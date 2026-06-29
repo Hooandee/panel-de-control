@@ -43,26 +43,41 @@ export const AdvancedBoost: FC<AdvancedBoostProps> = ({
     base: number,
     bound: LevelBound | undefined,
     onChange: (o: number) => void,
-  ) => (
+  ) => {
+    // Guard against a 0-width range (rail already at the active ceiling): a
+    // min==max SliderField divides by zero and fires onChange(NaN), which then
+    // poisons the levels. Keep max >= 1 and the value finite + in range.
+    const max = Math.max(1, maxOffset(base, bound));
+    const val = Math.min(Math.max(0, Number.isFinite(off) ? off : 0), max);
+    return (
     <div style={{ marginTop: theme.space.sm }}>
       <div style={{ display: "flex", justifyContent: "space-between", fontSize: theme.font.caption }}>
         <span>{label}</span>
         <span style={{ color: theme.color.textMuted }}>
-          +{off} W → {totalFor(base, off, bound)} W
+          +{val} W → {totalFor(base, val, bound)} W
         </span>
       </div>
-      <SliderField
-        value={off}
-        min={0}
-        max={maxOffset(base, bound)}
-        step={1}
-        onChange={onChange}
-      />
+      {/* Steam's SliderField has a fixed intrinsic width (~panel width) + a
+          Field margin:-16px that bleeds. A uniform scale(0.86) toward the centre
+          shrinks it so it sits inside the card with margin even at max, keeping
+          the handle round (scaleX alone made it oval); overflow clips the bleed. */}
+      <div style={{ overflow: "hidden" }}>
+        <div style={{ transform: "scale(0.86)" }}>
+          <SliderField
+            value={val}
+            min={0}
+            max={max}
+            step={1}
+            onChange={onChange}
+          />
+        </div>
+      </div>
     </div>
-  );
+    );
+  };
 
   return (
-    <div style={{ ...theme.card, padding: theme.space.md, marginTop: theme.space.sm }}>
+    <div style={{ ...theme.card, padding: theme.space.md, marginTop: theme.space.sm, overflow: "hidden" }}>
       <Focusable
         style={{ display: "flex", alignItems: "center", gap: theme.space.sm, cursor: "pointer" }}
         onActivate={() => setOpen((o) => !o)}

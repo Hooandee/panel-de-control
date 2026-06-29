@@ -90,15 +90,20 @@ export const ValueBar: FC<ValueBarProps> = ({
         : !loading && (
             // The slider is the single bar. Rendered directly — NOT in a
             // PanelSectionRow, whose negative margins would push it outside the card.
-            <div style={{ marginTop: theme.space.xs }}>
-              <SliderField
-                value={clamped}
-                min={0}
-                max={100}
-                step={1}
-                showValue={false}
-                onChange={onChange}
-              />
+            // Steam's SliderField has a fixed intrinsic width + a margin:-16px
+            // bleed; a uniform scale(0.86) toward centre shrinks it so it sits
+            // inside with margin even at max (round handle, unlike scaleX).
+            <div style={{ marginTop: theme.space.xs, overflow: "hidden" }}>
+              <div style={{ transform: "scale(0.86)" }}>
+                <SliderField
+                  value={clamped}
+                  min={0}
+                  max={100}
+                  step={1}
+                  showValue={false}
+                  onChange={onChange}
+                />
+              </div>
             </div>
           )}
     </div>

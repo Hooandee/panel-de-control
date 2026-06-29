@@ -57,4 +57,11 @@ describe("boost margin math", () => {
     expect(maxOffset(50, { min: 5, max: 45 })).toBe(0); // base already past max
     expect(maxOffset(17, undefined)).toBe(0);
   });
+
+  it("is NaN-safe (never propagates NaN to the UI)", () => {
+    expect(offsetOf(NaN, 17)).toBe(0);
+    expect(maxOffset(NaN, { min: 5, max: 45 })).toBe(0);
+    expect(totalFor(NaN, NaN)).toBe(0);
+    expect(totalFor(20, NaN)).toBe(20);
+  });
 });
