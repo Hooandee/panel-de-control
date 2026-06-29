@@ -78,8 +78,8 @@ export const AdvancedBoost: FC<AdvancedBoostProps> = ({
           <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, marginTop: theme.space.xs }}>
             {t("tdp.advanced.hint")}
           </div>
-          {railRow(t("tdp.level.slow"), off2, levels.pl1, bounds.pl2, (o2) => onSetLevels(o2, off3))}
-          {railRow(t("tdp.level.fast"), off3, levels.pl2, bounds.pl3, (o3) => onSetLevels(off2, o3))}
+          {bounds.pl2 && railRow(t("tdp.level.slow"), off2, levels.pl1, bounds.pl2, (o2) => onSetLevels(o2, off3))}
+          {bounds.pl3 && railRow(t("tdp.level.fast"), off3, levels.pl2, bounds.pl3, (o3) => onSetLevels(off2, o3))}
           {!auto && (
             <Focusable
               style={{

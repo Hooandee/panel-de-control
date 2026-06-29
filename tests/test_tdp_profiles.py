@@ -107,6 +107,7 @@ def test_migrates_old_watts_shape_to_auto(tmp_path):
     s = ProfileStore(path, default_watts=15)
     assert s.effective(None)["pl1"] == 22 and s.effective(None)["auto"] is True
     assert s.effective(None)["pl2"] == 26  # round(22*1.2)
+    assert s.effective(None)["pl3"] == 31  # round(22*1.4)
     assert s.effective("7")["pl1"] == 9
 
 

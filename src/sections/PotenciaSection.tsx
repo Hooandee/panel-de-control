@@ -77,15 +77,11 @@ export const PotenciaSection: FC = () => {
     [resolveTarget, refresh],
   );
 
+  // Reset is a discrete action: let the refresh update the badge and the rails
+  // together. An optimistic auto-flip alone would show the "Auto" badge while
+  // the sliders still rendered the old manual offsets until the refresh landed.
   const onResetAuto = useCallback(() => {
     const { target, sc } = resolveTarget();
-    setTdp((cur) =>
-      cur
-        ? sc === "global"
-          ? { ...cur, global_auto: true }
-          : { ...cur, auto: true }
-        : cur,
-    );
     resetTdpAuto(sc, target).then(() => refresh()).catch(() => {});
   }, [resolveTarget, refresh]);
 
