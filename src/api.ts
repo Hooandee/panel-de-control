@@ -17,3 +17,35 @@ export interface DeviceInfo {
 }
 
 export const getDevice = callable<[], DeviceInfo>("get_device");
+
+export interface TdpLimits {
+  min: number;
+  default: number;
+  max: number;
+  max_ac: number;
+}
+
+export interface TdpState {
+  supported: boolean;
+  backend: string;
+  limits: TdpLimits;
+  on_ac: boolean;
+  appid: string | null;
+  has_game_profile: boolean;
+  watts: number;
+  applied_w: number | null;
+}
+
+export interface TdpApplyResult {
+  requested_w: number;
+  applied_w: number | null;
+  ok: boolean;
+  detail: string;
+}
+
+export type TdpScope = "global" | "game";
+
+export const getTdpState = callable<[], TdpState>("get_tdp_state");
+export const setTdpWatts = callable<[watts: number, scope: TdpScope, appid: string | null], TdpApplyResult>("set_tdp_watts");
+export const createGameProfile = callable<[appid: string], void>("create_game_profile");
+export const setCurrentGame = callable<[appid: string | null], TdpState>("set_current_game");
