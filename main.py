@@ -81,6 +81,11 @@ class Plugin:
 
     async def set_tdp_watts(self, watts: int, scope: str, appid=None) -> dict:
         self._init()
+        if scope not in ("global", "game"):
+            return {"requested_w": watts, "applied_w": None, "ok": False,
+                    "detail": f"unknown scope: {scope}"}
+        if scope == "game" and appid is None:
+            scope = "global"
         clamped = self._tdp_backend.get_limits().clamp(watts)
         if scope == "game" and appid is not None:
             self._current_appid = str(appid)

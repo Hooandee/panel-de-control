@@ -43,6 +43,12 @@ class LifecycleManager:
         self._pending_apply_at = None
         self._task = None
 
+    def _safe_apply(self, ac):
+        try:
+            self._apply(ac)
+        except Exception:  # noqa: BLE001 - one bad apply must not abort check()
+            pass
+
     def check(self, now):
         wc = self._read_wakeup()
         ac = self._read_ac()
@@ -55,18 +61,24 @@ class LifecycleManager:
             self._last_wakeup = wc
             self._pending_apply_at = now + self._wakeup_delay
         # AC transition → re-apply immediately
+        applied = False
         if ac != self._last_ac:
             self._last_ac = ac
-            self._apply(ac)
+            self._safe_apply(ac)
+            applied = True
         # fire a scheduled re-apply once its delay elapses
         if self._pending_apply_at is not None and now >= self._pending_apply_at:
             self._pending_apply_at = None
-            self._apply(ac)
+            if not applied:
+                self._safe_apply(ac)
 
     async def run(self):
         import time
         while True:
-            self.check(time.time())
+            try:
+                self.check(time.time())
+            except Exception:  # noqa: BLE001 - the poller must never die
+                pass
             await asyncio.sleep(self._interval)
 
     def start(self):

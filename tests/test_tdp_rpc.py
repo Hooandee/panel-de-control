@@ -73,3 +73,15 @@ def test_per_game_profile_overrides_global(Plugin):
     assert st["global_watts"] == 20
     asyncio.run(p.set_current_game(None))
     assert asyncio.run(p.get_tdp_state())["watts"] == 20
+
+
+def test_set_tdp_watts_game_without_appid_falls_back_to_global(Plugin):
+    p = Plugin()
+    res = asyncio.run(p.set_tdp_watts(20, "game", None))  # appid missing
+    assert res["ok"] is True  # did not raise
+    assert asyncio.run(p.get_tdp_state())["global_watts"] == 20
+
+
+def test_set_tdp_watts_unknown_scope_does_not_raise(Plugin):
+    res = asyncio.run(Plugin().set_tdp_watts(15, "bogus"))
+    assert res["ok"] is False and "unknown scope" in res["detail"]

@@ -59,3 +59,14 @@ def test_reapplies_on_ac_transition():
     assert events == [True]
     lm.check(now=2.0)           # no change → no event
     assert events == [True]
+
+
+def test_check_survives_apply_exception():
+    def boom(_on_ac):
+        raise RuntimeError("boom")
+    ac = {"v": False}
+    lm = LifecycleManager(apply_cb=boom, read_wakeup=lambda: 0, read_ac=lambda: ac["v"])
+    lm.check(now=0.0)      # first observation
+    ac["v"] = True
+    lm.check(now=1.0)      # AC change → apply_cb raises; check() must NOT propagate
+    # (no assertion needed beyond "did not raise")
