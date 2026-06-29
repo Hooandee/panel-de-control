@@ -40,3 +40,19 @@ def test_get_version_returns_package_version(Plugin):
     pkg = json.loads((ROOT / "package.json").read_text())
     p = Plugin()
     assert asyncio.run(p.get_version()) == pkg["version"]
+
+
+def test_get_device_returns_detected_profile(Plugin, monkeypatch):
+    import device_registry
+    from device_profiles import DEVICE_TABLE
+    ally_x = next(p for p in DEVICE_TABLE if p.key == "rog_ally_x")
+    monkeypatch.setattr(device_registry, "detect", lambda product_name=None: ally_x)
+    p = Plugin()
+    dev = asyncio.run(p.get_device())
+    assert dev["key"] == "rog_ally_x"
+    assert dev["display_name"] == "ROG Ally X"
+    assert dev["chip"] == "AMD Z1 Extreme"
+    assert dev["vendor"] == "amd"
+    assert dev["tdp_max"] == 25
+    assert dev["tdp_max_charger"] == 30
+    assert dev["is_generic"] is False

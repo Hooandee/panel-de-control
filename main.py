@@ -1,8 +1,10 @@
 import os
+from dataclasses import asdict
 
 import decky
 
 # py_modules/ is on sys.path → import TOP-LEVEL (never `from py_modules.x import`).
+import device_registry
 from version import read_version
 from settings_store import SettingsStore
 
@@ -25,6 +27,7 @@ class Plugin:
         self._settings = self._store.load(DEFAULTS)
         # Probe hardware/environment HERE, wrapped so it NEVER raises — a raise in
         # init or _main bricks plugin load (UI stuck on spinner forever).
+        self._device = device_registry.detect()
         self._ready = True
 
     def _save(self) -> None:
@@ -44,6 +47,10 @@ class Plugin:
         self._settings["enabled"] = on
         self._save()
         # apply the change to hardware/effect here
+
+    async def get_device(self) -> dict:
+        self._init()
+        return asdict(self._device)
 
     # ---- lifecycle ----------------------------------------------------------
     async def _main(self) -> None:
