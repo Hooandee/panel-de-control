@@ -1,3 +1,5 @@
+import type { LevelBound } from "../api";
+
 export interface Zone {
   key: "save" | "eco" | "balanced" | "hot" | "turbo";
 }
@@ -29,5 +31,23 @@ export function arcColor(frac: number): string {
   const clamped = Math.max(0, Math.min(1, frac));
   const hue = Math.round(140 - clamped * 132); // 140 → 8
   return `hsl(${hue}, 75%, 52%)`;
+}
+
+/** Margin of a stacked rail above its base, never negative. */
+export function offsetOf(rail: number, base: number): number {
+  return Math.max(0, Math.round(rail - base));
+}
+
+/** Total watts for base + margin, clamped to the rail bound when present. */
+export function totalFor(base: number, offset: number, bound?: LevelBound): number {
+  const v = base + Math.max(0, offset);
+  if (!bound) return v;
+  return Math.max(bound.min, Math.min(v, bound.max));
+}
+
+/** Selectable headroom: max margin that keeps base+margin within the rail. */
+export function maxOffset(base: number, bound?: LevelBound): number {
+  if (!bound) return 0;
+  return Math.max(0, bound.max - base);
 }
 
