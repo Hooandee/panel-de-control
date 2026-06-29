@@ -30,7 +30,7 @@ class LifecycleManager:
     """Re-applies TDP after resume (wakeup_count change, delayed) and on AC/DC transitions.
     Decision logic is in check(now); run() is a thin async loop around it."""
 
-    def __init__(self, apply_cb, root="/", wakeup_delay=4.0, interval=1.0,
+    def __init__(self, apply_cb, root="/", wakeup_delay=4.0, interval=2.0,
                  read_wakeup=None, read_ac=None):
         self._apply = apply_cb
         self._root = root

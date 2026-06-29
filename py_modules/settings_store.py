@@ -1,5 +1,6 @@
 import json
-import os
+
+from json_store import atomic_json_save
 
 
 class SettingsStore:
@@ -20,8 +21,4 @@ class SettingsStore:
         return merged
 
     def save(self, data):
-        os.makedirs(os.path.dirname(self._path), exist_ok=True)
-        tmp = self._path + ".tmp"
-        with open(tmp, "w") as handle:
-            json.dump(data, handle)
-        os.replace(tmp, self._path)
+        atomic_json_save(self._path, data)

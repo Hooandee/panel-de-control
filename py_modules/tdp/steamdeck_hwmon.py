@@ -32,8 +32,8 @@ class SteamDeckHwmonBackend(TDPBackend):
         ordered = sorted(
             dirs,
             key=lambda d: (
-                _PREFERRED_NAMES.index(self._hwmon_name(d))
-                if self._hwmon_name(d) in _PREFERRED_NAMES
+                _PREFERRED_NAMES.index(n)
+                if (n := self._hwmon_name(d)) in _PREFERRED_NAMES
                 else len(_PREFERRED_NAMES)
             ),
         )

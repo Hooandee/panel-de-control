@@ -7,6 +7,11 @@ from tdp.types import TdpLimits, TdpResult
 _FW_BASE = "sys/class/firmware-attributes"
 _PP_BASE = "sys/class/platform-profile"
 
+# Boost headroom derived from sustained PL1 when the user sets a single TDP value.
+# PL2 (slow) and PL3 (fast) are scaled above PL1, then clamped to each rail's sysfs max.
+_PL2_BOOST_RATIO = 1.2
+_PL3_BOOST_RATIO = 1.4
+
 
 class FirmwareAttrBackend(TDPBackend):
     """TDP via kernel firmware-attributes. Covers ASUS (asus-armoury), Lenovo
@@ -22,6 +27,13 @@ class FirmwareAttrBackend(TDPBackend):
         self._profile_name = profile_name  # Lenovo: set this platform-profile to "custom" first
         self._dir = self._find_driver_dir(driver_prefix)
         self.supported = self._dir is not None and os.path.exists(self._attr("ppt_pl1_spl"))
+        self._bounds = {}  # attr -> (min, max); static hardware limits, read once
+        if self.supported:
+            for attr in ("ppt_pl1_spl", "ppt_pl2_sppt", "ppt_pl3_fppt"):
+                self._bounds[attr] = (
+                    self._read_int(self._attr(attr, "min_value")),
+                    self._read_int(self._attr(attr, "max_value")),
+                )
 
     def _find_driver_dir(self, prefix):
         base = os.path.join(self._root, _FW_BASE)
@@ -51,8 +63,7 @@ class FirmwareAttrBackend(TDPBackend):
     def get_limits(self):
         if not self.supported:
             return self._fallback
-        mn = self._read_int(self._attr("ppt_pl1_spl", "min_value"))
-        mx = self._read_int(self._attr("ppt_pl1_spl", "max_value"))
+        mn, mx = self._pl_bounds("ppt_pl1_spl")
         min_w = mn if mn is not None else self._fallback.min_w
         max_w = mx if mx is not None else self._fallback.max_w
         default_w = max(min_w, min(self._fallback.default_w, max_w))
@@ -72,9 +83,7 @@ class FirmwareAttrBackend(TDPBackend):
                 continue
 
     def _pl_bounds(self, attr):
-        mn = self._read_int(self._attr(attr, "min_value"))
-        mx = self._read_int(self._attr(attr, "max_value"))
-        return mn, mx
+        return self._bounds.get(attr, (None, None))
 
     def level_limits(self):
         out = {}
@@ -111,8 +120,8 @@ class FirmwareAttrBackend(TDPBackend):
             return TdpResult(watts, None, False, "firmware-attributes path not present")
         lim = self.get_limits()
         target = lim.clamp(watts)
-        pl2 = max(target, round(target * 1.2))
-        pl3 = max(target, round(target * 1.4))
+        pl2 = max(target, round(target * _PL2_BOOST_RATIO))
+        pl3 = max(target, round(target * _PL3_BOOST_RATIO))
         return self.set_levels(target, pl2, pl3, ac)
 
     def read_applied(self):

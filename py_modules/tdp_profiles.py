@@ -1,5 +1,6 @@
 import json
-import os
+
+from json_store import atomic_json_save
 
 
 class ProfileStore:
@@ -43,11 +44,7 @@ class ProfileStore:
         return {"global": glob, "games": games}
 
     def _save(self):
-        os.makedirs(os.path.dirname(self._path), exist_ok=True)
-        tmp = self._path + ".tmp"
-        with open(tmp, "w") as f:
-            json.dump(self._data, f)
-        os.replace(tmp, self._path)
+        atomic_json_save(self._path, self._data)
 
     def effective(self, appid):
         if appid is not None and str(appid) in self._data["games"]:
