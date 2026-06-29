@@ -48,10 +48,6 @@ const es: Record<string, string> = {
   "tdp.ceiling.charger": "Máximo del dispositivo: {max} W.",
   "tdp.arc.auto": "AUTO",
   "tdp.arc.gpu": "GPU {pct}%",
-  "tdp.fps.title": "FPS objetivo",
-  "tdp.fps.off": "Off",
-  "tdp.fps.unreached": "A máxima potencia no se alcanza el objetivo",
-  "tdp.fps.value": "{fps} fps",
 };
 
 const en: Record<string, string> = {
@@ -96,10 +92,6 @@ const en: Record<string, string> = {
   "tdp.ceiling.charger": "Device max: {max} W.",
   "tdp.arc.auto": "AUTO",
   "tdp.arc.gpu": "GPU {pct}%",
-  "tdp.fps.title": "Target FPS",
-  "tdp.fps.off": "Off",
-  "tdp.fps.unreached": "At max power the target isn't reached",
-  "tdp.fps.value": "{fps} fps",
 };
 
 const DICTS: Record<Lang, Record<string, string>> = { es, en };
