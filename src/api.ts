@@ -33,6 +33,7 @@ export interface TdpState {
   appid: string | null;
   has_game_profile: boolean;
   watts: number;
+  global_watts: number;
   applied_w: number | null;
 }
 

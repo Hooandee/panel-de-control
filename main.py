@@ -75,6 +75,7 @@ class Plugin:
             "has_game_profile": (self._current_appid is not None
                                  and self._tdp_profiles.has_game(self._current_appid)),
             "watts": limits.clamp(prof["watts"]),
+            "global_watts": limits.clamp(self._tdp_profiles.effective(None)["watts"]),
             "applied_w": self._tdp_backend.read_applied(),
         }
 

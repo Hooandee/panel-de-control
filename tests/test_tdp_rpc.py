@@ -49,6 +49,7 @@ def test_get_tdp_state_shape(Plugin):
     assert st["supported"] is True and st["backend"] == "fake"
     assert st["limits"] == {"min": 5, "default": 15, "max": 25, "max_ac": 30}
     assert "on_ac" in st and "watts" in st and "applied_w" in st
+    assert "global_watts" in st and isinstance(st["global_watts"], int)
 
 
 def test_set_tdp_watts_global_clamps_persists_applies(Plugin):
@@ -67,6 +68,8 @@ def test_per_game_profile_overrides_global(Plugin):
     asyncio.run(p.create_game_profile("42"))
     asyncio.run(p.set_current_game("42"))
     asyncio.run(p.set_tdp_watts(10, "game", "42"))
-    assert asyncio.run(p.get_tdp_state())["watts"] == 10
+    st = asyncio.run(p.get_tdp_state())
+    assert st["watts"] == 10
+    assert st["global_watts"] == 20
     asyncio.run(p.set_current_game(None))
     assert asyncio.run(p.get_tdp_state())["watts"] == 20
