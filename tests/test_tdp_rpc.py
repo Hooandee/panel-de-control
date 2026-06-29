@@ -123,6 +123,7 @@ def test_set_tdp_levels_clamps_to_rail_max(Plugin):
     asyncio.run(p.set_tdp_watts(20, "global"))
     asyncio.run(p.set_tdp_levels(40, 40, "global"))  # 20+40=60 -> pl2 clamps to 40
     st = asyncio.run(p.get_tdp_state())
+    # pl3: 20+40+40=100 -> clamped to rail max 50
     assert st["levels"]["pl2"] == 40 and st["levels"]["pl3"] == 50
 
 
@@ -143,3 +144,13 @@ def test_set_tdp_watts_preserves_manual_margins(Plugin):
     st = asyncio.run(p.get_tdp_state())
     assert st["auto"] is False
     assert st["levels"]["pl2"] == 30 and st["levels"]["pl3"] == 34
+
+
+def test_set_tdp_levels_unknown_scope_does_not_raise(Plugin):
+    res = asyncio.run(Plugin().set_tdp_levels(8, 4, "bogus"))
+    assert res["ok"] is False and "unknown scope" in res["detail"]
+
+
+def test_reset_tdp_auto_unknown_scope_does_not_raise(Plugin):
+    res = asyncio.run(Plugin().reset_tdp_auto("bogus"))
+    assert res["ok"] is False and "unknown scope" in res["detail"]

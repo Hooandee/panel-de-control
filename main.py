@@ -136,6 +136,7 @@ class Plugin:
                     "detail": f"unknown scope: {scope}"}
         self._tdp_profiles.set_offsets(resolved, off2, off3, appid=appid)
         res = self._reapply_tdp()
+        # requested_w/applied_w reflect resulting sustained pl1 (readback), not the offsets
         return {"requested_w": res.requested_w, "applied_w": res.applied_w,
                 "ok": res.ok, "detail": res.detail}
 
@@ -147,6 +148,7 @@ class Plugin:
                     "detail": f"unknown scope: {scope}"}
         self._tdp_profiles.set_auto(resolved, appid=appid)
         res = self._reapply_tdp()
+        # requested_w/applied_w reflect resulting sustained pl1 (readback), not the offsets
         return {"requested_w": res.requested_w, "applied_w": res.applied_w,
                 "ok": res.ok, "detail": res.detail}
 
