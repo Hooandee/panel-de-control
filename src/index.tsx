@@ -35,10 +35,10 @@ const Content: FC = () => {
 
   return (
     <PanelSection>
+      <LanguageToggle />
       <PanelSectionRow>
         <DeviceHeader device={device} />
       </PanelSectionRow>
-      <LanguageToggle />
     </PanelSection>
   );
 };
