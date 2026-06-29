@@ -1,6 +1,6 @@
 import { FC, useCallback, useEffect, useRef, useState } from "react";
 
-import { getTdpState, setTdpWatts, setTdpLevels, resetTdpAuto, TdpState, TdpScope } from "../api";
+import { getTdpState, setTdpWatts, setTdpLevels, resetTdpAuto, getPowerDraw, setAutoTdp, TdpState, TdpScope, PowerDraw } from "../api";
 import { TdpSection } from "../components/TdpSection";
 import { useRunningGame } from "../tdp/useRunningGame";
 
@@ -13,6 +13,7 @@ import { useRunningGame } from "../tdp/useRunningGame";
 export const PotenciaSection: FC = () => {
   const game = useRunningGame();
   const [tdp, setTdp] = useState<TdpState | null>(null);
+  const [power, setPower] = useState<PowerDraw | null>(null);
   const [scope, setScope] = useState<TdpScope>("global");
   const commitTimerWatts = useRef<ReturnType<typeof setTimeout> | null>(null);
   const commitTimerLevels = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -24,6 +25,15 @@ export const PotenciaSection: FC = () => {
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  // Poll live power draw every second while the section is mounted.
+  useEffect(() => {
+    getPowerDraw().then(setPower).catch(() => {});
+    const id = setInterval(() => {
+      getPowerDraw().then(setPower).catch(() => {});
+    }, 1000);
+    return () => clearInterval(id);
+  }, []);
 
   const appid = game?.appid;
   useEffect(() => {
@@ -85,15 +95,26 @@ export const PotenciaSection: FC = () => {
     resetTdpAuto(sc, target).then(() => refresh()).catch(() => {});
   }, [resolveTarget, refresh]);
 
+  const onAutoTdp = useCallback(
+    (enabled: boolean) => {
+      setAutoTdp(enabled)
+        .then(() => refresh())
+        .catch(() => {});
+    },
+    [refresh],
+  );
+
   return (
     <TdpSection
       tdp={tdp}
       scope={scope}
       game={game}
+      power={power}
       onScope={setScope}
       onWatts={onWatts}
       onSetLevels={onSetLevels}
       onResetAuto={onResetAuto}
+      onAutoTdp={onAutoTdp}
     />
   );
 };

@@ -88,3 +88,13 @@ export const createGameProfile = callable<[appid: string], void>("create_game_pr
 export const setCurrentGame = callable<[appid: string | null], TdpState>("set_current_game");
 export const setTdpLevels = callable<[off2: number, off3: number, scope: TdpScope, appid: string | null], TdpApplyResult>("set_tdp_levels");
 export const resetTdpAuto = callable<[scope: TdpScope, appid: string | null], TdpApplyResult>("reset_tdp_auto");
+
+export interface PowerDraw {
+  watts: number | null;
+  gpu_busy: number | null;
+  auto_tdp: boolean;
+  setpoint: number | null;
+}
+
+export const getPowerDraw = callable<[], PowerDraw>("get_power_draw");
+export const setAutoTdp = callable<[enabled: boolean], { auto_tdp: boolean }>("set_auto_tdp");

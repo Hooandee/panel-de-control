@@ -42,6 +42,12 @@ const es: Record<string, string> = {
   "tdp.advanced.reset": "Volver a automático",
   "tdp.level.slow": "Boost lento (SPPT)",
   "tdp.level.fast": "Boost rápido (FPPT)",
+  "tdp.auto.title": "Auto‑TDP",
+  "tdp.auto.hint": "Ajusta la potencia según la carga real.",
+  "tdp.ceiling.battery": "Máximo en batería: {max} W. Conecta el cargador para subir más.",
+  "tdp.ceiling.charger": "Máximo del dispositivo: {max} W.",
+  "tdp.arc.auto": "AUTO",
+  "tdp.arc.gpu": "GPU {pct}%",
 };
 
 const en: Record<string, string> = {
@@ -80,6 +86,12 @@ const en: Record<string, string> = {
   "tdp.advanced.reset": "Back to automatic",
   "tdp.level.slow": "Slow boost (SPPT)",
   "tdp.level.fast": "Fast boost (FPPT)",
+  "tdp.auto.title": "Auto‑TDP",
+  "tdp.auto.hint": "Adjusts power to match real load.",
+  "tdp.ceiling.battery": "Battery max: {max} W. Plug in the charger to go higher.",
+  "tdp.ceiling.charger": "Device max: {max} W.",
+  "tdp.arc.auto": "AUTO",
+  "tdp.arc.gpu": "GPU {pct}%",
 };
 
 const DICTS: Record<Lang, Record<string, string>> = { es, en };
