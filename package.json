@@ -6,7 +6,8 @@
   "scripts": {
     "build": "rollup -c",
     "watch": "rollup -c -w",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:fe": "vitest run"
   },
   "author": "Hooandee",
   "license": "BSD-3-Clause",
@@ -19,7 +20,8 @@
     "@types/webpack": "^5.28.5",
     "react-router": "^6.30.4",
     "rollup": "^4.53.3",
-    "typescript": "^5.6.2"
+    "typescript": "^5.6.2",
+    "vitest": "^2.1.0"
   },
   "dependencies": {
     "@decky/api": "^1.1.3",
