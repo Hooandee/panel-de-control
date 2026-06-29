@@ -38,7 +38,9 @@ export const LanguageToggle: FC = () => {
   });
 
   return (
-    <Focusable style={{ display: "flex", gap: 6, justifyContent: "flex-end", padding: "2px 2px 0" }}>
+    <Focusable
+      style={{ display: "flex", gap: 6, justifyContent: "flex-end", padding: "0 2px", marginTop: 10 }}
+    >
       <Focusable
         onActivate={() => setLang("es")}
         onClick={() => setLang("es")}
