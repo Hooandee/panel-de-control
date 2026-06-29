@@ -15,6 +15,17 @@ const es: Record<string, string> = {
   "device.generic.hint": "No se reconoció tu dispositivo; usando valores conservadores y seguros.",
   "lang.spanish": "Español",
   "lang.english": "Inglés",
+  "tdp.unsupported": "El control de TDP no está disponible en este dispositivo.",
+  "tdp.scope.global": "Global",
+  "tdp.inherit": "Heredando del global",
+  "tdp.zone.save": "Reposo",
+  "tdp.zone.eco": "Ahorro",
+  "tdp.zone.balanced": "Equilibrado",
+  "tdp.zone.hot": "Alto",
+  "tdp.zone.turbo": "Turbo",
+  "tdp.preset.save": "Ahorro",
+  "tdp.preset.balanced": "Equilibrado",
+  "tdp.preset.turbo": "Turbo",
 };
 
 const en: Record<string, string> = {
@@ -26,6 +37,17 @@ const en: Record<string, string> = {
   "device.generic.hint": "Your device wasn't recognized; using conservative, safe values.",
   "lang.spanish": "Spanish",
   "lang.english": "English",
+  "tdp.unsupported": "TDP control isn't available on this device.",
+  "tdp.scope.global": "Global",
+  "tdp.inherit": "Inheriting from global",
+  "tdp.zone.save": "Idle",
+  "tdp.zone.eco": "Eco",
+  "tdp.zone.balanced": "Balanced",
+  "tdp.zone.hot": "High",
+  "tdp.zone.turbo": "Turbo",
+  "tdp.preset.save": "Save",
+  "tdp.preset.balanced": "Balanced",
+  "tdp.preset.turbo": "Turbo",
 };
 
 const DICTS: Record<Lang, Record<string, string>> = { es, en };
