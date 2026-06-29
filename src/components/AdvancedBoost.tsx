@@ -56,7 +56,7 @@ export const AdvancedBoost: FC<AdvancedBoostProps> = ({
         min={0}
         max={maxOffset(base, bound)}
         step={1}
-        onChange={(v) => onChange(v)}
+        onChange={onChange}
       />
     </div>
   );

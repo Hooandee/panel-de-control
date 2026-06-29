@@ -60,10 +60,7 @@ class Plugin:
         return self._fan_reader.read()
 
     # ---- TDP helpers + RPCs -------------------------------------------------
-    def _clamp_levels(self, eff: dict) -> dict:
-        lim = self._tdp_backend.get_limits()
-        ll = self._tdp_backend.level_limits()
-
+    def _clamp_levels(self, eff: dict, lim, ll: dict) -> dict:
         def clamp(value, key):
             b = ll.get(key)
             lo = b["min"] if b else lim.min_w
@@ -100,9 +97,9 @@ class Plugin:
             "applied_w": self._tdp_backend.read_applied(),
             "supports_advanced": ("pl2" in ll or "pl3" in ll),
             "level_limits": ll,
-            "levels": self._clamp_levels(eff),
+            "levels": self._clamp_levels(eff, limits, ll),
             "auto": eff["auto"],
-            "global_levels": self._clamp_levels(geff),
+            "global_levels": self._clamp_levels(geff, limits, ll),
             "global_auto": geff["auto"],
         }
 

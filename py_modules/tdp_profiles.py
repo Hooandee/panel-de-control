@@ -83,7 +83,7 @@ class ProfileStore:
             pl2, pl3 = _derive(pl1)
         else:
             pl2 = pl1 + prof["off2"]
-            pl3 = pl2 + (prof["off3"] or 0)
+            pl3 = pl2 + prof["off3"]
         return {"pl1": pl1, "pl2": pl2, "pl3": pl3, "watts": pl1, "auto": auto}
 
     def has_game(self, appid):

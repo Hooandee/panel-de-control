@@ -32,8 +32,11 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, onScope, onW
     );
   }
 
-  const displayWatts = scope === "global" ? tdp.global_watts : tdp.watts;
-  const zone = zoneFor(fraction(displayWatts, tdp.limits.min, tdp.limits.max_ac));
+  const view =
+    scope === "global"
+      ? { watts: tdp.global_watts, levels: tdp.global_levels, auto: tdp.global_auto }
+      : { watts: tdp.watts, levels: tdp.levels, auto: tdp.auto };
+  const zone = zoneFor(fraction(view.watts, tdp.limits.min, tdp.limits.max_ac));
 
   return (
     <>
@@ -49,7 +52,7 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, onScope, onW
       </PanelSectionRow>
       <PanelSectionRow>
         <PowerArc
-          watts={displayWatts}
+          watts={view.watts}
           limits={tdp.limits}
           onAc={tdp.on_ac}
           zoneLabel={t(`tdp.zone.${zone.key}`)}
@@ -57,7 +60,7 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, onScope, onW
       </PanelSectionRow>
       <PanelSectionRow>
         <SliderField
-          value={displayWatts}
+          value={view.watts}
           min={tdp.limits.min}
           max={tdp.limits.max_ac}
           step={1}
@@ -80,8 +83,8 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, onScope, onW
       {tdp.supports_advanced && (
         <PanelSectionRow>
           <AdvancedBoost
-            levels={scope === "global" ? tdp.global_levels : tdp.levels}
-            auto={scope === "global" ? tdp.global_auto : tdp.auto}
+            levels={view.levels}
+            auto={view.auto}
             bounds={{ pl2: tdp.level_limits.pl2, pl3: tdp.level_limits.pl3 }}
             onSetLevels={onSetLevels}
             onResetAuto={onResetAuto}
