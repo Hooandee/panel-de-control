@@ -1,0 +1,38 @@
+export interface Zone {
+  key: "save" | "eco" | "balanced" | "hot" | "turbo";
+  icon: string;
+}
+
+const ZONES: Zone[] = [
+  { key: "save", icon: "😴" },
+  { key: "eco", icon: "🍃" },
+  { key: "balanced", icon: "⚖️" },
+  { key: "hot", icon: "🔥" },
+  { key: "turbo", icon: "🚀" },
+];
+
+/** Fill fraction in [0,1] of watts within [min, maxAc]. Clamped. */
+export function fraction(watts: number, min: number, maxAc: number): number {
+  const span = maxAc - min;
+  if (span <= 0) return 0;
+  return Math.max(0, Math.min(1, (watts - min) / span));
+}
+
+/** 5 even bands across [0,1] → 😴 🍃 ⚖️ 🔥 🚀. */
+export function zoneFor(frac: number): Zone {
+  const clamped = Math.max(0, Math.min(1, frac));
+  const idx = Math.min(ZONES.length - 1, Math.floor(clamped * ZONES.length));
+  return ZONES[idx];
+}
+
+/** Arc color: green (hue 140) at 0 → red (hue 8) at 1, passing through amber. */
+export function arcColor(frac: number): string {
+  const clamped = Math.max(0, Math.min(1, frac));
+  const hue = Math.round(140 - clamped * 132); // 140 → 8
+  return `hsl(${hue}, 75%, 52%)`;
+}
+
+/** Degrees along the arc sweep for a fraction. */
+export function angleFor(frac: number, sweep: number): number {
+  return Math.max(0, Math.min(1, frac)) * sweep;
+}
