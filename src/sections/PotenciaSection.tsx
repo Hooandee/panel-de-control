@@ -1,6 +1,6 @@
 import { FC, useCallback, useEffect, useRef, useState } from "react";
 
-import { getTdpState, setTdpWatts, setTdpLevels, resetTdpAuto, getPowerDraw, setAutoTdp, TdpState, TdpScope, PowerDraw } from "../api";
+import { getTdpState, setTdpWatts, setTdpLevels, resetTdpAuto, getPowerDraw, setAutoTdp, setFpsTarget, TdpState, TdpScope, PowerDraw } from "../api";
 import { TdpSection } from "../components/TdpSection";
 import { useRunningGame } from "../tdp/useRunningGame";
 
@@ -104,6 +104,15 @@ export const PotenciaSection: FC = () => {
     [refresh],
   );
 
+  const onFpsTarget = useCallback(
+    (target: number | null) => {
+      setFpsTarget(target)
+        .then(() => refresh())
+        .catch(() => {});
+    },
+    [refresh],
+  );
+
   return (
     <TdpSection
       tdp={tdp}
@@ -115,6 +124,7 @@ export const PotenciaSection: FC = () => {
       onSetLevels={onSetLevels}
       onResetAuto={onResetAuto}
       onAutoTdp={onAutoTdp}
+      onFpsTarget={onFpsTarget}
     />
   );
 };

@@ -92,9 +92,12 @@ export const resetTdpAuto = callable<[scope: TdpScope, appid: string | null], Td
 export interface PowerDraw {
   watts: number | null;
   gpu_busy: number | null;
+  fps: number | null;
   auto_tdp: boolean;
+  target_fps: number | null;
   setpoint: number | null;
 }
 
 export const getPowerDraw = callable<[], PowerDraw>("get_power_draw");
 export const setAutoTdp = callable<[enabled: boolean], { auto_tdp: boolean }>("set_auto_tdp");
+export const setFpsTarget = callable<[target: number | null], { target_fps: number | null }>("set_fps_target");

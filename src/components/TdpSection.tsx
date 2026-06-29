@@ -1,5 +1,5 @@
-import { PanelSectionRow, SliderField, Spinner, ToggleField } from "@decky/ui";
-import { FC } from "react";
+import { Focusable, PanelSectionRow, SliderField, Spinner, ToggleField } from "@decky/ui";
+import { CSSProperties, FC } from "react";
 
 import { TdpState, TdpScope, PowerDraw } from "../api";
 import { useI18n } from "../i18n";
@@ -9,6 +9,10 @@ import { ProfileSelector } from "./ProfileSelector";
 import { PowerArc } from "./PowerArc";
 import { Presets } from "./Presets";
 import { AdvancedBoost } from "./AdvancedBoost";
+import { segmentGroupStyle, segmentItemStyle } from "./segmented";
+
+// null = "Off" (no FPS target; auto-TDP runs in its plain load-tracking mode).
+const FPS_OPTIONS: (number | null)[] = [null, 30, 40, 45, 50, 60];
 
 export interface TdpSectionProps {
   tdp: TdpState | null;
@@ -20,9 +24,10 @@ export interface TdpSectionProps {
   onSetLevels: (off2: number, off3: number) => void;
   onResetAuto: () => void;
   onAutoTdp: (enabled: boolean) => void;
+  onFpsTarget: (target: number | null) => void;
 }
 
-export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onScope, onWatts, onSetLevels, onResetAuto, onAutoTdp }) => {
+export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onScope, onWatts, onSetLevels, onResetAuto, onAutoTdp, onFpsTarget }) => {
   const { t } = useI18n();
 
   if (!tdp) return <Spinner />;
@@ -45,6 +50,21 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
   const zone = zoneFor(fraction(view.watts, tdp.limits.min, activeMax));
   const isAutoOn = power?.auto_tdp ?? false;
   const atCeiling = Math.min(view.watts, activeMax) >= activeMax;
+  // Honest "can't reach the target": we're pinned at the active ceiling and the
+  // real fps is still meaningfully below the target. Never claim a hit target.
+  const belowTarget =
+    isAutoOn &&
+    power?.target_fps != null &&
+    power?.fps != null &&
+    power.fps < power.target_fps - 3 &&
+    (power.setpoint ?? 0) >= activeMax;
+
+  const fpsItem = (active: boolean): CSSProperties => ({
+    ...segmentItemStyle(active),
+    flex: 1,
+    textAlign: "center",
+    padding: "5px 4px",
+  });
 
   return (
     <>
@@ -68,8 +88,35 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
           gpuBusy={power?.gpu_busy ?? null}
           auto={isAutoOn}
           setpoint={power?.setpoint ?? null}
+          fps={power?.fps ?? null}
+          targetFps={power?.target_fps ?? null}
+          atMaxBelowTarget={belowTarget}
         />
       </PanelSectionRow>
+      {isAutoOn && (
+        <PanelSectionRow>
+          <div>
+            <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, margin: "0 2px 4px" }}>
+              {t("tdp.fps.title")}
+            </div>
+            <Focusable style={segmentGroupStyle}>
+              {FPS_OPTIONS.map((opt) => {
+                const active = (power?.target_fps ?? null) === opt;
+                return (
+                  <Focusable
+                    key={opt ?? "off"}
+                    style={fpsItem(active)}
+                    onActivate={() => onFpsTarget(opt)}
+                    onClick={() => onFpsTarget(opt)}
+                  >
+                    {opt === null ? t("tdp.fps.off") : opt}
+                  </Focusable>
+                );
+              })}
+            </Focusable>
+          </div>
+        </PanelSectionRow>
+      )}
       {!isAutoOn && (
         <>
           <PanelSectionRow>

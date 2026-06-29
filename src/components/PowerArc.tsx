@@ -33,6 +33,9 @@ interface PowerArcProps {
   gpuBusy?: number | null;
   auto?: boolean;
   setpoint?: number | null;
+  fps?: number | null;
+  targetFps?: number | null;
+  atMaxBelowTarget?: boolean;
 }
 
 export const PowerArc: FC<PowerArcProps> = ({
@@ -44,8 +47,15 @@ export const PowerArc: FC<PowerArcProps> = ({
   gpuBusy = null,
   auto = false,
   setpoint = null,
+  fps = null,
+  targetFps = null,
+  atMaxBelowTarget = false,
 }) => {
   const { t } = useI18n();
+
+  // FPS-target mode: auto-TDP with a real fps target set. The honest hero is the
+  // measured fps vs the target; watts/GPU drop to secondary sub-labels.
+  const fpsMode = auto && targetFps !== null;
 
   // In auto mode the fill tracks real consumption; fall back to manual watts if
   // no live reading is available yet. Never synthesise a value.
@@ -133,12 +143,25 @@ export const PowerArc: FC<PowerArcProps> = ({
       <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
         {/* Zone icon — hidden in auto mode to make room for AUTO chip */}
         {!auto && <div style={{ lineHeight: 0 }}><ZoneIcon size={26} color={color} /></div>}
-        <div style={{ fontSize: 32, fontWeight: 700, color: theme.color.textPrimary, lineHeight: 1.15 }}>
-          {displayAvailable
-            ? <>{Math.round(displayWatts)}<span style={{ fontSize: 16, color: theme.color.textMuted }}> W</span></>
-            : <span style={{ fontSize: 24, color: theme.color.textMuted }}>—</span>
-          }
-        </div>
+        {fpsMode ? (
+          <>
+            {/* Hero: real fps vs target. Never synthesise — show — when unknown. */}
+            <div style={{ fontSize: 30, fontWeight: 700, color: theme.color.textPrimary, lineHeight: 1.1 }}>
+              {fps !== null
+                ? <>{Math.round(fps)}<span style={{ fontSize: 14, color: theme.color.textMuted }}> fps</span></>
+                : <span style={{ fontSize: 22, color: theme.color.textMuted }}>—</span>
+              }
+            </div>
+            <div style={{ fontSize: 10, color: theme.color.textMuted, marginTop: 1 }}>→ {targetFps}</div>
+          </>
+        ) : (
+          <div style={{ fontSize: 32, fontWeight: 700, color: theme.color.textPrimary, lineHeight: 1.15 }}>
+            {displayAvailable
+              ? <>{Math.round(displayWatts)}<span style={{ fontSize: 16, color: theme.color.textMuted }}> W</span></>
+              : <span style={{ fontSize: 24, color: theme.color.textMuted }}>—</span>
+            }
+          </div>
+        )}
         {/* AUTO chip — replaces the zone label in auto mode */}
         {auto ? (
           <div style={{
@@ -156,10 +179,23 @@ export const PowerArc: FC<PowerArcProps> = ({
         ) : (
           <div style={{ fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color }}>{zoneLabel}</div>
         )}
-        {/* GPU load — shown in auto mode when data is available */}
-        {auto && gpuBusy !== null && (
+        {/* Secondary sub-labels: watts (+ GPU) under the fps hero, or just GPU in plain auto */}
+        {fpsMode ? (
           <div style={{ fontSize: 9, color: theme.color.textMuted, marginTop: 2 }}>
-            {t("tdp.arc.gpu", { pct: Math.round(gpuBusy) })}
+            {displayAvailable ? `${Math.round(displayWatts)} W` : "— W"}
+            {gpuBusy !== null && <> · {t("tdp.arc.gpu", { pct: Math.round(gpuBusy) })}</>}
+          </div>
+        ) : (
+          auto && gpuBusy !== null && (
+            <div style={{ fontSize: 9, color: theme.color.textMuted, marginTop: 2 }}>
+              {t("tdp.arc.gpu", { pct: Math.round(gpuBusy) })}
+            </div>
+          )
+        )}
+        {/* Honest "target unreachable" warning — at max power, still short of target */}
+        {atMaxBelowTarget && (
+          <div style={{ fontSize: 8, color: "#ffb454", marginTop: 2, maxWidth: 150, textAlign: "center", lineHeight: 1.2 }}>
+            {t("tdp.fps.unreached")}
           </div>
         )}
       </div>
