@@ -3,6 +3,7 @@ import { Focusable } from "@decky/ui";
 import { LuGamepad2 } from "react-icons/lu";
 import { TdpScope } from "../api";
 import { theme } from "../theme";
+import { segmentGroupStyle, segmentItemStyle } from "./segmented";
 
 interface ProfileSelectorProps {
   scope: TdpScope;
@@ -22,33 +23,15 @@ export const ProfileSelector: FC<ProfileSelectorProps> = ({
   onScope,
 }) => {
   const seg = (active: boolean): CSSProperties => ({
+    ...segmentItemStyle(active),
     flex: 1,
     textAlign: "center",
     padding: "6px 10px",
-    borderRadius: theme.radius.sm,
-    fontSize: theme.font.body,
-    fontWeight: active ? 600 : 400,
-    color: active ? theme.color.textPrimary : theme.color.textMuted,
-    background: active ? theme.color.accent : "transparent",
-    cursor: "pointer",
-    whiteSpace: "nowrap",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    transition: "background 140ms ease, color 140ms ease",
   });
 
   return (
     <div>
-      <Focusable
-        style={{
-          display: "flex",
-          gap: 4,
-          padding: 4,
-          borderRadius: theme.radius.md,
-          background: theme.color.surfaceRaised,
-          boxShadow: `inset 0 0 0 1px ${theme.color.hairline}`,
-        }}
-      >
+      <Focusable style={segmentGroupStyle}>
         <Focusable style={seg(scope === "global")} onActivate={() => onScope("global")} onClick={() => onScope("global")}>
           {globalLabel}
         </Focusable>

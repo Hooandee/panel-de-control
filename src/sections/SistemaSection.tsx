@@ -4,8 +4,7 @@ import { LuSun, LuVolume2 } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
 import { ValueBar } from "../components/ValueBar";
-import { useBrightness } from "../system/useBrightness";
-import { useVolume } from "../system/useVolume";
+import { useBrightness, useVolume } from "../system/useScalar";
 
 /** Quick system controls: brightness + volume, with the exact value visible. */
 export const SistemaSection: FC = () => {
@@ -22,6 +21,7 @@ export const SistemaSection: FC = () => {
           percent={brightness.percent}
           onChange={brightness.set}
           disabled={!brightness.supported}
+          loading={brightness.loading}
           unavailableLabel={t("system.unavailable")}
         />
       </PanelSectionRow>
@@ -32,6 +32,7 @@ export const SistemaSection: FC = () => {
           percent={volume.percent}
           onChange={volume.set}
           disabled={!volume.supported}
+          loading={volume.loading}
           unavailableLabel={t("system.unavailable")}
         />
       </PanelSectionRow>

@@ -17,7 +17,10 @@ export interface ScalarControl {
 
 /** What a section consumes: integer percent + a percent setter + availability. */
 export interface SystemControl {
+  /** The underlying API exists on this device. */
   supported: boolean;
+  /** Supported, but no real reading has arrived yet (don't show a value/slider). */
+  loading: boolean;
   percent: number;
   set: (percent: number) => void;
 }

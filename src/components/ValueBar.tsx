@@ -1,6 +1,7 @@
 import { FC, ReactNode } from "react";
 import { SliderField } from "@decky/ui";
 import { theme } from "../theme";
+import { clamp } from "../system/logic";
 
 interface ValueBarProps {
   icon: ReactNode;
@@ -8,16 +9,18 @@ interface ValueBarProps {
   /** 0..100 */
   percent: number;
   onChange: (percent: number) => void;
-  /** When the underlying system control is unavailable on this device. */
+  /** The underlying system control is unavailable on this device. */
   disabled?: boolean;
+  /** Supported but no real reading yet — show a placeholder, not a fake slider. */
+  loading?: boolean;
   unavailableLabel?: string;
 }
 
 /**
  * Labeled value control: icon + label, the exact numeric value shown large, and
  * a single gamepad/touch slider to set a precise value — the PdC answer to
- * Steam's native sliders that hide the number. The slider IS the bar (no second
- * decorative bar). Shows a degraded state (no slider) when unavailable.
+ * Steam's native sliders that hide the number. Honest about state: shows "—"
+ * when unavailable and "…" while loading (never a fake 0% slider).
  */
 export const ValueBar: FC<ValueBarProps> = ({
   icon,
@@ -25,17 +28,17 @@ export const ValueBar: FC<ValueBarProps> = ({
   percent,
   onChange,
   disabled = false,
+  loading = false,
   unavailableLabel,
 }) => {
-  const clamped = Math.min(100, Math.max(0, Math.round(percent)));
+  const clamped = clamp(Math.round(percent), 0, 100);
+  const value = disabled ? "—" : loading ? "…" : `${clamped}%`;
 
   return (
     <div
       style={{
+        ...theme.card,
         padding: theme.space.md,
-        borderRadius: theme.radius.md,
-        background: theme.color.surfaceRaised,
-        boxShadow: `inset 0 0 0 1px ${theme.color.hairline}`,
         opacity: disabled ? 0.5 : 1,
         overflow: "hidden", // contain the slider's focus highlight within the card
       }}
@@ -68,36 +71,36 @@ export const ValueBar: FC<ValueBarProps> = ({
             fontVariantNumeric: "tabular-nums",
           }}
         >
-          {disabled ? "—" : `${clamped}%`}
+          {value}
         </span>
       </div>
 
-      {disabled ? (
-        unavailableLabel && (
-          <div
-            style={{
-              marginTop: theme.space.sm,
-              fontSize: theme.font.caption,
-              color: theme.color.textMuted,
-            }}
-          >
-            {unavailableLabel}
-          </div>
-        )
-      ) : (
-        // The slider is the single bar. Rendered directly — NOT in a
-        // PanelSectionRow, whose negative margins would push it outside the card.
-        <div style={{ marginTop: theme.space.xs }}>
-          <SliderField
-            value={clamped}
-            min={0}
-            max={100}
-            step={1}
-            showValue={false}
-            onChange={onChange}
-          />
-        </div>
-      )}
+      {disabled
+        ? unavailableLabel && (
+            <div
+              style={{
+                marginTop: theme.space.sm,
+                fontSize: theme.font.caption,
+                color: theme.color.textMuted,
+              }}
+            >
+              {unavailableLabel}
+            </div>
+          )
+        : !loading && (
+            // The slider is the single bar. Rendered directly — NOT in a
+            // PanelSectionRow, whose negative margins would push it outside the card.
+            <div style={{ marginTop: theme.space.xs }}>
+              <SliderField
+                value={clamped}
+                min={0}
+                max={100}
+                step={1}
+                showValue={false}
+                onChange={onChange}
+              />
+            </div>
+          )}
     </div>
   );
 };
