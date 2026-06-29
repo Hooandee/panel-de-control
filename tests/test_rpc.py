@@ -33,3 +33,10 @@ def test_set_enabled_persists(Plugin):
     assert asyncio.run(p.get_state())["enabled"] is False
     # a fresh instance re-reads the same settings dir → value survived a "restart"
     assert asyncio.run(Plugin().get_state())["enabled"] is False
+
+
+def test_get_version_returns_package_version(Plugin):
+    import json
+    pkg = json.loads((ROOT / "package.json").read_text())
+    p = Plugin()
+    assert asyncio.run(p.get_version()) == pkg["version"]
