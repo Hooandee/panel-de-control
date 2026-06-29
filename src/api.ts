@@ -25,6 +25,17 @@ export interface TdpLimits {
   max_ac: number;
 }
 
+export interface LevelBound {
+  min: number;
+  max: number;
+}
+
+export interface Levels {
+  pl1: number;
+  pl2: number;
+  pl3: number;
+}
+
 export interface TdpState {
   supported: boolean;
   backend: string;
@@ -35,6 +46,12 @@ export interface TdpState {
   watts: number;
   global_watts: number;
   applied_w: number | null;
+  supports_advanced: boolean;
+  level_limits: { pl1?: LevelBound; pl2?: LevelBound; pl3?: LevelBound };
+  levels: Levels;
+  auto: boolean;
+  global_levels: Levels;
+  global_auto: boolean;
 }
 
 export interface TdpApplyResult {
@@ -69,3 +86,5 @@ export const getTdpState = callable<[], TdpState>("get_tdp_state");
 export const setTdpWatts = callable<[watts: number, scope: TdpScope, appid: string | null], TdpApplyResult>("set_tdp_watts");
 export const createGameProfile = callable<[appid: string], void>("create_game_profile");
 export const setCurrentGame = callable<[appid: string | null], TdpState>("set_current_game");
+export const setTdpLevels = callable<[off2: number, off3: number, scope: TdpScope, appid: string | null], TdpApplyResult>("set_tdp_levels");
+export const resetTdpAuto = callable<[scope: TdpScope, appid: string | null], TdpApplyResult>("reset_tdp_auto");
