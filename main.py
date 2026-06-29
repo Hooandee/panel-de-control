@@ -9,8 +9,8 @@ from version import read_version
 from settings_store import SettingsStore
 
 DEFAULTS = {
-    "enabled": True,
-    # add your settings keys here; SettingsStore merges these over stored values
+    # Persisted settings keys go here; SettingsStore merges these over stored values.
+    # (TDP per-game profiles will live in their own store in the TDP sub-project.)
 }
 
 
@@ -37,16 +37,6 @@ class Plugin:
     async def get_version(self) -> str:
         self._init()
         return read_version()
-
-    async def get_state(self) -> dict:
-        self._init()
-        return dict(self._settings)
-
-    async def set_enabled(self, on: bool) -> None:
-        self._init()
-        self._settings["enabled"] = on
-        self._save()
-        # apply the change to hardware/effect here
 
     async def get_device(self) -> dict:
         self._init()

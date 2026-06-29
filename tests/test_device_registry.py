@@ -11,6 +11,7 @@ KNOWN = {
     "ROG Xbox Ally X RC73XA": "rog_xbox_ally_x",
     "83E1": "legion_go",
     "83L3": "legion_go_s",
+    "83Q1": "legion_go_s",
     "83N0": "legion_go_2",
     "Claw 8 AI+ A2VM": "msi_claw_8_ai_plus",
 }

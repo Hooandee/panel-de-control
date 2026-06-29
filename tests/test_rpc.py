@@ -27,14 +27,6 @@ def Plugin(tmp_path, monkeypatch):
     return main.Plugin
 
 
-def test_set_enabled_persists(Plugin):
-    p = Plugin()
-    asyncio.run(p.set_enabled(False))
-    assert asyncio.run(p.get_state())["enabled"] is False
-    # a fresh instance re-reads the same settings dir → value survived a "restart"
-    assert asyncio.run(Plugin().get_state())["enabled"] is False
-
-
 def test_get_version_returns_package_version(Plugin):
     import json
     pkg = json.loads((ROOT / "package.json").read_text())
