@@ -1,9 +1,11 @@
+import asyncio
 import os
 from dataclasses import asdict
 
 import decky
 
 # py_modules/ is on sys.path → import TOP-LEVEL (never `from py_modules.x import`).
+import auto_tdp
 import device_registry
 from version import read_version
 from settings_store import SettingsStore
@@ -16,6 +18,7 @@ from power.reader import PowerReader
 DEFAULTS = {
     # Persisted settings keys go here; SettingsStore merges these over stored values.
     # (TDP per-game profiles will live in their own store in the TDP sub-project.)
+    "auto_tdp": False,
 }
 
 
@@ -42,6 +45,8 @@ class Plugin:
         self._power_reader = PowerReader()
         self._current_appid = None
         self._lifecycle = LifecycleManager(apply_cb=self._reapply_tdp)
+        self._auto_task = None
+        self._auto_setpoint = None
         self._ready = True
 
     def _save(self) -> None:
@@ -61,10 +66,70 @@ class Plugin:
         self._init()
         return self._fan_reader.read()
 
-    # ---- Power draw (read-only) --------------------------------------------
+    # ---- Auto-TDP loop ------------------------------------------------------
+    def _start_auto_loop(self) -> None:
+        if self._auto_task is not None and not self._auto_task.done():
+            return
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return  # no event loop in tests — skip task creation safely
+        self._auto_task = asyncio.create_task(self._auto_loop())
+
+    def _stop_auto_loop(self) -> None:
+        if self._auto_task is not None:
+            self._auto_task.cancel()
+            self._auto_task = None
+
+    async def _auto_loop(self) -> None:
+        while True:
+            try:
+                await asyncio.sleep(2)
+                pr = self._power_reader.read()
+                gpu_busy = pr.get("gpu_busy")
+                limits = self._tdp_backend.get_limits()
+                ac = read_on_ac()
+                active = self._active_max(limits, ac)
+                ll = self._cap_level_limits(self._tdp_backend.level_limits(), active)
+                eff = self._tdp_profiles.effective(self._current_appid)
+                cur = self._clamp_levels(eff, limits, active, ll)["pl1"]
+                nxt = auto_tdp.decide(cur, gpu_busy, limits.min_w, active)
+                if nxt != cur:
+                    scope = "game" if self._current_appid else "global"
+                    self._tdp_profiles.set_pl1(scope, nxt, appid=self._current_appid)
+                    self._reapply_tdp()
+            except asyncio.CancelledError:
+                return
+            except Exception:  # noqa: BLE001
+                pass  # loop must never die
+
+    # ---- Power draw + auto-TDP RPCs -----------------------------------------
     async def get_power_draw(self) -> dict:
         self._init()
-        return self._power_reader.read()
+        pr = self._power_reader.read()
+        auto = bool(self._settings.get("auto_tdp"))
+        limits = self._tdp_backend.get_limits()
+        ac = read_on_ac()
+        active = self._active_max(limits, ac)
+        ll = self._cap_level_limits(self._tdp_backend.level_limits(), active)
+        eff = self._tdp_profiles.effective(self._current_appid)
+        setpoint = self._clamp_levels(eff, limits, active, ll)["pl1"]
+        return {
+            "watts": pr["watts"],
+            "gpu_busy": pr["gpu_busy"],
+            "auto_tdp": auto,
+            "setpoint": setpoint,
+        }
+
+    async def set_auto_tdp(self, enabled: bool) -> dict:
+        self._init()
+        self._settings["auto_tdp"] = bool(enabled)
+        self._save()
+        if enabled:
+            self._start_auto_loop()
+        else:
+            self._stop_auto_loop()
+        return {"auto_tdp": bool(enabled)}
 
     # ---- TDP helpers + RPCs -------------------------------------------------
     def _cap_level_limits(self, ll: dict, active_max: int) -> dict:
@@ -195,11 +260,14 @@ class Plugin:
         try:
             self._reapply_tdp()
             self._lifecycle.start()
+            if self._settings.get("auto_tdp"):
+                self._start_auto_loop()
         except Exception as e:  # noqa: BLE001
             decky.logger.error("TDP startup failed: %s", e)
 
     async def _unload(self) -> None:
         # cancel asyncio tasks, stop loops, release hardware here
+        self._stop_auto_loop()
         if getattr(self, "_lifecycle", None) is not None:
             self._lifecycle.stop()
         decky.logger.info("Panel de Control unloaded")

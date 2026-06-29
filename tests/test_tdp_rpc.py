@@ -7,6 +7,8 @@ import pytest
 
 from tdp.types import TdpLimits, TdpResult
 
+_FAKE_POWER = {"watts": 13.1, "gpu_busy": 49}
+
 
 class FakeBackend:
     supported = True
@@ -167,3 +169,62 @@ def test_battery_ceiling_caps_pl1_and_rails(Plugin, monkeypatch):
     assert st["watts"] == 20
     assert st["level_limits"]["pl2"]["max"] == 20  # rails capped to battery ceiling
     assert st["levels"]["pl2"] == 20
+
+
+# --- auto-TDP RPC tests -------------------------------------------------------
+
+@pytest.fixture
+def PluginWithPower(Plugin, monkeypatch):
+    """Plugin fixture with a deterministic fake PowerReader."""
+    import main as main_module
+    fake_pr = types.SimpleNamespace(read=lambda: dict(_FAKE_POWER))
+    # Patch _init so it installs our fake reader, then call _init normally.
+    original_init = main_module.Plugin._init
+
+    def patched_init(self):
+        original_init(self)
+        self._power_reader = fake_pr
+
+    monkeypatch.setattr(main_module.Plugin, "_init", patched_init)
+    return main_module.Plugin
+
+
+def test_get_power_draw_has_all_keys(PluginWithPower):
+    p = PluginWithPower()
+    r = asyncio.run(p.get_power_draw())
+    assert set(r.keys()) == {"watts", "gpu_busy", "auto_tdp", "setpoint"}
+
+
+def test_get_power_draw_values(PluginWithPower):
+    p = PluginWithPower()
+    r = asyncio.run(p.get_power_draw())
+    assert r["watts"] == 13.1
+    assert r["gpu_busy"] == 49
+    assert r["auto_tdp"] is False  # default off
+    assert isinstance(r["setpoint"], int)  # effective clamped pl1
+
+
+def test_set_auto_tdp_true_returns_correct_shape(PluginWithPower):
+    p = PluginWithPower()
+    res = asyncio.run(p.set_auto_tdp(True))
+    assert res == {"auto_tdp": True}
+
+
+def test_set_auto_tdp_false_returns_correct_shape(PluginWithPower):
+    p = PluginWithPower()
+    asyncio.run(p.set_auto_tdp(True))
+    res = asyncio.run(p.set_auto_tdp(False))
+    assert res == {"auto_tdp": False}
+
+
+def test_set_auto_tdp_persists_across_rpc_calls(PluginWithPower):
+    p = PluginWithPower()
+    asyncio.run(p.set_auto_tdp(True))
+    r = asyncio.run(p.get_power_draw())
+    assert r["auto_tdp"] is True
+
+
+def test_get_power_draw_auto_tdp_false_by_default(PluginWithPower):
+    p = PluginWithPower()
+    r = asyncio.run(p.get_power_draw())
+    assert r["auto_tdp"] is False
