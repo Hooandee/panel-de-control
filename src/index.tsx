@@ -7,7 +7,7 @@ import {
   staticClasses,
 } from "@decky/ui";
 import { definePlugin } from "@decky/api";
-import { FaSlidersH } from "react-icons/fa";
+import { LuGauge } from "react-icons/lu";
 import { FC, ReactNode, useCallback, useEffect, useRef, useState } from "react";
 
 import { getDevice, getTdpState, setTdpWatts, DeviceInfo, TdpState, TdpScope } from "./api";
@@ -147,7 +147,7 @@ export default definePlugin(() => ({
       </ErrorBoundary>
     </I18nProvider>
   ),
-  icon: <FaSlidersH />,
+  icon: <LuGauge />,
   onDismount() {
     // no global listeners; hooks clean up their own
   },

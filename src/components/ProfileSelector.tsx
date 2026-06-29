@@ -1,5 +1,6 @@
 import { CSSProperties, FC } from "react";
 import { Focusable } from "@decky/ui";
+import { LuGamepad2 } from "react-icons/lu";
 import { TdpScope } from "../api";
 import { theme } from "../theme";
 
@@ -53,7 +54,7 @@ export const ProfileSelector: FC<ProfileSelectorProps> = ({
         </Focusable>
         {gameName && (
           <Focusable style={seg(scope === "game")} onActivate={() => onScope("game")} onClick={() => onScope("game")}>
-            🎮 {gameName}
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><LuGamepad2 size={13} /> {gameName}</span>
           </Focusable>
         )}
       </Focusable>

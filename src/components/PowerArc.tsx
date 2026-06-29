@@ -1,5 +1,6 @@
 import { FC } from "react";
 import { fraction, zoneFor, arcColor } from "../tdp/logic";
+import { ZONE_ICON } from "../tdp/zoneIcons";
 import { TdpLimits } from "../api";
 import { theme } from "../theme";
 
@@ -33,6 +34,7 @@ export const PowerArc: FC<PowerArcProps> = ({ watts, limits, onAc, zoneLabel }) 
   const f = fraction(watts, limits.min, limits.max_ac);
   const zone = zoneFor(f);
   const color = arcColor(f);
+  const ZoneIcon = ZONE_ICON[zone.key];
   const fMax = fraction(limits.max, limits.min, limits.max_ac);
   const hasBoost = fMax < 1;
   const end = START + SWEEP;
@@ -71,7 +73,7 @@ export const PowerArc: FC<PowerArcProps> = ({ watts, limits, onAc, zoneLabel }) 
         <text x={ex} y={ey + 16} fill={theme.color.textMuted} fontSize="10" textAnchor="middle">{limits.max_ac}W{hasBoost ? " ⚡" : ""}</text>
       </svg>
       <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
-        <div style={{ fontSize: 26, lineHeight: 1 }}>{zone.icon}</div>
+        <div style={{ lineHeight: 0 }}><ZoneIcon size={26} color={color} /></div>
         <div style={{ fontSize: 32, fontWeight: 700, color: theme.color.textPrimary, lineHeight: 1.15 }}>
           {watts}
           <span style={{ fontSize: 16, color: theme.color.textMuted }}> W</span>

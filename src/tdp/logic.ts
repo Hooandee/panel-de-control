@@ -1,14 +1,13 @@
 export interface Zone {
   key: "save" | "eco" | "balanced" | "hot" | "turbo";
-  icon: string;
 }
 
 const ZONES: Zone[] = [
-  { key: "save", icon: "😴" },
-  { key: "eco", icon: "🍃" },
-  { key: "balanced", icon: "⚖️" },
-  { key: "hot", icon: "🔥" },
-  { key: "turbo", icon: "🚀" },
+  { key: "save" },
+  { key: "eco" },
+  { key: "balanced" },
+  { key: "hot" },
+  { key: "turbo" },
 ];
 
 /** Fill fraction in [0,1] of watts within [min, maxAc]. Clamped. */
@@ -18,7 +17,7 @@ export function fraction(watts: number, min: number, maxAc: number): number {
   return Math.max(0, Math.min(1, (watts - min) / span));
 }
 
-/** 5 even bands across [0,1] → 😴 🍃 ⚖️ 🔥 🚀. */
+/** 5 even bands across [0,1] → save eco balanced hot turbo. */
 export function zoneFor(frac: number): Zone {
   const clamped = Math.max(0, Math.min(1, frac));
   const idx = Math.min(ZONES.length - 1, Math.floor(clamped * ZONES.length));

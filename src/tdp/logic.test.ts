@@ -19,13 +19,10 @@ describe("fraction", () => {
 });
 
 describe("zoneFor", () => {
-  it("returns the 5 zones across the range with emojis", () => {
+  it("returns the 5 zones across the range", () => {
     expect(zoneFor(0).key).toBe("save");
-    expect(zoneFor(0).icon).toBe("😴");
     expect(zoneFor(0.5).key).toBe("balanced");
-    expect(zoneFor(0.5).icon).toBe("⚖️");
     expect(zoneFor(1).key).toBe("turbo");
-    expect(zoneFor(1).icon).toBe("🚀");
     expect(zoneFor(0.3).key).toBe("eco");
     expect(zoneFor(0.7).key).toBe("hot");
   });

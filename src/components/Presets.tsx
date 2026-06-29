@@ -1,5 +1,6 @@
-import { CSSProperties, FC } from "react";
+import { CSSProperties, ComponentType, FC } from "react";
 import { Focusable } from "@decky/ui";
+import { LuLeaf, LuGauge, LuRocket } from "react-icons/lu";
 import { TdpLimits } from "../api";
 import { theme } from "../theme";
 
@@ -12,10 +13,10 @@ interface PresetsProps {
 
 export const Presets: FC<PresetsProps> = ({ limits, onAc, labels, onPick }) => {
   const turbo = onAc ? limits.max_ac : limits.max;
-  const items = [
-    { icon: "😴", label: labels.save, watts: limits.min },
-    { icon: "⚖️", label: labels.balanced, watts: limits.default },
-    { icon: "🚀", label: labels.turbo, watts: turbo },
+  const items: { Icon: ComponentType<{ size?: number }>; label: string; watts: number }[] = [
+    { Icon: LuLeaf, label: labels.save, watts: limits.min },
+    { Icon: LuGauge, label: labels.balanced, watts: limits.default },
+    { Icon: LuRocket, label: labels.turbo, watts: turbo },
   ];
   const btn: CSSProperties = {
     flex: 1,
@@ -36,7 +37,7 @@ export const Presets: FC<PresetsProps> = ({ limits, onAc, labels, onPick }) => {
     <Focusable style={{ display: "flex", gap: 6, marginTop: 8 }}>
       {items.map((it) => (
         <Focusable key={it.label} style={btn} onActivate={() => onPick(it.watts)} onClick={() => onPick(it.watts)}>
-          <span style={{ fontSize: 16 }}>{it.icon}</span>
+          <it.Icon size={16} />
           <span>{it.label}</span>
           <span style={{ color: theme.color.textMuted }}>{it.watts}W</span>
         </Focusable>
