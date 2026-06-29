@@ -30,6 +30,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
+      - run: pnpm test:fe
       - run: pnpm build
       - name: Verify build output exists
         run: test -f dist/index.js
