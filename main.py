@@ -60,27 +60,45 @@ class Plugin:
         return self._fan_reader.read()
 
     # ---- TDP helpers + RPCs -------------------------------------------------
-    def _clamp_levels(self, eff: dict, lim, ll: dict) -> dict:
+    def _cap_level_limits(self, ll: dict, active_max: int) -> dict:
+        """Cap each rail's max to the active (on_ac) ceiling so the UI never offers
+        more than the device can deliver on the current power source."""
+        out = {}
+        for key, b in ll.items():
+            hi = min(b["max"], active_max)
+            out[key] = {"min": min(b["min"], hi), "max": hi}
+        return out
+
+    def _clamp_levels(self, eff: dict, lim, active_max: int, ll: dict) -> dict:
         def clamp(value, key):
             b = ll.get(key)
             lo = b["min"] if b else lim.min_w
-            hi = b["max"] if b else lim.max_ac_w
+            hi = b["max"] if b else active_max
             return max(lo, min(int(value), hi))
 
         return {"pl1": clamp(eff["pl1"], "pl1"),
                 "pl2": clamp(eff["pl2"], "pl2"),
                 "pl3": clamp(eff["pl3"], "pl3")}
 
+    def _active_max(self, limits, ac: bool) -> int:
+        return limits.max_ac_w if ac else limits.max_w
+
     def _reapply_tdp(self, on_ac=None):
         self._init()
         eff = self._tdp_profiles.effective(self._current_appid)
         ac = read_on_ac() if on_ac is None else on_ac
-        return self._tdp_backend.set_levels(eff["pl1"], eff["pl2"], eff["pl3"], ac)
+        limits = self._tdp_backend.get_limits()
+        active = self._active_max(limits, ac)
+        ll = self._cap_level_limits(self._tdp_backend.level_limits(), active)
+        lv = self._clamp_levels(eff, limits, active, ll)
+        return self._tdp_backend.set_levels(lv["pl1"], lv["pl2"], lv["pl3"], ac)
 
     async def get_tdp_state(self) -> dict:
         self._init()
         limits = self._tdp_backend.get_limits()
-        ll = self._tdp_backend.level_limits()
+        ac = read_on_ac()
+        active = self._active_max(limits, ac)
+        ll = self._cap_level_limits(self._tdp_backend.level_limits(), active)
         eff = self._tdp_profiles.effective(self._current_appid)
         geff = self._tdp_profiles.effective(None)
         return {
@@ -88,18 +106,18 @@ class Plugin:
             "backend": self._tdp_backend.name,
             "limits": {"min": limits.min_w, "default": limits.default_w,
                        "max": limits.max_w, "max_ac": limits.max_ac_w},
-            "on_ac": read_on_ac(),
+            "on_ac": ac,
             "appid": self._current_appid,
             "has_game_profile": (self._current_appid is not None
                                  and self._tdp_profiles.has_game(self._current_appid)),
-            "watts": limits.clamp(eff["watts"]),
-            "global_watts": limits.clamp(geff["watts"]),
+            "watts": limits.clamp(eff["watts"], ac),
+            "global_watts": limits.clamp(geff["watts"], ac),
             "applied_w": self._tdp_backend.read_applied(),
             "supports_advanced": ("pl2" in ll or "pl3" in ll),
             "level_limits": ll,
-            "levels": self._clamp_levels(eff, limits, ll),
+            "levels": self._clamp_levels(eff, limits, active, ll),
             "auto": eff["auto"],
-            "global_levels": self._clamp_levels(geff, limits, ll),
+            "global_levels": self._clamp_levels(geff, limits, active, ll),
             "global_auto": geff["auto"],
         }
 
@@ -119,7 +137,8 @@ class Plugin:
         if resolved is None:
             return {"requested_w": watts, "applied_w": None, "ok": False,
                     "detail": f"unknown scope: {scope}"}
-        clamped = self._tdp_backend.get_limits().clamp(watts)
+        limits = self._tdp_backend.get_limits()
+        clamped = limits.clamp(watts, read_on_ac())
         self._tdp_profiles.set_pl1(resolved, clamped, appid=appid)
         res = self._reapply_tdp()
         return {"requested_w": res.requested_w, "applied_w": res.applied_w,

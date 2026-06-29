@@ -18,10 +18,10 @@ class FakeBackend:
         self._levels = None
 
     def get_limits(self):
-        return TdpLimits(min_w=5, default_w=15, max_w=25, max_ac_w=30)
+        return TdpLimits(min_w=5, default_w=15, max_w=20, max_ac_w=60)
 
     def level_limits(self):
-        return {"pl1": {"min": 5, "max": 30},
+        return {"pl1": {"min": 5, "max": 60},
                 "pl2": {"min": 5, "max": 40},
                 "pl3": {"min": 5, "max": 50}}
 
@@ -59,7 +59,7 @@ def Plugin(tmp_path, monkeypatch):
 def test_get_tdp_state_shape(Plugin):
     st = asyncio.run(Plugin().get_tdp_state())
     assert st["supported"] is True and st["backend"] == "fake"
-    assert st["limits"] == {"min": 5, "default": 15, "max": 25, "max_ac": 30}
+    assert st["limits"] == {"min": 5, "default": 15, "max": 20, "max_ac": 60}
     assert "on_ac" in st and "watts" in st and "applied_w" in st
     assert "global_watts" in st and isinstance(st["global_watts"], int)
 
@@ -67,11 +67,11 @@ def test_get_tdp_state_shape(Plugin):
 def test_set_tdp_watts_global_clamps_persists_applies(Plugin):
     p = Plugin()
     res = asyncio.run(p.set_tdp_watts(99, "global"))
-    assert res["ok"] is True and res["applied_w"] == 30  # clamped to max_ac
+    assert res["ok"] is True and res["applied_w"] == 60  # clamped to max_ac_w on charger
     st = asyncio.run(p.get_tdp_state())
-    assert st["watts"] == 30
+    assert st["watts"] == 60
     # survives reload (persisted)
-    assert asyncio.run(Plugin().get_tdp_state())["watts"] == 30
+    assert asyncio.run(Plugin().get_tdp_state())["watts"] == 60
 
 
 def test_per_game_profile_overrides_global(Plugin):
@@ -102,7 +102,7 @@ def test_set_tdp_watts_unknown_scope_does_not_raise(Plugin):
 def test_state_exposes_advanced_fields(Plugin):
     st = asyncio.run(Plugin().get_tdp_state())
     assert st["supports_advanced"] is True
-    assert st["level_limits"]["pl2"] == {"min": 5, "max": 40}
+    assert st["level_limits"]["pl2"] == {"min": 5, "max": 40}  # uncapped (active_max=60 > 40)
     assert st["auto"] is True  # fresh profile is auto
     assert set(st["levels"]) == {"pl1", "pl2", "pl3"}
     assert "global_levels" in st and "global_auto" in st
@@ -154,3 +154,16 @@ def test_set_tdp_levels_unknown_scope_does_not_raise(Plugin):
 def test_reset_tdp_auto_unknown_scope_does_not_raise(Plugin):
     res = asyncio.run(Plugin().reset_tdp_auto("bogus"))
     assert res["ok"] is False and "unknown scope" in res["detail"]
+
+
+def test_battery_ceiling_caps_pl1_and_rails(Plugin, monkeypatch):
+    import main as main_module
+    monkeypatch.setattr(main_module, "read_on_ac", lambda root="/": False)
+    p = Plugin()
+    res = asyncio.run(p.set_tdp_watts(99, "global"))
+    assert res["applied_w"] == 20  # clamped to battery max, not charger 60
+    st = asyncio.run(p.get_tdp_state())
+    assert st["on_ac"] is False
+    assert st["watts"] == 20
+    assert st["level_limits"]["pl2"]["max"] == 20  # rails capped to battery ceiling
+    assert st["levels"]["pl2"] == 20
