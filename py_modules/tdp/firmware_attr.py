@@ -13,6 +13,8 @@ class FirmwareAttrBackend(TDPBackend):
     (lenovo-wmi-other), MSI (msi-wmi-platform): ppt_pl1_spl/ppt_pl2_sppt/ppt_pl3_fppt
     with current_value (watts) + min_value/max_value. Never raises."""
 
+    supports_levels = True
+
     def __init__(self, driver_prefix, fallback, root="/", profile_name=None):
         self.name = f"firmware-attr:{driver_prefix}"
         self._fallback = fallback
@@ -69,25 +71,49 @@ class FirmwareAttrBackend(TDPBackend):
             except OSError:
                 continue
 
+    def _pl_bounds(self, attr):
+        mn = self._read_int(self._attr(attr, "min_value"))
+        mx = self._read_int(self._attr(attr, "max_value"))
+        return mn, mx
+
+    def level_limits(self):
+        out = {}
+        for key, attr in (("pl1", "ppt_pl1_spl"), ("pl2", "ppt_pl2_sppt"), ("pl3", "ppt_pl3_fppt")):
+            mn, mx = self._pl_bounds(attr)
+            if mn is not None and mx is not None:
+                out[key] = {"min": mn, "max": mx}
+        return out
+
+    def _clamp(self, value, attr, fallback_min, fallback_max):
+        mn, mx = self._pl_bounds(attr)
+        lo = mn if mn is not None else fallback_min
+        hi = mx if mx is not None else fallback_max
+        return max(lo, min(int(value), hi))
+
+    def set_levels(self, pl1, pl2, pl3, ac):
+        if not self.supported:
+            return TdpResult(pl1, None, False, "firmware-attributes path not present")
+        lim = self.get_limits()
+        c1 = self._clamp(pl1, "ppt_pl1_spl", lim.min_w, lim.max_ac_w)
+        c2 = self._clamp(pl2, "ppt_pl2_sppt", lim.min_w, lim.max_ac_w)
+        c3 = self._clamp(pl3, "ppt_pl3_fppt", lim.min_w, lim.max_ac_w)
+        self._set_custom_profile()
+        self._write(self._attr("ppt_pl3_fppt"), c3)
+        self._write(self._attr("ppt_pl2_sppt"), c2)
+        ok = self._write(self._attr("ppt_pl1_spl"), c1)
+        applied = self.read_applied()
+        success = ok and applied == c1
+        detail = "" if success else f"write not confirmed (wanted {c1}, read {applied})"
+        return TdpResult(pl1, applied, success, detail)
+
     def set_tdp(self, watts, ac):
         if not self.supported:
             return TdpResult(watts, None, False, "firmware-attributes path not present")
         lim = self.get_limits()
         target = lim.clamp(watts)
-        self._set_custom_profile()
-        # boost headroom for pl2/pl3, clamped to their own sysfs maxima
-        pl2_max = self._read_int(self._attr("ppt_pl2_sppt", "max_value"))
-        pl3_max = self._read_int(self._attr("ppt_pl3_fppt", "max_value"))
-        pl2 = target if pl2_max is None else min(pl2_max, max(target, round(target * 1.2)))
-        pl3 = target if pl3_max is None else min(pl3_max, max(target, round(target * 1.4)))
-        # write boost first, sustained (pl1) LAST
-        self._write(self._attr("ppt_pl3_fppt"), pl3)
-        self._write(self._attr("ppt_pl2_sppt"), pl2)
-        ok = self._write(self._attr("ppt_pl1_spl"), target)
-        applied = self.read_applied()
-        success = ok and applied == target
-        detail = "" if success else f"write not confirmed (wanted {target}, read {applied})"
-        return TdpResult(watts, applied, success, detail)
+        pl2 = max(target, round(target * 1.2))
+        pl3 = max(target, round(target * 1.4))
+        return self.set_levels(target, pl2, pl3, ac)
 
     def read_applied(self):
         return self._read_int(self._attr("ppt_pl1_spl"))

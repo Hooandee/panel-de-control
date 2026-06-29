@@ -5,6 +5,7 @@ from tdp.types import TdpLimits, TdpResult
 
 class TDPBackend(ABC):
     supported: bool = True
+    supports_levels: bool = False
     name: str = "base"
 
     @abstractmethod
@@ -18,6 +19,14 @@ class TDPBackend(ABC):
     @abstractmethod
     def read_applied(self) -> int | None:
         """Currently-applied sustained limit in watts, or None if unreadable."""
+
+    def level_limits(self) -> dict:
+        """Per-PL min/max bounds. Returns empty dict on backends without PL support."""
+        return {}
+
+    def set_levels(self, pl1: int, pl2: int, pl3: int, ac: bool) -> TdpResult:
+        """Set explicit per-PL targets. Defaults to applying pl1 via set_tdp."""
+        return self.set_tdp(pl1, ac)
 
 
 class NullBackend(TDPBackend):
