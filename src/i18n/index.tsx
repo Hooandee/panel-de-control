@@ -35,6 +35,13 @@ const es: Record<string, string> = {
   "tdp.preset.save": "Ahorro",
   "tdp.preset.balanced": "Equilibrado",
   "tdp.preset.turbo": "Turbo",
+  "tdp.advanced.title": "Avanzado",
+  "tdp.advanced.hint": "Margen extra de potencia para picos.",
+  "tdp.advanced.auto": "Auto",
+  "tdp.advanced.manual": "Manual",
+  "tdp.advanced.reset": "Volver a automático",
+  "tdp.level.slow": "Boost lento (SPPT)",
+  "tdp.level.fast": "Boost rápido (FPPT)",
 };
 
 const en: Record<string, string> = {
@@ -66,6 +73,13 @@ const en: Record<string, string> = {
   "tdp.preset.save": "Save",
   "tdp.preset.balanced": "Balanced",
   "tdp.preset.turbo": "Turbo",
+  "tdp.advanced.title": "Advanced",
+  "tdp.advanced.hint": "Extra power headroom for short spikes.",
+  "tdp.advanced.auto": "Auto",
+  "tdp.advanced.manual": "Manual",
+  "tdp.advanced.reset": "Back to automatic",
+  "tdp.level.slow": "Slow boost (SPPT)",
+  "tdp.level.fast": "Fast boost (FPPT)",
 };
 
 const DICTS: Record<Lang, Record<string, string>> = { es, en };

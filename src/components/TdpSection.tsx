@@ -7,6 +7,7 @@ import { fraction, zoneFor } from "../tdp/logic";
 import { ProfileSelector } from "./ProfileSelector";
 import { PowerArc } from "./PowerArc";
 import { Presets } from "./Presets";
+import { AdvancedBoost } from "./AdvancedBoost";
 
 export interface TdpSectionProps {
   tdp: TdpState | null;
@@ -14,9 +15,11 @@ export interface TdpSectionProps {
   game: { appid: string; name: string } | null;
   onScope: (scope: TdpScope) => void;
   onWatts: (watts: number) => void;
+  onSetLevels: (off2: number, off3: number) => void;
+  onResetAuto: () => void;
 }
 
-export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, onScope, onWatts }) => {
+export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, onScope, onWatts, onSetLevels, onResetAuto }) => {
   const { t } = useI18n();
 
   if (!tdp) return <Spinner />;
@@ -74,6 +77,17 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, onScope, onW
           onPick={onWatts}
         />
       </PanelSectionRow>
+      {tdp.supports_advanced && (
+        <PanelSectionRow>
+          <AdvancedBoost
+            levels={scope === "global" ? tdp.global_levels : tdp.levels}
+            auto={scope === "global" ? tdp.global_auto : tdp.auto}
+            bounds={{ pl2: tdp.level_limits.pl2, pl3: tdp.level_limits.pl3 }}
+            onSetLevels={onSetLevels}
+            onResetAuto={onResetAuto}
+          />
+        </PanelSectionRow>
+      )}
     </>
   );
 };

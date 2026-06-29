@@ -1,6 +1,6 @@
 import { FC, useCallback, useEffect, useRef, useState } from "react";
 
-import { getTdpState, setTdpWatts, TdpState, TdpScope } from "../api";
+import { getTdpState, setTdpWatts, setTdpLevels, resetTdpAuto, TdpState, TdpScope } from "../api";
 import { TdpSection } from "../components/TdpSection";
 import { useRunningGame } from "../tdp/useRunningGame";
 
@@ -50,7 +50,33 @@ export const PotenciaSection: FC = () => {
     [scope, game, refresh],
   );
 
+  const onSetLevels = useCallback(
+    (off2: number, off3: number) => {
+      const target = scope === "game" && game ? game.appid : null;
+      const sc = target ? "game" : "global";
+      if (commitTimer.current) clearTimeout(commitTimer.current);
+      commitTimer.current = setTimeout(() => {
+        setTdpLevels(off2, off3, sc, target).then(() => refresh()).catch(() => {});
+      }, 200);
+    },
+    [scope, game, refresh],
+  );
+
+  const onResetAuto = useCallback(() => {
+    const target = scope === "game" && game ? game.appid : null;
+    const sc = target ? "game" : "global";
+    resetTdpAuto(sc, target).then(() => refresh()).catch(() => {});
+  }, [scope, game, refresh]);
+
   return (
-    <TdpSection tdp={tdp} scope={scope} game={game} onScope={setScope} onWatts={onWatts} />
+    <TdpSection
+      tdp={tdp}
+      scope={scope}
+      game={game}
+      onScope={setScope}
+      onWatts={onWatts}
+      onSetLevels={onSetLevels}
+      onResetAuto={onResetAuto}
+    />
   );
 };
