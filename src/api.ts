@@ -46,6 +46,25 @@ export interface TdpApplyResult {
 
 export type TdpScope = "global" | "game";
 
+export interface FanInfo {
+  label: string;
+  rpm: number;
+  percent: number | null;
+}
+
+export interface TempInfo {
+  label: string;
+  celsius: number;
+}
+
+export interface FanState {
+  supported: boolean;
+  fans: FanInfo[];
+  temps: TempInfo[];
+}
+
+export const getFanState = callable<[], FanState>("get_fan_state");
+
 export const getTdpState = callable<[], TdpState>("get_tdp_state");
 export const setTdpWatts = callable<[watts: number, scope: TdpScope, appid: string | null], TdpApplyResult>("set_tdp_watts");
 export const createGameProfile = callable<[appid: string], void>("create_game_profile");

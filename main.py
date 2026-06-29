@@ -10,6 +10,7 @@ from settings_store import SettingsStore
 from tdp import factory as tdp_factory
 from tdp_profiles import ProfileStore
 from lifecycle import LifecycleManager, read_on_ac
+from fans.hwmon import FanReader
 
 DEFAULTS = {
     # Persisted settings keys go here; SettingsStore merges these over stored values.
@@ -36,6 +37,7 @@ class Plugin:
             default_watts=self._device.tdp_default or 15,
         )
         self._tdp_backend = tdp_factory.select_backend(self._device)
+        self._fan_reader = FanReader()
         self._current_appid = None
         self._lifecycle = LifecycleManager(apply_cb=self._reapply_tdp)
         self._ready = True
@@ -51,6 +53,11 @@ class Plugin:
     async def get_device(self) -> dict:
         self._init()
         return asdict(self._device)
+
+    # ---- Fans (read-only monitor) ------------------------------------------
+    async def get_fan_state(self) -> dict:
+        self._init()
+        return self._fan_reader.read()
 
     # ---- TDP helpers + RPCs -------------------------------------------------
     def _reapply_tdp(self, on_ac=None):
