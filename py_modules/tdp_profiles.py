@@ -36,11 +36,12 @@ class ProfileStore:
             pl1 = int(raw.get("pl1", self._default))
             o2 = raw.get("off2")
             o3 = raw.get("off3")
-            return {
-                "pl1": pl1,
-                "off2": None if o2 is None else max(0, int(o2)),
-                "off3": None if o3 is None else max(0, int(o3)),
-            }
+            if o2 is None or o3 is None:  # invariant: both None (auto) or both int (manual)
+                o2 = o3 = None
+            else:
+                o2 = max(0, int(o2))
+                o3 = max(0, int(o3))
+            return {"pl1": pl1, "off2": o2, "off3": o3}
         if "pl1" in raw and "pl2" in raw:  # migrate old flat/absolute shape
             pl1 = int(raw["pl1"])
             o2 = max(0, int(raw.get("pl2", pl1)) - pl1)
@@ -133,7 +134,7 @@ class ProfileStore:
         self._save()
 
     def set_levels(self, scope, pl1, pl2, pl3, appid=None):
-        """Absolute API (back-compat / game copy): stores pl1 + derived margins, manual."""
+        """Absolute API (back-compat / game copy): converts absolute (pl1, pl2, pl3) to explicit margins (off2=pl2-pl1, off3=pl3-pl2) and stores as manual mode."""
         prof = self._target(scope, appid)
         prof["pl1"] = int(pl1)
         prof["off2"] = max(0, int(pl2) - int(pl1))
@@ -141,5 +142,5 @@ class ProfileStore:
         self._save()
 
     def set_watts(self, scope, watts, appid=None):
-        """Back-compat shim: set pl1 in auto mode (boost derived). Used by main.py set_tdp_watts."""
+        """Back-compat shim for simple-mode callers; sets pl1, keeps boost auto-derived."""
         self.set_pl1(scope, watts, appid=appid)

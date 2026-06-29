@@ -52,6 +52,22 @@ def test_set_pl1_preserves_margins_no_bounce(tmp_path):
     assert s.effective(None)["pl2"] == 37 and s.effective(None)["pl3"] == 47
 
 
+def test_set_pl1_preserves_manual_margins_in_game_scope(tmp_path):
+    s = _store(tmp_path)
+    s.set_offsets("game", 8, 4, appid="42")  # creates manual game profile
+    s.set_pl1("game", 20, appid="42")
+    eff = s.effective("42")
+    assert eff["pl2"] == 28 and eff["pl3"] == 32 and eff["auto"] is False
+
+
+def test_mixed_offsets_collapse_to_auto_on_load(tmp_path):
+    path = str(tmp_path / "tdp_profiles.json")
+    with open(path, "w") as f:
+        json.dump({"global": {"pl1": 15, "off3": 5}}, f)
+    s = ProfileStore(path, default_watts=15)
+    assert s.effective(None)["auto"] is True and s.effective(None)["pl2"] == 18
+
+
 def test_set_auto_reverts_to_derived(tmp_path):
     s = _store(tmp_path)
     s.set_offsets("global", 8, 4)
