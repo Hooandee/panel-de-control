@@ -8,6 +8,7 @@ const color = {
   textMuted: "rgba(255,255,255,0.45)",
   accent: "#4ea1ff",
   warn: "#ffb454",
+  ok: "#7ee0a0",
 } as const;
 
 const radius = { sm: 8, md: 14, lg: 20 } as const;

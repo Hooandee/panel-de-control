@@ -32,8 +32,8 @@ export const AdvancedBoost: FC<AdvancedBoostProps> = ({
     fontSize: theme.font.caption,
     padding: "1px 7px",
     borderRadius: 999,
-    color: auto ? "#7ee0a0" : theme.color.warn,
-    boxShadow: `inset 0 0 0 1px ${auto ? "#7ee0a0" : theme.color.warn}`,
+    color: auto ? theme.color.ok : theme.color.warn,
+    boxShadow: `inset 0 0 0 1px ${auto ? theme.color.ok : theme.color.warn}`,
   };
   const Chevron = open ? LuChevronDown : LuChevronRight;
 
