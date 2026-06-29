@@ -1,0 +1,76 @@
+import os
+import re
+import shutil
+import subprocess
+
+from tdp.backend import TDPBackend
+from tdp.types import TdpLimits, TdpResult
+
+_STAPM_RE = re.compile(r"STAPM LIMIT\s*\|\s*([\d.]+)")
+
+
+def _default_resolve():
+    found = shutil.which("ryzenadj")
+    if found:
+        return found
+    bundled = os.path.join(os.path.dirname(__file__), "..", "..", "bin", "ryzenadj")
+    bundled = os.path.abspath(bundled)
+    return bundled if os.path.exists(bundled) else None
+
+
+def _clean_env():
+    env = dict(os.environ)
+    env["LD_LIBRARY_PATH"] = ""
+    return env
+
+
+class RyzenadjBackend(TDPBackend):
+    """Generic AMD fallback via the ryzenadj binary. Never raises."""
+
+    name = "ryzenadj"
+
+    def __init__(self, fallback: TdpLimits, resolve=_default_resolve, runner=subprocess.run):
+        self._fallback = fallback
+        self._runner = runner
+        self._bin = resolve()
+        self.supported = self._bin is not None
+
+    def get_limits(self) -> TdpLimits:
+        return self._fallback
+
+    def set_tdp(self, watts: int, ac: bool) -> TdpResult:
+        if not self.supported:
+            return TdpResult(watts, None, False, "ryzenadj binary not found")
+        target = self._fallback.clamp(watts)
+        mw = str(target * 1000)
+        argv = [
+            self._bin,
+            "--stapm-limit", mw,
+            "--fast-limit", mw,
+            "--slow-limit", mw,
+            "--tctl-temp", "90",
+        ]
+        try:
+            self._runner(argv, capture_output=True, text=True, timeout=5, env=_clean_env())
+        except (OSError, subprocess.SubprocessError) as e:
+            return TdpResult(watts, None, False, f"ryzenadj failed: {e}")
+        applied = self.read_applied()
+        ok = applied is not None
+        return TdpResult(watts, applied, ok, "" if ok else "could not read back ryzenadj limits")
+
+    def read_applied(self) -> int | None:
+        if not self.supported:
+            return None
+        try:
+            res = self._runner(
+                [self._bin, "-i"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                env=_clean_env(),
+            )
+        except (OSError, subprocess.SubprocessError):
+            return None
+        out = getattr(res, "stdout", "") or ""
+        m = _STAPM_RE.search(out)
+        return round(float(m.group(1))) if m else None
