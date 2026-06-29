@@ -3,9 +3,11 @@ import os
 
 
 class PowerReader:
-    """Reads actual APU/GPU power draw in watts from hwmon. AMD: the `amdgpu`
-    hwmon chip exposes power1_average / power1_input in microwatts. Never raises;
-    returns None when no source is available (honest 'unknown')."""
+    """Reads actual APU/GPU power draw in watts and GPU utilisation from sysfs.
+
+    AMD: `amdgpu` hwmon exposes power1_average / power1_input in microwatts;
+    `gpu_busy_percent` is under the DRM card device node. Never raises; returns
+    None for any field that is unavailable (honest 'unknown')."""
 
     def __init__(self, root="/"):
         self._root = root
@@ -39,5 +41,17 @@ class PowerReader:
                 return round(uw / 1_000_000, 1)
         return None
 
+    def read_gpu_busy(self):
+        """GPU utilisation as an integer percent (0–100), or None if unavailable."""
+        pattern = os.path.join(
+            self._root, "sys/class/drm", "card*", "device", "gpu_busy_percent"
+        )
+        for path in sorted(glob.glob(pattern)):
+            raw = self._read_int(path)
+            if raw is None:
+                return None
+            return max(0, min(raw, 100))
+        return None
+
     def read(self):
-        return {"watts": self.read_watts()}
+        return {"watts": self.read_watts(), "gpu_busy": self.read_gpu_busy()}
