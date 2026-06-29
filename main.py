@@ -13,14 +13,12 @@ from tdp import factory as tdp_factory
 from tdp_profiles import ProfileStore
 from lifecycle import LifecycleManager, read_on_ac
 from fans.hwmon import FanReader
-from gamescope_stats import GamescopeStats
 from power.reader import PowerReader
 
 DEFAULTS = {
     # Persisted settings keys go here; SettingsStore merges these over stored values.
     # (TDP per-game profiles will live in their own store in the TDP sub-project.)
     "auto_tdp": False,
-    "fps_target": None,
 }
 
 
@@ -45,7 +43,6 @@ class Plugin:
         self._tdp_backend = tdp_factory.select_backend(self._device)
         self._fan_reader = FanReader()
         self._power_reader = PowerReader()
-        self._gamescope = GamescopeStats()
         self._current_appid = None
         self._lifecycle = LifecycleManager(apply_cb=self._reapply_tdp)
         self._auto_task = None
@@ -89,22 +86,14 @@ class Plugin:
             try:
                 await asyncio.sleep(2)
                 pr = self._power_reader.read()
+                gpu_busy = pr.get("gpu_busy")
                 limits = self._tdp_backend.get_limits()
                 ac = read_on_ac()
                 active = self._active_max(limits, ac)
                 ll = self._cap_level_limits(self._tdp_backend.level_limits(), active)
                 eff = self._tdp_profiles.effective(self._current_appid)
                 cur = self._clamp_levels(eff, limits, active, ll)["pl1"]
-                target = self._settings.get("fps_target")
-                if target is not None:
-                    fps = self._gamescope.game_fps()
-                    if fps is not None:
-                        nxt = auto_tdp.decide_fps(cur, fps, target, limits.min_w, active)
-                    else:
-                        nxt = cur  # no game focused — hold
-                else:
-                    gpu_busy = pr.get("gpu_busy")
-                    nxt = auto_tdp.decide(cur, gpu_busy, limits.min_w, active)
+                nxt = auto_tdp.decide(cur, gpu_busy, limits.min_w, active)
                 if nxt != cur:
                     scope = "game" if self._current_appid else "global"
                     self._tdp_profiles.set_pl1(scope, nxt, appid=self._current_appid)
@@ -130,15 +119,7 @@ class Plugin:
             "gpu_busy": pr["gpu_busy"],
             "auto_tdp": auto,
             "setpoint": setpoint,
-            "fps": self._gamescope.game_fps(),
-            "target_fps": self._settings.get("fps_target"),
         }
-
-    async def set_fps_target(self, target) -> dict:
-        self._init()
-        self._settings["fps_target"] = int(target) if target is not None else None
-        self._save()
-        return {"target_fps": self._settings["fps_target"]}
 
     async def set_auto_tdp(self, enabled: bool) -> dict:
         self._init()
@@ -277,10 +258,6 @@ class Plugin:
             "Panel de Control v%s loaded (euid=%s)", read_version(), os.geteuid()
         )
         try:
-            self._gamescope.start()
-        except Exception:  # noqa: BLE001
-            pass
-        try:
             self._reapply_tdp()
             self._lifecycle.start()
             if self._settings.get("auto_tdp"):
@@ -293,11 +270,6 @@ class Plugin:
         self._stop_auto_loop()
         if getattr(self, "_lifecycle", None) is not None:
             self._lifecycle.stop()
-        try:
-            if getattr(self, "_gamescope", None) is not None:
-                self._gamescope.stop()
-        except Exception:  # noqa: BLE001
-            pass
         decky.logger.info("Panel de Control unloaded")
 
     async def _uninstall(self) -> None:
