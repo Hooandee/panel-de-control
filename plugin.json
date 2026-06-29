@@ -1,0 +1,11 @@
+{
+  "name": "Panel de Control",
+  "author": "Hooandee",
+  "flags": ["root", "_root"],
+  "api_version": 1,
+  "publish": {
+    "tags": ["root", "tdp", "power", "performance"],
+    "description": "Panel de control definitivo para PCs portátiles: TDP, ventiladores y más.",
+    "image": "https://opengraph.githubassets.com/1/Hooandee/panel-de-control"
+  }
+}
