@@ -141,6 +141,3 @@ class ProfileStore:
         prof["off3"] = max(0, int(pl3) - int(pl2))
         self._save()
 
-    def set_watts(self, scope, watts, appid=None):
-        """Back-compat shim for simple-mode callers; sets pl1, keeps boost auto-derived."""
-        self.set_pl1(scope, watts, appid=appid)

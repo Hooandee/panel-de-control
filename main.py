@@ -60,18 +60,32 @@ class Plugin:
         return self._fan_reader.read()
 
     # ---- TDP helpers + RPCs -------------------------------------------------
+    def _clamp_levels(self, eff: dict) -> dict:
+        lim = self._tdp_backend.get_limits()
+        ll = self._tdp_backend.level_limits()
+
+        def clamp(value, key):
+            b = ll.get(key)
+            lo = b["min"] if b else lim.min_w
+            hi = b["max"] if b else lim.max_ac_w
+            return max(lo, min(int(value), hi))
+
+        return {"pl1": clamp(eff["pl1"], "pl1"),
+                "pl2": clamp(eff["pl2"], "pl2"),
+                "pl3": clamp(eff["pl3"], "pl3")}
+
     def _reapply_tdp(self, on_ac=None):
         self._init()
-        prof = self._tdp_profiles.effective(self._current_appid)
-        limits = self._tdp_backend.get_limits()
-        watts = limits.clamp(prof["watts"])
+        eff = self._tdp_profiles.effective(self._current_appid)
         ac = read_on_ac() if on_ac is None else on_ac
-        return self._tdp_backend.set_tdp(watts, ac)
+        return self._tdp_backend.set_levels(eff["pl1"], eff["pl2"], eff["pl3"], ac)
 
     async def get_tdp_state(self) -> dict:
         self._init()
         limits = self._tdp_backend.get_limits()
-        prof = self._tdp_profiles.effective(self._current_appid)
+        ll = self._tdp_backend.level_limits()
+        eff = self._tdp_profiles.effective(self._current_appid)
+        geff = self._tdp_profiles.effective(None)
         return {
             "supported": self._tdp_backend.supported,
             "backend": self._tdp_backend.name,
@@ -81,22 +95,57 @@ class Plugin:
             "appid": self._current_appid,
             "has_game_profile": (self._current_appid is not None
                                  and self._tdp_profiles.has_game(self._current_appid)),
-            "watts": limits.clamp(prof["watts"]),
-            "global_watts": limits.clamp(self._tdp_profiles.effective(None)["watts"]),
+            "watts": limits.clamp(eff["watts"]),
+            "global_watts": limits.clamp(geff["watts"]),
             "applied_w": self._tdp_backend.read_applied(),
+            "supports_advanced": ("pl2" in ll or "pl3" in ll),
+            "level_limits": ll,
+            "levels": self._clamp_levels(eff),
+            "auto": eff["auto"],
+            "global_levels": self._clamp_levels(geff),
+            "global_auto": geff["auto"],
         }
+
+    def _resolve_scope(self, scope, appid):
+        """Normalize scope/appid; returns scope or None if invalid."""
+        if scope not in ("global", "game"):
+            return None
+        if scope == "game" and appid is None:
+            return "global"
+        if scope == "game" and appid is not None:
+            self._current_appid = str(appid)
+        return scope
 
     async def set_tdp_watts(self, watts: int, scope: str, appid=None) -> dict:
         self._init()
-        if scope not in ("global", "game"):
+        resolved = self._resolve_scope(scope, appid)
+        if resolved is None:
             return {"requested_w": watts, "applied_w": None, "ok": False,
                     "detail": f"unknown scope: {scope}"}
-        if scope == "game" and appid is None:
-            scope = "global"
         clamped = self._tdp_backend.get_limits().clamp(watts)
-        if scope == "game" and appid is not None:
-            self._current_appid = str(appid)
-        self._tdp_profiles.set_watts(scope, clamped, appid=appid)
+        self._tdp_profiles.set_pl1(resolved, clamped, appid=appid)
+        res = self._reapply_tdp()
+        return {"requested_w": res.requested_w, "applied_w": res.applied_w,
+                "ok": res.ok, "detail": res.detail}
+
+    async def set_tdp_levels(self, off2: int, off3: int, scope: str, appid=None) -> dict:
+        self._init()
+        resolved = self._resolve_scope(scope, appid)
+        if resolved is None:
+            return {"requested_w": 0, "applied_w": None, "ok": False,
+                    "detail": f"unknown scope: {scope}"}
+        self._tdp_profiles.set_offsets(resolved, off2, off3, appid=appid)
+        res = self._reapply_tdp()
+        return {"requested_w": res.requested_w, "applied_w": res.applied_w,
+                "ok": res.ok, "detail": res.detail}
+
+    async def reset_tdp_auto(self, scope: str, appid=None) -> dict:
+        self._init()
+        resolved = self._resolve_scope(scope, appid)
+        if resolved is None:
+            return {"requested_w": 0, "applied_w": None, "ok": False,
+                    "detail": f"unknown scope: {scope}"}
+        self._tdp_profiles.set_auto(resolved, appid=appid)
         res = self._reapply_tdp()
         return {"requested_w": res.requested_w, "applied_w": res.applied_w,
                 "ok": res.ok, "detail": res.detail}
