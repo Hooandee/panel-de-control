@@ -1,57 +1,60 @@
 import {
   PanelSection,
   PanelSectionRow,
-  ToggleField,
   Spinner,
   ErrorBoundary,
   staticClasses,
 } from "@decky/ui";
 import { definePlugin } from "@decky/api";
-// PLACEHOLDER icon — change to one that fits your plugin (and update the <FaPalette/> usage below).
-// Browse names: https://react-icons.github.io/react-icons/icons/fa/
-import { FaPalette } from "react-icons/fa";
-import { useEffect, useState } from "react";
+import { FaSlidersH } from "react-icons/fa";
+import { FC, useEffect, useState } from "react";
 
-import { getState, setEnabled, PluginState } from "./api";
+import { getDevice, DeviceInfo } from "./api";
+import { I18nProvider, useI18n } from "./i18n";
+import { DeviceHeader } from "./components/DeviceHeader";
+import { LanguageToggle } from "./components/LanguageToggle";
 
-function Content() {
-  // ALL hooks MUST be above any early return, or React throws a minified
-  // "invalid hook" error when the panel opens.
-  const [state, setState] = useState<PluginState | null>(null);
+const Content: FC = () => {
+  // ALL hooks above any early return (minified "invalid hook" trap otherwise).
+  const { t } = useI18n();
+  const [device, setDevice] = useState<DeviceInfo | null>(null);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
-    getState().then(setState);
+    getDevice().then(setDevice).catch(() => setFailed(true));
   }, []);
 
-  if (!state) return <Spinner />;
+  if (failed) {
+    return (
+      <PanelSection>
+        <PanelSectionRow>{t("load.error")}</PanelSectionRow>
+      </PanelSection>
+    );
+  }
+  if (!device) return <Spinner />;
 
   return (
-    <PanelSection title="Panel de Control">
+    <PanelSection>
       <PanelSectionRow>
-        <ToggleField
-          label="Enabled"
-          checked={state.enabled}
-          onChange={(on) => {
-            setState({ ...state, enabled: on }); // optimistic
-            setEnabled(on);
-          }}
-        />
+        <DeviceHeader device={device} />
       </PanelSectionRow>
+      <LanguageToggle />
     </PanelSection>
   );
-}
+};
 
 export default definePlugin(() => ({
   name: "Panel de Control",
   titleView: <div className={staticClasses.Title}>Panel de Control</div>,
-  // ErrorBoundary so a render error in our UI can't take down Decky-wide.
   content: (
-    <ErrorBoundary>
-      <Content />
-    </ErrorBoundary>
+    <I18nProvider>
+      <ErrorBoundary>
+        <Content />
+      </ErrorBoundary>
+    </I18nProvider>
   ),
-  icon: <FaPalette />,
+  icon: <FaSlidersH />,
   onDismount() {
-    // unregister SteamClient listeners / clear timers here
+    // no listeners/timers yet
   },
 }));
