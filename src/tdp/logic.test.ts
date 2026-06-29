@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { fraction, zoneFor, arcColor, angleFor } from "./logic";
+import { fraction, zoneFor, arcColor } from "./logic";
 
 describe("fraction", () => {
   it("maps min→0 and maxAc→1", () => {
@@ -36,13 +36,5 @@ describe("arcColor", () => {
     const hue1 = Number(arcColor(1).match(/hsl\((\d+)/)![1]);
     expect(hue0).toBeGreaterThan(120);
     expect(hue1).toBeLessThan(20);
-  });
-});
-
-describe("angleFor", () => {
-  it("maps fraction across the sweep", () => {
-    expect(angleFor(0, 240)).toBe(0);
-    expect(angleFor(1, 240)).toBe(240);
-    expect(angleFor(0.5, 240)).toBe(120);
   });
 });

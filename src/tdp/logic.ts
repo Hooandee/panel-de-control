@@ -31,7 +31,3 @@ export function arcColor(frac: number): string {
   return `hsl(${hue}, 75%, 52%)`;
 }
 
-/** Degrees along the arc sweep for a fraction. */
-export function angleFor(frac: number, sweep: number): number {
-  return Math.max(0, Math.min(1, frac)) * sweep;
-}
