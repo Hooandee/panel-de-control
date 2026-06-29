@@ -4,12 +4,31 @@ import os
 
 class ProfileStore:
     """Global TDP profile + per-appid overrides, persisted atomically as JSON.
-    Effective(appid) = game profile if present else global. New game copies global."""
+    Each profile stores three power levels: pl1 (sustained), pl2 (slow boost), pl3 (fast boost).
+    Migrates the old single-value {"watts": w} shape to {pl1:w, pl2:w, pl3:w}."""
 
     def __init__(self, path, default_watts):
         self._path = path
-        self._default = {"watts": int(default_watts)}
+        self._default = int(default_watts)
         self._data = self._load()
+
+    def _flat(self, w):
+        w = int(w)
+        return {"pl1": w, "pl2": w, "pl3": w}
+
+    def _clean(self, raw):
+        if not isinstance(raw, dict):
+            return self._flat(self._default)
+        if "pl1" in raw:
+            p1 = int(raw.get("pl1", self._default))
+            return {
+                "pl1": p1,
+                "pl2": int(raw.get("pl2", p1)),
+                "pl3": int(raw.get("pl3", p1)),
+            }
+        if "watts" in raw:  # migrate old shape
+            return self._flat(raw["watts"])
+        return self._flat(self._default)
 
     def _load(self):
         try:
@@ -17,15 +36,11 @@ class ProfileStore:
                 raw = json.load(f)
         except (OSError, ValueError):
             raw = {}
-        glob = raw.get("global") or dict(self._default)
-        games = raw.get("games") or {}
-        # keep only the known {"watts": int} shape
-        glob = {"watts": int(glob.get("watts", self._default["watts"]))}
-        clean_games = {}
-        for appid, prof in games.items():
-            if isinstance(prof, dict) and "watts" in prof:
-                clean_games[str(appid)] = {"watts": int(prof["watts"])}
-        return {"global": glob, "games": clean_games}
+        glob = self._clean(raw.get("global"))
+        games = {}
+        for appid, prof in (raw.get("games") or {}).items():
+            games[str(appid)] = self._clean(prof)
+        return {"global": glob, "games": games}
 
     def _save(self):
         os.makedirs(os.path.dirname(self._path), exist_ok=True)
@@ -36,8 +51,10 @@ class ProfileStore:
 
     def effective(self, appid):
         if appid is not None and str(appid) in self._data["games"]:
-            return dict(self._data["games"][str(appid)])
-        return dict(self._data["global"])
+            prof = self._data["games"][str(appid)]
+        else:
+            prof = self._data["global"]
+        return {**prof, "watts": prof["pl1"]}  # 'watts' alias = pl1 for simple-mode callers
 
     def has_game(self, appid):
         return str(appid) in self._data["games"]
@@ -49,14 +66,19 @@ class ProfileStore:
         self._data["games"][str(appid)] = dict(self._data["global"])
         self._save()
 
-    def set_watts(self, scope, watts, appid=None):
-        watts = int(watts)
+    def _store(self, scope, profile, appid):
         if scope == "global":
-            self._data["global"] = {"watts": watts}
+            self._data["global"] = profile
         elif scope == "game":
             if appid is None:
                 raise ValueError("appid required for game scope")
-            self._data["games"][str(appid)] = {"watts": watts}
+            self._data["games"][str(appid)] = profile
         else:
             raise ValueError(f"unknown scope: {scope}")
         self._save()
+
+    def set_levels(self, scope, pl1, pl2, pl3, appid=None):
+        self._store(scope, {"pl1": int(pl1), "pl2": int(pl2), "pl3": int(pl3)}, appid)
+
+    def set_watts(self, scope, watts, appid=None):
+        self._store(scope, self._flat(watts), appid)
