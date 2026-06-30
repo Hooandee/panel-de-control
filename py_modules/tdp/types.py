@@ -12,6 +12,14 @@ class TdpLimits:
         hi = self.max_ac_w if on_ac else self.max_w
         return max(self.min_w, min(int(watts), hi))
 
+    def unlocked(self, unlock: bool) -> "TdpLimits":
+        """When the user opts in (Ajustes toggle), raise the on-battery ceiling to
+        the firmware/charger max — the hardware allows it, with the battery-drain
+        consequences. No-op when unlock is False."""
+        if not unlock or self.max_w >= self.max_ac_w:
+            return self
+        return TdpLimits(self.min_w, self.default_w, self.max_ac_w, self.max_ac_w)
+
     @classmethod
     def from_profile(cls, device) -> "TdpLimits":
         return cls(

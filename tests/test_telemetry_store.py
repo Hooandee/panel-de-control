@@ -233,3 +233,53 @@ def test_add_sample_never_raises_on_bad_data(tmp_path):
     # Missing keys, wrong types — must not raise
     s.add_sample("1", {}, dt=5.0)
     s.add_sample("1", {"pl1": "not-an-int"}, dt=5.0)
+
+
+# ---------------------------------------------------------------------------
+# Temperature histogram (F3 foundation): seconds accumulated per 2C bin,
+# keyed by the driving temp = max(t_cpu, t_gpu). Feeds the suggestion brain.
+# ---------------------------------------------------------------------------
+
+def test_temp_histogram_accumulates_seconds_by_driving_temp(tmp_path):
+    s = _store(tmp_path)
+    s.add_sample("1", _sample(t_cpu=55.0, t_gpu=50.0), dt=5.0)   # driving 55 -> bin 54
+    s.add_sample("1", _sample(t_cpu=40.0, t_gpu=63.0), dt=5.0)   # driving 63 -> bin 62
+    s.add_sample("1", _sample(t_cpu=55.5, t_gpu=54.0), dt=5.0)   # driving 55.5 -> bin 54
+    hist = s.temp_histogram("1")
+    assert hist[54] == pytest.approx(10.0)
+    assert hist[62] == pytest.approx(5.0)
+
+
+def test_temp_histogram_unknown_appid_is_empty(tmp_path):
+    s = _store(tmp_path)
+    assert s.temp_histogram("999") == {}
+
+
+def test_temp_histogram_skips_when_both_temps_none(tmp_path):
+    s = _store(tmp_path)
+    s.add_sample("1", _sample(t_cpu=None, t_gpu=None), dt=5.0)
+    assert s.temp_histogram("1") == {}
+
+
+def test_temp_histogram_uses_present_temp_when_one_none(tmp_path):
+    s = _store(tmp_path)
+    s.add_sample("1", _sample(t_cpu=None, t_gpu=71.0), dt=5.0)   # driving 71 -> bin 70
+    assert s.temp_histogram("1")[70] == pytest.approx(5.0)
+
+
+def test_temp_histogram_clamps_out_of_range(tmp_path):
+    s = _store(tmp_path)
+    s.add_sample("1", _sample(t_cpu=12.0, t_gpu=8.0), dt=5.0)    # 12 -> clamp to bin 30
+    s.add_sample("1", _sample(t_cpu=105.0, t_gpu=99.0), dt=5.0)  # 105 -> clamp to bin 98
+    hist = s.temp_histogram("1")
+    assert hist[30] == pytest.approx(5.0)
+    assert hist[98] == pytest.approx(5.0)
+
+
+def test_temp_histogram_persists_and_reloads(tmp_path):
+    path = str(tmp_path / "telemetry.json")
+    s1 = TelemetryStore(path)
+    s1.add_sample("1", _sample(t_cpu=65.0, t_gpu=60.0), dt=5.0)  # bin 64
+    s1.flush()
+    s2 = TelemetryStore(path)
+    assert s2.temp_histogram("1")[64] == pytest.approx(5.0)

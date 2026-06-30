@@ -5,6 +5,18 @@ from json_store import atomic_json_save
 _MAX_RECENT = 120
 _MAX_GAMES = 50
 
+# Temperature histogram (feeds the F3 suggestion brain): 2 °C bins over 30–100 °C,
+# keyed by the driving temp = max(temp_cpu, temp_gpu) per sample.
+_TEMP_BIN_WIDTH = 2
+_TEMP_BIN_MIN = 30
+_TEMP_BIN_MAX = 98  # last bin lower-bound (covers 98–100+)
+
+
+def _temp_bin(temp: float) -> int:
+    """Floor *temp* to its 2 °C bin lower-bound, clamped to [30, 98]."""
+    b = int(temp // _TEMP_BIN_WIDTH) * _TEMP_BIN_WIDTH
+    return max(_TEMP_BIN_MIN, min(_TEMP_BIN_MAX, b))
+
 _METRICS = (
     # (bin_key, sample_key, avg_key)
     ("watts", "watts", "watts_avg"),
@@ -96,6 +108,17 @@ class TelemetryStore:
             "recent": list(game["recent"]),
         }
 
+    def temp_histogram(self, appid: str) -> dict:
+        """Return ``{bin_lower_temp(int): seconds(float)}`` for *appid*.
+
+        Bins are 2 °C wide over 30–100 °C, keyed by the driving temp
+        (max of cpu/gpu) per sample. Empty dict for an unknown appid.
+        """
+        game = self._data["games"].get(str(appid))
+        if game is None:
+            return {}
+        return {int(k): float(v) for k, v in game["temp_hist"].items()}
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
@@ -135,6 +158,14 @@ class TelemetryStore:
         if len(recent) > _MAX_RECENT:
             game["recent"] = recent[-_MAX_RECENT:]
 
+        # Temperature histogram: accumulate dwell seconds in the driving-temp bin.
+        cpu, gpu = sample.get("temp_cpu"), sample.get("temp_gpu")
+        present = [float(t) for t in (cpu, gpu) if t is not None]
+        if present:
+            bin_key = str(_temp_bin(max(present)))
+            hist = game["temp_hist"]
+            hist[bin_key] = hist.get(bin_key, 0.0) + dt
+
     def _trim_games(self) -> None:
         games = self._data["games"]
         if len(games) <= _MAX_GAMES:
@@ -173,7 +204,7 @@ class TelemetryStore:
 # ------------------------------------------------------------------
 
 def _empty_game() -> dict:
-    return {"n": 0, "last_ts": 0.0, "by_pl1": {}, "recent": []}
+    return {"n": 0, "last_ts": 0.0, "by_pl1": {}, "recent": [], "temp_hist": {}}
 
 
 def _empty_bin() -> dict:
@@ -225,6 +256,13 @@ def _clean_game(raw: object) -> dict:
     raw_recent = raw.get("recent")
     if isinstance(raw_recent, list):
         game["recent"] = raw_recent[-_MAX_RECENT:]
+    raw_hist = raw.get("temp_hist")
+    if isinstance(raw_hist, dict):
+        for k, v in raw_hist.items():
+            try:
+                game["temp_hist"][str(int(k))] = float(v)
+            except (TypeError, ValueError):
+                continue
     return game
 
 

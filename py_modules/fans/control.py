@@ -29,15 +29,40 @@ _POINTS: int = 8
 # Pure helpers
 # ---------------------------------------------------------------------------
 
+def _interp(points: list, temp: float, round_int: bool = True):
+    """Linear-interpolated value of a (x, y) curve at *temp*; clamps ends.
+
+    Used for both temp→pwm (round_int=True, integer pwm) and the suggestion's
+    temp→duty% shaping (round_int=False, float).
+    """
+    pts = sorted((float(t), float(p)) for t, p in points)
+    if not pts:
+        return 0
+
+    def out(v):
+        return int(round(v)) if round_int else v
+
+    if temp <= pts[0][0]:
+        return out(pts[0][1])
+    for (t0, p0), (t1, p1) in zip(pts, pts[1:]):
+        if temp <= t1:
+            if t1 == t0:
+                return out(p1)
+            frac = (temp - t0) / (t1 - t0)
+            return out(p0 + frac * (p1 - p0))
+    return out(pts[-1][1])
+
+
 def sanitize_curve(
     points: list,
     pwm_max: int = 255,
     floor_pwm: int = 0,
+    n_points: int = _POINTS,
 ) -> list[tuple[int, int]]:
-    """Return a safe 8-point ``[(temp, pwm), …]`` list suitable for writing.
+    """Return a safe ``n_points`` ``[(temp, pwm), …]`` list suitable for writing.
 
     Rules applied in order:
-    1. Truncate to 8 / pad by repeating the last point.
+    1. Truncate to n_points / pad by repeating the last point.
     2. Cast to int.
     3. Clamp temps to 0..100, pwm to ``[floor_pwm, pwm_max]``.
     4. Make temps non-decreasing (clamp each point's temp to >= the previous).
@@ -51,8 +76,8 @@ def sanitize_curve(
         points = [(0, 0)]
 
     # 1. Normalise length
-    pts: list[tuple[int, int]] = [(int(t), int(p)) for t, p in points[:_POINTS]]
-    while len(pts) < _POINTS:
+    pts: list[tuple[int, int]] = [(int(t), int(p)) for t, p in points[:n_points]]
+    while len(pts) < n_points:
         pts.append(pts[-1])
 
     # 2+3. Clamp
@@ -138,27 +163,28 @@ class NullFanBackend:
         return self.set_auto(None)
 
 
-class AsusFanCurveBackend:
-    """Fan-curve backend for the ``asus_custom_fan_curve`` hwmon chip.
+class HwmonCurveBackend:
+    """Generic hwmon fan-curve backend for the firmware-curve-table family.
 
-    On ROG Ally / ROG Xbox Ally X this chip is at::
-
-        /sys/devices/platform/asus-nb-wmi/hwmon/hwmonN/
-
-    and is also reachable via ``/sys/class/hwmon/hwmonN/`` which we use for
-    discovery.
-
-    Per fan M (1=CPU, 2=GPU):
-    - ``pwmM_auto_pointK_temp`` (°C, K=1..8)
-    - ``pwmM_auto_pointK_pwm``  (raw 0..255, must be monotonically non-decreasing)
+    These chips expose, per fan M (1=CPU, 2=GPU):
+    - ``pwmM_auto_pointK_temp`` (°C, K=1..n_points)
+    - ``pwmM_auto_pointK_pwm``  (raw 0..255, monotonically non-decreasing)
     - ``pwmM_enable``           (2 = firmware auto, 1 = use the written points)
 
-    All files are root:root 0644; the plugin runs as root → writable.
+    The firmware executes the written table autonomously — no software loop.
+    Two members today: ``asus_custom_fan_curve`` (Ally, 8 points, free temps) and
+    ``msi_wmi_platform`` (MSI Claw, 6 points, FIXED temps → the incoming curve is
+    resampled at those anchors). All files are root:root 0644; the plugin is root.
     """
 
-    name: str = _CHIP_NAME
-
-    def __init__(self, root: str = "/") -> None:
+    def __init__(self, chip_name: str, n_points: int = _POINTS,
+                 fixed_temps: Optional[tuple] = None, fan_keys: Optional[dict] = None,
+                 root: str = "/") -> None:
+        self.name = chip_name
+        self._chip_name = chip_name
+        self._n_points = n_points
+        self._fixed_temps = tuple(fixed_temps) if fixed_temps else None
+        self._fan_keys = fan_keys or _FAN_KEYS
         self._root = root
         self._dir: Optional[str] = self._find_chip()
 
@@ -169,88 +195,78 @@ class AsusFanCurveBackend:
     def _find_chip(self) -> Optional[str]:
         pattern = os.path.join(self._root, _HWMON, "hwmon*")
         for d in sorted(glob.glob(pattern)):
-            if _read(os.path.join(d, "name")) == _CHIP_NAME:
+            if _read(os.path.join(d, "name")) == self._chip_name:
                 # Confirm at least one pwm point file is present
                 if os.path.exists(os.path.join(d, "pwm1_auto_point1_pwm")):
                     return d
         return None
 
-    def _fan_dir(self) -> Optional[str]:
-        return self._dir
+    def _writable_points(self, points: list) -> list:
+        """Resolve the incoming canonical curve to this chip's writable points.
+
+        Fixed-temp chips (MSI) resample the curve at their anchors; free-temp
+        chips (ASUS) keep the curve's own temps. Both pass through the safety
+        sanitize (monotonic + hot-point floor) at the chip's point count.
+        """
+        if self._fixed_temps:
+            raw = [(t, _interp(points, t)) for t in self._fixed_temps]
+            return sanitize_curve(raw, pwm_max=255, floor_pwm=0, n_points=len(self._fixed_temps))
+        return sanitize_curve(points, pwm_max=255, floor_pwm=0, n_points=self._n_points)
 
     # --- public API -----------------------------------------------------------
 
     def read_state(self) -> dict:
-        """Read current curve and enable state for all present fans.
-
-        Never raises.  Missing/corrupt files produce None values or skip the
-        fan entirely.
-        """
+        """Read current curve and enable state for all present fans. Never raises."""
         if not self.supported:
             return {"supported": False, "source": self.name, "pwm_max": 255, "fans": []}
 
         fans = []
-        for fan_key, fan_index in _FAN_KEYS.items():
+        for fan_key, fan_index in self._fan_keys.items():
             enable_path = os.path.join(self._dir, f"pwm{fan_index}_enable")
             if not os.path.exists(enable_path):
                 continue  # this fan index not present on this chip
             enable = _read_int(enable_path)
             points = []
-            for point in range(1, _POINTS + 1):
+            for point in range(1, self._n_points + 1):
                 temp = _read_int(os.path.join(self._dir, f"pwm{fan_index}_auto_point{point}_temp"))
                 pwm = _read_int(os.path.join(self._dir, f"pwm{fan_index}_auto_point{point}_pwm"))
                 points.append({"temp": temp, "pwm": pwm})
             fans.append({"key": fan_key, "enable": enable, "points": points})
 
-        return {
-            "supported": True,
-            "source": self.name,
-            "pwm_max": 255,
-            "fans": fans,
-        }
+        return {"supported": True, "source": self.name, "pwm_max": 255, "fans": fans}
 
     def set_curve(self, fan_key: str, points: list) -> dict:
-        """Write a sanitized fan curve and switch the fan to manual mode.
-
-        Returns ``{"ok": bool, "detail": str}``.  Never raises.
-        """
+        """Write a sanitized fan curve and switch the fan to manual mode. Never raises."""
         if not self.supported:
-            return {"ok": False, "detail": "asus_custom_fan_curve chip not found"}
+            return {"ok": False, "detail": f"{self._chip_name} chip not found"}
 
-        fan_index = _FAN_KEYS.get(fan_key)
+        fan_index = self._fan_keys.get(fan_key)
         if fan_index is None:
             return {"ok": False, "detail": f"unknown fan key: {fan_key!r}"}
 
-        safe_points = sanitize_curve(points, pwm_max=255, floor_pwm=0)
+        safe_points = self._writable_points(points)
 
-        # Write the 8 temp+pwm files
         for point, (temp, pwm) in enumerate(safe_points, start=1):
             if not _write(os.path.join(self._dir, f"pwm{fan_index}_auto_point{point}_temp"), str(temp)):
                 return {"ok": False, "detail": f"write failed: pwm{fan_index}_auto_point{point}_temp"}
             if not _write(os.path.join(self._dir, f"pwm{fan_index}_auto_point{point}_pwm"), str(pwm)):
                 return {"ok": False, "detail": f"write failed: pwm{fan_index}_auto_point{point}_pwm"}
 
-        # Activate manual mode
         if not _write(os.path.join(self._dir, f"pwm{fan_index}_enable"), "1"):
             return {"ok": False, "detail": f"write failed: pwm{fan_index}_enable"}
 
         # Read back point 1 to confirm the kernel accepted the write
-        readback = _read_int(os.path.join(self._dir, f"pwm{fan_index}_auto_point1_pwm"))
-        if readback is None:
+        if _read_int(os.path.join(self._dir, f"pwm{fan_index}_auto_point1_pwm")) is None:
             return {"ok": False, "detail": "readback failed after write"}
 
         return {"ok": True, "detail": f"fan {fan_key} curve applied (manual mode)"}
 
     def apply_curve_all(self, points: list) -> dict:
-        """Write the SAME sanitized curve to every fan present on the chip.
-
-        F2 applies one user curve to all fans (CPU+GPU). Aggregates per-fan
-        results; ``ok=False`` if any fan write fails.  Never raises.
-        """
+        """Write the SAME curve to every fan present on the chip. Never raises."""
         if not self.supported:
-            return {"ok": False, "detail": "asus_custom_fan_curve chip not found"}
+            return {"ok": False, "detail": f"{self._chip_name} chip not found"}
         applied, failed = [], []
-        for fan_key, fan_index in _FAN_KEYS.items():
+        for fan_key, fan_index in self._fan_keys.items():
             if not os.path.exists(os.path.join(self._dir, f"pwm{fan_index}_enable")):
                 continue  # fan index not present on this chip
             result = self.set_curve(fan_key, points)
@@ -262,21 +278,17 @@ class AsusFanCurveBackend:
         return {"ok": True, "detail": f"curve applied to {applied}"}
 
     def set_auto(self, fan_key: Optional[str] = None) -> dict:
-        """Return the specified fan (or all fans when ``fan_key`` is None) to
-        firmware-controlled auto mode by writing ``pwmM_enable=2``.
-
-        Returns ``{"ok": bool, "detail": str}``.  Never raises.
-        """
+        """Return the given fan (or all when None) to firmware auto (enable=2). Never raises."""
         if not self.supported:
-            return {"ok": False, "detail": "asus_custom_fan_curve chip not found"}
+            return {"ok": False, "detail": f"{self._chip_name} chip not found"}
 
         if fan_key is not None:
-            fan_index = _FAN_KEYS.get(fan_key)
+            fan_index = self._fan_keys.get(fan_key)
             if fan_index is None:
                 return {"ok": False, "detail": f"unknown fan key: {fan_key!r}"}
             fans_to_restore = [(fan_key, fan_index)]
         else:
-            fans_to_restore = list(_FAN_KEYS.items())
+            fans_to_restore = list(self._fan_keys.items())
 
         failed = []
         for fan_key, fan_index in fans_to_restore:
@@ -293,22 +305,66 @@ class AsusFanCurveBackend:
         return self.set_auto(None)
 
 
+class AsusFanCurveBackend(HwmonCurveBackend):
+    """ROG Ally / ROG Xbox Ally X — ``asus_custom_fan_curve`` (8 points, free temps)."""
+
+    def __init__(self, root: str = "/") -> None:
+        super().__init__(_CHIP_NAME, n_points=_POINTS, fixed_temps=None, root=root)
+
+
+# MSI Claw exposes 6 curve points at fixed temperature anchors (per hhd/adjustor).
+_MSI_CHIP = "msi_wmi_platform"
+_MSI_TEMPS = (0, 50, 60, 70, 80, 88)
+
+
+class MsiFanCurveBackend(HwmonCurveBackend):
+    """MSI Claw 8 AI+ — ``msi_wmi_platform`` hwmon (6 points, FIXED temp anchors).
+
+    The driver historically doesn't autoload, so we modprobe it on a real device
+    before discovery (skipped under a synthetic test root).
+    """
+
+    def __init__(self, root: str = "/") -> None:
+        # Only shell out to modprobe on a real MSI device — the factory constructs
+        # this candidate on every non-ASUS handheld, so guard by DMI vendor.
+        if root == "/" and _is_msi_vendor(root):
+            try:
+                import subprocess
+                subprocess.run(["modprobe", "msi_wmi_platform"],
+                               check=False, capture_output=True, timeout=5)
+            except Exception:  # noqa: BLE001
+                pass
+        super().__init__(_MSI_CHIP, n_points=6, fixed_temps=_MSI_TEMPS, root=root)
+
+
+def _is_msi_vendor(root: str) -> bool:
+    vendor = (_read(os.path.join(root, "sys/class/dmi/id/sys_vendor")) or "").lower()
+    return "micro-star" in vendor or "msi" in vendor
+
+
 # ---------------------------------------------------------------------------
 # Factory
 # ---------------------------------------------------------------------------
 
-def select_fan_backend(device, root: str = "/"):
+def select_fan_backend(device, root: str = "/", temp_fn=None):
     """Return the best available fan-control backend for this device.
 
-    Strategy:
-    1. Always try the ``asus_custom_fan_curve`` chip (chip-name based, not
-       device-name based) — it's present on Ally family devices.
-    2. Fall back to ``NullFanBackend`` when the chip is not found.
-
-    Legion/MSI mechanisms are a future sub-project; their devices get Null
-    for now (read-only safety).
+    Chip-name based (not device-name based) so it's robust across the matrix:
+    1. ``asus_custom_fan_curve`` (ROG Ally family) — hardware curve table.
+    2. ``msi_wmi_platform`` (MSI Claw) — hardware curve table.
+    3. ``steamdeck_hwmon`` (Steam Deck) — software loop (needs ``temp_fn``).
+    4. (W4 adds the Legion Go 2 raw-EC software-loop backend here.)
+    5. ``NullFanBackend`` when nothing supported is found (read-only safety).
     """
-    backend = AsusFanCurveBackend(root=root)
-    if backend.supported:
-        return backend
+    for backend_cls in (AsusFanCurveBackend, MsiFanCurveBackend):
+        backend = backend_cls(root=root)
+        if backend.supported:
+            return backend
+    # Software-loop backends (lazy import avoids a circular dependency).
+    from fans.software_loop import SteamDeckFanBackend
+    from fans.legion_ec import LegionGo2FanBackend
+    for backend in (SteamDeckFanBackend(temp_fn=temp_fn, root=root),
+                    LegionGo2FanBackend(temp_fn=temp_fn, root=root)):
+        if backend.supported:
+            return backend
     return NullFanBackend()

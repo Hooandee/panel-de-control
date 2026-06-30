@@ -1,6 +1,6 @@
 import os
 
-from fans.hwmon import FanReader, extract_cpu_gpu_temps
+from fans.hwmon import FanReader, curate_fans, curate_temps, extract_cpu_gpu_temps
 
 
 def _mk_chip(root, idx, name, files):
@@ -141,3 +141,60 @@ def test_temps_fallback_keeps_all_when_no_cpu_gpu(tmp_path):
     _mk_chip(root, 1, "nvme", {"temp1_input": "33850", "temp1_label": "Composite"})
     temps = FanReader(root=root).read()["temps"]
     assert len(temps) == 2
+
+
+def test_curate_collapses_intel_multicore_to_single_cpu_max():
+    # MSI Claw: coretemp exposes Package + per-core, all map to "CPU" → collapse to
+    # one row showing the hottest, instead of a wall of duplicate "CPU" lines.
+    temps = [
+        {"chip": "coretemp", "label": "Core 0", "celsius": 46.0},
+        {"chip": "coretemp", "label": "Core 1", "celsius": 50.0},
+        {"chip": "coretemp", "label": "Package id 0", "celsius": 47.0},
+    ]
+    out = curate_temps(temps)
+    assert len(out) == 1
+    assert out[0]["label"] == "CPU"
+    assert out[0]["celsius"] == 50.0  # hottest core
+
+
+def test_curate_gpu_without_cpu_is_labelled_apu():
+    # Steam Deck exposes only amdgpu (no k10temp) — the single APU die sensor.
+    # Label it "APU", not "GPU" (which falsely implies a discrete graphics temp).
+    out = curate_temps([{"chip": "amdgpu", "label": "edge", "celsius": 43.0}])
+    assert len(out) == 1
+    assert out[0]["label"] == "APU"
+
+
+def _fan(label, rpm, chip="vendor"):
+    return {"chip": chip, "label": label, "rpm": rpm, "percent": None}
+
+
+def test_curate_fans_caps_at_two_preferring_spinning():
+    # MSI Claw: msi_wmi_platform exposes 4 channels but only 2 physical fans spin;
+    # the 2 phantom 0-RPM channels must be dropped → at most 2 chips shown.
+    fans = [_fan("f1", 2474), _fan("f2", 2461), _fan("f3", 0), _fan("f4", 0)]
+    out = curate_fans(fans)
+    assert len(out) == 2
+    assert [f["rpm"] for f in out] == [2474, 2461]
+
+
+def test_curate_fans_all_zero_keeps_first_two():
+    # Silent mode (every channel 0 RPM is real) → still cap at 2, keep the first two.
+    fans = [_fan("f1", 0), _fan("f2", 0), _fan("f3", 0), _fan("f4", 0)]
+    out = curate_fans(fans)
+    assert len(out) == 2
+
+
+def test_curate_fans_two_or_fewer_unchanged():
+    fans = [_fan("cpu", 4400), _fan("gpu", 4500)]
+    assert curate_fans(fans) == fans
+    assert len(curate_fans([_fan("only", 528)])) == 1
+
+
+def test_curate_keeps_cpu_and_gpu_distinct_when_both_present():
+    # AMD Ally/Legion: k10temp + amdgpu → CPU + GPU, NOT collapsed to APU.
+    out = curate_temps([
+        {"chip": "k10temp", "label": "Tctl", "celsius": 57.5},
+        {"chip": "amdgpu", "label": "edge", "celsius": 50.0},
+    ])
+    assert [t["label"] for t in out] == ["CPU", "GPU"]

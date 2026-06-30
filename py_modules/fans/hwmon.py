@@ -35,12 +35,20 @@ def _read_int(path: str) -> int | None:
         return None
 
 
+_MAX_FANS = 2  # no target device has >2 physical fans; extra hwmon channels are phantom
+
+
 def curate_fans(fans: list[dict]) -> list[dict]:
-    """Drop the generic acpi_fan chip when a vendor chip also reports fans."""
+    """Drop the generic acpi_fan chip when a vendor chip also reports fans, then cap
+    at 2 — the MSI Claw chip exposes 4 channels but only 2 fans spin, so prefer the
+    spinning ones and drop the phantom 0-RPM channels (fall back to the first 2 when
+    all read 0, e.g. silent mode)."""
     has_vendor = any(f["chip"] != _GENERIC_FAN_CHIP for f in fans)
-    if has_vendor:
-        return [f for f in fans if f["chip"] != _GENERIC_FAN_CHIP]
-    return list(fans)
+    fans = [f for f in fans if f["chip"] != _GENERIC_FAN_CHIP] if has_vendor else list(fans)
+    if len(fans) > _MAX_FANS:
+        spinning = [f for f in fans if (f.get("rpm") or 0) > 0]
+        fans = (spinning or fans)[:_MAX_FANS]
+    return fans
 
 
 def curate_temps(temps: list[dict]) -> list[dict]:
@@ -65,7 +73,25 @@ def curate_temps(temps: list[dict]) -> list[dict]:
     # Keep only recognized CPU/GPU (priority 0/1); fall back to all when none match.
     known = [d for d in decorated if d[0] <= 1]
     chosen = known if known else decorated
-    return [d[2] for d in chosen]
+
+    # Collapse rows sharing a friendly label (e.g. Intel coretemp's Package + every
+    # core all map to "CPU") into one, keeping the hottest — no wall of duplicates.
+    # (dict preserves first-seen order, so no separate order list is needed.)
+    collapsed: dict[str, dict] = {}
+    for _prio, _i, row in chosen:
+        label = row["label"]
+        if label not in collapsed or row["celsius"] > collapsed[label]["celsius"]:
+            collapsed[label] = row
+    result = list(collapsed.values())
+
+    # A GPU sensor with no CPU sensor IS the whole APU (e.g. Steam Deck exposes only
+    # amdgpu, no k10temp) — label it "APU" rather than implying discrete graphics.
+    labels = {r["label"] for r in result}
+    if "GPU" in labels and "CPU" not in labels:
+        for r in result:
+            if r["label"] == "GPU":
+                r["label"] = "APU"
+    return result
 
 
 def extract_cpu_gpu_temps(fan_state: dict) -> tuple:

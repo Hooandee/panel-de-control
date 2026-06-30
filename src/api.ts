@@ -90,7 +90,8 @@ export const setTdpWatts = callable<[watts: number, scope: TdpScope, appid: stri
 export const createGameProfile = callable<[appid: string], void>("create_game_profile");
 export const setCurrentGame = callable<[appid: string | null], TdpState>("set_current_game");
 export const setTdpLevels = callable<[off2: number, off3: number, scope: TdpScope, appid: string | null], TdpApplyResult>("set_tdp_levels");
-export const resetTdpAuto = callable<[scope: TdpScope, appid: string | null], TdpApplyResult>("reset_tdp_auto");
+// Returns the full new TDP state so the UI updates badge + sliders in one round-trip.
+export const resetTdpAuto = callable<[scope: TdpScope, appid: string | null], TdpState>("reset_tdp_auto");
 
 export interface PowerDraw {
   watts: number | null;
@@ -126,6 +127,9 @@ export interface FanCurveState {
 export const getTelemetryEnabled = callable<[], boolean>("get_telemetry_enabled");
 export const setTelemetryEnabled = callable<[enabled: boolean], boolean>("set_telemetry_enabled");
 
+export const getUnlockBatteryMax = callable<[], boolean>("get_unlock_battery_max");
+export const setUnlockBatteryMax = callable<[enabled: boolean], boolean>("set_unlock_battery_max");
+
 export const getFanCurveState = callable<[], FanCurveState>("get_fan_curve_state");
 export const setFanPreset =
   callable<[preset: FanPreset, scope: FanScope, appid: string | null], FanCurveState>("set_fan_preset");
@@ -133,3 +137,16 @@ export const setFanCurvePoints =
   callable<[points: [number, number][], scope: FanScope, appid: string | null], FanCurveState>("set_fan_curve_points");
 export const setFanCurveAuto =
   callable<[scope: FanScope, appid: string | null], FanCurveState>("set_fan_auto");
+
+// F3 — fan-curve suggestion fit to a game's observed temperature band.
+export interface FanSuggestion {
+  available: boolean;
+  // ok | disabled | unsupported | no_game | no_data | too_few | flat | error
+  reason: string;
+  minutes: number;
+  band: { floor: number; typical: number; high: number; peak: number } | null;
+  curves: { quiet: [number, number][]; balanced: [number, number][]; cool: [number, number][] } | null;
+}
+
+export const getFanSuggestion =
+  callable<[appid: string | null], FanSuggestion>("get_fan_suggestion");
