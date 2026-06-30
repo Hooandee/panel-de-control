@@ -11,6 +11,8 @@ def test_limits_clamp():
     assert lim.clamp(2) == 5
     assert lim.clamp(99) == 30
     assert lim.clamp(20) == 20
+    assert lim.clamp(99, on_ac=False) == 25  # battery ceiling
+    assert lim.clamp(99, on_ac=True) == 30   # charger ceiling
 
 
 def test_limits_from_profile_maps_fields():

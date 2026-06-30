@@ -20,7 +20,7 @@ const FlagEN: FC = () => (
 );
 
 // Flag toggle mirroring decky-colores: two Focusable flag buttons, the active one
-// at full opacity with a bright ring. Right-aligned, compact, sits above the content.
+// at full opacity with a bright ring. Compact; the parent controls placement.
 export const LanguageToggle: FC = () => {
   const { lang, setLang, t } = useI18n();
 
@@ -39,7 +39,7 @@ export const LanguageToggle: FC = () => {
 
   return (
     <Focusable
-      style={{ display: "flex", gap: 6, justifyContent: "flex-end", padding: "0 2px", marginTop: 10 }}
+      style={{ display: "flex", gap: 6, justifyContent: "flex-end", padding: "0 2px" }}
     >
       <Focusable
         onActivate={() => setLang("es")}

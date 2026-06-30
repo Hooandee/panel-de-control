@@ -8,8 +8,9 @@ class TdpLimits:
     max_w: int       # sustained / battery cap
     max_ac_w: int    # cap when on AC (>= max_w; charger boost)
 
-    def clamp(self, watts: int) -> int:
-        return max(self.min_w, min(int(watts), self.max_ac_w))
+    def clamp(self, watts: int, on_ac: bool = True) -> int:
+        hi = self.max_ac_w if on_ac else self.max_w
+        return max(self.min_w, min(int(watts), hi))
 
     @classmethod
     def from_profile(cls, device) -> "TdpLimits":

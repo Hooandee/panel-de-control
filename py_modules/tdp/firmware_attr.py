@@ -65,9 +65,10 @@ class FirmwareAttrBackend(TDPBackend):
             return self._fallback
         mn, mx = self._pl_bounds("ppt_pl1_spl")
         min_w = mn if mn is not None else self._fallback.min_w
-        max_w = mx if mx is not None else self._fallback.max_w
-        default_w = max(min_w, min(self._fallback.default_w, max_w))
-        return TdpLimits(min_w=min_w, default_w=default_w, max_w=max_w, max_ac_w=max_w)
+        fw_max = mx if mx is not None else self._fallback.max_ac_w  # firmware (charger) ceiling
+        batt_max = min(self._fallback.max_w, fw_max)                # device battery policy
+        default_w = max(min_w, min(self._fallback.default_w, fw_max))
+        return TdpLimits(min_w=min_w, default_w=default_w, max_w=batt_max, max_ac_w=fw_max)
 
     def _set_custom_profile(self):
         if not self._profile_name:
@@ -119,7 +120,7 @@ class FirmwareAttrBackend(TDPBackend):
         if not self.supported:
             return TdpResult(watts, None, False, "firmware-attributes path not present")
         lim = self.get_limits()
-        target = lim.clamp(watts)
+        target = lim.clamp(watts, ac)
         pl2 = max(target, round(target * _PL2_BOOST_RATIO))
         pl3 = max(target, round(target * _PL3_BOOST_RATIO))
         return self.set_levels(target, pl2, pl3, ac)

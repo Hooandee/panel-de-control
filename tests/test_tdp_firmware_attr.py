@@ -45,7 +45,9 @@ def test_get_limits_reads_sysfs_bounds(tmp_path):
     _mk_full(str(tmp_path))
     b = FirmwareAttrBackend("lenovo-wmi-other", FALLBACK, root=str(tmp_path))
     lim = b.get_limits()
-    assert lim.min_w == 5 and lim.max_w == 35 and lim.max_ac_w == 35
+    assert lim.min_w == 5
+    assert lim.max_w == 30   # battery = device policy (fallback.max_w)
+    assert lim.max_ac_w == 35  # charger = firmware sysfs max
     assert lim.default_w == 15  # fallback default, clamped into [5,35]
 
 
