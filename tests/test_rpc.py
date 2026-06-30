@@ -48,3 +48,19 @@ def test_get_device_returns_detected_profile(Plugin, monkeypatch):
     assert dev["tdp_max"] == 25
     assert dev["tdp_max_charger"] == 30
     assert dev["is_generic"] is False
+
+
+def test_telemetry_enabled_default_true(Plugin):
+    p = Plugin()
+    assert asyncio.run(p.get_telemetry_enabled()) is True
+
+
+def test_set_telemetry_enabled_persists(Plugin):
+    p = Plugin()
+    assert asyncio.run(p.set_telemetry_enabled(False)) is False
+    assert asyncio.run(p.get_telemetry_enabled()) is False
+    # Persisted across a fresh Plugin instance (same settings dir).
+    p2 = Plugin()
+    assert asyncio.run(p2.get_telemetry_enabled()) is False
+    asyncio.run(p2.set_telemetry_enabled(True))
+    assert asyncio.run(Plugin().get_telemetry_enabled()) is True

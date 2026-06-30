@@ -9,16 +9,14 @@ export interface FanMonitor {
   state: FanState | null;
   /** Rolling RPM history keyed by fan label (stable across set changes). */
   fanHistory: Record<string, number[]>;
-  /** Rolling °C history keyed by temp label. */
-  tempHistory: Record<string, number[]>;
 }
 
-const EMPTY: FanMonitor = { state: null, fanHistory: {}, tempHistory: {} };
+const EMPTY: FanMonitor = { state: null, fanHistory: {} };
 
 /**
  * Polls get_fan_state() every ~1.5 s while mounted (i.e. only while the
- * Ventiladores tab is open) and keeps a rolling sample buffer per fan/temp for
- * the sparklines. History is keyed by label, not array index, so a fan keeps its
+ * Ventiladores tab is open) and keeps a rolling RPM buffer per fan for the
+ * sparklines. History is keyed by label, not array index, so a fan keeps its
  * own buffer even when curation changes the set (e.g. the generic acpi_fan is
  * dropped once a vendor chip appears) — no cross-contaminated graphs. One state
  * update per tick (single render). Never throws.
@@ -37,11 +35,7 @@ export function useFanState(): FanMonitor {
             for (const f of s.fans) {
               fanHistory[f.label] = pushSample(prev.fanHistory[f.label] ?? [], f.rpm, MAX_SAMPLES);
             }
-            const tempHistory: Record<string, number[]> = {};
-            for (const t of s.temps) {
-              tempHistory[t.label] = pushSample(prev.tempHistory[t.label] ?? [], t.celsius, MAX_SAMPLES);
-            }
-            return { state: s, fanHistory, tempHistory };
+            return { state: s, fanHistory };
           });
         })
         .catch(() => {

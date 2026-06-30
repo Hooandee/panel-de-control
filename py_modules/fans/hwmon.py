@@ -44,7 +44,10 @@ def curate_fans(fans: list[dict]) -> list[dict]:
 
 
 def curate_temps(temps: list[dict]) -> list[dict]:
-    """Surface CPU/GPU first with friendly labels; demote known-noisy sensors."""
+    """Show only the meaningful CPU/GPU sensors with friendly labels, dropping the
+    generic noise (acpitz, wifi, nvme, battery…) that clutters the monitor. If a
+    device exposes no recognized CPU/GPU sensor, fall back to showing everything
+    (ranked) so the list is never silently empty."""
 
     def rank(t: dict) -> tuple[str, int]:
         chip = t["chip"]
@@ -59,7 +62,10 @@ def curate_temps(temps: list[dict]) -> list[dict]:
         label, prio = rank(t)
         decorated.append((prio, i, {"label": label, "celsius": t["celsius"]}))
     decorated.sort(key=lambda x: (x[0], x[1]))
-    return [d[2] for d in decorated]
+    # Keep only recognized CPU/GPU (priority 0/1); fall back to all when none match.
+    known = [d for d in decorated if d[0] <= 1]
+    chosen = known if known else decorated
+    return [d[2] for d in chosen]
 
 
 def extract_cpu_gpu_temps(fan_state: dict) -> tuple:

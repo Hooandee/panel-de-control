@@ -20,10 +20,27 @@ const es: Record<string, string> = {
   "nav.fans": "Ventiladores",
   "nav.settings": "Ajustes",
   "fans.unavailable": "No se detectaron ventiladores en este dispositivo.",
+  "fans.fan": "Ventilador {n}",
+  "fans.temp.cpu": "Procesador",
+  "fans.temp.gpu": "Gráfica",
+  "fans.curve.title": "Curva de ventilador",
+  "fans.preset.auto": "Auto",
+  "fans.preset.silent": "Silencioso",
+  "fans.preset.balanced": "Equilibrado",
+  "fans.preset.performance": "Rendimiento",
+  "fans.preset.custom": "Personalizado",
+  "fans.curve.custom.hint": "Arrastra los puntos para ajustar tu curva.",
+  "fans.curve.expand": "Editar a pantalla completa",
+  "fans.curve.saved": "Guardado",
+  "fans.curve.auto.hint": "Controlado por el firmware del dispositivo.",
+  "fans.curve.unsupported": "El control de ventilador no está disponible en este dispositivo.",
   "system.brightness": "Brillo",
   "system.volume": "Volumen",
   "system.unavailable": "No disponible en este dispositivo.",
   "settings.language": "Idioma",
+  "settings.telemetry": "Aprender de mi uso",
+  "settings.telemetry.desc": "Registra temperatura, ventilador y potencia por juego (solo en este dispositivo) para sugerir curvas y perfiles. Nunca sale del dispositivo.",
+  "settings.telemetry.learning": "Necesita varias sesiones de juego para aprender tu patrón antes de poder sugerir.",
   "tdp.unsupported": "El control de TDP no está disponible en este dispositivo.",
   "tdp.scope.global": "Global",
   "tdp.inherit": "Heredando del global",
@@ -64,10 +81,27 @@ const en: Record<string, string> = {
   "nav.fans": "Fans",
   "nav.settings": "Settings",
   "fans.unavailable": "No fans detected on this device.",
+  "fans.fan": "Fan {n}",
+  "fans.temp.cpu": "Processor",
+  "fans.temp.gpu": "Graphics",
+  "fans.curve.title": "Fan curve",
+  "fans.preset.auto": "Auto",
+  "fans.preset.silent": "Silent",
+  "fans.preset.balanced": "Balanced",
+  "fans.preset.performance": "Performance",
+  "fans.preset.custom": "Custom",
+  "fans.curve.custom.hint": "Drag the points to shape your curve.",
+  "fans.curve.expand": "Edit full screen",
+  "fans.curve.saved": "Saved",
+  "fans.curve.auto.hint": "Controlled by the device firmware.",
+  "fans.curve.unsupported": "Fan control isn't available on this device.",
   "system.brightness": "Brightness",
   "system.volume": "Volume",
   "system.unavailable": "Not available on this device.",
   "settings.language": "Language",
+  "settings.telemetry": "Learn from my usage",
+  "settings.telemetry.desc": "Records temperature, fan and power per game (on this device only) to suggest curves and profiles. Never leaves your device.",
+  "settings.telemetry.learning": "Needs a few play sessions to learn your pattern before it can suggest.",
   "tdp.unsupported": "TDP control isn't available on this device.",
   "tdp.scope.global": "Global",
   "tdp.inherit": "Inheriting from global",
@@ -141,6 +175,15 @@ export const I18nProvider: FC<{ children: ReactNode }> = ({ children }) => {
 
 export function useI18n(): I18nValue {
   const ctx = useContext(I18nContext);
-  if (!ctx) throw new Error("useI18n must be used within I18nProvider");
-  return ctx;
+  if (ctx) return ctx;
+  // Components rendered in a separate React root (e.g. via showModal) live
+  // outside the provider. Rather than throw, degrade to a snapshot of the
+  // persisted language — setLang is a no-op there (the modal opens after any
+  // language change and can't receive live updates anyway).
+  const lang = initialLang();
+  return {
+    lang,
+    setLang: () => {},
+    t: (key, params) => format(DICTS[lang][key] ?? en[key] ?? key, params),
+  };
 }

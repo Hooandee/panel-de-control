@@ -1,3 +1,5 @@
+import os
+
 import pytest
 
 from telemetry.store import TelemetryStore
@@ -179,11 +181,39 @@ def test_persists_and_reloads(tmp_path):
     path = str(tmp_path / "telemetry.json")
     s1 = TelemetryStore(path)
     s1.add_sample("42", _sample(pl1=15, watts=12.0), dt=5.0, ts=100.0)
+    s1.flush()  # writes are buffered; flush persists
     s2 = TelemetryStore(path)
     agg = s2.aggregate("42")
     assert agg["samples_n"] == 1
     assert agg["by_pl1"][15]["watts_avg"] == pytest.approx(12.0)
     assert len(agg["recent"]) == 1
+
+
+# ---------------------------------------------------------------------------
+# Write throttling: add_sample buffers in memory; flush() persists.
+# ---------------------------------------------------------------------------
+
+def test_add_sample_does_not_write_until_flush(tmp_path):
+    path = str(tmp_path / "telemetry.json")
+    s = TelemetryStore(path)
+    s.add_sample("1", _sample(pl1=15), dt=5.0)
+    assert not os.path.exists(path)  # throttled — no per-sample disk write
+    s.flush()
+    assert os.path.exists(path)
+
+
+def test_flush_is_noop_when_nothing_changed(tmp_path):
+    path = str(tmp_path / "telemetry.json")
+    s = TelemetryStore(path)
+    s.flush()  # nothing buffered → no file, no error
+    assert not os.path.exists(path)
+
+
+def test_aggregate_reflects_unflushed_samples(tmp_path):
+    # In-session reads (RPC/F3) must see buffered data without a flush.
+    s = _store(tmp_path)
+    s.add_sample("1", _sample(pl1=15), dt=5.0)
+    assert s.aggregate("1")["samples_n"] == 1
 
 
 # ---------------------------------------------------------------------------

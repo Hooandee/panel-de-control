@@ -14,10 +14,14 @@ class TelemetrySampler:
     (safe in unit-test contexts that skip asyncio).
     """
 
-    def __init__(self, store, sample_fn, interval: float = 5.0) -> None:
+    def __init__(self, store, sample_fn, interval: float = 5.0, flush_every: int = 12) -> None:
         self._store = store
         self._sample_fn = sample_fn
         self._interval = interval
+        # Persist to disk every `flush_every` samples (12 × 5 s ≈ 60 s) instead of
+        # every sample — spares eMMC wear. A final flush happens on stop().
+        self._flush_every = flush_every
+        self._since_flush = 0
         self._task: asyncio.Task | None = None
 
     def start(self) -> None:
@@ -33,6 +37,9 @@ class TelemetrySampler:
         if self._task is not None:
             self._task.cancel()
             self._task = None
+        # Persist whatever was buffered since the last periodic flush.
+        self._store.flush()
+        self._since_flush = 0
 
     async def _loop(self) -> None:
         while True:
@@ -42,6 +49,10 @@ class TelemetrySampler:
                 if result is not None:
                     appid, sample = result
                     self._store.add_sample(appid, sample, dt=self._interval, ts=time.time())
+                    self._since_flush += 1
+                    if self._since_flush >= self._flush_every:
+                        self._store.flush()
+                        self._since_flush = 0
             except asyncio.CancelledError:
                 return
             except Exception:  # noqa: BLE001 — loop must never die

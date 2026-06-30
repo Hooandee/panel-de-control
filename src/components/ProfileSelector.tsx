@@ -1,17 +1,17 @@
 import { CSSProperties, FC } from "react";
 import { Focusable } from "@decky/ui";
 import { LuGamepad2 } from "react-icons/lu";
-import { TdpScope } from "../api";
+import { Scope } from "../api";
 import { theme } from "../theme";
 import { segmentGroupStyle, segmentItemStyle } from "./segmented";
 
 interface ProfileSelectorProps {
-  scope: TdpScope;
+  scope: Scope;
   gameName: string | null;
   hasGameProfile: boolean;
   globalLabel: string;
   inheritHint: string;
-  onScope: (scope: TdpScope) => void;
+  onScope: (scope: Scope) => void;
 }
 
 export const ProfileSelector: FC<ProfileSelectorProps> = ({

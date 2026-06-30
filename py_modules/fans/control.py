@@ -40,7 +40,7 @@ def sanitize_curve(
     1. Truncate to 8 / pad by repeating the last point.
     2. Cast to int.
     3. Clamp temps to 0..100, pwm to ``[floor_pwm, pwm_max]``.
-    4. Make temps strictly non-decreasing (bump by +1 when equal).
+    4. Make temps non-decreasing (clamp each point's temp to >= the previous).
     5. Make pwm monotonically non-decreasing.
     6. Enforce ``_SAFE_MAX_TEMP_FLOOR`` on the LAST point only — lower points
        may remain quiet.
@@ -131,6 +131,9 @@ class NullFanBackend:
     def set_auto(self, fan_key: Optional[str] = None) -> dict:
         return {"ok": False, "detail": "fan control not supported on this device"}
 
+    def apply_curve_all(self, points: list) -> dict:
+        return {"ok": False, "detail": "fan control not supported on this device"}
+
     def restore_auto(self) -> dict:
         return self.set_auto(None)
 
@@ -187,17 +190,17 @@ class AsusFanCurveBackend:
             return {"supported": False, "source": self.name, "pwm_max": 255, "fans": []}
 
         fans = []
-        for key, m in _FAN_KEYS.items():
-            enable_path = os.path.join(self._dir, f"pwm{m}_enable")
+        for fan_key, fan_index in _FAN_KEYS.items():
+            enable_path = os.path.join(self._dir, f"pwm{fan_index}_enable")
             if not os.path.exists(enable_path):
                 continue  # this fan index not present on this chip
             enable = _read_int(enable_path)
             points = []
-            for k in range(1, _POINTS + 1):
-                t = _read_int(os.path.join(self._dir, f"pwm{m}_auto_point{k}_temp"))
-                p = _read_int(os.path.join(self._dir, f"pwm{m}_auto_point{k}_pwm"))
-                points.append({"temp": t, "pwm": p})
-            fans.append({"key": key, "enable": enable, "points": points})
+            for point in range(1, _POINTS + 1):
+                temp = _read_int(os.path.join(self._dir, f"pwm{fan_index}_auto_point{point}_temp"))
+                pwm = _read_int(os.path.join(self._dir, f"pwm{fan_index}_auto_point{point}_pwm"))
+                points.append({"temp": temp, "pwm": pwm})
+            fans.append({"key": fan_key, "enable": enable, "points": points})
 
         return {
             "supported": True,
@@ -214,29 +217,49 @@ class AsusFanCurveBackend:
         if not self.supported:
             return {"ok": False, "detail": "asus_custom_fan_curve chip not found"}
 
-        m = _FAN_KEYS.get(fan_key)
-        if m is None:
+        fan_index = _FAN_KEYS.get(fan_key)
+        if fan_index is None:
             return {"ok": False, "detail": f"unknown fan key: {fan_key!r}"}
 
-        safe_pts = sanitize_curve(points, pwm_max=255, floor_pwm=0)
+        safe_points = sanitize_curve(points, pwm_max=255, floor_pwm=0)
 
         # Write the 8 temp+pwm files
-        for k, (temp, pwm) in enumerate(safe_pts, start=1):
-            if not _write(os.path.join(self._dir, f"pwm{m}_auto_point{k}_temp"), str(temp)):
-                return {"ok": False, "detail": f"write failed: pwm{m}_auto_point{k}_temp"}
-            if not _write(os.path.join(self._dir, f"pwm{m}_auto_point{k}_pwm"), str(pwm)):
-                return {"ok": False, "detail": f"write failed: pwm{m}_auto_point{k}_pwm"}
+        for point, (temp, pwm) in enumerate(safe_points, start=1):
+            if not _write(os.path.join(self._dir, f"pwm{fan_index}_auto_point{point}_temp"), str(temp)):
+                return {"ok": False, "detail": f"write failed: pwm{fan_index}_auto_point{point}_temp"}
+            if not _write(os.path.join(self._dir, f"pwm{fan_index}_auto_point{point}_pwm"), str(pwm)):
+                return {"ok": False, "detail": f"write failed: pwm{fan_index}_auto_point{point}_pwm"}
 
         # Activate manual mode
-        if not _write(os.path.join(self._dir, f"pwm{m}_enable"), "1"):
-            return {"ok": False, "detail": f"write failed: pwm{m}_enable"}
+        if not _write(os.path.join(self._dir, f"pwm{fan_index}_enable"), "1"):
+            return {"ok": False, "detail": f"write failed: pwm{fan_index}_enable"}
 
         # Read back point 1 to confirm the kernel accepted the write
-        readback = _read_int(os.path.join(self._dir, f"pwm{m}_auto_point1_pwm"))
+        readback = _read_int(os.path.join(self._dir, f"pwm{fan_index}_auto_point1_pwm"))
         if readback is None:
             return {"ok": False, "detail": "readback failed after write"}
 
         return {"ok": True, "detail": f"fan {fan_key} curve applied (manual mode)"}
+
+    def apply_curve_all(self, points: list) -> dict:
+        """Write the SAME sanitized curve to every fan present on the chip.
+
+        F2 applies one user curve to all fans (CPU+GPU). Aggregates per-fan
+        results; ``ok=False`` if any fan write fails.  Never raises.
+        """
+        if not self.supported:
+            return {"ok": False, "detail": "asus_custom_fan_curve chip not found"}
+        applied, failed = [], []
+        for fan_key, fan_index in _FAN_KEYS.items():
+            if not os.path.exists(os.path.join(self._dir, f"pwm{fan_index}_enable")):
+                continue  # fan index not present on this chip
+            result = self.set_curve(fan_key, points)
+            (applied if result.get("ok") else failed).append(fan_key)
+        if not applied and not failed:
+            return {"ok": False, "detail": "no fans present"}
+        if failed:
+            return {"ok": False, "detail": f"curve write failed for: {failed}"}
+        return {"ok": True, "detail": f"curve applied to {applied}"}
 
     def set_auto(self, fan_key: Optional[str] = None) -> dict:
         """Return the specified fan (or all fans when ``fan_key`` is None) to
@@ -248,18 +271,18 @@ class AsusFanCurveBackend:
             return {"ok": False, "detail": "asus_custom_fan_curve chip not found"}
 
         if fan_key is not None:
-            m = _FAN_KEYS.get(fan_key)
-            if m is None:
+            fan_index = _FAN_KEYS.get(fan_key)
+            if fan_index is None:
                 return {"ok": False, "detail": f"unknown fan key: {fan_key!r}"}
-            fans_to_restore = [(fan_key, m)]
+            fans_to_restore = [(fan_key, fan_index)]
         else:
             fans_to_restore = list(_FAN_KEYS.items())
 
         failed = []
-        for key, m in fans_to_restore:
-            enable_path = os.path.join(self._dir, f"pwm{m}_enable")
+        for fan_key, fan_index in fans_to_restore:
+            enable_path = os.path.join(self._dir, f"pwm{fan_index}_enable")
             if not _write(enable_path, "2"):
-                failed.append(key)
+                failed.append(fan_key)
 
         if failed:
             return {"ok": False, "detail": f"enable=2 write failed for: {failed}"}
