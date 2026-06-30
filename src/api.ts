@@ -61,7 +61,10 @@ export interface TdpApplyResult {
   detail: string;
 }
 
-export type TdpScope = "global" | "game";
+// Profile scope shared by the TDP and fan-curve features (and the ProfileSelector
+// that both reuse).
+export type Scope = "global" | "game";
+export type TdpScope = Scope;
 
 export interface FanInfo {
   label: string;
@@ -98,3 +101,35 @@ export interface PowerDraw {
 
 export const getPowerDraw = callable<[], PowerDraw>("get_power_draw");
 export const setAutoTdp = callable<[enabled: boolean], { auto_tdp: boolean }>("set_auto_tdp");
+
+export type FanScope = Scope;
+export type FanPreset = "auto" | "silent" | "balanced" | "performance" | "custom";
+
+export interface FanPresetDef {
+  id: "silent" | "balanced" | "performance";
+  points: [number, number][];
+}
+
+export interface FanCurveState {
+  supported: boolean;
+  source: string | null;
+  pwm_max: number;
+  preset: FanPreset;
+  points: [number, number][] | null;
+  global_preset: FanPreset;
+  global_points: [number, number][] | null;
+  has_game_profile: boolean;
+  appid: string | null;
+  presets: FanPresetDef[];
+}
+
+export const getTelemetryEnabled = callable<[], boolean>("get_telemetry_enabled");
+export const setTelemetryEnabled = callable<[enabled: boolean], boolean>("set_telemetry_enabled");
+
+export const getFanCurveState = callable<[], FanCurveState>("get_fan_curve_state");
+export const setFanPreset =
+  callable<[preset: FanPreset, scope: FanScope, appid: string | null], FanCurveState>("set_fan_preset");
+export const setFanCurvePoints =
+  callable<[points: [number, number][], scope: FanScope, appid: string | null], FanCurveState>("set_fan_curve_points");
+export const setFanCurveAuto =
+  callable<[scope: FanScope, appid: string | null], FanCurveState>("set_fan_auto");

@@ -14,6 +14,8 @@ from tdp_profiles import ProfileStore
 from lifecycle import LifecycleManager, read_on_ac
 from fans.hwmon import FanReader, extract_cpu_gpu_temps
 from fans import control as fan_control
+from fans import presets as fan_presets
+from fan_curves import FanCurveStore
 from power.reader import PowerReader
 from telemetry.store import TelemetryStore
 from telemetry.sampler import TelemetrySampler
@@ -22,6 +24,9 @@ DEFAULTS = {
     # Persisted settings keys go here; SettingsStore merges these over stored values.
     # (TDP per-game profiles will live in their own store in the TDP sub-project.)
     "auto_tdp": False,
+    # Learn from usage (local-only telemetry powering F3 suggestions). Opt-out:
+    # when False the sampler never runs — nothing is read or written during play.
+    "telemetry_enabled": True,
 }
 
 
@@ -46,9 +51,12 @@ class Plugin:
         self._tdp_backend = tdp_factory.select_backend(self._device)
         self._fan_reader = FanReader()
         self._fan_ctrl = fan_control.select_fan_backend(self._device)
+        self._fan_curves = FanCurveStore(
+            os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "fan_curves.json")
+        )
         self._power_reader = PowerReader()
         self._current_appid = None
-        self._lifecycle = LifecycleManager(apply_cb=self._reapply_tdp)
+        self._lifecycle = LifecycleManager(apply_cb=self._reapply_all)
         self._auto_task = None
         self._auto_setpoint = None
         self._telemetry = TelemetryStore(
@@ -74,21 +82,81 @@ class Plugin:
         self._init()
         return self._fan_reader.read()
 
-    # ---- Fan-curve control --------------------------------------------------
-    async def get_fan_control(self) -> dict:
-        self._init()
-        return self._fan_ctrl.read_state()
+    # ---- Fan-curve control (global + per-game, persisted) -------------------
+    def _reapply_fans(self) -> None:
+        """Apply the effective fan profile for the current game (or global).
 
-    async def set_fan_curve(self, fan: str, points: list) -> dict:
-        self._init()
-        if not isinstance(fan, str) or not isinstance(points, list):
-            return {"ok": False, "detail": "invalid arguments"}
-        return self._fan_ctrl.set_curve(fan, points)
+        auto -> firmware control; manual -> write the stored curve to all fans.
+        Guarded: a bad fan apply must never brick load.
+        """
+        try:
+            profile = self._fan_curves.effective(self._current_appid)
+            if profile["preset"] == "auto" or not profile["points"]:
+                self._fan_ctrl.set_auto(None)
+            else:
+                self._fan_ctrl.apply_curve_all(profile["points"])
+        except Exception:  # noqa: BLE001
+            pass
 
-    async def set_fan_auto(self, fan=None) -> dict:
+    def _fan_curve_state(self) -> dict:
+        hw_state = self._fan_ctrl.read_state()
+        effective = self._fan_curves.effective(self._current_appid)
+        # When idle (no game) the effective profile IS the global one — skip the
+        # second store read.
+        global_curve = effective if self._current_appid is None else self._fan_curves.effective(None)
+        return {
+            "supported": hw_state.get("supported", False),
+            "source": hw_state.get("source"),
+            "pwm_max": hw_state.get("pwm_max", 255),
+            "preset": effective["preset"],
+            "points": effective["points"],
+            "global_preset": global_curve["preset"],
+            "global_points": global_curve["points"],
+            "has_game_profile": (self._current_appid is not None
+                                 and self._fan_curves.has_game(self._current_appid)),
+            "appid": self._current_appid,
+            "presets": [{"id": pid, "points": pts}
+                        for pid, pts in fan_presets.RESOLVED.items()],
+        }
+
+    async def get_fan_curve_state(self) -> dict:
         self._init()
-        key = fan if isinstance(fan, str) and fan else None
-        return self._fan_ctrl.set_auto(key)
+        return self._fan_curve_state()
+
+    async def set_fan_preset(self, preset: str, scope: str, appid=None) -> dict:
+        self._init()
+        if preset not in fan_presets.PRESETS:
+            return self._fan_curve_state()
+        resolved = self._resolve_scope(scope, appid)
+        if resolved is None:
+            return self._fan_curve_state()
+        self._fan_curves.set_preset(resolved, preset, fan_presets.RESOLVED[preset], appid)
+        self._reapply_fans()
+        return self._fan_curve_state()
+
+    async def set_fan_curve_points(self, points: list, scope: str, appid=None) -> dict:
+        self._init()
+        if not isinstance(points, list) or not points:
+            return self._fan_curve_state()
+        resolved = self._resolve_scope(scope, appid)
+        if resolved is None:
+            return self._fan_curve_state()
+        # Store the SANITIZED curve (8 points, monotonic, hot-point safety floor) —
+        # the same transform applied at write time — so the persisted/returned state
+        # reflects what the hardware will actually run. Never show a curve we override.
+        safe_points = [list(p) for p in fan_control.sanitize_curve(points)]
+        self._fan_curves.set_custom(resolved, safe_points, appid)
+        self._reapply_fans()
+        return self._fan_curve_state()
+
+    async def set_fan_auto(self, scope: str, appid=None) -> dict:
+        self._init()
+        resolved = self._resolve_scope(scope, appid)
+        if resolved is None:
+            return self._fan_curve_state()
+        self._fan_curves.set_auto(resolved, appid)
+        self._reapply_fans()
+        return self._fan_curve_state()
 
     # ---- Telemetry ----------------------------------------------------------
     def _collect_sample(self):
@@ -133,6 +201,23 @@ class Plugin:
         if key is None:
             return {"samples_n": 0, "by_pl1": {}, "recent": []}
         return self._telemetry.aggregate(key)
+
+    async def get_telemetry_enabled(self) -> bool:
+        self._init()
+        return bool(self._settings.get("telemetry_enabled", True))
+
+    async def set_telemetry_enabled(self, enabled: bool) -> bool:
+        """Opt out of (or back into) usage learning. Off stops the sampler so
+        nothing is read or written during play; on resumes it."""
+        self._init()
+        enabled = bool(enabled)
+        self._settings["telemetry_enabled"] = enabled
+        self._save()
+        if enabled:
+            self._sampler.start()
+        else:
+            self._sampler.stop()  # also flushes any buffered samples
+        return enabled
 
     # ---- Auto-TDP loop ------------------------------------------------------
     def _start_auto_loop(self) -> None:
@@ -230,6 +315,11 @@ class Plugin:
         lv, _active, ac = self._effective_levels(self._current_appid, on_ac)
         return self._tdp_backend.set_levels(lv["pl1"], lv["pl2"], lv["pl3"], ac)
 
+    def _reapply_all(self, on_ac=None) -> None:
+        """Lifecycle callback: re-assert TDP and the effective fan curve (resume/AC)."""
+        self._reapply_tdp(on_ac)
+        self._reapply_fans()
+
     async def get_tdp_state(self) -> dict:
         self._init()
         levels, active, ac = self._effective_levels(self._current_appid)
@@ -313,7 +403,7 @@ class Plugin:
     async def set_current_game(self, appid) -> dict:
         self._init()
         self._current_appid = str(appid) if appid is not None else None
-        self._reapply_tdp()
+        self._reapply_all()
         return await self.get_tdp_state()
 
     def _restore_fans_safe(self) -> None:
@@ -330,11 +420,12 @@ class Plugin:
             "Panel de Control v%s loaded (euid=%s)", read_version(), os.geteuid()
         )
         try:
-            self._reapply_tdp()
+            self._reapply_all()
             self._lifecycle.start()
             if self._settings.get("auto_tdp"):
                 self._start_auto_loop()
-            self._sampler.start()
+            if self._settings.get("telemetry_enabled", True):
+                self._sampler.start()
         except Exception as e:  # noqa: BLE001
             decky.logger.error("TDP startup failed: %s", e)
 

@@ -119,12 +119,25 @@ def test_extract_empty_returns_none_none():
 
 # --- device-aware curation (refined from real Ally X hwmon layout) -----------
 
-def test_temps_prioritize_cpu_and_gpu_and_relabel(tmp_path):
+def test_temps_keep_only_cpu_gpu_and_drop_noise(tmp_path):
     root = str(tmp_path)
-    # Enumeration order puts noise first; curation must surface CPU/GPU.
+    # Enumeration order puts noise first; curation must surface CPU/GPU and DROP
+    # the noisy sensors (nvme/acpitz/wifi) entirely — they clutter the monitor.
     _mk_chip(root, 4, "nvme", {"temp1_input": "33850", "temp1_label": "Composite"})
+    _mk_chip(root, 5, "acpitz", {"temp1_input": "45000"})
+    _mk_chip(root, 6, "mt7921", {"temp1_input": "40000"})
     _mk_chip(root, 7, "amdgpu", {"temp1_input": "56000", "temp1_label": "edge"})
     _mk_chip(root, 8, "k10temp", {"temp1_input": "58250", "temp1_label": "Tctl"})
     temps = FanReader(root=root).read()["temps"]
-    assert [t["label"] for t in temps[:2]] == ["CPU", "GPU"]
+    assert [t["label"] for t in temps] == ["CPU", "GPU"]  # noise dropped
     assert temps[0]["celsius"] == 58.2
+
+
+def test_temps_fallback_keeps_all_when_no_cpu_gpu(tmp_path):
+    # A device exposing only unrecognized sensors must still show them (honest
+    # fallback), not an empty list.
+    root = str(tmp_path)
+    _mk_chip(root, 0, "acpitz", {"temp1_input": "45000"})
+    _mk_chip(root, 1, "nvme", {"temp1_input": "33850", "temp1_label": "Composite"})
+    temps = FanReader(root=root).read()["temps"]
+    assert len(temps) == 2

@@ -28,3 +28,16 @@ export function sparklinePath(values: number[], width: number, height: number): 
     .map((v, i) => `${i === 0 ? "M" : "L"} ${x(i)} ${y(v)}`)
     .join(" ");
 }
+
+/**
+ * Fan speed as a 0..1 fraction for the gauge ring. The hardware doesn't expose
+ * PWM duty on every device, but RPM is real — so we show RPM relative to a max.
+ * The denominator self-calibrates to the fastest speed seen this session
+ * (`observedMax`) but never drops below `nominalMax`, so the ring is meaningful
+ * immediately and never overclaims (a fan at its session peak reads ~full).
+ */
+export function rpmFraction(rpm: number, observedMax: number, nominalMax: number): number {
+  const denom = Math.max(nominalMax, observedMax);
+  if (denom <= 0) return 0;
+  return Math.max(0, Math.min(1, rpm / denom));
+}

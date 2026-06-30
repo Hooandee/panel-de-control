@@ -1,4 +1,5 @@
-"""RPC-level tests for fan-curve control (get_fan_control, set_fan_curve, set_fan_auto).
+"""RPC-level tests for fan-curve control (get_fan_curve_state, set_fan_preset,
+set_fan_curve_points, set_fan_auto).
 
 Uses the same Plugin fixture pattern as test_tdp_rpc.py — monkeypatches ``decky``
 and reloads ``main`` so we get a real Plugin instance without live hardware.
@@ -105,44 +106,40 @@ def _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=None):
 
 
 # ---------------------------------------------------------------------------
-# Tests: Null backend (no hwmon — default in tmp_path)
+# Tests: Null backend (no hwmon — default in tmp_path). The UI hides the editor
+# when unsupported, but the RPCs must still degrade without raising.
 # ---------------------------------------------------------------------------
 
-class TestFanControlRpcNull:
+class TestFanCurveRpcNull:
     @pytest.fixture
     def Plugin(self, tmp_path, monkeypatch):
         return _make_plugin_fixture(tmp_path, monkeypatch)
 
-    def test_get_fan_control_returns_supported_false(self, Plugin):
-        r = asyncio.run(Plugin().get_fan_control())
-        assert r["supported"] is False
-        assert r["fans"] == []
+    def test_state_supported_false(self, Plugin):
+        st = asyncio.run(Plugin().get_fan_curve_state())
+        assert st["supported"] is False
+        assert st["preset"] == "auto"
+        assert {p["id"] for p in st["presets"]} == {"silent", "balanced", "performance"}
 
-    def test_get_fan_control_has_source_and_pwm_max(self, Plugin):
-        r = asyncio.run(Plugin().get_fan_control())
-        assert "source" in r
-        assert "pwm_max" in r
+    def test_set_preset_degrades_without_raising(self, Plugin):
+        st = asyncio.run(Plugin().set_fan_preset("balanced", "global", None))
+        assert st["supported"] is False
+        assert st["preset"] == "balanced"  # persisted even though hardware can't apply
 
-    def test_set_fan_curve_returns_ok_false_when_unsupported(self, Plugin):
-        pts = [(i * 10, i * 25) for i in range(8)]
-        r = asyncio.run(Plugin().set_fan_curve("cpu", pts))
-        assert r["ok"] is False
-        assert isinstance(r["detail"], str)
+    def test_set_auto_degrades(self, Plugin):
+        st = asyncio.run(Plugin().set_fan_auto("global", None))
+        assert st["preset"] == "auto"
 
-    def test_set_fan_auto_returns_ok_false_when_unsupported(self, Plugin):
-        r = asyncio.run(Plugin().set_fan_auto(None))
-        assert r["ok"] is False
-
-    def test_set_fan_curve_invalid_args_returns_ok_false(self, Plugin):
-        r = asyncio.run(Plugin().set_fan_curve(123, "not-a-list"))
-        assert r["ok"] is False
+    def test_unknown_preset_is_noop(self, Plugin):
+        st = asyncio.run(Plugin().set_fan_preset("nonsense", "global", None))
+        assert st["preset"] == "auto"
 
 
 # ---------------------------------------------------------------------------
 # Tests: Real AsusFanCurveBackend with synthetic sysfs
 # ---------------------------------------------------------------------------
 
-class TestFanControlRpcAsus:
+class TestFanCurveRpcAsus:
     @pytest.fixture
     def asus_root(self, tmp_path):
         _make_asus_chip(str(tmp_path))
@@ -154,59 +151,54 @@ class TestFanControlRpcAsus:
         assert backend.supported
         return _make_plugin_fixture(asus_root, monkeypatch, fan_ctrl_override=backend)
 
-    def test_get_fan_control_supported(self, Plugin):
-        r = asyncio.run(Plugin().get_fan_control())
-        assert r["supported"] is True
-        assert r["source"] == "asus_custom_fan_curve"
-        assert r["pwm_max"] == 255
-
-    def test_get_fan_control_has_two_fans(self, Plugin):
-        r = asyncio.run(Plugin().get_fan_control())
-        keys = {f["key"] for f in r["fans"]}
-        assert keys == {"cpu", "gpu"}
-
-    def test_get_fan_control_each_fan_has_8_points(self, Plugin):
-        r = asyncio.run(Plugin().get_fan_control())
-        for fan in r["fans"]:
-            assert len(fan["points"]) == 8
-
-    def test_set_fan_curve_ok_true(self, Plugin):
-        pts = [(i * 10, i * 25) for i in range(8)]
-        r = asyncio.run(Plugin().set_fan_curve("cpu", pts))
-        assert r["ok"] is True
-
-    def test_set_fan_curve_sets_enable_to_1(self, Plugin, asus_root):
-        pts = [(i * 10, i * 25) for i in range(8)]
-        asyncio.run(Plugin().set_fan_curve("cpu", pts))
-        enable_path = None
-        for hwmon_dir in os.scandir(os.path.join(str(asus_root), "sys/class/hwmon")):
-            enable_path = os.path.join(hwmon_dir.path, "pwm1_enable")
-        assert enable_path and open(enable_path).read().strip() == "1"
-
-    def test_set_fan_curve_unknown_key_returns_ok_false(self, Plugin):
-        r = asyncio.run(Plugin().set_fan_curve("exhaust", [(i * 10, 100) for i in range(8)]))
-        assert r["ok"] is False
-
-    def test_set_fan_auto_restores_enable_2(self, Plugin, asus_root):
-        pts = [(i * 10, i * 25) for i in range(8)]
-        asyncio.run(Plugin().set_fan_curve("cpu", pts))
-        asyncio.run(Plugin().set_fan_auto("cpu"))
-        for hwmon_dir in os.scandir(os.path.join(str(asus_root), "sys/class/hwmon")):
-            val = open(os.path.join(hwmon_dir.path, "pwm1_enable")).read().strip()
-        assert val == "2"
-
-    def test_set_fan_auto_none_restores_all_fans(self, Plugin, asus_root):
-        pts = [(i * 10, i * 25) for i in range(8)]
-        p = Plugin()
-        asyncio.run(p.set_fan_curve("cpu", pts))
-        asyncio.run(p.set_fan_curve("gpu", pts))
-        asyncio.run(p.set_fan_auto(None))
+    def _enables(self, asus_root):
         for hwmon_dir in os.scandir(os.path.join(str(asus_root), "sys/class/hwmon")):
             d = hwmon_dir.path
-            assert open(os.path.join(d, "pwm1_enable")).read().strip() == "2"
-            assert open(os.path.join(d, "pwm2_enable")).read().strip() == "2"
+            return (
+                open(os.path.join(d, "pwm1_enable")).read().strip(),
+                open(os.path.join(d, "pwm2_enable")).read().strip(),
+            )
+        return (None, None)
 
-    def test_set_fan_curve_sanitizes_short_list(self, Plugin):
-        # Fewer than 8 points — should pad + succeed
-        r = asyncio.run(Plugin().set_fan_curve("gpu", [(30, 80), (70, 200)]))
-        assert r["ok"] is True
+    def test_default_state_is_auto(self, Plugin):
+        st = asyncio.run(Plugin().get_fan_curve_state())
+        assert st["supported"] is True
+        assert st["source"] == "asus_custom_fan_curve"
+        assert st["preset"] == "auto"
+        assert st["points"] is None
+
+    def test_set_preset_applies_to_all_fans(self, Plugin, asus_root):
+        st = asyncio.run(Plugin().set_fan_preset("balanced", "global", None))
+        assert st["preset"] == "balanced"
+        assert len(st["points"]) == 8
+        assert self._enables(asus_root) == ("1", "1")  # both fans manual
+
+    def test_set_custom_points(self, Plugin):
+        pts = [[40, 0], [50, 30], [60, 60], [70, 95], [80, 135], [85, 175], [90, 215], [95, 255]]
+        st = asyncio.run(Plugin().set_fan_curve_points(pts, "global", None))
+        assert st["preset"] == "custom"
+
+    def test_set_auto_returns_fans_to_firmware(self, Plugin, asus_root):
+        asyncio.run(Plugin().set_fan_preset("performance", "global", None))
+        st = asyncio.run(Plugin().set_fan_auto("global", None))
+        assert st["preset"] == "auto"
+        assert self._enables(asus_root) == ("2", "2")
+
+    def test_game_scope_creates_profile(self, Plugin):
+        p = Plugin()
+        asyncio.run(p.set_current_game("123"))
+        st = asyncio.run(p.set_fan_preset("silent", "game", "123"))
+        assert st["preset"] == "silent"
+        assert st["has_game_profile"] is True
+        assert st["appid"] == "123"
+        assert st["global_preset"] == "auto"  # global untouched
+
+    def test_custom_points_sanitized_before_store(self, Plugin):
+        # Drag every point (incl. the hottest) to 0 duty. The backend safety floor
+        # must be reflected in the STORED + returned state, not just at apply time —
+        # otherwise the UI would show a curve the hardware silently overrides.
+        flat_zero = [[40, 0], [50, 0], [60, 0], [70, 0], [80, 0], [85, 0], [90, 0], [95, 0]]
+        st = asyncio.run(Plugin().set_fan_curve_points(flat_zero, "global", None))
+        assert st["preset"] == "custom"
+        assert len(st["points"]) == 8
+        assert st["points"][-1][1] >= 76  # hottest point floored, honestly reflected

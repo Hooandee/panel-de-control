@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { sparklinePath, pushSample } from "./logic";
+import { sparklinePath, pushSample, rpmFraction } from "./logic";
 
 describe("pushSample", () => {
   it("appends within capacity", () => {
@@ -27,5 +27,20 @@ describe("sparklinePath", () => {
   });
   it("draws a flat mid line when all values are equal", () => {
     expect(sparklinePath([5, 5, 5], 100, 20)).toBe("M 0 10 L 50 10 L 100 10");
+  });
+});
+
+describe("rpmFraction", () => {
+  it("is rpm over the nominal max when nothing faster was seen", () => {
+    expect(rpmFraction(3500, 0, 7000)).toBeCloseTo(0.5);
+  });
+  it("clamps to 1 when rpm exceeds the denominator", () => {
+    expect(rpmFraction(9000, 0, 7000)).toBe(1);
+  });
+  it("calibrates to the observed peak when it exceeds nominal", () => {
+    expect(rpmFraction(4500, 9000, 7000)).toBeCloseTo(0.5);
+  });
+  it("is 0 at rest", () => {
+    expect(rpmFraction(0, 0, 7000)).toBe(0);
   });
 });

@@ -47,6 +47,7 @@ class TelemetryStore:
     def __init__(self, path: str) -> None:
         self._path = path
         self._data = self._load()
+        self._dirty = False
 
     # ------------------------------------------------------------------
     # Public API
@@ -62,7 +63,9 @@ class TelemetryStore:
         try:
             self._add(str(appid), sample, float(dt), float(ts))
             self._trim_games()
-            self._save()
+            # Buffer in memory; persistence is throttled via flush() (called on a
+            # slower cadence + on stop) to spare the eMMC from a write every 5 s.
+            self._dirty = True
         except Exception:  # noqa: BLE001
             pass
 
@@ -154,9 +157,13 @@ class TelemetryStore:
         except (OSError, ValueError, KeyError, TypeError):
             return {"games": {}}
 
-    def _save(self) -> None:
+    def flush(self) -> None:
+        """Persist buffered samples to disk if anything changed. Never raises."""
+        if not self._dirty:
+            return
         try:
             atomic_json_save(self._path, self._data)
+            self._dirty = False
         except Exception:  # noqa: BLE001
             pass
 

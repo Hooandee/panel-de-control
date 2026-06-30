@@ -416,3 +416,22 @@ class TestSelectFanBackend:
     def test_rog_device_without_chip_gets_null_backend(self, tmp_path):
         b = select_fan_backend(self._rog_device(), root=str(tmp_path))
         assert isinstance(b, NullFanBackend)
+
+
+class TestApplyCurveAll:
+    _PTS = [[40, 0], [50, 30], [60, 60], [70, 95], [80, 135], [85, 175], [90, 215], [95, 255]]
+
+    def test_writes_every_fan(self, tmp_path):
+        _make_asus_chip(str(tmp_path))
+        be = AsusFanCurveBackend(root=str(tmp_path))
+        res = be.apply_curve_all(self._PTS)
+        assert res["ok"] is True
+        st = be.read_state()
+        assert {f["key"] for f in st["fans"]} == {"cpu", "gpu"}
+        for fan in st["fans"]:
+            assert fan["enable"] == 1  # manual mode engaged
+            assert fan["points"][0]["pwm"] == 0  # point 1 written
+            assert fan["points"][-1]["pwm"] >= 76  # safe floor honored
+
+    def test_null_backend_returns_ok_false(self):
+        assert NullFanBackend().apply_curve_all([[40, 0]])["ok"] is False
