@@ -126,6 +126,39 @@ class TestFanCurveRpcNull:
         assert st["supported"] is False
         assert st["preset"] == "balanced"  # persisted even though hardware can't apply
 
+    def test_suggestion_unsupported_backend(self, Plugin):
+        s = asyncio.run(Plugin().get_fan_suggestion("555"))
+        assert s["available"] is False
+        assert s["reason"] == "unsupported"
+
+
+class _EcRpmBackend:
+    """Stand-in for the Legion EC backend: no hwmon fan, but reads RPM over the EC."""
+    supported = True
+    name = "legion-go2-ec"
+
+    def read_state(self):
+        return {"supported": True, "source": self.name, "pwm_max": 255,
+                "fans": [{"key": "fan", "enable": 2, "rpm": 2982, "points": []}]}
+
+    def apply_curve_all(self, points):
+        return {"ok": True, "detail": ""}
+
+    def set_auto(self, fan_key=None):
+        return {"ok": True, "detail": ""}
+
+    def restore_auto(self):
+        return {"ok": True, "detail": ""}
+
+
+def test_get_fan_state_surfaces_ec_rpm_when_no_hwmon_fan(tmp_path, monkeypatch):
+    # Legion Go 2: hwmon exposes no fan, but the control backend reads RPM over the
+    # EC. The monitor must surface that real RPM instead of showing nothing.
+    Plugin = _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=_EcRpmBackend())
+    st = asyncio.run(Plugin().get_fan_state())
+    assert st["supported"] is True
+    assert [f["rpm"] for f in st["fans"]] == [2982]
+
     def test_set_auto_degrades(self, Plugin):
         st = asyncio.run(Plugin().set_fan_auto("global", None))
         assert st["preset"] == "auto"
@@ -192,6 +225,44 @@ class TestFanCurveRpcAsus:
         assert st["has_game_profile"] is True
         assert st["appid"] == "123"
         assert st["global_preset"] == "auto"  # global untouched
+
+    def _feed_band(self, p, appid):
+        # ~35 min total across a 58–82 °C band → enough_data ok (>=30 min, spread>=8)
+        for temp, secs in [(58, 300), (64, 500), (70, 600), (76, 400), (82, 300)]:
+            p._telemetry.add_sample(appid, {"pl1": 15, "temp_cpu": temp, "temp_gpu": temp - 4}, dt=secs)
+
+    def test_suggestion_available_with_good_data(self, Plugin):
+        p = Plugin()
+        asyncio.run(p.set_current_game("555"))
+        self._feed_band(p, "555")
+        s = asyncio.run(p.get_fan_suggestion("555"))
+        assert s["available"] is True
+        assert s["reason"] == "ok"
+        assert set(s["curves"]) == {"quiet", "balanced", "cool"}
+        assert all(len(c) == 8 for c in s["curves"].values())
+        assert s["minutes"] >= 30
+        assert s["band"]["floor"] <= s["band"]["peak"]
+
+    def test_suggestion_too_few_with_little_data(self, Plugin):
+        p = Plugin()
+        asyncio.run(p.set_current_game("556"))
+        p._telemetry.add_sample("556", {"pl1": 15, "temp_cpu": 60, "temp_gpu": 55}, dt=100)
+        s = asyncio.run(p.get_fan_suggestion("556"))
+        assert s["available"] is False
+        assert s["reason"] == "too_few"
+        assert s["minutes"] >= 1
+
+    def test_suggestion_no_game(self, Plugin):
+        s = asyncio.run(Plugin().get_fan_suggestion(None))
+        assert s["available"] is False
+        assert s["reason"] == "no_game"
+
+    def test_suggestion_disabled_when_telemetry_off(self, Plugin):
+        p = Plugin()
+        asyncio.run(p.set_telemetry_enabled(False))
+        s = asyncio.run(p.get_fan_suggestion("555"))
+        assert s["available"] is False
+        assert s["reason"] == "disabled"
 
     def test_custom_points_sanitized_before_store(self, Plugin):
         # Drag every point (incl. the hottest) to 0 duty. The backend safety floor

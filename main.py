@@ -15,6 +15,7 @@ from lifecycle import LifecycleManager, read_on_ac
 from fans.hwmon import FanReader, extract_cpu_gpu_temps
 from fans import control as fan_control
 from fans import presets as fan_presets
+from fans import suggest as fan_suggest
 from fan_curves import FanCurveStore
 from power.reader import PowerReader
 from telemetry.store import TelemetryStore
@@ -27,6 +28,10 @@ DEFAULTS = {
     # Learn from usage (local-only telemetry powering F3 suggestions). Opt-out:
     # when False the sampler never runs — nothing is read or written during play.
     "telemetry_enabled": True,
+    # Opt-in: raise the on-battery TDP ceiling to the firmware/charger max. Default
+    # off (we cap battery below the firmware max for battery life); the user accepts
+    # the drain when enabling. The firmware itself allows the same max either way.
+    "unlock_battery_max": False,
 }
 
 
@@ -50,7 +55,9 @@ class Plugin:
         )
         self._tdp_backend = tdp_factory.select_backend(self._device)
         self._fan_reader = FanReader()
-        self._fan_ctrl = fan_control.select_fan_backend(self._device)
+        # temp_fn feeds the software-loop backends (Steam Deck / Legion Go 2) the
+        # live driving temp; hardware-curve backends (ASUS/MSI) ignore it.
+        self._fan_ctrl = fan_control.select_fan_backend(self._device, temp_fn=self._driving_temp)
         self._fan_curves = FanCurveStore(
             os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "fan_curves.json")
         )
@@ -78,9 +85,36 @@ class Plugin:
         return asdict(self._device)
 
     # ---- Fans (read-only monitor) ------------------------------------------
+    def _read_fans(self) -> dict:
+        """hwmon fan/temp reading, with EC-readable RPM merged in for devices that
+        expose NO hwmon fan (Legion Go 2 reads RPM over the EC). Shared by the
+        monitor RPC and the telemetry sampler so both see the real RPM, not an empty
+        list. Honest: a value only appears when actually readable. Never raises."""
+        state = self._fan_reader.read()
+        if not state["fans"]:
+            try:
+                hw = self._fan_ctrl.read_state()
+                ec_fans = [{"label": f.get("key", "fan"), "rpm": rpm, "percent": None}
+                           for f in hw.get("fans", []) if (rpm := f.get("rpm")) is not None]
+                if ec_fans:
+                    state = {**state, "supported": True, "fans": ec_fans}
+            except Exception:  # noqa: BLE001
+                pass
+        return state
+
     async def get_fan_state(self) -> dict:
         self._init()
-        return self._fan_reader.read()
+        return self._read_fans()
+
+    def _driving_temp(self):
+        """Live driving temperature (max of CPU/GPU) for software-loop backends.
+        Never raises; returns None if no temp is readable."""
+        try:
+            cpu, gpu = extract_cpu_gpu_temps(self._fan_reader.read())
+            vals = [t for t in (cpu, gpu) if t is not None]
+            return max(vals) if vals else None
+        except Exception:  # noqa: BLE001
+            return None
 
     # ---- Fan-curve control (global + per-game, persisted) -------------------
     def _reapply_fans(self) -> None:
@@ -158,6 +192,43 @@ class Plugin:
         self._reapply_fans()
         return self._fan_curve_state()
 
+    # ---- Fan-curve suggestion (F3 brain over local telemetry) ---------------
+    async def get_fan_suggestion(self, appid=None) -> dict:
+        """Suggest a fan curve fit to a game's observed temperature band.
+
+        Per-game only (the band is learned per game). Degrades honestly:
+        - telemetry opted out  -> available False, reason "disabled"
+        - device can't write    -> available False, reason "unsupported"
+        - not enough/varied data -> available False, reason from enough_data
+        Never raises.
+        """
+        self._init()
+        key = str(appid) if appid is not None else self._current_appid
+
+        def unavail(reason, minutes=0):
+            return {"available": False, "curves": None, "band": None,
+                    "minutes": minutes, "reason": reason}
+
+        if not bool(self._settings.get("telemetry_enabled", True)):
+            return unavail("disabled")
+        if not self._fan_ctrl.supported:  # cheap property — no sysfs/EC read
+            return unavail("unsupported")
+        if key is None:
+            return unavail("no_game")
+        try:
+            hist = self._telemetry.temp_histogram(key)
+            minutes = round(sum(hist.values()) / 60) if hist else 0
+            ok, reason = fan_suggest.enough_data(hist)
+            if not ok:
+                return unavail(reason, minutes)
+            b = fan_suggest.band(hist)
+            curves = {name: [list(p) for p in pts]
+                      for name, pts in fan_suggest.suggest_curves(b).items()}
+            return {"available": True, "reason": "ok", "minutes": minutes,
+                    "band": b, "curves": curves}
+        except Exception:  # noqa: BLE001
+            return unavail("error")
+
     # ---- Telemetry ----------------------------------------------------------
     def _collect_sample(self):
         """Build one telemetry sample from live readers.
@@ -170,7 +241,7 @@ class Plugin:
                 return None
 
             pr = self._power_reader.read()
-            fan = self._fan_reader.read()
+            fan = self._read_fans()  # includes EC RPM on devices without a hwmon fan
 
             # CPU / GPU temps — prefer labels "CPU" / "GPU", fall back to position
             temp_cpu, temp_gpu = extract_cpu_gpu_temps(fan)
@@ -219,6 +290,20 @@ class Plugin:
             self._sampler.stop()  # also flushes any buffered samples
         return enabled
 
+    async def get_unlock_battery_max(self) -> bool:
+        self._init()
+        return bool(self._settings.get("unlock_battery_max", False))
+
+    async def set_unlock_battery_max(self, enabled: bool) -> bool:
+        """Opt in/out of using the firmware max on battery. Re-applies TDP so the
+        new ceiling (and any re-clamp of the current setpoint) takes effect now."""
+        self._init()
+        enabled = bool(enabled)
+        self._settings["unlock_battery_max"] = enabled
+        self._save()
+        self._reapply_tdp()
+        return enabled
+
     # ---- Auto-TDP loop ------------------------------------------------------
     def _start_auto_loop(self) -> None:
         if self._auto_task is not None and not self._auto_task.done():
@@ -242,7 +327,7 @@ class Plugin:
                 gpu_busy = pr.get("gpu_busy")
                 levels, active, _ac = self._effective_levels(self._current_appid)
                 cur = levels["pl1"]
-                limits = self._tdp_backend.get_limits()
+                limits = self._limits()
                 nxt = auto_tdp.decide(cur, gpu_busy, limits.min_w, active)
                 if nxt != cur:
                     scope = "game" if self._current_appid else "global"
@@ -277,10 +362,16 @@ class Plugin:
         return {"auto_tdp": bool(enabled)}
 
     # ---- TDP helpers + RPCs -------------------------------------------------
+    def _limits(self):
+        """Device TDP limits with the user's battery-unlock preference applied (a
+        single chokepoint so every clamp/limit path honours the Ajustes toggle)."""
+        return self._tdp_backend.get_limits().unlocked(
+            bool(self._settings.get("unlock_battery_max", False)))
+
     def _effective_levels(self, appid=None, on_ac=None):
         """Clamped {pl1,pl2,pl3} for a scope at the active (on_ac) ceiling, plus the
         ceiling. Single source for every loop/RPC that needs the applied setpoint."""
-        limits = self._tdp_backend.get_limits()
+        limits = self._limits()
         ac = read_on_ac() if on_ac is None else on_ac
         active = self._active_max(limits, ac)
         ll = self._cap_level_limits(self._tdp_backend.level_limits(), active)
@@ -288,12 +379,17 @@ class Plugin:
         return levels, active, ac
 
     def _cap_level_limits(self, ll: dict, active_max: int) -> dict:
-        """Cap each rail's max to the active (on_ac) ceiling so the UI never offers
-        more than the device can deliver on the current power source."""
+        """Cap PL1 (sustained) to the active power ceiling. The boost rails PL2/PL3
+        keep their FIRMWARE max — they are short-term limits that legitimately exceed
+        PL1 (SPPT 45 / FPPT 55 on the Ally). Capping them to PL1's ceiling left the
+        additive boost offsets at 0 once PL1 reached the max (e.g. unlocked to 35 W)."""
         out = {}
         for key, b in ll.items():
-            hi = min(b["max"], active_max)
-            out[key] = {"min": min(b["min"], hi), "max": hi}
+            if key == "pl1":
+                hi = min(b["max"], active_max)
+                out[key] = {"min": min(b["min"], hi), "max": hi}
+            else:
+                out[key] = {"min": b["min"], "max": b["max"]}
         return out
 
     def _clamp_levels(self, eff: dict, lim, active_max: int, ll: dict) -> dict:
@@ -322,9 +418,12 @@ class Plugin:
 
     async def get_tdp_state(self) -> dict:
         self._init()
+        return self._tdp_state()
+
+    def _tdp_state(self) -> dict:
         levels, active, ac = self._effective_levels(self._current_appid)
         global_levels, _active, _ac = self._effective_levels(None, ac)
-        limits = self._tdp_backend.get_limits()
+        limits = self._limits()
         ll = self._cap_level_limits(self._tdp_backend.level_limits(), active)
         eff = self._tdp_profiles.effective(self._current_appid)
         geff = self._tdp_profiles.effective(None)
@@ -364,7 +463,7 @@ class Plugin:
         if resolved is None:
             return {"requested_w": watts, "applied_w": None, "ok": False,
                     "detail": f"unknown scope: {scope}"}
-        limits = self._tdp_backend.get_limits()
+        limits = self._limits()
         clamped = limits.clamp(watts, read_on_ac())
         self._tdp_profiles.set_pl1(resolved, clamped, appid=appid)
         res = self._reapply_tdp()
@@ -386,14 +485,13 @@ class Plugin:
     async def reset_tdp_auto(self, scope: str, appid=None) -> dict:
         self._init()
         resolved = self._resolve_scope(scope, appid)
-        if resolved is None:
-            return {"requested_w": 0, "applied_w": None, "ok": False,
-                    "detail": f"unknown scope: {scope}"}
-        self._tdp_profiles.set_auto(resolved, appid=appid)
-        res = self._reapply_tdp()
-        # requested_w/applied_w reflect resulting sustained pl1 (readback), not the offsets
-        return {"requested_w": res.requested_w, "applied_w": res.applied_w,
-                "ok": res.ok, "detail": res.detail}
+        if resolved is not None:  # invalid scope → no-op (never from the UI)
+            self._tdp_profiles.set_auto(resolved, appid=appid)
+            self._reapply_tdp()
+        # Always return the full new state so the UI updates badge + sliders in ONE
+        # round-trip (no separate get_tdp_state) — immediate, and a consistent
+        # TdpState shape (the frontend does setTdp with it).
+        return self._tdp_state()
 
     async def create_game_profile(self, appid) -> None:
         self._init()

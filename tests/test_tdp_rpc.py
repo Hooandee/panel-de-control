@@ -153,22 +153,27 @@ def test_set_tdp_levels_unknown_scope_does_not_raise(Plugin):
     assert res["ok"] is False and "unknown scope" in res["detail"]
 
 
-def test_reset_tdp_auto_unknown_scope_does_not_raise(Plugin):
-    res = asyncio.run(Plugin().reset_tdp_auto("bogus"))
-    assert res["ok"] is False and "unknown scope" in res["detail"]
+def test_reset_tdp_auto_unknown_scope_is_noop_state(Plugin):
+    # Invalid scope is a no-op but must still return a valid TdpState (the frontend
+    # applies the result via setTdp), not an error dict that would corrupt the UI.
+    st = asyncio.run(Plugin().reset_tdp_auto("bogus"))
+    assert "supported" in st and "levels" in st and "limits" in st
 
 
-def test_battery_ceiling_caps_pl1_and_rails(Plugin, monkeypatch):
+def test_battery_ceiling_caps_pl1_not_boost_rails(Plugin, monkeypatch):
     import main as main_module
     monkeypatch.setattr(main_module, "read_on_ac", lambda root="/": False)
     p = Plugin()
     res = asyncio.run(p.set_tdp_watts(99, "global"))
-    assert res["applied_w"] == 20  # clamped to battery max, not charger 60
+    assert res["applied_w"] == 20  # PL1 clamped to battery max, not charger 60
     st = asyncio.run(p.get_tdp_state())
     assert st["on_ac"] is False
     assert st["watts"] == 20
-    assert st["level_limits"]["pl2"]["max"] == 20  # rails capped to battery ceiling
-    assert st["levels"]["pl2"] == 20
+    assert st["level_limits"]["pl1"]["max"] == 20  # PL1 (sustained) capped to battery
+    # Boost rails keep their firmware max so the additive SPPT/FPPT offsets are still
+    # movable above PL1 (the bug: at PL1=max they collapsed to a 0-width range).
+    assert st["level_limits"]["pl2"]["max"] == 40
+    assert st["level_limits"]["pl3"]["max"] == 50
 
 
 # --- auto-TDP RPC tests -------------------------------------------------------

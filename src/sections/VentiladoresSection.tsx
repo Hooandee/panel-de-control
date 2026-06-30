@@ -5,11 +5,17 @@ import { LuMaximize2 } from "react-icons/lu";
 import { useI18n } from "../i18n";
 import { useFanState } from "../fans/useFanState";
 import { useFanCurve } from "../fans/useFanCurve";
+import { useFanSuggestion } from "../fans/useFanSuggestion";
 import { FanChip } from "../components/FanChip";
 import { TempBar } from "../components/TempBar";
 import { FanCurveEditor } from "../components/FanCurveEditor";
+import { SuggestionCard } from "../components/SuggestionCard";
 import { openFanCurveModal } from "../components/FanCurveModal";
 import { theme } from "../theme";
+
+// Reasons worth surfacing as a one-line hint (others are silent: unsupported is
+// already covered by the no-write note; no_game/error need no nudge).
+const HINT_REASONS = new Set(["disabled", "too_few", "flat", "no_data"]);
 
 const card = { ...theme.card, padding: theme.space.md } as const;
 
@@ -31,18 +37,14 @@ export const VentiladoresSection: FC = () => {
   const { t } = useI18n();
   const { state, fanHistory } = useFanState();
   const curve = useFanCurve();
+  const { suggestion } = useFanSuggestion(curve.game?.appid ?? null);
 
   if (!state) return <Spinner />;
 
-  if (!state.supported) {
-    return (
-      <PanelSectionRow>
-        <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
-          {t("fans.unavailable")}
-        </div>
-      </PanelSectionRow>
-    );
-  }
+  // NOTE: do NOT gate the whole section on the hwmon monitor's `supported`. Some
+  // devices (Legion Go 2) expose NO hwmon fan but DO support a write backend (EC)
+  // and report temps — gating here hid the curve editor + temps entirely. Render
+  // whatever is available; show an honest note only when there is truly nothing.
 
   // Live max temp drives the "you are here" marker on the curve. Plain const (not
   // a hook) — it sits after the early returns above, and React.memo on
@@ -52,16 +54,20 @@ export const VentiladoresSection: FC = () => {
 
   return (
     <>
-      {/* fans — one chip per physical fan (Ventilador 1/2…), side by side */}
-      <PanelSectionRow>
-        <div style={{ ...card, display: "flex", gap: theme.space.sm }}>
-          {state.fans.map((fan, i) => (
-            <div key={fan.label} style={chipBox}>
-              <FanChip label={t("fans.fan", { n: i + 1 })} rpm={fan.rpm} values={fanHistory[fan.label] ?? []} />
-            </div>
-          ))}
-        </div>
-      </PanelSectionRow>
+      {/* fans — one chip per physical fan (Ventilador 1/2…), side by side. Only when
+          the hwmon monitor sees fans (Legion Go 2 has none — its RPM is EC-only). */}
+      {state.fans.length > 0 && (
+        <PanelSectionRow>
+          <div style={{ ...card, display: "flex", gap: theme.space.sm }}>
+            {state.fans.map((fan, i) => (
+              <div key={fan.label} style={chipBox}>
+                <FanChip label={t("fans.fan", { n: i + 1 })} rpm={fan.rpm}
+                         values={fanHistory[fan.label] ?? []} wide={state.fans.length === 1} />
+              </div>
+            ))}
+          </div>
+        </PanelSectionRow>
+      )}
 
       {/* temperatures — compact orange bars (Procesador + Gráfica), not gauges */}
       {state.temps.length > 0 && (
@@ -91,15 +97,27 @@ export const VentiladoresSection: FC = () => {
             </div>
 
             <FanCurveEditor control={curve} liveTemp={liveTemp} />
+
+            {/* F3 — suggestion fit to this game's observed band (only with enough
+                local data). Applying it persists a Custom curve via curve.onCurve. */}
+            {suggestion?.available && (
+              <SuggestionCard suggestion={suggestion} liveTemp={liveTemp} onApply={curve.onCurve} />
+            )}
+            {suggestion && !suggestion.available && HINT_REASONS.has(suggestion.reason) && (
+              <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
+                {t(`fans.suggest.hint.${suggestion.reason}`)}
+              </div>
+            )}
           </div>
         </PanelSectionRow>
       )}
 
-      {/* device monitors fans but has no supported write backend — say so honestly */}
+      {/* No write backend: say so honestly. "fan control unavailable" when we at
+          least monitor fans (MSI Claw); "no fans detected" when there's nothing. */}
       {curveState && !curveState.supported && (
         <PanelSectionRow>
           <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
-            {t("fans.curve.unsupported")}
+            {state.fans.length > 0 ? t("fans.curve.unsupported") : t("fans.unavailable")}
           </div>
         </PanelSectionRow>
       )}

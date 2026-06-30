@@ -1,5 +1,6 @@
 from tdp.backend import NullBackend, TDPBackend
 from tdp.firmware_attr import FirmwareAttrBackend
+from tdp.intel_rapl import IntelRaplBackend
 from tdp.ryzenadj import RyzenadjBackend
 from tdp.steamdeck_hwmon import SteamDeckHwmonBackend
 from tdp.types import TdpLimits
@@ -15,7 +16,10 @@ def _candidates(device, fallback, root, ryzenadj):
         return [FirmwareAttrBackend("lenovo-wmi-other", fallback, root=root,
                                     profile_name="lenovo-wmi-gamezone"), ryzenadj()]
     if key == "msi_claw_8_ai_plus":
-        return [FirmwareAttrBackend("msi-wmi-platform", fallback, root=root)]
+        # firmware-attributes if a kernel exposes ppt_*, else Intel RAPL powercap
+        # (the working path on current Bazzite/Neptune kernels).
+        return [FirmwareAttrBackend("msi-wmi-platform", fallback, root=root),
+                IntelRaplBackend(fallback, root=root)]
     # generic / other AMD
     return [ryzenadj()]
 
