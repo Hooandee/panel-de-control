@@ -1,4 +1,3 @@
-import pytest
 
 from fans.suggest import band, enough_data, suggest_curves
 
