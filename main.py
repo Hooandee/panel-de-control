@@ -13,6 +13,7 @@ from tdp import factory as tdp_factory
 from tdp_profiles import ProfileStore
 from lifecycle import LifecycleManager, read_on_ac
 from fans.hwmon import FanReader
+from fans import control as fan_control
 from power.reader import PowerReader
 from telemetry.store import TelemetryStore
 from telemetry.sampler import TelemetrySampler
@@ -44,6 +45,7 @@ class Plugin:
         )
         self._tdp_backend = tdp_factory.select_backend(self._device)
         self._fan_reader = FanReader()
+        self._fan_ctrl = fan_control.select_fan_backend(self._device)
         self._power_reader = PowerReader()
         self._current_appid = None
         self._lifecycle = LifecycleManager(apply_cb=self._reapply_tdp)
@@ -71,6 +73,22 @@ class Plugin:
     async def get_fan_state(self) -> dict:
         self._init()
         return self._fan_reader.read()
+
+    # ---- Fan-curve control --------------------------------------------------
+    async def get_fan_control(self) -> dict:
+        self._init()
+        return self._fan_ctrl.read_state()
+
+    async def set_fan_curve(self, fan: str, points: list) -> dict:
+        self._init()
+        if not isinstance(fan, str) or not isinstance(points, list):
+            return {"ok": False, "detail": "invalid arguments"}
+        return self._fan_ctrl.set_curve(fan, points)
+
+    async def set_fan_auto(self, fan=None) -> dict:
+        self._init()
+        key = fan if isinstance(fan, str) and fan else None
+        return self._fan_ctrl.set_auto(key)
 
     # ---- Telemetry ----------------------------------------------------------
     def _collect_sample(self):
@@ -333,7 +351,13 @@ class Plugin:
             decky.logger.error("TDP startup failed: %s", e)
 
     async def _unload(self) -> None:
-        # cancel asyncio tasks, stop loops, release hardware here
+        # Restore fans to firmware auto FIRST — before stopping other loops —
+        # so the hardware is never left with a stale manual curve.
+        try:
+            if getattr(self, "_fan_ctrl", None) is not None:
+                self._fan_ctrl.restore_auto()
+        except Exception:  # noqa: BLE001
+            pass
         self._stop_auto_loop()
         if getattr(self, "_sampler", None) is not None:
             self._sampler.stop()
@@ -342,4 +366,9 @@ class Plugin:
         decky.logger.info("Panel de Control unloaded")
 
     async def _uninstall(self) -> None:
+        try:
+            if getattr(self, "_fan_ctrl", None) is not None:
+                self._fan_ctrl.restore_auto()
+        except Exception:  # noqa: BLE001
+            pass
         decky.logger.info("Panel de Control uninstalled")
