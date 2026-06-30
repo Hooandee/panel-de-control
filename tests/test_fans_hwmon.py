@@ -1,6 +1,6 @@
 import os
 
-from fans.hwmon import FanReader
+from fans.hwmon import FanReader, extract_cpu_gpu_temps
 
 
 def _mk_chip(root, idx, name, files):
@@ -83,6 +83,41 @@ def test_keeps_acpi_fan_when_it_is_the_only_source(tmp_path):
     _mk_chip(root, 1, "acpi_fan", {"fan1_input": "1200"})
     assert len(FanReader(root=root).read()["fans"]) == 1
 
+
+# --- extract_cpu_gpu_temps ---------------------------------------------------
+
+def test_extract_with_cpu_gpu_labels():
+    state = {
+        "temps": [
+            {"label": "CPU", "celsius": 58.2},
+            {"label": "GPU", "celsius": 56.0},
+            {"label": "Composite", "celsius": 33.0},
+        ]
+    }
+    cpu, gpu = extract_cpu_gpu_temps(state)
+    assert cpu == 58.2
+    assert gpu == 56.0
+
+
+def test_extract_falls_back_to_position():
+    state = {
+        "temps": [
+            {"label": "Tctl", "celsius": 61.0},
+            {"label": "edge", "celsius": 54.5},
+        ]
+    }
+    cpu, gpu = extract_cpu_gpu_temps(state)
+    assert cpu == 61.0
+    assert gpu == 54.5
+
+
+def test_extract_empty_returns_none_none():
+    cpu, gpu = extract_cpu_gpu_temps({"temps": []})
+    assert cpu is None
+    assert gpu is None
+
+
+# --- device-aware curation (refined from real Ally X hwmon layout) -----------
 
 def test_temps_prioritize_cpu_and_gpu_and_relabel(tmp_path):
     root = str(tmp_path)

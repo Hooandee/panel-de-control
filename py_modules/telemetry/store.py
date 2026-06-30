@@ -170,14 +170,10 @@ def _empty_game() -> dict:
 
 
 def _empty_bin() -> dict:
-    return {
-        "seconds": 0.0,
-        "watts": {"sum": 0.0, "n": 0},
-        "gpu": {"sum": 0.0, "n": 0},
-        "t_cpu": {"sum": 0.0, "n": 0},
-        "t_gpu": {"sum": 0.0, "n": 0},
-        "rpm": {"sum": 0.0, "n": 0},
-    }
+    out: dict = {"seconds": 0.0}
+    for bin_key, _sample_key, _avg_key in _METRICS:
+        out[bin_key] = {"sum": 0.0, "n": 0}
+    return out
 
 
 def _clean_bin(raw: object) -> dict:
@@ -188,7 +184,7 @@ def _clean_bin(raw: object) -> dict:
         out["seconds"] = float(raw.get("seconds", 0.0))
     except (TypeError, ValueError):
         pass
-    for key in ("watts", "gpu", "t_cpu", "t_gpu", "rpm"):
+    for key, _sk, _ak in _METRICS:
         acc = raw.get(key)
         if isinstance(acc, dict):
             try:

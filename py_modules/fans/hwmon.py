@@ -62,6 +62,16 @@ def curate_temps(temps: list[dict]) -> list[dict]:
     return [d[2] for d in decorated]
 
 
+def extract_cpu_gpu_temps(fan_state: dict) -> tuple:
+    """(cpu_celsius, gpu_celsius) from a FanReader.read() result. Prefer labels
+    'CPU'/'GPU', fall back to position 0/1. None when absent."""
+    temps = fan_state.get("temps") or []
+    by_label = {t.get("label"): t.get("celsius") for t in temps}
+    cpu = by_label.get("CPU", temps[0]["celsius"] if temps else None)
+    gpu = by_label.get("GPU", temps[1]["celsius"] if len(temps) >= 2 else None)
+    return cpu, gpu
+
+
 class FanReader:
     """Reads fan speeds + temperatures from sysfs hwmon. Read-only. Never raises."""
 

@@ -1,4 +1,5 @@
 import asyncio
+import time
 
 
 class TelemetrySampler:
@@ -40,7 +41,7 @@ class TelemetrySampler:
                 result = self._sample_fn()
                 if result is not None:
                     appid, sample = result
-                    self._store.add_sample(appid, sample, dt=self._interval)
+                    self._store.add_sample(appid, sample, dt=self._interval, ts=time.time())
             except asyncio.CancelledError:
                 return
             except Exception:  # noqa: BLE001 — loop must never die

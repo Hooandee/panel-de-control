@@ -12,7 +12,7 @@ from settings_store import SettingsStore
 from tdp import factory as tdp_factory
 from tdp_profiles import ProfileStore
 from lifecycle import LifecycleManager, read_on_ac
-from fans.hwmon import FanReader
+from fans.hwmon import FanReader, extract_cpu_gpu_temps
 from fans import control as fan_control
 from power.reader import PowerReader
 from telemetry.store import TelemetryStore
@@ -105,18 +105,7 @@ class Plugin:
             fan = self._fan_reader.read()
 
             # CPU / GPU temps — prefer labels "CPU" / "GPU", fall back to position
-            temps = fan.get("temps") or []
-            temp_cpu = None
-            temp_gpu = None
-            for t in temps:
-                if t.get("label") == "CPU" and temp_cpu is None:
-                    temp_cpu = t.get("celsius")
-                elif t.get("label") == "GPU" and temp_gpu is None:
-                    temp_gpu = t.get("celsius")
-            if temp_cpu is None and len(temps) >= 1:
-                temp_cpu = temps[0].get("celsius")
-            if temp_gpu is None and len(temps) >= 2:
-                temp_gpu = temps[1].get("celsius")
+            temp_cpu, temp_gpu = extract_cpu_gpu_temps(fan)
 
             # Max RPM across all fans (None if no fans)
             fans = fan.get("fans") or []
@@ -124,12 +113,7 @@ class Plugin:
             fan_rpm = max(fan_rpms) if fan_rpms else None
 
             # Clamped effective setpoint (mirrors get_power_draw)
-            limits = self._tdp_backend.get_limits()
-            ac = read_on_ac()
-            active = self._active_max(limits, ac)
-            ll = self._cap_level_limits(self._tdp_backend.level_limits(), active)
-            eff = self._tdp_profiles.effective(self._current_appid)
-            pl1 = self._clamp_levels(eff, limits, active, ll)["pl1"]
+            pl1 = self._effective_levels(self._current_appid)[0]["pl1"]
 
             sample = {
                 "pl1": pl1,
@@ -171,12 +155,9 @@ class Plugin:
                 await asyncio.sleep(2)
                 pr = self._power_reader.read()
                 gpu_busy = pr.get("gpu_busy")
+                levels, active, _ac = self._effective_levels(self._current_appid)
+                cur = levels["pl1"]
                 limits = self._tdp_backend.get_limits()
-                ac = read_on_ac()
-                active = self._active_max(limits, ac)
-                ll = self._cap_level_limits(self._tdp_backend.level_limits(), active)
-                eff = self._tdp_profiles.effective(self._current_appid)
-                cur = self._clamp_levels(eff, limits, active, ll)["pl1"]
                 nxt = auto_tdp.decide(cur, gpu_busy, limits.min_w, active)
                 if nxt != cur:
                     scope = "game" if self._current_appid else "global"
@@ -192,12 +173,7 @@ class Plugin:
         self._init()
         pr = self._power_reader.read()
         auto = bool(self._settings.get("auto_tdp"))
-        limits = self._tdp_backend.get_limits()
-        ac = read_on_ac()
-        active = self._active_max(limits, ac)
-        ll = self._cap_level_limits(self._tdp_backend.level_limits(), active)
-        eff = self._tdp_profiles.effective(self._current_appid)
-        setpoint = self._clamp_levels(eff, limits, active, ll)["pl1"]
+        setpoint = self._effective_levels(self._current_appid)[0]["pl1"]
         return {
             "watts": pr["watts"],
             "gpu_busy": pr["gpu_busy"],
@@ -216,6 +192,16 @@ class Plugin:
         return {"auto_tdp": bool(enabled)}
 
     # ---- TDP helpers + RPCs -------------------------------------------------
+    def _effective_levels(self, appid=None, on_ac=None):
+        """Clamped {pl1,pl2,pl3} for a scope at the active (on_ac) ceiling, plus the
+        ceiling. Single source for every loop/RPC that needs the applied setpoint."""
+        limits = self._tdp_backend.get_limits()
+        ac = read_on_ac() if on_ac is None else on_ac
+        active = self._active_max(limits, ac)
+        ll = self._cap_level_limits(self._tdp_backend.level_limits(), active)
+        levels = self._clamp_levels(self._tdp_profiles.effective(appid), limits, active, ll)
+        return levels, active, ac
+
     def _cap_level_limits(self, ll: dict, active_max: int) -> dict:
         """Cap each rail's max to the active (on_ac) ceiling so the UI never offers
         more than the device can deliver on the current power source."""
@@ -241,19 +227,14 @@ class Plugin:
 
     def _reapply_tdp(self, on_ac=None):
         self._init()
-        eff = self._tdp_profiles.effective(self._current_appid)
-        ac = read_on_ac() if on_ac is None else on_ac
-        limits = self._tdp_backend.get_limits()
-        active = self._active_max(limits, ac)
-        ll = self._cap_level_limits(self._tdp_backend.level_limits(), active)
-        lv = self._clamp_levels(eff, limits, active, ll)
+        lv, _active, ac = self._effective_levels(self._current_appid, on_ac)
         return self._tdp_backend.set_levels(lv["pl1"], lv["pl2"], lv["pl3"], ac)
 
     async def get_tdp_state(self) -> dict:
         self._init()
+        levels, active, ac = self._effective_levels(self._current_appid)
+        global_levels, _active, _ac = self._effective_levels(None, ac)
         limits = self._tdp_backend.get_limits()
-        ac = read_on_ac()
-        active = self._active_max(limits, ac)
         ll = self._cap_level_limits(self._tdp_backend.level_limits(), active)
         eff = self._tdp_profiles.effective(self._current_appid)
         geff = self._tdp_profiles.effective(None)
@@ -271,9 +252,9 @@ class Plugin:
             "applied_w": self._tdp_backend.read_applied(),
             "supports_advanced": ("pl2" in ll or "pl3" in ll),
             "level_limits": ll,
-            "levels": self._clamp_levels(eff, limits, active, ll),
+            "levels": levels,
             "auto": eff["auto"],
-            "global_levels": self._clamp_levels(geff, limits, active, ll),
+            "global_levels": global_levels,
             "global_auto": geff["auto"],
         }
 
@@ -335,6 +316,13 @@ class Plugin:
         self._reapply_tdp()
         return await self.get_tdp_state()
 
+    def _restore_fans_safe(self) -> None:
+        try:
+            if getattr(self, "_fan_ctrl", None) is not None:
+                self._fan_ctrl.restore_auto()
+        except Exception:  # noqa: BLE001
+            pass
+
     # ---- lifecycle ----------------------------------------------------------
     async def _main(self) -> None:
         self._init()
@@ -353,11 +341,7 @@ class Plugin:
     async def _unload(self) -> None:
         # Restore fans to firmware auto FIRST — before stopping other loops —
         # so the hardware is never left with a stale manual curve.
-        try:
-            if getattr(self, "_fan_ctrl", None) is not None:
-                self._fan_ctrl.restore_auto()
-        except Exception:  # noqa: BLE001
-            pass
+        self._restore_fans_safe()
         self._stop_auto_loop()
         if getattr(self, "_sampler", None) is not None:
             self._sampler.stop()
@@ -366,9 +350,5 @@ class Plugin:
         decky.logger.info("Panel de Control unloaded")
 
     async def _uninstall(self) -> None:
-        try:
-            if getattr(self, "_fan_ctrl", None) is not None:
-                self._fan_ctrl.restore_auto()
-        except Exception:  # noqa: BLE001
-            pass
+        self._restore_fans_safe()
         decky.logger.info("Panel de Control uninstalled")

@@ -12,9 +12,13 @@ const SW = 14;
 const START = 135;
 const SWEEP = 270;
 
-function polar(deg: number): [number, number] {
+function polarAt(deg: number, r: number): [number, number] {
   const a = (deg * Math.PI) / 180;
-  return [CX + R * Math.cos(a), CY + R * Math.sin(a)];
+  return [CX + r * Math.cos(a), CY + r * Math.sin(a)];
+}
+
+function polar(deg: number): [number, number] {
+  return polarAt(deg, R);
 }
 
 function arcPath(startDeg: number, endDeg: number): string {
@@ -69,18 +73,14 @@ export const PowerArc: FC<PowerArcProps> = ({
     auto && setpoint !== null ? fraction(setpoint, limits.min, limits.max_ac) : null;
   const [spx, spy] =
     setpointFrac !== null ? polar(START + setpointFrac * SWEEP) : [0, 0];
-  // Inner radius for the tick line
+  // Inner/outer radii for the setpoint tick line
   const rInner = R - SW / 2 - 1;
   const rOuter = R + SW / 2 + 1;
   const getTickPoints = (frac: number): { x1: number; y1: number; x2: number; y2: number } => {
     const deg = START + frac * SWEEP;
-    const rad = (deg * Math.PI) / 180;
-    return {
-      x1: CX + rInner * Math.cos(rad),
-      y1: CY + rInner * Math.sin(rad),
-      x2: CX + rOuter * Math.cos(rad),
-      y2: CY + rOuter * Math.sin(rad),
-    };
+    const [x1, y1] = polarAt(deg, rInner);
+    const [x2, y2] = polarAt(deg, rOuter);
+    return { x1, y1, x2, y2 };
   };
   const tickPoints = setpointFrac !== null ? getTickPoints(setpointFrac) : null;
 
