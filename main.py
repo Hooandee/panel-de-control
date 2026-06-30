@@ -14,6 +14,8 @@ from tdp_profiles import ProfileStore
 from lifecycle import LifecycleManager, read_on_ac
 from fans.hwmon import FanReader
 from power.reader import PowerReader
+from telemetry.store import TelemetryStore
+from telemetry.sampler import TelemetrySampler
 
 DEFAULTS = {
     # Persisted settings keys go here; SettingsStore merges these over stored values.
@@ -47,6 +49,10 @@ class Plugin:
         self._lifecycle = LifecycleManager(apply_cb=self._reapply_tdp)
         self._auto_task = None
         self._auto_setpoint = None
+        self._telemetry = TelemetryStore(
+            os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "telemetry.json")
+        )
+        self._sampler = TelemetrySampler(self._telemetry, self._collect_sample)
         self._ready = True
 
     def _save(self) -> None:
@@ -65,6 +71,66 @@ class Plugin:
     async def get_fan_state(self) -> dict:
         self._init()
         return self._fan_reader.read()
+
+    # ---- Telemetry ----------------------------------------------------------
+    def _collect_sample(self):
+        """Build one telemetry sample from live readers.
+
+        Returns (appid, sample_dict) while in-game, or None when idle.
+        Never raises; any error degrades to None (no sample recorded).
+        """
+        try:
+            if self._current_appid is None:
+                return None
+
+            pr = self._power_reader.read()
+            fan = self._fan_reader.read()
+
+            # CPU / GPU temps — prefer labels "CPU" / "GPU", fall back to position
+            temps = fan.get("temps") or []
+            temp_cpu = None
+            temp_gpu = None
+            for t in temps:
+                if t.get("label") == "CPU" and temp_cpu is None:
+                    temp_cpu = t.get("celsius")
+                elif t.get("label") == "GPU" and temp_gpu is None:
+                    temp_gpu = t.get("celsius")
+            if temp_cpu is None and len(temps) >= 1:
+                temp_cpu = temps[0].get("celsius")
+            if temp_gpu is None and len(temps) >= 2:
+                temp_gpu = temps[1].get("celsius")
+
+            # Max RPM across all fans (None if no fans)
+            fans = fan.get("fans") or []
+            fan_rpms = [f["rpm"] for f in fans if f.get("rpm") is not None]
+            fan_rpm = max(fan_rpms) if fan_rpms else None
+
+            # Clamped effective setpoint (mirrors get_power_draw)
+            limits = self._tdp_backend.get_limits()
+            ac = read_on_ac()
+            active = self._active_max(limits, ac)
+            ll = self._cap_level_limits(self._tdp_backend.level_limits(), active)
+            eff = self._tdp_profiles.effective(self._current_appid)
+            pl1 = self._clamp_levels(eff, limits, active, ll)["pl1"]
+
+            sample = {
+                "pl1": pl1,
+                "watts": pr.get("watts"),
+                "gpu_busy": pr.get("gpu_busy"),
+                "temp_cpu": temp_cpu,
+                "temp_gpu": temp_gpu,
+                "fan_rpm": fan_rpm,
+            }
+            return (self._current_appid, sample)
+        except Exception:  # noqa: BLE001
+            return None
+
+    async def get_telemetry(self, appid=None) -> dict:
+        self._init()
+        key = str(appid) if appid is not None else self._current_appid
+        if key is None:
+            return {"samples_n": 0, "by_pl1": {}, "recent": []}
+        return self._telemetry.aggregate(key)
 
     # ---- Auto-TDP loop ------------------------------------------------------
     def _start_auto_loop(self) -> None:
@@ -262,12 +328,15 @@ class Plugin:
             self._lifecycle.start()
             if self._settings.get("auto_tdp"):
                 self._start_auto_loop()
+            self._sampler.start()
         except Exception as e:  # noqa: BLE001
             decky.logger.error("TDP startup failed: %s", e)
 
     async def _unload(self) -> None:
         # cancel asyncio tasks, stop loops, release hardware here
         self._stop_auto_loop()
+        if getattr(self, "_sampler", None) is not None:
+            self._sampler.stop()
         if getattr(self, "_lifecycle", None) is not None:
             self._lifecycle.stop()
         decky.logger.info("Panel de Control unloaded")

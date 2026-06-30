@@ -228,3 +228,101 @@ def test_get_power_draw_auto_tdp_false_by_default(PluginWithPower):
     p = PluginWithPower()
     r = asyncio.run(p.get_power_draw())
     assert r["auto_tdp"] is False
+
+
+# --- telemetry RPC tests -------------------------------------------------------
+
+def test_get_telemetry_no_game_returns_empty_shape(Plugin):
+    p = Plugin()
+    r = asyncio.run(p.get_telemetry())
+    assert set(r.keys()) == {"samples_n", "by_pl1", "recent"}
+    assert r["samples_n"] == 0
+    assert r["by_pl1"] == {}
+    assert r["recent"] == []
+
+
+def test_get_telemetry_with_explicit_appid_unknown_returns_empty(Plugin):
+    p = Plugin()
+    r = asyncio.run(p.get_telemetry(appid="99999"))
+    assert r["samples_n"] == 0
+
+
+def test_collect_sample_returns_none_without_game(Plugin):
+    p = Plugin()
+    p._init()
+    assert p._collect_sample() is None
+
+
+def test_collect_sample_returns_tuple_with_game(Plugin, monkeypatch):
+    import main as main_module
+    import types
+
+    fake_pr = types.SimpleNamespace(read=lambda: {"watts": 11.0, "gpu_busy": 60})
+    fake_fan = types.SimpleNamespace(read=lambda: {
+        "supported": True,
+        "fans": [{"label": "cpu_fan", "rpm": 1800, "percent": 50}],
+        "temps": [
+            {"label": "CPU", "celsius": 52.0},
+            {"label": "GPU", "celsius": 48.0},
+        ],
+    })
+
+    original_init = main_module.Plugin._init
+
+    def patched_init(self):
+        original_init(self)
+        self._power_reader = fake_pr
+        self._fan_reader = fake_fan
+
+    monkeypatch.setattr(main_module.Plugin, "_init", patched_init)
+
+    p = main_module.Plugin()
+    p._init()
+    p._current_appid = "42"
+    result = p._collect_sample()
+    assert result is not None
+    appid, sample = result
+    assert appid == "42"
+    assert sample["pl1"] is not None
+    assert sample["watts"] == 11.0
+    assert sample["gpu_busy"] == 60
+    assert sample["temp_cpu"] == pytest.approx(52.0)
+    assert sample["temp_gpu"] == pytest.approx(48.0)
+    assert sample["fan_rpm"] == 1800
+
+
+def test_get_telemetry_aggregates_after_collect(Plugin, monkeypatch):
+    import main as main_module
+    import types
+
+    fake_pr = types.SimpleNamespace(read=lambda: {"watts": 13.0, "gpu_busy": 75})
+    fake_fan = types.SimpleNamespace(read=lambda: {
+        "supported": True,
+        "fans": [{"label": "cpu_fan", "rpm": 2000, "percent": 60}],
+        "temps": [
+            {"label": "CPU", "celsius": 55.0},
+            {"label": "GPU", "celsius": 50.0},
+        ],
+    })
+
+    original_init = main_module.Plugin._init
+
+    def patched_init(self):
+        original_init(self)
+        self._power_reader = fake_pr
+        self._fan_reader = fake_fan
+
+    monkeypatch.setattr(main_module.Plugin, "_init", patched_init)
+
+    p = main_module.Plugin()
+    p._init()
+    p._current_appid = "42"
+    # Manually collect a sample into the store (bypasses asyncio)
+    result = p._collect_sample()
+    assert result is not None
+    appid, sample = result
+    p._telemetry.add_sample(appid, sample, dt=5.0)
+
+    agg = asyncio.run(p.get_telemetry())
+    assert agg["samples_n"] == 1
+    assert len(agg["recent"]) == 1
