@@ -384,7 +384,14 @@ class Plugin:
         Never raises; any error degrades to None (no sample recorded).
         """
         try:
-            if self._current_appid is None:
+            # Snapshot the appid once: this method now runs on a worker thread
+            # (via asyncio.to_thread) and spans a ~120 ms gpu_busy burst + fan
+            # I/O, during which an event-loop RPC could reassign _current_appid.
+            # Reading it once keeps the guard, the setpoint, and the returned
+            # appid consistent so a sample is never mislabelled across a game
+            # switch (telemetry honesty).
+            appid = self._current_appid
+            if appid is None:
                 return None
 
             pr = self._power_reader.read()
@@ -399,7 +406,7 @@ class Plugin:
             fan_rpm = max(fan_rpms) if fan_rpms else None
 
             # Clamped effective setpoint (mirrors get_power_draw)
-            pl1 = self._effective_levels(self._current_appid)[0]["pl1"]
+            pl1 = self._effective_levels(appid)[0]["pl1"]
 
             # boost = was the chip boosting at this PL1 (draw > PL1 + deadband)?
             # 1.0/0.0/None; its per-bin average = the honest "power-limited here?"
@@ -417,7 +424,7 @@ class Plugin:
                 "temp_gpu": temp_gpu,
                 "fan_rpm": fan_rpm,
             }
-            return (self._current_appid, sample)
+            return (appid, sample)
         except Exception:  # noqa: BLE001
             return None
 
@@ -583,7 +590,9 @@ class Plugin:
                 if self._current_appid is None:
                     self._reset_auto_windows()
                     continue
-                pr = self._power_reader.read()
+                # read() sub-samples gpu_busy over a short blocking burst -> off
+                # the event loop so it can't stall other Decky RPC handling.
+                pr = await asyncio.to_thread(self._power_reader.read)
                 levels, active, _ac = self._effective_levels(self._current_appid)
                 cur = levels["pl1"]
                 lim = self._limits()
@@ -627,7 +636,7 @@ class Plugin:
 
     async def get_power_draw(self) -> dict:
         self._init()
-        pr = self._power_reader.read()
+        pr = await asyncio.to_thread(self._power_reader.read)
         auto = bool(self._settings.get("auto_tdp"))
         setpoint = self._effective_levels(self._current_appid)[0]["pl1"]
         return {

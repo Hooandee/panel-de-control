@@ -87,3 +87,52 @@ def test_read_returns_both_fields(tmp_path):
     r = PowerReader(root=str(tmp_path)).read()
     assert r["watts"] == 15.0
     assert r["gpu_busy"] == 55
+
+
+# --- gpu_busy sub-sampling (Van Gogh instantaneous-sensor de-noise) ---
+
+def _reader_with_samples(tmp_path, samples):
+    """A PowerReader whose gpu_busy path resolves, but whose per-read value is
+    driven by a scripted sequence (simulating the noisy instantaneous sensor).
+    Sleeps are disabled so tests run instantly."""
+    _mk_drm_card(str(tmp_path), 0, 0)  # make _find_gpu_busy_path succeed
+    r = PowerReader(root=str(tmp_path), gpu_samples=len(samples), gpu_sample_gap=0.0)
+    seq = list(samples)
+
+    def fake_read_int(_path):
+        return seq.pop(0) if seq else None
+
+    r._read_int = fake_read_int
+    return r
+
+
+def test_gpu_busy_averages_a_burst(tmp_path):
+    # The exact on-device Van Gogh probe: instantaneous 0<->100 noise, ~22% real.
+    samples = [0, 0, 0, 100, 100, 100, 0, 0, 0, 0, 53, 59, 0, 0, 0, 37, 0, 0, 0, 0]
+    r = _reader_with_samples(tmp_path, samples)
+    # mean = 449/20 = 22.45 -> 22 (a single instantaneous read would give a bogus 0,
+    # matching gamescope's smoothed ~30% and the 5.2 W real draw)
+    assert r.read_gpu_busy() == 22
+
+
+def test_gpu_busy_burst_of_constant_is_that_value(tmp_path):
+    r = _reader_with_samples(tmp_path, [72] * 12)
+    assert r.read_gpu_busy() == 72
+
+
+def test_gpu_busy_averages_only_valid_reads(tmp_path):
+    # Corrupt reads (None) are ignored; the mean is over the valid ones only.
+    r = _reader_with_samples(tmp_path, [None, 80, None, 40, None])
+    assert r.read_gpu_busy() == 60  # mean(80, 40)
+
+
+def test_gpu_busy_none_when_no_valid_reads(tmp_path):
+    # File vanished mid-burst / all corrupt -> honest None, never a fake 0.
+    r = _reader_with_samples(tmp_path, [None, None, None])
+    assert r.read_gpu_busy() is None
+
+
+def test_gpu_busy_burst_clamps_per_read(tmp_path):
+    r = _reader_with_samples(tmp_path, [150, 100, -5])
+    # each read clamped to [0,100] -> mean(100, 100, 0) = 66.67 -> 67
+    assert r.read_gpu_busy() == 67
