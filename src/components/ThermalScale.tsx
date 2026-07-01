@@ -18,7 +18,7 @@ const ZONE_COLOR: Record<ThermalZone, string> = {
   cool: theme.color.ok,
   warm: theme.color.warn,
   hot: theme.color.boost,
-  limit: "#e05a5a",
+  limit: theme.color.danger,
 };
 
 // Segment stops (°C) derived from THERMAL_BOUNDS (single source of truth) so the

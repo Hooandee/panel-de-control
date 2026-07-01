@@ -1,4 +1,5 @@
 import type { LevelBound } from "../api";
+import { clamp } from "../system/logic";
 
 export interface Zone {
   key: "save" | "eco" | "balanced" | "hot" | "turbo";
@@ -16,19 +17,19 @@ const ZONES: Zone[] = [
 export function fraction(watts: number, min: number, maxAc: number): number {
   const span = maxAc - min;
   if (span <= 0) return 0;
-  return Math.max(0, Math.min(1, (watts - min) / span));
+  return clamp((watts - min) / span, 0, 1);
 }
 
 /** 5 even bands across [0,1] → save eco balanced hot turbo. */
 export function zoneFor(frac: number): Zone {
-  const clamped = Math.max(0, Math.min(1, frac));
+  const clamped = clamp(frac, 0, 1);
   const idx = Math.min(ZONES.length - 1, Math.floor(clamped * ZONES.length));
   return ZONES[idx];
 }
 
 /** Arc color: green (hue 140) at 0 → red (hue 8) at 1, passing through amber. */
 export function arcColor(frac: number): string {
-  const clamped = Math.max(0, Math.min(1, frac));
+  const clamped = clamp(frac, 0, 1);
   const hue = Math.round(140 - clamped * 132); // 140 → 8
   return `hsl(${hue}, 75%, 52%)`;
 }

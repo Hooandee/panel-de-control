@@ -1,5 +1,5 @@
 from tdp import suggest as tdp_suggest
-from tdp.suggest import learned_band, target_for_dial
+from tdp.suggest import learned_band
 
 
 def _by_pl1(rows):
@@ -266,31 +266,6 @@ def test_no_gpu_falls_back_to_watts():
         (24, 400, None, 17.0),
     ]))
     assert b["floor"] == 18   # watts fallback when GPU is absent
-
-
-# ---------------------------------------------------------------------------
-# Dial: battery (0) .. performance (1) -> resting target within the band
-# ---------------------------------------------------------------------------
-
-def test_dial_battery_targets_floor():
-    b = {"floor": 15, "ceil": 21}
-    assert target_for_dial(b, 0.0) == 15
-
-
-def test_dial_performance_targets_ceil():
-    b = {"floor": 15, "ceil": 21}
-    assert target_for_dial(b, 1.0) == 21
-
-
-def test_dial_mid_targets_band_midpoint():
-    b = {"floor": 15, "ceil": 21}
-    assert target_for_dial(b, 0.5) == 18
-
-
-def test_dial_clamps_out_of_range():
-    b = {"floor": 15, "ceil": 21}
-    assert target_for_dial(b, -1) == 15
-    assert target_for_dial(b, 2) == 21
 
 
 # ---------------------------------------------------------------------------

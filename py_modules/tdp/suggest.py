@@ -107,10 +107,3 @@ def _satisfied(pl1: int, row: dict) -> bool:
         return gpu < _GPU_STARVED
     watts = row.get("watts_avg")
     return watts is not None and watts < pl1 * _HEADROOM_FRAC
-
-
-def target_for_dial(band: dict, dial: float) -> int:
-    """Resting PL1 target inside *band* for *dial* ∈ [0,1] (0=battery, 1=performance)."""
-    floor, ceil = band["floor"], band["ceil"]
-    d = _clamp(dial, 0.0, 1.0)
-    return round(floor + d * (ceil - floor))

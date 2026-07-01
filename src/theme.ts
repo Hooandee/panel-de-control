@@ -12,6 +12,8 @@ const color = {
   onAccent: "#06121f",
   warn: "#ffb454",
   ok: "#7ee0a0",
+  // Hot/over-limit red (thermal scale "limit" zone) — beyond `warn`/`boost`.
+  danger: "#e05a5a",
   // Warm/bright orange for the transient HW-boost segment on the power arc — a
   // hotter tone than `warn` so it reads as "extra on top", not a warning.
   boost: "#ff8a3d",
