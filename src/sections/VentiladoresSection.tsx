@@ -7,20 +7,13 @@ import { useFanState } from "../fans/useFanState";
 import { useFanCurve } from "../fans/useFanCurve";
 import { useFanSuggestion } from "../fans/useFanSuggestion";
 import { FanChip } from "../components/FanChip";
-import { TempBar } from "../components/TempBar";
+import { TempStat } from "../components/TempStat";
+import { Sparkline } from "../components/Sparkline";
 import { FanCurveEditor } from "../components/FanCurveEditor";
 import { openFanCurveModal } from "../components/FanCurveModal";
 import { theme } from "../theme";
 
 const card = { ...theme.card, padding: theme.space.md } as const;
-
-const chipBox = {
-  flex: "1 1 0",
-  minWidth: 0,
-  padding: theme.space.sm,
-  borderRadius: theme.radius.sm,
-  boxShadow: `inset 0 0 0 1px ${theme.color.hairline}`,
-} as const;
 
 // Map a curated temp sensor token (CPU/GPU) to its localized display name
 // ("Procesador" / "Gráfica"); unknown sensors show their raw label.
@@ -47,32 +40,54 @@ export const VentiladoresSection: FC = () => {
   const liveTemp = state.temps.length ? Math.max(...state.temps.map((x) => x.celsius)) : null;
   const curveState = curve.state;
 
+  // Single fan + single temp (e.g. Steam Deck): fan ring and temperature share one
+  // row, with the fan's history sparkline spanning below both.
+  const solo = state.fans.length === 1 && state.temps.length === 1;
+
   return (
     <>
-      {/* fans — one chip per physical fan (Ventilador 1/2…), side by side. Only when
-          the hwmon monitor sees fans (Legion Go 2 has none — its RPM is EC-only). */}
-      {state.fans.length > 0 && (
-        <PanelSectionRow>
-          <div style={{ ...card, display: "flex", gap: theme.space.sm }}>
-            {state.fans.map((fan, i) => (
-              <div key={fan.label} style={chipBox}>
-                <FanChip label={t("fans.fan", { n: i + 1 })} rpm={fan.rpm}
-                         values={fanHistory[fan.label] ?? []} wide={state.fans.length === 1} />
-              </div>
-            ))}
-          </div>
-        </PanelSectionRow>
-      )}
-
-      {/* temperatures — compact orange bars (Procesador + Gráfica), not gauges */}
-      {state.temps.length > 0 && (
+      {solo ? (
         <PanelSectionRow>
           <div style={{ ...card, display: "flex", flexDirection: "column", gap: theme.space.sm }}>
-            {state.temps.map((tmp) => (
-              <TempBar key={tmp.label} label={tempLabel(t, tmp.label)} celsius={tmp.celsius} />
-            ))}
+            <div style={{ display: "flex", gap: theme.space.sm, alignItems: "stretch" }}>
+              <div style={{ ...theme.tile, display: "flex", justifyContent: "center" }}>
+                <FanChip label={t("fans.fan", { n: 1 })} rpm={state.fans[0].rpm}
+                         values={fanHistory[state.fans[0].label] ?? []} layout="ring" />
+              </div>
+              <TempStat label={tempLabel(t, state.temps[0].label)} celsius={state.temps[0].celsius} />
+            </div>
+            <Sparkline values={fanHistory[state.fans[0].label] ?? []} color={theme.color.accent} height={40} />
           </div>
         </PanelSectionRow>
+      ) : (
+        <>
+          {/* fans — one chip per physical fan (Ventilador 1/2…), side by side. Only when
+              the hwmon monitor sees fans (Legion Go 2 has none — its RPM is EC-only). */}
+          {state.fans.length > 0 && (
+            <PanelSectionRow>
+              <div style={{ ...card, display: "flex", gap: theme.space.sm }}>
+                {state.fans.map((fan, i) => (
+                  <div key={fan.label} style={theme.tile}>
+                    <FanChip label={t("fans.fan", { n: i + 1 })} rpm={fan.rpm}
+                             values={fanHistory[fan.label] ?? []} layout={state.fans.length === 1 ? "wide" : "stack"} />
+                  </div>
+                ))}
+              </div>
+            </PanelSectionRow>
+          )}
+
+          {/* temperatures — compact thermometer tiles side by side (Procesador · Gráfica);
+              extra sensors wrap to a second row */}
+          {state.temps.length > 0 && (
+            <PanelSectionRow>
+              <div style={{ ...card, display: "flex", flexWrap: "wrap", gap: theme.space.sm }}>
+                {state.temps.map((tmp) => (
+                  <TempStat key={tmp.label} label={tempLabel(t, tmp.label)} celsius={tmp.celsius} />
+                ))}
+              </div>
+            </PanelSectionRow>
+          )}
+        </>
       )}
 
       {/* fan-curve control (only when the device supports writes) */}

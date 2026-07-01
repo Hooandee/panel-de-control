@@ -13,10 +13,12 @@ interface Props {
   label: string;
   rpm: number;
   values: number[];
-  // When it's the only fan, lay the ring and sparkline side by side so they fill
-  // the full-width card (e.g. Steam Deck has a single fan) instead of a centered
-  // ring with empty space beside it.
-  wide?: boolean;
+  // Layout:
+  //  - "stack" (default): ring on top, label, sparkline below.
+  //  - "wide": ring left, label + sparkline right (single fan fills a full card).
+  //  - "ring": ring + label only, NO sparkline — the caller renders the sparkline
+  //    separately (single-fan + single-temp: fan and temp share a row, graph below).
+  layout?: "stack" | "wide" | "ring";
 }
 
 /**
@@ -25,7 +27,7 @@ interface Props {
  * machine's two blowers run as one lock-step cooling system, so we don't tie a
  * fan to a CPU/GPU it doesn't independently cool.
  */
-const FanChipImpl: FC<Props> = ({ label, rpm, values, wide = false }) => {
+const FanChipImpl: FC<Props> = ({ label, rpm, values, layout = "stack" }) => {
   const r = (SIZE - STROKE) / 2;
   const circ = 2 * Math.PI * r;
   const observedMax = values.length ? Math.max(...values, rpm) : rpm;
@@ -55,7 +57,7 @@ const FanChipImpl: FC<Props> = ({ label, rpm, values, wide = false }) => {
   );
   const labelEl = <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{label}</div>;
 
-  if (wide) {
+  if (layout === "wide") {
     // Ring on the left; label + a taller sparkline fill the rest of the row.
     return (
       <div style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: theme.space.md, width: "100%" }}>
@@ -68,13 +70,17 @@ const FanChipImpl: FC<Props> = ({ label, rpm, values, wide = false }) => {
     );
   }
 
+  // "stack" = ring + label + sparkline below; "ring" is the same minus the
+  // sparkline (the caller draws it elsewhere).
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: theme.space.xs, width: "100%" }}>
       {ring}
       <div style={{ textAlign: "center" }}>{labelEl}</div>
-      <div style={{ width: "100%" }}>
-        <Sparkline values={values} color={theme.color.accent} height={18} />
-      </div>
+      {layout === "stack" && (
+        <div style={{ width: "100%" }}>
+          <Sparkline values={values} color={theme.color.accent} height={18} />
+        </div>
+      )}
     </div>
   );
 };

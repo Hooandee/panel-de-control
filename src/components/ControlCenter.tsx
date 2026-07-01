@@ -10,6 +10,7 @@ import { SECTIONS } from "../sections/registry";
 import { resolveActiveSection } from "../sections/nav";
 import { useRunningGame } from "../tdp/useRunningGame";
 import { useLearningStatus } from "../learning/useLearningStatus";
+import { theme } from "../theme";
 
 /**
  * The control-center shell: persistent chrome (device header + language flags +
@@ -56,22 +57,23 @@ export const ControlCenter: FC = () => {
 
   return (
     <PanelSection>
+      {/* Shell chrome grouped in one row with an explicit gap so the three cards
+          (device / learning / tabs) breathe instead of touching. A null
+          LearningBanner collapses its slot — no double gap. */}
       <PanelSectionRow>
-        <DeviceHeader device={device} />
-      </PanelSectionRow>
-      <PanelSectionRow>
-        <LearningBanner
-          gameName={game?.name ?? null}
-          status={learning}
-          onOpenSettings={() => setActiveId("settings")}
-        />
-      </PanelSectionRow>
-      <PanelSectionRow>
-        <TabBar
-          tabs={SECTIONS.map((s) => ({ id: s.id, icon: s.icon, label: t(s.labelKey) }))}
-          activeId={active?.id ?? activeId}
-          onSelect={setActiveId}
-        />
+        <div style={{ display: "flex", flexDirection: "column", gap: theme.space.section }}>
+          <DeviceHeader device={device} />
+          <LearningBanner
+            gameName={game?.name ?? null}
+            status={learning}
+            onOpenSettings={() => setActiveId("settings")}
+          />
+          <TabBar
+            tabs={SECTIONS.map((s) => ({ id: s.id, icon: s.icon, label: t(s.labelKey) }))}
+            activeId={active?.id ?? activeId}
+            onSelect={setActiveId}
+          />
+        </div>
       </PanelSectionRow>
       {Active && (
         <ErrorBoundary>

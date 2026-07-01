@@ -58,8 +58,8 @@ export const AdaptiveCard: FC<Props> = ({ suggestion, liveTemp, bias, onBias }) 
                   boxShadow: `inset 0 0 0 1px ${green}`,
                   display: "flex", flexDirection: "column", gap: theme.space.sm }}>
       <div style={{ display: "flex", alignItems: "center", gap: theme.space.sm, color: theme.color.textPrimary }}>
-        <LuSparkles size={16} color={green} />
-        <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+        <LuSparkles size={16} color={green} style={{ flexShrink: 0 }} />
+        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
           <span style={{ fontSize: theme.font.body }}>
             {t(ready ? "fans.adaptive.title" : "fans.suggest.learning.title")}
           </span>
@@ -67,12 +67,15 @@ export const AdaptiveCard: FC<Props> = ({ suggestion, liveTemp, bias, onBias }) 
             {t("fans.suggest.continuous")}
           </span>
         </div>
-        <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
-          {ready && band
-            ? t("fans.suggest.band", { lo: band.floor, hi: band.peak, min: minutes })
-            : t("fans.suggest.progress", { min: minutes, target })}
-        </span>
       </div>
+
+      {/* Band (ready) or progress (learning) on its OWN line — keeps the header
+          from cramping, especially once learned ("Ajustada a 54–84 °C · 31 min"). */}
+      <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
+        {ready && band
+          ? t("fans.suggest.band", { lo: band.floor, hi: band.peak, min: minutes })
+          : t("fans.suggest.progress", { min: minutes, target })}
+      </span>
 
       {!ready && <ProgressBar value={learningProgress(seconds, target_seconds, available)} />}
 

@@ -51,64 +51,56 @@ export const AjustesSection: FC = () => {
       : t("settings.reset");
 
   return (
-    <>
-      <PanelSectionRow>
+    // One row holding a spaced column so the settings don't glue together. Null
+    // children (not-yet-loaded toggles) collapse their slot — no double gaps.
+    <PanelSectionRow>
+      <div style={{ display: "flex", flexDirection: "column", gap: theme.space.section, marginTop: theme.space.section }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: theme.space.sm }}>
           <span style={{ fontSize: theme.font.body, color: theme.color.textPrimary }}>
             {t("settings.language")}
           </span>
           <LanguageToggle />
         </div>
-      </PanelSectionRow>
 
-      {learn !== null && (
-        <PanelSectionRow>
+        {learn !== null && (
           <ToggleField
             label={t("settings.telemetry")}
             description={t("settings.telemetry.desc")}
             checked={learn}
             onChange={onToggle}
           />
-        </PanelSectionRow>
-      )}
+        )}
 
-      {learn === true && (
-        <PanelSectionRow>
+        {learn === true && (
           <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
             {t("settings.telemetry.learning")}
           </div>
-        </PanelSectionRow>
-      )}
+        )}
 
-      {battMax !== null && (
-        <PanelSectionRow>
+        {battMax !== null && (
           <ToggleField
             label={t("settings.battmax")}
             description={t("settings.battmax.desc")}
             checked={battMax}
             onChange={onToggleBattMax}
           />
-        </PanelSectionRow>
-      )}
+        )}
 
-      {qamBoost !== null && (
-        <PanelSectionRow>
+        {qamBoost !== null && (
           <ToggleField
             label={t("settings.qamboost")}
             description={t("settings.qamboost.desc")}
             checked={qamBoost}
             onChange={onToggleQamBoost}
           />
-        </PanelSectionRow>
-      )}
+        )}
 
-      {/* Start-from-scratch: wipe all learned telemetry (TDP + fans). Two-tap
-          confirm. Doesn't touch manual profiles/curves. */}
-      <PanelSectionRow>
+        {/* Start-from-scratch: wipe all learned telemetry (TDP + fans). Two-tap
+            confirm. Doesn't touch manual profiles/curves. */}
         <ButtonItem layout="below" description={t("settings.reset.desc")} onClick={onReset}>
           {resetLabel}
         </ButtonItem>
-      </PanelSectionRow>
-    </>
+      </div>
+    </PanelSectionRow>
   );
 };

@@ -1,6 +1,6 @@
-import { FC } from "react";
+import { FC, ReactNode } from "react";
 import { Focusable, Spinner } from "@decky/ui";
-import { LuSparkles } from "react-icons/lu";
+import { LuSparkles, LuRefreshCw, LuVolumeX, LuScale, LuZap, LuPencil } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
 import { FanCurveControl, shownPoints } from "../fans/useFanCurve";
@@ -15,12 +15,26 @@ import { theme } from "./../theme";
 // "custom" = the hand-drawn editing mode; the rest are fixed presets.
 const MODES: FanPreset[] = ["auto", "adaptive", "silent", "balanced", "performance", "custom"];
 
+// One icon per mode. Inactive chips show ONLY the icon (like the top tab bar), so
+// six modes fit one tidy row; the selected chip expands to icon + label.
+const MODE_ICON: Record<FanPreset, ReactNode> = {
+  auto: <LuRefreshCw size={13} />,
+  adaptive: <LuSparkles size={13} />,
+  silent: <LuVolumeX size={13} />,
+  balanced: <LuScale size={13} />,
+  performance: <LuZap size={13} />,
+  custom: <LuPencil size={13} />,
+};
+
 interface Props {
   control: FanCurveControl;
   liveTemp: number | null;
   // The live learning suggestion (per-game). Fuels the Adaptive card; may be null
   // until the first fetch lands.
   suggestion: FanSuggestion | null;
+  // Full-screen modal? Only then do the mode chips show their labels; inline (the
+  // narrow QAM card) they stay icon-only so the six modes fit one clean row.
+  expanded?: boolean;
 }
 
 /**
@@ -29,7 +43,7 @@ interface Props {
  * both inline in the Ventiladores card and (larger) inside the full-screen modal.
  * All state/handlers come from a FanCurveControl instance supplied by the caller.
  */
-export const FanCurveEditor: FC<Props> = ({ control, liveTemp, suggestion }) => {
+export const FanCurveEditor: FC<Props> = ({ control, liveTemp, suggestion, expanded = false }) => {
   const { t } = useI18n();
   const curveState = control.state;
 
@@ -68,21 +82,25 @@ export const FanCurveEditor: FC<Props> = ({ control, liveTemp, suggestion }) => 
         />
       )}
 
-      <Focusable style={{ ...segmentGroupStyle, flexWrap: "wrap" }}>
+      <Focusable style={{ ...segmentGroupStyle, ...(expanded ? { flexWrap: "wrap" } : null) }}>
         {MODES.map((mode) => {
           const active = curveState.preset === mode;
+          const label = t(`fans.preset.${mode}`);
           const select = () =>
             mode === "custom" ? control.onCustomMode() : control.onPreset(mode);
           return (
             <Focusable
               key={mode}
-              style={{ ...segmentItemStyle(active), flex: "1 1 60px", padding: "6px 8px",
-                       display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}
+              style={{ ...segmentItemStyle(active), flex: expanded ? "1 1 90px" : 1, padding: "6px 8px" }}
+              aria-label={label}
+              title={label}
               onActivate={select}
               onClick={select}
             >
-              {mode === "adaptive" && <LuSparkles size={12} />}
-              {t(`fans.preset.${mode}`)}
+              {MODE_ICON[mode]}
+              {/* Labels only in the full-screen modal; the inline QAM card is
+                  icon-only (tooltip/aria-label still name each mode). */}
+              {expanded && <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>}
             </Focusable>
           );
         })}

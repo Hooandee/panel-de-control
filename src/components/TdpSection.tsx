@@ -77,6 +77,8 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
           setpoint={power?.setpoint ?? null}
         />
       </PanelSectionRow>
+      {/* Auto status, sitting directly under the arc so it fills what would
+          otherwise be dead space above the toggle. */}
       {isAutoOn && power?.ui_floor_engaged && (
         // Honest: opening the QAM raised PL1 so the CPU-bound menu render stays
         // fluid — the arc shows a menu-temporary value, NOT the settled in-game one.
@@ -85,6 +87,24 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
             {t("tdp.auto.ui_floor")}
           </div>
         </PanelSectionRow>
+      )}
+      {isAutoOn && (
+        // The learned band when ready, a plain "learning…" note while collecting,
+        // nothing otherwise. Auto-TDP itself is decoupled from the band (runs the
+        // full range + explores); this is a read-only status line.
+        tdp.learned.enough ? (
+          <PanelSectionRow>
+            <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
+              {t("tdp.learned.band", { lo: tdp.learned.floor!, hi: tdp.learned.ceil! })}
+            </div>
+          </PanelSectionRow>
+        ) : LEARNING_REASONS.has(tdp.learned.reason) ? (
+          <PanelSectionRow>
+            <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
+              {t("tdp.learned.learning.title")}
+            </div>
+          </PanelSectionRow>
+        ) : null
       )}
       {!isAutoOn && (
         <>
@@ -149,26 +169,6 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
           onChange={onAutoTdp}
         />
       </PanelSectionRow>
-      {isAutoOn && (
-        // Auto-TDP is now parameter-free and DECOUPLED from the learned band: it runs
-        // dynamically over the full device range and explores to its own level (no dial
-        // — that moved to the suggestion card, shown only when auto is off). All we add
-        // here is one honest read-only line: the learned band when ready, a plain
-        // "learning…" note while collecting, nothing otherwise.
-        tdp.learned.enough ? (
-          <PanelSectionRow>
-            <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
-              {t("tdp.learned.band", { lo: tdp.learned.floor!, hi: tdp.learned.ceil! })}
-            </div>
-          </PanelSectionRow>
-        ) : LEARNING_REASONS.has(tdp.learned.reason) ? (
-          <PanelSectionRow>
-            <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
-              {t("tdp.learned.learning.title")}
-            </div>
-          </PanelSectionRow>
-        ) : null
-      )}
     </>
   );
 };

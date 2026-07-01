@@ -13,8 +13,9 @@ import { theme } from "../theme";
 const SCALE_MIN = 40;
 const SCALE_MAX = 95;
 
-// Zone colors: green → amber → orange → red, matching thermalZone().
-const ZONE_COLOR: Record<ThermalZone, string> = {
+// Zone colors: green → amber → orange → red, matching thermalZone(). Exported as
+// the single source so TempStat's thermometer tile can't drift from this scale.
+export const ZONE_COLOR: Record<ThermalZone, string> = {
   cool: theme.color.ok,
   warm: theme.color.warn,
   hot: theme.color.boost,

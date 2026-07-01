@@ -20,7 +20,9 @@ const color = {
 } as const;
 
 const radius = { sm: 8, md: 14, lg: 20 } as const;
-const space = { xs: 4, sm: 8, md: 12, lg: 18 } as const;
+// `section` = the breathing gap BETWEEN stacked cards (shell chrome, settings
+// rows). A touch more than `md` so containers read as separate, not glued.
+const space = { xs: 4, sm: 8, md: 12, lg: 18, section: 14 } as const;
 const font = { caption: 11, body: 13, value: 28 } as const;
 
 export const theme = {
@@ -32,6 +34,15 @@ export const theme = {
   card: {
     borderRadius: radius.md,
     background: color.surfaceRaised,
+    boxShadow: `inset 0 0 0 1px ${color.hairline}`,
+  },
+  // Equal-width tile inside a card (fan chip, temp stat) — hairline-outlined,
+  // shares one definition so side-by-side tiles can't drift apart.
+  tile: {
+    flex: "1 1 0",
+    minWidth: 0,
+    padding: space.sm,
+    borderRadius: radius.sm,
     boxShadow: `inset 0 0 0 1px ${color.hairline}`,
   },
 } as const;

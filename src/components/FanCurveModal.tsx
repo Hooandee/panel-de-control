@@ -24,7 +24,7 @@ const FanCurveModalBody: FC<{ liveTemp: number | null }> = ({ liveTemp }) => {
     <div style={{ display: "flex", flexDirection: "column", gap: theme.space.md, padding: theme.space.sm }}>
       <div style={{ fontSize: theme.font.value, color: theme.color.textPrimary }}>{t("fans.curve.title")}</div>
       <div style={{ maxWidth: 760, width: "100%", margin: "0 auto" }}>
-        <FanCurveEditor control={control} liveTemp={liveTemp} suggestion={suggestion} />
+        <FanCurveEditor control={control} liveTemp={liveTemp} suggestion={suggestion} expanded />
       </div>
     </div>
   );

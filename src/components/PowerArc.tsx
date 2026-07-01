@@ -87,8 +87,11 @@ export const PowerArc: FC<PowerArcProps> = ({
   const [tx2, ty2] = polarAt(tickDeg, R + SW / 2 + 1);
 
   return (
-    <div style={{ position: "relative", width: "100%", maxWidth: 240, margin: "6px auto 0" }}>
-      <svg viewBox="0 0 200 200" style={{ width: "100%", display: "block", overflow: "visible" }}>
+    <div style={{ position: "relative", width: "100%", maxWidth: 240, margin: "2px auto 0" }}>
+      {/* viewBox cropped to ~180 tall: the 270° arc + its W labels bottom out near
+          y172, so the lower ~20px of a square box was dead space that pushed the
+          next control away. Overflow stays visible for the round stroke caps. */}
+      <svg viewBox="0 0 200 180" style={{ width: "100%", display: "block", overflow: "visible" }}>
         <path d={fullArc} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={SW} strokeLinecap="round" />
         {chargerHeadroom && (
           <path

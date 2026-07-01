@@ -25,6 +25,7 @@ export const ProfileSelector: FC<ProfileSelectorProps> = ({
   const seg = (active: boolean): CSSProperties => ({
     ...segmentItemStyle(active),
     flex: 1,
+    minWidth: 0, // lets the pill shrink so the game name can ellipsize, not bleed
     textAlign: "center",
     padding: "6px 10px",
   });
@@ -37,7 +38,10 @@ export const ProfileSelector: FC<ProfileSelectorProps> = ({
         </Focusable>
         {gameName && (
           <Focusable style={seg(scope === "game")} onActivate={() => onScope("game")} onClick={() => onScope("game")}>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><LuGamepad2 size={13} /> {gameName}</span>
+            <span style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, minWidth: 0, width: "100%" }}>
+              <LuGamepad2 size={13} style={{ flexShrink: 0 }} />
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{gameName}</span>
+            </span>
           </Focusable>
         )}
       </Focusable>
