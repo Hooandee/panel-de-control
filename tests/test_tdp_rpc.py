@@ -197,7 +197,7 @@ def PluginWithPower(Plugin, monkeypatch):
 def test_get_power_draw_has_all_keys(PluginWithPower):
     p = PluginWithPower()
     r = asyncio.run(p.get_power_draw())
-    assert set(r.keys()) == {"watts", "gpu_busy", "auto_tdp", "setpoint"}
+    assert set(r.keys()) == {"watts", "gpu_busy", "auto_tdp", "setpoint", "ui_floor_engaged"}
 
 
 def test_get_power_draw_values(PluginWithPower):

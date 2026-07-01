@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { fraction, zoneFor, arcColor } from "./logic";
-import { offsetOf, totalFor, maxOffset } from "./logic";
+import { offsetOf, totalFor, maxOffset, dialToWatts, boostWatts, boostEndFraction } from "./logic";
 
 describe("fraction", () => {
   it("maps min→0 and maxAc→1", () => {
@@ -63,5 +63,79 @@ describe("boost margin math", () => {
     expect(maxOffset(NaN, { min: 5, max: 45 })).toBe(0);
     expect(totalFor(NaN, NaN)).toBe(0);
     expect(totalFor(20, NaN)).toBe(20);
+  });
+});
+
+describe("dialToWatts (learned-band suggestion)", () => {
+  it("lerps battery→floor, performance→ceil, mid→middle (rounded)", () => {
+    expect(dialToWatts(15, 21, 0)).toBe(15);
+    expect(dialToWatts(15, 21, 1)).toBe(21);
+    expect(dialToWatts(15, 21, 0.5)).toBe(18);
+    expect(dialToWatts(13, 20, 0.5)).toBe(17); // 16.5 rounds up
+  });
+
+  it("clamps the dial and the result into [floor, ceil]", () => {
+    expect(dialToWatts(15, 21, -1)).toBe(15);
+    expect(dialToWatts(15, 21, 2)).toBe(21);
+  });
+
+  it("handles a collapsed band (floor == ceil)", () => {
+    expect(dialToWatts(34, 34, 0.5)).toBe(34);
+  });
+
+  it("is NaN-safe (→ floor)", () => {
+    expect(dialToWatts(15, NaN, 0.5)).toBe(15);
+    expect(dialToWatts(15, 21, NaN)).toBe(15);
+  });
+});
+
+describe("boostWatts (HW boost above your TDP)", () => {
+  it("returns null when the draw sensor is unavailable (never fake)", () => {
+    expect(boostWatts(22, null)).toBeNull();
+  });
+
+  it("returns 0 at rest (draw <= tdp)", () => {
+    expect(boostWatts(22, 22)).toBe(0);
+    expect(boostWatts(22, 20)).toBe(0);
+  });
+
+  it("returns the extra watts when the chip boosts above your TDP", () => {
+    expect(boostWatts(22, 31)).toBe(9);
+  });
+
+  it("rounds both sides before subtracting", () => {
+    expect(boostWatts(22.4, 30.6)).toBe(9); // round(31) - round(22) = 9
+    expect(boostWatts(21.6, 22.4)).toBe(0); // round(22) == round(22) → rest
+  });
+
+  it("still reports the real extra when draw exceeds max_ac (clamp is UI-only)", () => {
+    expect(boostWatts(33, 38)).toBe(5);
+  });
+});
+
+describe("boostEndFraction (arc geometry of the boost segment)", () => {
+  // range [7, 35]
+  it("returns null when the draw sensor is unavailable", () => {
+    expect(boostEndFraction(22, null, 7, 35)).toBeNull();
+  });
+
+  it("returns null at rest (gated by the same rounded test as boostWatts)", () => {
+    expect(boostEndFraction(22, 22, 7, 35)).toBeNull();
+    expect(boostEndFraction(22, 20, 7, 35)).toBeNull();
+  });
+
+  it("returns the draw fraction for a real boost", () => {
+    // draw 31 within [7,35] → (31-7)/28
+    expect(boostEndFraction(22, 31, 7, 35)).toBeCloseTo(24 / 28, 5);
+  });
+
+  it("saturates at the ceiling (1.0) when draw exceeds max_ac", () => {
+    // tdp 30, draw 38 > 35 → clamp to 35 → fraction 1.0
+    expect(boostEndFraction(30, 38, 7, 35)).toBe(1);
+  });
+
+  it("returns null when the segment would be zero-length (TDP already at ceiling)", () => {
+    // tdp 35 (=max_ac, frac 1.0), draw 38 → end clamps to 1.0 == tdpFrac → no segment
+    expect(boostEndFraction(35, 38, 7, 35)).toBeNull();
   });
 });

@@ -14,10 +14,15 @@ class TelemetrySampler:
     (safe in unit-test contexts that skip asyncio).
     """
 
-    def __init__(self, store, sample_fn, interval: float = 5.0, flush_every: int = 12) -> None:
+    def __init__(self, store, sample_fn, interval: float = 5.0, flush_every: int = 12,
+                 on_sample=None) -> None:
         self._store = store
         self._sample_fn = sample_fn
         self._interval = interval
+        # Optional post-store callback(result) invoked after each poll (result =
+        # the (appid, sample) tuple or None). Lets the owner count in-game ticks
+        # (A1 learned-curve re-apply cadence) without a second timer.
+        self._on_sample = on_sample
         # Persist to disk every `flush_every` samples (12 × 5 s ≈ 60 s) instead of
         # every sample — spares eMMC wear. A final flush happens on stop().
         self._flush_every = flush_every
@@ -53,6 +58,8 @@ class TelemetrySampler:
                     if self._since_flush >= self._flush_every:
                         self._store.flush()
                         self._since_flush = 0
+                if self._on_sample is not None:
+                    self._on_sample(result)
             except asyncio.CancelledError:
                 return
             except Exception:  # noqa: BLE001 — loop must never die

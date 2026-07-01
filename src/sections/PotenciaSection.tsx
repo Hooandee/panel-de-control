@@ -104,6 +104,20 @@ export const PotenciaSection: FC = () => {
     [refresh],
   );
 
+  // Apply the learned-band suggestion: a FIXED PL1 at the dial-picked value, which is
+  // a distinct mode from dynamic auto-TDP → turn auto OFF, then commit the watts to the
+  // current scope. Refresh so the slider/arc reflect the new fixed setpoint.
+  const onApplySuggestion = useCallback(
+    (w: number) => {
+      const { target, sc } = resolveTarget();
+      setAutoTdp(false)
+        .then(() => setTdpWatts(w, sc, target))
+        .then(() => refresh())
+        .catch(() => {});
+    },
+    [resolveTarget, refresh],
+  );
+
   return (
     <TdpSection
       tdp={tdp}
@@ -115,6 +129,7 @@ export const PotenciaSection: FC = () => {
       onSetLevels={onSetLevels}
       onResetAuto={onResetAuto}
       onAutoTdp={onAutoTdp}
+      onApplySuggestion={onApplySuggestion}
     />
   );
 };

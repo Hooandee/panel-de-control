@@ -52,6 +52,23 @@ export interface TdpState {
   auto: boolean;
   global_levels: Levels;
   global_auto: boolean;
+  // The learned TDP band for the current game (honest reasons when not enough data).
+  // Powers the separate "Aprendí…" suggestion (apply a fixed value); auto-TDP itself
+  // is parameter-free and decoupled from this band.
+  learned: TdpLearned;
+}
+
+export interface TdpLearned {
+  floor: number | null;
+  ceil: number | null;
+  seed: number | null;
+  observed_lo: number | null;
+  observed_hi: number | null;
+  enough: boolean;
+  // disabled | no_game | no_data | too_few | one_level | error | ok
+  reason: string;
+  minutes: number;
+  target_minutes: number;
 }
 
 export interface TdpApplyResult {
@@ -98,13 +115,21 @@ export interface PowerDraw {
   gpu_busy: number | null;
   auto_tdp: boolean;
   setpoint: number | null;
+  // True only while the QAM-open responsive floor is REALLY raising PL1 above where
+  // the auto loop would park it → the arc shows a menu-temporary value, so say so.
+  ui_floor_engaged: boolean;
 }
 
 export const getPowerDraw = callable<[], PowerDraw>("get_power_draw");
 export const setAutoTdp = callable<[enabled: boolean], { auto_tdp: boolean }>("set_auto_tdp");
+// Signals the QAM panel opened/closed so the auto loop can raise its floor (and bump
+// PL1 immediately) to keep the CPU-bound menu render fluid.
+export const setUiActive = callable<[enabled: boolean], boolean>("set_ui_active");
 
 export type FanScope = Scope;
-export type FanPreset = "auto" | "silent" | "balanced" | "performance" | "custom";
+// "adaptive" = the learned curve (computed live from telemetry). Choosing it IS
+// the opt-in to auto-learning for that scope.
+export type FanPreset = "auto" | "adaptive" | "silent" | "balanced" | "performance" | "custom";
 
 export interface FanPresetDef {
   id: "silent" | "balanced" | "performance";
@@ -117,6 +142,8 @@ export interface FanCurveState {
   pwm_max: number;
   preset: FanPreset;
   points: [number, number][] | null;
+  // Silence↔cool bias for the adaptive mode (-100..100, 0 otherwise).
+  bias: number;
   global_preset: FanPreset;
   global_points: [number, number][] | null;
   has_game_profile: boolean;
@@ -126,9 +153,26 @@ export interface FanCurveState {
 
 export const getTelemetryEnabled = callable<[], boolean>("get_telemetry_enabled");
 export const setTelemetryEnabled = callable<[enabled: boolean], boolean>("set_telemetry_enabled");
+// Wipe all learned usage data (start from scratch). Doesn't touch manual profiles.
+export const resetTelemetry = callable<[], boolean>("reset_telemetry");
+
+// Capability + opt-in snapshot for the persistent learning banner. Reports what
+// THIS device can actually learn (never-fake: no fan tag if it can't write curves).
+export interface LearningStatus {
+  telemetry_enabled: boolean;
+  tdp_supported: boolean;
+  fan_supported: boolean;
+}
+
+export const getLearningStatus = callable<[], LearningStatus>("get_learning_status");
 
 export const getUnlockBatteryMax = callable<[], boolean>("get_unlock_battery_max");
 export const setUnlockBatteryMax = callable<[enabled: boolean], boolean>("set_unlock_battery_max");
+
+// Opt-in (default off): raise TDP while the QAM is open for a fluid menu. Off keeps
+// the auto loop showing the REAL in-game TDP (no menu-time inflation).
+export const getQamTdpBoost = callable<[], boolean>("get_qam_tdp_boost");
+export const setQamTdpBoost = callable<[enabled: boolean], boolean>("set_qam_tdp_boost");
 
 export const getFanCurveState = callable<[], FanCurveState>("get_fan_curve_state");
 export const setFanPreset =
@@ -137,6 +181,12 @@ export const setFanCurvePoints =
   callable<[points: [number, number][], scope: FanScope, appid: string | null], FanCurveState>("set_fan_curve_points");
 export const setFanCurveAuto =
   callable<[scope: FanScope, appid: string | null], FanCurveState>("set_fan_auto");
+// Adaptive (learned) mode. Selecting it drives the learned curve (or firmware auto
+// until enough data). The bias variant sets the silence↔cool dial for the mode.
+export const setFanAdaptive =
+  callable<[scope: FanScope, appid: string | null], FanCurveState>("set_fan_adaptive");
+export const setFanAdaptiveBias =
+  callable<[bias: number, scope: FanScope, appid: string | null], FanCurveState>("set_fan_adaptive_bias");
 
 // F3 — fan-curve suggestion fit to a game's observed temperature band.
 export interface FanSuggestion {
@@ -144,6 +194,11 @@ export interface FanSuggestion {
   // ok | disabled | unsupported | no_game | no_data | too_few | flat | error
   reason: string;
   minutes: number;
+  target_minutes: number;
+  // Raw in-game dwell (and target), so the UI derives the learning bar + "min left"
+  // honestly at the round-up boundary rather than from rounded minutes.
+  seconds: number;
+  target_seconds: number;
   band: { floor: number; typical: number; high: number; peak: number } | null;
   curves: { quiet: [number, number][]; balanced: [number, number][]; cool: [number, number][] } | null;
 }

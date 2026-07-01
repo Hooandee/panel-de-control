@@ -54,3 +54,53 @@ export function maxOffset(base: number, bound?: LevelBound): number {
   return Number.isFinite(v) ? Math.max(0, v) : 0;
 }
 
+/**
+ * Watt value the learned-band suggestion applies for a battery↔performance *dial*
+ * (0 = battery/floor, 1 = performance/ceil). Linear interpolation, rounded, clamped
+ * into [floor, ceil]. Mirrors the backend's `target_for_dial` exactly so the applied
+ * fixed setpoint matches what the band promises. NaN-safe (→ floor).
+ */
+export function dialToWatts(floor: number, ceil: number, dial: number): number {
+  if (!Number.isFinite(floor) || !Number.isFinite(ceil)) return Number.isFinite(floor) ? floor : 0;
+  const lo = Math.min(floor, ceil);
+  const hi = Math.max(floor, ceil);
+  const d = Math.max(0, Math.min(1, Number.isFinite(dial) ? dial : 0));
+  return Math.max(lo, Math.min(hi, Math.round(lo + d * (hi - lo))));
+}
+
+/**
+ * Extra watts the hardware is drawing ABOVE your set TDP (the "HW boost" the
+ * SPPT/FPPT rails deliver on top of PL1). `drawWatts == null` → null (the
+ * consumption sensor is unavailable; never fabricate a number). At rest
+ * (rounded draw ≤ rounded TDP) → 0. Otherwise → the rounded extra. The UI clamps
+ * the boost segment geometrically to the arc, but this magnitude stays exact.
+ */
+export function boostWatts(tdpWatts: number, drawWatts: number | null): number | null {
+  if (drawWatts === null) return null;
+  const extra = Math.round(drawWatts) - Math.round(tdpWatts);
+  return extra > 0 ? extra : 0;
+}
+
+/**
+ * Arc fraction [0,1] where the HW-boost segment ends, or `null` when there is no
+ * visible segment to draw. Gated by the SAME rounded test as `boostWatts`, then
+ * saturates at the scale ceiling if the draw runs past `maxAc` (the ⁺N magnitude
+ * stays exact; only the bar saturates). Returns null for a zero-length segment.
+ * Note: when the TDP is already at the ceiling the arc is full, so the ⁺N number
+ * still reports the overshoot but this returns null — the number and the segment
+ * agree everywhere EXCEPT that pinned-at-ceiling case, where there is simply no
+ * room left on the arc to draw the extra.
+ */
+export function boostEndFraction(
+  tdpWatts: number,
+  drawWatts: number | null,
+  min: number,
+  maxAc: number,
+): number | null {
+  const boost = boostWatts(tdpWatts, drawWatts);
+  if (boost === null || boost === 0) return null;
+  const tdpFrac = fraction(tdpWatts, min, maxAc);
+  const end = fraction(Math.min(drawWatts as number, maxAc), min, maxAc);
+  return end > tdpFrac ? end : null;
+}
+

@@ -10,6 +10,7 @@ import device_registry
 from version import read_version
 from settings_store import SettingsStore
 from tdp import factory as tdp_factory
+from tdp import suggest as tdp_suggest
 from tdp_profiles import ProfileStore
 from lifecycle import LifecycleManager, read_on_ac
 from fans.hwmon import FanReader, extract_cpu_gpu_temps
@@ -20,6 +21,12 @@ from fan_curves import FanCurveStore
 from power.reader import PowerReader
 from telemetry.store import TelemetryStore
 from telemetry.sampler import TelemetrySampler
+
+# Auto-TDP rolling window: last N samples (~2 s apart) the control law reads. It
+# measures the FREQUENCY of boost over the window (not an instant), so it is longer
+# than the old reactive window; the up-trigger still uses the recent peak to reject
+# transient dips. See py_modules/auto_tdp.py.
+_AUTO_WINDOW = 10
 
 DEFAULTS = {
     # Persisted settings keys go here; SettingsStore merges these over stored values.
@@ -32,10 +39,21 @@ DEFAULTS = {
     # off (we cap battery below the firmware max for battery life); the user accepts
     # the drain when enabling. The firmware itself allows the same max either way.
     "unlock_battery_max": False,
+    # Opt-in: while the QAM/plugin UI is open, raise PL1 to a responsive floor so the
+    # CPU-bound menu render stays fluid. Default OFF for honesty — raising TDP behind
+    # the menu would show an inflated number vs the REAL in-game TDP the user wants to
+    # see with the QAM open. When ON, the user accepts the menu-time bump for fluidity.
+    "qam_tdp_boost": False,
 }
 
 
 class Plugin:
+    # A1: re-fit + re-apply the learned fan curve every this-many collected in-game
+    # samples. The sampler ticks every 5 s only while in-game, so 360 × 5 s ≈ 30 min
+    # of ACTUAL play — matching the telemetry histogram's ~30 min decay half-life so
+    # the curve tracks the current thermal "zone" without explicit zone detection.
+    _REAPPLY_EVERY_TICKS = 360
+
     # Lazy, idempotent init called at the top of EVERY RPC method and _main.
     # RPC can be invoked before _main finishes; without this, methods AttributeError
     # on a half-built instance and the UI hangs on its spinner.
@@ -66,10 +84,28 @@ class Plugin:
         self._lifecycle = LifecycleManager(apply_cb=self._reapply_all)
         self._auto_task = None
         self._auto_setpoint = None
+        # Rolling GPU% window + slack counter for the GPU-driven auto-TDP control law.
+        self._gpu_window = []      # recent GPU% samples
+        self._slack_ticks = 0      # consecutive GPU-headroom ticks (temporal gate)
+        # QAM/plugin UI open → the auto loop uses a higher "responsive" floor so the
+        # CPU-bound menu render stays fluid (the GPU-only loop can't see CPU load).
+        # Set/cleared by the ControlCenter mount/unmount via set_ui_active.
+        self._ui_active = False
         self._telemetry = TelemetryStore(
             os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "telemetry.json")
         )
-        self._sampler = TelemetrySampler(self._telemetry, self._collect_sample)
+        # A1: count in-game samples toward the periodic adaptive re-fit.
+        self._reapply_ticks = 0
+        # Whether the adaptive curve has been driven THIS session (per game). Lets the
+        # mid-session drive fire the moment `enough_data` flips true instead of waiting
+        # for the next ~30 min re-fit. Reset on game change (and on sampler (re)start).
+        self._adaptive_applied = False
+        # Last adaptive curve actually driven to hardware — the anti-churn baseline for
+        # the periodic re-fit (adaptive stores no points, so we track it here).
+        self._last_adaptive_points = None
+        self._sampler = TelemetrySampler(
+            self._telemetry, self._collect_sample, on_sample=self._on_sample_collected
+        )
         self._ready = True
 
     def _save(self) -> None:
@@ -120,17 +156,40 @@ class Plugin:
     def _reapply_fans(self) -> None:
         """Apply the effective fan profile for the current game (or global).
 
-        auto -> firmware control; manual -> write the stored curve to all fans.
+        - auto      -> firmware control.
+        - adaptive  -> drive the LEARNED curve (computed live from telemetry): the
+                       balanced fit biased by the scope's silence↔cool dial. When
+                       there isn't enough real data yet, fall back to firmware auto
+                       (never fabricate a curve) — the card shows the learning state.
+        - preset/custom -> write the stored 8-point curve to all fans.
         Guarded: a bad fan apply must never brick load.
         """
         try:
             profile = self._fan_curves.effective(self._current_appid)
-            if profile["preset"] == "auto" or not profile["points"]:
+            preset = profile["preset"]
+            if preset == "adaptive":
+                points = self._adaptive_curve_points(self._current_appid)
+                if points is None:
+                    self._fan_ctrl.set_auto(None)  # not enough data → honest firmware auto
+                else:
+                    self._fan_ctrl.apply_curve_all(points)
+            elif preset == "auto" or not profile["points"]:
                 self._fan_ctrl.set_auto(None)
             else:
                 self._fan_ctrl.apply_curve_all(profile["points"])
         except Exception:  # noqa: BLE001
             pass
+
+    def _adaptive_curve_points(self, appid):
+        """The learned curve to drive in adaptive mode for *appid* (or None if there
+        isn't enough real data yet). Balanced fit biased by the scope's silence↔cool
+        dial, sanitized. Never raises; never fabricates a curve without data."""
+        sugg = self._fan_suggestion(appid)
+        if not sugg["available"] or not sugg["curves"]:
+            return None
+        bias = self._fan_curves.adaptive_bias(appid)
+        pts = fan_suggest.biased_curve(sugg["curves"], bias)
+        return [list(p) for p in pts]
 
     def _fan_curve_state(self) -> dict:
         hw_state = self._fan_ctrl.read_state()
@@ -144,6 +203,7 @@ class Plugin:
             "pwm_max": hw_state.get("pwm_max", 255),
             "preset": effective["preset"],
             "points": effective["points"],
+            "bias": effective.get("bias", 0),
             "global_preset": global_curve["preset"],
             "global_points": global_curve["points"],
             "has_game_profile": (self._current_appid is not None
@@ -165,6 +225,36 @@ class Plugin:
         if resolved is None:
             return self._fan_curve_state()
         self._fan_curves.set_preset(resolved, preset, fan_presets.RESOLVED[preset], appid)
+        self._reapply_fans()
+        return self._fan_curve_state()
+
+    async def set_fan_adaptive(self, scope: str, appid=None) -> dict:
+        """Select the Adaptive (learned) curve mode. Choosing this IS the opt-in to
+        auto-learning for this scope: the learner now drives + re-fits the curve."""
+        self._init()
+        resolved = self._resolve_scope(scope, appid)
+        if resolved is None:
+            return self._fan_curve_state()
+        self._fan_curves.set_adaptive(resolved, appid)
+        # Re-arm the mid-session drive, then drive the learned curve now (also sets the
+        # anti-churn baseline so the periodic re-fit doesn't needlessly re-drive).
+        self._adaptive_applied = False
+        self._last_adaptive_points = None
+        self._maybe_drive_adaptive_fan_curve()
+        self._reapply_fans()  # covers the no-data case (firmware auto) honestly
+        return self._fan_curve_state()
+
+    async def set_fan_adaptive_bias(self, bias: int, scope: str, appid=None) -> dict:
+        """Set the silence↔cool bias of the Adaptive mode (also selects it). Drives
+        the biased learned curve so the hardware reflects the dial immediately."""
+        self._init()
+        resolved = self._resolve_scope(scope, appid)
+        if resolved is None:
+            return self._fan_curve_state()
+        self._fan_curves.set_adaptive_bias(resolved, bias, appid)
+        # A new bias changes the target curve → reset the anti-churn baseline and drive.
+        self._last_adaptive_points = None
+        self._maybe_drive_adaptive_fan_curve()
         self._reapply_fans()
         return self._fan_curve_state()
 
@@ -193,41 +283,98 @@ class Plugin:
         return self._fan_curve_state()
 
     # ---- Fan-curve suggestion (F3 brain over local telemetry) ---------------
-    async def get_fan_suggestion(self, appid=None) -> dict:
-        """Suggest a fan curve fit to a game's observed temperature band.
+    def _fan_suggestion(self, appid=None) -> dict:
+        """Suggest a fan curve fit to a game's observed temperature band (sync core).
 
         Per-game only (the band is learned per game). Degrades honestly:
         - telemetry opted out  -> available False, reason "disabled"
         - device can't write    -> available False, reason "unsupported"
         - not enough/varied data -> available False, reason from enough_data
-        Never raises.
+        Never raises. Shared by the RPC and the proactive auto-apply path.
         """
-        self._init()
         key = str(appid) if appid is not None else self._current_appid
 
-        def unavail(reason, minutes=0):
+        def unavail(reason):
             return {"available": False, "curves": None, "band": None,
-                    "minutes": minutes, "reason": reason}
+                    "minutes": 0, "seconds": 0, "reason": reason,
+                    "target_minutes": fan_suggest.MIN_MINUTES,
+                    "target_seconds": fan_suggest._MIN_SECONDS}
 
-        if not bool(self._settings.get("telemetry_enabled", True)):
-            return unavail("disabled")
+        # Device-can't-write is checked first: an unsupported device returns
+        # "unsupported" (card stays silent) rather than nudging "turn on learning".
         if not self._fan_ctrl.supported:  # cheap property — no sysfs/EC read
             return unavail("unsupported")
+        if not bool(self._settings.get("telemetry_enabled", True)):
+            return unavail("disabled")
         if key is None:
             return unavail("no_game")
         try:
             hist = self._telemetry.temp_histogram(key)
-            minutes = round(sum(hist.values()) / 60) if hist else 0
+            total = sum(hist.values()) if hist else 0
+            # Floor (not round) so `minutes` can't show the 30-min target while the
+            # honest gate is still `too_few` (round(1770/60)=30 would lie). The FE
+            # derives the progress bar + "min left" from raw `seconds` anyway.
+            minutes = int(total // 60)
             ok, reason = fan_suggest.enough_data(hist)
-            if not ok:
-                return unavail(reason, minutes)
-            b = fan_suggest.band(hist)
-            curves = {name: [list(p) for p in pts]
-                      for name, pts in fan_suggest.suggest_curves(b).items()}
-            return {"available": True, "reason": "ok", "minutes": minutes,
-                    "band": b, "curves": curves}
+            # Compute the candidate the moment there's ANY real observed dwell, so the
+            # UI can show a live green preview while learning. Gated on total>0 so the
+            # no_data verdict never carries a curve (no graph beside "start playing").
+            # `available` (=ok) still gates applying — never apply without enough data.
+            band = curves = None
+            if total > 0:
+                band = fan_suggest.band(hist)
+                curves = {name: [list(p) for p in pts]
+                          for name, pts in fan_suggest.suggest_curves(band).items()}
+            return {"available": ok, "reason": reason, "minutes": minutes,
+                    "seconds": total, "target_minutes": fan_suggest.MIN_MINUTES,
+                    "target_seconds": fan_suggest._MIN_SECONDS, "band": band, "curves": curves}
         except Exception:  # noqa: BLE001
             return unavail("error")
+
+    async def get_fan_suggestion(self, appid=None) -> dict:
+        self._init()
+        return self._fan_suggestion(appid)
+
+    def _drive_adaptive_fan_curve(self, *, reapply: bool) -> None:
+        """Drive the learned curve when the effective mode is Adaptive (never-fake).
+
+        Adaptive is a stateless MODE — it stores no points; the curve is computed
+        live from telemetry here. Choosing the mode IS the opt-in, so the only guards
+        are: a game is running and the effective curve is Adaptive. Never overrides a
+        preset/custom/auto profile (that mode simply isn't Adaptive → we return).
+
+        - reapply=False (mode selected / game entry): mark applied so the per-tick
+          watcher can stop recomputing every 5 s. `_reapply_fans` does the actual
+          hardware write on these paths.
+        - reapply=True  (periodic ~30 min re-fit): recompute and re-drive the hardware
+          only when the fit shifted appreciably (anti-churn vs the last driven curve).
+
+        Cheap O(1) guards (running game + adaptive mode) run FIRST so the histogram is
+        never walked otherwise. Never raises; never fakes an apply."""
+        try:
+            appid = self._current_appid
+            if appid is None or not self._fan_curves.is_adaptive(appid):
+                return
+            points = self._adaptive_curve_points(appid)
+            if points is None:
+                return  # not enough real data yet → firmware auto stays (never-fake)
+            if reapply and not fan_suggest.curve_changed(self._last_adaptive_points, points):
+                return  # nothing worth re-driving → no thermal/eMMC churn
+            self._last_adaptive_points = points
+            self._reapply_fans()  # push the (re)computed curve to the hardware
+            self._adaptive_applied = True  # per-session watcher can stop now
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _maybe_drive_adaptive_fan_curve(self) -> None:
+        """On selecting Adaptive / entering a game (or mid-session once enough data
+        lands), compute and drive the learned curve to the hardware."""
+        self._drive_adaptive_fan_curve(reapply=False)
+
+    def _maybe_reapply_adaptive_fan_curve(self) -> None:
+        """A1: periodically (every ~30 min of play) re-fit and re-drive the adaptive
+        curve so it follows the game's RECENT thermal pattern (the histogram decays)."""
+        self._drive_adaptive_fan_curve(reapply=True)
 
     # ---- Telemetry ----------------------------------------------------------
     def _collect_sample(self):
@@ -254,10 +401,18 @@ class Plugin:
             # Clamped effective setpoint (mirrors get_power_draw)
             pl1 = self._effective_levels(self._current_appid)[0]["pl1"]
 
+            # boost = was the chip boosting at this PL1 (draw > PL1 + deadband)?
+            # 1.0/0.0/None; its per-bin average = the honest "power-limited here?"
+            # signal the learned band reads (tdp/suggest._satisfied).
+            watts = pr.get("watts")
+            boosting = auto_tdp.is_boosting(watts, pl1)
+            boost = None if boosting is None else (1.0 if boosting else 0.0)
+
             sample = {
                 "pl1": pl1,
-                "watts": pr.get("watts"),
+                "watts": watts,
                 "gpu_busy": pr.get("gpu_busy"),
+                "boost": boost,
                 "temp_cpu": temp_cpu,
                 "temp_gpu": temp_gpu,
                 "fan_rpm": fan_rpm,
@@ -266,12 +421,51 @@ class Plugin:
         except Exception:  # noqa: BLE001
             return None
 
+    def _on_sample_collected(self, result) -> None:
+        """Sampler callback after each stored sample (A1 re-apply cadence).
+
+        *result* is the (appid, sample) tuple that was stored, or None when idle.
+        Idle ticks don't count — the counter reflects real play time. Every
+        _REAPPLY_EVERY_TICKS in-game samples (~30 min) trigger a learned re-fit.
+
+        While the effective mode is Adaptive and we have NOT yet driven the learned
+        curve this session, try the gated drive on every in-game tick — so the moment
+        `enough_data` flips true mid-session the curve lands immediately instead of
+        waiting up to ~30 min for the next re-fit tick. The cheap O(1) mode guard runs
+        first (in `_drive_adaptive_fan_curve`), and once driven the flag stops the
+        suggestion from being recomputed every 5 s (only the 30-min re-fit runs).
+        """
+        if result is None:
+            return
+        if not self._adaptive_applied:
+            self._maybe_drive_adaptive_fan_curve()  # gated; sets _adaptive_applied on success
+        self._reapply_ticks += 1
+        if self._reapply_ticks >= self._REAPPLY_EVERY_TICKS:
+            self._reapply_ticks = 0
+            self._maybe_reapply_adaptive_fan_curve()
+
     async def get_telemetry(self, appid=None) -> dict:
         self._init()
         key = str(appid) if appid is not None else self._current_appid
         if key is None:
             return {"samples_n": 0, "by_pl1": {}, "recent": []}
         return self._telemetry.aggregate(key)
+
+    async def reset_telemetry(self) -> bool:
+        """Wipe ALL learned usage data (TDP + fan) — start from scratch. Does NOT
+        touch the user's manual TDP/fan profiles. The live windows are cleared too so
+        the loop doesn't carry stale signal into the freshly-empty model."""
+        self._init()
+        self._telemetry.clear()
+        self._reset_auto_windows()
+        return True
+
+    def _start_sampler(self) -> None:
+        """Start the telemetry sampler and reset the ~30 min re-apply cadence so it
+        aligns to when learning actually (re)begins — otherwise toggling telemetry
+        mid-game would let `_reapply_ticks` drift out of phase with real dwell."""
+        self._reapply_ticks = 0
+        self._sampler.start()
 
     async def get_telemetry_enabled(self) -> bool:
         self._init()
@@ -285,10 +479,25 @@ class Plugin:
         self._settings["telemetry_enabled"] = enabled
         self._save()
         if enabled:
-            self._sampler.start()
+            self._start_sampler()
         else:
             self._sampler.stop()  # also flushes any buffered samples
         return enabled
+
+    async def get_learning_status(self) -> dict:
+        """Capability + opt-in snapshot for the persistent learning banner (shown
+        under the DeviceHeader). Reports what THIS device can actually learn:
+        `tdp_supported` = a real TDP write backend exists; `fan_supported` = the
+        device can WRITE fan curves (Null backends read-only → False). The banner
+        combines these with the live running game (read on the frontend) to say —
+        honestly — what is being learned, or that learning is paused when
+        telemetry is off. Never claims to learn something this device can't."""
+        self._init()
+        return {
+            "telemetry_enabled": bool(self._settings.get("telemetry_enabled", True)),
+            "tdp_supported": bool(self._tdp_backend.supported),
+            "fan_supported": bool(self._fan_ctrl.supported),
+        }
 
     async def get_unlock_battery_max(self) -> bool:
         self._init()
@@ -304,6 +513,27 @@ class Plugin:
         self._reapply_tdp()
         return enabled
 
+    def _qam_boost_active(self) -> bool:
+        """The QAM-open responsive floor applies ONLY when its opt-in setting is on
+        AND the UI is open. Default OFF → the auto loop shows the REAL in-game TDP
+        with the QAM open (never inflates the number behind the menu). When ON, the
+        user accepts the menu-time bump for fluidity."""
+        return self._ui_active and bool(self._settings.get("qam_tdp_boost", False))
+
+    async def get_qam_tdp_boost(self) -> bool:
+        self._init()
+        return bool(self._settings.get("qam_tdp_boost", False))
+
+    async def set_qam_tdp_boost(self, enabled: bool) -> bool:
+        """Opt in/out of raising PL1 while the QAM is open. When turning OFF while the
+        UI is open we do NOT force PL1 back down — the auto loop will settle it to the
+        real in-game value on its next tick (never fake, no jarring drop)."""
+        self._init()
+        enabled = bool(enabled)
+        self._settings["qam_tdp_boost"] = enabled
+        self._save()
+        return enabled
+
     # ---- Auto-TDP loop ------------------------------------------------------
     def _start_auto_loop(self) -> None:
         if self._auto_task is not None and not self._auto_task.done():
@@ -312,6 +542,7 @@ class Plugin:
             asyncio.get_running_loop()
         except RuntimeError:
             return  # no event loop in tests — skip task creation safely
+        self._reset_auto_windows()  # start each auto session with fresh windows
         self._auto_task = asyncio.create_task(self._auto_loop())
 
     def _stop_auto_loop(self) -> None:
@@ -319,26 +550,81 @@ class Plugin:
             self._auto_task.cancel()
             self._auto_task = None
 
+    def _clear_auto_windows(self) -> None:
+        """Empty the GPU% window — keeping it HOMOGENEOUS at the current PL1. Called
+        after every applied PL1 change so decide never averages GPU% across
+        different setpoints (samples taken at the OLD PL1 no longer describe the new
+        one)."""
+        self._gpu_window = []
+
+    def _reset_auto_windows(self) -> None:
+        """Full reset: clear the windows AND the slack counter, so a game change /
+        loop (re)start / telemetry wipe never carries stale signal into the fresh
+        state. (A mere PL1 change clears only the windows — decide already zeroes
+        slack itself on any UP/DOWN, so don't double-reset it there.)"""
+        self._clear_auto_windows()
+        self._slack_ticks = 0
+
     async def _auto_loop(self) -> None:
+        """Autonomous, band-DECOUPLED GPU-driven controller. Runs over the full
+        device range [min_w, active_max]: every 2 s it feeds the rolling GPU%
+        window to auto_tdp.decide, which converges on the knee and HOLDS (dead-band
+        + temporal gate = no sawtooth), stepping up on GPU saturation and down after
+        sustained GPU headroom. Watts/boost are NOT used for the decision — on a
+        power-limited game the draw follows PL1, so any draw signal is confounded
+        (measured on-device: 35 W cap / 80% GPU held at max forever). The learned
+        band never caps it. Degrades to HOLD on devices without gpu_busy (Claw)."""
         while True:
             try:
                 await asyncio.sleep(2)
+                # Auto-TDP is a per-GAME dynamic control: don't adjust the global
+                # setpoint from desktop/loading activity. Idle → drop stale window
+                # so re-entry into a game starts homogeneous.
+                if self._current_appid is None:
+                    self._reset_auto_windows()
+                    continue
                 pr = self._power_reader.read()
-                gpu_busy = pr.get("gpu_busy")
                 levels, active, _ac = self._effective_levels(self._current_appid)
                 cur = levels["pl1"]
-                limits = self._limits()
-                nxt = auto_tdp.decide(cur, gpu_busy, limits.min_w, active)
+                lim = self._limits()
+
+                self._gpu_window.append(pr.get("gpu_busy"))
+                del self._gpu_window[:-_AUTO_WINDOW]
+
+                floor = auto_tdp.effective_floor(lim.min_w, self._qam_boost_active())
+                nxt, self._slack_ticks = auto_tdp.decide(
+                    cur, self._gpu_window, self._slack_ticks, floor, active)
                 if nxt != cur:
-                    scope = "game" if self._current_appid else "global"
-                    self._tdp_profiles.set_pl1(scope, nxt, appid=self._current_appid)
+                    self._tdp_profiles.set_pl1(self._auto_scope(), nxt, appid=self._current_appid)
                     self._reapply_tdp()
+                    # PL1 changed → drop the now-stale window (samples taken at the
+                    # OLD setpoint) so the next reads are homogeneous at the new PL1.
+                    self._clear_auto_windows()
             except asyncio.CancelledError:
                 return
             except Exception:  # noqa: BLE001
                 pass  # loop must never die
 
     # ---- Power draw + auto-TDP RPCs -----------------------------------------
+    def _ui_floor_engaged(self) -> bool:
+        """True ONLY when the QAM-open responsive floor is REALLY holding PL1 above
+        where the auto loop would otherwise park it — so the UI can honestly say
+        "this number is raised for the menu, not the in-game value". False when the
+        game already demands >= the responsive floor (the number IS the in-game one),
+        or when not auto / no game / UI closed. Never-fake: don't claim a raise that
+        isn't happening."""
+        if not (self._qam_boost_active() and self._current_appid is not None
+                and bool(self._settings.get("auto_tdp"))):
+            return False
+        lim = self._limits()
+        floor = auto_tdp.effective_floor(lim.min_w, True)
+        if floor <= lim.min_w:
+            return False  # device min already >= responsive floor → no raise
+        # The floor bites only when the loop's PL1 sits AT the responsive floor
+        # (it wanted lower / is being held up). A demanding game parks above it.
+        pl1 = self._effective_levels(self._current_appid)[0]["pl1"]
+        return pl1 <= floor
+
     async def get_power_draw(self) -> dict:
         self._init()
         pr = self._power_reader.read()
@@ -349,6 +635,7 @@ class Plugin:
             "gpu_busy": pr["gpu_busy"],
             "auto_tdp": auto,
             "setpoint": setpoint,
+            "ui_floor_engaged": self._ui_floor_engaged(),
         }
 
     async def set_auto_tdp(self, enabled: bool) -> dict:
@@ -360,6 +647,28 @@ class Plugin:
         else:
             self._stop_auto_loop()
         return {"auto_tdp": bool(enabled)}
+
+    async def set_ui_active(self, enabled: bool) -> bool:
+        """The plugin UI (QAM panel) opened/closed. When the opt-in ``qam_tdp_boost``
+        setting is on, while open the AUTO loop uses a higher responsive floor
+        (CPU-bound menu render stays fluid) and we bump PL1 to that floor IMMEDIATELY
+        (only if it's currently LOWER) so the menu is snappy without waiting for the
+        loop to ramp — a real, honest PL1 change surfaced via ui_floor_engaged. With
+        the setting OFF (default) opening the QAM changes NOTHING: the auto loop shows
+        the REAL in-game TDP. Only affects AUTO mode + a running game."""
+        self._init()
+        self._ui_active = bool(enabled)
+        if (self._qam_boost_active() and self._current_appid is not None
+                and bool(self._settings.get("auto_tdp"))):
+            lim = self._limits()
+            floor = auto_tdp.effective_floor(lim.min_w, True)
+            cur = self._effective_levels(self._current_appid)[0]["pl1"]
+            if cur < floor:  # only raise if actually below the responsive floor
+                self._tdp_profiles.set_pl1(self._auto_scope(), floor,
+                                           appid=self._current_appid)
+                self._reapply_tdp()
+                self._clear_auto_windows()  # PL1 changed → window is now stale
+        return self._ui_active
 
     # ---- TDP helpers + RPCs -------------------------------------------------
     def _limits(self):
@@ -406,6 +715,37 @@ class Plugin:
     def _active_max(self, limits, ac: bool) -> int:
         return limits.max_ac_w if ac else limits.max_w
 
+    # ---- Learned TDP band (G2) ----------------------------------------------
+    def _tdp_learned_info(self, appid=None) -> dict:
+        """Display-facing learned-band info for a game (honest reasons).
+
+        reason ∈ {disabled, no_game, no_data, too_few, one_level, ok}. The band
+        fields are None unless ``enough``. ``minutes`` = total in-game dwell learned.
+        """
+        def unavail(reason):
+            return {"floor": None, "ceil": None, "seed": None,
+                    "observed_lo": None, "observed_hi": None,
+                    "enough": False, "reason": reason, "minutes": 0,
+                    "target_minutes": tdp_suggest.MIN_MINUTES}
+
+        if not bool(self._settings.get("telemetry_enabled", True)):
+            return unavail("disabled")
+        key = str(appid) if appid is not None else self._current_appid
+        if key is None:
+            return unavail("no_game")
+        try:
+            by_pl1 = self._telemetry.aggregate(key)["by_pl1"]
+            band = tdp_suggest.learned_band(by_pl1)
+            minutes = round(sum(r["seconds"] for r in by_pl1.values()) / 60) if by_pl1 else 0
+            return {**band, "minutes": minutes, "target_minutes": tdp_suggest.MIN_MINUTES}
+        except Exception:  # noqa: BLE001
+            return unavail("error")
+
+    def _auto_scope(self) -> str:
+        """The TDP/fan profile scope the auto machinery writes to (game when one is
+        running, else global)."""
+        return "game" if self._current_appid else "global"
+
     def _reapply_tdp(self, on_ac=None):
         self._init()
         lv, _active, ac = self._effective_levels(self._current_appid, on_ac)
@@ -445,6 +785,10 @@ class Plugin:
             "auto": eff["auto"],
             "global_levels": global_levels,
             "global_auto": geff["auto"],
+            # The learned band for this game (powers the separate TDP suggestion card).
+            # The battery↔performance dial that picks a value inside it is now LOCAL UI
+            # state — applying it is a fixed manual setpoint, not a loop parameter.
+            "learned": self._tdp_learned_info(self._current_appid),
         }
 
     def _resolve_scope(self, scope, appid):
@@ -501,6 +845,15 @@ class Plugin:
     async def set_current_game(self, appid) -> dict:
         self._init()
         self._current_appid = str(appid) if appid is not None else None
+        self._reset_auto_windows()  # don't let the previous game's signal gate the new one
+        self._reapply_ticks = 0        # A1: fresh ~30 min re-fit window for the new game
+        self._adaptive_applied = False  # re-arm the mid-session adaptive drive for this game
+        self._last_adaptive_points = None  # anti-churn baseline resets with the game
+        # Auto-TDP no longer seeds PL1 from the learned band: the loop is band-decoupled
+        # and explores to its own level. The learned band is a separate, explicit
+        # suggestion (apply a fixed value) — see the UI. `_reapply_all` drives the
+        # effective fan curve, including the adaptive learned curve when that mode is on.
+        self._maybe_drive_adaptive_fan_curve()  # track + drive if adaptive with enough data
         self._reapply_all()
         return await self.get_tdp_state()
 
@@ -523,7 +876,7 @@ class Plugin:
             if self._settings.get("auto_tdp"):
                 self._start_auto_loop()
             if self._settings.get("telemetry_enabled", True):
-                self._sampler.start()
+                self._start_sampler()
         except Exception as e:  # noqa: BLE001
             decky.logger.error("TDP startup failed: %s", e)
 

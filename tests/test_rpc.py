@@ -64,3 +64,17 @@ def test_set_telemetry_enabled_persists(Plugin):
     assert asyncio.run(p2.get_telemetry_enabled()) is False
     asyncio.run(p2.set_telemetry_enabled(True))
     assert asyncio.run(Plugin().get_telemetry_enabled()) is True
+
+
+def test_qam_tdp_boost_default_false(Plugin):
+    # Honesty default: opening the QAM must NOT raise TDP unless the user opts in.
+    p = Plugin()
+    assert asyncio.run(p.get_qam_tdp_boost()) is False
+
+
+def test_set_qam_tdp_boost_persists(Plugin):
+    p = Plugin()
+    assert asyncio.run(p.set_qam_tdp_boost(True)) is True
+    assert asyncio.run(p.get_qam_tdp_boost()) is True
+    # Persisted across a fresh Plugin instance (same settings dir).
+    assert asyncio.run(Plugin().get_qam_tdp_boost()) is True

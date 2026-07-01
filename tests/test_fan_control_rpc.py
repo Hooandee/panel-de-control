@@ -227,9 +227,14 @@ class TestFanCurveRpcAsus:
         assert st["global_preset"] == "auto"  # global untouched
 
     def _feed_band(self, p, appid):
-        # ~35 min total across a 58–82 °C band → enough_data ok (>=30 min, spread>=8)
-        for temp, secs in [(58, 300), (64, 500), (70, 600), (76, 400), (82, 300)]:
-            p._telemetry.add_sample(appid, {"pl1": 15, "temp_cpu": temp, "temp_gpu": temp - 4}, dt=secs)
+        # Feed realistic 5 s samples across a 58–82 °C band. The store now DECAYS
+        # old dwell with in-game time (~30 min half-life), so weighted dwell tops
+        # out below wall-clock dwell — feed ~60 min of real play to clear the
+        # 30-min gate. (A single huge-dt sample would just fade itself away.)
+        for temp, secs in [(58, 720), (64, 720), (70, 900), (76, 720), (82, 720)]:
+            for _ in range(secs // 5):
+                p._telemetry.add_sample(
+                    appid, {"pl1": 15, "temp_cpu": temp, "temp_gpu": temp - 4}, dt=5.0)
 
     def test_suggestion_available_with_good_data(self, Plugin):
         p = Plugin()
@@ -263,6 +268,25 @@ class TestFanCurveRpcAsus:
         s = asyncio.run(p.get_fan_suggestion("555"))
         assert s["available"] is False
         assert s["reason"] == "disabled"
+
+    def test_adaptive_mode_applies_learned_curve_to_hardware(self, Plugin, asus_root):
+        # Selecting Adaptive with enough real data drives the learned curve → both
+        # fans flip to manual (enable=1), like any applied curve.
+        p = Plugin()
+        asyncio.run(p.set_current_game("555"))
+        self._feed_band(p, "555")
+        st = asyncio.run(p.set_fan_adaptive("game", "555"))
+        assert st["preset"] == "adaptive"
+        assert st["points"] is None  # adaptive stores no points (computed live)
+        assert self._enables(asus_root) == ("1", "1")
+
+    def test_adaptive_mode_no_data_stays_firmware_auto(self, Plugin, asus_root):
+        # never-fake: adaptive with no learned data leaves the fans on firmware auto.
+        p = Plugin()
+        asyncio.run(p.set_current_game("777"))
+        st = asyncio.run(p.set_fan_adaptive("game", "777"))
+        assert st["preset"] == "adaptive"
+        assert self._enables(asus_root) == ("2", "2")
 
     def test_custom_points_sanitized_before_store(self, Plugin):
         # Drag every point (incl. the hottest) to 0 duty. The backend safety floor

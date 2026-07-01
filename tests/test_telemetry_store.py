@@ -46,8 +46,9 @@ def test_add_sample_bins_by_integer_pl1(tmp_path):
     agg = s.aggregate("1")
     assert agg["samples_n"] == 3
     assert set(agg["by_pl1"].keys()) == {15, 20}
-    assert agg["by_pl1"][15]["seconds"] == pytest.approx(10.0)
-    assert agg["by_pl1"][20]["seconds"] == pytest.approx(5.0)
+    # ~10 s / ~5 s with a whisker of decay at the 5 s cadence (recency weighting).
+    assert agg["by_pl1"][15]["seconds"] == pytest.approx(10.0, abs=0.05)
+    assert agg["by_pl1"][20]["seconds"] == pytest.approx(5.0, abs=0.05)
 
 
 def test_bins_keyed_by_int_not_string(tmp_path):
@@ -68,11 +69,13 @@ def test_averages_computed_correctly(tmp_path):
     s.add_sample("1", _sample(pl1=15, watts=14.0, gpu=90, t_cpu=60.0, t_gpu=55.0, rpm=2200), dt=5.0)
     agg = s.aggregate("1")
     b = agg["by_pl1"][15]
-    assert b["watts_avg"] == pytest.approx(12.0)
-    assert b["gpu_avg"] == pytest.approx(85.0)
-    assert b["temp_cpu_avg"] == pytest.approx(55.0)
-    assert b["temp_gpu_avg"] == pytest.approx(50.0)
-    assert b["rpm_avg"] == pytest.approx(2000.0)
+    # Decay weights the newer sample a hair more (recency), so the averages skew
+    # ever-so-slightly toward the second sample's values at the 5 s cadence.
+    assert b["watts_avg"] == pytest.approx(12.0, abs=0.01)
+    assert b["gpu_avg"] == pytest.approx(85.0, abs=0.05)
+    assert b["temp_cpu_avg"] == pytest.approx(55.0, abs=0.05)
+    assert b["temp_gpu_avg"] == pytest.approx(50.0, abs=0.05)
+    assert b["rpm_avg"] == pytest.approx(2000.0, abs=1.0)
 
 
 # ---------------------------------------------------------------------------
@@ -246,8 +249,8 @@ def test_temp_histogram_accumulates_seconds_by_driving_temp(tmp_path):
     s.add_sample("1", _sample(t_cpu=40.0, t_gpu=63.0), dt=5.0)   # driving 63 -> bin 62
     s.add_sample("1", _sample(t_cpu=55.5, t_gpu=54.0), dt=5.0)   # driving 55.5 -> bin 54
     hist = s.temp_histogram("1")
-    assert hist[54] == pytest.approx(10.0)
-    assert hist[62] == pytest.approx(5.0)
+    assert hist[54] == pytest.approx(10.0, abs=0.05)  # whisker of decay at 5 s cadence
+    assert hist[62] == pytest.approx(5.0, abs=0.05)
 
 
 def test_temp_histogram_unknown_appid_is_empty(tmp_path):
@@ -272,8 +275,8 @@ def test_temp_histogram_clamps_out_of_range(tmp_path):
     s.add_sample("1", _sample(t_cpu=12.0, t_gpu=8.0), dt=5.0)    # 12 -> clamp to bin 30
     s.add_sample("1", _sample(t_cpu=105.0, t_gpu=99.0), dt=5.0)  # 105 -> clamp to bin 98
     hist = s.temp_histogram("1")
-    assert hist[30] == pytest.approx(5.0)
-    assert hist[98] == pytest.approx(5.0)
+    assert hist[30] == pytest.approx(5.0, abs=0.05)  # whisker of decay at 5 s cadence
+    assert hist[98] == pytest.approx(5.0, abs=0.05)
 
 
 def test_temp_histogram_persists_and_reloads(tmp_path):
@@ -283,3 +286,81 @@ def test_temp_histogram_persists_and_reloads(tmp_path):
     s1.flush()
     s2 = TelemetryStore(path)
     assert s2.temp_histogram("1")[64] == pytest.approx(5.0)
+
+
+# ---------------------------------------------------------------------------
+# Decay (rolling/forgetting): per-game accumulators fade with in-game time so
+# recent play dominates and old data ages out (~30 min half-life). Decay runs
+# only via _add (in-game sampler) so it's tied to play time, frozen when idle.
+# ---------------------------------------------------------------------------
+
+def test_decay_halves_after_one_half_life(tmp_path):
+    from telemetry.store import _HALF_LIFE_SECONDS
+
+    s = _store(tmp_path)
+    # Seed a bin with a known weight, then add ONE sample a half-life later.
+    # The pre-existing weight should be halved BEFORE the new sample lands.
+    s.add_sample("1", _sample(pl1=15, watts=12.0, gpu=80), dt=600.0)  # seconds=600
+    s.add_sample("1", _sample(pl1=15, watts=12.0, gpu=80), dt=float(_HALF_LIFE_SECONDS))
+    agg = s.aggregate("1")
+    b = agg["by_pl1"][15]
+    # seconds = 600*0.5 + 1800 (the new sample's dt) = 2100
+    assert b["seconds"] == pytest.approx(2100.0)
+    # The average is preserved (sum and n decayed by the same factor).
+    assert b["watts_avg"] == pytest.approx(12.0)
+    assert b["gpu_avg"] == pytest.approx(80.0)
+
+
+def test_decay_preserves_average_but_shrinks_weight(tmp_path):
+    from telemetry.store import _HALF_LIFE_SECONDS
+
+    s = _store(tmp_path)
+    # Old bin at low pl1 with high watts; then lots of recent play at a different pl1.
+    s.add_sample("1", _sample(pl1=7, watts=7.0, gpu=80), dt=1200.0)
+    # One big jump of in-game time (decays everything by half) + recent dwell at 22.
+    for _ in range(10):
+        s.add_sample("1", _sample(pl1=22, watts=20.0, gpu=95), dt=float(_HALF_LIFE_SECONDS) / 5)
+    agg = s.aggregate("1")
+    # The old low-pl1 bin's dwell has faded relative to the recent high-pl1 bin.
+    assert agg["by_pl1"][22]["seconds"] > agg["by_pl1"][7]["seconds"]
+    # Averages within each bin remain intact (decay is uniform on sum and n).
+    assert agg["by_pl1"][7]["watts_avg"] == pytest.approx(7.0)
+    assert agg["by_pl1"][22]["watts_avg"] == pytest.approx(20.0)
+
+
+def test_faded_bins_prune_below_epsilon(tmp_path):
+    from telemetry.store import _HALF_LIFE_SECONDS
+
+    s = _store(tmp_path)
+    # A tiny old bin then many half-lives of play elsewhere → the tiny bin prunes.
+    s.add_sample("1", _sample(pl1=7, watts=7.0, gpu=80), dt=2.0)
+    for _ in range(8):  # 8 half-lives: 2 * 0.5^8 ≈ 0.0078 < epsilon(1.0)
+        s.add_sample("1", _sample(pl1=22, watts=20.0, gpu=95), dt=float(_HALF_LIFE_SECONDS))
+    agg = s.aggregate("1")
+    assert 7 not in agg["by_pl1"]   # faded below epsilon → pruned
+    assert 22 in agg["by_pl1"]
+
+
+def test_temp_hist_bins_decay_and_prune(tmp_path):
+    from telemetry.store import _HALF_LIFE_SECONDS
+
+    s = _store(tmp_path)
+    s.add_sample("1", _sample(t_cpu=55.0, t_gpu=50.0), dt=2.0)   # bin 54, tiny
+    for _ in range(8):
+        s.add_sample("1", _sample(t_cpu=75.0, t_gpu=70.0), dt=float(_HALF_LIFE_SECONDS))  # bin 74
+    hist = s.temp_histogram("1")
+    assert 54 not in hist   # faded below epsilon → pruned
+    assert 74 in hist
+
+
+def test_no_decay_within_single_short_sample(tmp_path):
+    # A normal 5 s cadence barely decays (0.5^(5/1800) ≈ 0.998) — averages and
+    # near-full seconds preserved. Recency weighting is gradual, not abrupt.
+    s = _store(tmp_path)
+    s.add_sample("1", _sample(pl1=15, watts=12.0, gpu=80), dt=5.0)
+    s.add_sample("1", _sample(pl1=15, watts=12.0, gpu=80), dt=5.0)
+    agg = s.aggregate("1")
+    b = agg["by_pl1"][15]
+    # ~10 s with a whisker of decay on the first sample's 5 s.
+    assert b["seconds"] == pytest.approx(10.0, abs=0.05)
+    assert b["watts_avg"] == pytest.approx(12.0)

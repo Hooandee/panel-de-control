@@ -1,81 +1,124 @@
-import { FC, useState } from "react";
-import { Focusable, SliderField } from "@decky/ui";
-import { LuSparkles } from "react-icons/lu";
+import { FC } from "react";
+import { Spinner } from "@decky/ui";
+import { LuSparkles, LuVolumeX, LuThermometerSnowflake } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
 import { FanSuggestion } from "../api";
 import { Point } from "../fans/curve";
-import { interpolateCurves } from "../fans/suggestLogic";
+import { dialTone, interpolateCurves, learningProgress, minutesLeft, suggestState } from "../fans/suggestLogic";
 import { FanCurveGraph } from "./FanCurveGraph";
+import { ContainedSlider } from "./ContainedSlider";
+import { ProgressBar } from "./ProgressBar";
+import { ThermalScale } from "./ThermalScale";
 import { theme } from "../theme";
 
 interface Props {
-  suggestion: FanSuggestion; // caller guarantees available && curves != null
+  // The live suggestion for the current game; null until the first fetch lands.
+  suggestion: FanSuggestion | null;
   liveTemp: number | null;
-  onApply: (points: Point[]) => void;
+  // Persisted silence↔cool bias (-100..100) of the adaptive mode.
+  bias: number;
+  onBias: (bias: number) => void;
 }
 
 /**
- * "Sugerido" preview: a read-only curve graph fit to the game's observed thermal
- * band, plus a silence↔cool dial that blends the three anchor curves locally (no
- * RPC per drag). Applying hands the resulting points to the curve control, which
- * persists them as a Custom profile. Honest: the dial is a preference, not a
- * promise of degrees — the caption states the real band it was fit to.
+ * Body of the ADAPTIVE curve mode (green). Choosing the mode IS the opt-in and IS
+ * the apply — there is NO Apply button. It shows what the learner is doing for THIS
+ * game and lets the user bias it quieter↔cooler:
+ * - ready    → the learned curve (biased by the dial) + silence↔cool dial (drives HW)
+ * - learning → green dashed candidate + green observed points + progress + "keep playing"
+ * - spread   → progress full + honest "need more temperature variation"
+ * - empty    → "start playing" (no fabricated curve — never-fake)
+ * - disabled → "turn on learning in Settings"
+ * - no_game  → "launch a game"
+ * `unsupported` never reaches here (the chip only shows when the device can write).
  */
-export const SuggestionCard: FC<Props> = ({ suggestion, liveTemp, onApply }) => {
+export const AdaptiveCard: FC<Props> = ({ suggestion, liveTemp, bias, onBias }) => {
   const { t } = useI18n();
-  const [dial, setDial] = useState(0); // -100..100 → quiet..cool
-  const [open, setOpen] = useState(false);
 
-  const c = suggestion.curves!;
-  const points = interpolateCurves(
-    c.quiet as Point[],
-    c.balanced as Point[],
-    c.cool as Point[],
-    dial / 100,
-  );
+  // No suggestion fetched yet → a neutral spinner (never a fabricated curve).
+  if (!suggestion) return <Spinner width={24} />;
+
+  const state = suggestState(suggestion);
+  const ready = state === "ready";
+  const green = theme.color.ok;
+  const { minutes, target_minutes: target, seconds, target_seconds, available, band, curves } = suggestion;
+  const left = minutesLeft(seconds, target_seconds);
+
+  // ready → the learned curve biased by the persisted dial; learning/spread → the
+  // balanced candidate (green preview). Never a curve without real data.
+  const points: Point[] | null = !curves
+    ? null
+    : ready
+      ? interpolateCurves(curves.quiet as Point[], curves.balanced as Point[], curves.cool as Point[], bias / 100)
+      : (curves.balanced as Point[]);
 
   return (
     <div style={{ ...theme.card, padding: theme.space.md, overflow: "hidden",
+                  boxShadow: `inset 0 0 0 1px ${green}`,
                   display: "flex", flexDirection: "column", gap: theme.space.sm }}>
-      <Focusable
-        style={{ display: "flex", alignItems: "center", gap: theme.space.sm, cursor: "pointer", color: theme.color.textPrimary }}
-        onActivate={() => setOpen((o) => !o)}
-        onClick={() => setOpen((o) => !o)}
-      >
-        <LuSparkles size={16} color={theme.color.accent} />
-        <span style={{ flex: 1, fontSize: theme.font.body }}>{t("fans.suggest.title")}</span>
+      <div style={{ display: "flex", alignItems: "center", gap: theme.space.sm, color: theme.color.textPrimary }}>
+        <LuSparkles size={16} color={green} />
+        <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+          <span style={{ fontSize: theme.font.body }}>
+            {t(ready ? "fans.adaptive.title" : "fans.suggest.learning.title")}
+          </span>
+          <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
+            {t("fans.suggest.continuous")}
+          </span>
+        </div>
         <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
-          {suggestion.band
-            ? t("fans.suggest.band", { lo: suggestion.band.floor, hi: suggestion.band.peak, min: suggestion.minutes })
-            : ""}
+          {ready && band
+            ? t("fans.suggest.band", { lo: band.floor, hi: band.peak, min: minutes })
+            : t("fans.suggest.progress", { min: minutes, target })}
         </span>
-      </Focusable>
+      </div>
 
-      {open && (
+      {!ready && <ProgressBar value={learningProgress(seconds, target_seconds, available)} />}
+
+      {/* Peak temperature + colored scale. Only when a real band exists (never
+          fabricate a peak). Shows during learning too so the number is live. */}
+      {band && <ThermalScale peak={band.peak} />}
+
+      {points && (
+        <FanCurveGraph
+          points={points}
+          liveTemp={liveTemp}
+          editable={false}
+          onChange={() => {}}
+          stroke={green}
+          dashed={!ready}
+        />
+      )}
+
+      {ready ? (
         <>
-          <FanCurveGraph points={points} liveTemp={liveTemp} editable={false} onChange={() => {}} />
-
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: theme.font.caption, color: theme.color.textMuted }}>
             <span>{t("fans.suggest.dial.quiet")}</span>
             <span>{t("fans.suggest.dial.cool")}</span>
           </div>
-          {/* scale(0.86)+overflow per the SliderField bleed gotcha (see AdvancedBoost). */}
-          <div style={{ overflow: "hidden" }}>
-            <div style={{ transform: "scale(0.86)" }}>
-              <SliderField value={dial} min={-100} max={100} step={1} onChange={setDial} />
-            </div>
-          </div>
-
-          <Focusable
-            style={{ textAlign: "center", padding: theme.space.sm, borderRadius: theme.radius.sm,
-                     background: theme.color.accent, color: "#06121f", fontSize: theme.font.body, cursor: "pointer" }}
-            onActivate={() => onApply(points)}
-            onClick={() => onApply(points)}
-          >
-            {t("fans.suggest.apply")}
-          </Focusable>
+          <ContainedSlider value={bias} min={-100} max={100} step={1} onChange={onBias} />
+          {/* Translate the dial into plain language for a non-expert. */}
+          {(() => {
+            const tone = dialTone(bias);
+            const ToneIcon = tone === "quiet" ? LuVolumeX : tone === "cool" ? LuThermometerSnowflake : LuSparkles;
+            return (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: theme.space.xs,
+                            fontSize: theme.font.caption, color: theme.color.textMuted }}>
+                <ToneIcon size={13} />
+                <span>{t(`fans.suggest.tone.${tone}`)}</span>
+              </div>
+            );
+          })()}
         </>
+      ) : (
+        <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, lineHeight: 1.5 }}>
+          {state === "spread" ? t("fans.suggest.hint.flat")
+            : state === "disabled" ? t("fans.suggest.hint.disabled")
+            : state === "no_game" ? t("fans.suggest.msg.nogame")
+            : state === "empty" ? t("fans.suggest.msg.empty")
+            : t("fans.suggest.msg.learning", { left })}
+        </div>
       )}
     </div>
   );

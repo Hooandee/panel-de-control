@@ -9,6 +9,11 @@ import { ProfileSelector } from "./ProfileSelector";
 import { PowerArc } from "./PowerArc";
 import { Presets } from "./Presets";
 import { AdvancedBoost } from "./AdvancedBoost";
+import { TdpSuggestionCard } from "./TdpSuggestionCard";
+
+// Learned-band reasons worth surfacing as "still learning" (others — no_game,
+// disabled, error — show no line).
+const LEARNING_REASONS = new Set(["no_data", "too_few", "one_level"]);
 
 export interface TdpSectionProps {
   tdp: TdpState | null;
@@ -20,9 +25,11 @@ export interface TdpSectionProps {
   onSetLevels: (off2: number, off3: number) => void;
   onResetAuto: () => void;
   onAutoTdp: (enabled: boolean) => void;
+  // Apply the learned-band suggestion as a FIXED PL1 (also turns auto-TDP off).
+  onApplySuggestion: (watts: number) => void;
 }
 
-export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onScope, onWatts, onSetLevels, onResetAuto, onAutoTdp }) => {
+export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onScope, onWatts, onSetLevels, onResetAuto, onAutoTdp, onApplySuggestion }) => {
   const { t } = useI18n();
 
   if (!tdp) return <Spinner />;
@@ -70,6 +77,15 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
           setpoint={power?.setpoint ?? null}
         />
       </PanelSectionRow>
+      {isAutoOn && power?.ui_floor_engaged && (
+        // Honest: opening the QAM raised PL1 so the CPU-bound menu render stays
+        // fluid — the arc shows a menu-temporary value, NOT the settled in-game one.
+        <PanelSectionRow>
+          <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
+            {t("tdp.auto.ui_floor")}
+          </div>
+        </PanelSectionRow>
+      )}
       {!isAutoOn && (
         <>
           <PanelSectionRow>
@@ -114,6 +130,15 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
               />
             </PanelSectionRow>
           )}
+          {/* Learned-band suggestion: apply a FIXED watt value the loop has learned
+              this game lives in. Auto OFF only (it's a third, distinct way to set TDP:
+              manual slider · auto-TDP dynamic · learned fixed). Renders nothing without
+              an enough band (never a fabricated suggestion). */}
+          {tdp.learned.enough && (
+            <PanelSectionRow>
+              <TdpSuggestionCard learned={tdp.learned} onApply={onApplySuggestion} />
+            </PanelSectionRow>
+          )}
         </>
       )}
       <PanelSectionRow>
@@ -124,6 +149,26 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
           onChange={onAutoTdp}
         />
       </PanelSectionRow>
+      {isAutoOn && (
+        // Auto-TDP is now parameter-free and DECOUPLED from the learned band: it runs
+        // dynamically over the full device range and explores to its own level (no dial
+        // — that moved to the suggestion card, shown only when auto is off). All we add
+        // here is one honest read-only line: the learned band when ready, a plain
+        // "learning…" note while collecting, nothing otherwise.
+        tdp.learned.enough ? (
+          <PanelSectionRow>
+            <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
+              {t("tdp.learned.band", { lo: tdp.learned.floor!, hi: tdp.learned.ceil! })}
+            </div>
+          </PanelSectionRow>
+        ) : LEARNING_REASONS.has(tdp.learned.reason) ? (
+          <PanelSectionRow>
+            <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
+              {t("tdp.learned.learning.title")}
+            </div>
+          </PanelSectionRow>
+        ) : null
+      )}
     </>
   );
 };

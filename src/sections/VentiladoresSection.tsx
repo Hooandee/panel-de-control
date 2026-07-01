@@ -9,13 +9,8 @@ import { useFanSuggestion } from "../fans/useFanSuggestion";
 import { FanChip } from "../components/FanChip";
 import { TempBar } from "../components/TempBar";
 import { FanCurveEditor } from "../components/FanCurveEditor";
-import { SuggestionCard } from "../components/SuggestionCard";
 import { openFanCurveModal } from "../components/FanCurveModal";
 import { theme } from "../theme";
-
-// Reasons worth surfacing as a one-line hint (others are silent: unsupported is
-// already covered by the no-write note; no_game/error need no nudge).
-const HINT_REASONS = new Set(["disabled", "too_few", "flat", "no_data"]);
 
 const card = { ...theme.card, padding: theme.space.md } as const;
 
@@ -96,18 +91,7 @@ export const VentiladoresSection: FC = () => {
               </Focusable>
             </div>
 
-            <FanCurveEditor control={curve} liveTemp={liveTemp} />
-
-            {/* F3 — suggestion fit to this game's observed band (only with enough
-                local data). Applying it persists a Custom curve via curve.onCurve. */}
-            {suggestion?.available && (
-              <SuggestionCard suggestion={suggestion} liveTemp={liveTemp} onApply={curve.onCurve} />
-            )}
-            {suggestion && !suggestion.available && HINT_REASONS.has(suggestion.reason) && (
-              <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
-                {t(`fans.suggest.hint.${suggestion.reason}`)}
-              </div>
-            )}
+            <FanCurveEditor control={curve} liveTemp={liveTemp} suggestion={suggestion} />
           </div>
         </PanelSectionRow>
       )}

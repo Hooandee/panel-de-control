@@ -7,8 +7,14 @@ const color = {
   textPrimary: "rgba(255,255,255,0.92)",
   textMuted: "rgba(255,255,255,0.45)",
   accent: "#4ea1ff",
+  // Text/icon color on top of `accent` (e.g. the Apply button label) — a deep
+  // navy so light-on-accent stays legible without a pure-black hard edge.
+  onAccent: "#06121f",
   warn: "#ffb454",
   ok: "#7ee0a0",
+  // Warm/bright orange for the transient HW-boost segment on the power arc — a
+  // hotter tone than `warn` so it reads as "extra on top", not a warning.
+  boost: "#ff8a3d",
 } as const;
 
 const radius = { sm: 8, md: 14, lg: 20 } as const;

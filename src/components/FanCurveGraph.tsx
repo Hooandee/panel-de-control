@@ -7,6 +7,8 @@ interface Props {
   liveTemp: number | null; // "you are here" marker from the live monitor
   editable: boolean; // only true in custom mode (presets/auto are read-only)
   onChange: (next: Point[]) => void;
+  stroke?: string; // curve/point color (default accent); green for a learning preview
+  dashed?: boolean; // dashed curve for a not-yet-applied candidate
 }
 
 const geom = GEOM;
@@ -22,7 +24,8 @@ const PERCENT_LABELS = [0, 50, 100]; // fan % gridlines on the Y axis
 const tempToX = (temp: number) => curveToPx([temp, 0], geom).x;
 const percentToY = (percent: number) => geom.height - (percent / 100) * geom.height;
 
-const FanCurveGraphImpl: FC<Props> = ({ points, liveTemp, editable, onChange }) => {
+const FanCurveGraphImpl: FC<Props> = ({ points, liveTemp, editable, onChange, stroke, dashed }) => {
+  const curveColor = stroke ?? theme.color.accent;
   const svgRef = useRef<SVGSVGElement | null>(null);
   const draggingPoint = useRef<number | null>(null);
   const [activePoint, setActivePoint] = useState<number | null>(null);
@@ -103,7 +106,7 @@ const FanCurveGraphImpl: FC<Props> = ({ points, liveTemp, editable, onChange }) 
         <rect x={0} y={0} width={geom.width} height={geom.height} fill="none" stroke={theme.color.hairline} rx={6} />
 
         {/* the fan curve */}
-        <path d={pointsToPath(points, geom)} fill="none" stroke={theme.color.accent} strokeWidth={2} strokeLinejoin="round" />
+        <path d={pointsToPath(points, geom)} fill="none" stroke={curveColor} strokeWidth={2} strokeLinejoin="round" strokeDasharray={dashed ? "5 4" : undefined} />
 
         {/* live "you are here" temperature marker */}
         {liveMarkerX !== null && (
@@ -124,7 +127,7 @@ const FanCurveGraphImpl: FC<Props> = ({ points, liveTemp, editable, onChange }) 
               cx={x}
               cy={y}
               r={editable ? 6 : 3}
-              fill={theme.color.accent}
+              fill={curveColor}
               onPointerDown={editable ? startDrag(index) : undefined}
               style={editable ? { cursor: "grab" } : undefined}
             />

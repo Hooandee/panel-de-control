@@ -4,6 +4,8 @@ import {
   setFanPreset,
   setFanCurvePoints,
   setFanCurveAuto,
+  setFanAdaptive,
+  setFanAdaptiveBias,
   FanCurveState,
   FanScope,
   FanPreset,
@@ -20,6 +22,8 @@ export interface FanCurveControl {
   setScope: (s: FanScope) => void;
   onPreset: (preset: FanPreset) => void;
   onCustomMode: () => void;
+  onAdaptive: () => void;
+  onAdaptiveBias: (bias: number) => void;
   onCurve: (points: Point[]) => void;
 }
 
@@ -82,6 +86,11 @@ export function useFanCurve(): FanCurveControl {
     return { appid: targetAppid, scope: targetAppid ? "game" : "global" };
   }, [scope, game]);
 
+  const onAdaptive = useCallback(() => {
+    const { appid: targetAppid, scope: targetScope } = resolveTarget();
+    setFanAdaptive(targetScope, targetAppid).then(setState).catch(() => {});
+  }, [resolveTarget]);
+
   const onPreset = useCallback(
     (preset: FanPreset) => {
       const { appid: targetAppid, scope: targetScope } = resolveTarget();
@@ -89,7 +98,25 @@ export function useFanCurve(): FanCurveControl {
         setFanCurveAuto(targetScope, targetAppid).then(setState).catch(() => {});
         return;
       }
+      if (preset === "adaptive") {
+        onAdaptive();
+        return;
+      }
       setFanPreset(preset, targetScope, targetAppid).then(setState).catch(() => {});
+    },
+    [resolveTarget, onAdaptive],
+  );
+
+  // The silence↔cool dial in adaptive mode: optimistic local bias, debounced commit
+  // (mirrors onCurve). The RPC drives the biased learned curve to the hardware.
+  const onAdaptiveBias = useCallback(
+    (bias: number) => {
+      const { appid: targetAppid, scope: targetScope } = resolveTarget();
+      setState((cur) => (cur ? { ...cur, preset: "adaptive", bias } : cur)); // optimistic
+      if (commit.current) clearTimeout(commit.current);
+      commit.current = setTimeout(() => {
+        setFanAdaptiveBias(bias, targetScope, targetAppid).then(setState).catch(() => {});
+      }, 200);
     },
     [resolveTarget],
   );
@@ -128,5 +155,5 @@ export function useFanCurve(): FanCurveControl {
     [resolveTarget, flashSaved],
   );
 
-  return { state, scope, game, saved, refresh, setScope, onPreset, onCustomMode, onCurve };
+  return { state, scope, game, saved, refresh, setScope, onPreset, onCustomMode, onAdaptive, onAdaptiveBias, onCurve };
 }

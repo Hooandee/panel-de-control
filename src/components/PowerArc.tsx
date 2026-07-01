@@ -1,5 +1,5 @@
 import { FC } from "react";
-import { fraction, zoneFor, arcColor } from "../tdp/logic";
+import { fraction, zoneFor, arcColor, boostWatts, boostEndFraction } from "../tdp/logic";
 import { ZONE_ICON } from "../tdp/zoneIcons";
 import { TdpLimits } from "../api";
 import { theme } from "../theme";
@@ -51,44 +51,46 @@ export const PowerArc: FC<PowerArcProps> = ({
 }) => {
   const { t } = useI18n();
 
-  // In auto mode the fill tracks real consumption; fall back to manual watts if
-  // no live reading is available yet. Never synthesise a value.
-  const displayWatts = auto ? (actualWatts ?? watts) : watts;
-  const displayAvailable = auto ? actualWatts !== null : true;
+  // Your real TDP (the PL1 you/the loop set). Auto → the setpoint the loop drives
+  // (falling back to watts before the first tick); manual → the slider watts.
+  // Always known → the big number never shows "—". The base fill, zone, icon and
+  // colour all track THIS, not the noisy live draw.
+  const tdpWatts = auto ? (setpoint ?? watts) : watts;
 
-  const f = fraction(displayWatts, limits.min, limits.max_ac);
+  const f = fraction(tdpWatts, limits.min, limits.max_ac);
   const zone = zoneFor(f);
   const color = arcColor(f);
   const ZoneIcon = ZONE_ICON[zone.key];
+
+  // Charger-only headroom: the dim ⚡ segment between the on-battery max and the
+  // charger max. NOT the HW boost — this is a fixed ceiling band. (Renamed from
+  // the old `hasBoost` to avoid colliding with the real HW-boost segment below.)
   const fMax = fraction(limits.max, limits.min, limits.max_ac);
-  const hasBoost = fMax < 1;
+  const chargerHeadroom = fMax < 1;
   const end = START + SWEEP;
   const fullArc = arcPath(START, end);
-  const [tx, ty] = polar(START + f * SWEEP);
   const [sx, sy] = polar(START);
   const [ex, ey] = polar(end);
 
-  // Setpoint tick (auto mode only): thin radial line inside the arc.
-  const setpointFrac =
-    auto && setpoint !== null ? fraction(setpoint, limits.min, limits.max_ac) : null;
-  const [spx, spy] =
-    setpointFrac !== null ? polar(START + setpointFrac * SWEEP) : [0, 0];
-  // Inner/outer radii for the setpoint tick line
-  const rInner = R - SW / 2 - 1;
-  const rOuter = R + SW / 2 + 1;
-  const getTickPoints = (frac: number): { x1: number; y1: number; x2: number; y2: number } => {
-    const deg = START + frac * SWEEP;
-    const [x1, y1] = polarAt(deg, rInner);
-    const [x2, y2] = polarAt(deg, rOuter);
-    return { x1, y1, x2, y2 };
-  };
-  const tickPoints = setpointFrac !== null ? getTickPoints(setpointFrac) : null;
+  // HW boost: the extra watts the chip draws above your TDP via SPPT/FPPT. Null
+  // when the draw sensor is down (never fake). Only shown when it's a real extra.
+  const boost = boostWatts(tdpWatts, actualWatts);
+  const hasBoost = boost !== null && boost > 0;
+  // Where the boost segment ends on the arc (null → nothing to draw). The clamp to
+  // the ceiling and the same-rounded-gate-as-boostWatts live in the pure helper.
+  const boostEnd = boostEndFraction(tdpWatts, actualWatts, limits.min, limits.max_ac);
+
+  // White tick at your TDP — the "this is your TDP" marker, in BOTH auto & manual.
+  // It sits on the base-fill ↔ boost boundary.
+  const tickDeg = START + f * SWEEP;
+  const [tx1, ty1] = polarAt(tickDeg, R - SW / 2 - 1);
+  const [tx2, ty2] = polarAt(tickDeg, R + SW / 2 + 1);
 
   return (
     <div style={{ position: "relative", width: "100%", maxWidth: 240, margin: "6px auto 0" }}>
       <svg viewBox="0 0 200 200" style={{ width: "100%", display: "block", overflow: "visible" }}>
         <path d={fullArc} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={SW} strokeLinecap="round" />
-        {hasBoost && (
+        {chargerHeadroom && (
           <path
             d={arcPath(START + fMax * SWEEP, end)}
             fill="none"
@@ -98,6 +100,7 @@ export const PowerArc: FC<PowerArcProps> = ({
             style={{ transition: "stroke 220ms ease" }}
           />
         )}
+        {/* Base fill: min → your TDP, coloured by zone. */}
         <path
           d={fullArc}
           fill="none"
@@ -109,36 +112,47 @@ export const PowerArc: FC<PowerArcProps> = ({
           strokeDashoffset={1000 * (1 - f)}
           style={{ transition: "stroke-dashoffset 240ms ease, stroke 240ms ease", filter: `drop-shadow(0 0 6px ${color})` }}
         />
-        {/* Setpoint target marker — shown only in auto mode */}
-        {tickPoints !== null && (
-          <line
-            x1={tickPoints.x1}
-            y1={tickPoints.y1}
-            x2={tickPoints.x2}
-            y2={tickPoints.y2}
-            stroke="rgba(255,255,255,0.70)"
-            strokeWidth={2}
+        {/* HW boost segment: your TDP → live draw (clamped to arc end), warm + glow. */}
+        {boostEnd !== null && (
+          <path
+            d={arcPath(START + f * SWEEP, START + boostEnd * SWEEP)}
+            fill="none"
+            stroke={theme.color.boost}
+            strokeWidth={SW}
             strokeLinecap="round"
+            style={{ filter: `drop-shadow(0 0 7px ${theme.color.boost})` }}
           />
         )}
-        {/* Travelling dot at the fill tip */}
-        <circle cx={tx} cy={ty} r={SW / 2 + 1} fill="#fff" style={{ filter: `drop-shadow(0 0 4px ${color})` }} />
+        {/* Your-TDP tick — the "this is your TDP" marker, in auto and manual. */}
+        <line
+          x1={tx1}
+          y1={ty1}
+          x2={tx2}
+          y2={ty2}
+          stroke="rgba(255,255,255,0.90)"
+          strokeWidth={2.5}
+          strokeLinecap="round"
+        />
         <text x={sx} y={sy + 16} fill={theme.color.textMuted} fontSize="10" textAnchor="middle">{limits.min}W</text>
-        <text x={ex} y={ey + 16} fill={theme.color.textMuted} fontSize="10" textAnchor="middle">{limits.max_ac}W{hasBoost ? " ⚡" : ""}</text>
-        {/* Setpoint label near the tick */}
-        {setpointFrac !== null && setpoint !== null && (
-          <text x={spx} y={spy - 6} fill="rgba(255,255,255,0.60)" fontSize="8" textAnchor="middle">{setpoint}W</text>
-        )}
+        <text x={ex} y={ey + 16} fill={theme.color.textMuted} fontSize="10" textAnchor="middle">{limits.max_ac}W{chargerHeadroom ? " ⚡" : ""}</text>
       </svg>
       <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
         {/* Zone icon — hidden in auto mode to make room for AUTO chip */}
         {!auto && <div style={{ lineHeight: 0 }}><ZoneIcon size={26} color={color} /></div>}
         <div style={{ fontSize: 32, fontWeight: 700, color: theme.color.textPrimary, lineHeight: 1.15 }}>
-          {displayAvailable
-            ? <>{Math.round(displayWatts)}<span style={{ fontSize: 16, color: theme.color.textMuted }}> W</span></>
-            : <span style={{ fontSize: 24, color: theme.color.textMuted }}>—</span>
-          }
+          {Math.round(tdpWatts)}
+          {hasBoost && (
+            <span style={{ fontSize: 15, fontWeight: 700, color: theme.color.boost, verticalAlign: "super", marginLeft: 1 }}>
+              ⁺{boost}
+            </span>
+          )}
+          <span style={{ fontSize: 16, color: theme.color.textMuted }}> W</span>
         </div>
+        {hasBoost && (
+          <div style={{ fontSize: 9, color: theme.color.boost, marginTop: 1, letterSpacing: "0.04em" }}>
+            ⚡ {t("tdp.arc.boostHw")}
+          </div>
+        )}
         {/* AUTO chip — replaces the zone label in auto mode */}
         {auto ? (
           <div style={{

@@ -1,9 +1,9 @@
 import { FC, useEffect, useState } from "react";
-import { PanelSectionRow, ToggleField } from "@decky/ui";
+import { ButtonItem, PanelSectionRow, ToggleField } from "@decky/ui";
 
 import { useI18n } from "../i18n";
 import { LanguageToggle } from "../components/LanguageToggle";
-import { getTelemetryEnabled, setTelemetryEnabled, getUnlockBatteryMax, setUnlockBatteryMax } from "../api";
+import { getTelemetryEnabled, setTelemetryEnabled, getUnlockBatteryMax, setUnlockBatteryMax, getQamTdpBoost, setQamTdpBoost, resetTelemetry } from "../api";
 import { theme } from "../theme";
 
 /** A persisted boolean setting: fetch on mount, optimistic update on toggle.
@@ -29,6 +29,26 @@ export const AjustesSection: FC = () => {
   const { t } = useI18n();
   const [learn, onToggle] = useToggleSetting(getTelemetryEnabled, setTelemetryEnabled, true);
   const [battMax, onToggleBattMax] = useToggleSetting(getUnlockBatteryMax, setUnlockBatteryMax, false);
+  const [qamBoost, onToggleQamBoost] = useToggleSetting(getQamTdpBoost, setQamTdpBoost, false);
+
+  // Destructive reset: a two-tap confirm avoids accidental wipes on the QAM.
+  const [confirming, setConfirming] = useState(false);
+  const [done, setDone] = useState(false);
+  const onReset = () => {
+    setDone(false);
+    if (!confirming) {
+      setConfirming(true);
+      return;
+    }
+    resetTelemetry()
+      .then(() => { setConfirming(false); setDone(true); })
+      .catch(() => setConfirming(false));
+  };
+  const resetLabel = done
+    ? t("settings.reset.done")
+    : confirming
+      ? t("settings.reset.confirm")
+      : t("settings.reset");
 
   return (
     <>
@@ -70,6 +90,25 @@ export const AjustesSection: FC = () => {
           />
         </PanelSectionRow>
       )}
+
+      {qamBoost !== null && (
+        <PanelSectionRow>
+          <ToggleField
+            label={t("settings.qamboost")}
+            description={t("settings.qamboost.desc")}
+            checked={qamBoost}
+            onChange={onToggleQamBoost}
+          />
+        </PanelSectionRow>
+      )}
+
+      {/* Start-from-scratch: wipe all learned telemetry (TDP + fans). Two-tap
+          confirm. Doesn't touch manual profiles/curves. */}
+      <PanelSectionRow>
+        <ButtonItem layout="below" description={t("settings.reset.desc")} onClick={onReset}>
+          {resetLabel}
+        </ButtonItem>
+      </PanelSectionRow>
     </>
   );
 };

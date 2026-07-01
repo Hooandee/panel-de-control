@@ -5,6 +5,13 @@ from json_store import atomic_json_save
 _MAX_RECENT = 120
 _MAX_GAMES = 50
 
+# Rolling/forgetting: per-game accumulators decay with in-game time so recent
+# play dominates and stale data fades. ~30 min half-life. Decay runs only via
+# _add (the in-game sampler), so it's tied to play time and frozen when idle.
+_HALF_LIFE_SECONDS = 1800.0
+# Bins whose dwell decays below this disappear (faded to noise).
+_DECAY_PRUNE_EPSILON = 1.0
+
 # Temperature histogram (feeds the F3 suggestion brain): 2 °C bins over 30–100 °C,
 # keyed by the driving temp = max(temp_cpu, temp_gpu) per sample.
 _TEMP_BIN_WIDTH = 2
@@ -21,6 +28,11 @@ _METRICS = (
     # (bin_key, sample_key, avg_key)
     ("watts", "watts", "watts_avg"),
     ("gpu", "gpu_busy", "gpu_avg"),
+    # boost = 1.0 when the chip was boosting this sample (draw > PL1 + deadband),
+    # 0.0 otherwise; None when watts is unavailable. Its average = the fraction of
+    # time boosting — the honest "was this PL1 power-limited" signal for the
+    # learned band (tdp/suggest._satisfied). Computed in main._collect_sample.
+    ("boost", "boost", "boost_avg"),
     ("t_cpu", "temp_cpu", "temp_cpu_avg"),
     ("t_gpu", "temp_gpu", "temp_gpu_avg"),
     ("rpm", "fan_rpm", "rpm_avg"),
@@ -48,6 +60,7 @@ class TelemetryStore:
                   "t_cpu":  {"sum": float, "n": int},
                   "t_gpu":  {"sum": float, "n": int},
                   "rpm":    {"sum": float, "n": int},
+                  "boost":  {"sum": float, "n": int},
                 }
               },
               "recent": [{"ts", "pl1", "watts", "gpu", "t_cpu", "t_gpu", "rpm"}, ...]
@@ -130,6 +143,9 @@ class TelemetryStore:
             pl1 = 0
 
         game = self._data["games"].setdefault(appid, _empty_game())
+        # Forget before remembering: age this game's accumulators by the elapsed
+        # in-game time so the sample we're about to add weighs more than old play.
+        self._decay_game(game, dt)
         game["n"] += 1
         game["last_ts"] = ts
 
@@ -166,6 +182,41 @@ class TelemetryStore:
             hist = game["temp_hist"]
             hist[bin_key] = hist.get(bin_key, 0.0) + dt
 
+    def _decay_game(self, game: dict, dt: float) -> None:
+        """Multiply this game's accumulators by ``0.5 ** (dt / half-life)``.
+
+        Decaying both ``sum`` and ``n`` of each metric by the same factor leaves
+        the average (sum/n) intact while shrinking its WEIGHT — so a fresh sample
+        of equal dt outweighs old ones (recency weighting). Bins (by_pl1 and
+        temp_hist) whose dwell falls below the prune epsilon are dropped so faded
+        history disappears instead of lingering as noise.
+        """
+        if dt <= 0:
+            return
+        factor = 0.5 ** (dt / _HALF_LIFE_SECONDS)
+        if factor >= 1.0:  # no-op fast path (non-positive dt already handled)
+            return
+
+        by_pl1 = game["by_pl1"]
+        for key in list(by_pl1):
+            bin_ = by_pl1[key]
+            bin_["seconds"] *= factor
+            if bin_["seconds"] < _DECAY_PRUNE_EPSILON:
+                del by_pl1[key]
+                continue
+            for bin_key, _sk, _ak in _METRICS:
+                acc = bin_[bin_key]
+                acc["sum"] *= factor
+                acc["n"] *= factor
+
+        hist = game["temp_hist"]
+        for key in list(hist):
+            faded = hist[key] * factor
+            if faded < _DECAY_PRUNE_EPSILON:
+                del hist[key]
+            else:
+                hist[key] = faded
+
     def _trim_games(self) -> None:
         games = self._data["games"]
         if len(games) <= _MAX_GAMES:
@@ -198,6 +249,13 @@ class TelemetryStore:
         except Exception:  # noqa: BLE001
             pass
 
+    def clear(self) -> None:
+        """Wipe ALL learned telemetry — start from scratch. Persists immediately so
+        a reload can't resurrect the old data. Never raises."""
+        self._data = {"games": {}}
+        self._dirty = True
+        self.flush()
+
 
 # ------------------------------------------------------------------
 # Factory helpers
@@ -226,8 +284,10 @@ def _clean_bin(raw: object) -> dict:
         acc = raw.get(key)
         if isinstance(acc, dict):
             try:
+                # n is a float once decay has run; keep the fractional weight so a
+                # reload doesn't truncate it (averages = sum/n stay accurate).
                 out[key] = {"sum": float(acc.get("sum", 0.0)),
-                            "n": int(acc.get("n", 0))}
+                            "n": float(acc.get("n", 0))}
             except (TypeError, ValueError):
                 pass
     return out

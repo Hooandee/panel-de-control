@@ -3,6 +3,7 @@ import { ModalRoot, showModal } from "@decky/ui";
 
 import { useI18n } from "../i18n";
 import { useFanCurve } from "../fans/useFanCurve";
+import { useFanSuggestion } from "../fans/useFanSuggestion";
 import { FanCurveEditor } from "./FanCurveEditor";
 import { theme } from "./../theme";
 
@@ -17,12 +18,13 @@ import { theme } from "./../theme";
 const FanCurveModalBody: FC<{ liveTemp: number | null }> = ({ liveTemp }) => {
   const { t } = useI18n();
   const control = useFanCurve();
+  const { suggestion } = useFanSuggestion(control.game?.appid ?? null);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: theme.space.md, padding: theme.space.sm }}>
       <div style={{ fontSize: theme.font.value, color: theme.color.textPrimary }}>{t("fans.curve.title")}</div>
       <div style={{ maxWidth: 760, width: "100%", margin: "0 auto" }}>
-        <FanCurveEditor control={control} liveTemp={liveTemp} />
+        <FanCurveEditor control={control} liveTemp={liveTemp} suggestion={suggestion} />
       </div>
     </div>
   );

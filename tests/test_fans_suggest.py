@@ -1,5 +1,6 @@
 
-from fans.suggest import band, enough_data, suggest_curves
+from fans import suggest as fan_suggest
+from fans.suggest import band, biased_curve, curve_changed, enough_data, suggest_curves
 
 _SAFE_FLOOR = 76  # must match fans.control._SAFE_MAX_TEMP_FLOOR
 
@@ -93,3 +94,87 @@ def test_cool_is_louder_than_balanced_than_quiet():
     c = duty_at(curves["cool"], 70)
     assert c >= b >= q
     assert c > q  # the dial must actually do something
+
+
+# ---------------------------------------------------------------------------
+# biased_curve — the silence↔cool dial applied to the learned curves (drives HW;
+# mirrors the frontend interpolateCurves so preview == what runs).
+# ---------------------------------------------------------------------------
+
+def _curves():
+    return {n: [list(p) for p in pts] for n, pts in suggest_curves(band(_good_hist())).items()}
+
+
+def test_biased_curve_zero_is_balanced():
+    c = _curves()
+    assert [list(p) for p in biased_curve(c, 0)] == c["balanced"]
+
+
+def test_biased_curve_negative_is_quieter_positive_is_cooler():
+    c = _curves()
+    quiet_sum = sum(p for _t, p in biased_curve(c, -100))
+    cool_sum = sum(p for _t, p in biased_curve(c, 100))
+    bal_sum = sum(p for _t, p in c["balanced"])
+    assert quiet_sum <= bal_sum <= cool_sum
+
+
+def test_biased_curve_clamps_out_of_range_bias():
+    c = _curves()
+    assert biased_curve(c, 500) == biased_curve(c, 100)
+    assert biased_curve(c, -500) == biased_curve(c, -100)
+
+
+def test_biased_curve_is_sanitized_8_points_monotonic():
+    # The result goes through sanitize_curve regardless of bias: 8 points, monotonic
+    # temps + pwm, hot-point safety floor — so the driven curve can never be unsafe.
+    for bias in (-100, -40, 0, 40, 100):
+        cur = biased_curve(_curves(), bias)
+        assert len(cur) == 8
+        temps = [t for t, _p in cur]
+        pwms = [p for _t, p in cur]
+        assert temps == sorted(temps)
+        assert pwms == sorted(pwms)
+
+
+def test_min_minutes_is_30():
+    assert fan_suggest.MIN_MINUTES == 30
+
+
+# ---------------------------------------------------------------------------
+# curve_changed — anti-churn gate for periodic re-apply (A1)
+# ---------------------------------------------------------------------------
+
+def _curve(bump=0):
+    base = [[40, 0], [50, 30], [60, 60], [70, 95], [80, 135], [85, 175], [90, 215], [95, 255]]
+    return [[t, min(255, p + bump)] for t, p in base]
+
+
+def test_curve_changed_false_for_identical_curves():
+    assert curve_changed(_curve(), _curve()) is False
+
+
+def test_curve_changed_false_for_tiny_pwm_drift():
+    # A drift within tolerance (default 8/255 ≈ 3 %) is not worth a re-write.
+    assert curve_changed(_curve(), _curve(bump=5)) is False
+
+
+def test_curve_changed_true_for_appreciable_shift():
+    assert curve_changed(_curve(), _curve(bump=20)) is True
+
+
+def test_curve_changed_true_when_shape_differs():
+    a = _curve()
+    b = _curve()
+    b[3][1] += 40  # one point moves a lot
+    assert curve_changed(a, b) is True
+
+
+def test_curve_changed_true_when_old_is_none_or_empty():
+    # No vigente curve → always "changed" (a first apply must go through).
+    assert curve_changed(None, _curve()) is True
+    assert curve_changed([], _curve()) is True
+
+
+def test_curve_changed_respects_custom_tolerance():
+    assert curve_changed(_curve(), _curve(bump=5), tol_pwm=2) is True
+    assert curve_changed(_curve(), _curve(bump=5), tol_pwm=10) is False
