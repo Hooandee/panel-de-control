@@ -1,5 +1,5 @@
 import { PanelSection, PanelSectionRow, Spinner, ErrorBoundary } from "@decky/ui";
-import { FC, useEffect, useState } from "react";
+import { FC, useEffect, useMemo, useState } from "react";
 
 import { getDevice, DeviceInfo, setUiActive } from "../api";
 import { useI18n } from "../i18n";
@@ -27,8 +27,12 @@ export const ControlCenter: FC = () => {
   const [failed, setFailed] = useState(false);
   const layout = useLayout();
   // The user's visible tabs in their saved order (Settings always kept). One
-  // computation feeds both the initial-tab pick and the rendered tab list.
-  const visibleTabIds = visibleIds(SECTIONS.map((s) => s.id), layout.tabs, [PINNED_TAB]);
+  // memoized computation feeds both the initial-tab pick and the rendered tab
+  // list (the shell re-renders on every poll tick, so avoid recomputing it).
+  const visibleTabIds = useMemo(
+    () => visibleIds(SECTIONS.map((s) => s.id), layout.tabs, [PINNED_TAB]),
+    [layout],
+  );
   // Open on the user's FIRST VISIBLE tab (their reordering), not the code default.
   // Lazy init reads the layout once per mount; Decky remounts the panel on each
   // QAM open, so a saved reorder takes effect the next time it opens.
@@ -62,9 +66,10 @@ export const ControlCenter: FC = () => {
   }
   if (!device) return <Spinner />;
 
-  // Apply the user's tab order + visibility. Settings stays pinned. A hidden
-  // active tab falls back to the first visible one via resolveActiveSection.
-  const orderedTabs = visibleIds(SECTIONS.map((s) => s.id), layout.tabs, [PINNED_TAB])
+  // Apply the user's tab order + visibility (reusing the memoized id list above).
+  // Settings stays pinned; a hidden active tab falls back to the first visible
+  // one via resolveActiveSection.
+  const orderedTabs = visibleTabIds
     .map((id) => SECTIONS.find((s) => s.id === id))
     .filter((s): s is (typeof SECTIONS)[number] => !!s);
   const active = resolveActiveSection(orderedTabs, activeId);
