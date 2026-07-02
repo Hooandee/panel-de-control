@@ -68,3 +68,30 @@ export function move(list: string[], id: string, dir: -1 | 1): string[] {
 export function toggle(set: string[], id: string): string[] {
   return set.includes(id) ? set.filter((x) => x !== id) : [...set, id];
 }
+
+const strArray = (v: unknown): string[] =>
+  Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+
+const asPref = (v: unknown): ListPref => {
+  const o = (v && typeof v === "object" ? v : {}) as { order?: unknown; hidden?: unknown };
+  return { order: strArray(o.order), hidden: strArray(o.hidden) };
+};
+
+/**
+ * Coerce arbitrary parsed JSON into a valid Layout. localStorage can hold a
+ * corrupt or old-shape value (valid JSON but wrong types, e.g. `order: 5`);
+ * without this, `for..of` / `new Set` on a non-array throws during render and,
+ * caught by the top-level ErrorBoundary with no in-UI recovery, permanently
+ * bricks the panel. Everything unrecognized degrades to the empty layout.
+ */
+export function coerceLayout(parsed: unknown): Layout {
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return { tabs: { order: [], hidden: [] }, blocks: {} };
+  }
+  const p = parsed as { tabs?: unknown; blocks?: unknown };
+  const blocks: Record<string, ListPref> = {};
+  if (p.blocks && typeof p.blocks === "object" && !Array.isArray(p.blocks)) {
+    for (const [k, v] of Object.entries(p.blocks)) blocks[k] = asPref(v);
+  }
+  return { tabs: asPref(p.tabs), blocks };
+}

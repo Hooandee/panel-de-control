@@ -3,7 +3,7 @@
 // module store + subscribe is what lets a save there re-render the shell and
 // sections live. Never throws; degrades to defaults if storage is unavailable.
 import { useSyncExternalStore } from "react";
-import { Layout } from "./layout";
+import { Layout, coerceLayout } from "./layout";
 
 const KEY = "pdc:layout";
 const EMPTY: Layout = { tabs: { order: [], hidden: [] }, blocks: {} };
@@ -18,11 +18,9 @@ function read(): Layout {
   try {
     const raw = window.localStorage?.getItem(KEY);
     if (!raw) return EMPTY;
-    const p = JSON.parse(raw) as Partial<Layout>;
-    return {
-      tabs: { order: p.tabs?.order ?? [], hidden: p.tabs?.hidden ?? [] },
-      blocks: p.blocks ?? {},
-    };
+    // Coerce shapes: valid JSON with wrong types (e.g. order:5) must NOT throw
+    // downstream — that would brick the panel with no in-UI recovery path.
+    return coerceLayout(JSON.parse(raw));
   } catch {
     return EMPTY;
   }

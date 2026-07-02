@@ -1,5 +1,33 @@
 import { describe, it, expect } from "vitest";
-import { orderIds, visibleIds, move, toggle } from "./layout";
+import { orderIds, visibleIds, move, toggle, coerceLayout } from "./layout";
+
+describe("coerceLayout", () => {
+  const EMPTY = { tabs: { order: [], hidden: [] }, blocks: {} };
+
+  it("returns empty layout for non-object input", () => {
+    expect(coerceLayout(null)).toEqual(EMPTY);
+    expect(coerceLayout(5)).toEqual(EMPTY);
+    expect(coerceLayout("x")).toEqual(EMPTY);
+    expect(coerceLayout([])).toEqual(EMPTY);
+  });
+
+  it("keeps a well-formed layout", () => {
+    const good = { tabs: { order: ["a"], hidden: ["b"] }, blocks: { sys: { order: ["x"], hidden: [] } } };
+    expect(coerceLayout(good)).toEqual(good);
+  });
+
+  it("coerces wrong-typed fields to safe arrays (never throws downstream)", () => {
+    // valid JSON, wrong types — the bug that bricked the panel (for..of on a number)
+    expect(coerceLayout({ tabs: { order: 5, hidden: {} } })).toEqual(EMPTY);
+    expect(coerceLayout({ tabs: 5, blocks: [] })).toEqual(EMPTY);
+    // non-string ids are dropped
+    expect(coerceLayout({ tabs: { order: ["a", 1, null], hidden: [] } }))
+      .toEqual({ tabs: { order: ["a"], hidden: [] }, blocks: {} });
+    // a block pref with a bad shape coerces, doesn't crash
+    expect(coerceLayout({ blocks: { sys: { order: 9 } } }))
+      .toEqual({ tabs: { order: [], hidden: [] }, blocks: { sys: { order: [], hidden: [] } } });
+  });
+});
 
 describe("orderIds", () => {
   const defaults = ["a", "b", "c"];
