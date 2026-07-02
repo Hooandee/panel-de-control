@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.2.0...panel-de-control-v0.2.1) (2026-07-02)
+
+
+### Bug Fixes
+
+* match GitHub's dotted release asset name ([3d71531](https://github.com/Hooandee/panel-de-control/commit/3d71531b2d2a5f279b7da7916f98f80db0bea55b))
+
 ## [0.2.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.1.0...panel-de-control-v0.2.0) (2026-07-02)
 
 
