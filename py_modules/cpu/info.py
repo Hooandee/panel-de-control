@@ -1,9 +1,28 @@
 import glob
 import os
+import re
 
 from sysfs import read_int, read_str
 
 _CPU = "sys/devices/system/cpu"
+
+
+def read_cpu_model(root="/"):
+    """The real CPU model string from /proc/cpuinfo ("model name"), with (R)/(TM)/(C)
+    trademark noise stripped and whitespace collapsed. Returns None when unreadable.
+    Used so the DeviceHeader shows the actual silicon (never a hardcoded guess that
+    can drift — e.g. the Legion Go 2 reports "Ryzen Z2 Extreme", not the Ally X's
+    "Ryzen AI Z2 Extreme"). Never raises."""
+    try:
+        with open(os.path.join(root, "proc", "cpuinfo")) as f:
+            for line in f:
+                if line.startswith("model name"):
+                    name = line.split(":", 1)[1]
+                    name = re.sub(r"\((?:R|TM|C)\)", "", name)
+                    return re.sub(r"\s+", " ", name).strip() or None
+    except OSError:
+        return None
+    return None
 
 
 def _count_range(spec):

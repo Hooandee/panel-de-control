@@ -1,6 +1,6 @@
 import os
 
-from cpu.info import read_cpu_info
+from cpu.info import read_cpu_info, read_cpu_model
 
 
 def _cpu_base(root):
@@ -64,3 +64,29 @@ def test_empty_sysfs_all_none(tmp_path):
     assert info["cores"] is None
     assert info["base_khz"] is None
     assert info["max_khz"] is None
+
+
+def _write_cpuinfo(root, body):
+    p = os.path.join(root, "proc", "cpuinfo")
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    with open(p, "w") as f:
+        f.write(body)
+
+
+def test_cpu_model_reads_and_strips_trademark_noise(tmp_path):
+    # The real silicon name — shown in the DeviceHeader instead of a hardcoded
+    # guess so it's never misleading (e.g. Legion Go 2 = "Ryzen Z2 Extreme", NOT
+    # the Ally X's "Ryzen AI Z2 Extreme"). (R)/(TM) noise is stripped.
+    root = str(tmp_path)
+    _write_cpuinfo(root, "processor\t: 0\nmodel name\t: Intel(R) Core(TM) Ultra 7 258V\nflags\t: fpu\n")
+    assert read_cpu_model(root=root) == "Intel Core Ultra 7 258V"
+
+
+def test_cpu_model_amd_untouched(tmp_path):
+    root = str(tmp_path)
+    _write_cpuinfo(root, "model name\t: AMD Ryzen Z2 Extreme\n")
+    assert read_cpu_model(root=root) == "AMD Ryzen Z2 Extreme"
+
+
+def test_cpu_model_missing_is_none(tmp_path):
+    assert read_cpu_model(root=str(tmp_path)) is None

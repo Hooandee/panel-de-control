@@ -21,7 +21,7 @@ from fan_curves import FanCurveStore
 from power.reader import PowerReader
 from battery.reader import BatteryReader
 from battery.charge_limit import select_charge_limit
-from cpu.info import read_cpu_info
+from cpu.info import read_cpu_info, read_cpu_model
 from cpu.controls import SmtControl, select_boost
 from telemetry.store import TelemetryStore
 from telemetry.sampler import TelemetrySampler
@@ -102,6 +102,9 @@ class Plugin:
         self._boost = select_boost()
         # Topology + freq range are static — read once (only SMT/boost state is live).
         self._cpu_info = read_cpu_info()
+        # Real silicon name (static) shown in the DeviceHeader instead of the hardcoded
+        # table chip; read once here like _cpu_info. None on generic or when unreadable.
+        self._chip = read_cpu_model() if not self._device.is_generic else None
         self._current_appid = None
         self._lifecycle = LifecycleManager(apply_cb=self._reapply_all)
         self._auto_task = None
@@ -140,7 +143,14 @@ class Plugin:
 
     async def get_device(self) -> dict:
         self._init()
-        return asdict(self._device)
+        d = asdict(self._device)
+        # Show the REAL silicon name (cached in _init) rather than the hardcoded table
+        # value, which can drift per unit/variant (e.g. Legion Go 2 = "Ryzen Z2
+        # Extreme", not the Ally X's "Ryzen AI Z2 Extreme"). Falls back to the table
+        # chip when the kernel exposes nothing.
+        if self._chip:
+            d["chip"] = self._chip
+        return d
 
     # ---- Fans (read-only monitor) ------------------------------------------
     def _read_fans(self) -> dict:
@@ -897,7 +907,9 @@ class Plugin:
     def _cpu_state(self) -> dict:
         info = self._cpu_info
         return {
-            "chip": self._device.chip,
+            # Real silicon name (same source as get_device) so the CpuCard and the
+            # DeviceHeader never show two different CPU names on the same screen.
+            "chip": self._chip or self._device.chip,
             "cores": info["cores"],
             "threads": info["threads"],
             "base_khz": info["base_khz"],
