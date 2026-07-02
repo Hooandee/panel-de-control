@@ -115,7 +115,7 @@ export function UpdateModal({
     <ModalRoot onCancel={closeModal} onEscKeypress={closeModal}>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         <div style={{ fontSize: 20, fontWeight: 700 }}>
-          {t.title} — v{latest}
+          {t.title} v{latest}
         </div>
         <div style={{ maxHeight: 340, overflowY: "auto", paddingRight: 8 }}>
           {notes ? renderMarkdown(notes) : <div style={{ opacity: 0.7 }}>{t.noNotes}</div>}
