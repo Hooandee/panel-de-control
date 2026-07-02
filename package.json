@@ -1,6 +1,6 @@
 {
   "name": "panel-de-control",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Panel de control definitivo para PCs portátiles: TDP, ventiladores y más.",
   "type": "module",
   "scripts": {
@@ -30,7 +30,10 @@
   },
   "pnpm": {
     "peerDependencyRules": {
-      "ignoreMissing": ["react", "react-dom"]
+      "ignoreMissing": [
+        "react",
+        "react-dom"
+      ]
     }
   }
 }
