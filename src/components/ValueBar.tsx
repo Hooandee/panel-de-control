@@ -94,7 +94,7 @@ export const ValueBar: FC<ValueBarProps> = ({
             // bleed; a uniform scale(0.86) toward centre shrinks it so it sits
             // inside with margin even at max (round handle, unlike scaleX).
             <div style={{ marginTop: theme.space.xs, overflow: "hidden" }}>
-              <div style={{ transform: "scale(0.86)" }}>
+              <div style={{ transform: "scale(0.80)", transformOrigin: "center" }}>
                 <SliderField
                   value={clamped}
                   min={0}

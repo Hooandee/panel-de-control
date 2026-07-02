@@ -18,7 +18,7 @@ interface Props {
  */
 export const ContainedSlider: FC<Props> = ({ value, min, max, step, showValue, onChange }) => (
   <div style={{ overflow: "hidden", width: "100%" }}>
-    <div style={{ transform: "scale(0.86)" }}>
+    <div style={{ transform: "scale(0.80)", transformOrigin: "center" }}>
       <SliderField value={value} min={min} max={max} step={step} showValue={showValue} onChange={onChange} />
     </div>
   </div>

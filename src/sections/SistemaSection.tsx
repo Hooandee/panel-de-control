@@ -4,16 +4,22 @@ import { LuSun, LuVolume2 } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
 import { ValueBar } from "../components/ValueBar";
+import { BatteryCard } from "../components/BatteryCard";
 import { useBrightness, useVolume } from "../system/useScalar";
+import { useBattery } from "../system/useBattery";
 
-/** Quick system controls: brightness + volume, with the exact value visible. */
+/** System controls: battery (state/health/charge limit) then brightness + volume. */
 export const SistemaSection: FC = () => {
   const { t } = useI18n();
   const brightness = useBrightness();
   const volume = useVolume();
+  const battery = useBattery();
 
   return (
     <>
+      {battery.state && (
+        <BatteryCard state={battery.state} onSetLimit={battery.setLimit} />
+      )}
       <PanelSectionRow>
         <ValueBar
           icon={<LuSun size={16} />}

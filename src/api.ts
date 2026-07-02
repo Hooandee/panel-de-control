@@ -205,3 +205,40 @@ export interface FanSuggestion {
 
 export const getFanSuggestion =
   callable<[appid: string | null], FanSuggestion>("get_fan_suggestion");
+
+// ---- Battery (Sistema) ----------------------------------------------------
+// Every field is nullable: the device may not expose it, and we never fake a
+// value (a hidden stat beats a wrong one).
+export interface BatteryInfo {
+  present: boolean;
+  percent: number | null;
+  // Charging | Discharging | Full | Not charging | Unknown
+  status: string | null;
+  health_percent: number | null;
+  cycle_count: number | null;
+  energy_now_mwh: number | null;
+  energy_full_mwh: number | null;
+  energy_full_design_mwh: number | null;
+  power_now_w: number | null;
+  eta_seconds: number | null;
+  ac_online: boolean | null;
+}
+
+export interface ChargeLimit {
+  supported: boolean;
+  // false = fixed firmware cap (on/off only, no slider — e.g. Lenovo conservation)
+  adjustable: boolean;
+  enabled: boolean;
+  percent: number;
+  min: number;
+  max: number;
+}
+
+export interface BatteryState {
+  battery: BatteryInfo;
+  charge_limit: ChargeLimit;
+}
+
+export const getBatteryState = callable<[], BatteryState>("get_battery_state");
+export const setChargeLimit =
+  callable<[enabled: boolean, percent: number], ChargeLimit>("set_charge_limit");

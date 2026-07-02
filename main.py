@@ -19,6 +19,8 @@ from fans import presets as fan_presets
 from fans import suggest as fan_suggest
 from fan_curves import FanCurveStore
 from power.reader import PowerReader
+from battery.reader import BatteryReader
+from battery.charge_limit import select_charge_limit
 from telemetry.store import TelemetryStore
 from telemetry.sampler import TelemetrySampler
 
@@ -44,6 +46,10 @@ DEFAULTS = {
     # the menu would show an inflated number vs the REAL in-game TDP the user wants to
     # see with the QAM open. When ON, the user accepts the menu-time bump for fluidity.
     "qam_tdp_boost": False,
+    # Battery charge limit: when enabled, cap charging at `charge_limit_percent`
+    # (protects battery longevity). Disabled → firmware default (100%).
+    "charge_limit_enabled": False,
+    "charge_limit_percent": 80,
 }
 
 
@@ -80,6 +86,8 @@ class Plugin:
             os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "fan_curves.json")
         )
         self._power_reader = PowerReader()
+        self._battery = BatteryReader()
+        self._charge_limit = select_charge_limit(self._device)
         self._current_appid = None
         self._lifecycle = LifecycleManager(apply_cb=self._reapply_all)
         self._auto_task = None
@@ -761,9 +769,64 @@ class Plugin:
         return self._tdp_backend.set_levels(lv["pl1"], lv["pl2"], lv["pl3"], ac)
 
     def _reapply_all(self, on_ac=None) -> None:
-        """Lifecycle callback: re-assert TDP and the effective fan curve (resume/AC)."""
+        """Lifecycle callback: re-assert TDP, the fan curve and the charge limit
+        (resume/AC — firmware may drop the threshold across a suspend)."""
         self._reapply_tdp(on_ac)
         self._reapply_fans()
+        self._apply_charge_limit()
+
+    # ---- Battery + charge limit --------------------------------------------
+    def _apply_charge_limit(self) -> None:
+        """Write the persisted charge limit (or 100 = no cap when disabled). Safe to
+        call on any device — a Null backend no-ops."""
+        if not self._charge_limit.supported:
+            return
+        enabled = bool(self._settings.get("charge_limit_enabled", False))
+        if enabled:
+            self._charge_limit.set(int(self._settings.get("charge_limit_percent", 80)))
+        else:
+            # backend-specific "no cap" (ASUS 100, Deck 0)
+            self._charge_limit.disable()
+
+    def _charge_limit_state(self) -> dict:
+        lo, hi = self._charge_limit.range()
+        enabled = bool(self._settings.get("charge_limit_enabled", False))
+        percent = int(self._settings.get("charge_limit_percent", 80))
+        fixed = getattr(self._charge_limit, "fixed_percent", None)
+        if not self._charge_limit.adjustable and fixed is not None:
+            # Fixed-cap backend (Lenovo conservation): report the firmware level so
+            # the UI can state it explicitly (e.g. "caps at 80%").
+            percent = fixed
+        elif enabled and self._charge_limit.supported and self._charge_limit.adjustable:
+            # never-fake: report what the firmware actually holds (it may clamp our write).
+            actual = self._charge_limit.get()
+            if actual is not None:
+                percent = actual
+        return {
+            "supported": self._charge_limit.supported,
+            "adjustable": self._charge_limit.adjustable,
+            "enabled": enabled,
+            "percent": percent,
+            "min": lo,
+            "max": hi,
+        }
+
+    async def get_battery_state(self) -> dict:
+        self._init()
+        battery = self._battery.read()
+        # Single AC-online source (same one every TDP clamp uses).
+        battery["ac_online"] = read_on_ac()
+        return {"battery": battery, "charge_limit": self._charge_limit_state()}
+
+    async def set_charge_limit(self, enabled: bool, percent: int) -> dict:
+        """Enable/disable the charge cap and set its threshold. Persists, applies via
+        readback, and returns the resulting charge_limit block."""
+        self._init()
+        self._settings["charge_limit_enabled"] = bool(enabled)
+        self._settings["charge_limit_percent"] = int(percent)
+        self._save()
+        self._apply_charge_limit()
+        return self._charge_limit_state()
 
     async def get_tdp_state(self) -> dict:
         self._init()
