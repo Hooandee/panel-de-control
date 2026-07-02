@@ -25,7 +25,7 @@ export const Collapsible: FC<Props> = ({ icon, title, summary, children }) => {
 
   return (
     <PanelSectionRow>
-      <div style={{ ...theme.card, padding: theme.space.md, overflow: "hidden" }}>
+      <div style={{ ...theme.card, padding: theme.space.md, overflow: "hidden", marginBottom: 6 }}>
         <Focusable
           style={{ display: "flex", alignItems: "center", gap: theme.space.sm, cursor: "pointer" }}
           onActivate={() => setOpen((o) => !o)}

@@ -5,6 +5,7 @@ import { LuGauge } from "react-icons/lu";
 import { I18nProvider } from "./i18n";
 import { ControlCenter } from "./components/ControlCenter";
 import { startGameWatcher } from "./tdp/gameWatcher";
+import { startEcoAmbient } from "./system/ecoAmbient";
 
 export default definePlugin(() => {
   // Persistent current-game watcher: runs at plugin scope (while Steam runs),
@@ -12,6 +13,9 @@ export default definePlugin(() => {
   // running game to the backend so auto-TDP / telemetry / fan auto-apply engage
   // on a game already running after a plugin restart. See tdp/gameWatcher.ts.
   const stopGameWatcher = startGameWatcher();
+  // Persistent ambient-dim controller for download mode: also runs at plugin scope
+  // so the screen keeps dimming/waking while a game downloads with the QAM closed.
+  const stopEcoAmbient = startEcoAmbient();
 
   return {
     name: "Panel de Control",
@@ -26,6 +30,7 @@ export default definePlugin(() => {
     icon: <LuGauge />,
     onDismount() {
       stopGameWatcher();
+      stopEcoAmbient();
     },
   };
 });

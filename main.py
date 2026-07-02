@@ -55,6 +55,11 @@ DEFAULTS = {
     # CPU controls default to full performance (SMT + boost on) — the stock state.
     "smt_enabled": True,
     "boost_enabled": True,
+    # Download mode (low power while a game downloads unattended): TDP→min, boost
+    # off, ambient screen dim. `eco_brightness` = the pre-eco brightness % to wake
+    # back to. Both restored/derived on exit; eco_enabled is a pure override.
+    "eco_enabled": False,
+    "eco_brightness": 40,
 }
 
 
@@ -607,6 +612,12 @@ class Plugin:
                 if self._current_appid is None:
                     self._reset_auto_windows()
                     continue
+                # Download mode owns the setpoint (min) — the loop must not fight it.
+                # Drop the window so post-eco decisions start from fresh samples taken
+                # at the real PL1, not stale ones from before eco pinned it to min.
+                if self._settings.get("eco_enabled"):
+                    self._reset_auto_windows()
+                    continue
                 # read() sub-samples gpu_busy over a short blocking burst -> off
                 # the event loop so it can't stall other Decky RPC handling.
                 pr = await asyncio.to_thread(self._power_reader.read)
@@ -666,6 +677,7 @@ class Plugin:
 
     async def set_auto_tdp(self, enabled: bool) -> dict:
         self._init()
+        self._clear_eco()
         self._settings["auto_tdp"] = bool(enabled)
         self._save()
         if enabled:
@@ -711,6 +723,13 @@ class Plugin:
         active = self._active_max(limits, ac)
         ll = self._cap_level_limits(self._tdp_backend.level_limits(), active)
         levels = self._clamp_levels(self._tdp_profiles.effective(appid), limits, active, ll)
+        if self._settings.get("eco_enabled"):
+            # Download mode: force every rail to the device minimum, overriding any
+            # profile/scope (this is the single chokepoint every RPC + reapply reads).
+            # Clamp through the rail floors so the reported levels equal what the
+            # firmware actually accepts (a rail's own min may be > min_w).
+            m = limits.min_w
+            levels = self._clamp_levels({"pl1": m, "pl2": m, "pl3": m}, limits, active, ll)
         return levels, active, ac
 
     def _cap_level_limits(self, ll: dict, active_max: int) -> dict:
@@ -830,11 +849,50 @@ class Plugin:
 
     # ---- CPU (SMT + boost) --------------------------------------------------
     def _apply_cpu(self) -> None:
-        """Re-assert the persisted SMT + boost state (safe no-op where unsupported)."""
+        """Re-assert the persisted SMT + boost state (safe no-op where unsupported).
+        In download mode, boost is forced off regardless of the saved setting."""
         if self._smt.supported:
             self._smt.set(bool(self._settings.get("smt_enabled", True)))
         if self._boost.supported:
-            self._boost.set(bool(self._settings.get("boost_enabled", True)))
+            eco = self._settings.get("eco_enabled", False)
+            self._boost.set(False if eco else bool(self._settings.get("boost_enabled", True)))
+
+    def _clear_eco(self) -> None:
+        """Manual control taken → exit download mode and restore the normal TDP/boost
+        state. Brightness is NOT touched here (FE-only; the persistent controller
+        stops driving it and the user keeps whatever they set). B1 in the design."""
+        if self._settings.get("eco_enabled"):
+            self._settings["eco_enabled"] = False
+            self._save()
+            self._reapply_all()
+
+    def _eco_state(self) -> dict:
+        return {
+            "enabled": bool(self._settings.get("eco_enabled", False)),
+            "tdp_min_w": self._limits().min_w,
+            "affects_boost": self._boost.supported,
+            # The brightness % to wake back to (pre-eco snapshot).
+            "wake_brightness": int(self._settings.get("eco_brightness", 40)),
+        }
+
+    async def get_eco_state(self) -> dict:
+        self._init()
+        return self._eco_state()
+
+    async def set_eco(self, enabled: bool, current_brightness: int) -> dict:
+        """Toggle download mode. On enable, snapshot the current brightness (to wake
+        back to) and apply the override (TDP min + boost off) via _reapply_all; on
+        disable, drop the override and re-apply the normal profile/boost."""
+        self._init()
+        # Snapshot the wake brightness only if it's a real reading (> 0). The FE may
+        # pass 0 while brightness is still loading; storing 0 would restore the screen
+        # to black on exit (unrecoverable from the card). Keep the previous value then.
+        if enabled and int(current_brightness) > 0:
+            self._settings["eco_brightness"] = int(current_brightness)
+        self._settings["eco_enabled"] = bool(enabled)
+        self._save()
+        self._reapply_all()
+        return self._eco_state()
 
     def _cpu_state(self) -> dict:
         info = self._cpu_info
@@ -854,6 +912,7 @@ class Plugin:
 
     async def set_smt(self, enabled: bool) -> dict:
         self._init()
+        self._clear_eco()
         self._settings["smt_enabled"] = bool(enabled)
         self._save()
         if self._smt.supported:
@@ -862,6 +921,7 @@ class Plugin:
 
     async def set_cpu_boost(self, enabled: bool) -> dict:
         self._init()
+        self._clear_eco()
         self._settings["boost_enabled"] = bool(enabled)
         self._save()
         if self._boost.supported:
@@ -929,6 +989,7 @@ class Plugin:
         if resolved is None:
             return {"requested_w": watts, "applied_w": None, "ok": False,
                     "detail": f"unknown scope: {scope}"}
+        self._clear_eco()  # manual TDP change exits download mode (after scope is valid)
         limits = self._limits()
         clamped = limits.clamp(watts, read_on_ac())
         self._tdp_profiles.set_pl1(resolved, clamped, appid=appid)
@@ -942,6 +1003,7 @@ class Plugin:
         if resolved is None:
             return {"requested_w": 0, "applied_w": None, "ok": False,
                     "detail": f"unknown scope: {scope}"}
+        self._clear_eco()
         self._tdp_profiles.set_offsets(resolved, off2, off3, appid=appid)
         res = self._reapply_tdp()
         # requested_w/applied_w reflect resulting sustained pl1 (readback), not the offsets
@@ -952,6 +1014,7 @@ class Plugin:
         self._init()
         resolved = self._resolve_scope(scope, appid)
         if resolved is not None:  # invalid scope → no-op (never from the UI)
+            self._clear_eco()
             self._tdp_profiles.set_auto(resolved, appid=appid)
             self._reapply_tdp()
         # Always return the full new state so the UI updates badge + sliders in ONE

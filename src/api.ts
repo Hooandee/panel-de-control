@@ -262,3 +262,15 @@ export interface CpuState {
 export const getCpuState = callable<[], CpuState>("get_cpu_state");
 export const setSmt = callable<[enabled: boolean], CpuState>("set_smt");
 export const setCpuBoost = callable<[enabled: boolean], CpuState>("set_cpu_boost");
+
+// ---- Download mode (low power) --------------------------------------------
+export interface EcoState {
+  enabled: boolean;
+  tdp_min_w: number;
+  affects_boost: boolean;
+  // Brightness % to wake back to (the pre-eco snapshot).
+  wake_brightness: number;
+}
+
+export const getEcoState = callable<[], EcoState>("get_eco_state");
+export const setEco = callable<[enabled: boolean, current_brightness: number], EcoState>("set_eco");

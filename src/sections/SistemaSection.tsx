@@ -6,11 +6,13 @@ import { useI18n } from "../i18n";
 import { ValueBar } from "../components/ValueBar";
 import { BatteryCard } from "../components/BatteryCard";
 import { CpuCard } from "../components/CpuCard";
+import { EcoCard } from "../components/EcoCard";
 import { Collapsible } from "../components/Collapsible";
 import { batteryStatusKey } from "../system/battery";
 import { useBrightness, useVolume } from "../system/useScalar";
 import { useBattery } from "../system/useBattery";
 import { useCpu } from "../system/useCpu";
+import { useEco } from "../system/useEco";
 
 /** System controls: battery + CPU (collapsible, rich) then brightness + volume (simple bars). */
 export const SistemaSection: FC = () => {
@@ -19,6 +21,7 @@ export const SistemaSection: FC = () => {
   const volume = useVolume();
   const battery = useBattery();
   const cpu = useCpu();
+  const eco = useEco();
 
   const b = battery.state?.battery;
   const batterySummary = b?.present
@@ -32,6 +35,13 @@ export const SistemaSection: FC = () => {
 
   return (
     <>
+      {eco.state && (
+        <EcoCard
+          state={eco.state}
+          brightnessSupported={brightness.supported}
+          onToggle={(en) => eco.toggle(en, brightness.percent)}
+        />
+      )}
       {battery.state && (
         <Collapsible icon={<LuBatteryFull size={16} />} title={t("system.battery.title")} summary={batterySummary}>
           <BatteryCard state={battery.state} onSetLimit={battery.setLimit} />

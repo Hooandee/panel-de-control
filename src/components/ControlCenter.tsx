@@ -61,7 +61,7 @@ export const ControlCenter: FC = () => {
           (device / learning / tabs) breathe instead of touching. A null
           LearningBanner collapses its slot — no double gap. */}
       <PanelSectionRow>
-        <div style={{ display: "flex", flexDirection: "column", gap: theme.space.section }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: theme.space.section, marginBottom: 6 }}>
           <DeviceHeader device={device} />
           <LearningBanner
             gameName={game?.name ?? null}

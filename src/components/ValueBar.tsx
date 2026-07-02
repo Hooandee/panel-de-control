@@ -39,6 +39,7 @@ export const ValueBar: FC<ValueBarProps> = ({
       style={{
         ...theme.card,
         padding: theme.space.md,
+        marginBottom: 6,
         opacity: disabled ? 0.5 : 1,
         overflow: "hidden", // contain the slider's focus highlight within the card
       }}
