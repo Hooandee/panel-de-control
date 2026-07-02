@@ -1,11 +1,11 @@
 import { FC } from "react";
-import { PanelSectionRow, ToggleField } from "@decky/ui";
-import { LuBatteryCharging, LuBatteryFull, LuBatteryLow, LuHeartPulse, LuPlug, LuRefreshCw, LuZap } from "react-icons/lu";
+import { ToggleField } from "@decky/ui";
+import { LuBatteryFull, LuBatteryLow, LuHeartPulse, LuPlug, LuRefreshCw, LuZap } from "react-icons/lu";
 
 import { BatteryState } from "../api";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
-import { batteryColor, clampThreshold, formatCapacity, formatEta } from "../system/battery";
+import { batteryColor, batteryStatusKey, clampThreshold, formatCapacity, formatEta } from "../system/battery";
 import { ContainedSlider } from "./ContainedSlider";
 
 interface Props {
@@ -63,36 +63,34 @@ export const BatteryCard: FC<Props> = ({ state, onSetLimit }) => {
 
   if (!b.present) {
     return (
-      <PanelSectionRow>
-        <div style={{ ...theme.card, padding: theme.space.md, fontSize: theme.font.caption, color: theme.color.textMuted }}>
-          {t("system.battery.absent")}
-        </div>
-      </PanelSectionRow>
+      <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
+        {t("system.battery.absent")}
+      </div>
     );
   }
 
   const percent = b.percent ?? 0;
   const charging = b.status === "Charging";
-  const StatusIcon = charging ? LuBatteryCharging : percent <= 15 ? LuBatteryLow : LuBatteryFull;
+  const statusKey = batteryStatusKey(b.status, b.ac_online);
 
   // Status line: charging / discharging (+eta) / connected.
   let statusText: string;
   let statusIcon: React.ReactNode;
-  if (charging) {
+  if (statusKey === "charging") {
     statusText = t("system.battery.charging");
     statusIcon = <LuZap size={13} color={theme.color.accent} />;
-  } else if (b.status === "Full" || (b.ac_online && b.status !== "Discharging")) {
+  } else if (statusKey === "connected") {
     statusText = t("system.battery.connected");
     statusIcon = <LuPlug size={13} color={theme.color.textMuted} />;
   } else {
     const eta = formatEta(b.eta_seconds);
     statusText = eta === "—" ? t("system.battery.discharging") : `${t("system.battery.discharging")} · ${eta}`;
-    statusIcon = <StatusIcon size={13} color={theme.color.textMuted} />;
+    const Icon = percent <= 15 ? LuBatteryLow : LuBatteryFull;
+    statusIcon = <Icon size={13} color={theme.color.textMuted} />;
   }
 
   return (
-    <PanelSectionRow>
-      <div style={{ ...theme.card, padding: theme.space.md, display: "flex", flexDirection: "column", gap: theme.space.sm, overflow: "hidden" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm, overflow: "hidden" }}>
         {/* Hero: glyph + big %, then the status on its own full-width row so a
             long "Discharging · 2h 33m" never wraps mid-phrase. */}
         <div style={{ display: "flex", alignItems: "center", gap: theme.space.md }}>
@@ -172,6 +170,5 @@ export const BatteryCard: FC<Props> = ({ state, onSetLimit }) => {
           </div>
         )}
       </div>
-    </PanelSectionRow>
   );
 };

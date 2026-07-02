@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { batteryColor, clampThreshold, formatCapacity, formatEta } from "./battery";
+import { batteryColor, batteryStatusKey, clampThreshold, formatCapacity, formatEta } from "./battery";
 import { theme } from "../theme";
 
 describe("batteryColor", () => {
@@ -38,6 +38,21 @@ describe("formatCapacity", () => {
   });
   it("returns dash when full is absent", () => {
     expect(formatCapacity(null, 50000)).toBe("—");
+  });
+});
+
+describe("batteryStatusKey", () => {
+  it("is charging when Charging", () => {
+    expect(batteryStatusKey("Charging", false)).toBe("charging");
+  });
+  it("is connected when Full, or on AC and not discharging", () => {
+    expect(batteryStatusKey("Full", false)).toBe("connected");
+    expect(batteryStatusKey("Not charging", true)).toBe("connected");
+  });
+  it("is discharging otherwise (incl. on AC but Discharging)", () => {
+    expect(batteryStatusKey("Discharging", false)).toBe("discharging");
+    expect(batteryStatusKey("Discharging", true)).toBe("discharging");
+    expect(batteryStatusKey(null, false)).toBe("discharging");
   });
 });
 

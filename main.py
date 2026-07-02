@@ -21,6 +21,8 @@ from fan_curves import FanCurveStore
 from power.reader import PowerReader
 from battery.reader import BatteryReader
 from battery.charge_limit import select_charge_limit
+from cpu.info import read_cpu_info
+from cpu.controls import SmtControl, select_boost
 from telemetry.store import TelemetryStore
 from telemetry.sampler import TelemetrySampler
 
@@ -50,6 +52,9 @@ DEFAULTS = {
     # (protects battery longevity). Disabled → firmware default (100%).
     "charge_limit_enabled": False,
     "charge_limit_percent": 80,
+    # CPU controls default to full performance (SMT + boost on) — the stock state.
+    "smt_enabled": True,
+    "boost_enabled": True,
 }
 
 
@@ -88,6 +93,10 @@ class Plugin:
         self._power_reader = PowerReader()
         self._battery = BatteryReader()
         self._charge_limit = select_charge_limit(self._device)
+        self._smt = SmtControl()
+        self._boost = select_boost()
+        # Topology + freq range are static — read once (only SMT/boost state is live).
+        self._cpu_info = read_cpu_info()
         self._current_appid = None
         self._lifecycle = LifecycleManager(apply_cb=self._reapply_all)
         self._auto_task = None
@@ -769,11 +778,12 @@ class Plugin:
         return self._tdp_backend.set_levels(lv["pl1"], lv["pl2"], lv["pl3"], ac)
 
     def _reapply_all(self, on_ac=None) -> None:
-        """Lifecycle callback: re-assert TDP, the fan curve and the charge limit
-        (resume/AC — firmware may drop the threshold across a suspend)."""
+        """Lifecycle callback: re-assert TDP, the fan curve, the charge limit and the
+        CPU controls (resume/AC — firmware may drop these across a suspend)."""
         self._reapply_tdp(on_ac)
         self._reapply_fans()
         self._apply_charge_limit()
+        self._apply_cpu()
 
     # ---- Battery + charge limit --------------------------------------------
     def _apply_charge_limit(self) -> None:
@@ -817,6 +827,46 @@ class Plugin:
         # Single AC-online source (same one every TDP clamp uses).
         battery["ac_online"] = read_on_ac()
         return {"battery": battery, "charge_limit": self._charge_limit_state()}
+
+    # ---- CPU (SMT + boost) --------------------------------------------------
+    def _apply_cpu(self) -> None:
+        """Re-assert the persisted SMT + boost state (safe no-op where unsupported)."""
+        if self._smt.supported:
+            self._smt.set(bool(self._settings.get("smt_enabled", True)))
+        if self._boost.supported:
+            self._boost.set(bool(self._settings.get("boost_enabled", True)))
+
+    def _cpu_state(self) -> dict:
+        info = self._cpu_info
+        return {
+            "chip": self._device.chip,
+            "cores": info["cores"],
+            "threads": info["threads"],
+            "base_khz": info["base_khz"],
+            "max_khz": info["max_khz"],
+            "smt": {"supported": self._smt.supported, "enabled": self._smt.enabled()},
+            "boost": {"supported": self._boost.supported, "enabled": self._boost.enabled()},
+        }
+
+    async def get_cpu_state(self) -> dict:
+        self._init()
+        return self._cpu_state()
+
+    async def set_smt(self, enabled: bool) -> dict:
+        self._init()
+        self._settings["smt_enabled"] = bool(enabled)
+        self._save()
+        if self._smt.supported:
+            self._smt.set(bool(enabled))
+        return self._cpu_state()
+
+    async def set_cpu_boost(self, enabled: bool) -> dict:
+        self._init()
+        self._settings["boost_enabled"] = bool(enabled)
+        self._save()
+        if self._boost.supported:
+            self._boost.set(bool(enabled))
+        return self._cpu_state()
 
     async def set_charge_limit(self, enabled: bool, percent: int) -> dict:
         """Enable/disable the charge cap and set its threshold. Persists, applies via

@@ -242,3 +242,23 @@ export interface BatteryState {
 export const getBatteryState = callable<[], BatteryState>("get_battery_state");
 export const setChargeLimit =
   callable<[enabled: boolean, percent: number], ChargeLimit>("set_charge_limit");
+
+// ---- CPU (Sistema) --------------------------------------------------------
+export interface CpuToggle {
+  supported: boolean;
+  enabled: boolean;
+}
+
+export interface CpuState {
+  chip: string;
+  cores: number | null;
+  threads: number | null;
+  base_khz: number | null;
+  max_khz: number | null;
+  smt: CpuToggle;
+  boost: CpuToggle;
+}
+
+export const getCpuState = callable<[], CpuState>("get_cpu_state");
+export const setSmt = callable<[enabled: boolean], CpuState>("set_smt");
+export const setCpuBoost = callable<[enabled: boolean], CpuState>("set_cpu_boost");

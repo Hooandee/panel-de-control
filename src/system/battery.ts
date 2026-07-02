@@ -33,3 +33,14 @@ export function formatCapacity(fullMwh: number | null, designMwh: number | null)
 export function clampThreshold(percent: number, min: number, max: number): number {
   return clamp(Math.round(percent), min, max);
 }
+
+/** i18n key suffix for the charge state — shared by the card status line and the
+ *  collapsed summary so they never diverge. */
+export function batteryStatusKey(
+  status: string | null,
+  acOnline: boolean | null,
+): "charging" | "connected" | "discharging" {
+  if (status === "Charging") return "charging";
+  if (status === "Full" || (acOnline && status !== "Discharging")) return "connected";
+  return "discharging";
+}
