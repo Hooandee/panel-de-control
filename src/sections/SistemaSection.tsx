@@ -43,12 +43,12 @@ export const SistemaSection: FC = () => {
         />
       )}
       {battery.state && (
-        <Collapsible icon={<LuBatteryFull size={16} />} title={t("system.battery.title")} summary={batterySummary}>
+        <Collapsible id="battery" icon={<LuBatteryFull size={16} />} title={t("system.battery.title")} summary={batterySummary}>
           <BatteryCard state={battery.state} onSetLimit={battery.setLimit} />
         </Collapsible>
       )}
       {cpu.state && (
-        <Collapsible icon={<LuCpu size={16} />} title={t("system.cpu.title")} summary={cpuSummary}>
+        <Collapsible id="cpu" icon={<LuCpu size={16} />} title={t("system.cpu.title")} summary={cpuSummary}>
           <CpuCard state={cpu.state} onSetSmt={cpu.setSmt} onSetBoost={cpu.setBoost} />
         </Collapsible>
       )}
