@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ScalarControl, SystemControl } from "./types";
-import { fromPercent, toPercent } from "./logic";
+import { acceptEcho, fromPercent, toPercent } from "./logic";
 import { displayBrightness } from "./display";
 import { systemVolume } from "./audio";
 
@@ -20,11 +20,20 @@ import { systemVolume } from "./audio";
 export function useScalar(control: ScalarControl): SystemControl {
   const [percent, setPercent] = useState<number | null>(null);
   const [supported, setSupported] = useState(true);
+  // The value we last wrote optimistically, and when. Used to reject late echoes
+  // from an earlier drag position that would otherwise snap the slider backward.
+  const pendingRef = useRef<number | null>(null);
+  const lastSetAtRef = useRef(0);
 
   useEffect(() => {
     let alive = true;
     const unsub = control.subscribe((fraction) => {
-      if (alive) setPercent(toPercent(fraction));
+      if (!alive) return;
+      const echo = toPercent(fraction);
+      if (acceptEcho(pendingRef.current, echo, Date.now() - lastSetAtRef.current)) {
+        pendingRef.current = null;
+        setPercent(echo);
+      }
     });
     setSupported(unsub !== null);
     return () => {
@@ -35,7 +44,9 @@ export function useScalar(control: ScalarControl): SystemControl {
 
   const set = useCallback(
     (p: number) => {
-      setPercent(p); // optimistic; the change event confirms/corrects
+      pendingRef.current = p; // optimistic; ignore echoes until this value confirms
+      lastSetAtRef.current = Date.now();
+      setPercent(p);
       control.set(fromPercent(p));
     },
     [control],
