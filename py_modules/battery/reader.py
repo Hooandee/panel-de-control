@@ -79,6 +79,13 @@ class BatteryReader:
                 power_uw = round(current_ua * voltage_now / 1_000_000)
         power_w = round(power_uw / 1_000_000, 1) if power_uw is not None else None
 
+        # cycle_count: many handhelds (ASUS Ally, Steam Deck, MSI Claw) expose the
+        # node but the firmware never populates it, so it reads a literal 0. A used
+        # battery with genuinely 0 cycles is implausible → treat 0 (and missing) as
+        # unknown so the UI hides the chip rather than showing a fake "0 cycles".
+        # Devices that report real counts (Legion) are unaffected.
+        cycles = read_int(os.path.join(d, "cycle_count")) or None
+
         status = read_str(os.path.join(d, "status"))
         eta = None
         if status == "Discharging" and power_w and now:
@@ -90,7 +97,7 @@ class BatteryReader:
             "percent": read_int(os.path.join(d, "capacity")),
             "status": status,
             "health_percent": health,
-            "cycle_count": read_int(os.path.join(d, "cycle_count")),
+            "cycle_count": cycles,
             "energy_now_mwh": now,
             "energy_full_mwh": full,
             "energy_full_design_mwh": design,

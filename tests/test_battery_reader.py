@@ -107,6 +107,18 @@ def test_missing_optional_fields_are_hidden(tmp_path):
     assert state["eta_seconds"] is None
 
 
+def test_zero_cycle_count_is_unknown(tmp_path):
+    # Many handhelds (ASUS Ally, Steam Deck, MSI Claw) expose a cycle_count node
+    # that the firmware never populates → it reads a literal "0". A used battery
+    # with genuinely 0 cycles is implausible; showing "0 cycles" is a fake reading.
+    # Treat 0 as unknown (None) so the UI hides the chip (never-fake). Real counts
+    # (Legion reports e.g. 38) are untouched.
+    root = str(tmp_path)
+    _mk_supply(root, "BAT0", {"type": "Battery", "capacity": "60", "cycle_count": "0"})
+    state = BatteryReader(root=root).read()
+    assert state["cycle_count"] is None
+
+
 def test_corrupt_values_do_not_raise(tmp_path):
     root = str(tmp_path)
     _mk_supply(root, "BAT0", {
