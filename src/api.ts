@@ -274,3 +274,24 @@ export interface EcoState {
 
 export const getEcoState = callable<[], EcoState>("get_eco_state");
 export const setEco = callable<[enabled: boolean, current_brightness: number], EcoState>("set_eco");
+
+// ── Self-updater — append to src/api.ts (it already imports { callable } from "@decky/api") ──
+
+export interface UpdateInfo {
+  current: string;
+  latest: string;
+  has_update: boolean;
+  notes: string;
+  download_url: string;
+  error: string;
+}
+
+export interface InstallResult {
+  ok: boolean;
+  needs_restart: boolean;
+  message: string;
+}
+
+export const checkUpdate = callable<[force: boolean], UpdateInfo>("check_update");
+export const installUpdate = callable<[], InstallResult>("install_update");
+export const restartLoader = callable<[], void>("restart_loader");

@@ -4,7 +4,8 @@ import { ButtonItem, PanelSectionRow, ToggleField } from "@decky/ui";
 import { useI18n } from "../i18n";
 import { LanguageToggle } from "../components/LanguageToggle";
 import { openCustomizeModal } from "../components/CustomizeModal";
-import { getTelemetryEnabled, setTelemetryEnabled, getUnlockBatteryMax, setUnlockBatteryMax, getQamTdpBoost, setQamTdpBoost, resetTelemetry } from "../api";
+import { getTelemetryEnabled, setTelemetryEnabled, getUnlockBatteryMax, setUnlockBatteryMax, getQamTdpBoost, setQamTdpBoost, resetTelemetry, getVersion } from "../api";
+import { UpdatePanel } from "../updater/UpdatePanel";
 import { theme } from "../theme";
 
 /** A persisted boolean setting: fetch on mount, optimistic update on toggle.
@@ -27,10 +28,14 @@ function useToggleSetting(
 
 /** Plugin settings: language + usage-learning opt-out + battery-max unlock. */
 export const AjustesSection: FC = () => {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [learn, onToggle] = useToggleSetting(getTelemetryEnabled, setTelemetryEnabled, true);
   const [battMax, onToggleBattMax] = useToggleSetting(getUnlockBatteryMax, setUnlockBatteryMax, false);
   const [qamBoost, onToggleQamBoost] = useToggleSetting(getQamTdpBoost, setQamTdpBoost, false);
+  const [version, setVersion] = useState("");
+  useEffect(() => {
+    getVersion().then(setVersion).catch(() => {});
+  }, []);
 
   // Destructive reset: a two-tap confirm avoids accidental wipes on the QAM.
   const [confirming, setConfirming] = useState(false);
@@ -106,6 +111,9 @@ export const AjustesSection: FC = () => {
         <ButtonItem layout="below" description={t("settings.reset.desc")} onClick={onReset}>
           {resetLabel}
         </ButtonItem>
+
+        {/* In-plugin self-updater: version line + changelog + install/restart. */}
+        <UpdatePanel lang={lang} version={version} />
       </div>
     </PanelSectionRow>
   );

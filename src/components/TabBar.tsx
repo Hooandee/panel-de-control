@@ -6,6 +6,8 @@ export interface TabItem {
   id: string;
   icon: ReactNode;
   label: string;
+  // Optional adornment rendered after the label on the active tab (e.g. an update dot).
+  badge?: ReactNode;
 }
 
 interface TabBarProps {
@@ -40,6 +42,9 @@ export const TabBar: FC<TabBarProps> = ({ tabs, activeId, onSelect }) => {
           >
             {tab.icon}
             {active && <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{tab.label}</span>}
+            {/* Alert badge shows on any tab state (icon-only or expanded) so an
+                update is noticeable even when the tab isn't active. */}
+            {tab.badge}
           </Focusable>
         );
       })}

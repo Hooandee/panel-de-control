@@ -10,6 +10,8 @@ import { SECTIONS } from "../sections/registry";
 import { resolveActiveSection } from "../sections/nav";
 import { useRunningGame } from "../tdp/useRunningGame";
 import { useLearningStatus } from "../learning/useLearningStatus";
+import { useUpdate } from "../updater/useUpdate";
+import { AlertDot } from "../updater/AlertDot";
 import { useLayout } from "../customize/store";
 import { visibleIds } from "../customize/layout";
 import { PINNED_TAB } from "../customize/manifest";
@@ -22,7 +24,7 @@ import { theme } from "../theme";
  * blanking the whole panel.
  */
 export const ControlCenter: FC = () => {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [device, setDevice] = useState<DeviceInfo | null>(null);
   const [failed, setFailed] = useState(false);
   const layout = useLayout();
@@ -41,6 +43,10 @@ export const ControlCenter: FC = () => {
   // early returns below (rules-of-hooks; poll hooks blank first render).
   const game = useRunningGame();
   const { status: learning } = useLearningStatus(game?.appid ?? null);
+  // One session-guarded update check high in the tree: powers the toast (in the
+  // hook) and the alert dot on the Ajustes tab. Calling useUpdate elsewhere
+  // (AjustesSection's UpdatePanel) reuses the same session-cached result.
+  const { hasUpdate } = useUpdate(lang);
 
   useEffect(() => {
     getDevice().then(setDevice).catch(() => setFailed(true));
@@ -89,7 +95,14 @@ export const ControlCenter: FC = () => {
             onOpenSettings={() => setActiveId("settings")}
           />
           <TabBar
-            tabs={orderedTabs.map((s) => ({ id: s.id, icon: s.icon, label: t(s.labelKey) }))}
+            tabs={orderedTabs.map((s) => ({
+              id: s.id,
+              icon: s.icon,
+              label: t(s.labelKey),
+              // Red dot on the tab that leads to the updater (Ajustes) when an
+              // update is available.
+              badge: s.id === PINNED_TAB ? <AlertDot show={hasUpdate} /> : undefined,
+            }))}
             activeId={active?.id ?? activeId}
             onSelect={setActiveId}
           />

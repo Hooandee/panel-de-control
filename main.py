@@ -7,6 +7,7 @@ import decky
 # py_modules/ is on sys.path → import TOP-LEVEL (never `from py_modules.x import`).
 import auto_tdp
 import device_registry
+import self_updater
 from version import read_version
 from settings_store import SettingsStore
 from tdp import factory as tdp_factory
@@ -140,6 +141,18 @@ class Plugin:
     async def get_version(self) -> str:
         self._init()
         return read_version()
+
+    async def check_update(self, force: bool = False) -> dict:
+        self._init()
+        return self_updater.check(force)
+
+    async def install_update(self) -> dict:
+        self._init()
+        return self_updater.install()
+
+    async def restart_loader(self) -> None:
+        # Fire-and-forget: restarts Decky to load the just-installed files.
+        self_updater.restart_loader()
 
     async def get_device(self) -> dict:
         self._init()
