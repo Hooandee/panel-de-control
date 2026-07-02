@@ -208,9 +208,20 @@ def install() -> dict:
 def restart_loader() -> None:
     """Restart Decky to load the just-installed files. Fire-and-forget (kills this process)."""
     try:
+        import os
         import subprocess
 
-        subprocess.Popen(["systemctl", "restart", "plugin_loader"])  # noqa: S603,S607
+        # Decky's PyInstaller build points LD_LIBRARY_PATH at its bundled libs
+        # (an older libcrypto), which makes system binaries like systemctl fail
+        # with "OPENSSL_x not found". Restore the pre-bundle library path (or drop
+        # it) so systemctl loads the system libraries.
+        env = dict(os.environ)
+        orig = env.pop("LD_LIBRARY_PATH_ORIG", None)
+        if orig is not None:
+            env["LD_LIBRARY_PATH"] = orig
+        else:
+            env.pop("LD_LIBRARY_PATH", None)
+        subprocess.Popen(["/usr/bin/systemctl", "restart", "plugin_loader"], env=env)  # noqa: S603
     except Exception as e:  # noqa: BLE001
         decky.logger.error(f"[updater] restart failed: {e}")
 
