@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.2.2...panel-de-control-v0.2.3) (2026-07-02)
+
+
+### Bug Fixes
+
+* minor fixes ([0cd1723](https://github.com/Hooandee/panel-de-control/commit/0cd1723f7fec8c33a328f5a74cdfcddb5a05ae2e))
+
 ## [0.2.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.2.1...panel-de-control-v0.2.2) (2026-07-02)
 
 
