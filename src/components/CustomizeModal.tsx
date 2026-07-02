@@ -85,7 +85,7 @@ const ListEditor: FC<{
   const hidden = pref?.hidden ?? [];
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: theme.space.xs }}>
-      <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, textTransform: "uppercase", letterSpacing: 0.5 }}>{title}</div>
+      <div style={theme.sectionLabel}>{title}</div>
       {order.map((id, i) => (
         <Row
           key={id}
@@ -129,7 +129,7 @@ const CustomizeBody: FC = () => {
       />
 
       <div style={{ display: "flex", flexDirection: "column", gap: theme.space.md }}>
-        <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, textTransform: "uppercase", letterSpacing: 0.5 }}>{t("customize.blocks")}</div>
+        <div style={theme.sectionLabel}>{t("customize.blocks")}</div>
         {blockSections.map((s) => (
           <ListEditor
             key={s.id}

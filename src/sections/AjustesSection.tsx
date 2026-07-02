@@ -4,6 +4,7 @@ import { ButtonItem, PanelSectionRow, ToggleField } from "@decky/ui";
 import { useI18n } from "../i18n";
 import { LanguageToggle } from "../components/LanguageToggle";
 import { openCustomizeModal } from "../components/CustomizeModal";
+import { openGlossaryModal } from "../components/GlossaryModal";
 import { getTelemetryEnabled, setTelemetryEnabled, getUnlockBatteryMax, setUnlockBatteryMax, getQamTdpBoost, setQamTdpBoost, resetTelemetry, getVersion } from "../api";
 import { UpdatePanel } from "../updater/UpdatePanel";
 import { theme } from "../theme";
@@ -100,6 +101,11 @@ export const AjustesSection: FC = () => {
             onChange={onToggleQamBoost}
           />
         )}
+
+        {/* Open the full-screen plain-language glossary of terms. */}
+        <ButtonItem layout="below" description={t("glossary.button.desc")} onClick={() => openGlossaryModal()}>
+          {t("glossary.button")}
+        </ButtonItem>
 
         {/* Open the full-screen tab + block layout editor. */}
         <ButtonItem layout="below" description={t("customize.button.desc")} onClick={() => openCustomizeModal()}>

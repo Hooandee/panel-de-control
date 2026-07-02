@@ -45,4 +45,12 @@ export const theme = {
     borderRadius: radius.sm,
     boxShadow: `inset 0 0 0 1px ${color.hairline}`,
   },
+  // Muted uppercase caption used as a section heading inside the full-screen
+  // modals (Customize, Glossary). Shared so the treatment stays consistent.
+  sectionLabel: {
+    fontSize: font.caption,
+    color: color.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
 } as const;
