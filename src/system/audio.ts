@@ -5,20 +5,21 @@ import { ScalarControl } from "./types";
 // RegisterForDeviceVolumeChanged keeps it live, SetDeviceVolume(id, audioType, v)
 // writes it.
 //
-// audioType is PER-DEVICE, not a constant: SetDeviceVolume must be called with the
-// device's config type or the write hits the wrong channel and is silently a no-op
-// (CDP-confirmed: Ally X = 0, Legion Go 2 = 1 = "Analog Stereo Duplex"). We seed it
-// from the device's currentConfig.eConfig and keep learning it from change events
-// (which carry the authoritative audioType). Seeding — not defaulting to 0 — is what
-// makes the FIRST slider drag actually change the volume on devices whose type != 0
-// (before this, volume only started working after an unrelated change event, e.g. a
-// hardware volume-button press, taught us the right type).
+// The `audioType` arg to SetDeviceVolume is a DIRECTION, not a per-device config:
+// CDP-probed on Claw, Steam Deck and both ROG Allys, audioType 1 = OUTPUT and
+// audioType 0 = INPUT (mic). Writing the output volume with the wrong type hits the
+// mic and is a silent no-op for the speaker. A previous version seeded it from the
+// device's `currentConfig.eConfig`, which happens to be 1 on the Legion Go 2 (so it
+// worked there by coincidence) but 0 on the Ally/Deck/Claw (so those wrote to the
+// mic and the slider did nothing until a hardware volume-button event taught the
+// real type). Output is audioType OUTPUT everywhere → write that, and only track
+// OUTPUT change events (ignore mic-volume events so they can't corrupt the reading).
 //
 // NOTE: on real hardware RegisterForDeviceVolumeChanged registers but returns
 // `undefined` (no unsubscribe handle) — so support is keyed off the METHOD existing,
 // not off getting a handle. Never throws.
+const OUTPUT = 1; // audioType for the output (speaker) channel
 let outputDeviceId: number | null = null;
-let outputAudioType = 0;
 
 export const systemVolume: ScalarControl = {
   subscribe(cb) {
@@ -42,10 +43,6 @@ export const systemVolume: ScalarControl = {
             info?.vecDevices?.find((d) => d.id === info.activeOutputDeviceId);
           if (dev) {
             outputDeviceId = dev.id;
-            // Seed the write channel from the device config (Legion Go 2 = 1, not 0)
-            // so the first set targets the right audioType; change events refine it.
-            const eConfig = (dev as { currentConfig?: { eConfig?: number } }).currentConfig?.eConfig;
-            if (typeof eConfig === "number") outputAudioType = eConfig;
             cb(dev.flOutputVolume);
           }
         })
@@ -54,8 +51,8 @@ export const systemVolume: ScalarControl = {
         });
 
       const reg = audio.RegisterForDeviceVolumeChanged((deviceId, audioType, volume) => {
-        if (deviceId === outputDeviceId) {
-          outputAudioType = audioType;
+        // Only the OUTPUT channel drives the slider — ignore mic (input) events.
+        if (deviceId === outputDeviceId && audioType === OUTPUT) {
           cb(volume);
         }
       });
@@ -73,11 +70,7 @@ export const systemVolume: ScalarControl = {
   set(fraction) {
     try {
       if (outputDeviceId !== null) {
-        void SteamClient?.System?.Audio?.SetDeviceVolume?.(
-          outputDeviceId,
-          outputAudioType,
-          fraction,
-        );
+        void SteamClient?.System?.Audio?.SetDeviceVolume?.(outputDeviceId, OUTPUT, fraction);
       }
     } catch {
       /* ignore */
