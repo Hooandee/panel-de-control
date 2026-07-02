@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.2.1...panel-de-control-v0.2.2) (2026-07-02)
+
+
+### Bug Fixes
+
+* show the changelog in a formatted modal instead of raw inline text ([c7a7b8f](https://github.com/Hooandee/panel-de-control/commit/c7a7b8f4ef5c96b4a11f40b990c0b60bc448c15e))
+
 ## [0.2.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.2.0...panel-de-control-v0.2.1) (2026-07-02)
 
 
