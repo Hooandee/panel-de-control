@@ -113,9 +113,12 @@ def _shape(data: dict, current: str) -> dict:
     latest = _extract_semver(str(data.get("tag_name", "")))
     notes = str(data.get("body", "") or "")
     zip_name = f"{_plugin_name()}.zip"
+    # GitHub replaces spaces with dots in release asset names, so
+    # "Panel de Control.zip" is stored as "Panel.de.Control.zip".
+    candidates = {zip_name, zip_name.replace(" ", ".")}
     download_url = ""
     for asset in data.get("assets", []) or []:
-        if asset.get("name") == zip_name:
+        if asset.get("name") in candidates:
             download_url = str(asset.get("browser_download_url", ""))
             break
     return {
