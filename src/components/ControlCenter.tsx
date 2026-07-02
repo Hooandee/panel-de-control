@@ -10,6 +10,9 @@ import { SECTIONS } from "../sections/registry";
 import { resolveActiveSection } from "../sections/nav";
 import { useRunningGame } from "../tdp/useRunningGame";
 import { useLearningStatus } from "../learning/useLearningStatus";
+import { useLayout } from "../customize/store";
+import { visibleIds } from "../customize/layout";
+import { PINNED_TAB } from "../customize/manifest";
 import { theme } from "../theme";
 
 /**
@@ -22,7 +25,14 @@ export const ControlCenter: FC = () => {
   const { t } = useI18n();
   const [device, setDevice] = useState<DeviceInfo | null>(null);
   const [failed, setFailed] = useState(false);
-  const [activeId, setActiveId] = useState<string>(SECTIONS[0].id);
+  const layout = useLayout();
+  // The user's visible tabs in their saved order (Settings always kept). One
+  // computation feeds both the initial-tab pick and the rendered tab list.
+  const visibleTabIds = visibleIds(SECTIONS.map((s) => s.id), layout.tabs, [PINNED_TAB]);
+  // Open on the user's FIRST VISIBLE tab (their reordering), not the code default.
+  // Lazy init reads the layout once per mount; Decky remounts the panel on each
+  // QAM open, so a saved reorder takes effect the next time it opens.
+  const [activeId, setActiveId] = useState<string>(() => visibleTabIds[0] ?? SECTIONS[0].id);
   // Local UI reads for the persistent learning banner. All hooks precede the
   // early returns below (rules-of-hooks; poll hooks blank first render).
   const game = useRunningGame();
@@ -52,7 +62,12 @@ export const ControlCenter: FC = () => {
   }
   if (!device) return <Spinner />;
 
-  const active = resolveActiveSection(SECTIONS, activeId);
+  // Apply the user's tab order + visibility. Settings stays pinned. A hidden
+  // active tab falls back to the first visible one via resolveActiveSection.
+  const orderedTabs = visibleIds(SECTIONS.map((s) => s.id), layout.tabs, [PINNED_TAB])
+    .map((id) => SECTIONS.find((s) => s.id === id))
+    .filter((s): s is (typeof SECTIONS)[number] => !!s);
+  const active = resolveActiveSection(orderedTabs, activeId);
   const Active = active?.Component;
 
   return (
@@ -69,7 +84,7 @@ export const ControlCenter: FC = () => {
             onOpenSettings={() => setActiveId("settings")}
           />
           <TabBar
-            tabs={SECTIONS.map((s) => ({ id: s.id, icon: s.icon, label: t(s.labelKey) }))}
+            tabs={orderedTabs.map((s) => ({ id: s.id, icon: s.icon, label: t(s.labelKey) }))}
             activeId={active?.id ?? activeId}
             onSelect={setActiveId}
           />

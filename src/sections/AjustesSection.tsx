@@ -3,6 +3,7 @@ import { ButtonItem, PanelSectionRow, ToggleField } from "@decky/ui";
 
 import { useI18n } from "../i18n";
 import { LanguageToggle } from "../components/LanguageToggle";
+import { openCustomizeModal } from "../components/CustomizeModal";
 import { getTelemetryEnabled, setTelemetryEnabled, getUnlockBatteryMax, setUnlockBatteryMax, getQamTdpBoost, setQamTdpBoost, resetTelemetry } from "../api";
 import { theme } from "../theme";
 
@@ -94,6 +95,11 @@ export const AjustesSection: FC = () => {
             onChange={onToggleQamBoost}
           />
         )}
+
+        {/* Open the full-screen tab + block layout editor. */}
+        <ButtonItem layout="below" description={t("customize.button.desc")} onClick={() => openCustomizeModal()}>
+          {t("customize.button")}
+        </ButtonItem>
 
         {/* Start-from-scratch: wipe all learned telemetry (TDP + fans). Two-tap
             confirm. Doesn't touch manual profiles/curves. */}

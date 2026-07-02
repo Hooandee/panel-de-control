@@ -139,6 +139,19 @@ const es: Record<string, string> = {
   "settings.reset.confirm": "Toca otra vez para borrar",
   "settings.reset.done": "Aprendizaje borrado",
   "settings.reset.desc": "Empieza de cero el aprendizaje (TDP y ventiladores). No toca tus perfiles ni curvas manuales.",
+  "customize.button": "Personalizar la interfaz",
+  "customize.button.desc": "Reordena u oculta pestañas y bloques a tu gusto.",
+  "customize.title": "Personalizar",
+  "customize.tabs": "Pestañas",
+  "customize.blocks": "Bloques",
+  "customize.reset": "Restablecer valores por defecto",
+  "customize.locked": "Siempre visible",
+  "customize.show": "Mostrar",
+  "customize.hide": "Ocultar",
+  "customize.moveUp": "Subir",
+  "customize.moveDown": "Bajar",
+  "customize.block.fanRpm": "Ventiladores",
+  "customize.block.temps": "Temperaturas",
 };
 
 const en: Record<string, string> = {
@@ -271,6 +284,19 @@ const en: Record<string, string> = {
   "settings.reset.confirm": "Tap again to clear",
   "settings.reset.done": "Learning cleared",
   "settings.reset.desc": "Start learning from scratch (TDP and fans). Doesn't touch your manual profiles or curves.",
+  "customize.button": "Customize the interface",
+  "customize.button.desc": "Reorder or hide tabs and blocks to your taste.",
+  "customize.title": "Customize",
+  "customize.tabs": "Tabs",
+  "customize.blocks": "Blocks",
+  "customize.reset": "Reset to defaults",
+  "customize.locked": "Always visible",
+  "customize.show": "Show",
+  "customize.hide": "Hide",
+  "customize.moveUp": "Move up",
+  "customize.moveDown": "Move down",
+  "customize.block.fanRpm": "Fans",
+  "customize.block.temps": "Temperatures",
 };
 
 const DICTS: Record<Lang, Record<string, string>> = { es, en };

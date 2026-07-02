@@ -1,19 +1,28 @@
-import { LuGauge, LuSlidersHorizontal, LuFan, LuSettings } from "react-icons/lu";
+import { FC } from "react";
 
 import { SectionDef } from "./types";
+import { TABS } from "../customize/manifest";
 import { PotenciaSection } from "./PotenciaSection";
 import { SistemaSection } from "./SistemaSection";
 import { VentiladoresSection } from "./VentiladoresSection";
 import { AjustesSection } from "./AjustesSection";
 
+// Section body per tab id. The tab metadata (order, label, icon) lives in the
+// customization manifest (TABS) so the editor can read it without importing the
+// section components (which would cycle back through here).
+const COMPONENTS: Record<string, FC> = {
+  power: PotenciaSection,
+  system: SistemaSection,
+  fans: VentiladoresSection,
+  settings: AjustesSection,
+};
+
 /**
- * The control-center sections, in tab order. Single source of truth: the TabBar
- * and the body both read from here. Add a future section (Ventiladores,
- * Perfiles) by appending one entry.
+ * The control-center sections, in default tab order. Single source of truth: the
+ * TabBar and the body both read from here. Built from the manifest's TABS +
+ * COMPONENTS above — add a section by adding a TABS entry and a component here.
  */
-export const SECTIONS: SectionDef[] = [
-  { id: "power", icon: <LuGauge size={15} />, labelKey: "nav.power", Component: PotenciaSection },
-  { id: "system", icon: <LuSlidersHorizontal size={15} />, labelKey: "nav.system", Component: SistemaSection },
-  { id: "fans", icon: <LuFan size={15} />, labelKey: "nav.fans", Component: VentiladoresSection },
-  { id: "settings", icon: <LuSettings size={15} />, labelKey: "nav.settings", Component: AjustesSection },
-];
+export const SECTIONS: SectionDef[] = TABS.map((tab) => ({
+  ...tab,
+  Component: COMPONENTS[tab.id],
+}));

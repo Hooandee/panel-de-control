@@ -1,0 +1,59 @@
+import { ReactNode } from "react";
+import {
+  LuGauge, LuSlidersHorizontal, LuFan, LuSettings,
+  LuLeaf, LuBatteryFull, LuCpu, LuSun, LuVolume2, LuWind, LuThermometer, LuChartSpline,
+} from "react-icons/lu";
+
+/** Presentation metadata shared by a tab and a configurable block. */
+export interface ItemMeta {
+  id: string;
+  labelKey: string;
+  icon: ReactNode;
+}
+export type BlockDef = ItemMeta;
+
+/** The tab that can never be hidden — the escape hatch back to the customization
+ *  editor. Single source of truth for both the shell and the editor. */
+export const PINNED_TAB = "settings";
+
+const ICON = 15;
+
+/**
+ * The tabs (id + label + icon), in DEFAULT order. Kept here — decoupled from the
+ * section Components in registry.tsx — so both the registry AND the customization
+ * editor read the same tab metadata without a circular import.
+ */
+export const TABS: ItemMeta[] = [
+  { id: "power", labelKey: "nav.power", icon: <LuGauge size={ICON} /> },
+  { id: "system", labelKey: "nav.system", icon: <LuSlidersHorizontal size={ICON} /> },
+  { id: "fans", labelKey: "nav.fans", icon: <LuFan size={ICON} /> },
+  { id: "settings", labelKey: "nav.settings", icon: <LuSettings size={ICON} /> },
+];
+
+/**
+ * The configurable blocks per section, in DEFAULT order. Single source of truth
+ * for BOTH the customization editor (labels/icons) and each section's default
+ * block order. Potencia has no configurable blocks (its interior is a
+ * conditional flow) → it's absent here and only appears in the tab editor.
+ *
+ * Section render code must key its block nodes by exactly these ids.
+ */
+export const SECTION_BLOCKS: Record<string, BlockDef[]> = {
+  system: [
+    { id: "eco", labelKey: "system.eco.title", icon: <LuLeaf size={ICON} /> },
+    { id: "battery", labelKey: "system.battery.title", icon: <LuBatteryFull size={ICON} /> },
+    { id: "cpu", labelKey: "system.cpu.title", icon: <LuCpu size={ICON} /> },
+    { id: "brightness", labelKey: "system.brightness", icon: <LuSun size={ICON} /> },
+    { id: "volume", labelKey: "system.volume", icon: <LuVolume2 size={ICON} /> },
+  ],
+  fans: [
+    { id: "fanRpm", labelKey: "customize.block.fanRpm", icon: <LuWind size={ICON} /> },
+    { id: "temps", labelKey: "customize.block.temps", icon: <LuThermometer size={ICON} /> },
+    { id: "curve", labelKey: "fans.curve.title", icon: <LuChartSpline size={ICON} /> },
+  ],
+};
+
+/** Default block-id order for a section (empty for sections without blocks). */
+export function blockOrder(sectionId: string): string[] {
+  return (SECTION_BLOCKS[sectionId] ?? []).map((b) => b.id);
+}
