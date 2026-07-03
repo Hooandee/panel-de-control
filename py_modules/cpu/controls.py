@@ -1,4 +1,6 @@
+import glob
 import os
+import re
 
 from sysfs import read_int, read_str, write_str
 
@@ -88,3 +90,54 @@ def select_boost(root="/"):
         if backend.supported:
             return backend
     return NullBoost()
+
+
+class CoreControl:
+    """Number of active PHYSICAL cores via `cpuN/online`. Cores are grouped by
+    `topology/core_id` (SMT siblings share one), so this counts/keeps whole cores,
+    independent of the SMT toggle. cpu0 has no `online` node (the kernel forbids
+    offlining it) → its core is always kept, so the minimum is 1 core.
+
+    Writing needs root. `set()` reads the result back (never-fake): if the kernel
+    clamps a write, the reported active count reflects reality, not the request."""
+
+    def __init__(self, root="/"):
+        self._base = os.path.join(root, _CPU)
+        # {core_id: [cpu_index, ...]} ordered by core_id (lowest = kept first).
+        self._cores = self._map()
+        self.max_cores = len(self._cores) or None
+        # Toggleable only if there's more than one core AND at least one online node
+        # to write (cpu0-only trees expose nothing to change).
+        self.supported = bool(self.max_cores and self.max_cores > 1
+                              and glob.glob(os.path.join(self._base, "cpu[0-9]*", "online")))
+
+    def _map(self):
+        m = {}
+        for p in glob.glob(os.path.join(self._base, "cpu[0-9]*", "topology", "core_id")):
+            match = re.search(r"cpu(\d+)", p)
+            cid = read_int(p)
+            if match and cid is not None:
+                m.setdefault(cid, []).append(int(match.group(1)))
+        return dict(sorted(m.items()))
+
+    def _online_path(self, idx):
+        return os.path.join(self._base, f"cpu{idx}", "online")
+
+    def _is_online(self, idx):
+        v = read_int(self._online_path(idx))
+        return True if v is None else v == 1  # no node (cpu0) => always online
+
+    def active(self):
+        """Count physical cores with at least one online logical CPU."""
+        return sum(1 for idxs in self._cores.values()
+                   if any(self._is_online(i) for i in idxs))
+
+    def set(self, n):
+        if not self.supported:
+            return False
+        n = max(1, min(self.max_cores, int(n)))  # always keep cpu0's core
+        for pos, idxs in enumerate(self._cores.values()):
+            want_on = pos < n
+            for i in idxs:
+                write_str(self._online_path(i), 1 if want_on else 0)  # cpu0 no-node write no-ops
+        return self.active() == n

@@ -1,6 +1,6 @@
 import os
 
-from cpu.controls import SmtControl, select_boost
+from cpu.controls import CoreControl, SmtControl, select_boost
 
 
 def _write(root, rel, val):
@@ -9,6 +9,21 @@ def _write(root, rel, val):
     with open(p, "w") as f:
         f.write(str(val))
     return p
+
+
+def _make_cpu_tree(root, cores, smt=False):
+    """Build a synthetic cpu tree with `cores` physical cores (core_id 0..cores-1).
+    cpu0 has NO online node (kernel never lets you offline it). With smt=True each
+    core has a second logical cpu (sibling sharing the core_id), all starting online."""
+    base = "sys/devices/system/cpu"
+    idx = 0
+    threads = 2 if smt else 1
+    for cid in range(cores):
+        for _ in range(threads):
+            _write(root, f"{base}/cpu{idx}/topology/core_id", cid)
+            if idx != 0:  # cpu0 can't be offlined → no online node
+                _write(root, f"{base}/cpu{idx}/online", "1")
+            idx += 1
 
 
 # ---- SMT ----
@@ -79,3 +94,52 @@ def test_boost_absent_is_null(tmp_path):
     b = select_boost(root=str(tmp_path))
     assert b.supported is False
     assert b.set(True) is False
+
+
+# ---- Active core count (cpuN/online) ----
+
+def test_core_control_reads_topology(tmp_path):
+    root = str(tmp_path)
+    _make_cpu_tree(root, cores=4)
+    cc = CoreControl(root=root)
+    assert cc.supported is True
+    assert cc.max_cores == 4
+    assert cc.active() == 4
+
+
+def test_core_control_offlines_and_onlines(tmp_path):
+    root = str(tmp_path)
+    _make_cpu_tree(root, cores=4)
+    cc = CoreControl(root=root)
+    assert cc.set(2) is True
+    assert cc.active() == 2
+    # the two higher cores went offline, cpu0's core stays
+    assert cc.set(4) is True
+    assert cc.active() == 4
+
+
+def test_core_control_never_offlines_cpu0_core(tmp_path):
+    root = str(tmp_path)
+    _make_cpu_tree(root, cores=4)
+    cc = CoreControl(root=root)
+    cc.set(1)             # minimum
+    assert cc.active() == 1  # cpu0's core is always kept
+    cc.set(0)             # below min clamps to 1, not 0
+    assert cc.active() == 1
+
+
+def test_core_control_counts_smt_core_once(tmp_path):
+    root = str(tmp_path)
+    _make_cpu_tree(root, cores=4, smt=True)  # 8 logical, 4 physical
+    cc = CoreControl(root=root)
+    assert cc.max_cores == 4
+    assert cc.set(2) is True
+    assert cc.active() == 2  # a core with either sibling online counts once
+
+
+def test_core_control_unsupported_single_core(tmp_path):
+    root = str(tmp_path)
+    _make_cpu_tree(root, cores=1)
+    cc = CoreControl(root=root)
+    assert cc.supported is False  # nothing to toggle
+    assert cc.set(1) is False

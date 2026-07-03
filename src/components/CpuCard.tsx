@@ -5,11 +5,13 @@ import { CpuState } from "../api";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { activeThreads, formatGhz, threadsPerCore, turboFraction } from "../system/cpu";
+import { ContainedSlider } from "./ContainedSlider";
 
 interface Props {
   state: CpuState;
   onSetSmt: (enabled: boolean) => void;
   onSetBoost: (enabled: boolean) => void;
+  onSetCores: (count: number) => void;
 }
 
 // Boost-off turbo tail: dim but visible, so "boost off" reads differently from
@@ -25,7 +27,7 @@ const Core: FC<{ pips: number; lit: number }> = ({ pips, lit }) => (
   </div>
 );
 
-export const CpuCard: FC<Props> = ({ state, onSetSmt, onSetBoost }) => {
+export const CpuCard: FC<Props> = ({ state, onSetSmt, onSetBoost, onSetCores }) => {
   const { t } = useI18n();
   const smtOn = state.smt.enabled;
   const boostOn = state.boost.enabled;
@@ -33,6 +35,8 @@ export const CpuCard: FC<Props> = ({ state, onSetSmt, onSetBoost }) => {
   const tpc = threadsPerCore(state.cores, state.threads);
   const turbo = turboFraction(state.base_khz, state.max_khz);
   const peak = boostOn ? state.max_khz : state.base_khz;
+  // How many physical cores are active (for both the pip viz and the slider).
+  const activeCores = state.active_cores ?? cores ?? 0;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm, overflow: "hidden" }}>
@@ -44,7 +48,7 @@ export const CpuCard: FC<Props> = ({ state, onSetSmt, onSetBoost }) => {
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <div style={{ display: "flex", gap: 3 }}>
             {Array.from({ length: cores }, (_, i) => (
-              <Core key={i} pips={tpc} lit={smtOn ? tpc : 1} />
+              <Core key={i} pips={tpc} lit={i < activeCores ? (smtOn ? tpc : 1) : 0} />
             ))}
           </div>
           <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
@@ -66,6 +70,23 @@ export const CpuCard: FC<Props> = ({ state, onSetSmt, onSetBoost }) => {
               <div style={{ flex: `${turbo} 0 0`, background: boostOn ? theme.color.boost : TURBO_OFF }} />
             )}
           </div>
+        </div>
+      )}
+
+      {/* Active core count */}
+      {state.cores_supported && state.max_cores !== null && state.max_cores > 1 && (
+        <div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: theme.font.caption, color: theme.color.textMuted }}>
+            <span>{t("system.cpu.activeCores")}</span>
+            <span style={{ color: theme.color.textPrimary, fontWeight: 700 }}>{activeCores} / {state.max_cores}</span>
+          </div>
+          <ContainedSlider
+            value={activeCores}
+            min={1}
+            max={state.max_cores}
+            step={1}
+            onChange={onSetCores}
+          />
         </div>
       )}
 

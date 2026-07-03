@@ -2,6 +2,7 @@ import { FC, useCallback, useEffect, useRef, useState } from "react";
 
 import { getTdpState, setTdpWatts, setTdpLevels, resetTdpAuto, getPowerDraw, setAutoTdp, TdpState, TdpScope, PowerDraw } from "../api";
 import { TdpSection } from "../components/TdpSection";
+import { GpuClockCard } from "../components/GpuClockCard";
 import { useRunningGame } from "../tdp/useRunningGame";
 
 /**
@@ -119,17 +120,20 @@ export const PotenciaSection: FC = () => {
   );
 
   return (
-    <TdpSection
-      tdp={tdp}
-      scope={scope}
-      game={game}
-      power={power}
-      onScope={setScope}
-      onWatts={onWatts}
-      onSetLevels={onSetLevels}
-      onResetAuto={onResetAuto}
-      onAutoTdp={onAutoTdp}
-      onApplySuggestion={onApplySuggestion}
-    />
+    <>
+      <TdpSection
+        tdp={tdp}
+        scope={scope}
+        game={game}
+        power={power}
+        onScope={setScope}
+        onWatts={onWatts}
+        onSetLevels={onSetLevels}
+        onResetAuto={onResetAuto}
+        onAutoTdp={onAutoTdp}
+        onApplySuggestion={onApplySuggestion}
+      />
+      <GpuClockCard />
+    </>
   );
 };

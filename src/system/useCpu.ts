@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CpuState, getCpuState, setCpuBoost, setSmt } from "../api";
+import { CpuState, getCpuState, setActiveCores, setCpuBoost, setSmt } from "../api";
 
 const POLL_MS = 3000; // topology/freq change rarely
 
@@ -7,6 +7,7 @@ export interface CpuController {
   state: CpuState | null;
   setSmt: (enabled: boolean) => void;
   setBoost: (enabled: boolean) => void;
+  setCores: (count: number) => void;
 }
 
 /**
@@ -63,6 +64,11 @@ export function useCpu(): CpuController {
       apply((s) => ({ ...s, boost: { ...s.boost, enabled } }), () => setCpuBoost(enabled)),
     [apply],
   );
+  const doCores = useCallback(
+    (count: number) =>
+      apply((s) => ({ ...s, active_cores: count }), () => setActiveCores(count)),
+    [apply],
+  );
 
-  return { state, setSmt: doSmt, setBoost: doBoost };
+  return { state, setSmt: doSmt, setBoost: doBoost, setCores: doCores };
 }

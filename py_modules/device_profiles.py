@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from typing import Optional
 
 
 @dataclass(frozen=True)
@@ -14,6 +15,13 @@ class DeviceProfile:
     # DMI product_name strings that identify this device (matched case-insensitively, substring)
     match_names: tuple = field(default_factory=tuple)
     is_generic: bool = False
+    # Panel technology. "oled" hides the "OLED look" color preset (a real OLED has
+    # nothing to emulate). VERIFY ON-DEVICE if unsure — a wrong guess only shows/hides
+    # a cosmetic button, never anything unsafe.
+    panel: str = "lcd"
+    # Optional per-model calibrated "OLED look" color state. None => the generic look
+    # (display.oled_look.GENERIC_OLED_LOOK). Fill in only VALUES VALIDATED ON-DEVICE.
+    oled_look: Optional[dict] = None
 
 
 # Conservative, safe fallback when detection fails - visibly generic.
@@ -35,7 +43,7 @@ DEVICE_TABLE = (
     DeviceProfile("steam_deck_lcd", "Steam Deck", "AMD Van Gogh", "amd",
                   3, 12, 15, 15, match_names=("Jupiter",)),
     DeviceProfile("steam_deck_oled", "Steam Deck OLED", "AMD Sephiroth", "amd",
-                  3, 12, 15, 15, match_names=("Galileo",)),
+                  3, 12, 15, 15, match_names=("Galileo",), panel="oled"),
     DeviceProfile("rog_xbox_ally_x", "ROG Xbox Ally X", "AMD Ryzen AI Z2 Extreme", "amd",
                   7, 17, 25, 30, match_names=("ROG Xbox Ally X",)),
     DeviceProfile("rog_ally_x", "ROG Ally X", "AMD Z1 Extreme", "amd",
@@ -43,7 +51,7 @@ DEVICE_TABLE = (
     DeviceProfile("rog_ally", "ROG Ally", "AMD Z1 Extreme", "amd",
                   7, 15, 25, 30, match_names=("ROG Ally RC71", "ROG Ally")),
     DeviceProfile("legion_go_2", "Legion Go 2", "AMD Ryzen AI Z2 Extreme", "amd",
-                  5, 15, 30, 33, match_names=("83N0", "Legion Go 2")),
+                  5, 15, 30, 33, match_names=("83N0", "Legion Go 2"), panel="oled"),
     DeviceProfile("legion_go_s", "Legion Go S", "AMD Ryzen Z2 Go", "amd",
                   5, 15, 30, 33, match_names=("83L3", "83Q", "Legion Go S")),
     DeviceProfile("legion_go", "Legion Go", "AMD Z1 Extreme", "amd",

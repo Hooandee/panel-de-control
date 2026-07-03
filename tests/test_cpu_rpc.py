@@ -24,7 +24,21 @@ class _FakeToggle:
         return True
 
 
-def _make_plugin(tmp_path, monkeypatch, smt=None, boost=None):
+class _FakeCores:
+    def __init__(self, supported=True, max_cores=8, active=8):
+        self.supported = supported
+        self.max_cores = max_cores if supported else None
+        self._active = active
+
+    def active(self):
+        return self._active
+
+    def set(self, n):
+        self._active = max(1, min(self.max_cores, int(n)))
+        return True
+
+
+def _make_plugin(tmp_path, monkeypatch, smt=None, boost=None, cores=None):
     fake_decky = types.ModuleType("decky")
     fake_decky.DECKY_PLUGIN_SETTINGS_DIR = str(tmp_path)
     fake_decky.DECKY_USER = "deck"
@@ -64,7 +78,7 @@ def _make_plugin(tmp_path, monkeypatch, smt=None, boost=None):
     main = importlib.reload(importlib.import_module("main"))
     monkeypatch.setattr(main, "read_on_ac", lambda root="/": True, raising=False)
 
-    if smt is not None or boost is not None:
+    if smt is not None or boost is not None or cores is not None:
         original_init = main.Plugin._init
 
         def patched_init(self):
@@ -73,6 +87,8 @@ def _make_plugin(tmp_path, monkeypatch, smt=None, boost=None):
                 self._smt = smt
             if boost is not None:
                 self._boost = boost
+            if cores is not None:
+                self._cores = cores
 
         monkeypatch.setattr(main.Plugin, "_init", patched_init)
 
@@ -106,6 +122,27 @@ def test_set_boost_toggles(tmp_path, monkeypatch):
     p = _make_plugin(tmp_path, monkeypatch, smt=_FakeToggle(), boost=boost)
     asyncio.run(p.set_cpu_boost(False))
     assert boost.enabled() is False
+
+
+def test_set_active_cores_persists_and_reapplies(tmp_path, monkeypatch):
+    cores = _FakeCores(max_cores=8, active=8)
+    p = _make_plugin(tmp_path, monkeypatch, smt=_FakeToggle(), boost=_FakeToggle(), cores=cores)
+    st = asyncio.run(p.set_active_cores(4))
+    assert cores.active() == 4
+    assert st["active_cores"] == 4 and st["max_cores"] == 8 and st["cores_supported"] is True
+    # persisted → startup re-applies
+    p2 = _make_plugin(tmp_path, monkeypatch, smt=_FakeToggle(), boost=_FakeToggle(),
+                      cores=_FakeCores(max_cores=8, active=8))
+    p2._init()
+    p2._apply_cpu()
+    assert p2._cores.active() == 4
+
+
+def test_cores_unsupported_hides(tmp_path, monkeypatch):
+    p = _make_plugin(tmp_path, monkeypatch, smt=_FakeToggle(), boost=_FakeToggle(),
+                     cores=_FakeCores(supported=False))
+    st = asyncio.run(p.get_cpu_state())
+    assert st["cores_supported"] is False and st["active_cores"] is None
 
 
 def test_unsupported_controls_degrade(tmp_path, monkeypatch):

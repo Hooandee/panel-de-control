@@ -4,6 +4,7 @@ import { SectionDef } from "./types";
 import { TABS } from "../customize/manifest";
 import { PotenciaSection } from "./PotenciaSection";
 import { SistemaSection } from "./SistemaSection";
+import { PantallaSection } from "./PantallaSection";
 import { VentiladoresSection } from "./VentiladoresSection";
 import { AjustesSection } from "./AjustesSection";
 
@@ -13,6 +14,7 @@ import { AjustesSection } from "./AjustesSection";
 const COMPONENTS: Record<string, FC> = {
   power: PotenciaSection,
   system: SistemaSection,
+  display: PantallaSection,
   fans: VentiladoresSection,
   settings: AjustesSection,
 };

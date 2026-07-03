@@ -19,11 +19,16 @@ from fans import control as fan_control
 from fans import presets as fan_presets
 from fans import suggest as fan_suggest
 from fan_curves import FanCurveStore
+from display.color_store import ColorStore
+from display.gamescope import GamescopeColorBackend
+from display.oled_look import oled_look_for
+from display.const import NATIVE as COLOR_NATIVE, FIELDS as COLOR_FIELDS
+from gpu.clock import select_gpu_clock
 from power.reader import PowerReader
 from battery.reader import BatteryReader
 from battery.charge_limit import select_charge_limit
 from cpu.info import read_cpu_info, read_cpu_model
-from cpu.controls import SmtControl, select_boost
+from cpu.controls import CoreControl, SmtControl, select_boost
 from telemetry.store import TelemetryStore
 from telemetry.sampler import TelemetrySampler
 
@@ -56,6 +61,13 @@ DEFAULTS = {
     # CPU controls default to full performance (SMT + boost on) — the stock state.
     "smt_enabled": True,
     "boost_enabled": True,
+    # Active physical cores. None = all cores (stock); an int caps the count.
+    "active_cores": None,
+    # GPU clock window (MHz). manual=False → leave the GPU on auto (we don't touch
+    # it); True → pin/limit to [min,max]. min/max None until the user sets them.
+    "gpu_clock_manual": False,
+    "gpu_clock_min": None,
+    "gpu_clock_max": None,
     # Download mode (low power while a game downloads unattended): TDP→min, boost
     # off, ambient screen dim. `eco_brightness` = the pre-eco brightness % to wake
     # back to. Both restored/derived on exit; eco_enabled is a pure override.
@@ -70,6 +82,10 @@ class Plugin:
     # of ACTUAL play — matching the telemetry histogram's ~30 min decay half-life so
     # the curve tracks the current thermal "zone" without explicit zone detection.
     _REAPPLY_EVERY_TICKS = 360
+
+    # Calibration preview auto-reverts to the saved value after this many seconds
+    # unless the user confirms — the "changing screen resolution" safety pattern.
+    _COLOR_REVERT_SECS = 15
 
     # Lazy, idempotent init called at the top of EVERY RPC method and _main.
     # RPC can be invoked before _main finishes; without this, methods AttributeError
@@ -96,11 +112,29 @@ class Plugin:
         self._fan_curves = FanCurveStore(
             os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "fan_curves.json")
         )
+        # Pantalla: panel color. Saturation is per-game (store), calibration global.
+        # Applied via gamescope atoms; the backend is probe-gated (UI hidden if the
+        # host has no gamescope display) so nothing fake is ever shown.
+        self._color = ColorStore(
+            os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "color.json")
+        )
+        # Intel/Xe needs gamescope composition forced for a color look to show in-game
+        # (the LUT isn't carried by the HW color pipeline as it is on AMD).
+        self._color_backend = GamescopeColorBackend(
+            force_composite=(self._device.vendor == "intel")
+        )
+        # Calibration safety: a change previews live but auto-reverts to the saved
+        # value after _COLOR_REVERT_SECS unless confirmed (so a mis-drag to an
+        # illegible screen self-heals even if the QAM closes). None = nothing pending.
+        self._color_preview = None
+        self._color_revert_task = None
         self._power_reader = PowerReader()
         self._battery = BatteryReader()
         self._charge_limit = select_charge_limit(self._device)
         self._smt = SmtControl()
         self._boost = select_boost()
+        self._cores = CoreControl()
+        self._gpu_clock = select_gpu_clock(self._device)
         # Topology + freq range are static — read once (only SMT/boost state is live).
         self._cpu_info = read_cpu_info()
         # Real silicon name (static) shown in the DeviceHeader instead of the hardcoded
@@ -822,10 +856,17 @@ class Plugin:
     def _reapply_all(self, on_ac=None) -> None:
         """Lifecycle callback: re-assert TDP, the fan curve, the charge limit and the
         CPU controls (resume/AC — firmware may drop these across a suspend)."""
+        # A context change (resume, AC/DC, game change, eco) invalidates any
+        # unconfirmed calibration preview — drop it and cancel its revert timer so a
+        # stale preview can't leak onto the new context (nor a dangling timer fire).
+        self._cancel_color_revert()
+        self._color_preview = None
         self._reapply_tdp(on_ac)
         self._reapply_fans()
         self._apply_charge_limit()
         self._apply_cpu()
+        self._reapply_color()
+        self._apply_gpu_clock()
 
     # ---- Battery + charge limit --------------------------------------------
     def _apply_charge_limit(self) -> None:
@@ -872,8 +913,17 @@ class Plugin:
 
     # ---- CPU (SMT + boost) --------------------------------------------------
     def _apply_cpu(self) -> None:
-        """Re-assert the persisted SMT + boost state (safe no-op where unsupported).
-        In download mode, boost is forced off regardless of the saved setting."""
+        """Re-assert the persisted core count, SMT + boost state (safe no-op where
+        unsupported). In download mode, boost is forced off regardless of the saved
+        setting.
+
+        ORDER MATTERS: cores FIRST (onlining the kept cores brings their SMT siblings
+        online too), then SMT — so SMT-off re-offlines those siblings and the two
+        controls, which write the same cpuN/online nodes, end up consistent."""
+        # Re-assert the active-core count (cores come back all-online after a suspend).
+        n = self._settings.get("active_cores")
+        if self._cores.supported and n is not None:
+            self._cores.set(int(n))
         if self._smt.supported:
             self._smt.set(bool(self._settings.get("smt_enabled", True)))
         if self._boost.supported:
@@ -929,11 +979,76 @@ class Plugin:
             "max_khz": info["max_khz"],
             "smt": {"supported": self._smt.supported, "enabled": self._smt.enabled()},
             "boost": {"supported": self._boost.supported, "enabled": self._boost.enabled()},
+            # Active physical cores (None max = feature unavailable on this device).
+            "cores_supported": self._cores.supported,
+            "max_cores": self._cores.max_cores,
+            "active_cores": self._cores.active() if self._cores.supported else None,
         }
 
     async def get_cpu_state(self) -> dict:
         self._init()
         return self._cpu_state()
+
+    async def set_active_cores(self, count: int) -> dict:
+        self._init()
+        self._clear_eco()
+        self._settings["active_cores"] = int(count)
+        self._save()
+        if self._cores.supported:
+            self._cores.set(int(count))
+            # Onlining the kept cores also brings their SMT siblings online; re-assert
+            # SMT so an SMT-off preference re-offlines them (shared cpuN/online nodes).
+            if self._smt.supported:
+                self._smt.set(bool(self._settings.get("smt_enabled", True)))
+        return self._cpu_state()
+
+    # ---- GPU clock (Potencia) ----------------------------------------------
+    def _apply_gpu_clock(self) -> None:
+        """Re-assert the GPU clock window when manual (cleared to auto after suspend).
+        When not manual we leave the GPU alone (don't fight other tools). Guarded."""
+        try:
+            if not self._gpu_clock.supported or not self._settings.get("gpu_clock_manual"):
+                return
+            lo, hi = self._settings.get("gpu_clock_min"), self._settings.get("gpu_clock_max")
+            if lo is not None and hi is not None:
+                self._gpu_clock.set(int(lo), int(hi))
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _gpu_clock_state(self) -> dict:
+        rng = self._gpu_clock.get_range()
+        cur = self._gpu_clock.get()
+        return {
+            "supported": self._gpu_clock.supported,
+            "manual": bool(self._settings.get("gpu_clock_manual")),
+            "range_min": rng[0] if rng else None,
+            "range_max": rng[1] if rng else None,
+            # Current forced window; falls back to the full range for the initial sliders.
+            "min": cur[0] if cur else (rng[0] if rng else None),
+            "max": cur[1] if cur else (rng[1] if rng else None),
+        }
+
+    async def get_gpu_clock(self) -> dict:
+        self._init()
+        return self._gpu_clock_state()
+
+    async def set_gpu_clock(self, min_mhz: int, max_mhz: int) -> dict:
+        self._init()
+        self._settings["gpu_clock_manual"] = True
+        self._settings["gpu_clock_min"] = int(min_mhz)
+        self._settings["gpu_clock_max"] = int(max_mhz)
+        self._save()
+        if self._gpu_clock.supported:
+            self._gpu_clock.set(int(min_mhz), int(max_mhz))
+        return self._gpu_clock_state()
+
+    async def set_gpu_clock_auto(self) -> dict:
+        self._init()
+        self._settings["gpu_clock_manual"] = False
+        self._save()
+        if self._gpu_clock.supported:
+            self._gpu_clock.set_auto()
+        return self._gpu_clock_state()
 
     async def set_smt(self, enabled: bool) -> dict:
         self._init()
@@ -962,6 +1077,121 @@ class Plugin:
         self._save()
         self._apply_charge_limit()
         return self._charge_limit_state()
+
+    # ---- Pantalla (panel color via gamescope) -------------------------------
+    def _reapply_color(self) -> None:
+        """Push the effective color (per-game saturation + global calibration, with
+        any live preview overlaid) to gamescope. No-op when unsupported. Guarded."""
+        try:
+            if self._color_backend.supported:
+                self._color_backend.apply(self._effective_color())
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _effective_color(self) -> dict:
+        """The color to actually apply: saved effective, overlaid with the unconfirmed
+        calibration preview when one is pending."""
+        eff = self._color.effective(self._current_appid)
+        if self._color_preview is not None:
+            eff = {**eff, **self._color_preview}
+        return eff
+
+    def _color_state(self) -> dict:
+        eff = self._effective_color()
+        return {
+            "supported": self._color_backend.supported,
+            **{f: eff[f] for f in COLOR_FIELDS},
+            "global_saturation": self._color.effective(None)["saturation"],
+            "has_game_profile": (self._current_appid is not None
+                                 and self._color.has_game(self._current_appid)),
+            "appid": self._current_appid,
+            # The per-model "OLED look" preset (None on a real OLED → UI hides the card).
+            "oled_look": oled_look_for(self._device),
+            "panel": self._device.panel,
+            # True when a color look costs a bit of extra power here (Intel forces
+            # gamescope composition) → the UI shows an honest, device-named note.
+            "perf_cost": getattr(self._color_backend, "force_composite", False),
+            "device_name": self._device.display_name,
+            # Calibration preview pending confirmation (auto-reverts) + its window.
+            "preview": self._color_preview is not None,
+            "revert_seconds": self._COLOR_REVERT_SECS,
+        }
+
+    async def get_color_state(self) -> dict:
+        self._init()
+        return self._color_state()
+
+    async def set_saturation(self, value: int, scope: str, appid=None) -> dict:
+        # Saturation can't make the screen illegible (0 = grayscale) → save directly,
+        # no confirm timer.
+        self._init()
+        self._color.set_saturation(scope, int(value), appid=appid)
+        self._reapply_color()
+        return self._color_state()
+
+    async def preview_calibration(self, temperature: int, contrast: int) -> dict:
+        """Apply calibration LIVE without saving, and arm the auto-revert timer. The
+        UI confirms with set_calibration; if it doesn't, the screen self-heals."""
+        self._init()
+        self._color_preview = {"temperature": int(temperature), "contrast": int(contrast)}
+        self._reapply_color()
+        self._arm_color_revert()
+        return self._color_state()
+
+    async def set_calibration(self, temperature: int, contrast: int) -> dict:
+        """Confirm (save) the calibration: persist, cancel the auto-revert, apply."""
+        self._init()
+        self._cancel_color_revert()
+        self._color_preview = None
+        self._color.set_calibration(temperature=int(temperature), contrast=int(contrast))
+        self._reapply_color()
+        return self._color_state()
+
+    def _arm_color_revert(self) -> None:
+        self._cancel_color_revert()
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return  # no event loop (tests) — the FE countdown still guards the UI
+        self._color_revert_task = asyncio.create_task(self._color_revert_after())
+
+    def _cancel_color_revert(self) -> None:
+        if self._color_revert_task is not None:
+            self._color_revert_task.cancel()
+            self._color_revert_task = None
+
+    async def _color_revert_after(self) -> None:
+        try:
+            await asyncio.sleep(self._COLOR_REVERT_SECS)
+            self._do_color_revert()
+        except asyncio.CancelledError:
+            pass
+
+    def _do_color_revert(self) -> None:
+        """Drop the unconfirmed preview and re-apply the saved color."""
+        self._color_preview = None
+        self._color_revert_task = None
+        self._reapply_color()
+
+    async def apply_oled_look(self) -> dict:
+        """One-tap: apply this model's OLED-look preset (calibration + a global
+        saturation). No-op on OLED panels (no preset). Saved directly."""
+        self._init()
+        self._cancel_color_revert()
+        self._color_preview = None
+        look = oled_look_for(self._device)
+        if look is not None:
+            self._color.apply_preset(look)
+            self._reapply_color()
+        return self._color_state()
+
+    async def reset_color(self) -> dict:
+        self._init()
+        self._cancel_color_revert()
+        self._color_preview = None
+        self._color.reset()
+        self._reapply_color()
+        return self._color_state()
 
     async def get_tdp_state(self) -> dict:
         self._init()
@@ -1074,6 +1304,16 @@ class Plugin:
         except Exception:  # noqa: BLE001
             pass
 
+    def _restore_color_safe(self) -> None:
+        """Clear any applied color LUT (back to the panel's native look) so a
+        disabled/uninstalled plugin leaves no lingering color. Guarded."""
+        try:
+            cb = getattr(self, "_color_backend", None)
+            if cb is not None and cb.supported:
+                cb.apply(dict(COLOR_NATIVE))
+        except Exception:  # noqa: BLE001
+            pass
+
     # ---- lifecycle ----------------------------------------------------------
     async def _main(self) -> None:
         self._init()
@@ -1094,6 +1334,8 @@ class Plugin:
         # Restore fans to firmware auto FIRST — before stopping other loops —
         # so the hardware is never left with a stale manual curve.
         self._restore_fans_safe()
+        self._cancel_color_revert()
+        self._restore_color_safe()
         self._stop_auto_loop()
         if getattr(self, "_sampler", None) is not None:
             self._sampler.stop()
@@ -1103,4 +1345,5 @@ class Plugin:
 
     async def _uninstall(self) -> None:
         self._restore_fans_safe()
+        self._restore_color_safe()
         decky.logger.info("Panel de Control uninstalled")

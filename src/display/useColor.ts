@@ -1,0 +1,137 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  getColorState,
+  setSaturation,
+  previewCalibration,
+  setCalibration,
+  applyOledLook,
+  resetColor,
+  ColorState,
+  ColorPreset,
+  Scope,
+} from "../api";
+import { useRunningGame } from "../tdp/useRunningGame";
+
+export interface ColorControl {
+  state: ColorState | null;
+  scope: Scope;
+  game: ReturnType<typeof useRunningGame>;
+  /** Seconds left before an unconfirmed calibration auto-reverts (null = none pending). */
+  revertIn: number | null;
+  setScope: (s: Scope) => void;
+  onSaturation: (value: number) => void;
+  onCalibration: (patch: Partial<ColorPreset>) => void;
+  confirmCalibration: () => void;
+  onOledLook: () => void;
+  onReset: () => void;
+}
+
+/**
+ * Owns the Pantalla color state + the global/per-game scope for SATURATION.
+ * Saturation saves directly (can't make the screen illegible). Calibration
+ * (temperature/contrast) is PREVIEWED live and auto-reverts after the backend
+ * window unless confirmed — a UI countdown mirrors it and refreshes on expiry.
+ */
+export function useColor(): ColorControl {
+  const game = useRunningGame();
+  const [state, setState] = useState<ColorState | null>(null);
+  const [scope, setScope] = useState<Scope>("global");
+  const [revertIn, setRevertIn] = useState<number | null>(null);
+  const commit = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const countdown = useRef<ReturnType<typeof setInterval> | null>(null);
+  const remaining = useRef(0);
+  const stateRef = useRef<ColorState | null>(null);
+  stateRef.current = state;
+
+  const refresh = useCallback(() => {
+    getColorState().then(setState).catch(() => {});
+  }, []);
+
+  const stopCountdown = useCallback(() => {
+    if (countdown.current) clearInterval(countdown.current);
+    countdown.current = null;
+    setRevertIn(null);
+  }, []);
+
+  // Fetch on mount + whenever the running game changes (also snaps scope). A game
+  // change invalidates any in-flight calibration preview (the backend drops it in
+  // _reapply_all), so cancel the pending commit AND the mirror countdown to stay in
+  // sync — otherwise the confirm bar keeps ticking against a preview that's gone.
+  const appid = game?.appid;
+  useEffect(() => {
+    if (commit.current) clearTimeout(commit.current);
+    stopCountdown();
+    setScope(appid ? "game" : "global");
+    refresh();
+  }, [appid, refresh, stopCountdown]);
+
+  useEffect(() => () => {
+    if (commit.current) clearTimeout(commit.current);
+    if (countdown.current) clearInterval(countdown.current);
+  }, []);
+
+  const onSaturation = useCallback(
+    (value: number) => {
+      const targetAppid = scope === "game" && game ? game.appid : null;
+      const targetScope: Scope = targetAppid ? "game" : "global";
+      setState((cur) => (cur ? { ...cur, saturation: value } : cur)); // optimistic
+      if (commit.current) clearTimeout(commit.current);
+      commit.current = setTimeout(() => {
+        setSaturation(value, targetScope, targetAppid).then(setState).catch(() => {});
+      }, 200);
+    },
+    [scope, game],
+  );
+
+  // (re)start the mirror countdown; on expiry the backend has already reverted, so
+  // just refresh to show the restored values.
+  const startCountdown = useCallback((secs: number) => {
+    remaining.current = secs;
+    setRevertIn(secs);
+    if (countdown.current) clearInterval(countdown.current);
+    countdown.current = setInterval(() => {
+      remaining.current -= 1;
+      if (remaining.current <= 0) {
+        stopCountdown();
+        refresh();
+      } else {
+        setRevertIn(remaining.current);
+      }
+    }, 1000);
+  }, [refresh, stopCountdown]);
+
+  const onCalibration = useCallback((patch: Partial<ColorPreset>) => {
+    const base = stateRef.current;
+    if (!base) return;
+    const next = { ...base, ...patch, preview: true };
+    setState(next); // optimistic
+    startCountdown(base.revert_seconds || 15);
+    if (commit.current) clearTimeout(commit.current);
+    commit.current = setTimeout(() => {
+      previewCalibration(next.temperature, next.contrast).then(setState).catch(() => {});
+    }, 200);
+  }, [startCountdown]);
+
+  const confirmCalibration = useCallback(() => {
+    const cur = stateRef.current;
+    if (!cur) return;
+    stopCountdown();
+    if (commit.current) clearTimeout(commit.current);
+    setCalibration(cur.temperature, cur.contrast).then(setState).catch(() => {});
+  }, [stopCountdown]);
+
+  const onOledLook = useCallback(() => {
+    stopCountdown();
+    applyOledLook().then(setState).catch(() => {});
+  }, [stopCountdown]);
+
+  const onReset = useCallback(() => {
+    stopCountdown();
+    resetColor().then(setState).catch(() => {});
+  }, [stopCountdown]);
+
+  return {
+    state, scope, game, revertIn, setScope,
+    onSaturation, onCalibration, confirmCalibration, onOledLook, onReset,
+  };
+}

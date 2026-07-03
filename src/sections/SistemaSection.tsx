@@ -55,7 +55,7 @@ export const SistemaSection: FC = () => {
     ),
     cpu: cpu.state && (
       <Collapsible id="cpu" icon={<LuCpu size={16} />} title={t("system.cpu.title")} summary={cpuSummary}>
-        <CpuCard state={cpu.state} onSetSmt={cpu.setSmt} onSetBoost={cpu.setBoost} />
+        <CpuCard state={cpu.state} onSetSmt={cpu.setSmt} onSetBoost={cpu.setBoost} onSetCores={cpu.setCores} />
       </Collapsible>
     ),
     brightness: (

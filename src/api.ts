@@ -257,11 +257,16 @@ export interface CpuState {
   max_khz: number | null;
   smt: CpuToggle;
   boost: CpuToggle;
+  // Active physical cores. cores_supported=false → the control is hidden.
+  cores_supported: boolean;
+  max_cores: number | null;
+  active_cores: number | null;
 }
 
 export const getCpuState = callable<[], CpuState>("get_cpu_state");
 export const setSmt = callable<[enabled: boolean], CpuState>("set_smt");
 export const setCpuBoost = callable<[enabled: boolean], CpuState>("set_cpu_boost");
+export const setActiveCores = callable<[count: number], CpuState>("set_active_cores");
 
 // ---- Download mode (low power) --------------------------------------------
 export interface EcoState {
@@ -295,3 +300,57 @@ export interface InstallResult {
 export const checkUpdate = callable<[force: boolean], UpdateInfo>("check_update");
 export const installUpdate = callable<[], InstallResult>("install_update");
 export const restartLoader = callable<[], void>("restart_loader");
+
+// ---- Pantalla (panel color via gamescope) ---------------------------------
+// Saturation is PER-GAME (global + per-appid); the calibration fields
+// (temperature/contrast) are panel-level → GLOBAL. See ColorPreset for ranges.
+export interface ColorPreset {
+  saturation: number;   // 0..200, 100 neutral (per-game)
+  temperature: number;  // -100 cool .. +100 warm, 0 neutral (global)
+  contrast: number;     // -100 flat .. +100 punchy, 0 neutral (global)
+}
+
+export interface ColorState extends ColorPreset {
+  // False when the host has no gamescope color control → UI shows an honest note.
+  supported: boolean;
+  global_saturation: number;
+  has_game_profile: boolean;
+  appid: string | null;
+  // The one-tap per-model "OLED look" preset, or null on a real OLED panel.
+  oled_look: ColorPreset | null;
+  panel: string; // "lcd" | "oled"
+  // A calibration change is previewed live but pending confirmation — it
+  // auto-reverts to the saved value after `revert_seconds` unless confirmed.
+  preview: boolean;
+  revert_seconds: number;
+  // True when an active look costs a bit of extra power on this device (Intel forces
+  // gamescope composition so the look shows in-game) → the UI notes it (by name).
+  perf_cost: boolean;
+  device_name: string;
+}
+
+// ---- GPU clock (Potencia) -------------------------------------------------
+export interface GpuClockState {
+  supported: boolean;
+  manual: boolean;
+  range_min: number | null;
+  range_max: number | null;
+  min: number | null;
+  max: number | null;
+}
+
+export const getGpuClock = callable<[], GpuClockState>("get_gpu_clock");
+export const setGpuClock =
+  callable<[min_mhz: number, max_mhz: number], GpuClockState>("set_gpu_clock");
+export const setGpuClockAuto = callable<[], GpuClockState>("set_gpu_clock_auto");
+
+export const getColorState = callable<[], ColorState>("get_color_state");
+export const setSaturation =
+  callable<[value: number, scope: Scope, appid: string | null], ColorState>("set_saturation");
+// Preview calibration live (arms the backend auto-revert); confirm with setCalibration.
+export const previewCalibration =
+  callable<[temperature: number, contrast: number], ColorState>("preview_calibration");
+export const setCalibration =
+  callable<[temperature: number, contrast: number], ColorState>("set_calibration");
+export const applyOledLook = callable<[], ColorState>("apply_oled_look");
+export const resetColor = callable<[], ColorState>("reset_color");

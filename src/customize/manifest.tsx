@@ -2,7 +2,7 @@ import { ReactNode } from "react";
 import {
   LuGauge, LuSlidersHorizontal, LuFan, LuSettings,
   LuLeaf, LuBatteryFull, LuCpu, LuSun, LuVolume2, LuWind, LuThermometer, LuChartSpline,
-  LuLightbulb,
+  LuLightbulb, LuPalette,
 } from "react-icons/lu";
 
 /** Presentation metadata shared by a tab and a configurable block. */
@@ -27,6 +27,7 @@ const ICON = 15;
 export const TABS: ItemMeta[] = [
   { id: "power", labelKey: "nav.power", icon: <LuGauge size={ICON} /> },
   { id: "system", labelKey: "nav.system", icon: <LuSlidersHorizontal size={ICON} /> },
+  { id: "display", labelKey: "nav.display", icon: <LuPalette size={ICON} /> },
   { id: "fans", labelKey: "nav.fans", icon: <LuFan size={ICON} /> },
   { id: "settings", labelKey: "nav.settings", icon: <LuSettings size={ICON} /> },
 ];
