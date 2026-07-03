@@ -7,12 +7,14 @@ import { ValueBar } from "../components/ValueBar";
 import { BatteryCard } from "../components/BatteryCard";
 import { CpuCard } from "../components/CpuCard";
 import { EcoCard } from "../components/EcoCard";
+import { ColoresCard } from "../components/ColoresCard";
 import { Collapsible } from "../components/Collapsible";
 import { batteryStatusKey } from "../system/battery";
 import { useBrightness, useVolume } from "../system/useScalar";
 import { useBattery } from "../system/useBattery";
 import { useCpu } from "../system/useCpu";
 import { useEco } from "../system/useEco";
+import { useColores } from "../system/useColores";
 import { SectionBlocks } from "../customize/SectionBlocks";
 
 /** System controls: battery + CPU (collapsible, rich) then brightness + volume (simple bars). */
@@ -23,6 +25,7 @@ export const SistemaSection: FC = () => {
   const battery = useBattery();
   const cpu = useCpu();
   const eco = useEco();
+  const colores = useColores();
 
   const b = battery.state?.battery;
   const batterySummary = b?.present
@@ -80,6 +83,16 @@ export const SistemaSection: FC = () => {
           unavailableLabel={t("system.unavailable")}
         />
       </PanelSectionRow>
+    ),
+    // RGB lighting → opens/installs the sibling Colores plugin. Absent on Steam
+    // Deck (no RGB LEDs): hasRgb is false → falsy node → renders nothing.
+    colores: colores.hasRgb && (
+      <ColoresCard
+        state={colores.state}
+        onInstall={colores.install}
+        onOpen={colores.open}
+        onOpenStore={colores.openStore}
+      />
     ),
   };
 

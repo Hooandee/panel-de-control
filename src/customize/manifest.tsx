@@ -2,6 +2,7 @@ import { ReactNode } from "react";
 import {
   LuGauge, LuSlidersHorizontal, LuFan, LuSettings,
   LuLeaf, LuBatteryFull, LuCpu, LuSun, LuVolume2, LuWind, LuThermometer, LuChartSpline,
+  LuLightbulb,
 } from "react-icons/lu";
 
 /** Presentation metadata shared by a tab and a configurable block. */
@@ -45,6 +46,7 @@ export const SECTION_BLOCKS: Record<string, BlockDef[]> = {
     { id: "cpu", labelKey: "system.cpu.title", icon: <LuCpu size={ICON} /> },
     { id: "brightness", labelKey: "system.brightness", icon: <LuSun size={ICON} /> },
     { id: "volume", labelKey: "system.volume", icon: <LuVolume2 size={ICON} /> },
+    { id: "colores", labelKey: "system.rgb.title", icon: <LuLightbulb size={ICON} /> },
   ],
   fans: [
     { id: "fanRpm", labelKey: "customize.block.fanRpm", icon: <LuWind size={ICON} /> },
