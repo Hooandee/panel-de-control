@@ -144,6 +144,7 @@ export const BatteryCard: FC<Props> = ({ state, onSetLimit }) => {
               description={t("system.battery.limit.desc")}
               checked={cl.enabled}
               onChange={(v) => onSetLimit(v, cl.percent)}
+              bottomSeparator="none"
             />
             {cl.enabled && cl.adjustable && (
               <div style={{ display: "flex", alignItems: "center", gap: theme.space.sm }}>

@@ -1,5 +1,5 @@
 import { FC, ReactNode } from "react";
-import { PanelSectionRow, Spinner, Focusable } from "@decky/ui";
+import { PanelSectionRow, Focusable } from "@decky/ui";
 import { LuMaximize2 } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
@@ -8,12 +8,14 @@ import { useFanCurve } from "../fans/useFanCurve";
 import { useFanSuggestion } from "../fans/useFanSuggestion";
 import { FanChip } from "../components/FanChip";
 import { TempStat } from "../components/TempStat";
+import { Sparkline } from "../components/Sparkline";
 import { FanCurveEditor } from "../components/FanCurveEditor";
 import { openFanCurveModal } from "../components/FanCurveModal";
+import { Loading } from "../components/Loading";
 import { SectionBlocks } from "../customize/SectionBlocks";
 import { theme } from "../theme";
 
-const card = { ...theme.card, padding: theme.space.md } as const;
+const card = { ...theme.card, padding: theme.space.md, marginBottom: theme.space.card } as const;
 
 // Map a curated temp sensor token (CPU/GPU) to its localized display name
 // ("Procesador" / "Gráfica"); unknown sensors show their raw label.
@@ -27,7 +29,7 @@ export const VentiladoresSection: FC = () => {
   const curve = useFanCurve();
   const { suggestion } = useFanSuggestion(curve.game?.appid ?? null);
 
-  if (!state) return <Spinner />;
+  if (!state) return <Loading />;
 
   // NOTE: do NOT gate the whole section on the hwmon monitor's `supported`. Some
   // devices (Legion Go 2) expose NO hwmon fan but DO support a write backend (EC)
@@ -40,14 +42,37 @@ export const VentiladoresSection: FC = () => {
   const liveTemp = state.temps.length ? Math.max(...state.temps.map((x) => x.celsius)) : null;
   const curveState = curve.state;
 
+  // "Solo" layout (Steam Deck): EXACTLY one fan + one temp = a single cooling
+  // system. Merge the two monitor cards into one — fan ring on the left, the
+  // (APU) temperature beside it, and the fan's sparkline full-width below the
+  // ring. Multi-fan/multi-temp machines keep the separate fanRpm + temps blocks.
+  const solo = state.fans.length === 1 && state.temps.length === 1;
+  const soloFan = solo ? state.fans[0] : null;
+  const soloTemp = solo ? state.temps[0] : null;
+
   // Three independent, reorderable/hideable blocks. Each renders nothing when its
   // data is absent (hwmon sees no fans, device has no temps, no write backend);
   // order + visibility layer on top via the customization store.
   const blocks: Record<string, ReactNode> = {
     // fans — one chip per physical fan (Ventilador 1/2…), side by side. When the
     // device exposes no readable fan (Legion Go original: no hwmon fan, no EC RPM),
-    // say so honestly here rather than leaving the block silently empty.
-    fanRpm: state.fans.length > 0 ? (
+    // say so honestly here rather than leaving the block silently empty. In the
+    // solo case this block hosts the MERGED fan+temp card (temp absorbed here; the
+    // `temps` block renders nothing so the two aren't shown twice).
+    fanRpm: solo && soloFan && soloTemp ? (
+      <PanelSectionRow>
+        <div style={{ ...card, display: "flex", flexDirection: "column", gap: theme.space.sm }}>
+          <div style={{ display: "flex", alignItems: "center", gap: theme.space.md }}>
+            <FanChip label={t("fans.fan", { n: 1 })} rpm={soloFan.rpm}
+                     values={fanHistory[soloFan.label] ?? []} layout="ring" />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <TempStat label={tempLabel(t, soloTemp.label)} celsius={soloTemp.celsius} variant="hero" />
+            </div>
+          </div>
+          <Sparkline values={fanHistory[soloFan.label] ?? []} color={theme.color.accent} height={40} />
+        </div>
+      </PanelSectionRow>
+    ) : state.fans.length > 0 ? (
       <PanelSectionRow>
         <div style={{ ...card, display: "flex", gap: theme.space.sm }}>
           {state.fans.map((fan, i) => (
@@ -67,8 +92,9 @@ export const VentiladoresSection: FC = () => {
     ),
 
     // temperatures — compact thermometer tiles side by side (Procesador · Gráfica);
-    // extra sensors wrap to a second row.
-    temps: state.temps.length > 0 && (
+    // extra sensors wrap to a second row. Empty in the solo case (the single temp
+    // lives in the merged fanRpm card above — never render it twice).
+    temps: !solo && state.temps.length > 0 && (
       <PanelSectionRow>
         <div style={{ ...card, display: "flex", flexWrap: "wrap", gap: theme.space.sm }}>
           {state.temps.map((tmp) => (

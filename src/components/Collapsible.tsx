@@ -33,13 +33,13 @@ export const Collapsible: FC<Props> = ({ id, icon, title, summary, children }) =
 
   return (
     <PanelSectionRow>
-      <div style={{ ...theme.card, padding: theme.space.md, overflow: "hidden", marginBottom: 6 }}>
+      <div style={{ ...theme.card, padding: theme.space.md, overflow: "hidden", marginBottom: theme.space.card }}>
         <Focusable
           style={{ display: "flex", alignItems: "center", gap: theme.space.sm, cursor: "pointer" }}
           onActivate={toggle}
           onClick={toggle}
         >
-          <span style={{ display: "inline-flex", color: theme.color.textPrimary }}>{icon}</span>
+          <span style={{ display: "inline-flex", color: theme.color.accent }}>{icon}</span>
           <span style={{ flex: 1, fontSize: theme.font.body, fontWeight: 700, color: theme.color.textPrimary }}>
             {title}
           </span>

@@ -1,11 +1,13 @@
 import { FC, ReactNode } from "react";
-import { Focusable, Spinner } from "@decky/ui";
+import { Focusable } from "@decky/ui";
 import { LuSparkles, LuRefreshCw, LuVolumeX, LuScale, LuZap, LuPencil } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
 import { FanCurveControl, shownPoints } from "../fans/useFanCurve";
+import { presetConverges } from "../fans/logic";
 import { FanPreset, FanSuggestion } from "../api";
 import { FanCurveGraph } from "./FanCurveGraph";
+import { Loading } from "./Loading";
 import { AdaptiveCard } from "./SuggestionCard";
 import { ProfileSelector } from "./ProfileSelector";
 import { segmentGroupStyle, segmentItemStyle } from "./segmented";
@@ -50,7 +52,7 @@ export const FanCurveEditor: FC<Props> = ({ control, liveTemp, suggestion, expan
   const { t } = useI18n();
   const curveState = control.state;
 
-  if (!curveState) return <Spinner />;
+  if (!curveState) return <Loading />;
   if (!curveState.supported) {
     return (
       <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
@@ -111,12 +113,17 @@ export const FanCurveEditor: FC<Props> = ({ control, liveTemp, suggestion, expan
   const points = shownPoints(curveState) ?? [];
 
   // Footer hint for the active (non-adaptive) mode; adaptive shows its own card.
+  // For a fixed preset while the device is still cool, explain that presets look
+  // the same until it heats up (the fan sits at its floor) — so idle-convergence
+  // isn't mistaken for "the preset didn't apply". Honest, on-device-confirmed.
   const hint = control.saved
     ? t("fans.curve.saved")
     : curveState.preset === "auto"
     ? t("fans.curve.auto.hint")
     : curveState.preset === "custom"
     ? t("fans.curve.custom.hint")
+    : presetConverges(curveState.preset, liveTemp)
+    ? t("fans.preset.cool.hint")
     : t(`fans.preset.${curveState.preset}`);
 
   return (

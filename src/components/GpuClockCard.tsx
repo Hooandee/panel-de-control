@@ -36,6 +36,7 @@ export const GpuClockCard: FC = () => {
         description={t("gpu.clock.manual.desc")}
         checked={state.manual}
         onChange={setManual}
+        bottomSeparator="none"
       />
       {state.manual && (
         <div style={{ marginTop: theme.space.sm }}>

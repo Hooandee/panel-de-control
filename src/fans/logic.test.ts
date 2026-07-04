@@ -1,5 +1,30 @@
 import { describe, it, expect } from "vitest";
-import { sparklinePath, pushSample, rpmFraction } from "./logic";
+import { sparklinePath, pushSample, rpmFraction, presetConverges } from "./logic";
+
+describe("presetConverges", () => {
+  // On these devices the fan sits at a physical floor when cool, so silent/
+  // balanced/performance all look identical until temps climb into the zone
+  // where their curves diverge. The hint tells the user that's expected — not
+  // that the preset failed. Only for the three fixed presets; never for
+  // auto/custom/adaptive (they aren't "presets look the same" cases).
+  it("is true for a fixed preset while cool (below the divergence temp)", () => {
+    expect(presetConverges("silent", 40)).toBe(true);
+    expect(presetConverges("balanced", 55)).toBe(true);
+    expect(presetConverges("performance", 30)).toBe(true);
+  });
+  it("is false once temps reach the divergence zone", () => {
+    expect(presetConverges("silent", 65)).toBe(false);
+    expect(presetConverges("performance", 80)).toBe(false);
+  });
+  it("is false for non-fixed modes regardless of temp", () => {
+    expect(presetConverges("auto", 40)).toBe(false);
+    expect(presetConverges("custom", 40)).toBe(false);
+    expect(presetConverges("adaptive", 40)).toBe(false);
+  });
+  it("is false when live temp is unknown (no marker to reason about)", () => {
+    expect(presetConverges("silent", null)).toBe(false);
+  });
+});
 
 describe("pushSample", () => {
   it("appends within capacity", () => {

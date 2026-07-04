@@ -41,3 +41,24 @@ export function rpmFraction(rpm: number, observedMax: number, nominalMax: number
   if (denom <= 0) return 0;
   return Math.max(0, Math.min(1, rpm / denom));
 }
+
+// The fixed presets that share a near-flat, quiet low-temp region. Below this
+// temperature their curves overlap and the fan sits at its hardware floor, so
+// switching between them makes no audible/RPM difference — they only diverge
+// under load. Confirmed on-device (ROG Ally X): at ~36 °C silent/balanced/
+// performance all held ~4700 rpm; at ~75 °C silent ~5400 vs performance ~8100.
+const _FIXED_PRESETS = ["silent", "balanced", "performance"] as const;
+const _DIVERGENCE_TEMP_C = 60;
+
+/**
+ * Whether a fixed fan preset is active but the device is still cool enough that
+ * all presets look identical (fan at its floor). Used to show an honest hint so
+ * the user doesn't read idle-convergence as "the preset didn't apply". Only the
+ * three fixed presets qualify; auto/custom/adaptive never do. A null live temp
+ * (no marker) → false.
+ */
+export function presetConverges(preset: string, liveTemp: number | null): boolean {
+  if (liveTemp === null) return false;
+  if (!(_FIXED_PRESETS as readonly string[]).includes(preset)) return false;
+  return liveTemp < _DIVERGENCE_TEMP_C;
+}

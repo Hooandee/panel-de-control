@@ -42,8 +42,15 @@ def _fan_node_present(root: str) -> bool:
 
 
 def _default_run(cmd: list) -> bool:
+    # Decky's PyInstaller-frozen loader gives the child an EMPTY PATH + a poisoned
+    # LD_LIBRARY_PATH (its _MEI bundle). A bare "modprobe" raises FileNotFoundError,
+    # and even a resolved one can load the bundle's libs and fail — the same trap
+    # fixed in fans/software_loop._systemctl. Resolve the binary to an absolute path
+    # and spawn with clean_env(). Same fix the controller backends use.
     try:
-        return subprocess.run(cmd, capture_output=True, timeout=15).returncode == 0
+        from controllers.detect import clean_env, resolve_bin
+        argv = [resolve_bin(cmd[0]), *cmd[1:]]
+        return subprocess.run(argv, capture_output=True, timeout=15, env=clean_env()).returncode == 0
     except Exception:  # noqa: BLE001
         return False
 

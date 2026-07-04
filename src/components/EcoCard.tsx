@@ -28,14 +28,15 @@ export const EcoCard: FC<Props> = ({ state, brightnessSupported, onToggle }) => 
 
   return (
     <PanelSectionRow>
-      <div style={{ ...theme.card, padding: theme.space.md, overflow: "hidden", marginBottom: 6, boxShadow: on ? `inset 0 0 0 1px ${theme.color.ok}` : theme.card.boxShadow }}>
+      <div style={{ ...theme.card, padding: theme.space.md, overflow: "hidden", marginBottom: theme.space.card, boxShadow: on ? `inset 0 0 0 1px ${theme.color.ok}` : theme.card.boxShadow }}>
         <div style={{ display: "flex", alignItems: "center", gap: theme.space.xs, fontSize: theme.font.body, fontWeight: 700, color: theme.color.textPrimary }}>
-          <LuLeaf size={16} color={on ? theme.color.ok : theme.color.textPrimary} /> {t("system.eco.title")}
+          <LuLeaf size={16} color={theme.color.ok} /> {t("system.eco.title")}
         </div>
         <ToggleField
           label={t("system.eco.desc")}
           checked={on}
           onChange={onToggle}
+          bottomSeparator="none"
         />
         <div style={{ display: "flex", flexWrap: "wrap", gap: theme.space.md, marginTop: theme.space.xs }}>
           <Effect icon={<LuZap size={12} />} label={t("system.eco.effect.tdp", { watts: state.tdp_min_w })} active={on} />
