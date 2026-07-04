@@ -1,5 +1,6 @@
+import os
+
 from device_registry import detect
-from device_profiles import GENERIC
 
 
 # (product_name as it appears in /sys/class/dmi/id/product_name) -> expected key
@@ -32,9 +33,38 @@ def test_intel_vs_amd_vendor():
 
 def test_unknown_falls_back_to_generic_visibly():
     prof = detect(product_name="Some Random Laptop 9000")
-    assert prof is GENERIC
     assert prof.key == "generic"
     assert prof.is_generic is True
+
+
+def _mk_cpuinfo(root, vendor_id, model_name):
+    os.makedirs(os.path.join(root, "proc"), exist_ok=True)
+    with open(os.path.join(root, "proc", "cpuinfo"), "w") as f:
+        f.write(f"vendor_id\t: {vendor_id}\nmodel name\t: {model_name}\n")
+
+
+def test_generic_reads_real_vendor_and_chip_amd(tmp_path):
+    root = str(tmp_path)
+    _mk_cpuinfo(root, "AuthenticAMD", "AMD Ryzen Z2 Extreme w/ Radeon 890M")
+    prof = detect(product_name="Unknown Handheld", root=root)
+    assert prof.is_generic is True
+    assert prof.vendor == "amd"
+    assert "Ryzen Z2 Extreme" in prof.chip
+
+
+def test_generic_reads_real_vendor_intel(tmp_path):
+    root = str(tmp_path)
+    _mk_cpuinfo(root, "GenuineIntel", "Intel Core Ultra 7 258V")
+    prof = detect(product_name="Unknown Handheld", root=root)
+    assert prof.is_generic is True
+    assert prof.vendor == "intel"
+    assert "Core Ultra" in prof.chip
+
+
+def test_generic_defaults_to_amd_when_cpuinfo_absent(tmp_path):
+    prof = detect(product_name="Unknown Handheld", root=str(tmp_path))
+    assert prof.is_generic is True
+    assert prof.vendor == "amd"
 
 
 def test_ally_x_has_charger_boost():

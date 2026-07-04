@@ -171,7 +171,9 @@ def select_charge_limit(device, root="/"):
     elif key.startswith("legion"):
         candidates = [SysfsChargeLimit(root), LenovoConservationMode(root)]
     else:
-        candidates = [SysfsChargeLimit(root)]
+        # Unrecognised / other: probe every known interface, standard threshold first.
+        candidates = [SysfsChargeLimit(root), SteamDeckChargeLimit(root),
+                      LenovoConservationMode(root)]
     for backend in candidates:
         if backend.supported:
             return backend

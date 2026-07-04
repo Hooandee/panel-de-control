@@ -7,21 +7,42 @@ from tdp.types import TdpLimits
 
 
 def _candidates(device, fallback, root, ryzenadj):
+    """Ordered probe chain of backend factories (constructed lazily by the caller,
+    so an early match costs no extra sysfs work). The detected family puts its
+    known-good backend first, then falls through to every other known path by
+    capability — so a known device stays robust if a kernel update moves its
+    interface, and an unrecognised handheld still lands on whatever it actually
+    exposes. ryzenadj (AMD-only) is excluded on Intel hosts so its mere presence
+    can't capture the selection."""
+    def asus():
+        return FirmwareAttrBackend("asus-armoury", fallback, root=root)
+
+    def lenovo():
+        return FirmwareAttrBackend("lenovo-wmi-other", fallback, root=root,
+                                   profile_name="lenovo-wmi-gamezone")
+
+    def msi():
+        return FirmwareAttrBackend("msi-wmi-platform", fallback, root=root)
+
+    def intel():
+        return IntelRaplBackend(fallback, root=root)
+
+    def deck():
+        return SteamDeckHwmonBackend(fallback, root=root)
+
     key = device.key
+    if device.vendor == "intel":
+        return [msi, intel]
     if key.startswith("steam_deck"):
-        return [SteamDeckHwmonBackend(fallback, root=root), ryzenadj()]
+        return [deck, asus, lenovo, msi, ryzenadj]
     if key.startswith("rog_"):
-        return [FirmwareAttrBackend("asus-armoury", fallback, root=root), ryzenadj()]
+        return [asus, lenovo, msi, ryzenadj]
     if key.startswith("legion_"):
-        return [FirmwareAttrBackend("lenovo-wmi-other", fallback, root=root,
-                                    profile_name="lenovo-wmi-gamezone"), ryzenadj()]
-    if key == "msi_claw_8_ai_plus":
-        # firmware-attributes if a kernel exposes ppt_*, else Intel RAPL powercap
-        # (the working path on current Bazzite/Neptune kernels).
-        return [FirmwareAttrBackend("msi-wmi-platform", fallback, root=root),
-                IntelRaplBackend(fallback, root=root)]
-    # generic / other AMD
-    return [ryzenadj()]
+        return [lenovo, asus, msi, ryzenadj]
+    # generic / other AMD. intel-rapl excluded (AMD RAPL can confirm a write without
+    # changing real TDP); deck excluded (steamdeck-hwmon matches any power*_cap chip,
+    # incl. amdgpu's GPU cap — wrong rail). ryzenadj is the AMD fallback.
+    return [asus, lenovo, msi, ryzenadj]
 
 
 def select_backend(device, root="/", ryzenadj_resolve=None) -> TDPBackend:
@@ -33,7 +54,8 @@ def select_backend(device, root="/", ryzenadj_resolve=None) -> TDPBackend:
             return RyzenadjBackend(fallback, resolve=ryzenadj_resolve)
         return RyzenadjBackend(fallback)
 
-    for backend in _candidates(device, fallback, root, ryzenadj):
+    for make in _candidates(device, fallback, root, ryzenadj):
+        backend = make()
         if backend.supported:
             return backend
     return NullBackend(f"no supported TDP interface for {device.key}")

@@ -379,4 +379,9 @@ def select_fan_backend(device, root: str = "/", temp_fn=None):
                     LegionGo2FanBackend(temp_fn=temp_fn, root=root)):
         if backend.supported:
             return backend
+    # Last resort for unrecognised hardware: the standard hwmon manual-PWM interface.
+    from fans.generic_pwm import GenericPwmFanBackend
+    generic = GenericPwmFanBackend(temp_fn=temp_fn, root=root)
+    if generic.supported:
+        return generic
     return NullFanBackend()
