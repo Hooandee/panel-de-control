@@ -330,8 +330,13 @@ class MsiFanCurveBackend(HwmonCurveBackend):
         if root == "/" and _is_msi_vendor(root):
             try:
                 import subprocess
-                subprocess.run(["modprobe", "msi_wmi_platform"],
-                               check=False, capture_output=True, timeout=5)
+                # Decky's PyInstaller-frozen loader gives the child an empty PATH +
+                # a poisoned LD_LIBRARY_PATH → a bare "modprobe" silently fails and
+                # the msi_wmi_platform chip never appears. Resolve to an absolute
+                # path + clean_env (same fix as fans/expose.py and software_loop).
+                from controllers.detect import clean_env, resolve_bin
+                subprocess.run([resolve_bin("modprobe"), "msi_wmi_platform"],
+                               check=False, capture_output=True, timeout=5, env=clean_env())
             except Exception:  # noqa: BLE001
                 pass
         super().__init__(_MSI_CHIP, n_points=6, fixed_temps=_MSI_TEMPS, root=root)
