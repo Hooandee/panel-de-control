@@ -7,9 +7,8 @@ range comes from that file's OD_RANGE section. Auto = performance_level back to 
 Intel (i915): plain `gt_min_freq_mhz` / `gt_max_freq_mhz`; hardware bounds are
 `gt_RPn_freq_mhz` (min) / `gt_RP0_freq_mhz` (max); auto = restore the full range.
 
-Pure parsing/command building is unit-tested; the actual sysfs writes are validated
-on-device. Every backend degrades to unsupported (UI hidden) when the nodes are
-absent — never fake."""
+Pure parsing/command building is unit-tested. Every backend degrades to unsupported
+(UI hidden) when the nodes are absent."""
 import glob
 import os
 import re
@@ -79,7 +78,7 @@ class AmdGpuClock:
         write_str(self._level, "manual")
         for cmd in sclk_commands(min_mhz, max_mhz):
             write_str(self._od, cmd)
-        return read_str(self._level) == "manual"  # readback (never-fake)
+        return read_str(self._level) == "manual"  # readback
 
     def set_auto(self):
         if not self.supported:

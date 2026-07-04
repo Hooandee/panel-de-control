@@ -6,7 +6,7 @@ import { systemVolume } from "./audio";
 
 /**
  * Drives a ScalarControl as an integer-percent value. Distinguishes three
- * states so the UI never fakes a reading:
+ * states so the UI never shows a value it doesn't really have:
  *  - `supported=false` → the API is absent (subscribe returned no registration).
  *  - `supported && loading` → API present, but no real value has arrived yet
  *    (e.g. volume seeds via an async GetDevices and only emits on change). The

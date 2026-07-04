@@ -4,7 +4,7 @@ HHD serves its full settings tree + live state at http://127.0.0.1:5335, the
 same interface its own frontend uses. Reading it lets us detect the power
 conflict (M0) and, cooperatively, drive the controller settings (later
 milestones). Token lives at /etc/hhd/.token (world-unreadable → we run as root).
-Every call degrades to None on failure — never fake, never raise.
+Every call degrades to None on failure — never raises.
 """
 import json
 import os

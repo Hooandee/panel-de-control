@@ -7,20 +7,19 @@ vibrancy, slightly punchier gamma). The UI copy must say "acerca el color al de 
 OLED", never "convierte en OLED".
 
 `GENERIC_OLED_LOOK` is a conservative, safe enhancement applied to any LCD. A model
-can carry its own `oled_look` (calibrated ON-DEVICE) to override the generic one.
+can carry its own calibrated `oled_look` to override the generic one.
 """
 
 # Universal LCD enhancement toward the OLED look: a clear vibrancy boost + a
 # contrast lift (the real differentiator — OLED's deep blacks read as "pop"),
 # neutral temperature. Punchy enough to be obviously different, still tasteful.
-# Per-model tuning refines it later (validated on real hardware, never invented).
 GENERIC_OLED_LOOK = {
     "saturation": 140,
     "temperature": 0,
     "contrast": 20,
 }
-# NOTE: contrast kept moderate — a +30 crushed shadow detail on the Ally LCD
-# (validated 2026-07-03). Saturation (140) carries most of the OLED "pop".
+# Contrast kept moderate — a higher value crushes shadow detail on LCD.
+# Saturation (140) carries most of the OLED "pop".
 
 
 def oled_look_for(device):

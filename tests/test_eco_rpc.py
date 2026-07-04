@@ -1,4 +1,4 @@
-"""RPC-level tests for download mode (eco): override + restore + B1 clear."""
+"""RPC-level tests for download mode (eco): override + restore + manual clear."""
 import asyncio
 import importlib
 import sys
@@ -108,7 +108,7 @@ def test_manual_tdp_change_clears_eco(tmp_path, monkeypatch):
     asyncio.run(p.set_eco(True, 40))
     assert p._settings["eco_enabled"] is True
     asyncio.run(p.set_tdp_watts(18, "global", None))
-    assert p._settings["eco_enabled"] is False  # B1: manual control exits eco
+    assert p._settings["eco_enabled"] is False  # manual control exits eco
 
 
 def test_zero_brightness_snapshot_is_ignored(tmp_path, monkeypatch):

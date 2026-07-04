@@ -48,7 +48,7 @@ def test_up_clamps_at_max():
 
 
 # ===========================================================================
-# HOLD — dead-band (knee) + power-limited-at-max case (the on-device bug)
+# HOLD — dead-band (knee) + power-limited-at-max case
 # ===========================================================================
 
 def test_deadband_holds():
@@ -58,7 +58,7 @@ def test_deadband_holds():
 
 
 def test_power_limited_at_max_still_probes_down():
-    # THE on-device case: pl1=35 (max), GPU stable 80% (below _DOWN_GPU) → there IS
+    # The power-limited case: pl1=35 (max), GPU stable 80% (below _DOWN_GPU) → there IS
     # margin (not saturated) even though draw pinned the cap. Must accumulate slack
     # and eventually step down — NOT hold forever at max.
     nxt, slack = decide(35, g(80, 81, 80, 81, 80), _SLACK_HOLD - 1, 5, 35)

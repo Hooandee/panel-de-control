@@ -282,7 +282,7 @@ class TestFanCurveRpcAsus:
         assert self._enables(asus_root) == ("1", "1")
 
     def test_adaptive_mode_no_data_stays_firmware_auto(self, Plugin, asus_root):
-        # never-fake: adaptive with no learned data leaves the fans on firmware auto.
+        # adaptive with no learned data leaves the fans on firmware auto.
         p = Plugin()
         asyncio.run(p.set_current_game("777"))
         st = asyncio.run(p.set_fan_adaptive("game", "777"))

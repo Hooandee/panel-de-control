@@ -7,7 +7,7 @@ Members: Steam Deck (steamdeck_hwmon `fan1_target` RPM). Legion Go 2 (raw EC)
 is a separate W4 backend with the same shape.
 
 Canonical curve stays temp→pwm(0–255); each backend reinterprets pwm/255 as a
-fraction of its RPM range so the F2/F3 curve representation is portable.
+fraction of its RPM range so the curve representation is portable.
 """
 
 import asyncio
@@ -69,7 +69,7 @@ class SoftwareLoopBackend:
     @property
     def _owns_fan(self) -> bool:
         """True only when we actually drive the fan (points set AND ownership
-        acquired). read_state reports manual only when this holds (never-fake)."""
+        acquired). read_state reports manual only when this holds."""
         return self._points is not None
 
     # --- common API ------------------------------------------------------------
@@ -100,7 +100,7 @@ class SoftwareLoopBackend:
             return {"ok": False, "detail": f"{self.name} not found"}
         # Take ownership of the fan FIRST. If we can't (e.g. jupiter-fan-control
         # refused to stop), we do NOT own the fan → never claim to drive and
-        # never write a target the OS daemon would fight (never-fake).
+        # never write a target the OS daemon would fight.
         if not self._before_drive():
             return {"ok": False, "detail": f"{self.name} could not take fan control"}
         self._points = [list(p) for p in sanitize_curve(points)]
@@ -176,8 +176,7 @@ def _systemctl_path() -> str:
     CRITICAL: the plugin runs under Decky's PyInstaller-frozen PluginLoader, whose
     child process has an EMPTY ``PATH`` (only ``LD_LIBRARY_PATH`` is set to the
     _MEI bundle). So a bare ``["systemctl", …]`` raises FileNotFoundError → our
-    guard returns False → jupiter is never stopped and the curve never drives.
-    That was the real "custom curve at startup does nothing on the Deck" bug. Use
+    guard returns False → jupiter is never stopped and the curve never drives. Use
     an absolute path; fall back through the standard locations, then bare name."""
     for p in ("/usr/bin/systemctl", "/bin/systemctl"):
         if os.path.exists(p):
@@ -194,7 +193,7 @@ def _systemctl(verb: str) -> bool:
     ``LD_LIBRARY_PATH`` to its _MEI bundle (older bundled libcrypto) AND leaves
     ``PATH`` empty. A raw spawn makes systemctl load the bundle's libcrypto →
     ``libsystemd-shared … OPENSSL_x not found`` → rc=1 → jupiter never stops → the
-    stored curve never drives at startup (the real Deck bug). ``clean_env`` restores
+    stored curve never drives at startup. ``clean_env`` restores
     the pre-bundle LD_LIBRARY_PATH + a sane PATH; we also invoke systemctl by
     absolute path. This is the same fix the controller backends use.
 
@@ -240,7 +239,7 @@ class SteamDeckFanBackend(SoftwareLoopBackend):
         super().__init__(temp_fn=temp_fn, root=root)
         board = _read(os.path.join(root, "sys/class/dmi/id/board_name")) or ""
         self.max_rpm = _DECK_MAX_RPM.get(board, 7000)
-        # Injectable for tests; defaults to real systemctl on-device.
+        # Injectable for tests; defaults to real systemctl.
         self._jupiter_ctl = jupiter_ctl if jupiter_ctl is not None else _systemctl
         self._jupiter_stopped = False  # track state → idempotent (stop/start once)
 
@@ -252,7 +251,7 @@ class SteamDeckFanBackend(SoftwareLoopBackend):
 
     def _before_drive(self) -> bool:
         # Stop jupiter-fan-control once, so it stops fighting our writes. If it
-        # won't stop, we don't own the fan → refuse to drive (never-fake).
+        # won't stop, we don't own the fan → refuse to drive.
         if self._jupiter_stopped:
             return True
         if self._run_jupiter("stop"):
@@ -266,7 +265,7 @@ class SteamDeckFanBackend(SoftwareLoopBackend):
         # Deck with jupiter down. Idempotent: start on a running unit is a no-op.
         # Only clear the "we stopped it" flag if the restart actually succeeded —
         # if it failed, jupiter is still down and read_state/_before_drive must not
-        # pretend it's back (never-fake). reset-failed makes this edge rare.
+        # pretend it's back. reset-failed makes this edge rare.
         started = self._run_jupiter("start")
         self._jupiter_stopped = self._jupiter_stopped and not started
 

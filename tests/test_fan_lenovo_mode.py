@@ -66,7 +66,7 @@ class TestSetMode:
         b = LenovoFanModeBackend(root=str(tmp_path))
         res = b.set_mode(3)
         assert res["ok"] is False
-        # never-fake: rejected write must not report the requested mode
+        # rejected write must not report the requested mode
         assert b.read_state()["mode"] == 1
 
     def test_readback_mismatch_reports_failure(self, tmp_path):

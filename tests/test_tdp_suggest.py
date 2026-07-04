@@ -121,7 +121,7 @@ def test_power_limited_low_pl1_never_becomes_floor():
 
 
 def test_power_limited_at_cap_but_gpu_has_margin_is_satisfied():
-    # THE on-device case (Ally, 35 W cap / 80% GPU / draw pinned): watts says "no
+    # The power-limited case (35 W cap / 80% GPU / draw pinned): watts says "no
     # headroom" (draw==cap) but the GPU at 80% had margin → GPU-primary marks it
     # SATISFIED, so a lower level with margin becomes the floor rather than the cap.
     b = learned_band(_by_pl1([

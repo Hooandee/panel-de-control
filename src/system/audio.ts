@@ -6,8 +6,8 @@ import { ScalarControl } from "./types";
 // writes it.
 //
 // The `audioType` arg to SetDeviceVolume is a DIRECTION, not a per-device config:
-// CDP-probed on Claw, Steam Deck and both ROG Allys, audioType 1 = OUTPUT and
-// audioType 0 = INPUT (mic). Writing the output volume with the wrong type hits the
+// audioType 1 = OUTPUT and audioType 0 = INPUT (mic) on these handhelds. Writing
+// the output volume with the wrong type hits the
 // mic and is a silent no-op for the speaker. A previous version seeded it from the
 // device's `currentConfig.eConfig`, which happens to be 1 on the Legion Go 2 (so it
 // worked there by coincidence) but 0 on the Ally/Deck/Claw (so those wrote to the

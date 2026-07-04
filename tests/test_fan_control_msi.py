@@ -35,7 +35,7 @@ def _make_msi_chip(root, idx=0):
     return d
 
 
-# A canonical 8-point curve (what F2/F3 store) — must be resampled to MSI's 6.
+# A canonical 8-point curve (what the curve editor stores) — must be resampled to MSI's 6.
 CANON_8 = [(40, 0), (50, 30), (60, 60), (70, 95), (80, 135), (85, 175), (90, 215), (95, 255)]
 
 

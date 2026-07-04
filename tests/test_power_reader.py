@@ -107,7 +107,7 @@ def _reader_with_samples(tmp_path, samples):
 
 
 def test_gpu_busy_averages_a_burst(tmp_path):
-    # The exact on-device Van Gogh probe: instantaneous 0<->100 noise, ~22% real.
+    # Van Gogh-style probe: instantaneous 0<->100 noise, ~22% real.
     samples = [0, 0, 0, 100, 100, 100, 0, 0, 0, 0, 53, 59, 0, 0, 0, 37, 0, 0, 0, 0]
     r = _reader_with_samples(tmp_path, samples)
     # mean = 449/20 = 22.45 -> 22 (a single instantaneous read would give a bogus 0,

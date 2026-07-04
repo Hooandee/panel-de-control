@@ -18,7 +18,7 @@ export function useFanSuggestion(appid: string | null) {
     // Drop the previous game's suggestion immediately on appid change — never show
     // (or let the user apply) one game's learned curve labeled as another's while
     // the new RPC is in flight. The prominent, open-by-default card makes this
-    // window actionable, so blanking here is a "never fake" guard.
+    // window actionable, so blanking here is a correctness guard.
     setSuggestion(null);
     refresh();
   }, [appid, refresh]);

@@ -145,7 +145,7 @@ class TestJupiterHandoff:
         assert svc.active is True  # SteamOS resumes control
 
     def test_release_keeps_stopped_flag_when_restart_fails(self, tmp_path):
-        # never-fake: if the jupiter restart FAILS on release, jupiter is still
+        # if the jupiter restart FAILS on release, jupiter is still
         # down — don't clear _jupiter_stopped (that would claim it's back up).
         _make_deck_chip(str(tmp_path))
         svc = _FakeSystemctl(fail={"start"})
@@ -166,7 +166,7 @@ class TestJupiterHandoff:
         b.restore_auto()
         assert svc.active is True
 
-    def test_never_fake_when_stop_fails(self, tmp_path):
+    def test_no_false_manual_when_stop_fails(self, tmp_path):
         # If we cannot stop jupiter, we do NOT own the fan → don't claim to drive.
         d = _make_deck_chip(str(tmp_path))
         svc = _FakeSystemctl(fail={"stop"})
@@ -182,7 +182,7 @@ class TestJupiterHandoff:
         svc = _FakeSystemctl(fail={"stop"})
         b = _backend_svc(tmp_path, temp=85.0, svc=svc)
         b.apply_curve_all(CURVE)
-        # never-fake: enable must report firmware auto (2), not manual (1)
+        # enable must report firmware auto (2), not manual (1)
         assert b.read_state()["fans"][0]["enable"] == 2
 
     def test_guarded_never_raises_on_service_error(self, tmp_path):

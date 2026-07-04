@@ -90,7 +90,7 @@ describe("dialToWatts (learned-band suggestion)", () => {
 });
 
 describe("boostWatts (HW boost above your TDP)", () => {
-  it("returns null when the draw sensor is unavailable (never fake)", () => {
+  it("returns null when the draw sensor is unavailable", () => {
     expect(boostWatts(22, null)).toBeNull();
   });
 

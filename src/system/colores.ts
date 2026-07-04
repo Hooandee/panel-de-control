@@ -36,8 +36,8 @@ export function coloresCardState(input: {
 // ── Decky-internal adapters ────────────────────────────────────────────────
 // These reach INTERNAL Decky Loader globals (`window.DeckyPluginLoader`,
 // `window.DeckyBackend`) that are NOT part of the public `@decky/api`. Every one
-// is guarded so a Decky version that moved them degrades honestly (never-fake:
-// we report "not installed" / fall back to the store rather than throw or lie).
+// is guarded so a Decky version that moved them degrades honestly: we report
+// "not installed" / fall back to the store rather than throw or lie.
 
 /** Reads Decky's in-memory installed-plugin list to see if Colores is present. */
 export function isColoresInstalled(): boolean {
@@ -84,7 +84,7 @@ export function setActiveColoresPlugin(): void {
 /**
  * After an install RPC resolves, Decky needs a moment to register + load the new
  * plugin into its state. Poll a few times so we only flip to "installed" once it
- * REALLY appears (never-fake).
+ * REALLY appears.
  */
 export async function waitForColoresInstalled(tries = 8, gapMs = 800): Promise<boolean> {
   for (let i = 0; i < tries; i++) {

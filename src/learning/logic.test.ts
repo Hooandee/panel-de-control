@@ -38,7 +38,7 @@ describe("learningBadge", () => {
     ).toEqual({ state: "hidden", tags: [] });
   });
 
-  it("in-game but device can learn nothing → hidden (never-fake)", () => {
+  it("in-game but device can learn nothing → hidden", () => {
     expect(
       learningBadge({ inGame: true, telemetryOn: true, tdpSupported: false, fanSupported: false }),
     ).toEqual({ state: "hidden", tags: [] });

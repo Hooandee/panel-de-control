@@ -4,9 +4,9 @@ Converges on the "knee" (the least sustained PL1 that keeps the GPU just below
 saturation) and HOLDS there. Deliberately does NOT use real watts or boost: when a
 game is power-limited the draw simply follows PL1 (it eats the whole budget across
 CPU+GPU), so EVERY draw-derived signal — boost magnitude, boost frequency, watts
-headroom — is confounded and can't tell "has margin" from "needs it". Measured
-on-device (ROG Ally): pl1=35 (cap), draw=35 W (pinned), GPU=80% stable → the
-watts/boost model saw "no headroom" and held at max forever, yet 80% GPU means
+headroom — is confounded and can't tell "has margin" from "needs it": a power-limited
+game pinned at max PL1 draws the full budget with the GPU stable at ~80%, which the
+watts/boost model reads as "no headroom" and holds at max forever — yet 80% GPU means
 there IS margin. GPU utilisation is the only honest "can it go lower?" signal.
 
 Signals kept: GPU% only. Watts/boost are dropped from the control decision.
@@ -27,7 +27,7 @@ Three states:
 
 Degradation:
   - GPU% available (AMD Ally/Legion, Steam Deck): the model above.
-  - No GPU% (Intel Claw today: no gpu_busy): HOLD — can't optimise blind, no fake.
+  - No GPU% (Intel Claw today: no gpu_busy): HOLD — can't optimise blind.
 """
 
 # Responsive floor (watts) applied ONLY while the QAM / plugin UI is open. The loop
@@ -35,7 +35,7 @@ Degradation:
 # the GPU) — but rendering the QAM is CPU-bound (steamwebhelper/CEF) and a starved
 # PL1 makes the menu lag. Raising the loop's floor while the UI is open keeps
 # interacting fluid; on close it drops back to device_min for battery. Device-aware
-# (never below device_min). Tunable (on-device: 7 W lags, 15 W fluid → ~13 W).
+# (never below device_min). Tunable (~13 W: lower lags the menu, higher wastes battery).
 RESPONSIVE_FLOOR_W = 13
 
 _UP_GPU = 97       # a recent GPU% peak at/above this = saturated → step up (safety)

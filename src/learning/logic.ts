@@ -2,7 +2,7 @@
 // DeviceHeader. Decides — by DEVICE CAPABILITY — whether we are learning, paused,
 // or should say nothing at all. Telemetry is one stream that feeds both TDP and
 // fan learning; the tags reflect only what THIS device can actually learn/apply
-// (never-fake: no tag for a subsystem this machine can't control).
+// (no tag for a subsystem this machine can't control).
 
 export type LearningTag = "tdp" | "fans";
 export type LearningState = "learning" | "paused" | "hidden";

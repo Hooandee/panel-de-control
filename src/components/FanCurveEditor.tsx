@@ -115,7 +115,7 @@ export const FanCurveEditor: FC<Props> = ({ control, liveTemp, suggestion, expan
   // Footer hint for the active (non-adaptive) mode; adaptive shows its own card.
   // For a fixed preset while the device is still cool, explain that presets look
   // the same until it heats up (the fan sits at its floor) — so idle-convergence
-  // isn't mistaken for "the preset didn't apply". Honest, on-device-confirmed.
+  // isn't mistaken for "the preset didn't apply".
   const hint = control.saved
     ? t("fans.curve.saved")
     : curveState.preset === "auto"

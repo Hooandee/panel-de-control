@@ -85,7 +85,7 @@ export function useColores(): UseColores {
       return;
     }
     // The RPC resolved; only flip to "installed" once it REALLY appears in Decky's
-    // state (never-fake) — otherwise surface the honest error + store fallback.
+    // state — otherwise surface the honest error + store fallback.
     const found = await waitForColoresInstalled();
     if (!mounted.current) return;
     setInstalled(found);

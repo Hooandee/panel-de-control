@@ -73,7 +73,7 @@ class LegionGo2FanBackend(SoftwareLoopBackend):
 
     name = "legion-go2-ec"
     min_rpm = 0
-    max_rpm = 5000  # nominal; refine against the real fan's top RPM on-device
+    max_rpm = 5000  # nominal; refine against the real fan's top RPM
 
     def __init__(self, temp_fn: Optional[Callable[[], Optional[float]]] = None,
                  root: str = "/", ec=None) -> None:

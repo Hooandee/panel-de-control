@@ -52,7 +52,7 @@ describe("learningProgress", () => {
     expect(learningProgress(600, 0, false)).toBe(0);
   });
 
-  // never-fake: while still learning (not available) the bar must NEVER read full,
+  // while still learning (not available) the bar must NEVER read full,
   // even at the round-up boundary where minutes(round) would show the target.
   it("never reaches 1 while learning, even at 1770/1799 s (round→30 min)", () => {
     expect(learningProgress(1770, TARGET, false)).toBeLessThan(1);

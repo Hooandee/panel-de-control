@@ -19,7 +19,7 @@ export type SuggestStateKind =
   | "disabled"    // telemetry opted out
   | "unsupported"; // device can't write fan curves
 
-// While still learning the bar must NEVER read full (never-fake) — cap just under 1
+// While still learning the bar must NEVER read full — cap just under 1
 // so a 29.5-min dwell (which round(minutes) would show as the 30-min target) can't
 // look "done" while the honest gate is still `too_few`.
 const _LEARNING_MAX = 0.99;
@@ -39,7 +39,7 @@ export function learningProgress(seconds: number, targetSeconds: number, availab
 
 /**
  * Whole minutes still to go before unlocking, rounded UP with a floor of 1 so the
- * card never says "~0 min" while the state is still `learning` (never-fake). Only
+ * card never says "~0 min" while the state is still `learning`. Only
  * meaningful while learning; once available the card no longer shows it.
  */
 export function minutesLeft(seconds: number, targetSeconds: number): number {

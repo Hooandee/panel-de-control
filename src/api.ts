@@ -162,7 +162,7 @@ export const setTelemetryEnabled = callable<[enabled: boolean], boolean>("set_te
 export const resetTelemetry = callable<[], boolean>("reset_telemetry");
 
 // Capability + opt-in snapshot for the persistent learning banner. Reports what
-// THIS device can actually learn (never-fake: no fan tag if it can't write curves).
+// THIS device can actually learn (no fan tag if it can't write curves).
 export interface LearningStatus {
   telemetry_enabled: boolean;
   tdp_supported: boolean;
@@ -193,7 +193,7 @@ export const setFanAdaptive =
 export const setFanAdaptiveBias =
   callable<[bias: number, scope: FanScope, appid: string | null], FanCurveState>("set_fan_adaptive_bias");
 
-// F3 — fan-curve suggestion fit to a game's observed temperature band.
+// Fan-curve suggestion fit to a game's observed temperature band.
 export interface FanSuggestion {
   available: boolean;
   // ok | disabled | unsupported | no_game | no_data | too_few | flat | error
@@ -212,7 +212,7 @@ export const getFanSuggestion =
   callable<[appid: string | null], FanSuggestion>("get_fan_suggestion");
 
 // ---- Battery (Sistema) ----------------------------------------------------
-// Every field is nullable: the device may not expose it, and we never fake a
+// Every field is nullable: the device may not expose it, and we don't fabricate a
 // value (a hidden stat beats a wrong one).
 export interface BatteryInfo {
   present: boolean;
@@ -377,7 +377,7 @@ export interface RemapButton {
   // The InputPlumber source capability (e.g. "LeftPaddle1") — used when remapping.
   source: string;
   // The literal silkscreen label printed on the device (e.g. "Y1", "M2"),
-  // device-correct from the backend's validated per-device table. NOT translated.
+  // device-correct from the backend's per-device table. NOT translated.
   label: string;
   // The current override, or null = still at the device default.
   target: ControllerTarget[] | null;
@@ -391,7 +391,7 @@ export interface ControllerConfig {
   // "remap" = per-button editor (InputPlumber); "settings" = mode/paddles (HHD).
   kind: "remap" | "settings" | "none";
   // remap (InputPlumber)
-  // Whether we have an on-device-validated button map for this model. When false,
+  // Whether we have a known button map for this model. When false,
   // `buttons` is empty and the UI shows an honest "not calibrated" note.
   device_known?: boolean;
   buttons?: RemapButton[];

@@ -16,11 +16,10 @@ class DeviceProfile:
     match_names: tuple = field(default_factory=tuple)
     is_generic: bool = False
     # Panel technology. "oled" hides the "OLED look" color preset (a real OLED has
-    # nothing to emulate). VERIFY ON-DEVICE if unsure — a wrong guess only shows/hides
-    # a cosmetic button, never anything unsafe.
+    # nothing to emulate). A wrong guess only shows/hides a cosmetic button.
     panel: str = "lcd"
     # Optional per-model calibrated "OLED look" color state. None => the generic look
-    # (display.oled_look.GENERIC_OLED_LOOK). Fill in only VALUES VALIDATED ON-DEVICE.
+    # (display.oled_look.GENERIC_OLED_LOOK).
     oled_look: Optional[dict] = None
 
 

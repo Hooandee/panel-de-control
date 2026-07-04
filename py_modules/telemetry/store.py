@@ -12,7 +12,7 @@ _HALF_LIFE_SECONDS = 1800.0
 # Bins whose dwell decays below this disappear (faded to noise).
 _DECAY_PRUNE_EPSILON = 1.0
 
-# Temperature histogram (feeds the F3 suggestion brain): 2 °C bins over 30–100 °C,
+# Temperature histogram (feeds the suggestion brain): 2 °C bins over 30–100 °C,
 # keyed by the driving temp = max(temp_cpu, temp_gpu) per sample.
 _TEMP_BIN_WIDTH = 2
 _TEMP_BIN_MIN = 30
