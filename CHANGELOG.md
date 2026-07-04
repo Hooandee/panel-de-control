@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.3.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.2.4...panel-de-control-v0.3.0) (2026-07-04)
+
+
+### Features
+
+* capability-probe fallbacks for unrecognised handhelds ([0515652](https://github.com/Hooandee/panel-de-control/commit/051565214091b6ce8fe0731548b80f715c27f4f8))
+* capability-probe fallbacks for unrecognised handhelds ([87053e6](https://github.com/Hooandee/panel-de-control/commit/87053e609f8bb438e3e85cf2d54bf2582a2d50d3))
+* control-center UI polish, Steam Deck fan control, Legion Go S refinements ([#14](https://github.com/Hooandee/panel-de-control/issues/14)) ([9958268](https://github.com/Hooandee/panel-de-control/commit/99582683e92fe15fcc193316de9401d42b980c95))
+* controller manager hub with per-device remap (Mandos) ([cc6e5b8](https://github.com/Hooandee/panel-de-control/commit/cc6e5b8a06e025fe06c7b18e754cd2bf7f53ffb3))
+* display color calibration, active CPU cores, and GPU clock controls ([30eec65](https://github.com/Hooandee/panel-de-control/commit/30eec652381d80ae0c26b7cc02c59f5a190153cb))
+* in-plugin problem reporter ([1752878](https://github.com/Hooandee/panel-de-control/commit/1752878a0c3b73c9f44bf34892e88ee574fce4de))
+* in-plugin problem reporter ([59afbd7](https://github.com/Hooandee/panel-de-control/commit/59afbd7db71fc7b48c5bd874c6f8133d889287b1))
+* Legion Go S support (detection, fan monitor, fan modes) ([2bed969](https://github.com/Hooandee/panel-de-control/commit/2bed969e2da300f092f3156b4ea5bb56afc98702))
+* plain-language glossary of handheld terms in Settings ([9a95918](https://github.com/Hooandee/panel-de-control/commit/9a959180eb000c0fd1df396b7bdddd4d00139768))
+* RGB lighting card — open or install Colores from Sistema ([5e96f91](https://github.com/Hooandee/panel-de-control/commit/5e96f91a0ad3b75e43e5a17b0243925235cdf789))
+
+
+### Bug Fixes
+
+* spawn modprobe (MSI) and gamescopectl (color) via clean_env + absolute path ([#15](https://github.com/Hooandee/panel-de-control/issues/15)) ([160611f](https://github.com/Hooandee/panel-de-control/commit/160611fa195948d99243c27ad50505ff653d5da9))
+
 ## [0.2.4](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.2.3...panel-de-control-v0.2.4) (2026-07-02)
 
 
