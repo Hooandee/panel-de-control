@@ -83,7 +83,7 @@ export const AdvancedBoost: FC<AdvancedBoostProps> = ({
         onActivate={() => setOpen((o) => !o)}
         onClick={() => setOpen((o) => !o)}
       >
-        <Chevron size={16} />
+        <Chevron size={16} color={theme.color.textMuted} />
         <span style={{ flex: 1 }}>{t("tdp.advanced.title")}</span>
         <span style={badge}>{auto ? t("tdp.advanced.auto") : t("tdp.advanced.manual")}</span>
       </Focusable>

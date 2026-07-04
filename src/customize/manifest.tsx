@@ -2,7 +2,7 @@ import { ReactNode } from "react";
 import {
   LuGauge, LuSlidersHorizontal, LuFan, LuSettings,
   LuLeaf, LuBatteryFull, LuCpu, LuSun, LuVolume2, LuWind, LuThermometer, LuChartSpline,
-  LuLightbulb, LuPalette, LuGamepad2,
+  LuLightbulb, LuPalette, LuGamepad2, LuMemoryStick, LuActivity,
 } from "react-icons/lu";
 
 /** Presentation metadata shared by a tab and a configurable block. */
@@ -36,12 +36,17 @@ export const TABS: ItemMeta[] = [
 /**
  * The configurable blocks per section, in DEFAULT order. Single source of truth
  * for BOTH the customization editor (labels/icons) and each section's default
- * block order. Potencia has no configurable blocks (its interior is a
- * conditional flow) → it's absent here and only appears in the tab editor.
+ * block order. Potencia's core (arc + slider + presets) is a fixed conditional
+ * flow, but its two extras — the GPU-clock card and the Auto‑TDP toggle — are
+ * reorderable/hideable blocks (GPU first by default).
  *
  * Section render code must key its block nodes by exactly these ids.
  */
 export const SECTION_BLOCKS: Record<string, BlockDef[]> = {
+  power: [
+    { id: "gpu", labelKey: "gpu.clock.title", icon: <LuMemoryStick size={ICON} /> },
+    { id: "autoTdp", labelKey: "tdp.auto.title", icon: <LuActivity size={ICON} /> },
+  ],
   system: [
     { id: "eco", labelKey: "system.eco.title", icon: <LuLeaf size={ICON} /> },
     { id: "battery", labelKey: "system.battery.title", icon: <LuBatteryFull size={ICON} /> },

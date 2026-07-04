@@ -56,7 +56,7 @@ export const PantallaSection: FC = () => {
         <PanelSectionRow>
           <div style={{
             display: "flex", alignItems: "center", gap: theme.space.sm,
-            borderRadius: theme.radius.md, padding: theme.space.md, marginBottom: 6,
+            borderRadius: theme.radius.md, padding: theme.space.md, marginBottom: theme.space.card,
             background: "rgba(255,180,84,0.14)", boxShadow: `inset 0 0 0 1px ${theme.color.warn}`,
           }}>
             <div style={{ flex: 1, minWidth: 0 }}>

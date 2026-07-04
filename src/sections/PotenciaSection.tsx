@@ -3,6 +3,11 @@ import { FC, useCallback, useEffect, useRef, useState } from "react";
 import { getTdpState, setTdpWatts, setTdpLevels, resetTdpAuto, getPowerDraw, setAutoTdp, TdpState, TdpScope, PowerDraw } from "../api";
 import { TdpSection } from "../components/TdpSection";
 import { GpuClockCard } from "../components/GpuClockCard";
+import { AutoTdpToggle } from "../components/AutoTdpToggle";
+import { SectionBlocks } from "../customize/SectionBlocks";
+import { useLayout } from "../customize/store";
+import { visibleIds } from "../customize/layout";
+import { blockOrder } from "../customize/manifest";
 import { useRunningGame } from "../tdp/useRunningGame";
 
 /**
@@ -119,6 +124,21 @@ export const PotenciaSection: FC = () => {
     [resolveTarget, refresh],
   );
 
+  // The fixed TDP core (arc + slider/presets) renders first; the GPU-clock card
+  // and the Auto‑TDP toggle are reorderable/hideable blocks below it — GPU before
+  // Auto‑TDP by default (see the "power" entry in the customization manifest).
+  const isAutoOn = power?.auto_tdp ?? false;
+
+  // Safety: if the Auto‑TDP block is hidden while auto is ON, there's no way to
+  // turn it off from Potencia (the core shows the live gauge, no slider). So
+  // hiding it disables auto-TDP — the loop's last PL1 stays as a fixed, editable
+  // value. onAutoTdp(false) is idempotent; this fires once when it becomes hidden.
+  const layout = useLayout();
+  const autoTdpVisible = visibleIds(blockOrder("power"), layout.blocks["power"]).includes("autoTdp");
+  useEffect(() => {
+    if (!autoTdpVisible && isAutoOn) onAutoTdp(false);
+  }, [autoTdpVisible, isAutoOn, onAutoTdp]);
+
   return (
     <>
       <TdpSection
@@ -130,10 +150,15 @@ export const PotenciaSection: FC = () => {
         onWatts={onWatts}
         onSetLevels={onSetLevels}
         onResetAuto={onResetAuto}
-        onAutoTdp={onAutoTdp}
         onApplySuggestion={onApplySuggestion}
       />
-      <GpuClockCard />
+      <SectionBlocks
+        sectionId="power"
+        blocks={{
+          gpu: <GpuClockCard />,
+          autoTdp: <AutoTdpToggle checked={isAutoOn} onChange={onAutoTdp} />,
+        }}
+      />
     </>
   );
 };

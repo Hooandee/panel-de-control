@@ -1,5 +1,5 @@
 import { FC, useEffect, useState } from "react";
-import { DialogButton, Dropdown, PanelSectionRow, Spinner } from "@decky/ui";
+import { DialogButton, Dropdown, PanelSectionRow } from "@decky/ui";
 import { LuGamepad2, LuRotateCcw } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
@@ -18,6 +18,7 @@ import {
   prettyTarget,
   valueToTarget,
 } from "../mandos/logic";
+import { Loading } from "../components/Loading";
 
 /** Raised card chrome with a titled header row. */
 const Card: FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
@@ -108,15 +109,7 @@ export const MandosSection: FC = () => {
     getControllerConfig().then(setConfig).catch(() => {});
   }, []);
 
-  if (!config) {
-    return (
-      <PanelSectionRow>
-        <div style={{ display: "flex", justifyContent: "center", padding: theme.space.lg }}>
-          <Spinner style={{ width: 28, height: 28 }} />
-        </div>
-      </PanelSectionRow>
-    );
-  }
+  if (!config) return <Loading />;
 
   const manager = config.manager;
   const version = config.manager_version;

@@ -1,10 +1,11 @@
-import { PanelSectionRow, SliderField, Spinner, ToggleField } from "@decky/ui";
+import { PanelSectionRow, SliderField } from "@decky/ui";
 import { FC } from "react";
 
 import { TdpState, TdpScope, PowerDraw } from "../api";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { fraction, zoneFor } from "../tdp/logic";
+import { Loading } from "./Loading";
 import { ProfileSelector } from "./ProfileSelector";
 import { PowerArc } from "./PowerArc";
 import { Presets } from "./Presets";
@@ -24,15 +25,14 @@ export interface TdpSectionProps {
   onWatts: (watts: number) => void;
   onSetLevels: (off2: number, off3: number) => void;
   onResetAuto: () => void;
-  onAutoTdp: (enabled: boolean) => void;
   // Apply the learned-band suggestion as a FIXED PL1 (also turns auto-TDP off).
   onApplySuggestion: (watts: number) => void;
 }
 
-export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onScope, onWatts, onSetLevels, onResetAuto, onAutoTdp, onApplySuggestion }) => {
+export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onScope, onWatts, onSetLevels, onResetAuto, onApplySuggestion }) => {
   const { t } = useI18n();
 
-  if (!tdp) return <Spinner />;
+  if (!tdp) return <Loading />;
 
   if (!tdp.supported) {
     return (
@@ -161,14 +161,6 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
           )}
         </>
       )}
-      <PanelSectionRow>
-        <ToggleField
-          label={t("tdp.auto.title")}
-          description={t("tdp.auto.hint")}
-          checked={isAutoOn}
-          onChange={onAutoTdp}
-        />
-      </PanelSectionRow>
     </>
   );
 };

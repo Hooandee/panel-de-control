@@ -24,6 +24,8 @@ import glob
 import os
 from typing import Optional
 
+from sysfs import read_int, write_str
+
 # Stable, bounded device path — the fan_mode attribute hangs off the VPC2004 ACPI
 # device. Globbed (not recursive) so a firmware revision that numbers the instance
 # differently (VPC2004:01) still resolves, without ever walking /sys recursively
@@ -37,31 +39,8 @@ _DEFAULT_MODE = 1  # balanced — the stock firmware default (fail-safe target)
 PRESET_TO_MODE: dict[str, int] = {"silent": 0, "balanced": 1, "performance": 2}
 
 
-def _read(path: str) -> Optional[str]:
-    try:
-        with open(path) as f:
-            return f.read().strip()
-    except OSError:
-        return None
-
-
-def _read_int(path: str) -> Optional[int]:
-    v = _read(path)
-    if v is None:
-        return None
-    try:
-        return int(v)
-    except ValueError:
-        return None
-
-
-def _write(path: str, value: str) -> bool:
-    try:
-        with open(path, "w") as f:
-            f.write(value)
-        return True
-    except OSError:
-        return False
+# sysfs read/write come from the shared py_modules/sysfs.py helpers (read_int /
+# write_str) — no private copies here.
 
 
 class LenovoFanModeBackend:
@@ -90,11 +69,11 @@ class LenovoFanModeBackend:
     # --- mode I/O ---------------------------------------------------------------
 
     def _current_mode(self) -> Optional[int]:
-        return _read_int(self._path) if self._path else None
+        return read_int(self._path) if self._path else None
 
     def _write_mode(self, mode: int) -> bool:
         """Raw write (no readback). Overridable in tests to simulate a stuck node."""
-        return _write(self._path, str(mode))
+        return write_str(self._path, str(mode))
 
     def set_mode(self, mode: int) -> dict:
         """Write a coarse fan mode (0/1/2) and confirm via readback. Never raises."""

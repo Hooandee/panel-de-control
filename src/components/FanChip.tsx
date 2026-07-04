@@ -30,9 +30,10 @@ interface Props {
 const FanChipImpl: FC<Props> = ({ label, rpm, values, layout = "stack" }) => {
   const r = (SIZE - STROKE) / 2;
   const circ = 2 * Math.PI * r;
-  // rpm null (glitch) → show "—" and an empty ring for this tick, honestly.
-  const known = rpm ?? 0;
-  const observedMax = values.length ? Math.max(...values, known) : known;
+  // rpm null (glitch) → show "—" and an empty ring for this tick, honestly. The
+  // fraction is only computed on the rpm != null branch, so observedMax's null
+  // fallback is never exercised there — inline it.
+  const observedMax = values.length ? Math.max(...values, rpm ?? 0) : (rpm ?? 0);
   const fraction = rpm == null ? 0 : rpmFraction(rpm, observedMax, NOMINAL_MAX_RPM);
 
   const ring = (
@@ -72,10 +73,13 @@ const FanChipImpl: FC<Props> = ({ label, rpm, values, layout = "stack" }) => {
     );
   }
 
-  // "stack" = ring + label + sparkline below; "ring" is the same minus the
-  // sparkline (the caller draws it elsewhere).
+  // "stack" = ring + label + sparkline below (fills its tile → width 100%);
+  // "ring" is the same minus the sparkline AND sized to its content, because the
+  // caller lays it out in a flex row beside the temperature (a 100% width here
+  // would starve that sibling — the "solo" merged card bug).
+  const isStack = layout === "stack";
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: theme.space.xs, width: "100%" }}>
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: theme.space.xs, width: isStack ? "100%" : "auto", flexShrink: isStack ? undefined : 0 }}>
       {ring}
       <div style={{ textAlign: "center" }}>{labelEl}</div>
       {layout === "stack" && (

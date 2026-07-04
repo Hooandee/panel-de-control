@@ -97,6 +97,7 @@ export const CpuCard: FC<Props> = ({ state, onSetSmt, onSetBoost, onSetCores }) 
           description={t("system.cpu.smt.desc")}
           checked={smtOn}
           onChange={onSetSmt}
+          bottomSeparator="none"
         />
       )}
       {state.boost.supported && (
@@ -105,6 +106,7 @@ export const CpuCard: FC<Props> = ({ state, onSetSmt, onSetBoost, onSetCores }) 
           description={t("system.cpu.boost.desc")}
           checked={boostOn}
           onChange={onSetBoost}
+          bottomSeparator="none"
         />
       )}
     </div>

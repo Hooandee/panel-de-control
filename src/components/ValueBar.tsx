@@ -39,7 +39,7 @@ export const ValueBar: FC<ValueBarProps> = ({
       style={{
         ...theme.card,
         padding: theme.space.md,
-        marginBottom: 6,
+        marginBottom: theme.space.card,
         opacity: disabled ? 0.5 : 1,
         overflow: "hidden", // contain the slider's focus highlight within the card
       }}
@@ -61,7 +61,7 @@ export const ValueBar: FC<ValueBarProps> = ({
             color: theme.color.textPrimary,
           }}
         >
-          {icon} {label}
+          <span style={{ display: "inline-flex", color: theme.color.accent }}>{icon}</span> {label}
         </span>
         <span
           style={{

@@ -1,6 +1,7 @@
 import { FC, ReactNode } from "react";
 import { Focusable } from "@decky/ui";
 import { segmentGroupStyle, segmentItemStyle } from "./segmented";
+import { MarqueeText } from "./MarqueeText";
 
 export interface TabItem {
   id: string;
@@ -41,7 +42,9 @@ export const TabBar: FC<TabBarProps> = ({ tabs, activeId, onSelect }) => {
             onClick={() => onSelect(tab.id)}
           >
             {tab.icon}
-            {active && <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{tab.label}</span>}
+            {/* Active tab shows its name; if it's too long to fit, it gently
+                scrolls (marquee) instead of truncating to "Pot…". */}
+            {active && <MarqueeText text={tab.label} />}
             {/* Alert badge shows on any tab state (icon-only or expanded) so an
                 update is noticeable even when the tab isn't active. */}
             {tab.badge}

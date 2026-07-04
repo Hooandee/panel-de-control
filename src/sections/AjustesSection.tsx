@@ -84,6 +84,7 @@ export const AjustesSection: FC = () => {
             description={t("settings.telemetry.desc")}
             checked={learn}
             onChange={onToggle}
+            bottomSeparator="none"
           />
         )}
 
@@ -99,6 +100,7 @@ export const AjustesSection: FC = () => {
             description={t("settings.battmax.desc")}
             checked={battMax}
             onChange={onToggleBattMax}
+            bottomSeparator="none"
           />
         )}
 
@@ -108,6 +110,7 @@ export const AjustesSection: FC = () => {
             description={t("settings.qamboost.desc")}
             checked={qamBoost}
             onChange={onToggleQamBoost}
+            bottomSeparator="none"
           />
         )}
 
