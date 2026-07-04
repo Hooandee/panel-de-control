@@ -36,9 +36,15 @@ def test_get_version_returns_package_version(Plugin):
 
 def test_get_device_returns_detected_profile(Plugin, monkeypatch):
     import device_registry
+    import main
     from device_profiles import DEVICE_TABLE
     ally_x = next(p for p in DEVICE_TABLE if p.key == "rog_ally_x")
     monkeypatch.setattr(device_registry, "detect", lambda product_name=None: ally_x)
+    # get_device surfaces the REAL silicon name (read_cpu_model → /proc/cpuinfo),
+    # falling back to the profile's table chip when the kernel exposes nothing. Pin
+    # the reader off so the test is host-independent: a CI runner reports its own CPU
+    # (e.g. "AMD EPYC 7763"), which would otherwise fail this assertion.
+    monkeypatch.setattr(main, "read_cpu_model", lambda: None)
     p = Plugin()
     dev = asyncio.run(p.get_device())
     assert dev["key"] == "rog_ally_x"
