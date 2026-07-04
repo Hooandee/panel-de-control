@@ -47,6 +47,18 @@ def test_fan_without_pwm_has_none_percent(tmp_path):
     assert fan["percent"] is None
 
 
+def test_ffff_rpm_glitch_is_reported_as_unknown_not_65535(tmp_path):
+    # The Legion Go S lenovo_wmi_other driver briefly returns 0xFFFF (65535) while
+    # the fan ramps — an all-ones sentinel, not a real speed. Keep the fan present
+    # (it exists) but report rpm unknown for that read; never show 65535.
+    root = str(tmp_path)
+    _mk_chip(root, 0, "lenovo_wmi_other", {"fan1_input": "65535"})
+    state = FanReader(root=root).read()
+    assert state["supported"] is True
+    assert len(state["fans"]) == 1
+    assert state["fans"][0]["rpm"] is None
+
+
 def test_uses_fan_label_when_present(tmp_path):
     root = str(tmp_path)
     _mk_chip(root, 0, "x", {"fan1_input": "1500", "fan1_label": "CPU Fan"})

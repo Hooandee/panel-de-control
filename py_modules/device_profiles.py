@@ -52,8 +52,11 @@ DEVICE_TABLE = (
                   7, 15, 25, 30, match_names=("ROG Ally RC71", "ROG Ally")),
     DeviceProfile("legion_go_2", "Legion Go 2", "AMD Ryzen AI Z2 Extreme", "amd",
                   5, 15, 30, 33, match_names=("83N0", "Legion Go 2"), panel="oled"),
-    DeviceProfile("legion_go_s", "Legion Go S", "AMD Ryzen Z2 Go", "amd",
-                  5, 15, 30, 33, match_names=("83L3", "83Q", "Legion Go S")),
+    # Legion Go S ships as both 8ARP1 (83L3) and 8APU1 (83N6), each with either a
+    # Ryzen Z1 Extreme or a Z2 Go. The real chip is read live from /proc/cpuinfo;
+    # this string is only a fallback when that read fails.
+    DeviceProfile("legion_go_s", "Legion Go S", "AMD Ryzen Z1 Extreme / Z2 Go", "amd",
+                  5, 15, 30, 33, match_names=("83L3", "83N6", "Legion Go S")),
     DeviceProfile("legion_go", "Legion Go", "AMD Z1 Extreme", "amd",
                   5, 15, 30, 30, match_names=("83E1", "Legion Go")),
     DeviceProfile("msi_claw_8_ai_plus", "MSI Claw 8 AI+", "Intel Core Ultra 7 258V", "intel",

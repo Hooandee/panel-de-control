@@ -11,7 +11,7 @@ const NOMINAL_MAX_RPM = 7000;
 
 interface Props {
   label: string;
-  rpm: number;
+  rpm: number | null; // null = speed unknown this read (sensor glitch)
   values: number[];
   // Layout:
   //  - "stack" (default): ring on top, label, sparkline below.
@@ -30,8 +30,10 @@ interface Props {
 const FanChipImpl: FC<Props> = ({ label, rpm, values, layout = "stack" }) => {
   const r = (SIZE - STROKE) / 2;
   const circ = 2 * Math.PI * r;
-  const observedMax = values.length ? Math.max(...values, rpm) : rpm;
-  const fraction = rpmFraction(rpm, observedMax, NOMINAL_MAX_RPM);
+  // rpm null (glitch) → show "—" and an empty ring for this tick, honestly.
+  const known = rpm ?? 0;
+  const observedMax = values.length ? Math.max(...values, known) : known;
+  const fraction = rpm == null ? 0 : rpmFraction(rpm, observedMax, NOMINAL_MAX_RPM);
 
   const ring = (
     <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`} style={{ flexShrink: 0 }}>
@@ -48,7 +50,7 @@ const FanChipImpl: FC<Props> = ({ label, rpm, values, layout = "stack" }) => {
         transform={`rotate(-90 ${SIZE / 2} ${SIZE / 2})`}
       />
       <text x="50%" y="46%" textAnchor="middle" fill={theme.color.textPrimary} fontSize={17} fontWeight={700} style={{ fontVariantNumeric: "tabular-nums" }}>
-        {rpm}
+        {rpm == null ? "—" : rpm}
       </text>
       <text x="50%" y="64%" textAnchor="middle" fill={theme.color.textMuted} fontSize={9}>
         RPM

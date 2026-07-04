@@ -16,6 +16,7 @@ from tdp_profiles import ProfileStore
 from lifecycle import LifecycleManager, read_on_ac
 from fans.hwmon import FanReader, extract_cpu_gpu_temps
 from fans import control as fan_control
+from fans import expose as fan_expose
 from fans import presets as fan_presets
 from fans import suggest as fan_suggest
 from fan_curves import FanCurveStore
@@ -241,11 +242,23 @@ class Plugin:
                        there isn't enough real data yet, fall back to firmware auto
                        (never fabricate a curve) — the card shows the learning state.
         - preset/custom -> write the stored 8-point curve to all fans.
-        Guarded: a bad fan apply must never brick load.
+
+        On a coarse mode-based device (Legion Go S) the firmware allows no freeform
+        curve — the effective preset maps to a fan mode (quiet/balanced/performance);
+        auto/custom/adaptive settle on the stock default. Guarded: a bad fan apply
+        must never brick load.
         """
         try:
             profile = self._fan_curves.effective(self._current_appid)
             preset = profile["preset"]
+            if getattr(self._fan_ctrl, "mode_based", False):
+                # auto -> stock default; a mapped preset -> its mode; anything not
+                # representable as a coarse mode (custom/adaptive) -> default.
+                if preset == "auto":
+                    self._fan_ctrl.set_auto(None)
+                else:
+                    self._fan_ctrl.apply_preset(preset)
+                return
             if preset == "adaptive":
                 points = self._adaptive_curve_points(self._current_appid)
                 if points is None:
@@ -280,6 +293,10 @@ class Plugin:
             "supported": hw_state.get("supported", False),
             "source": hw_state.get("source"),
             "pwm_max": hw_state.get("pwm_max", 255),
+            # Coarse mode-based device (Legion Go S): the UI shows quiet/balanced/
+            # performance chips instead of a curve. `mode` is the live firmware mode.
+            "mode_based": hw_state.get("mode_based", False),
+            "mode": hw_state.get("mode"),
             "preset": effective["preset"],
             "points": effective["points"],
             "bias": effective.get("bias", 0),
@@ -1320,6 +1337,10 @@ class Plugin:
         decky.logger.info(
             "Panel de Control v%s loaded (euid=%s)", read_version(), os.geteuid()
         )
+        # Legion Go S hides its fan sensor unless lenovo_wmi_other is loaded with
+        # expose_all_fans=Y — enable it (idempotent, no-op elsewhere, never raises).
+        if fan_expose.ensure_fan_sensor():
+            decky.logger.info("Legion fan sensor exposed (lenovo_wmi_other)")
         try:
             self._reapply_all()
             self._lifecycle.start()
@@ -1346,4 +1367,5 @@ class Plugin:
     async def _uninstall(self) -> None:
         self._restore_fans_safe()
         self._restore_color_safe()
+        fan_expose.remove_conf()  # drop the modprobe.d option we added (guarded)
         decky.logger.info("Panel de Control uninstalled")

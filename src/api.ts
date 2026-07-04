@@ -85,7 +85,7 @@ export type TdpScope = Scope;
 
 export interface FanInfo {
   label: string;
-  rpm: number;
+  rpm: number | null; // null = speed unknown this read (e.g. a sensor glitch)
   percent: number | null;
 }
 
@@ -140,6 +140,11 @@ export interface FanCurveState {
   supported: boolean;
   source: string | null;
   pwm_max: number;
+  // Coarse mode-based device (Legion Go S): no freeform curve is possible, only
+  // quiet/balanced/performance fan modes. When true the editor shows mode chips and
+  // hides the graph/adaptive/custom modes. `mode` is the live firmware mode (0/1/2).
+  mode_based: boolean;
+  mode: number | null;
   preset: FanPreset;
   points: [number, number][] | null;
   // Silence↔cool bias for the adaptive mode (-100..100, 0 otherwise).

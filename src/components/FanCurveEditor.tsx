@@ -15,6 +15,9 @@ import { theme } from "./../theme";
 // "custom" = the hand-drawn editing mode; the rest are fixed presets.
 const MODES: FanPreset[] = ["auto", "adaptive", "silent", "balanced", "performance", "custom"];
 
+// Coarse-mode devices (Legion Go S) expose only these three firmware fan modes.
+const FAN_MODES: FanPreset[] = ["silent", "balanced", "performance"];
+
 // One icon per mode. Inactive chips show ONLY the icon (like the top tab bar), so
 // six modes fit one tidy row; the selected chip expands to icon + label.
 const MODE_ICON: Record<FanPreset, ReactNode> = {
@@ -52,6 +55,53 @@ export const FanCurveEditor: FC<Props> = ({ control, liveTemp, suggestion, expan
     return (
       <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
         {t("fans.curve.unsupported")}
+      </div>
+    );
+  }
+
+  // Coarse mode-based device (Legion Go S): the firmware allows no freeform curve,
+  // only quiet/balanced/performance modes. Show the three mode chips + an honest
+  // note; hide the graph, the adaptive learned card, and the custom editor. A
+  // preset not representable as a mode (auto/custom/adaptive) settles on balanced,
+  // so highlight balanced in that case to match what the hardware runs.
+  if (curveState.mode_based) {
+    const activeMode: FanPreset = (FAN_MODES as string[]).includes(curveState.preset)
+      ? curveState.preset
+      : "balanced";
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
+        {control.game && (
+          <ProfileSelector
+            scope={control.scope}
+            gameName={control.game.name}
+            hasGameProfile={curveState.has_game_profile}
+            globalLabel={t("tdp.scope.global")}
+            inheritHint={t("tdp.inherit")}
+            onScope={control.setScope}
+          />
+        )}
+        <Focusable style={segmentGroupStyle}>
+          {FAN_MODES.map((mode) => {
+            const active = activeMode === mode;
+            const label = t(`fans.preset.${mode}`);
+            return (
+              <Focusable
+                key={mode}
+                style={{ ...segmentItemStyle(active), flex: 1, padding: "6px 8px" }}
+                aria-label={label}
+                title={label}
+                onActivate={() => control.onPreset(mode)}
+                onClick={() => control.onPreset(mode)}
+              >
+                {MODE_ICON[mode]}
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>
+              </Focusable>
+            );
+          })}
+        </Focusable>
+        <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
+          {t("fans.mode.note")}
+        </div>
       </div>
     );
   }

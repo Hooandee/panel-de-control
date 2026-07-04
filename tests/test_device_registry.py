@@ -10,9 +10,11 @@ KNOWN = {
     "ROG Ally X RC72LA_RC72LA": "rog_ally_x",
     "ROG Xbox Ally X RC73XA": "rog_xbox_ally_x",
     "83E1": "legion_go",
-    "83L3": "legion_go_s",
-    "83Q1": "legion_go_s",
-    "83N0": "legion_go_2",
+    "83L3": "legion_go_s",           # Legion Go S 8ARP1 (Z1 Extreme / Z2 Go)
+    "83L30030US": "legion_go_s",     # 8ARP1 SteamOS SKU
+    "83N6": "legion_go_s",           # Legion Go S 8APU1 (Ryzen Z2 Go, 2025)
+    "83N6000MSB": "legion_go_s",     # 8APU1 full SKU
+    "83N0": "legion_go_2",           # Legion Go 2 — must NOT collide with 83N6
     "Claw 8 AI+ A2VM": "msi_claw_8_ai_plus",
 }
 

@@ -17,6 +17,7 @@ import types
 import pytest
 
 from fans.control import AsusFanCurveBackend
+from fans.lenovo_mode import LenovoFanModeBackend
 
 
 # ---------------------------------------------------------------------------
@@ -297,3 +298,62 @@ class TestFanCurveRpcAsus:
         assert st["preset"] == "custom"
         assert len(st["points"]) == 8
         assert st["points"][-1][1] >= 76  # hottest point floored, honestly reflected
+
+
+# ---------------------------------------------------------------------------
+# Tests: Legion Go S coarse mode backend (fan_mode node)
+# ---------------------------------------------------------------------------
+
+def _make_fan_mode_node(root, value="1"):
+    d = os.path.join(root, "sys/bus/platform/devices/VPC2004:00")
+    os.makedirs(d, exist_ok=True)
+    with open(os.path.join(d, "fan_mode"), "w") as f:
+        f.write(value)
+    return os.path.join(d, "fan_mode")
+
+
+class TestFanCurveRpcLenovoMode:
+    @pytest.fixture
+    def go_s_root(self, tmp_path):
+        _make_fan_mode_node(str(tmp_path), "1")
+        return tmp_path
+
+    @pytest.fixture
+    def Plugin(self, go_s_root, monkeypatch):
+        backend = LenovoFanModeBackend(root=str(go_s_root))
+        assert backend.supported
+        return _make_plugin_fixture(go_s_root, monkeypatch, fan_ctrl_override=backend)
+
+    def _mode(self, root):
+        return int(open(os.path.join(str(root), "sys/bus/platform/devices/VPC2004:00/fan_mode")).read().strip())
+
+    def test_state_reports_mode_based(self, Plugin):
+        st = asyncio.run(Plugin().get_fan_curve_state())
+        assert st["supported"] is True
+        assert st["mode_based"] is True
+        assert st["mode"] == 1
+        assert st["source"] == "lenovo_fan_mode"
+
+    def test_preset_maps_to_fan_mode(self, Plugin, go_s_root):
+        st = asyncio.run(Plugin().set_fan_preset("performance", "global", None))
+        assert st["preset"] == "performance"
+        assert self._mode(go_s_root) == 2
+        assert st["mode"] == 2
+
+        asyncio.run(Plugin().set_fan_preset("silent", "global", None))
+        assert self._mode(go_s_root) == 0
+
+    def test_auto_settles_on_default_mode(self, Plugin, go_s_root):
+        asyncio.run(Plugin().set_fan_preset("performance", "global", None))
+        st = asyncio.run(Plugin().set_fan_auto("global", None))
+        assert st["preset"] == "auto"
+        assert self._mode(go_s_root) == 1  # balanced default
+
+    def test_custom_curve_falls_back_to_default_mode(self, Plugin, go_s_root):
+        # A freeform curve isn't runnable on this firmware; the persisted preset is
+        # still "custom" (honest), but the hardware settles on the default mode.
+        pts = [[40, 0], [50, 30], [60, 60], [70, 95], [80, 135], [85, 175], [90, 215], [95, 255]]
+        asyncio.run(Plugin().set_fan_preset("performance", "global", None))  # move off default
+        st = asyncio.run(Plugin().set_fan_curve_points(pts, "global", None))
+        assert st["preset"] == "custom"
+        assert self._mode(go_s_root) == 1

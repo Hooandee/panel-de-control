@@ -33,7 +33,10 @@ export function useFanState(): FanMonitor {
           setMonitor((prev) => {
             const fanHistory: Record<string, number[]> = {};
             for (const f of s.fans) {
-              fanHistory[f.label] = pushSample(prev.fanHistory[f.label] ?? [], f.rpm, MAX_SAMPLES);
+              const prevBuf = prev.fanHistory[f.label] ?? [];
+              // Skip glitch reads (rpm null) so they never poison the sparkline.
+              fanHistory[f.label] =
+                f.rpm == null ? prevBuf : pushSample(prevBuf, f.rpm, MAX_SAMPLES);
             }
             return { state: s, fanHistory };
           });

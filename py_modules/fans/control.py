@@ -349,17 +349,24 @@ def _is_msi_vendor(root: str) -> bool:
 def select_fan_backend(device, root: str = "/", temp_fn=None):
     """Return the best available fan-control backend for this device.
 
-    Chip-name based (not device-name based) so it's robust across the matrix:
+    Chip/attr based (not device-name based) so it's robust across the matrix:
     1. ``asus_custom_fan_curve`` (ROG Ally family) — hardware curve table.
     2. ``msi_wmi_platform`` (MSI Claw) — hardware curve table.
-    3. ``steamdeck_hwmon`` (Steam Deck) — software loop (needs ``temp_fn``).
-    4. (W4 adds the Legion Go 2 raw-EC software-loop backend here.)
-    5. ``NullFanBackend`` when nothing supported is found (read-only safety).
+    3. ``VPC2004`` ``fan_mode`` (Legion Go S) — coarse quiet/balanced/performance
+       mode (no freeform curve possible on its firmware).
+    4. ``steamdeck_hwmon`` (Steam Deck) — software loop (needs ``temp_fn``).
+    5. Legion Go 2 raw-EC software loop.
+    6. ``NullFanBackend`` when nothing supported is found (read-only safety).
     """
     for backend_cls in (AsusFanCurveBackend, MsiFanCurveBackend):
         backend = backend_cls(root=root)
         if backend.supported:
             return backend
+    # Coarse fan-mode backend (Legion Go S). Lazy import keeps the module graph flat.
+    from fans.lenovo_mode import LenovoFanModeBackend
+    mode_backend = LenovoFanModeBackend(root=root)
+    if mode_backend.supported:
+        return mode_backend
     # Software-loop backends (lazy import avoids a circular dependency).
     from fans.software_loop import SteamDeckFanBackend
     from fans.legion_ec import LegionGo2FanBackend

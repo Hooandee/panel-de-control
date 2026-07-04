@@ -37,6 +37,11 @@ def _read_int(path: str) -> int | None:
 
 _MAX_FANS = 2  # no target device has >2 physical fans; extra hwmon channels are phantom
 
+# 0xFFFF is the all-ones sentinel the Legion Go S lenovo_wmi_other driver returns
+# mid-ramp; it is not a real speed (handheld fans top out ~8000 RPM), so we report
+# it as unknown rather than a fake 65535.
+_INVALID_RPM = 0xFFFF
+
 
 def curate_fans(fans: list[dict]) -> list[dict]:
     """Drop the generic acpi_fan chip when a vendor chip also reports fans, then cap
@@ -124,6 +129,8 @@ class FanReader:
                 rpm = _read_int(inp)
                 if rpm is None:
                     continue
+                if rpm == _INVALID_RPM:
+                    rpm = None  # glitch read — keep the fan, report speed unknown
                 n = os.path.basename(inp)[len("fan"):-len("_input")]
                 label = _read(os.path.join(d, f"fan{n}_label")) or f"{name or 'fan'} {n}".strip()
                 pwm = _read_int(os.path.join(d, f"pwm{n}"))
