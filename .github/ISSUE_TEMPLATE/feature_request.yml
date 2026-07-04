@@ -1,0 +1,42 @@
+name: Feature request
+description: Suggest an idea or improvement
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the use case or the frustration this would address.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What would you like to see happen?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: false
+  - type: dropdown
+    id: device
+    attributes:
+      label: Is this device-specific?
+      options:
+        - Applies to all devices
+        - Steam Deck LCD
+        - Steam Deck OLED
+        - ROG Ally
+        - ROG Ally X
+        - ROG Xbox Ally X
+        - Legion Go
+        - Legion Go S
+        - Legion Go 2
+        - MSI Claw 8 AI+
+        - Other
+    validations:
+      required: false
