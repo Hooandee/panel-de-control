@@ -14,7 +14,6 @@ from __future__ import annotations
 import json
 import re
 import shutil
-import ssl
 import tempfile
 import urllib.error
 import urllib.request
@@ -23,7 +22,8 @@ from pathlib import Path
 
 import decky
 
-from version import read_version  # top-level import (Decky adds py_modules to sys.path)
+from http_util import ssl_context  # top-level import (Decky adds py_modules to sys.path)
+from version import read_version
 
 _GITHUB_OWNER = "Hooandee"
 _UA = "decky-self-updater"
@@ -76,35 +76,9 @@ def _is_newer(latest: str, current: str) -> bool:
     return _norm(latest) > _norm(current)
 
 
-# Decky's bundled Python can ship with a CA path baked at build time that doesn't
-# exist on the device, so its default trust store is empty and HTTPS verification
-# fails with CERTIFICATE_VERIFY_FAILED (Decky's own updater dodges this via certifi).
-# Load the system CA bundle explicitly when the default store has no CAs.
-_CA_BUNDLES = (
-    "/etc/ssl/certs/ca-certificates.crt",
-    "/etc/ssl/cert.pem",
-    "/etc/pki/tls/certs/ca-bundle.crt",
-    "/etc/ssl/ca-bundle.pem",
-)
-
-
-def _ssl_context() -> ssl.SSLContext:
-    ctx = ssl.create_default_context()
-    # Load the system CA bundle on top of the defaults (harmless if defaults
-    # already work; the fix for Decky's cert-less bundled Python).
-    for path in _CA_BUNDLES:
-        if Path(path).exists():
-            try:
-                ctx.load_verify_locations(path)
-            except Exception:
-                continue
-            break
-    return ctx
-
-
 def _http_get(url: str, accept: str) -> bytes:
     req = urllib.request.Request(url, headers={"User-Agent": _UA, "Accept": accept})
-    with urllib.request.urlopen(req, timeout=15, context=_ssl_context()) as resp:  # noqa: S310
+    with urllib.request.urlopen(req, timeout=15, context=ssl_context()) as resp:  # noqa: S310
         return resp.read()
 
 
