@@ -359,3 +359,55 @@ export const setCalibration =
   callable<[temperature: number, contrast: number], ColorState>("set_calibration");
 export const applyOledLook = callable<[], ColorState>("apply_oled_look");
 export const resetColor = callable<[], ColorState>("reset_color");
+
+// ---- Mandos (controller manager) ------------------------------------------
+export interface ControllerConflict {
+  hhd_present: boolean;
+  hhd_managing_power: boolean;
+  // True when HHD manages power AND our TDP backend can too → they fight.
+  conflict: boolean;
+}
+
+export const getControllerConflict =
+  callable<[], ControllerConflict>("get_controller_conflict");
+
+export type ControllerTarget = { gamepad: string } | { key: string };
+
+export interface RemapButton {
+  // The InputPlumber source capability (e.g. "LeftPaddle1") — used when remapping.
+  source: string;
+  // The literal silkscreen label printed on the device (e.g. "Y1", "M2"),
+  // device-correct from the backend's validated per-device table. NOT translated.
+  label: string;
+  // The current override, or null = still at the device default.
+  target: ControllerTarget[] | null;
+}
+
+export interface ControllerConfig {
+  // Which resident daemon owns the gamepad (we cooperate with it, never grab).
+  manager: "hhd" | "inputplumber" | "none";
+  manager_version: string | null;
+  supported: boolean;
+  // "remap" = per-button editor (InputPlumber); "settings" = mode/paddles (HHD).
+  kind: "remap" | "settings" | "none";
+  // remap (InputPlumber)
+  // Whether we have an on-device-validated button map for this model. When false,
+  // `buttons` is empty and the UI shows an honest "not calibrated" note.
+  device_known?: boolean;
+  buttons?: RemapButton[];
+  gamepad_targets?: string[];
+  key_targets?: string[];
+  // settings (HHD)
+  device_key?: string;
+  mode?: string | null;
+  mode_options?: string[];
+  paddles_as?: string | null;
+  paddles_options?: string[];
+}
+
+export const getControllerConfig = callable<[], ControllerConfig>("get_controller_config");
+export const setControllerButton =
+  callable<[source: string, targets: ControllerTarget[]], ControllerConfig>("set_controller_button");
+export const setControllerSetting =
+  callable<[field: string, value: string], ControllerConfig>("set_controller_setting");
+export const resetController = callable<[], ControllerConfig>("reset_controller");

@@ -32,6 +32,12 @@ from cpu.info import read_cpu_info, read_cpu_model
 from cpu.controls import CoreControl, SmtControl, select_boost
 from telemetry.store import TelemetryStore
 from telemetry.sampler import TelemetrySampler
+from controllers import detect as controller_detect
+from controllers import hhd as controller_hhd
+from controllers import conflict as controller_conflict
+from controllers import factory as controller_factory
+from controllers.store import RemapStore
+from controllers.dbus import IpDbus
 
 # Auto-TDP rolling window: last N samples (~2 s apart) the control law reads. It
 # measures the FREQUENCY of boost over the window (not an instant), so it is longer
@@ -106,6 +112,18 @@ class Plugin:
             default_watts=self._device.tdp_default or 15,
         )
         self._tdp_backend = tdp_factory.select_backend(self._device)
+        # Which daemon owns the controller (HHD / InputPlumber / none). Detected
+        # once — the resident daemon doesn't change at runtime. Probe never raises.
+        self._controller = controller_detect.detect()
+        # Cooperative controller remap: overrides store (global, IP profiles are
+        # global) + the busctl dbus driver, both owned by the InputPlumber backend.
+        # The factory picks ONE backend for this device (HHD REST / IP dbus / none).
+        self._controller_backend = controller_factory.select_controller_backend(
+            self._controller,
+            RemapStore(os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "controller_remap.json")),
+            IpDbus(),
+            self._device,
+        )
         self._fan_reader = FanReader()
         # temp_fn feeds the software-loop backends (Steam Deck / Legion Go 2) the
         # live driving temp; hardware-curve backends (ASUS/MSI) ignore it.
@@ -199,6 +217,38 @@ class Plugin:
         if self._chip:
             d["chip"] = self._chip
         return d
+
+    # ---- Mandos (controller manager + conflict) ----------------------------
+    # One backend per device (factory), mirroring the TDP backend: each RPC is a
+    # one-line delegation, no per-manager if/elif here. The config carries
+    # manager / manager_version / supported so the UI needs a single round-trip.
+    async def get_controller_config(self) -> dict:
+        self._init()
+        return self._controller_backend.get_config()
+
+    async def set_controller_button(self, source: str, targets: list) -> dict:
+        """Remap one extra button (InputPlumber devices; no-op on others)."""
+        self._init()
+        return self._controller_backend.set_button(source, targets)
+
+    async def set_controller_setting(self, field: str, value: str) -> dict:
+        """Change a controller setting on HHD (mode / paddles_as; no-op on others)."""
+        self._init()
+        return self._controller_backend.set_setting(field, value)
+
+    async def reset_controller(self) -> dict:
+        """Reset remap to the device default (InputPlumber; no-op on others)."""
+        self._init()
+        return self._controller_backend.reset()
+
+    async def get_controller_conflict(self) -> dict:
+        self._init()
+        hhd_present = self._controller_backend.manager == controller_detect.HHD
+        # Only read HHD state when HHD is the active manager (its API is local).
+        state = controller_hhd.read_state() if hhd_present else None
+        out = controller_conflict.assess(state, self._tdp_backend.supported)
+        out["hhd_present"] = hhd_present
+        return out
 
     # ---- Fans (read-only monitor) ------------------------------------------
     def _read_fans(self) -> dict:

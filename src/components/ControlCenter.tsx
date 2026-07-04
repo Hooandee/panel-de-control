@@ -1,5 +1,5 @@
 import { PanelSection, PanelSectionRow, Spinner, ErrorBoundary } from "@decky/ui";
-import { FC, useEffect, useMemo, useState } from "react";
+import { FC, useCallback, useEffect, useMemo, useState } from "react";
 
 import { getDevice, DeviceInfo, setUiActive } from "../api";
 import { useI18n } from "../i18n";
@@ -8,6 +8,7 @@ import { LearningBanner } from "./LearningBanner";
 import { TabBar } from "./TabBar";
 import { SECTIONS } from "../sections/registry";
 import { resolveActiveSection } from "../sections/nav";
+import { readActiveTab, writeActiveTab } from "../sections/activeTab";
 import { useRunningGame } from "../tdp/useRunningGame";
 import { useLearningStatus } from "../learning/useLearningStatus";
 import { useUpdate } from "../updater/useUpdate";
@@ -35,10 +36,20 @@ export const ControlCenter: FC = () => {
     () => visibleIds(SECTIONS.map((s) => s.id), layout.tabs, [PINNED_TAB]),
     [layout],
   );
-  // Open on the user's FIRST VISIBLE tab (their reordering), not the code default.
-  // Lazy init reads the layout once per mount; Decky remounts the panel on each
-  // QAM open, so a saved reorder takes effect the next time it opens.
-  const [activeId, setActiveId] = useState<string>(() => visibleTabIds[0] ?? SECTIONS[0].id);
+  // Restore the last active tab (persisted) so a panel remount — Decky remounts on
+  // each QAM open, and applying a controller remap reloads the gamepad which makes
+  // Steam remount us — doesn't snap back to the first tab. Falls back to the user's
+  // first visible tab. A stale/hidden saved id is caught by resolveActiveSection.
+  const [activeId, setActiveIdState] = useState<string>(() => {
+    const saved = readActiveTab();
+    return (saved && visibleTabIds.includes(saved) ? saved : visibleTabIds[0]) ?? SECTIONS[0].id;
+  });
+  // Memoized so it's a stable prop for TabBar/children — this shell is the one
+  // implicated in the QAM render-storm freeze, so avoid churning children.
+  const setActiveId = useCallback((id: string) => {
+    writeActiveTab(id);
+    setActiveIdState(id);
+  }, []);
   // Local UI reads for the persistent learning banner. All hooks precede the
   // early returns below (rules-of-hooks; poll hooks blank first render).
   const game = useRunningGame();

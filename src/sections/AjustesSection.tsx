@@ -5,8 +5,9 @@ import { useI18n } from "../i18n";
 import { LanguageToggle } from "../components/LanguageToggle";
 import { openCustomizeModal } from "../components/CustomizeModal";
 import { openGlossaryModal } from "../components/GlossaryModal";
-import { getTelemetryEnabled, setTelemetryEnabled, getUnlockBatteryMax, setUnlockBatteryMax, getQamTdpBoost, setQamTdpBoost, resetTelemetry, getVersion } from "../api";
+import { getTelemetryEnabled, setTelemetryEnabled, getUnlockBatteryMax, setUnlockBatteryMax, getQamTdpBoost, setQamTdpBoost, resetTelemetry, getVersion, getControllerConflict } from "../api";
 import { UpdatePanel } from "../updater/UpdatePanel";
+import { ControllerConflictCard } from "../components/ControllerConflictCard";
 import { theme } from "../theme";
 
 /** A persisted boolean setting: fetch on mount, optimistic update on toggle.
@@ -38,6 +39,12 @@ export const AjustesSection: FC = () => {
     getVersion().then(setVersion).catch(() => {});
   }, []);
 
+  // Power-management conflict with HHD (both driving TDP/fans). Warn only.
+  const [conflict, setConflict] = useState(false);
+  useEffect(() => {
+    getControllerConflict().then((c) => setConflict(c.conflict)).catch(() => {});
+  }, []);
+
   // Destructive reset: a two-tap confirm avoids accidental wipes on the QAM.
   const [confirming, setConfirming] = useState(false);
   const [done, setDone] = useState(false);
@@ -62,6 +69,8 @@ export const AjustesSection: FC = () => {
     // children (not-yet-loaded toggles) collapse their slot — no double gaps.
     <PanelSectionRow>
       <div style={{ display: "flex", flexDirection: "column", gap: theme.space.section, marginTop: theme.space.section }}>
+        {conflict && <ControllerConflictCard />}
+
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: theme.space.sm }}>
           <span style={{ fontSize: theme.font.body, color: theme.color.textPrimary }}>
             {t("settings.language")}

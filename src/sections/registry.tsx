@@ -6,6 +6,7 @@ import { PotenciaSection } from "./PotenciaSection";
 import { SistemaSection } from "./SistemaSection";
 import { PantallaSection } from "./PantallaSection";
 import { VentiladoresSection } from "./VentiladoresSection";
+import { MandosSection } from "./MandosSection";
 import { AjustesSection } from "./AjustesSection";
 
 // Section body per tab id. The tab metadata (order, label, icon) lives in the
@@ -16,6 +17,7 @@ const COMPONENTS: Record<string, FC> = {
   system: SistemaSection,
   display: PantallaSection,
   fans: VentiladoresSection,
+  mandos: MandosSection,
   settings: AjustesSection,
 };
 
