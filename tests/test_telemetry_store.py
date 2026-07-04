@@ -213,7 +213,7 @@ def test_flush_is_noop_when_nothing_changed(tmp_path):
 
 
 def test_aggregate_reflects_unflushed_samples(tmp_path):
-    # In-session reads (RPC/F3) must see buffered data without a flush.
+    # In-session reads (RPC/suggestions) must see buffered data without a flush.
     s = _store(tmp_path)
     s.add_sample("1", _sample(pl1=15), dt=5.0)
     assert s.aggregate("1")["samples_n"] == 1
@@ -239,7 +239,7 @@ def test_add_sample_never_raises_on_bad_data(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Temperature histogram (F3 foundation): seconds accumulated per 2C bin,
+# Temperature histogram (suggestion foundation): seconds accumulated per 2C bin,
 # keyed by the driving temp = max(t_cpu, t_gpu). Feeds the suggestion brain.
 # ---------------------------------------------------------------------------
 

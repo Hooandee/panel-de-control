@@ -1,6 +1,6 @@
 """Thin busctl driver for InputPlumber (no python-dbus dependency; busctl ships
 with systemd). Discovers the composite-device object path dynamically. Every call
-degrades to a safe empty/False on failure — never raises, never fakes.
+degrades to a safe empty/False on failure — never raises.
 """
 import json
 import re

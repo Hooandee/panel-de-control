@@ -45,8 +45,8 @@ export function rpmFraction(rpm: number, observedMax: number, nominalMax: number
 // The fixed presets that share a near-flat, quiet low-temp region. Below this
 // temperature their curves overlap and the fan sits at its hardware floor, so
 // switching between them makes no audible/RPM difference — they only diverge
-// under load. Confirmed on-device (ROG Ally X): at ~36 °C silent/balanced/
-// performance all held ~4700 rpm; at ~75 °C silent ~5400 vs performance ~8100.
+// under load: at low temps silent/balanced/performance all hold the same floor
+// RPM; only at high temps do they diverge.
 const _FIXED_PRESETS = ["silent", "balanced", "performance"] as const;
 const _DIVERGENCE_TEMP_C = 60;
 

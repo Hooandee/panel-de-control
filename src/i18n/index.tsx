@@ -117,7 +117,7 @@ const es: Record<string, string> = {
   "fans.suggest.msg.learning": "Sigue jugando ~{left} min más para desbloquear la curva. Los puntos verdes son lo que ya he observado.",
   "fans.suggest.msg.empty": "Empieza a jugar para que aprenda el patrón térmico de este juego.",
   "fans.suggest.msg.nogame": "Entra a un juego para que aprenda su patrón.",
-  // A1 — comunica que el aprendizaje es CONTINUO (no de una sola vez).
+  // Comunica que el aprendizaje es CONTINUO (no de una sola vez).
   "fans.suggest.continuous": "Afino la curva cada ~30 min con tu uso reciente.",
   // A2 — tope de temperatura + escala con significado.
   "fans.suggest.peak.title": "Temperatura máxima",

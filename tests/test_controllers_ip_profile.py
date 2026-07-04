@@ -15,7 +15,7 @@ GO2_CAPS = [
 
 
 def test_buttons_legion_go_2_silkscreen_map_grips_only():
-    # Validated on-device: silkscreen (Y1/M1/…) -> source capability, GRIPS ONLY.
+    # Silkscreen (Y1/M1/…) -> source capability, GRIPS ONLY.
     # Phantoms (RightPaddle3) and system buttons (Guide/QuickAccess/…) are excluded.
     assert ip.buttons_for("legion_go_2", GO2_CAPS) == [
         ("LeftPaddle1", "Y1"),
@@ -73,7 +73,7 @@ def test_buttons_unknown_device_is_empty():
 def test_is_known_device():
     assert ip.is_known_device("legion_go_2") is True
     assert ip.is_known_device("msi_claw_8_ai_plus") is True
-    assert ip.is_known_device("legion_go_s") is False  # not validated on-device
+    assert ip.is_known_device("legion_go_s") is False  # no known button map
     assert ip.is_known_device(None) is False
 
 

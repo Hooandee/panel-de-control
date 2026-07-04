@@ -5,10 +5,10 @@ import { fromPercent } from "./logic";
 import { ecoBrightness } from "./eco";
 
 // Idle brightness floor while download mode dims the screen. Minimum by default
-// (max saving for an unattended download); tune on-device if a fully-dark panel
+// (max saving for an unattended download); tune if a fully-dark panel
 // reads as "off".
 const ECO_FLOOR_PCT = 0;
-// Backstop reconcile cadence — runs ONLY while eco is on, to catch a backend B1
+// Backstop reconcile cadence — runs ONLY while eco is on, to catch a backend-side
 // clear (a manual power change that turned eco off without going through the card).
 const POLL_MS = 3000;
 

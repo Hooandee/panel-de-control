@@ -1,4 +1,4 @@
-"""F3 suggestion brain — turn a game's observed temperature histogram into a
+"""Suggestion brain — turn a game's observed temperature histogram into a
 recommended fan curve fit to the band the game actually runs in.
 
 Pure functions, no I/O. The honest contract: we only fit the *active ramp* to the
@@ -15,7 +15,7 @@ MIN_MINUTES = _MIN_SECONDS // 60   # learning-progress target (minutes), for the
 _MIN_SPREAD = 8                # P90-P10 °C — refuse to fit a flat (idle-only) band
 
 # The curve's temp anchors (mirror the presets so an applied suggestion edits
-# cleanly in the F2 graph).
+# cleanly in the curve graph).
 _ANCHORS = (40, 50, 60, 70, 80, 85, 90, 95)
 
 # Balanced duty (%) control points, placed on the observed band percentiles.
@@ -84,7 +84,7 @@ def _curve(b: dict, bias: int):
 def curve_changed(old, new, tol_pwm: int = 8) -> bool:
     """Whether *new* differs from *old* enough to be worth re-applying (anti-churn).
 
-    Used by the periodic re-apply (A1): re-fitting the learned curve every ~30 min
+    Used by the periodic re-apply: re-fitting the learned curve every ~30 min
     would otherwise churn the hardware (and eMMC) on cosmetic drift. Returns True
     when any control point's pwm moves by more than *tol_pwm* (default 8/255 ≈ 3 %),
     or when there's no vigente curve at all (a first apply must always go through).

@@ -10,7 +10,7 @@ profile — the firmware then manages the actual RPM within each mode:
     2 = performance  (~2715 rpm)
 
 Values outside {0,1,2} are rejected by the firmware (the node reads back
-unchanged), so ``set_mode`` verifies the write with a readback (never-fake).
+unchanged), so ``set_mode`` verifies the write with a readback.
 
 This backend is ``mode_based``: it presents the existing NullFanBackend/
 HwmonCurveBackend interface (``read_state``/``set_auto``/``restore_auto``/
@@ -87,7 +87,7 @@ class LenovoFanModeBackend:
             return {"ok": False, "detail": f"mode out of range: {mode}"}
         if not self._write_mode(mode):
             return {"ok": False, "detail": "fan_mode write failed"}
-        # never-fake: only report success if the node actually took the value.
+        # only report success if the node actually took the value.
         if self._current_mode() != mode:
             return {"ok": False, "detail": "fan_mode did not latch"}
         return {"ok": True, "detail": f"fan mode {mode} applied"}

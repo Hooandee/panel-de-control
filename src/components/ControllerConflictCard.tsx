@@ -8,7 +8,7 @@ import { theme } from "../theme";
  * Warns when Handheld Daemon's TDP plugin (which also drives its fan curve) is
  * enabled at the same time as our power control — both write the same firmware
  * rails and fight (last-writer-wins → jitter). We only WARN and guide; we never
- * touch HHD's settings (the user's boundary). Rendered only when a real conflict
+ * touch HHD's settings. Rendered only when a real conflict
  * is detected. Shown in Ajustes.
  */
 export const ControllerConflictCard: FC = () => {

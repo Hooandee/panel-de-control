@@ -10,7 +10,7 @@ _CPU = "sys/devices/system/cpu"
 class SmtControl:
     """Simultaneous multi-threading via `cpu/smt/control` (on/off/forceoff/
     notsupported). Generic across AMD/Intel. Writing needs root; set() reads back
-    to confirm (never-fake)."""
+    to confirm."""
 
     def __init__(self, root="/"):
         self._path = os.path.join(root, _CPU, "smt", "control")
@@ -51,7 +51,7 @@ class AmdBoost(_Boost):
     def __init__(self, root="/"):
         self._path = os.path.join(root, _CPU, "cpufreq", "boost")
         # Gate on a successful READ (not mere existence) so an unreadable node isn't
-        # mis-reported as boost-off (never-fake), matching SmtControl.
+        # mis-reported as boost-off, matching SmtControl.
         self.supported = read_int(self._path) is not None
 
     def enabled(self):
@@ -98,8 +98,8 @@ class CoreControl:
     independent of the SMT toggle. cpu0 has no `online` node (the kernel forbids
     offlining it) → its core is always kept, so the minimum is 1 core.
 
-    Writing needs root. `set()` reads the result back (never-fake): if the kernel
-    clamps a write, the reported active count reflects reality, not the request."""
+    Writing needs root. `set()` reads the result back: if the kernel clamps a write,
+    the reported active count reflects reality, not the request."""
 
     def __init__(self, root="/"):
         self._base = os.path.join(root, _CPU)

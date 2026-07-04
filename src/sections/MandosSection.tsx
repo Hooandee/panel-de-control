@@ -147,7 +147,7 @@ export const MandosSection: FC = () => {
     return v === key ? fallback : v;
   };
 
-  // Remappable physical buttons (empty for non-remap configs / unvalidated devices).
+  // Remappable physical buttons (empty for non-remap configs / unknown devices).
   const buttons = config.buttons ?? [];
 
   return (
@@ -185,7 +185,7 @@ export const MandosSection: FC = () => {
                 />
               </RemapRow>
             ))}
-            {/* Honest footnote: no buttons → why (unvalidated model vs a transient
+            {/* Honest footnote: no buttons → why (unknown model vs a transient
                 empty-caps read, distinguished by device_known); otherwise the
                 global-scope reminder. */}
             <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, margin: `${theme.space.sm}px 0`, lineHeight: 1.4 }}>

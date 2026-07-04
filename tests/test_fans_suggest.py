@@ -141,7 +141,7 @@ def test_min_minutes_is_30():
 
 
 # ---------------------------------------------------------------------------
-# curve_changed — anti-churn gate for periodic re-apply (A1)
+# curve_changed — anti-churn gate for periodic re-apply
 # ---------------------------------------------------------------------------
 
 def _curve(bump=0):

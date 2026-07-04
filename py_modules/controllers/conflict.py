@@ -3,7 +3,7 @@
 HHD's TDP plugin (master toggle `hhd.settings.tdp_enable`, which also owns its
 fan curve) writes the same firmware power rails Panel de Control does; when both
 are active they fight (last-writer-wins → jitter). We only WARN — never touch
-HHD's settings (the user decided that boundary) — and let the user disable one.
+HHD's settings — and let the user disable one.
 """
 
 

@@ -49,7 +49,7 @@ class _FileChargeLimit(ChargeLimitBackend):
     """A single sysfs file holding the cap percent. Subclasses locate the file and
     define the 'no limit' sentinel (`_OFF`) written on disable. Writing needs root
     (the plugin runs as root); every `set`/`disable` reads back to confirm the
-    write stuck (never-fake)."""
+    write stuck."""
 
     _OFF = _MAX
 
@@ -97,7 +97,7 @@ class SysfsChargeLimit(_FileChargeLimit):
 
 class SteamDeckChargeLimit(_FileChargeLimit):
     """Steam Deck `steamdeck_hwmon/max_battery_charge_level`. 0 = no cap (distinct
-    from the ASUS/Lenovo 100). Validated on-device (OLED)."""
+    from the ASUS/Lenovo 100)."""
 
     _OFF = 0
 
@@ -117,7 +117,7 @@ class SteamDeckChargeLimit(_FileChargeLimit):
 
 class LenovoConservationMode(ChargeLimitBackend):
     """Lenovo (Legion Go) `conservation_mode`: a boolean (1=cap on) with a
-    firmware-fixed threshold, NOT a settable percent. Validated on Legion Go 2.
+    firmware-fixed threshold, NOT a settable percent.
     `adjustable=False` → the UI shows an on/off toggle (no slider) and states the
     fixed cap (`fixed_percent`, the Legion Go conservation level ≈80%)."""
 
@@ -146,7 +146,7 @@ class LenovoConservationMode(ChargeLimitBackend):
         return None
 
     def get(self):
-        return None  # firmware-fixed threshold; percent unknown (never-fake)
+        return None  # firmware-fixed threshold; percent unknown
 
     def set(self, percent):
         if not self.supported:

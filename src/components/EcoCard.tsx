@@ -9,7 +9,7 @@ import { theme } from "../theme";
 interface Props {
   state: EcoState;
   /** Whether this device exposes a brightness API — gates the brightness effect
-   *  so the card never claims a dim it can't perform (never-fake). */
+   *  so the card never claims a dim it can't perform. */
   brightnessSupported: boolean;
   onToggle: (enabled: boolean) => void;
 }

@@ -2,15 +2,15 @@
 their silkscreen name), and how to apply an override without clobbering the
 device's default mappings.
 
-Design (validated ON-DEVICE, 2026-07-04):
+Design:
 - The remappable buttons come from a PER-DEVICE table (DEVICE_BUTTONS), NOT from the
   daemon's live Capabilities. Capabilities is a superset with phantoms (the Go 2
   advertises paddle caps no physical button emits) and it can't tell you the
   silkscreen name (M1 is reported as `RightStickTouch`); the SAME capability is a
   different physical button per device (LeftPaddle1 = Go2 "Y1" but Claw "M2"). So
-  each entry maps a source capability to the literal silkscreen label, validated by
-  pressing every button on real hardware. The table is intersected with the live
-  capability set (defensive — never surface a button the daemon doesn't report).
+  each entry maps a source capability to the literal silkscreen label. The table is
+  intersected with the live capability set (defensive — never surface a button the
+  daemon doesn't report).
 - Applying an override PRESERVES the device's default profile: we read the current
   profile, replace only the edited button's target, and load it back. The YAML
   round-trip runs in the SYSTEM python (which has PyYAML) via subprocess — Decky's
@@ -18,20 +18,20 @@ Design (validated ON-DEVICE, 2026-07-04):
   it's unit-tested; only load()/dump() live in the system-python helper.
 """
 
-# The remappable PHYSICAL buttons per device, validated ON-DEVICE (2026-07-04) by
-# pressing each one and reading the source capability it emits. This is a
-# per-device table, NOT derived from the daemon's Capabilities property, because:
+# The remappable PHYSICAL buttons per device, each mapping the source capability a
+# button emits to its silkscreen label. This is a per-device table, NOT derived from
+# the daemon's Capabilities property, because:
 #   - Capabilities is a SUPERSET with phantoms (the Go 2 lists LeftPaddle3/
 #     RightPaddle3 that no physical button emits) — deriving from it showed ghosts;
 #   - the SAME capability is a DIFFERENT physical button per device (LeftPaddle1 is
 #     the Go 2's "Y1" but the Claw's "M2") — labels must be per-device;
 #   - a capability's normalized name (RightStickTouch) rarely matches the silkscreen
-#     label the user reads (M1) — the user wants the silkscreen name.
+#     label printed on the device (M1).
 # ONLY the grip/paddle buttons are listed: system buttons (Guide/QuickAccess/
 # QuickAccess2/Keyboard) are deliberately omitted — remapping them breaks Steam/QAM
 # navigation. Each entry is (source_capability, silkscreen_label). Labels are the
 # literal names printed on the device and are NOT translated. An unlisted device
-# degrades to an empty (honest) button list — never invents a mapping.
+# degrades to an empty button list — never invents a mapping.
 DEVICE_BUTTONS = {
     "legion_go_2": [
         ("LeftPaddle1", "Y1"), ("LeftPaddle2", "Y2"), ("RightPaddle1", "Y3"),
@@ -82,7 +82,7 @@ def buttons_for(device_key, capabilities) -> list:
     in display order. The per-device table is the source of truth for which buttons
     and what to call them; it's intersected with the LIVE capability set so we only
     surface a button the daemon actually reports (defensive — never invent one). An
-    unknown device (not in the validated table) yields an empty list."""
+    unknown device (not in the table) yields an empty list."""
     have = _capability_names(capabilities)
     return [
         (cap, label)
@@ -92,12 +92,12 @@ def buttons_for(device_key, capabilities) -> list:
 
 
 def is_known_device(device_key) -> bool:
-    """Whether we have an on-device-validated button map for this device."""
+    """Whether we have a known button map for this device."""
     return device_key in DEVICE_BUTTONS
 
 
 def sanitize_target(target: dict):
-    """Coerce one target to {"gamepad"|"key": name}, or None if invalid (never-fake)."""
+    """Coerce one target to {"gamepad"|"key": name}, or None if invalid."""
     if not isinstance(target, dict):
         return None
     if target.get("gamepad") in GAMEPAD_TARGETS:

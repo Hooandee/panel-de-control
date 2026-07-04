@@ -215,7 +215,7 @@ def test_loop_holds_at_knee_no_sawtooth(Plugin, monkeypatch):
 
 
 def test_loop_power_limited_at_max_probes_down(Plugin, monkeypatch):
-    # THE on-device bug: pl1 at max (35), GPU stable 80% (below the 88 knee) → there
+    # The power-limited case: pl1 at max (35), GPU stable 80% (below the 88 knee) → there
     # IS margin, so after the sustained-headroom gate it steps DOWN off the cap
     # (proportional to the gap), instead of holding at max forever like the old
     # watts model did (draw pinned the cap → "no headroom" → stuck).
@@ -467,7 +467,7 @@ def test_adaptive_mode_drives_learned_curve_when_enough_data(Plugin):
 
 
 def test_adaptive_mode_no_data_falls_back_to_firmware_auto(Plugin):
-    # never-fake: adaptive with no learned data must NOT fabricate a curve — it
+    # adaptive with no learned data must NOT fabricate a curve — it
     # leaves the fans on firmware auto and shows the learning state.
     p = Plugin()
     p._init()
@@ -528,7 +528,7 @@ def test_switching_to_preset_leaves_adaptive(Plugin):
 
 
 # ---------------------------------------------------------------------------
-# A1 — periodic re-fit of the adaptive curve (~30 min of play), following the
+# Periodic re-fit of the adaptive curve (~30 min of play), following the
 # recent thermal pattern. Anti-churn; only runs in adaptive mode.
 # ---------------------------------------------------------------------------
 

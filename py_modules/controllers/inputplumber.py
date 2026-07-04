@@ -14,7 +14,7 @@ def get_config(store, dbus, device_key, caps=None) -> dict:
     """The device's remappable physical buttons (per-device silkscreen table, gated
     by the live capabilities) + each one's current override (or None = still at the
     device default) + the target vocabulary the UI offers. `device_known` is False
-    for a device we haven't validated on-hardware, so the UI can say so honestly
+    for a device we don't have a button map for, so the UI can say so honestly
     instead of showing phantom buttons. `caps` lets a caller that already read the
     live capabilities (set_button) avoid a second `busctl` spawn."""
     if caps is None:
@@ -54,7 +54,7 @@ def _apply_overrides(dbus, overrides: dict, merge=merge_profile) -> bool:
 def set_button(store, dbus, device_key, source: str, targets: list, merge=merge_profile) -> dict:
     """Remap one physical button. Ignores a source that isn't one of THIS device's
     remappable buttons; empty/invalid targets revert the button to its device
-    default. Never-fake: the store is only updated if the daemon ACTUALLY applied the
+    default. The store is only updated if the daemon ACTUALLY applied the
     profile, so the reported config can't show a remap the hardware never took."""
     caps = dbus.capabilities()  # read once — reused for the guard and the returned config
     valid = {cap for (cap, _label) in ip_profile.buttons_for(device_key, caps)}
@@ -73,7 +73,7 @@ def set_button(store, dbus, device_key, source: str, targets: list, merge=merge_
 
 def reset(store, dbus, device_key=None) -> dict:
     """Reload InputPlumber's shipped default profile; only forget the overrides if it
-    actually reset (never-fake)."""
+    actually reset."""
     if dbus.reset_default():
         store.reset()
     return get_config(store, dbus, device_key)

@@ -37,7 +37,7 @@ export function currentTargetValue(targets: ControllerTarget[]): string {
 }
 
 // Friendly labels: Xbox face-button letters + short paddle/shoulder names. Anything
-// unmapped falls through to the raw name (never fake a label we don't know).
+// unmapped falls through to the raw name (don't invent a label we don't know).
 const GP_LABEL: Record<string, string> = {
   South: "A", East: "B", West: "X", North: "Y",
   LeftBumper: "LB", RightBumper: "RB", LeftTrigger: "LT", RightTrigger: "RT",

@@ -1,14 +1,12 @@
 """gamescope color control via a generated 3D LUT + `gamescopectl set_look`.
 
-VALIDATED ON-DEVICE (ROG Ally, gamescope 3.16, 2026-07-03): the classic vibrantDeck
-X-atom path is dead on modern (Wayland) gamescope — xprop can't reach the X server.
-The working mechanism is a `.cube` 3D LUT loaded through gamescope's Wayland control
-socket: `XDG_RUNTIME_DIR=/run/user/<uid> WAYLAND_DISPLAY=gamescope-0 gamescopectl
-set_look <file>` (root can drive it; a grayscale LUT visibly desaturated the panel).
+The classic vibrantDeck X-atom path is dead on modern (Wayland) gamescope — xprop
+can't reach the X server. The working mechanism is a `.cube` 3D LUT loaded through
+gamescope's Wayland control socket: `XDG_RUNTIME_DIR=/run/user/<uid>
+WAYLAND_DISPLAY=gamescope-0 gamescopectl set_look <file>` (needs root).
 
-The color MATH (transform/build_cube) is pure and unit-tested; the socket discovery
-+ subprocess call is the thin device layer. Probe-gated: unsupported (UI hidden) when
-no gamescope socket answers."""
+The color transform (transform/build_cube) is pure; the socket discovery + subprocess
+call is the thin device layer. Unsupported (UI hidden) when no gamescope socket answers."""
 import glob
 import os
 import subprocess

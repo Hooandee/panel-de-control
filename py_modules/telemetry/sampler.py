@@ -21,7 +21,7 @@ class TelemetrySampler:
         self._interval = interval
         # Optional post-store callback(result) invoked after each poll (result =
         # the (appid, sample) tuple or None). Lets the owner count in-game ticks
-        # (A1 learned-curve re-apply cadence) without a second timer.
+        # (learned-curve re-apply cadence) without a second timer.
         self._on_sample = on_sample
         # Persist to disk every `flush_every` samples (12 × 5 s ≈ 60 s) instead of
         # every sample — spares eMMC wear. A final flush happens on stop().

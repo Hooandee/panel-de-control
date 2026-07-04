@@ -15,8 +15,8 @@ class PowerReader:
 
     `gpu_busy_percent` on some APUs (notably the Steam Deck's Van Gogh) is an
     INSTANTANEOUS sample of a tiny window that swings wildly 0<->100. A single
-    read is unrepresentative (measured on-device: a ~30% game reads
-    0,0,0,100,100,0,... mean 22). read_gpu_busy() therefore sub-samples a short
+    read is unrepresentative (a ~30% game reads e.g. 0,0,0,100,100,0,...
+    averaging ~22). read_gpu_busy() therefore sub-samples a short
     burst and returns the arithmetic mean — the honest time-average of GPU
     utilisation (mangohud does the same). The mean, not a percentile: `decide`
     already owns the up/down asymmetry (recent-peak up, smoothed-mean down)

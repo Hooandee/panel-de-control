@@ -73,7 +73,7 @@ export const PowerArc: FC<PowerArcProps> = ({
   const [ex, ey] = polar(end);
 
   // HW boost: the extra watts the chip draws above your TDP via SPPT/FPPT. Null
-  // when the draw sensor is down (never fake). Only shown when it's a real extra.
+  // when the draw sensor is down. Only shown when it's a real extra.
   const boost = boostWatts(tdpWatts, actualWatts);
   const hasBoost = boost !== null && boost > 0;
   // Where the boost segment ends on the arc (null → nothing to draw). The clamp to

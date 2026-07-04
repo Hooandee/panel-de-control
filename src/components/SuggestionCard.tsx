@@ -28,7 +28,7 @@ interface Props {
  * - ready    → the learned curve (biased by the dial) + silence↔cool dial (drives HW)
  * - learning → green dashed candidate + green observed points + progress + "keep playing"
  * - spread   → progress full + honest "need more temperature variation"
- * - empty    → "start playing" (no fabricated curve — never-fake)
+ * - empty    → "start playing" (no fabricated curve)
  * - disabled → "turn on learning in Settings"
  * - no_game  → "launch a game"
  * `unsupported` never reaches here (the chip only shows when the device can write).

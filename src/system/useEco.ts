@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { EcoState, getEcoState, setEco } from "../api";
 import { setEcoActiveHint } from "./ecoAmbient";
 
-const POLL_MS = 3000; // keep the toggle in sync when another card's manual change clears eco (B1)
+const POLL_MS = 3000; // keep the toggle in sync when another card's manual change clears eco
 
 export interface EcoController {
   state: EcoState | null;

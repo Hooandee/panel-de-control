@@ -1,4 +1,4 @@
-"""G2 suggestion brain — turn a game's per-PL1 telemetry into a learned TDP band.
+"""Suggestion brain — turn a game's per-PL1 telemetry into a learned TDP band.
 
 Pure functions, no I/O. Mirror of ``fans/suggest.py`` but for power: instead of a
 fan curve we derive a ``[floor, ceil]`` watt band + a habitual ``seed`` for the
@@ -13,7 +13,7 @@ Floor honesty is GPU-PRIMARY (``_satisfied``), matching the honest signal the
 control loop acts on. A PL1 level "had headroom" when the GPU was NOT saturated
 there (``gpu_avg < _GPU_STARVED``). On a power-limited game the draw just follows
 PL1, so watts/boost are confounded — they can't tell "has margin" from "needs it"
-(measured on-device: 35 W cap / 80% GPU looked "no headroom" by watts, yet 80%
+(a 35 W cap with the GPU stable at 80% looks like "no headroom" by watts, yet 80%
 GPU means there IS margin). GPU utilisation is the only honest "could it go lower?"
 signal, so the learned floor and the loop's knee converge on the same PL1. A level
 that pinned the GPU is power-limited, not satisfied — so it can never be the floor.
