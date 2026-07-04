@@ -405,6 +405,20 @@ export interface ControllerConfig {
   paddles_options?: string[];
 }
 
+// ---- Bug reporter ---------------------------------------------------------
+// Write-only: the plugin can only SEND a report. On success the backend returns a
+// short code the user can quote; on failure it saved the bundle locally.
+export interface ReportResult {
+  ok: boolean;
+  code?: string;
+  issue_url?: string | null;
+  error?: string;
+  saved_path?: string | null;
+}
+
+export const submitReport =
+  callable<[categories: string[], text: string], ReportResult>("submit_report");
+
 export const getControllerConfig = callable<[], ControllerConfig>("get_controller_config");
 export const setControllerButton =
   callable<[source: string, targets: ControllerTarget[]], ControllerConfig>("set_controller_button");

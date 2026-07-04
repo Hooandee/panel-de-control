@@ -5,6 +5,7 @@ import { useI18n } from "../i18n";
 import { LanguageToggle } from "../components/LanguageToggle";
 import { openCustomizeModal } from "../components/CustomizeModal";
 import { openGlossaryModal } from "../components/GlossaryModal";
+import { openReportModal } from "../components/ReportModal";
 import { getTelemetryEnabled, setTelemetryEnabled, getUnlockBatteryMax, setUnlockBatteryMax, getQamTdpBoost, setQamTdpBoost, resetTelemetry, getVersion, getControllerConflict } from "../api";
 import { UpdatePanel } from "../updater/UpdatePanel";
 import { ControllerConflictCard } from "../components/ControllerConflictCard";
@@ -122,6 +123,11 @@ export const AjustesSection: FC = () => {
         {/* Open the full-screen tab + block layout editor. */}
         <ButtonItem layout="below" description={t("customize.button.desc")} onClick={() => openCustomizeModal()}>
           {t("customize.button")}
+        </ButtonItem>
+
+        {/* Open the full-screen "report a problem" flow. */}
+        <ButtonItem layout="below" description={t("report.button.desc")} onClick={() => openReportModal()}>
+          {t("report.button")}
         </ButtonItem>
 
         {/* Start-from-scratch: wipe all learned telemetry (TDP + fans). Two-tap

@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 from dataclasses import asdict
 
@@ -38,6 +39,17 @@ from controllers import conflict as controller_conflict
 from controllers import factory as controller_factory
 from controllers.store import RemapStore
 from controllers.dbus import IpDbus
+from sysfs import read_str
+from report import collector as report_collector
+from report import client as report_client
+
+# Bug reporter: the app slug (routes to the right GitHub repo, server-side) and the
+# collector endpoint. The URL is set to the deployed Vercel service; overridable via
+# env for testing. The plugin only POSTs here; it can never read a report back.
+_REPORT_APP = "panel-de-control"
+_REPORT_SERVICE_URL = os.environ.get(
+    "PDC_REPORT_URL", "https://bug-collector-khaki.vercel.app/api/report"
+)
 
 # Auto-TDP rolling window: last N samples (~2 s apart) the control law reads. It
 # measures the FREQUENCY of boost over the window (not an instant), so it is longer
@@ -217,6 +229,178 @@ class Plugin:
         if self._chip:
             d["chip"] = self._chip
         return d
+
+    # ---- Bug reporter ------------------------------------------------------
+    async def submit_report(self, categories=None, text: str = "") -> dict:
+        """Collect a redacted diagnostic bundle and send it to the collector
+        service. Write-only: the plugin can never read a report back. Falls back to
+        saving the bundle on disk if the network send fails. Returns
+        {ok, code, issue_url} or {ok:false, error, saved_path}."""
+        self._init()
+        home, hostname = self._redact_ids()
+        try:
+            bundle = await self._build_report_bundle(categories, text, home, hostname)
+        except Exception as e:  # noqa: BLE001
+            decky.logger.error("report bundle failed: %s", e)
+            bundle = report_collector.build_bundle(
+                app=_REPORT_APP, categories=categories, text=text,
+                environment={}, capabilities={}, state={}, stores={}, logs=[],
+                home=home, hostname=hostname,
+            )
+            bundle["error"] = "bundle_incomplete"
+        # The POST is a blocking urllib call (up to 20s on a dead network); run it
+        # off the event loop so the auto-TDP loop and other RPCs don't stall.
+        res = await asyncio.get_running_loop().run_in_executor(
+            None, lambda: report_client.submit(_REPORT_SERVICE_URL, bundle)
+        )
+        if res.get("ok"):
+            decky.logger.info("report sent: %s", res.get("code"))
+            return {"ok": True, "code": res["code"], "issue_url": res.get("issue_url")}
+        path = report_client.save_local(
+            getattr(decky, "DECKY_PLUGIN_LOG_DIR", "."), bundle
+        )
+        decky.logger.warning(
+            "report send failed (%s); saved to %s", res.get("error"), path
+        )
+        return {"ok": False, "error": res.get("error", "unknown"), "saved_path": path}
+
+    def _redact_ids(self):
+        """(home, hostname) used to scrub PII from the bundle. Guarded."""
+        home = getattr(decky, "DECKY_USER_HOME", None) or os.path.expanduser("~")
+        try:
+            import socket
+
+            hostname = socket.gethostname()
+        except Exception:  # noqa: BLE001
+            hostname = None
+        return home, hostname
+
+    async def _build_report_bundle(self, categories, text, home, hostname) -> dict:
+        """Gather every diagnostic piece (device, live state, stores, logs) and hand
+        it to the collector for assembly + redaction. Each state fetch is guarded so
+        a single failing subsystem never blocks the report."""
+        loop = asyncio.get_running_loop()
+
+        async def _safe(coro):
+            try:
+                return await coro
+            except Exception:  # noqa: BLE001
+                return {}
+
+        states = {
+            "device": await _safe(self.get_device()),
+            "tdp": await _safe(self.get_tdp_state()),
+            "fan_curve": await _safe(self.get_fan_curve_state()),
+            "fan_monitor": await _safe(self.get_fan_state()),
+            "battery": await _safe(self.get_battery_state()),
+            "cpu": await _safe(self.get_cpu_state()),
+            "color": await _safe(self.get_color_state()),
+            "gpu": await _safe(self.get_gpu_clock()),
+            # get_controller_config can block (HHD localhost HTTP / busctl spawn) →
+            # run it off the event loop, unlike the cheap sysfs reads above.
+            "controller": await loop.run_in_executor(None, self._safe_controller_config),
+            "power": await _safe(self.get_power_draw()),
+            "eco": await _safe(self.get_eco_state()),
+        }
+        logs = report_collector.tail_logs(
+            getattr(decky, "DECKY_PLUGIN_LOG_DIR", ""), home=home, hostname=hostname
+        )
+        # dmesg/journalctl are blocking subprocess calls (up to a few seconds each);
+        # run them off the event loop so the auto-TDP loop and other RPCs don't stall.
+        kernel = await loop.run_in_executor(
+            None,
+            lambda: report_collector.kernel_logs(
+                self._run_capture, home=home, hostname=hostname
+            ),
+        )
+        return report_collector.build_bundle(
+            app=_REPORT_APP,
+            categories=categories,
+            text=text,
+            environment=self._report_environment(),
+            capabilities=report_collector.capabilities_from(states),
+            state=states,
+            stores=self._report_stores(),
+            logs=logs,
+            kernel=kernel,
+            home=home,
+            hostname=hostname,
+        )
+
+    def _safe_controller_config(self) -> dict:
+        try:
+            return self._controller_backend.get_config()
+        except Exception:  # noqa: BLE001
+            return {}
+
+    def _run_capture(self, cmd) -> str | None:
+        """Run a diagnostic command and return its stdout (or None). Root + a clean
+        env (the frozen runtime's LD_LIBRARY_PATH breaks system binaries). Guarded."""
+        try:
+            import subprocess
+
+            r = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=5,
+                env=controller_detect.clean_env(),
+            )  # noqa: S603
+            return r.stdout or ""
+        except Exception:  # noqa: BLE001
+            return None
+
+    def _report_environment(self) -> dict:
+        """Host identity + versions. Serials are deliberately NOT read (and any
+        serial-like field is scrubbed downstream)."""
+        os_name = None
+        try:
+            rel = {}
+            with open("/etc/os-release") as f:
+                for line in f:
+                    if "=" in line:
+                        k, v = line.rstrip().split("=", 1)
+                        rel[k] = v.strip('"')
+            os_name = rel.get("PRETTY_NAME") or rel.get("NAME")
+        except Exception:  # noqa: BLE001
+            pass
+        kernel = None
+        try:
+            u = os.uname()
+            kernel = f"{u.sysname} {u.release}"
+        except Exception:  # noqa: BLE001
+            pass
+        return {
+            "plugin_version": read_version(),
+            "decky_version": getattr(decky, "DECKY_VERSION", None),
+            "device_key": getattr(self._device, "key", None),
+            "product_name": read_str("/sys/class/dmi/id/product_name"),
+            "product_family": read_str("/sys/class/dmi/id/product_family"),
+            "board_name": read_str("/sys/class/dmi/id/board_name"),
+            "os": os_name,
+            "kernel": kernel,
+        }
+
+    def _report_stores(self) -> dict:
+        """The persisted JSON stores (settings + per-game profiles/curves + learned
+        telemetry). All bounded in size; telemetry self-caps at 50 games."""
+        base = decky.DECKY_PLUGIN_SETTINGS_DIR
+
+        def _rj(name):
+            try:
+                with open(os.path.join(base, name)) as f:
+                    return json.load(f)
+            except Exception:  # noqa: BLE001
+                return None
+
+        return {
+            "settings": self._settings,
+            "tdp_profiles": _rj("tdp_profiles.json"),
+            "fan_curves": _rj("fan_curves.json"),
+            "color": _rj("color.json"),
+            "controller_remap": _rj("controller_remap.json"),
+            "telemetry": _rj("telemetry.json"),
+        }
 
     # ---- Mandos (controller manager + conflict) ----------------------------
     # One backend per device (factory), mirroring the TDP backend: each RPC is a
