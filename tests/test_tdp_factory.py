@@ -1,3 +1,4 @@
+import dataclasses
 import os
 
 from device_profiles import DEVICE_TABLE, GENERIC
@@ -66,3 +67,80 @@ def test_falls_back_to_null_when_nothing_present(tmp_path):
 def test_generic_amd_uses_ryzenadj_when_present(tmp_path):
     b = select_backend(GENERIC, root=str(tmp_path), ryzenadj_resolve=lambda: "/usr/bin/ryzenadj")
     assert b.supported and b.name == "ryzenadj"
+
+
+def _mk_rapl(root):
+    d = os.path.join(root, "sys/devices/virtual/powercap/intel-rapl-mmio/intel-rapl-mmio:0")
+    os.makedirs(d, exist_ok=True)
+    for i, uw in ((0, 30_000_000), (1, 37_000_000)):
+        with open(os.path.join(d, f"constraint_{i}_power_limit_uw"), "w") as f:
+            f.write(str(uw))
+
+
+def test_generic_amd_probes_firmware_attr_before_ryzenadj(tmp_path):
+    # An unrecognised AMD handheld that exposes a firmware-attributes chip must use
+    # it (real rails) instead of falling straight to ryzenadj.
+    root = str(tmp_path)
+    _mk_fw(root, "asus-armoury")
+    b = select_backend(GENERIC, root=root, ryzenadj_resolve=lambda: "/usr/bin/ryzenadj")
+    assert b.supported and "asus-armoury" in b.name
+
+
+def test_generic_amd_uses_lenovo_firmware_attr_when_present(tmp_path):
+    root = str(tmp_path)
+    _mk_fw(root, "lenovo-wmi-other-0")
+    b = select_backend(GENERIC, root=root, ryzenadj_resolve=_NO_RYZENADJ)
+    assert b.supported and "lenovo-wmi-other" in b.name
+
+
+def test_generic_intel_uses_rapl_and_not_ryzenadj(tmp_path):
+    # An unrecognised Intel handheld must not be captured by ryzenadj (AMD-only)
+    # just because the binary exists; RAPL powercap is the correct path.
+    root = str(tmp_path)
+    _mk_rapl(root)
+    intel = dataclasses.replace(GENERIC, vendor="intel")
+    b = select_backend(intel, root=root, ryzenadj_resolve=lambda: "/usr/bin/ryzenadj")
+    assert b.supported and b.name == "intel-rapl"
+
+
+def test_generic_intel_never_uses_ryzenadj(tmp_path):
+    intel = dataclasses.replace(GENERIC, vendor="intel")
+    b = select_backend(intel, root=str(tmp_path), ryzenadj_resolve=lambda: "/usr/bin/ryzenadj")
+    assert b.name != "ryzenadj"
+
+
+def test_known_rog_falls_through_to_ryzenadj(tmp_path):
+    # Robustness: if a kernel update drops the ASUS chip, a known AMD device still
+    # finds its AMD fallback (ryzenadj) instead of Null. intel-rapl is NOT used on
+    # AMD — a RAPL write there can confirm without changing real TDP.
+    root = str(tmp_path)
+    _mk_rapl(root)
+    b = select_backend(_p("rog_ally_x"), root=root, ryzenadj_resolve=lambda: "/usr/bin/ryzenadj")
+    assert b.supported and b.name == "ryzenadj"
+
+
+def test_amd_never_uses_intel_rapl(tmp_path):
+    # Even with RAPL present and no ryzenadj, an AMD device must not pick intel-rapl.
+    root = str(tmp_path)
+    _mk_rapl(root)
+    b = select_backend(GENERIC, root=root, ryzenadj_resolve=_NO_RYZENADJ)
+    assert b.name != "intel-rapl"
+
+
+def _mk_amdgpu_powercap(root):
+    d = os.path.join(root, "sys/class/hwmon/hwmon0")
+    os.makedirs(d, exist_ok=True)
+    with open(os.path.join(d, "name"), "w") as f:
+        f.write("amdgpu")
+    with open(os.path.join(d, "power1_cap"), "w") as f:
+        f.write("15000000")
+
+
+def test_amd_does_not_hijack_gpu_power_cap_as_tdp(tmp_path):
+    # steamdeck-hwmon matches any power*_cap chip, incl. amdgpu's GPU cap. A non-Deck
+    # AMD device must NOT drive the GPU cap as TDP — it falls to ryzenadj.
+    root = str(tmp_path)
+    _mk_amdgpu_powercap(root)
+    b = select_backend(_p("rog_ally_x"), root=root, ryzenadj_resolve=lambda: "/usr/bin/ryzenadj")
+    assert b.name != "steamdeck-hwmon"
+    assert b.name == "ryzenadj"

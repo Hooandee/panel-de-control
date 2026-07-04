@@ -186,3 +186,26 @@ def test_select_returns_deck_backend_for_deck(tmp_path):
     cl = select_charge_limit(Dev(), root=str(tmp_path))
     assert isinstance(cl, SteamDeckChargeLimit)
     assert cl.supported is True
+
+
+class _Generic:
+    key = "generic"
+
+
+def test_select_generic_uses_standard_threshold(tmp_path):
+    _mk_bat(str(tmp_path), value="85")
+    cl = select_charge_limit(_Generic(), root=str(tmp_path))
+    assert isinstance(cl, SysfsChargeLimit)
+    assert cl.get() == 85
+
+
+def test_select_generic_finds_conservation_mode(tmp_path):
+    _mk_conservation(str(tmp_path), value="0")
+    cl = select_charge_limit(_Generic(), root=str(tmp_path))
+    assert isinstance(cl, LenovoConservationMode)
+
+
+def test_select_generic_finds_deck_level(tmp_path):
+    _mk_deck_hwmon(str(tmp_path), value="0")
+    cl = select_charge_limit(_Generic(), root=str(tmp_path))
+    assert isinstance(cl, SteamDeckChargeLimit)
