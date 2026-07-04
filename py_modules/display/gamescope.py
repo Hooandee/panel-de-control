@@ -67,8 +67,14 @@ def is_native(state):
 
 def _run(args, env):
     try:
-        p = subprocess.run(args, capture_output=True, text=True, timeout=5,
-                           env={**os.environ, **env})
+        # Resolve the binary absolutely + start from clean_env (restores the
+        # pre-bundle LD_LIBRARY_PATH + a sane PATH that Decky's frozen loader
+        # strips), then overlay the caller's Wayland env (XDG_RUNTIME_DIR /
+        # WAYLAND_DISPLAY). Same spawn hygiene as the controller/fan backends.
+        from controllers.detect import clean_env, resolve_bin
+        argv = [resolve_bin(args[0]), *args[1:]]
+        p = subprocess.run(argv, capture_output=True, text=True, timeout=5,
+                           env={**clean_env(), **env})
         return p.returncode, (p.stdout or "")
     except (OSError, subprocess.SubprocessError):
         return 1, ""
