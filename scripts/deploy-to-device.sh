@@ -8,15 +8,15 @@
 # installs it into ~/homebrew/plugins/<plugin-name>, then restarts the loader.
 #
 # Requirements: key-based SSH as deck@<device-ip>; passwordless or password sudo
-# on the device (set DECK_SUDO_PASS, default "deck"). The plugin name may contain
-# spaces — it is quoted throughout.
+# on the device (set DECK_SUDO_PASS to the sudo password). The plugin name may
+# contain spaces — it is quoted throughout.
 #
 set -euo pipefail
 
 IP="${1:?usage: deploy-to-device.sh <device-ip> [plugin-name]}"
 PLUGIN="${2:-Panel de Control}"
 HOST="deck@${IP}"
-SUDO_PASS="${DECK_SUDO_PASS:-deck}"
+SUDO_PASS="${DECK_SUDO_PASS:?set DECK_SUDO_PASS to the device sudo password}"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
