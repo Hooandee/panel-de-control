@@ -19,13 +19,13 @@ jobs:
           manifest-file: .release-please-manifest.json
 
       # Build + attach the plugin zip only when a release was just tagged.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: ${{ steps.release.outputs.release_created }}
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         if: ${{ steps.release.outputs.release_created }}
         with:
           version: 10
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         if: ${{ steps.release.outputs.release_created }}
         with:
           node-version: 20
