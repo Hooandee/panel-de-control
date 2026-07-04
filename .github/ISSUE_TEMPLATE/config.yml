@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/Hooandee/panel-de-control/security/advisories/new
+    about: Please report vulnerabilities privately — do not open a public issue.
+  - name: Decky Loader
+    url: https://decky.xyz/
+    about: Questions about Decky Loader itself (not this plugin) belong upstream.

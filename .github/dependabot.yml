@@ -1,0 +1,37 @@
+version: 2
+updates:
+  # Keep the SHA-pinned GitHub Actions current. Dependabot bumps both the pinned
+  # SHA and its version comment, so pinning stays maintainable.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      # Non-releasing prefix: release-please only bumps on feat/fix, so dependency
+      # PRs merged to main never cut a release on their own.
+      prefix: ci
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # Frontend dependencies (pnpm).
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      npm:
+        patterns: ["*"]
+
+  # Backend dev dependencies (requirements-dev.txt).
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore
+      include: scope

@@ -1,0 +1,76 @@
+name: Bug report
+description: Something isn't working as expected
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please do **not** include any
+        personal data or secrets. If this is a **security vulnerability**, do not
+        open a public issue — see the [security policy](../../security/policy).
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug and what you expected instead.
+      placeholder: When I do X, Y happens; I expected Z.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open the panel
+        2. Go to ...
+        3. See error
+    validations:
+      required: true
+  - type: dropdown
+    id: device
+    attributes:
+      label: Device
+      description: Which handheld are you on?
+      options:
+        - Steam Deck LCD
+        - Steam Deck OLED
+        - ROG Ally
+        - ROG Ally X
+        - ROG Xbox Ally X
+        - Legion Go
+        - Legion Go S
+        - Legion Go 2
+        - MSI Claw 8 AI+
+        - Other (specify below)
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      description: e.g. SteamOS 3.6, Bazzite (date/build), Windows dual-boot, etc.
+    validations:
+      required: true
+  - type: input
+    id: plugin-version
+    attributes:
+      label: Panel de Control version
+      description: Shown in the plugin's settings.
+    validations:
+      required: true
+  - type: input
+    id: decky-version
+    attributes:
+      label: Decky Loader version
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: >
+        Plugin logs live at `~/homebrew/logs/Panel de Control/`. Paste only the
+        relevant lines. This will be rendered as code, so no backticks needed.
+      render: shell
+    validations:
+      required: false
