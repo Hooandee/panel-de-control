@@ -21,7 +21,7 @@
     "react-router": "^6.30.4",
     "rollup": "^4.53.3",
     "typescript": "^5.6.2",
-    "vitest": "^2.1.0"
+    "vitest": "^3.2.6"
   },
   "dependencies": {
     "@decky/api": "^1.1.3",
