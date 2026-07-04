@@ -17,12 +17,12 @@ interface Props {
 export const AutoTdpToggle: FC<Props> = ({ checked, onChange }) => {
   const { t } = useI18n();
   const label = (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: theme.space.xs }}>
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
       {t("tdp.auto.title")}
       <span
         style={{
-          fontSize: theme.font.caption,
-          padding: "1px 6px",
+          fontSize: 10,
+          padding: "1px 5px",
           borderRadius: 999,
           color: theme.color.warn,
           boxShadow: `inset 0 0 0 1px ${theme.color.warn}`,
