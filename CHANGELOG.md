@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.4.0...panel-de-control-v0.4.1) (2026-07-05)
+
+
+### Bug Fixes
+
+* keep panel color working when gamescope socket appears after load ([ee0ee60](https://github.com/Hooandee/panel-de-control/commit/ee0ee6026c7a187d46d9cae5103e638f144747ad))
+* keep panel color working when gamescope socket appears after load ([d3fd9d2](https://github.com/Hooandee/panel-de-control/commit/d3fd9d22d8165793c5d0f695148e339b44d92ef4))
+
 ## [0.4.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.3.0...panel-de-control-v0.4.0) (2026-07-05)
 
 
