@@ -169,8 +169,8 @@ Once installed, the plugin can update itself from within its settings.
 
 ### Verifying a download (recommended)
 
-Every release zip is signed with build provenance. Confirm it really came from this repository's
-pipeline before installing:
+Releases published once the repository is public are signed with build provenance. When the signature
+is available, you can confirm the zip really came from this repository's pipeline:
 
 ```sh
 gh attestation verify "Panel de Control.zip" --repo Hooandee/panel-de-control
@@ -212,8 +212,8 @@ full list with licenses is in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 - **[Handheld Daemon (HHD)](https://github.com/hhd-dev/hhd)** (LGPL-2.1). Reference for the
   per-device strategy, re-applying on resume and on AC/DC changes, and cooperating with the
   controller daemon. We only reference the approach, we don't copy its code.
-- **[RyzenAdj](https://github.com/FlyGoat/RyzenAdj)** (LGPL-3.0). Bundled as a binary for the generic
-  AMD path when there's no better firmware route.
+- **[RyzenAdj](https://github.com/FlyGoat/RyzenAdj)** (LGPL-3.0). Invoked as an external process for
+  the generic AMD path when there's no better firmware route; not bundled inside the plugin.
 - **[PowerControl](https://github.com/mengmeet/PowerControl)**. Origin of the Lenovo
   firmware-attributes path that SimpleDeckyTDP inherits.
 - **[Fantastic](https://git.ngram.ca/NG-SD-Plugins/Fantastic)** and **[PowerTools](https://git.ngni.us/NG-SD-Plugins/PowerTools)**.
@@ -234,5 +234,6 @@ open a public issue.
 
 ## License
 
-[BSD-3-Clause](LICENSE) © Hooandee. The bundled ryzenadj binary keeps its own LGPL-3.0 license.
-Third-party attributions are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+[BSD-3-Clause](LICENSE) © Hooandee. Third-party attributions and license details (including ryzenadj,
+which is invoked as an external process and not bundled) are listed in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

@@ -170,8 +170,8 @@ Una vez instalado, el plugin puede actualizarse solo desde sus ajustes.
 
 ### Verificar la descarga (recomendado)
 
-Cada zip de release va firmado con build provenance. Antes de instalar, confirma que de verdad salió
-del pipeline de este repositorio:
+Las releases publicadas una vez el repositorio es público se firman con build provenance. Cuando la
+firma esté disponible, puedes confirmar que el zip salió de verdad del pipeline de este repositorio:
 
 ```sh
 gh attestation verify "Panel de Control.zip" --repo Hooandee/panel-de-control
@@ -214,8 +214,9 @@ citamos aquí. La lista completa con licencias está en [THIRD_PARTY_NOTICES.md]
 - **[Handheld Daemon (HHD)](https://github.com/hhd-dev/hhd)** (LGPL-2.1). Referencia para la
   estrategia por dispositivo, la reaplicación al despertar y al cambiar de corriente, y la
   cooperación con el demonio de mandos. Solo consultamos el enfoque, no copiamos su código.
-- **[RyzenAdj](https://github.com/FlyGoat/RyzenAdj)** (LGPL-3.0). Lo incluimos como binario para el
-  camino genérico de AMD cuando no hay una ruta de firmware mejor.
+- **[RyzenAdj](https://github.com/FlyGoat/RyzenAdj)** (LGPL-3.0). Lo invocamos como proceso externo
+  para el camino genérico de AMD cuando no hay una ruta de firmware mejor; no se empaqueta dentro del
+  plugin.
 - **[PowerControl](https://github.com/mengmeet/PowerControl)**. Origen de la ruta de
   firmware-attributes de Lenovo que hereda SimpleDeckyTDP.
 - **[Fantastic](https://git.ngram.ca/NG-SD-Plugins/Fantastic)** y **[PowerTools](https://git.ngni.us/NG-SD-Plugins/PowerTools)**.
@@ -237,5 +238,6 @@ No abras un issue público.
 
 ## Licencia
 
-[BSD-3-Clause](LICENSE) © Hooandee. El binario de ryzenadj que se distribuye conserva su propia
-licencia LGPL-3.0. Las atribuciones de terceros están en [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+[BSD-3-Clause](LICENSE) © Hooandee. Las atribuciones de terceros y los detalles de licencia (incluido
+ryzenadj, que se invoca como proceso externo y no se empaqueta) están en
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
