@@ -95,18 +95,18 @@ Leyenda: **✅** comprobado en ese equipo · **⚠️** limitado o solo por defe
 | Modos avanzados (SPPT/FPPT) | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ❌ [¹](#notas) |
 | Auto-TDP por carga de GPU | ✅ [²](#notas) | ✅ [²](#notas) | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ❌ [³](#notas) |
 | Frecuencia de GPU | ❔ [⁴](#notas) | ❔ [⁴](#notas) | ❔ [⁴](#notas) | ❔ [⁴](#notas) | ❔ [⁴](#notas) | ❔ [⁴](#notas) | ❔ [⁴](#notas) | ❔ [⁴](#notas) | ❔ [⁴](#notas) |
-| Batería: estado y salud | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ❔ |
+| Batería: estado y salud | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ✅ |
 | Ciclos de batería | ❌ [⁵](#notas) | ❌ [⁵](#notas) | ❌ [⁵](#notas) | ❌ [⁵](#notas) | ❌ [⁵](#notas) | ✅ | ❔ | ✅ | ❌ [⁵](#notas) |
-| Límite de carga | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [⁶](#notas) | ❔ | ⚠️ [⁷](#notas) | ❔ |
+| Límite de carga | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [⁶](#notas) | ❔ | ⚠️ [⁷](#notas) | ✅ |
 | CPU: turbo boost | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ✅ |
 | CPU: multihilo (SMT) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ❌ [⁸](#notas) |
 | CPU: núcleos activos | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ✅ |
-| Brillo y volumen | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ❔ |
+| Brillo y volumen | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ✅ |
 | Modo Descarga | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ❔ |
-| Monitor de temperaturas | ✅ | ✅ | ✅ | ✅ | ✅ | ❔ | ❔ | ✅ | ✅ [⁹](#notas) |
-| Monitor de RPM de ventilador | ❔ | ❔ | ✅ | ✅ | ✅ | ❔ | ❔ | ❌ [¹⁰](#notas) | ❌ [⁹](#notas) |
-| Curvas de ventilador | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ [¹¹](#notas) | ⚠️ [¹²](#notas) | ❔ [¹⁰](#notas) | ❌ [⁹](#notas) |
-| Curvas aprendidas por juego | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ [¹¹](#notas) | ❌ [¹²](#notas) | ❔ [¹⁰](#notas) | ❌ [⁹](#notas) |
+| Monitor de temperaturas | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ [⁹](#notas) |
+| Monitor de RPM de ventilador | ❔ | ❔ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹⁰](#notas) | ❌ [⁹](#notas) |
+| Curvas de ventilador | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹¹](#notas) | ⚠️ [¹²](#notas) | ❔ [¹⁰](#notas) | ❌ [⁹](#notas) |
+| Curvas aprendidas por juego | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹¹](#notas) | ❌ [¹²](#notas) | ❔ [¹⁰](#notas) | ❌ [⁹](#notas) |
 | Calibración de color | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ✅ [¹³](#notas) |
 | Preset "Aspecto OLED" | ✅ | ❌ [¹⁴](#notas) | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹⁴](#notas) | ✅ |
 | Remapeo de mandos (beta) | ❔ | ❔ | ⚠️ [¹⁵](#notas) | ⚠️ [¹⁵](#notas) | ⚠️ [¹⁵](#notas) | ⚠️ [¹⁵](#notas) | ❔ | ⚠️ [¹⁵](#notas) | ⚠️ [¹⁵](#notas) |
@@ -138,8 +138,10 @@ reales y muestra lo que consigue, ocultando honestamente el resto.
 10. La Legion Go 2 no expone un ventilador escribible por hwmon; el RPM tendría que leerse por el EC
     y en la build actual no está apareciendo en el monitor. Por eso lo marco como no disponible / sin
     confirmar hasta revisarlo en tu equipo.
-11. La Legion Go original controla el ventilador vía `acpi_call` (GZFD), que existe en Bazzite pero
-    no en SteamOS; además aplicar la curva fuerza el TDP a modo custom.
+11. La Legion Go original necesita `acpi_call` (GZFD) para las curvas de ventilador; está presente en
+    Bazzite pero no en SteamOS, así que sin él no aparece ninguna curva (ni siquiera por defecto).
+    Donde funciona, aplicar la curva fuerza el TDP a modo custom. El monitor (velocidad + temperatura)
+    sí funciona.
 12. La Legion Go S solo permite modos gruesos de ventilador (silencioso, equilibrado, rendimiento),
     no una curva libre, así que tampoco puede aplicar una curva aprendida.
 13. En Intel el color solo se aplica mientras el compositor está activo, así que se fuerza esa ruta y

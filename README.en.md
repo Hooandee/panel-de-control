@@ -95,18 +95,18 @@ supported in code but not confirmed on that device yet
 | Advanced modes (SPPT/FPPT) | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ❌ [¹](#notes) |
 | Auto-TDP by GPU load | ✅ [²](#notes) | ✅ [²](#notes) | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ❌ [³](#notes) |
 | GPU clock | ❔ [⁴](#notes) | ❔ [⁴](#notes) | ❔ [⁴](#notes) | ❔ [⁴](#notes) | ❔ [⁴](#notes) | ❔ [⁴](#notes) | ❔ [⁴](#notes) | ❔ [⁴](#notes) | ❔ [⁴](#notes) |
-| Battery: state and health | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ❔ |
+| Battery: state and health | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ✅ |
 | Battery cycle count | ❌ [⁵](#notes) | ❌ [⁵](#notes) | ❌ [⁵](#notes) | ❌ [⁵](#notes) | ❌ [⁵](#notes) | ✅ | ❔ | ✅ | ❌ [⁵](#notes) |
-| Charge limit | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [⁶](#notes) | ❔ | ⚠️ [⁷](#notes) | ❔ |
+| Charge limit | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [⁶](#notes) | ❔ | ⚠️ [⁷](#notes) | ✅ |
 | CPU: turbo boost | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ✅ |
 | CPU: multithreading (SMT) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ❌ [⁸](#notes) |
 | CPU: active cores | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ✅ |
-| Brightness and volume | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ❔ |
+| Brightness and volume | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ✅ |
 | Download Mode | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ❔ |
-| Temperature monitor | ✅ | ✅ | ✅ | ✅ | ✅ | ❔ | ❔ | ✅ | ✅ [⁹](#notes) |
-| Fan RPM monitor | ❔ | ❔ | ✅ | ✅ | ✅ | ❔ | ❔ | ❌ [¹⁰](#notes) | ❌ [⁹](#notes) |
-| Fan curves | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ [¹¹](#notes) | ⚠️ [¹²](#notes) | ❔ [¹⁰](#notes) | ❌ [⁹](#notes) |
-| Learned per-game curves | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ [¹¹](#notes) | ❌ [¹²](#notes) | ❔ [¹⁰](#notes) | ❌ [⁹](#notes) |
+| Temperature monitor | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ [⁹](#notes) |
+| Fan RPM monitor | ❔ | ❔ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹⁰](#notes) | ❌ [⁹](#notes) |
+| Fan curves | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹¹](#notes) | ⚠️ [¹²](#notes) | ❔ [¹⁰](#notes) | ❌ [⁹](#notes) |
+| Learned per-game curves | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹¹](#notes) | ❌ [¹²](#notes) | ❔ [¹⁰](#notes) | ❌ [⁹](#notes) |
 | Color calibration | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ✅ [¹³](#notes) |
 | "OLED look" preset | ✅ | ❌ [¹⁴](#notes) | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹⁴](#notes) | ✅ |
 | Controller remap (beta) | ❔ | ❔ | ⚠️ [¹⁵](#notes) | ⚠️ [¹⁵](#notes) | ⚠️ [¹⁵](#notes) | ⚠️ [¹⁵](#notes) | ❔ | ⚠️ [¹⁵](#notes) | ⚠️ [¹⁵](#notes) |
@@ -138,8 +138,9 @@ capabilities and shows what it can, honestly hiding the rest.
 10. The Legion Go 2 exposes no writable hwmon fan; RPM would have to be read over the EC, and on the
     current build it isn't showing up in the monitor. Marked as not available / unconfirmed until
     reviewed on your device.
-11. The original Legion Go controls the fan via `acpi_call` (GZFD), which exists on Bazzite but not on
-    SteamOS; applying the curve also forces TDP into custom mode.
+11. The original Legion Go needs `acpi_call` (GZFD) for fan curves; it's present on Bazzite but not on
+    SteamOS, so without it no curve shows up at all (not even a default one). Where it works, applying
+    the curve forces TDP into custom mode. The monitor (speed + temperature) does work.
 12. The Legion Go S only allows coarse fan modes (quiet, balanced, performance), not a freeform curve,
     so it can't apply a learned curve either.
 13. On Intel the color is only applied while the compositor is active, so that path is forced and the
