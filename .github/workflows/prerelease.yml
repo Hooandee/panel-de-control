@@ -36,7 +36,7 @@ jobs:
           rm -f dist/*.map
           staging=$(mktemp -d)
           mkdir -p "$staging/$PLUGIN_NAME"
-          cp -rL dist main.py plugin.json package.json README.md LICENSE py_modules assets "$staging/$PLUGIN_NAME"
+          cp -rL dist main.py plugin.json package.json README.md README.en.md LICENSE py_modules assets "$staging/$PLUGIN_NAME"
           (cd "$staging" && zip -r "$GITHUB_WORKSPACE/$PLUGIN_NAME.zip" "$PLUGIN_NAME")
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
 
