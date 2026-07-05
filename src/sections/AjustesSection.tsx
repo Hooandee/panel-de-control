@@ -1,5 +1,5 @@
 import { FC, useEffect, useState } from "react";
-import { ButtonItem, PanelSectionRow, ToggleField } from "@decky/ui";
+import { ButtonItem, Focusable, Navigation, PanelSectionRow, ToggleField } from "@decky/ui";
 
 import { useI18n } from "../i18n";
 import { LanguageToggle } from "../components/LanguageToggle";
@@ -10,6 +10,9 @@ import { getTelemetryEnabled, setTelemetryEnabled, getUnlockBatteryMax, setUnloc
 import { UpdatePanel } from "../updater/UpdatePanel";
 import { ControllerConflictCard } from "../components/ControllerConflictCard";
 import { theme } from "../theme";
+
+const AUTHOR = "Hooandee";
+const CHANNEL_URL = "https://www.youtube.com/@Hooandee";
 
 /** A persisted boolean setting: fetch on mount, optimistic update on toggle.
  *  Returns null until the first read lands (so the UI can hide the control). */
@@ -64,6 +67,9 @@ export const AjustesSection: FC = () => {
     : confirming
       ? t("settings.reset.confirm")
       : t("settings.reset");
+
+  const openChannel = () => Navigation.NavigateToExternalWeb(CHANNEL_URL);
+  const [madeByBefore, madeByAfter] = t("settings.madeBy").split("{name}");
 
   return (
     // One row holding a spaced column so the settings don't glue together. Null
@@ -138,6 +144,20 @@ export const AjustesSection: FC = () => {
 
         {/* In-plugin self-updater: version line + changelog + install/restart. */}
         <UpdatePanel lang={lang} version={version} />
+
+        {/* Authorship: opens the author's channel in an external browser. */}
+        <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
+          {madeByBefore}
+          <Focusable
+            onActivate={openChannel}
+            onClick={openChannel}
+            aria-label={AUTHOR}
+            style={{ display: "inline", color: theme.color.accent, cursor: "pointer", textDecoration: "underline" }}
+          >
+            {AUTHOR}
+          </Focusable>
+          {madeByAfter}
+        </div>
       </div>
     </PanelSectionRow>
   );
