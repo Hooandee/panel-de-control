@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.3.0...panel-de-control-v0.4.0) (2026-07-05)
+
+
+### Features
+
+* author channel link in Settings ([00490fc](https://github.com/Hooandee/panel-de-control/commit/00490fc856509fe24c060de95a46068f689909ac))
+* author channel link in Settings ([55ab769](https://github.com/Hooandee/panel-de-control/commit/55ab769e6eca046279e0c440d912a41ad875ee4d))
+
 ## [0.3.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.2.4...panel-de-control-v0.3.0) (2026-07-04)
 
 
