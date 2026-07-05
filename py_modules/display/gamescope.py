@@ -11,10 +11,12 @@ import glob
 import os
 import subprocess
 import tempfile
+import time
 
 from display.const import NATIVE as _NATIVE
 
 _LUT_SIZE = 17  # 17^3 grid — smooth enough for color, cheap to generate/apply
+_PROBE_RETRY_S = 5.0  # min interval between probes of a present-but-unresponsive socket
 
 # Rec.709 luma weights (saturation pivots around perceived brightness).
 _LR, _LG, _LB = 0.2126, 0.7152, 0.0722
@@ -71,7 +73,9 @@ def _run(args, env):
         # WAYLAND_DISPLAY). Same spawn hygiene as the controller/fan backends.
         from controllers.detect import clean_env, resolve_bin
         argv = [resolve_bin(args[0]), *args[1:]]
-        p = subprocess.run(argv, capture_output=True, text=True, timeout=5,
+        # Short timeout: this runs on the event loop, so it must fail fast rather than
+        # stall it if gamescope is wedged (the calls themselves complete in ms).
+        p = subprocess.run(argv, capture_output=True, text=True, timeout=2,
                            env={**clean_env(), **env})
         return p.returncode, (p.stdout or "")
     except (OSError, subprocess.SubprocessError):
@@ -84,7 +88,7 @@ class GamescopeColorBackend:
     `runner(args, env) -> (rc, stdout)` is injected for testing."""
 
     def __init__(self, runner=_run, socket_glob="/run/user/*/gamescope-*", lut_path=None,
-                 force_composite=False):
+                 force_composite=False, clock=time.monotonic):
         self._run = runner
         # On Intel/Xe the color LUT is only applied while gamescope COMPOSITES (it's
         # not carried by the HW DRM color pipeline as on AMD), so a look is invisible
@@ -93,8 +97,13 @@ class GamescopeColorBackend:
         # small power cost (composition every frame). AMD leaves this False.
         self._force_composite = force_composite
         self._lut_path = lut_path or os.path.join(tempfile.gettempdir(), "pdc_look.cube")
-        self._runtime, self._wayland = self._discover(socket_glob)
-        self._supported = self._runtime is not None and self._probe()
+        # The socket may not exist yet when the plugin loads, so probe on demand.
+        self._socket_glob = socket_glob
+        self._clock = clock
+        self._last_probe = None
+        self._runtime = self._wayland = None
+        self._supported = False
+        self._ensure_supported()
         # Whether a non-native look may be loaded — lets apply() skip rebuilding the
         # identity LUT on the common (untouched-color) path, yet still clear a look
         # exactly once when returning to native. Starts True: a prior plugin process
@@ -116,9 +125,25 @@ class GamescopeColorBackend:
         rc, _ = self._ctl("version")
         return rc == 0
 
+    def _ensure_supported(self):
+        """Discover the socket + probe on demand, caching the first success."""
+        if self._supported:
+            return True
+        self._runtime, self._wayland = self._discover(self._socket_glob)
+        if self._runtime is None:
+            return False
+        # Rate-limit the probe: it spawns a subprocess and is read on the event loop,
+        # so a present-but-unresponsive socket must not re-probe on every access.
+        now = self._clock()
+        if self._last_probe is not None and now - self._last_probe < _PROBE_RETRY_S:
+            return False
+        self._last_probe = now
+        self._supported = self._probe()
+        return self._supported
+
     @property
     def supported(self):
-        return self._supported
+        return self._ensure_supported()
 
     @property
     def force_composite(self):
@@ -132,7 +157,7 @@ class GamescopeColorBackend:
         non-native is currently applied (no wasted rebuild on the untouched path).
         On force_composite devices, toggles gamescope composition so the look is
         visible in-game (on for a look, off at native). Never raises."""
-        if not self._supported:
+        if not self._ensure_supported():
             return False
         native = is_native(state)
         if native and not self._applied_non_native:

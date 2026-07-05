@@ -1,4 +1,10 @@
-from display.gamescope import GamescopeColorBackend, build_cube, is_native, transform
+from display.gamescope import (
+    _PROBE_RETRY_S,
+    GamescopeColorBackend,
+    build_cube,
+    is_native,
+    transform,
+)
 
 NATIVE = {"saturation": 100, "temperature": 0, "contrast": 0}
 
@@ -109,6 +115,41 @@ def test_backend_unsupported_when_no_socket(tmp_path):
                               socket_glob=str(tmp_path / "run/user/*/gamescope-*"))
     assert b.supported is False
     assert b.apply({**NATIVE, "saturation": 150}) is False
+
+
+def test_backend_self_heals_when_socket_appears_after_init(tmp_path):
+    # A socket that appears after construction must still be picked up.
+    run = tmp_path / "run"
+    run.mkdir()
+    r = FakeRunner(ok=True)
+    b = GamescopeColorBackend(runner=r,
+                              socket_glob=str(tmp_path / "run/user/*/gamescope-*"),
+                              lut_path=str(tmp_path / "look.cube"))
+    assert b.supported is False            # no socket yet at construction
+    sock = run / "user" / "1000" / "gamescope-0"
+    sock.parent.mkdir(parents=True)
+    sock.write_text("")
+    assert b.supported is True             # gamescope came up → re-discovered + probed
+    assert b.apply({**NATIVE, "saturation": 150}) is True
+
+
+def test_backend_rate_limits_probe_of_unresponsive_socket(tmp_path):
+    # A socket that exists but doesn't answer must not re-spawn the probe on every read.
+    sock = tmp_path / "run" / "user" / "1000" / "gamescope-0"
+    sock.parent.mkdir(parents=True)
+    sock.write_text("")
+    r = FakeRunner(ok=False)
+    t = [100.0]
+    b = GamescopeColorBackend(runner=r, socket_glob=str(tmp_path / "run/user/*/gamescope-*"),
+                              lut_path=str(tmp_path / "look.cube"), clock=lambda: t[0])
+
+    def probes():
+        return len([c for c in r.calls if c[0][:2] == ["gamescopectl", "version"]])
+
+    assert b.supported is False and probes() == 1   # probed once at construction
+    assert b.supported is False and probes() == 1   # within backoff → no re-probe
+    t[0] += _PROBE_RETRY_S + 1
+    assert b.supported is False and probes() == 2   # past the interval → re-probes
 
 
 def test_backend_apply_writes_cube_and_calls_set_look(tmp_path):
