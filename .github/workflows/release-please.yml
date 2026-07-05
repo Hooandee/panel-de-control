@@ -46,20 +46,11 @@ jobs:
           rm -f dist/*.map
           staging=$(mktemp -d)
           mkdir -p "$staging/$PLUGIN_NAME"
-          cp -rL dist main.py plugin.json package.json README.md LICENSE py_modules assets "$staging/$PLUGIN_NAME"
+          cp -rL dist main.py plugin.json package.json README.md README.en.md LICENSE py_modules assets "$staging/$PLUGIN_NAME"
           (cd "$staging" && zip -r "$GITHUB_WORKSPACE/$PLUGIN_NAME.zip" "$PLUGIN_NAME")
 
-      # Sign the exact release artifact with build provenance (Sigstore, keyless).
-      # Anyone can verify the zip really came from this workflow/commit with:
-      #   gh attestation verify "Panel de Control.zip" --repo Hooandee/panel-de-control
-      # This is what protects users even if the GitHub account or a token leaks:
-      # a zip published outside this pipeline has no valid provenance.
-      - name: Attest build provenance
-        if: ${{ steps.release.outputs.release_created }}
-        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
-        with:
-          subject-path: "Panel de Control.zip"
-
+      # Attach the artifact first, so provenance signing can never block the release
+      # asset (e.g. build provenance is unavailable on private repos).
       - name: Upload zip to the release
         if: ${{ steps.release.outputs.release_created }}
         env:
@@ -67,3 +58,16 @@ jobs:
           TAG: ${{ steps.release.outputs.tag_name }}
           PLUGIN_NAME: Panel de Control
         run: gh release upload "$TAG" "$PLUGIN_NAME.zip" --clobber
+
+      # Sign the exact release artifact with build provenance (Sigstore, keyless).
+      # Anyone can verify the zip really came from this workflow/commit with:
+      #   gh attestation verify "Panel de Control.zip" --repo Hooandee/panel-de-control
+      # This is what protects users even if the GitHub account or a token leaks:
+      # a zip published outside this pipeline has no valid provenance.
+      # Skipped while the repo is private (attestations require a public repo);
+      # it turns on automatically once the repo is made public.
+      - name: Attest build provenance
+        if: ${{ steps.release.outputs.release_created && !github.event.repository.private }}
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        with:
+          subject-path: "Panel de Control.zip"
