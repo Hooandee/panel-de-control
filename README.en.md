@@ -82,53 +82,78 @@ can be turned off), and a button to erase what has been learned.
 ## Per-device compatibility
 
 Panel de Control knows nine models and, for anything else, tries to work by probing the real
-capabilities of the hardware. This table sums up what you'll find in each family. Differences usually
-come from what the vendor lets you touch in firmware, not from the plugin.
+capabilities of the hardware. This table is honest about what's **verified on each device** and what
+isn't yet: we'd rather show "unconfirmed" than a false "yes". Differences come from what each vendor
+lets you touch in firmware and from each distro's kernel.
 
-Legend: **●** works · **◐** limited, read-only or default values · **○** not available
+Legend: **✅** verified on that device · **⚠️** limited or default only · **❌** not available · **❔**
+supported in code but not confirmed on that device yet
 
-| Feature | Steam Deck | ROG Ally | Legion Go | MSI Claw 8 AI+ | Other devices |
-|---|:---:|:---:|:---:|:---:|:---:|
-| TDP limit | ● | ● | ● | ● | ◐ |
-| Advanced modes (SPPT/FPPT) | ○ | ● | ● | ○ | ○ |
-| Auto-TDP by GPU load | ● [¹](#notes) | ● | ● | ○ [²](#notes) | ◐ |
-| GPU clock | ● | ● | ● | ● | ◐ |
-| Battery: state, health, cycles | ● | ● | ● | ● | ● |
-| Charge limit | ● | ● | ◐ [³](#notes) | ◐ | ◐ |
-| CPU: turbo boost | ● | ● | ● | ● | ◐ |
-| CPU: multithreading (SMT) | ● | ● | ● | ○ [⁴](#notes) | ◐ |
-| CPU: active cores | ● | ● | ● | ● | ● |
-| Brightness and volume | ● | ● | ● | ● | ● |
-| Download Mode | ● | ● | ● | ● | ● |
-| Fan monitor | ● | ● | ● | ● | ● |
-| Fan curves | ● | ● | ◐ [⁵](#notes) | ● | ◐ |
-| Learned per-game curves | ● | ● | ◐ [⁵](#notes) | ● | ◐ |
-| Color calibration | ● | ● | ● | ● [⁶](#notes) | ● |
-| "OLED look" preset | ◐ [⁷](#notes) | ● | ◐ [⁷](#notes) | ● | ● |
-| Controller remap (beta) | ◐ | ◐ | ◐ | ◐ | ○ |
-| RGB lighting (via Colores) | ○ [⁸](#notes) | ● | ● | ● | ◐ |
+| Feature | Steam Deck LCD | Steam Deck OLED | ROG Ally | ROG Ally X | ROG Xbox Ally X | Legion Go | Legion Go S | Legion Go 2 | MSI Claw 8 AI+ |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| TDP limit | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ✅ |
+| Advanced modes (SPPT/FPPT) | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ❌ [¹](#notes) |
+| Auto-TDP by GPU load | ✅ [²](#notes) | ✅ [²](#notes) | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ❌ [³](#notes) |
+| GPU clock | ❔ [⁴](#notes) | ❔ [⁴](#notes) | ❔ [⁴](#notes) | ❔ [⁴](#notes) | ❔ [⁴](#notes) | ❔ [⁴](#notes) | ❔ [⁴](#notes) | ❔ [⁴](#notes) | ❔ [⁴](#notes) |
+| Battery: state and health | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ✅ |
+| Battery cycle count | ❌ [⁵](#notes) | ❌ [⁵](#notes) | ❌ [⁵](#notes) | ❌ [⁵](#notes) | ❌ [⁵](#notes) | ✅ | ❔ | ✅ | ❌ [⁵](#notes) |
+| Charge limit | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [⁶](#notes) | ❔ | ⚠️ [⁷](#notes) | ✅ |
+| CPU: turbo boost | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ✅ |
+| CPU: multithreading (SMT) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ❌ [⁸](#notes) |
+| CPU: active cores | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ✅ |
+| Brightness and volume | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ✅ |
+| Download Mode | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ❔ |
+| Temperature monitor | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ [⁹](#notes) |
+| Fan RPM monitor | ❔ | ❔ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹⁰](#notes) | ❌ [⁹](#notes) |
+| Fan curves | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹¹](#notes) | ⚠️ [¹²](#notes) | ❔ [¹⁰](#notes) | ❌ [⁹](#notes) |
+| Learned per-game curves | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹¹](#notes) | ❌ [¹²](#notes) | ❔ [¹⁰](#notes) | ❌ [⁹](#notes) |
+| Color calibration | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ✅ [¹³](#notes) |
+| "OLED look" preset | ✅ | ❌ [¹⁴](#notes) | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹⁴](#notes) | ✅ |
+| Controller remap (beta) | ❔ | ❔ | ⚠️ [¹⁵](#notes) | ⚠️ [¹⁵](#notes) | ⚠️ [¹⁵](#notes) | ⚠️ [¹⁵](#notes) | ❔ | ⚠️ [¹⁵](#notes) | ⚠️ [¹⁵](#notes) |
+| RGB lighting (via Colores) | ❌ [¹⁶](#notes) | ❌ [¹⁶](#notes) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
-Each family covers: **Steam Deck** (LCD and OLED), **ROG Ally** (Ally 2023, Ally X, Xbox Ally X),
-**Legion Go** (Go, Go S, Go 2). Every other handheld falls under "Other devices", where the plugin
-marks itself as experimental and works with whatever it can probe.
+Any other handheld falls under an **experimental generic** profile: the plugin probes the real
+capabilities and shows what it can, honestly hiding the rest.
 
 ### Notes
 
-1. On the Steam Deck the GPU-load reading is instantaneous and very noisy; auto-TDP averages it
+1. The Claw controls TDP through `intel-rapl`, which only exposes the base limit (PL1); there are no
+   separate boost rails to tune.
+2. On the Steam Deck the GPU-load reading is instantaneous and very noisy; auto-TDP averages it
    before deciding.
-2. Power profiling on Intel (RAPL / i915) isn't implemented yet, so GPU-based auto-TDP isn't
-   available on the Claw. The rest of the TDP control is.
-3. On Legion, the charge limit is a "conservation mode" toggle with a firmware-fixed percentage, not
-   an adjustable value. On the Claw it depends on what each unit exposes.
-4. The Claw's Intel Core Ultra has no hyperthreading, so there's no multithreading to enable or
+3. Power profiling on Intel (RAPL / i915) isn't implemented yet, so GPU-based auto-TDP isn't
+   available on the Claw. The rest of the TDP control works.
+4. GPU-clock writing is implemented per device, but it hasn't been confirmed with a live change on
+   any machine yet. Marked as unconfirmed until validated.
+5. The cycle counter is only populated by Lenovo firmware; on ASUS, Steam Deck and MSI the node
+   reports a fake 0, so it's hidden instead of showing an invented zero.
+6. The original Legion Go (83E1) doesn't expose `conservation_mode`, so it offers no charge limit.
+7. On Legion the charge limit is a "conservation mode" toggle with a firmware-fixed percentage, not
+   an adjustable value.
+8. The Claw's Intel Core Ultra has no hyperthreading, so there's no multithreading to enable or
    disable.
-5. Legion Go 2 has a full curve; Legion Go S only coarse modes (quiet, balanced, performance); the
-   original Legion Go is limited depending on the OS.
-6. On Intel the color is only applied while the compositor is active, so that path is forced and the
-   small cost is disclosed.
-7. The "OLED look" preset is hidden on panels that are already OLED (Steam Deck OLED, Legion Go 2)
-   since it makes no sense there.
-8. The Steam Deck has no RGB lighting, so this card doesn't appear.
+9. On the MSI Claw the fan chip (`msi_wmi_platform`) is read-only on its current kernel, so there are
+   no curves and the editor is hidden. `coretemp` provides temperatures but exposes no fan RPM, which
+   is why the monitor shows no fans on the Claw.
+10. The Legion Go 2 exposes no writable hwmon fan; RPM would have to be read over the EC, and on the
+    current build it isn't showing up in the monitor. Marked as not available / unconfirmed until
+    reviewed on your device.
+11. The original Legion Go needs `acpi_call` (GZFD) for fan curves; it's present on Bazzite but not on
+    SteamOS, so without it no curve shows up at all (not even a default one). Where it works, applying
+    the curve forces TDP into custom mode. The monitor (speed + temperature) does work.
+12. The Legion Go S only allows coarse fan modes (quiet, balanced, performance), not a freeform curve,
+    so it can't apply a learned curve either.
+13. On Intel the color is only applied while the compositor is active, so that path is forced and the
+    small cost is disclosed.
+14. The "OLED look" preset is hidden on panels that are already OLED (Steam Deck OLED, Legion Go 2)
+    since it makes no sense there.
+15. Remapping cooperates with the system daemon (HHD on Bazzite, InputPlumber on SteamOS). It's early,
+    and on Legion some back buttons aren't detected well yet.
+16. The Steam Deck has no RGB lighting, so this card doesn't appear.
+
+> Cells marked **❔** are the ones I haven't confirmed on that specific device. If you have the
+> hardware in front of you and see something works (or doesn't), tell me and I'll fix it: this table
+> should reflect reality, not what the code tries to do.
 
 ## Installation
 

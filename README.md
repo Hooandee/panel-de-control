@@ -82,53 +82,79 @@ Idioma (con banderas, no un desplegable), el interruptor de "aprender de mi uso"
 ## Compatibilidad por equipo
 
 Panel de Control conoce nueve modelos y, para cualquier otro, intenta funcionar sondeando las
-capacidades reales del hardware. Esta tabla resume qué encontrarás en cada familia. Las diferencias
-suelen venir de lo que el fabricante deja tocar por firmware, no del plugin.
+capacidades reales del hardware. Esta tabla es honesta sobre qué está **comprobado en cada equipo**
+y qué todavía no: preferimos un "sin confirmar" a un "sí" falso. Las diferencias vienen de lo que
+cada fabricante deja tocar por firmware y del kernel de cada distro.
 
-Leyenda: **●** funciona · **◐** limitado, solo lectura o valores por defecto · **○** no disponible
+Leyenda: **✅** comprobado en ese equipo · **⚠️** limitado o solo por defecto · **❌** no disponible
+· **❔** el código lo soporta pero aún no está confirmado en ese equipo
 
-| Característica | Steam Deck | ROG Ally | Legion Go | MSI Claw 8 AI+ | Otros equipos |
-|---|:---:|:---:|:---:|:---:|:---:|
-| Límite de TDP | ● | ● | ● | ● | ◐ |
-| Modos avanzados (SPPT/FPPT) | ○ | ● | ● | ○ | ○ |
-| Auto-TDP por carga de GPU | ● [¹](#notas) | ● | ● | ○ [²](#notas) | ◐ |
-| Frecuencia de GPU | ● | ● | ● | ● | ◐ |
-| Batería: estado, salud, ciclos | ● | ● | ● | ● | ● |
-| Límite de carga | ● | ● | ◐ [³](#notas) | ◐ | ◐ |
-| CPU: turbo boost | ● | ● | ● | ● | ◐ |
-| CPU: multihilo (SMT) | ● | ● | ● | ○ [⁴](#notas) | ◐ |
-| CPU: núcleos activos | ● | ● | ● | ● | ● |
-| Brillo y volumen | ● | ● | ● | ● | ● |
-| Modo Descarga | ● | ● | ● | ● | ● |
-| Monitor de ventiladores | ● | ● | ● | ● | ● |
-| Curvas de ventilador | ● | ● | ◐ [⁵](#notas) | ● | ◐ |
-| Curvas aprendidas por juego | ● | ● | ◐ [⁵](#notas) | ● | ◐ |
-| Calibración de color | ● | ● | ● | ● [⁶](#notas) | ● |
-| Preset "Aspecto OLED" | ◐ [⁷](#notas) | ● | ◐ [⁷](#notas) | ● | ● |
-| Remapeo de mandos (beta) | ◐ | ◐ | ◐ | ◐ | ○ |
-| Iluminación RGB (vía Colores) | ○ [⁸](#notas) | ● | ● | ● | ◐ |
+| Característica | Steam Deck LCD | Steam Deck OLED | ROG Ally | ROG Ally X | ROG Xbox Ally X | Legion Go | Legion Go S | Legion Go 2 | MSI Claw 8 AI+ |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| Límite de TDP | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ✅ |
+| Modos avanzados (SPPT/FPPT) | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ❌ [¹](#notas) |
+| Auto-TDP por carga de GPU | ✅ [²](#notas) | ✅ [²](#notas) | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ❌ [³](#notas) |
+| Frecuencia de GPU | ❔ [⁴](#notas) | ❔ [⁴](#notas) | ❔ [⁴](#notas) | ❔ [⁴](#notas) | ❔ [⁴](#notas) | ❔ [⁴](#notas) | ❔ [⁴](#notas) | ❔ [⁴](#notas) | ❔ [⁴](#notas) |
+| Batería: estado y salud | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ✅ |
+| Ciclos de batería | ❌ [⁵](#notas) | ❌ [⁵](#notas) | ❌ [⁵](#notas) | ❌ [⁵](#notas) | ❌ [⁵](#notas) | ✅ | ❔ | ✅ | ❌ [⁵](#notas) |
+| Límite de carga | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [⁶](#notas) | ❔ | ⚠️ [⁷](#notas) | ✅ |
+| CPU: turbo boost | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ✅ |
+| CPU: multihilo (SMT) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ❌ [⁸](#notas) |
+| CPU: núcleos activos | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ✅ |
+| Brillo y volumen | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ✅ |
+| Modo Descarga | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ❔ |
+| Monitor de temperaturas | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ [⁹](#notas) |
+| Monitor de RPM de ventilador | ❔ | ❔ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹⁰](#notas) | ❌ [⁹](#notas) |
+| Curvas de ventilador | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹¹](#notas) | ⚠️ [¹²](#notas) | ❔ [¹⁰](#notas) | ❌ [⁹](#notas) |
+| Curvas aprendidas por juego | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹¹](#notas) | ❌ [¹²](#notas) | ❔ [¹⁰](#notas) | ❌ [⁹](#notas) |
+| Calibración de color | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ✅ [¹³](#notas) |
+| Preset "Aspecto OLED" | ✅ | ❌ [¹⁴](#notas) | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹⁴](#notas) | ✅ |
+| Remapeo de mandos (beta) | ❔ | ❔ | ⚠️ [¹⁵](#notas) | ⚠️ [¹⁵](#notas) | ⚠️ [¹⁵](#notas) | ⚠️ [¹⁵](#notas) | ❔ | ⚠️ [¹⁵](#notas) | ⚠️ [¹⁵](#notas) |
+| Iluminación RGB (vía Colores) | ❌ [¹⁶](#notas) | ❌ [¹⁶](#notas) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
-Cada familia agrupa: **Steam Deck** (LCD y OLED), **ROG Ally** (Ally 2023, Ally X, Xbox Ally X),
-**Legion Go** (Go, Go S, Go 2). El resto de portátiles caen en "Otros equipos", donde el plugin se
-marca como experimental y funciona con lo que consiga sondear.
+Cualquier otro portátil cae en un perfil **genérico experimental**: el plugin sondea las capacidades
+reales y muestra lo que consigue, ocultando honestamente el resto.
 
 ### Notas
 
-1. En Steam Deck la lectura de carga de GPU es instantánea y muy ruidosa; el auto-TDP la promedia
+1. El Claw controla el TDP por `intel-rapl`, que solo expone el límite base (PL1); no hay raíles de
+   boost separados que ajustar.
+2. En Steam Deck la lectura de carga de GPU es instantánea y muy ruidosa; el auto-TDP la promedia
    antes de decidir.
-2. El perfilado de consumo en Intel (RAPL / i915) todavía no está implementado, así que el auto-TDP
-   por GPU no está disponible en el Claw. El resto del control de TDP sí.
-3. En Legion el límite de carga es un interruptor de "modo conservación" con un porcentaje fijo por
-   firmware, no un valor ajustable. En el Claw depende de lo que exponga cada unidad.
-4. El Intel Core Ultra del Claw no tiene hyperthreading, así que no hay multihilo que activar o
+3. El perfilado de consumo en Intel (RAPL / i915) todavía no está implementado, así que el auto-TDP
+   por GPU no está disponible en el Claw. El resto del control de TDP sí funciona.
+4. La escritura de frecuencia de GPU está implementada por dispositivo, pero aún no se ha confirmado
+   con un cambio en vivo en ningún equipo. Marcado como sin confirmar hasta validarlo.
+5. El contador de ciclos solo lo rellena el firmware de Lenovo; en ASUS, Steam Deck y MSI el nodo da
+   un 0 falso, así que se oculta en vez de mostrar un cero inventado.
+6. La Legion Go original (83E1) no expone `conservation_mode`, así que no ofrece límite de carga.
+7. En Legion el límite de carga es un interruptor de "modo conservación" con un porcentaje fijo por
+   firmware, no un valor ajustable.
+8. El Intel Core Ultra del Claw no tiene hyperthreading, así que no hay multihilo que activar o
    desactivar.
-5. Legion Go 2 tiene curva completa; Legion Go S solo modos gruesos (silencioso, equilibrado,
-   rendimiento); el Legion Go original queda limitado según el sistema.
-6. En Intel el color solo se aplica mientras el compositor está activo, así que se fuerza esa ruta y
-   se avisa del pequeño coste.
-7. El preset "Aspecto OLED" se oculta en los paneles que ya son OLED (Steam Deck OLED, Legion Go 2)
-   porque no tiene sentido allí.
-8. La Steam Deck no lleva iluminación RGB, así que esta tarjeta no aparece.
+9. En el MSI Claw el chip de ventilador (`msi_wmi_platform`) es de solo lectura en su kernel actual,
+   así que no hay curvas y el editor se oculta. El `coretemp` da temperaturas pero no expone RPM de
+   ventilador, por eso el monitor no muestra ventiladores en el Claw.
+10. La Legion Go 2 no expone un ventilador escribible por hwmon; el RPM tendría que leerse por el EC
+    y en la build actual no está apareciendo en el monitor. Por eso lo marco como no disponible / sin
+    confirmar hasta revisarlo en tu equipo.
+11. La Legion Go original necesita `acpi_call` (GZFD) para las curvas de ventilador; está presente en
+    Bazzite pero no en SteamOS, así que sin él no aparece ninguna curva (ni siquiera por defecto).
+    Donde funciona, aplicar la curva fuerza el TDP a modo custom. El monitor (velocidad + temperatura)
+    sí funciona.
+12. La Legion Go S solo permite modos gruesos de ventilador (silencioso, equilibrado, rendimiento),
+    no una curva libre, así que tampoco puede aplicar una curva aprendida.
+13. En Intel el color solo se aplica mientras el compositor está activo, así que se fuerza esa ruta y
+    se avisa del pequeño coste.
+14. El preset "Aspecto OLED" se oculta en los paneles que ya son OLED (Steam Deck OLED, Legion Go 2)
+    porque no tiene sentido allí.
+15. El remapeo coopera con el demonio del sistema (HHD en Bazzite, InputPlumber en SteamOS). Está en
+    fase temprana y en Legion algunos botones traseros aún no se detectan bien.
+16. La Steam Deck no lleva iluminación RGB, así que esta tarjeta no aparece.
+
+> Las celdas marcadas **❔** son las que aún no he confirmado en ese equipo concreto. Si tienes el
+> hardware delante y ves que algo va (o no va), dímelo y lo corrijo: la idea es que esta tabla
+> refleje la realidad, no lo que el código intenta hacer.
 
 ## Instalación
 
