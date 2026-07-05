@@ -91,25 +91,25 @@ supported in code but not confirmed on that device yet
 
 | Feature | Steam Deck LCD | Steam Deck OLED | ROG Ally | ROG Ally X | ROG Xbox Ally X | Legion Go | Legion Go S | Legion Go 2 | MSI Claw 8 AI+ |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| TDP limit | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ✅ |
-| Advanced modes (SPPT/FPPT) | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ❌ [¹](#notes) |
-| Auto-TDP by GPU load | ✅ [²](#notes) | ✅ [²](#notes) | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ❌ [³](#notes) |
+| TDP limit | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Advanced modes (SPPT/FPPT) | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹](#notes) |
+| Auto-TDP by GPU load | ✅ [²](#notes) | ✅ [²](#notes) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [³](#notes) |
 | GPU clock | ❔ [⁴](#notes) | ❔ [⁴](#notes) | ❔ [⁴](#notes) | ❔ [⁴](#notes) | ❔ [⁴](#notes) | ❔ [⁴](#notes) | ❔ [⁴](#notes) | ❔ [⁴](#notes) | ❔ [⁴](#notes) |
-| Battery: state and health | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ✅ |
-| Battery cycle count | ❌ [⁵](#notes) | ❌ [⁵](#notes) | ❌ [⁵](#notes) | ❌ [⁵](#notes) | ❌ [⁵](#notes) | ✅ | ❔ | ✅ | ❌ [⁵](#notes) |
+| Battery: state and health | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Battery cycle count | ❌ [⁵](#notes) | ❌ [⁵](#notes) | ❌ [⁵](#notes) | ❌ [⁵](#notes) | ❌ [⁵](#notes) | ✅ | ✅ | ✅ | ❌ [⁵](#notes) |
 | Charge limit | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [⁶](#notes) | ❔ | ⚠️ [⁷](#notes) | ✅ |
-| CPU: turbo boost | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ✅ |
-| CPU: multithreading (SMT) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ❌ [⁸](#notes) |
-| CPU: active cores | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ✅ |
-| Brightness and volume | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ✅ |
-| Download Mode | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ❔ |
+| CPU: turbo boost | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| CPU: multithreading (SMT) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [⁸](#notes) |
+| CPU: active cores | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Brightness and volume | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Download Mode | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Temperature monitor | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ [⁹](#notes) |
-| Fan RPM monitor | ❔ | ❔ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹⁰](#notes) | ❌ [⁹](#notes) |
+| Fan RPM monitor | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹⁰](#notes) | ❌ [⁹](#notes) |
 | Fan curves | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹¹](#notes) | ⚠️ [¹²](#notes) | ❔ [¹⁰](#notes) | ❌ [⁹](#notes) |
 | Learned per-game curves | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹¹](#notes) | ❌ [¹²](#notes) | ❔ [¹⁰](#notes) | ❌ [⁹](#notes) |
-| Color calibration | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ✅ [¹³](#notes) |
+| Color calibration | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ [¹³](#notes) |
 | "OLED look" preset | ✅ | ❌ [¹⁴](#notes) | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹⁴](#notes) | ✅ |
-| Controller remap (beta) | ❔ | ❔ | ⚠️ [¹⁵](#notes) | ⚠️ [¹⁵](#notes) | ⚠️ [¹⁵](#notes) | ⚠️ [¹⁵](#notes) | ❔ | ⚠️ [¹⁵](#notes) | ⚠️ [¹⁵](#notes) |
+| Controller remap (beta) | ❌ | ❌ | ⚠️ [¹⁵](#notes) | ⚠️ [¹⁵](#notes) | ❌ [¹⁵](#notes) | ⚠️ [¹⁵](#notes) | ❌ [¹⁵](#notes) | ⚠️ [¹⁵](#notes) | ⚠️ [¹⁵](#notes) |
 | RGB lighting (via Colores) | ❌ [¹⁶](#notes) | ❌ [¹⁶](#notes) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 Any other handheld falls under an **experimental generic** profile: the plugin probes the real
@@ -147,8 +147,9 @@ capabilities and shows what it can, honestly hiding the rest.
     small cost is disclosed.
 14. The "OLED look" preset is hidden on panels that are already OLED (Steam Deck OLED, Legion Go 2)
     since it makes no sense there.
-15. Remapping cooperates with the system daemon (HHD on Bazzite, InputPlumber on SteamOS). It's early,
-    and on Legion some back buttons aren't detected well yet.
+15. Remapping cooperates with the system daemon (HHD on Bazzite, InputPlumber on SteamOS) and is
+    early. It doesn't appear on the Steam Deck; on the Legion Go S and ROG Xbox Ally X the app says
+    there's no remapping for that controller yet. On Legion some back buttons aren't detected well yet.
 16. The Steam Deck has no RGB lighting, so this card doesn't appear.
 
 > Cells marked **❔** are the ones I haven't confirmed on that specific device. If you have the
