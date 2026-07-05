@@ -91,25 +91,25 @@ Leyenda: **✅** comprobado en ese equipo · **⚠️** limitado o solo por defe
 
 | Característica | Steam Deck LCD | Steam Deck OLED | ROG Ally | ROG Ally X | ROG Xbox Ally X | Legion Go | Legion Go S | Legion Go 2 | MSI Claw 8 AI+ |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| Límite de TDP | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ✅ |
-| Modos avanzados (SPPT/FPPT) | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ❌ [¹](#notas) |
-| Auto-TDP por carga de GPU | ✅ [²](#notas) | ✅ [²](#notas) | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ❌ [³](#notas) |
+| Límite de TDP | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Modos avanzados (SPPT/FPPT) | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹](#notas) |
+| Auto-TDP por carga de GPU | ✅ [²](#notas) | ✅ [²](#notas) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [³](#notas) |
 | Frecuencia de GPU | ❔ [⁴](#notas) | ❔ [⁴](#notas) | ❔ [⁴](#notas) | ❔ [⁴](#notas) | ❔ [⁴](#notas) | ❔ [⁴](#notas) | ❔ [⁴](#notas) | ❔ [⁴](#notas) | ❔ [⁴](#notas) |
-| Batería: estado y salud | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ✅ |
-| Ciclos de batería | ❌ [⁵](#notas) | ❌ [⁵](#notas) | ❌ [⁵](#notas) | ❌ [⁵](#notas) | ❌ [⁵](#notas) | ✅ | ❔ | ✅ | ❌ [⁵](#notas) |
+| Batería: estado y salud | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Ciclos de batería | ❌ [⁵](#notas) | ❌ [⁵](#notas) | ❌ [⁵](#notas) | ❌ [⁵](#notas) | ❌ [⁵](#notas) | ✅ | ✅ | ✅ | ❌ [⁵](#notas) |
 | Límite de carga | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [⁶](#notas) | ❔ | ⚠️ [⁷](#notas) | ✅ |
-| CPU: turbo boost | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ✅ |
-| CPU: multihilo (SMT) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ❌ [⁸](#notas) |
-| CPU: núcleos activos | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ✅ |
-| Brillo y volumen | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ✅ |
-| Modo Descarga | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ❔ |
+| CPU: turbo boost | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| CPU: multihilo (SMT) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [⁸](#notas) |
+| CPU: núcleos activos | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Brillo y volumen | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Modo Descarga | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Monitor de temperaturas | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ [⁹](#notas) |
-| Monitor de RPM de ventilador | ❔ | ❔ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹⁰](#notas) | ❌ [⁹](#notas) |
+| Monitor de RPM de ventilador | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹⁰](#notas) | ❌ [⁹](#notas) |
 | Curvas de ventilador | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹¹](#notas) | ⚠️ [¹²](#notas) | ❔ [¹⁰](#notas) | ❌ [⁹](#notas) |
 | Curvas aprendidas por juego | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹¹](#notas) | ❌ [¹²](#notas) | ❔ [¹⁰](#notas) | ❌ [⁹](#notas) |
-| Calibración de color | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❔ | ✅ | ✅ [¹³](#notas) |
+| Calibración de color | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ [¹³](#notas) |
 | Preset "Aspecto OLED" | ✅ | ❌ [¹⁴](#notas) | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹⁴](#notas) | ✅ |
-| Remapeo de mandos (beta) | ❔ | ❔ | ⚠️ [¹⁵](#notas) | ⚠️ [¹⁵](#notas) | ⚠️ [¹⁵](#notas) | ⚠️ [¹⁵](#notas) | ❔ | ⚠️ [¹⁵](#notas) | ⚠️ [¹⁵](#notas) |
+| Remapeo de mandos (beta) | ❌ | ❌ | ⚠️ [¹⁵](#notas) | ⚠️ [¹⁵](#notas) | ❌ [¹⁵](#notas) | ⚠️ [¹⁵](#notas) | ❌ [¹⁵](#notas) | ⚠️ [¹⁵](#notas) | ⚠️ [¹⁵](#notas) |
 | Iluminación RGB (vía Colores) | ❌ [¹⁶](#notas) | ❌ [¹⁶](#notas) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 Cualquier otro portátil cae en un perfil **genérico experimental**: el plugin sondea las capacidades
@@ -148,8 +148,9 @@ reales y muestra lo que consigue, ocultando honestamente el resto.
     se avisa del pequeño coste.
 14. El preset "Aspecto OLED" se oculta en los paneles que ya son OLED (Steam Deck OLED, Legion Go 2)
     porque no tiene sentido allí.
-15. El remapeo coopera con el demonio del sistema (HHD en Bazzite, InputPlumber en SteamOS). Está en
-    fase temprana y en Legion algunos botones traseros aún no se detectan bien.
+15. El remapeo coopera con el demonio del sistema (HHD en Bazzite, InputPlumber en SteamOS) y está en
+    fase temprana. En Steam Deck no aparece; en Legion Go S y ROG Xbox Ally X la app indica que
+    todavía no hay remapeo para ese mando. En Legion algunos botones traseros aún no se detectan bien.
 16. La Steam Deck no lleva iluminación RGB, así que esta tarjeta no aparece.
 
 > Las celdas marcadas **❔** son las que aún no he confirmado en ese equipo concreto. Si tienes el
