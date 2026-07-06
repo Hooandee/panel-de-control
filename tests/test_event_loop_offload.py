@@ -192,6 +192,64 @@ class _SlowBackend:
         return self._applied
 
 
+class _FakeFan:
+    """Fan backend that records the thread each hardware write runs on. On the Steam
+    Deck this write is a blocking systemctl, so it MUST run off the loop thread."""
+
+    def __init__(self):
+        self.supported = True
+        self.mode_based = False
+        self.write_threads = []
+
+    def read_state(self):
+        return {"supported": True, "source": "fake", "pwm_max": 255,
+                "mode_based": False, "mode": None}
+
+    def apply_curve_all(self, points):
+        self.write_threads.append(threading.get_ident())
+
+    def set_auto(self, _mode):
+        self.write_threads.append(threading.get_ident())
+
+    def apply_preset(self, preset):
+        self.write_threads.append(threading.get_ident())
+
+    def restore_auto(self):
+        self.write_threads.append(threading.get_ident())
+
+
+def test_apply_rpcs_keep_subprocess_backends_off_the_loop_thread(tmp_path, monkeypatch):
+    """Tripwire: every user apply path (color + fan RPCs, game change) must run the
+    subprocess-spawning backends OFF the event-loop thread. Catches a future change
+    that adds a blocking apply on the loop or drops the off-load — for any device."""
+    p, color = _make_plugin(tmp_path, monkeypatch)
+    fan = _FakeFan()
+    p._fan_ctrl = fan
+    ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    p._apply_executor = ex
+
+    async def drive():
+        loop_tid = threading.get_ident()
+        await p.set_saturation(150, "global", None)
+        await p.set_calibration(-20, 15)
+        await p.preview_calibration(-10, 10)
+        await p.reset_color()
+        await p.set_fan_preset("balanced", "global", None)
+        await p.set_fan_curve_points([[40, 30], [60, 50], [80, 90]], "global", None)
+        await p.set_fan_auto("global", None)
+        await p.create_game_profile("7")
+        await p.set_current_game("7")
+        await p._drain_offloaded()  # let fire-and-forget applies land
+        return loop_tid
+
+    loop_tid = asyncio.run(drive())
+    ex.shutdown()
+    assert color.applied_threads, "color apply never ran"
+    assert fan.write_threads, "fan apply never ran"
+    assert loop_tid not in color.applied_threads   # gamescopectl off the loop
+    assert loop_tid not in fan.write_threads        # (Deck) systemctl off the loop
+
+
 def test_set_current_game_state_reflects_the_offloaded_apply(tmp_path, monkeypatch):
     p, _ = _make_plugin(tmp_path, monkeypatch)
     p._tdp_backend = _SlowBackend()
