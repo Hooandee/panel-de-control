@@ -347,21 +347,41 @@ def _is_msi_vendor(root: str) -> bool:
     return "micro-star" in vendor or "msi" in vendor
 
 
+def select_firmware_curve_reader(device, root: str = "/"):
+    """Return a read-only firmware fan-curve reader, or None if this device has no
+    legible firmware curve. Keeps the vendor test beside the write-backend selection.
+
+    Only the MSI Claw applies today: its ``msi_wmi_platform`` driver is read-only
+    RPM (no writable pwm), but the firmware's active curve is legible over the EC.
+    """
+    if _is_msi_vendor(root):
+        from fans.ec_curve import EcFanCurveReader
+        return EcFanCurveReader(root=root)
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Factory
 # ---------------------------------------------------------------------------
 
-def select_fan_backend(device, root: str = "/", temp_fn=None):
+def select_fan_backend(device, root: str = "/", temp_fn=None, ec=None):
     """Return the best available fan-control backend for this device.
 
     Chip/attr based (not device-name based) so it's robust across the matrix:
     1. ``asus_custom_fan_curve`` (ROG Ally family) — hardware curve table.
-    2. ``msi_wmi_platform`` (MSI Claw) — hardware curve table.
+    2. ``msi_wmi_platform`` (MSI Claw) — hardware curve table (only when its
+       kernel exposes a WRITABLE pwm point; read-only kernels fall through).
     3. ``VPC2004`` ``fan_mode`` (Legion Go S) — coarse quiet/balanced/performance
        mode (no freeform curve possible on its firmware).
     4. ``steamdeck_hwmon`` (Steam Deck) — software loop (needs ``temp_fn``).
     5. Legion Go 2 raw-EC software loop.
     6. ``NullFanBackend`` when nothing supported is found (read-only safety).
+
+    MSI Claw EC 0x33 step control (``msi_ec.MsiEcFanBackend``) is intentionally
+    NOT wired: driving the fan to its top step resets the device (the EC drops
+    into a full-blast failsafe that ignores further writes), so the Claw stays
+    on firmware auto until a safe ceiling is proven. ``ec`` stays for that
+    backend's own tests.
     """
     for backend_cls in (AsusFanCurveBackend, MsiFanCurveBackend):
         backend = backend_cls(root=root)

@@ -104,8 +104,8 @@ supported in code but not confirmed on that device yet
 | Brightness and volume | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Download Mode | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Temperature monitor | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ [⁹](#notes) |
-| Fan RPM monitor | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹⁰](#notes) | ❌ [⁹](#notes) |
-| Fan curves | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹¹](#notes) | ⚠️ [¹²](#notes) | ❔ [¹⁰](#notes) | ❌ [⁹](#notes) |
+| Fan RPM monitor | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹⁰](#notes) | ✅ [⁹](#notes) |
+| Fan curves | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹¹](#notes) | ⚠️ [¹²](#notes) | ❔ [¹⁰](#notes) | ⚠️ [⁹](#notes) |
 | Learned per-game curves | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹¹](#notes) | ❌ [¹²](#notes) | ❔ [¹⁰](#notes) | ❌ [⁹](#notes) |
 | Color calibration | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ [¹³](#notes) |
 | "OLED look" preset | ✅ | ❌ [¹⁴](#notes) | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹⁴](#notes) | ✅ |
@@ -132,9 +132,10 @@ capabilities and shows what it can, honestly hiding the rest.
    an adjustable value.
 8. The Claw's Intel Core Ultra has no hyperthreading, so there's no multithreading to enable or
    disable.
-9. On the MSI Claw the fan chip (`msi_wmi_platform`) is read-only on its current kernel, so there are
-   no curves and the editor is hidden. `coretemp` provides temperatures but exposes no fan RPM, which
-   is why the monitor shows no fans on the Claw.
+9. On the MSI Claw the fan chip (`msi_wmi_platform`) exposes fan RPM (the monitor does show both fans;
+   at low temperatures they sit at 0 in silent mode), but its kernel can't write the curve. The curve
+   the firmware applies is read over the EC and shown read-only; editing is in progress (fan-speed
+   control will be enabled safely).
 10. The Legion Go 2 exposes no writable hwmon fan; RPM would have to be read over the EC, and on the
     current build it isn't showing up in the monitor. Marked as not available / unconfirmed until
     reviewed on your device.
