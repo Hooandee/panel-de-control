@@ -83,8 +83,8 @@ Idioma (con banderas, no un desplegable), el interruptor de "aprender de mi uso"
 
 Panel de Control conoce nueve modelos y, para cualquier otro, intenta funcionar sondeando las
 capacidades reales del hardware. Esta tabla es honesta sobre qué está **comprobado en cada equipo**
-y qué todavía no: preferimos un "sin confirmar" a un "sí" falso. Las diferencias vienen de lo que
-cada fabricante deja tocar por firmware y del kernel de cada distro.
+y qué todavía no: prefiero enseñarte un "sin confirmar" antes que un "sí" falso. Las diferencias
+vienen de lo que cada fabricante deja tocar por firmware y del kernel de cada distro.
 
 Leyenda: **✅** comprobado en ese equipo · **⚠️** limitado o solo por defecto · **❌** no disponible
 · **❔** el código lo soporta pero aún no está confirmado en ese equipo
@@ -138,7 +138,7 @@ reales y muestra lo que consigue, ocultando honestamente el resto.
    lectura; la edición está en desarrollo (el control de velocidad se ajustará de forma segura).
 10. La Legion Go 2 no expone un ventilador escribible por hwmon; el RPM tendría que leerse por el EC
     y en la build actual no está apareciendo en el monitor. Por eso lo marco como no disponible / sin
-    confirmar hasta revisarlo en tu equipo.
+    confirmar hasta que pueda revisarlo.
 11. La Legion Go original necesita `acpi_call` (GZFD) para las curvas de ventilador; está presente en
     Bazzite pero no en SteamOS, así que sin él no aparece ninguna curva (ni siquiera por defecto).
     Donde funciona, aplicar la curva fuerza el TDP a modo custom. El monitor (velocidad + temperatura)
@@ -178,20 +178,6 @@ firma esté disponible, puedes confirmar que el zip salió de verdad del pipelin
 gh attestation verify "Panel de Control.zip" --repo Hooandee/panel-de-control
 ```
 
-## Compilar desde el código
-
-Herramientas: **pnpm 10**, **Node 20**, **Python 3.11**.
-
-```sh
-pnpm install --frozen-lockfile
-pnpm build          # genera dist/index.js
-```
-
-Copia la carpeta resultante a `~/homebrew/plugins/` en tu equipo y reinicia Decky. El backend en
-Python necesita root (lo declara el plugin) para escribir en sysfs; la detección del modelo, en
-cambio, no lo necesita. Mira [CONTRIBUTING.md](CONTRIBUTING.md) para el conjunto de pruebas completo
-y la configuración de desarrollo.
-
 ## Cómo aprende (y por qué es local)
 
 La gracia de Panel de Control no es solo tener botones bonitos, es que aprende de cómo usas cada
@@ -205,16 +191,16 @@ número en pantalla es un número real.
 
 ## Agradecimientos
 
-Este plugin se apoya en el trabajo de mucha gente de la comunidad de handhelds. Referenciamos
-interfaces del kernel (que son hechos, no código) libremente, y cuando adaptamos ideas o código lo
-citamos aquí. La lista completa con licencias está en [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Este plugin se apoya en el trabajo de mucha gente de la comunidad de handhelds. Referencio las
+interfaces del kernel (que son hechos, no código) con libertad, y cuando adapto una idea o algo de
+código lo cito aquí. La lista completa con licencias está en [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 - **[SimpleDeckyTDP](https://github.com/aarron-lee/SimpleDeckyTDP)** (BSD-3, Aarron Lee). La
   referencia principal del mecanismo de TDP por dispositivo: las rutas de firmware-attributes de
   Lenovo y ASUS, el paso previo de `platform_profile=custom`, y el uso de ryzenadj.
 - **[Handheld Daemon (HHD)](https://github.com/hhd-dev/hhd)** (LGPL-2.1). Referencia para la
   estrategia por dispositivo, la reaplicación al despertar y al cambiar de corriente, y la
-  cooperación con el demonio de mandos. Solo consultamos el enfoque, no copiamos su código.
+  cooperación con el demonio de mandos. Solo miré el enfoque, no copié su código.
 - **[RyzenAdj](https://github.com/FlyGoat/RyzenAdj)** (LGPL-3.0). Lo invocamos como proceso externo
   para el camino genérico de AMD cuando no hay una ruta de firmware mejor; no se empaqueta dentro del
   plugin.
@@ -225,7 +211,7 @@ citamos aquí. La lista completa con licencias está en [THIRD_PARTY_NOTICES.md]
 - **[Decky Loader](https://decky.xyz/)** y su plantilla de plugins. La base sobre la que corre todo
   esto.
 - **La documentación del kernel de Linux** (firmware-attributes, powercap, asus-wmi, hwmon,
-  power_supply). De donde salen las rutas de sysfs que leemos y escribimos.
+  power_supply). De donde salen las rutas de sysfs que leo y escribo.
 
 ## Contribuir
 

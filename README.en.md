@@ -83,8 +83,8 @@ can be turned off), and a button to erase what has been learned.
 
 Panel de Control knows nine models and, for anything else, tries to work by probing the real
 capabilities of the hardware. This table is honest about what's **verified on each device** and what
-isn't yet: we'd rather show "unconfirmed" than a false "yes". Differences come from what each vendor
-lets you touch in firmware and from each distro's kernel.
+isn't yet: I'd rather show you "unconfirmed" than a false "yes". Differences come from what each
+vendor lets you touch in firmware and from each distro's kernel.
 
 Legend: **✅** verified on that device · **⚠️** limited or default only · **❌** not available · **❔**
 supported in code but not confirmed on that device yet
@@ -137,8 +137,8 @@ capabilities and shows what it can, honestly hiding the rest.
    the firmware applies is read over the EC and shown read-only; editing is in progress (fan-speed
    control will be enabled safely).
 10. The Legion Go 2 exposes no writable hwmon fan; RPM would have to be read over the EC, and on the
-    current build it isn't showing up in the monitor. Marked as not available / unconfirmed until
-    reviewed on your device.
+    current build it isn't showing up in the monitor. Marked as not available / unconfirmed until I
+    can review it.
 11. The original Legion Go needs `acpi_call` (GZFD) for fan curves; it's present on Bazzite but not on
     SteamOS, so without it no curve shows up at all (not even a default one). Where it works, applying
     the curve forces TDP into custom mode. The monitor (speed + temperature) does work.
@@ -177,19 +177,6 @@ is available, you can confirm the zip really came from this repository's pipelin
 gh attestation verify "Panel de Control.zip" --repo Hooandee/panel-de-control
 ```
 
-## Building from source
-
-Toolchain: **pnpm 10**, **Node 20**, **Python 3.11**.
-
-```sh
-pnpm install --frozen-lockfile
-pnpm build          # produces dist/index.js
-```
-
-Copy the resulting folder to `~/homebrew/plugins/` on your device and restart Decky. The Python
-backend needs root (the plugin declares it) to write to sysfs; model detection, on the other hand,
-doesn't. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full test gate and development setup.
-
 ## How it learns (and why it stays local)
 
 The point of Panel de Control isn't just having nice buttons, it's that it learns from how you play
@@ -203,16 +190,16 @@ number on screen is a real number.
 
 ## Acknowledgments
 
-This plugin stands on the work of many people in the handheld community. We reference kernel
-interfaces (which are facts, not code) freely, and when we adapt ideas or code we credit it here. The
-full list with licenses is in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+This plugin stands on the work of many people in the handheld community. I reference kernel
+interfaces (which are facts, not code) freely, and when I adapt an idea or a bit of code I credit it
+here. The full list with licenses is in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 - **[SimpleDeckyTDP](https://github.com/aarron-lee/SimpleDeckyTDP)** (BSD-3, Aarron Lee). The primary
   reference for the per-device TDP mechanism: the Lenovo and ASUS firmware-attributes paths, the
   `platform_profile=custom` prestep, and ryzenadj usage.
 - **[Handheld Daemon (HHD)](https://github.com/hhd-dev/hhd)** (LGPL-2.1). Reference for the
   per-device strategy, re-applying on resume and on AC/DC changes, and cooperating with the
-  controller daemon. We only reference the approach, we don't copy its code.
+  controller daemon. I only looked at the approach, I didn't copy its code.
 - **[RyzenAdj](https://github.com/FlyGoat/RyzenAdj)** (LGPL-3.0). Invoked as an external process for
   the generic AMD path when there's no better firmware route; not bundled inside the plugin.
 - **[PowerControl](https://github.com/mengmeet/PowerControl)**. Origin of the Lenovo
@@ -221,7 +208,7 @@ full list with licenses is in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
   Reference for the fan monitor and curve control and for periodic re-apply.
 - **[Decky Loader](https://decky.xyz/)** and its plugin template. The base everything runs on.
 - **The Linux kernel documentation** (firmware-attributes, powercap, asus-wmi, hwmon, power_supply).
-  The source of the sysfs paths we read and write.
+  The source of the sysfs paths I read and write.
 
 ## Contributing
 
