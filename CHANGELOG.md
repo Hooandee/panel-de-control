@@ -3,9 +3,10 @@
 ## [0.5.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.4.2...panel-de-control-v0.5.0) (2026-07-06)
 
 
-### Features
+### Features / Novedades
 
-* show MSI Claw firmware fan curve (read-only) ([#42](https://github.com/Hooandee/panel-de-control/issues/42)) ([414fca1](https://github.com/Hooandee/panel-de-control/commit/414fca15c6f7e9cd5f305e7a38aa3d29d4d6f246))
+* MSI Claw: the Ventiladores tab now shows the fan curve your Claw's firmware applies, read-only, with the live temperature marker — so you can see how it behaves even though its driver doesn't let apps edit the curve yet. The fan RPM monitor also shows both fans correctly. Editable, safe fan-speed control for the Claw is in progress. ([#42](https://github.com/Hooandee/panel-de-control/issues/42)) ([414fca1](https://github.com/Hooandee/panel-de-control/commit/414fca15c6f7e9cd5f305e7a38aa3d29d4d6f246))
+* **ES:** MSI Claw: la pestaña Ventiladores ahora muestra la curva de ventilación que aplica el firmware de tu Claw, en solo lectura, con la marca de temperatura en vivo — así ves cómo se comporta aunque su driver todavía no deje a las apps editar la curva. El monitor de RPM también muestra bien los dos ventiladores. El control editable y seguro de la velocidad del ventilador para el Claw está en desarrollo. ([#42](https://github.com/Hooandee/panel-de-control/issues/42)) ([414fca1](https://github.com/Hooandee/panel-de-control/commit/414fca15c6f7e9cd5f305e7a38aa3d29d4d6f246))
 
 ## [0.4.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.4.1...panel-de-control-v0.4.2) (2026-07-06)
 
