@@ -15,6 +15,12 @@ export interface ListPref {
 export interface Layout {
   tabs: ListPref;
   blocks: Record<string, ListPref>;
+  /**
+   * Hidden sub-item ids per block (keyed by block id). Sub-items are a fixed
+   * part of their block — they can only be hidden, not reordered — so this is a
+   * plain hidden-id list, not a full ListPref.
+   */
+  subitems: Record<string, string[]>;
 }
 
 /**
@@ -69,6 +75,15 @@ export function toggle(set: string[], id: string): string[] {
   return set.includes(id) ? set.filter((x) => x !== id) : [...set, id];
 }
 
+/** Whether a fixed sub-item within a block is hidden by the user's prefs. */
+export function subitemHidden(
+  subitems: Record<string, string[]>,
+  group: string,
+  id: string,
+): boolean {
+  return (subitems[group] ?? []).includes(id);
+}
+
 const strArray = (v: unknown): string[] =>
   Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
 
@@ -86,12 +101,19 @@ const asPref = (v: unknown): ListPref => {
  */
 export function coerceLayout(parsed: unknown): Layout {
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    return { tabs: { order: [], hidden: [] }, blocks: {} };
+    return { tabs: { order: [], hidden: [] }, blocks: {}, subitems: {} };
   }
-  const p = parsed as { tabs?: unknown; blocks?: unknown };
-  const blocks: Record<string, ListPref> = {};
-  if (p.blocks && typeof p.blocks === "object" && !Array.isArray(p.blocks)) {
-    for (const [k, v] of Object.entries(p.blocks)) blocks[k] = asPref(v);
-  }
-  return { tabs: asPref(p.tabs), blocks };
+  const p = parsed as { tabs?: unknown; blocks?: unknown; subitems?: unknown };
+  const asRecordOf = <T>(v: unknown, mapVal: (x: unknown) => T): Record<string, T> => {
+    const out: Record<string, T> = {};
+    if (v && typeof v === "object" && !Array.isArray(v)) {
+      for (const [k, val] of Object.entries(v)) out[k] = mapVal(val);
+    }
+    return out;
+  };
+  return {
+    tabs: asPref(p.tabs),
+    blocks: asRecordOf(p.blocks, asPref),
+    subitems: asRecordOf(p.subitems, strArray),
+  };
 }

@@ -6,7 +6,7 @@ import { useSyncExternalStore } from "react";
 import { Layout, coerceLayout } from "./layout";
 
 const KEY = "pdc:layout";
-const EMPTY: Layout = { tabs: { order: [], hidden: [] }, blocks: {} };
+const EMPTY: Layout = { tabs: { order: [], hidden: [] }, blocks: {}, subitems: {} };
 
 // Layout is treated as IMMUTABLE: saveLayout/resetLayout always assign a fresh
 // object (never mutate in place), so useSyncExternalStore sees a new reference

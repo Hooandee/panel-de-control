@@ -2,7 +2,7 @@ import { ReactNode } from "react";
 import {
   LuGauge, LuSlidersHorizontal, LuFan, LuSettings,
   LuLeaf, LuBatteryFull, LuCpu, LuSun, LuVolume2, LuWind, LuThermometer, LuChartSpline,
-  LuLightbulb, LuPalette, LuGamepad2, LuMemoryStick, LuActivity,
+  LuLightbulb, LuPalette, LuGamepad2, LuMemoryStick, LuActivity, LuHeartPulse,
 } from "react-icons/lu";
 
 /** Presentation metadata shared by a tab and a configurable block. */
@@ -59,6 +59,17 @@ export const SECTION_BLOCKS: Record<string, BlockDef[]> = {
     { id: "fanRpm", labelKey: "customize.block.fanRpm", icon: <LuWind size={ICON} /> },
     { id: "temps", labelKey: "customize.block.temps", icon: <LuThermometer size={ICON} /> },
     { id: "curve", labelKey: "fans.curve.title", icon: <LuChartSpline size={ICON} /> },
+  ],
+};
+
+/**
+ * Fixed sub-items WITHIN a block that the user can HIDE (only hide — they're a
+ * fixed part of their block, not reorderable). Keyed by block id. Section render
+ * code drops them with subitemHidden(layout.subitems, <block>, <sub-item id>).
+ */
+export const SUBITEMS: Record<string, ItemMeta[]> = {
+  battery: [
+    { id: "health", labelKey: "system.battery.healthGroup", icon: <LuHeartPulse size={ICON} /> },
   ],
 };
 

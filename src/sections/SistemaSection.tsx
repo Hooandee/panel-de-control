@@ -16,6 +16,8 @@ import { useCpu } from "../system/useCpu";
 import { useEco } from "../system/useEco";
 import { useColores } from "../system/useColores";
 import { SectionBlocks } from "../customize/SectionBlocks";
+import { useLayout } from "../customize/store";
+import { subitemHidden } from "../customize/layout";
 
 /** System controls: battery + CPU (collapsible, rich) then brightness + volume (simple bars). */
 export const SistemaSection: FC = () => {
@@ -26,6 +28,8 @@ export const SistemaSection: FC = () => {
   const cpu = useCpu();
   const eco = useEco();
   const colores = useColores();
+  const layout = useLayout();
+  const hideHealth = subitemHidden(layout.subitems, "battery", "health");
 
   const b = battery.state?.battery;
   const batterySummary = b?.present
@@ -50,7 +54,7 @@ export const SistemaSection: FC = () => {
     ),
     battery: battery.state && (
       <Collapsible id="battery" icon={<LuBatteryFull size={16} />} title={t("system.battery.title")} summary={batterySummary}>
-        <BatteryCard state={battery.state} onSetLimit={battery.setLimit} />
+        <BatteryCard state={battery.state} onSetLimit={battery.setLimit} hideHealth={hideHealth} />
       </Collapsible>
     ),
     cpu: cpu.state && (
