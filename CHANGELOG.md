@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.4.1...panel-de-control-v0.4.2) (2026-07-06)
+
+
+### Performance Improvements
+
+* run subprocess-backed applies off the event loop ([#40](https://github.com/Hooandee/panel-de-control/issues/40)) ([c404201](https://github.com/Hooandee/panel-de-control/commit/c4042011f88502ef2afaabbc094a07a312a1f51a))
+
 ## [0.4.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.4.0...panel-de-control-v0.4.1) (2026-07-05)
 
 
