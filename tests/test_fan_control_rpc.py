@@ -357,3 +357,52 @@ class TestFanCurveRpcLenovoMode:
         st = asyncio.run(Plugin().set_fan_curve_points(pts, "global", None))
         assert st["preset"] == "custom"
         assert self._mode(go_s_root) == 1
+
+
+# ---------------------------------------------------------------------------
+# Tests: read-only firmware curve (MSI Claw EC) — write backend unsupported but
+# the firmware curve is legible and shown informationally.
+# ---------------------------------------------------------------------------
+
+class TestFirmwareCurveReadOnly:
+    def _fixture(self, tmp_path, monkeypatch, ec_reader):
+        from fans.control import NullFanBackend
+        Plugin = _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=NullFanBackend())
+        original_init = Plugin._init
+
+        def patched_init(self):
+            original_init(self)
+            self._fan_ctrl = NullFanBackend()
+            self._ec_curve = ec_reader
+
+        monkeypatch.setattr(Plugin, "_init", patched_init)
+        return Plugin
+
+    def test_read_only_curve_surfaced_when_write_unsupported(self, tmp_path, monkeypatch):
+        from fans.ec_curve import EcFanCurveReader
+
+        buf = bytearray(256)
+        buf[0x6A:0x70] = bytes([50, 60, 70, 80, 88, 88])
+        buf[0x73:0x79] = bytes([40, 49, 58, 67, 75, 75])
+        reader = EcFanCurveReader(read_bytes=lambda: bytes(buf))
+        Plugin = self._fixture(tmp_path, monkeypatch, reader)
+
+        st = asyncio.run(Plugin().get_fan_curve_state())
+        assert st["supported"] is False
+        assert st["firmware_points"] == [
+            {"temp": 50, "pct": 40}, {"temp": 60, "pct": 49}, {"temp": 70, "pct": 58},
+            {"temp": 80, "pct": 67}, {"temp": 88, "pct": 75}, {"temp": 88, "pct": 75},
+        ]
+
+    def test_no_curve_when_ec_unreadable(self, tmp_path, monkeypatch):
+        from fans.ec_curve import EcFanCurveReader
+
+        reader = EcFanCurveReader(read_bytes=lambda: None)
+        Plugin = self._fixture(tmp_path, monkeypatch, reader)
+        st = asyncio.run(Plugin().get_fan_curve_state())
+        assert st["firmware_points"] is None
+
+    def test_no_reader_leaves_state_unchanged(self, tmp_path, monkeypatch):
+        Plugin = self._fixture(tmp_path, monkeypatch, None)
+        st = asyncio.run(Plugin().get_fan_curve_state())
+        assert st["firmware_points"] is None

@@ -1,5 +1,5 @@
 import { FC, PointerEvent as ReactPointerEvent, memo, useRef, useState } from "react";
-import { Point, GEOM, pointsToPath, curveToPx, pxToCurve, clampMonotonic, pwmToPercent } from "../fans/curve";
+import { Point, GEOM, pointsToPath, curveToPx, pxToCurve, clampMonotonic, curveValueAt, pwmToPercent } from "../fans/curve";
 import { theme } from "../theme";
 
 interface Props {
@@ -60,10 +60,13 @@ const FanCurveGraphImpl: FC<Props> = ({ points, liveTemp, editable, onChange, st
     setActivePoint(null);
   };
 
-  const liveMarkerX =
-    liveTemp !== null
-      ? tempToX(Math.max(geom.tempMin, Math.min(geom.tempMax, liveTemp)))
-      : null;
+  const liveClampedTemp =
+    liveTemp !== null ? Math.max(geom.tempMin, Math.min(geom.tempMax, liveTemp)) : null;
+  const liveMarkerX = liveClampedTemp !== null ? tempToX(liveClampedTemp) : null;
+  // Dot sits ON the curve at the live temperature (interpolated pwm) — the same
+  // "you are here" meaning in the editor and the read-only firmware view.
+  const liveMarkerY =
+    liveClampedTemp !== null ? curveToPx([0, curveValueAt(points, liveClampedTemp)], geom).y : null;
 
   const muted = theme.color.textMuted;
   const dragged = activePoint !== null ? points[activePoint] : null;
@@ -108,10 +111,11 @@ const FanCurveGraphImpl: FC<Props> = ({ points, liveTemp, editable, onChange, st
         {/* the fan curve */}
         <path d={pointsToPath(points, geom)} fill="none" stroke={curveColor} strokeWidth={2} strokeLinejoin="round" strokeDasharray={dashed ? "5 4" : undefined} />
 
-        {/* live "you are here" temperature marker */}
-        {liveMarkerX !== null && (
+        {/* live "you are here" marker: dashed temp line + a dot ON the curve */}
+        {liveMarkerX !== null && liveMarkerY !== null && (
           <>
             <line x1={liveMarkerX} y1={0} x2={liveMarkerX} y2={geom.height} stroke={theme.color.warn} strokeDasharray="3 3" strokeWidth={1} />
+            <circle cx={liveMarkerX} cy={liveMarkerY} r={3.5} fill={theme.color.warn} />
             <text x={liveMarkerX} y={-2} textAnchor="middle" fontSize={9} fill={theme.color.warn}>
               {Math.round(liveTemp as number)}°
             </text>

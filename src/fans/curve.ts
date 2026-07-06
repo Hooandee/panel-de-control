@@ -34,6 +34,24 @@ export function pointsToPath(points: Point[], geom: Geom): string {
     .join(" ");
 }
 
+/** Linear-interpolated pwm of a curve at `temp`; clamps at the curve's ends.
+ *  Assumes points are temp-ascending (the curve invariant everywhere else here).
+ *  Used to place the live "you are here" marker ON the curve (both editable and
+ *  read-only views), so the marker means the same thing everywhere. */
+export function curveValueAt(points: Point[], temp: number): number {
+  if (!points.length) return 0;
+  if (temp <= points[0][0]) return points[0][1];
+  for (let i = 0; i < points.length - 1; i++) {
+    const [t0, p0] = points[i];
+    const [t1, p1] = points[i + 1];
+    if (temp <= t1) {
+      if (t1 === t0) return p1;
+      return p0 + ((temp - t0) / (t1 - t0)) * (p1 - p0);
+    }
+  }
+  return points[points.length - 1][1];
+}
+
 /** UI-side mirror of the backend sanitize: non-decreasing temps + pwm, clamped ranges.
  *  Keeps the preview consistent with what the backend will write (the backend still adds
  *  the hot-point safety floor; the next state refresh re-syncs the UI). */

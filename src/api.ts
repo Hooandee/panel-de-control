@@ -145,6 +145,10 @@ export interface FanCurveState {
   // hides the graph/adaptive/custom modes. `mode` is the live firmware mode (0/1/2).
   mode_based: boolean;
   mode: number | null;
+  // Read-only firmware curve (MSI Claw): the device can't be controlled but its
+  // firmware fan curve is legible over the EC and shown informationally. Non-null
+  // only when unsupported; null everywhere else.
+  firmware_points: { temp: number; pct: number }[] | null;
   preset: FanPreset;
   points: [number, number][] | null;
   // Silence↔cool bias for the adaptive mode (-100..100, 0 otherwise).

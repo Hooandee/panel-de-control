@@ -104,8 +104,8 @@ Leyenda: **✅** comprobado en ese equipo · **⚠️** limitado o solo por defe
 | Brillo y volumen | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Modo Descarga | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Monitor de temperaturas | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ [⁹](#notas) |
-| Monitor de RPM de ventilador | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹⁰](#notas) | ❌ [⁹](#notas) |
-| Curvas de ventilador | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹¹](#notas) | ⚠️ [¹²](#notas) | ❔ [¹⁰](#notas) | ❌ [⁹](#notas) |
+| Monitor de RPM de ventilador | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹⁰](#notas) | ✅ [⁹](#notas) |
+| Curvas de ventilador | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹¹](#notas) | ⚠️ [¹²](#notas) | ❔ [¹⁰](#notas) | ⚠️ [⁹](#notas) |
 | Curvas aprendidas por juego | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹¹](#notas) | ❌ [¹²](#notas) | ❔ [¹⁰](#notas) | ❌ [⁹](#notas) |
 | Calibración de color | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ [¹³](#notas) |
 | Preset "Aspecto OLED" | ✅ | ❌ [¹⁴](#notas) | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹⁴](#notas) | ✅ |
@@ -132,9 +132,10 @@ reales y muestra lo que consigue, ocultando honestamente el resto.
    firmware, no un valor ajustable.
 8. El Intel Core Ultra del Claw no tiene hyperthreading, así que no hay multihilo que activar o
    desactivar.
-9. En el MSI Claw el chip de ventilador (`msi_wmi_platform`) es de solo lectura en su kernel actual,
-   así que no hay curvas y el editor se oculta. El `coretemp` da temperaturas pero no expone RPM de
-   ventilador, por eso el monitor no muestra ventiladores en el Claw.
+9. En el MSI Claw el chip de ventilador (`msi_wmi_platform`) expone las RPM (el monitor sí muestra los
+   dos ventiladores; a temperatura baja giran a 0 en modo silencioso), pero su kernel no permite
+   escribir la curva. La curva que aplica el firmware se lee por el EC y se muestra en modo solo
+   lectura; la edición está en desarrollo (el control de velocidad se ajustará de forma segura).
 10. La Legion Go 2 no expone un ventilador escribible por hwmon; el RPM tendría que leerse por el EC
     y en la build actual no está apareciendo en el monitor. Por eso lo marco como no disponible / sin
     confirmar hasta revisarlo en tu equipo.

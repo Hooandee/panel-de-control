@@ -141,6 +141,10 @@ class Plugin:
         # temp_fn feeds the software-loop backends (Steam Deck / Legion Go 2) the
         # live driving temp; hardware-curve backends (ASUS/MSI) ignore it.
         self._fan_ctrl = fan_control.select_fan_backend(self._device, temp_fn=self._driving_temp)
+        # MSI Claw only: the firmware fan curve is read-only-legible in the EC even
+        # though the write backend is unsupported. Surface it as an informational
+        # curve. Other devices get None (no EC dependency).
+        self._ec_curve = fan_control.select_firmware_curve_reader(self._device)
         self._fan_curves = FanCurveStore(
             os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "fan_curves.json")
         )
@@ -529,8 +533,17 @@ class Plugin:
         # When idle (no game) the effective profile IS the global one — skip the
         # second store read.
         global_curve = effective if self._current_appid is None else self._fan_curves.effective(None)
+        # A device that can't be controlled but exposes its firmware curve (MSI Claw)
+        # shows it read-only, as [{temp, pct}]. Never activates when a write backend
+        # is present; None everywhere else (the reader is cached, static config).
+        firmware_points = None
+        if not hw_state.get("supported") and self._ec_curve is not None:
+            curve = self._ec_curve.read_curve()
+            if curve:
+                firmware_points = [{"temp": t, "pct": p} for t, p in curve]
         return {
             "supported": hw_state.get("supported", False),
+            "firmware_points": firmware_points,
             "source": hw_state.get("source"),
             "pwm_max": hw_state.get("pwm_max", 255),
             # Coarse mode-based device (Legion Go S): the UI shows quiet/balanced/
@@ -549,8 +562,16 @@ class Plugin:
                         for pid, pts in fan_presets.RESOLVED.items()],
         }
 
+    async def _prime_firmware_curve(self) -> None:
+        """Read the EC firmware curve off the event loop (modprobe + EC handshake can
+        block). Cached in the reader, so this is a one-time cost; _fan_curve_state
+        then reads the cached value without blocking. No-op when there's no reader."""
+        if self._ec_curve is not None and not self._fan_ctrl.supported:
+            await asyncio.to_thread(self._ec_curve.read_curve)
+
     async def get_fan_curve_state(self) -> dict:
         self._init()
+        await self._prime_firmware_curve()
         return self._fan_curve_state()
 
     async def set_fan_preset(self, preset: str, scope: str, appid=None) -> dict:

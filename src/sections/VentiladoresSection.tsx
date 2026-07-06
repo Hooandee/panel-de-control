@@ -1,4 +1,4 @@
-import { FC, ReactNode } from "react";
+import { FC, ReactNode, useMemo } from "react";
 import { PanelSectionRow, Focusable } from "@decky/ui";
 import { LuMaximize2 } from "react-icons/lu";
 
@@ -10,7 +10,9 @@ import { FanChip } from "../components/FanChip";
 import { TempStat } from "../components/TempStat";
 import { Sparkline } from "../components/Sparkline";
 import { FanCurveEditor } from "../components/FanCurveEditor";
+import { FanCurveGraph } from "../components/FanCurveGraph";
 import { openFanCurveModal } from "../components/FanCurveModal";
+import { Point, percentToPwm } from "../fans/curve";
 import { Loading } from "../components/Loading";
 import { SectionBlocks } from "../customize/SectionBlocks";
 import { theme } from "../theme";
@@ -28,6 +30,14 @@ export const VentiladoresSection: FC = () => {
   const { state, fanHistory } = useFanState();
   const curve = useFanCurve();
   const { suggestion } = useFanSuggestion(curve.game?.appid ?? null);
+
+  // Read-only firmware curve (MSI Claw): map pct→pwm once per fetch so the memoized
+  // FanCurveGraph isn't rebuilt on every 1.5 s monitor poll (points are static).
+  // Hook stays BEFORE the early return (rules of hooks).
+  const firmwarePoints = useMemo<Point[] | null>(
+    () => curve.state?.firmware_points?.map((p) => [p.temp, percentToPwm(p.pct)]) ?? null,
+    [curve.state?.firmware_points],
+  );
 
   if (!state) return <Loading />;
 
@@ -133,9 +143,27 @@ export const VentiladoresSection: FC = () => {
             </div>
           </PanelSectionRow>
         )}
-        {/* Only when we CAN monitor fans but not control them (e.g. MSI Claw). The
-            no-fans-at-all case is already stated honestly by the fanRpm block. */}
-        {curveState && !curveState.supported && state.fans.length > 0 && (
+        {/* Can't control, but the firmware curve is legible (MSI Claw EC): show it
+            read-only with the live temperature marker on the curve. */}
+        {curveState && !curveState.supported && firmwarePoints && (
+          <PanelSectionRow>
+            <div style={{ ...card, display: "flex", flexDirection: "column", gap: theme.space.sm, overflow: "hidden" }}>
+              <span style={{ fontSize: theme.font.body, color: theme.color.textPrimary }}>
+                {t("fans.firmware.title")}
+              </span>
+              <FanCurveGraph points={firmwarePoints} liveTemp={liveTemp} editable={false} onChange={() => {}} />
+              <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
+                {t("fans.firmware.note")}
+              </span>
+              <span style={{ fontSize: theme.font.caption, color: theme.color.accent }}>
+                {t("fans.firmware.wip")}
+              </span>
+            </div>
+          </PanelSectionRow>
+        )}
+        {/* Only when we CAN monitor fans but not control them AND can't read the
+            firmware curve. The no-fans-at-all case is stated by the fanRpm block. */}
+        {curveState && !curveState.supported && !firmwarePoints && state.fans.length > 0 && (
           <PanelSectionRow>
             <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
               {t("fans.curve.unsupported")}
