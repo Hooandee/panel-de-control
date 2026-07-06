@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.4.2...panel-de-control-v0.5.0) (2026-07-06)
+
+
+### Features
+
+* show MSI Claw firmware fan curve (read-only) ([#42](https://github.com/Hooandee/panel-de-control/issues/42)) ([414fca1](https://github.com/Hooandee/panel-de-control/commit/414fca15c6f7e9cd5f305e7a38aa3d29d4d6f246))
+
 ## [0.4.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.4.1...panel-de-control-v0.4.2) (2026-07-06)
 
 
