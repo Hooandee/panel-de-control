@@ -11,6 +11,8 @@ import { ContainedSlider } from "./ContainedSlider";
 interface Props {
   state: BatteryState;
   onSetLimit: (enabled: boolean, percent: number) => void;
+  /** Optionally hide the whole health group: bar + cycles + capacity. */
+  hideHealth?: boolean;
 }
 
 /** Horizontal battery glyph that fills with the charge %, colored by state, with
@@ -57,7 +59,7 @@ const Chip: FC<{ icon: React.ReactNode; label: string; value: string; grow?: num
   </div>
 );
 
-export const BatteryCard: FC<Props> = ({ state, onSetLimit }) => {
+export const BatteryCard: FC<Props> = ({ state, onSetLimit, hideHealth = false }) => {
   const { t } = useI18n();
   const { battery: b, charge_limit: cl } = state;
 
@@ -104,7 +106,7 @@ export const BatteryCard: FC<Props> = ({ state, onSetLimit }) => {
         </div>
 
         {/* Health bar */}
-        {b.health_percent !== null && (
+        {!hideHealth && b.health_percent !== null && (
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: theme.font.caption, color: theme.color.textMuted }}>
               <span style={{ display: "inline-flex", alignItems: "center", gap: theme.space.xs }}>
@@ -118,8 +120,8 @@ export const BatteryCard: FC<Props> = ({ state, onSetLimit }) => {
           </div>
         )}
 
-        {/* Stat chips */}
-        {(b.cycle_count !== null || b.energy_full_mwh !== null) && (
+        {/* Stat chips (cycles + capacity) — part of the hideable health group. */}
+        {!hideHealth && (b.cycle_count !== null || b.energy_full_mwh !== null) && (
           <div style={{ display: "flex", gap: theme.space.sm }}>
             {b.cycle_count !== null && (
               <Chip icon={<LuRefreshCw size={11} />} label={t("system.battery.cycles")} value={String(b.cycle_count)} grow={1} />

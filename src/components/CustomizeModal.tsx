@@ -1,10 +1,10 @@
-import { FC, ReactNode } from "react";
+import { FC, Fragment, ReactNode } from "react";
 import { ModalRoot, showModal, Focusable, ButtonItem } from "@decky/ui";
 import { LuChevronUp, LuChevronDown, LuEye, LuEyeOff, LuLock } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
-import { TABS, SECTION_BLOCKS, blockOrder, PINNED_TAB, ItemMeta } from "../customize/manifest";
+import { TABS, SECTION_BLOCKS, SUBITEMS, blockOrder, PINNED_TAB, ItemMeta } from "../customize/manifest";
 import { ListPref, orderIds, move, toggle } from "../customize/layout";
 import { useLayout, saveLayout, resetLayout } from "../customize/store";
 
@@ -24,16 +24,18 @@ const iconBtn = (dim: boolean): React.CSSProperties => ({
   cursor: dim ? "default" : "pointer",
 });
 
-/** One reorderable row: icon + label + ↑ ↓ and a show/hide (or lock) toggle. */
+/** One row: icon + label + (optional ↑ ↓) and a show/hide (or lock) toggle.
+ *  Sub-items pass hideMove — they're fixed in place, only hideable. */
 const Row: FC<{
   meta: RowMeta;
-  index: number;
-  count: number;
+  index?: number;
+  count?: number;
   hidden: boolean;
   locked: boolean;
-  onMove: (dir: -1 | 1) => void;
+  hideMove?: boolean;
+  onMove?: (dir: -1 | 1) => void;
   onToggle: () => void;
-}> = ({ meta, index, count, hidden, locked, onMove, onToggle }) => {
+}> = ({ meta, index = 0, count = 1, hidden, locked, hideMove = false, onMove, onToggle }) => {
   const { t } = useI18n();
   const first = index === 0;
   const last = index === count - 1;
@@ -53,12 +55,16 @@ const Row: FC<{
       <span style={{ flex: 1, minWidth: 0, fontSize: theme.font.body, color: theme.color.textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
         {meta.label}
       </span>
-      <Focusable style={iconBtn(first)} aria-label={t("customize.moveUp")} onActivate={() => !first && onMove(-1)} onClick={() => !first && onMove(-1)}>
-        <LuChevronUp size={18} style={{ opacity: first ? 0.3 : 1 }} />
-      </Focusable>
-      <Focusable style={iconBtn(last)} aria-label={t("customize.moveDown")} onActivate={() => !last && onMove(1)} onClick={() => !last && onMove(1)}>
-        <LuChevronDown size={18} style={{ opacity: last ? 0.3 : 1 }} />
-      </Focusable>
+      {!hideMove && (
+        <>
+          <Focusable style={iconBtn(first)} aria-label={t("customize.moveUp")} onActivate={() => !first && onMove?.(-1)} onClick={() => !first && onMove?.(-1)}>
+            <LuChevronUp size={18} style={{ opacity: first ? 0.3 : 1 }} />
+          </Focusable>
+          <Focusable style={iconBtn(last)} aria-label={t("customize.moveDown")} onActivate={() => !last && onMove?.(1)} onClick={() => !last && onMove?.(1)}>
+            <LuChevronDown size={18} style={{ opacity: last ? 0.3 : 1 }} />
+          </Focusable>
+        </>
+      )}
       {locked ? (
         <span style={iconBtn(true)} title={t("customize.locked")}>
           <LuLock size={16} />
@@ -72,7 +78,9 @@ const Row: FC<{
   );
 };
 
-/** An editable list (tabs or one section's blocks) driven by a ListPref. */
+/** An editable list (tabs or one section's blocks) driven by a ListPref.
+ *  `renderAfter` injects extra content right below a given row — used to nest a
+ *  block's hideable sub-items directly under it. */
 const ListEditor: FC<{
   title: string;
   defaults: string[];
@@ -80,22 +88,49 @@ const ListEditor: FC<{
   pref: ListPref | undefined;
   pinned?: string[];
   onChange: (next: ListPref) => void;
-}> = ({ title, defaults, metaFor, pref, pinned = [], onChange }) => {
+  renderAfter?: (id: string) => ReactNode;
+}> = ({ title, defaults, metaFor, pref, pinned = [], onChange, renderAfter }) => {
   const order = orderIds(defaults, pref?.order);
   const hidden = pref?.hidden ?? [];
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: theme.space.xs }}>
       <div style={theme.sectionLabel}>{title}</div>
       {order.map((id, i) => (
+        <Fragment key={id}>
+          <Row
+            meta={metaFor(id)}
+            index={i}
+            count={order.length}
+            hidden={hidden.includes(id)}
+            locked={pinned.includes(id)}
+            onMove={(dir) => onChange({ order: move(order, id, dir), hidden })}
+            onToggle={() => onChange({ order, hidden: toggle(hidden, id) })}
+          />
+          {renderAfter?.(id)}
+        </Fragment>
+      ))}
+    </div>
+  );
+};
+
+/** Hide-only list for the fixed sub-items within one block (no reorder). Nested
+ *  under its block's row (indented), so it needs no heading of its own. */
+const SubitemEditor: FC<{
+  items: ItemMeta[];
+  hidden: string[];
+  onChange: (next: string[]) => void;
+}> = ({ items, hidden, onChange }) => {
+  const { t } = useI18n();
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: theme.space.xs, paddingLeft: theme.space.md }}>
+      {items.map((item) => (
         <Row
-          key={id}
-          meta={metaFor(id)}
-          index={i}
-          count={order.length}
-          hidden={hidden.includes(id)}
-          locked={pinned.includes(id)}
-          onMove={(dir) => onChange({ order: move(order, id, dir), hidden })}
-          onToggle={() => onChange({ order, hidden: toggle(hidden, id) })}
+          key={item.id}
+          meta={{ id: item.id, label: t(item.labelKey), icon: item.icon }}
+          hidden={hidden.includes(item.id)}
+          locked={false}
+          hideMove
+          onToggle={() => onChange(toggle(hidden, item.id))}
         />
       ))}
     </div>
@@ -138,6 +173,16 @@ const CustomizeBody: FC = () => {
             metaFor={metaFor(SECTION_BLOCKS[s.id])}
             pref={layout.blocks[s.id]}
             onChange={(next) => saveLayout({ ...layout, blocks: { ...layout.blocks, [s.id]: next } })}
+            // A block's hideable sub-items render nested right under its row.
+            renderAfter={(bid) =>
+              SUBITEMS[bid]?.length ? (
+                <SubitemEditor
+                  items={SUBITEMS[bid]}
+                  hidden={layout.subitems[bid] ?? []}
+                  onChange={(next) => saveLayout({ ...layout, subitems: { ...layout.subitems, [bid]: next } })}
+                />
+              ) : null
+            }
           />
         ))}
       </div>

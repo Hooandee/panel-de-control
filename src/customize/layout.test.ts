@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { orderIds, visibleIds, move, toggle, coerceLayout } from "./layout";
+import { orderIds, visibleIds, move, toggle, coerceLayout, subitemHidden } from "./layout";
 
 describe("coerceLayout", () => {
-  const EMPTY = { tabs: { order: [], hidden: [] }, blocks: {} };
+  const EMPTY = { tabs: { order: [], hidden: [] }, blocks: {}, subitems: {} };
 
   it("returns empty layout for non-object input", () => {
     expect(coerceLayout(null)).toEqual(EMPTY);
@@ -12,8 +12,17 @@ describe("coerceLayout", () => {
   });
 
   it("keeps a well-formed layout", () => {
-    const good = { tabs: { order: ["a"], hidden: ["b"] }, blocks: { sys: { order: ["x"], hidden: [] } } };
+    const good = {
+      tabs: { order: ["a"], hidden: ["b"] },
+      blocks: { sys: { order: ["x"], hidden: [] } },
+      subitems: { battery: ["health"] },
+    };
     expect(coerceLayout(good)).toEqual(good);
+  });
+
+  it("defaults subitems to {} when the stored layout predates it", () => {
+    const old = { tabs: { order: ["a"], hidden: [] }, blocks: {} };
+    expect(coerceLayout(old)).toEqual({ ...old, subitems: {} });
   });
 
   it("coerces wrong-typed fields to safe arrays (never throws downstream)", () => {
@@ -22,10 +31,28 @@ describe("coerceLayout", () => {
     expect(coerceLayout({ tabs: 5, blocks: [] })).toEqual(EMPTY);
     // non-string ids are dropped
     expect(coerceLayout({ tabs: { order: ["a", 1, null], hidden: [] } }))
-      .toEqual({ tabs: { order: ["a"], hidden: [] }, blocks: {} });
+      .toEqual({ tabs: { order: ["a"], hidden: [] }, blocks: {}, subitems: {} });
     // a block pref with a bad shape coerces, doesn't crash
     expect(coerceLayout({ blocks: { sys: { order: 9 } } }))
-      .toEqual({ tabs: { order: [], hidden: [] }, blocks: { sys: { order: [], hidden: [] } } });
+      .toEqual({ tabs: { order: [], hidden: [] }, blocks: { sys: { order: [], hidden: [] } }, subitems: {} });
+    // a corrupt subitems map coerces to {}
+    expect(coerceLayout({ subitems: 7 })).toEqual(EMPTY);
+    // a subitems entry with a wrong-typed value coerces to an empty id list
+    expect(coerceLayout({ subitems: { battery: 9 } }))
+      .toEqual({ ...EMPTY, subitems: { battery: [] } });
+    // non-string ids inside a subitems list are dropped
+    expect(coerceLayout({ subitems: { battery: ["health", 1, null] } }))
+      .toEqual({ ...EMPTY, subitems: { battery: ["health"] } });
+  });
+});
+
+describe("subitemHidden", () => {
+  it("is true only for an id listed as hidden in its group", () => {
+    const subitems = { battery: ["health"] };
+    expect(subitemHidden(subitems, "battery", "health")).toBe(true);
+    expect(subitemHidden(subitems, "battery", "cycles")).toBe(false);
+    expect(subitemHidden(subitems, "cpu", "health")).toBe(false);
+    expect(subitemHidden({}, "battery", "health")).toBe(false);
   });
 });
 

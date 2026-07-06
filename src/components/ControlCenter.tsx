@@ -9,6 +9,7 @@ import { LearningBanner } from "./LearningBanner";
 import { TabBar } from "./TabBar";
 import { SECTIONS } from "../sections/registry";
 import { resolveActiveSection } from "../sections/nav";
+import { useShoulderNav } from "../sections/useShoulderNav";
 import { readActiveTab, writeActiveTab } from "../sections/activeTab";
 import { useRunningGame } from "../tdp/useRunningGame";
 import { useLearningStatus } from "../learning/useLearningStatus";
@@ -75,6 +76,25 @@ export const ControlCenter: FC = () => {
     };
   }, []);
 
+  // Apply the user's tab order + visibility (reusing the memoized id list above).
+  // Settings stays pinned; a hidden active tab falls back to the first visible
+  // one via resolveActiveSection.
+  // Controller management isn't offered on the Steam Deck — its gamepad is native
+  // and Steam Input owns remapping — so drop the Mandos tab there (same device gate
+  // as the RGB card, see deviceHasRgb). A stale saved active="mandos" falls back to
+  // the first visible tab via resolveActiveSection below.
+  // Computed BEFORE the early returns so useShoulderNav (a hook) always runs.
+  const hidesMandos = !!device && device.key.startsWith("steam_deck");
+  const orderedTabs = visibleTabIds
+    .map((id) => SECTIONS.find((s) => s.id === id))
+    .filter((s): s is (typeof SECTIONS)[number] => !!s)
+    .filter((s) => !(hidesMandos && s.id === "mandos"));
+  const active = resolveActiveSection(orderedTabs, activeId);
+  const Active = active?.Component;
+
+  // L1/R1 cycle the visible tabs (previous/next), wrapping around.
+  useShoulderNav(orderedTabs.map((s) => s.id), active?.id ?? activeId, setActiveId);
+
   if (failed) {
     return (
       <PanelSection>
@@ -83,21 +103,6 @@ export const ControlCenter: FC = () => {
     );
   }
   if (!device) return <Loading />;
-
-  // Apply the user's tab order + visibility (reusing the memoized id list above).
-  // Settings stays pinned; a hidden active tab falls back to the first visible
-  // one via resolveActiveSection.
-  // Controller management isn't offered on the Steam Deck — its gamepad is native
-  // and Steam Input owns remapping — so drop the Mandos tab there (same device gate
-  // as the RGB card, see deviceHasRgb). A stale saved active="mandos" falls back to
-  // the first visible tab via resolveActiveSection below.
-  const hidesMandos = device.key.startsWith("steam_deck");
-  const orderedTabs = visibleTabIds
-    .map((id) => SECTIONS.find((s) => s.id === id))
-    .filter((s): s is (typeof SECTIONS)[number] => !!s)
-    .filter((s) => !(hidesMandos && s.id === "mandos"));
-  const active = resolveActiveSection(orderedTabs, activeId);
-  const Active = active?.Component;
 
   return (
     <PanelSection>
