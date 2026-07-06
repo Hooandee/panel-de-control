@@ -13,6 +13,12 @@ doing.
 
 The interface ships in Spanish by default and falls back to English when your system asks for it.
 
+## Video
+
+In this video I show and explain the plugin in depth:
+
+[![Panel de Control in action](https://img.youtube.com/vi/sDpXFTxG7NQ/maxresdefault.jpg)](https://youtu.be/sDpXFTxG7NQ)
+
 > [!WARNING]
 > This plugin runs with **root privileges** and changes low-level power, thermal, and firmware
 > settings on your device. It talks only to documented kernel interfaces and is designed to fail
