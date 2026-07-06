@@ -2,7 +2,7 @@
 
 **Español** · [English](README.en.md)
 
-El centro de control que le faltaba a tu PC portátil de juego. Ajusta la potencia, las curvas de
+El centro de control que le faltaba a tu Handheld PC. Ajusta la potencia, las curvas de
 ventilador, la batería, la pantalla y los mandos desde un único panel dentro del menú de acceso
 rápido de Steam, sin salir del juego y sin memorizar rutas de sysfs.
 
@@ -10,7 +10,7 @@ Es un plugin para [Decky Loader](https://decky.xyz/). Está pensado para Steam D
 Go, MSI Claw y compañía, con una idea fija: que cada control se vea bien, muestre siempre el modelo
 real de tu equipo arriba, y nunca te mienta sobre lo que de verdad está pasando en el hardware.
 
-La interfaz viene en español por defecto y cae a inglés si tu sistema lo pide.
+La interfaz viene en español por defecto y se pone defecto en inglés si tu sistema lo pide.
 
 ## Vídeo
 
