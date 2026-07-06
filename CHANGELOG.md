@@ -3,9 +3,10 @@
 ## [0.6.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.5.0...panel-de-control-v0.6.0) (2026-07-06)
 
 
-### Features
+### Features / Novedades
 
-* hideable battery-health group and L1/R1 tab navigation ([#51](https://github.com/Hooandee/panel-de-control/issues/51)) ([bbba2ed](https://github.com/Hooandee/panel-de-control/commit/bbba2ed325b863c94cb75b09513af28c1b4610d2))
+* You can now hide the battery health info — health, charge cycles and capacity — from the Battery card, with a single toggle under Ajustes → Personalizar, for anyone who'd rather not keep an eye on it. You can also move between tabs with the L1/R1 shoulder buttons. ([#51](https://github.com/Hooandee/panel-de-control/issues/51)) ([bbba2ed](https://github.com/Hooandee/panel-de-control/commit/bbba2ed325b863c94cb75b09513af28c1b4610d2))
+* **ES:** Ahora puedes ocultar la información de salud de la batería —salud, ciclos de carga y capacidad— de la tarjeta de Batería, con un solo interruptor en Ajustes → Personalizar, para quien prefiera no estar pendiente de ella. Además puedes cambiar de pestaña con los gatillos L1/R1. ([#51](https://github.com/Hooandee/panel-de-control/issues/51)) ([bbba2ed](https://github.com/Hooandee/panel-de-control/commit/bbba2ed325b863c94cb75b09513af28c1b4610d2))
 
 ## [0.5.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.4.2...panel-de-control-v0.5.0) (2026-07-06)
 
