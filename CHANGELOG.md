@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.4.1...panel-de-control-v0.4.2) (2026-07-06)
+
+
+### Performance Improvements / Mejoras de rendimiento
+
+* The control panel and its live readouts stay responsive even when a system tool (the display compositor, the fan service) is slow to answer — the heavy work now runs in the background instead of briefly freezing the panel. ([#40](https://github.com/Hooandee/panel-de-control/issues/40)) ([c404201](https://github.com/Hooandee/panel-de-control/commit/c4042011f88502ef2afaabbc094a07a312a1f51a))
+* **ES:** El panel y sus lecturas en vivo siguen respondiendo aunque una herramienta del sistema (el compositor de pantalla, el servicio de ventiladores) tarde en contestar — el trabajo pesado ahora corre en segundo plano en vez de congelar el panel un instante. ([#40](https://github.com/Hooandee/panel-de-control/issues/40)) ([c404201](https://github.com/Hooandee/panel-de-control/commit/c4042011f88502ef2afaabbc094a07a312a1f51a))
+
 ## [0.4.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.4.0...panel-de-control-v0.4.1) (2026-07-05)
 
 
