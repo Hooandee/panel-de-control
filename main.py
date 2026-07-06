@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict
 
 import decky
@@ -468,6 +469,11 @@ class Plugin:
 
     # ---- Fan-curve control (global + per-game, persisted) -------------------
     def _reapply_fans(self) -> None:
+        """Push the effective fan curve off the event loop (Steam Deck's software-loop
+        backend spawns a blocking systemctl). No executor / no loop → inline."""
+        self._offload(self._reapply_fans_sync)
+
+    def _reapply_fans_sync(self) -> None:
         """Apply the effective fan profile for the current game (or global).
 
         - auto      -> firmware control.
@@ -847,7 +853,7 @@ class Plugin:
         enabled = bool(enabled)
         self._settings["unlock_battery_max"] = enabled
         self._save()
-        self._reapply_tdp()
+        await self._offload_call(self._reapply_tdp)
         return enabled
 
     def _qam_boost_active(self) -> bool:
@@ -941,7 +947,7 @@ class Plugin:
                     cur, self._gpu_window, self._slack_ticks, floor, active)
                 if nxt != cur:
                     self._tdp_profiles.set_pl1(self._auto_scope(), nxt, appid=self._current_appid)
-                    self._reapply_tdp()
+                    await self._offload_call(self._reapply_tdp)
                     # PL1 changed → drop the now-stale window (samples taken at the
                     # OLD setpoint) so the next reads are homogeneous at the new PL1.
                     self._clear_auto_windows()
@@ -1012,7 +1018,7 @@ class Plugin:
             if cur < floor:  # only raise if actually below the responsive floor
                 self._tdp_profiles.set_pl1(self._auto_scope(), floor,
                                            appid=self._current_appid)
-                self._reapply_tdp()
+                await self._offload_call(self._reapply_tdp)
                 self._clear_auto_windows()  # PL1 changed → window is now stale
         return self._ui_active
 
@@ -1099,6 +1105,46 @@ class Plugin:
         running, else global)."""
         return "game" if self._current_appid else "global"
 
+    # ---- off-loop dispatch --------------------------------------------------
+    # Any subprocess/HTTP-backed apply (gamescopectl, systemctl, ryzenadj, …) MUST
+    # run through one of these so a wedged tool can't stall the event loop that
+    # drives the auto-TDP loop + every QAM RPC. The single-worker executor (created
+    # in _main) serialises applies → no race on shared state (e.g. the color LUT
+    # file). No executor / no loop (unit tests) → run inline (behaviour preserved).
+    def _offload(self, fn):
+        """Fire-and-forget a blocking apply off the event loop. Guards fn on both
+        paths so a raise can't kill the caller nor leak an unretrieved-future log."""
+        def guarded():
+            try:
+                fn()
+            except Exception:  # noqa: BLE001
+                pass
+        ex = getattr(self, "_apply_executor", None)
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+        if ex is None or loop is None:
+            guarded()
+        else:
+            loop.run_in_executor(ex, guarded)
+
+    async def _offload_call(self, fn):
+        """Run a blocking call off the event loop and return its result (awaited)."""
+        ex = getattr(self, "_apply_executor", None)
+        if ex is None:
+            return fn()
+        return await asyncio.get_running_loop().run_in_executor(ex, fn)
+
+    async def _drain_offloaded(self):
+        """Wait for the queued off-loop applies to finish (a no-op runs after them on
+        the single-worker executor). Use before reading back hardware state that a
+        fire-and-forget apply just changed, so the readback isn't stale."""
+        ex = getattr(self, "_apply_executor", None)
+        if ex is None:
+            return
+        await asyncio.get_running_loop().run_in_executor(ex, lambda: None)
+
     def _reapply_tdp(self, on_ac=None):
         self._init()
         lv, _active, ac = self._effective_levels(self._current_appid, on_ac)
@@ -1112,12 +1158,13 @@ class Plugin:
         # stale preview can't leak onto the new context (nor a dangling timer fire).
         self._cancel_color_revert()
         self._color_preview = None
-        self._reapply_tdp(on_ac)
-        self._reapply_fans()
+        # sysfs (fast) → inline; subprocess-backed (tdp-ryzenadj/fans/color) → off-loop.
         self._apply_charge_limit()
         self._apply_cpu()
-        self._reapply_color()
         self._apply_gpu_clock()
+        self._offload(lambda: self._reapply_tdp(on_ac))
+        self._reapply_fans()   # self-offloading
+        self._reapply_color()  # self-offloading
 
     # ---- Battery + charge limit --------------------------------------------
     def _apply_charge_limit(self) -> None:
@@ -1331,6 +1378,11 @@ class Plugin:
 
     # ---- Pantalla (panel color via gamescope) -------------------------------
     def _reapply_color(self) -> None:
+        """Push the color apply off the event loop (gamescopectl can stall on a wedged
+        compositor). No executor / no loop → inline."""
+        self._offload(self._reapply_color_sync)
+
+    def _reapply_color_sync(self) -> None:
         """Push the effective color (per-game saturation + global calibration, with
         any live preview overlaid) to gamescope. No-op when unsupported. Guarded."""
         try:
@@ -1370,7 +1422,7 @@ class Plugin:
 
     async def get_color_state(self) -> dict:
         self._init()
-        return self._color_state()
+        return await self._offload_call(self._color_state)
 
     async def set_saturation(self, value: int, scope: str, appid=None) -> dict:
         # Saturation can't make the screen illegible (0 = grayscale) → save directly,
@@ -1378,7 +1430,7 @@ class Plugin:
         self._init()
         self._color.set_saturation(scope, int(value), appid=appid)
         self._reapply_color()
-        return self._color_state()
+        return await self._offload_call(self._color_state)
 
     async def preview_calibration(self, temperature: int, contrast: int) -> dict:
         """Apply calibration LIVE without saving, and arm the auto-revert timer. The
@@ -1387,7 +1439,7 @@ class Plugin:
         self._color_preview = {"temperature": int(temperature), "contrast": int(contrast)}
         self._reapply_color()
         self._arm_color_revert()
-        return self._color_state()
+        return await self._offload_call(self._color_state)
 
     async def set_calibration(self, temperature: int, contrast: int) -> dict:
         """Confirm (save) the calibration: persist, cancel the auto-revert, apply."""
@@ -1396,7 +1448,7 @@ class Plugin:
         self._color_preview = None
         self._color.set_calibration(temperature=int(temperature), contrast=int(contrast))
         self._reapply_color()
-        return self._color_state()
+        return await self._offload_call(self._color_state)
 
     def _arm_color_revert(self) -> None:
         self._cancel_color_revert()
@@ -1434,7 +1486,7 @@ class Plugin:
         if look is not None:
             self._color.apply_preset(look)
             self._reapply_color()
-        return self._color_state()
+        return await self._offload_call(self._color_state)
 
     async def reset_color(self) -> dict:
         self._init()
@@ -1442,7 +1494,7 @@ class Plugin:
         self._color_preview = None
         self._color.reset()
         self._reapply_color()
-        return self._color_state()
+        return await self._offload_call(self._color_state)
 
     async def get_tdp_state(self) -> dict:
         self._init()
@@ -1499,7 +1551,7 @@ class Plugin:
         limits = self._limits()
         clamped = limits.clamp(watts, read_on_ac())
         self._tdp_profiles.set_pl1(resolved, clamped, appid=appid)
-        res = self._reapply_tdp()
+        res = await self._offload_call(self._reapply_tdp)
         return {"requested_w": res.requested_w, "applied_w": res.applied_w,
                 "ok": res.ok, "detail": res.detail}
 
@@ -1511,7 +1563,7 @@ class Plugin:
                     "detail": f"unknown scope: {scope}"}
         self._clear_eco()
         self._tdp_profiles.set_offsets(resolved, off2, off3, appid=appid)
-        res = self._reapply_tdp()
+        res = await self._offload_call(self._reapply_tdp)
         # requested_w/applied_w reflect resulting sustained pl1 (readback), not the offsets
         return {"requested_w": res.requested_w, "applied_w": res.applied_w,
                 "ok": res.ok, "detail": res.detail}
@@ -1522,7 +1574,7 @@ class Plugin:
         if resolved is not None:  # invalid scope → no-op (never from the UI)
             self._clear_eco()
             self._tdp_profiles.set_auto(resolved, appid=appid)
-            self._reapply_tdp()
+            await self._offload_call(self._reapply_tdp)
         # Always return the full new state so the UI updates badge + sliders in ONE
         # round-trip (no separate get_tdp_state) — immediate, and a consistent
         # TdpState shape (the frontend does setTdp with it).
@@ -1546,6 +1598,9 @@ class Plugin:
         # effective fan curve, including the adaptive learned curve when that mode is on.
         self._maybe_drive_adaptive_fan_curve()  # track + drive if adaptive with enough data
         self._reapply_all()
+        # The TDP re-apply is off-loop; wait for it so the returned state's hardware
+        # readback (applied_w) reflects the new game, not the previous setpoint.
+        await self._drain_offloaded()
         return await self.get_tdp_state()
 
     def _restore_fans_safe(self) -> None:
@@ -1568,6 +1623,10 @@ class Plugin:
     # ---- lifecycle ----------------------------------------------------------
     async def _main(self) -> None:
         self._init()
+        # Single-worker executor for subprocess-backed applies (gamescopectl /
+        # systemctl / ryzenadj) → keeps them off the event loop AND serialised.
+        # Created here (not _init) so unit tests that never call _main run inline.
+        self._apply_executor = ThreadPoolExecutor(max_workers=1)
         decky.logger.info(
             "Panel de Control v%s loaded (euid=%s)", read_version(), os.geteuid()
         )
@@ -1587,19 +1646,29 @@ class Plugin:
 
     async def _unload(self) -> None:
         # Restore fans to firmware auto FIRST — before stopping other loops —
-        # so the hardware is never left with a stale manual curve.
-        self._restore_fans_safe()
+        # so the hardware is never left with a stale manual curve. The restores
+        # spawn subprocesses (systemctl / gamescopectl) → run them off the loop and
+        # await, then shut the executor down.
+        await self._offload_call(self._restore_fans_safe)
         self._cancel_color_revert()
-        self._restore_color_safe()
+        await self._offload_call(self._restore_color_safe)
         self._stop_auto_loop()
         if getattr(self, "_sampler", None) is not None:
             self._sampler.stop()
         if getattr(self, "_lifecycle", None) is not None:
             self._lifecycle.stop()
+        self._shutdown_apply_executor()
         decky.logger.info("Panel de Control unloaded")
 
+    def _shutdown_apply_executor(self) -> None:
+        ex = getattr(self, "_apply_executor", None)
+        if ex is not None:
+            ex.shutdown(wait=False)
+            self._apply_executor = None
+
     async def _uninstall(self) -> None:
-        self._restore_fans_safe()
-        self._restore_color_safe()
+        await self._offload_call(self._restore_fans_safe)
+        await self._offload_call(self._restore_color_safe)
+        self._shutdown_apply_executor()
         fan_expose.remove_conf()  # drop the modprobe.d option we added (guarded)
         decky.logger.info("Panel de Control uninstalled")
