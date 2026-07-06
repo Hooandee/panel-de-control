@@ -12,6 +12,12 @@ real de tu equipo arriba, y nunca te mienta sobre lo que de verdad está pasando
 
 La interfaz viene en español por defecto y cae a inglés si tu sistema lo pide.
 
+## Vídeo
+
+En este vídeo enseño y explico el plugin a fondo:
+
+[![Panel de Control en acción](https://img.youtube.com/vi/sDpXFTxG7NQ/maxresdefault.jpg)](https://youtu.be/sDpXFTxG7NQ)
+
 > [!WARNING]
 > Este plugin corre con **privilegios de root** y cambia ajustes de bajo nivel de potencia,
 > temperatura y firmware de tu equipo. Solo habla con interfaces documentadas del kernel y está
