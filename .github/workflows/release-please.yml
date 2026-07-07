@@ -36,6 +36,46 @@ jobs:
         with:
           node-version: 20
           cache: pnpm
+      # Build the generic AMD power fallback from source, pinned. libpci is provided
+      # by a self-contained static build (no udev/zlib/kmod), so the final binary is
+      # fully static and runs on any target without host libraries. Placed at
+      # bin/ryzenadj, where the backend resolves it. A build failure fails the release.
+      # The recipe lives in scripts/build-ryzenadj.sh so it can also be run off-CI.
+      - name: Build bundled power binary
+        if: ${{ steps.release.outputs.release_created }}
+        env:
+          RYZENADJ_TAG: v0.19.0
+          PCIUTILS_TAG: v3.13.0
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake pkg-config
+          bash scripts/build-ryzenadj.sh bin
+
+      # The binary must be a valid executable with no unresolved libraries. A
+      # hardware-init failure on the runner (no AMD APU) is expected and does not
+      # fail the check; a loader/exec failure does.
+      - name: Verify bundled power binary
+        if: ${{ steps.release.outputs.release_created }}
+        run: |
+          set -euo pipefail
+          test -x bin/ryzenadj
+          file bin/ryzenadj | grep -q 'ELF 64-bit'
+          if ldd bin/ryzenadj 2>&1 | grep -q 'not found'; then
+            echo "::error::bundled binary has unresolved shared libraries"; ldd bin/ryzenadj; exit 1
+          fi
+          set +e
+          out="$(timeout 30 bin/ryzenadj -i 2>&1)"; rc=$?
+          set -e
+          echo "smoke (rc=$rc):"; echo "$out"
+          case "$rc" in
+            124) echo "::error::bundled binary timed out"; exit 1 ;;
+            126|127) echo "::error::bundled binary failed to execute"; exit 1 ;;
+          esac
+          if echo "$out" | grep -qi 'error while loading shared libraries'; then
+            echo "::error::bundled binary loader error"; exit 1
+          fi
+
       - name: Build and package
         if: ${{ steps.release.outputs.release_created }}
         env:
@@ -46,7 +86,7 @@ jobs:
           rm -f dist/*.map
           staging=$(mktemp -d)
           mkdir -p "$staging/$PLUGIN_NAME"
-          cp -rL dist main.py plugin.json package.json README.md README.en.md LICENSE py_modules assets "$staging/$PLUGIN_NAME"
+          cp -rL dist main.py plugin.json package.json README.md README.en.md LICENSE py_modules assets bin "$staging/$PLUGIN_NAME"
           (cd "$staging" && zip -r "$GITHUB_WORKSPACE/$PLUGIN_NAME.zip" "$PLUGIN_NAME")
 
       # Attach the artifact first, so provenance signing can never block the release

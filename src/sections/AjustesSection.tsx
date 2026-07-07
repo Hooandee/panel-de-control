@@ -6,7 +6,7 @@ import { LanguageToggle } from "../components/LanguageToggle";
 import { openCustomizeModal } from "../components/CustomizeModal";
 import { openGlossaryModal } from "../components/GlossaryModal";
 import { openReportModal } from "../components/ReportModal";
-import { getTelemetryEnabled, setTelemetryEnabled, getUnlockBatteryMax, setUnlockBatteryMax, getQamTdpBoost, setQamTdpBoost, resetTelemetry, getVersion, getControllerConflict } from "../api";
+import { getTelemetryEnabled, setTelemetryEnabled, getUnlockBatteryMax, setUnlockBatteryMax, getQamTdpBoost, setQamTdpBoost, resetTelemetry, getVersion, getControllerConflict, getDevice, DeviceInfo, isUnvalidated } from "../api";
 import { isValueToastEnabled, setValueToastEnabled } from "../system/valueToast";
 import { UpdatePanel } from "../updater/UpdatePanel";
 import { ControllerConflictCard } from "../components/ControllerConflictCard";
@@ -48,6 +48,14 @@ export const AjustesSection: FC = () => {
   useEffect(() => {
     getVersion().then(setVersion).catch(() => {});
   }, []);
+
+  // One-time device read (same pattern as ReportModal — a single fetch, not a
+  // poll) to add a note when this model isn't confirmed yet.
+  const [device, setDevice] = useState<DeviceInfo | null>(null);
+  useEffect(() => {
+    getDevice().then(setDevice).catch(() => {});
+  }, []);
+  const unvalidated = !!device && isUnvalidated(device);
 
   // Power-management conflict with HHD (both driving TDP/fans). Warn only.
   const [conflict, setConflict] = useState(false);
@@ -144,6 +152,13 @@ export const AjustesSection: FC = () => {
         <ButtonItem layout="below" description={t("customize.button.desc")} onClick={() => openCustomizeModal()}>
           {t("customize.button")}
         </ButtonItem>
+
+        {/* Note shown on an unconfirmed (experimental or generic) model. */}
+        {unvalidated && (
+          <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
+            {t("report.unvalidated.note")}
+          </div>
+        )}
 
         {/* Open the full-screen "report a problem" flow. */}
         <ButtonItem layout="below" description={t("report.button.desc")} onClick={() => openReportModal()}>

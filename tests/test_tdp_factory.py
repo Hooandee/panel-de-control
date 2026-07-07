@@ -127,6 +127,71 @@ def test_amd_never_uses_intel_rapl(tmp_path):
     assert b.name != "intel-rapl"
 
 
+def _mk_acpi_call(root):
+    d = os.path.join(root, "proc/acpi")
+    os.makedirs(d, exist_ok=True)
+    with open(os.path.join(d, "call"), "w") as f:
+        f.write("not called")
+
+
+def test_generic_amd_uses_alib_when_acpi_call_present(tmp_path):
+    # An unrecognised AMD handheld with no firmware-attributes chip drives TDP
+    # via the ALIB acpi_call path (no bundled ryzenadj needed).
+    root = str(tmp_path)
+    _mk_acpi_call(root)
+    b = select_backend(GENERIC, root=root, ryzenadj_resolve=_NO_RYZENADJ)
+    assert b.supported and b.name == "acpi-alib"
+
+
+def test_ryzenadj_precedes_alib(tmp_path):
+    # With both generic-AMD backends available, ryzenadj is selected before ALIB.
+    root = str(tmp_path)
+    _mk_acpi_call(root)
+    b = select_backend(GENERIC, root=root, ryzenadj_resolve=lambda: "/usr/bin/ryzenadj")
+    assert b.name == "ryzenadj"
+
+
+def test_firmware_attr_still_wins_over_alib(tmp_path):
+    # A firmware-attributes chip must still be chosen ahead of ALIB (real rails).
+    root = str(tmp_path)
+    _mk_fw(root, "asus-armoury")
+    _mk_acpi_call(root)
+    b = select_backend(GENERIC, root=root, ryzenadj_resolve=_NO_RYZENADJ)
+    assert "asus-armoury" in b.name
+
+
+def test_known_rog_falls_through_to_ryzenadj_before_alib(tmp_path):
+    # If a kernel update drops the ASUS chip, a known AMD device reaches its AMD
+    # fallback: ryzenadj first, then ALIB. With both available, ryzenadj wins.
+    root = str(tmp_path)
+    _mk_acpi_call(root)
+    b = select_backend(_p("rog_ally_x"), root=root, ryzenadj_resolve=lambda: "/usr/bin/ryzenadj")
+    assert b.name == "ryzenadj"
+
+
+def test_known_rog_falls_through_to_alib_when_no_ryzenadj(tmp_path):
+    # ALIB still catches a known AMD device when the ryzenadj binary is absent.
+    root = str(tmp_path)
+    _mk_acpi_call(root)
+    b = select_backend(_p("rog_ally_x"), root=root, ryzenadj_resolve=_NO_RYZENADJ)
+    assert b.name == "acpi-alib"
+
+
+def test_generic_intel_never_uses_alib(tmp_path):
+    # ALIB is an AMD path; an Intel host must not pick it even if acpi_call exists.
+    root = str(tmp_path)
+    _mk_acpi_call(root)
+    intel = dataclasses.replace(GENERIC, vendor="intel")
+    b = select_backend(intel, root=root, ryzenadj_resolve=lambda: "/usr/bin/ryzenadj")
+    assert b.name != "acpi-alib"
+
+
+def test_ryzenadj_still_used_when_no_alib(tmp_path):
+    # No acpi_call interface -> ALIB unsupported -> ryzenadj remains the fallback.
+    b = select_backend(GENERIC, root=str(tmp_path), ryzenadj_resolve=lambda: "/usr/bin/ryzenadj")
+    assert b.name == "ryzenadj"
+
+
 def _mk_amdgpu_powercap(root):
     d = os.path.join(root, "sys/class/hwmon/hwmon0")
     os.makedirs(d, exist_ok=True)

@@ -15,8 +15,11 @@ piece is missing.
 from __future__ import annotations
 
 import glob
+import json
 import os
 import re
+
+from sysfs import read_str
 
 # Bump when the bundle shape changes so consumers can adapt.
 SCHEMA = 1
@@ -31,12 +34,23 @@ _MAC = re.compile(r"\b(?:[0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}\b")
 _UUID = re.compile(
     r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b"
 )
+# Serial numbers leak in DMI/dmesg dumps ("board_serial: ...", "Serial Number: ...").
+# Keep the label for context, drop the value.
+_SERIAL_LABELED = re.compile(
+    r"((?:board|product|chassis|system|baseboard)?_?serial(?:\s*number)?)(\s*[:=]\s*)(\S+)",
+    re.I,
+)
+# A standalone long alphanumeric run that mixes letters AND digits (typical serial
+# shape). Pure words ('steamdeck') and pure numbers (timestamps) are left alone.
+_SERIAL_RUN = re.compile(
+    r"\b(?=[A-Za-z0-9]*[A-Za-z])(?=[A-Za-z0-9]*\d)[A-Za-z0-9]{8,}\b"
+)
 
 
 def redact_text(s, *, home: str | None = None, hostname: str | None = None):
-    """Scrub PII from a string: home paths, an explicit hostname, and any MAC/UUID
-    that shows up inside log or kernel output. Never touches a bare username token
-    (that would nuke 'Steam Deck' when the user is 'deck')."""
+    """Scrub PII from a string: home paths, an explicit hostname, MAC/UUID and
+    serial-like values that show up inside log or kernel output. Never touches a
+    bare username token (that would nuke 'Steam Deck' when the user is 'deck')."""
     if not isinstance(s, str):
         return s
     s = _HOME_PATH.sub("~", s)
@@ -46,6 +60,8 @@ def redact_text(s, *, home: str | None = None, hostname: str | None = None):
         s = re.sub(rf"\b{re.escape(hostname)}\b", "HOST", s)
     s = _MAC.sub("[mac]", s)
     s = _UUID.sub("[uuid]", s)
+    s = _SERIAL_LABELED.sub(lambda m: f"{m.group(1)}{m.group(2)}[serial]", s)
+    s = _SERIAL_RUN.sub("[serial]", s)
     return s
 
 
@@ -139,6 +155,140 @@ def kernel_logs(run, *, cap: int = 40_000, home: str | None = None, hostname: st
     return out
 
 
+# Raw sysfs surfaces that decide device support. A listing (node/dir NAMES, plus a
+# couple of tiny label values) so a triager can tell "node exists but capability
+# reads false → probe bug" from "node absent → truly unsupported". Bounded to keep
+# the bundle small and to never sweep /sys recursively.
+_SNAP_MAX_CHIPS = 32
+_SNAP_MAX_NAMES = 128
+_SNAP_MAX_MODULES = 512
+_SNAP_CAP = 60_000
+_HWMON_PATTERNS = ("pwm*", "fan*_input", "temp*_label")
+
+
+def _glob(root: str, pattern: str) -> list[str]:
+    try:
+        return glob.glob(os.path.join(root, pattern))
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _listdir(path: str) -> list[str]:
+    try:
+        return os.listdir(path)
+    except OSError:
+        return []
+
+
+def _hwmon_nodes(chip_dir: str) -> list[str]:
+    names: set[str] = set()
+    for pat in _HWMON_PATTERNS:
+        for p in _glob(chip_dir, pat):
+            names.add(os.path.basename(p))
+    return sorted(names)[:_SNAP_MAX_NAMES]
+
+
+def _snap_hwmon(root: str) -> list[dict]:
+    out: list[dict] = []
+    for chip in sorted(_glob(root, "sys/class/hwmon/hwmon*"))[:_SNAP_MAX_CHIPS]:
+        try:
+            out.append({"name": read_str(os.path.join(chip, "name")), "nodes": _hwmon_nodes(chip)})
+        except Exception:  # noqa: BLE001
+            continue
+    return out
+
+
+def _snap_dir_listing(root: str, pattern: str, sub: str = "") -> dict:
+    """Map each matched dir's basename to a sorted listing of the names inside it
+    (optionally a `sub` child dir). Diagnoses WMI attributes / power_supply nodes."""
+    out: dict = {}
+    for d in sorted(_glob(root, pattern))[:_SNAP_MAX_CHIPS]:
+        try:
+            out[os.path.basename(d)] = sorted(_listdir(os.path.join(d, sub) if sub else d))[:_SNAP_MAX_NAMES]
+        except Exception:  # noqa: BLE001
+            out[os.path.basename(d)] = []
+    return out
+
+
+def _snap_acpi(root: str) -> dict:
+    path = os.path.join(root, "proc/acpi/call")
+    try:
+        present = os.path.exists(path)
+        writable = bool(present and os.access(path, os.W_OK))
+    except Exception:  # noqa: BLE001
+        present, writable = False, False
+    return {"call_present": present, "call_writable": writable}
+
+
+def _snap_modules(root: str) -> list[str]:
+    """Loaded kernel module names from /proc/modules (bounded line read, never
+    lsmod). Makes ALIB-vs-ryzenadj viability obvious (acpi_call present?)."""
+    names: list[str] = []
+    try:
+        with open(os.path.join(root, "proc/modules")) as f:
+            for line in f:
+                name = line.split(" ", 1)[0].strip()
+                if name:
+                    names.append(name)
+                if len(names) >= _SNAP_MAX_MODULES:
+                    break
+    except OSError:
+        return []
+    return sorted(names)
+
+
+def _within(obj, cap: int) -> bool:
+    try:
+        return len(json.dumps(obj, default=str)) <= cap
+    except Exception:  # noqa: BLE001
+        return True
+
+
+def sysfs_snapshot(
+    root: str = "/",
+    *,
+    cap: int = _SNAP_CAP,
+    home: str | None = None,
+    hostname: str | None = None,
+) -> dict:
+    """Redacted, size-capped listing of the sysfs surfaces that decide fan/temp,
+    vendor-WMI TDP, charge-limit/battery, and ACPI-call support. Listing only —
+    bounded-depth globs, NEVER a recursive walk of /sys. Never raises: any missing
+    or unreadable path records an absent/empty marker."""
+    snap: dict = {"hwmon": [], "firmware_attributes": {}, "power_supply": {}, "acpi": {}, "modules": []}
+    try:
+        snap["hwmon"] = _snap_hwmon(root)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        snap["firmware_attributes"] = _snap_dir_listing(
+            root, "sys/class/firmware-attributes/*", "attributes"
+        )
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        snap["power_supply"] = _snap_dir_listing(root, "sys/class/power_supply/*")
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        snap["acpi"] = _snap_acpi(root)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        snap["modules"] = _snap_modules(root)
+    except Exception:  # noqa: BLE001
+        pass
+    # Backstop the count caps: if the listing is still oversized, drop the heaviest
+    # sections and flag it honestly rather than shipping an unbounded blob.
+    if not _within(snap, cap):
+        snap["truncated"] = True
+        for key in ("modules", "hwmon", "power_supply", "firmware_attributes"):
+            if _within(snap, cap):
+                break
+            snap[key] = [] if isinstance(snap[key], list) else {}
+    return redact_obj(snap, home=home, hostname=hostname)
+
+
 def capabilities_from(states: dict) -> dict:
     """Distil the per-subsystem detected backends + supported flags from the live
     state dicts. This is the single most useful section for triage: many reports
@@ -175,6 +325,7 @@ def build_bundle(
     stores: dict,
     logs: list,
     kernel: dict | None = None,
+    sysfs: dict | None = None,
     home: str | None = None,
     hostname: str | None = None,
 ) -> dict:
@@ -191,5 +342,6 @@ def build_bundle(
         "stores": stores or {},
         "logs": logs or [],
         "kernel": kernel or {},
+        "sysfs": sysfs or {},
     }
     return redact_obj(bundle, home=home, hostname=hostname)

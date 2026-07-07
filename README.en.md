@@ -121,6 +121,12 @@ supported in code but not confirmed on that device yet
 Any other handheld falls under an **experimental generic** profile: the plugin probes the real
 capabilities and shows what it can, honestly hiding the rest.
 
+The **OneXPlayer OneXFly Apex** (Ryzen AI Max+ 395) is now recognised by name and comes in as
+experimental. TDP control goes through the generic AMD path, so it should work; fans and the
+charge limit only light up if the device exposes the nodes, and until someone runs it in person
+we would rather not assume anything. If you own one, reports from the Settings tab help a lot to
+dial it in.
+
 ### Notes
 
 1. The Claw controls TDP through `intel-rapl`, which only exposes the base limit (PL1); there are no

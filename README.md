@@ -121,6 +121,12 @@ Leyenda: **✅** comprobado en ese equipo · **⚠️** limitado o solo por defe
 Cualquier otro portátil cae en un perfil **genérico experimental**: el plugin sondea las capacidades
 reales y muestra lo que consigue, ocultando honestamente el resto.
 
+El **OneXPlayer OneXFly Apex** (Ryzen AI Max+ 395) ya se reconoce por su nombre y entra como
+experimental. El control de TDP va por la vía genérica de AMD, así que debería funcionar; los
+ventiladores y el límite de carga se activan solo si el equipo expone los nodos, y hasta que
+alguien lo pruebe en mano preferimos no dar nada por hecho. Si tienes uno, los reportes desde
+Ajustes ayudan un montón a afinarlo.
+
 ### Notas
 
 1. El Claw controla el TDP por `intel-rapl`, que solo expone el límite base (PL1); no hay raíles de

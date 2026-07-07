@@ -37,6 +37,28 @@ def test_unknown_falls_back_to_generic_visibly():
     assert prof.is_generic is True
 
 
+def test_onexplayer_apex_is_recognised_experimental():
+    prof = detect(product_name="ONEXPLAYER APEX")
+    assert prof.key == "onexplayer_apex"
+    assert prof.is_generic is False
+    assert prof.experimental is True
+    assert prof.vendor == "amd"
+
+
+def test_onexplayer_apex_matches_case_insensitively():
+    prof = detect(product_name="OneXPlayer Apex 2025")
+    assert prof.key == "onexplayer_apex"
+
+
+def test_known_devices_are_not_experimental():
+    for product in ("Galileo", "ROG Ally X RC72LA_RC72LA", "83N0", "Claw 8 AI+ A2VM"):
+        assert detect(product_name=product).experimental is False
+
+
+def test_generic_fallback_is_not_experimental():
+    assert detect(product_name="Some Random Laptop 9000").experimental is False
+
+
 def _mk_cpuinfo(root, vendor_id, model_name):
     os.makedirs(os.path.join(root, "proc"), exist_ok=True)
     with open(os.path.join(root, "proc", "cpuinfo"), "w") as f:

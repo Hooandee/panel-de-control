@@ -1,5 +1,5 @@
 import { FC } from "react";
-import { DeviceInfo } from "../api";
+import { DeviceInfo, isUnvalidated } from "../api";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 
@@ -44,9 +44,9 @@ export const DeviceHeader: FC<{ device: DeviceInfo }> = ({ device }) => {
           {device.chip}
         </div>
       </div>
-      {device.is_generic && (
+      {isUnvalidated(device) && (
         <span
-          title={t("device.generic.hint")}
+          title={t(device.is_generic ? "device.generic.hint" : "device.experimental.hint")}
           style={{
             flexShrink: 0,
             fontSize: theme.font.caption,
@@ -56,7 +56,7 @@ export const DeviceHeader: FC<{ device: DeviceInfo }> = ({ device }) => {
             background: "rgba(255,180,84,0.12)",
           }}
         >
-          {t("device.generic.badge")}
+          {t("device.experimental.badge")}
         </span>
       )}
     </div>

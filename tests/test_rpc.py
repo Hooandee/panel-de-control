@@ -54,6 +54,20 @@ def test_get_device_returns_detected_profile(Plugin, monkeypatch):
     assert dev["tdp_max"] == 25
     assert dev["tdp_max_charger"] == 30
     assert dev["is_generic"] is False
+    assert dev["experimental"] is False
+
+
+def test_get_device_surfaces_experimental_flag(Plugin, monkeypatch):
+    import device_registry
+    import main
+    from device_profiles import DEVICE_TABLE
+    apex = next(p for p in DEVICE_TABLE if p.key == "onexplayer_apex")
+    monkeypatch.setattr(device_registry, "detect", lambda product_name=None: apex)
+    monkeypatch.setattr(main, "read_cpu_model", lambda: None)
+    dev = asyncio.run(Plugin().get_device())
+    assert dev["key"] == "onexplayer_apex"
+    assert dev["experimental"] is True
+    assert dev["is_generic"] is False
 
 
 def test_telemetry_enabled_default_true(Plugin):

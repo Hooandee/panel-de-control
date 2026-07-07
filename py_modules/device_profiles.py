@@ -15,6 +15,8 @@ class DeviceProfile:
     # DMI product_name strings that identify this device (matched case-insensitively, substring)
     match_names: tuple = field(default_factory=tuple)
     is_generic: bool = False
+    # When set, the UI shows the experimental marker for this recognised model.
+    experimental: bool = False
     # Panel technology. "oled" hides the "OLED look" color preset (a real OLED has
     # nothing to emulate). A wrong guess only shows/hides a cosmetic button.
     panel: str = "lcd"
@@ -60,4 +62,9 @@ DEVICE_TABLE = (
                   5, 15, 30, 30, match_names=("83E1", "Legion Go")),
     DeviceProfile("msi_claw_8_ai_plus", "MSI Claw 8 AI+", "Intel Core Ultra 7 258V", "intel",
                   8, 17, 30, 35, match_names=("Claw 8 AI+", "Claw 8")),
+    # OneXPlayer OneXFly Apex (Strix Halo). The chip name is read live from
+    # cpuinfo; this string is only a fallback.
+    DeviceProfile("onexplayer_apex", "OneXPlayer OneXFly Apex",
+                  "AMD Ryzen AI Max+ 395", "amd",
+                  5, 20, 45, 54, match_names=("ONEXPLAYER APEX",), experimental=True),
 )

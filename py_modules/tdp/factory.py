@@ -1,3 +1,4 @@
+from tdp.alib import AlibBackend
 from tdp.backend import NullBackend, TDPBackend
 from tdp.firmware_attr import FirmwareAttrBackend
 from tdp.intel_rapl import IntelRaplBackend
@@ -12,8 +13,9 @@ def _candidates(device, fallback, root, ryzenadj):
     known-good backend first, then falls through to every other known path by
     capability — so a known device stays robust if a kernel update moves its
     interface, and an unrecognised handheld still lands on whatever it actually
-    exposes. ryzenadj (AMD-only) is excluded on Intel hosts so its mere presence
-    can't capture the selection."""
+    exposes. The generic AMD write paths (ryzenadj, then ALIB via acpi_call) sit
+    strictly last, after every device-specific interface, so a recognised device
+    never changes selection. Both are AMD-only and excluded on Intel."""
     def asus():
         return FirmwareAttrBackend("asus-armoury", fallback, root=root)
 
@@ -30,19 +32,26 @@ def _candidates(device, fallback, root, ryzenadj):
     def deck():
         return SteamDeckHwmonBackend(fallback, root=root)
 
+    def alib():
+        return AlibBackend(fallback, root=root)
+
+    # Generic-AMD fallbacks, appended after every device-specific path: ryzenadj
+    # first, then the acpi_call ALIB path when ryzenadj is absent.
+    amd_tail = [ryzenadj, alib]
+
     key = device.key
     if device.vendor == "intel":
-        return [msi, intel]
+        return [msi, intel]  # no AMD fallbacks on Intel
     if key.startswith("steam_deck"):
-        return [deck, asus, lenovo, msi, ryzenadj]
+        return [deck, asus, lenovo, msi, *amd_tail]
     if key.startswith("rog_"):
-        return [asus, lenovo, msi, ryzenadj]
+        return [asus, lenovo, msi, *amd_tail]
     if key.startswith("legion_"):
-        return [lenovo, asus, msi, ryzenadj]
+        return [lenovo, asus, msi, *amd_tail]
     # generic / other AMD. intel-rapl excluded (AMD RAPL can confirm a write without
     # changing real TDP); deck excluded (steamdeck-hwmon matches any power*_cap chip,
-    # incl. amdgpu's GPU cap — wrong rail). ryzenadj is the AMD fallback.
-    return [asus, lenovo, msi, ryzenadj]
+    # incl. amdgpu's GPU cap — wrong rail).
+    return [asus, lenovo, msi, *amd_tail]
 
 
 def select_backend(device, root="/", ryzenadj_resolve=None) -> TDPBackend:

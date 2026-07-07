@@ -7,6 +7,7 @@ from report.collector import (
     kernel_logs,
     redact_obj,
     redact_text,
+    sysfs_snapshot,
     tail_logs,
 )
 
@@ -77,6 +78,26 @@ def test_redact_text_hostname_word_boundary():
 def test_redact_text_keeps_device_names():
     # The username 'deck' must NOT nuke 'Steam Deck' - we only scrub PATHS.
     assert redact_text("Steam Deck OLED") == "Steam Deck OLED"
+
+
+def test_redact_text_scrubs_labeled_serials():
+    # DMI/dmesg serial lines: keep the label for context, drop the value.
+    out = redact_text("board_serial: ABCD1234EFGH")
+    assert "ABCD1234EFGH" not in out and "[serial]" in out and "board_serial" in out
+    out = redact_text("product_serial=XYZ98765QP")
+    assert "XYZ98765QP" not in out and "[serial]" in out
+    out = redact_text("System Info: Serial Number: 9F8E7D6C5B")
+    assert "9F8E7D6C5B" not in out and "[serial]" in out
+
+
+def test_redact_text_scrubs_standalone_serial_run():
+    # A long mixed alphanumeric token anywhere is scrubbed...
+    assert "XJ8KD93MABZ" not in redact_text("unit XJ8KD93MABZ online")
+
+
+def test_redact_text_serial_run_leaves_words_and_numbers():
+    # ...but pure words and pure numbers (timestamps) are left intact.
+    assert redact_text("steamdeck up at 1700000000") == "steamdeck up at 1700000000"
 
 
 def test_redact_text_passes_non_strings():
@@ -163,3 +184,130 @@ def test_build_bundle_tolerates_none_categories():
     )
     assert b["categories"] == []
     assert b["text"] == ""
+
+
+def test_build_bundle_includes_sysfs():
+    b = build_bundle(
+        app="a", categories=[], text="", environment={}, capabilities={},
+        state={}, stores={}, logs=[], sysfs={"hwmon": [{"name": "asus"}]},
+    )
+    assert b["sysfs"] == {"hwmon": [{"name": "asus"}]}
+
+
+def test_build_bundle_defaults_sysfs_empty():
+    b = build_bundle(
+        app="a", categories=[], text="", environment={}, capabilities={},
+        state={}, stores={}, logs=[],
+    )
+    assert b["sysfs"] == {}
+
+
+# ---- sysfs_snapshot -------------------------------------------------------
+def _mk(path, text=""):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
+        f.write(text)
+
+
+def _build_fake_sysfs(root):
+    # hwmon0 = a vendor fan chip with pwm + fan + temp label nodes.
+    _mk(os.path.join(root, "sys/class/hwmon/hwmon0/name"), "asus\n")
+    _mk(os.path.join(root, "sys/class/hwmon/hwmon0/pwm1"), "128\n")
+    _mk(os.path.join(root, "sys/class/hwmon/hwmon0/pwm1_enable"), "2\n")
+    _mk(os.path.join(root, "sys/class/hwmon/hwmon0/fan1_input"), "3200\n")
+    _mk(os.path.join(root, "sys/class/hwmon/hwmon0/temp1_label"), "Tctl\n")
+    # hwmon1 = a temp-only chip.
+    _mk(os.path.join(root, "sys/class/hwmon/hwmon1/name"), "k10temp\n")
+    _mk(os.path.join(root, "sys/class/hwmon/hwmon1/temp1_label"), "Tctl\n")
+    # firmware-attributes: vendor WMI TDP attributes.
+    _mk(os.path.join(root, "sys/class/firmware-attributes/asus-armoury/attributes/ppt_pl1_spl/current_value"), "17\n")
+    _mk(os.path.join(root, "sys/class/firmware-attributes/asus-armoury/attributes/ppt_pl2_sppt/current_value"), "25\n")
+    # power_supply: a battery with a charge threshold + a charger without one.
+    _mk(os.path.join(root, "sys/class/power_supply/BAT0/energy_full"), "1\n")
+    _mk(os.path.join(root, "sys/class/power_supply/BAT0/cycle_count"), "38\n")
+    _mk(os.path.join(root, "sys/class/power_supply/BAT0/charge_control_end_threshold"), "80\n")
+    _mk(os.path.join(root, "sys/class/power_supply/ADP0/online"), "1\n")
+
+
+def test_sysfs_snapshot_hwmon(tmp_path):
+    _build_fake_sysfs(str(tmp_path))
+    snap = sysfs_snapshot(root=str(tmp_path))
+    chips = {c["name"]: c["nodes"] for c in snap["hwmon"]}
+    assert set(chips["asus"]) == {"pwm1", "pwm1_enable", "fan1_input", "temp1_label"}
+    assert chips["k10temp"] == ["temp1_label"]
+
+
+def test_sysfs_snapshot_firmware_attributes(tmp_path):
+    _build_fake_sysfs(str(tmp_path))
+    snap = sysfs_snapshot(root=str(tmp_path))
+    assert snap["firmware_attributes"]["asus-armoury"] == ["ppt_pl1_spl", "ppt_pl2_sppt"]
+
+
+def test_sysfs_snapshot_power_supply(tmp_path):
+    _build_fake_sysfs(str(tmp_path))
+    snap = sysfs_snapshot(root=str(tmp_path))
+    assert "charge_control_end_threshold" in snap["power_supply"]["BAT0"]
+    assert "cycle_count" in snap["power_supply"]["BAT0"]
+    assert "charge_control_end_threshold" not in snap["power_supply"]["ADP0"]
+
+
+def test_sysfs_snapshot_acpi_present_and_writable(tmp_path):
+    _mk(os.path.join(str(tmp_path), "proc/acpi/call"), "")
+    snap = sysfs_snapshot(root=str(tmp_path))
+    assert snap["acpi"]["call_present"] is True
+    assert snap["acpi"]["call_writable"] is True
+
+
+def test_sysfs_snapshot_acpi_absent(tmp_path):
+    snap = sysfs_snapshot(root=str(tmp_path))
+    assert snap["acpi"]["call_present"] is False
+    assert snap["acpi"]["call_writable"] is False
+
+
+def test_sysfs_snapshot_modules_lists_acpi_call(tmp_path):
+    _mk(
+        os.path.join(str(tmp_path), "proc/modules"),
+        "amdgpu 12288 3 - Live 0x0000000000000000\n"
+        "acpi_call 16384 0 - Live 0x0000000000000000\n",
+    )
+    snap = sysfs_snapshot(root=str(tmp_path))
+    assert "acpi_call" in snap["modules"] and "amdgpu" in snap["modules"]
+
+
+def test_sysfs_snapshot_modules_without_acpi_call(tmp_path):
+    _mk(os.path.join(str(tmp_path), "proc/modules"), "amdgpu 12288 3 - Live 0x0\n")
+    snap = sysfs_snapshot(root=str(tmp_path))
+    assert "acpi_call" not in snap["modules"]
+
+
+def test_sysfs_snapshot_empty_root_never_raises(tmp_path):
+    snap = sysfs_snapshot(root=str(tmp_path))
+    assert snap == {
+        "hwmon": [],
+        "firmware_attributes": {},
+        "power_supply": {},
+        "acpi": {"call_present": False, "call_writable": False},
+        "modules": [],
+    }
+
+
+def test_sysfs_snapshot_missing_root_never_raises():
+    # A non-existent root must still return the full shape, never throw.
+    snap = sysfs_snapshot(root="/no/such/root/xyz")
+    assert snap["hwmon"] == [] and snap["modules"] == []
+
+
+def test_sysfs_snapshot_redacts_serial_in_node_value(tmp_path):
+    # A serial leaking through a small node value is scrubbed.
+    _mk(os.path.join(str(tmp_path), "sys/class/hwmon/hwmon0/name"), "chipXJ8KD93MABZ\n")
+    snap = sysfs_snapshot(root=str(tmp_path), home="/home/deck")
+    assert "XJ8KD93MABZ" not in snap["hwmon"][0]["name"]
+
+
+def test_sysfs_snapshot_is_size_capped(tmp_path):
+    # A pathological chip count still yields a bounded, flagged snapshot.
+    root = str(tmp_path)
+    for i in range(200):
+        _mk(os.path.join(root, f"sys/class/hwmon/hwmon{i}/name"), f"chip{i}\n")
+    snap = sysfs_snapshot(root=root)
+    assert len(snap["hwmon"]) <= 32  # chip cap, no recursive/unbounded sweep

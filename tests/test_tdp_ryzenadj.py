@@ -59,3 +59,20 @@ def test_set_tdp_clamps():
     res = b.set_tdp(99, ac=True)
     # requested clamped to 30 (max_ac); applied read back from (faked) info
     assert res.requested_w == 99
+
+
+def test_read_applied_none_when_stapm_absent():
+    # No stapm/sustained rail in the output — report unreadable, never guess
+    # from another rail.
+    info = "| Name | Value | Parameter |\n| PPT FAST | 30.000 | fast-limit |\n"
+    fake = FakeRun(info=info)
+    b = RyzenadjBackend(FALLBACK, resolve=lambda: "/usr/bin/ryzenadj", runner=fake)
+    assert b.read_applied() is None
+
+
+def test_set_tdp_not_ok_when_readback_unavailable():
+    info = "| Name | Value | Parameter |\n| PPT FAST | 30.000 | fast-limit |\n"
+    fake = FakeRun(info=info)
+    b = RyzenadjBackend(FALLBACK, resolve=lambda: "/usr/bin/ryzenadj", runner=fake)
+    res = b.set_tdp(20, ac=True)
+    assert res.ok is False and res.applied_w is None
