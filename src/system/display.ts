@@ -1,4 +1,5 @@
 import { ScalarControl } from "./types";
+import { markSelfWrite } from "./selfWrite";
 
 // SteamClient brightness adapter. Isolated here so the rest of the UI is stable
 // if a device needs a different call. Never throws — degrades to "unavailable"
@@ -26,6 +27,7 @@ export const displayBrightness: ScalarControl = {
   },
   set(fraction) {
     try {
+      markSelfWrite("brightness");
       SteamClient?.System?.Display?.SetBrightness?.(fraction);
     } catch {
       /* ignore */

@@ -185,6 +185,10 @@ const es: Record<string, string> = {
   "settings.battmax.desc": "Permite subir el TDP hasta el máximo del equipo también con batería. Más potencia, pero la batería se agota mucho más rápido.",
   "settings.qamboost": "Subir TDP con el menú abierto",
   "settings.qamboost.desc": "Sube el TDP mientras el menú de acceso rápido está abierto para que vaya fluido. El valor mostrado es temporal del menú; dentro del juego se reajusta.",
+  "settings.valueToast": "Mostrar valor al cambiar volumen o brillo",
+  "settings.valueToast.desc": "Muestra el número en pantalla al ajustar con los botones, sin abrir el panel.",
+  "valueToast.volume": "Volumen",
+  "valueToast.brightness": "Brillo",
   "tdp.unsupported": "El control de TDP no está disponible en este dispositivo.",
   "tdp.scope.global": "Global",
   "tdp.inherit": "Heredando del global",
@@ -449,6 +453,10 @@ const en: Record<string, string> = {
   "settings.battmax.desc": "Allow raising TDP to the device maximum on battery too. More performance, but the battery drains much faster.",
   "settings.qamboost": "Raise TDP while the menu is open",
   "settings.qamboost.desc": "Raises TDP while the quick access menu is open so it stays fluid. The value shown is temporary to the menu; in-game it readjusts.",
+  "settings.valueToast": "Show value when changing volume or brightness",
+  "settings.valueToast.desc": "Shows the number on screen when you adjust with the buttons, without opening the panel.",
+  "valueToast.volume": "Volume",
+  "valueToast.brightness": "Brightness",
   "tdp.unsupported": "TDP control isn't available on this device.",
   "tdp.scope.global": "Global",
   "tdp.inherit": "Inheriting from global",
@@ -581,6 +589,11 @@ export const I18nProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const value = useMemo<I18nValue>(() => ({ lang, setLang, t }), [lang, setLang, t]);
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 };
+
+export function translate(key: string, params?: Params): string {
+  const lang = initialLang();
+  return format(DICTS[lang][key] ?? en[key] ?? key, params);
+}
 
 export function useI18n(): I18nValue {
   const ctx = useContext(I18nContext);

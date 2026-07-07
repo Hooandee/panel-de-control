@@ -7,6 +7,7 @@ import { openCustomizeModal } from "../components/CustomizeModal";
 import { openGlossaryModal } from "../components/GlossaryModal";
 import { openReportModal } from "../components/ReportModal";
 import { getTelemetryEnabled, setTelemetryEnabled, getUnlockBatteryMax, setUnlockBatteryMax, getQamTdpBoost, setQamTdpBoost, resetTelemetry, getVersion, getControllerConflict } from "../api";
+import { isValueToastEnabled, setValueToastEnabled } from "../system/valueToast";
 import { UpdatePanel } from "../updater/UpdatePanel";
 import { ControllerConflictCard } from "../components/ControllerConflictCard";
 import { theme } from "../theme";
@@ -38,6 +39,11 @@ export const AjustesSection: FC = () => {
   const [learn, onToggle] = useToggleSetting(getTelemetryEnabled, setTelemetryEnabled, true);
   const [battMax, onToggleBattMax] = useToggleSetting(getUnlockBatteryMax, setUnlockBatteryMax, false);
   const [qamBoost, onToggleQamBoost] = useToggleSetting(getQamTdpBoost, setQamTdpBoost, false);
+  const [valueToast, setValueToast] = useState(isValueToastEnabled());
+  const onToggleValueToast = (next: boolean) => {
+    setValueToast(next);
+    setValueToastEnabled(next);
+  };
   const [version, setVersion] = useState("");
   useEffect(() => {
     getVersion().then(setVersion).catch(() => {});
@@ -120,6 +126,14 @@ export const AjustesSection: FC = () => {
             bottomSeparator="none"
           />
         )}
+
+        <ToggleField
+          label={t("settings.valueToast")}
+          description={t("settings.valueToast.desc")}
+          checked={valueToast}
+          onChange={onToggleValueToast}
+          bottomSeparator="none"
+        />
 
         {/* Open the full-screen plain-language glossary of terms. */}
         <ButtonItem layout="below" description={t("glossary.button.desc")} onClick={() => openGlossaryModal()}>

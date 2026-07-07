@@ -21,6 +21,7 @@ const color = {
   // Warm/bright orange for the transient HW-boost segment on the power arc — a
   // hotter tone than `warn` so it reads as "extra on top", not a warning.
   boost: "#ff8a3d",
+  brightness: "#f5c542",
 } as const;
 
 const radius = { sm: 8, md: 14, lg: 20 } as const;
