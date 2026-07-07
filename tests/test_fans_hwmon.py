@@ -66,6 +66,34 @@ def test_uses_fan_label_when_present(tmp_path):
     assert fan["label"] == "CPU Fan"
 
 
+def test_unlabeled_fan_gets_friendly_generic_label_not_raw_chip_name(tmp_path):
+    # The lenovo_wmi_other chip exposes no fanN_label, so the fallback must be a
+    # clean generic label ("Fan 1"), not the raw chip name ("lenovo_wmi_other 1").
+    root = str(tmp_path)
+    _mk_chip(root, 0, "lenovo_wmi_other", {"fan1_input": "9415"})
+    fan = FanReader(root=root).read()["fans"][0]
+    assert fan["label"] == "Fan 1"
+
+
+def test_lenovo_wmi_other_drops_phantom_zero_channel(tmp_path):
+    # Legion Go original (83E1): one physical fan, but lenovo_wmi_other over-exposes
+    # a fixed 2-channel layout ("all fans exposed. Use with caution"). The 0-RPM
+    # second channel is a phantom → keep only the real spinning fan.
+    root = str(tmp_path)
+    _mk_chip(root, 0, "lenovo_wmi_other", {"fan1_input": "9415", "fan2_input": "0"})
+    fans = FanReader(root=root).read()["fans"]
+    assert len(fans) == 1
+    assert fans[0]["rpm"] == 9415
+
+
+def test_lenovo_wmi_other_all_zero_keeps_single_fan(tmp_path):
+    # Silent mode (both channels read 0) still collapses to the one physical fan.
+    root = str(tmp_path)
+    _mk_chip(root, 0, "lenovo_wmi_other", {"fan1_input": "0", "fan2_input": "0"})
+    fans = FanReader(root=root).read()["fans"]
+    assert len(fans) == 1
+
+
 def test_reads_temps_in_celsius(tmp_path):
     root = str(tmp_path)
     _mk_chip(root, 0, "x", {"fan1_input": "1500", "temp1_input": "54800", "temp1_label": "CPU"})
@@ -201,6 +229,23 @@ def test_curate_fans_two_or_fewer_unchanged():
     fans = [_fan("cpu", 4400), _fan("gpu", 4500)]
     assert curate_fans(fans) == fans
     assert len(curate_fans([_fan("only", 528)])) == 1
+
+
+def test_curate_fans_collapses_lenovo_wmi_other_phantom():
+    # Legion Go original: lenovo_wmi_other exposes 2 channels but the device has one
+    # physical fan; drop the phantom 0-RPM channel, keep the spinning one.
+    fans = [_fan("Fan 1", 9415, chip="lenovo_wmi_other"),
+            _fan("Fan 2", 0, chip="lenovo_wmi_other")]
+    out = curate_fans(fans)
+    assert len(out) == 1
+    assert out[0]["rpm"] == 9415
+
+
+def test_curate_fans_does_not_collapse_other_two_fan_chips():
+    # A genuine two-fan chip (e.g. Ally's lock-step pair) is untouched, even with a
+    # channel idling at 0 — only lenovo_wmi_other is known to over-expose a phantom.
+    fans = [_fan("cpu", 4400), _fan("gpu", 0)]
+    assert curate_fans(fans) == fans
 
 
 def test_curate_keeps_cpu_and_gpu_distinct_when_both_present():

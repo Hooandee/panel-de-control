@@ -42,14 +42,34 @@ _MAX_FANS = 2  # no target device has >2 physical fans; extra hwmon channels are
 # it as unknown rather than a fake 65535.
 _INVALID_RPM = 0xFFFF
 
+# The lenovo_wmi_other driver exposes a fixed two-channel layout regardless of how
+# many fans are populated (it logs "all fans exposed. Use with caution"). The Legion
+# Go original (83E1) and Go S have ONE physical fan, so the second channel is a
+# phantom. The Legion Go 2's two real fans read RPM over the EC, not this hwmon, so
+# they never reach here — collapse this chip to a single (spinning) fan.
+_SINGLE_FAN_CHIP = "lenovo_wmi_other"
+
+
+def _collapse_single_fan_chip(fans: list[dict]) -> list[dict]:
+    """Keep only one channel for a chip known to over-expose phantom fans, preferring
+    a spinning one (fall back to the first when all read 0, e.g. silent mode)."""
+    channels = [i for i, f in enumerate(fans) if f["chip"] == _SINGLE_FAN_CHIP]
+    if len(channels) <= 1:
+        return fans
+    spinning = [i for i in channels if (fans[i].get("rpm") or 0) > 0]
+    keep = (spinning or channels)[0]
+    drop = set(channels) - {keep}
+    return [f for i, f in enumerate(fans) if i not in drop]
+
 
 def curate_fans(fans: list[dict]) -> list[dict]:
-    """Drop the generic acpi_fan chip when a vendor chip also reports fans, then cap
-    at 2 — the MSI Claw chip exposes 4 channels but only 2 fans spin, so prefer the
-    spinning ones and drop the phantom 0-RPM channels (fall back to the first 2 when
-    all read 0, e.g. silent mode)."""
+    """Drop the generic acpi_fan chip when a vendor chip also reports fans, collapse
+    the lenovo_wmi_other phantom channel, then cap at 2 — the MSI Claw chip exposes 4
+    channels but only 2 fans spin, so prefer the spinning ones and drop the phantom
+    0-RPM channels (fall back to the first 2 when all read 0, e.g. silent mode)."""
     has_vendor = any(f["chip"] != _GENERIC_FAN_CHIP for f in fans)
     fans = [f for f in fans if f["chip"] != _GENERIC_FAN_CHIP] if has_vendor else list(fans)
+    fans = _collapse_single_fan_chip(fans)
     if len(fans) > _MAX_FANS:
         spinning = [f for f in fans if (f.get("rpm") or 0) > 0]
         fans = (spinning or fans)[:_MAX_FANS]
@@ -132,7 +152,11 @@ class FanReader:
                 if rpm == _INVALID_RPM:
                     rpm = None  # glitch read — keep the fan, report speed unknown
                 n = os.path.basename(inp)[len("fan"):-len("_input")]
-                label = _read(os.path.join(d, f"fan{n}_label")) or f"{name or 'fan'} {n}".strip()
+                # Vendor chips like lenovo_wmi_other expose no fanN_label; fall back to
+                # a clean generic ("Fan 1"), never the raw chip name. The monitor UI
+                # localizes this to "Ventilador N" anyway; this keeps the label honest
+                # in exported diagnostics too.
+                label = _read(os.path.join(d, f"fan{n}_label")) or f"Fan {n}"
                 pwm = _read_int(os.path.join(d, f"pwm{n}"))
                 percent = round(pwm / 255 * 100) if pwm is not None else None
                 raw_fans.append({"chip": name, "label": label, "rpm": rpm, "percent": percent})
