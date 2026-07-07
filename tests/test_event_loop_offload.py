@@ -33,6 +33,7 @@ class _RecordingExecutor(concurrent.futures.Executor):
 class _FakeColorBackend:
     def __init__(self):
         self.supported = True
+        self.probe_detail = "fake"
         self.force_composite = False
         self.applied = []
         self.applied_threads = []

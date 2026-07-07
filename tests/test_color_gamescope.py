@@ -152,6 +152,31 @@ def test_backend_rate_limits_probe_of_unresponsive_socket(tmp_path):
     assert b.supported is False and probes() == 2   # past the interval → re-probes
 
 
+def test_probe_detail_reports_missing_socket(tmp_path):
+    (tmp_path / "run").mkdir()
+    b = GamescopeColorBackend(runner=FakeRunner(),
+                              socket_glob=str(tmp_path / "run/user/*/gamescope-*"))
+    assert b.supported is False
+    assert "no gamescope socket" in b.probe_detail
+
+
+def test_probe_detail_reports_socket_and_rc(tmp_path):
+    b, _ = _backend(tmp_path, ok=True)
+    assert b.supported is True
+    assert "gamescope-0" in b.probe_detail and "rc=0" in b.probe_detail
+
+
+def test_probe_detail_reports_nonzero_rc(tmp_path):
+    b = GamescopeColorBackend(runner=FakeRunner(ok=False),
+                              socket_glob=str(tmp_path / "run/user/*/gamescope-*"),
+                              lut_path=str(tmp_path / "look.cube"))
+    sock = tmp_path / "run" / "user" / "1000" / "gamescope-0"
+    sock.parent.mkdir(parents=True)
+    sock.write_text("")
+    assert b.supported is False
+    assert "rc=1" in b.probe_detail
+
+
 def test_backend_apply_writes_cube_and_calls_set_look(tmp_path):
     b, r = _backend(tmp_path)
     r.calls.clear()

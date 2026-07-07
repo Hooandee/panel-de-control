@@ -16,15 +16,16 @@ describe("toggleCategory", () => {
 });
 
 describe("canSubmit", () => {
-  it("false for an empty report", () => {
+  it("false without a description", () => {
     expect(canSubmit([], "")).toBe(false);
     expect(canSubmit([], "   ")).toBe(false);
   });
-  it("true with a category", () => {
-    expect(canSubmit(["fans"], "")).toBe(true);
+  it("false with categories but no description", () => {
+    expect(canSubmit(["fans", "display"], "")).toBe(false);
   });
-  it("true with only free text", () => {
+  it("true once there is a description", () => {
     expect(canSubmit([], "algo falla")).toBe(true);
+    expect(canSubmit(["fans"], "los ventiladores no giran")).toBe(true);
   });
 });
 
