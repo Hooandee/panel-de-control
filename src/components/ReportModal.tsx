@@ -198,6 +198,11 @@ const ReportBody: FC<{ closeModal?: () => void }> = ({ closeModal }) => {
           value={text}
           onChange={(e) => setText(e.target.value)}
         />
+        {text.trim().length === 0 && (
+          <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
+            {t("report.describe.hint")}
+          </div>
+        )}
       </div>
 
       <div

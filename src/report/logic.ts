@@ -24,8 +24,9 @@ export function toggleCategory(
     : [...selected, id];
 }
 
-/** A report is sendable once the user has marked at least one category OR written
- *  something - an empty report helps nobody. */
-export function canSubmit(selected: ReportCategory[], text: string): boolean {
-  return selected.length > 0 || text.trim().length > 0;
+/** A report is sendable once the user has written something. Without a description
+ *  a report is almost impossible to act on, so the text is required; categories
+ *  alone are not enough. */
+export function canSubmit(_selected: ReportCategory[], text: string): boolean {
+  return text.trim().length > 0;
 }
