@@ -1,4 +1,5 @@
 import { ScalarControl } from "./types";
+import { markSelfWrite } from "./selfWrite";
 
 // SteamClient system-volume adapter. Volume is per audio device, so we track the
 // default OUTPUT device: GetDevices() seeds the current level and device id,
@@ -70,6 +71,7 @@ export const systemVolume: ScalarControl = {
   set(fraction) {
     try {
       if (outputDeviceId !== null) {
+        markSelfWrite("volume");
         void SteamClient?.System?.Audio?.SetDeviceVolume?.(outputDeviceId, OUTPUT, fraction);
       }
     } catch {

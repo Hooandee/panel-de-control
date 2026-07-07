@@ -6,6 +6,7 @@ import { I18nProvider } from "./i18n";
 import { ControlCenter } from "./components/ControlCenter";
 import { startGameWatcher } from "./tdp/gameWatcher";
 import { startEcoAmbient } from "./system/ecoAmbient";
+import { startValueToast } from "./system/valueToast";
 
 export default definePlugin(() => {
   // Persistent current-game watcher: runs at plugin scope (while Steam runs),
@@ -16,6 +17,7 @@ export default definePlugin(() => {
   // Persistent ambient-dim controller for download mode: also runs at plugin scope
   // so the screen keeps dimming/waking while a game downloads with the QAM closed.
   const stopEcoAmbient = startEcoAmbient();
+  const stopValueToast = startValueToast();
 
   return {
     name: "Panel de Control",
@@ -31,6 +33,7 @@ export default definePlugin(() => {
     onDismount() {
       stopGameWatcher();
       stopEcoAmbient();
+      stopValueToast();
     },
   };
 });
