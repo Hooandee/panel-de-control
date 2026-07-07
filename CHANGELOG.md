@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.8.0...panel-de-control-v0.8.1) (2026-07-07)
+
+
+### Bug Fixes
+
+* require a report description and tidy the Legion Go fan monitor ([#81](https://github.com/Hooandee/panel-de-control/issues/81)) ([a4be837](https://github.com/Hooandee/panel-de-control/commit/a4be83700d79108b376d58b27aa006a4f7c60eb5))
+
 ## [0.8.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.7.0...panel-de-control-v0.8.0) (2026-07-07)
 
 
