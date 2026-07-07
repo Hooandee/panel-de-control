@@ -3,9 +3,10 @@
 ## [0.8.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.7.0...panel-de-control-v0.8.0) (2026-07-07)
 
 
-### Features
+### Features / Novedades
 
-* recognise the OneXPlayer OneXFly Apex with a generic AMD TDP path ([#78](https://github.com/Hooandee/panel-de-control/issues/78)) ([e407d17](https://github.com/Hooandee/panel-de-control/commit/e407d17b74a70f35669dbaf12241111c3e3bf6e7))
+* The OneXPlayer OneXFly Apex is now recognised by name instead of showing up as a generic device, and it gets working TDP control through the generic AMD path. Fans and the charge limit stay off until they can be confirmed on the hardware, so the device is marked experimental for now. Bug reports also gather more device detail, which makes it easier to add support for new handhelds like this one. ([#78](https://github.com/Hooandee/panel-de-control/issues/78)) ([e407d17](https://github.com/Hooandee/panel-de-control/commit/e407d17b74a70f35669dbaf12241111c3e3bf6e7))
+* **ES:** La OneXPlayer OneXFly Apex ahora se reconoce por su nombre en lugar de aparecer como dispositivo genérico, y obtiene control de TDP por la vía genérica de AMD. Los ventiladores y el límite de carga quedan desactivados hasta poder confirmarlos en el equipo, así que de momento va marcada como experimental. Los reportes de problemas también recogen más detalle del dispositivo, lo que facilita dar soporte a equipos nuevos como este. ([#78](https://github.com/Hooandee/panel-de-control/issues/78)) ([e407d17](https://github.com/Hooandee/panel-de-control/commit/e407d17b74a70f35669dbaf12241111c3e3bf6e7))
 
 ## [0.7.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.6.0...panel-de-control-v0.7.0) (2026-07-07)
 
