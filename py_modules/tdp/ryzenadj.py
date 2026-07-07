@@ -6,7 +6,18 @@ import subprocess
 from tdp.backend import TDPBackend
 from tdp.types import TdpLimits, TdpResult
 
-_STAPM_RE = re.compile(r"STAPM LIMIT\s*\|\s*([\d.]+)")
+# The sustained (STAPM) limit line of `ryzenadj -i`.
+_STAPM_RE = re.compile(r"STAPM LIMIT\s*\|\s*([\d.]+)", re.IGNORECASE)
+
+
+def _parse_stapm(out: str) -> int | None:
+    m = _STAPM_RE.search(out)
+    if not m:
+        return None
+    try:
+        return round(float(m.group(1)))
+    except ValueError:
+        return None
 
 
 def _default_resolve():
@@ -28,6 +39,7 @@ class RyzenadjBackend(TDPBackend):
     """Generic AMD fallback via the ryzenadj binary. Never raises."""
 
     name = "ryzenadj"
+    blocking = True
 
     def __init__(self, fallback: TdpLimits, resolve=_default_resolve, runner=subprocess.run):
         self._fallback = fallback
@@ -72,5 +84,4 @@ class RyzenadjBackend(TDPBackend):
         except (OSError, subprocess.SubprocessError):
             return None
         out = getattr(res, "stdout", "") or ""
-        m = _STAPM_RE.search(out)
-        return round(float(m.group(1))) if m else None
+        return _parse_stapm(out)

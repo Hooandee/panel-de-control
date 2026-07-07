@@ -19,7 +19,7 @@ If you believe attribution is missing or incorrect, please open an issue.
 | [SteamDeckHomebrew/decky-plugin-template](https://github.com/SteamDeckHomebrew/decky-plugin-template) | BSD-3-Clause | Project scaffold. |
 | [SimpleDeckyTDP](https://github.com/aarron-lee/SimpleDeckyTDP) | BSD-3-Clause | TDP mechanism reference (firmware-attributes paths, per-device approach). |
 | [Handheld Daemon (hhd)](https://github.com/hhd-dev/hhd) | LGPL-2.1 | Per-device strategy, resume/AC re-apply concepts; its localhost REST API for cooperative control. Approach/interface only — no LGPL code copied. |
-| [RyzenAdj](https://github.com/FlyGoat/RyzenAdj) | LGPL-3.0 | Generic AMD TDP fallback. Invoked as an external subprocess when present; **not** bundled in this repository and not linked into our code. If a future release bundles the binary, RyzenAdj's LGPL-3.0 license text will be shipped alongside it. |
+| [RyzenAdj](https://github.com/FlyGoat/RyzenAdj) | LGPL-3.0 | Generic AMD TDP fallback. Invoked as an external subprocess (never linked into our code). See the bundled-dependencies section below — release builds ship a prebuilt binary. |
 | [PowerControl](https://github.com/mengmeet/PowerControl) | See project | Upstream of the Lenovo firmware-attributes path (chain credit). |
 | [LegionGoRemapper](https://github.com/aarron-lee/LegionGoRemapper) | See project | Controller/remap reference for Legion devices. |
 | [InputPlumber](https://github.com/ShadowBlip/InputPlumber) | See project | SteamOS controller daemon. We cooperate with it over its D-Bus interface; no code copied. |
@@ -37,6 +37,17 @@ The built plugin (`dist/index.js`) bundles the following runtime packages:
 | [react-icons](https://github.com/react-icons/react-icons) | MIT |
 | [tslib](https://github.com/microsoft/tslib) | 0BSD |
 | React / React-DOM (provided by the Decky runtime) | MIT |
+
+### Bundled binary (release builds only)
+
+Release builds also include a prebuilt [RyzenAdj](https://github.com/FlyGoat/RyzenAdj)
+CLI binary at `bin/ryzenadj` (built from source at a pinned tag during the release
+pipeline; not committed to this repository). It is used only as a last-resort generic
+AMD power fallback and is invoked as a standalone subprocess — it is **not** linked
+into the plugin's code. RyzenAdj is licensed under the **LGPL-3.0**; its full license
+text ships alongside the binary as `bin/ryzenadj-LICENSE.txt`. RyzenAdj's
+corresponding source is available at its upstream repository at the pinned tag. Dev
+and prerelease builds omit the binary; the fallback simply reports as unsupported.
 
 Development-only tooling (TypeScript, Rollup, Vitest, Ruff, pytest, `@decky/ui`,
 `@decky/rollup`, type stubs) is not redistributed and is listed in `package.json`

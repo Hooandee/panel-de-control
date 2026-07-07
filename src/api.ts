@@ -14,9 +14,15 @@ export interface DeviceInfo {
   tdp_max: number;
   tdp_max_charger: number;
   is_generic: boolean;
+  // When true, the shell shows the experimental marker for this recognised model.
+  experimental: boolean;
 }
 
 export const getDevice = callable<[], DeviceInfo>("get_device");
+
+// Generic (unrecognised) or experimental (recognised, unconfirmed): both drive the
+// header badge and the Ajustes note.
+export const isUnvalidated = (d: DeviceInfo): boolean => d.is_generic || d.experimental;
 
 export interface TdpLimits {
   min: number;

@@ -110,6 +110,24 @@ def test_multi_fan_all_driven(tmp_path):
     assert int(_r(d, "pwm1")) == 135 and int(_r(d, "pwm2")) == 135
 
 
+def test_oxp_style_chip_supported(tmp_path):
+    # OneXPlayer oxp-sensors exposes the standard manual-PWM trio (pwm1 +
+    # pwm1_enable + fan1_input); the generic probe must catch it.
+    _mk_pwm_chip(str(tmp_path), name="oxpec")
+    assert _backend(tmp_path).supported is True
+
+
+def test_oxp_style_release_restores_captured_auto_value(tmp_path):
+    # oxp's auto value is 0 (not the hwmon-standard 2). Capturing the original
+    # enable before driving means release hands it back to the right auto value.
+    d = _mk_pwm_chip(str(tmp_path), name="oxpec", enable="0")
+    b = _backend(tmp_path, temp=70.0)
+    b.apply_curve_all(CURVE)
+    assert _r(d, "pwm1_enable") == "1"  # driven manual
+    b.set_auto(None)
+    assert _r(d, "pwm1_enable") == "0"  # restored to the captured auto value
+
+
 def test_factory_selects_generic_pwm_last(tmp_path):
     _mk_pwm_chip(str(tmp_path))
     backend = select_fan_backend(None, root=str(tmp_path), temp_fn=lambda: 60.0)

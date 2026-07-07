@@ -169,6 +169,7 @@ class _SlowBackend:
 
     supported = True
     supports_levels = True
+    blocking = True  # simulates the ryzenadj subprocess fallback (must run off-loop)
     name = "slow"
 
     def __init__(self):
@@ -248,6 +249,47 @@ def test_apply_rpcs_keep_subprocess_backends_off_the_loop_thread(tmp_path, monke
     assert fan.write_threads, "fan apply never ran"
     assert loop_tid not in color.applied_threads   # gamescopectl off the loop
     assert loop_tid not in fan.write_threads        # (Deck) systemctl off the loop
+
+
+def test_get_tdp_state_reads_applied_off_the_loop_thread(tmp_path, monkeypatch):
+    """read_applied() spawns a subprocess on the ryzenadj fallback -> it must run
+    off the event-loop thread, not inline in the async get_tdp_state handler."""
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+
+    read_threads = []
+
+    class _RecordingReadBackend(_SlowBackend):
+        def read_applied(self):
+            read_threads.append(threading.get_ident())
+            return self._applied
+
+    p._tdp_backend = _RecordingReadBackend()
+    ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    p._apply_executor = ex
+    main_tid = threading.get_ident()
+    st = asyncio.run(p.get_tdp_state())
+    ex.shutdown()
+    assert st["applied_w"] is not None
+    assert read_threads and main_tid not in read_threads  # read_applied off the loop
+
+
+def test_reset_tdp_auto_reads_applied_off_the_loop_thread(tmp_path, monkeypatch):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+
+    read_threads = []
+
+    class _RecordingReadBackend(_SlowBackend):
+        def read_applied(self):
+            read_threads.append(threading.get_ident())
+            return self._applied
+
+    p._tdp_backend = _RecordingReadBackend()
+    ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    p._apply_executor = ex
+    main_tid = threading.get_ident()
+    asyncio.run(p.reset_tdp_auto("global"))
+    ex.shutdown()
+    assert read_threads and main_tid not in read_threads
 
 
 def test_set_current_game_state_reflects_the_offloaded_apply(tmp_path, monkeypatch):

@@ -209,3 +209,21 @@ def test_select_generic_finds_deck_level(tmp_path):
     _mk_deck_hwmon(str(tmp_path), value="0")
     cl = select_charge_limit(_Generic(), root=str(tmp_path))
     assert isinstance(cl, SteamDeckChargeLimit)
+
+
+class _OxpApex:
+    key = "onexplayer_apex"
+
+
+def test_select_oxp_unsupported_without_known_node(tmp_path):
+    # No known/safe charge-limit node on this device -> honestly unsupported.
+    cl = select_charge_limit(_OxpApex(), root=str(tmp_path))
+    assert cl.supported is False
+
+
+def test_select_oxp_uses_standard_threshold_if_present(tmp_path):
+    # If the kernel does expose the standard threshold, the generic path catches it.
+    _mk_bat(str(tmp_path), value="85")
+    cl = select_charge_limit(_OxpApex(), root=str(tmp_path))
+    assert isinstance(cl, SysfsChargeLimit)
+    assert cl.get() == 85

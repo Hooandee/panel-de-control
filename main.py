@@ -310,6 +310,10 @@ class Plugin:
         logs = report_collector.tail_logs(
             getattr(decky, "DECKY_PLUGIN_LOG_DIR", ""), home=home, hostname=hostname
         )
+        # Bounded filesystem listing of the raw sysfs support surfaces (fan/temp
+        # chips, vendor WMI attributes, battery/charge nodes, ACPI-call + modules)
+        # so an unrecognised device is diagnosable from what actually exists.
+        snapshot = report_collector.sysfs_snapshot(home=home, hostname=hostname)
         # dmesg/journalctl are blocking subprocess calls (up to a few seconds each);
         # run them off the event loop so the auto-TDP loop and other RPCs don't stall.
         kernel = await loop.run_in_executor(
@@ -328,6 +332,7 @@ class Plugin:
             stores=self._report_stores(),
             logs=logs,
             kernel=kernel,
+            sysfs=snapshot,
             home=home,
             hostname=hostname,
         )
@@ -1517,11 +1522,19 @@ class Plugin:
         self._reapply_color()
         return await self._offload_call(self._color_state)
 
+    async def _read_applied(self):
+        # Only subprocess-backed backends (ryzenadj fallback) need the executor;
+        # sysfs reads (firmware-attr/intel/deck) and acpi-alib (None) are cheap inline.
+        b = self._tdp_backend
+        if getattr(b, "blocking", False):
+            return await self._offload_call(b.read_applied)
+        return b.read_applied()
+
     async def get_tdp_state(self) -> dict:
         self._init()
-        return self._tdp_state()
+        return self._tdp_state(await self._read_applied())
 
-    def _tdp_state(self) -> dict:
+    def _tdp_state(self, applied_w) -> dict:
         levels, active, ac = self._effective_levels(self._current_appid)
         global_levels, _active, _ac = self._effective_levels(None, ac)
         limits = self._limits()
@@ -1539,7 +1552,7 @@ class Plugin:
                                  and self._tdp_profiles.has_game(self._current_appid)),
             "watts": limits.clamp(eff["watts"], ac),
             "global_watts": limits.clamp(geff["watts"], ac),
-            "applied_w": self._tdp_backend.read_applied(),
+            "applied_w": applied_w,
             "supports_advanced": ("pl2" in ll or "pl3" in ll),
             "level_limits": ll,
             "levels": levels,
@@ -1592,14 +1605,14 @@ class Plugin:
     async def reset_tdp_auto(self, scope: str, appid=None) -> dict:
         self._init()
         resolved = self._resolve_scope(scope, appid)
+        # Always return the full new state so the UI updates badge + sliders in ONE
+        # round-trip (no separate get_tdp_state) — immediate, and a consistent
+        # TdpState shape (the frontend does setTdp with it).
         if resolved is not None:  # invalid scope → no-op (never from the UI)
             self._clear_eco()
             self._tdp_profiles.set_auto(resolved, appid=appid)
             await self._offload_call(self._reapply_tdp)
-        # Always return the full new state so the UI updates badge + sliders in ONE
-        # round-trip (no separate get_tdp_state) — immediate, and a consistent
-        # TdpState shape (the frontend does setTdp with it).
-        return self._tdp_state()
+        return self._tdp_state(await self._read_applied())
 
     async def create_game_profile(self, appid) -> None:
         self._init()

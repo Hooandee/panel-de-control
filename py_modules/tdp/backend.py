@@ -6,6 +6,8 @@ from tdp.types import TdpLimits, TdpResult
 class TDPBackend(ABC):
     supported: bool = True
     supports_levels: bool = False
+    # True when read_applied()/set_tdp() spawn a subprocess and must run off the loop.
+    blocking: bool = False
     name: str = "base"
 
     @abstractmethod
