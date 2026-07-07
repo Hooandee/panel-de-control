@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.8.0...panel-de-control-v0.8.1) (2026-07-07)
+
+
+### Bug Fixes / Correcciones
+
+* Reporting a problem now needs a short description before you can send it, so I actually know what went wrong. On the Legion Go the fan monitor now shows a single real fan instead of a phantom second one stuck at 0. ([#81](https://github.com/Hooandee/panel-de-control/issues/81)) ([a4be837](https://github.com/Hooandee/panel-de-control/commit/a4be83700d79108b376d58b27aa006a4f7c60eb5))
+* **ES:** Reportar un problema ahora pide una breve descripción antes de poder enviarlo, así sé de verdad qué falló. En la Legion Go el monitor de ventiladores ahora muestra un solo ventilador real en vez de un segundo fantasma clavado en 0. ([#81](https://github.com/Hooandee/panel-de-control/issues/81)) ([a4be837](https://github.com/Hooandee/panel-de-control/commit/a4be83700d79108b376d58b27aa006a4f7c60eb5))
+
 ## [0.8.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.7.0...panel-de-control-v0.8.0) (2026-07-07)
 
 
