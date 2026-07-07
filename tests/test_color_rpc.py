@@ -13,6 +13,7 @@ import types
 class _FakeColorBackend:
     def __init__(self, supported=True):
         self.supported = supported
+        self.probe_detail = "fake"
         self.applied = []
 
     def apply(self, state):

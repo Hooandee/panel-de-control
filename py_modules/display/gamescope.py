@@ -103,6 +103,9 @@ class GamescopeColorBackend:
         self._last_probe = None
         self._runtime = self._wayland = None
         self._supported = False
+        # Last probe outcome, for diagnostics (a report showing the UI hidden should
+        # say WHY: no socket / gamescopectl rc). Never affects `supported`.
+        self._probe_detail = "not probed"
         self._ensure_supported()
         # Whether a non-native look may be loaded — lets apply() skip rebuilding the
         # identity LUT on the common (untouched-color) path, yet still clear a look
@@ -123,6 +126,7 @@ class GamescopeColorBackend:
 
     def _probe(self):
         rc, _ = self._ctl("version")
+        self._probe_detail = f"socket={self._runtime}/{self._wayland} version rc={rc}"
         return rc == 0
 
     def _ensure_supported(self):
@@ -131,6 +135,7 @@ class GamescopeColorBackend:
             return True
         self._runtime, self._wayland = self._discover(self._socket_glob)
         if self._runtime is None:
+            self._probe_detail = f"no gamescope socket under {self._socket_glob}"
             return False
         # Rate-limit the probe: it spawns a subprocess and is read on the event loop,
         # so a present-but-unresponsive socket must not re-probe on every access.
@@ -144,6 +149,12 @@ class GamescopeColorBackend:
     @property
     def supported(self):
         return self._ensure_supported()
+
+    @property
+    def probe_detail(self):
+        """Last support-probe outcome (missing socket, or gamescopectl version rc).
+        Logged once so a report with the Pantalla tab hidden is diagnosable."""
+        return self._probe_detail
 
     @property
     def force_composite(self):

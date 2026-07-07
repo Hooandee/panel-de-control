@@ -159,6 +159,10 @@ class Plugin:
         self._color_backend = GamescopeColorBackend(
             force_composite=(self._device.vendor == "intel")
         )
+        decky.logger.info(
+            "color: supported=%s (%s)",
+            self._color_backend.supported, self._color_backend.probe_detail,
+        )
         # Calibration safety: a change previews live but auto-reverts to the saved
         # value after _COLOR_REVERT_SECS unless confirmed (so a mis-drag to an
         # illegible screen self-heals even if the QAM closes). None = nothing pending.
