@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.7.0...panel-de-control-v0.8.0) (2026-07-07)
+
+
+### Features
+
+* recognise the OneXPlayer OneXFly Apex with a generic AMD TDP path ([#78](https://github.com/Hooandee/panel-de-control/issues/78)) ([e407d17](https://github.com/Hooandee/panel-de-control/commit/e407d17b74a70f35669dbaf12241111c3e3bf6e7))
+
 ## [0.7.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.6.0...panel-de-control-v0.7.0) (2026-07-07)
 
 
