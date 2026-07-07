@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.7.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.6.0...panel-de-control-v0.7.0) (2026-07-07)
+
+
+### Features / Novedades
+
+* The volume and brightness buttons can now show the exact value on screen without opening the panel: turn on "Show value when changing volume or brightness" under Ajustes and a small toast shows the number as you adjust — speaker/sun icon, silent, and off by default. ([#73](https://github.com/Hooandee/panel-de-control/issues/73)) ([27bb34a](https://github.com/Hooandee/panel-de-control/commit/27bb34adba25d0949493d9c236d4e1380786d1cb))
+* **ES:** Los botones de volumen y brillo ahora pueden mostrar el valor exacto en pantalla sin abrir el panel: activa «Mostrar valor al cambiar volumen o brillo» en Ajustes y un pequeño aviso muestra el número mientras ajustas — con icono de altavoz/sol, silencioso y desactivado por defecto. ([#73](https://github.com/Hooandee/panel-de-control/issues/73)) ([27bb34a](https://github.com/Hooandee/panel-de-control/commit/27bb34adba25d0949493d9c236d4e1380786d1cb))
+
 ## [0.6.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.5.0...panel-de-control-v0.6.0) (2026-07-06)
 
 
