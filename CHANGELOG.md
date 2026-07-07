@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.6.0...panel-de-control-v0.7.0) (2026-07-07)
+
+
+### Features
+
+* on-screen value toast for volume and brightness ([#73](https://github.com/Hooandee/panel-de-control/issues/73)) ([27bb34a](https://github.com/Hooandee/panel-de-control/commit/27bb34adba25d0949493d9c236d4e1380786d1cb))
+
 ## [0.6.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.5.0...panel-de-control-v0.6.0) (2026-07-06)
 
 
