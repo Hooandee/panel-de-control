@@ -4,6 +4,7 @@ from report.collector import (
     SCHEMA,
     build_bundle,
     capabilities_from,
+    controller_daemon_cmds,
     kernel_logs,
     redact_obj,
     redact_text,
@@ -25,6 +26,28 @@ def test_kernel_logs_runner_raising_is_null():
         raise OSError("boom")
     out = kernel_logs(run)
     assert out["dmesg"] is None and out["journal"] is None
+
+
+def test_controller_daemon_cmds_hhd():
+    cmd = controller_daemon_cmds("hhd")["controller"]
+    assert "journalctl" in cmd[0] and "hhd.service" in cmd
+
+
+def test_controller_daemon_cmds_inputplumber():
+    cmd = controller_daemon_cmds("inputplumber")["controller"]
+    assert "inputplumber.service" in cmd
+
+
+def test_controller_daemon_cmds_none_is_empty():
+    assert controller_daemon_cmds("none") == {}
+    assert controller_daemon_cmds(None) == {}
+
+
+def test_kernel_logs_captures_extra_controller_journal():
+    def run(cmd):
+        return "HHD woke up /home/deck/x" if "hhd.service" in cmd else None
+    out = kernel_logs(run, extra=controller_daemon_cmds("hhd"))
+    assert "~/x" in out["controller"] and "/home/deck" not in out["controller"]
 
 
 def test_build_bundle_includes_kernel():
