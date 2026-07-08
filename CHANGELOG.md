@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.4](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.8.3...panel-de-control-v0.8.4) (2026-07-08)
+
+
+### Bug Fixes
+
+* persist language and UI preferences across reboot ([#98](https://github.com/Hooandee/panel-de-control/issues/98)) ([0feb60e](https://github.com/Hooandee/panel-de-control/commit/0feb60e62e3a0a8c64443a9bd2fd811c6725b1a7))
+
 ## [0.8.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.8.2...panel-de-control-v0.8.3) (2026-07-08)
 
 
