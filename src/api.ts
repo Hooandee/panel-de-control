@@ -4,6 +4,10 @@ import { callable } from "@decky/api";
 // Names must match the Python `async def` on the Plugin class exactly.
 export const getVersion = callable<[], string>("get_version");
 
+// Durable mirror of the frontend's localStorage prefs (a null value removes a key).
+export const getUiPrefs = callable<[], Record<string, string>>("get_ui_prefs");
+export const setUiPrefs = callable<[Record<string, string | null>], boolean>("set_ui_prefs");
+
 export interface DeviceInfo {
   key: string;
   display_name: string;

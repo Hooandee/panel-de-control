@@ -1,5 +1,15 @@
-import { FC, ReactNode, createContext, useCallback, useContext, useMemo, useState } from "react";
+import {
+  FC,
+  ReactNode,
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { format, Params } from "./format";
+import { hydratePrefs, onPrefsHealed, readString, writeString } from "../system/pdcStorage";
 
 export type Lang = "es" | "en";
 
@@ -554,13 +564,8 @@ const en: Record<string, string> = {
 const DICTS: Record<Lang, Record<string, string>> = { es, en };
 
 function initialLang(): Lang {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored === "es" || stored === "en") return stored;
-  } catch {
-    /* localStorage may be unavailable; default below */
-  }
-  return "es"; // Spanish default
+  const stored = readString(STORAGE_KEY);
+  return stored === "es" || stored === "en" ? stored : "es"; // Spanish default
 }
 
 interface I18nValue {
@@ -574,13 +579,16 @@ const I18nContext = createContext<I18nValue | null>(null);
 export const I18nProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const [lang, setLangState] = useState<Lang>(initialLang);
 
+  // Re-read once hydratePrefs heals the cache, in case we rendered stale.
+  useEffect(() => {
+    const off = onPrefsHealed(() => setLangState(initialLang()));
+    void hydratePrefs();
+    return off;
+  }, []);
+
   const setLang = useCallback((l: Lang) => {
     setLangState(l);
-    try {
-      localStorage.setItem(STORAGE_KEY, l);
-    } catch {
-      /* ignore persistence failure */
-    }
+    writeString(STORAGE_KEY, l);
   }, []);
 
   const t = useCallback(

@@ -6,9 +6,19 @@ import { I18nProvider } from "./i18n";
 import { ControlCenter } from "./components/ControlCenter";
 import { startGameWatcher } from "./tdp/gameWatcher";
 import { startEcoAmbient } from "./system/ecoAmbient";
-import { startValueToast } from "./system/valueToast";
+import { startValueToast, refreshValueToast } from "./system/valueToast";
+import { hydratePrefs, onPrefsHealed } from "./system/pdcStorage";
+import { reloadLayout } from "./customize/store";
 
 export default definePlugin(() => {
+  // Restore durable UI prefs into the localStorage cache at plugin scope (so the
+  // QAM-closed toast uses the right language), then re-apply the healed values.
+  onPrefsHealed(() => {
+    refreshValueToast();
+    reloadLayout();
+  });
+  void hydratePrefs();
+
   // Persistent current-game watcher: runs at plugin scope (while Steam runs),
   // independent of the QAM being open. It is the single source that reports the
   // running game to the backend so auto-TDP / telemetry / fan auto-apply engage

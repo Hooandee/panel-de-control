@@ -93,6 +93,9 @@ DEFAULTS = {
     # back to. Both restored/derived on exit; eco_enabled is a pure override.
     "eco_enabled": False,
     "eco_brightness": 40,
+    # Frontend UI preferences, mirrored here so they survive a reboot (the
+    # frontend's localStorage cache does not). Opaque string map.
+    "ui_prefs": {},
 }
 
 
@@ -215,6 +218,27 @@ class Plugin:
     async def get_version(self) -> str:
         self._init()
         return read_version()
+
+    async def get_ui_prefs(self) -> dict:
+        self._init()
+        prefs = self._settings.get("ui_prefs")
+        return dict(prefs) if isinstance(prefs, dict) else {}
+
+    async def set_ui_prefs(self, updates: dict) -> bool:
+        # A None value removes that key.
+        self._init()
+        prefs = self._settings.get("ui_prefs")
+        # Copy: an unset key aliases the shared DEFAULTS dict; never mutate it.
+        prefs = dict(prefs) if isinstance(prefs, dict) else {}
+        if isinstance(updates, dict):
+            for key, value in updates.items():
+                if value is None:
+                    prefs.pop(str(key), None)
+                else:
+                    prefs[str(key)] = str(value)
+        self._settings["ui_prefs"] = prefs
+        self._save()
+        return True
 
     async def check_update(self, force: bool = False) -> dict:
         self._init()
