@@ -142,11 +142,35 @@ _KERNEL_CMDS = {
 }
 
 
-def kernel_logs(run, *, cap: int = 40_000, home: str | None = None, hostname: str | None = None) -> dict:
-    """Tail of dmesg (errors/warnings) + the plugin_loader journal, via run(cmd)->
-    str|None. Redacted and size-capped. Never raises."""
+# The controller daemon (HHD on Bazzite, InputPlumber on SteamOS) owns the gamepad
+# and its own resume/re-grab. Controller failures land in ITS journal, not the
+# plugin log — so a controller report should carry it. Keyed by the manager string
+# reported by controllers.detect (values, not imported, to keep this standalone).
+_CONTROLLER_UNITS = {"hhd": "hhd.service", "inputplumber": "inputplumber.service"}
+
+
+def controller_daemon_cmds(manager: str | None) -> dict:
+    """Extra kernel_logs command for the active controller daemon's journal, or an
+    empty dict when no daemon runs the controller (nothing to capture)."""
+    unit = _CONTROLLER_UNITS.get(manager or "")
+    if not unit:
+        return {}
+    return {"controller": ["/usr/bin/journalctl", "-b", "-u", unit, "-n", "300", "--no-pager"]}
+
+
+def kernel_logs(
+    run,
+    *,
+    cap: int = 40_000,
+    extra: dict | None = None,
+    home: str | None = None,
+    hostname: str | None = None,
+) -> dict:
+    """Tail of dmesg (errors/warnings) + the plugin_loader journal, plus any `extra`
+    {key: cmd} commands (e.g. the controller daemon journal), via run(cmd)->str|None.
+    Redacted and size-capped. Never raises."""
     out = {}
-    for key, cmd in _KERNEL_CMDS.items():
+    for key, cmd in {**_KERNEL_CMDS, **(extra or {})}.items():
         try:
             text = run(cmd)
         except Exception:  # noqa: BLE001

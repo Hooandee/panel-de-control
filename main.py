@@ -323,7 +323,12 @@ class Plugin:
         kernel = await loop.run_in_executor(
             None,
             lambda: report_collector.kernel_logs(
-                self._run_capture, home=home, hostname=hostname
+                self._run_capture,
+                extra=report_collector.controller_daemon_cmds(
+                    self._controller_backend.manager
+                ),
+                home=home,
+                hostname=hostname,
             ),
         )
         return report_collector.build_bundle(
