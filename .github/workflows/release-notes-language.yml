@@ -1,0 +1,31 @@
+name: release-notes-language
+
+# The in-app updater shows the GitHub release body verbatim. release-please
+# generates it in English only, so this fails loudly if a published (or edited)
+# release is missing either language section, keeping the notes bilingual.
+
+on:
+  release:
+    types: [published, edited]
+
+permissions:
+  contents: read
+
+jobs:
+  check-bilingual:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require both language sections
+        env:
+          BODY: ${{ github.event.release.body }}
+        run: |
+          set -euo pipefail
+          missing=""
+          printf '%s' "$BODY" | grep -qF "### Novedades" || missing="$missing '### Novedades' (español)"
+          printf '%s' "$BODY" | grep -qF "### What's new" || missing="$missing '### What's new' (English)"
+          if [ -n "$missing" ]; then
+            echo "::error::Release notes must be bilingual. Missing section(s):$missing"
+            echo "Edit the release body so it has a '### Novedades' section (Spanish) and a '### What's new' section (English)."
+            exit 1
+          fi
+          echo "Release notes include both languages."
