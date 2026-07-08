@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.8.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.8.1...panel-de-control-v0.8.2) (2026-07-08)
+
+
+### Features
+
+* capture the controller daemon journal in bug reports ([#93](https://github.com/Hooandee/panel-de-control/issues/93)) ([5d3fe99](https://github.com/Hooandee/panel-de-control/commit/5d3fe9985828297dc54aa3134469f54c4469fa47))
+
+
+### Miscellaneous Chores
+
+* release panel-de-control 0.8.2 ([bc89561](https://github.com/Hooandee/panel-de-control/commit/bc895615dccf63b3bccbbbf65eaf523044605bd4))
+
 ## [0.8.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.8.0...panel-de-control-v0.8.1) (2026-07-07)
 
 
