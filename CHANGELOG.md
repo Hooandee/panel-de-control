@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.8.2...panel-de-control-v0.8.3) (2026-07-08)
+
+
+### Bug Fixes
+
+* stop download mode from fighting manual screen brightness ([#95](https://github.com/Hooandee/panel-de-control/issues/95)) ([31daef5](https://github.com/Hooandee/panel-de-control/commit/31daef590cd6bbc75a8186bb1f9d76468ae08d74))
+
 ## [0.8.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.8.1...panel-de-control-v0.8.2) (2026-07-08)
 
 
