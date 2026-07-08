@@ -4,6 +4,7 @@
 // sections live. Never throws; degrades to defaults if storage is unavailable.
 import { useSyncExternalStore } from "react";
 import { Layout, coerceLayout } from "./layout";
+import { readString, writeString, removeString } from "../system/pdcStorage";
 
 const KEY = "pdc:layout";
 const EMPTY: Layout = { tabs: { order: [], hidden: [] }, blocks: {}, subitems: {} };
@@ -16,7 +17,7 @@ const listeners = new Set<() => void>();
 
 function read(): Layout {
   try {
-    const raw = window.localStorage?.getItem(KEY);
+    const raw = readString(KEY);
     if (!raw) return EMPTY;
     // Coerce shapes: valid JSON with wrong types (e.g. order:5) must NOT throw
     // downstream — that would brick the panel with no in-UI recovery path.
@@ -34,22 +35,22 @@ export function getLayout(): Layout {
 
 export function saveLayout(next: Layout): void {
   cache = next;
-  try {
-    window.localStorage?.setItem(KEY, JSON.stringify(next));
-  } catch {
-    /* storage unavailable — layout just won't persist this session */
-  }
+  writeString(KEY, JSON.stringify(next));
   listeners.forEach((l) => l());
 }
 
 /** Wipe all customization → back to code defaults. */
 export function resetLayout(): void {
   cache = EMPTY;
-  try {
-    window.localStorage?.removeItem(KEY);
-  } catch {
-    /* ignore */
-  }
+  removeString(KEY);
+  listeners.forEach((l) => l());
+}
+
+// Re-read once hydratePrefs heals the cache; notify only if it changed.
+export function reloadLayout(): void {
+  const next = read();
+  if (JSON.stringify(next) === JSON.stringify(getLayout())) return;
+  cache = next;
   listeners.forEach((l) => l());
 }
 

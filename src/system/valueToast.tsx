@@ -111,14 +111,23 @@ export function isValueToastEnabled(): boolean {
   return readFlag(KEY);
 }
 
-export function setValueToastEnabled(on: boolean): void {
-  writeFlag(KEY, on);
+function applyEnabled(on: boolean): void {
   enabled = on;
   if (on) {
     if (alive) subscribeAll();
   } else {
     clearTimers();
   }
+}
+
+export function setValueToastEnabled(on: boolean): void {
+  writeFlag(KEY, on);
+  applyEnabled(on);
+}
+
+// Re-apply the healed flag without re-persisting it (after hydratePrefs).
+export function refreshValueToast(): void {
+  applyEnabled(isValueToastEnabled());
 }
 
 export function startValueToast(): () => void {

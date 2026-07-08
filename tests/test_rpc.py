@@ -86,6 +86,38 @@ def test_set_telemetry_enabled_persists(Plugin):
     assert asyncio.run(Plugin().get_telemetry_enabled()) is True
 
 
+def test_ui_prefs_default_empty(Plugin):
+    assert asyncio.run(Plugin().get_ui_prefs()) == {}
+
+
+def test_set_ui_prefs_persists(Plugin):
+    p = Plugin()
+    asyncio.run(p.set_ui_prefs({"panel-de-control-lang": "en", "pdc:valueToast:enabled": "1"}))
+    prefs = asyncio.run(p.get_ui_prefs())
+    assert prefs == {"panel-de-control-lang": "en", "pdc:valueToast:enabled": "1"}
+    # Survives a fresh Plugin instance (same settings dir) → survives a reboot.
+    assert asyncio.run(Plugin().get_ui_prefs()) == prefs
+
+
+def test_set_ui_prefs_none_removes_key(Plugin):
+    p = Plugin()
+    asyncio.run(p.set_ui_prefs({"pdc:layout": "{}"}))
+    asyncio.run(p.set_ui_prefs({"pdc:layout": None}))
+    assert asyncio.run(p.get_ui_prefs()) == {}
+
+
+def test_set_ui_prefs_coerces_value_to_string(Plugin):
+    p = Plugin()
+    asyncio.run(p.set_ui_prefs({"k": 1}))
+    assert asyncio.run(p.get_ui_prefs()) == {"k": "1"}
+
+
+def test_set_ui_prefs_does_not_mutate_defaults(Plugin):
+    import main
+    asyncio.run(Plugin().set_ui_prefs({"k": "v"}))
+    assert main.DEFAULTS["ui_prefs"] == {}
+
+
 def test_qam_tdp_boost_default_false(Plugin):
     # Honesty default: opening the QAM must NOT raise TDP unless the user opts in.
     p = Plugin()
