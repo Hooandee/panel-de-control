@@ -1,32 +1,50 @@
 import { getEcoState } from "../api";
 import { subscribeActive } from "./activity";
 import { displayBrightness } from "./display";
-import { fromPercent } from "./logic";
-import { ecoBrightness } from "./eco";
+import { fromPercent, toPercent } from "./logic";
+import { activityDebounceMs, ecoBrightness, isDimEcho, isFloorEcho } from "./eco";
 
-// Idle brightness floor while download mode dims the screen. Minimum by default
-// (max saving for an unattended download); tune if a fully-dark panel
-// reads as "off".
-const ECO_FLOOR_PCT = 0;
-// Backstop reconcile cadence — runs ONLY while eco is on, to catch a backend-side
-// clear (a manual power change that turned eco off without going through the card).
+// Download-mode ambient dim. Runs at plugin scope so it works with the QAM closed.
+const ECO_FLOOR_PCT = 12;
 const POLL_MS = 3000;
 
-// Singleton state — this controller runs once at plugin scope (definePlugin), not
-// tied to the QAM being open, so the ambient dim works while a game downloads with
-// the panel closed. Event-driven (activity transitions) + a backstop poll that runs
-// only while enabled; NO render loop.
 let enabled = false;
 let wakePct = 40;
 let alive = false;
+let activeState = true;
 let unsubActivity: (() => void) | null = null;
+let unsubBrightness: (() => void) | null = null;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
-// Bumped on every explicit toggle (hint). An async getEcoState() started before a
-// toggle must not reconcile with its now-stale result and undo the user's action.
+let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+let lastDriven: number | null = null; // last value we drove, to spot our own echoes
+let lastDriveAt = 0;
 let epoch = 0;
 
 function drive(active: boolean): void {
-  if (enabled) displayBrightness.set(fromPercent(ecoBrightness(active, wakePct, ECO_FLOOR_PCT)));
+  if (!enabled) return;
+  lastDriven = ecoBrightness(active, wakePct, ECO_FLOOR_PCT);
+  lastDriveAt = Date.now();
+  displayBrightness.set(fromPercent(lastDriven));
+}
+
+function onActivity(active: boolean): void {
+  if (debounceTimer !== null) clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(() => {
+    debounceTimer = null;
+    if (active !== activeState) {
+      activeState = active;
+      drive(active);
+    }
+  }, activityDebounceMs(active));
+}
+
+// Adopt a user brightness change as the new wake level; skip our own echoes and the floor.
+function onBrightness(fraction: number): void {
+  if (!enabled) return;
+  const echo = toPercent(fraction);
+  if (isDimEcho(echo, lastDriven, Date.now() - lastDriveAt)) return;
+  if (isFloorEcho(echo, ECO_FLOOR_PCT)) return;
+  wakePct = echo;
 }
 
 function startPoll(): void {
@@ -35,11 +53,9 @@ function startPoll(): void {
     const e = epoch;
     getEcoState()
       .then((s) => {
-        if (e === epoch) reconcile(s.enabled, s.wake_brightness); // ignore if a toggle raced
+        if (e === epoch) reconcile(s.enabled, s.wake_brightness);
       })
-      .catch(() => {
-        /* backend busy — retry next tick */
-      });
+      .catch(() => {});
   }, POLL_MS);
 }
 
@@ -50,33 +66,43 @@ function stopPoll(): void {
   }
 }
 
-/** Reconcile to the desired eco state (from a toggle hint, startup, or backstop poll). */
+function teardown(): void {
+  if (unsubActivity) {
+    unsubActivity();
+    unsubActivity = null;
+  }
+  if (unsubBrightness) {
+    unsubBrightness();
+    unsubBrightness = null;
+  }
+  if (debounceTimer !== null) {
+    clearTimeout(debounceTimer);
+    debounceTimer = null;
+  }
+  stopPoll();
+}
+
 function reconcile(on: boolean, wake: number): void {
-  wakePct = wake;
   if (on && !enabled) {
+    wakePct = wake; // snapshot only on enable; while on, wakePct tracks the user
     enabled = true;
-    unsubActivity = subscribeActive((active) => drive(active));
-    drive(true); // user just enabled it → start at the wake level
+    activeState = true;
+    drive(true); // before subscribing, so the on-register echo is recognised as ours
+    unsubActivity = subscribeActive(onActivity);
+    unsubBrightness = displayBrightness.subscribe(onBrightness);
     startPoll();
   } else if (!on && enabled) {
     enabled = false;
-    if (unsubActivity) {
-      unsubActivity();
-      unsubActivity = null;
-    }
-    stopPoll();
-    displayBrightness.set(fromPercent(wakePct)); // restore the pre-eco brightness
+    teardown();
+    displayBrightness.set(fromPercent(wakePct));
   }
-  // already-on: wake level is snapshotted at enable — nothing to re-drive.
 }
 
-/** Instant response when the user toggles download mode from the card. */
 export function setEcoActiveHint(on: boolean, wake: number): void {
-  epoch += 1; // invalidate any in-flight poll result
+  epoch += 1;
   reconcile(on, wake);
 }
 
-/** Start the persistent ambient-dim controller. Call once in definePlugin. */
 export function startEcoAmbient(): () => void {
   alive = true;
   const e = epoch;
@@ -84,16 +110,11 @@ export function startEcoAmbient(): () => void {
     .then((s) => {
       if (alive && e === epoch) reconcile(s.enabled, s.wake_brightness);
     })
-    .catch(() => {
-      /* backend not ready — a later toggle hint will engage it */
-    });
+    .catch(() => {});
   return () => {
     alive = false;
-    stopPoll();
-    if (unsubActivity) {
-      unsubActivity();
-      unsubActivity = null;
-    }
+    if (enabled) displayBrightness.set(fromPercent(wakePct)); // don't leave the panel dim
     enabled = false;
+    teardown();
   };
 }
