@@ -3,9 +3,10 @@
 ## [0.8.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.8.1...panel-de-control-v0.8.2) (2026-07-08)
 
 
-### Features
+### Features / Novedades
 
-* capture the controller daemon journal in bug reports ([#93](https://github.com/Hooandee/panel-de-control/issues/93)) ([5d3fe99](https://github.com/Hooandee/panel-de-control/commit/5d3fe9985828297dc54aa3134469f54c4469fa47))
+* Improved the problem report: it now includes the controller manager's log, so controller issues (like the rear buttons after waking from sleep) can be diagnosed without needing the device in hand. ([#93](https://github.com/Hooandee/panel-de-control/issues/93)) ([5d3fe99](https://github.com/Hooandee/panel-de-control/commit/5d3fe9985828297dc54aa3134469f54c4469fa47))
+* **ES:** Mejorado el reporte de problemas: ahora incluye el registro del gestor de mandos, así los problemas de mando (como los botones traseros al salir de suspensión) se pueden diagnosticar sin tener el equipo delante. ([#93](https://github.com/Hooandee/panel-de-control/issues/93)) ([5d3fe99](https://github.com/Hooandee/panel-de-control/commit/5d3fe9985828297dc54aa3134469f54c4469fa47))
 
 
 ### Miscellaneous Chores
