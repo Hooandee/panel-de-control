@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.9.0...panel-de-control-v0.10.0) (2026-07-09)
+
+
+### Features
+
+* live TDP readout, per-device presets, and instant download-mode dim ([#119](https://github.com/Hooandee/panel-de-control/issues/119)) ([cbc8e0e](https://github.com/Hooandee/panel-de-control/commit/cbc8e0ed33de5b489879c3cfce8c0e6491f8261a))
+
 ## [0.9.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.8.4...panel-de-control-v0.9.0) (2026-07-09)
 
 
