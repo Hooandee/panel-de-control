@@ -525,22 +525,11 @@ class Plugin:
                        (never fabricate a curve) — the card shows the learning state.
         - preset/custom -> write the stored 8-point curve to all fans.
 
-        On a coarse mode-based device (Legion Go S) the firmware allows no freeform
-        curve — the effective preset maps to a fan mode (quiet/balanced/performance);
-        auto/custom/adaptive settle on the stock default. Guarded: a bad fan apply
-        must never brick load.
+        Guarded: a bad fan apply must never brick load.
         """
         try:
             profile = self._fan_curves.effective(self._current_appid)
             preset = profile["preset"]
-            if getattr(self._fan_ctrl, "mode_based", False):
-                # auto -> stock default; a mapped preset -> its mode; anything not
-                # representable as a coarse mode (custom/adaptive) -> default.
-                if preset == "auto":
-                    self._fan_ctrl.set_auto(None)
-                else:
-                    self._fan_ctrl.apply_preset(preset)
-                return
             if preset == "adaptive":
                 points = self._adaptive_curve_points(self._current_appid)
                 if points is None:
@@ -584,10 +573,6 @@ class Plugin:
             "firmware_points": firmware_points,
             "source": hw_state.get("source"),
             "pwm_max": hw_state.get("pwm_max", 255),
-            # Coarse mode-based device (Legion Go S): the UI shows quiet/balanced/
-            # performance chips instead of a curve. `mode` is the live firmware mode.
-            "mode_based": hw_state.get("mode_based", False),
-            "mode": hw_state.get("mode"),
             "preset": effective["preset"],
             "points": effective["points"],
             "bias": effective.get("bias", 0),

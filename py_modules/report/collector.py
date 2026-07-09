@@ -328,7 +328,6 @@ def capabilities_from(states: dict) -> dict:
         "tdp_supported": bool(tdp.get("supported")),
         "fan_source": fan.get("source"),
         "fan_supported": bool(fan.get("supported")),
-        "fan_mode_based": bool(fan.get("mode_based")),
         "charge_limit_supported": bool(batt.get("supported")),
         "charge_limit_adjustable": bool(batt.get("adjustable")),
         "gpu_clock_supported": bool(gpu.get("supported")),

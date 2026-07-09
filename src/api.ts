@@ -150,11 +150,6 @@ export interface FanCurveState {
   supported: boolean;
   source: string | null;
   pwm_max: number;
-  // Coarse mode-based device (Legion Go S): no freeform curve is possible, only
-  // quiet/balanced/performance fan modes. When true the editor shows mode chips and
-  // hides the graph/adaptive/custom modes. `mode` is the live firmware mode (0/1/2).
-  mode_based: boolean;
-  mode: number | null;
   // Read-only firmware curve (MSI Claw): the device can't be controlled but its
   // firmware fan curve is legible over the EC and shown informationally. Non-null
   // only when unsupported; null everywhere else.

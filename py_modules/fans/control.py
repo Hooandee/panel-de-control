@@ -371,11 +371,9 @@ def select_fan_backend(device, root: str = "/", temp_fn=None, ec=None):
     1. ``asus_custom_fan_curve`` (ROG Ally family) — hardware curve table.
     2. ``msi_wmi_platform`` (MSI Claw) — hardware curve table (only when its
        kernel exposes a WRITABLE pwm point; read-only kernels fall through).
-    3. ``VPC2004`` ``fan_mode`` (Legion Go S) — coarse quiet/balanced/performance
-       mode (no freeform curve possible on its firmware).
-    4. ``steamdeck_hwmon`` (Steam Deck) — software loop (needs ``temp_fn``).
-    5. Legion Go 2 raw-EC software loop.
-    6. ``NullFanBackend`` when nothing supported is found (read-only safety).
+    3. ``steamdeck_hwmon`` (Steam Deck) — software loop (needs ``temp_fn``).
+    4. Legion Go 2 raw-EC software loop.
+    5. ``NullFanBackend`` when nothing supported is found (read-only safety).
 
     MSI Claw EC 0x33 step control (``msi_ec.MsiEcFanBackend``) is intentionally
     NOT wired: driving the fan to its top step resets the device (the EC drops
@@ -387,11 +385,6 @@ def select_fan_backend(device, root: str = "/", temp_fn=None, ec=None):
         backend = backend_cls(root=root)
         if backend.supported:
             return backend
-    # Coarse fan-mode backend (Legion Go S). Lazy import keeps the module graph flat.
-    from fans.lenovo_mode import LenovoFanModeBackend
-    mode_backend = LenovoFanModeBackend(root=root)
-    if mode_backend.supported:
-        return mode_backend
     # Software-loop backends (lazy import avoids a circular dependency).
     from fans.software_loop import SteamDeckFanBackend
     from fans.legion_ec import LegionGo2FanBackend

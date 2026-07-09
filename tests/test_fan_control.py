@@ -417,6 +417,17 @@ class TestSelectFanBackend:
         b = select_fan_backend(self._rog_device(), root=str(tmp_path))
         assert isinstance(b, NullFanBackend)
 
+    def test_vpc2004_fan_mode_node_alone_gets_null_backend(self, tmp_path):
+        # A device whose only fan node is VPC2004 fan_mode (Legion Go S) has no
+        # writable curve/mode that actually moves the fan → read-only monitor.
+        d = os.path.join(str(tmp_path), "sys/bus/platform/devices/VPC2004:00")
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, "fan_mode"), "w") as f:
+            f.write("1")
+        b = select_fan_backend(GENERIC, root=str(tmp_path))
+        assert isinstance(b, NullFanBackend)
+        assert b.supported is False
+
 
 class TestApplyCurveAll:
     _PTS = [[40, 0], [50, 30], [60, 60], [70, 95], [80, 135], [85, 175], [90, 215], [95, 255]]

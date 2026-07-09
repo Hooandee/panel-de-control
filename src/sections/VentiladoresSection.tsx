@@ -123,20 +123,16 @@ export const VentiladoresSection: FC = () => {
             <div style={{ ...card, display: "flex", flexDirection: "column", gap: theme.space.sm, overflow: "hidden" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <span style={{ fontSize: theme.font.body, color: theme.color.textPrimary }}>
-                  {curveState.mode_based ? t("fans.mode.title") : t("fans.curve.title")}
+                  {t("fans.curve.title")}
                 </span>
-                {/* No full-screen editor on coarse mode-based devices — three mode
-                    chips have nothing to expand. */}
-                {!curveState.mode_based && (
-                  <Focusable
-                    style={{ display: "flex", alignItems: "center", padding: 4, borderRadius: theme.radius.sm, color: theme.color.textMuted, cursor: "pointer" }}
-                    onActivate={() => openFanCurveModal(liveTemp, curve.refresh)}
-                    onClick={() => openFanCurveModal(liveTemp, curve.refresh)}
-                    title={t("fans.curve.expand")}
-                  >
-                    <LuMaximize2 size={16} />
-                  </Focusable>
-                )}
+                <Focusable
+                  style={{ display: "flex", alignItems: "center", padding: 4, borderRadius: theme.radius.sm, color: theme.color.textMuted, cursor: "pointer" }}
+                  onActivate={() => openFanCurveModal(liveTemp, curve.refresh)}
+                  onClick={() => openFanCurveModal(liveTemp, curve.refresh)}
+                  title={t("fans.curve.expand")}
+                >
+                  <LuMaximize2 size={16} />
+                </Focusable>
               </div>
 
               <FanCurveEditor control={curve} liveTemp={liveTemp} suggestion={suggestion} />
