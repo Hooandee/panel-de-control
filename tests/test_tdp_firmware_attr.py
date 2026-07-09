@@ -1,9 +1,21 @@
 import os
 
+import pytest
+
+from device_registry import detect
 from tdp.firmware_attr import FirmwareAttrBackend
 from tdp.types import TdpLimits
 
 FALLBACK = TdpLimits(min_w=4, default_w=15, max_w=30, max_ac_w=30)
+
+# Real firmware ppt maxes (pl1, sppt, fppt) probed on hardware. The sanitizer must
+# TRUST these — never cap a healthy device below its real limits. Guards against a
+# profile's charger max being lowered under a device's real firmware ceiling.
+_REAL_FW_MAXES = {
+    "ROG Xbox Ally X RC73XA_RC73XA": (35, 45, 55),
+    "ROG Ally X RC72LA_RC72LA": (30, 43, 53),
+    "83N0": (35, 37, 45),  # Legion Go 2
+}
 
 
 def _mk_attr(root, driver, attr, cur, mn, mx):
@@ -140,3 +152,19 @@ def test_trustworthy_firmware_keeps_real_boost_maxes(tmp_path):
     b = FirmwareAttrBackend("asus-armoury", fb, root=root)
     ll = b.level_limits()
     assert (ll["pl1"]["max"], ll["pl2"]["max"], ll["pl3"]["max"]) == (35, 45, 55)
+
+
+@pytest.mark.parametrize("product,maxes", _REAL_FW_MAXES.items())
+def test_real_firmware_maxes_are_trusted(tmp_path, product, maxes):
+    dev = detect(product_name=product)
+    driver = "asus-armoury" if product.startswith("ROG") else "lenovo-wmi-other"
+    root = str(tmp_path)
+    pl1, sppt, fppt = maxes
+    _mk_attr(root, driver, "ppt_pl1_spl", 15, 5, pl1)
+    _mk_attr(root, driver, "ppt_pl2_sppt", 15, 5, sppt)
+    _mk_attr(root, driver, "ppt_pl3_fppt", 15, 5, fppt)
+    b = FirmwareAttrBackend(driver, TdpLimits.from_profile(dev), root=root,
+                            is_generic=dev.is_generic)
+    ll = b.level_limits()
+    assert (ll["pl1"]["max"], ll["pl2"]["max"], ll["pl3"]["max"]) == (pl1, sppt, fppt)
+    assert b.get_limits().max_ac_w == pl1
