@@ -2,6 +2,19 @@
 
 **Español** · [English](README.en.md)
 
+<p align="center">
+  <a href="https://ko-fi.com/hooandee"><img src="https://img.shields.io/badge/Ko--fi-Inv%C3%ADtame%20un%20caf%C3%A9-FF5E5B?style=for-the-badge&logo=ko-fi&logoColor=white" alt="Ko-fi"></a>
+  <a href="https://www.patreon.com/hooandee"><img src="https://img.shields.io/badge/Patreon-Ap%C3%B3yame-FF424D?style=for-the-badge&logo=patreon&logoColor=white" alt="Patreon"></a>
+  <a href="https://www.youtube.com/channel/UCDsSJByXklp6xc_WwQJI7Lw/join"><img src="https://img.shields.io/badge/YouTube-Hazte%20miembro-FF0000?style=for-the-badge&logo=youtube&logoColor=white" alt="YouTube"></a>
+  <a href="https://discord.gg/x2ZNARy"><img src="https://img.shields.io/badge/Discord-%C3%9Anete-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"></a>
+  <a href="https://linktr.ee/hooandee"><img src="https://img.shields.io/badge/Todos%20mis%20enlaces-Linktree-43E660?style=for-the-badge&logo=linktree&logoColor=white" alt="Linktree"></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/Hooandee/panel-de-control/actions/workflows/ci.yml"><img src="https://github.com/Hooandee/panel-de-control/actions/workflows/ci.yml/badge.svg" alt="Estado del CI"></a>
+  <a href="https://github.com/Hooandee/panel-de-control/releases/latest"><img src="https://img.shields.io/github/v/release/Hooandee/panel-de-control?label=%C3%BAltima%20versi%C3%B3n&color=blue" alt="Última versión"></a>
+</p>
+
 El centro de control que le faltaba a tu Handheld PC. Ajusta la potencia, las curvas de
 ventilador, la batería, la pantalla y los mandos desde un único panel dentro del menú de acceso
 rápido de Steam, sin salir del juego y sin memorizar rutas de sysfs.
