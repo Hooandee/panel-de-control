@@ -11,6 +11,7 @@ import { TempStat } from "../components/TempStat";
 import { Sparkline } from "../components/Sparkline";
 import { FanCurveEditor } from "../components/FanCurveEditor";
 import { FanCurveGraph } from "../components/FanCurveGraph";
+import { ExperimentalFanCard } from "../components/ExperimentalFanCard";
 import { openFanCurveModal } from "../components/FanCurveModal";
 import { Point, percentToPwm } from "../fans/curve";
 import { Loading } from "../components/Loading";
@@ -118,6 +119,11 @@ export const VentiladoresSection: FC = () => {
     // otherwise — "unavailable" when we at least monitor fans, "no fans" when not).
     curve: (
       <>
+        {/* Legion Go S: opt-in to the unofficial EC channel. Enabling flips
+            `supported` on → the editor below renders. */}
+        {curveState?.experimental_available && (
+          <ExperimentalFanCard enabled={curveState.experimental_enabled} onToggle={curve.onExperimental} />
+        )}
         {curveState?.supported && (
           <PanelSectionRow>
             <div style={{ ...card, display: "flex", flexDirection: "column", gap: theme.space.sm, overflow: "hidden" }}>
@@ -159,7 +165,8 @@ export const VentiladoresSection: FC = () => {
         )}
         {/* Only when we CAN monitor fans but not control them AND can't read the
             firmware curve. The no-fans-at-all case is stated by the fanRpm block. */}
-        {curveState && !curveState.supported && !firmwarePoints && state.fans.length > 0 && (
+        {curveState && !curveState.supported && !firmwarePoints
+          && !curveState.experimental_available && state.fans.length > 0 && (
           <PanelSectionRow>
             <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
               {t("fans.curve.unsupported")}

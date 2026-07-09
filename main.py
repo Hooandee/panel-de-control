@@ -93,6 +93,10 @@ DEFAULTS = {
     # back to. Both restored/derived on exit; eco_enabled is a pure override.
     "eco_enabled": False,
     "eco_brightness": 40,
+    # Opt-in experimental fan control on devices whose only channel is an unofficial
+    # EC interface (Legion Go S). Default off → read-only monitor; on → EC curve
+    # control with the RPM cap + temp guardian harness. The user accepts the risk.
+    "fan_experimental": False,
     # Frontend UI preferences, mirrored here so they survive a reboot (the
     # frontend's localStorage cache does not). Opaque string map.
     "ui_prefs": {},
@@ -143,7 +147,16 @@ class Plugin:
         self._fan_reader = FanReader()
         # temp_fn feeds the software-loop backends (Steam Deck / Legion Go 2) the
         # live driving temp; hardware-curve backends (ASUS/MSI) ignore it.
-        self._fan_ctrl = fan_control.select_fan_backend(self._device, temp_fn=self._driving_temp)
+        self._fan_ctrl = fan_control.select_fan_backend(
+            self._device, temp_fn=self._driving_temp,
+            experimental=bool(self._settings.get("fan_experimental", False)))
+        # True only on a device with an opt-in experimental EC fan channel (Legion
+        # Go S). DMI-only check (no EC I/O) → the UI shows the experimental toggle.
+        try:
+            from fans.legion_ec import LegionGoSFanBackend
+            self._fan_experimental_available = LegionGoSFanBackend(root="/").supported
+        except Exception:  # noqa: BLE001 — availability probe must never break load
+            self._fan_experimental_available = False
         # MSI Claw only: the firmware fan curve is read-only-legible in the EC even
         # though the write backend is unsupported. Surface it as an informational
         # curve. Other devices get None (no EC dependency).
@@ -583,6 +596,10 @@ class Plugin:
             "appid": self._current_appid,
             "presets": [{"id": pid, "points": pts}
                         for pid, pts in fan_presets.RESOLVED.items()],
+            # Experimental EC control (Legion Go S): available = device has the
+            # unofficial channel; enabled = the user opted in.
+            "experimental_available": getattr(self, "_fan_experimental_available", False),
+            "experimental_enabled": bool(self._settings.get("fan_experimental", False)),
         }
 
     async def _prime_firmware_curve(self) -> None:
@@ -595,6 +612,23 @@ class Plugin:
     async def get_fan_curve_state(self) -> dict:
         self._init()
         await self._prime_firmware_curve()
+        return self._fan_curve_state()
+
+    async def set_fan_experimental(self, enabled: bool) -> dict:
+        """Opt in/out of experimental EC fan control (Legion Go S). Releases the
+        current backend before swapping so the fan is never left driven, then
+        rebuilds the backend and re-applies the stored curve (or firmware auto)."""
+        self._init()
+        enabled = bool(enabled)
+        try:
+            self._fan_ctrl.restore_auto()  # hand any active EC drive back to firmware
+        except Exception:  # noqa: BLE001 — release is best-effort; must not raise
+            pass
+        self._settings["fan_experimental"] = enabled
+        self._store.save(self._settings)
+        self._fan_ctrl = fan_control.select_fan_backend(
+            self._device, temp_fn=self._driving_temp, experimental=enabled)
+        self._reapply_fans()
         return self._fan_curve_state()
 
     async def set_fan_preset(self, preset: str, scope: str, appid=None) -> dict:

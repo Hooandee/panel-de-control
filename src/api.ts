@@ -163,6 +163,11 @@ export interface FanCurveState {
   has_game_profile: boolean;
   appid: string | null;
   presets: FanPresetDef[];
+  // Experimental EC fan control (Legion Go S): available = the device has the
+  // unofficial channel; enabled = the user opted in. When available && !enabled the
+  // control card shows the opt-in toggle instead of the editor.
+  experimental_available: boolean;
+  experimental_enabled: boolean;
 }
 
 export const getTelemetryEnabled = callable<[], boolean>("get_telemetry_enabled");
@@ -189,6 +194,9 @@ export const getQamTdpBoost = callable<[], boolean>("get_qam_tdp_boost");
 export const setQamTdpBoost = callable<[enabled: boolean], boolean>("set_qam_tdp_boost");
 
 export const getFanCurveState = callable<[], FanCurveState>("get_fan_curve_state");
+// Opt in/out of experimental EC fan control (Legion Go S). Returns the fresh state.
+export const setFanExperimental =
+  callable<[enabled: boolean], FanCurveState>("set_fan_experimental");
 export const setFanPreset =
   callable<[preset: FanPreset, scope: FanScope, appid: string | null], FanCurveState>("set_fan_preset");
 export const setFanCurvePoints =

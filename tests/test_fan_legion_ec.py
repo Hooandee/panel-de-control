@@ -3,7 +3,14 @@ a FakeEC (dict-backed) and a synthetic DMI so no hardware is touched. The EC
 protocol (registers, 16-bit LE) was confirmed read-only on the real device."""
 import os
 
-from fans.legion_ec import LegionGo2FanBackend, REG_OVERRIDE, REG_RPM
+from fans.legion_ec import (
+    LegionGo2FanBackend,
+    LegionGoSFanBackend,
+    REG_OVERRIDE,
+    REG_RPM,
+    _GOS_MAX_RPM,
+    _GOS_TEMP_GUARD_C,
+)
 from fans.control import select_fan_backend, NullFanBackend
 
 
@@ -93,3 +100,56 @@ class TestLegionBackend:
     def test_factory_null_when_nothing_matches(self, tmp_path):
         _dmi(str(tmp_path), version="ROG Ally", name="RC71L")
         assert isinstance(select_fan_backend(None, root=str(tmp_path)), NullFanBackend)
+
+
+def _dmi_gos(root, name="83N6", family="Legion Go S 8APU1"):
+    d = os.path.join(root, "sys/class/dmi/id")
+    os.makedirs(d, exist_ok=True)
+    for attr, val in (("product_name", name), ("product_family", family), ("product_version", "")):
+        with open(os.path.join(d, attr), "w") as f:
+            f.write(val)
+
+
+class TestLegionGoSBackend:
+    def test_supported_when_dmi_matches(self, tmp_path):
+        _dmi_gos(str(tmp_path))
+        b = LegionGoSFanBackend(root=str(tmp_path), ec=FakeEC(), temp_fn=lambda: 70.0)
+        assert b.supported is True
+
+    def test_not_a_go2(self, tmp_path):
+        # A Go S must not be picked up by the Go 2 backend (distinct DMI tokens).
+        _dmi_gos(str(tmp_path))
+        assert LegionGo2FanBackend(root=str(tmp_path), ec=FakeEC()).supported is False
+
+    def test_experimental_gate_off_gives_null(self, tmp_path):
+        _dmi_gos(str(tmp_path))
+        assert isinstance(select_fan_backend(None, root=str(tmp_path), temp_fn=lambda: 60.0),
+                          NullFanBackend)
+
+    def test_experimental_gate_on_selects_gos(self, tmp_path):
+        _dmi_gos(str(tmp_path))
+        b = select_fan_backend(None, root=str(tmp_path), temp_fn=lambda: 60.0, experimental=True)
+        assert isinstance(b, LegionGoSFanBackend)
+
+    def test_rpm_capped_at_safe_max(self, tmp_path):
+        # 100%-duty point must never target above the safety cap.
+        _dmi_gos(str(tmp_path))
+        b = LegionGoSFanBackend(root=str(tmp_path), ec=FakeEC(), temp_fn=lambda: 95.0)
+        b.apply_curve_all(CURVE)
+        assert 0 < b.target_for_temp(95.0) <= _GOS_MAX_RPM
+
+    def test_temp_guardian_forces_max(self, tmp_path):
+        # Past the hard limit, ignore the curve and drive the capped max (never undercool).
+        _dmi_gos(str(tmp_path))
+        b = LegionGoSFanBackend(root=str(tmp_path), ec=FakeEC(), temp_fn=lambda: 70.0)
+        b.apply_curve_all(CURVE)  # a gentle curve
+        assert b.target_for_temp(_GOS_TEMP_GUARD_C) == _GOS_MAX_RPM
+        assert b.target_for_temp(_GOS_TEMP_GUARD_C + 10) == _GOS_MAX_RPM
+
+    def test_set_auto_releases(self, tmp_path):
+        _dmi_gos(str(tmp_path))
+        ec = FakeEC()
+        b = LegionGoSFanBackend(root=str(tmp_path), ec=ec, temp_fn=lambda: 70.0)
+        b.apply_curve_all(CURVE)
+        b.set_auto(None)
+        assert ec.read(REG_OVERRIDE) == 0 and ec.read(REG_OVERRIDE + 1) == 0
