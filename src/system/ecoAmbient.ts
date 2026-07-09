@@ -86,8 +86,11 @@ function reconcile(on: boolean, wake: number): void {
   if (on && !enabled) {
     wakePct = wake; // snapshot only on enable; while on, wakePct tracks the user
     enabled = true;
+    // Dim to the floor immediately on enable, not only once idle. activeState stays
+    // true so the "active" signal fired while still in the menu doesn't bounce it back
+    // to full; a later idle→active transition still wakes it.
     activeState = true;
-    drive(true); // before subscribing, so the on-register echo is recognised as ours
+    drive(false);
     unsubActivity = subscribeActive(onActivity);
     unsubBrightness = displayBrightness.subscribe(onBrightness);
     startPoll();

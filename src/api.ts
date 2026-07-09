@@ -66,6 +66,17 @@ export interface TdpState {
   // Powers the separate "Aprendí…" suggestion (apply a fixed value); auto-TDP itself
   // is parameter-free and decoupled from this band.
   learned: TdpLearned;
+  // Quick-preset watts for the arc buttons (curated per-model or derived from limits).
+  presets: TdpPresets;
+  // True when get_tdp_state adopted an external (HHD/Steam) TDP change on this read.
+  external_change: boolean;
+}
+
+export interface TdpPresets {
+  quiet: number;
+  balanced: number;
+  turbo: number;    // on battery
+  turbo_ac: number; // on charger
 }
 
 export interface TdpLearned {
@@ -125,6 +136,9 @@ export interface PowerDraw {
   gpu_busy: number | null;
   auto_tdp: boolean;
   setpoint: number | null;
+  // Live PL1 the firmware actually holds (reflects download mode + external HHD/Steam
+  // changes + chip clamp). null when the backend can't read it back.
+  applied: number | null;
   // True only while the QAM-open responsive floor is REALLY raising PL1 above where
   // the auto loop would park it → the arc shows a menu-temporary value, so say so.
   ui_floor_engaged: boolean;

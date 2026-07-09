@@ -4,7 +4,6 @@ import { FC } from "react";
 import { TdpState, TdpScope, PowerDraw } from "../api";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
-import { fraction, zoneFor } from "../tdp/logic";
 import { Loading } from "./Loading";
 import { ProfileSelector } from "./ProfileSelector";
 import { PowerArc } from "./PowerArc";
@@ -49,7 +48,6 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
   // Active ceiling: on battery the device-aware cap (max), on charger max_ac.
   // Never offer more than the current power source can deliver.
   const activeMax = tdp.on_ac ? tdp.limits.max_ac : tdp.limits.max;
-  const zone = zoneFor(fraction(view.watts, tdp.limits.min, activeMax));
   const isAutoOn = power?.auto_tdp ?? false;
   const atCeiling = Math.min(view.watts, activeMax) >= activeMax;
 
@@ -70,13 +68,22 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
           watts={view.watts}
           limits={tdp.limits}
           onAc={tdp.on_ac}
-          zoneLabel={t(`tdp.zone.${zone.key}`)}
           actualWatts={power?.watts ?? null}
           gpuBusy={power?.gpu_busy ?? null}
           auto={isAutoOn}
           setpoint={power?.setpoint ?? null}
+          appliedWatts={power?.applied ?? null}
         />
       </PanelSectionRow>
+      {tdp.external_change && (
+        // An external tool moved the TDP and we adopted it — say so, so the value
+        // doesn't read as a bug.
+        <PanelSectionRow>
+          <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
+            {t("tdp.external_change")}
+          </div>
+        </PanelSectionRow>
+      )}
       {/* Auto status, sitting directly under the arc so it fills what would
           otherwise be dead space above the toggle. */}
       {isAutoOn && power?.ui_floor_engaged && (
@@ -129,8 +136,9 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
           )}
           <PanelSectionRow>
             <Presets
-              limits={tdp.limits}
+              presets={tdp.presets}
               onAc={tdp.on_ac}
+              activeWatts={view.watts}
               labels={{
                 save: t("tdp.preset.save"),
                 balanced: t("tdp.preset.balanced"),

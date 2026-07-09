@@ -64,6 +64,9 @@ def test_get_tdp_state_shape(Plugin):
     assert st["limits"] == {"min": 5, "default": 15, "max": 20, "max_ac": 60}
     assert "on_ac" in st and "watts" in st and "applied_w" in st
     assert "global_watts" in st and isinstance(st["global_watts"], int)
+    # Presets fall back to the rail limits when the profile carries none, clamped
+    # to [min, max_ac].
+    assert st["presets"] == {"quiet": 5, "balanced": 15, "turbo": 20, "turbo_ac": 60}
 
 
 def test_set_tdp_watts_global_clamps_persists_applies(Plugin):
@@ -197,7 +200,8 @@ def PluginWithPower(Plugin, monkeypatch):
 def test_get_power_draw_has_all_keys(PluginWithPower):
     p = PluginWithPower()
     r = asyncio.run(p.get_power_draw())
-    assert set(r.keys()) == {"watts", "gpu_busy", "auto_tdp", "setpoint", "ui_floor_engaged"}
+    assert set(r.keys()) == {"watts", "gpu_busy", "auto_tdp", "setpoint", "applied",
+                             "ui_floor_engaged"}
 
 
 def test_get_power_draw_values(PluginWithPower):
@@ -207,6 +211,7 @@ def test_get_power_draw_values(PluginWithPower):
     assert r["gpu_busy"] == 49
     assert r["auto_tdp"] is False  # default off
     assert isinstance(r["setpoint"], int)  # effective clamped pl1
+    assert r["applied"] is None or isinstance(r["applied"], int)  # live firmware PL1
 
 
 def test_set_auto_tdp_true_returns_correct_shape(PluginWithPower):
@@ -331,3 +336,37 @@ def test_get_telemetry_aggregates_after_collect(Plugin, monkeypatch):
     agg = asyncio.run(p.get_telemetry())
     assert agg["samples_n"] == 1
     assert len(agg["recent"]) == 1
+
+
+def test_adopt_external_tdp_syncs_and_flags(Plugin):
+    p = Plugin()
+    asyncio.run(p.set_tdp_watts(15, "global"))
+    p._tdp_backend._applied = 18  # HHD/Steam moved the firmware PL1 behind our back
+    st = asyncio.run(p.get_tdp_state())
+    assert st["external_change"] is True
+    assert st["global_watts"] == 18  # adopted → our setpoint follows, no stomp next reapply
+    # already adopted → a second read is no longer flagged
+    assert asyncio.run(p.get_tdp_state())["external_change"] is False
+
+
+def test_adopt_skipped_in_download_mode(Plugin):
+    p = Plugin()
+    asyncio.run(p.set_tdp_watts(15, "global"))
+    asyncio.run(p.set_eco(True, 50))
+    assert p._adopt_external_tdp(18) is False  # eco owns the setpoint (forced min)
+
+
+def test_adopt_skipped_within_threshold(Plugin):
+    p = Plugin()
+    asyncio.run(p.set_tdp_watts(15, "global"))
+    assert p._adopt_external_tdp(16) is False  # 1 W jitter, not an external change
+
+
+def test_no_adopt_before_first_apply(Plugin):
+    # Startup race: the firmware still holds a default before we've applied our saved
+    # profile — it must NOT be mistaken for an external change and overwrite the profile.
+    p = Plugin()
+    asyncio.run(p.get_tdp_state())  # init backends; nothing applied yet
+    p._tdp_backend._applied = 28    # firmware default, we've written nothing
+    st = asyncio.run(p.get_tdp_state())
+    assert st["external_change"] is False

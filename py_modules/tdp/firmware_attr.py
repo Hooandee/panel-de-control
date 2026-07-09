@@ -12,6 +12,14 @@ _PP_BASE = "sys/class/platform-profile"
 _PL2_BOOST_RATIO = 1.2
 _PL3_BOOST_RATIO = 1.4
 
+# Guard against bogus firmware ppt ceilings (some ASUS kernels report every rail as
+# 150 W). A recognised device trusts its sysfs PL1 max only within this margin of the
+# profile charger max; beyond that the whole ppt set is untrusted and all rails fall
+# back to profile-derived maxes. A generic device has no reference, so it only drops a
+# physically-impossible value per rail.
+_FW_MARGIN_W = 10
+_FW_ABSURD_W = 100
+
 
 class FirmwareAttrBackend(TDPBackend):
     """TDP via kernel firmware-attributes. Covers ASUS (asus-armoury), Lenovo
@@ -20,11 +28,12 @@ class FirmwareAttrBackend(TDPBackend):
 
     supports_levels = True
 
-    def __init__(self, driver_prefix, fallback, root="/", profile_name=None):
+    def __init__(self, driver_prefix, fallback, root="/", profile_name=None, is_generic=False):
         self.name = f"firmware-attr:{driver_prefix}"
         self._fallback = fallback
         self._root = root
         self._profile_name = profile_name  # Lenovo: set this platform-profile to "custom" first
+        self._is_generic = is_generic
         self._dir = self._find_driver_dir(driver_prefix)
         self.supported = self._dir is not None and os.path.exists(self._attr("ppt_pl1_spl"))
         self._bounds = {}  # attr -> (min, max); static hardware limits, read once
@@ -34,6 +43,31 @@ class FirmwareAttrBackend(TDPBackend):
                     self._read_int(self._attr(attr, "min_value")),
                     self._read_int(self._attr(attr, "max_value")),
                 )
+            self._sanitize_bounds()
+
+    def _sanitize_bounds(self):
+        """Drop bogus firmware rail ceilings so a lying kernel never exposes a
+        dangerous slider (base OR boost). If the sustained PL1 max is implausible on a
+        recognised device (beyond the profile charger max + margin), the whole ppt set
+        is untrusted → rebuild all maxes from the profile (PL1 = charger max, boost
+        rails scaled from it). A trustworthy firmware keeps its real per-rail maxes
+        (legitimate boost above PL1). A generic device only drops an impossible value."""
+        mx1 = self._bounds.get("ppt_pl1_spl", (None, None))[1]
+        if mx1 is None:
+            return
+        if self._is_generic:
+            for attr, (lo, hi) in self._bounds.items():
+                if hi is not None and hi > _FW_ABSURD_W:
+                    self._bounds[attr] = (lo, _FW_ABSURD_W)
+            return
+        ceil = self._fallback.max_ac_w
+        if mx1 <= ceil + _FW_MARGIN_W:
+            return  # trustworthy — keep real per-rail maxes
+        for attr, ratio in (("ppt_pl1_spl", 1.0),
+                            ("ppt_pl2_sppt", _PL2_BOOST_RATIO),
+                            ("ppt_pl3_fppt", _PL3_BOOST_RATIO)):
+            lo = self._bounds.get(attr, (None, None))[0]
+            self._bounds[attr] = (lo, round(ceil * ratio))
 
     def _find_driver_dir(self, prefix):
         base = os.path.join(self._root, _FW_BASE)
@@ -63,7 +97,7 @@ class FirmwareAttrBackend(TDPBackend):
     def get_limits(self):
         if not self.supported:
             return self._fallback
-        mn, mx = self._pl_bounds("ppt_pl1_spl")
+        mn, mx = self._pl_bounds("ppt_pl1_spl")  # already sanitized in _sanitize_bounds
         min_w = mn if mn is not None else self._fallback.min_w
         fw_max = mx if mx is not None else self._fallback.max_ac_w  # firmware (charger) ceiling
         batt_max = min(self._fallback.max_w, fw_max)                # device battery policy

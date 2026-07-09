@@ -1,9 +1,21 @@
 import os
 
+import pytest
+
+from device_registry import detect
 from tdp.firmware_attr import FirmwareAttrBackend
 from tdp.types import TdpLimits
 
 FALLBACK = TdpLimits(min_w=4, default_w=15, max_w=30, max_ac_w=30)
+
+# Real firmware ppt maxes (pl1, sppt, fppt) probed on hardware. The sanitizer must
+# TRUST these — never cap a healthy device below its real limits. Guards against a
+# profile's charger max being lowered under a device's real firmware ceiling.
+_REAL_FW_MAXES = {
+    "ROG Xbox Ally X RC73XA_RC73XA": (35, 45, 55),
+    "ROG Ally X RC72LA_RC72LA": (30, 43, 53),
+    "83N0": (35, 37, 45),  # Legion Go 2
+}
 
 
 def _mk_attr(root, driver, attr, cur, mn, mx):
@@ -77,3 +89,82 @@ def test_lenovo_profile_prestep_sets_custom(tmp_path):
     b = FirmwareAttrBackend("lenovo-wmi-other", FALLBACK, root=root, profile_name="lenovo-wmi-gamezone")
     b.set_tdp(20, ac=True)
     assert open(prof).read().strip() == "custom"
+
+
+def _mk_pl1(root, driver, cur, mn, mx):
+    _mk_attr(root, driver, "ppt_pl1_spl", cur, mn, mx)
+
+
+def test_bogus_firmware_pl1_max_is_capped_for_recognised_device(tmp_path):
+    # A broken BIOS reporting 150 W must not expose a 150 W slider — fall back to
+    # the profile charger ceiling (30).
+    root = str(tmp_path)
+    _mk_pl1(root, "asus-armoury", 20, 7, 150)
+    b = FirmwareAttrBackend("asus-armoury", FALLBACK, root=root)
+    assert b.get_limits().max_ac_w == 30
+
+
+def test_firmware_pl1_max_within_margin_is_trusted(tmp_path):
+    # Slightly above the profile charger max (30) but plausible → trust the firmware.
+    root = str(tmp_path)
+    _mk_pl1(root, "asus-armoury", 20, 7, 38)
+    b = FirmwareAttrBackend("asus-armoury", FALLBACK, root=root)
+    assert b.get_limits().max_ac_w == 38
+
+
+def test_generic_device_only_rejects_absurd_pl1_max(tmp_path):
+    # No trustworthy reference on an unrecognised device: a high-but-possible value
+    # is trusted; a physically-impossible one is dropped to the absurd bound.
+    root = str(tmp_path)
+    _mk_pl1(root, "asus-armoury", 20, 7, 50)
+    b = FirmwareAttrBackend("asus-armoury", FALLBACK, root=root, is_generic=True)
+    assert b.get_limits().max_ac_w == 50
+    root2 = str(tmp_path / "b")
+    _mk_pl1(root2, "asus-armoury", 20, 7, 150)
+    b2 = FirmwareAttrBackend("asus-armoury", FALLBACK, root=root2, is_generic=True)
+    assert b2.get_limits().max_ac_w == 100
+
+
+def test_bogus_firmware_all_rails_fall_back_to_profile(tmp_path):
+    # Some ASUS kernels report every ppt rail max as 150 W on the Xbox Ally X. With a
+    # recognised profile (charger max 35) the whole set is distrusted: PL1 -> 35 and the
+    # boost rails -> profile-scaled, so neither the slider nor Advanced exposes 150.
+    root = str(tmp_path)
+    for attr in ("ppt_pl1_spl", "ppt_pl2_sppt", "ppt_pl3_fppt"):
+        _mk_attr(root, "asus-armoury", attr, 7, 5, 150)
+    fb = TdpLimits(min_w=7, default_w=17, max_w=25, max_ac_w=35)
+    b = FirmwareAttrBackend("asus-armoury", fb, root=root)
+    assert b.get_limits().max_ac_w == 35
+    ll = b.level_limits()
+    assert ll["pl1"]["max"] == 35
+    assert ll["pl2"]["max"] == round(35 * 1.2)  # 42
+    assert ll["pl3"]["max"] == round(35 * 1.4)  # 49
+
+
+def test_trustworthy_firmware_keeps_real_boost_maxes(tmp_path):
+    # A healthy firmware (PL1 within margin) keeps its real per-rail maxes, so genuine
+    # SPPT/FPPT boost above PL1 is preserved.
+    root = str(tmp_path)
+    _mk_attr(root, "asus-armoury", "ppt_pl1_spl", 17, 7, 35)
+    _mk_attr(root, "asus-armoury", "ppt_pl2_sppt", 25, 13, 45)
+    _mk_attr(root, "asus-armoury", "ppt_pl3_fppt", 33, 19, 55)
+    fb = TdpLimits(min_w=7, default_w=17, max_w=25, max_ac_w=35)
+    b = FirmwareAttrBackend("asus-armoury", fb, root=root)
+    ll = b.level_limits()
+    assert (ll["pl1"]["max"], ll["pl2"]["max"], ll["pl3"]["max"]) == (35, 45, 55)
+
+
+@pytest.mark.parametrize("product,maxes", _REAL_FW_MAXES.items())
+def test_real_firmware_maxes_are_trusted(tmp_path, product, maxes):
+    dev = detect(product_name=product)
+    driver = "asus-armoury" if product.startswith("ROG") else "lenovo-wmi-other"
+    root = str(tmp_path)
+    pl1, sppt, fppt = maxes
+    _mk_attr(root, driver, "ppt_pl1_spl", 15, 5, pl1)
+    _mk_attr(root, driver, "ppt_pl2_sppt", 15, 5, sppt)
+    _mk_attr(root, driver, "ppt_pl3_fppt", 15, 5, fppt)
+    b = FirmwareAttrBackend(driver, TdpLimits.from_profile(dev), root=root,
+                            is_generic=dev.is_generic)
+    ll = b.level_limits()
+    assert (ll["pl1"]["max"], ll["pl2"]["max"], ll["pl3"]["max"]) == (pl1, sppt, fppt)
+    assert b.get_limits().max_ac_w == pl1

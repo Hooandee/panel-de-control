@@ -100,3 +100,13 @@ def test_deck_has_no_charger_boost():
     prof = detect(product_name="Galileo")
     assert prof.tdp_max == 15
     assert prof.tdp_max_charger == prof.tdp_max  # no boost
+
+
+def test_ally_family_curated_presets():
+    for name in ("ROG Ally X RC72LA_RC72LA", "ROG Xbox Ally X RC73XA"):
+        prof = detect(product_name=name)
+        assert prof.tdp_presets == (13, 17, 25, 30)
+
+
+def test_other_devices_have_no_curated_presets():
+    assert detect(product_name="Galileo").tdp_presets == ()  # falls back to rail limits
