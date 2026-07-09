@@ -154,8 +154,9 @@ dial it in.
 11. The original Legion Go needs `acpi_call` (GZFD) for fan curves; it's present on Bazzite but not on
     SteamOS, so without it no curve shows up at all (not even a default one). Where it works, applying
     the curve forces TDP into custom mode. The monitor (speed + temperature) does work.
-12. The Legion Go S only allows coarse fan modes (quiet, balanced, performance), not a freeform curve,
-    so it can't apply a learned curve either.
+12. The Legion Go S drives its fan over an unofficial embedded-controller (EC) path, so it's an
+    optional experimental control: you enable it by hand, with a safety speed cap. Left off, it stays
+    monitor-only.
 13. On Intel the color is only applied while the compositor is active, so that path is forced and the
     small cost is disclosed.
 14. The "OLED look" preset is hidden on panels that are already OLED (Steam Deck OLED, Legion Go 2)
