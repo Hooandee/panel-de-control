@@ -528,6 +528,21 @@ class Plugin:
         backend spawns a blocking systemctl). No executor / no loop → inline."""
         self._offload(self._reapply_fans_sync)
 
+    def _ensure_fan_loop(self) -> None:
+        """Start a software-loop backend's periodic curve loop ON the event loop.
+        Applies run off-loop (in a worker thread with no loop), where the backend's
+        own start() is a no-op — so the loop that re-evaluates the curve against live
+        temperature (and enforces the high-temp guardian) would never run. Call this
+        on the event loop after an apply. No-op for backends without a loop / when
+        not driving a curve."""
+        ctrl = self._fan_ctrl
+        starter = getattr(ctrl, "start", None)
+        if callable(starter) and getattr(ctrl, "_owns_fan", False):
+            try:
+                starter()
+            except Exception:  # noqa: BLE001 — starting the loop must never break an RPC
+                pass
+
     def _reapply_fans_sync(self) -> None:
         """Apply the effective fan profile for the current game (or global).
 
@@ -615,21 +630,27 @@ class Plugin:
         return self._fan_curve_state()
 
     async def set_fan_experimental(self, enabled: bool) -> dict:
-        """Opt in/out of experimental EC fan control (Legion Go S). Releases the
-        current backend before swapping so the fan is never left driven, then
-        rebuilds the backend and re-applies the stored curve (or firmware auto)."""
+        """Opt in/out of experimental EC fan control (Legion Go S). The swap probes
+        sysfs (backend selection) + drives the EC, so it runs OFF the event loop to
+        keep the QAM render fluid; only the small state read stays on the loop."""
         self._init()
         enabled = bool(enabled)
+        self._settings["fan_experimental"] = enabled
+        self._store.save(self._settings)
+        await self._offload_call(lambda: self._swap_fan_backend(enabled))
+        self._ensure_fan_loop()  # start the curve loop on the event loop (guardian!)
+        return self._fan_curve_state()
+
+    def _swap_fan_backend(self, enabled: bool) -> None:
+        """Release the current backend (never leave the fan driven), rebuild it for
+        the new experimental flag, and re-apply the effective curve. Off-loop."""
         try:
             self._fan_ctrl.restore_auto()  # hand any active EC drive back to firmware
         except Exception:  # noqa: BLE001 — release is best-effort; must not raise
             pass
-        self._settings["fan_experimental"] = enabled
-        self._store.save(self._settings)
         self._fan_ctrl = fan_control.select_fan_backend(
             self._device, temp_fn=self._driving_temp, experimental=enabled)
-        self._reapply_fans()
-        return self._fan_curve_state()
+        self._reapply_fans_sync()
 
     async def set_fan_preset(self, preset: str, scope: str, appid=None) -> dict:
         self._init()
