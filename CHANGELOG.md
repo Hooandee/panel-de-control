@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.9.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.8.4...panel-de-control-v0.9.0) (2026-07-09)
+
+
+### Features / Novedades
+
+* Fan control on the Legion Go S: you can now set a fan curve on the Go S through a new experimental, opt-in mode. It's off by default, drives the fan over an unofficial path, and keeps a safety speed cap. ([#112](https://github.com/Hooandee/panel-de-control/issues/112)) ([2281a33](https://github.com/Hooandee/panel-de-control/commit/2281a33c127fe98b2eb9298725b4fe6b0f4c3a1b))
+* **ES:** Control de ventilador en la Legion Go S: ya puedes poner una curva de ventilador en la Go S con un modo experimental y opcional. Viene desactivado, controla el ventilador por una vía no oficial y mantiene un tope de velocidad de seguridad. ([#112](https://github.com/Hooandee/panel-de-control/issues/112)) ([2281a33](https://github.com/Hooandee/panel-de-control/commit/2281a33c127fe98b2eb9298725b4fe6b0f4c3a1b))
+
 ## [0.8.4](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.8.3...panel-de-control-v0.8.4) (2026-07-08)
 
 
