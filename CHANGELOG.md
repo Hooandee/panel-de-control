@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.8.4...panel-de-control-v0.9.0) (2026-07-09)
+
+
+### Features
+
+* experimental fan control on the Legion Go S ([#112](https://github.com/Hooandee/panel-de-control/issues/112)) ([2281a33](https://github.com/Hooandee/panel-de-control/commit/2281a33c127fe98b2eb9298725b4fe6b0f4c3a1b))
+
 ## [0.8.4](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.8.3...panel-de-control-v0.8.4) (2026-07-08)
 
 
