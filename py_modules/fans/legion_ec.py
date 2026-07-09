@@ -137,7 +137,6 @@ class LegionGoSFanBackend(LegionGo2FanBackend):
 
     name = "legion-go-s-ec"
     max_rpm = _GOS_MAX_RPM
-    min_rpm = 0
 
     def _dmi_matches(self) -> bool:
         dmi = os.path.join(self._root, "sys/class/dmi/id")

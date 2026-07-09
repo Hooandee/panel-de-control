@@ -49,9 +49,11 @@ export const ExperimentalFanCard: FC<Props> = ({ enabled, onToggle }) => {
         <div style={{ display: "flex", alignItems: "center", gap: theme.space.xs, fontSize: theme.font.body, fontWeight: 700, color: theme.color.textPrimary }}>
           <LuTriangleAlert size={16} color={theme.color.warn} /> {t("fans.experimental.title")}
         </div>
-        <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, margin: `${theme.space.xs}px 0`, lineHeight: 1.4 }}>
-          {t("fans.experimental.note")}
-        </div>
+        {!enabled && (
+          <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, margin: `${theme.space.xs}px 0`, lineHeight: 1.4 }}>
+            {t("fans.experimental.note")}
+          </div>
+        )}
         <ToggleField
           label={t("fans.experimental.toggle")}
           checked={enabled}

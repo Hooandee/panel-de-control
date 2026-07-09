@@ -525,13 +525,8 @@ class Plugin:
     # ---- Fan-curve control (global + per-game, persisted) -------------------
     def _reapply_fans(self) -> None:
         """Push the effective fan curve off the event loop (Steam Deck's software-loop
-        backend spawns a blocking systemctl). No executor / no loop → inline.
-
-        The apply runs in a worker thread with no event loop, where a software-loop
-        backend's own start() no-ops — so once the apply lands we (re)start its
-        periodic curve loop ON the event loop. Chaining it as the offload's `done`
-        callback means it fires only AFTER the apply took fan ownership (no race);
-        _ensure_fan_loop no-ops for backends without a loop and in auto mode."""
+        backend spawns a blocking systemctl). `done` (re)starts the curve loop on the
+        event loop after the apply took ownership — race-free (see _ensure_fan_loop)."""
         self._offload(self._reapply_fans_sync, done=self._ensure_fan_loop)
 
     def _ensure_fan_loop(self) -> None:
