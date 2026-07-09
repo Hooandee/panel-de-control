@@ -3,9 +3,10 @@
 ## [0.10.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.9.0...panel-de-control-v0.10.0) (2026-07-09)
 
 
-### Features
+### Features / Novedades
 
-* live TDP readout, per-device presets, and instant download-mode dim ([#119](https://github.com/Hooandee/panel-de-control/issues/119)) ([cbc8e0e](https://github.com/Hooandee/panel-de-control/commit/cbc8e0ed33de5b489879c3cfce8c0e6491f8261a))
+* The Power tab now shows the TDP the firmware is actually holding, not just the value you set, so download mode and changes made from other tools show up. Adds curated quick presets on the ROG Ally X and Xbox Ally X (with the active one highlighted), dims the screen right away in download mode, and ignores a bogus firmware TDP ceiling so the slider can never offer a dangerous value. ([#119](https://github.com/Hooandee/panel-de-control/issues/119)) ([cbc8e0e](https://github.com/Hooandee/panel-de-control/commit/cbc8e0ed33de5b489879c3cfce8c0e6491f8261a))
+* **ES:** La pestaña de Potencia ahora muestra el TDP que el firmware tiene puesto de verdad, no solo el que fijaste tú, así se reflejan el modo descarga y los cambios hechos desde otras herramientas. Añade presets rápidos a medida en la ROG Ally X y la Xbox Ally X (con el activo resaltado), atenúa la pantalla al instante en modo descarga, e ignora un tope de TDP erróneo del firmware para que el slider nunca ofrezca un valor peligroso. ([#119](https://github.com/Hooandee/panel-de-control/issues/119)) ([cbc8e0e](https://github.com/Hooandee/panel-de-control/commit/cbc8e0ed33de5b489879c3cfce8c0e6491f8261a))
 
 ## [0.9.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.8.4...panel-de-control-v0.9.0) (2026-07-09)
 
