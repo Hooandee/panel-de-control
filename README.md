@@ -155,8 +155,9 @@ Ajustes ayudan un montón a afinarlo.
     Bazzite pero no en SteamOS, así que sin él no aparece ninguna curva (ni siquiera por defecto).
     Donde funciona, aplicar la curva fuerza el TDP a modo custom. El monitor (velocidad + temperatura)
     sí funciona.
-12. La Legion Go S solo permite modos gruesos de ventilador (silencioso, equilibrado, rendimiento),
-    no una curva libre, así que tampoco puede aplicar una curva aprendida.
+12. La Legion Go S controla el ventilador por una vía no oficial del controlador integrado (EC), así
+    que es un control experimental y opcional: hay que activarlo a mano, con un tope de velocidad de
+    seguridad. Desactivado, se queda solo en monitor.
 13. En Intel el color solo se aplica mientras el compositor está activo, así que se fuerza esa ruta y
     se avisa del pequeño coste.
 14. El preset "Aspecto OLED" se oculta en los paneles que ya son OLED (Steam Deck OLED, Legion Go 2)
