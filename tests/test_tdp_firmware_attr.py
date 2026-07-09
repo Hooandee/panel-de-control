@@ -111,3 +111,32 @@ def test_generic_device_only_rejects_absurd_pl1_max(tmp_path):
     _mk_pl1(root2, "asus-armoury", 20, 7, 150)
     b2 = FirmwareAttrBackend("asus-armoury", FALLBACK, root=root2, is_generic=True)
     assert b2.get_limits().max_ac_w == 100
+
+
+def test_bogus_firmware_all_rails_fall_back_to_profile(tmp_path):
+    # Some ASUS kernels report every ppt rail max as 150 W on the Xbox Ally X. With a
+    # recognised profile (charger max 35) the whole set is distrusted: PL1 -> 35 and the
+    # boost rails -> profile-scaled, so neither the slider nor Advanced exposes 150.
+    root = str(tmp_path)
+    for attr in ("ppt_pl1_spl", "ppt_pl2_sppt", "ppt_pl3_fppt"):
+        _mk_attr(root, "asus-armoury", attr, 7, 5, 150)
+    fb = TdpLimits(min_w=7, default_w=17, max_w=25, max_ac_w=35)
+    b = FirmwareAttrBackend("asus-armoury", fb, root=root)
+    assert b.get_limits().max_ac_w == 35
+    ll = b.level_limits()
+    assert ll["pl1"]["max"] == 35
+    assert ll["pl2"]["max"] == round(35 * 1.2)  # 42
+    assert ll["pl3"]["max"] == round(35 * 1.4)  # 49
+
+
+def test_trustworthy_firmware_keeps_real_boost_maxes(tmp_path):
+    # A healthy firmware (PL1 within margin) keeps its real per-rail maxes, so genuine
+    # SPPT/FPPT boost above PL1 is preserved.
+    root = str(tmp_path)
+    _mk_attr(root, "asus-armoury", "ppt_pl1_spl", 17, 7, 35)
+    _mk_attr(root, "asus-armoury", "ppt_pl2_sppt", 25, 13, 45)
+    _mk_attr(root, "asus-armoury", "ppt_pl3_fppt", 33, 19, 55)
+    fb = TdpLimits(min_w=7, default_w=17, max_w=25, max_ac_w=35)
+    b = FirmwareAttrBackend("asus-armoury", fb, root=root)
+    ll = b.level_limits()
+    assert (ll["pl1"]["max"], ll["pl2"]["max"], ll["pl3"]["max"]) == (35, 45, 55)
