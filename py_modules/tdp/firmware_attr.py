@@ -12,6 +12,12 @@ _PP_BASE = "sys/class/platform-profile"
 _PL2_BOOST_RATIO = 1.2
 _PL3_BOOST_RATIO = 1.4
 
+# Guard against a bogus firmware PL1 ceiling. A recognised device trusts its sysfs max
+# only within this margin of the profile charger max; a generic one only drops a
+# physically-impossible value. SPPT/FPPT are left at their real firmware max.
+_FW_PL1_MARGIN_W = 10
+_FW_PL1_ABSURD_W = 100
+
 
 class FirmwareAttrBackend(TDPBackend):
     """TDP via kernel firmware-attributes. Covers ASUS (asus-armoury), Lenovo
@@ -20,11 +26,12 @@ class FirmwareAttrBackend(TDPBackend):
 
     supports_levels = True
 
-    def __init__(self, driver_prefix, fallback, root="/", profile_name=None):
+    def __init__(self, driver_prefix, fallback, root="/", profile_name=None, is_generic=False):
         self.name = f"firmware-attr:{driver_prefix}"
         self._fallback = fallback
         self._root = root
         self._profile_name = profile_name  # Lenovo: set this platform-profile to "custom" first
+        self._is_generic = is_generic
         self._dir = self._find_driver_dir(driver_prefix)
         self.supported = self._dir is not None and os.path.exists(self._attr("ppt_pl1_spl"))
         self._bounds = {}  # attr -> (min, max); static hardware limits, read once
@@ -66,9 +73,16 @@ class FirmwareAttrBackend(TDPBackend):
         mn, mx = self._pl_bounds("ppt_pl1_spl")
         min_w = mn if mn is not None else self._fallback.min_w
         fw_max = mx if mx is not None else self._fallback.max_ac_w  # firmware (charger) ceiling
+        fw_max = self._sane_pl1_max(fw_max)
         batt_max = min(self._fallback.max_w, fw_max)                # device battery policy
         default_w = max(min_w, min(self._fallback.default_w, fw_max))
         return TdpLimits(min_w=min_w, default_w=default_w, max_w=batt_max, max_ac_w=fw_max)
+
+    def _sane_pl1_max(self, fw_max):
+        if self._is_generic:
+            return min(fw_max, _FW_PL1_ABSURD_W)
+        limit = self._fallback.max_ac_w + _FW_PL1_MARGIN_W
+        return self._fallback.max_ac_w if fw_max > limit else fw_max
 
     def _set_custom_profile(self):
         if not self._profile_name:

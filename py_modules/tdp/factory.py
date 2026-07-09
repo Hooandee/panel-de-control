@@ -16,15 +16,17 @@ def _candidates(device, fallback, root, ryzenadj):
     exposes. The generic AMD write paths (ryzenadj, then ALIB via acpi_call) sit
     strictly last, after every device-specific interface, so a recognised device
     never changes selection. Both are AMD-only and excluded on Intel."""
+    generic = device.is_generic
+
     def asus():
-        return FirmwareAttrBackend("asus-armoury", fallback, root=root)
+        return FirmwareAttrBackend("asus-armoury", fallback, root=root, is_generic=generic)
 
     def lenovo():
         return FirmwareAttrBackend("lenovo-wmi-other", fallback, root=root,
-                                   profile_name="lenovo-wmi-gamezone")
+                                   profile_name="lenovo-wmi-gamezone", is_generic=generic)
 
     def msi():
-        return FirmwareAttrBackend("msi-wmi-platform", fallback, root=root)
+        return FirmwareAttrBackend("msi-wmi-platform", fallback, root=root, is_generic=generic)
 
     def intel():
         return IntelRaplBackend(fallback, root=root)

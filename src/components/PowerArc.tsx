@@ -32,32 +32,32 @@ interface PowerArcProps {
   watts: number;
   limits: TdpLimits;
   onAc: boolean;
-  zoneLabel: string;
   actualWatts?: number | null;
   gpuBusy?: number | null;
   auto?: boolean;
   setpoint?: number | null;
+  appliedWatts?: number | null;
 }
 
 export const PowerArc: FC<PowerArcProps> = ({
   watts,
   limits,
   onAc,
-  zoneLabel,
   actualWatts = null,
   gpuBusy = null,
   auto = false,
   setpoint = null,
+  appliedWatts = null,
 }) => {
   const { t } = useI18n();
 
-  // Your real TDP (the PL1 you/the loop set). Auto → the setpoint the loop drives
-  // (falling back to watts before the first tick); manual → the slider watts.
-  // Always known → the big number never shows "—". The base fill, zone, icon and
-  // colour all track THIS, not the noisy live draw.
-  const tdpWatts = auto ? (setpoint ?? watts) : watts;
+  // The fixed target you set (auto → the loop's setpoint) — shown as a marker.
+  const targetWatts = auto ? (setpoint ?? watts) : watts;
+  // The live applied PL1 — the hero number + fill. Falls back to the target so it
+  // never shows "—".
+  const heroWatts = appliedWatts ?? targetWatts;
 
-  const f = fraction(tdpWatts, limits.min, limits.max_ac);
+  const f = fraction(heroWatts, limits.min, limits.max_ac);
   const zone = zoneFor(f);
   const color = arcColor(f);
   const ZoneIcon = ZONE_ICON[zone.key];
@@ -72,19 +72,22 @@ export const PowerArc: FC<PowerArcProps> = ({
   const [sx, sy] = polar(START);
   const [ex, ey] = polar(end);
 
-  // HW boost: the extra watts the chip draws above your TDP via SPPT/FPPT. Null
-  // when the draw sensor is down. Only shown when it's a real extra.
-  const boost = boostWatts(tdpWatts, actualWatts);
+  // HW boost: watts drawn above the applied PL1 via SPPT/FPPT. Null when no draw
+  // sensor; shown only when it's a real extra.
+  const boost = boostWatts(heroWatts, actualWatts);
   const hasBoost = boost !== null && boost > 0;
   // Where the boost segment ends on the arc (null → nothing to draw). The clamp to
   // the ceiling and the same-rounded-gate-as-boostWatts live in the pure helper.
-  const boostEnd = boostEndFraction(tdpWatts, actualWatts, limits.min, limits.max_ac);
+  const boostEnd = boostEndFraction(heroWatts, actualWatts, limits.min, limits.max_ac);
 
-  // White tick at your TDP — the "this is your TDP" marker, in BOTH auto & manual.
-  // It sits on the base-fill ↔ boost boundary.
-  const tickDeg = START + f * SWEEP;
+  // Marker at the fixed target you set. A small number by it appears only when it
+  // diverges from the applied value (eco/HHD/Steam), so it's read, not estimated.
+  const fTarget = fraction(targetWatts, limits.min, limits.max_ac);
+  const tickDeg = START + fTarget * SWEEP;
   const [tx1, ty1] = polarAt(tickDeg, R - SW / 2 - 1);
   const [tx2, ty2] = polarAt(tickDeg, R + SW / 2 + 1);
+  const targetDiverged = Math.round(targetWatts) !== Math.round(heroWatts);
+  const [lx, ly] = polarAt(tickDeg, R + SW / 2 + 10);
 
   return (
     <div style={{ position: "relative", width: "100%", maxWidth: 240, margin: "2px auto 0" }}>
@@ -103,18 +106,20 @@ export const PowerArc: FC<PowerArcProps> = ({
             style={{ transition: "stroke 220ms ease" }}
           />
         )}
-        {/* Base fill: min → your TDP, coloured by zone. */}
-        <path
-          d={fullArc}
-          fill="none"
-          stroke={color}
-          strokeWidth={SW}
-          strokeLinecap="round"
-          pathLength={1000}
-          strokeDasharray={1000}
-          strokeDashoffset={1000 * (1 - f)}
-          style={{ transition: "stroke-dashoffset 240ms ease, stroke 240ms ease", filter: `drop-shadow(0 0 6px ${color})` }}
-        />
+        {/* Base fill: min → applied TDP. A single growing dash (offset 0) so the
+            round cap can't bleed a dot onto the far end when f→0. */}
+        {f > 0 && (
+          <path
+            d={fullArc}
+            fill="none"
+            stroke={color}
+            strokeWidth={SW}
+            strokeLinecap="round"
+            pathLength={1000}
+            strokeDasharray={`${1000 * f} 1000`}
+            style={{ transition: "stroke-dasharray 240ms ease, stroke 240ms ease", filter: `drop-shadow(0 0 6px ${color})` }}
+          />
+        )}
         {/* HW boost segment: your TDP → live draw (clamped to arc end), warm + glow. */}
         {boostEnd !== null && (
           <path
@@ -126,7 +131,7 @@ export const PowerArc: FC<PowerArcProps> = ({
             style={{ filter: `drop-shadow(0 0 7px ${theme.color.boost})` }}
           />
         )}
-        {/* Your-TDP tick — the "this is your TDP" marker, in auto and manual. */}
+        {/* Fixed-target tick — where YOU set PL1, in auto and manual. */}
         <line
           x1={tx1}
           y1={ty1}
@@ -136,6 +141,11 @@ export const PowerArc: FC<PowerArcProps> = ({
           strokeWidth={2.5}
           strokeLinecap="round"
         />
+        {targetDiverged && (
+          <text x={lx} y={ly + 3} fill="rgba(255,255,255,0.90)" fontSize="9" fontWeight={700} textAnchor="middle">
+            {Math.round(targetWatts)}W
+          </text>
+        )}
         <text x={sx} y={sy + 16} fill={theme.color.textMuted} fontSize="10" textAnchor="middle">{limits.min}W</text>
         <text x={ex} y={ey + 16} fill={theme.color.textMuted} fontSize="10" textAnchor="middle">{limits.max_ac}W{chargerHeadroom ? " ⚡" : ""}</text>
       </svg>
@@ -143,7 +153,7 @@ export const PowerArc: FC<PowerArcProps> = ({
         {/* Zone icon — hidden in auto mode to make room for AUTO chip */}
         {!auto && <div style={{ lineHeight: 0 }}><ZoneIcon size={26} color={color} /></div>}
         <div style={{ fontSize: 32, fontWeight: 700, color: theme.color.textPrimary, lineHeight: 1.15 }}>
-          {Math.round(tdpWatts)}
+          {Math.round(heroWatts)}
           {hasBoost && (
             <span style={{ fontSize: 15, fontWeight: 700, color: theme.color.boost, verticalAlign: "super", marginLeft: 1 }}>
               ⁺{boost}
@@ -171,7 +181,7 @@ export const PowerArc: FC<PowerArcProps> = ({
             {t("tdp.arc.auto")}
           </div>
         ) : (
-          <div style={{ fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color }}>{zoneLabel}</div>
+          <div style={{ fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color }}>{t(`tdp.zone.${zone.key}`)}</div>
         )}
         {/* GPU load — shown in auto mode when data is available */}
         {auto && gpuBusy !== null && (

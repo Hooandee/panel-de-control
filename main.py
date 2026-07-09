@@ -57,6 +57,9 @@ _REPORT_SERVICE_URL = os.environ.get(
 # than the old reactive window; the up-trigger still uses the recent peak to reject
 # transient dips. See py_modules/auto_tdp.py.
 _AUTO_WINDOW = 10
+# Watts of divergence before we treat a firmware PL1 read as an external change to
+# adopt (above rounding/settling jitter).
+_EXTERNAL_TDP_THRESHOLD = 2
 
 DEFAULTS = {
     # Persisted settings keys go here; SettingsStore merges these over stored values.
@@ -197,6 +200,10 @@ class Plugin:
         # table chip; read once here like _cpu_info. None on generic or when unreadable.
         self._chip = read_cpu_model() if not self._device.is_generic else None
         self._current_appid = None
+        # Last PL1 WE wrote to the firmware (readback). Adoption compares the live value
+        # against this, not the profile, so it fires only for a real external change —
+        # never on a stale/default read before our first apply or mid-transition (None).
+        self._last_written_pl1 = None
         self._lifecycle = LifecycleManager(apply_cb=self._reapply_all)
         self._auto_task = None
         self._auto_setpoint = None
@@ -1081,11 +1088,16 @@ class Plugin:
         pr = await asyncio.to_thread(self._power_reader.read)
         auto = bool(self._settings.get("auto_tdp"))
         setpoint = self._effective_levels(self._current_appid)[0]["pl1"]
+        # Live PL1 the firmware holds (reflects eco + external HHD/Steam changes). Skip
+        # it on subprocess-backed backends (ryzenadj) so the 1 s poll doesn't fork a
+        # tool every tick — the arc falls back to the setpoint there.
+        applied = None if getattr(self._tdp_backend, "blocking", False) else await self._read_applied()
         return {
             "watts": pr["watts"],
             "gpu_busy": pr["gpu_busy"],
             "auto_tdp": auto,
             "setpoint": setpoint,
+            "applied": applied,
             "ui_floor_engaged": self._ui_floor_engaged(),
         }
 
@@ -1264,7 +1276,11 @@ class Plugin:
     def _reapply_tdp(self, on_ac=None):
         self._init()
         lv, _active, ac = self._effective_levels(self._current_appid, on_ac)
-        return self._tdp_backend.set_levels(lv["pl1"], lv["pl2"], lv["pl3"], ac)
+        res = self._tdp_backend.set_levels(lv["pl1"], lv["pl2"], lv["pl3"], ac)
+        # Record what the firmware now holds (readback), so adoption can tell a real
+        # external change from our own write.
+        self._last_written_pl1 = res.applied_w if res.applied_w is not None else lv["pl1"]
+        return res
 
     def _reapply_all(self, on_ac=None) -> None:
         """Lifecycle callback: re-assert TDP, the fan curve, the charge limit and the
@@ -1274,6 +1290,10 @@ class Plugin:
         # stale preview can't leak onto the new context (nor a dangling timer fire).
         self._cancel_color_revert()
         self._color_preview = None
+        # A context change is landing (resume/AC/game/eco) — the firmware may be mid-
+        # transition until the offloaded re-apply below writes. Suspend adoption until
+        # then so a transient/default read isn't mistaken for an external change.
+        self._last_written_pl1 = None
         # sysfs (fast) → inline; subprocess-backed (tdp-ryzenadj/fans/color) → off-loop.
         self._apply_charge_limit()
         self._apply_cpu()
@@ -1622,7 +1642,29 @@ class Plugin:
 
     async def get_tdp_state(self) -> dict:
         self._init()
-        return self._tdp_state(await self._read_applied())
+        applied = await self._read_applied()
+        external = self._adopt_external_tdp(applied)
+        st = self._tdp_state(applied)
+        st["external_change"] = external
+        return st
+
+    def _adopt_external_tdp(self, applied) -> bool:
+        """Adopt a firmware PL1 moved by an external tool (HHD/Steam) as our setpoint,
+        so a later re-apply doesn't stomp it. Compares against the value WE last wrote
+        (``_last_written_pl1``): None until our first apply and cleared during a
+        re-apply, so a stale/default read at startup or mid-transition never adopts.
+        Skipped in eco / auto (we own the setpoint there). True when adopted."""
+        if applied is None or self._last_written_pl1 is None:
+            return False
+        if self._settings.get("eco_enabled") or self._settings.get("auto_tdp"):
+            return False
+        if abs(int(applied) - int(self._last_written_pl1)) < _EXTERNAL_TDP_THRESHOLD:
+            return False
+        appid = self._current_appid
+        scope = "game" if (appid is not None and self._tdp_profiles.has_game(appid)) else "global"
+        self._tdp_profiles.set_pl1(scope, int(applied), appid=appid)
+        self._last_written_pl1 = int(applied)
+        return True
 
     def _tdp_state(self, applied_w) -> dict:
         levels, active, ac = self._effective_levels(self._current_appid)
@@ -1653,7 +1695,23 @@ class Plugin:
             # The battery↔performance dial that picks a value inside it is now LOCAL UI
             # state — applying it is a fixed manual setpoint, not a loop parameter.
             "learned": self._tdp_learned_info(self._current_appid),
+            "presets": self._tdp_presets(limits),
+            # get_tdp_state flips this True when it adopts an external change.
+            "external_change": False,
         }
+
+    def _tdp_presets(self, limits) -> dict:
+        """Quick-preset watts for the arc's preset buttons. Curated per-model values
+        (device profile) when present, else derived from the rail limits. Clamped to
+        the rail so a preset can never sit above the active ceiling."""
+        p = self._device.tdp_presets
+        if len(p) == 4:
+            quiet, balanced, turbo, turbo_ac = p
+        else:
+            quiet, balanced = limits.min_w, limits.default_w
+            turbo, turbo_ac = limits.max_w, limits.max_ac_w
+        return {"quiet": limits.clamp(quiet), "balanced": limits.clamp(balanced),
+                "turbo": limits.clamp(turbo), "turbo_ac": limits.clamp(turbo_ac)}
 
     def _resolve_scope(self, scope, appid):
         """Normalize scope/appid; returns scope or None if invalid."""

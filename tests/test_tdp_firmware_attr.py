@@ -77,3 +77,37 @@ def test_lenovo_profile_prestep_sets_custom(tmp_path):
     b = FirmwareAttrBackend("lenovo-wmi-other", FALLBACK, root=root, profile_name="lenovo-wmi-gamezone")
     b.set_tdp(20, ac=True)
     assert open(prof).read().strip() == "custom"
+
+
+def _mk_pl1(root, driver, cur, mn, mx):
+    _mk_attr(root, driver, "ppt_pl1_spl", cur, mn, mx)
+
+
+def test_bogus_firmware_pl1_max_is_capped_for_recognised_device(tmp_path):
+    # A broken BIOS reporting 150 W must not expose a 150 W slider — fall back to
+    # the profile charger ceiling (30).
+    root = str(tmp_path)
+    _mk_pl1(root, "asus-armoury", 20, 7, 150)
+    b = FirmwareAttrBackend("asus-armoury", FALLBACK, root=root)
+    assert b.get_limits().max_ac_w == 30
+
+
+def test_firmware_pl1_max_within_margin_is_trusted(tmp_path):
+    # Slightly above the profile charger max (30) but plausible → trust the firmware.
+    root = str(tmp_path)
+    _mk_pl1(root, "asus-armoury", 20, 7, 38)
+    b = FirmwareAttrBackend("asus-armoury", FALLBACK, root=root)
+    assert b.get_limits().max_ac_w == 38
+
+
+def test_generic_device_only_rejects_absurd_pl1_max(tmp_path):
+    # No trustworthy reference on an unrecognised device: a high-but-possible value
+    # is trusted; a physically-impossible one is dropped to the absurd bound.
+    root = str(tmp_path)
+    _mk_pl1(root, "asus-armoury", 20, 7, 50)
+    b = FirmwareAttrBackend("asus-armoury", FALLBACK, root=root, is_generic=True)
+    assert b.get_limits().max_ac_w == 50
+    root2 = str(tmp_path / "b")
+    _mk_pl1(root2, "asus-armoury", 20, 7, 150)
+    b2 = FirmwareAttrBackend("asus-armoury", FALLBACK, root=root2, is_generic=True)
+    assert b2.get_limits().max_ac_w == 100

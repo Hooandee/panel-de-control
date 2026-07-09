@@ -23,6 +23,9 @@ class DeviceProfile:
     # Optional per-model calibrated "OLED look" color state. None => the generic look
     # (display.oled_look.GENERIC_OLED_LOOK).
     oled_look: Optional[dict] = None
+    # Curated quick-preset watts (quiet, balanced, turbo_battery, turbo_charger);
+    # empty → fall back to (min, default, max, max_ac).
+    tdp_presets: tuple = field(default_factory=tuple)
 
 
 # Conservative, safe fallback when detection fails - visibly generic.
@@ -46,9 +49,11 @@ DEVICE_TABLE = (
     DeviceProfile("steam_deck_oled", "Steam Deck OLED", "AMD Sephiroth", "amd",
                   3, 12, 15, 15, match_names=("Galileo",), panel="oled"),
     DeviceProfile("rog_xbox_ally_x", "ROG Xbox Ally X", "AMD Ryzen AI Z2 Extreme", "amd",
-                  7, 17, 25, 30, match_names=("ROG Xbox Ally X",)),
+                  7, 17, 25, 35, match_names=("ROG Xbox Ally X",),
+                  tdp_presets=(13, 17, 25, 30)),
     DeviceProfile("rog_ally_x", "ROG Ally X", "AMD Z1 Extreme", "amd",
-                  7, 17, 25, 30, match_names=("ROG Ally X",)),
+                  7, 17, 25, 30, match_names=("ROG Ally X",),
+                  tdp_presets=(13, 17, 25, 30)),
     DeviceProfile("rog_ally", "ROG Ally", "AMD Z1 Extreme", "amd",
                   7, 15, 25, 30, match_names=("ROG Ally RC71", "ROG Ally")),
     DeviceProfile("legion_go_2", "Legion Go 2", "AMD Ryzen AI Z2 Extreme", "amd",
