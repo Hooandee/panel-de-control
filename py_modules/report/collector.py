@@ -328,6 +328,11 @@ def capabilities_from(states: dict) -> dict:
         "tdp_supported": bool(tdp.get("supported")),
         "fan_source": fan.get("source"),
         "fan_supported": bool(fan.get("supported")),
+        # Experimental EC fan control (Legion Go S): whether the device offers the
+        # unofficial channel and whether the user opted in. Key for fan reports —
+        # "modes do nothing" reads very differently with this off vs on.
+        "fan_experimental_available": bool(fan.get("experimental_available")),
+        "fan_experimental_enabled": bool(fan.get("experimental_enabled")),
         "charge_limit_supported": bool(batt.get("supported")),
         "charge_limit_adjustable": bool(batt.get("adjustable")),
         "gpu_clock_supported": bool(gpu.get("supported")),

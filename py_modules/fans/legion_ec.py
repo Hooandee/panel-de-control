@@ -14,7 +14,7 @@ real matching device, and only on the first write/read.
 import os
 from typing import Callable, Optional
 
-from fans.control import _read
+from fans.control import _read, _interp
 from fans.software_loop import SoftwareLoopBackend
 
 # EC register map (16-bit addresses; RPM/override are little-endian across addr,addr+1).
@@ -114,11 +114,17 @@ class LegionGo2FanBackend(SoftwareLoopBackend):
 
 # Legion Go S: RPM (0xC6C0) and override (0xC6C8) use the same SuperIO 0x4E map as
 # the Go 2. Unofficial interface → gated behind an opt-in and wrapped in a safety
-# harness (RPM cap + high-temp guardian).
+# harness (RPM cap + min-spin floor + high-temp guardian).
 _DMI_MATCH_GOS = ("83N6", "83L3", "LEGION GO S")
 # Cap the driven target below the firmware's own top (~4800 rpm observed): the curve's
 # 100% maps here, so it can never be pushed to an out-of-range value.
 _GOS_MAX_RPM = 4500
+# The fan does not physically spin below this. A target in (0, MIN_SPIN) is the DANGER
+# zone: the fan is stopped AND the firmware is locked out. So we only ever write 0
+# (hand control back to the firmware) or a value in [MIN_SPIN, MAX_RPM]. This also
+# makes a stuck override safe if the plugin ever dies — either firmware-controlled or
+# genuinely cooling, never stopped-and-abandoned.
+_GOS_MIN_SPIN = 1500
 # Above this temperature we ignore the user's curve and force full (capped) cooling —
 # a bad curve must never leave the fan slow while hot.
 _GOS_TEMP_GUARD_C = 90
@@ -126,10 +132,12 @@ _GOS_TEMP_GUARD_C = 90
 
 class LegionGoSFanBackend(LegionGo2FanBackend):
     """Legion Go S EC fan control (opt-in, experimental). Same override mechanism as
-    the Go 2, with an RPM ceiling and a high-temp guardian layered on top."""
+    the Go 2, with an RPM ceiling, a min-spin floor (no dead zone), and a high-temp
+    guardian layered on top."""
 
     name = "legion-go-s-ec"
     max_rpm = _GOS_MAX_RPM
+    min_rpm = 0
 
     def _dmi_matches(self) -> bool:
         dmi = os.path.join(self._root, "sys/class/dmi/id")
@@ -139,9 +147,16 @@ class LegionGoSFanBackend(LegionGo2FanBackend):
         return any(tok in text for tok in _DMI_MATCH_GOS)
 
     def target_for_temp(self, temp: Optional[float]) -> Optional[int]:
-        # Guardian: while driving, past the hard limit ignore the curve and drive the
-        # (capped) max — a bad curve must never leave the fan slow when hot. When not
-        # driving (points None) defer to the base (returns None → writes nothing).
-        if self._points is not None and temp is not None and temp >= _GOS_TEMP_GUARD_C:
-            return self.max_rpm
-        return super().target_for_temp(temp)
+        """Curve → a SAFE target. 0 when the curve wants no airflow (hand back to
+        firmware); otherwise at least MIN_SPIN so a request never lands in the dead
+        zone. Past the hard temp limit, force the capped max regardless of the curve.
+        None (writes nothing) when not driving."""
+        if self._points is None or temp is None:
+            return None
+        if temp >= _GOS_TEMP_GUARD_C:
+            return self.max_rpm  # guardian
+        duty = _interp(self._points, temp)
+        if duty <= 0:
+            return 0  # curve wants the fan off → release to firmware
+        frac = min(255, duty) / 255.0
+        return int(round(_GOS_MIN_SPIN + frac * (self.max_rpm - _GOS_MIN_SPIN)))

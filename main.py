@@ -525,16 +525,22 @@ class Plugin:
     # ---- Fan-curve control (global + per-game, persisted) -------------------
     def _reapply_fans(self) -> None:
         """Push the effective fan curve off the event loop (Steam Deck's software-loop
-        backend spawns a blocking systemctl). No executor / no loop → inline."""
-        self._offload(self._reapply_fans_sync)
+        backend spawns a blocking systemctl). No executor / no loop → inline.
+
+        The apply runs in a worker thread with no event loop, where a software-loop
+        backend's own start() no-ops — so once the apply lands we (re)start its
+        periodic curve loop ON the event loop. Chaining it as the offload's `done`
+        callback means it fires only AFTER the apply took fan ownership (no race);
+        _ensure_fan_loop no-ops for backends without a loop and in auto mode."""
+        self._offload(self._reapply_fans_sync, done=self._ensure_fan_loop)
 
     def _ensure_fan_loop(self) -> None:
         """Start a software-loop backend's periodic curve loop ON the event loop.
-        Applies run off-loop (in a worker thread with no loop), where the backend's
-        own start() is a no-op — so the loop that re-evaluates the curve against live
-        temperature (and enforces the high-temp guardian) would never run. Call this
-        on the event loop after an apply. No-op for backends without a loop / when
-        not driving a curve."""
+        Applies run off-loop (worker thread, no loop) where the backend's own start()
+        no-ops — so the loop that re-evaluates the curve against live temperature (and
+        enforces the high-temp guardian) would never run. Call after an apply has taken
+        fan ownership (race-free via _offload's `done`). No-op for backends without a
+        loop and when not driving (auto mode)."""
         ctrl = self._fan_ctrl
         starter = getattr(ctrl, "start", None)
         if callable(starter) and getattr(ctrl, "_owns_fan", False):
@@ -638,7 +644,7 @@ class Plugin:
         self._settings["fan_experimental"] = enabled
         self._store.save(self._settings)
         await self._offload_call(lambda: self._swap_fan_backend(enabled))
-        self._ensure_fan_loop()  # start the curve loop on the event loop (guardian!)
+        self._ensure_fan_loop()  # swap ran off-loop; start the curve loop here
         return self._fan_curve_state()
 
     def _swap_fan_backend(self, enabled: bool) -> None:
@@ -1210,14 +1216,26 @@ class Plugin:
     # drives the auto-TDP loop + every QAM RPC. The single-worker executor (created
     # in _main) serialises applies → no race on shared state (e.g. the color LUT
     # file). No executor / no loop (unit tests) → run inline (behaviour preserved).
-    def _offload(self, fn):
+    def _offload(self, fn, done=None):
         """Fire-and-forget a blocking apply off the event loop. Guards fn on both
-        paths so a raise can't kill the caller nor leak an unretrieved-future log."""
+        paths so a raise can't kill the caller nor leak an unretrieved-future log.
+
+        `done` (optional) runs ON the event loop AFTER fn finishes — use it to start
+        work that depends on state fn just set (e.g. a re-assert loop that needs the
+        apply to have taken fan ownership first), race-free. It must be safe to run
+        on the loop; it is guarded like fn."""
         def guarded():
             try:
                 fn()
             except Exception:  # noqa: BLE001
                 pass
+
+        def run_done(*_):
+            try:
+                done()
+            except Exception:  # noqa: BLE001
+                pass
+
         ex = getattr(self, "_apply_executor", None)
         try:
             loop = asyncio.get_running_loop()
@@ -1225,8 +1243,12 @@ class Plugin:
             loop = None
         if ex is None or loop is None:
             guarded()
+            if done is not None:
+                run_done()
         else:
-            loop.run_in_executor(ex, guarded)
+            fut = loop.run_in_executor(ex, guarded)
+            if done is not None:
+                fut.add_done_callback(run_done)
 
     async def _offload_call(self, fn):
         """Run a blocking call off the event loop and return its result (awaited)."""

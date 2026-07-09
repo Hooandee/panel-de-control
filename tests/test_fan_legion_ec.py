@@ -9,6 +9,7 @@ from fans.legion_ec import (
     REG_OVERRIDE,
     REG_RPM,
     _GOS_MAX_RPM,
+    _GOS_MIN_SPIN,
     _GOS_TEMP_GUARD_C,
 )
 from fans.control import select_fan_backend, NullFanBackend
@@ -153,3 +154,21 @@ class TestLegionGoSBackend:
         b.apply_curve_all(CURVE)
         b.set_auto(None)
         assert ec.read(REG_OVERRIDE) == 0 and ec.read(REG_OVERRIDE + 1) == 0
+
+    def test_cool_point_releases_not_dead_zone(self, tmp_path):
+        # A 0-duty (cool) curve point hands the fan back to firmware (target 0), it
+        # does NOT write a sub-spin value that stops the fan while owning it.
+        _dmi_gos(str(tmp_path))
+        b = LegionGoSFanBackend(root=str(tmp_path), ec=FakeEC(), temp_fn=lambda: 40.0)
+        b.apply_curve_all(CURVE)  # 40C -> duty 0
+        assert b.target_for_temp(40.0) == 0
+
+    def test_never_targets_the_dead_zone(self, tmp_path):
+        # Across the whole range, every target is either 0 (firmware) or a real
+        # spinnable speed in [MIN_SPIN, MAX_RPM] — never the stopped-but-owned zone.
+        _dmi_gos(str(tmp_path))
+        b = LegionGoSFanBackend(root=str(tmp_path), ec=FakeEC(), temp_fn=lambda: 60.0)
+        b.apply_curve_all(CURVE)
+        for temp in range(35, 101):
+            t = b.target_for_temp(float(temp))
+            assert t == 0 or _GOS_MIN_SPIN <= t <= _GOS_MAX_RPM, f"{temp}C -> {t}"
