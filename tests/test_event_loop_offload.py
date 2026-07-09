@@ -200,20 +200,15 @@ class _FakeFan:
 
     def __init__(self):
         self.supported = True
-        self.mode_based = False
         self.write_threads = []
 
     def read_state(self):
-        return {"supported": True, "source": "fake", "pwm_max": 255,
-                "mode_based": False, "mode": None}
+        return {"supported": True, "source": "fake", "pwm_max": 255}
 
     def apply_curve_all(self, points):
         self.write_threads.append(threading.get_ident())
 
     def set_auto(self, _mode):
-        self.write_threads.append(threading.get_ident())
-
-    def apply_preset(self, preset):
         self.write_threads.append(threading.get_ident())
 
     def restore_auto(self):

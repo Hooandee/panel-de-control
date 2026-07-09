@@ -6,6 +6,7 @@ import {
   setFanCurveAuto,
   setFanAdaptive,
   setFanAdaptiveBias,
+  setFanExperimental,
   FanCurveState,
   FanScope,
   FanPreset,
@@ -25,6 +26,7 @@ export interface FanCurveControl {
   onAdaptive: () => void;
   onAdaptiveBias: (bias: number) => void;
   onCurve: (points: Point[]) => void;
+  onExperimental: (enabled: boolean) => void;
 }
 
 const BALANCED = "balanced";
@@ -155,5 +157,11 @@ export function useFanCurve(): FanCurveControl {
     [resolveTarget, flashSaved],
   );
 
-  return { state, scope, game, saved, refresh, setScope, onPreset, onCustomMode, onAdaptive, onAdaptiveBias, onCurve };
+  // Opt in/out of experimental EC fan control (Legion Go S). The returned state is
+  // the source of truth (backend swaps the fan backend), so no optimism.
+  const onExperimental = useCallback((enabled: boolean) => {
+    setFanExperimental(enabled).then(setState).catch(() => {});
+  }, []);
+
+  return { state, scope, game, saved, refresh, setScope, onPreset, onCustomMode, onAdaptive, onAdaptiveBias, onCurve, onExperimental };
 }

@@ -61,7 +61,7 @@ def test_build_bundle_includes_kernel():
 def test_capabilities_from_distils_backends():
     caps = capabilities_from({
         "tdp": {"backend": "asus-armoury", "supported": True},
-        "fan_curve": {"source": "asus_custom_fan_curve", "supported": True, "mode_based": False},
+        "fan_curve": {"source": "asus_custom_fan_curve", "supported": True},
         "battery": {"charge_limit": {"supported": True, "adjustable": False}},
         "gpu": {"supported": False},
         "color": {"supported": True},

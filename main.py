@@ -93,6 +93,10 @@ DEFAULTS = {
     # back to. Both restored/derived on exit; eco_enabled is a pure override.
     "eco_enabled": False,
     "eco_brightness": 40,
+    # Opt-in experimental fan control on devices whose only channel is an unofficial
+    # EC interface (Legion Go S). Default off → read-only monitor; on → EC curve
+    # control with the RPM cap + temp guardian harness. The user accepts the risk.
+    "fan_experimental": False,
     # Frontend UI preferences, mirrored here so they survive a reboot (the
     # frontend's localStorage cache does not). Opaque string map.
     "ui_prefs": {},
@@ -143,7 +147,16 @@ class Plugin:
         self._fan_reader = FanReader()
         # temp_fn feeds the software-loop backends (Steam Deck / Legion Go 2) the
         # live driving temp; hardware-curve backends (ASUS/MSI) ignore it.
-        self._fan_ctrl = fan_control.select_fan_backend(self._device, temp_fn=self._driving_temp)
+        self._fan_ctrl = fan_control.select_fan_backend(
+            self._device, temp_fn=self._driving_temp,
+            experimental=bool(self._settings.get("fan_experimental", False)))
+        # True only on a device with an opt-in experimental EC fan channel (Legion
+        # Go S). DMI-only check (no EC I/O) → the UI shows the experimental toggle.
+        try:
+            from fans.legion_ec import LegionGoSFanBackend
+            self._fan_experimental_available = LegionGoSFanBackend(root="/").supported
+        except Exception:  # noqa: BLE001 — availability probe must never break load
+            self._fan_experimental_available = False
         # MSI Claw only: the firmware fan curve is read-only-legible in the EC even
         # though the write backend is unsupported. Surface it as an informational
         # curve. Other devices get None (no EC dependency).
@@ -512,8 +525,24 @@ class Plugin:
     # ---- Fan-curve control (global + per-game, persisted) -------------------
     def _reapply_fans(self) -> None:
         """Push the effective fan curve off the event loop (Steam Deck's software-loop
-        backend spawns a blocking systemctl). No executor / no loop → inline."""
-        self._offload(self._reapply_fans_sync)
+        backend spawns a blocking systemctl). `done` (re)starts the curve loop on the
+        event loop after the apply took ownership — race-free (see _ensure_fan_loop)."""
+        self._offload(self._reapply_fans_sync, done=self._ensure_fan_loop)
+
+    def _ensure_fan_loop(self) -> None:
+        """Start a software-loop backend's periodic curve loop ON the event loop.
+        Applies run off-loop (worker thread, no loop) where the backend's own start()
+        no-ops — so the loop that re-evaluates the curve against live temperature (and
+        enforces the high-temp guardian) would never run. Call after an apply has taken
+        fan ownership (race-free via _offload's `done`). No-op for backends without a
+        loop and when not driving (auto mode)."""
+        ctrl = self._fan_ctrl
+        starter = getattr(ctrl, "start", None)
+        if callable(starter) and getattr(ctrl, "_owns_fan", False):
+            try:
+                starter()
+            except Exception:  # noqa: BLE001 — starting the loop must never break an RPC
+                pass
 
     def _reapply_fans_sync(self) -> None:
         """Apply the effective fan profile for the current game (or global).
@@ -525,22 +554,11 @@ class Plugin:
                        (never fabricate a curve) — the card shows the learning state.
         - preset/custom -> write the stored 8-point curve to all fans.
 
-        On a coarse mode-based device (Legion Go S) the firmware allows no freeform
-        curve — the effective preset maps to a fan mode (quiet/balanced/performance);
-        auto/custom/adaptive settle on the stock default. Guarded: a bad fan apply
-        must never brick load.
+        Guarded: a bad fan apply must never brick load.
         """
         try:
             profile = self._fan_curves.effective(self._current_appid)
             preset = profile["preset"]
-            if getattr(self._fan_ctrl, "mode_based", False):
-                # auto -> stock default; a mapped preset -> its mode; anything not
-                # representable as a coarse mode (custom/adaptive) -> default.
-                if preset == "auto":
-                    self._fan_ctrl.set_auto(None)
-                else:
-                    self._fan_ctrl.apply_preset(preset)
-                return
             if preset == "adaptive":
                 points = self._adaptive_curve_points(self._current_appid)
                 if points is None:
@@ -584,10 +602,6 @@ class Plugin:
             "firmware_points": firmware_points,
             "source": hw_state.get("source"),
             "pwm_max": hw_state.get("pwm_max", 255),
-            # Coarse mode-based device (Legion Go S): the UI shows quiet/balanced/
-            # performance chips instead of a curve. `mode` is the live firmware mode.
-            "mode_based": hw_state.get("mode_based", False),
-            "mode": hw_state.get("mode"),
             "preset": effective["preset"],
             "points": effective["points"],
             "bias": effective.get("bias", 0),
@@ -598,6 +612,10 @@ class Plugin:
             "appid": self._current_appid,
             "presets": [{"id": pid, "points": pts}
                         for pid, pts in fan_presets.RESOLVED.items()],
+            # Experimental EC control (Legion Go S): available = device has the
+            # unofficial channel; enabled = the user opted in.
+            "experimental_available": getattr(self, "_fan_experimental_available", False),
+            "experimental_enabled": bool(self._settings.get("fan_experimental", False)),
         }
 
     async def _prime_firmware_curve(self) -> None:
@@ -611,6 +629,29 @@ class Plugin:
         self._init()
         await self._prime_firmware_curve()
         return self._fan_curve_state()
+
+    async def set_fan_experimental(self, enabled: bool) -> dict:
+        """Opt in/out of experimental EC fan control (Legion Go S). The swap probes
+        sysfs (backend selection) + drives the EC, so it runs OFF the event loop to
+        keep the QAM render fluid; only the small state read stays on the loop."""
+        self._init()
+        enabled = bool(enabled)
+        self._settings["fan_experimental"] = enabled
+        self._store.save(self._settings)
+        await self._offload_call(lambda: self._swap_fan_backend(enabled))
+        self._ensure_fan_loop()  # swap ran off-loop; start the curve loop here
+        return self._fan_curve_state()
+
+    def _swap_fan_backend(self, enabled: bool) -> None:
+        """Release the current backend (never leave the fan driven), rebuild it for
+        the new experimental flag, and re-apply the effective curve. Off-loop."""
+        try:
+            self._fan_ctrl.restore_auto()  # hand any active EC drive back to firmware
+        except Exception:  # noqa: BLE001 — release is best-effort; must not raise
+            pass
+        self._fan_ctrl = fan_control.select_fan_backend(
+            self._device, temp_fn=self._driving_temp, experimental=enabled)
+        self._reapply_fans_sync()
 
     async def set_fan_preset(self, preset: str, scope: str, appid=None) -> dict:
         self._init()
@@ -1170,14 +1211,26 @@ class Plugin:
     # drives the auto-TDP loop + every QAM RPC. The single-worker executor (created
     # in _main) serialises applies → no race on shared state (e.g. the color LUT
     # file). No executor / no loop (unit tests) → run inline (behaviour preserved).
-    def _offload(self, fn):
+    def _offload(self, fn, done=None):
         """Fire-and-forget a blocking apply off the event loop. Guards fn on both
-        paths so a raise can't kill the caller nor leak an unretrieved-future log."""
+        paths so a raise can't kill the caller nor leak an unretrieved-future log.
+
+        `done` (optional) runs ON the event loop AFTER fn finishes — use it to start
+        work that depends on state fn just set (e.g. a re-assert loop that needs the
+        apply to have taken fan ownership first), race-free. It must be safe to run
+        on the loop; it is guarded like fn."""
         def guarded():
             try:
                 fn()
             except Exception:  # noqa: BLE001
                 pass
+
+        def run_done(*_):
+            try:
+                done()
+            except Exception:  # noqa: BLE001
+                pass
+
         ex = getattr(self, "_apply_executor", None)
         try:
             loop = asyncio.get_running_loop()
@@ -1185,8 +1238,12 @@ class Plugin:
             loop = None
         if ex is None or loop is None:
             guarded()
+            if done is not None:
+                run_done()
         else:
-            loop.run_in_executor(ex, guarded)
+            fut = loop.run_in_executor(ex, guarded)
+            if done is not None:
+                fut.add_done_callback(run_done)
 
     async def _offload_call(self, fn):
         """Run a blocking call off the event loop and return its result (awaited)."""

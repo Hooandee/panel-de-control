@@ -13,6 +13,7 @@ fraction of its RPM range so the curve representation is portable.
 import asyncio
 import glob
 import os
+import threading
 from typing import Callable, Optional
 
 # Reuse the sysfs read/write + interp helpers from control (no 4th copy).
@@ -40,6 +41,10 @@ class SoftwareLoopBackend:
         self._root = root
         self._points: Optional[list] = None
         self._task: Optional[asyncio.Task] = None
+        # Serialises a per-tick write against a release: the tick now runs off-loop
+        # (asyncio.to_thread), so without this a release write could interleave with
+        # an in-flight tick and leave a stale target after we hand the fan back.
+        self._io_lock = threading.Lock()
         self._dir: Optional[str] = self._find_chip()
 
     # --- subclass hooks --------------------------------------------------------
@@ -119,7 +124,10 @@ class SoftwareLoopBackend:
         # cancelled task — deferred async cancel+await, shared with the sampler.)
         self._points = None
         self.stop()
-        ok = self._release()
+        # Under the lock, so a tick already mid-write finishes FIRST and our release
+        # write lands last — the fan is never left driven after we release it.
+        with self._io_lock:
+            ok = self._release()
         # Hand ownership back to the OS/firmware daemon LAST (fail-safe: even if
         # the target write failed, the device must never be left with our loop
         # dead AND the daemon stopped).
@@ -131,10 +139,13 @@ class SoftwareLoopBackend:
 
     # --- the loop --------------------------------------------------------------
     def _apply_once(self) -> None:
-        temp = self._temp_fn() if self._temp_fn else None
-        target = self.target_for_temp(temp)
-        if target is not None:
-            self._write_target(target)
+        # Locked so a release (set_auto) can't interleave with this write: once we
+        # start writing, the release waits for us, then wins (target released).
+        with self._io_lock:
+            temp = self._temp_fn() if self._temp_fn else None
+            target = self.target_for_temp(temp)
+            if target is not None:
+                self._write_target(target)
 
     def start(self) -> None:
         if self._task is not None and not self._task.done():
@@ -154,7 +165,10 @@ class SoftwareLoopBackend:
         while True:
             try:
                 await asyncio.sleep(_LOOP_INTERVAL)
-                self._apply_once()
+                # Off the event loop: _apply_once reads hwmon temp (~ms) and writes
+                # the EC/target — blocking I/O that must never sit on the loop that
+                # drives the QAM. The 1.5 s cadence is set by the sleep above.
+                await asyncio.to_thread(self._apply_once)
             except asyncio.CancelledError:
                 return
             except Exception:  # noqa: BLE001 — loop must never die

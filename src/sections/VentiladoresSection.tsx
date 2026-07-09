@@ -11,6 +11,7 @@ import { TempStat } from "../components/TempStat";
 import { Sparkline } from "../components/Sparkline";
 import { FanCurveEditor } from "../components/FanCurveEditor";
 import { FanCurveGraph } from "../components/FanCurveGraph";
+import { ExperimentalFanCard } from "../components/ExperimentalFanCard";
 import { openFanCurveModal } from "../components/FanCurveModal";
 import { Point, percentToPwm } from "../fans/curve";
 import { Loading } from "../components/Loading";
@@ -118,25 +119,26 @@ export const VentiladoresSection: FC = () => {
     // otherwise — "unavailable" when we at least monitor fans, "no fans" when not).
     curve: (
       <>
+        {/* Legion Go S: opt-in to the unofficial EC channel. Enabling flips
+            `supported` on → the editor below renders. */}
+        {curveState?.experimental_available && (
+          <ExperimentalFanCard enabled={curveState.experimental_enabled} onToggle={curve.onExperimental} />
+        )}
         {curveState?.supported && (
           <PanelSectionRow>
             <div style={{ ...card, display: "flex", flexDirection: "column", gap: theme.space.sm, overflow: "hidden" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <span style={{ fontSize: theme.font.body, color: theme.color.textPrimary }}>
-                  {curveState.mode_based ? t("fans.mode.title") : t("fans.curve.title")}
+                  {t("fans.curve.title")}
                 </span>
-                {/* No full-screen editor on coarse mode-based devices — three mode
-                    chips have nothing to expand. */}
-                {!curveState.mode_based && (
-                  <Focusable
-                    style={{ display: "flex", alignItems: "center", padding: 4, borderRadius: theme.radius.sm, color: theme.color.textMuted, cursor: "pointer" }}
-                    onActivate={() => openFanCurveModal(liveTemp, curve.refresh)}
-                    onClick={() => openFanCurveModal(liveTemp, curve.refresh)}
-                    title={t("fans.curve.expand")}
-                  >
-                    <LuMaximize2 size={16} />
-                  </Focusable>
-                )}
+                <Focusable
+                  style={{ display: "flex", alignItems: "center", padding: 4, borderRadius: theme.radius.sm, color: theme.color.textMuted, cursor: "pointer" }}
+                  onActivate={() => openFanCurveModal(liveTemp, curve.refresh)}
+                  onClick={() => openFanCurveModal(liveTemp, curve.refresh)}
+                  title={t("fans.curve.expand")}
+                >
+                  <LuMaximize2 size={16} />
+                </Focusable>
               </div>
 
               <FanCurveEditor control={curve} liveTemp={liveTemp} suggestion={suggestion} />
@@ -163,7 +165,8 @@ export const VentiladoresSection: FC = () => {
         )}
         {/* Only when we CAN monitor fans but not control them AND can't read the
             firmware curve. The no-fans-at-all case is stated by the fanRpm block. */}
-        {curveState && !curveState.supported && !firmwarePoints && state.fans.length > 0 && (
+        {curveState && !curveState.supported && !firmwarePoints
+          && !curveState.experimental_available && state.fans.length > 0 && (
           <PanelSectionRow>
             <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
               {t("fans.curve.unsupported")}

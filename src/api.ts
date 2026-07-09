@@ -150,11 +150,6 @@ export interface FanCurveState {
   supported: boolean;
   source: string | null;
   pwm_max: number;
-  // Coarse mode-based device (Legion Go S): no freeform curve is possible, only
-  // quiet/balanced/performance fan modes. When true the editor shows mode chips and
-  // hides the graph/adaptive/custom modes. `mode` is the live firmware mode (0/1/2).
-  mode_based: boolean;
-  mode: number | null;
   // Read-only firmware curve (MSI Claw): the device can't be controlled but its
   // firmware fan curve is legible over the EC and shown informationally. Non-null
   // only when unsupported; null everywhere else.
@@ -168,6 +163,11 @@ export interface FanCurveState {
   has_game_profile: boolean;
   appid: string | null;
   presets: FanPresetDef[];
+  // Experimental EC fan control (Legion Go S): available = the device has the
+  // unofficial channel; enabled = the user opted in. When available && !enabled the
+  // control card shows the opt-in toggle instead of the editor.
+  experimental_available: boolean;
+  experimental_enabled: boolean;
 }
 
 export const getTelemetryEnabled = callable<[], boolean>("get_telemetry_enabled");
@@ -194,6 +194,9 @@ export const getQamTdpBoost = callable<[], boolean>("get_qam_tdp_boost");
 export const setQamTdpBoost = callable<[enabled: boolean], boolean>("set_qam_tdp_boost");
 
 export const getFanCurveState = callable<[], FanCurveState>("get_fan_curve_state");
+// Opt in/out of experimental EC fan control (Legion Go S). Returns the fresh state.
+export const setFanExperimental =
+  callable<[enabled: boolean], FanCurveState>("set_fan_experimental");
 export const setFanPreset =
   callable<[preset: FanPreset, scope: FanScope, appid: string | null], FanCurveState>("set_fan_preset");
 export const setFanCurvePoints =

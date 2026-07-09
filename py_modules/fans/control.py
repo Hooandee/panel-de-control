@@ -364,17 +364,17 @@ def select_firmware_curve_reader(device, root: str = "/"):
 # Factory
 # ---------------------------------------------------------------------------
 
-def select_fan_backend(device, root: str = "/", temp_fn=None, ec=None):
+def select_fan_backend(device, root: str = "/", temp_fn=None, ec=None, experimental=False):
     """Return the best available fan-control backend for this device.
 
     Chip/attr based (not device-name based) so it's robust across the matrix:
     1. ``asus_custom_fan_curve`` (ROG Ally family) — hardware curve table.
     2. ``msi_wmi_platform`` (MSI Claw) — hardware curve table (only when its
        kernel exposes a WRITABLE pwm point; read-only kernels fall through).
-    3. ``VPC2004`` ``fan_mode`` (Legion Go S) — coarse quiet/balanced/performance
-       mode (no freeform curve possible on its firmware).
-    4. ``steamdeck_hwmon`` (Steam Deck) — software loop (needs ``temp_fn``).
-    5. Legion Go 2 raw-EC software loop.
+    3. ``steamdeck_hwmon`` (Steam Deck) — software loop (needs ``temp_fn``).
+    4. Legion Go 2 raw-EC software loop.
+    5. Legion Go S raw-EC software loop — ONLY when ``experimental`` is on (its
+       EC interface is unofficial; off = read-only monitor via NullFanBackend).
     6. ``NullFanBackend`` when nothing supported is found (read-only safety).
 
     MSI Claw EC 0x33 step control (``msi_ec.MsiEcFanBackend``) is intentionally
@@ -387,11 +387,6 @@ def select_fan_backend(device, root: str = "/", temp_fn=None, ec=None):
         backend = backend_cls(root=root)
         if backend.supported:
             return backend
-    # Coarse fan-mode backend (Legion Go S). Lazy import keeps the module graph flat.
-    from fans.lenovo_mode import LenovoFanModeBackend
-    mode_backend = LenovoFanModeBackend(root=root)
-    if mode_backend.supported:
-        return mode_backend
     # Software-loop backends (lazy import avoids a circular dependency).
     from fans.software_loop import SteamDeckFanBackend
     from fans.legion_ec import LegionGo2FanBackend
@@ -399,6 +394,13 @@ def select_fan_backend(device, root: str = "/", temp_fn=None, ec=None):
                     LegionGo2FanBackend(temp_fn=temp_fn, root=root)):
         if backend.supported:
             return backend
+    # Legion Go S EC control is opt-in (unofficial interface). When the toggle is
+    # off it falls through to the read-only monitor below.
+    if experimental:
+        from fans.legion_ec import LegionGoSFanBackend
+        gos = LegionGoSFanBackend(temp_fn=temp_fn, root=root)
+        if gos.supported:
+            return gos
     # Last resort for unrecognised hardware: the standard hwmon manual-PWM interface.
     from fans.generic_pwm import GenericPwmFanBackend
     generic = GenericPwmFanBackend(temp_fn=temp_fn, root=root)
