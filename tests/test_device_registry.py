@@ -50,6 +50,21 @@ def test_onexplayer_apex_matches_case_insensitively():
     assert prof.key == "onexplayer_apex"
 
 
+def test_aokzoe_a1x_is_recognised_experimental():
+    prof = detect(product_name="AOKZOE A1X")
+    assert prof.key == "aokzoe_a1x"
+    assert prof.is_generic is False
+    assert prof.experimental is True
+    assert prof.vendor == "amd"
+    assert prof.tdp_max == 30
+    assert prof.tdp_presets == (12, 18, 30, 30)
+
+
+def test_aokzoe_a1x_matches_case_insensitively():
+    prof = detect(product_name="AOKZOE A1X Handheld")
+    assert prof.key == "aokzoe_a1x"
+
+
 def test_known_devices_are_not_experimental():
     for product in ("Galileo", "ROG Ally X RC72LA_RC72LA", "83N0", "Claw 8 AI+ A2VM"):
         assert detect(product_name=product).experimental is False

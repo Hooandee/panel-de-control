@@ -140,6 +140,11 @@ charge limit only light up if the device exposes the nodes, and until someone ru
 we would rather not assume anything. If you own one, reports from the Settings tab help a lot to
 dial it in.
 
+The **AOKZOE A1X** (Ryzen AI 9 HX 370) is also recognised by name and comes in as experimental. Its
+TDP runs through the same generic AMD path (ryzenadj), but with a 30 W ceiling instead of being
+capped at the generic profile's 15 W. As with the OneXFly we do not own one, so reports from the
+Settings tab are gold for confirming what actually responds.
+
 ### Notes
 
 1. The Claw controls TDP through `intel-rapl`, which only exposes the base limit (PL1); there are no

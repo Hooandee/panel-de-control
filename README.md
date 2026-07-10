@@ -140,6 +140,11 @@ ventiladores y el límite de carga se activan solo si el equipo expone los nodos
 alguien lo pruebe en mano preferimos no dar nada por hecho. Si tienes uno, los reportes desde
 Ajustes ayudan un montón a afinarlo.
 
+El **AOKZOE A1X** (Ryzen AI 9 HX 370) también se reconoce por su nombre y entra como experimental.
+Su TDP va por la misma vía genérica de AMD (ryzenadj), pero con un techo de 30 W en vez de quedarse
+capado a los 15 W del perfil genérico. Igual que con el OneXFly no lo tenemos en mano, así que los
+reportes desde Ajustes son oro para confirmar lo que responde de verdad.
+
 ### Notas
 
 1. El Claw controla el TDP por `intel-rapl`, que solo expone el límite base (PL1); no hay raíles de
