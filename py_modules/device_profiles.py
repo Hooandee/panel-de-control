@@ -72,4 +72,7 @@ DEVICE_TABLE = (
     DeviceProfile("onexplayer_apex", "OneXPlayer OneXFly Apex",
                   "AMD Ryzen AI Max+ 395", "amd",
                   5, 20, 45, 54, match_names=("ONEXPLAYER APEX",), experimental=True),
+    DeviceProfile("aokzoe_a1x", "AOKZOE A1X", "AMD Ryzen AI 9 HX 370", "amd",
+                  4, 18, 30, 30, match_names=("AOKZOE A1X",), experimental=True,
+                  tdp_presets=(12, 18, 30, 30)),
 )
