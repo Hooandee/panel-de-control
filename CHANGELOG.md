@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.10.0...panel-de-control-v0.11.0) (2026-07-10)
+
+
+### Features
+
+* recognise the AOKZOE A1X with a generic AMD TDP path ([#130](https://github.com/Hooandee/panel-de-control/issues/130)) ([5bb4882](https://github.com/Hooandee/panel-de-control/commit/5bb488236925fe7e00a0d812b228ccd47175db58))
+
 ## [0.10.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.9.0...panel-de-control-v0.10.0) (2026-07-09)
 
 
