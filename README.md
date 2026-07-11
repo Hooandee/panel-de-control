@@ -145,6 +145,13 @@ Su TDP va por la misma vía genérica de AMD (ryzenadj), pero con un techo de 30
 capado a los 15 W del perfil genérico. Igual que con el OneXFly no lo tenemos en mano, así que los
 reportes desde Ajustes son oro para confirmar lo que responde de verdad.
 
+La **GPD Win Mini 2025** (Ryzen AI 9 HX 370/365) y la **MSI Claw A8** (Ryzen Z2 Extreme) también se
+reconocen por su nombre y entran como experimentales. Antes salían como genéricas y el TDP se
+quedaba en 15 W; ahora suben hasta un techo seguro de 35 W (el máximo que homologa el fabricante,
+muy por debajo del cTDP teórico del chip) con sus tres presets afinados. Van por la misma vía
+genérica de AMD (ryzenadj) y no las tenemos en mano, así que los reportes desde Ajustes ayudan a
+confirmarlo.
+
 ### Notas
 
 1. El Claw controla el TDP por `intel-rapl`, que solo expone el límite base (PL1); no hay raíles de
