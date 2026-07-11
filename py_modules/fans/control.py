@@ -342,6 +342,41 @@ class MsiFanCurveBackend(HwmonCurveBackend):
         super().__init__(_MSI_CHIP, n_points=6, fixed_temps=_MSI_TEMPS, root=root)
 
 
+_LEGION_WMI_CHIP = "legion_wmi_fan"
+_LEGION_WMI_TEMPS = (10, 20, 30, 40, 50, 60, 70, 80, 90, 100)
+
+
+class LegionWmiFanBackend(HwmonCurveBackend):
+    """Legion Go ``legion_wmi_fan`` hwmon (10 points, fixed temp anchors, one fan).
+
+    The kernel driver runs the written curve autonomously (no software loop),
+    like the ASUS chip. Provided by the mainline lenovo/legion WMI fan driver;
+    absent kernels degrade to the read-only monitor (NullFanBackend)."""
+
+    def __init__(self, root: str = "/") -> None:
+        super().__init__(_LEGION_WMI_CHIP, n_points=10, fixed_temps=_LEGION_WMI_TEMPS,
+                         fan_keys={"fan": 1}, root=root)
+
+    def set_curve(self, fan_key: str, points: list) -> dict:
+        """Write the pwm points and switch to manual mode. This chip fixes the
+        temp anchors and exposes no writable temp files, so only pwm is written."""
+        if not self.supported:
+            return {"ok": False, "detail": f"{self._chip_name} chip not found"}
+        fan_index = self._fan_keys.get(fan_key)
+        if fan_index is None:
+            return {"ok": False, "detail": f"unknown fan key: {fan_key!r}"}
+
+        for point, (_temp, pwm) in enumerate(self._writable_points(points), start=1):
+            if not _write(os.path.join(self._dir, f"pwm{fan_index}_auto_point{point}_pwm"), str(pwm)):
+                return {"ok": False, "detail": f"write failed: pwm{fan_index}_auto_point{point}_pwm"}
+
+        if not _write(os.path.join(self._dir, f"pwm{fan_index}_enable"), "1"):
+            return {"ok": False, "detail": f"write failed: pwm{fan_index}_enable"}
+        if _read_int(os.path.join(self._dir, f"pwm{fan_index}_auto_point1_pwm")) is None:
+            return {"ok": False, "detail": "readback failed after write"}
+        return {"ok": True, "detail": f"fan {fan_key} curve applied (manual mode)"}
+
+
 def _is_msi_vendor(root: str) -> bool:
     vendor = (_read(os.path.join(root, "sys/class/dmi/id/sys_vendor")) or "").lower()
     return "micro-star" in vendor or "msi" in vendor
@@ -371,11 +406,13 @@ def select_fan_backend(device, root: str = "/", temp_fn=None, ec=None, experimen
     1. ``asus_custom_fan_curve`` (ROG Ally family) — hardware curve table.
     2. ``msi_wmi_platform`` (MSI Claw) — hardware curve table (only when its
        kernel exposes a WRITABLE pwm point; read-only kernels fall through).
-    3. ``steamdeck_hwmon`` (Steam Deck) — software loop (needs ``temp_fn``).
-    4. Legion Go 2 raw-EC software loop.
-    5. Legion Go S raw-EC software loop — ONLY when ``experimental`` is on (its
+    3. ``legion_wmi_fan`` (Legion Go original) — hardware curve table, present
+       only when the kernel ships the lenovo/legion WMI fan driver.
+    4. ``steamdeck_hwmon`` (Steam Deck) — software loop (needs ``temp_fn``).
+    5. Legion Go 2 raw-EC software loop.
+    6. Legion Go S raw-EC software loop — ONLY when ``experimental`` is on (its
        EC interface is unofficial; off = read-only monitor via NullFanBackend).
-    6. ``NullFanBackend`` when nothing supported is found (read-only safety).
+    7. ``NullFanBackend`` when nothing supported is found (read-only safety).
 
     MSI Claw EC 0x33 step control (``msi_ec.MsiEcFanBackend``) is intentionally
     NOT wired: driving the fan to its top step resets the device (the EC drops
@@ -383,7 +420,7 @@ def select_fan_backend(device, root: str = "/", temp_fn=None, ec=None, experimen
     on firmware auto until a safe ceiling is proven. ``ec`` stays for that
     backend's own tests.
     """
-    for backend_cls in (AsusFanCurveBackend, MsiFanCurveBackend):
+    for backend_cls in (AsusFanCurveBackend, MsiFanCurveBackend, LegionWmiFanBackend):
         backend = backend_cls(root=root)
         if backend.supported:
             return backend
