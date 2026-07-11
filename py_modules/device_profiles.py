@@ -75,4 +75,11 @@ DEVICE_TABLE = (
     DeviceProfile("aokzoe_a1x", "AOKZOE A1X", "AMD Ryzen AI 9 HX 370", "amd",
                   4, 18, 30, 30, match_names=("AOKZOE A1X",), experimental=True,
                   tdp_presets=(12, 18, 30, 30)),
+    DeviceProfile("gpd_win_mini_2025", "GPD Win Mini 2025",
+                  "AMD Ryzen AI 9 HX 370", "amd",
+                  5, 20, 35, 35, match_names=("G1617-02",), experimental=True,
+                  tdp_presets=(12, 22, 32, 32)),
+    DeviceProfile("msi_claw_a8", "MSI Claw A8", "AMD Ryzen Z2 Extreme", "amd",
+                  6, 17, 35, 35, match_names=("Claw A8",), experimental=True,
+                  tdp_presets=(10, 20, 33, 33)),
 )

@@ -65,6 +65,31 @@ def test_aokzoe_a1x_matches_case_insensitively():
     assert prof.key == "aokzoe_a1x"
 
 
+def test_gpd_win_mini_2025_is_recognised_experimental():
+    prof = detect(product_name="G1617-02")
+    assert prof.key == "gpd_win_mini_2025"
+    assert prof.is_generic is False
+    assert prof.experimental is True
+    assert prof.vendor == "amd"
+    assert prof.tdp_max == 35
+    assert prof.tdp_presets == (12, 22, 32, 32)
+
+
+def test_msi_claw_a8_is_recognised_experimental():
+    prof = detect(product_name="Claw A8 BZ2EM")
+    assert prof.key == "msi_claw_a8"
+    assert prof.is_generic is False
+    assert prof.experimental is True
+    assert prof.vendor == "amd"
+    assert prof.tdp_max == 35
+    assert prof.tdp_presets == (10, 20, 33, 33)
+
+
+def test_msi_claw_a8_is_not_the_intel_claw():
+    assert detect(product_name="Claw A8 BZ2EM").key == "msi_claw_a8"
+    assert detect(product_name="Claw 8 AI+ A2VM").key == "msi_claw_8_ai_plus"
+
+
 def test_known_devices_are_not_experimental():
     for product in ("Galileo", "ROG Ally X RC72LA_RC72LA", "83N0", "Claw 8 AI+ A2VM"):
         assert detect(product_name=product).experimental is False
