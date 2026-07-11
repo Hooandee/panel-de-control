@@ -76,9 +76,7 @@ class AlibBackend(TDPBackend):
     def __init__(self, fallback: TdpLimits, root: str = "/",
                  modprobe=_default_modprobe, caller=None, write_max: int | None = None) -> None:
         self._fallback = fallback
-        # Writes clamp to the device's absolute ceiling (raised to cooler_max when
-        # present); get_limits() keeps the base policy. See RyzenadjBackend.
-        self._write_limits = fallback.with_cooler(write_max) if write_max else fallback
+        self._write_limits = fallback.with_cooler(write_max)
         self._root = root
         self._call_path = os.path.join(root, _CALL_REL)
         self._modprobe = modprobe

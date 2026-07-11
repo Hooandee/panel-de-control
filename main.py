@@ -72,9 +72,6 @@ DEFAULTS = {
     # off (we cap battery below the firmware max for battery life); the user accepts
     # the drain when enabling. The firmware itself allows the same max either way.
     "unlock_battery_max": False,
-    # Opt-in (GPD Win 5 only): the user confirms the external cooler is attached, so
-    # the TDP ceiling may rise to the device's cooler_max. Default off — without the
-    # cooler the higher rail would overheat, so we never assume it.
     "cooler_boost": False,
     # Opt-in: while the QAM/plugin UI is open, raise PL1 to a responsive floor so the
     # CPU-bound menu render stays fluid. Default OFF for honesty — raising TDP behind

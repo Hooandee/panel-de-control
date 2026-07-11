@@ -113,8 +113,6 @@ def test_firmware_pl1_max_within_margin_is_trusted(tmp_path):
 
 
 def test_rog_xbox_ally_z2a_bogus_100w_capped_to_profile(tmp_path):
-    # The Z2A firmware reports a bogus 100 W ceiling; its recognised profile
-    # (max 17 / charger 20) must cap it so the slider never offers a dangerous value.
     root = str(tmp_path)
     _mk_pl1(root, "asus-armoury", 15, 5, 100)
     fallback = TdpLimits.from_profile(detect(product_name="ROG Xbox Ally RC73YA_RC73YA"))

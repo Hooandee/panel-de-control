@@ -20,7 +20,6 @@ export interface DeviceInfo {
   is_generic: boolean;
   // When true, the shell shows the experimental marker for this recognised model.
   experimental: boolean;
-  // When set, the device has an external-cooler TDP ceiling; the Ajustes toggle shows.
   cooler_max: number | null;
 }
 

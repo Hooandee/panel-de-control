@@ -44,11 +44,8 @@ class RyzenadjBackend(TDPBackend):
     def __init__(self, fallback: TdpLimits, resolve=_default_resolve, runner=subprocess.run,
                  write_max: int | None = None):
         self._fallback = fallback
-        # get_limits() reports the base policy; writes clamp to the device's absolute
-        # ceiling (raised to cooler_max when a device has an external cooler, so the
-        # Ajustes opt-in can actually reach the chip). main._limits() still gates the
-        # effective policy, so a value above the base only arrives when the user opts in.
-        self._write_limits = fallback.with_cooler(write_max) if write_max else fallback
+        # Writes clamp to the absolute ceiling (cooler_max); get_limits keeps the base.
+        self._write_limits = fallback.with_cooler(write_max)
         self._runner = runner
         self._bin = resolve()
         self.supported = self._bin is not None

@@ -26,8 +26,7 @@ class DeviceProfile:
     # Curated quick-preset watts (quiet, balanced, turbo_battery, turbo_charger);
     # empty → fall back to (min, default, max, max_ac).
     tdp_presets: tuple = field(default_factory=tuple)
-    # Higher TDP ceiling unlocked only when the user confirms the device's external
-    # cooler is attached (Ajustes toggle). None → no cooler mode, no toggle shown.
+    # Ceiling unlocked when the user confirms the external cooler is attached (Win 5).
     cooler_max: Optional[int] = None
 
 
