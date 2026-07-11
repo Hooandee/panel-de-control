@@ -3,9 +3,10 @@
 ## [0.14.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.13.0...panel-de-control-v0.14.0) (2026-07-11)
 
 
-### Features
+### Features / Novedades
 
-* recognise five more handhelds instead of the generic profile ([#159](https://github.com/Hooandee/panel-de-control/issues/159)) ([ac56e21](https://github.com/Hooandee/panel-de-control/commit/ac56e212962d521580127a4a4138ec59b243aa98))
+* Adds support for five more handhelds, all experimental: the Legion Go 2 with the plain Ryzen Z2, the ROG Xbox Ally with the Ryzen Z2 A (whose bogus 100 W firmware ceiling is now capped to the safe 20 W it really runs at), the OneXPlayer F1 Pro, the GPD Win 5 and the GPD Win Max 2. Each gets a safe TDP ceiling and its own presets instead of landing on the 15 W generic profile. The GPD Win 5 also gets an opt-in "external cooler attached" toggle that raises its ceiling to 75 W once you confirm the cooler is on. ([#159](https://github.com/Hooandee/panel-de-control/issues/159)) ([ac56e21](https://github.com/Hooandee/panel-de-control/commit/ac56e212962d521580127a4a4138ec59b243aa98))
+* **ES:** Añade soporte para cinco máquinas más, todas experimentales: la Legion Go 2 con el Ryzen Z2 normal, la ROG Xbox Ally con el Ryzen Z2 A (cuyo tope de firmware falso de 100 W queda capado a los 20 W seguros que de verdad usa), la OneXPlayer F1 Pro, la GPD Win 5 y la GPD Win Max 2. Cada una con su techo de TDP seguro y sus presets en vez de caer en el perfil genérico de 15 W. La GPD Win 5 además trae un interruptor opcional de "cooler externo puesto" que sube su techo a 75 W cuando confirmas que el cooler está conectado. ([#159](https://github.com/Hooandee/panel-de-control/issues/159)) ([ac56e21](https://github.com/Hooandee/panel-de-control/commit/ac56e212962d521580127a4a4138ec59b243aa98))
 
 ## [0.13.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.12.0...panel-de-control-v0.13.0) (2026-07-11)
 
