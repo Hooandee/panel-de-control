@@ -124,8 +124,8 @@ supported in code but not confirmed on that device yet
 | Download Mode | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Temperature monitor | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ [⁹](#notes) |
 | Fan RPM monitor | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹⁰](#notes) | ✅ [⁹](#notes) |
-| Fan curves | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹¹](#notes) | ⚠️ [¹²](#notes) | ❔ [¹⁰](#notes) | ⚠️ [⁹](#notes) |
-| Learned per-game curves | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹¹](#notes) | ❌ [¹²](#notes) | ❔ [¹⁰](#notes) | ❌ [⁹](#notes) |
+| Fan curves | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ [¹¹](#notes) | ⚠️ [¹²](#notes) | ❔ [¹⁰](#notes) | ⚠️ [⁹](#notes) |
+| Learned per-game curves | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ [¹¹](#notes) | ❌ [¹²](#notes) | ❔ [¹⁰](#notes) | ❌ [⁹](#notes) |
 | Color calibration | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ [¹³](#notes) |
 | "OLED look" preset | ✅ | ❌ [¹⁴](#notes) | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹⁴](#notes) | ✅ |
 | Controller remap (beta) | ❌ | ❌ | ⚠️ [¹⁵](#notes) | ⚠️ [¹⁵](#notes) | ❌ [¹⁵](#notes) | ⚠️ [¹⁵](#notes) | ❌ [¹⁵](#notes) | ⚠️ [¹⁵](#notes) | ⚠️ [¹⁵](#notes) |
@@ -175,9 +175,10 @@ and we do not own either, so reports from the Settings tab help confirm it.
 10. The Legion Go 2 exposes no writable hwmon fan; RPM would have to be read over the EC, and on the
     current build it isn't showing up in the monitor. Marked as not available / unconfirmed until I
     can review it.
-11. The original Legion Go needs `acpi_call` (GZFD) for fan curves; it's present on Bazzite but not on
-    SteamOS, so without it no curve shows up at all (not even a default one). Where it works, applying
-    the curve forces TDP into custom mode. The monitor (speed + temperature) does work.
+11. The original Legion Go drives its fan curve through the `legion_wmi_fan` kernel driver. It works on
+    kernels that ship it (Bazzite and recent kernels) and turns on by itself when present. The current
+    SteamOS build doesn't include it yet, so there it stays monitor-only until the kernel is updated.
+    The speed and temperature monitor works either way.
 12. The Legion Go S drives its fan over an unofficial embedded-controller (EC) path, so it's an
     optional experimental control: you enable it by hand, with a safety speed cap. Left off, it stays
     monitor-only.

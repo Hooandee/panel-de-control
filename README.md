@@ -124,8 +124,8 @@ Leyenda: **✅** comprobado en ese equipo · **⚠️** limitado o solo por defe
 | Modo Descarga | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Monitor de temperaturas | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ [⁹](#notas) |
 | Monitor de RPM de ventilador | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹⁰](#notas) | ✅ [⁹](#notas) |
-| Curvas de ventilador | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹¹](#notas) | ⚠️ [¹²](#notas) | ❔ [¹⁰](#notas) | ⚠️ [⁹](#notas) |
-| Curvas aprendidas por juego | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹¹](#notas) | ❌ [¹²](#notas) | ❔ [¹⁰](#notas) | ❌ [⁹](#notas) |
+| Curvas de ventilador | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ [¹¹](#notas) | ⚠️ [¹²](#notas) | ❔ [¹⁰](#notas) | ⚠️ [⁹](#notas) |
+| Curvas aprendidas por juego | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ [¹¹](#notas) | ❌ [¹²](#notas) | ❔ [¹⁰](#notas) | ❌ [⁹](#notas) |
 | Calibración de color | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ [¹³](#notas) |
 | Preset "Aspecto OLED" | ✅ | ❌ [¹⁴](#notas) | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹⁴](#notas) | ✅ |
 | Remapeo de mandos (beta) | ❌ | ❌ | ⚠️ [¹⁵](#notas) | ⚠️ [¹⁵](#notas) | ❌ [¹⁵](#notas) | ⚠️ [¹⁵](#notas) | ❌ [¹⁵](#notas) | ⚠️ [¹⁵](#notas) | ⚠️ [¹⁵](#notas) |
@@ -176,10 +176,10 @@ confirmarlo.
 10. La Legion Go 2 no expone un ventilador escribible por hwmon; el RPM tendría que leerse por el EC
     y en la build actual no está apareciendo en el monitor. Por eso lo marco como no disponible / sin
     confirmar hasta que pueda revisarlo.
-11. La Legion Go original necesita `acpi_call` (GZFD) para las curvas de ventilador; está presente en
-    Bazzite pero no en SteamOS, así que sin él no aparece ninguna curva (ni siquiera por defecto).
-    Donde funciona, aplicar la curva fuerza el TDP a modo custom. El monitor (velocidad + temperatura)
-    sí funciona.
+11. La Legion Go original controla la curva de ventilador por el driver de kernel `legion_wmi_fan`. Va
+    en los kernels que lo incluyen (Bazzite y kernels recientes) y se enciende solo cuando está
+    presente. La build actual de SteamOS todavía no lo trae, así que ahí se queda en monitor hasta que
+    se actualice el kernel. El monitor de velocidad y temperatura funciona siempre.
 12. La Legion Go S controla el ventilador por una vía no oficial del controlador integrado (EC), así
     que es un control experimental y opcional: hay que activarlo a mano, con un tope de velocidad de
     seguridad. Desactivado, se queda solo en monitor.
