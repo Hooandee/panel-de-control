@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.13.0...panel-de-control-v0.14.0) (2026-07-11)
+
+
+### Features
+
+* recognise five more handhelds instead of the generic profile ([#159](https://github.com/Hooandee/panel-de-control/issues/159)) ([ac56e21](https://github.com/Hooandee/panel-de-control/commit/ac56e212962d521580127a4a4138ec59b243aa98))
+
 ## [0.13.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.12.0...panel-de-control-v0.13.0) (2026-07-11)
 
 
