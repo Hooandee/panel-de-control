@@ -6,7 +6,7 @@ import { LanguageToggle } from "../components/LanguageToggle";
 import { openCustomizeModal } from "../components/CustomizeModal";
 import { openGlossaryModal } from "../components/GlossaryModal";
 import { openReportModal } from "../components/ReportModal";
-import { getTelemetryEnabled, setTelemetryEnabled, getUnlockBatteryMax, setUnlockBatteryMax, getQamTdpBoost, setQamTdpBoost, resetTelemetry, getVersion, getControllerConflict, getDevice, DeviceInfo, isUnvalidated } from "../api";
+import { getTelemetryEnabled, setTelemetryEnabled, getUnlockBatteryMax, setUnlockBatteryMax, getCoolerBoost, setCoolerBoost, getQamTdpBoost, setQamTdpBoost, resetTelemetry, getVersion, getControllerConflict, getDevice, DeviceInfo, isUnvalidated } from "../api";
 import { isValueToastEnabled, setValueToastEnabled } from "../system/valueToast";
 import { UpdatePanel } from "../updater/UpdatePanel";
 import { ControllerConflictCard } from "../components/ControllerConflictCard";
@@ -38,6 +38,7 @@ export const AjustesSection: FC = () => {
   const { t, lang } = useI18n();
   const [learn, onToggle] = useToggleSetting(getTelemetryEnabled, setTelemetryEnabled, true);
   const [battMax, onToggleBattMax] = useToggleSetting(getUnlockBatteryMax, setUnlockBatteryMax, false);
+  const [coolerBoost, onToggleCoolerBoost] = useToggleSetting(getCoolerBoost, setCoolerBoost, false);
   const [qamBoost, onToggleQamBoost] = useToggleSetting(getQamTdpBoost, setQamTdpBoost, false);
   const [valueToast, setValueToast] = useState(isValueToastEnabled());
   const onToggleValueToast = (next: boolean) => {
@@ -121,6 +122,16 @@ export const AjustesSection: FC = () => {
             description={t("settings.battmax.desc")}
             checked={battMax}
             onChange={onToggleBattMax}
+            bottomSeparator="none"
+          />
+        )}
+
+        {coolerBoost !== null && device?.cooler_max != null && (
+          <ToggleField
+            label={t("settings.cooler")}
+            description={t("settings.cooler.desc", { max: device.cooler_max })}
+            checked={coolerBoost}
+            onChange={onToggleCoolerBoost}
             bottomSeparator="none"
           />
         )}

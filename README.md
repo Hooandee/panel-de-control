@@ -152,6 +152,14 @@ muy por debajo del cTDP teórico del chip) con sus tres presets afinados. Van po
 genérica de AMD (ryzenadj) y no las tenemos en mano, así que los reportes desde Ajustes ayudan a
 confirmarlo.
 
+En la misma tanda se reconocen unas cuantas más, todas experimentales y con un techo seguro
+homologado: la **OneXPlayer F1 Pro** (Ryzen AI 9 HX 370, hasta 30 W), la **GPD Win 5** (Ryzen AI
+Max 385 "Strix Halo", hasta 55 W), la **GPD Win Max 2** (Ryzen 7 8840U, hasta 35 W) y la **ROG Xbox
+Ally** con el Ryzen Z2 A (la blanca), que además tenía un tope de firmware falso de 100 W y ahora
+queda capada a los 20 W reales que homologa ASUS. La **Legion Go 2** con el Ryzen Z2 normal (no
+Extreme) también se detecta ya con su nombre en vez de como equipo genérico. En todo lo que no
+tenemos en mano, los reportes desde Ajustes son los que confirman lo que responde de verdad.
+
 ### Notas
 
 1. El Claw controla el TDP por `intel-rapl`, que solo expone el límite base (PL1); no hay raíles de

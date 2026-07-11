@@ -20,6 +20,7 @@ export interface DeviceInfo {
   is_generic: boolean;
   // When true, the shell shows the experimental marker for this recognised model.
   experimental: boolean;
+  cooler_max: number | null;
 }
 
 export const getDevice = callable<[], DeviceInfo>("get_device");
@@ -201,6 +202,8 @@ export const getLearningStatus = callable<[], LearningStatus>("get_learning_stat
 
 export const getUnlockBatteryMax = callable<[], boolean>("get_unlock_battery_max");
 export const setUnlockBatteryMax = callable<[enabled: boolean], boolean>("set_unlock_battery_max");
+export const getCoolerBoost = callable<[], boolean>("get_cooler_boost");
+export const setCoolerBoost = callable<[enabled: boolean], boolean>("set_cooler_boost");
 
 // Opt-in (default off): raise TDP while the QAM is open for a fluid menu. Off keeps
 // the auto loop showing the REAL in-game TDP (no menu-time inflation).

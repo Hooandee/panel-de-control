@@ -151,6 +151,14 @@ at 15 W; now they go up to a safe 35 W ceiling (the manufacturer-rated peak, wel
 theoretical cTDP) with three tuned presets. Both run through the same generic AMD path (ryzenadj),
 and we do not own either, so reports from the Settings tab help confirm it.
 
+The same batch recognises a few more, all experimental and each with a safe manufacturer-rated
+ceiling: the **OneXPlayer F1 Pro** (Ryzen AI 9 HX 370, up to 30 W), the **GPD Win 5** (Ryzen AI Max
+385 "Strix Halo", up to 55 W), the **GPD Win Max 2** (Ryzen 7 8840U, up to 35 W) and the **ROG Xbox
+Ally** with the Ryzen Z2 A (the white one), which also reported a bogus 100 W firmware ceiling and is
+now capped to the real 20 W ASUS rates it at. The **Legion Go 2** with the plain Ryzen Z2 (not
+Extreme) is now detected by name instead of as a generic device. For anything we do not own, reports
+from the Settings tab are what confirm how it really behaves.
+
 ### Notes
 
 1. The Claw controls TDP through `intel-rapl`, which only exposes the base limit (PL1); there are no

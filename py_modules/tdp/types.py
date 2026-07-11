@@ -20,6 +20,15 @@ class TdpLimits:
             return self
         return TdpLimits(self.min_w, self.default_w, self.max_ac_w, self.max_ac_w)
 
+    def with_cooler(self, ceiling: int | None) -> "TdpLimits":
+        """Raise both ceilings to a device's cooler-attached max when the user
+        confirms the external cooler is present (only exposed on the GPD Win 5,
+        whose big cooler makes the higher rail thermally viable). No-op when the
+        device has none or it wouldn't raise."""
+        if not ceiling or ceiling <= self.max_ac_w:
+            return self
+        return TdpLimits(self.min_w, self.default_w, ceiling, ceiling)
+
     @classmethod
     def from_profile(cls, device) -> "TdpLimits":
         return cls(

@@ -35,7 +35,7 @@ def _candidates(device, fallback, root, ryzenadj):
         return SteamDeckHwmonBackend(fallback, root=root)
 
     def alib():
-        return AlibBackend(fallback, root=root)
+        return AlibBackend(fallback, root=root, write_max=device.cooler_max)
 
     # Generic-AMD fallbacks, appended after every device-specific path: ryzenadj
     # first, then the acpi_call ALIB path when ryzenadj is absent.
@@ -62,8 +62,8 @@ def select_backend(device, root="/", ryzenadj_resolve=None) -> TDPBackend:
 
     def ryzenadj():
         if ryzenadj_resolve is not None:
-            return RyzenadjBackend(fallback, resolve=ryzenadj_resolve)
-        return RyzenadjBackend(fallback)
+            return RyzenadjBackend(fallback, resolve=ryzenadj_resolve, write_max=device.cooler_max)
+        return RyzenadjBackend(fallback, write_max=device.cooler_max)
 
     for make in _candidates(device, fallback, root, ryzenadj):
         backend = make()

@@ -41,8 +41,11 @@ class RyzenadjBackend(TDPBackend):
     name = "ryzenadj"
     blocking = True
 
-    def __init__(self, fallback: TdpLimits, resolve=_default_resolve, runner=subprocess.run):
+    def __init__(self, fallback: TdpLimits, resolve=_default_resolve, runner=subprocess.run,
+                 write_max: int | None = None):
         self._fallback = fallback
+        # Writes clamp to the absolute ceiling (cooler_max); get_limits keeps the base.
+        self._write_limits = fallback.with_cooler(write_max)
         self._runner = runner
         self._bin = resolve()
         self.supported = self._bin is not None
@@ -53,7 +56,7 @@ class RyzenadjBackend(TDPBackend):
     def set_tdp(self, watts: int, ac: bool) -> TdpResult:
         if not self.supported:
             return TdpResult(watts, None, False, "ryzenadj binary not found")
-        target = self._fallback.clamp(watts)
+        target = self._write_limits.clamp(watts)
         mw = str(target * 1000)
         argv = [
             self._bin,
