@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.12.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.11.0...panel-de-control-v0.12.0) (2026-07-11)
+
+
+### Features / Novedades
+
+* Adds support for the GPD Win Mini 2025 (Ryzen AI 9 HX 370/365) and the MSI Claw A8 (Ryzen Z2 Extreme). They're now recognised by name instead of landing on the generic profile, so their TDP can reach a safe 35 W instead of being capped at 15 W, each with tuned quick presets. Battery, CPU, colour, GPU clock and the fan monitor come along too. Experimental until it's confirmed on the devices. ([#153](https://github.com/Hooandee/panel-de-control/issues/153)) ([3dedcd7](https://github.com/Hooandee/panel-de-control/commit/3dedcd70fe51970603a545d20e2afaa07c4ad805))
+* **ES:** Añade soporte para la GPD Win Mini 2025 (Ryzen AI 9 HX 370/365) y la MSI Claw A8 (Ryzen Z2 Extreme). Ahora se reconocen por su nombre en vez de caer en el perfil genérico, así su TDP llega a unos 35 W seguros en lugar de quedarse capado a 15 W, cada una con sus presets rápidos afinados. También llegan la batería, la CPU, el color, la frecuencia de GPU y el monitor de ventiladores. Experimental hasta confirmarlo en los equipos. ([#153](https://github.com/Hooandee/panel-de-control/issues/153)) ([3dedcd7](https://github.com/Hooandee/panel-de-control/commit/3dedcd70fe51970603a545d20e2afaa07c4ad805))
+
+## [0.11.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.10.0...panel-de-control-v0.11.0) (2026-07-10)
+
+
+### Features / Novedades
+
+* Adds support for the AOKZOE A1X handheld (Ryzen AI 9 HX 370). It's now recognised by name instead of landing on the generic profile, so its TDP can reach the real 30 W instead of being capped at 15 W, with quick presets at 12 / 18 / 30 W. Experimental until it's confirmed on the device. ([#130](https://github.com/Hooandee/panel-de-control/issues/130)) ([5bb4882](https://github.com/Hooandee/panel-de-control/commit/5bb488236925fe7e00a0d812b228ccd47175db58))
+* **ES:** Añade soporte para el handheld AOKZOE A1X (Ryzen AI 9 HX 370). Ahora se reconoce por su nombre en vez de caer en el perfil genérico, así su TDP llega a los 30 W reales en lugar de quedarse capado a 15 W, con presets rápidos a 12 / 18 / 30 W. Experimental hasta confirmarlo en el equipo. ([#130](https://github.com/Hooandee/panel-de-control/issues/130)) ([5bb4882](https://github.com/Hooandee/panel-de-control/commit/5bb488236925fe7e00a0d812b228ccd47175db58))
+
 ## [0.10.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.9.0...panel-de-control-v0.10.0) (2026-07-09)
 
 
