@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.12.0...panel-de-control-v0.13.0) (2026-07-11)
+
+
+### Features
+
+* Legion Go fan curve control via the legion_wmi_fan hwmon driver ([#158](https://github.com/Hooandee/panel-de-control/issues/158)) ([342b585](https://github.com/Hooandee/panel-de-control/commit/342b5855e4c7d9fa1715b8ab6d666064ac13d895))
+
 ## [0.12.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.11.0...panel-de-control-v0.12.0) (2026-07-11)
 
 
