@@ -74,8 +74,11 @@ class AlibBackend(TDPBackend):
     name = "acpi-alib"
 
     def __init__(self, fallback: TdpLimits, root: str = "/",
-                 modprobe=_default_modprobe, caller=None) -> None:
+                 modprobe=_default_modprobe, caller=None, write_max: int | None = None) -> None:
         self._fallback = fallback
+        # Writes clamp to the device's absolute ceiling (raised to cooler_max when
+        # present); get_limits() keeps the base policy. See RyzenadjBackend.
+        self._write_limits = fallback.with_cooler(write_max) if write_max else fallback
         self._root = root
         self._call_path = os.path.join(root, _CALL_REL)
         self._modprobe = modprobe
@@ -135,7 +138,7 @@ class AlibBackend(TDPBackend):
         self._ensure_loaded()
         if not self._node_writable():
             return TdpResult(watts, None, False, "acpi_call ALIB interface unavailable")
-        target = self._fallback.clamp(watts, ac)
+        target = self._write_limits.clamp(watts, ac)
         mw = target * 1000
         # Short-term rails first so the sustained rail is never transiently highest.
         for cmd in (_FAST_LIMIT, _SLOW_LIMIT, _STAPM_LIMIT):

@@ -26,3 +26,17 @@ def test_limits_from_profile_maps_fields():
 def test_result_fields():
     r = TdpResult(requested_w=15, applied_w=15, ok=True, detail="")
     assert r.ok and r.applied_w == 15 and r.requested_w == 15
+
+
+def test_with_cooler_raises_ceiling():
+    lim = TdpLimits(min_w=5, default_w=25, max_w=55, max_ac_w=55)
+    boosted = lim.with_cooler(75)
+    assert boosted.max_w == 75
+    assert boosted.max_ac_w == 75
+    assert boosted.min_w == 5 and boosted.default_w == 25
+
+
+def test_with_cooler_noop_when_not_higher():
+    lim = TdpLimits(min_w=5, default_w=25, max_w=55, max_ac_w=55)
+    assert lim.with_cooler(50) is lim
+    assert lim.with_cooler(55) is lim

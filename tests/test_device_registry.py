@@ -121,6 +121,13 @@ def test_gpd_win5_is_recognised_experimental():
     assert prof.experimental is True
     assert prof.tdp_max == 55
     assert prof.tdp_presets == (15, 30, 50, 50)
+    assert prof.cooler_max == 75  # cooler-attached ceiling (opt-in)
+
+
+def test_only_win5_has_cooler_max():
+    assert detect(product_name="G1619-05").cooler_max is None  # GPD Win Max 2
+    assert detect(product_name="ONEXPLAYER F1Pro").cooler_max is None
+    assert detect(product_name="Some Random Laptop").cooler_max is None
 
 
 def test_gpd_win_max_2_is_recognised_experimental():

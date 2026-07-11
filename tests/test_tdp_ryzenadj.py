@@ -76,3 +76,19 @@ def test_set_tdp_not_ok_when_readback_unavailable():
     b = RyzenadjBackend(FALLBACK, resolve=lambda: "/usr/bin/ryzenadj", runner=fake)
     res = b.set_tdp(20, ac=True)
     assert res.ok is False and res.applied_w is None
+
+
+def test_write_max_widens_the_write_clamp():
+    # Without write_max the write clamps to the base ceiling (30)...
+    base = FakeRun()
+    RyzenadjBackend(FALLBACK, resolve=lambda: "/usr/bin/ryzenadj", runner=base).set_tdp(70, ac=True)
+    argv = next(c for c in base.calls if "--stapm-limit" in c[0])[0]
+    assert "30000" in argv
+    # ...but with the device's cooler_max the write reaches the raised ceiling (75),
+    # so an opt-in cooler value actually gets to the chip (never-fake).
+    boosted = FakeRun()
+    b = RyzenadjBackend(FALLBACK, resolve=lambda: "/usr/bin/ryzenadj", runner=boosted, write_max=75)
+    b.set_tdp(70, ac=True)
+    argv = next(c for c in boosted.calls if "--stapm-limit" in c[0])[0]
+    assert "70000" in argv
+    assert b.get_limits().max_ac_w == 30  # base policy unchanged (main._limits gates it)

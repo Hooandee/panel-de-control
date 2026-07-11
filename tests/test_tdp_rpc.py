@@ -370,3 +370,22 @@ def test_no_adopt_before_first_apply(Plugin):
     p._tdp_backend._applied = 28    # firmware default, we've written nothing
     st = asyncio.run(p.get_tdp_state())
     assert st["external_change"] is False
+
+
+def test_cooler_boost_raises_ceiling_on_win5(Plugin):
+    from device_registry import detect
+    p = Plugin()
+    p._init()
+    p._device = detect(product_name="G1618-05")  # gpd_win5, cooler_max=75
+    assert p._limits().max_w == 20 and p._limits().max_ac_w == 60  # cooler off
+    asyncio.run(p.set_cooler_boost(True))
+    assert p._limits().max_w == 75 and p._limits().max_ac_w == 75  # cooler on
+    asyncio.run(p.set_cooler_boost(False))
+    assert p._limits().max_w == 20
+
+
+def test_cooler_boost_ignored_when_device_has_no_cooler(Plugin):
+    p = Plugin()
+    p._init()  # detected device is generic → cooler_max None
+    asyncio.run(p.set_cooler_boost(True))
+    assert p._limits().max_w == 20  # unchanged

@@ -72,6 +72,10 @@ DEFAULTS = {
     # off (we cap battery below the firmware max for battery life); the user accepts
     # the drain when enabling. The firmware itself allows the same max either way.
     "unlock_battery_max": False,
+    # Opt-in (GPD Win 5 only): the user confirms the external cooler is attached, so
+    # the TDP ceiling may rise to the device's cooler_max. Default off — without the
+    # cooler the higher rail would overheat, so we never assume it.
+    "cooler_boost": False,
     # Opt-in: while the QAM/plugin UI is open, raise PL1 to a responsive floor so the
     # CPU-bound menu render stays fluid. Default OFF for honesty — raising TDP behind
     # the menu would show an inflated number vs the REAL in-game TDP the user wants to
@@ -963,6 +967,20 @@ class Plugin:
         await self._offload_call(self._reapply_tdp)
         return enabled
 
+    async def get_cooler_boost(self) -> bool:
+        self._init()
+        return bool(self._settings.get("cooler_boost", False))
+
+    async def set_cooler_boost(self, enabled: bool) -> bool:
+        """Opt in/out of the GPD Win 5 cooler-attached ceiling. Re-applies TDP so the
+        new ceiling (and any re-clamp of the current setpoint) takes effect now."""
+        self._init()
+        enabled = bool(enabled)
+        self._settings["cooler_boost"] = enabled
+        self._save()
+        await self._offload_call(self._reapply_tdp)
+        return enabled
+
     def _qam_boost_active(self) -> bool:
         """The QAM-open responsive floor applies ONLY when its opt-in setting is on
         AND the UI is open. Default OFF → the auto loop shows the REAL in-game TDP
@@ -1136,10 +1154,15 @@ class Plugin:
 
     # ---- TDP helpers + RPCs -------------------------------------------------
     def _limits(self):
-        """Device TDP limits with the user's battery-unlock preference applied (a
-        single chokepoint so every clamp/limit path honours the Ajustes toggle)."""
-        return self._tdp_backend.get_limits().unlocked(
+        """Device TDP limits with the user's opt-in ceilings applied (a single
+        chokepoint so every clamp/limit path honours the Ajustes toggles): the
+        battery-unlock preference, then the GPD Win 5 cooler boost."""
+        lim = self._tdp_backend.get_limits().unlocked(
             bool(self._settings.get("unlock_battery_max", False)))
+        cooler_max = self._device.cooler_max
+        if cooler_max and self._settings.get("cooler_boost", False):
+            lim = lim.with_cooler(cooler_max)
+        return lim
 
     def _effective_levels(self, appid=None, on_ac=None):
         """Clamped {pl1,pl2,pl3} for a scope at the active (on_ac) ceiling, plus the

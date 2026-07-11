@@ -26,6 +26,9 @@ class DeviceProfile:
     # Curated quick-preset watts (quiet, balanced, turbo_battery, turbo_charger);
     # empty → fall back to (min, default, max, max_ac).
     tdp_presets: tuple = field(default_factory=tuple)
+    # Higher TDP ceiling unlocked only when the user confirms the device's external
+    # cooler is attached (Ajustes toggle). None → no cooler mode, no toggle shown.
+    cooler_max: Optional[int] = None
 
 
 # Conservative, safe fallback when detection fails - visibly generic.
@@ -91,7 +94,7 @@ DEVICE_TABLE = (
                   tdp_presets=(12, 18, 30, 30)),
     DeviceProfile("gpd_win5", "GPD Win 5", "AMD Ryzen AI Max 385", "amd",
                   5, 25, 55, 55, match_names=("G1618-05",), experimental=True,
-                  tdp_presets=(15, 30, 50, 50)),
+                  tdp_presets=(15, 30, 50, 50), cooler_max=75),
     DeviceProfile("gpd_win_max_2", "GPD Win Max 2", "AMD Ryzen 7 8840U", "amd",
                   5, 20, 35, 35, match_names=("G1619-05",), experimental=True,
                   tdp_presets=(12, 22, 32, 32)),
