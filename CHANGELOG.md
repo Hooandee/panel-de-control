@@ -3,9 +3,10 @@
 ## [0.13.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.12.0...panel-de-control-v0.13.0) (2026-07-11)
 
 
-### Features
+### Features / Novedades
 
-* Legion Go fan curve control via the legion_wmi_fan hwmon driver ([#158](https://github.com/Hooandee/panel-de-control/issues/158)) ([342b585](https://github.com/Hooandee/panel-de-control/commit/342b5855e4c7d9fa1715b8ab6d666064ac13d895))
+* Fan curves on the original Legion Go: the fan section turns into a drag-to-set curve editor, with presets and per-game curves, on the kernels that ship the Legion fan driver. Where the driver isn't there yet it stays a read-only RPM monitor and turns on by itself once the kernel includes it. ([#158](https://github.com/Hooandee/panel-de-control/issues/158)) ([342b585](https://github.com/Hooandee/panel-de-control/commit/342b5855e4c7d9fa1715b8ab6d666064ac13d895))
+* **ES:** Curvas de ventilador en la Legion Go original: la sección de ventiladores pasa a un editor de curvas que arrastras con el dedo, con presets y curvas por juego, en los kernels que traen el driver de ventilador de la Legion. Donde el driver aún no está, se queda en monitor de RPM de solo lectura y se enciende solo en cuanto el kernel lo incluye. ([#158](https://github.com/Hooandee/panel-de-control/issues/158)) ([342b585](https://github.com/Hooandee/panel-de-control/commit/342b5855e4c7d9fa1715b8ab6d666064ac13d895))
 
 ## [0.12.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.11.0...panel-de-control-v0.12.0) (2026-07-11)
 
