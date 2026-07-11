@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.11.0...panel-de-control-v0.12.0) (2026-07-11)
+
+
+### Features
+
+* recognise the GPD Win Mini 2025 and MSI Claw A8 with a safe generic AMD TDP path ([#153](https://github.com/Hooandee/panel-de-control/issues/153)) ([3dedcd7](https://github.com/Hooandee/panel-de-control/commit/3dedcd70fe51970603a545d20e2afaa07c4ad805))
+
 ## [0.11.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.10.0...panel-de-control-v0.11.0) (2026-07-10)
 
 
