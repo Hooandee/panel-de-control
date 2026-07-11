@@ -16,7 +16,9 @@ KNOWN = {
     "83N6": "legion_go_s",           # Legion Go S 8APU1 (Ryzen Z2 Go, 2025)
     "83N6000MSB": "legion_go_s",     # 8APU1 full SKU
     "83N0": "legion_go_2",           # Legion Go 2 — must NOT collide with 83N6
+    "83N1": "legion_go_2",           # Legion Go 2 with the Ryzen Z2 (non-Extreme)
     "Claw 8 AI+ A2VM": "msi_claw_8_ai_plus",
+    "ROG Xbox Ally RC73YA_RC73YA": "rog_xbox_ally",
 }
 
 
@@ -90,8 +92,46 @@ def test_msi_claw_a8_is_not_the_intel_claw():
     assert detect(product_name="Claw 8 AI+ A2VM").key == "msi_claw_8_ai_plus"
 
 
+def test_rog_xbox_ally_z2a_is_recognised_and_capped():
+    prof = detect(product_name="ROG Xbox Ally RC73YA_RC73YA")
+    assert prof.key == "rog_xbox_ally"
+    assert prof.experimental is True
+    assert prof.vendor == "amd"
+    assert prof.tdp_max == 17
+    assert prof.tdp_max_charger == 20
+    assert prof.tdp_presets == (10, 15, 17, 20)
+
+
+def test_rog_xbox_ally_z2a_is_not_the_x():
+    assert detect(product_name="ROG Xbox Ally RC73YA_RC73YA").key == "rog_xbox_ally"
+    assert detect(product_name="ROG Xbox Ally X RC73XA").key == "rog_xbox_ally_x"
+
+
+def test_onexplayer_f1pro_is_recognised_experimental():
+    prof = detect(product_name="ONEXPLAYER F1Pro")
+    assert prof.key == "onexplayer_f1pro"
+    assert prof.experimental is True
+    assert prof.tdp_max == 30
+    assert prof.tdp_presets == (12, 18, 30, 30)
+
+
+def test_gpd_win5_is_recognised_experimental():
+    prof = detect(product_name="G1618-05")
+    assert prof.key == "gpd_win5"
+    assert prof.experimental is True
+    assert prof.tdp_max == 55
+    assert prof.tdp_presets == (15, 30, 50, 50)
+
+
+def test_gpd_win_max_2_is_recognised_experimental():
+    prof = detect(product_name="G1619-05")
+    assert prof.key == "gpd_win_max_2"
+    assert prof.experimental is True
+    assert prof.tdp_max == 35
+
+
 def test_known_devices_are_not_experimental():
-    for product in ("Galileo", "ROG Ally X RC72LA_RC72LA", "83N0", "Claw 8 AI+ A2VM"):
+    for product in ("Galileo", "ROG Ally X RC72LA_RC72LA", "83N0", "83N1", "Claw 8 AI+ A2VM"):
         assert detect(product_name=product).experimental is False
 
 
