@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.15.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.14.0...panel-de-control-v0.15.0) (2026-07-12)
+
+
+### Features / Novedades
+
+* The Display tab becomes a small color lab: one-tap looks (Native, Cinema, Vivid, Comfort) tuned per panel, an advanced mode with gamma, hue, black level, vibrance and manual RGB white balance on top of saturation and temperature/contrast, a night mode that warms the screen always or on the schedule you choose, and an HDR on/off toggle on the HDR-capable OLED panels (Steam Deck OLED, Legion Go 2). ([#168](https://github.com/Hooandee/panel-de-control/issues/168)) ([e1e5c4d](https://github.com/Hooandee/panel-de-control/commit/e1e5c4d6323561d1e47a29c7ffb1c3d92b003659))
+* **ES:** La pestaña Pantalla se convierte en un pequeño laboratorio de color: ambientes de un toque (Nativo, Cine, Vivo, Cómodo) afinados por panel, un modo avanzado con gamma, tono, nivel de negro, vivacidad y balance manual de blancos (RGB) sobre la saturación y la temperatura/contraste, un modo nocturno que calienta la pantalla siempre o en el horario que elijas, y un interruptor de HDR en los paneles OLED con HDR (Steam Deck OLED, Legion Go 2). ([#168](https://github.com/Hooandee/panel-de-control/issues/168)) ([e1e5c4d](https://github.com/Hooandee/panel-de-control/commit/e1e5c4d6323561d1e47a29c7ffb1c3d92b003659))
+
 ## [0.14.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.13.0...panel-de-control-v0.14.0) (2026-07-11)
 
 
