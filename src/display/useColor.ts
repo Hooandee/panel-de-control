@@ -5,12 +5,14 @@ import {
   previewCalibration,
   setCalibration,
   applyOledLook,
+  applyColorPreset,
   resetColor,
   ColorState,
   ColorPreset,
   Scope,
 } from "../api";
 import { useRunningGame } from "../tdp/useRunningGame";
+import { pickCalibration } from "./color";
 
 export interface ColorControl {
   state: ColorState | null;
@@ -23,6 +25,7 @@ export interface ColorControl {
   onCalibration: (patch: Partial<ColorPreset>) => void;
   confirmCalibration: () => void;
   onOledLook: () => void;
+  onPreset: (key: string) => void;
   onReset: () => void;
 }
 
@@ -108,7 +111,7 @@ export function useColor(): ColorControl {
     startCountdown(base.revert_seconds || 15);
     if (commit.current) clearTimeout(commit.current);
     commit.current = setTimeout(() => {
-      previewCalibration(next.temperature, next.contrast).then(setState).catch(() => {});
+      previewCalibration(pickCalibration(next)).then(setState).catch(() => {});
     }, 200);
   }, [startCountdown]);
 
@@ -117,12 +120,17 @@ export function useColor(): ColorControl {
     if (!cur) return;
     stopCountdown();
     if (commit.current) clearTimeout(commit.current);
-    setCalibration(cur.temperature, cur.contrast).then(setState).catch(() => {});
+    setCalibration(pickCalibration(cur)).then(setState).catch(() => {});
   }, [stopCountdown]);
 
   const onOledLook = useCallback(() => {
     stopCountdown();
     applyOledLook().then(setState).catch(() => {});
+  }, [stopCountdown]);
+
+  const onPreset = useCallback((key: string) => {
+    stopCountdown();
+    applyColorPreset(key).then(setState).catch(() => {});
   }, [stopCountdown]);
 
   const onReset = useCallback(() => {
@@ -132,6 +140,6 @@ export function useColor(): ColorControl {
 
   return {
     state, scope, game, revertIn, setScope,
-    onSaturation, onCalibration, confirmCalibration, onOledLook, onReset,
+    onSaturation, onCalibration, confirmCalibration, onOledLook, onPreset, onReset,
   };
 }

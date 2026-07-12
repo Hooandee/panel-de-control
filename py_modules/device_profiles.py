@@ -20,6 +20,9 @@ class DeviceProfile:
     # Panel technology. "oled" hides the "OLED look" color preset (a real OLED has
     # nothing to emulate). A wrong guess only shows/hides a cosmetic button.
     panel: str = "lcd"
+    # True on panels that support HDR output (gamescope can drive them in HDR). Gates
+    # the HDR sub-tab; on a non-HDR panel the toggle would be a no-op, so it's hidden.
+    hdr: bool = False
     # Optional per-model calibrated "OLED look" color state. None => the generic look
     # (display.oled_look.GENERIC_OLED_LOOK).
     oled_look: Optional[dict] = None
@@ -49,7 +52,7 @@ DEVICE_TABLE = (
     DeviceProfile("steam_deck_lcd", "Steam Deck", "AMD Van Gogh", "amd",
                   3, 12, 15, 15, match_names=("Jupiter",)),
     DeviceProfile("steam_deck_oled", "Steam Deck OLED", "AMD Sephiroth", "amd",
-                  3, 12, 15, 15, match_names=("Galileo",), panel="oled"),
+                  3, 12, 15, 15, match_names=("Galileo",), panel="oled", hdr=True),
     DeviceProfile("rog_xbox_ally_x", "ROG Xbox Ally X", "AMD Ryzen AI Z2 Extreme", "amd",
                   7, 17, 25, 35, match_names=("ROG Xbox Ally X",),
                   tdp_presets=(13, 17, 25, 30)),
@@ -62,7 +65,8 @@ DEVICE_TABLE = (
     DeviceProfile("rog_ally", "ROG Ally", "AMD Z1 Extreme", "amd",
                   7, 15, 25, 30, match_names=("ROG Ally RC71", "ROG Ally")),
     DeviceProfile("legion_go_2", "Legion Go 2", "AMD Ryzen AI Z2 Extreme", "amd",
-                  5, 15, 30, 33, match_names=("83N0", "83N1", "Legion Go 2"), panel="oled"),
+                  5, 15, 30, 33, match_names=("83N0", "83N1", "Legion Go 2"),
+                  panel="oled", hdr=True),
     # Legion Go S ships as both 8ARP1 (83L3) and 8APU1 (83N6), each with either a
     # Ryzen Z1 Extreme or a Z2 Go. The real chip is read live from /proc/cpuinfo;
     # this string is only a fallback when that read fails.

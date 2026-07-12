@@ -2,9 +2,12 @@ import json
 
 from display.color_store import ColorStore
 
-# Native/neutral: saturation 100 (%), neutral temperature & contrast (both bipolar,
-# 0 = neutral). saturation is the per-game field; temperature/contrast are global.
-NATIVE = {"saturation": 100, "temperature": 0, "contrast": 0}
+# Native/neutral: saturation 100 (%, per-game); every other field is global panel
+# calibration at its neutral (bipolar 0, or gain 100 = 1.0).
+NATIVE = {
+    "saturation": 100, "temperature": 0, "contrast": 0, "gamma": 0, "hue": 0, "black": 0,
+    "gain_r": 100, "gain_g": 100, "gain_b": 100, "vibrance": 0,
+}
 
 
 def _store(tmp_path):
@@ -46,6 +49,47 @@ def test_set_calibration_clamps_bipolar(tmp_path):
     eff = s.effective(None)
     assert eff["temperature"] == 100    # -100..100
     assert eff["contrast"] == -60       # floored so the panel never goes illegible
+
+
+def test_advanced_calibration_fields_are_global(tmp_path):
+    s = _store(tmp_path)
+    s.set_calibration(gamma=40, hue=-20, gain_r=120, gain_g=90, gain_b=110, vibrance=60)
+    s.set_saturation("game", 160, appid="123")
+    eff = s.effective("123")
+    assert eff["gamma"] == 40 and eff["hue"] == -20 and eff["vibrance"] == 60
+    assert eff["gain_r"] == 120 and eff["gain_g"] == 90 and eff["gain_b"] == 110
+    assert eff["saturation"] == 160  # game override untouched
+
+
+def test_advanced_calibration_clamps(tmp_path):
+    s = _store(tmp_path)
+    s.set_calibration(gamma=999, hue=-999, gain_r=999, gain_b=-5, vibrance=999)
+    eff = s.effective(None)
+    assert eff["gamma"] == 100 and eff["hue"] == -100 and eff["vibrance"] == 100
+    assert eff["gain_r"] == 150   # 50..150
+    assert eff["gain_b"] == 50    # floored so a channel is never crushed to black
+
+
+def test_every_native_field_has_a_range():
+    # Guards the invariant _clean_global relies on: a NATIVE field without a range
+    # would KeyError out of __init__ and hang the panel.
+    from display import color_store
+    from display.const import NATIVE as N
+    assert set(N) <= set(color_store._RANGES)
+
+
+def test_default_advanced_fields_are_neutral(tmp_path):
+    eff = _store(tmp_path).effective(None)
+    assert eff["gamma"] == 0 and eff["hue"] == 0 and eff["vibrance"] == 0 and eff["black"] == 0
+    assert eff["gain_r"] == 100 and eff["gain_g"] == 100 and eff["gain_b"] == 100
+
+
+def test_reset_clears_advanced_fields(tmp_path):
+    s = _store(tmp_path)
+    s.set_calibration(gamma=50, gain_r=130, vibrance=40)
+    s.reset()
+    eff = s.effective(None)
+    assert eff["gamma"] == 0 and eff["gain_r"] == 100 and eff["vibrance"] == 0
 
 
 def test_set_saturation_clamps(tmp_path):

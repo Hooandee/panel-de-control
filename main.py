@@ -3,6 +3,7 @@ import json
 import os
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict
+from datetime import datetime
 
 import decky
 
@@ -22,10 +23,14 @@ from fans import expose as fan_expose
 from fans import presets as fan_presets
 from fans import suggest as fan_suggest
 from fan_curves import FanCurveStore
-from display.color_store import ColorStore
-from display.gamescope import GamescopeColorBackend
+from display.color_store import ColorStore, sanitize_calibration
+from display.gamescope import GamescopeColorBackend, run_gamescopectl
 from display.oled_look import oled_look_for
 from display.const import NATIVE as COLOR_NATIVE, FIELDS as COLOR_FIELDS
+from display.night_store import NightStore
+from display.night import is_night_active
+from display import presets as color_presets
+from display.hdr import HdrBackend
 from gpu.clock import select_gpu_clock
 from power.reader import PowerReader
 from battery.reader import BatteryReader
@@ -61,6 +66,13 @@ _AUTO_WINDOW = 10
 # adopt (above rounding/settling jitter).
 _EXTERNAL_TDP_THRESHOLD = 2
 
+_NIGHT_TICK_S = 30  # how often the night-mode clock checks for a schedule-edge crossing
+
+
+def _now_minutes() -> int:
+    t = datetime.now()
+    return t.hour * 60 + t.minute
+
 DEFAULTS = {
     # Persisted settings keys go here; SettingsStore merges these over stored values.
     # (Per-game TDP profiles live in their own store, tdp_profiles.py.)
@@ -78,6 +90,8 @@ DEFAULTS = {
     # the menu would show an inflated number vs the REAL in-game TDP the user wants to
     # see with the QAM open. When ON, the user accepts the menu-time bump for fluidity.
     "qam_tdp_boost": False,
+    # HDR output on/off (only meaningful on HDR-capable panels — see device.hdr).
+    "hdr_enabled": False,
     # Battery charge limit: when enabled, cap charging at `charge_limit_percent`
     # (protects battery longevity). Disabled → firmware default (100%).
     "charge_limit_enabled": False,
@@ -188,6 +202,16 @@ class Plugin:
         # illegible screen self-heals even if the QAM closes). None = nothing pending.
         self._color_preview = None
         self._color_revert_task = None
+        # Night mode: a scheduled warm shift on top of the calibration; _night_loop
+        # re-applies on a schedule edge so it works with the QAM closed.
+        self._night = NightStore(
+            os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "night.json")
+        )
+        self._night_task = None
+        self._night_applied = False
+        # HDR output on/off (gamescope). State lives in settings (hdr_enabled); gated to
+        # HDR-capable panels with gamescope.
+        self._hdr_backend = HdrBackend(run_gamescopectl)
         self._power_reader = PowerReader()
         self._battery = BatteryReader()
         self._charge_limit = select_charge_limit(self._device)
@@ -1320,7 +1344,10 @@ class Plugin:
         self._apply_gpu_clock()
         self._offload(lambda: self._reapply_tdp(on_ac))
         self._reapply_fans()   # self-offloading
-        self._reapply_color()  # self-offloading
+        # HDR before color: switching the HDR mode can drop the loaded LUT, so re-assert
+        # HDR first and load the color look after (both self-offloading, FIFO executor).
+        self._reapply_hdr()
+        self._reapply_color()
 
     # ---- Battery + charge limit --------------------------------------------
     def _apply_charge_limit(self) -> None:
@@ -1539,24 +1566,40 @@ class Plugin:
         self._offload(self._reapply_color_sync)
 
     def _reapply_color_sync(self) -> None:
-        """Push the effective color (per-game saturation + global calibration, with
-        any live preview overlaid) to gamescope. No-op when unsupported. Guarded."""
+        """Push the effective color to gamescope. No-op when unsupported. Guarded.
+        Applied in HDR mode too — it colors all composited/SDR content; a native-HDR
+        game (direct scanout) is simply out of the LUT's reach, no handling needed."""
         try:
             if self._color_backend.supported:
                 self._color_backend.apply(self._effective_color())
         except Exception:  # noqa: BLE001
             pass
 
-    def _effective_color(self) -> dict:
-        """The color to actually apply: saved effective, overlaid with the unconfirmed
-        calibration preview when one is pending."""
+    def _display_color(self) -> dict:
+        """What the UI reflects: saved effective + the unconfirmed preview. Excludes the
+        night-mode shift, so the Temperature slider keeps showing the user's own value."""
         eff = self._color.effective(self._current_appid)
         if self._color_preview is not None:
             eff = {**eff, **self._color_preview}
         return eff
 
+    def _effective_color(self) -> dict:
+        """What is pushed to hardware: the displayed color + the night-mode warm shift."""
+        eff = self._display_color()
+        n = self._night.get()
+        if self._night_is_active(n):
+            eff = {**eff, "temperature": min(100, eff.get("temperature", 0) + n["warmth"])}
+        return eff
+
+    def _night_is_active(self, n=None) -> bool:
+        n = n if n is not None else self._night.get()
+        return is_night_active(
+            _now_minutes(), n["enabled"], n["schedule_enabled"], n["start"], n["end"]
+        )
+
     def _color_state(self) -> dict:
-        eff = self._effective_color()
+        eff = self._display_color()
+        preset_keys = color_presets.preset_keys(self._device)
         return {
             "supported": self._color_backend.supported,
             **{f: eff[f] for f in COLOR_FIELDS},
@@ -1574,10 +1617,37 @@ class Plugin:
             # Calibration preview pending confirmation (auto-reverts) + its window.
             "preview": self._color_preview is not None,
             "revert_seconds": self._COLOR_REVERT_SECS,
+            "presets": preset_keys,
+            "active_preset": self._active_preset(preset_keys),
         }
+
+    def _active_preset(self, keys) -> str:
+        """The look key the color actually shown for the current scope matches, or None.
+        Compares the effective color (so a per-game saturation override that hides the
+        look's saturation correctly reads as custom, not a false match)."""
+        cur = self._color.effective(self._current_appid)
+        for key in keys:
+            preset = color_presets.resolve_preset(self._device, key)
+            full = self._color._clean_global(preset or {})  # same merge+clamp apply uses
+            if all(cur[f] == full[f] for f in COLOR_FIELDS):
+                return key
+        return None
 
     async def get_color_state(self) -> dict:
         self._init()
+        return await self._offload_call(self._color_state)
+
+    async def apply_color_preset(self, key: str) -> dict:
+        """Apply a balanced look globally (native = reset). Saved directly."""
+        self._init()
+        self._cancel_color_revert()
+        self._color_preview = None
+        preset = color_presets.resolve_preset(self._device, key)
+        if key == "native":
+            self._color.apply_preset(dict(COLOR_NATIVE))  # global→native, keep per-game
+        elif preset is not None:
+            self._color.apply_preset(preset)
+        self._reapply_color()
         return await self._offload_call(self._color_state)
 
     async def set_saturation(self, value: int, scope: str, appid=None) -> dict:
@@ -1588,21 +1658,28 @@ class Plugin:
         self._reapply_color()
         return await self._offload_call(self._color_state)
 
-    async def preview_calibration(self, temperature: int, contrast: int) -> dict:
-        """Apply calibration LIVE without saving, and arm the auto-revert timer. The
-        UI confirms with set_calibration; if it doesn't, the screen self-heals."""
+    async def preview_calibration(self, calibration: dict) -> dict:
+        """Apply calibration LIVE without saving, and arm the auto-revert timer. Any
+        subset of the calibration fields may be sent; sanitized to the safe ranges so
+        the live preview honours the same floors as a saved value. The UI confirms with
+        set_calibration; if it doesn't, the screen self-heals."""
         self._init()
-        self._color_preview = {"temperature": int(temperature), "contrast": int(contrast)}
+        # Empty/malformed payload → nothing to preview: don't arm a revert timer or
+        # show a confirm bar with nothing to confirm.
+        self._color_preview = sanitize_calibration(calibration) or None
         self._reapply_color()
-        self._arm_color_revert()
+        if self._color_preview is not None:
+            self._arm_color_revert()
+        else:
+            self._cancel_color_revert()  # empty payload → drop any timer already armed
         return await self._offload_call(self._color_state)
 
-    async def set_calibration(self, temperature: int, contrast: int) -> dict:
+    async def set_calibration(self, calibration: dict) -> dict:
         """Confirm (save) the calibration: persist, cancel the auto-revert, apply."""
         self._init()
         self._cancel_color_revert()
         self._color_preview = None
-        self._color.set_calibration(temperature=int(temperature), contrast=int(contrast))
+        self._color.set_calibration(**sanitize_calibration(calibration))
         self._reapply_color()
         return await self._offload_call(self._color_state)
 
@@ -1651,6 +1728,106 @@ class Plugin:
         self._color.reset()
         self._reapply_color()
         return await self._offload_call(self._color_state)
+
+    # ---- Night mode (scheduled warm shift) ----------------------------------
+    def _night_state(self) -> dict:
+        n = self._night.get()
+        return {
+            "supported": self._color_backend.supported,
+            **n,
+            "active": self._night_is_active(n),
+        }
+
+    async def get_night_state(self) -> dict:
+        self._init()
+        return await self._offload_call(self._night_state)
+
+    async def set_night(self, patch: dict) -> dict:
+        """Update night-mode settings (any subset) and re-apply at once."""
+        self._init()
+        p = patch if isinstance(patch, dict) else {}
+        self._night.set(
+            warmth=p.get("warmth"), enabled=p.get("enabled"),
+            schedule_enabled=p.get("schedule_enabled"),
+            start=p.get("start"), end=p.get("end"),
+        )
+        self._night_applied = self._night_is_active()
+        self._start_night_loop()  # idempotent — (re)start if it hadn't come up yet
+        self._reapply_color()
+        return await self._offload_call(self._night_state)
+
+    def _start_night_loop(self) -> None:
+        if not self._color_backend.supported:
+            return  # nothing to apply a warm shift to on this host
+        if self._night_task is not None and not self._night_task.done():
+            return
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return  # no running event loop → skip task creation
+        self._night_applied = self._night_is_active()
+        self._night_task = asyncio.create_task(self._night_loop())
+
+    def _stop_night_loop(self) -> None:
+        if self._night_task is not None:
+            self._night_task.cancel()
+            self._night_task = None
+
+    async def _night_loop(self) -> None:
+        """Re-apply only when the active state crosses a schedule edge."""
+        try:
+            while True:
+                await asyncio.sleep(_NIGHT_TICK_S)
+                active = self._night_is_active()
+                if active != self._night_applied:
+                    self._night_applied = active
+                    self._reapply_color()
+        except asyncio.CancelledError:
+            pass
+
+    # ---- HDR output ----------------------------------------------------------
+    def _hdr_supported(self) -> bool:
+        return self._device.hdr and self._color_backend.supported
+
+    def _hdr_state(self) -> dict:
+        return {
+            "supported": self._hdr_supported(),
+            "enabled": bool(self._settings.get("hdr_enabled")),
+        }
+
+    def _reapply_hdr(self) -> None:
+        # Gate on the cheap setting only (skips a no-op executor hop on the common path);
+        # the supported probe (may spawn gamescopectl) runs off-loop in _reapply_hdr_sync.
+        if self._settings.get("hdr_enabled"):
+            self._offload(self._reapply_hdr_sync)
+
+    def _reapply_hdr_sync(self) -> None:
+        """Re-assert HDR ON (never force a supported panel OUT of an HDR mode set
+        elsewhere, e.g. Steam's own toggle)."""
+        try:
+            if self._hdr_supported() and self._settings.get("hdr_enabled"):
+                self._hdr_backend.set_enabled(True)
+        except Exception:  # noqa: BLE001
+            pass
+
+    async def get_hdr_state(self) -> dict:
+        self._init()
+        return await self._offload_call(self._hdr_state)
+
+    async def set_hdr(self, patch: dict) -> dict:
+        """Turn HDR on/off and apply at once (an explicit toggle applies both states,
+        unlike the resume re-assert which only re-asserts ON)."""
+        self._init()
+        p = patch if isinstance(patch, dict) else {}
+        if "enabled" in p:
+            self._settings["hdr_enabled"] = bool(p["enabled"])
+            self._save()
+        enabled = bool(self._settings.get("hdr_enabled"))
+        # Off-loop: set_enabled spawns gamescopectl (a no-op when gamescope is absent).
+        self._offload(lambda: self._hdr_backend.set_enabled(enabled))
+        # Then re-assert the color look — gamescope can drop the loaded LUT on a mode switch.
+        self._reapply_color()
+        return await self._offload_call(self._hdr_state)
 
     async def _read_applied(self):
         # Only subprocess-backed backends (ryzenadj fallback) need the executor;
@@ -1839,6 +2016,7 @@ class Plugin:
         try:
             self._reapply_all()
             self._lifecycle.start()
+            self._start_night_loop()
             if self._settings.get("auto_tdp"):
                 self._start_auto_loop()
             if self._settings.get("telemetry_enabled", True):
@@ -1853,6 +2031,7 @@ class Plugin:
         # await, then shut the executor down.
         await self._offload_call(self._restore_fans_safe)
         self._cancel_color_revert()
+        self._stop_night_loop()
         await self._offload_call(self._restore_color_safe)
         self._stop_auto_loop()
         if getattr(self, "_sampler", None) is not None:

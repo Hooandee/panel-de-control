@@ -83,9 +83,13 @@ and tells you exactly why, instead of pretending it works.
 
 ### Display (Pantalla)
 
-Panel color calibration through gamescope: per-game saturation, global temperature and contrast, and
-a one-tap "OLED look" preset for panels that aren't OLED. It comes with a confirmation timer that
-reverts changes only if something looks wrong, so you never get stuck with an unreadable screen.
+Panel color calibration through gamescope, turned into a small lab: one-tap looks (Native, Cinema,
+Vivid, Comfort) tuned per panel type, per-game saturation, and an advanced mode with temperature,
+contrast, gamma, hue, black level, vibrance and manual white balance (RGB). It adds a night mode that
+warms the screen, always or on a schedule you pick, plus a one-tap "OLED look" preset for panels that
+aren't OLED. A confirmation timer reverts changes only if something looks wrong, so you never get
+stuck with an unreadable screen. On HDR panels (Steam Deck OLED and Legion Go 2) there's also an HDR
+toggle.
 
 ### Controllers (Mandos)
 

@@ -1,21 +1,20 @@
 import { CSSProperties, FC } from "react";
 import { Focusable, PanelSectionRow } from "@decky/ui";
-import { LuPalette, LuSlidersHorizontal } from "react-icons/lu";
+import { LuPalette, LuSlidersHorizontal, LuSparkles } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { useColor } from "../display/useColor";
-import {
-  SATURATION_CHIPS,
-  activeSaturationChip,
-  isNativeColor,
-  isCalibrated,
-} from "../display/color";
+import { useNight } from "../display/useNight";
+import { useHdr } from "../display/useHdr";
+import { isNativeColor, isCalibrated } from "../display/color";
 import { ProfileSelector } from "../components/ProfileSelector";
 import { ContainedSlider } from "../components/ContainedSlider";
 import { Collapsible } from "../components/Collapsible";
 import { OledLookCard } from "../components/OledLookCard";
-import { ColorCalibration } from "../components/ColorCalibration";
+import { AdvancedColor } from "../components/AdvancedColor";
+import { NightModeCard } from "../components/NightModeCard";
+import { HdrPanel } from "../components/HdrPanel";
 import { segmentGroupStyle, segmentItemStyle } from "../components/segmented";
 
 /** Pantalla: panel color. One-tap OLED look (per model) → saturation (per-game) →
@@ -25,8 +24,10 @@ export const PantallaSection: FC = () => {
   const { t } = useI18n();
   const {
     state, scope, game, revertIn, setScope,
-    onSaturation, onCalibration, confirmCalibration, onOledLook, onReset,
+    onSaturation, onCalibration, confirmCalibration, onOledLook, onPreset, onReset,
   } = useColor();
+  const night = useNight();
+  const hdr = useHdr();
 
   if (!state) return null;
 
@@ -41,14 +42,13 @@ export const PantallaSection: FC = () => {
   }
 
   const active = !isNativeColor(state);
-  const activeChip = activeSaturationChip(state.saturation);
   const chip = (on: boolean): CSSProperties => ({
     ...segmentItemStyle(on),
     flex: 1,
     padding: "6px 4px",
   });
 
-  return (
+  const sdrBody = (
     <>
       {/* Confirm-or-auto-revert bar for an unconfirmed calibration change (the
           "changing screen resolution" safety pattern). Prominent + always visible. */}
@@ -99,6 +99,26 @@ export const PantallaSection: FC = () => {
       {/* One-tap per-model OLED look — hidden on real OLED panels (oled_look null). */}
       {state.oled_look && <OledLookCard active={active} onApply={onOledLook} onReset={onReset} />}
 
+      {/* Ambiente — one-tap balanced looks (global, tuned per panel). */}
+      <PanelSectionRow>
+        <div style={{ ...theme.card, padding: theme.space.md, overflow: "hidden" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+            <LuSparkles size={16} color={theme.color.accent} />
+            <span style={{ fontSize: theme.font.body, fontWeight: 600, color: theme.color.textPrimary }}>
+              {t("display.look")}
+            </span>
+          </div>
+          <Focusable style={segmentGroupStyle}>
+            {state.presets.map((key) => (
+              <Focusable key={key} style={chip(state.active_preset === key)}
+                onActivate={() => onPreset(key)} onClick={() => onPreset(key)}>
+                {t(`display.look.${key}`)}
+              </Focusable>
+            ))}
+          </Focusable>
+        </div>
+      </PanelSectionRow>
+
       {/* Saturation — the hero, per-game (global + game override). */}
       <PanelSectionRow>
         <ProfileSelector
@@ -111,7 +131,7 @@ export const PantallaSection: FC = () => {
         />
       </PanelSectionRow>
       <PanelSectionRow>
-        <div style={{ ...theme.card, padding: theme.space.md, overflow: "hidden" }}>
+        <div style={{ ...theme.card, padding: theme.space.md, margin: `${theme.space.sm}px 0`, overflow: "hidden" }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 2 }}>
             <LuPalette size={16} color={theme.color.accent} />
             <span style={{ fontSize: theme.font.body, fontWeight: 600, color: theme.color.textPrimary }}>
@@ -123,25 +143,17 @@ export const PantallaSection: FC = () => {
           </div>
           <ContainedSlider value={state.saturation} min={0} max={200} step={5}
             scale={0.75} onChange={onSaturation} />
-          <Focusable style={{ ...segmentGroupStyle, marginTop: 4 }}>
-            {SATURATION_CHIPS.map((c) => (
-              <Focusable key={c.key} style={chip(activeChip === c.key)}
-                onActivate={() => onSaturation(c.value)} onClick={() => onSaturation(c.value)}>
-                {t(`display.sat.${c.key}`)}
-              </Focusable>
-            ))}
-          </Focusable>
         </div>
       </PanelSectionRow>
 
-      {/* Global panel calibration. */}
+      {/* Advanced color lab (global panel calibration). */}
       <Collapsible
-        id="color-calibration"
+        id="color-advanced"
         icon={<LuSlidersHorizontal size={16} />}
-        title={t("display.calibration")}
+        title={t("display.advanced")}
         summary={isCalibrated(state) ? t("display.custom") : t("display.native")}
       >
-        <ColorCalibration state={state} onChange={onCalibration} />
+        <AdvancedColor state={state} onChange={onCalibration} />
         {active && (
           <Focusable
             style={{
@@ -156,6 +168,24 @@ export const PantallaSection: FC = () => {
           </Focusable>
         )}
       </Collapsible>
+
+      {/* Night mode: scheduled warm shift, on top of the calibration. Only where the
+          host has color control (same gamescope path). */}
+      {night.state?.supported && (
+        <PanelSectionRow>
+          <NightModeCard state={night.state} onChange={night.update} />
+        </PanelSectionRow>
+      )}
+    </>
+  );
+
+  // The color lab is always active (it colors all composited/SDR content, even in HDR
+  // mode — only a native-HDR game is out of reach). HDR-capable panels also get a plain
+  // HDR on/off toggle at the bottom; it hides nothing.
+  return (
+    <>
+      {sdrBody}
+      {hdr.state?.supported && <HdrPanel state={hdr.state} onChange={hdr.update} />}
     </>
   );
 };

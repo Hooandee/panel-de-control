@@ -82,10 +82,13 @@ y se te dice claramente por qué, en lugar de fingir que funciona.
 
 ### Pantalla
 
-Calibración de color del panel a través de gamescope: saturación por juego, temperatura y contraste
-globales, y un preset "Aspecto OLED" de un toque para los paneles que no son OLED. Trae un
-temporizador de confirmación que revierte los cambios solo si algo se ve mal, para que no te quedes
-con una pantalla ilegible.
+Calibración de color del panel a través de gamescope, convertida en un pequeño laboratorio: ambientes
+de un toque (Nativo, Cine, Vivo, Cómodo) afinados por tipo de panel, saturación por juego y un modo
+avanzado con temperatura, contraste, gamma, tono, nivel de negro, vivacidad y balance manual de
+blancos (RGB). Incluye un modo nocturno que calienta la pantalla, siempre o en el horario que elijas,
+y un preset "Aspecto OLED" para los paneles que no son OLED. Un temporizador de confirmación revierte
+los cambios solo si algo se ve mal, para que no te quedes con una pantalla ilegible. En los paneles
+con HDR (Steam Deck OLED y Legion Go 2) hay además un interruptor de HDR.
 
 ### Mandos
 

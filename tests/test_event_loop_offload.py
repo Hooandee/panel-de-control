@@ -139,7 +139,8 @@ def test_reapply_all_offloads_tdp_fans_and_color(tmp_path, monkeypatch):
         p._reapply_all()  # sync, but under a running loop
 
     asyncio.run(_run())
-    # tdp + fans + color offloaded; charge/cpu/gpu-clock stay inline (sysfs).
+    # tdp + fans + color offloaded; charge/cpu/gpu-clock stay inline (sysfs); hdr only
+    # offloads when it's enabled+supported (off by default here).
     assert rec.count == 3
 
 
@@ -228,8 +229,8 @@ def test_apply_rpcs_keep_subprocess_backends_off_the_loop_thread(tmp_path, monke
     async def drive():
         loop_tid = threading.get_ident()
         await p.set_saturation(150, "global", None)
-        await p.set_calibration(-20, 15)
-        await p.preview_calibration(-10, 10)
+        await p.set_calibration({"temperature": -20, "contrast": 15})
+        await p.preview_calibration({"temperature": -10, "contrast": 10})
         await p.reset_color()
         await p.set_fan_preset("balanced", "global", None)
         await p.set_fan_curve_points([[40, 30], [60, 50], [80, 90]], "global", None)

@@ -10,6 +10,8 @@ OLED", never "convierte en OLED".
 can carry its own calibrated `oled_look` to override the generic one.
 """
 
+from display.const import is_oled
+
 # Universal LCD enhancement toward the OLED look: a clear vibrancy boost + a
 # contrast lift (the real differentiator — OLED's deep blacks read as "pop"),
 # neutral temperature. Punchy enough to be obviously different, still tasteful.
@@ -26,6 +28,6 @@ def oled_look_for(device):
     """The OLED-look preset for a device, or None if the feature does not apply
     (the device already has an OLED panel). LCD => the device's own calibrated look
     if present, else the generic one."""
-    if getattr(device, "panel", "lcd") == "oled":
+    if is_oled(device):
         return None
     return device.oled_look or GENERIC_OLED_LOOK

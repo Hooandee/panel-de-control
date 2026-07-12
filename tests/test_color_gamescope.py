@@ -1,3 +1,4 @@
+from display.const import NATIVE
 from display.gamescope import (
     _PROBE_RETRY_S,
     GamescopeColorBackend,
@@ -5,8 +6,6 @@ from display.gamescope import (
     is_native,
     transform,
 )
-
-NATIVE = {"saturation": 100, "temperature": 0, "contrast": 0}
 
 _PTS = [(0.0, 0.0, 0.0), (0.5, 0.3, 0.7), (1.0, 1.0, 1.0), (0.8, 0.2, 0.4)]
 
@@ -56,10 +55,75 @@ def test_contrast_negative_flattens_toward_mid():
 
 def test_endpoints_and_all_outputs_clamped_0_1():
     for st in [{**NATIVE, "saturation": 200, "temperature": 100},
-               {**NATIVE, "contrast": 100}, {**NATIVE, "contrast": -100}]:
+               {**NATIVE, "contrast": 100}, {**NATIVE, "contrast": -100},
+               {**NATIVE, "gamma": 100, "gain_r": 150, "gain_b": 150},
+               {**NATIVE, "gamma": -100}, {**NATIVE, "hue": 100, "saturation": 200},
+               {**NATIVE, "vibrance": 100, "saturation": 200},
+               {**NATIVE, "black": 100}, {**NATIVE, "black": -100, "contrast": -60}]:
         for p in _PTS:
             for v in transform(*p, st):
                 assert 0.0 <= v <= 1.0
+
+
+# ---- advanced color fields (all missing => neutral, so pre-existing states are safe) ----
+
+def test_gamma_positive_brightens_midtones():
+    r, _, _ = transform(0.5, 0.5, 0.5, {**NATIVE, "gamma": 100})
+    assert r > 0.5
+
+
+def test_gamma_negative_darkens_midtones():
+    r, _, _ = transform(0.5, 0.5, 0.5, {**NATIVE, "gamma": -100})
+    assert r < 0.5
+
+
+def test_gamma_leaves_endpoints_fixed():
+    for p in [(0.0, 0.0, 0.0), (1.0, 1.0, 1.0)]:
+        assert _close(transform(*p, {**NATIVE, "gamma": 80}), p, tol=1e-4)
+
+
+def test_rgb_gain_scales_only_its_channel():
+    r, g, b = transform(0.5, 0.5, 0.5, {**NATIVE, "gain_r": 120, "gain_b": 80})
+    assert r > 0.5 and b < 0.5 and _close((g,), (0.5,))
+
+
+def test_hue_leaves_gray_unchanged():
+    # A hue rotation is achromatic-preserving: neutral grey stays grey.
+    for v in (0.2, 0.5, 0.8):
+        assert _close(transform(v, v, v, {**NATIVE, "hue": 100}), (v, v, v), tol=1e-4)
+
+
+def test_hue_shifts_a_colored_pixel():
+    base = transform(0.8, 0.2, 0.2, NATIVE)
+    rot = transform(0.8, 0.2, 0.2, {**NATIVE, "hue": 100})
+    assert not _close(rot, base, tol=1e-3)
+
+
+def test_black_positive_raises_black_point_keeps_white():
+    r, _, _ = transform(0.0, 0.0, 0.0, {**NATIVE, "black": 100})
+    assert r > 0.0                                   # black lifted (shadow detail)
+    assert _close(transform(1.0, 1.0, 1.0, {**NATIVE, "black": 100}), (1.0, 1.0, 1.0), tol=1e-6)
+
+
+def test_black_negative_deepens_shadows_keeps_white():
+    r, _, _ = transform(0.08, 0.08, 0.08, {**NATIVE, "black": -100})
+    assert r == 0.0                                  # near-black crushed to 0
+    assert _close(transform(1.0, 1.0, 1.0, {**NATIVE, "black": -100}), (1.0, 1.0, 1.0), tol=1e-6)
+
+
+def test_vibrance_leaves_gray_unchanged():
+    assert _close(transform(0.5, 0.5, 0.5, {**NATIVE, "vibrance": 100}), (0.5, 0.5, 0.5), tol=1e-6)
+
+
+def test_vibrance_boosts_low_saturation_more_than_high():
+    def spread(px, st):
+        r, g, b = transform(*px, st)
+        return max(r, g, b) - min(r, g, b)
+    low = (0.55, 0.5, 0.45)   # barely saturated
+    high = (0.95, 0.15, 0.1)  # already vivid
+    low_gain = spread(low, {**NATIVE, "vibrance": 100}) - spread(low, NATIVE)
+    high_gain = spread(high, {**NATIVE, "vibrance": 100}) - spread(high, NATIVE)
+    assert low_gain > 0 and low_gain > high_gain
 
 
 # ---- .cube generation ----
