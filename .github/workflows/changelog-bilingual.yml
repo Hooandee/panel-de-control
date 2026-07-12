@@ -1,0 +1,21 @@
+name: changelog-bilingual
+
+# Blocks a PR whose newest CHANGELOG.md section isn't bilingual (every English entry
+# needs a matching Spanish "**ES:**" one). Runs on the release-please PR before merge,
+# so a monolingual release can never reach main. release-please writes English only,
+# so the Spanish line is added by hand on the release PR and this check enforces it.
+on:
+  pull_request:
+    paths: ["CHANGELOG.md"]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - run: python3 scripts/changelog_notes.py --check

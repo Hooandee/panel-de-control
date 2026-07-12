@@ -1,12 +1,13 @@
 name: release-notes-language
 
-# The in-app updater shows the GitHub release body verbatim. release-please
-# generates it in English only, so this fails loudly if a published (or edited)
-# release is missing either language section, keeping the notes bilingual.
+# The in-app updater shows the GitHub release body verbatim. The release-body workflow
+# rewrites it into both languages right after publish; this is the safety net that fails
+# loudly if an edited release ever ends up missing either language section. Runs on
+# edited (not published) so it validates the rewritten body, not the raw English one.
 
 on:
   release:
-    types: [published, edited]
+    types: [edited]
 
 permissions:
   contents: read
