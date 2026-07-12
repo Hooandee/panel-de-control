@@ -2,18 +2,28 @@ import json
 
 from json_store import atomic_json_save
 from display.const import NATIVE as _NATIVE
+from display.const import CALIBRATION as _CALIBRATION
 
-# `saturation` is the only PER-GAME field; `temperature`/`contrast` are panel
-# calibration (global only). Saturation is unipolar (0..200, 100 = neutral);
-# temperature/contrast are bipolar (0 = neutral). Neutral baseline: display.const.
-# Contrast is floored at -60 (k=0.4): still legible even at the extreme, so a mis-drag
-# can never flatten the panel to an unreadable grey (belt + the confirm timer).
+# Contrast is floored at -60 and each gain at 50 so a mis-drag can never crush the panel
+# to an unreadable grey/black. Every field in NATIVE must have a range here.
 _RANGES = {
     "saturation": (0, 200),
     "temperature": (-100, 100),
     "contrast": (-60, 60),
+    "gamma": (-100, 100),
+    "hue": (-100, 100),
+    "black": (-100, 100),
+    "gain_r": (50, 150),
+    "gain_g": (50, 150),
+    "gain_b": (50, 150),
+    "vibrance": (-100, 100),
 }
-_CALIBRATION = ("temperature", "contrast")
+
+# A missing range would KeyError out of the synchronous _init (hanging the panel);
+# fail loudly at import instead.
+_missing = set(_NATIVE) - set(_RANGES)
+if _missing:
+    raise RuntimeError(f"color fields without a range: {sorted(_missing)}")
 
 
 def _clamp(field, value):
@@ -24,10 +34,20 @@ def _clamp(field, value):
         return _NATIVE[field]
 
 
+def sanitize_calibration(fields):
+    """Clamp a calibration patch to the safe ranges — the one definition of "safe",
+    used by both the live preview and the saved value. Returns only known calibration
+    fields, as clamped ints."""
+    if not isinstance(fields, dict):
+        return {}
+    return {f: _clamp(f, fields[f]) for f in _CALIBRATION if f in fields}
+
+
 class ColorStore:
     """Panel color settings, persisted atomically. HYBRID scope: `saturation` is
-    per-game (global + per-appid override, inheriting global); calibration
-    (temperature/contrast) is panel-level → GLOBAL only. Never raises on load.
+    per-game (global + per-appid override, inheriting global); the calibration fields
+    (everything else — temperature/contrast/gamma/hue/gains/vibrance) are panel-level
+    → GLOBAL only. Never raises on load.
 
     effective(appid) = calibration always from global, saturation from the game
     override if present else global.

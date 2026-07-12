@@ -8,6 +8,7 @@ WAYLAND_DISPLAY=gamescope-0 gamescopectl set_look <file>` (needs root).
 The color transform (transform/build_cube) is pure; the socket discovery + subprocess
 call is the thin device layer. Unsupported (UI hidden) when no gamescope socket answers."""
 import glob
+import math
 import os
 import subprocess
 import tempfile
@@ -20,43 +21,106 @@ _PROBE_RETRY_S = 5.0  # min interval between probes of a present-but-unresponsiv
 
 # Rec.709 luma weights (saturation pivots around perceived brightness).
 _LR, _LG, _LB = 0.2126, 0.7152, 0.0722
-# How hard the extreme temperature/contrast ends push (kept tasteful, not garish).
-_TEMP_GAIN = 0.3
+_TEMP_GAIN = 0.3     # temperature push at ±100
+_HUE_MAX_DEG = 30.0  # hue rotation at ±100
+_BLACK_MAX = 0.15    # black-point shift at ±100
 
 
 def _clamp01(v):
     return 0.0 if v < 0.0 else 1.0 if v > 1.0 else v
 
 
-def transform(r, g, b, state):
-    """Apply the color look to one (r,g,b) in 0..1. Order: temperature (warm↔cool
-    white balance) → saturation (around luma) → contrast (around mid-grey). All
-    outputs clamped 0..1; a native state is the identity.
+def _toward_luma(r, g, b, f):
+    """Scale each channel's distance from its luma by f (f=0 → grey, 1 → unchanged,
+    >1 → more saturated). The shared core of saturation and vibrance."""
+    y = _LR * r + _LG * g + _LB * b
+    return y + f * (r - y), y + f * (g - y), y + f * (b - y)
 
-    temperature: -100 cool .. +100 warm (0 neutral). contrast: -100 flat .. +100
-    punchy (0 neutral). saturation: 0 grayscale .. 100 neutral .. 200 vivid."""
-    # temperature: warm (>0) raises red, lowers blue; cool (<0) the reverse.
-    t = state.get("temperature", 0) / 100.0
+
+def _black(v, k):
+    """Shift the black point by k in (-1, 1). k>0 raises it (greyer blacks, more shadow
+    detail); k<0 deepens it (crushes near-blacks). White (1) is left fixed either way."""
+    return k + (1.0 - k) * v if k >= 0.0 else (v + k) / (1.0 + k)
+
+
+def _gpow(v, exp):
+    """Gamma on one channel; base clamped >=0 so a fractional exponent never returns
+    a complex number (endpoints 0 and 1 stay fixed)."""
+    return (v if v <= 0.0 else v ** exp)
+
+
+def _hue_matrix(deg):
+    """Luma-preserving hue-rotation matrix (SVG feColorMatrix); every row sums to 1 so
+    grey is unchanged."""
+    a = math.radians(deg)
+    c, s = math.cos(a), math.sin(a)
+    return (
+        (0.213 + c * 0.787 - s * 0.213, 0.715 - c * 0.715 - s * 0.715, 0.072 - c * 0.072 + s * 0.928),
+        (0.213 - c * 0.213 + s * 0.143, 0.715 + c * 0.285 + s * 0.140, 0.072 - c * 0.072 - s * 0.283),
+        (0.213 - c * 0.213 - s * 0.787, 0.715 - c * 0.715 + s * 0.715, 0.072 + c * 0.928 + s * 0.072),
+    )
+
+
+def _coeffs(state):
+    """Precompute the per-look coefficients once — they're invariant across the LUT, so
+    build_cube derives them a single time rather than re-reading `state` per node."""
+    gm, h, bl = state.get("gamma", 0), state.get("hue", 0), state.get("black", 0)
+    return (
+        state.get("gain_r", 100) / 100.0,
+        state.get("gain_g", 100) / 100.0,
+        state.get("gain_b", 100) / 100.0,
+        state.get("temperature", 0) / 100.0,
+        (2.0 ** (-gm / 100.0)) if gm else None,          # gamma exponent
+        state.get("saturation", 100) / 100.0,
+        state.get("vibrance", 0) / 100.0,
+        _hue_matrix(h * _HUE_MAX_DEG / 100.0) if h else None,
+        1.0 + state.get("contrast", 0) / 100.0,          # contrast k
+        (bl / 100.0 * _BLACK_MAX) if bl else None,        # black-point shift
+    )
+
+
+def _apply(r, g, b, c):
+    """Apply precomputed coefficients to one (r,g,b). Order: per-channel gain →
+    temperature → gamma → saturation → vibrance (spares vivid pixels) → hue → contrast
+    → black point. All outputs clamped 0..1."""
+    gr, gg, gb, t, gexp, s, v, hmat, k, kb = c
+    r, g, b = r * gr, g * gg, b * gb
     r *= 1.0 + _TEMP_GAIN * t
     b *= 1.0 - _TEMP_GAIN * t
-    # saturation around luma.
-    s = state.get("saturation", 100) / 100.0
-    y = _LR * r + _LG * g + _LB * b
-    r, g, b = y + s * (r - y), y + s * (g - y), y + s * (b - y)
-    # contrast around mid-grey (0.5). k in 0..2 (1 = neutral).
-    k = 1.0 + state.get("contrast", 0) / 100.0
+    if gexp is not None:
+        r, g, b = _gpow(r, gexp), _gpow(g, gexp), _gpow(b, gexp)
+    r, g, b = _toward_luma(r, g, b, s)
+    if v:
+        sat = max(r, g, b) - min(r, g, b)
+        r, g, b = _toward_luma(r, g, b, 1.0 + v * (1.0 - _clamp01(sat)))
+    if hmat is not None:
+        (m00, m01, m02), (m10, m11, m12), (m20, m21, m22) = hmat
+        r, g, b = (m00 * r + m01 * g + m02 * b,
+                   m10 * r + m11 * g + m12 * b,
+                   m20 * r + m21 * g + m22 * b)
     r, g, b = (r - 0.5) * k + 0.5, (g - 0.5) * k + 0.5, (b - 0.5) * k + 0.5
+    if kb is not None:
+        r, g, b = _black(r, kb), _black(g, kb), _black(b, kb)
     return _clamp01(r), _clamp01(g), _clamp01(b)
+
+
+def transform(r, g, b, state):
+    """Apply the color look to one (r,g,b) in 0..1. A native state is the identity.
+
+    temperature/contrast/gamma/hue/vibrance/black: -100..+100 (0 neutral). gain_r/g/b:
+    50..150 (100 = 1.0). saturation: 0 grayscale .. 100 neutral .. 200 vivid."""
+    return _apply(r, g, b, _coeffs(state))
 
 
 def build_cube(state, size=_LUT_SIZE):
     """A .cube 3D LUT text realising `state` (red index varies fastest — .cube spec)."""
     n = size - 1
+    c = _coeffs(state)
     lines = ['TITLE "panel-de-control"', f"LUT_3D_SIZE {size}"]
     for bi in range(size):
         for gi in range(size):
             for ri in range(size):
-                ro, go, bo = transform(ri / n, gi / n, bi / n, state)
+                ro, go, bo = _apply(ri / n, gi / n, bi / n, c)
                 lines.append(f"{ro:.5f} {go:.5f} {bo:.5f}")
     return "\n".join(lines) + "\n"
 
@@ -80,6 +144,16 @@ def _run(args, env):
         return p.returncode, (p.stdout or "")
     except (OSError, subprocess.SubprocessError):
         return 1, ""
+
+
+def run_gamescopectl(args, socket_glob="/run/user/*/gamescope-*"):
+    """Run `gamescopectl <args>` against the live gamescope Wayland socket. Returns
+    (rc, stdout); rc=1 when no socket is present. Used by the HDR backend."""
+    for sock in sorted(glob.glob(socket_glob)):
+        env = {"XDG_RUNTIME_DIR": os.path.dirname(sock),
+               "WAYLAND_DISPLAY": os.path.basename(sock)}
+        return _run(["gamescopectl", *args], env)
+    return 1, ""
 
 
 class GamescopeColorBackend:

@@ -341,13 +341,24 @@ export const installUpdate = callable<[], InstallResult>("install_update");
 export const restartLoader = callable<[], void>("restart_loader");
 
 // ---- Pantalla (panel color via gamescope) ---------------------------------
-// Saturation is PER-GAME (global + per-appid); the calibration fields
-// (temperature/contrast) are panel-level → GLOBAL. See ColorPreset for ranges.
+// Saturation is PER-GAME (global + per-appid); every other field is panel-level
+// calibration → GLOBAL. See ColorPreset for ranges.
 export interface ColorPreset {
   saturation: number;   // 0..200, 100 neutral (per-game)
   temperature: number;  // -100 cool .. +100 warm, 0 neutral (global)
   contrast: number;     // -100 flat .. +100 punchy, 0 neutral (global)
+  gamma: number;        // -100 dark .. +100 bright midtones, 0 neutral (global)
+  hue: number;          // -100 .. +100 tint rotation, 0 neutral (global)
+  black: number;        // -100 deepen .. +100 lift black point, 0 neutral (global)
+  gain_r: number;       // 50..150, 100 = 1.0 — manual white balance (global)
+  gain_g: number;
+  gain_b: number;
+  vibrance: number;     // -100 mute .. +100 boost (spares vivid pixels), 0 neutral (global)
 }
+
+// Calibration = a ColorPreset minus the per-game saturation. The key list lives in
+// display/color.ts (kept free of this module's @decky/api import).
+export type Calibration = Omit<ColorPreset, "saturation">;
 
 export interface ColorState extends ColorPreset {
   // False when the host has no gamescope color control → UI shows an honest note.
@@ -366,6 +377,10 @@ export interface ColorState extends ColorPreset {
   // gamescope composition so the look shows in-game) → the UI notes it (by name).
   perf_cost: boolean;
   device_name: string;
+  // One-tap balanced looks available on this panel (native first) + the one the global
+  // color currently matches (null = a custom look).
+  presets: string[];
+  active_preset: string | null;
 }
 
 // ---- GPU clock (Potencia) -------------------------------------------------
@@ -387,12 +402,52 @@ export const getColorState = callable<[], ColorState>("get_color_state");
 export const setSaturation =
   callable<[value: number, scope: Scope, appid: string | null], ColorState>("set_saturation");
 // Preview calibration live (arms the backend auto-revert); confirm with setCalibration.
+// Both take the full calibration object (backend picks the known fields + clamps).
 export const previewCalibration =
-  callable<[temperature: number, contrast: number], ColorState>("preview_calibration");
+  callable<[calibration: Calibration], ColorState>("preview_calibration");
 export const setCalibration =
-  callable<[temperature: number, contrast: number], ColorState>("set_calibration");
+  callable<[calibration: Calibration], ColorState>("set_calibration");
 export const applyOledLook = callable<[], ColorState>("apply_oled_look");
 export const resetColor = callable<[], ColorState>("reset_color");
+// Apply a balanced full-color look globally ("native" = back to the panel's own look).
+export const applyColorPreset =
+  callable<[key: string], ColorState>("apply_color_preset");
+
+// ---- Night mode (scheduled warm shift) ------------------------------------
+export interface NightState {
+  supported: boolean;
+  warmth: number;            // 0..100, added-warmth in temperature units
+  enabled: boolean;          // master on/off
+  schedule_enabled: boolean; // while enabled: true = by time window, false = always
+  start: number;             // window start, minute-of-day (0..1439)
+  end: number;               // window end, minute-of-day
+  active: boolean;           // whether the warm shift is applied right now
+}
+
+export interface NightPatch {
+  warmth?: number;
+  enabled?: boolean;
+  schedule_enabled?: boolean;
+  start?: number;
+  end?: number;
+}
+
+export const getNightState = callable<[], NightState>("get_night_state");
+export const setNight = callable<[patch: NightPatch], NightState>("set_night");
+
+// ---- HDR output -----------------------------------------------------------
+// On/off only: HDR content scans out directly, so its color can't be tuned from here.
+export interface HdrState {
+  supported: boolean;   // HDR-capable panel + gamescope present
+  enabled: boolean;
+}
+
+export interface HdrPatch {
+  enabled?: boolean;
+}
+
+export const getHdrState = callable<[], HdrState>("get_hdr_state");
+export const setHdr = callable<[patch: HdrPatch], HdrState>("set_hdr");
 
 // ---- Mandos (controller manager) ------------------------------------------
 export interface ControllerConflict {
