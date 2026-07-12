@@ -1,0 +1,29 @@
+name: release-body
+
+# The in-app updater shows the GitHub release body verbatim. release-please writes it
+# in English (the raw changelog section, with links). Rebuild it from the changelog's
+# English/Spanish bullets into a clean, link-free, Spanish-first note, so every release
+# is bilingual with no manual step.
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write # edit the release notes
+
+jobs:
+  fill:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          persist-credentials: false
+      - name: Rewrite release notes from the changelog
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          python3 scripts/changelog_notes.py --release-body > "$RUNNER_TEMP/notes.md"
+          gh release edit "$TAG" --notes-file "$RUNNER_TEMP/notes.md"
