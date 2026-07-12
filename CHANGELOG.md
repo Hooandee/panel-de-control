@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.14.0...panel-de-control-v0.15.0) (2026-07-12)
+
+
+### Features
+
+* display color lab, per-panel looks, night mode and HDR toggle ([#168](https://github.com/Hooandee/panel-de-control/issues/168)) ([e1e5c4d](https://github.com/Hooandee/panel-de-control/commit/e1e5c4d6323561d1e47a29c7ffb1c3d92b003659))
+
 ## [0.14.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.13.0...panel-de-control-v0.14.0) (2026-07-11)
 
 
