@@ -1,4 +1,4 @@
-import { FC, useEffect, useState } from "react";
+import { FC, useCallback, useEffect, useState } from "react";
 import { DialogButton, Dropdown, PanelSectionRow } from "@decky/ui";
 import { LuGamepad2, LuRotateCcw } from "react-icons/lu";
 
@@ -21,6 +21,7 @@ import {
   valueToTarget,
 } from "../mandos/logic";
 import { useRunningGame } from "../tdp/useRunningGame";
+import { useScopeSync } from "../useScopeSync";
 import { ProfileSelector } from "../components/ProfileSelector";
 import { Loading } from "../components/Loading";
 
@@ -109,7 +110,6 @@ export const MandosSection: FC = () => {
   const { t } = useI18n();
   const game = useRunningGame();
   const [config, setConfig] = useState<ControllerConfig | null>(null);
-  const [scope, setScope] = useState<Scope>("global");
 
   // Fetch on mount + whenever the running game changes (the backend keys the remap
   // by the running appid). Clear first so a game switch can't show the previous
@@ -120,10 +120,14 @@ export const MandosSection: FC = () => {
     getControllerConfig().then(setConfig).catch(() => {});
   }, [appid]);
 
-  // Keep the scope tab in sync with the running game's ACTIVE remap (own vs global).
-  useEffect(() => {
-    if (config) setScope(appid && !config.follows_global ? "game" : "global");
-  }, [appid, config?.follows_global]);
+  // The scope tab reflects the running game's active remap and IS the control (shared
+  // wiring): Global makes the game follow the global remap, the game tab activates its
+  // own, neither deletes the other.
+  const applyFollow = useCallback(
+    (f: boolean, a: string) => { setControllerFollowGlobal(f, a).then(setConfig).catch(() => {}); },
+    [],
+  );
+  const { scope, onScope } = useScopeSync(appid, config?.follows_global, applyFollow);
 
   if (!config) return <Loading />;
 
@@ -134,12 +138,6 @@ export const MandosSection: FC = () => {
   const targetAppid = scope === "game" && game ? game.appid : null;
   const targetScope: Scope = targetAppid ? "game" : "global";
 
-  // The tab IS the control: Global makes the running game follow the global remap; the
-  // game tab activates its own. Neither deletes the other.
-  const onScope = (next: Scope) => {
-    setScope(next);
-    if (appid) setControllerFollowGlobal(next === "global", appid).then(setConfig).catch(() => {});
-  };
   const onSetButton = (source: string, value: string) =>
     // Empty value = the "Default" option → send no targets so the backend reverts
     // this one button to the device default.

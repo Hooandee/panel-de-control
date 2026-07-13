@@ -9,6 +9,7 @@ import { useLayout } from "../customize/store";
 import { visibleIds } from "../customize/layout";
 import { blockOrder } from "../customize/manifest";
 import { useRunningGame } from "../tdp/useRunningGame";
+import { useScopeSync } from "../useScopeSync";
 
 /**
  * Power section: owns the TDP state (global/per-game scope, running game, the
@@ -20,7 +21,6 @@ export const PotenciaSection: FC = () => {
   const game = useRunningGame();
   const [tdp, setTdp] = useState<TdpState | null>(null);
   const [power, setPower] = useState<PowerDraw | null>(null);
-  const [scope, setScope] = useState<TdpScope>("global");
   const commitTimerWatts = useRef<ReturnType<typeof setTimeout> | null>(null);
   const commitTimerLevels = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -46,23 +46,14 @@ export const PotenciaSection: FC = () => {
     refresh();
   }, [appid, refresh]);
 
-  // Keep the selected tab in sync with the game's ACTIVE profile: "game" when it uses
-  // its own value, "global" when it follows the global one (or no game is running).
-  useEffect(() => {
-    if (!tdp) return;
-    setScope(appid && !tdp.follows_global ? "game" : "global");
-  }, [appid, tdp?.follows_global]);
-
-  // The scope tab IS the control: picking Global makes the running game follow the global
-  // profile (applies it now); picking the game activates its own value. Neither deletes
-  // the other — the backend keeps both and just switches which one is live.
-  const onScope = useCallback(
-    (next: TdpScope) => {
-      setScope(next);
-      if (appid) setTdpFollowGlobal(next === "global", appid).then(setTdp).catch(() => {});
-    },
-    [appid],
+  // The scope tab reflects the game's active profile and IS the control (shared wiring):
+  // picking Global makes the running game follow the global profile, the game tab
+  // activates its own, neither deletes the other.
+  const applyFollow = useCallback(
+    (f: boolean, a: string) => { setTdpFollowGlobal(f, a).then(setTdp).catch(() => {}); },
+    [],
   );
+  const { scope, onScope } = useScopeSync(appid, tdp?.follows_global, applyFollow);
 
   // Resolve the RPC target/scope from the current scope + running game. Falls
   // back to global when in game scope without a running game.

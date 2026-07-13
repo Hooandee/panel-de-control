@@ -13,6 +13,7 @@ import {
   Scope,
 } from "../api";
 import { useRunningGame } from "../tdp/useRunningGame";
+import { useScopeSync } from "../useScopeSync";
 import { pickCalibration } from "./color";
 
 export interface ColorControl {
@@ -39,7 +40,6 @@ export interface ColorControl {
 export function useColor(): ColorControl {
   const game = useRunningGame();
   const [state, setState] = useState<ColorState | null>(null);
-  const [scope, setScope] = useState<Scope>("global");
   const [revertIn, setRevertIn] = useState<number | null>(null);
   const commit = useRef<ReturnType<typeof setTimeout> | null>(null);
   const countdown = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -68,21 +68,12 @@ export function useColor(): ColorControl {
     refresh();
   }, [appid, refresh, stopCountdown]);
 
-  // Keep the tab in sync with the game's ACTIVE saturation profile (own vs global).
-  useEffect(() => {
-    if (!state) return;
-    setScope(appid && !state.follows_global ? "game" : "global");
-  }, [appid, state?.follows_global]);
-
-  // The tab IS the control: Global makes the running game follow the global saturation;
-  // the game tab activates its own. Neither deletes the other.
-  const onScope = useCallback(
-    (next: Scope) => {
-      setScope(next);
-      if (appid) setColorFollowGlobal(next === "global", appid).then(setState).catch(() => {});
-    },
-    [appid],
+  // The scope tab reflects the game's active profile and IS the control (shared wiring).
+  const applyFollow = useCallback(
+    (f: boolean, a: string) => { setColorFollowGlobal(f, a).then(setState).catch(() => {}); },
+    [],
   );
+  const { scope, onScope } = useScopeSync(appid, state?.follows_global, applyFollow);
 
   useEffect(() => () => {
     if (commit.current) clearTimeout(commit.current);

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CpuState, TdpScope, getCpuState, setActiveCores, setCpuBoost, setCpuFollowGlobal, setSmt } from "../api";
 import { useRunningGame } from "../tdp/useRunningGame";
+import { useScopeSync } from "../useScopeSync";
 
 const POLL_MS = 3000; // topology/freq change rarely
 
@@ -22,7 +23,6 @@ export interface CpuController {
 export function useCpu(): CpuController {
   const game = useRunningGame();
   const [state, setState] = useState<CpuState | null>(null);
-  const [scope, setScope] = useState<TdpScope>("global");
   const pending = useRef(false);
   const appid = game?.appid;
 
@@ -45,29 +45,15 @@ export function useCpu(): CpuController {
     };
   }, [appid]);
 
-  // Keep the card's tab in sync with the game's ACTIVE CPU profile (own vs global).
-  useEffect(() => {
-    if (!state) return;
-    setScope(appid && !state.follows_global ? "game" : "global");
-  }, [appid, state?.follows_global]);
+  // The card's tab reflects the game's active profile and IS the control (shared wiring).
+  // The pending guard stops a poll landing mid-write from clobbering the optimistic state.
+  const applyFollow = useCallback((f: boolean, a: string) => {
+    pending.current = true;
+    setCpuFollowGlobal(f, a).then(setState).catch(() => {}).finally(() => { pending.current = false; });
+  }, []);
+  const { scope, onScope } = useScopeSync(appid, state?.follows_global, applyFollow);
 
   const target = scope === "game" ? (appid ?? null) : null;
-
-  // The card's tab IS the control: Global makes the running game follow the global CPU
-  // controls; the game tab activates its own. Neither deletes the other.
-  const onScope = useCallback(
-    (next: TdpScope) => {
-      setScope(next);
-      if (appid) {
-        pending.current = true;
-        setCpuFollowGlobal(next === "global", appid)
-          .then(setState)
-          .catch(() => {})
-          .finally(() => { pending.current = false; });
-      }
-    },
-    [appid],
-  );
 
   const apply = useCallback(
     (optimistic: (s: CpuState) => CpuState, rpc: () => Promise<CpuState>) => {

@@ -13,6 +13,7 @@ import {
   FanPreset,
 } from "../api";
 import { useRunningGame } from "../tdp/useRunningGame";
+import { useScopeSync } from "../useScopeSync";
 import { Point } from "./curve";
 
 export interface FanCurveControl {
@@ -49,7 +50,6 @@ export function shownPoints(s: FanCurveState | null): Point[] | null {
 export function useFanCurve(): FanCurveControl {
   const game = useRunningGame();
   const [state, setState] = useState<FanCurveState | null>(null);
-  const [scope, setScope] = useState<FanScope>("global");
   const [saved, setSaved] = useState(false);
   const commit = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -75,22 +75,14 @@ export function useFanCurve(): FanCurveControl {
     refresh();
   }, [appid, refresh]);
 
-  // Keep the tab in sync with the game's ACTIVE fan profile: "game" when it uses its
-  // own curve, "global" when it follows global (or no game).
-  useEffect(() => {
-    if (!state) return;
-    setScope(appid && !state.follows_global ? "game" : "global");
-  }, [appid, state?.follows_global]);
-
-  // The tab IS the control: Global makes the running game follow the global curve;
-  // the game tab activates its own. Neither deletes the other (backend keeps both).
-  const onScope = useCallback(
-    (next: FanScope) => {
-      setScope(next);
-      if (appid) setFanFollowGlobal(next === "global", appid).then(setState).catch(() => {});
-    },
-    [appid],
+  // The scope tab reflects the game's active fan profile and IS the control (shared
+  // wiring): picking Global makes the running game follow the global curve, the game
+  // tab activates its own, neither deletes the other.
+  const applyFollow = useCallback(
+    (f: boolean, a: string) => { setFanFollowGlobal(f, a).then(setState).catch(() => {}); },
+    [],
   );
+  const { scope, onScope } = useScopeSync(appid, state?.follows_global, applyFollow);
 
   // Don't fire a debounced sysfs write after the tab unmounts mid-drag.
   useEffect(() => () => {

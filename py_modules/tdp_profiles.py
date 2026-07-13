@@ -1,6 +1,4 @@
-import json
-
-from json_store import atomic_json_save
+from scoped_store import ScopedProfileStore
 
 # Auto-mode boost derivation (single source of truth). When off2/off3 are None the
 # rails are derived from PL1: PL2 = 1.2x, PL3 = 1.4x (matches historical behavior).
@@ -12,28 +10,27 @@ def _derive(pl1):
     return round(pl1 * _AUTO_PL2_RATIO), round(pl1 * _AUTO_PL3_RATIO)
 
 
-class ProfileStore:
-    """Global TDP profile + per-appid overrides, persisted atomically as JSON.
+class ProfileStore(ScopedProfileStore):
+    """Global TDP profile + per-appid overrides. See ScopedProfileStore for the scope
+    contract.
 
     A profile is {pl1, off2, off3}: pl1 is sustained watts; off2/off3 are the boost
     MARGINS stacked above (SPPT = pl1 + off2, FPPT = SPPT + off3). off2/off3 == None
     means AUTO (derived from pl1). Storing margins (not absolute watts) keeps the user's
     intent intact when pl1 moves and a rail clamps at the hardware ceiling (no bounce).
-    Migrates the old {"watts": w} and flat {pl1,pl2,pl3} shapes."""
+    Also carries per-scope auto_tdp + gpu clock. Migrates the old {"watts": w} and flat
+    {pl1,pl2,pl3} shapes."""
 
     def __init__(self, path, default_watts):
-        self._path = path
         self._default = int(default_watts)
-        self._data = self._load()
+        super().__init__(path)
 
     def _auto(self, w):
         return {"pl1": int(w), "off2": None, "off3": None}
 
-    def _clean(self, raw):
+    def _clean_global(self, raw):
         base = self._clean_values(raw)
         if isinstance(raw, dict):
-            if raw.get("follow_global"):
-                base["follow_global"] = True  # game-only: preserved across reload
             if raw.get("auto_tdp"):
                 base["auto_tdp"] = True
             g = raw.get("gpu")
@@ -68,45 +65,6 @@ class ProfileStore:
             return self._auto(int(raw["watts"]))
         return self._auto(self._default)
 
-    def _load(self):
-        try:
-            with open(self._path) as f:
-                raw = json.load(f)
-        except (OSError, ValueError):
-            raw = {}
-        glob = self._clean(raw.get("global"))
-        games = {}
-        for appid, prof in (raw.get("games") or {}).items():
-            games[str(appid)] = self._clean(prof)
-        return {"global": glob, "games": games}
-
-    def _save(self):
-        atomic_json_save(self._path, self._data)
-
-    def _profile(self, appid):
-        if appid is not None and str(appid) in self._data["games"]:
-            return self._data["games"][str(appid)]
-        return self._data["global"]
-
-    def is_following_global(self, appid):
-        """True when this game applies the global profile: either it has no own
-        profile, or its own profile is toggled to follow global. Its stored values
-        are never deleted — following global just deactivates them."""
-        g = self._data["games"].get(str(appid)) if appid is not None else None
-        return g is None or bool(g.get("follow_global"))
-
-    def set_follow_global(self, appid, follow):
-        """Toggle a game between applying its own profile and following the global
-        one, WITHOUT discarding its stored values. No-op if the game has no profile."""
-        g = self._data["games"].get(str(appid))
-        if g is not None:
-            g["follow_global"] = bool(follow)
-            self._save()
-
-    def _effective_prof(self, appid):
-        """The profile dict a game applies: global when it follows global, else own."""
-        return self._data["global"] if self.is_following_global(appid) else self._profile(appid)
-
     # Auto-TDP and GPU-clock are part of the Potencia profile: per-scope, gated by the
     # same follow_global as the TDP value (one tab governs the whole section).
     def auto_tdp(self, appid):
@@ -135,27 +93,6 @@ class ProfileStore:
             pl2 = pl1 + prof["off2"]
             pl3 = pl2 + prof["off3"]
         return {"pl1": pl1, "pl2": pl2, "pl3": pl3, "watts": pl1, "auto": auto}
-
-    def has_game(self, appid):
-        return str(appid) in self._data["games"]
-
-    def list_games(self):
-        return list(self._data["games"].keys())
-
-    def create_game_from_global(self, appid):
-        self._data["games"][str(appid)] = dict(self._data["global"])
-        self._save()
-
-    def _target(self, scope, appid):
-        if scope == "global":
-            return self._data["global"]
-        if scope == "game":
-            if appid is None:
-                raise ValueError("appid required for game scope")
-            prof = self._data["games"].setdefault(str(appid), dict(self._data["global"]))
-            prof["follow_global"] = False  # editing a game value activates its own profile
-            return prof
-        raise ValueError(f"unknown scope: {scope}")
 
     def set_pl1(self, scope, pl1, appid=None):
         """Set sustained watts, keeping the auto/manual margin mode intact.
@@ -191,4 +128,3 @@ class ProfileStore:
         prof["off2"] = max(0, int(pl2) - int(pl1))
         prof["off3"] = max(0, int(pl3) - int(pl2))
         self._save()
-

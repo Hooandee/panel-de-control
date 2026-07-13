@@ -1,6 +1,4 @@
-import json
-
-from json_store import atomic_json_save
+from scoped_store import ScopedProfileStore
 from display.const import NATIVE as _NATIVE
 from display.const import CALIBRATION as _CALIBRATION
 
@@ -43,16 +41,10 @@ def sanitize_calibration(fields):
     return {f: _clamp(f, fields[f]) for f in _CALIBRATION if f in fields}
 
 
-class ColorStore:
-    """Panel color settings, persisted atomically. The WHOLE profile (saturation +
-    calibration: temperature/contrast/gamma/hue/gains/vibrance) is per-game: global +
-    per-appid override with a `follow_global` toggle (never deletes). Mirrors
-    ProfileStore. effective(appid) = the game's own profile, or global when it follows
-    global / has none. Never raises on load."""
-
-    def __init__(self, path):
-        self._path = path
-        self._data = self._load()
+class ColorStore(ScopedProfileStore):
+    """Panel color settings. The WHOLE profile (saturation + calibration:
+    temperature/contrast/gamma/hue/gains/vibrance + HDR mode) is per-game. See
+    ScopedProfileStore for the scope contract."""
 
     def _clean_global(self, raw):
         raw = raw if isinstance(raw, dict) else {}
@@ -76,41 +68,6 @@ class ColorStore:
             prof["follow_global"] = True
         return prof
 
-    def _load(self):
-        try:
-            with open(self._path) as f:
-                raw = json.load(f)
-        except (OSError, ValueError):
-            raw = {}
-        if not isinstance(raw, dict):
-            raw = {}
-        glob = self._clean_global(raw.get("global"))
-        games = {}
-        for appid, prof in (raw.get("games") or {}).items():
-            if isinstance(prof, dict):
-                games[str(appid)] = self._clean_game(prof, glob)
-        return {"global": glob, "games": games}
-
-    def _save(self):
-        atomic_json_save(self._path, self._data)
-
-    def is_following_global(self, appid):
-        """True when this game applies the global color profile: no own profile, or its
-        own is toggled to follow global. Own values are never deleted."""
-        g = self._data["games"].get(str(appid)) if appid is not None else None
-        return g is None or bool(g.get("follow_global"))
-
-    def set_follow_global(self, appid, follow):
-        g = self._data["games"].get(str(appid))
-        if g is not None:
-            g["follow_global"] = bool(follow)
-            self._save()
-
-    def _effective_prof(self, appid):
-        if self.is_following_global(appid):
-            return self._data["global"]
-        return self._data["games"].get(str(appid), self._data["global"])
-
     def effective(self, appid):
         e = self._effective_prof(appid)
         return {f: e[f] for f in _NATIVE}
@@ -121,27 +78,6 @@ class ColorStore:
     def set_hdr(self, scope, enabled, appid=None):
         self._target(scope, appid)["hdr"] = bool(enabled)
         self._save()
-
-    def has_game(self, appid):
-        return str(appid) in self._data["games"]
-
-    def _copy_global(self):
-        return {k: v for k, v in self._data["global"].items() if k != "follow_global"}
-
-    def create_game_from_global(self, appid):
-        self._data["games"][str(appid)] = self._copy_global()
-        self._save()
-
-    def _target(self, scope, appid):
-        if scope == "global":
-            return self._data["global"]
-        if scope == "game":
-            if appid is None:
-                raise ValueError("appid required for game scope")
-            prof = self._data["games"].setdefault(str(appid), self._copy_global())
-            prof["follow_global"] = False  # editing a value activates the game's own profile
-            return prof
-        raise ValueError(f"unknown scope: {scope}")
 
     def set_saturation(self, scope, value, appid=None):
         self._target(scope, appid)["saturation"] = _clamp("saturation", value)
