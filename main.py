@@ -1885,9 +1885,9 @@ class Plugin:
             "supports_advanced": ("pl2" in ll or "pl3" in ll),
             "level_limits": ll,
             "levels": levels,
-            "auto": eff["auto"],
+            "boost_mode": eff["mode"],
             "global_levels": global_levels,
-            "global_auto": geff["auto"],
+            "global_boost_mode": geff["mode"],
             # The learned band for this game (powers the separate TDP suggestion card).
             # The battery↔performance dial that picks a value inside it is now LOCAL UI
             # state — applying it is a fixed manual setpoint, not a loop parameter.
@@ -1947,15 +1947,16 @@ class Plugin:
         return {"requested_w": res.requested_w, "applied_w": res.applied_w,
                 "ok": res.ok, "detail": res.detail}
 
-    async def reset_tdp_auto(self, scope: str, appid=None) -> dict:
+    async def set_tdp_boost_mode(self, mode: str, scope: str, appid=None) -> dict:
+        """Set the boost behaviour (estable/auto/custom) for a scope and re-apply.
+        Returns the full new state so the UI updates the segmented control + rails in
+        ONE round-trip (the frontend does setTdp with it), avoiding a transient
+        mode/rails mismatch."""
         self._init()
         resolved = self._resolve_scope(scope, appid)
-        # Always return the full new state so the UI updates badge + sliders in ONE
-        # round-trip (no separate get_tdp_state) — immediate, and a consistent
-        # TdpState shape (the frontend does setTdp with it).
         if resolved is not None:  # invalid scope → no-op (never from the UI)
             self._clear_eco()
-            self._tdp_profiles.set_auto(resolved, appid=appid)
+            self._tdp_profiles.set_boost_mode(resolved, mode, appid=appid)
             await self._offload_call(self._reapply_tdp)
         return self._tdp_state(await self._read_applied())
 

@@ -270,7 +270,7 @@ def test_get_tdp_state_reads_applied_off_the_loop_thread(tmp_path, monkeypatch):
     assert read_threads and main_tid not in read_threads  # read_applied off the loop
 
 
-def test_reset_tdp_auto_reads_applied_off_the_loop_thread(tmp_path, monkeypatch):
+def test_set_tdp_boost_mode_reads_applied_off_the_loop_thread(tmp_path, monkeypatch):
     p, _ = _make_plugin(tmp_path, monkeypatch)
 
     read_threads = []
@@ -284,7 +284,7 @@ def test_reset_tdp_auto_reads_applied_off_the_loop_thread(tmp_path, monkeypatch)
     ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
     p._apply_executor = ex
     main_tid = threading.get_ident()
-    asyncio.run(p.reset_tdp_auto("global"))
+    asyncio.run(p.set_tdp_boost_mode("auto", "global"))
     ex.shutdown()
     assert read_threads and main_tid not in read_threads
 

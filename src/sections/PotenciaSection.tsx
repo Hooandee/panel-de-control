@@ -1,6 +1,6 @@
 import { FC, useCallback, useEffect, useRef, useState } from "react";
 
-import { getTdpState, setTdpWatts, setTdpLevels, resetTdpAuto, getPowerDraw, setAutoTdp, TdpState, TdpScope, PowerDraw } from "../api";
+import { getTdpState, setTdpWatts, setTdpLevels, setTdpBoostMode, getPowerDraw, setAutoTdp, TdpState, TdpScope, PowerDraw, BoostMode } from "../api";
 import { TdpSection } from "../components/TdpSection";
 import { GpuClockCard } from "../components/GpuClockCard";
 import { AutoTdpToggle } from "../components/AutoTdpToggle";
@@ -82,8 +82,8 @@ export const PotenciaSection: FC = () => {
         const base = sc === "global" ? cur.global_levels : cur.levels;
         const nl = { pl1: base.pl1, pl2: base.pl1 + off2, pl3: base.pl1 + off2 + off3 };
         return sc === "global"
-          ? { ...cur, global_levels: nl, global_auto: false }
-          : { ...cur, levels: nl, auto: false };
+          ? { ...cur, global_levels: nl, global_boost_mode: "custom" }
+          : { ...cur, levels: nl, boost_mode: "custom" };
       });
       if (commitTimerLevels.current) clearTimeout(commitTimerLevels.current);
       commitTimerLevels.current = setTimeout(() => {
@@ -93,12 +93,11 @@ export const PotenciaSection: FC = () => {
     [resolveTarget, refresh],
   );
 
-  // Reset is a discrete action: badge + rails must update together. The RPC returns
-  // the full new state so we apply it in ONE round-trip (no separate get_tdp_state) —
-  // immediate, and no transient "Auto badge with old manual sliders" mismatch.
-  const onResetAuto = useCallback(() => {
+  // The RPC returns the full new state so the segmented control + rails update
+  // together in one round-trip (no transient mode/rail mismatch).
+  const onSetMode = useCallback((mode: BoostMode) => {
     const { target, sc } = resolveTarget();
-    resetTdpAuto(sc, target).then(setTdp).catch(() => {});
+    setTdpBoostMode(mode, sc, target).then(setTdp).catch(() => {});
   }, [resolveTarget]);
 
   const onAutoTdp = useCallback(
@@ -149,7 +148,7 @@ export const PotenciaSection: FC = () => {
         onScope={setScope}
         onWatts={onWatts}
         onSetLevels={onSetLevels}
-        onResetAuto={onResetAuto}
+        onSetMode={onSetMode}
         onApplySuggestion={onApplySuggestion}
       />
       <SectionBlocks

@@ -50,8 +50,9 @@ presets rápidos, y puedes guardar un perfil global o uno propio por juego.
 - **Auto-TDP.** Un modo automático que observa la carga de la GPU y sube o baja la potencia sola
   para darte los fotogramas que necesitas gastando lo mínimo. Aprende de cómo juegas y se
   autocorrige; no hace falta que toques nada.
-- **Modos avanzados.** Si tu firmware lo permite, un apartado plegable para afinar los límites de
-  boost (SPPT y FPPT) como márgenes sobre el límite base.
+- **Boost.** Si tu firmware lo permite, eliges cómo se comportan los raíles SPPT y FPPT: Estable
+  (lo que fijas es lo que gasta, el modo por defecto), Auto (un margen de boost gestionado) o
+  Personalizado (ajustas los márgenes a mano).
 - **Frecuencia de GPU.** Fija el reloj mínimo y máximo de la gráfica.
 
 ### Sistema
@@ -114,7 +115,7 @@ Leyenda: **✅** comprobado en ese equipo · **⚠️** limitado o solo por defe
 | Característica | Steam Deck LCD | Steam Deck OLED | ROG Ally | ROG Ally X | ROG Xbox Ally X | Legion Go | Legion Go S | Legion Go 2 | MSI Claw 8 AI+ |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
 | Límite de TDP | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Modos avanzados (SPPT/FPPT) | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹](#notas) |
+| Boost (SPPT/FPPT) | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹](#notas) |
 | Auto-TDP por carga de GPU | ✅ [²](#notas) | ✅ [²](#notas) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [³](#notas) |
 | Frecuencia de GPU | ❔ [⁴](#notas) | ❔ [⁴](#notas) | ❔ [⁴](#notas) | ❔ [⁴](#notas) | ❔ [⁴](#notas) | ❔ [⁴](#notas) | ❔ [⁴](#notas) | ❔ [⁴](#notas) | ❔ [⁴](#notas) |
 | Batería: estado y salud | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |

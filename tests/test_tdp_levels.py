@@ -51,16 +51,16 @@ def test_set_levels_writes_each_clamped_pl1_last(tmp_path):
     assert rd("ppt_pl3_fppt") == "19"
 
 
-def test_set_tdp_still_works_and_derives_boost(tmp_path):
+def test_set_tdp_writes_flat_rails(tmp_path):
     root = str(tmp_path)
     base = _mk(root)
     b = FirmwareAttrBackend("asus-armoury", FALLBACK, root=root)
     res = b.set_tdp(20, ac=True)
     assert res.ok and res.applied_w == 20
+    # single-value entry writes all rails flat (SPPT=FPPT=PL1); no derived boost
     assert open(os.path.join(base, "ppt_pl1_spl", "current_value")).read().strip() == "20"
-    # pl2/pl3 derived above pl1 (>=20), clamped to their maxima
-    assert int(open(os.path.join(base, "ppt_pl2_sppt", "current_value")).read()) >= 20
-    assert int(open(os.path.join(base, "ppt_pl3_fppt", "current_value")).read()) >= 20
+    assert open(os.path.join(base, "ppt_pl2_sppt", "current_value")).read().strip() == "20"
+    assert open(os.path.join(base, "ppt_pl3_fppt", "current_value")).read().strip() == "20"
 
 
 def test_null_set_levels_degrades():

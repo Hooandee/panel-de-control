@@ -151,13 +151,13 @@ class FirmwareAttrBackend(TDPBackend):
         return TdpResult(pl1, applied, success, detail)
 
     def set_tdp(self, watts, ac):
+        # Single-value entry: write all rails flat (SPPT = FPPT = PL1). Boost headroom
+        # is opt-in via set_levels, never implied by a bare TDP value.
         if not self.supported:
             return TdpResult(watts, None, False, "firmware-attributes path not present")
         lim = self.get_limits()
         target = lim.clamp(watts, ac)
-        pl2 = max(target, round(target * _PL2_BOOST_RATIO))
-        pl3 = max(target, round(target * _PL3_BOOST_RATIO))
-        return self.set_levels(target, pl2, pl3, ac)
+        return self.set_levels(target, target, target, ac)
 
     def read_applied(self):
         return self._read_int(self._attr("ppt_pl1_spl"))
