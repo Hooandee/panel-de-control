@@ -199,41 +199,47 @@ export const MandosSection: FC = () => {
         {/* InputPlumber: real per-button remap editor, per-game (global + game). */}
         {config.kind === "remap" && (
           <Card title={t("mandos.remap.title")}>
-            <div style={{ marginBottom: theme.space.sm }}>
-              <ProfileSelector
-                scope={scope}
-                gameName={game?.name ?? null}
-                hasGameProfile={config.has_game_profile ?? false}
-                globalLabel={t("tdp.scope.global")}
-                inheritHint={t("mandos.inherit")}
-                onScope={onScope}
-              />
-            </div>
-            {buttons.map((b) => (
-              // b.label is the literal silkscreen name (Y1/M2/…) — render as-is.
-              <RemapRow key={b.source} label={b.label}>
-                <Dropdown
-                  rgOptions={targetGroups}
-                  selectedOption={currentTargetValue(b.target ?? [])}
-                  strDefaultLabel={t("mandos.remap.default")}
-                  onChange={(o) => onSetButton(b.source, o.data as string)}
-                />
-              </RemapRow>
-            ))}
-            {/* Honest footnote: no buttons → why (unknown model vs a transient
-                empty-caps read, distinguished by device_known); otherwise the
-                global-scope reminder. */}
-            <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, margin: `${theme.space.sm}px 0`, lineHeight: 1.4 }}>
-              {buttons.length === 0
-                ? t(config.device_known === false ? "mandos.remap.uncalibrated" : "mandos.remap.nobuttons")
-                : t("mandos.remap.note")}
-            </div>
-            <DialogButton
-              style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: theme.space.xs }}
-              onClick={onReset}
-            >
-              <LuRotateCcw size={14} /> {t("mandos.remap.reset")}
-            </DialogButton>
+            {buttons.length === 0 ? (
+              // No remappable buttons for this model → nothing to scope per game. Show
+              // the honest reason and point to Steam Input for per-game layouts, no
+              // scope tab / reset for an empty editor.
+              <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, lineHeight: 1.4 }}>
+                {t(config.device_known === false ? "mandos.remap.uncalibrated" : "mandos.remap.nobuttons")}
+              </div>
+            ) : (
+              <>
+                <div style={{ marginBottom: theme.space.sm }}>
+                  <ProfileSelector
+                    scope={scope}
+                    gameName={game?.name ?? null}
+                    hasGameProfile={config.has_game_profile ?? false}
+                    globalLabel={t("tdp.scope.global")}
+                    inheritHint={t("mandos.inherit")}
+                    onScope={onScope}
+                  />
+                </div>
+                {buttons.map((b) => (
+                  // b.label is the literal silkscreen name (Y1/M2/…) — render as-is.
+                  <RemapRow key={b.source} label={b.label}>
+                    <Dropdown
+                      rgOptions={targetGroups}
+                      selectedOption={currentTargetValue(b.target ?? [])}
+                      strDefaultLabel={t("mandos.remap.default")}
+                      onChange={(o) => onSetButton(b.source, o.data as string)}
+                    />
+                  </RemapRow>
+                ))}
+                <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, margin: `${theme.space.sm}px 0`, lineHeight: 1.4 }}>
+                  {t("mandos.remap.note")}
+                </div>
+                <DialogButton
+                  style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: theme.space.xs }}
+                  onClick={onReset}
+                >
+                  <LuRotateCcw size={14} /> {t("mandos.remap.reset")}
+                </DialogButton>
+              </>
+            )}
           </Card>
         )}
 

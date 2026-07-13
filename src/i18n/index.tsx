@@ -61,7 +61,7 @@ const es: Record<string, string> = {
   "mandos.paddles.steam_input": "Steam Input",
   "mandos.paddles.noob": "Teclado/Overlay",
   "mandos.paddles.disabled": "Desactivado",
-  "mandos.remap.uncalibrated": "Aún no tenemos calibrados los botones extra de este modelo, así que el remapeo no está disponible aquí.",
+  "mandos.remap.uncalibrated": "En este modelo no remapeamos el mando por ahora. El remapeo por juego se hace en Steam Input.",
   "mandos.remap.nobuttons": "No detectamos botones remapeables ahora mismo. Si acabas de reiniciar, espera unos segundos.",
   // Pantalla (color del panel)
   "display.oled.title": "Aspecto OLED",
@@ -393,7 +393,7 @@ const en: Record<string, string> = {
   "mandos.paddles.steam_input": "Steam Input",
   "mandos.paddles.noob": "Keyboard/Overlay",
   "mandos.paddles.disabled": "Disabled",
-  "mandos.remap.uncalibrated": "We haven't mapped this model's extra buttons yet, so remapping isn't available here.",
+  "mandos.remap.uncalibrated": "We don't remap the controller on this model for now. Per-game controller layouts are done in Steam Input.",
   "mandos.remap.nobuttons": "No remappable buttons detected right now. If you just restarted, give it a few seconds.",
   // Display (panel color)
   "display.oled.title": "OLED look",
