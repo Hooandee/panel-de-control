@@ -92,6 +92,28 @@ def test_per_game_profile_overrides_global(Plugin):
     assert asyncio.run(p.get_tdp_state())["watts"] == 20
 
 
+def test_follow_global_toggle_applies_and_keeps_own(Plugin):
+    p = Plugin()
+    asyncio.run(p.set_tdp_watts(20, "global"))
+    asyncio.run(p.set_current_game("42"))
+    asyncio.run(p.set_tdp_watts(10, "game", "42"))   # game's own value
+    assert asyncio.run(p.get_tdp_state())["watts"] == 10
+    st = asyncio.run(p.set_tdp_follow_global(True, "42"))  # follow global
+    assert st["follows_global"] is True and st["watts"] == 20
+    st = asyncio.run(p.set_tdp_follow_global(False, "42"))  # back to own, restored
+    assert st["follows_global"] is False and st["watts"] == 10
+
+
+def test_follow_own_on_game_without_profile_seeds_from_global(Plugin):
+    p = Plugin()
+    asyncio.run(p.set_tdp_watts(18, "global"))
+    asyncio.run(p.set_current_game("99"))            # no own profile yet
+    st = asyncio.run(p.set_tdp_follow_global(False, "99"))  # "use own" seeds from global
+    assert st["follows_global"] is False
+    assert st["has_game_profile"] is True
+    assert st["watts"] == 18
+
+
 def test_set_tdp_watts_game_without_appid_falls_back_to_global(Plugin):
     p = Plugin()
     res = asyncio.run(p.set_tdp_watts(20, "game", None))  # appid missing

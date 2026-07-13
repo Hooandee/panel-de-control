@@ -1,24 +1,14 @@
 from controllers import hhd_config, inputplumber
+from controllers.store import RemapStore
 
 
-class FakeStore:
-    def __init__(self, data=None):
-        self._d = dict(data or {})
-
-    def all(self):
-        return dict(self._d)
-
-    def set(self, s, t):
-        self._d[s] = t
-
-    def clear(self, s):
-        self._d.pop(s, None)
-
-    def replace(self, data):
-        self._d = dict(data)
-
-    def reset(self):
-        self._d = {}
+def _store(tmp_path, data=None):
+    """A real (file-backed) RemapStore, optionally seeded with a raw dict."""
+    import json
+    p = tmp_path / "remap.json"
+    if data is not None:
+        p.write_text(json.dumps(data))
+    return RemapStore(str(p))
 
 
 class FakeDbus:
@@ -53,8 +43,11 @@ class FakeDbus:
 CLAW = "msi_claw_8_ai_plus"  # caps LeftPaddle1/RightPaddle1 → silkscreen M2/M1
 
 
-def test_ip_get_config_lists_device_buttons_with_silkscreen_labels():
-    cfg = inputplumber.get_config(FakeStore(), FakeDbus(), CLAW)
+_MERGE = lambda baseline, overrides: "merged-yaml"  # noqa: E731 — the real one shells to system python
+
+
+def test_ip_get_config_lists_device_buttons_with_silkscreen_labels(tmp_path):
+    cfg = inputplumber.get_config(_store(tmp_path), FakeDbus(), CLAW)
     assert cfg["kind"] == "remap"
     assert cfg["device_known"] is True
     # Per-device table order; the Claw's two grips carry real silkscreen labels.
@@ -64,48 +57,71 @@ def test_ip_get_config_lists_device_buttons_with_silkscreen_labels():
     # Untouched buttons have no override yet.
     assert all(b["target"] is None for b in cfg["buttons"])
     assert "South" in cfg["gamepad_targets"] and "KeyEsc" in cfg["key_targets"]
+    # No game → follows global, no own profile.
+    assert cfg["follows_global"] is True and cfg["has_game_profile"] is False
 
 
-def test_ip_get_config_unknown_device_has_no_buttons_but_stays_honest():
-    cfg = inputplumber.get_config(FakeStore(), FakeDbus(), "legion_go_s")
+def test_ip_get_config_unknown_device_has_no_buttons_but_stays_honest(tmp_path):
+    cfg = inputplumber.get_config(_store(tmp_path), FakeDbus(), "legion_go_s")
     assert cfg["kind"] == "remap"
     assert cfg["device_known"] is False
     assert cfg["buttons"] == []
 
 
-def test_ip_set_button_stores_and_applies():
-    store, dbus = FakeStore(), FakeDbus()
-    # Inject a fake merge (the real one shells out to the system python for YAML).
-    fake_merge = lambda baseline, overrides: "merged-yaml"  # noqa: E731
+def test_ip_set_button_stores_and_applies(tmp_path):
+    store, dbus = _store(tmp_path), FakeDbus()
     cfg = inputplumber.set_button(store, dbus, CLAW, "LeftPaddle1", [{"gamepad": "South"}],
-                                  merge=fake_merge)
-    assert store.all()["LeftPaddle1"] == [{"gamepad": "South"}]
+                                  merge=_MERGE)
+    assert store.overrides_for("global")["LeftPaddle1"] == [{"gamepad": "South"}]
     assert dbus.reset_called is True   # rebuilt from the pristine default
     assert dbus.loaded == "merged-yaml"  # the merged profile was loaded
     by_src = {b["source"]: b["target"] for b in cfg["buttons"]}
     assert by_src["LeftPaddle1"] == [{"gamepad": "South"}]
 
 
-def test_ip_set_button_empty_reverts_to_default():
-    store = FakeStore({"LeftPaddle1": [{"gamepad": "South"}]})
-    inputplumber.set_button(store, FakeDbus(), CLAW, "LeftPaddle1", [{"key": "bad"}])
-    assert "LeftPaddle1" not in store.all()  # cleared → device default
+def test_ip_set_button_empty_reverts_to_default(tmp_path):
+    store = _store(tmp_path, {"LeftPaddle1": [{"gamepad": "South"}]})
+    inputplumber.set_button(store, FakeDbus(), CLAW, "LeftPaddle1", [{"key": "bad"}], merge=_MERGE)
+    assert "LeftPaddle1" not in store.overrides_for("global")  # cleared → device default
 
 
-def test_ip_set_button_ignores_source_not_on_this_device():
+def test_ip_set_button_ignores_source_not_on_this_device(tmp_path):
     # RightPaddle2 is a real Legion cap but the Claw has no such physical button.
-    store, dbus = FakeStore(), FakeDbus()
-    inputplumber.set_button(store, dbus, CLAW, "RightPaddle2", [{"gamepad": "South"}])
-    assert store.all() == {}
+    store, dbus = _store(tmp_path), FakeDbus()
+    inputplumber.set_button(store, dbus, CLAW, "RightPaddle2", [{"gamepad": "South"}], merge=_MERGE)
+    assert store.overrides_for("global") == {}
     assert dbus.loaded is None
 
 
-def test_ip_reset_clears_and_loads_default():
-    store = FakeStore({"LeftPaddle1": [{"gamepad": "South"}]})
+def test_ip_reset_clears_and_loads_default(tmp_path):
+    store = _store(tmp_path, {"LeftPaddle1": [{"gamepad": "South"}]})
     dbus = FakeDbus()
     inputplumber.reset(store, dbus)
-    assert store.all() == {}
+    assert store.overrides_for("global") == {}
     assert dbus.reset_called is True
+
+
+def test_ip_per_game_scope_is_independent_from_global(tmp_path):
+    # A game remap doesn't touch global, activates its own profile, and shows in its scope.
+    store, dbus = _store(tmp_path, {"RightPaddle1": [{"gamepad": "North"}]}), FakeDbus()
+    inputplumber.set_button(store, dbus, CLAW, "LeftPaddle1", [{"gamepad": "South"}],
+                            scope="game", appid="1234", merge=_MERGE)
+    assert store.overrides_for("game", "1234")["LeftPaddle1"] == [{"gamepad": "South"}]
+    assert "LeftPaddle1" not in store.overrides_for("global")   # global untouched
+    assert store.overrides_for("global")["RightPaddle1"] == [{"gamepad": "North"}]
+    # Editing a game value activated its own profile, and get_config (effective) now
+    # shows THAT game's remap — not the global one — for the running game.
+    cfg = inputplumber.get_config(store, dbus, CLAW, appid="1234")
+    assert cfg["follows_global"] is False and cfg["has_game_profile"] is True
+    by_src = {b["source"]: b["target"] for b in cfg["buttons"]}
+    assert by_src["LeftPaddle1"] == [{"gamepad": "South"}]  # game's own value, effective
+
+
+def test_ip_apply_effective_uses_global_when_following(tmp_path):
+    store, dbus = _store(tmp_path, {"LeftPaddle1": [{"gamepad": "South"}]}), FakeDbus()
+    # A game with no own profile follows global → applies the global overrides.
+    assert inputplumber.apply_effective(store, dbus, "999", merge=_MERGE) is True
+    assert dbus.loaded == "merged-yaml"
 
 
 # ---- HHD config ------------------------------------------------------------

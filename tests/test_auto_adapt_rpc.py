@@ -177,6 +177,10 @@ def _run_loop_ticks(p, reads, monkeypatch):
     seq = itertools.chain(reads, itertools.repeat(reads[-1]))
     p._power_reader.read = lambda: next(seq)
     p._reset_auto_windows()
+    # Auto-TDP is per-game now; these tests exercise the control law, so enable it for
+    # whichever scope is active.
+    _scope = "game" if p._current_appid is not None else "global"
+    p._tdp_profiles.set_auto_tdp(_scope, True, appid=p._current_appid)
 
     state = {"n": 0, "sleeps": 0}
     real_decide = main_mod.auto_tdp.decide
@@ -323,6 +327,7 @@ def test_set_ui_active_bumps_pl1_up_when_below_floor(Plugin):
     p._settings["qam_tdp_boost"] = True
     p._current_appid = "g"
     p._tdp_profiles.set_pl1("game", 7, appid="g")  # sunk to device min
+    p._tdp_profiles.set_auto_tdp("game", True, appid="g")
     assert asyncio.run(p.set_ui_active(True)) is True
     from auto_tdp import RESPONSIVE_FLOOR_W
     assert p._effective_levels("g")[0]["pl1"] == RESPONSIVE_FLOOR_W  # bumped up
@@ -370,6 +375,7 @@ def test_ui_floor_engaged_true_only_when_raising(Plugin):
     p._settings["qam_tdp_boost"] = True
     p._current_appid = "g"
     p._tdp_profiles.set_pl1("game", 7, appid="g")
+    p._tdp_profiles.set_auto_tdp("game", True, appid="g")
     asyncio.run(p.set_ui_active(True))  # bumps to the floor
     assert asyncio.run(p.get_power_draw())["ui_floor_engaged"] is True
     # A demanding game parked above the floor → the number IS the in-game one.

@@ -118,6 +118,22 @@ def test_core_control_offlines_and_onlines(tmp_path):
     assert cc.active() == 4
 
 
+def test_core_control_onlines_offlined_cpus_at_init(tmp_path):
+    # A prior core-limit may have left CPUs offline (and the kernel drops their topology
+    # → the count collapses). Init must bring every present CPU back online so max_cores
+    # is the true hardware max, not a stale offlined subset. _apply_cpu re-applies any
+    # saved limit afterwards.
+    root = str(tmp_path)
+    _make_cpu_tree(root, cores=4)
+    base = "sys/devices/system/cpu"
+    for i in (2, 3, 4, 5, 6, 7):
+        _write(root, f"{base}/cpu{i}/online", "0")
+    cc = CoreControl(root=root)
+    assert cc.max_cores == 4
+    for i in (2, 3, 4, 5, 6, 7):
+        assert open(f"{root}/{base}/cpu{i}/online").read().strip() == "1"
+
+
 def test_core_control_never_offlines_cpu0_core(tmp_path):
     root = str(tmp_path)
     _make_cpu_tree(root, cores=4)

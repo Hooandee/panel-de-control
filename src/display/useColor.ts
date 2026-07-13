@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   getColorState,
   setSaturation,
+  setColorFollowGlobal,
   previewCalibration,
   setCalibration,
   applyOledLook,
@@ -20,7 +21,7 @@ export interface ColorControl {
   game: ReturnType<typeof useRunningGame>;
   /** Seconds left before an unconfirmed calibration auto-reverts (null = none pending). */
   revertIn: number | null;
-  setScope: (s: Scope) => void;
+  onScope: (s: Scope) => void;
   onSaturation: (value: number) => void;
   onCalibration: (patch: Partial<ColorPreset>) => void;
   confirmCalibration: () => void;
@@ -64,9 +65,24 @@ export function useColor(): ColorControl {
   useEffect(() => {
     if (commit.current) clearTimeout(commit.current);
     stopCountdown();
-    setScope(appid ? "game" : "global");
     refresh();
   }, [appid, refresh, stopCountdown]);
+
+  // Keep the tab in sync with the game's ACTIVE saturation profile (own vs global).
+  useEffect(() => {
+    if (!state) return;
+    setScope(appid && !state.follows_global ? "game" : "global");
+  }, [appid, state?.follows_global]);
+
+  // The tab IS the control: Global makes the running game follow the global saturation;
+  // the game tab activates its own. Neither deletes the other.
+  const onScope = useCallback(
+    (next: Scope) => {
+      setScope(next);
+      if (appid) setColorFollowGlobal(next === "global", appid).then(setState).catch(() => {});
+    },
+    [appid],
+  );
 
   useEffect(() => () => {
     if (commit.current) clearTimeout(commit.current);
@@ -115,23 +131,27 @@ export function useColor(): ColorControl {
     }, 200);
   }, [startCountdown]);
 
+  // Write target for the active scope (game writes need the appid; global ignores it).
+  const wScope: Scope = scope === "game" && game ? "game" : "global";
+  const wTarget = wScope === "game" && game ? game.appid : null;
+
   const confirmCalibration = useCallback(() => {
     const cur = stateRef.current;
     if (!cur) return;
     stopCountdown();
     if (commit.current) clearTimeout(commit.current);
-    setCalibration(pickCalibration(cur)).then(setState).catch(() => {});
-  }, [stopCountdown]);
+    setCalibration(pickCalibration(cur), wScope, wTarget).then(setState).catch(() => {});
+  }, [stopCountdown, wScope, wTarget]);
 
   const onOledLook = useCallback(() => {
     stopCountdown();
-    applyOledLook().then(setState).catch(() => {});
-  }, [stopCountdown]);
+    applyOledLook(wScope, wTarget).then(setState).catch(() => {});
+  }, [stopCountdown, wScope, wTarget]);
 
   const onPreset = useCallback((key: string) => {
     stopCountdown();
-    applyColorPreset(key).then(setState).catch(() => {});
-  }, [stopCountdown]);
+    applyColorPreset(key, wScope, wTarget).then(setState).catch(() => {});
+  }, [stopCountdown, wScope, wTarget]);
 
   const onReset = useCallback(() => {
     stopCountdown();
@@ -139,7 +159,7 @@ export function useColor(): ColorControl {
   }, [stopCountdown]);
 
   return {
-    state, scope, game, revertIn, setScope,
+    state, scope, game, revertIn, onScope,
     onSaturation, onCalibration, confirmCalibration, onOledLook, onPreset, onReset,
   };
 }

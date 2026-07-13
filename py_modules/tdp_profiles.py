@@ -30,6 +30,19 @@ class ProfileStore:
         return {"pl1": int(w), "off2": None, "off3": None}
 
     def _clean(self, raw):
+        base = self._clean_values(raw)
+        if isinstance(raw, dict):
+            if raw.get("follow_global"):
+                base["follow_global"] = True  # game-only: preserved across reload
+            if raw.get("auto_tdp"):
+                base["auto_tdp"] = True
+            g = raw.get("gpu")
+            if isinstance(g, dict):
+                base["gpu"] = {"manual": bool(g.get("manual")),
+                               "min": g.get("min"), "max": g.get("max")}
+        return base
+
+    def _clean_values(self, raw):
         if not isinstance(raw, dict):
             return self._auto(self._default)
         if "off2" in raw or "off3" in raw:  # current shape
@@ -75,8 +88,45 @@ class ProfileStore:
             return self._data["games"][str(appid)]
         return self._data["global"]
 
+    def is_following_global(self, appid):
+        """True when this game applies the global profile: either it has no own
+        profile, or its own profile is toggled to follow global. Its stored values
+        are never deleted — following global just deactivates them."""
+        g = self._data["games"].get(str(appid)) if appid is not None else None
+        return g is None or bool(g.get("follow_global"))
+
+    def set_follow_global(self, appid, follow):
+        """Toggle a game between applying its own profile and following the global
+        one, WITHOUT discarding its stored values. No-op if the game has no profile."""
+        g = self._data["games"].get(str(appid))
+        if g is not None:
+            g["follow_global"] = bool(follow)
+            self._save()
+
+    def _effective_prof(self, appid):
+        """The profile dict a game applies: global when it follows global, else own."""
+        return self._data["global"] if self.is_following_global(appid) else self._profile(appid)
+
+    # Auto-TDP and GPU-clock are part of the Potencia profile: per-scope, gated by the
+    # same follow_global as the TDP value (one tab governs the whole section).
+    def auto_tdp(self, appid):
+        return bool(self._effective_prof(appid).get("auto_tdp", False))
+
+    def set_auto_tdp(self, scope, enabled, appid=None):
+        self._target(scope, appid)["auto_tdp"] = bool(enabled)
+        self._save()
+
+    def gpu_clock(self, appid):
+        g = self._effective_prof(appid).get("gpu")
+        return dict(g) if g else {"manual": False, "min": None, "max": None}
+
+    def set_gpu_clock(self, scope, manual, gmin, gmax, appid=None):
+        self._target(scope, appid)["gpu"] = {"manual": bool(manual),
+                                              "min": int(gmin), "max": int(gmax)}
+        self._save()
+
     def effective(self, appid):
-        prof = self._profile(appid)
+        prof = self._effective_prof(appid)
         pl1 = prof["pl1"]
         auto = prof["off2"] is None
         if auto:
@@ -103,6 +153,7 @@ class ProfileStore:
             if appid is None:
                 raise ValueError("appid required for game scope")
             prof = self._data["games"].setdefault(str(appid), dict(self._data["global"]))
+            prof["follow_global"] = False  # editing a game value activates its own profile
             return prof
         raise ValueError(f"unknown scope: {scope}")
 

@@ -2,6 +2,7 @@ import { FC } from "react";
 import { ToggleField } from "@decky/ui";
 import { LuMemoryStick } from "react-icons/lu";
 
+import { TdpScope } from "../api";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { clamp } from "../system/logic";
@@ -10,10 +11,11 @@ import { Collapsible } from "./Collapsible";
 import { useGpuClock } from "../gpu/useGpuClock";
 
 /** GPU clock window (min/max MHz) in Potencia. Auto by default; manual pins/limits
- *  the clock — complements the TDP for fine control. Hidden where unsupported. */
-export const GpuClockCard: FC = () => {
+ *  the clock — complements the TDP for fine control. Hidden where unsupported.
+ *  Per-game/global: follows the same scope tab as the rest of Potencia. */
+export const GpuClockCard: FC<{ scope: TdpScope; appid: string | null }> = ({ scope, appid }) => {
   const { t } = useI18n();
-  const { state, setManual, setWindow } = useGpuClock();
+  const { state, setManual, setWindow } = useGpuClock(scope, appid);
 
   if (!state || !state.supported || state.range_min === null || state.range_max === null) {
     return null;

@@ -176,6 +176,15 @@ def test_generic_defaults_to_amd_when_cpuinfo_absent(tmp_path):
     assert prof.vendor == "amd"
 
 
+def test_generic_profile_ceiling_allows_modern_amd_range():
+    # An unrecognised AMD handheld on the ryzenadj path has no firmware bounds to read,
+    # so the generic profile ceiling IS the slider max. It must not strand a capable
+    # handheld at 15 W — the category sustains ~30 W with active cooling.
+    from device_profiles import GENERIC
+    assert GENERIC.tdp_max >= 30
+    assert GENERIC.tdp_max_charger >= 30
+
+
 def test_ally_x_has_charger_boost():
     prof = detect(product_name="ROG Ally X RC72LA_RC72LA")
     assert prof.tdp_max == 25

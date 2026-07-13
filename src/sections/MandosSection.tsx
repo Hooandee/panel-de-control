@@ -8,8 +8,10 @@ import {
   getControllerConfig,
   resetController,
   setControllerButton,
+  setControllerFollowGlobal,
   setControllerSetting,
   type ControllerConfig,
+  type Scope,
 } from "../api";
 import {
   currentTargetValue,
@@ -18,6 +20,8 @@ import {
   prettyTarget,
   valueToTarget,
 } from "../mandos/logic";
+import { useRunningGame } from "../tdp/useRunningGame";
+import { ProfileSelector } from "../components/ProfileSelector";
 import { Loading } from "../components/Loading";
 
 /** Raised card chrome with a titled header row. */
@@ -103,24 +107,47 @@ const RemapRow: FC<{ label: string; children: React.ReactNode }> = ({ label, chi
  */
 export const MandosSection: FC = () => {
   const { t } = useI18n();
+  const game = useRunningGame();
   const [config, setConfig] = useState<ControllerConfig | null>(null);
+  const [scope, setScope] = useState<Scope>("global");
 
+  // Fetch on mount + whenever the running game changes (the backend keys the remap
+  // by the running appid). Clear first so a game switch can't show the previous
+  // game's remap/scope until the new config lands.
+  const appid = game?.appid;
   useEffect(() => {
+    setConfig(null);
     getControllerConfig().then(setConfig).catch(() => {});
-  }, []);
+  }, [appid]);
+
+  // Keep the scope tab in sync with the running game's ACTIVE remap (own vs global).
+  useEffect(() => {
+    if (config) setScope(appid && !config.follows_global ? "game" : "global");
+  }, [appid, config?.follows_global]);
 
   if (!config) return <Loading />;
 
   const manager = config.manager;
   const version = config.manager_version;
 
+  // Write target for the active scope (a game write needs the appid; global ignores it).
+  const targetAppid = scope === "game" && game ? game.appid : null;
+  const targetScope: Scope = targetAppid ? "game" : "global";
+
+  // The tab IS the control: Global makes the running game follow the global remap; the
+  // game tab activates its own. Neither deletes the other.
+  const onScope = (next: Scope) => {
+    setScope(next);
+    if (appid) setControllerFollowGlobal(next === "global", appid).then(setConfig).catch(() => {});
+  };
   const onSetButton = (source: string, value: string) =>
     // Empty value = the "Default" option → send no targets so the backend reverts
     // this one button to the device default.
-    setControllerButton(source, value ? [valueToTarget(value)] : []).then(setConfig).catch(() => {});
+    setControllerButton(source, value ? [valueToTarget(value)] : [], targetScope, targetAppid)
+      .then(setConfig).catch(() => {});
   const onSetSetting = (field: string, value: string) =>
     setControllerSetting(field, value).then(setConfig).catch(() => {});
-  const onReset = () => resetController().then(setConfig).catch(() => {});
+  const onReset = () => resetController(targetScope, targetAppid).then(setConfig).catch(() => {});
 
   // Dropdown options: a "Default" entry (empty value → backend reverts that one
   // button to the device default) plus grouped buttons + keys.
@@ -171,9 +198,19 @@ export const MandosSection: FC = () => {
           </div>
         </Card>
 
-        {/* InputPlumber: real per-button remap editor. */}
+        {/* InputPlumber: real per-button remap editor, per-game (global + game). */}
         {config.kind === "remap" && (
           <Card title={t("mandos.remap.title")}>
+            <div style={{ marginBottom: theme.space.sm }}>
+              <ProfileSelector
+                scope={scope}
+                gameName={game?.name ?? null}
+                hasGameProfile={config.has_game_profile ?? false}
+                globalLabel={t("tdp.scope.global")}
+                inheritHint={t("mandos.inherit")}
+                onScope={onScope}
+              />
+            </div>
             {buttons.map((b) => (
               // b.label is the literal silkscreen name (Y1/M2/…) — render as-is.
               <RemapRow key={b.source} label={b.label}>

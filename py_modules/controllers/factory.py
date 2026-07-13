@@ -27,17 +27,35 @@ class ControllerBackend:
         cfg["supported"] = cfg.get("kind", "none") != "none"
         return cfg
 
-    def get_config(self) -> dict:
+    def get_config(self, appid=None) -> dict:
         return self._stamp({"kind": "none"})
 
-    def set_button(self, source: str, targets: list) -> dict:
+    def set_button(self, source: str, targets: list, scope="global", appid=None) -> dict:
         return self.get_config()
 
     def set_setting(self, field: str, value: str) -> dict:
         return self.get_config()
 
-    def reset(self) -> dict:
+    def reset(self, scope="global", appid=None) -> dict:
         return self.get_config()
+
+    # Per-game scope: only InputPlumber (we own its remap store). No-ops elsewhere so
+    # main.py can call uniformly. `effective_overrides` returning None means "not a
+    # per-game backend" → the game-change re-apply skips it.
+    def has_game(self, appid) -> bool:
+        return False
+
+    def create_game_from_global(self, appid) -> None:
+        pass
+
+    def set_follow_global(self, appid, follow: bool) -> None:
+        pass
+
+    def effective_overrides(self, appid):
+        return None
+
+    def apply_effective(self, appid) -> bool:
+        return False
 
 
 class IpBackend(ControllerBackend):
@@ -51,14 +69,30 @@ class IpBackend(ControllerBackend):
         self._dbus = dbus
         self._device_key = device_key
 
-    def get_config(self) -> dict:
-        return self._stamp(ip.get_config(self._store, self._dbus, self._device_key))
+    def get_config(self, appid=None) -> dict:
+        return self._stamp(ip.get_config(self._store, self._dbus, self._device_key, appid=appid))
 
-    def set_button(self, source: str, targets: list) -> dict:
-        return self._stamp(ip.set_button(self._store, self._dbus, self._device_key, source, targets))
+    def set_button(self, source: str, targets: list, scope="global", appid=None) -> dict:
+        return self._stamp(
+            ip.set_button(self._store, self._dbus, self._device_key, source, targets, scope, appid))
 
-    def reset(self) -> dict:
-        return self._stamp(ip.reset(self._store, self._dbus, self._device_key))
+    def reset(self, scope="global", appid=None) -> dict:
+        return self._stamp(ip.reset(self._store, self._dbus, self._device_key, scope, appid))
+
+    def has_game(self, appid) -> bool:
+        return self._store.has_game(appid)
+
+    def create_game_from_global(self, appid) -> None:
+        self._store.create_game_from_global(appid)
+
+    def set_follow_global(self, appid, follow: bool) -> None:
+        self._store.set_follow_global(appid, bool(follow))
+
+    def effective_overrides(self, appid):
+        return self._store.effective_overrides(appid)
+
+    def apply_effective(self, appid) -> bool:
+        return ip.apply_effective(self._store, self._dbus, appid)
 
 
 class HhdBackend(ControllerBackend):
@@ -66,7 +100,7 @@ class HhdBackend(ControllerBackend):
 
     manager = detect.HHD
 
-    def get_config(self) -> dict:
+    def get_config(self, appid=None) -> dict:
         return self._stamp(hhd_config.get_config(hhd_api.read_state()))
 
     def set_setting(self, field: str, value: str) -> dict:

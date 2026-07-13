@@ -38,6 +38,12 @@ class FanCurveStore:
         return {"preset": "adaptive", "points": None, "bias": _clamp_bias(bias)}
 
     def _clean(self, raw):
+        base = self._clean_profile(raw)
+        if isinstance(raw, dict) and raw.get("follow_global"):
+            base["follow_global"] = True  # game-only: preserved across reload
+        return base
+
+    def _clean_profile(self, raw):
         if not isinstance(raw, dict):
             return self._auto()
         preset = raw.get("preset")
@@ -81,8 +87,23 @@ class FanCurveStore:
             return self._data["games"][str(appid)]
         return self._data["global"]
 
+    def is_following_global(self, appid):
+        """True when this game applies the global fan curve: no own profile, or its own
+        is toggled to follow global. Own values are never deleted."""
+        g = self._data["games"].get(str(appid)) if appid is not None else None
+        return g is None or bool(g.get("follow_global"))
+
+    def set_follow_global(self, appid, follow):
+        g = self._data["games"].get(str(appid))
+        if g is not None:
+            g["follow_global"] = bool(follow)
+            self._save()
+
+    def _effective_prof(self, appid):
+        return self._data["global"] if self.is_following_global(appid) else self._profile(appid)
+
     def effective(self, appid):
-        return dict(self._profile(appid))
+        return dict(self._effective_prof(appid))
 
     def has_game(self, appid):
         return str(appid) in self._data["games"]
@@ -92,11 +113,11 @@ class FanCurveStore:
 
         The drive path and the periodic re-fit gate on this: the learner runs ONLY
         when the user has explicitly selected Adaptive for the effective scope."""
-        return self._profile(appid).get("preset") == "adaptive"
+        return self._effective_prof(appid).get("preset") == "adaptive"
 
     def adaptive_bias(self, appid):
         """The silence↔cool bias (-100..100) of the effective adaptive profile (0 otherwise)."""
-        return _clamp_bias(self._profile(appid).get("bias", 0))
+        return _clamp_bias(self._effective_prof(appid).get("bias", 0))
 
     def create_game_from_global(self, appid):
         self._data["games"][str(appid)] = dict(self._data["global"])

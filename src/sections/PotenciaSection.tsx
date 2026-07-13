@@ -1,6 +1,6 @@
 import { FC, useCallback, useEffect, useRef, useState } from "react";
 
-import { getTdpState, setTdpWatts, setTdpLevels, resetTdpAuto, getPowerDraw, setAutoTdp, TdpState, TdpScope, PowerDraw } from "../api";
+import { getTdpState, setTdpWatts, setTdpLevels, resetTdpAuto, getPowerDraw, setAutoTdp, setTdpFollowGlobal, TdpState, TdpScope, PowerDraw } from "../api";
 import { TdpSection } from "../components/TdpSection";
 import { GpuClockCard } from "../components/GpuClockCard";
 import { AutoTdpToggle } from "../components/AutoTdpToggle";
@@ -43,9 +43,26 @@ export const PotenciaSection: FC = () => {
 
   const appid = game?.appid;
   useEffect(() => {
-    setScope(appid ? "game" : "global");
     refresh();
   }, [appid, refresh]);
+
+  // Keep the selected tab in sync with the game's ACTIVE profile: "game" when it uses
+  // its own value, "global" when it follows the global one (or no game is running).
+  useEffect(() => {
+    if (!tdp) return;
+    setScope(appid && !tdp.follows_global ? "game" : "global");
+  }, [appid, tdp?.follows_global]);
+
+  // The scope tab IS the control: picking Global makes the running game follow the global
+  // profile (applies it now); picking the game activates its own value. Neither deletes
+  // the other — the backend keeps both and just switches which one is live.
+  const onScope = useCallback(
+    (next: TdpScope) => {
+      setScope(next);
+      if (appid) setTdpFollowGlobal(next === "global", appid).then(setTdp).catch(() => {});
+    },
+    [appid],
+  );
 
   // Resolve the RPC target/scope from the current scope + running game. Falls
   // back to global when in game scope without a running game.
@@ -103,11 +120,12 @@ export const PotenciaSection: FC = () => {
 
   const onAutoTdp = useCallback(
     (enabled: boolean) => {
-      setAutoTdp(enabled)
+      const { target, sc } = resolveTarget();
+      setAutoTdp(enabled, sc, target)
         .then(() => refresh())
         .catch(() => {});
     },
-    [refresh],
+    [resolveTarget, refresh],
   );
 
   // Apply the learned-band suggestion: a FIXED PL1 at the dial-picked value, which is
@@ -116,7 +134,7 @@ export const PotenciaSection: FC = () => {
   const onApplySuggestion = useCallback(
     (w: number) => {
       const { target, sc } = resolveTarget();
-      setAutoTdp(false)
+      setAutoTdp(false, sc, target)
         .then(() => setTdpWatts(w, sc, target))
         .then(() => refresh())
         .catch(() => {});
@@ -146,7 +164,7 @@ export const PotenciaSection: FC = () => {
         scope={scope}
         game={game}
         power={power}
-        onScope={setScope}
+        onScope={onScope}
         onWatts={onWatts}
         onSetLevels={onSetLevels}
         onResetAuto={onResetAuto}
@@ -155,7 +173,7 @@ export const PotenciaSection: FC = () => {
       <SectionBlocks
         sectionId="power"
         blocks={{
-          gpu: <GpuClockCard />,
+          gpu: <GpuClockCard scope={scope} appid={game?.appid ?? null} />,
           autoTdp: <AutoTdpToggle checked={isAutoOn} onChange={onAutoTdp} />,
         }}
       />

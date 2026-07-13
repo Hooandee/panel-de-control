@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   getFanCurveState,
+  setFanFollowGlobal,
   setFanPreset,
   setFanCurvePoints,
   setFanCurveAuto,
@@ -20,7 +21,7 @@ export interface FanCurveControl {
   game: ReturnType<typeof useRunningGame>;
   saved: boolean;
   refresh: () => void;
-  setScope: (s: FanScope) => void;
+  onScope: (s: FanScope) => void;
   onPreset: (preset: FanPreset) => void;
   onCustomMode: () => void;
   onAdaptive: () => void;
@@ -71,9 +72,25 @@ export function useFanCurve(): FanCurveControl {
     // Cancel any in-flight drag commit captured against the previous scope — its
     // late response would otherwise overwrite the freshly-refreshed new scope.
     if (commit.current) clearTimeout(commit.current);
-    setScope(appid ? "game" : "global");
     refresh();
   }, [appid, refresh]);
+
+  // Keep the tab in sync with the game's ACTIVE fan profile: "game" when it uses its
+  // own curve, "global" when it follows global (or no game).
+  useEffect(() => {
+    if (!state) return;
+    setScope(appid && !state.follows_global ? "game" : "global");
+  }, [appid, state?.follows_global]);
+
+  // The tab IS the control: Global makes the running game follow the global curve;
+  // the game tab activates its own. Neither deletes the other (backend keeps both).
+  const onScope = useCallback(
+    (next: FanScope) => {
+      setScope(next);
+      if (appid) setFanFollowGlobal(next === "global", appid).then(setState).catch(() => {});
+    },
+    [appid],
+  );
 
   // Don't fire a debounced sysfs write after the tab unmounts mid-drag.
   useEffect(() => () => {
@@ -163,5 +180,5 @@ export function useFanCurve(): FanCurveControl {
     setFanExperimental(enabled).then(setState).catch(() => {});
   }, []);
 
-  return { state, scope, game, saved, refresh, setScope, onPreset, onCustomMode, onAdaptive, onAdaptiveBias, onCurve, onExperimental };
+  return { state, scope, game, saved, refresh, onScope, onPreset, onCustomMode, onAdaptive, onAdaptiveBias, onCurve, onExperimental };
 }

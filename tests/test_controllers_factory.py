@@ -8,8 +8,17 @@ def _device(key):
 
 
 class FakeStore:
-    def all(self):
+    def effective_overrides(self, appid):
         return {}
+
+    def overrides_for(self, scope, appid=None):
+        return {}
+
+    def is_following_global(self, appid):
+        return True
+
+    def has_game(self, appid):
+        return False
 
 
 class FakeDbus:

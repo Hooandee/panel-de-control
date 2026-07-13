@@ -41,8 +41,12 @@ GENERIC = DeviceProfile(
     vendor="amd",
     tdp_min=4,
     tdp_default=10,
-    tdp_max=15,
-    tdp_max_charger=15,
+    # Ceiling for an unrecognised handheld on the ryzenadj path (no firmware bounds to
+    # read). 30 W is the sustained max the modern AMD handheld category reaches with
+    # active cooling; 15 W stranded capable devices far below their real limit. Devices
+    # that go higher expose it via their firmware bounds once recognised.
+    tdp_max=30,
+    tdp_max_charger=30,
     match_names=(),
     is_generic=True,
 )

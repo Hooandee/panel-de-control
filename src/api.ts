@@ -54,6 +54,9 @@ export interface TdpState {
   on_ac: boolean;
   appid: string | null;
   has_game_profile: boolean;
+  // True when this game applies the global profile (no own value, or its own is toggled
+  // to follow global). Its stored values are never deleted.
+  follows_global: boolean;
   watts: number;
   global_watts: number;
   applied_w: number | null;
@@ -132,6 +135,10 @@ export const setTdpLevels = callable<[off2: number, off3: number, scope: TdpScop
 // Returns the full new TDP state so the UI updates badge + sliders in one round-trip.
 export const resetTdpAuto = callable<[scope: TdpScope, appid: string | null], TdpState>("reset_tdp_auto");
 
+// Toggle a game between its own TDP profile and following the global one (never deletes
+// the game's stored values). Returns the full new state.
+export const setTdpFollowGlobal = callable<[follow: boolean, appid: string | null], TdpState>("set_tdp_follow_global");
+
 export interface PowerDraw {
   watts: number | null;
   gpu_busy: number | null;
@@ -146,7 +153,7 @@ export interface PowerDraw {
 }
 
 export const getPowerDraw = callable<[], PowerDraw>("get_power_draw");
-export const setAutoTdp = callable<[enabled: boolean], { auto_tdp: boolean }>("set_auto_tdp");
+export const setAutoTdp = callable<[enabled: boolean, scope: TdpScope, appid: string | null], { auto_tdp: boolean }>("set_auto_tdp");
 // Signals the QAM panel opened/closed so the auto loop can raise its floor (and bump
 // PL1 immediately) to keep the CPU-bound menu render fluid.
 export const setUiActive = callable<[enabled: boolean], boolean>("set_ui_active");
@@ -176,6 +183,8 @@ export interface FanCurveState {
   global_preset: FanPreset;
   global_points: [number, number][] | null;
   has_game_profile: boolean;
+  // True when this game applies the global fan curve (no own, or toggled to follow).
+  follows_global: boolean;
   appid: string | null;
   presets: FanPresetDef[];
   // Experimental EC fan control (Legion Go S): available = the device has the
@@ -216,6 +225,8 @@ export const setFanExperimental =
   callable<[enabled: boolean], FanCurveState>("set_fan_experimental");
 export const setFanPreset =
   callable<[preset: FanPreset, scope: FanScope, appid: string | null], FanCurveState>("set_fan_preset");
+export const setFanFollowGlobal =
+  callable<[follow: boolean, appid: string | null], FanCurveState>("set_fan_follow_global");
 export const setFanCurvePoints =
   callable<[points: [number, number][], scope: FanScope, appid: string | null], FanCurveState>("set_fan_curve_points");
 export const setFanCurveAuto =
@@ -300,12 +311,17 @@ export interface CpuState {
   cores_supported: boolean;
   max_cores: number | null;
   active_cores: number | null;
+  // Per-game scope for the CPU controls (SMT/boost/cores): true when this game applies
+  // the global CPU profile (no own, or toggled to follow). Own values never deleted.
+  follows_global: boolean;
+  has_game_profile: boolean;
 }
 
 export const getCpuState = callable<[], CpuState>("get_cpu_state");
-export const setSmt = callable<[enabled: boolean], CpuState>("set_smt");
-export const setCpuBoost = callable<[enabled: boolean], CpuState>("set_cpu_boost");
-export const setActiveCores = callable<[count: number], CpuState>("set_active_cores");
+export const setSmt = callable<[enabled: boolean, scope: TdpScope, appid: string | null], CpuState>("set_smt");
+export const setCpuBoost = callable<[enabled: boolean, scope: TdpScope, appid: string | null], CpuState>("set_cpu_boost");
+export const setActiveCores = callable<[count: number, scope: TdpScope, appid: string | null], CpuState>("set_active_cores");
+export const setCpuFollowGlobal = callable<[follow: boolean, appid: string | null], CpuState>("set_cpu_follow_global");
 
 // ---- Download mode (low power) --------------------------------------------
 export interface EcoState {
@@ -365,6 +381,8 @@ export interface ColorState extends ColorPreset {
   supported: boolean;
   global_saturation: number;
   has_game_profile: boolean;
+  // True when this game applies the global saturation (no own, or toggled to follow).
+  follows_global: boolean;
   appid: string | null;
   // The one-tap per-model "OLED look" preset, or null on a real OLED panel.
   oled_look: ColorPreset | null;
@@ -395,23 +413,25 @@ export interface GpuClockState {
 
 export const getGpuClock = callable<[], GpuClockState>("get_gpu_clock");
 export const setGpuClock =
-  callable<[min_mhz: number, max_mhz: number], GpuClockState>("set_gpu_clock");
-export const setGpuClockAuto = callable<[], GpuClockState>("set_gpu_clock_auto");
+  callable<[min_mhz: number, max_mhz: number, scope: TdpScope, appid: string | null], GpuClockState>("set_gpu_clock");
+export const setGpuClockAuto = callable<[scope: TdpScope, appid: string | null], GpuClockState>("set_gpu_clock_auto");
 
 export const getColorState = callable<[], ColorState>("get_color_state");
 export const setSaturation =
   callable<[value: number, scope: Scope, appid: string | null], ColorState>("set_saturation");
+export const setColorFollowGlobal =
+  callable<[follow: boolean, appid: string | null], ColorState>("set_color_follow_global");
 // Preview calibration live (arms the backend auto-revert); confirm with setCalibration.
 // Both take the full calibration object (backend picks the known fields + clamps).
 export const previewCalibration =
   callable<[calibration: Calibration], ColorState>("preview_calibration");
 export const setCalibration =
-  callable<[calibration: Calibration], ColorState>("set_calibration");
-export const applyOledLook = callable<[], ColorState>("apply_oled_look");
+  callable<[calibration: Calibration, scope: Scope, appid: string | null], ColorState>("set_calibration");
+export const applyOledLook = callable<[scope: Scope, appid: string | null], ColorState>("apply_oled_look");
 export const resetColor = callable<[], ColorState>("reset_color");
-// Apply a balanced full-color look globally ("native" = back to the panel's own look).
+// Apply a balanced full-color look to a scope ("native" = back to the panel's own look).
 export const applyColorPreset =
-  callable<[key: string], ColorState>("apply_color_preset");
+  callable<[key: string, scope: Scope, appid: string | null], ColorState>("apply_color_preset");
 
 // ---- Night mode (scheduled warm shift) ------------------------------------
 export interface NightState {
@@ -440,6 +460,8 @@ export const setNight = callable<[patch: NightPatch], NightState>("set_night");
 export interface HdrState {
   supported: boolean;   // HDR-capable panel + gamescope present
   enabled: boolean;
+  // Per-game via the shared color scope: true when this game follows the global HDR.
+  follows_global: boolean;
 }
 
 export interface HdrPatch {
@@ -447,7 +469,7 @@ export interface HdrPatch {
 }
 
 export const getHdrState = callable<[], HdrState>("get_hdr_state");
-export const setHdr = callable<[patch: HdrPatch], HdrState>("set_hdr");
+export const setHdr = callable<[patch: HdrPatch, scope: Scope, appid: string | null], HdrState>("set_hdr");
 
 // ---- Mandos (controller manager) ------------------------------------------
 export interface ControllerConflict {
@@ -486,6 +508,10 @@ export interface ControllerConfig {
   buttons?: RemapButton[];
   gamepad_targets?: string[];
   key_targets?: string[];
+  // Per-game scope (InputPlumber): whether the running game follows the global
+  // remap, and whether it has its own saved profile — drive the scope tab.
+  follows_global?: boolean;
+  has_game_profile?: boolean;
   // settings (HHD)
   device_key?: string;
   mode?: string | null;
@@ -510,7 +536,11 @@ export const submitReport =
 
 export const getControllerConfig = callable<[], ControllerConfig>("get_controller_config");
 export const setControllerButton =
-  callable<[source: string, targets: ControllerTarget[]], ControllerConfig>("set_controller_button");
+  callable<[source: string, targets: ControllerTarget[], scope: Scope, appid: string | null], ControllerConfig>(
+    "set_controller_button");
+export const setControllerFollowGlobal =
+  callable<[follow: boolean, appid: string], ControllerConfig>("set_controller_follow_global");
 export const setControllerSetting =
   callable<[field: string, value: string], ControllerConfig>("set_controller_setting");
-export const resetController = callable<[], ControllerConfig>("reset_controller");
+export const resetController =
+  callable<[scope: Scope, appid: string | null], ControllerConfig>("reset_controller");
