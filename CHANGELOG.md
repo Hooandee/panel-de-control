@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.15.0...panel-de-control-v0.16.0) (2026-07-13)
+
+
+### Features
+
+* TDP boost modes (Estable default, Auto, Personalizado) ([#176](https://github.com/Hooandee/panel-de-control/issues/176)) ([1f43847](https://github.com/Hooandee/panel-de-control/commit/1f43847f9e1491a1c2f25a39d74ba2f1556ab7c7))
+
 ## [0.15.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.14.0...panel-de-control-v0.15.0) (2026-07-12)
 
 
