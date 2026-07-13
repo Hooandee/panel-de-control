@@ -295,3 +295,60 @@ def test_color_persists_across_instances(tmp_path, monkeypatch):
     asyncio.run(p.set_saturation(133, "global", None))
     p2, _ = _make_plugin(tmp_path, monkeypatch)
     assert asyncio.run(p2.get_color_state())["saturation"] == 133
+
+
+class _LateColorBackend:
+    """gamescope's Wayland socket comes up AFTER load: `supported` reads False until
+    it has been polled `ready_after` times, then True (permanently). apply() records
+    what got pushed."""
+
+    def __init__(self, ready_after=2):
+        self.ready_after = ready_after
+        self._reads = 0
+        self.probe_detail = "fake"
+        self.force_composite = False
+        self.applied = []
+
+    @property
+    def supported(self):
+        self._reads += 1
+        return self._reads > self.ready_after
+
+    def apply(self, state):
+        self.applied.append(dict(state))
+        return True
+
+
+def test_display_reapply_waits_for_gamescope_on_cold_boot(tmp_path, monkeypatch):
+    # Cold boot: the socket isn't up when the plugin loads, so the startup apply
+    # no-ops. The waiter must retry and push the persisted look once it comes up.
+    late = _LateColorBackend(ready_after=2)
+    p, _ = _make_plugin(tmp_path, monkeypatch, color=late)
+    asyncio.run(p.set_saturation(150, "global", None))  # persists regardless
+    late.applied.clear()
+    asyncio.run(p._await_display_backend(
+        attempts=8, interval=0, reasserts=3, reassert_interval=0))
+    assert late.applied, "color look was never re-applied once gamescope came up"
+    assert late.applied[-1]["saturation"] == 150
+
+
+def test_display_reapply_reasserts_multiple_times(tmp_path, monkeypatch):
+    # gamescope can drop a look loaded during session bringup, so the waiter must
+    # re-assert several times, not once.
+    late = _LateColorBackend(ready_after=0)
+    p, _ = _make_plugin(tmp_path, monkeypatch, color=late)
+    asyncio.run(p.set_saturation(150, "global", None))
+    late.applied.clear()
+    asyncio.run(p._await_display_backend(
+        attempts=2, interval=0, reasserts=4, reassert_interval=0))
+    assert len(late.applied) == 4
+
+
+def test_display_reapply_gives_up_without_gamescope(tmp_path, monkeypatch):
+    # No gamescope (desktop): bounded — returns without ever applying (honest no-op).
+    never = _LateColorBackend(ready_after=999)
+    p, _ = _make_plugin(tmp_path, monkeypatch, color=never)
+    asyncio.run(p.set_saturation(150, "global", None))
+    never.applied.clear()
+    asyncio.run(p._await_display_backend(attempts=3, interval=0))
+    assert never.applied == []

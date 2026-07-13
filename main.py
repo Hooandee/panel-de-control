@@ -209,6 +209,8 @@ class Plugin:
         )
         self._night_task = None
         self._night_applied = False
+        # Bounded startup task that re-asserts the display look once gamescope is ready.
+        self._display_wait_task = None
         # HDR output on/off (gamescope). State lives in settings (hdr_enabled); gated to
         # HDR-capable panels with gamescope.
         self._hdr_backend = HdrBackend(run_gamescopectl)
@@ -1575,6 +1577,31 @@ class Plugin:
         except Exception:  # noqa: BLE001
             pass
 
+    async def _await_display_backend(self, attempts=30, interval=5.0,
+                                     reasserts=40, reassert_interval=3.0) -> None:
+        """Re-assert the color/HDR look at startup over a short window. gamescope drops a
+        look loaded while it is still bringing up the session, so applying once at load
+        isn't enough — whether gamescope wasn't up yet when we loaded (cold boot) or it
+        was up but still initialising (fast/manual reboot). First wait (bounded) for the
+        socket to answer, then re-apply every few seconds across the session-bringup
+        window, and finally start the night loop. On a host with no gamescope (desktop)
+        it just stays native."""
+        try:
+            for _ in range(attempts):
+                if await self._offload_call(lambda: self._color_backend.supported):
+                    break
+                await asyncio.sleep(interval)
+            else:
+                return  # gamescope never came up (desktop) — nothing to apply
+            for i in range(reasserts):
+                self._reapply_color()
+                self._reapply_hdr()
+                if i < reasserts - 1:
+                    await asyncio.sleep(reassert_interval)
+            self._start_night_loop()
+        except asyncio.CancelledError:
+            pass
+
     def _display_color(self) -> dict:
         """What the UI reflects: saved effective + the unconfirmed preview. Excludes the
         night-mode shift, so the Temperature slider keeps showing the user's own value."""
@@ -2018,6 +2045,9 @@ class Plugin:
             self._reapply_all()
             self._lifecycle.start()
             self._start_night_loop()
+            # Re-assert the look across gamescope's session bringup, when a single apply
+            # doesn't stick (see _await_display_backend). Always runs, not just cold boot.
+            self._display_wait_task = asyncio.create_task(self._await_display_backend())
             if self._settings.get("auto_tdp"):
                 self._start_auto_loop()
             if self._settings.get("telemetry_enabled", True):
@@ -2032,6 +2062,10 @@ class Plugin:
         # await, then shut the executor down.
         await self._offload_call(self._restore_fans_safe)
         self._cancel_color_revert()
+        wait_task = getattr(self, "_display_wait_task", None)
+        if wait_task is not None:
+            wait_task.cancel()
+            self._display_wait_task = None
         self._stop_night_loop()
         await self._offload_call(self._restore_color_safe)
         self._stop_auto_loop()
