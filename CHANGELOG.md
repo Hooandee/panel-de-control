@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.16.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.15.0...panel-de-control-v0.16.0) (2026-07-13)
+
+
+### Features / Novedades
+
+* Power boost is now a choice, not a hidden extra. A new Boost control picks how the SPPT and FPPT limits behave: Stable (what you set is what it draws, and the new default), Auto (a managed boost margin) or Custom (set the margins by hand). Existing setups move to Stable, so at the same TDP the handheld stops pulling more than you asked for. Some machines' firmware keeps a minimum, so the panel always shows the resulting limits. ([#176](https://github.com/Hooandee/panel-de-control/issues/176)) ([1f43847](https://github.com/Hooandee/panel-de-control/commit/1f43847f9e1491a1c2f25a39d74ba2f1556ab7c7))
+* **ES:** El boost de potencia ahora se elige, ya no es un extra oculto. Un nuevo control de Boost decide cómo se comportan los límites SPPT y FPPT: Estable (lo que fijas es lo que gasta, y el nuevo modo por defecto), Auto (un margen de boost gestionado) o Personalizado (fijas los márgenes a mano). Los perfiles existentes pasan a Estable, así al mismo TDP el equipo deja de tirar más de lo que le pediste. El firmware de algunas máquinas mantiene un mínimo, por eso el panel siempre muestra los límites resultantes. ([#176](https://github.com/Hooandee/panel-de-control/issues/176)) ([1f43847](https://github.com/Hooandee/panel-de-control/commit/1f43847f9e1491a1c2f25a39d74ba2f1556ab7c7))
+
 ## [0.15.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.14.0...panel-de-control-v0.15.0) (2026-07-12)
 
 
