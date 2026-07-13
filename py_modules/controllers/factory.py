@@ -45,6 +45,18 @@ class ControllerBackend:
     def has_game(self, appid) -> bool:
         return False
 
+    def is_following_global(self, appid) -> bool:
+        return True
+
+    def list_games(self) -> list:
+        return []
+
+    def game_profile(self, appid):
+        return None
+
+    def forget_game(self, appid) -> None:
+        pass
+
     def create_game_from_global(self, appid) -> None:
         pass
 
@@ -81,6 +93,18 @@ class IpBackend(ControllerBackend):
 
     def has_game(self, appid) -> bool:
         return self._store.has_game(appid)
+
+    def is_following_global(self, appid) -> bool:
+        return self._store.is_following_global(appid)
+
+    def list_games(self) -> list:
+        return self._store.list_games()
+
+    def game_profile(self, appid):
+        return self._store.game_profile(appid)
+
+    def forget_game(self, appid) -> None:
+        self._store.forget_game(appid)
 
     def create_game_from_global(self, appid) -> None:
         self._store.create_game_from_global(appid)

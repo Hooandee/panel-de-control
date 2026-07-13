@@ -544,3 +544,17 @@ export const setControllerSetting =
   callable<[field: string, value: string], ControllerConfig>("set_controller_setting");
 export const resetController =
   callable<[scope: Scope, appid: string | null], ControllerConfig>("reset_controller");
+
+// ---- Ajustes: per-game profile overview -----------------------------------
+// One row per game that has a stored per-game profile in any section (raw own values).
+export interface GameProfileRow {
+  appid: string;
+  tdp?: { pl1: number; auto: boolean; gpu: boolean; follows_global: boolean };
+  fan?: { preset: string; follows_global: boolean };
+  color?: { saturation: number; calibrated: boolean; hdr: boolean; follows_global: boolean };
+  cpu?: { smt: boolean; boost: boolean; cores: number | null; follows_global: boolean };
+  mandos?: { count: number; follows_global: boolean };
+}
+export const listGameProfiles = callable<[], GameProfileRow[]>("list_game_profiles");
+export const resetGameProfiles =
+  callable<[appid: string], GameProfileRow[]>("reset_game_profiles");

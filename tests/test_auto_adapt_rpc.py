@@ -670,3 +670,20 @@ def test_auto_scope_follows_global_until_game_has_own_profile(Plugin):
     assert p._auto_scope() == "game"
     p._current_appid = None
     assert p._auto_scope() == "global"
+
+
+def test_game_profiles_overview_lists_and_resets(Plugin):
+    p = Plugin()
+    p._init()
+    p._tdp_profiles.set_pl1("game", 22, appid="g")
+    p._cpu_profiles.set_smt("game", False, appid="g")
+    rows = asyncio.run(p.list_game_profiles())
+    row = next(r for r in rows if r["appid"] == "g")
+    assert row["tdp"]["pl1"] == 22
+    assert row["cpu"]["smt"] is False
+    assert "fan" not in row  # no fan profile set for this game
+    # Reset forgets the game across every store → it reverts to global.
+    rows2 = asyncio.run(p.reset_game_profiles("g"))
+    assert all(r["appid"] != "g" for r in rows2)
+    assert p._tdp_profiles.has_game("g") is False
+    assert p._cpu_profiles.has_game("g") is False

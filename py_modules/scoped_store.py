@@ -86,6 +86,23 @@ class ScopedProfileStore:
         self._data["games"][str(appid)] = self._new_game_from_global()
         self._save()
 
+    def game_profile(self, appid):
+        """The game's OWN stored profile (what it applies when not following global), or
+        None if it has no entry. follow_global is stripped — it's a scope flag, not a
+        setting. Used by the Ajustes per-game overview."""
+        g = self._data["games"].get(str(appid))
+        if g is None:
+            return None
+        return {k: v for k, v in g.items() if k != "follow_global"}
+
+    def forget_game(self, appid):
+        """Delete the game's stored profile entirely so it reverts to global. No-op when
+        it has none. (The scope tab only DEACTIVATES via follow_global; this is the
+        explicit 'reset this game to global' from the overview.)"""
+        if str(appid) in self._data["games"]:
+            del self._data["games"][str(appid)]
+            self._save()
+
     def _target(self, scope, appid):
         """The profile dict to mutate in place for a scope. Editing a game value seeds it
         from global on first touch and activates its own profile (follow_global=False)."""

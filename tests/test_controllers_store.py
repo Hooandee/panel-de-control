@@ -57,3 +57,13 @@ def test_corrupt_load_is_empty(tmp_path):
     s = RemapStore(str(p))
     assert s.overrides_for("global") == {}
     assert s.list_games() == []
+
+
+def test_game_profile_and_forget(tmp_path):
+    s = _store(tmp_path)
+    assert s.game_profile("7") is None
+    s.replace("game", "7", {"B": [{"gamepad": "North"}]})
+    assert s.game_profile("7") == {"B": [{"gamepad": "North"}]}
+    s.forget_game("7")
+    assert s.has_game("7") is False
+    assert s.game_profile("7") is None

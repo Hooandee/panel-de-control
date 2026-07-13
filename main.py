@@ -617,6 +617,65 @@ class Plugin:
 
         self._offload(apply)
 
+    # ---- Ajustes: per-game profile overview --------------------------------
+    def _game_profile_row(self, appid: str) -> dict:
+        """A game's stored per-section profiles for the overview — RAW own values (what
+        the user set), not the effective/global-inherited ones. A section key is present
+        only when the game has an own stored profile there; `follows_global` marks a
+        stored-but-inactive one."""
+        row = {"appid": appid}
+        tp = self._tdp_profiles.game_profile(appid)
+        if tp is not None:
+            row["tdp"] = {"pl1": int(tp.get("pl1", 0)),
+                          "auto": bool(tp.get("auto_tdp")),
+                          "gpu": bool((tp.get("gpu") or {}).get("manual")),
+                          "follows_global": self._tdp_profiles.is_following_global(appid)}
+        fp = self._fan_curves.game_profile(appid)
+        if fp is not None:
+            row["fan"] = {"preset": fp.get("preset", "auto"),
+                          "follows_global": self._fan_curves.is_following_global(appid)}
+        cp = self._color.game_profile(appid)
+        if cp is not None:
+            calibrated = any(cp.get(f) != COLOR_NATIVE[f]
+                             for f in COLOR_NATIVE if f != "saturation")
+            row["color"] = {"saturation": int(cp.get("saturation", 100)),
+                            "calibrated": calibrated,
+                            "hdr": bool(cp.get("hdr")),
+                            "follows_global": self._color.is_following_global(appid)}
+        up = self._cpu_profiles.game_profile(appid)
+        if up is not None:
+            row["cpu"] = {"smt": bool(up.get("smt", True)),
+                          "boost": bool(up.get("boost", True)),
+                          "cores": up.get("cores"),
+                          "follows_global": self._cpu_profiles.is_following_global(appid)}
+        mp = self._controller_backend.game_profile(appid)
+        if mp is not None:
+            row["mandos"] = {"count": len(mp),
+                             "follows_global": self._controller_backend.is_following_global(appid)}
+        return row
+
+    async def list_game_profiles(self) -> list:
+        """Every game with a stored per-game profile in ANY section, for the Ajustes
+        overview. The frontend resolves names + formats the summaries (i18n)."""
+        self._init()
+        appids = set()
+        for store in (self._tdp_profiles, self._fan_curves, self._color, self._cpu_profiles):
+            appids.update(store.list_games())
+        appids.update(self._controller_backend.list_games())
+        return [self._game_profile_row(a) for a in sorted(appids)]
+
+    async def reset_game_profiles(self, appid) -> list:
+        """Forget a game's per-section profiles across every store → it reverts to
+        global. Re-applies if it's the running game. Returns the refreshed list."""
+        self._init()
+        appid = str(appid)
+        for store in (self._tdp_profiles, self._fan_curves, self._color, self._cpu_profiles):
+            store.forget_game(appid)
+        self._controller_backend.forget_game(appid)
+        if appid == self._current_appid:
+            self._reapply_all()
+        return await self.list_game_profiles()
+
     async def get_controller_conflict(self) -> dict:
         self._init()
         hhd_present = self._controller_backend.manager == controller_detect.HHD

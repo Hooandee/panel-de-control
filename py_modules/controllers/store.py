@@ -84,6 +84,18 @@ class RemapStore:
         }
         self._save()
 
+    def game_profile(self, appid):
+        """The game's OWN stored overrides ({source: targets}), or None if no entry.
+        Used by the Ajustes per-game overview."""
+        g = self._game(appid)
+        return dict(g["overrides"]) if g is not None else None
+
+    def forget_game(self, appid) -> None:
+        """Delete the game's stored remap so it reverts to global. No-op when none."""
+        if str(appid) in self._data["games"]:
+            del self._data["games"][str(appid)]
+            self._save()
+
     def _target(self, scope: str, appid=None) -> dict:
         """The overrides dict to mutate for a scope. Editing a game value activates
         its own profile (follow_global=False), seeded from global on first touch."""
