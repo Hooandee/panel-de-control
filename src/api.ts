@@ -47,6 +47,12 @@ export interface Levels {
   pl3: number;
 }
 
+// Boost behaviour: how the SPPT/FPPT rails relate to the sustained PL1.
+//   estable — flat (SPPT = FPPT = PL1), the default; "what you set is what it draws".
+//   auto    — managed headroom (SPPT ≈ 1.2x, FPPT ≈ 1.4x), clamped to firmware max.
+//   custom  — explicit additive margins (the offset sliders).
+export type BoostMode = "estable" | "auto" | "custom";
+
 export interface TdpState {
   supported: boolean;
   backend: string;
@@ -60,9 +66,9 @@ export interface TdpState {
   supports_advanced: boolean;
   level_limits: { pl1?: LevelBound; pl2?: LevelBound; pl3?: LevelBound };
   levels: Levels;
-  auto: boolean;
+  boost_mode: BoostMode;
   global_levels: Levels;
-  global_auto: boolean;
+  global_boost_mode: BoostMode;
   // The learned TDP band for the current game (honest reasons when not enough data).
   // Powers the separate "Aprendí…" suggestion (apply a fixed value); auto-TDP itself
   // is parameter-free and decoupled from this band.
@@ -129,8 +135,9 @@ export const setTdpWatts = callable<[watts: number, scope: TdpScope, appid: stri
 export const createGameProfile = callable<[appid: string], void>("create_game_profile");
 export const setCurrentGame = callable<[appid: string | null], TdpState>("set_current_game");
 export const setTdpLevels = callable<[off2: number, off3: number, scope: TdpScope, appid: string | null], TdpApplyResult>("set_tdp_levels");
-// Returns the full new TDP state so the UI updates badge + sliders in one round-trip.
-export const resetTdpAuto = callable<[scope: TdpScope, appid: string | null], TdpState>("reset_tdp_auto");
+// Sets the boost mode; returns the full new TDP state so the UI updates the segmented
+// control + rails in one round-trip.
+export const setTdpBoostMode = callable<[mode: BoostMode, scope: TdpScope, appid: string | null], TdpState>("set_tdp_boost_mode");
 
 export interface PowerDraw {
   watts: number | null;

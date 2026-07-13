@@ -1,7 +1,7 @@
 import { PanelSectionRow, SliderField } from "@decky/ui";
 import { FC } from "react";
 
-import { TdpState, TdpScope, PowerDraw } from "../api";
+import { TdpState, TdpScope, PowerDraw, BoostMode } from "../api";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { Loading } from "./Loading";
@@ -23,12 +23,12 @@ export interface TdpSectionProps {
   onScope: (scope: TdpScope) => void;
   onWatts: (watts: number) => void;
   onSetLevels: (off2: number, off3: number) => void;
-  onResetAuto: () => void;
+  onSetMode: (mode: BoostMode) => void;
   // Apply the learned-band suggestion as a FIXED PL1 (also turns auto-TDP off).
   onApplySuggestion: (watts: number) => void;
 }
 
-export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onScope, onWatts, onSetLevels, onResetAuto, onApplySuggestion }) => {
+export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onScope, onWatts, onSetLevels, onSetMode, onApplySuggestion }) => {
   const { t } = useI18n();
 
   if (!tdp) return <Loading />;
@@ -43,8 +43,8 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
 
   const view =
     scope === "global"
-      ? { watts: tdp.global_watts, levels: tdp.global_levels, auto: tdp.global_auto }
-      : { watts: tdp.watts, levels: tdp.levels, auto: tdp.auto };
+      ? { watts: tdp.global_watts, levels: tdp.global_levels, mode: tdp.global_boost_mode }
+      : { watts: tdp.watts, levels: tdp.levels, mode: tdp.boost_mode };
   // Active ceiling: on battery the device-aware cap (max), on charger max_ac.
   // Never offer more than the current power source can deliver.
   const activeMax = tdp.on_ac ? tdp.limits.max_ac : tdp.limits.max;
@@ -151,10 +151,10 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
             <PanelSectionRow>
               <AdvancedBoost
                 levels={view.levels}
-                auto={view.auto}
+                mode={view.mode}
                 bounds={{ pl2: tdp.level_limits.pl2, pl3: tdp.level_limits.pl3 }}
                 onSetLevels={onSetLevels}
-                onResetAuto={onResetAuto}
+                onSetMode={onSetMode}
               />
             </PanelSectionRow>
           )}

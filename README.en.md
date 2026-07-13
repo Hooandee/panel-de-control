@@ -50,8 +50,9 @@ can save a global profile or a per-game one.
 - **Auto-TDP.** An automatic mode that watches GPU load and raises or lowers power on its own to give
   you the frames you need while spending as little as possible. It learns from how you play and
   self-corrects, no need to touch anything.
-- **Advanced modes.** If your firmware allows it, a collapsible section to fine-tune the boost limits
-  (SPPT and FPPT) as margins over the base limit.
+- **Boost.** If your firmware allows it, you choose how the SPPT and FPPT rails behave: Stable
+  (what you set is what it draws, the default), Auto (a managed boost margin) or Custom (tune the
+  margins by hand).
 - **GPU clock.** Set the minimum and maximum graphics clock.
 
 ### System (Sistema)
@@ -115,7 +116,7 @@ supported in code but not confirmed on that device yet
 | Feature | Steam Deck LCD | Steam Deck OLED | ROG Ally | ROG Ally X | ROG Xbox Ally X | Legion Go | Legion Go S | Legion Go 2 | MSI Claw 8 AI+ |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
 | TDP limit | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Advanced modes (SPPT/FPPT) | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹](#notes) |
+| Boost (SPPT/FPPT) | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹](#notes) |
 | Auto-TDP by GPU load | ✅ [²](#notes) | ✅ [²](#notes) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [³](#notes) |
 | GPU clock | ❔ [⁴](#notes) | ❔ [⁴](#notes) | ❔ [⁴](#notes) | ❔ [⁴](#notes) | ❔ [⁴](#notes) | ❔ [⁴](#notes) | ❔ [⁴](#notes) | ❔ [⁴](#notes) | ❔ [⁴](#notes) |
 | Battery: state and health | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
