@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.16.0...panel-de-control-v0.16.1) (2026-07-13)
+
+
+### Bug Fixes
+
+* re-apply panel color after boot once gamescope is ready ([#183](https://github.com/Hooandee/panel-de-control/issues/183)) ([a523a78](https://github.com/Hooandee/panel-de-control/commit/a523a7863fde7e60560b27628623ef3f891a1291))
+
 ## [0.16.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.15.0...panel-de-control-v0.16.0) (2026-07-13)
 
 
