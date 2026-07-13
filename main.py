@@ -261,8 +261,8 @@ class Plugin:
         # Topology + freq range are static — read once (only SMT/boost state is live).
         # ORDER-CRITICAL: read AFTER CoreControl() above, which onlines all CPUs. The
         # kernel drops an offline CPU's topology/core_id, so counting cores here before
-        # every core is online silently undercounts (the "2 cores 16 threads" bug). Keep
-        # this after self._cores.
+        # every core is online undercounts (e.g. 2 cores on an 8-core chip). Keep this
+        # after self._cores.
         self._cpu_info = read_cpu_info()
         # Real silicon name (static) shown in the DeviceHeader instead of the hardcoded
         # table chip; read once here like _cpu_info. None on generic or when unreadable.
@@ -568,6 +568,7 @@ class Plugin:
         self._init()
         if appid is not None:
             appid = str(appid)
+            self._current_appid = appid  # pin so the re-apply/state use the toggled game
             if not follow and not self._controller_backend.has_game(appid):
                 self._controller_backend.create_game_from_global(appid)  # already sets follow_global=False
             else:
@@ -744,8 +745,7 @@ class Plugin:
             "global_points": global_curve["points"],
             "has_game_profile": (self._current_appid is not None
                                  and self._fan_curves.has_game(self._current_appid)),
-            "follows_global": (self._current_appid is None
-                               or self._fan_curves.is_following_global(self._current_appid)),
+            "follows_global": self._fan_curves.is_following_global(self._current_appid),
             "appid": self._current_appid,
             "presets": [{"id": pid, "points": pts}
                         for pid, pts in fan_presets.RESOLVED.items()],
@@ -796,6 +796,7 @@ class Plugin:
         self._init()
         if appid is not None:
             appid = str(appid)
+            self._current_appid = appid  # pin so the re-apply/state use the toggled game
             if not follow and not self._fan_curves.has_game(appid):
                 self._fan_curves.create_game_from_global(appid)
             self._fan_curves.set_follow_global(appid, bool(follow))
@@ -1374,9 +1375,14 @@ class Plugin:
             return unavail("error")
 
     def _auto_scope(self) -> str:
-        """The TDP/fan profile scope the auto machinery writes to (game when one is
-        running, else global)."""
-        return "game" if self._current_appid else "global"
+        """The TDP profile scope the auto machinery writes to. Only the game scope when
+        the running game has its OWN profile; a game that follows global is tuned via the
+        global profile it inherits, so the loop never silently detaches it (which would
+        flip follow_global off and mint a per-game profile with no user action)."""
+        appid = self._current_appid
+        if appid is not None and not self._tdp_profiles.is_following_global(appid):
+            return "game"
+        return "global"
 
     # ---- off-loop dispatch --------------------------------------------------
     # Any subprocess/HTTP-backed apply (gamescopectl, systemctl, ryzenadj, …) MUST
@@ -1587,8 +1593,7 @@ class Plugin:
             "cores_supported": self._cores.supported,
             "max_cores": self._cores.max_cores,
             "active_cores": self._cores.active() if self._cores.supported else None,
-            "follows_global": (self._current_appid is None
-                               or self._cpu_profiles.is_following_global(self._current_appid)),
+            "follows_global": self._cpu_profiles.is_following_global(self._current_appid),
             "has_game_profile": (self._current_appid is not None
                                  and self._cpu_profiles.has_game(self._current_appid)),
         }
@@ -1610,6 +1615,7 @@ class Plugin:
         self._init()
         if appid is not None:
             appid = str(appid)
+            self._current_appid = appid  # pin so the re-apply/state use the toggled game
             if not follow and not self._cpu_profiles.has_game(appid):
                 self._cpu_profiles.create_game_from_global(appid)
             self._cpu_profiles.set_follow_global(appid, bool(follow))
@@ -1625,7 +1631,7 @@ class Plugin:
             if not self._gpu_clock.supported or not g.get("manual"):
                 return
             lo, hi = g.get("min"), g.get("max")
-            if lo:
+            if lo is not None and hi is not None:
                 self._gpu_clock.set(int(lo), int(hi))
         except Exception:  # noqa: BLE001
             pass
@@ -1733,8 +1739,7 @@ class Plugin:
             "global_saturation": self._color.effective(None)["saturation"],
             "has_game_profile": (self._current_appid is not None
                                  and self._color.has_game(self._current_appid)),
-            "follows_global": (self._current_appid is None
-                               or self._color.is_following_global(self._current_appid)),
+            "follows_global": self._color.is_following_global(self._current_appid),
             "appid": self._current_appid,
             # The per-model "OLED look" preset (None on a real OLED → UI hides the card).
             "oled_look": oled_look_for(self._device),
@@ -1793,6 +1798,7 @@ class Plugin:
         self._init()
         if appid is not None:
             appid = str(appid)
+            self._current_appid = appid  # pin so the re-apply/state use the toggled game
             if not follow and not self._color.has_game(appid):
                 self._color.create_game_from_global(appid)
             self._color.set_follow_global(appid, bool(follow))
@@ -1934,8 +1940,7 @@ class Plugin:
         return {
             "supported": self._hdr_supported(),
             "enabled": self._color.hdr(self._current_appid),  # per-game (own or global)
-            "follows_global": (self._current_appid is None
-                               or self._color.is_following_global(self._current_appid)),
+            "follows_global": self._color.is_following_global(self._current_appid),
         }
 
     def _reapply_hdr(self) -> None:
@@ -2023,8 +2028,7 @@ class Plugin:
                                  and self._tdp_profiles.has_game(self._current_appid)),
             # Whether this game is applying the global profile (no own value, or its own
             # is toggled to follow global). Powers the "usa el global / usa el propio" UI.
-            "follows_global": (self._current_appid is None
-                               or self._tdp_profiles.is_following_global(self._current_appid)),
+            "follows_global": self._tdp_profiles.is_following_global(self._current_appid),
             "watts": limits.clamp(eff["watts"], ac),
             "global_watts": limits.clamp(geff["watts"], ac),
             "applied_w": applied_w,
@@ -2087,6 +2091,7 @@ class Plugin:
         if appid is not None:
             self._clear_eco()
             appid = str(appid)
+            self._current_appid = appid  # pin so the re-apply/state use the toggled game
             # "Use own" on a game with no profile yet: seed it from the current global so
             # there's an editable starting value (nothing is ever deleted).
             if not follow and not self._tdp_profiles.has_game(appid):

@@ -61,7 +61,16 @@ class ColorStore:
             prof["hdr"] = True  # HDR on/off is part of the per-scope display profile
         return prof
 
-    def _clean_game(self, raw):
+    def _clean_game(self, raw, glob):
+        # Older stores kept ONLY saturation per game (calibration was global). Preserve
+        # that intent: keep the global calibration, override just the saturation, so the
+        # game doesn't drop to native calibration on load.
+        if (isinstance(raw, dict) and "saturation" in raw
+                and not raw.get("follow_global")
+                and not any(f in raw for f in _CALIBRATION)):
+            prof = {k: v for k, v in glob.items() if k != "follow_global"}
+            prof["saturation"] = _clamp("saturation", raw["saturation"])
+            return prof
         prof = self._clean_global(raw)
         if isinstance(raw, dict) and raw.get("follow_global"):
             prof["follow_global"] = True
@@ -75,11 +84,12 @@ class ColorStore:
             raw = {}
         if not isinstance(raw, dict):
             raw = {}
+        glob = self._clean_global(raw.get("global"))
         games = {}
         for appid, prof in (raw.get("games") or {}).items():
             if isinstance(prof, dict):
-                games[str(appid)] = self._clean_game(prof)
-        return {"global": self._clean_global(raw.get("global")), "games": games}
+                games[str(appid)] = self._clean_game(prof, glob)
+        return {"global": glob, "games": games}
 
     def _save(self):
         atomic_json_save(self._path, self._data)
@@ -146,17 +156,26 @@ class ColorStore:
 
     def apply_preset(self, scope, preset, appid=None):
         """Overwrite a scope's profile from a preset dict (per-model OLED look): the full
-        calibration + saturation in one write. Missing fields → native."""
+        calibration + saturation in one write. Missing fields → native. HDR is a display
+        mode, not part of a look, so the scope's current HDR is kept across the change."""
         prof = self._clean_global(preset)
         if scope == "game":
             if appid is None:
                 raise ValueError("appid required for game scope")
+            if self.hdr(appid):
+                prof["hdr"] = True  # keep the game's effective HDR
             self._data["games"][str(appid)] = prof  # replaces → own active (no follow_global)
         else:
+            if self._data["global"].get("hdr"):
+                prof["hdr"] = True
             self._data["global"] = prof
         self._save()
 
     def reset(self):
-        """Back to the panel's native look: native global + no game overrides."""
-        self._data = {"global": dict(_NATIVE), "games": {}}
+        """Back to the panel's native look: native global + no game overrides. HDR is a
+        display mode, not a look, so it survives a color reset (kept from global)."""
+        glob = dict(_NATIVE)
+        if self._data["global"].get("hdr"):
+            glob["hdr"] = True
+        self._data = {"global": glob, "games": {}}
         self._save()

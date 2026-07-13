@@ -158,3 +158,39 @@ def test_persists_across_instances(tmp_path):
     path = str(tmp_path / "color.json")
     ColorStore(path).set_saturation("global", 133)
     assert ColorStore(path).effective(None)["saturation"] == 133
+
+
+def test_apply_preset_keeps_hdr_global(tmp_path):
+    s = _store(tmp_path)
+    s.set_hdr("global", True)
+    s.apply_preset("global", {"saturation": 140, "contrast": 20})  # a preset carries no hdr
+    assert s.hdr(None) is True  # HDR is a display mode, not part of a look
+
+
+def test_apply_preset_keeps_hdr_game(tmp_path):
+    s = _store(tmp_path)
+    s.set_hdr("game", True, appid="7")
+    s.apply_preset("game", {"saturation": 130}, appid="7")
+    assert s.hdr("7") is True
+
+
+def test_reset_keeps_hdr(tmp_path):
+    s = _store(tmp_path)
+    s.set_hdr("global", True)
+    s.set_saturation("global", 150)
+    s.reset()
+    assert s.effective(None)["saturation"] == 100  # color back to native
+    assert s.hdr(None) is True                      # HDR mode survives a color reset
+
+
+def test_migrates_old_saturation_only_game_entry_keeping_global_calibration(tmp_path):
+    # Old shape: calibration was global, a game held ONLY its own saturation.
+    path = str(tmp_path / "color.json")
+    with open(path, "w") as f:
+        json.dump({"global": {"contrast": 30, "temperature": -20},
+                   "games": {"42": {"saturation": 160}}}, f)
+    s = ColorStore(path)
+    eff = s.effective("42")
+    assert eff["saturation"] == 160     # its own saturation kept
+    assert eff["contrast"] == 30        # global calibration inherited, not reset to native
+    assert eff["temperature"] == -20

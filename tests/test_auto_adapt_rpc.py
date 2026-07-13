@@ -653,3 +653,20 @@ def test_sampler_tick_counter_triggers_reapply(Plugin, monkeypatch):
         res = p._collect_sample()
         p._on_sample_collected(res)
     assert calls["n"] == 1
+
+
+def test_auto_scope_follows_global_until_game_has_own_profile(Plugin):
+    # The auto machinery must NOT detach a game that follows global: while following,
+    # it tunes the global profile the game inherits (scope "global"), never minting a
+    # per-game profile behind the user's back. Only a game with its own profile is
+    # tuned in "game" scope.
+    p = Plugin()
+    p._init()
+    p._current_appid = "g"
+    assert p._tdp_profiles.is_following_global("g") is True
+    assert p._auto_scope() == "global"
+    p._tdp_profiles.set_pl1("game", 20, appid="g")   # game now has its own profile
+    assert p._tdp_profiles.is_following_global("g") is False
+    assert p._auto_scope() == "game"
+    p._current_appid = None
+    assert p._auto_scope() == "global"
