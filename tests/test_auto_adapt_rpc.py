@@ -687,3 +687,16 @@ def test_game_profiles_overview_lists_and_resets(Plugin):
     assert all(r["appid"] != "g" for r in rows2)
     assert p._tdp_profiles.has_game("g") is False
     assert p._cpu_profiles.has_game("g") is False
+
+
+def test_overview_skips_tab_flip_with_no_real_change(Plugin):
+    p = Plugin()
+    p._init()
+    # A bare scope-toggle (own profile seeded from global, nothing edited) must NOT show
+    # up as a configured game.
+    p._cpu_profiles.create_game_from_global("g")
+    assert all(r["appid"] != "g" for r in asyncio.run(p.list_game_profiles()))
+    # Once something actually differs from global, it appears.
+    p._cpu_profiles.set_smt("game", False, appid="g")
+    rows = asyncio.run(p.list_game_profiles())
+    assert any(r["appid"] == "g" for r in rows)

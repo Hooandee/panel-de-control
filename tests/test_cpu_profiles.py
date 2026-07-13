@@ -71,3 +71,12 @@ def test_forget_game_reverts_to_global(tmp_path):
     assert s.has_game("42") is False
     assert s.game_profile("42") is None
     assert s.effective("42") == s.effective(None)  # back to global
+
+
+def test_differs_from_global(tmp_path):
+    s = _store(tmp_path)
+    assert s.differs_from_global("42") is False          # no own profile
+    s.create_game_from_global("42")                       # bare scope-toggle: copies global
+    assert s.differs_from_global("42") is False          # same as global → not configured
+    s.set_smt("game", False, appid="42")                 # actually change something
+    assert s.differs_from_global("42") is True

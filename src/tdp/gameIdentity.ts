@@ -15,6 +15,20 @@ export interface GameOverview {
   app_type?: number;
 }
 
+// Prefix stamped on the stable key of a non-Steam shortcut (keyed by name, not its
+// churning appid). Encode + decode live together so the format has one owner.
+export const NS_PREFIX = "ns:";
+
+/** Whether a stored per-game key belongs to a non-Steam shortcut. */
+export function isNonSteamKey(key: string): boolean {
+  return key.startsWith(NS_PREFIX);
+}
+
+/** The stored (normalized) name from a non-Steam key. */
+export function nonSteamName(key: string): string {
+  return key.slice(NS_PREFIX.length);
+}
+
 // EAppType.Shortcut — the reliable non-Steam flag when the overview carries it.
 const APP_TYPE_SHORTCUT = 1073741824;
 // Non-Steam shortcut appids have the top bit set (>= 2^31); real Steam appids
@@ -35,7 +49,7 @@ export function stableGameKey(overview: GameOverview): string {
   const rawAppid = String(overview.appid);
   if (isNonSteam(overview)) {
     const name = overview.display_name ? normalizeGameName(overview.display_name) : "";
-    if (name) return "ns:" + name;
+    if (name) return NS_PREFIX + name;
     // No usable name → keep the raw appid (never worse than before).
   }
   return rawAppid;

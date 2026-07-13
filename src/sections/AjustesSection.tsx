@@ -165,8 +165,6 @@ export const AjustesSection: FC = () => {
           {t("customize.button")}
         </ButtonItem>
 
-        {/* Open the full-screen per-game profile overview (what's configured per game,
-            with a reset-to-global per game). */}
         <ButtonItem layout="below" description={t("gameProfiles.button.desc")} onClick={() => openGameProfilesModal()}>
           {t("gameProfiles.button")}
         </ButtonItem>

@@ -1,16 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { isNonSteamKey, nonSteamName, configuredSections } from "./gameProfiles";
+import { configuredSections } from "./gameProfiles";
 import type { GameProfileRow } from "../api";
-
-describe("isNonSteamKey / nonSteamName", () => {
-  it("detects and unwraps a non-Steam key", () => {
-    expect(isNonSteamKey("ns:hades")).toBe(true);
-    expect(nonSteamName("ns:hades")).toBe("hades");
-  });
-  it("treats a numeric Steam appid as Steam", () => {
-    expect(isNonSteamKey("1245620")).toBe(false);
-  });
-});
 
 describe("configuredSections", () => {
   it("returns only the present sections, in display order", () => {

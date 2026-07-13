@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { normalizeGameName, isNonSteam, stableGameKey } from "./gameIdentity";
+import { normalizeGameName, isNonSteam, stableGameKey, isNonSteamKey, nonSteamName } from "./gameIdentity";
 
 describe("normalizeGameName", () => {
   it("lowercases, trims and collapses whitespace", () => {
@@ -51,5 +51,15 @@ describe("stableGameKey", () => {
       "3400000000",
     );
     expect(stableGameKey({ appid: "3400000000", app_type: 1073741824 })).toBe("3400000000");
+  });
+});
+
+describe("isNonSteamKey / nonSteamName", () => {
+  it("detects and unwraps a non-Steam key", () => {
+    expect(isNonSteamKey("ns:hades")).toBe(true);
+    expect(nonSteamName("ns:hades")).toBe("hades");
+  });
+  it("treats a numeric Steam appid as Steam", () => {
+    expect(isNonSteamKey("1245620")).toBe(false);
   });
 });

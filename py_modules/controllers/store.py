@@ -85,10 +85,15 @@ class RemapStore:
         self._save()
 
     def game_profile(self, appid):
-        """The game's OWN stored overrides ({source: targets}), or None if no entry.
-        Used by the Ajustes per-game overview."""
+        """The game's OWN stored overrides ({source: targets}), or None if no entry."""
         g = self._game(appid)
         return dict(g["overrides"]) if g is not None else None
+
+    def differs_from_global(self, appid) -> bool:
+        """Whether the game's own overrides actually differ from global (a bare
+        scope-toggle copies global → not 'configured')."""
+        own = self.game_profile(appid)
+        return own is not None and own != dict(self._data["global"])
 
     def forget_game(self, appid) -> None:
         """Delete the game's stored remap so it reverts to global. No-op when none."""

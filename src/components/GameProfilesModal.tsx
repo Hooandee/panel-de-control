@@ -1,4 +1,4 @@
-import { FC, useEffect, useState } from "react";
+import { FC, useEffect, useMemo, useState } from "react";
 import { ModalRoot, showModal, Focusable } from "@decky/ui";
 import { LuTrash2, LuGamepad2 } from "react-icons/lu";
 
@@ -6,9 +6,11 @@ import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { Loading } from "./Loading";
 import { GameProfileRow, listGameProfiles, resetGameProfiles } from "../api";
-import { configuredSections, isNonSteamKey, nonSteamName, SectionId } from "../system/gameProfiles";
+import { configuredSections, SectionId } from "../system/gameProfiles";
+import { isNonSteamKey, nonSteamName } from "../tdp/gameIdentity";
 
 type T = (key: string, params?: Record<string, string | number>) => string;
+type SectionLine = { label: string; text: string; dim: boolean };
 
 /** Resolve a stored appid to a display name. Steam games via the app store (missing =
  *  uninstalled); non-Steam shortcuts carry their name in the "ns:" key. */
@@ -26,7 +28,7 @@ function resolveName(appid: string): { name: string; installed: boolean } {
 }
 
 /** One translated summary line per configured section: a label + a short value. */
-function sectionLine(section: SectionId, row: GameProfileRow, t: T): { label: string; text: string; dim: boolean } | null {
+function sectionLine(section: SectionId, row: GameProfileRow, t: T): SectionLine | null {
   if (section === "tdp" && row.tdp) {
     const extra = [row.tdp.auto ? t("gameProfiles.auto") : "", row.tdp.gpu ? "GPU" : ""].filter(Boolean);
     return { label: t("gameProfiles.sec.tdp"), text: [`${row.tdp.pl1} W`, ...extra].join(" · "), dim: row.tdp.follows_global };
@@ -55,10 +57,18 @@ function sectionLine(section: SectionId, row: GameProfileRow, t: T): { label: st
 const GameRow: FC<{ row: GameProfileRow; onReset: (appid: string) => void }> = ({ row, onReset }) => {
   const { t } = useI18n();
   const [confirm, setConfirm] = useState(false);
-  const { name, installed } = resolveName(row.appid);
-  const lines = configuredSections(row)
-    .map((s) => sectionLine(s, row, t))
-    .filter((l): l is { label: string; text: string; dim: boolean } => l !== null);
+  // Auto-revert the armed "tap again" state so it doesn't stay stuck (e.g. if the user
+  // changes their mind, or a reset RPC failed).
+  useEffect(() => {
+    if (!confirm) return;
+    const id = setTimeout(() => setConfirm(false), 3000);
+    return () => clearTimeout(id);
+  }, [confirm]);
+  const { name, installed } = useMemo(() => resolveName(row.appid), [row.appid]);
+  const lines = useMemo(
+    () => configuredSections(row).map((s) => sectionLine(s, row, t)).filter((l): l is SectionLine => l !== null),
+    [row, t],
+  );
 
   return (
     <div style={{ ...theme.card, padding: theme.space.md, marginBottom: theme.space.sm, overflow: "hidden" }}>

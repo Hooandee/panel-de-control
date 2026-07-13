@@ -54,6 +54,9 @@ class ControllerBackend:
     def game_profile(self, appid):
         return None
 
+    def differs_from_global(self, appid) -> bool:
+        return False
+
     def forget_game(self, appid) -> None:
         pass
 
@@ -102,6 +105,9 @@ class IpBackend(ControllerBackend):
 
     def game_profile(self, appid):
         return self._store.game_profile(appid)
+
+    def differs_from_global(self, appid) -> bool:
+        return self._store.differs_from_global(appid)
 
     def forget_game(self, appid) -> None:
         self._store.forget_game(appid)

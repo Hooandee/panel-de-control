@@ -89,11 +89,20 @@ class ScopedProfileStore:
     def game_profile(self, appid):
         """The game's OWN stored profile (what it applies when not following global), or
         None if it has no entry. follow_global is stripped — it's a scope flag, not a
-        setting. Used by the Ajustes per-game overview."""
+        setting."""
         g = self._data["games"].get(str(appid))
         if g is None:
             return None
         return {k: v for k, v in g.items() if k != "follow_global"}
+
+    def differs_from_global(self, appid):
+        """Whether the game has an own stored profile whose values actually differ from
+        global. A bare scope-toggle copies global (follow_global=False, same values), so
+        it reads as no difference → the overview won't list it as 'configured'."""
+        own = self.game_profile(appid)
+        if own is None:
+            return False
+        return own != {k: v for k, v in self._data["global"].items() if k != "follow_global"}
 
     def forget_game(self, appid):
         """Delete the game's stored profile entirely so it reverts to global. No-op when

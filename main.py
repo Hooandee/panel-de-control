@@ -26,7 +26,7 @@ from fan_curves import FanCurveStore
 from display.color_store import ColorStore, sanitize_calibration
 from display.gamescope import GamescopeColorBackend, run_gamescopectl
 from display.oled_look import oled_look_for
-from display.const import NATIVE as COLOR_NATIVE, FIELDS as COLOR_FIELDS
+from display.const import NATIVE as COLOR_NATIVE, FIELDS as COLOR_FIELDS, CALIBRATION as COLOR_CALIBRATION
 from display.night_store import NightStore
 from display.night import is_night_active
 from display import presets as color_presets
@@ -618,60 +618,62 @@ class Plugin:
         self._offload(apply)
 
     # ---- Ajustes: per-game profile overview --------------------------------
+    def _scoped_stores(self):
+        """Every store that keeps per-game profiles, all sharing list_games/forget_game
+        (the controller backend no-ops when it's not InputPlumber)."""
+        return (self._tdp_profiles, self._fan_curves, self._color, self._cpu_profiles,
+                self._controller_backend)
+
     def _game_profile_row(self, appid: str) -> dict:
-        """A game's stored per-section profiles for the overview — RAW own values (what
-        the user set), not the effective/global-inherited ones. A section key is present
-        only when the game has an own stored profile there; `follows_global` marks a
-        stored-but-inactive one."""
+        """A game's per-section profiles for the overview — RAW own values (what the user
+        set), not the effective/global-inherited ones. A section is included only when
+        the game's own profile actually DIFFERS from global (a bare scope-toggle that
+        just copied global isn't 'configured'); `follows_global` marks a
+        configured-but-inactive one."""
         row = {"appid": appid}
-        tp = self._tdp_profiles.game_profile(appid)
-        if tp is not None:
+        if self._tdp_profiles.differs_from_global(appid):
+            tp = self._tdp_profiles.game_profile(appid)
             row["tdp"] = {"pl1": int(tp.get("pl1", 0)),
                           "auto": bool(tp.get("auto_tdp")),
                           "gpu": bool((tp.get("gpu") or {}).get("manual")),
                           "follows_global": self._tdp_profiles.is_following_global(appid)}
-        fp = self._fan_curves.game_profile(appid)
-        if fp is not None:
-            row["fan"] = {"preset": fp.get("preset", "auto"),
+        if self._fan_curves.differs_from_global(appid):
+            row["fan"] = {"preset": self._fan_curves.game_profile(appid).get("preset", "auto"),
                           "follows_global": self._fan_curves.is_following_global(appid)}
-        cp = self._color.game_profile(appid)
-        if cp is not None:
-            calibrated = any(cp.get(f) != COLOR_NATIVE[f]
-                             for f in COLOR_NATIVE if f != "saturation")
+        if self._color.differs_from_global(appid):
+            cp = self._color.game_profile(appid)
             row["color"] = {"saturation": int(cp.get("saturation", 100)),
-                            "calibrated": calibrated,
+                            "calibrated": any(cp.get(f) != COLOR_NATIVE[f] for f in COLOR_CALIBRATION),
                             "hdr": bool(cp.get("hdr")),
                             "follows_global": self._color.is_following_global(appid)}
-        up = self._cpu_profiles.game_profile(appid)
-        if up is not None:
+        if self._cpu_profiles.differs_from_global(appid):
+            up = self._cpu_profiles.game_profile(appid)
             row["cpu"] = {"smt": bool(up.get("smt", True)),
                           "boost": bool(up.get("boost", True)),
                           "cores": up.get("cores"),
                           "follows_global": self._cpu_profiles.is_following_global(appid)}
-        mp = self._controller_backend.game_profile(appid)
-        if mp is not None:
-            row["mandos"] = {"count": len(mp),
+        if self._controller_backend.differs_from_global(appid):
+            row["mandos"] = {"count": len(self._controller_backend.game_profile(appid)),
                              "follows_global": self._controller_backend.is_following_global(appid)}
         return row
 
     async def list_game_profiles(self) -> list:
-        """Every game with a stored per-game profile in ANY section, for the Ajustes
-        overview. The frontend resolves names + formats the summaries (i18n)."""
+        """Every game with a per-game profile that differs from global in ANY section, for
+        the Ajustes overview. The frontend resolves names + formats the summaries (i18n)."""
         self._init()
         appids = set()
-        for store in (self._tdp_profiles, self._fan_curves, self._color, self._cpu_profiles):
+        for store in self._scoped_stores():
             appids.update(store.list_games())
-        appids.update(self._controller_backend.list_games())
-        return [self._game_profile_row(a) for a in sorted(appids)]
+        rows = (self._game_profile_row(a) for a in sorted(appids))
+        return [r for r in rows if len(r) > 1]  # drop games whose every section == global
 
     async def reset_game_profiles(self, appid) -> list:
         """Forget a game's per-section profiles across every store → it reverts to
         global. Re-applies if it's the running game. Returns the refreshed list."""
         self._init()
         appid = str(appid)
-        for store in (self._tdp_profiles, self._fan_curves, self._color, self._cpu_profiles):
+        for store in self._scoped_stores():
             store.forget_game(appid)
-        self._controller_backend.forget_game(appid)
         if appid == self._current_appid:
             self._reapply_all()
         return await self.list_game_profiles()
