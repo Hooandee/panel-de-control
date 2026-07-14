@@ -6,8 +6,6 @@ GAIN_MIN = -12.0
 GAIN_MAX = 12.0
 ROUTES = ["speaker", "headphone"]
 
-DEFAULT_SETTING = {"preset": "flat", "gains": [0.0] * 10, "preamp": 0.0}
-
 
 def clamp_gain(value):
     try:

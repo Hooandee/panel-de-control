@@ -18,8 +18,6 @@ GENERIC = {
     "music": [2, 3, 2, 0, -1, -1, 0, 1, 3, 2],
 }
 
-_GENERIC_ORDER = ["flat", "voices", "bass", "cinema", "music"]
-
 # Per-device internal-speaker correction. The proven fix for small/thin laptop-class
 # speakers (EasyEffects laptop-speaker method): add upper-bass body (~125 Hz) and CUT the
 # harsh mid presence (~800 Hz–2 kHz) that makes them sound tinny/boxy, leaving treble
@@ -49,5 +47,5 @@ def list_presets(device_key):
     out = []
     if "device_tuned" in DEVICE.get(device_key, {}):
         out.append({"id": "device_tuned"})
-    out.extend({"id": pid} for pid in _GENERIC_ORDER)
+    out.extend({"id": pid} for pid in GENERIC)  # dict preserves the display order
     return out

@@ -1,6 +1,5 @@
 from audio.const import (
     BAND_FREQS,
-    DEFAULT_SETTING,
     GAIN_MAX,
     GAIN_MIN,
     ROUTES,
@@ -15,12 +14,6 @@ def test_ten_bands():
 
 def test_routes():
     assert ROUTES == ["speaker", "headphone"]
-
-
-def test_default_setting_is_flat():
-    assert DEFAULT_SETTING["preset"] == "flat"
-    assert DEFAULT_SETTING["gains"] == [0.0] * 10
-    assert DEFAULT_SETTING["preamp"] == 0.0
 
 
 def test_clamp_gain():

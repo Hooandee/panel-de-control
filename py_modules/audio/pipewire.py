@@ -43,6 +43,7 @@ class PipeWireEq:
         self._session = _find_session()
         self._orig_default = None
         self._orig_volume = None
+        self._last_gains = None
         # Human-facing sink name shown in the system/Steam volume UI (the device name).
         self._name = name or "Panel de Control"
 
@@ -117,18 +118,27 @@ class PipeWireEq:
     def ensure_sink(self, gains):
         """Create/refresh the EQ sink with these gains and make it default. On the first
         takeover we make the insert transparent (see _make_transparent); we don't touch
-        volumes again after that, so band edits never disturb the user's level."""
-        if not self.is_supported() or not self._write_conf(gains):
+        volumes again after that, so band edits never disturb the user's level.
+
+        Diff-gated: when the gains match what's already applied (e.g. a game change where
+        the effective curve is unchanged) we skip the conf rewrite + the ~1s service
+        restart and only re-assert the default sink — no work, no audio interruption."""
+        if not self.is_supported():
+            return False
+        unchanged = self._orig_default is not None and gains == self._last_gains
+        if not unchanged and not self._write_conf(gains):
             return False
         new_takeover = self._orig_default is None
         if new_takeover:
             cur = self._runner(["pactl", "get-default-sink"])
             if cur and cur != _INPUT:
                 self._orig_default = cur
-        self._restart()
+        if not unchanged:
+            self._restart()
         self._runner(["pactl", "set-default-sink", _INPUT])
         if new_takeover and self._orig_default:
             self._make_transparent(self._orig_default)
+        self._last_gains = list(gains)
         return True
 
     def set_gains(self, gains):
@@ -155,3 +165,4 @@ class PipeWireEq:
             self._runner(["pactl", "set-default-sink", self._orig_default])
             self._orig_default = None
             self._orig_volume = None
+        self._last_gains = None

@@ -37,6 +37,15 @@ def test_set_setting_replaces_route(tmp_path):
     assert eff["preset"] == "bass" and eff["gains"] == [4.0] * 10
 
 
+def test_set_bands_clamps_pads_and_marks_custom(tmp_path):
+    s = EqStore(str(tmp_path / "audio.json"))
+    s.set_bands("global", "speaker", [99, -99, 3])  # over-range + short list
+    eff = s.effective(appid=None, route="speaker")
+    assert eff["gains"] == [12.0, -12.0, 3.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    assert eff["preset"] == "custom"
+    assert eff["preamp"] == -12.0
+
+
 def test_reset_route_to_flat(tmp_path):
     s = EqStore(str(tmp_path / "audio.json"))
     s.set_band("global", "speaker", 0, 9.0)

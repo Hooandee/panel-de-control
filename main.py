@@ -41,8 +41,6 @@ from battery.charge_limit import select_charge_limit
 from audio.eq_store import EqStore
 from audio.pipewire import PipeWireEq
 from audio import presets as audio_presets
-from audio.const import clamp_gain as clamp_audio_gain
-from audio.const import compute_preamp as audio_compute_preamp
 from cpu.info import read_cpu_info, read_cpu_model
 from cpu.controls import CoreControl, SmtControl, select_boost
 from cpu.profiles import CpuProfileStore
@@ -2435,10 +2433,7 @@ class Plugin:
         resolved = self._resolve_scope(scope, appid)
         if resolved is None:
             return await self._offload_call(self._audio_state)
-        clean = [clamp_audio_gain(g) for g in (gains or [])][:10]
-        clean += [0.0] * (10 - len(clean))
-        setting = {"preset": "custom", "gains": clean, "preamp": audio_compute_preamp(clean)}
-        self._audio_eq.set_setting(resolved, self._current_route(), setting, appid=appid)
+        self._audio_eq.set_bands(resolved, self._current_route(), gains, appid=appid)
         self._reapply_audio()
         return await self._offload_call(self._audio_state)
 

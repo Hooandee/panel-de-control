@@ -49,6 +49,19 @@ class EqStore(ScopedProfileStore):
         prof[route] = {"preset": "custom", "gains": gains, "preamp": compute_preamp(gains)}
         self._save()
 
+    def set_bands(self, scope, route, gains, appid=None):
+        """Replace all 10 band gains for a route (drag-commit of the whole curve): clamp,
+        pad/truncate to 10, mark custom, recompute the anti-clip preamp. The canonical
+        setting shape lives here, not in the caller."""
+        if route not in ROUTES:
+            return
+        clean = [clamp_gain(g) for g in (gains or [])][:10]
+        clean += [0.0] * (10 - len(clean))
+        self._target(scope, appid)[route] = {
+            "preset": "custom", "gains": clean, "preamp": compute_preamp(clean),
+        }
+        self._save()
+
     def reset(self, scope, route, appid=None):
         if route not in ROUTES:
             return
