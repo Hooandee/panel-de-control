@@ -1,6 +1,6 @@
 import { FC, useCallback, useEffect, useRef, useState } from "react";
 
-import { getTdpState, setTdpWatts, setTdpLevels, setTdpBoostMode, setTdpFirmwareMode, getPowerDraw, setAutoTdp, TdpState, TdpScope, PowerDraw, BoostMode } from "../api";
+import { getTdpState, setTdpWatts, setTdpLevels, setTdpBoostMode, setTdpFirmwareMode, getPowerDraw, setAutoTdp, setTdpFollowGlobal, TdpState, TdpScope, PowerDraw, BoostMode } from "../api";
 import { TdpSection } from "../components/TdpSection";
 import { GpuClockCard } from "../components/GpuClockCard";
 import { AutoTdpToggle } from "../components/AutoTdpToggle";
@@ -9,6 +9,7 @@ import { useLayout } from "../customize/store";
 import { visibleIds } from "../customize/layout";
 import { blockOrder } from "../customize/manifest";
 import { useRunningGame } from "../tdp/useRunningGame";
+import { useScopeSync } from "../useScopeSync";
 
 /**
  * Power section: owns the TDP state (global/per-game scope, running game, the
@@ -20,7 +21,6 @@ export const PotenciaSection: FC = () => {
   const game = useRunningGame();
   const [tdp, setTdp] = useState<TdpState | null>(null);
   const [power, setPower] = useState<PowerDraw | null>(null);
-  const [scope, setScope] = useState<TdpScope>("global");
   const commitTimerWatts = useRef<ReturnType<typeof setTimeout> | null>(null);
   const commitTimerLevels = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -43,9 +43,17 @@ export const PotenciaSection: FC = () => {
 
   const appid = game?.appid;
   useEffect(() => {
-    setScope(appid ? "game" : "global");
     refresh();
   }, [appid, refresh]);
+
+  // The scope tab reflects the game's active profile and IS the control (shared wiring):
+  // picking Global makes the running game follow the global profile, the game tab
+  // activates its own, neither deletes the other.
+  const applyFollow = useCallback(
+    (f: boolean, a: string) => { setTdpFollowGlobal(f, a).then(setTdp).catch(() => {}); },
+    [],
+  );
+  const { scope, onScope } = useScopeSync(appid, tdp?.follows_global, applyFollow);
 
   // Resolve the RPC target/scope from the current scope + running game. Falls
   // back to global when in game scope without a running game.
@@ -102,11 +110,12 @@ export const PotenciaSection: FC = () => {
 
   const onAutoTdp = useCallback(
     (enabled: boolean) => {
-      setAutoTdp(enabled)
+      const { target, sc } = resolveTarget();
+      setAutoTdp(enabled, sc, target)
         .then(() => refresh())
         .catch(() => {});
     },
-    [refresh],
+    [resolveTarget, refresh],
   );
 
   // Firmware performance mode (Legion Go original). Device-global; the RPC returns the
@@ -121,7 +130,7 @@ export const PotenciaSection: FC = () => {
   const onApplySuggestion = useCallback(
     (w: number) => {
       const { target, sc } = resolveTarget();
-      setAutoTdp(false)
+      setAutoTdp(false, sc, target)
         .then(() => setTdpWatts(w, sc, target))
         .then(() => refresh())
         .catch(() => {});
@@ -151,7 +160,7 @@ export const PotenciaSection: FC = () => {
         scope={scope}
         game={game}
         power={power}
-        onScope={setScope}
+        onScope={onScope}
         onWatts={onWatts}
         onSetLevels={onSetLevels}
         onSetMode={onSetMode}
@@ -161,7 +170,7 @@ export const PotenciaSection: FC = () => {
       <SectionBlocks
         sectionId="power"
         blocks={{
-          gpu: <GpuClockCard />,
+          gpu: <GpuClockCard scope={scope} appid={game?.appid ?? null} />,
           autoTdp: <AutoTdpToggle checked={isAutoOn} onChange={onAutoTdp} />,
         }}
       />

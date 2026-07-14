@@ -1,6 +1,4 @@
-import json
-
-from json_store import atomic_json_save
+from scoped_store import ScopedProfileStore
 
 # Boost derivation for the "auto" mode (single source of truth): moderate managed
 # headroom above PL1, clamped later to each rail's firmware max. SPPT = 1.2x, FPPT = 1.4x.
@@ -23,21 +21,20 @@ def _norm_mode(mode):
     return mode if mode in _MODES else _DEFAULT_MODE
 
 
-class ProfileStore:
-    """Global TDP profile + per-appid overrides, persisted atomically as JSON.
+class ProfileStore(ScopedProfileStore):
+    """Global TDP profile + per-appid overrides. See ScopedProfileStore for the per-game
+    scope contract (follow_global).
 
     A profile is {pl1, mode, off2, off3}: pl1 is sustained watts; mode picks how the
     boost rails (SPPT/FPPT) relate to pl1 — estable (flat, the default), auto (managed
-    1.2x/1.4x headroom) or custom (explicit off2/off3 margins). Storing margins (not
-    absolute watts) keeps the user's intent intact when pl1 moves and a rail clamps at
-    the hardware ceiling (no bounce). Migrates the old {"watts": w}, flat {pl1,pl2,pl3}
-    and off2/off3-shape profiles; the old silent default (derived boost) migrates to
-    ESTABLE so a stale install stops over-drawing on the next apply."""
+    1.2x/1.4x headroom) or custom (explicit off2/off3 margins). It also carries per-scope
+    auto_tdp + gpu clock. Migrates the old {"watts": w}, flat {pl1,pl2,pl3} and
+    off2/off3-shape profiles; the old silent derived-boost default migrates to ESTABLE so
+    a stale install stops over-drawing on the next apply."""
 
     def __init__(self, path, default_watts):
-        self._path = path
         self._default = int(default_watts)
-        self._data = self._load()
+        super().__init__(path)
 
     def _profile_dict(self, pl1, mode=_DEFAULT_MODE, off2=0, off3=0):
         # off2/off3 coerced None-safe: _clean is the shape-validator and must never
@@ -45,7 +42,18 @@ class ProfileStore:
         return {"pl1": int(pl1), "mode": _norm_mode(mode),
                 "off2": max(0, int(off2 or 0)), "off3": max(0, int(off3 or 0))}
 
-    def _clean(self, raw):
+    def _clean_global(self, raw):
+        base = self._clean_values(raw)
+        if isinstance(raw, dict):
+            if raw.get("auto_tdp"):
+                base["auto_tdp"] = True
+            g = raw.get("gpu")
+            if isinstance(g, dict):
+                base["gpu"] = {"manual": bool(g.get("manual")),
+                               "min": g.get("min"), "max": g.get("max")}
+        return base
+
+    def _clean_values(self, raw):
         if not isinstance(raw, dict):
             return self._profile_dict(self._default)
         if "mode" in raw:  # current shape (_profile_dict normalizes the mode)
@@ -71,28 +79,26 @@ class ProfileStore:
             return self._profile_dict(int(raw["watts"]))
         return self._profile_dict(self._default)
 
-    def _load(self):
-        try:
-            with open(self._path) as f:
-                raw = json.load(f)
-        except (OSError, ValueError):
-            raw = {}
-        glob = self._clean(raw.get("global"))
-        games = {}
-        for appid, prof in (raw.get("games") or {}).items():
-            games[str(appid)] = self._clean(prof)
-        return {"global": glob, "games": games}
+    # Auto-TDP and GPU-clock are part of the Potencia profile: per-scope, gated by the
+    # same follow_global as the TDP value (one tab governs the whole section).
+    def auto_tdp(self, appid):
+        return bool(self._effective_prof(appid).get("auto_tdp", False))
 
-    def _save(self):
-        atomic_json_save(self._path, self._data)
+    def set_auto_tdp(self, scope, enabled, appid=None):
+        self._target(scope, appid)["auto_tdp"] = bool(enabled)
+        self._save()
 
-    def _profile(self, appid):
-        if appid is not None and str(appid) in self._data["games"]:
-            return self._data["games"][str(appid)]
-        return self._data["global"]
+    def gpu_clock(self, appid):
+        g = self._effective_prof(appid).get("gpu")
+        return dict(g) if g else {"manual": False, "min": None, "max": None}
+
+    def set_gpu_clock(self, scope, manual, gmin, gmax, appid=None):
+        self._target(scope, appid)["gpu"] = {"manual": bool(manual),
+                                              "min": int(gmin), "max": int(gmax)}
+        self._save()
 
     def effective(self, appid):
-        prof = self._profile(appid)
+        prof = self._effective_prof(appid)
         pl1 = prof["pl1"]
         mode = prof.get("mode", _DEFAULT_MODE)
         if mode == "auto":
@@ -103,26 +109,6 @@ class ProfileStore:
         else:  # estable (flat)
             pl2 = pl3 = pl1
         return {"pl1": pl1, "pl2": pl2, "pl3": pl3, "watts": pl1, "mode": mode}
-
-    def has_game(self, appid):
-        return str(appid) in self._data["games"]
-
-    def list_games(self):
-        return list(self._data["games"].keys())
-
-    def create_game_from_global(self, appid):
-        self._data["games"][str(appid)] = dict(self._data["global"])
-        self._save()
-
-    def _target(self, scope, appid):
-        if scope == "global":
-            return self._data["global"]
-        if scope == "game":
-            if appid is None:
-                raise ValueError("appid required for game scope")
-            prof = self._data["games"].setdefault(str(appid), dict(self._data["global"]))
-            return prof
-        raise ValueError(f"unknown scope: {scope}")
 
     def set_pl1(self, scope, pl1, appid=None):
         """Set sustained watts, keeping the boost mode + margins intact.

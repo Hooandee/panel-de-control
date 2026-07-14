@@ -103,7 +103,10 @@ class FirmwareAttrBackend(TDPBackend):
         mn, mx = self._pl_bounds("ppt_pl1_spl")  # already sanitized in _sanitize_bounds
         min_w = mn if mn is not None else self._fallback.min_w
         fw_max = mx if mx is not None else self._fallback.max_ac_w  # firmware (charger) ceiling
-        batt_max = min(self._fallback.max_w, fw_max)                # device battery policy
+        # Recognised device: keep its intentional on-battery policy (max_w <= firmware).
+        # Generic device: its profile max_w is only a placeholder, so trust the firmware's
+        # real sustained ceiling on battery too instead of capping the slider below it.
+        batt_max = fw_max if self._is_generic else min(self._fallback.max_w, fw_max)
         default_w = max(min_w, min(self._fallback.default_w, fw_max))
         return TdpLimits(min_w=min_w, default_w=default_w, max_w=batt_max, max_ac_w=fw_max)
 

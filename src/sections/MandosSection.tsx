@@ -1,4 +1,4 @@
-import { FC, useEffect, useState } from "react";
+import { FC, useCallback, useEffect, useState } from "react";
 import { DialogButton, Dropdown, PanelSectionRow } from "@decky/ui";
 import { LuGamepad2, LuRotateCcw } from "react-icons/lu";
 
@@ -8,8 +8,10 @@ import {
   getControllerConfig,
   resetController,
   setControllerButton,
+  setControllerFollowGlobal,
   setControllerSetting,
   type ControllerConfig,
+  type Scope,
 } from "../api";
 import {
   currentTargetValue,
@@ -18,6 +20,9 @@ import {
   prettyTarget,
   valueToTarget,
 } from "../mandos/logic";
+import { useRunningGame } from "../tdp/useRunningGame";
+import { useScopeSync } from "../useScopeSync";
+import { ProfileSelector } from "../components/ProfileSelector";
 import { Loading } from "../components/Loading";
 
 /** Raised card chrome with a titled header row. */
@@ -103,24 +108,44 @@ const RemapRow: FC<{ label: string; children: React.ReactNode }> = ({ label, chi
  */
 export const MandosSection: FC = () => {
   const { t } = useI18n();
+  const game = useRunningGame();
   const [config, setConfig] = useState<ControllerConfig | null>(null);
 
+  // Fetch on mount + whenever the running game changes (the backend keys the remap
+  // by the running appid). Clear first so a game switch can't show the previous
+  // game's remap/scope until the new config lands.
+  const appid = game?.appid;
   useEffect(() => {
+    setConfig(null);
     getControllerConfig().then(setConfig).catch(() => {});
-  }, []);
+  }, [appid]);
+
+  // The scope tab reflects the running game's active remap and IS the control (shared
+  // wiring): Global makes the game follow the global remap, the game tab activates its
+  // own, neither deletes the other.
+  const applyFollow = useCallback(
+    (f: boolean, a: string) => { setControllerFollowGlobal(f, a).then(setConfig).catch(() => {}); },
+    [],
+  );
+  const { scope, onScope } = useScopeSync(appid, config?.follows_global, applyFollow);
 
   if (!config) return <Loading />;
 
   const manager = config.manager;
   const version = config.manager_version;
 
+  // Write target for the active scope (a game write needs the appid; global ignores it).
+  const targetAppid = scope === "game" && game ? game.appid : null;
+  const targetScope: Scope = targetAppid ? "game" : "global";
+
   const onSetButton = (source: string, value: string) =>
     // Empty value = the "Default" option → send no targets so the backend reverts
     // this one button to the device default.
-    setControllerButton(source, value ? [valueToTarget(value)] : []).then(setConfig).catch(() => {});
+    setControllerButton(source, value ? [valueToTarget(value)] : [], targetScope, targetAppid)
+      .then(setConfig).catch(() => {});
   const onSetSetting = (field: string, value: string) =>
     setControllerSetting(field, value).then(setConfig).catch(() => {});
-  const onReset = () => resetController().then(setConfig).catch(() => {});
+  const onReset = () => resetController(targetScope, targetAppid).then(setConfig).catch(() => {});
 
   // Dropdown options: a "Default" entry (empty value → backend reverts that one
   // button to the device default) plus grouped buttons + keys.
@@ -171,34 +196,50 @@ export const MandosSection: FC = () => {
           </div>
         </Card>
 
-        {/* InputPlumber: real per-button remap editor. */}
+        {/* InputPlumber: real per-button remap editor, per-game (global + game). */}
         {config.kind === "remap" && (
           <Card title={t("mandos.remap.title")}>
-            {buttons.map((b) => (
-              // b.label is the literal silkscreen name (Y1/M2/…) — render as-is.
-              <RemapRow key={b.source} label={b.label}>
-                <Dropdown
-                  rgOptions={targetGroups}
-                  selectedOption={currentTargetValue(b.target ?? [])}
-                  strDefaultLabel={t("mandos.remap.default")}
-                  onChange={(o) => onSetButton(b.source, o.data as string)}
-                />
-              </RemapRow>
-            ))}
-            {/* Honest footnote: no buttons → why (unknown model vs a transient
-                empty-caps read, distinguished by device_known); otherwise the
-                global-scope reminder. */}
-            <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, margin: `${theme.space.sm}px 0`, lineHeight: 1.4 }}>
-              {buttons.length === 0
-                ? t(config.device_known === false ? "mandos.remap.uncalibrated" : "mandos.remap.nobuttons")
-                : t("mandos.remap.note")}
-            </div>
-            <DialogButton
-              style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: theme.space.xs }}
-              onClick={onReset}
-            >
-              <LuRotateCcw size={14} /> {t("mandos.remap.reset")}
-            </DialogButton>
+            {buttons.length === 0 ? (
+              // No remappable buttons for this model → nothing to scope per game. Show
+              // the honest reason and point to Steam Input for per-game layouts, no
+              // scope tab / reset for an empty editor.
+              <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, lineHeight: 1.4 }}>
+                {t(config.device_known === false ? "mandos.remap.uncalibrated" : "mandos.remap.nobuttons")}
+              </div>
+            ) : (
+              <>
+                <div style={{ marginBottom: theme.space.sm }}>
+                  <ProfileSelector
+                    scope={scope}
+                    gameName={game?.name ?? null}
+                    hasGameProfile={config.has_game_profile ?? false}
+                    globalLabel={t("tdp.scope.global")}
+                    inheritHint={t("mandos.inherit")}
+                    onScope={onScope}
+                  />
+                </div>
+                {buttons.map((b) => (
+                  // b.label is the literal silkscreen name (Y1/M2/…) — render as-is.
+                  <RemapRow key={b.source} label={b.label}>
+                    <Dropdown
+                      rgOptions={targetGroups}
+                      selectedOption={currentTargetValue(b.target ?? [])}
+                      strDefaultLabel={t("mandos.remap.default")}
+                      onChange={(o) => onSetButton(b.source, o.data as string)}
+                    />
+                  </RemapRow>
+                ))}
+                <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, margin: `${theme.space.sm}px 0`, lineHeight: 1.4 }}>
+                  {t("mandos.remap.note")}
+                </div>
+                <DialogButton
+                  style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: theme.space.xs }}
+                  onClick={onReset}
+                >
+                  <LuRotateCcw size={14} /> {t("mandos.remap.reset")}
+                </DialogButton>
+              </>
+            )}
           </Card>
         )}
 

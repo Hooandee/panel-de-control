@@ -86,7 +86,7 @@ export const FanCurveEditor: FC<Props> = ({ control, liveTemp, suggestion, expan
           hasGameProfile={curveState.has_game_profile}
           globalLabel={t("tdp.scope.global")}
           inheritHint={t("tdp.inherit")}
-          onScope={control.setScope}
+          onScope={control.onScope}
         />
       )}
 

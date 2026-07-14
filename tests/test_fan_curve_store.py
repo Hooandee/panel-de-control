@@ -15,6 +15,32 @@ def test_default_is_auto(tmp_path):
     assert eff["points"] is None
 
 
+def test_fan_follow_global_applies_global_keeps_own(tmp_path):
+    s = _store(tmp_path)
+    s.set_preset("global", "balanced", PTS)
+    s.set_preset("game", "performance", PTS, appid="42")
+    assert s.effective("42")["preset"] == "performance"
+    s.set_follow_global("42", True)
+    assert s.effective("42")["preset"] == "balanced"     # global applied
+    assert s.has_game("42") and s.is_following_global("42") is True
+    s.set_follow_global("42", False)
+    assert s.effective("42")["preset"] == "performance"  # own restored, never lost
+
+
+def test_fan_game_without_profile_follows_global(tmp_path):
+    assert _store(tmp_path).is_following_global("999") is True
+
+
+def test_fan_follow_global_persists(tmp_path):
+    path = str(tmp_path / "f.json")
+    s1 = FanCurveStore(path)
+    s1.set_preset("game", "silent", PTS, appid="42")
+    assert s1.is_following_global("42") is False
+    s1.set_follow_global("42", True)
+    s2 = FanCurveStore(path)
+    assert s2.is_following_global("42") is True
+
+
 def test_set_preset_persists_points(tmp_path):
     s = _store(tmp_path)
     s.set_preset("global", "balanced", PTS)

@@ -136,6 +136,81 @@ def test_create_game_copies_global_then_overrides(tmp_path):
     assert s.effective(None)["pl1"] == 18  # global unchanged
 
 
+def test_follow_global_applies_global_but_keeps_own_value(tmp_path):
+    s = _store(tmp_path)
+    s.set_pl1("global", 25)
+    s.set_pl1("game", 10, appid="42")  # game has its own value
+    assert s.effective("42")["pl1"] == 10
+    s.set_follow_global("42", True)     # follow global WITHOUT deleting own
+    assert s.effective("42")["pl1"] == 25   # global applied
+    assert s.has_game("42")                  # own value preserved
+    assert s.is_following_global("42") is True
+    s.set_follow_global("42", False)    # switch back to own
+    assert s.effective("42")["pl1"] == 10   # own value restored, never lost
+    assert s.is_following_global("42") is False
+
+
+def test_game_without_profile_follows_global(tmp_path):
+    s = _store(tmp_path)
+    assert s.is_following_global("999") is True  # no own value → follows global
+
+
+def test_follow_global_defaults_false_and_persists(tmp_path):
+    path = str(tmp_path / "p.json")
+    s1 = ProfileStore(path, default_watts=15)
+    s1.set_pl1("game", 8, appid="42")
+    assert s1.is_following_global("42") is False  # a fresh own profile is active
+    s1.set_follow_global("42", True)
+    s2 = ProfileStore(path, default_watts=15)
+    assert s2.is_following_global("42") is True
+    assert s2.effective("42")["pl1"] == 15  # global default applied on reload
+
+
+def test_editing_game_value_reactivates_own(tmp_path):
+    s = _store(tmp_path)
+    s.set_pl1("global", 25)
+    s.set_pl1("game", 10, appid="42")
+    s.set_follow_global("42", True)
+    assert s.effective("42")["pl1"] == 25          # following global
+    s.set_pl1("game", 12, appid="42")              # user edits the game value
+    assert s.is_following_global("42") is False     # editing re-activates own
+    assert s.effective("42")["pl1"] == 12
+
+
+def test_auto_tdp_per_scope_follows_global(tmp_path):
+    s = _store(tmp_path)
+    assert s.auto_tdp(None) is False            # default off
+    s.set_auto_tdp("global", True)
+    assert s.auto_tdp(None) is True
+    assert s.auto_tdp("42") is True             # no own profile → global
+    s.set_auto_tdp("game", False, appid="42")   # game overrides (activates own)
+    assert s.auto_tdp("42") is False
+    assert s.auto_tdp(None) is True             # global untouched
+    s.set_follow_global("42", True)             # follow global → global's auto
+    assert s.auto_tdp("42") is True
+
+
+def test_gpu_clock_per_scope_follows_global(tmp_path):
+    s = _store(tmp_path)
+    s.set_gpu_clock("global", True, 800, 2000)
+    assert s.gpu_clock(None) == {"manual": True, "min": 800, "max": 2000}
+    assert s.gpu_clock("42") == {"manual": True, "min": 800, "max": 2000}  # global
+    s.set_gpu_clock("game", False, 0, 0, appid="42")  # game overrides (own)
+    assert s.gpu_clock("42")["manual"] is False
+    s.set_follow_global("42", True)
+    assert s.gpu_clock("42")["manual"] is True   # back to global
+
+
+def test_auto_tdp_and_gpu_persist(tmp_path):
+    path = str(tmp_path / "p.json")
+    s1 = ProfileStore(path, default_watts=15)
+    s1.set_auto_tdp("game", True, appid="42")
+    s1.set_gpu_clock("game", True, 1200, 2400, appid="42")
+    s2 = ProfileStore(path, default_watts=15)
+    assert s2.auto_tdp("42") is True
+    assert s2.gpu_clock("42") == {"manual": True, "min": 1200, "max": 2400}
+
+
 def test_persists_and_lists(tmp_path):
     path = str(tmp_path / "tdp_profiles.json")
     s1 = ProfileStore(path, default_watts=15)

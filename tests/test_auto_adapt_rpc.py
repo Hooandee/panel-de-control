@@ -177,6 +177,10 @@ def _run_loop_ticks(p, reads, monkeypatch):
     seq = itertools.chain(reads, itertools.repeat(reads[-1]))
     p._power_reader.read = lambda: next(seq)
     p._reset_auto_windows()
+    # Auto-TDP is per-game now; these tests exercise the control law, so enable it for
+    # whichever scope is active.
+    _scope = "game" if p._current_appid is not None else "global"
+    p._tdp_profiles.set_auto_tdp(_scope, True, appid=p._current_appid)
 
     state = {"n": 0, "sleeps": 0}
     real_decide = main_mod.auto_tdp.decide
@@ -323,6 +327,7 @@ def test_set_ui_active_bumps_pl1_up_when_below_floor(Plugin):
     p._settings["qam_tdp_boost"] = True
     p._current_appid = "g"
     p._tdp_profiles.set_pl1("game", 7, appid="g")  # sunk to device min
+    p._tdp_profiles.set_auto_tdp("game", True, appid="g")
     assert asyncio.run(p.set_ui_active(True)) is True
     from auto_tdp import RESPONSIVE_FLOOR_W
     assert p._effective_levels("g")[0]["pl1"] == RESPONSIVE_FLOOR_W  # bumped up
@@ -370,6 +375,7 @@ def test_ui_floor_engaged_true_only_when_raising(Plugin):
     p._settings["qam_tdp_boost"] = True
     p._current_appid = "g"
     p._tdp_profiles.set_pl1("game", 7, appid="g")
+    p._tdp_profiles.set_auto_tdp("game", True, appid="g")
     asyncio.run(p.set_ui_active(True))  # bumps to the floor
     assert asyncio.run(p.get_power_draw())["ui_floor_engaged"] is True
     # A demanding game parked above the floor → the number IS the in-game one.
@@ -647,3 +653,50 @@ def test_sampler_tick_counter_triggers_reapply(Plugin, monkeypatch):
         res = p._collect_sample()
         p._on_sample_collected(res)
     assert calls["n"] == 1
+
+
+def test_auto_scope_follows_global_until_game_has_own_profile(Plugin):
+    # The auto machinery must NOT detach a game that follows global: while following,
+    # it tunes the global profile the game inherits (scope "global"), never minting a
+    # per-game profile behind the user's back. Only a game with its own profile is
+    # tuned in "game" scope.
+    p = Plugin()
+    p._init()
+    p._current_appid = "g"
+    assert p._tdp_profiles.is_following_global("g") is True
+    assert p._auto_scope() == "global"
+    p._tdp_profiles.set_pl1("game", 20, appid="g")   # game now has its own profile
+    assert p._tdp_profiles.is_following_global("g") is False
+    assert p._auto_scope() == "game"
+    p._current_appid = None
+    assert p._auto_scope() == "global"
+
+
+def test_game_profiles_overview_lists_and_resets(Plugin):
+    p = Plugin()
+    p._init()
+    p._tdp_profiles.set_pl1("game", 22, appid="g")
+    p._cpu_profiles.set_smt("game", False, appid="g")
+    rows = asyncio.run(p.list_game_profiles())
+    row = next(r for r in rows if r["appid"] == "g")
+    assert row["tdp"]["pl1"] == 22
+    assert row["cpu"]["smt"] is False
+    assert "fan" not in row  # no fan profile set for this game
+    # Reset forgets the game across every store → it reverts to global.
+    rows2 = asyncio.run(p.reset_game_profiles("g"))
+    assert all(r["appid"] != "g" for r in rows2)
+    assert p._tdp_profiles.has_game("g") is False
+    assert p._cpu_profiles.has_game("g") is False
+
+
+def test_overview_skips_tab_flip_with_no_real_change(Plugin):
+    p = Plugin()
+    p._init()
+    # A bare scope-toggle (own profile seeded from global, nothing edited) must NOT show
+    # up as a configured game.
+    p._cpu_profiles.create_game_from_global("g")
+    assert all(r["appid"] != "g" for r in asyncio.run(p.list_game_profiles()))
+    # Once something actually differs from global, it appears.
+    p._cpu_profiles.set_smt("game", False, appid="g")
+    rows = asyncio.run(p.list_game_profiles())
+    assert any(r["appid"] == "g" for r in rows)

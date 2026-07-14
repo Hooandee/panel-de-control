@@ -126,6 +126,25 @@ class TestFanCurveRpcNull:
         assert st["supported"] is False
         assert st["preset"] == "balanced"  # persisted even though hardware can't apply
 
+    def test_fan_follow_global_toggle_keeps_own(self, Plugin):
+        p = Plugin()
+        asyncio.run(p.set_fan_preset("balanced", "global", None))
+        asyncio.run(p.set_current_game("42"))
+        asyncio.run(p.set_fan_preset("performance", "game", "42"))  # own
+        assert asyncio.run(p.get_fan_curve_state())["preset"] == "performance"
+        st = asyncio.run(p.set_fan_follow_global(True, "42"))
+        assert st["follows_global"] is True and st["preset"] == "balanced"
+        st = asyncio.run(p.set_fan_follow_global(False, "42"))
+        assert st["follows_global"] is False and st["preset"] == "performance"
+
+    def test_fan_follow_own_without_profile_seeds_from_global(self, Plugin):
+        p = Plugin()
+        asyncio.run(p.set_fan_preset("silent", "global", None))
+        asyncio.run(p.set_current_game("99"))
+        st = asyncio.run(p.set_fan_follow_global(False, "99"))
+        assert st["follows_global"] is False
+        assert st["has_game_profile"] is True and st["preset"] == "silent"
+
     def test_suggestion_unsupported_backend(self, Plugin):
         s = asyncio.run(Plugin().get_fan_suggestion("555"))
         assert s["available"] is False

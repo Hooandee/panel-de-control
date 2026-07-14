@@ -179,6 +179,31 @@ def test_generic_device_only_rejects_absurd_pl1_max(tmp_path):
     assert b2.get_limits().max_ac_w == 100
 
 
+def test_generic_device_battery_max_trusts_firmware(tmp_path):
+    # A generic (unrecognised) device's profile max_w is only a placeholder (15 W).
+    # On battery, trust the firmware's real sustained ceiling instead of capping there
+    # — else a capable handheld is stuck far below what its firmware allows.
+    root = str(tmp_path)
+    _mk_pl1(root, "asus-armoury", 20, 5, 30)
+    generic_fb = TdpLimits(min_w=4, default_w=10, max_w=15, max_ac_w=15)
+    b = FirmwareAttrBackend("asus-armoury", generic_fb, root=root, is_generic=True)
+    lim = b.get_limits()
+    assert lim.max_w == 30
+    assert lim.max_ac_w == 30
+
+
+def test_recognised_device_keeps_battery_policy_below_firmware(tmp_path):
+    # A recognised device keeps its intentional on-battery policy even when the
+    # firmware ceiling is higher (charger-only boost stays a charger-only boost).
+    root = str(tmp_path)
+    _mk_pl1(root, "asus-armoury", 20, 5, 35)
+    fb = TdpLimits(min_w=5, default_w=15, max_w=25, max_ac_w=35)
+    b = FirmwareAttrBackend("asus-armoury", fb, root=root)  # is_generic=False
+    lim = b.get_limits()
+    assert lim.max_w == 25       # battery policy preserved
+    assert lim.max_ac_w == 35    # firmware ceiling on charger
+
+
 def test_bogus_firmware_all_rails_fall_back_to_profile(tmp_path):
     # Some ASUS kernels report every ppt rail max as 150 W on the Xbox Ally X. With a
     # recognised profile (charger max 35) the whole set is distrusted: PL1 -> 35 and the

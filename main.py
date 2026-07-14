@@ -29,7 +29,7 @@ from fan_curves import FanCurveStore
 from display.color_store import ColorStore, sanitize_calibration
 from display.gamescope import GamescopeColorBackend, run_gamescopectl
 from display.oled_look import oled_look_for
-from display.const import NATIVE as COLOR_NATIVE, FIELDS as COLOR_FIELDS
+from display.const import NATIVE as COLOR_NATIVE, FIELDS as COLOR_FIELDS, CALIBRATION as COLOR_CALIBRATION
 from display.night_store import NightStore
 from display.night import is_night_active
 from display import presets as color_presets
@@ -40,6 +40,7 @@ from battery.reader import BatteryReader
 from battery.charge_limit import select_charge_limit
 from cpu.info import read_cpu_info, read_cpu_model
 from cpu.controls import CoreControl, SmtControl, select_boost
+from cpu.profiles import CpuProfileStore
 from telemetry.store import TelemetryStore
 from telemetry.sampler import TelemetrySampler
 from controllers import detect as controller_detect
@@ -82,6 +83,11 @@ def _now_minutes() -> int:
 DEFAULTS = {
     # Persisted settings keys go here; SettingsStore merges these over stored values.
     # (Per-game TDP profiles live in their own store, tdp_profiles.py.)
+    # One-time-migration flags: SettingsStore drops keys not in DEFAULTS, so these MUST
+    # be declared here or the migration re-runs every load and clobbers the new stores.
+    "_potencia_scope_migrated": False,
+    "_cpu_scope_migrated": False,
+    "_hdr_scope_migrated": False,
     "auto_tdp": False,
     # Learn from usage (local-only telemetry powering fan-curve suggestions). Opt-out:
     # when False the sampler never runs — nothing is read or written during play.
@@ -158,19 +164,34 @@ class Plugin:
             os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "tdp_profiles.json"),
             default_watts=self._device.tdp_default or 15,
         )
+        # One-time migration: auto-TDP and GPU clock used to be flat global settings.
+        # Seed them into the global Potencia profile so they take part in per-game scope.
+        if not self._settings.get("_potencia_scope_migrated"):
+            if self._settings.get("auto_tdp"):
+                self._tdp_profiles.set_auto_tdp("global", True)
+            if self._settings.get("gpu_clock_manual"):
+                self._tdp_profiles.set_gpu_clock(
+                    "global", True,
+                    self._settings.get("gpu_clock_min") or 0,
+                    self._settings.get("gpu_clock_max") or 0)
+            self._settings["_potencia_scope_migrated"] = True
+            self._store.save(self._settings)
         self._tdp_backend = tdp_factory.select_backend(self._device)
         # Which daemon owns the controller (HHD / InputPlumber / none). Detected
         # once — the resident daemon doesn't change at runtime. Probe never raises.
         self._controller = controller_detect.detect()
-        # Cooperative controller remap: overrides store (global, IP profiles are
-        # global) + the busctl dbus driver, both owned by the InputPlumber backend.
-        # The factory picks ONE backend for this device (HHD REST / IP dbus / none).
+        # Cooperative controller remap: per-scope overrides store (global + per-game,
+        # InputPlumber only — we own its remap) + the busctl dbus driver, both owned by
+        # the InputPlumber backend. The factory picks ONE backend (HHD REST / IP dbus /
+        # none). `_last_controller_overrides` gates the game-change re-apply so we only
+        # touch the daemon when the effective profile actually changes.
         self._controller_backend = controller_factory.select_controller_backend(
             self._controller,
             RemapStore(os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "controller_remap.json")),
             IpDbus(),
             self._device,
         )
+        self._last_controller_overrides = None
         self._fan_reader = FanReader()
         # temp_fn feeds the software-loop backends (Steam Deck / Legion Go 2) the
         # live driving temp; hardware-curve backends (ASUS/MSI) ignore it.
@@ -199,6 +220,13 @@ class Plugin:
         self._color = ColorStore(
             os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "color.json")
         )
+        # One-time migration: HDR on/off used to be a flat global setting; fold it into
+        # the global color profile so it participates in per-game scope.
+        if not self._settings.get("_hdr_scope_migrated"):
+            if self._settings.get("hdr_enabled"):
+                self._color.set_hdr("global", True)
+            self._settings["_hdr_scope_migrated"] = True
+            self._store.save(self._settings)
         # Intel/Xe needs gamescope composition forced for a color look to show in-game
         # (the LUT isn't carried by the HW color pipeline as it is on AMD).
         self._color_backend = GamescopeColorBackend(
@@ -231,8 +259,23 @@ class Plugin:
         self._smt = SmtControl()
         self._boost = select_boost()
         self._cores = CoreControl()
+        self._cpu_profiles = CpuProfileStore(
+            os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "cpu_profiles.json"))
+        # One-time migration: SMT / boost / active cores used to be flat global settings.
+        if not self._settings.get("_cpu_scope_migrated"):
+            self._cpu_profiles.set_smt("global", bool(self._settings.get("smt_enabled", True)))
+            self._cpu_profiles.set_boost("global", bool(self._settings.get("boost_enabled", True)))
+            n = self._settings.get("active_cores")
+            if n is not None:
+                self._cpu_profiles.set_cores("global", int(n))
+            self._settings["_cpu_scope_migrated"] = True
+            self._store.save(self._settings)
         self._gpu_clock = select_gpu_clock(self._device)
         # Topology + freq range are static — read once (only SMT/boost state is live).
+        # ORDER-CRITICAL: read AFTER CoreControl() above, which onlines all CPUs. The
+        # kernel drops an offline CPU's topology/core_id, so counting cores here before
+        # every core is online undercounts (e.g. 2 cores on an 8-core chip). Keep this
+        # after self._cores.
         self._cpu_info = read_cpu_info()
         # Real silicon name (static) shown in the DeviceHeader instead of the hardcoded
         # table chip; read once here like _cpu_info. None on generic or when unreadable.
@@ -498,24 +541,146 @@ class Plugin:
     # One backend per device (factory), mirroring the TDP backend: each RPC is a
     # one-line delegation, no per-manager if/elif here. The config carries
     # manager / manager_version / supported so the UI needs a single round-trip.
+    # get_config / set_button / reset spawn busctl (InputPlumber) or hit HHD's local
+    # HTTP — blocking work that must stay off the event loop (a busctl stall while the
+    # daemon re-grabs the pad would freeze the QAM). All offloaded via _offload_call.
     async def get_controller_config(self) -> dict:
         self._init()
-        return self._controller_backend.get_config()
+        return await self._offload_call(
+            lambda: self._controller_backend.get_config(self._current_appid))
 
-    async def set_controller_button(self, source: str, targets: list) -> dict:
-        """Remap one extra button (InputPlumber devices; no-op on others)."""
+    async def set_controller_button(self, source: str, targets: list,
+                                    scope: str = "global", appid=None) -> dict:
+        """Remap one extra button in a scope (global / a game; InputPlumber only,
+        no-op on others). Editing tracks the applied set so the game-change re-apply
+        can tell whether anything changed."""
         self._init()
-        return self._controller_backend.set_button(source, targets)
+        scope = self._resolve_scope(scope, appid)  # game+no-appid → global; pins _current_appid
+        if scope is None:
+            return await self._offload_call(
+                lambda: self._controller_backend.get_config(self._current_appid))
+        cfg = await self._offload_call(
+            lambda: self._controller_backend.set_button(source, targets, scope, appid))
+        self._last_controller_overrides = self._controller_backend.effective_overrides(
+            self._current_appid)
+        return cfg
+
+    async def set_controller_follow_global(self, follow: bool, appid) -> dict:
+        """Toggle a game between its own remap and following the global one, keeping
+        its stored overrides (never deletes). Seeds from global on "use own" if it has
+        none, then re-applies the now-effective profile (InputPlumber only)."""
+        self._init()
+        if appid is not None:
+            appid = str(appid)
+            self._current_appid = appid  # pin so the re-apply/state use the toggled game
+            if not follow and not self._controller_backend.has_game(appid):
+                self._controller_backend.create_game_from_global(appid)  # already sets follow_global=False
+            else:
+                self._controller_backend.set_follow_global(appid, bool(follow))
+            self._reapply_controller()
+        return await self._offload_call(
+            lambda: self._controller_backend.get_config(self._current_appid))
 
     async def set_controller_setting(self, field: str, value: str) -> dict:
         """Change a controller setting on HHD (mode / paddles_as; no-op on others)."""
         self._init()
-        return self._controller_backend.set_setting(field, value)
+        return await self._offload_call(
+            lambda: self._controller_backend.set_setting(field, value))
 
-    async def reset_controller(self) -> dict:
-        """Reset remap to the device default (InputPlumber; no-op on others)."""
+    async def reset_controller(self, scope: str = "global", appid=None) -> dict:
+        """Reset a scope's remap to the device default (InputPlumber; no-op on others)."""
         self._init()
-        return self._controller_backend.reset()
+        scope = self._resolve_scope(scope, appid)
+        if scope is None:
+            return await self._offload_call(
+                lambda: self._controller_backend.get_config(self._current_appid))
+        cfg = await self._offload_call(
+            lambda: self._controller_backend.reset(scope, appid))
+        self._last_controller_overrides = self._controller_backend.effective_overrides(
+            self._current_appid)
+        return cfg
+
+    def _reapply_controller(self) -> None:
+        """On a game change, load the effective InputPlumber profile for the running
+        game — but only when it DIFFERS from what's already loaded, so the common case
+        (following global, or the same profile) never touches the daemon and can't
+        race its own re-grab on game launch. Offloaded (dbus + YAML subprocess). No-op
+        on HHD/none (effective_overrides returns None)."""
+        ov = self._controller_backend.effective_overrides(self._current_appid)
+        if ov is None or ov == self._last_controller_overrides:
+            return
+        # No remaps configured and none ever applied this session → leave the daemon
+        # untouched (don't reset it to default just because a game launched).
+        if not ov and self._last_controller_overrides is None:
+            return
+        appid = self._current_appid
+
+        def apply():
+            if self._controller_backend.apply_effective(appid):
+                self._last_controller_overrides = ov
+
+        self._offload(apply)
+
+    # ---- Ajustes: per-game profile overview --------------------------------
+    def _scoped_stores(self):
+        """Every store that keeps per-game profiles, all sharing list_games/forget_game
+        (the controller backend no-ops when it's not InputPlumber)."""
+        return (self._tdp_profiles, self._fan_curves, self._color, self._cpu_profiles,
+                self._controller_backend)
+
+    def _game_profile_row(self, appid: str) -> dict:
+        """A game's per-section profiles for the overview — RAW own values (what the user
+        set), not the effective/global-inherited ones. A section is included only when
+        the game's own profile actually DIFFERS from global (a bare scope-toggle that
+        just copied global isn't 'configured'); `follows_global` marks a
+        configured-but-inactive one."""
+        row = {"appid": appid}
+        if self._tdp_profiles.differs_from_global(appid):
+            tp = self._tdp_profiles.game_profile(appid)
+            row["tdp"] = {"pl1": int(tp.get("pl1", 0)),
+                          "auto": bool(tp.get("auto_tdp")),
+                          "gpu": bool((tp.get("gpu") or {}).get("manual")),
+                          "follows_global": self._tdp_profiles.is_following_global(appid)}
+        if self._fan_curves.differs_from_global(appid):
+            row["fan"] = {"preset": self._fan_curves.game_profile(appid).get("preset", "auto"),
+                          "follows_global": self._fan_curves.is_following_global(appid)}
+        if self._color.differs_from_global(appid):
+            cp = self._color.game_profile(appid)
+            row["color"] = {"saturation": int(cp.get("saturation", 100)),
+                            "calibrated": any(cp.get(f) != COLOR_NATIVE[f] for f in COLOR_CALIBRATION),
+                            "hdr": bool(cp.get("hdr")),
+                            "follows_global": self._color.is_following_global(appid)}
+        if self._cpu_profiles.differs_from_global(appid):
+            up = self._cpu_profiles.game_profile(appid)
+            row["cpu"] = {"smt": bool(up.get("smt", True)),
+                          "boost": bool(up.get("boost", True)),
+                          "cores": up.get("cores"),
+                          "follows_global": self._cpu_profiles.is_following_global(appid)}
+        if self._controller_backend.differs_from_global(appid):
+            row["mandos"] = {"count": len(self._controller_backend.game_profile(appid)),
+                             "follows_global": self._controller_backend.is_following_global(appid)}
+        return row
+
+    async def list_game_profiles(self) -> list:
+        """Every game with a per-game profile that differs from global in ANY section, for
+        the Ajustes overview. The frontend resolves names + formats the summaries (i18n)."""
+        self._init()
+        appids = set()
+        for store in self._scoped_stores():
+            appids.update(store.list_games())
+        rows = (self._game_profile_row(a) for a in sorted(appids))
+        return [r for r in rows if len(r) > 1]  # drop games whose every section == global
+
+    async def reset_game_profiles(self, appid) -> list:
+        """Forget a game's per-section profiles across every store → it reverts to
+        global. Re-applies if it's the running game. Returns the refreshed list."""
+        self._init()
+        appid = str(appid)
+        for store in self._scoped_stores():
+            store.forget_game(appid)
+        if appid == self._current_appid:
+            self._reapply_all()
+        return await self.list_game_profiles()
 
     async def get_controller_conflict(self) -> dict:
         self._init()
@@ -655,6 +820,7 @@ class Plugin:
             "global_points": global_curve["points"],
             "has_game_profile": (self._current_appid is not None
                                  and self._fan_curves.has_game(self._current_appid)),
+            "follows_global": self._fan_curves.is_following_global(self._current_appid),
             "appid": self._current_appid,
             "presets": [{"id": pid, "points": pts}
                         for pid, pts in fan_presets.RESOLVED.items()],
@@ -702,6 +868,19 @@ class Plugin:
         self._fan_ctrl = fan_control.select_fan_backend(
             self._device, temp_fn=self._driving_temp, experimental=enabled)
         self._reapply_fans_sync()
+
+    async def set_fan_follow_global(self, follow: bool, appid) -> dict:
+        """Toggle a game between its own fan curve and following the global one, keeping
+        its stored curve (never deletes). Seeds from global on "use own" if it has none."""
+        self._init()
+        if appid is not None:
+            appid = str(appid)
+            self._current_appid = appid  # pin so the re-apply/state use the toggled game
+            if not follow and not self._fan_curves.has_game(appid):
+                self._fan_curves.create_game_from_global(appid)
+            self._fan_curves.set_follow_global(appid, bool(follow))
+            self._reapply_fans()
+        return self._fan_curve_state()
 
     async def set_fan_preset(self, preset: str, scope: str, appid=None) -> dict:
         self._init()
@@ -1096,8 +1275,10 @@ class Plugin:
                 if self._settings.get("eco_enabled"):
                     self._reset_auto_windows()
                     continue
-                # A named firmware mode owns the rails — don't drive PL1 over it.
-                if self._firmware_mode() != _CUSTOM_MODE:
+                # Hold when auto-TDP is off for THIS game (per-game, own or global) or a
+                # named firmware mode owns the rails — either way we don't drive PL1.
+                if (not self._tdp_profiles.auto_tdp(self._current_appid)
+                        or self._firmware_mode() != _CUSTOM_MODE):
                     self._reset_auto_windows()
                     continue
                 # read() sub-samples gpu_busy over a short blocking burst -> off
@@ -1133,7 +1314,7 @@ class Plugin:
         or when not auto / no game / UI closed. Don't claim a raise that
         isn't happening."""
         if not (self._qam_boost_active() and self._current_appid is not None
-                and bool(self._settings.get("auto_tdp"))):
+                and self._tdp_profiles.auto_tdp(self._current_appid)):
             return False
         lim = self._limits()
         floor = auto_tdp.effective_floor(lim.min_w, True)
@@ -1147,7 +1328,7 @@ class Plugin:
     async def get_power_draw(self) -> dict:
         self._init()
         pr = await asyncio.to_thread(self._power_reader.read)
-        auto = bool(self._settings.get("auto_tdp"))
+        auto = self._tdp_profiles.auto_tdp(self._current_appid)
         setpoint = self._effective_levels(self._current_appid)[0]["pl1"]
         # Live PL1 the firmware holds (reflects eco + external HHD/Steam changes). Skip
         # it on subprocess-backed backends (ryzenadj) so the 1 s poll doesn't fork a
@@ -1162,16 +1343,12 @@ class Plugin:
             "ui_floor_engaged": self._ui_floor_engaged(),
         }
 
-    async def set_auto_tdp(self, enabled: bool) -> dict:
+    async def set_auto_tdp(self, enabled: bool, scope: str = "global", appid=None) -> dict:
         self._init()
         self._clear_eco()
-        self._settings["auto_tdp"] = bool(enabled)
-        self._save()
-        if enabled:
-            self._start_auto_loop()
-        else:
-            self._stop_auto_loop()
-        return {"auto_tdp": bool(enabled)}
+        self._tdp_profiles.set_auto_tdp(scope, bool(enabled), appid=appid)
+        await self._offload_call(self._reapply_tdp)
+        return {"auto_tdp": self._tdp_profiles.auto_tdp(self._current_appid)}
 
     async def set_ui_active(self, enabled: bool) -> bool:
         """The plugin UI (QAM panel) opened/closed. When the opt-in ``qam_tdp_boost``
@@ -1184,7 +1361,8 @@ class Plugin:
         self._init()
         self._ui_active = bool(enabled)
         if (self._qam_boost_active() and self._current_appid is not None
-                and bool(self._settings.get("auto_tdp"))):
+                and self._tdp_profiles.auto_tdp(self._current_appid)
+                and self._firmware_mode() == _CUSTOM_MODE):
             lim = self._limits()
             floor = auto_tdp.effective_floor(lim.min_w, True)
             cur = self._effective_levels(self._current_appid)[0]["pl1"]
@@ -1279,9 +1457,14 @@ class Plugin:
             return unavail("error")
 
     def _auto_scope(self) -> str:
-        """The TDP/fan profile scope the auto machinery writes to (game when one is
-        running, else global)."""
-        return "game" if self._current_appid else "global"
+        """The TDP profile scope the auto machinery writes to. Only the game scope when
+        the running game has its OWN profile; a game that follows global is tuned via the
+        global profile it inherits, so the loop never silently detaches it (which would
+        flip follow_global off and mint a per-game profile with no user action)."""
+        appid = self._current_appid
+        if appid is not None and not self._tdp_profiles.is_following_global(appid):
+            return "game"
+        return "global"
 
     # ---- off-loop dispatch --------------------------------------------------
     # Any subprocess/HTTP-backed apply (gamescopectl, systemctl, ryzenadj, …) MUST
@@ -1393,6 +1576,7 @@ class Plugin:
         # HDR first and load the color look after (both self-offloading, FIFO executor).
         self._reapply_hdr()
         self._reapply_color()
+        self._reapply_controller()  # diff-gated; no-op unless the effective remap changed
 
     # ---- Battery + charge limit --------------------------------------------
     def _apply_charge_limit(self) -> None:
@@ -1446,15 +1630,20 @@ class Plugin:
         ORDER MATTERS: cores FIRST (onlining the kept cores brings their SMT siblings
         online too), then SMT — so SMT-off re-offlines those siblings and the two
         controls, which write the same cpuN/online nodes, end up consistent."""
-        # Re-assert the active-core count (cores come back all-online after a suspend).
-        n = self._settings.get("active_cores")
-        if self._cores.supported and n is not None:
-            self._cores.set(int(n))
+        # Effective per-game CPU controls (own when the game has them, else global).
+        eff = self._cpu_profiles.effective(self._current_appid)
+        # Re-assert the active-core count. None = "all cores" → actively restore the full
+        # count (so switching FROM a core-limited game/global back to an unlimited scope
+        # brings the offlined cores back, instead of leaving them off).
+        if self._cores.supported:
+            n = eff["cores"] if eff["cores"] is not None else self._cores.max_cores
+            if n is not None:
+                self._cores.set(int(n))
         if self._smt.supported:
-            self._smt.set(bool(self._settings.get("smt_enabled", True)))
+            self._smt.set(bool(eff["smt"]))
         if self._boost.supported:
             eco = self._settings.get("eco_enabled", False)
-            self._boost.set(False if eco else bool(self._settings.get("boost_enabled", True)))
+            self._boost.set(False if eco else bool(eff["boost"]))
 
     def _clear_eco(self) -> None:
         """Manual control taken → exit download mode and restore the normal TDP/boost
@@ -1509,23 +1698,33 @@ class Plugin:
             "cores_supported": self._cores.supported,
             "max_cores": self._cores.max_cores,
             "active_cores": self._cores.active() if self._cores.supported else None,
+            "follows_global": self._cpu_profiles.is_following_global(self._current_appid),
+            "has_game_profile": (self._current_appid is not None
+                                 and self._cpu_profiles.has_game(self._current_appid)),
         }
 
     async def get_cpu_state(self) -> dict:
         self._init()
         return self._cpu_state()
 
-    async def set_active_cores(self, count: int) -> dict:
+    async def set_active_cores(self, count: int, scope: str = "global", appid=None) -> dict:
         self._init()
         self._clear_eco()
-        self._settings["active_cores"] = int(count)
-        self._save()
-        if self._cores.supported:
-            self._cores.set(int(count))
-            # Onlining the kept cores also brings their SMT siblings online; re-assert
-            # SMT so an SMT-off preference re-offlines them (shared cpuN/online nodes).
-            if self._smt.supported:
-                self._smt.set(bool(self._settings.get("smt_enabled", True)))
+        self._cpu_profiles.set_cores(scope, int(count), appid=appid)
+        self._apply_cpu()  # orders cores→SMT so kept cores' SMT siblings don't re-online
+        return self._cpu_state()
+
+    async def set_cpu_follow_global(self, follow: bool, appid) -> dict:
+        """Toggle a game between its own CPU controls (SMT/boost/cores) and following the
+        global ones, keeping its stored values (never deletes). Seeds from global on use-own."""
+        self._init()
+        if appid is not None:
+            appid = str(appid)
+            self._current_appid = appid  # pin so the re-apply/state use the toggled game
+            if not follow and not self._cpu_profiles.has_game(appid):
+                self._cpu_profiles.create_game_from_global(appid)
+            self._cpu_profiles.set_follow_global(appid, bool(follow))
+            self._apply_cpu()
         return self._cpu_state()
 
     # ---- GPU clock (Potencia) ----------------------------------------------
@@ -1533,65 +1732,59 @@ class Plugin:
         """Re-assert the GPU clock window when manual (cleared to auto after suspend).
         When not manual we leave the GPU alone (don't fight other tools). Guarded."""
         try:
-            if not self._gpu_clock.supported or not self._settings.get("gpu_clock_manual"):
+            g = self._tdp_profiles.gpu_clock(self._current_appid)  # effective per game
+            if not self._gpu_clock.supported or not g.get("manual"):
                 return
-            lo, hi = self._settings.get("gpu_clock_min"), self._settings.get("gpu_clock_max")
+            lo, hi = g.get("min"), g.get("max")
             if lo is not None and hi is not None:
                 self._gpu_clock.set(int(lo), int(hi))
         except Exception:  # noqa: BLE001
             pass
 
     def _gpu_clock_state(self) -> dict:
+        g = self._tdp_profiles.gpu_clock(self._current_appid)
         rng = self._gpu_clock.get_range()
         cur = self._gpu_clock.get()
+        gmin, gmax = g.get("min"), g.get("max")
         return {
             "supported": self._gpu_clock.supported,
-            "manual": bool(self._settings.get("gpu_clock_manual")),
+            "manual": bool(g.get("manual")),
             "range_min": rng[0] if rng else None,
             "range_max": rng[1] if rng else None,
-            # Current forced window; falls back to the full range for the initial sliders.
-            "min": cur[0] if cur else (rng[0] if rng else None),
-            "max": cur[1] if cur else (rng[1] if rng else None),
+            # Stored per-scope window when set; else the live/full range for the sliders.
+            "min": gmin if gmin else (cur[0] if cur else (rng[0] if rng else None)),
+            "max": gmax if gmax else (cur[1] if cur else (rng[1] if rng else None)),
         }
 
     async def get_gpu_clock(self) -> dict:
         self._init()
         return self._gpu_clock_state()
 
-    async def set_gpu_clock(self, min_mhz: int, max_mhz: int) -> dict:
+    async def set_gpu_clock(self, min_mhz: int, max_mhz: int, scope: str = "global", appid=None) -> dict:
         self._init()
-        self._settings["gpu_clock_manual"] = True
-        self._settings["gpu_clock_min"] = int(min_mhz)
-        self._settings["gpu_clock_max"] = int(max_mhz)
-        self._save()
-        if self._gpu_clock.supported:
-            self._gpu_clock.set(int(min_mhz), int(max_mhz))
+        self._tdp_profiles.set_gpu_clock(scope, True, int(min_mhz), int(max_mhz), appid=appid)
+        self._apply_gpu_clock()
         return self._gpu_clock_state()
 
-    async def set_gpu_clock_auto(self) -> dict:
+    async def set_gpu_clock_auto(self, scope: str = "global", appid=None) -> dict:
         self._init()
-        self._settings["gpu_clock_manual"] = False
-        self._save()
+        self._tdp_profiles.set_gpu_clock(scope, False, 0, 0, appid=appid)
         if self._gpu_clock.supported:
             self._gpu_clock.set_auto()
         return self._gpu_clock_state()
 
-    async def set_smt(self, enabled: bool) -> dict:
+    async def set_smt(self, enabled: bool, scope: str = "global", appid=None) -> dict:
         self._init()
         self._clear_eco()
-        self._settings["smt_enabled"] = bool(enabled)
-        self._save()
-        if self._smt.supported:
-            self._smt.set(bool(enabled))
+        self._cpu_profiles.set_smt(scope, bool(enabled), appid=appid)
+        self._apply_cpu()
         return self._cpu_state()
 
-    async def set_cpu_boost(self, enabled: bool) -> dict:
+    async def set_cpu_boost(self, enabled: bool, scope: str = "global", appid=None) -> dict:
         self._init()
         self._clear_eco()
-        self._settings["boost_enabled"] = bool(enabled)
-        self._save()
-        if self._boost.supported:
-            self._boost.set(bool(enabled))
+        self._cpu_profiles.set_boost(scope, bool(enabled), appid=appid)
+        self._apply_cpu()
         return self._cpu_state()
 
     async def set_charge_limit(self, enabled: bool, percent: int) -> dict:
@@ -1676,6 +1869,7 @@ class Plugin:
             "global_saturation": self._color.effective(None)["saturation"],
             "has_game_profile": (self._current_appid is not None
                                  and self._color.has_game(self._current_appid)),
+            "follows_global": self._color.is_following_global(self._current_appid),
             "appid": self._current_appid,
             # The per-model "OLED look" preset (None on a real OLED → UI hides the card).
             "oled_look": oled_look_for(self._device),
@@ -1707,16 +1901,16 @@ class Plugin:
         self._init()
         return await self._offload_call(self._color_state)
 
-    async def apply_color_preset(self, key: str) -> dict:
-        """Apply a balanced look globally (native = reset). Saved directly."""
+    async def apply_color_preset(self, key: str, scope: str = "global", appid=None) -> dict:
+        """Apply a look to the given scope (native = reset that scope). Saved directly."""
         self._init()
         self._cancel_color_revert()
         self._color_preview = None
         preset = color_presets.resolve_preset(self._device, key)
         if key == "native":
-            self._color.apply_preset(dict(COLOR_NATIVE))  # global→native, keep per-game
+            self._color.apply_preset(scope, dict(COLOR_NATIVE), appid=appid)
         elif preset is not None:
-            self._color.apply_preset(preset)
+            self._color.apply_preset(scope, preset, appid=appid)
         self._reapply_color()
         return await self._offload_call(self._color_state)
 
@@ -1726,6 +1920,19 @@ class Plugin:
         self._init()
         self._color.set_saturation(scope, int(value), appid=appid)
         self._reapply_color()
+        return await self._offload_call(self._color_state)
+
+    async def set_color_follow_global(self, follow: bool, appid) -> dict:
+        """Toggle a game between its own saturation and following the global one, keeping
+        its stored value (never deletes). Seeds from global on "use own" if it has none."""
+        self._init()
+        if appid is not None:
+            appid = str(appid)
+            self._current_appid = appid  # pin so the re-apply/state use the toggled game
+            if not follow and not self._color.has_game(appid):
+                self._color.create_game_from_global(appid)
+            self._color.set_follow_global(appid, bool(follow))
+            self._reapply_color()
         return await self._offload_call(self._color_state)
 
     async def preview_calibration(self, calibration: dict) -> dict:
@@ -1744,12 +1951,12 @@ class Plugin:
             self._cancel_color_revert()  # empty payload → drop any timer already armed
         return await self._offload_call(self._color_state)
 
-    async def set_calibration(self, calibration: dict) -> dict:
-        """Confirm (save) the calibration: persist, cancel the auto-revert, apply."""
+    async def set_calibration(self, calibration: dict, scope: str = "global", appid=None) -> dict:
+        """Confirm (save) the calibration for a scope: persist, cancel auto-revert, apply."""
         self._init()
         self._cancel_color_revert()
         self._color_preview = None
-        self._color.set_calibration(**sanitize_calibration(calibration))
+        self._color.set_calibration(scope, appid, **sanitize_calibration(calibration))
         self._reapply_color()
         return await self._offload_call(self._color_state)
 
@@ -1779,15 +1986,15 @@ class Plugin:
         self._color_revert_task = None
         self._reapply_color()
 
-    async def apply_oled_look(self) -> dict:
-        """One-tap: apply this model's OLED-look preset (calibration + a global
-        saturation). No-op on OLED panels (no preset). Saved directly."""
+    async def apply_oled_look(self, scope: str = "global", appid=None) -> dict:
+        """One-tap: apply this model's OLED-look preset (calibration + saturation) to the
+        given scope. No-op on OLED panels (no preset). Saved directly."""
         self._init()
         self._cancel_color_revert()
         self._color_preview = None
         look = oled_look_for(self._device)
         if look is not None:
-            self._color.apply_preset(look)
+            self._color.apply_preset(scope, look, appid=appid)
             self._reapply_color()
         return await self._offload_call(self._color_state)
 
@@ -1862,20 +2069,21 @@ class Plugin:
     def _hdr_state(self) -> dict:
         return {
             "supported": self._hdr_supported(),
-            "enabled": bool(self._settings.get("hdr_enabled")),
+            "enabled": self._color.hdr(self._current_appid),  # per-game (own or global)
+            "follows_global": self._color.is_following_global(self._current_appid),
         }
 
     def _reapply_hdr(self) -> None:
-        # Gate on the cheap setting only (skips a no-op executor hop on the common path);
-        # the supported probe (may spawn gamescopectl) runs off-loop in _reapply_hdr_sync.
-        if self._settings.get("hdr_enabled"):
+        # Gate on the effective per-game HDR (skips a no-op executor hop on the common
+        # path); the supported probe (may spawn gamescopectl) runs off-loop below.
+        if self._color.hdr(self._current_appid):
             self._offload(self._reapply_hdr_sync)
 
     def _reapply_hdr_sync(self) -> None:
         """Re-assert HDR ON (never force a supported panel OUT of an HDR mode set
         elsewhere, e.g. Steam's own toggle)."""
         try:
-            if self._hdr_supported() and self._settings.get("hdr_enabled"):
+            if self._hdr_supported() and self._color.hdr(self._current_appid):
                 self._hdr_backend.set_enabled(True)
         except Exception:  # noqa: BLE001
             pass
@@ -1884,15 +2092,14 @@ class Plugin:
         self._init()
         return await self._offload_call(self._hdr_state)
 
-    async def set_hdr(self, patch: dict) -> dict:
-        """Turn HDR on/off and apply at once (an explicit toggle applies both states,
-        unlike the resume re-assert which only re-asserts ON)."""
+    async def set_hdr(self, patch: dict, scope: str = "global", appid=None) -> dict:
+        """Turn HDR on/off for a scope and apply at once (an explicit toggle applies both
+        states, unlike the resume re-assert which only re-asserts ON)."""
         self._init()
         p = patch if isinstance(patch, dict) else {}
         if "enabled" in p:
-            self._settings["hdr_enabled"] = bool(p["enabled"])
-            self._save()
-        enabled = bool(self._settings.get("hdr_enabled"))
+            self._color.set_hdr(scope, bool(p["enabled"]), appid=appid)
+        enabled = self._color.hdr(self._current_appid)
         # Off-loop: set_enabled spawns gamescopectl (a no-op when gamescope is absent).
         self._offload(lambda: self._hdr_backend.set_enabled(enabled))
         # Then re-assert the color look — gamescope can drop the loaded LUT on a mode switch.
@@ -1923,12 +2130,14 @@ class Plugin:
         Skipped in eco / auto (we own the setpoint there). True when adopted."""
         if applied is None or self._last_written_pl1 is None:
             return False
-        if self._settings.get("eco_enabled") or self._settings.get("auto_tdp"):
+        if self._settings.get("eco_enabled") or self._tdp_profiles.auto_tdp(self._current_appid):
             return False
         if abs(int(applied) - int(self._last_written_pl1)) < _EXTERNAL_TDP_THRESHOLD:
             return False
         appid = self._current_appid
-        scope = "game" if (appid is not None and self._tdp_profiles.has_game(appid)) else "global"
+        # Adopt into the scope that's actually live (game only when it has its OWN active
+        # profile) — never detach a follow-global game that merely kept stored values.
+        scope = self._auto_scope()
         self._tdp_profiles.set_pl1(scope, int(applied), appid=appid)
         self._last_written_pl1 = int(applied)
         return True
@@ -1949,6 +2158,9 @@ class Plugin:
             "appid": self._current_appid,
             "has_game_profile": (self._current_appid is not None
                                  and self._tdp_profiles.has_game(self._current_appid)),
+            # Whether this game is applying the global profile (no own value, or its own
+            # is toggled to follow global). Powers the "usa el global / usa el propio" UI.
+            "follows_global": self._tdp_profiles.is_following_global(self._current_appid),
             "watts": limits.clamp(eff["watts"], ac),
             "global_watts": limits.clamp(geff["watts"], ac),
             "applied_w": applied_w,
@@ -2007,6 +2219,22 @@ class Plugin:
         res = await self._offload_call(self._reapply_tdp)
         return {"requested_w": res.requested_w, "applied_w": res.applied_w,
                 "ok": res.ok, "detail": res.detail}
+
+    async def set_tdp_follow_global(self, follow: bool, appid) -> dict:
+        """Toggle a game between its own TDP profile and following the global one,
+        keeping its stored values (never deletes). Re-applies and returns full state."""
+        self._init()
+        if appid is not None:
+            self._clear_eco()
+            appid = str(appid)
+            self._current_appid = appid  # pin so the re-apply/state use the toggled game
+            # "Use own" on a game with no profile yet: seed it from the current global so
+            # there's an editable starting value (nothing is ever deleted).
+            if not follow and not self._tdp_profiles.has_game(appid):
+                self._tdp_profiles.create_game_from_global(appid)
+            self._tdp_profiles.set_follow_global(appid, bool(follow))
+            await self._offload_call(self._reapply_tdp)
+        return self._tdp_state(await self._read_applied())
 
     async def set_tdp_firmware_mode(self, mode: str) -> dict:
         """Select a firmware performance mode (Legion Go original). 'low-power' /
@@ -2112,8 +2340,10 @@ class Plugin:
             # Re-assert the look across gamescope's session bringup, when a single apply
             # doesn't stick (see _await_display_backend). Always runs, not just cold boot.
             self._display_wait_task = asyncio.create_task(self._await_display_backend())
-            if self._settings.get("auto_tdp"):
-                self._start_auto_loop()
+            # Auto-TDP is per-game: the loop always runs and each tick gates on the current
+            # game's effective auto_tdp (holds when off), so it activates for a game that
+            # has it on without waiting for the QAM.
+            self._start_auto_loop()
             if self._settings.get("telemetry_enabled", True):
                 self._start_sampler()
         except Exception as e:  # noqa: BLE001

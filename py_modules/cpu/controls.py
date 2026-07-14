@@ -103,6 +103,11 @@ class CoreControl:
 
     def __init__(self, root="/"):
         self._base = os.path.join(root, _CPU)
+        # Bring every offlined CPU back first: the kernel drops the topology of an offline
+        # CPU, so a prior core-limit would make the map (and max_cores) reflect only the
+        # online subset. Online all → read the true hardware topology → _apply_cpu
+        # re-applies any saved limit afterwards.
+        self._online_all_present()
         # {core_id: [cpu_index, ...]} ordered by core_id (lowest = kept first).
         self._cores = self._map()
         self.max_cores = len(self._cores) or None
@@ -110,6 +115,12 @@ class CoreControl:
         # to write (cpu0-only trees expose nothing to change).
         self.supported = bool(self.max_cores and self.max_cores > 1
                               and glob.glob(os.path.join(self._base, "cpu[0-9]*", "online")))
+
+    def _online_all_present(self):
+        """Write 1 to every offlined cpuN/online node (cpu0 has none — always online)."""
+        for p in glob.glob(os.path.join(self._base, "cpu[0-9]*", "online")):
+            if read_int(p) == 0:
+                write_str(p, 1)
 
     def _map(self):
         m = {}

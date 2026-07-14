@@ -1,14 +1,18 @@
 import { FC } from "react";
 import { ToggleField } from "@decky/ui";
 
-import { CpuState } from "../api";
+import { CpuState, TdpScope } from "../api";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { activeThreads, formatGhz, threadsPerCore, turboFraction } from "../system/cpu";
 import { ContainedSlider } from "./ContainedSlider";
+import { ProfileSelector } from "./ProfileSelector";
 
 interface Props {
   state: CpuState;
+  scope: TdpScope;
+  game: { appid: string; name: string } | null;
+  onScope: (s: TdpScope) => void;
   onSetSmt: (enabled: boolean) => void;
   onSetBoost: (enabled: boolean) => void;
   onSetCores: (count: number) => void;
@@ -27,7 +31,7 @@ const Core: FC<{ pips: number; lit: number }> = ({ pips, lit }) => (
   </div>
 );
 
-export const CpuCard: FC<Props> = ({ state, onSetSmt, onSetBoost, onSetCores }) => {
+export const CpuCard: FC<Props> = ({ state, scope, game, onScope, onSetSmt, onSetBoost, onSetCores }) => {
   const { t } = useI18n();
   const smtOn = state.smt.enabled;
   const boostOn = state.boost.enabled;
@@ -40,6 +44,17 @@ export const CpuCard: FC<Props> = ({ state, onSetSmt, onSetBoost, onSetCores }) 
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm, overflow: "hidden" }}>
+      {/* Per-game scope: only shown in-game (one tab governs SMT/boost/cores together). */}
+      {game && (
+        <ProfileSelector
+          scope={scope}
+          gameName={game.name}
+          hasGameProfile={state.has_game_profile}
+          globalLabel={t("tdp.scope.global")}
+          inheritHint={t("tdp.inherit")}
+          onScope={onScope}
+        />
+      )}
       {/* Identity */}
       <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{state.chip}</div>
 

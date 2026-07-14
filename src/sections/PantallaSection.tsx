@@ -1,6 +1,6 @@
 import { CSSProperties, FC } from "react";
 import { Focusable, PanelSectionRow } from "@decky/ui";
-import { LuPalette, LuSlidersHorizontal, LuSparkles } from "react-icons/lu";
+import { LuGlobe, LuPalette, LuSlidersHorizontal, LuSparkles } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
@@ -23,11 +23,11 @@ import { segmentGroupStyle, segmentItemStyle } from "../components/segmented";
 export const PantallaSection: FC = () => {
   const { t } = useI18n();
   const {
-    state, scope, game, revertIn, setScope,
+    state, scope, game, revertIn, onScope,
     onSaturation, onCalibration, confirmCalibration, onOledLook, onPreset, onReset,
   } = useColor();
   const night = useNight();
-  const hdr = useHdr();
+  const hdr = useHdr(scope, game?.appid ?? null);
 
   if (!state) return null;
 
@@ -96,12 +96,30 @@ export const PantallaSection: FC = () => {
         </PanelSectionRow>
       )}
 
-      {/* One-tap per-model OLED look — hidden on real OLED panels (oled_look null). */}
-      {state.oled_look && <OledLookCard active={active} onApply={onOledLook} onReset={onReset} />}
-
-      {/* Ambiente — one-tap balanced looks (global, tuned per panel). */}
+      {/* Scope tab — governs the per-game color controls below (OLED look, Ambiente,
+          saturation, calibration, HDR). */}
       <PanelSectionRow>
-        <div style={{ ...theme.card, padding: theme.space.md, overflow: "hidden" }}>
+        <ProfileSelector
+          scope={scope}
+          gameName={game?.name ?? null}
+          hasGameProfile={state.has_game_profile}
+          globalLabel={t("tdp.scope.global")}
+          inheritHint={t("display.inherit")}
+          onScope={onScope}
+        />
+      </PanelSectionRow>
+
+      {/* One-tap per-model OLED look — per-game via the scope tab above; hidden on real
+          OLED panels (oled_look null). */}
+      {state.oled_look && (
+        <div style={{ marginTop: theme.space.sm }}>
+          <OledLookCard active={active} onApply={onOledLook} onReset={onReset} />
+        </div>
+      )}
+
+      {/* Ambiente — one-tap balanced looks, per-game via the scope tab above. */}
+      <PanelSectionRow>
+        <div style={{ ...theme.card, padding: theme.space.md, marginTop: theme.space.sm, overflow: "hidden" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
             <LuSparkles size={16} color={theme.color.accent} />
             <span style={{ fontSize: theme.font.body, fontWeight: 600, color: theme.color.textPrimary }}>
@@ -117,18 +135,6 @@ export const PantallaSection: FC = () => {
             ))}
           </Focusable>
         </div>
-      </PanelSectionRow>
-
-      {/* Saturation — the hero, per-game (global + game override). */}
-      <PanelSectionRow>
-        <ProfileSelector
-          scope={scope}
-          gameName={game?.name ?? null}
-          hasGameProfile={state.has_game_profile}
-          globalLabel={t("tdp.scope.global")}
-          inheritHint={t("display.inherit")}
-          onScope={setScope}
-        />
       </PanelSectionRow>
       <PanelSectionRow>
         <div style={{ ...theme.card, padding: theme.space.md, margin: `${theme.space.sm}px 0`, overflow: "hidden" }}>
@@ -169,23 +175,30 @@ export const PantallaSection: FC = () => {
         )}
       </Collapsible>
 
-      {/* Night mode: scheduled warm shift, on top of the calibration. Only where the
-          host has color control (same gamescope path). */}
-      {night.state?.supported && (
+      {/* HDR on/off — per-game, governed by the same scope tab as the color above. */}
+      {hdr.state?.supported && (
         <PanelSectionRow>
-          <NightModeCard state={night.state} onChange={night.update} />
+          <HdrPanel state={hdr.state} onChange={hdr.update} />
         </PanelSectionRow>
+      )}
+
+      {/* General — applies to every game, NOT governed by the scope tab above. */}
+      {night.state?.supported && (
+        <>
+          <PanelSectionRow>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, margin: `${theme.space.md}px 0 ${theme.space.xs}px`, color: theme.color.textMuted }}>
+              <LuGlobe size={13} />
+              <span style={{ fontSize: theme.font.caption }}>{t("display.general")}</span>
+              <div style={{ flex: 1, height: 1, background: theme.color.hairline }} />
+            </div>
+          </PanelSectionRow>
+          <PanelSectionRow>
+            <NightModeCard state={night.state} onChange={night.update} />
+          </PanelSectionRow>
+        </>
       )}
     </>
   );
 
-  // The color lab is always active (it colors all composited/SDR content, even in HDR
-  // mode — only a native-HDR game is out of reach). HDR-capable panels also get a plain
-  // HDR on/off toggle at the bottom; it hides nothing.
-  return (
-    <>
-      {sdrBody}
-      {hdr.state?.supported && <HdrPanel state={hdr.state} onChange={hdr.update} />}
-    </>
-  );
+  return sdrBody;
 };

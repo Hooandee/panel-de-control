@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   getFanCurveState,
+  setFanFollowGlobal,
   setFanPreset,
   setFanCurvePoints,
   setFanCurveAuto,
@@ -12,6 +13,7 @@ import {
   FanPreset,
 } from "../api";
 import { useRunningGame } from "../tdp/useRunningGame";
+import { useScopeSync } from "../useScopeSync";
 import { Point } from "./curve";
 
 export interface FanCurveControl {
@@ -20,7 +22,7 @@ export interface FanCurveControl {
   game: ReturnType<typeof useRunningGame>;
   saved: boolean;
   refresh: () => void;
-  setScope: (s: FanScope) => void;
+  onScope: (s: FanScope) => void;
   onPreset: (preset: FanPreset) => void;
   onCustomMode: () => void;
   onAdaptive: () => void;
@@ -48,7 +50,6 @@ export function shownPoints(s: FanCurveState | null): Point[] | null {
 export function useFanCurve(): FanCurveControl {
   const game = useRunningGame();
   const [state, setState] = useState<FanCurveState | null>(null);
-  const [scope, setScope] = useState<FanScope>("global");
   const [saved, setSaved] = useState(false);
   const commit = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -71,9 +72,17 @@ export function useFanCurve(): FanCurveControl {
     // Cancel any in-flight drag commit captured against the previous scope — its
     // late response would otherwise overwrite the freshly-refreshed new scope.
     if (commit.current) clearTimeout(commit.current);
-    setScope(appid ? "game" : "global");
     refresh();
   }, [appid, refresh]);
+
+  // The scope tab reflects the game's active fan profile and IS the control (shared
+  // wiring): picking Global makes the running game follow the global curve, the game
+  // tab activates its own, neither deletes the other.
+  const applyFollow = useCallback(
+    (f: boolean, a: string) => { setFanFollowGlobal(f, a).then(setState).catch(() => {}); },
+    [],
+  );
+  const { scope, onScope } = useScopeSync(appid, state?.follows_global, applyFollow);
 
   // Don't fire a debounced sysfs write after the tab unmounts mid-drag.
   useEffect(() => () => {
@@ -163,5 +172,5 @@ export function useFanCurve(): FanCurveControl {
     setFanExperimental(enabled).then(setState).catch(() => {});
   }, []);
 
-  return { state, scope, game, saved, refresh, setScope, onPreset, onCustomMode, onAdaptive, onAdaptiveBias, onCurve, onExperimental };
+  return { state, scope, game, saved, refresh, onScope, onPreset, onCustomMode, onAdaptive, onAdaptiveBias, onCurve, onExperimental };
 }

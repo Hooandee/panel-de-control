@@ -4,6 +4,7 @@ import { ButtonItem, Focusable, Navigation, PanelSectionRow, ToggleField } from 
 import { useI18n } from "../i18n";
 import { LanguageToggle } from "../components/LanguageToggle";
 import { openCustomizeModal } from "../components/CustomizeModal";
+import { openGameProfilesModal } from "../components/GameProfilesModal";
 import { openGlossaryModal } from "../components/GlossaryModal";
 import { openReportModal } from "../components/ReportModal";
 import { getTelemetryEnabled, setTelemetryEnabled, getUnlockBatteryMax, setUnlockBatteryMax, getCoolerBoost, setCoolerBoost, getQamTdpBoost, setQamTdpBoost, resetTelemetry, getVersion, getControllerConflict, getDevice, DeviceInfo, isUnvalidated } from "../api";
@@ -162,6 +163,10 @@ export const AjustesSection: FC = () => {
         {/* Open the full-screen tab + block layout editor. */}
         <ButtonItem layout="below" description={t("customize.button.desc")} onClick={() => openCustomizeModal()}>
           {t("customize.button")}
+        </ButtonItem>
+
+        <ButtonItem layout="below" description={t("gameProfiles.button.desc")} onClick={() => openGameProfilesModal()}>
+          {t("gameProfiles.button")}
         </ButtonItem>
 
         {/* Note shown on an unconfirmed (experimental or generic) model. */}
