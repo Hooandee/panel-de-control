@@ -2,25 +2,28 @@ import { CSSProperties, FC, useState } from "react";
 import { Focusable, SliderField } from "@decky/ui";
 import { LuChevronDown, LuChevronRight } from "react-icons/lu";
 
-import { Levels, LevelBound } from "../api";
+import { Levels, LevelBound, BoostMode } from "../api";
 import { useI18n } from "../i18n";
 import { offsetOf, totalFor, maxOffset } from "../tdp/logic";
+import { segmentGroupStyle, segmentItemStyle } from "./segmented";
 import { theme } from "../theme";
 
 interface AdvancedBoostProps {
   levels: Levels;
-  auto: boolean;
+  mode: BoostMode;
   bounds: { pl2?: LevelBound; pl3?: LevelBound };
+  onSetMode: (mode: BoostMode) => void;
   onSetLevels: (off2: number, off3: number) => void;
-  onResetAuto: () => void;
 }
+
+const MODES: BoostMode[] = ["estable", "auto", "custom"];
 
 export const AdvancedBoost: FC<AdvancedBoostProps> = ({
   levels,
-  auto,
+  mode,
   bounds,
+  onSetMode,
   onSetLevels,
-  onResetAuto,
 }) => {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
@@ -28,12 +31,14 @@ export const AdvancedBoost: FC<AdvancedBoostProps> = ({
   const off2 = offsetOf(levels.pl2, levels.pl1);
   const off3 = offsetOf(levels.pl3, levels.pl2);
 
+  const modeColor =
+    mode === "estable" ? theme.color.ok : mode === "auto" ? theme.color.accent : theme.color.warn;
   const badge: CSSProperties = {
     fontSize: theme.font.caption,
     padding: "1px 7px",
     borderRadius: 999,
-    color: auto ? theme.color.ok : theme.color.warn,
-    boxShadow: `inset 0 0 0 1px ${auto ? theme.color.ok : theme.color.warn}`,
+    color: modeColor,
+    boxShadow: `inset 0 0 0 1px ${modeColor}`,
   };
   const Chevron = open ? LuChevronDown : LuChevronRight;
 
@@ -84,34 +89,43 @@ export const AdvancedBoost: FC<AdvancedBoostProps> = ({
         onClick={() => setOpen((o) => !o)}
       >
         <Chevron size={16} color={theme.color.textMuted} />
-        <span style={{ flex: 1 }}>{t("tdp.advanced.title")}</span>
-        <span style={badge}>{auto ? t("tdp.advanced.auto") : t("tdp.advanced.manual")}</span>
+        <span style={{ flex: 1 }}>{t("tdp.boost.title")}</span>
+        <span style={badge}>{t(`tdp.boost.mode.${mode}`)}</span>
       </Focusable>
 
       {open && (
         <>
           <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, marginTop: theme.space.xs }}>
-            {t("tdp.advanced.hint")}
+            {t(`tdp.boost.hint.${mode}`)}
           </div>
-          {bounds.pl2 && railRow(t("tdp.level.slow"), off2, levels.pl1, bounds.pl2, (o2) => onSetLevels(o2, off3))}
-          {bounds.pl3 && railRow(t("tdp.level.fast"), off3, levels.pl2, bounds.pl3, (o3) => onSetLevels(off2, o3))}
-          {!auto && (
-            <Focusable
-              style={{
-                marginTop: theme.space.md,
-                padding: "6px 10px",
-                borderRadius: theme.radius.sm,
-                background: theme.color.surfaceRaised,
-                boxShadow: `inset 0 0 0 1px ${theme.color.hairline}`,
-                textAlign: "center",
-                cursor: "pointer",
-                fontSize: theme.font.caption,
-              }}
-              onActivate={onResetAuto}
-              onClick={onResetAuto}
-            >
-              {t("tdp.advanced.reset")}
-            </Focusable>
+
+          <div style={{ ...segmentGroupStyle, marginTop: theme.space.sm }}>
+            {MODES.map((m) => (
+              <Focusable
+                key={m}
+                style={{ ...segmentItemStyle(m === mode), flex: 1, padding: "4px 6px" }}
+                onActivate={() => onSetMode(m)}
+                onClick={() => onSetMode(m)}
+              >
+                {t(`tdp.boost.mode.${m}`)}
+              </Focusable>
+            ))}
+          </div>
+
+          {/* Resulting rails: the watts the firmware actually holds, for any mode. */}
+          <div style={{
+            display: "flex", justifyContent: "space-between",
+            fontSize: theme.font.caption, color: theme.color.textMuted, marginTop: theme.space.sm,
+          }}>
+            <span>SPPT {levels.pl2} W</span>
+            <span>FPPT {levels.pl3} W</span>
+          </div>
+
+          {mode === "custom" && (
+            <>
+              {bounds.pl2 && railRow(t("tdp.level.slow"), off2, levels.pl1, bounds.pl2, (o2) => onSetLevels(o2, off3))}
+              {bounds.pl3 && railRow(t("tdp.level.fast"), off3, levels.pl2, bounds.pl3, (o3) => onSetLevels(off2, o3))}
+            </>
           )}
         </>
       )}

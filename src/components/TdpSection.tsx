@@ -1,13 +1,14 @@
 import { PanelSectionRow, SliderField } from "@decky/ui";
 import { FC } from "react";
 
-import { TdpState, TdpScope, PowerDraw } from "../api";
+import { TdpState, TdpScope, PowerDraw, BoostMode } from "../api";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { Loading } from "./Loading";
 import { ProfileSelector } from "./ProfileSelector";
 import { PowerArc } from "./PowerArc";
 import { Presets } from "./Presets";
+import { FirmwareModes } from "./FirmwareModes";
 import { AdvancedBoost } from "./AdvancedBoost";
 import { TdpSuggestionCard } from "./TdpSuggestionCard";
 
@@ -23,12 +24,14 @@ export interface TdpSectionProps {
   onScope: (scope: TdpScope) => void;
   onWatts: (watts: number) => void;
   onSetLevels: (off2: number, off3: number) => void;
-  onResetAuto: () => void;
+  onSetMode: (mode: BoostMode) => void;
   // Apply the learned-band suggestion as a FIXED PL1 (also turns auto-TDP off).
   onApplySuggestion: (watts: number) => void;
+  // Select a firmware performance mode (Legion Go original); "custom" via the slider.
+  onFirmwareMode: (mode: string) => void;
 }
 
-export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onScope, onWatts, onSetLevels, onResetAuto, onApplySuggestion }) => {
+export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onScope, onWatts, onSetLevels, onSetMode, onApplySuggestion, onFirmwareMode }) => {
   const { t } = useI18n();
 
   if (!tdp) return <Loading />;
@@ -43,13 +46,19 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
 
   const view =
     scope === "global"
-      ? { watts: tdp.global_watts, levels: tdp.global_levels, auto: tdp.global_auto }
-      : { watts: tdp.watts, levels: tdp.levels, auto: tdp.auto };
+      ? { watts: tdp.global_watts, levels: tdp.global_levels, mode: tdp.global_boost_mode }
+      : { watts: tdp.watts, levels: tdp.levels, mode: tdp.boost_mode };
   // Active ceiling: on battery the device-aware cap (max), on charger max_ac.
   // Never offer more than the current power source can deliver.
   const activeMax = tdp.on_ac ? tdp.limits.max_ac : tdp.limits.max;
   const isAutoOn = power?.auto_tdp ?? false;
   const atCeiling = Math.min(view.watts, activeMax) >= activeMax;
+  // Firmware modes replace the watt presets. In a named mode the firmware owns
+  // power+fan, so the arc/slider show its applied watts; the slider drops to custom.
+  const fwModes = tdp.firmware_modes ?? [];
+  const hasFwModes = fwModes.length > 0;
+  const inFwMode = hasFwModes && tdp.firmware_mode !== "custom";
+  const shownWatts = inFwMode ? (tdp.applied_w ?? view.watts) : view.watts;
 
   return (
     <>
@@ -65,7 +74,7 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
       </PanelSectionRow>
       <PanelSectionRow>
         <PowerArc
-          watts={view.watts}
+          watts={shownWatts}
           limits={tdp.limits}
           onAc={tdp.on_ac}
           actualWatts={power?.watts ?? null}
@@ -117,7 +126,7 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
         <>
           <PanelSectionRow>
             <SliderField
-              value={Math.min(view.watts, activeMax)}
+              value={Math.min(shownWatts, activeMax)}
               min={tdp.limits.min}
               max={activeMax}
               step={1}
@@ -134,27 +143,49 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
               </div>
             </PanelSectionRow>
           )}
-          <PanelSectionRow>
-            <Presets
-              presets={tdp.presets}
-              onAc={tdp.on_ac}
-              activeWatts={view.watts}
-              labels={{
-                save: t("tdp.preset.save"),
-                balanced: t("tdp.preset.balanced"),
-                turbo: t("tdp.preset.turbo"),
-              }}
-              onPick={onWatts}
-            />
-          </PanelSectionRow>
-          {tdp.supports_advanced && (
+          {hasFwModes ? (
+            <>
+              <PanelSectionRow>
+                <FirmwareModes
+                  modes={fwModes}
+                  active={tdp.firmware_mode}
+                  labels={{
+                    "low-power": t("tdp.fwmode.low-power"),
+                    balanced: t("tdp.fwmode.balanced"),
+                    performance: t("tdp.fwmode.performance"),
+                  }}
+                  onPick={onFirmwareMode}
+                />
+              </PanelSectionRow>
+              <PanelSectionRow>
+                <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, marginTop: 8 }}>
+                  {inFwMode ? t("tdp.fwmode.active") : t("tdp.fwmode.custom")}
+                </div>
+              </PanelSectionRow>
+            </>
+          ) : (
+            <PanelSectionRow>
+              <Presets
+                presets={tdp.presets}
+                onAc={tdp.on_ac}
+                activeWatts={view.watts}
+                labels={{
+                  save: t("tdp.preset.save"),
+                  balanced: t("tdp.preset.balanced"),
+                  turbo: t("tdp.preset.turbo"),
+                }}
+                onPick={onWatts}
+              />
+            </PanelSectionRow>
+          )}
+          {!inFwMode && tdp.supports_advanced && (
             <PanelSectionRow>
               <AdvancedBoost
                 levels={view.levels}
-                auto={view.auto}
+                mode={view.mode}
                 bounds={{ pl2: tdp.level_limits.pl2, pl3: tdp.level_limits.pl3 }}
                 onSetLevels={onSetLevels}
-                onResetAuto={onResetAuto}
+                onSetMode={onSetMode}
               />
             </PanelSectionRow>
           )}
@@ -162,7 +193,7 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
               this game lives in. Auto OFF only (it's a third, distinct way to set TDP:
               manual slider · auto-TDP dynamic · learned fixed). Renders nothing without
               an enough band (never a fabricated suggestion). */}
-          {tdp.learned.enough && (
+          {!inFwMode && tdp.learned.enough && (
             <PanelSectionRow>
               <TdpSuggestionCard learned={tdp.learned} onApply={onApplySuggestion} />
             </PanelSectionRow>

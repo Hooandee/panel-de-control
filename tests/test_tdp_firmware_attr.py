@@ -32,13 +32,17 @@ def _mk_full(root, driver="lenovo-wmi-other-0"):
     _mk_attr(root, driver, "ppt_pl3_fppt", 45, 5, 45)
 
 
-def _mk_profile(root, name="lenovo-wmi-gamezone", cur="balanced"):
+def _mk_profile(root, name="lenovo-wmi-gamezone", cur="balanced",
+                choices="low-power balanced performance custom"):
     d = os.path.join(root, "sys/class/platform-profile/platform-profile-0")
     os.makedirs(d, exist_ok=True)
     with open(os.path.join(d, "name"), "w") as f:
         f.write(name)
     with open(os.path.join(d, "profile"), "w") as f:
         f.write(cur)
+    if choices is not None:
+        with open(os.path.join(d, "choices"), "w") as f:
+            f.write(choices)
     return os.path.join(d, "profile")
 
 
@@ -89,6 +93,47 @@ def test_lenovo_profile_prestep_sets_custom(tmp_path):
     b = FirmwareAttrBackend("lenovo-wmi-other", FALLBACK, root=root, profile_name="lenovo-wmi-gamezone")
     b.set_tdp(20, ac=True)
     assert open(prof).read().strip() == "custom"
+
+
+def _legion(root):
+    _mk_full(root)
+    _mk_profile(root, cur="performance")
+    return FirmwareAttrBackend("lenovo-wmi-other", FALLBACK, root=root,
+                               profile_name="lenovo-wmi-gamezone")
+
+
+def test_read_profile(tmp_path):
+    b = _legion(str(tmp_path))
+    assert b.read_profile() == "performance"
+
+
+def test_profile_choices(tmp_path):
+    b = _legion(str(tmp_path))
+    assert b.profile_choices() == ["low-power", "balanced", "performance", "custom"]
+
+
+def test_set_profile_writes_and_confirms(tmp_path):
+    root = str(tmp_path)
+    b = _legion(root)
+    assert b.set_profile("low-power") is True
+    assert b.read_profile() == "low-power"
+
+
+def test_set_profile_rejects_unknown_mode(tmp_path):
+    root = str(tmp_path)
+    b = _legion(root)
+    assert b.set_profile("turbo") is False
+    assert b.read_profile() == "performance"  # unchanged
+
+
+def test_profile_helpers_none_without_profile_name(tmp_path):
+    root = str(tmp_path)
+    _mk_full(root)
+    _mk_profile(root)
+    b = FirmwareAttrBackend("lenovo-wmi-other", FALLBACK, root=root)  # no profile_name
+    assert b.read_profile() is None
+    assert b.profile_choices() == []
+    assert b.set_profile("balanced") is False
 
 
 def _mk_pl1(root, driver, cur, mn, mx):

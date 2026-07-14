@@ -6,6 +6,7 @@ import { useI18n } from "../i18n";
 import { useFanState } from "../fans/useFanState";
 import { useFanCurve } from "../fans/useFanCurve";
 import { useFanSuggestion } from "../fans/useFanSuggestion";
+import { fanCurveNotice } from "../fans/notice";
 import { FanChip } from "../components/FanChip";
 import { TempStat } from "../components/TempStat";
 import { Sparkline } from "../components/Sparkline";
@@ -163,13 +164,15 @@ export const VentiladoresSection: FC = () => {
             </div>
           </PanelSectionRow>
         )}
-        {/* Only when we CAN monitor fans but not control them AND can't read the
-            firmware curve. The no-fans-at-all case is stated by the fanRpm block. */}
-        {curveState && !curveState.supported && !firmwarePoints
-          && !curveState.experimental_available && state.fans.length > 0 && (
+        {/* Uncontrollable fan: a firmware mode governs it (Legion Go original, shown
+            even with no fan detected), or the honest OS note when we can monitor but
+            not control and there's no firmware curve. */}
+        {curveState && !curveState.supported
+          && (curveState.firmware_mode || curveState.has_firmware_modes
+              || (!firmwarePoints && !curveState.experimental_available && state.fans.length > 0)) && (
           <PanelSectionRow>
             <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
-              {t("fans.curve.unsupported")}
+              {fanCurveNotice(curveState, t)}
             </div>
           </PanelSectionRow>
         )}

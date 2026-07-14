@@ -234,6 +234,30 @@ def _snap_dir_listing(root: str, pattern: str, sub: str = "") -> dict:
     return out
 
 
+def _snap_platform_profile(root: str) -> dict:
+    """The performance-mode surface: the ACPI single-file interface plus the class
+    interface (Legion's lenovo-wmi-gamezone exposes its firmware modes here). Tells a
+    triager which modes a device offers and which is active."""
+    out: dict = {"acpi": {}, "class": {}}
+    base = os.path.join(root, "sys/firmware/acpi")
+    cur = read_str(os.path.join(base, "platform_profile"))
+    choices = read_str(os.path.join(base, "platform_profile_choices"))
+    if cur is not None:
+        out["acpi"]["current"] = cur
+    if choices is not None:
+        out["acpi"]["choices"] = choices
+    for d in sorted(_glob(root, "sys/class/platform-profile/*"))[:_SNAP_MAX_CHIPS]:
+        try:
+            out["class"][os.path.basename(d)] = {
+                "name": read_str(os.path.join(d, "name")),
+                "profile": read_str(os.path.join(d, "profile")),
+                "choices": read_str(os.path.join(d, "choices")),
+            }
+        except Exception:  # noqa: BLE001
+            continue
+    return out
+
+
 def _snap_acpi(root: str) -> dict:
     path = os.path.join(root, "proc/acpi/call")
     try:
@@ -279,7 +303,8 @@ def sysfs_snapshot(
     vendor-WMI TDP, charge-limit/battery, and ACPI-call support. Listing only —
     bounded-depth globs, NEVER a recursive walk of /sys. Never raises: any missing
     or unreadable path records an absent/empty marker."""
-    snap: dict = {"hwmon": [], "firmware_attributes": {}, "power_supply": {}, "acpi": {}, "modules": []}
+    snap: dict = {"hwmon": [], "firmware_attributes": {}, "power_supply": {},
+                  "platform_profile": {"acpi": {}, "class": {}}, "acpi": {}, "modules": []}
     try:
         snap["hwmon"] = _snap_hwmon(root)
     except Exception:  # noqa: BLE001
@@ -292,6 +317,10 @@ def sysfs_snapshot(
         pass
     try:
         snap["power_supply"] = _snap_dir_listing(root, "sys/class/power_supply/*")
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        snap["platform_profile"] = _snap_platform_profile(root)
     except Exception:  # noqa: BLE001
         pass
     try:

@@ -50,8 +50,9 @@ presets rápidos, y puedes guardar un perfil global o uno propio por juego.
 - **Auto-TDP.** Un modo automático que observa la carga de la GPU y sube o baja la potencia sola
   para darte los fotogramas que necesitas gastando lo mínimo. Aprende de cómo juegas y se
   autocorrige; no hace falta que toques nada.
-- **Modos avanzados.** Si tu firmware lo permite, un apartado plegable para afinar los límites de
-  boost (SPPT y FPPT) como márgenes sobre el límite base.
+- **Boost.** Si tu firmware lo permite, eliges cómo se comportan los raíles SPPT y FPPT: Estable
+  (lo que fijas es lo que gasta, el modo por defecto), Auto (un margen de boost gestionado) o
+  Personalizado (ajustas los márgenes a mano).
 - **Frecuencia de GPU.** Fija el reloj mínimo y máximo de la gráfica.
 
 ### Sistema
@@ -114,7 +115,7 @@ Leyenda: **✅** comprobado en ese equipo · **⚠️** limitado o solo por defe
 | Característica | Steam Deck LCD | Steam Deck OLED | ROG Ally | ROG Ally X | ROG Xbox Ally X | Legion Go | Legion Go S | Legion Go 2 | MSI Claw 8 AI+ |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
 | Límite de TDP | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Modos avanzados (SPPT/FPPT) | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹](#notas) |
+| Boost (SPPT/FPPT) | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹](#notas) |
 | Auto-TDP por carga de GPU | ✅ [²](#notas) | ✅ [²](#notas) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [³](#notas) |
 | Frecuencia de GPU | ❔ [⁴](#notas) | ❔ [⁴](#notas) | ❔ [⁴](#notas) | ❔ [⁴](#notas) | ❔ [⁴](#notas) | ❔ [⁴](#notas) | ❔ [⁴](#notas) | ❔ [⁴](#notas) | ❔ [⁴](#notas) |
 | Batería: estado y salud | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
@@ -129,6 +130,7 @@ Leyenda: **✅** comprobado en ese equipo · **⚠️** limitado o solo por defe
 | Monitor de RPM de ventilador | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹⁰](#notas) | ✅ [⁹](#notas) |
 | Curvas de ventilador | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ [¹¹](#notas) | ⚠️ [¹²](#notas) | ❔ [¹⁰](#notas) | ⚠️ [⁹](#notas) |
 | Curvas aprendidas por juego | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ [¹¹](#notas) | ❌ [¹²](#notas) | ❔ [¹⁰](#notas) | ❌ [⁹](#notas) |
+| Modos de firmware (perfiles) | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ [¹¹](#notas) | ❌ | ❌ | ❌ |
 | Calibración de color | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ [¹³](#notas) |
 | Preset "Aspecto OLED" | ✅ | ❌ [¹⁴](#notas) | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹⁴](#notas) | ✅ |
 | Remapeo de mandos (beta) | ❌ | ❌ | ⚠️ [¹⁵](#notas) | ⚠️ [¹⁵](#notas) | ❌ [¹⁵](#notas) | ⚠️ [¹⁵](#notas) | ❌ [¹⁵](#notas) | ⚠️ [¹⁵](#notas) | ⚠️ [¹⁵](#notas) |
@@ -187,10 +189,12 @@ tenemos en mano, los reportes desde Ajustes son los que confirman lo que respond
 10. La Legion Go 2 no expone un ventilador escribible por hwmon; el RPM tendría que leerse por el EC
     y en la build actual no está apareciendo en el monitor. Por eso lo marco como no disponible / sin
     confirmar hasta que pueda revisarlo.
-11. La Legion Go original controla la curva de ventilador por el driver de kernel `legion_wmi_fan`. Va
-    en los kernels que lo incluyen (Bazzite y kernels recientes) y se enciende solo cuando está
-    presente. La build actual de SteamOS todavía no lo trae, así que ahí se queda en monitor hasta que
-    se actualice el kernel. El monitor de velocidad y temperatura funciona siempre.
+11. La Legion Go original controla la curva de ventilador por el driver de kernel `legion_wmi_fan`, que
+    va en los kernels que lo incluyen y se enciende solo cuando está presente. Donde no está (SteamOS
+    actual y algunos kernels), el ventilador lo gobiernan los **modos de firmware**
+    (Silencioso/Equilibrado/Rendimiento) desde el arco de Potencia, que ajustan potencia y ventilador a
+    la vez. El monitor de velocidad funciona siempre: si el driver no publica el nodo hwmon, la RPM se
+    lee por el EC.
 12. La Legion Go S controla el ventilador por una vía no oficial del controlador integrado (EC), así
     que es un control experimental y opcional: hay que activarlo a mano, con un tope de velocidad de
     seguridad. Desactivado, se queda solo en monitor.

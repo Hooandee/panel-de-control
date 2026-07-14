@@ -39,6 +39,20 @@ class FakeBackend:
     def read_applied(self):
         return self._applied
 
+    _profile = "custom"
+
+    def profile_choices(self):
+        return ["low-power", "balanced", "performance", "custom"]
+
+    def read_profile(self):
+        return self._profile
+
+    def set_profile(self, mode):
+        if mode in self.profile_choices():
+            self._profile = mode
+            return True
+        return False
+
 
 @pytest.fixture
 def Plugin(tmp_path, monkeypatch):
@@ -126,22 +140,67 @@ def test_set_tdp_watts_unknown_scope_does_not_raise(Plugin):
     assert res["ok"] is False and "unknown scope" in res["detail"]
 
 
+def _force_legion(monkeypatch):
+    import device_registry
+    from device_profiles import DEVICE_TABLE
+    legion = next(d for d in DEVICE_TABLE if d.key == "legion_go")
+    monkeypatch.setattr(device_registry, "detect", lambda *a, **k: legion)
+
+
+def test_firmware_modes_exposed_only_on_capable_device(Plugin, monkeypatch):
+    _force_legion(monkeypatch)
+    st = asyncio.run(Plugin().get_tdp_state())
+    assert st["firmware_modes"] == ["low-power", "balanced", "performance", "custom"]
+    assert st["firmware_mode"] == "custom"  # default: our TDP owns the rails
+
+
+def test_firmware_modes_absent_on_normal_device(Plugin):
+    st = asyncio.run(Plugin().get_tdp_state())  # generic detected device
+    assert st["firmware_modes"] == []
+    assert st["firmware_mode"] == "custom"
+
+
+def test_set_firmware_mode_selects_and_persists(Plugin, monkeypatch):
+    _force_legion(monkeypatch)
+    p = Plugin()
+    st = asyncio.run(p.set_tdp_firmware_mode("performance"))
+    assert st["firmware_mode"] == "performance"
+    # persists across reload (device-global setting) and is re-asserted on startup
+    _force_legion(monkeypatch)
+    assert asyncio.run(Plugin().get_tdp_state())["firmware_mode"] == "performance"
+
+
+def test_moving_slider_leaves_firmware_mode(Plugin, monkeypatch):
+    _force_legion(monkeypatch)
+    p = Plugin()
+    asyncio.run(p.set_tdp_firmware_mode("low-power"))
+    asyncio.run(p.set_tdp_watts(15, "global"))
+    assert asyncio.run(p.get_tdp_state())["firmware_mode"] == "custom"
+
+
+def test_set_firmware_mode_rejects_unknown(Plugin, monkeypatch):
+    _force_legion(monkeypatch)
+    p = Plugin()
+    st = asyncio.run(p.set_tdp_firmware_mode("turbo"))
+    assert st["firmware_mode"] == "custom"  # unchanged
+
+
 def test_state_exposes_advanced_fields(Plugin):
     st = asyncio.run(Plugin().get_tdp_state())
     assert st["supports_advanced"] is True
     assert st["level_limits"]["pl2"] == {"min": 5, "max": 40}  # uncapped (active_max=60 > 40)
-    assert st["auto"] is True  # fresh profile is auto
+    assert st["boost_mode"] == "estable"  # fresh profile is flat by default
     assert set(st["levels"]) == {"pl1", "pl2", "pl3"}
-    assert "global_levels" in st and "global_auto" in st
+    assert "global_levels" in st and "global_boost_mode" in st
 
 
 def test_set_tdp_levels_goes_manual_and_clamps(Plugin):
     p = Plugin()
-    asyncio.run(p.set_tdp_watts(20, "global"))      # pl1 = 20, still auto
+    asyncio.run(p.set_tdp_watts(20, "global"))      # pl1 = 20, still estable
     res = asyncio.run(p.set_tdp_levels(8, 4, "global"))  # SPPT +8, FPPT +4
     assert res["ok"] is True
     st = asyncio.run(p.get_tdp_state())
-    assert st["auto"] is False
+    assert st["boost_mode"] == "custom"
     assert st["levels"]["pl2"] == 28 and st["levels"]["pl3"] == 32
 
 
@@ -154,22 +213,27 @@ def test_set_tdp_levels_clamps_to_rail_max(Plugin):
     assert st["levels"]["pl2"] == 40 and st["levels"]["pl3"] == 50
 
 
-def test_reset_tdp_auto_reverts(Plugin):
+def test_set_tdp_boost_mode_switches(Plugin):
     p = Plugin()
     asyncio.run(p.set_tdp_watts(20, "global"))
     asyncio.run(p.set_tdp_levels(8, 4, "global"))
-    assert asyncio.run(p.get_tdp_state())["auto"] is False
-    asyncio.run(p.reset_tdp_auto("global"))
-    assert asyncio.run(p.get_tdp_state())["auto"] is True
+    assert asyncio.run(p.get_tdp_state())["boost_mode"] == "custom"
+    # back to flat: rails collapse to PL1
+    st = asyncio.run(p.set_tdp_boost_mode("estable", "global"))
+    assert st["boost_mode"] == "estable"
+    assert st["levels"]["pl2"] == 20 and st["levels"]["pl3"] == 20
+    # auto: managed headroom
+    st = asyncio.run(p.set_tdp_boost_mode("auto", "global"))
+    assert st["boost_mode"] == "auto" and st["levels"]["pl2"] == 24  # round(20*1.2)
 
 
-def test_set_tdp_watts_preserves_manual_margins(Plugin):
+def test_set_tdp_watts_preserves_custom_margins(Plugin):
     p = Plugin()
     asyncio.run(p.set_tdp_watts(17, "global"))
-    asyncio.run(p.set_tdp_levels(8, 4, "global"))   # manual: pl2=25, pl3=29
+    asyncio.run(p.set_tdp_levels(8, 4, "global"))   # custom: pl2=25, pl3=29
     asyncio.run(p.set_tdp_watts(22, "global"))      # raise pl1, keep margins
     st = asyncio.run(p.get_tdp_state())
-    assert st["auto"] is False
+    assert st["boost_mode"] == "custom"
     assert st["levels"]["pl2"] == 30 and st["levels"]["pl3"] == 34
 
 
@@ -178,10 +242,10 @@ def test_set_tdp_levels_unknown_scope_does_not_raise(Plugin):
     assert res["ok"] is False and "unknown scope" in res["detail"]
 
 
-def test_reset_tdp_auto_unknown_scope_is_noop_state(Plugin):
+def test_set_tdp_boost_mode_unknown_scope_is_noop_state(Plugin):
     # Invalid scope is a no-op but must still return a valid TdpState (the frontend
     # applies the result via setTdp), not an error dict that would corrupt the UI.
-    st = asyncio.run(Plugin().reset_tdp_auto("bogus"))
+    st = asyncio.run(Plugin().set_tdp_boost_mode("estable", "bogus"))
     assert "supported" in st and "levels" in st and "limits" in st
 
 

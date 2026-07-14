@@ -250,6 +250,13 @@ def _build_fake_sysfs(root):
     _mk(os.path.join(root, "sys/class/power_supply/BAT0/cycle_count"), "38\n")
     _mk(os.path.join(root, "sys/class/power_supply/BAT0/charge_control_end_threshold"), "80\n")
     _mk(os.path.join(root, "sys/class/power_supply/ADP0/online"), "1\n")
+    # platform_profile: the ACPI single-file interface + a vendor class profile
+    # (Legion's lenovo-wmi-gamezone with its firmware modes).
+    _mk(os.path.join(root, "sys/firmware/acpi/platform_profile"), "balanced\n")
+    _mk(os.path.join(root, "sys/firmware/acpi/platform_profile_choices"), "quiet balanced performance custom\n")
+    _mk(os.path.join(root, "sys/class/platform-profile/platform-profile-0/name"), "lenovo-wmi-gamezone\n")
+    _mk(os.path.join(root, "sys/class/platform-profile/platform-profile-0/profile"), "balanced\n")
+    _mk(os.path.join(root, "sys/class/platform-profile/platform-profile-0/choices"), "quiet balanced performance custom\n")
 
 
 def test_sysfs_snapshot_hwmon(tmp_path):
@@ -272,6 +279,23 @@ def test_sysfs_snapshot_power_supply(tmp_path):
     assert "charge_control_end_threshold" in snap["power_supply"]["BAT0"]
     assert "cycle_count" in snap["power_supply"]["BAT0"]
     assert "charge_control_end_threshold" not in snap["power_supply"]["ADP0"]
+
+
+def test_sysfs_snapshot_platform_profile(tmp_path):
+    _build_fake_sysfs(str(tmp_path))
+    snap = sysfs_snapshot(root=str(tmp_path))
+    pp = snap["platform_profile"]
+    assert pp["acpi"]["current"] == "balanced"
+    assert pp["acpi"]["choices"] == "quiet balanced performance custom"
+    cls = pp["class"]["platform-profile-0"]
+    assert cls["name"] == "lenovo-wmi-gamezone"
+    assert cls["profile"] == "balanced"
+    assert cls["choices"] == "quiet balanced performance custom"
+
+
+def test_sysfs_snapshot_platform_profile_absent(tmp_path):
+    snap = sysfs_snapshot(root=str(tmp_path))
+    assert snap["platform_profile"] == {"acpi": {}, "class": {}}
 
 
 def test_sysfs_snapshot_acpi_present_and_writable(tmp_path):
@@ -309,6 +333,7 @@ def test_sysfs_snapshot_empty_root_never_raises(tmp_path):
         "hwmon": [],
         "firmware_attributes": {},
         "power_supply": {},
+        "platform_profile": {"acpi": {}, "class": {}},
         "acpi": {"call_present": False, "call_writable": False},
         "modules": [],
     }

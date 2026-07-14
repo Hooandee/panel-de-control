@@ -50,8 +50,9 @@ can save a global profile or a per-game one.
 - **Auto-TDP.** An automatic mode that watches GPU load and raises or lowers power on its own to give
   you the frames you need while spending as little as possible. It learns from how you play and
   self-corrects, no need to touch anything.
-- **Advanced modes.** If your firmware allows it, a collapsible section to fine-tune the boost limits
-  (SPPT and FPPT) as margins over the base limit.
+- **Boost.** If your firmware allows it, you choose how the SPPT and FPPT rails behave: Stable
+  (what you set is what it draws, the default), Auto (a managed boost margin) or Custom (tune the
+  margins by hand).
 - **GPU clock.** Set the minimum and maximum graphics clock.
 
 ### System (Sistema)
@@ -115,7 +116,7 @@ supported in code but not confirmed on that device yet
 | Feature | Steam Deck LCD | Steam Deck OLED | ROG Ally | ROG Ally X | ROG Xbox Ally X | Legion Go | Legion Go S | Legion Go 2 | MSI Claw 8 AI+ |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
 | TDP limit | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Advanced modes (SPPT/FPPT) | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹](#notes) |
+| Boost (SPPT/FPPT) | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹](#notes) |
 | Auto-TDP by GPU load | ✅ [²](#notes) | ✅ [²](#notes) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [³](#notes) |
 | GPU clock | ❔ [⁴](#notes) | ❔ [⁴](#notes) | ❔ [⁴](#notes) | ❔ [⁴](#notes) | ❔ [⁴](#notes) | ❔ [⁴](#notes) | ❔ [⁴](#notes) | ❔ [⁴](#notes) | ❔ [⁴](#notes) |
 | Battery: state and health | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
@@ -130,6 +131,7 @@ supported in code but not confirmed on that device yet
 | Fan RPM monitor | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹⁰](#notes) | ✅ [⁹](#notes) |
 | Fan curves | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ [¹¹](#notes) | ⚠️ [¹²](#notes) | ❔ [¹⁰](#notes) | ⚠️ [⁹](#notes) |
 | Learned per-game curves | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ [¹¹](#notes) | ❌ [¹²](#notes) | ❔ [¹⁰](#notes) | ❌ [⁹](#notes) |
+| Firmware modes (profiles) | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ [¹¹](#notes) | ❌ | ❌ | ❌ |
 | Color calibration | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ [¹³](#notes) |
 | "OLED look" preset | ✅ | ❌ [¹⁴](#notes) | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹⁴](#notes) | ✅ |
 | Controller remap (beta) | ❌ | ❌ | ⚠️ [¹⁵](#notes) | ⚠️ [¹⁵](#notes) | ❌ [¹⁵](#notes) | ⚠️ [¹⁵](#notes) | ❌ [¹⁵](#notes) | ⚠️ [¹⁵](#notes) | ⚠️ [¹⁵](#notes) |
@@ -187,10 +189,11 @@ from the Settings tab are what confirm how it really behaves.
 10. The Legion Go 2 exposes no writable hwmon fan; RPM would have to be read over the EC, and on the
     current build it isn't showing up in the monitor. Marked as not available / unconfirmed until I
     can review it.
-11. The original Legion Go drives its fan curve through the `legion_wmi_fan` kernel driver. It works on
-    kernels that ship it (Bazzite and recent kernels) and turns on by itself when present. The current
-    SteamOS build doesn't include it yet, so there it stays monitor-only until the kernel is updated.
-    The speed and temperature monitor works either way.
+11. The original Legion Go drives its fan curve through the `legion_wmi_fan` kernel driver, which ships
+    on some kernels and turns on by itself when present. Where it's absent (current SteamOS and some
+    kernels), the fan is governed by the **firmware modes** (Quiet/Balanced/Performance) from the Power
+    arc, which set power and fan together. The speed monitor always works: if the driver publishes no
+    hwmon node, RPM is read over the EC.
 12. The Legion Go S drives its fan over an unofficial embedded-controller (EC) path, so it's an
     optional experimental control: you enable it by hand, with a safety speed cap. Left off, it stays
     monitor-only.

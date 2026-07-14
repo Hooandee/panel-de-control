@@ -47,6 +47,12 @@ export interface Levels {
   pl3: number;
 }
 
+// Boost behaviour: how the SPPT/FPPT rails relate to the sustained PL1.
+//   estable — flat (SPPT = FPPT = PL1), the default; "what you set is what it draws".
+//   auto    — managed headroom (SPPT ≈ 1.2x, FPPT ≈ 1.4x), clamped to firmware max.
+//   custom  — explicit additive margins (the offset sliders).
+export type BoostMode = "estable" | "auto" | "custom";
+
 export interface TdpState {
   supported: boolean;
   backend: string;
@@ -63,15 +69,19 @@ export interface TdpState {
   supports_advanced: boolean;
   level_limits: { pl1?: LevelBound; pl2?: LevelBound; pl3?: LevelBound };
   levels: Levels;
-  auto: boolean;
+  boost_mode: BoostMode;
   global_levels: Levels;
-  global_auto: boolean;
+  global_boost_mode: BoostMode;
   // The learned TDP band for the current game (honest reasons when not enough data).
   // Powers the separate "Aprendí…" suggestion (apply a fixed value); auto-TDP itself
   // is parameter-free and decoupled from this band.
   learned: TdpLearned;
   // Quick-preset watts for the arc buttons (curated per-model or derived from limits).
   presets: TdpPresets;
+  // Firmware performance modes (e.g. low-power/balanced/performance/custom); empty
+  // hides the selector. firmware_mode is the active one ("custom" = our TDP slider).
+  firmware_modes: string[];
+  firmware_mode: string;
   // True when get_tdp_state adopted an external (HHD/Steam) TDP change on this read.
   external_change: boolean;
 }
@@ -132,8 +142,11 @@ export const setTdpWatts = callable<[watts: number, scope: TdpScope, appid: stri
 export const createGameProfile = callable<[appid: string], void>("create_game_profile");
 export const setCurrentGame = callable<[appid: string | null], TdpState>("set_current_game");
 export const setTdpLevels = callable<[off2: number, off3: number, scope: TdpScope, appid: string | null], TdpApplyResult>("set_tdp_levels");
-// Returns the full new TDP state so the UI updates badge + sliders in one round-trip.
-export const resetTdpAuto = callable<[scope: TdpScope, appid: string | null], TdpState>("reset_tdp_auto");
+// Sets the boost mode; returns the full new TDP state so the UI updates the segmented
+// control + rails in one round-trip.
+export const setTdpBoostMode = callable<[mode: BoostMode, scope: TdpScope, appid: string | null], TdpState>("set_tdp_boost_mode");
+// Firmware performance mode (Legion Go original). Device-global; returns fresh state.
+export const setTdpFirmwareMode = callable<[mode: string], TdpState>("set_tdp_firmware_mode");
 
 // Toggle a game between its own TDP profile and following the global one (never deletes
 // the game's stored values). Returns the full new state.
@@ -192,6 +205,15 @@ export interface FanCurveState {
   // control card shows the opt-in toggle instead of the editor.
   experimental_available: boolean;
   experimental_enabled: boolean;
+  // Host OS name (PRETTY_NAME) for the honest "curve not available on this OS"
+  // message; null when unreadable.
+  os_name: string | null;
+  // Active firmware performance mode (Legion Go original) governing the fan, e.g.
+  // "performance"; null when in custom / the device has no firmware modes.
+  firmware_mode: string | null;
+  // True when the device exposes firmware modes at all (even in custom) — the fan
+  // can't be curve-controlled here; a TDP mode governs it.
+  has_firmware_modes: boolean;
 }
 
 export const getTelemetryEnabled = callable<[], boolean>("get_telemetry_enabled");

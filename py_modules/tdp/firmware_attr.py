@@ -1,6 +1,7 @@
 import glob
 import os
 
+from sysfs import read_str
 from tdp.backend import TDPBackend
 from tdp.types import TdpLimits, TdpResult
 
@@ -44,6 +45,8 @@ class FirmwareAttrBackend(TDPBackend):
                     self._read_int(self._attr(attr, "max_value")),
                 )
             self._sanitize_bounds()
+        self._pp_dir = self._find_profile_dir()  # static, resolved once
+        self._pp_choices = None                  # parsed lazily, then cached
 
     def _sanitize_bounds(self):
         """Drop bogus firmware rail ceilings so a lying kernel never exposes a
@@ -107,18 +110,39 @@ class FirmwareAttrBackend(TDPBackend):
         default_w = max(min_w, min(self._fallback.default_w, fw_max))
         return TdpLimits(min_w=min_w, default_w=default_w, max_w=batt_max, max_ac_w=fw_max)
 
-    def _set_custom_profile(self):
+    def _find_profile_dir(self):
         if not self._profile_name:
-            return
+            return None
         base = os.path.join(self._root, _PP_BASE)
-        for d in glob.glob(os.path.join(base, "*")):
-            try:
-                with open(os.path.join(d, "name")) as f:
-                    if f.read().strip() == self._profile_name:
-                        self._write(os.path.join(d, "profile"), "custom")
-                        return
-            except OSError:
-                continue
+        for d in sorted(glob.glob(os.path.join(base, "*"))):
+            if read_str(os.path.join(d, "name")) == self._profile_name:
+                return d
+        return None
+
+    def _set_custom_profile(self):
+        if self._pp_dir:
+            self._write(os.path.join(self._pp_dir, "profile"), "custom")
+
+    def read_profile(self):
+        """Active firmware profile (e.g. 'performance', 'custom'), or None. Read live —
+        the active profile changes when the user picks a mode."""
+        return read_str(os.path.join(self._pp_dir, "profile")) if self._pp_dir else None
+
+    def profile_choices(self):
+        """Available firmware profiles, e.g. ['low-power','balanced','performance',
+        'custom']. Static, cached. Empty when unsupported."""
+        if self._pp_choices is None:
+            raw = read_str(os.path.join(self._pp_dir, "choices")) if self._pp_dir else None
+            self._pp_choices = raw.split() if raw else []
+        return self._pp_choices
+
+    def set_profile(self, mode):
+        """Write a named firmware profile. Returns True on confirmed readback; False
+        for an unknown mode or when unsupported."""
+        if not self._pp_dir or mode not in self.profile_choices():
+            return False
+        self._write(os.path.join(self._pp_dir, "profile"), mode)
+        return self.read_profile() == mode
 
     def _pl_bounds(self, attr):
         return self._bounds.get(attr, (None, None))
@@ -154,13 +178,13 @@ class FirmwareAttrBackend(TDPBackend):
         return TdpResult(pl1, applied, success, detail)
 
     def set_tdp(self, watts, ac):
+        # Single-value entry: write all rails flat (SPPT = FPPT = PL1). Boost headroom
+        # is opt-in via set_levels, never implied by a bare TDP value.
         if not self.supported:
             return TdpResult(watts, None, False, "firmware-attributes path not present")
         lim = self.get_limits()
         target = lim.clamp(watts, ac)
-        pl2 = max(target, round(target * _PL2_BOOST_RATIO))
-        pl3 = max(target, round(target * _PL3_BOOST_RATIO))
-        return self.set_levels(target, pl2, pl3, ac)
+        return self.set_levels(target, target, target, ac)
 
     def read_applied(self):
         return self._read_int(self._attr("ppt_pl1_spl"))

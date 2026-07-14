@@ -10,15 +10,18 @@ import decky
 # py_modules/ is on sys.path → import TOP-LEVEL (never `from py_modules.x import`).
 import auto_tdp
 import device_registry
+import osinfo
 import self_updater
 from version import read_version
 from settings_store import SettingsStore
 from tdp import factory as tdp_factory
 from tdp import suggest as tdp_suggest
+from tdp.types import TdpResult
 from tdp_profiles import ProfileStore
 from lifecycle import LifecycleManager, read_on_ac
 from fans.hwmon import FanReader, extract_cpu_gpu_temps
 from fans import control as fan_control
+from fans import legion_ec
 from fans import expose as fan_expose
 from fans import presets as fan_presets
 from fans import suggest as fan_suggest
@@ -68,6 +71,9 @@ _AUTO_WINDOW = 10
 _EXTERNAL_TDP_THRESHOLD = 2
 
 _NIGHT_TICK_S = 30  # how often the night-mode clock checks for a schedule-edge crossing
+
+# "custom" = our TDP owns the rails, vs a named platform_profile mode.
+_CUSTOM_MODE = "custom"
 
 
 def _now_minutes() -> int:
@@ -121,6 +127,9 @@ DEFAULTS = {
     # EC interface (Legion Go S). Default off → read-only monitor; on → EC curve
     # control with the RPM cap + temp guardian harness. The user accepts the risk.
     "fan_experimental": False,
+    # Firmware performance mode (Legion Go original). "custom" = our TDP; a named mode
+    # hands power+fan+LED to the firmware. Device-global; ignored where unsupported.
+    "firmware_mode": "custom",
     # Frontend UI preferences, mirrored here so they survive a reboot (the
     # frontend's localStorage cache does not). Opaque string map.
     "ui_prefs": {},
@@ -200,6 +209,8 @@ class Plugin:
         # though the write backend is unsupported. Surface it as an informational
         # curve. Other devices get None (no EC dependency).
         self._ec_curve = fan_control.select_firmware_curve_reader(self._device)
+        # Read-only EC RPM fallback for kernels whose driver publishes no hwmon fan node.
+        self._ec_rpm = legion_ec.select_legion_rpm_reader(self._device)
         self._fan_curves = FanCurveStore(
             os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "fan_curves.json")
         )
@@ -237,6 +248,8 @@ class Plugin:
         )
         self._night_task = None
         self._night_applied = False
+        # Bounded startup task that re-asserts the display look once gamescope is ready.
+        self._display_wait_task = None
         # HDR output on/off (gamescope). State lives in settings (hdr_enabled); gated to
         # HDR-capable panels with gamescope.
         self._hdr_backend = HdrBackend(run_gamescopectl)
@@ -267,6 +280,7 @@ class Plugin:
         # Real silicon name (static) shown in the DeviceHeader instead of the hardcoded
         # table chip; read once here like _cpu_info. None on generic or when unreadable.
         self._chip = read_cpu_model() if not self._device.is_generic else None
+        self._os_name = osinfo.read_os_name()
         self._current_appid = None
         # Last PL1 WE wrote to the firmware (readback). Adoption compares the live value
         # against this, not the profile, so it fires only for a real external change —
@@ -484,17 +498,7 @@ class Plugin:
     def _report_environment(self) -> dict:
         """Host identity + versions. Serials are deliberately NOT read (and any
         serial-like field is scrubbed downstream)."""
-        os_name = None
-        try:
-            rel = {}
-            with open("/etc/os-release") as f:
-                for line in f:
-                    if "=" in line:
-                        k, v = line.rstrip().split("=", 1)
-                        rel[k] = v.strip('"')
-            os_name = rel.get("PRETTY_NAME") or rel.get("NAME")
-        except Exception:  # noqa: BLE001
-            pass
+        os_name = self._os_name
         kernel = None
         try:
             u = os.uname()
@@ -703,6 +707,16 @@ class Plugin:
                     state = {**state, "supported": True, "fans": ec_fans}
             except Exception:  # noqa: BLE001
                 pass
+        # Some kernels load lenovo_wmi_other but publish no hwmon fan node — read the
+        # RPM straight from the EC so the monitor still shows the fan.
+        if not state["fans"] and self._ec_rpm is not None:
+            try:
+                rpm = self._ec_rpm.read_rpm()
+                if rpm is not None and rpm > 0:
+                    state = {**state, "supported": True,
+                             "fans": [{"label": "fan", "rpm": rpm, "percent": None}]}
+            except Exception:  # noqa: BLE001
+                pass
         return state
 
     async def get_fan_state(self) -> dict:
@@ -814,6 +828,10 @@ class Plugin:
             # unofficial channel; enabled = the user opted in.
             "experimental_available": getattr(self, "_fan_experimental_available", False),
             "experimental_enabled": bool(self._settings.get("fan_experimental", False)),
+            "os_name": self._os_name,
+            # Active firmware mode governing the fan; None = custom / no firmware modes.
+            "firmware_mode": (fw if (fw := self._firmware_mode()) != _CUSTOM_MODE else None),
+            "has_firmware_modes": bool(self._firmware_choices()),
         }
 
     async def _prime_firmware_curve(self) -> None:
@@ -1257,8 +1275,10 @@ class Plugin:
                 if self._settings.get("eco_enabled"):
                     self._reset_auto_windows()
                     continue
-                # Auto-TDP is per-game: hold unless THIS game has it on (own or global).
-                if not self._tdp_profiles.auto_tdp(self._current_appid):
+                # Hold when auto-TDP is off for THIS game (per-game, own or global) or a
+                # named firmware mode owns the rails — either way we don't drive PL1.
+                if (not self._tdp_profiles.auto_tdp(self._current_appid)
+                        or self._firmware_mode() != _CUSTOM_MODE):
                     self._reset_auto_windows()
                     continue
                 # read() sub-samples gpu_busy over a short blocking burst -> off
@@ -1501,8 +1521,31 @@ class Plugin:
             return
         await asyncio.get_running_loop().run_in_executor(ex, lambda: None)
 
+    def _firmware_choices(self) -> list:
+        """Firmware performance modes the device exposes, or [] when it has none."""
+        return self._tdp_backend.profile_choices() if self._device.firmware_modes else []
+
+    def _firmware_mode(self) -> str:
+        """Selected firmware performance mode on a device that exposes them
+        ('low-power'/'balanced'/'performance'), else 'custom' (our TDP owns the rails)."""
+        if not self._device.firmware_modes:
+            return _CUSTOM_MODE
+        return self._settings.get("firmware_mode") or _CUSTOM_MODE
+
+    def _exit_firmware_mode(self) -> None:
+        """A manual TDP action (slider / boost offsets) returns control to our TDP."""
+        if self._firmware_mode() != _CUSTOM_MODE:
+            self._settings["firmware_mode"] = _CUSTOM_MODE
+            self._save()
+
     def _reapply_tdp(self, on_ac=None):
         self._init()
+        mode = self._firmware_mode()
+        if mode != _CUSTOM_MODE:
+            # A named firmware mode owns the rails, fan curve and LED — don't force custom.
+            self._tdp_backend.set_profile(mode)
+            self._last_written_pl1 = None
+            return TdpResult(None, self._tdp_backend.read_applied(), True, f"firmware-mode:{mode}")
         lv, _active, ac = self._effective_levels(self._current_appid, on_ac)
         res = self._tdp_backend.set_levels(lv["pl1"], lv["pl2"], lv["pl3"], ac)
         # Record what the firmware now holds (readback), so adoption can tell a real
@@ -1767,6 +1810,31 @@ class Plugin:
             if self._color_backend.supported:
                 self._color_backend.apply(self._effective_color())
         except Exception:  # noqa: BLE001
+            pass
+
+    async def _await_display_backend(self, attempts=30, interval=5.0,
+                                     reasserts=40, reassert_interval=3.0) -> None:
+        """Re-assert the color/HDR look at startup over a short window. gamescope drops a
+        look loaded while it is still bringing up the session, so applying once at load
+        isn't enough — whether gamescope wasn't up yet when we loaded (cold boot) or it
+        was up but still initialising (fast/manual reboot). First wait (bounded) for the
+        socket to answer, then re-apply every few seconds across the session-bringup
+        window, and finally start the night loop. On a host with no gamescope (desktop)
+        it just stays native."""
+        try:
+            for _ in range(attempts):
+                if await self._offload_call(lambda: self._color_backend.supported):
+                    break
+                await asyncio.sleep(interval)
+            else:
+                return  # gamescope never came up (desktop) — nothing to apply
+            for i in range(reasserts):
+                self._reapply_color()
+                self._reapply_hdr()
+                if i < reasserts - 1:
+                    await asyncio.sleep(reassert_interval)
+            self._start_night_loop()
+        except asyncio.CancelledError:
             pass
 
     def _display_color(self) -> dict:
@@ -2096,14 +2164,17 @@ class Plugin:
             "supports_advanced": ("pl2" in ll or "pl3" in ll),
             "level_limits": ll,
             "levels": levels,
-            "auto": eff["auto"],
+            "boost_mode": eff["mode"],
             "global_levels": global_levels,
-            "global_auto": geff["auto"],
+            "global_boost_mode": geff["mode"],
             # The learned band for this game (powers the separate TDP suggestion card).
             # The battery↔performance dial that picks a value inside it is now LOCAL UI
             # state — applying it is a fixed manual setpoint, not a loop parameter.
             "learned": self._tdp_learned_info(self._current_appid),
             "presets": self._tdp_presets(limits),
+            # Selectable firmware performance modes; empty on devices without them.
+            "firmware_modes": self._firmware_choices(),
+            "firmware_mode": self._firmware_mode(),
             # get_tdp_state flips this True when it adopts an external change.
             "external_change": False,
         }
@@ -2138,6 +2209,7 @@ class Plugin:
             return {"requested_w": watts, "applied_w": None, "ok": False,
                     "detail": f"unknown scope: {scope}"}
         self._clear_eco()  # manual TDP change exits download mode (after scope is valid)
+        self._exit_firmware_mode()  # moving the slider means "I want custom"
         limits = self._limits()
         clamped = limits.clamp(watts, read_on_ac())
         self._tdp_profiles.set_pl1(resolved, clamped, appid=appid)
@@ -2161,6 +2233,22 @@ class Plugin:
             await self._offload_call(self._reapply_tdp)
         return self._tdp_state(await self._read_applied())
 
+    async def set_tdp_firmware_mode(self, mode: str) -> dict:
+        """Select a firmware performance mode (Legion Go original). 'low-power' /
+        'balanced' / 'performance' hand power + fan + LED to the firmware; 'custom'
+        returns control to our TDP slider. Device-global. Returns the fresh TDP state."""
+        self._init()
+        if not self._device.firmware_modes:
+            return await self.get_tdp_state()
+        valid = set(self._firmware_choices()) | {_CUSTOM_MODE}
+        if mode not in valid:
+            return await self.get_tdp_state()
+        self._clear_eco()
+        self._settings["firmware_mode"] = mode
+        self._save()
+        await self._offload_call(self._reapply_tdp)
+        return await self.get_tdp_state()
+
     async def set_tdp_levels(self, off2: int, off3: int, scope: str, appid=None) -> dict:
         self._init()
         resolved = self._resolve_scope(scope, appid)
@@ -2168,21 +2256,23 @@ class Plugin:
             return {"requested_w": 0, "applied_w": None, "ok": False,
                     "detail": f"unknown scope: {scope}"}
         self._clear_eco()
+        self._exit_firmware_mode()
         self._tdp_profiles.set_offsets(resolved, off2, off3, appid=appid)
         res = await self._offload_call(self._reapply_tdp)
         # requested_w/applied_w reflect resulting sustained pl1 (readback), not the offsets
         return {"requested_w": res.requested_w, "applied_w": res.applied_w,
                 "ok": res.ok, "detail": res.detail}
 
-    async def reset_tdp_auto(self, scope: str, appid=None) -> dict:
+    async def set_tdp_boost_mode(self, mode: str, scope: str, appid=None) -> dict:
+        """Set the boost behaviour (estable/auto/custom) for a scope and re-apply.
+        Returns the full new state so the UI updates the segmented control + rails in
+        ONE round-trip (the frontend does setTdp with it), avoiding a transient
+        mode/rails mismatch."""
         self._init()
         resolved = self._resolve_scope(scope, appid)
-        # Always return the full new state so the UI updates badge + sliders in ONE
-        # round-trip (no separate get_tdp_state) — immediate, and a consistent
-        # TdpState shape (the frontend does setTdp with it).
         if resolved is not None:  # invalid scope → no-op (never from the UI)
             self._clear_eco()
-            self._tdp_profiles.set_auto(resolved, appid=appid)
+            self._tdp_profiles.set_boost_mode(resolved, mode, appid=appid)
             await self._offload_call(self._reapply_tdp)
         return self._tdp_state(await self._read_applied())
 
@@ -2244,9 +2334,12 @@ class Plugin:
             self._reapply_all()
             self._lifecycle.start()
             self._start_night_loop()
-            # Auto-TDP is now per-game: the loop always runs and each tick gates on the
-            # current game's effective auto_tdp (holds when off), so it activates for a
-            # game that has it on without waiting for the QAM.
+            # Re-assert the look across gamescope's session bringup, when a single apply
+            # doesn't stick (see _await_display_backend). Always runs, not just cold boot.
+            self._display_wait_task = asyncio.create_task(self._await_display_backend())
+            # Auto-TDP is per-game: the loop always runs and each tick gates on the current
+            # game's effective auto_tdp (holds when off), so it activates for a game that
+            # has it on without waiting for the QAM.
             self._start_auto_loop()
             if self._settings.get("telemetry_enabled", True):
                 self._start_sampler()
@@ -2260,6 +2353,10 @@ class Plugin:
         # await, then shut the executor down.
         await self._offload_call(self._restore_fans_safe)
         self._cancel_color_revert()
+        wait_task = getattr(self, "_display_wait_task", None)
+        if wait_task is not None:
+            wait_task.cancel()
+            self._display_wait_task = None
         self._stop_night_loop()
         await self._offload_call(self._restore_color_safe)
         self._stop_auto_loop()

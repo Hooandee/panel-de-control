@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.17.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.16.1...panel-de-control-v0.17.0) (2026-07-14)
+
+
+### Features / Novedades
+
+* On the original Legion Go the power section now offers the firmware performance modes (Quiet, Balanced, Performance) as presets under the arc. Picking one hands power, fan and LED to the firmware, and the plugin no longer forces the custom profile on every change, so a mode you set stops flipping back to turbo on its own. The fan section says clearly when a mode is running the fan, and the fan monitor now reads the speed straight from the controller on kernels whose driver doesn't publish it, so it shows up instead of looking undetected. ([#187](https://github.com/Hooandee/panel-de-control/issues/187)) ([e7a9a6d](https://github.com/Hooandee/panel-de-control/commit/e7a9a6dc19d1f0d31e38640c120f28c331e94d47))
+* **ES:** En la Legion Go original la sección de potencia ahora ofrece los modos de rendimiento del firmware (Silencioso, Equilibrado, Rendimiento) como presets debajo del arco. Al elegir uno, el firmware pasa a llevar la potencia, el ventilador y el LED, y el plugin ya no fuerza el perfil personalizado en cada cambio, así que el modo que pongas deja de saltar solo a turbo. La sección de ventiladores dice con claridad cuándo es un modo el que lleva el ventilador, y el monitor ahora lee la velocidad directamente del controlador en los kernels cuyo driver no la publica, así aparece en vez de salir como no detectada. ([#187](https://github.com/Hooandee/panel-de-control/issues/187)) ([e7a9a6d](https://github.com/Hooandee/panel-de-control/commit/e7a9a6dc19d1f0d31e38640c120f28c331e94d47))
+
+## [0.16.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.16.0...panel-de-control-v0.16.1) (2026-07-13)
+
+
+### Bug Fixes / Correcciones
+
+* Panel color (and HDR) now comes back on its own after a reboot or a full power-cycle. It was getting lost because the look is loaded into gamescope, which drops it while the session is still starting up, so the plugin now keeps re-applying it during startup until it sticks. ([#183](https://github.com/Hooandee/panel-de-control/issues/183)) ([a523a78](https://github.com/Hooandee/panel-de-control/commit/a523a7863fde7e60560b27628623ef3f891a1291))
+* **ES:** El color del panel (y el HDR) ahora vuelve solo tras reiniciar o apagar y encender. Se perdía porque el look se carga en gamescope, que lo descarta mientras la sesión todavía arranca, así que el plugin ahora lo reaplica durante el arranque hasta que queda fijo. ([#183](https://github.com/Hooandee/panel-de-control/issues/183)) ([a523a78](https://github.com/Hooandee/panel-de-control/commit/a523a7863fde7e60560b27628623ef3f891a1291))
+
+## [0.16.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.15.0...panel-de-control-v0.16.0) (2026-07-13)
+
+
+### Features / Novedades
+
+* Power boost is now a choice, not a hidden extra. A new Boost control picks how the SPPT and FPPT limits behave: Stable (what you set is what it draws, and the new default), Auto (a managed boost margin) or Custom (set the margins by hand). Existing setups move to Stable, so at the same TDP the handheld stops pulling more than you asked for. Some machines' firmware keeps a minimum, so the panel always shows the resulting limits. ([#176](https://github.com/Hooandee/panel-de-control/issues/176)) ([1f43847](https://github.com/Hooandee/panel-de-control/commit/1f43847f9e1491a1c2f25a39d74ba2f1556ab7c7))
+* **ES:** El boost de potencia ahora se elige, ya no es un extra oculto. Un nuevo control de Boost decide cómo se comportan los límites SPPT y FPPT: Estable (lo que fijas es lo que gasta, y el nuevo modo por defecto), Auto (un margen de boost gestionado) o Personalizado (fijas los márgenes a mano). Los perfiles existentes pasan a Estable, así al mismo TDP el equipo deja de tirar más de lo que le pediste. El firmware de algunas máquinas mantiene un mínimo, por eso el panel siempre muestra los límites resultantes. ([#176](https://github.com/Hooandee/panel-de-control/issues/176)) ([1f43847](https://github.com/Hooandee/panel-de-control/commit/1f43847f9e1491a1c2f25a39d74ba2f1556ab7c7))
+
 ## [0.15.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.14.0...panel-de-control-v0.15.0) (2026-07-12)
 
 
