@@ -27,6 +27,20 @@ jobs:
         if: ${{ steps.release.outputs.release_created }}
         with:
           persist-credentials: false
+
+      # Rewrite the release body into the clean, link-free, Spanish-first bilingual
+      # note. Done in this job (not a separate on:release workflow) because a release
+      # the bot creates with GITHUB_TOKEN does not trigger on:release workflows.
+      - name: Rewrite release notes from the changelog
+        if: ${{ steps.release.outputs.release_created }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag_name }}
+        run: |
+          set -euo pipefail
+          python3 scripts/changelog_notes.py --release-body > "$RUNNER_TEMP/notes.md"
+          gh release edit "$TAG" --notes-file "$RUNNER_TEMP/notes.md"
+
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
         if: ${{ steps.release.outputs.release_created }}
         with:
