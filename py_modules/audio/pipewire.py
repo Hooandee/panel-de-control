@@ -12,6 +12,7 @@ pipewire-filter-chain-eq memory."""
 import glob
 import os
 import pwd
+import re
 import subprocess
 
 from audio.filter_chain import build_chain_config
@@ -41,6 +42,7 @@ class PipeWireEq:
         self._runner = runner or self._run
         self._session = _find_session()
         self._orig_default = None
+        self._orig_volume = None
         # Human-facing sink name shown in the system/Steam volume UI (the device name).
         self._name = name or "Panel de Control"
 
@@ -95,19 +97,38 @@ class PipeWireEq:
     def _restart(self):
         self._runner(["systemctl", "--user", "restart", _SERVICE])
 
+    def _sink_volume_pct(self, sink):
+        """The sink's front volume as a 'NN%' string, or None."""
+        m = re.search(r"(\d+)%", self._runner(["pactl", "get-sink-volume", sink]) or "")
+        return f"{m.group(1)}%" if m else None
+
+    def _make_transparent(self, downstream):
+        """One volume stage, not two. Our sink is the new default (what the volume keys
+        move), but it feeds the previous default which may sit below 100% — so the output
+        is capped there and reads as 'stuck quiet'. Move that volume onto our sink and set
+        the downstream to unity: same loudness now, full range afterwards. Snapshot the
+        downstream volume to restore on teardown."""
+        vol = self._sink_volume_pct(downstream)
+        if vol:
+            self._orig_volume = vol
+            self._runner(["pactl", "set-sink-volume", _INPUT, vol])
+        self._runner(["pactl", "set-sink-volume", downstream, "100%"])
+
     def ensure_sink(self, gains):
-        """Create/refresh the EQ sink with these gains and make it default. We never
-        touch the sink VOLUME — that is the user's volume (Steam controls it); changing
-        it here would look like the audio dropping on its own. Clip headroom is handled
-        by keeping preset boosts modest, not by attenuating the output."""
+        """Create/refresh the EQ sink with these gains and make it default. On the first
+        takeover we make the insert transparent (see _make_transparent); we don't touch
+        volumes again after that, so band edits never disturb the user's level."""
         if not self.is_supported() or not self._write_conf(gains):
             return False
-        if self._orig_default is None:
+        new_takeover = self._orig_default is None
+        if new_takeover:
             cur = self._runner(["pactl", "get-default-sink"])
             if cur and cur != _INPUT:
                 self._orig_default = cur
         self._restart()
         self._runner(["pactl", "set-default-sink", _INPUT])
+        if new_takeover and self._orig_default:
+            self._make_transparent(self._orig_default)
         return True
 
     def set_gains(self, gains):
@@ -129,5 +150,8 @@ class PipeWireEq:
                 pass
         self._restart()
         if self._orig_default:
+            if self._orig_volume:
+                self._runner(["pactl", "set-sink-volume", self._orig_default, self._orig_volume])
             self._runner(["pactl", "set-default-sink", self._orig_default])
             self._orig_default = None
+            self._orig_volume = None
