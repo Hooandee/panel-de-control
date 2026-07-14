@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.17.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.16.1...panel-de-control-v0.17.0) (2026-07-14)
+
+
+### Features
+
+* Legion Go firmware modes, honest fan message, EC RPM fallback ([#187](https://github.com/Hooandee/panel-de-control/issues/187)) ([e7a9a6d](https://github.com/Hooandee/panel-de-control/commit/e7a9a6dc19d1f0d31e38640c120f28c331e94d47))
+
 ## [0.16.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.16.0...panel-de-control-v0.16.1) (2026-07-13)
 
 
