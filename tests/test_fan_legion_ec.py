@@ -5,12 +5,15 @@ import os
 
 from fans.legion_ec import (
     LegionGo2FanBackend,
+    LegionGoRpmReader,
     LegionGoSFanBackend,
     REG_OVERRIDE,
     REG_RPM,
+    REG_RPM_83E1,
     _GOS_MAX_RPM,
     _GOS_MIN_SPIN,
     _GOS_TEMP_GUARD_C,
+    select_legion_rpm_reader,
 )
 from fans.control import select_fan_backend, NullFanBackend
 
@@ -172,3 +175,24 @@ class TestLegionGoSBackend:
         for temp in range(35, 101):
             t = b.target_for_temp(float(temp))
             assert t == 0 or _GOS_MIN_SPIN <= t <= _GOS_MAX_RPM, f"{temp}C -> {t}"
+
+
+class TestLegionGo1RpmReader:
+    def test_decodes_16bit_le(self):
+        ec = FakeEC()
+        ec.mem[REG_RPM_83E1] = 0xCC       # 204
+        ec.mem[REG_RPM_83E1 + 1] = 0x0C   # 12 -> (12<<8)|204 = 3276
+        assert LegionGoRpmReader(ec=ec).read_rpm() == 3276
+
+    def test_none_when_read_fails(self):
+        class DeadEC:
+            def read(self, addr):
+                return None
+        assert LegionGoRpmReader(ec=DeadEC()).read_rpm() is None
+
+    def test_selector_only_for_legion_go(self):
+        from device_profiles import DEVICE_TABLE
+        legion = next(d for d in DEVICE_TABLE if d.key == "legion_go")
+        go2 = next(d for d in DEVICE_TABLE if d.key == "legion_go_2")
+        assert select_legion_rpm_reader(legion, ec=FakeEC()) is not None
+        assert select_legion_rpm_reader(go2, ec=FakeEC()) is None

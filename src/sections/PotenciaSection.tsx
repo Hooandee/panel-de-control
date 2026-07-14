@@ -1,6 +1,6 @@
 import { FC, useCallback, useEffect, useRef, useState } from "react";
 
-import { getTdpState, setTdpWatts, setTdpLevels, setTdpBoostMode, getPowerDraw, setAutoTdp, TdpState, TdpScope, PowerDraw, BoostMode } from "../api";
+import { getTdpState, setTdpWatts, setTdpLevels, setTdpBoostMode, setTdpFirmwareMode, getPowerDraw, setAutoTdp, TdpState, TdpScope, PowerDraw, BoostMode } from "../api";
 import { TdpSection } from "../components/TdpSection";
 import { GpuClockCard } from "../components/GpuClockCard";
 import { AutoTdpToggle } from "../components/AutoTdpToggle";
@@ -109,6 +109,12 @@ export const PotenciaSection: FC = () => {
     [refresh],
   );
 
+  // Firmware performance mode (Legion Go original). Device-global; the RPC returns the
+  // full new state so the arc + chips update in one round-trip.
+  const onFirmwareMode = useCallback((mode: string) => {
+    setTdpFirmwareMode(mode).then(setTdp).catch(() => {});
+  }, []);
+
   // Apply the learned-band suggestion: a FIXED PL1 at the dial-picked value, which is
   // a distinct mode from dynamic auto-TDP → turn auto OFF, then commit the watts to the
   // current scope. Refresh so the slider/arc reflect the new fixed setpoint.
@@ -150,6 +156,7 @@ export const PotenciaSection: FC = () => {
         onSetLevels={onSetLevels}
         onSetMode={onSetMode}
         onApplySuggestion={onApplySuggestion}
+        onFirmwareMode={onFirmwareMode}
       />
       <SectionBlocks
         sectionId="power"

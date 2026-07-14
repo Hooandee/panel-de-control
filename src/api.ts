@@ -75,6 +75,10 @@ export interface TdpState {
   learned: TdpLearned;
   // Quick-preset watts for the arc buttons (curated per-model or derived from limits).
   presets: TdpPresets;
+  // Firmware performance modes (e.g. low-power/balanced/performance/custom); empty
+  // hides the selector. firmware_mode is the active one ("custom" = our TDP slider).
+  firmware_modes: string[];
+  firmware_mode: string;
   // True when get_tdp_state adopted an external (HHD/Steam) TDP change on this read.
   external_change: boolean;
 }
@@ -138,6 +142,8 @@ export const setTdpLevels = callable<[off2: number, off3: number, scope: TdpScop
 // Sets the boost mode; returns the full new TDP state so the UI updates the segmented
 // control + rails in one round-trip.
 export const setTdpBoostMode = callable<[mode: BoostMode, scope: TdpScope, appid: string | null], TdpState>("set_tdp_boost_mode");
+// Firmware performance mode (Legion Go original). Device-global; returns fresh state.
+export const setTdpFirmwareMode = callable<[mode: string], TdpState>("set_tdp_firmware_mode");
 
 export interface PowerDraw {
   watts: number | null;
@@ -190,6 +196,15 @@ export interface FanCurveState {
   // control card shows the opt-in toggle instead of the editor.
   experimental_available: boolean;
   experimental_enabled: boolean;
+  // Host OS name (PRETTY_NAME) for the honest "curve not available on this OS"
+  // message; null when unreadable.
+  os_name: string | null;
+  // Active firmware performance mode (Legion Go original) governing the fan, e.g.
+  // "performance"; null when in custom / the device has no firmware modes.
+  firmware_mode: string | null;
+  // True when the device exposes firmware modes at all (even in custom) — the fan
+  // can't be curve-controlled here; a TDP mode governs it.
+  has_firmware_modes: boolean;
 }
 
 export const getTelemetryEnabled = callable<[], boolean>("get_telemetry_enabled");

@@ -31,6 +31,10 @@ class DeviceProfile:
     tdp_presets: tuple = field(default_factory=tuple)
     # Ceiling unlocked when the user confirms the external cooler is attached (Win 5).
     cooler_max: Optional[int] = None
+    # Expose the firmware performance modes (platform_profile) as selectable presets.
+    # Only for models where we can't drive the fan curve and the modes are the sole
+    # fan lever (Legion Go original); models with real curve control keep custom TDP.
+    firmware_modes: bool = False
 
 
 # Conservative, safe fallback when detection fails - visibly generic.
@@ -73,7 +77,7 @@ DEVICE_TABLE = (
     DeviceProfile("legion_go_s", "Legion Go S", "AMD Ryzen Z1 Extreme / Z2 Go", "amd",
                   5, 15, 30, 33, match_names=("83L3", "83N6", "Legion Go S")),
     DeviceProfile("legion_go", "Legion Go", "AMD Z1 Extreme", "amd",
-                  5, 15, 30, 30, match_names=("83E1", "Legion Go")),
+                  5, 15, 30, 30, match_names=("83E1", "Legion Go"), firmware_modes=True),
     DeviceProfile("msi_claw_8_ai_plus", "MSI Claw 8 AI+", "Intel Core Ultra 7 258V", "intel",
                   8, 17, 30, 35, match_names=("Claw 8 AI+", "Claw 8")),
     # OneXPlayer OneXFly Apex (Strix Halo). The chip name is read live from

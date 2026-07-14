@@ -10,15 +10,18 @@ import decky
 # py_modules/ is on sys.path → import TOP-LEVEL (never `from py_modules.x import`).
 import auto_tdp
 import device_registry
+import osinfo
 import self_updater
 from version import read_version
 from settings_store import SettingsStore
 from tdp import factory as tdp_factory
 from tdp import suggest as tdp_suggest
+from tdp.types import TdpResult
 from tdp_profiles import ProfileStore
 from lifecycle import LifecycleManager, read_on_ac
 from fans.hwmon import FanReader, extract_cpu_gpu_temps
 from fans import control as fan_control
+from fans import legion_ec
 from fans import expose as fan_expose
 from fans import presets as fan_presets
 from fans import suggest as fan_suggest
@@ -68,6 +71,9 @@ _EXTERNAL_TDP_THRESHOLD = 2
 
 _NIGHT_TICK_S = 30  # how often the night-mode clock checks for a schedule-edge crossing
 
+# "custom" = our TDP owns the rails, vs a named platform_profile mode.
+_CUSTOM_MODE = "custom"
+
 
 def _now_minutes() -> int:
     t = datetime.now()
@@ -115,6 +121,9 @@ DEFAULTS = {
     # EC interface (Legion Go S). Default off → read-only monitor; on → EC curve
     # control with the RPM cap + temp guardian harness. The user accepts the risk.
     "fan_experimental": False,
+    # Firmware performance mode (Legion Go original). "custom" = our TDP; a named mode
+    # hands power+fan+LED to the firmware. Device-global; ignored where unsupported.
+    "firmware_mode": "custom",
     # Frontend UI preferences, mirrored here so they survive a reboot (the
     # frontend's localStorage cache does not). Opaque string map.
     "ui_prefs": {},
@@ -179,6 +188,8 @@ class Plugin:
         # though the write backend is unsupported. Surface it as an informational
         # curve. Other devices get None (no EC dependency).
         self._ec_curve = fan_control.select_firmware_curve_reader(self._device)
+        # Read-only EC RPM fallback for kernels whose driver publishes no hwmon fan node.
+        self._ec_rpm = legion_ec.select_legion_rpm_reader(self._device)
         self._fan_curves = FanCurveStore(
             os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "fan_curves.json")
         )
@@ -226,6 +237,7 @@ class Plugin:
         # Real silicon name (static) shown in the DeviceHeader instead of the hardcoded
         # table chip; read once here like _cpu_info. None on generic or when unreadable.
         self._chip = read_cpu_model() if not self._device.is_generic else None
+        self._os_name = osinfo.read_os_name()
         self._current_appid = None
         # Last PL1 WE wrote to the firmware (readback). Adoption compares the live value
         # against this, not the profile, so it fires only for a real external change —
@@ -443,17 +455,7 @@ class Plugin:
     def _report_environment(self) -> dict:
         """Host identity + versions. Serials are deliberately NOT read (and any
         serial-like field is scrubbed downstream)."""
-        os_name = None
-        try:
-            rel = {}
-            with open("/etc/os-release") as f:
-                for line in f:
-                    if "=" in line:
-                        k, v = line.rstrip().split("=", 1)
-                        rel[k] = v.strip('"')
-            os_name = rel.get("PRETTY_NAME") or rel.get("NAME")
-        except Exception:  # noqa: BLE001
-            pass
+        os_name = self._os_name
         kernel = None
         try:
             u = os.uname()
@@ -538,6 +540,16 @@ class Plugin:
                            for f in hw.get("fans", []) if (rpm := f.get("rpm")) is not None]
                 if ec_fans:
                     state = {**state, "supported": True, "fans": ec_fans}
+            except Exception:  # noqa: BLE001
+                pass
+        # Some kernels load lenovo_wmi_other but publish no hwmon fan node — read the
+        # RPM straight from the EC so the monitor still shows the fan.
+        if not state["fans"] and self._ec_rpm is not None:
+            try:
+                rpm = self._ec_rpm.read_rpm()
+                if rpm is not None and rpm > 0:
+                    state = {**state, "supported": True,
+                             "fans": [{"label": "fan", "rpm": rpm, "percent": None}]}
             except Exception:  # noqa: BLE001
                 pass
         return state
@@ -650,6 +662,10 @@ class Plugin:
             # unofficial channel; enabled = the user opted in.
             "experimental_available": getattr(self, "_fan_experimental_available", False),
             "experimental_enabled": bool(self._settings.get("fan_experimental", False)),
+            "os_name": self._os_name,
+            # Active firmware mode governing the fan; None = custom / no firmware modes.
+            "firmware_mode": (fw if (fw := self._firmware_mode()) != _CUSTOM_MODE else None),
+            "has_firmware_modes": bool(self._firmware_choices()),
         }
 
     async def _prime_firmware_curve(self) -> None:
@@ -1080,6 +1096,10 @@ class Plugin:
                 if self._settings.get("eco_enabled"):
                     self._reset_auto_windows()
                     continue
+                # A named firmware mode owns the rails — don't drive PL1 over it.
+                if self._firmware_mode() != _CUSTOM_MODE:
+                    self._reset_auto_windows()
+                    continue
                 # read() sub-samples gpu_busy over a short blocking burst -> off
                 # the event loop so it can't stall other Decky RPC handling.
                 pr = await asyncio.to_thread(self._power_reader.read)
@@ -1319,8 +1339,31 @@ class Plugin:
             return
         await asyncio.get_running_loop().run_in_executor(ex, lambda: None)
 
+    def _firmware_choices(self) -> list:
+        """Firmware performance modes the device exposes, or [] when it has none."""
+        return self._tdp_backend.profile_choices() if self._device.firmware_modes else []
+
+    def _firmware_mode(self) -> str:
+        """Selected firmware performance mode on a device that exposes them
+        ('low-power'/'balanced'/'performance'), else 'custom' (our TDP owns the rails)."""
+        if not self._device.firmware_modes:
+            return _CUSTOM_MODE
+        return self._settings.get("firmware_mode") or _CUSTOM_MODE
+
+    def _exit_firmware_mode(self) -> None:
+        """A manual TDP action (slider / boost offsets) returns control to our TDP."""
+        if self._firmware_mode() != _CUSTOM_MODE:
+            self._settings["firmware_mode"] = _CUSTOM_MODE
+            self._save()
+
     def _reapply_tdp(self, on_ac=None):
         self._init()
+        mode = self._firmware_mode()
+        if mode != _CUSTOM_MODE:
+            # A named firmware mode owns the rails, fan curve and LED — don't force custom.
+            self._tdp_backend.set_profile(mode)
+            self._last_written_pl1 = None
+            return TdpResult(None, self._tdp_backend.read_applied(), True, f"firmware-mode:{mode}")
         lv, _active, ac = self._effective_levels(self._current_appid, on_ac)
         res = self._tdp_backend.set_levels(lv["pl1"], lv["pl2"], lv["pl3"], ac)
         # Record what the firmware now holds (readback), so adoption can tell a real
@@ -1920,6 +1963,9 @@ class Plugin:
             # state — applying it is a fixed manual setpoint, not a loop parameter.
             "learned": self._tdp_learned_info(self._current_appid),
             "presets": self._tdp_presets(limits),
+            # Selectable firmware performance modes; empty on devices without them.
+            "firmware_modes": self._firmware_choices(),
+            "firmware_mode": self._firmware_mode(),
             # get_tdp_state flips this True when it adopts an external change.
             "external_change": False,
         }
@@ -1954,12 +2000,29 @@ class Plugin:
             return {"requested_w": watts, "applied_w": None, "ok": False,
                     "detail": f"unknown scope: {scope}"}
         self._clear_eco()  # manual TDP change exits download mode (after scope is valid)
+        self._exit_firmware_mode()  # moving the slider means "I want custom"
         limits = self._limits()
         clamped = limits.clamp(watts, read_on_ac())
         self._tdp_profiles.set_pl1(resolved, clamped, appid=appid)
         res = await self._offload_call(self._reapply_tdp)
         return {"requested_w": res.requested_w, "applied_w": res.applied_w,
                 "ok": res.ok, "detail": res.detail}
+
+    async def set_tdp_firmware_mode(self, mode: str) -> dict:
+        """Select a firmware performance mode (Legion Go original). 'low-power' /
+        'balanced' / 'performance' hand power + fan + LED to the firmware; 'custom'
+        returns control to our TDP slider. Device-global. Returns the fresh TDP state."""
+        self._init()
+        if not self._device.firmware_modes:
+            return await self.get_tdp_state()
+        valid = set(self._firmware_choices()) | {_CUSTOM_MODE}
+        if mode not in valid:
+            return await self.get_tdp_state()
+        self._clear_eco()
+        self._settings["firmware_mode"] = mode
+        self._save()
+        await self._offload_call(self._reapply_tdp)
+        return await self.get_tdp_state()
 
     async def set_tdp_levels(self, off2: int, off3: int, scope: str, appid=None) -> dict:
         self._init()
@@ -1968,6 +2031,7 @@ class Plugin:
             return {"requested_w": 0, "applied_w": None, "ok": False,
                     "detail": f"unknown scope: {scope}"}
         self._clear_eco()
+        self._exit_firmware_mode()
         self._tdp_profiles.set_offsets(resolved, off2, off3, appid=appid)
         res = await self._offload_call(self._reapply_tdp)
         # requested_w/applied_w reflect resulting sustained pl1 (readback), not the offsets
