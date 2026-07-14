@@ -3,9 +3,10 @@
 ## [0.18.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.17.0...panel-de-control-v0.18.0) (2026-07-14)
 
 
-### Features
+### Features / Novedades
 
-* coherent global/per-game profiles across every section ([#175](https://github.com/Hooandee/panel-de-control/issues/175)) ([881831e](https://github.com/Hooandee/panel-de-control/commit/881831e07e67390d84dda7662d59590078a48235))
+* Global and per-game now work the same everywhere. Power (TDP, auto-TDP, GPU clock, boost mode), Fans, Display (color, calibration, HDR) and CPU (SMT, boost, active cores) each get a Global / game switch, and controller remaps are per-game on InputPlumber. Pick Global and the running game follows your global profile; pick the game and it uses its own, and switching never deletes either. A new "Per-game profiles" panel in Settings shows what you've set for each game, section by section, and lets you reset one back to global. Non-Steam games keep their profile across relaunches. This is a big release that touched every section, so if something that worked before now behaves oddly, please report it from Settings. ([#175](https://github.com/Hooandee/panel-de-control/issues/175)) ([881831e](https://github.com/Hooandee/panel-de-control/commit/881831e07e67390d84dda7662d59590078a48235))
+* **ES:** Global y por-juego ahora funcionan igual en todas partes. Potencia (TDP, auto-TDP, frecuencia de GPU, modo de boost), Ventiladores, Pantalla (color, calibración, HDR) y CPU (SMT, boost, núcleos activos) tienen su selector Global / juego, y los mandos se remapean por juego en InputPlumber. Eliges Global y el juego en marcha sigue tu perfil global; eliges el juego y usa el suyo, y cambiar de uno a otro nunca borra ninguno. Un nuevo panel "Perfiles por juego" en Ajustes muestra lo que has configurado en cada juego, sección por sección, y te deja restablecer uno a global. Los juegos que no son de Steam conservan su perfil entre relanzamientos. Es una versión grande que tocó todas las secciones, así que si algo que antes funcionaba ahora va raro, repórtalo desde Ajustes. ([#175](https://github.com/Hooandee/panel-de-control/issues/175)) ([881831e](https://github.com/Hooandee/panel-de-control/commit/881831e07e67390d84dda7662d59590078a48235))
 
 ## [0.17.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.16.1...panel-de-control-v0.17.0) (2026-07-14)
 
