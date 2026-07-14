@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.18.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.17.0...panel-de-control-v0.18.0) (2026-07-14)
+
+
+### Features
+
+* coherent global/per-game profiles across every section ([#175](https://github.com/Hooandee/panel-de-control/issues/175)) ([881831e](https://github.com/Hooandee/panel-de-control/commit/881831e07e67390d84dda7662d59590078a48235))
+
 ## [0.17.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.16.1...panel-de-control-v0.17.0) (2026-07-14)
 
 
