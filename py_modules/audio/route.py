@@ -12,10 +12,22 @@ def classify_route(name):
     return "headphone" if any(h in n for h in _HEADPHONE_HINTS) else "speaker"
 
 
+def route_from_sinks(pactl_list_output):
+    """Classify the active output route from `pactl list sinks` text. The physical sink
+    exposes an ``Active Port:`` (e.g. analog-output-headphones / analog-output-speaker);
+    our virtual EQ sink has none, so the only Active Port is the real device's. Defaults
+    to 'speaker' when no active port is found."""
+    for line in (pactl_list_output or "").splitlines():
+        stripped = line.strip()
+        if stripped.startswith("Active Port:"):
+            return classify_route(stripped)
+    return "speaker"
+
+
 def route_of_default_sink(reader):
-    """`reader()` returns the active output device/port description; classify it. Never
-    raises — an unreadable audio stack falls back to 'speaker'."""
+    """`reader()` returns `pactl list sinks` text; classify the active port. Never raises
+    — an unreadable audio stack falls back to 'speaker'."""
     try:
-        return classify_route(reader())
+        return route_from_sinks(reader())
     except Exception:
         return "speaker"

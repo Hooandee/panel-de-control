@@ -118,9 +118,9 @@ class PipeWireEq:
         return self.ensure_sink(gains, preamp)
 
     def current_route(self):
-        # Best-effort from the default sink's name; the precise active-port lookup (which
-        # device our sink forwards to) is refined during on-device validation.
-        return route_of_default_sink(lambda: self._runner(["pactl", "get-default-sink"]))
+        # The active port of the physical sink (our virtual sink has none) tells speaker
+        # vs headphone — the default sink is our virtual sink, so read the ports instead.
+        return route_of_default_sink(lambda: self._runner(["pactl", "list", "sinks"]))
 
     def teardown(self):
         """Remove the sink and restore the previous default (fail-safe on disable/unload)."""
