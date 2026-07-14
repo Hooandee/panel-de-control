@@ -8,20 +8,26 @@ from audio.const import clamp_gain, compute_preamp
 # Generic use-presets: gains in dB per band [32, 64, 125, 250, 500, 1k, 2k, 4k, 8k, 16k].
 GENERIC = {
     "flat": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    "voices": [-2, -1, 0, 1, 2, 3, 3, 2, 1, 0],
-    "bass": [6, 5, 4, 2, 0, 0, 0, 0, 0, 0],
-    "cinema": [4, 3, 1, 0, -1, 0, 1, 2, 3, 2],
-    "music": [3, 2, 0, -1, -1, 0, 1, 2, 2, 1],
+    # Dialogue/footsteps: cut boom, lift presence — clear voices without the harsh top.
+    "voices": [-4, -3, -1, 0, 1, 2, 3, 2, 0, -1],
+    # Body/warmth from upper bass (tiny drivers can't do deep sub, so 32/64 stay modest).
+    "bass": [2, 4, 5, 3, 1, 0, 0, 0, 0, 1],
+    # Cinematic V-shape: fuller lows + airy highs, scooped mids.
+    "cinema": [3, 4, 3, 1, -2, -3, -1, 1, 3, 3],
+    # Gentle smile for music.
+    "music": [2, 3, 2, 0, -1, -1, 0, 1, 3, 2],
 }
 
 _GENERIC_ORDER = ["flat", "voices", "bass", "cinema", "music"]
 
-# Per-device internal-speaker correction. Small handheld speakers can't reproduce deep
-# bass — boosting 32/64 Hz just distorts them, so the correction keeps the low end modest
-# and lifts upper-mid presence + a little air for clarity. Provisional; refined on-device.
+# Per-device internal-speaker correction. The proven fix for small/thin laptop-class
+# speakers (EasyEffects laptop-speaker method): add upper-bass body (~125 Hz) and CUT the
+# harsh mid presence (~800 Hz–2 kHz) that makes them sound tinny/boxy, leaving treble
+# roughly flat. Modelled on a documented Lenovo ThinkPad small-speaker preset — the closest
+# published analog; refine with a real Legion measurement when available.
 DEVICE = {
-    "legion_go": {"device_tuned": [0, 1, 2, 2, 1, 1, 2, 3, 3, 2]},
-    "legion_go_2": {"device_tuned": [0, 1, 2, 2, 1, 1, 2, 3, 3, 2]},
+    "legion_go": {"device_tuned": [0, 0, 3, 1, -1, -4, -3, -2, 0, 1]},
+    "legion_go_2": {"device_tuned": [0, 0, 3, 1, -1, -4, -3, -2, 0, 1]},
 }
 
 
