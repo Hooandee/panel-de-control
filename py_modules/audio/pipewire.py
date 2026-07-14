@@ -37,10 +37,12 @@ def _find_session():
 
 
 class PipeWireEq:
-    def __init__(self, runner=None):
+    def __init__(self, runner=None, name="Panel de Control"):
         self._runner = runner or self._run
         self._session = _find_session()
         self._orig_default = None
+        # Human-facing sink name shown in the system/Steam volume UI (the device name).
+        self._name = name or "Panel de Control"
 
     # --- session command plumbing -------------------------------------------------
     def _run(self, argv, timeout=8):
@@ -82,7 +84,7 @@ class PipeWireEq:
             return False
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w") as f:
-            f.write(build_chain_config(gains, _SINK))
+            f.write(build_chain_config(gains, _SINK, self._name))
         uid = self._session[0]
         try:
             os.chown(path, uid, uid)

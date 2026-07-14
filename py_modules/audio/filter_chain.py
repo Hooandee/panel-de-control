@@ -8,7 +8,7 @@ from audio.const import BAND_FREQS
 _LABELS = ["bq_lowshelf"] + ["bq_peaking"] * 8 + ["bq_highshelf"]
 
 
-def build_chain_config(gains, sink_name):
+def build_chain_config(gains, sink_name, description="Panel de Control"):
     nodes = []
     for i, (freq, label, gain) in enumerate(zip(BAND_FREQS, _LABELS, gains), start=1):
         nodes.append(
@@ -24,8 +24,8 @@ def build_chain_config(gains, sink_name):
     return f"""context.modules = [
   {{ name = libpipewire-module-filter-chain
     args = {{
-      node.description = "PdC EQ"
-      media.name       = "PdC EQ"
+      node.description = "{description}"
+      media.name       = "{description}"
       filter.graph = {{
         nodes = [
 {nodes_s}
@@ -36,7 +36,7 @@ def build_chain_config(gains, sink_name):
       }}
       audio.channels = 2
       audio.position = [ FL FR ]
-      capture.props  = {{ node.name = "effect_input.{sink_name}" node.description = "Panel de Control" media.class = Audio/Sink }}
+      capture.props  = {{ node.name = "effect_input.{sink_name}" node.description = "{description}" media.class = Audio/Sink }}
       playback.props = {{ node.name = "effect_output.{sink_name}" node.passive = true }}
     }}
   }}

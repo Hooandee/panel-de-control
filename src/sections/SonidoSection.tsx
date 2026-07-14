@@ -94,19 +94,27 @@ export const SonidoSection: FC = () => {
 
           {/* Curated presets — the device-tuned one is the hero (first). */}
           <Focusable style={{ ...segmentGroupStyle, flexWrap: "wrap", gap: 6, background: "none", padding: 0 }}>
-            {state.presets.map((p) => (
-              <Focusable
-                key={p.id}
-                style={chip(state.preset === p.id)}
-                onActivate={() => onPreset(p.id)}
-                onClick={() => onPreset(p.id)}
-              >
-                <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                  {p.id === "device_tuned" && <LuSparkles size={12} color={theme.color.accent} />}
-                  {presetLabel(p.id)}
-                </span>
-              </Focusable>
-            ))}
+            {state.presets.map((p) => {
+              const on = state.preset === p.id;
+              return (
+                <Focusable
+                  key={p.id}
+                  style={chip(on)}
+                  onActivate={() => onPreset(p.id)}
+                  onClick={() => onPreset(p.id)}
+                >
+                  <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    {p.id === "device_tuned" && (
+                      <LuSparkles
+                        size={12}
+                        color={on ? theme.color.textPrimary : theme.color.accent}
+                      />
+                    )}
+                    {presetLabel(p.id)}
+                  </span>
+                </Focusable>
+              );
+            })}
           </Focusable>
 
           {/* Current response curve (read-only preview). */}

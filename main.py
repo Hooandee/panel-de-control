@@ -251,7 +251,7 @@ class Plugin:
         self._audio_eq = EqStore(
             os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "audio.json")
         )
-        self._audio = PipeWireEq()
+        self._audio = PipeWireEq(name=self._device.display_name)
         # Calibration safety: a change previews live but auto-reverts to the saved
         # value after _COLOR_REVERT_SECS unless confirmed (so a mis-drag to an
         # illegible screen self-heals even if the QAM closes). None = nothing pending.
