@@ -6,6 +6,7 @@ import { PotenciaSection } from "./PotenciaSection";
 import { SistemaSection } from "./SistemaSection";
 import { PantallaSection } from "./PantallaSection";
 import { VentiladoresSection } from "./VentiladoresSection";
+import { SonidoSection } from "./SonidoSection";
 import { MandosSection } from "./MandosSection";
 import { AjustesSection } from "./AjustesSection";
 
@@ -17,6 +18,7 @@ const COMPONENTS: Record<string, FC> = {
   system: SistemaSection,
   display: PantallaSection,
   fans: VentiladoresSection,
+  audio: SonidoSection,
   mandos: MandosSection,
   settings: AjustesSection,
 };

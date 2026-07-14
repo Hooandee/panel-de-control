@@ -580,3 +580,33 @@ export interface GameProfileRow {
 export const listGameProfiles = callable<[], GameProfileRow[]>("list_game_profiles");
 export const resetGameProfiles =
   callable<[appid: string], GameProfileRow[]>("reset_game_profiles");
+
+// ---- Sonido: audio EQ ----------------------------------------------------
+export interface AudioPresetDef {
+  id: string;
+}
+export interface AudioState {
+  supported: boolean;
+  enabled: boolean;
+  route: "speaker" | "headphone";
+  appid: string | null;
+  follows_global: boolean;
+  has_game_profile: boolean;
+  preset: string;
+  gains: number[];
+  preamp: number;
+  presets: AudioPresetDef[];
+  device_name: string;
+}
+export const getAudioState = callable<[], AudioState>("get_audio_state");
+export const setAudioEnabled = callable<[enabled: boolean], AudioState>("set_audio_enabled");
+export const applyAudioPreset =
+  callable<[preset: string, scope: Scope, appid: string | null], AudioState>("apply_audio_preset");
+export const setAudioBand =
+  callable<[index: number, gain: number, scope: Scope, appid: string | null], AudioState>("set_audio_band");
+export const setAudioBands =
+  callable<[gains: number[], scope: Scope, appid: string | null], AudioState>("set_audio_bands");
+export const setAudioFollowGlobal =
+  callable<[follow: boolean, appid: string | null], AudioState>("set_audio_follow_global");
+export const resetAudio =
+  callable<[scope: Scope, appid: string | null], AudioState>("reset_audio");
