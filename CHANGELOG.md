@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.18.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.17.0...panel-de-control-v0.18.0) (2026-07-14)
+
+
+### Features / Novedades
+
+* Global and per-game now work the same everywhere. Power (TDP, auto-TDP, GPU clock, boost mode), Fans, Display (color, calibration, HDR) and CPU (SMT, boost, active cores) each get a Global / game switch, and controller remaps are per-game on InputPlumber. Pick Global and the running game follows your global profile; pick the game and it uses its own, and switching never deletes either. A new "Per-game profiles" panel in Settings shows what you've set for each game, section by section, and lets you reset one back to global. Non-Steam games keep their profile across relaunches. This is a big release that touched every section, so if something that worked before now behaves oddly, please report it from Settings. ([#175](https://github.com/Hooandee/panel-de-control/issues/175)) ([881831e](https://github.com/Hooandee/panel-de-control/commit/881831e07e67390d84dda7662d59590078a48235))
+* **ES:** Global y por-juego ahora funcionan igual en todas partes. Potencia (TDP, auto-TDP, frecuencia de GPU, modo de boost), Ventiladores, Pantalla (color, calibración, HDR) y CPU (SMT, boost, núcleos activos) tienen su selector Global / juego, y los mandos se remapean por juego en InputPlumber. Eliges Global y el juego en marcha sigue tu perfil global; eliges el juego y usa el suyo, y cambiar de uno a otro nunca borra ninguno. Un nuevo panel "Perfiles por juego" en Ajustes muestra lo que has configurado en cada juego, sección por sección, y te deja restablecer uno a global. Los juegos que no son de Steam conservan su perfil entre relanzamientos. Es una versión grande que tocó todas las secciones, así que si algo que antes funcionaba ahora va raro, repórtalo desde Ajustes. ([#175](https://github.com/Hooandee/panel-de-control/issues/175)) ([881831e](https://github.com/Hooandee/panel-de-control/commit/881831e07e67390d84dda7662d59590078a48235))
+
 ## [0.17.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.16.1...panel-de-control-v0.17.0) (2026-07-14)
 
 
@@ -129,40 +137,40 @@
 
 ### Features / Novedades
 
-* The volume and brightness buttons can now show the exact value on screen without opening the panel: turn on "Show value when changing volume or brightness" under Ajustes and a small toast shows the number as you adjust — speaker/sun icon, silent, and off by default. ([#73](https://github.com/Hooandee/panel-de-control/issues/73)) ([27bb34a](https://github.com/Hooandee/panel-de-control/commit/27bb34adba25d0949493d9c236d4e1380786d1cb))
-* **ES:** Los botones de volumen y brillo ahora pueden mostrar el valor exacto en pantalla sin abrir el panel: activa «Mostrar valor al cambiar volumen o brillo» en Ajustes y un pequeño aviso muestra el número mientras ajustas — con icono de altavoz/sol, silencioso y desactivado por defecto. ([#73](https://github.com/Hooandee/panel-de-control/issues/73)) ([27bb34a](https://github.com/Hooandee/panel-de-control/commit/27bb34adba25d0949493d9c236d4e1380786d1cb))
+* The volume and brightness buttons can now show the exact value on screen without opening the panel: turn on "Show value when changing volume or brightness" under Ajustes and a small toast shows the number as you adjust, speaker/sun icon, silent, and off by default. ([#73](https://github.com/Hooandee/panel-de-control/issues/73)) ([27bb34a](https://github.com/Hooandee/panel-de-control/commit/27bb34adba25d0949493d9c236d4e1380786d1cb))
+* **ES:** Los botones de volumen y brillo ahora pueden mostrar el valor exacto en pantalla sin abrir el panel: activa «Mostrar valor al cambiar volumen o brillo» en Ajustes y un pequeño aviso muestra el número mientras ajustas, con icono de altavoz/sol, silencioso y desactivado por defecto. ([#73](https://github.com/Hooandee/panel-de-control/issues/73)) ([27bb34a](https://github.com/Hooandee/panel-de-control/commit/27bb34adba25d0949493d9c236d4e1380786d1cb))
 
 ## [0.6.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.5.0...panel-de-control-v0.6.0) (2026-07-06)
 
 
 ### Features / Novedades
 
-* You can now hide the battery health info — health, charge cycles and capacity — from the Battery card, with a single toggle under Ajustes → Personalizar, for anyone who'd rather not keep an eye on it. You can also move between tabs with the L1/R1 shoulder buttons. ([#51](https://github.com/Hooandee/panel-de-control/issues/51)) ([bbba2ed](https://github.com/Hooandee/panel-de-control/commit/bbba2ed325b863c94cb75b09513af28c1b4610d2))
-* **ES:** Ahora puedes ocultar la información de salud de la batería —salud, ciclos de carga y capacidad— de la tarjeta de Batería, con un solo interruptor en Ajustes → Personalizar, para quien prefiera no estar pendiente de ella. Además puedes cambiar de pestaña con los gatillos L1/R1. ([#51](https://github.com/Hooandee/panel-de-control/issues/51)) ([bbba2ed](https://github.com/Hooandee/panel-de-control/commit/bbba2ed325b863c94cb75b09513af28c1b4610d2))
+* You can now hide the battery health info (health, charge cycles and capacity) from the Battery card, with a single toggle under Ajustes → Personalizar, for anyone who'd rather not keep an eye on it. You can also move between tabs with the L1/R1 shoulder buttons. ([#51](https://github.com/Hooandee/panel-de-control/issues/51)) ([bbba2ed](https://github.com/Hooandee/panel-de-control/commit/bbba2ed325b863c94cb75b09513af28c1b4610d2))
+* **ES:** Ahora puedes ocultar la información de salud de la batería (salud, ciclos de carga y capacidad) de la tarjeta de Batería, con un solo interruptor en Ajustes → Personalizar, para quien prefiera no estar pendiente de ella. Además puedes cambiar de pestaña con los gatillos L1/R1. ([#51](https://github.com/Hooandee/panel-de-control/issues/51)) ([bbba2ed](https://github.com/Hooandee/panel-de-control/commit/bbba2ed325b863c94cb75b09513af28c1b4610d2))
 
 ## [0.5.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.4.2...panel-de-control-v0.5.0) (2026-07-06)
 
 
 ### Features / Novedades
 
-* MSI Claw: the Ventiladores tab now shows the fan curve your Claw's firmware applies, read-only, with the live temperature marker — so you can see how it behaves even though its driver doesn't let apps edit the curve yet. The fan RPM monitor also shows both fans correctly. Editable, safe fan-speed control for the Claw is in progress. ([#42](https://github.com/Hooandee/panel-de-control/issues/42)) ([414fca1](https://github.com/Hooandee/panel-de-control/commit/414fca15c6f7e9cd5f305e7a38aa3d29d4d6f246))
-* **ES:** MSI Claw: la pestaña Ventiladores ahora muestra la curva de ventilación que aplica el firmware de tu Claw, en solo lectura, con la marca de temperatura en vivo — así ves cómo se comporta aunque su driver todavía no deje a las apps editar la curva. El monitor de RPM también muestra bien los dos ventiladores. El control editable y seguro de la velocidad del ventilador para el Claw está en desarrollo. ([#42](https://github.com/Hooandee/panel-de-control/issues/42)) ([414fca1](https://github.com/Hooandee/panel-de-control/commit/414fca15c6f7e9cd5f305e7a38aa3d29d4d6f246))
+* MSI Claw: the Ventiladores tab now shows the fan curve your Claw's firmware applies, read-only, with the live temperature marker, so you can see how it behaves even though its driver doesn't let apps edit the curve yet. The fan RPM monitor also shows both fans correctly. Editable, safe fan-speed control for the Claw is in progress. ([#42](https://github.com/Hooandee/panel-de-control/issues/42)) ([414fca1](https://github.com/Hooandee/panel-de-control/commit/414fca15c6f7e9cd5f305e7a38aa3d29d4d6f246))
+* **ES:** MSI Claw: la pestaña Ventiladores ahora muestra la curva de ventilación que aplica el firmware de tu Claw, en solo lectura, con la marca de temperatura en vivo, así ves cómo se comporta aunque su driver todavía no deje a las apps editar la curva. El monitor de RPM también muestra bien los dos ventiladores. El control editable y seguro de la velocidad del ventilador para el Claw está en desarrollo. ([#42](https://github.com/Hooandee/panel-de-control/issues/42)) ([414fca1](https://github.com/Hooandee/panel-de-control/commit/414fca15c6f7e9cd5f305e7a38aa3d29d4d6f246))
 
 ## [0.4.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.4.1...panel-de-control-v0.4.2) (2026-07-06)
 
 
 ### Performance Improvements / Mejoras de rendimiento
 
-* The control panel and its live readouts stay responsive even when a system tool (the display compositor, the fan service) is slow to answer — the heavy work now runs in the background instead of briefly freezing the panel. ([#40](https://github.com/Hooandee/panel-de-control/issues/40)) ([c404201](https://github.com/Hooandee/panel-de-control/commit/c4042011f88502ef2afaabbc094a07a312a1f51a))
-* **ES:** El panel y sus lecturas en vivo siguen respondiendo aunque una herramienta del sistema (el compositor de pantalla, el servicio de ventiladores) tarde en contestar — el trabajo pesado ahora corre en segundo plano en vez de congelar el panel un instante. ([#40](https://github.com/Hooandee/panel-de-control/issues/40)) ([c404201](https://github.com/Hooandee/panel-de-control/commit/c4042011f88502ef2afaabbc094a07a312a1f51a))
+* The control panel and its live readouts stay responsive even when a system tool (the display compositor, the fan service) is slow to answer, the heavy work now runs in the background instead of briefly freezing the panel. ([#40](https://github.com/Hooandee/panel-de-control/issues/40)) ([c404201](https://github.com/Hooandee/panel-de-control/commit/c4042011f88502ef2afaabbc094a07a312a1f51a))
+* **ES:** El panel y sus lecturas en vivo siguen respondiendo aunque una herramienta del sistema (el compositor de pantalla, el servicio de ventiladores) tarde en contestar, el trabajo pesado ahora corre en segundo plano en vez de congelar el panel un instante. ([#40](https://github.com/Hooandee/panel-de-control/issues/40)) ([c404201](https://github.com/Hooandee/panel-de-control/commit/c4042011f88502ef2afaabbc094a07a312a1f51a))
 
 ## [0.4.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.4.0...panel-de-control-v0.4.1) (2026-07-05)
 
 
 ### Bug Fixes / Correcciones
 
-* Keep panel color working when gamescope's socket appears after load: the Pantalla (display color) tab no longer vanishes when the plugin starts before gamescope is ready — detection now recovers on its own instead of staying off for the whole session. ([d3fd9d2](https://github.com/Hooandee/panel-de-control/commit/d3fd9d22d8165793c5d0f695148e339b44d92ef4))
-* **ES:** El control de color sigue funcionando cuando el socket de gamescope aparece tras el arranque: la pestaña Pantalla ya no desaparece si el plugin arranca antes de que gamescope esté listo — la detección se recupera sola en vez de quedarse desactivada toda la sesión. ([d3fd9d2](https://github.com/Hooandee/panel-de-control/commit/d3fd9d22d8165793c5d0f695148e339b44d92ef4))
+* Keep panel color working when gamescope's socket appears after load: the Pantalla (display color) tab no longer vanishes when the plugin starts before gamescope is ready, detection now recovers on its own instead of staying off for the whole session. ([d3fd9d2](https://github.com/Hooandee/panel-de-control/commit/d3fd9d22d8165793c5d0f695148e339b44d92ef4))
+* **ES:** El control de color sigue funcionando cuando el socket de gamescope aparece tras el arranque: la pestaña Pantalla ya no desaparece si el plugin arranca antes de que gamescope esté listo, la detección se recupera sola en vez de quedarse desactivada toda la sesión. ([d3fd9d2](https://github.com/Hooandee/panel-de-control/commit/d3fd9d22d8165793c5d0f695148e339b44d92ef4))
 
 ## [0.4.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.3.0...panel-de-control-v0.4.0) (2026-07-05)
 
@@ -186,7 +194,7 @@
 * in-plugin problem reporter ([59afbd7](https://github.com/Hooandee/panel-de-control/commit/59afbd7db71fc7b48c5bd874c6f8133d889287b1))
 * Legion Go S support (detection, fan monitor, fan modes) ([2bed969](https://github.com/Hooandee/panel-de-control/commit/2bed969e2da300f092f3156b4ea5bb56afc98702))
 * plain-language glossary of handheld terms in Settings ([9a95918](https://github.com/Hooandee/panel-de-control/commit/9a959180eb000c0fd1df396b7bdddd4d00139768))
-* RGB lighting card — open or install Colores from Sistema ([5e96f91](https://github.com/Hooandee/panel-de-control/commit/5e96f91a0ad3b75e43e5a17b0243925235cdf789))
+* RGB lighting card, open or install Colores from Sistema ([5e96f91](https://github.com/Hooandee/panel-de-control/commit/5e96f91a0ad3b75e43e5a17b0243925235cdf789))
 
 
 ### Bug Fixes
@@ -254,7 +262,7 @@
 * add TDPBackend interface and NullBackend ([9004015](https://github.com/Hooandee/panel-de-control/commit/900401516a35ac780d30cbb0b1a13b8d05d42ac5))
 * add usage telemetry store and sampler ([d609dd8](https://github.com/Hooandee/panel-de-control/commit/d609dd8b4d4e1caeb2e59d2190083ca7ccabd39a))
 * advanced TDP, auto-TDP, battery ceiling, telemetry and fan-curve control ([b7ca38d](https://github.com/Hooandee/panel-de-control/commit/b7ca38d50a1b5a2e390be43d87c5c35727590578))
-* assistive auto-adaptation — GPU-driven auto-TDP, adaptive fan mode, learning ([3bd6488](https://github.com/Hooandee/panel-de-control/commit/3bd64889349b174f67741c909fd0d8d2f8bd95c8))
+* assistive auto-adaptation, GPU-driven auto-TDP, adaptive fan mode, learning ([3bd6488](https://github.com/Hooandee/panel-de-control/commit/3bd64889349b174f67741c909fd0d8d2f8bd95c8))
 * assistive fan-curve suggestions + multi-device fan & TDP control ([74bf87e](https://github.com/Hooandee/panel-de-control/commit/74bf87ebf05196732ac47144931d9794e94c6a18))
 * assistive fan-curve suggestions + multi-device fan & TDP control ([44f5d12](https://github.com/Hooandee/panel-de-control/commit/44f5d12c39238fb64eea1b18313b4bf2ca98bb80))
 * cap TDP to a device-aware battery ceiling on DC power ([38516c2](https://github.com/Hooandee/panel-de-control/commit/38516c23556afa03396d0daa77601c3a4a9ae001))
