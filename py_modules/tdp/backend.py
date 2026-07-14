@@ -30,6 +30,17 @@ class TDPBackend(ABC):
         """Set explicit per-PL targets. Defaults to applying pl1 via set_tdp."""
         return self.set_tdp(pl1, ac)
 
+    # Firmware performance modes (platform_profile). Only backends that expose a named
+    # platform-profile override these; every other backend is a safe no-op.
+    def profile_choices(self) -> list:
+        return []
+
+    def read_profile(self) -> str | None:
+        return None
+
+    def set_profile(self, mode: str) -> bool:
+        return False
+
 
 class NullBackend(TDPBackend):
     supported = False

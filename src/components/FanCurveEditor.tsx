@@ -5,6 +5,7 @@ import { LuSparkles, LuRefreshCw, LuVolumeX, LuScale, LuZap, LuPencil } from "re
 import { useI18n } from "../i18n";
 import { FanCurveControl, shownPoints } from "../fans/useFanCurve";
 import { presetConverges } from "../fans/logic";
+import { fanCurveNotice } from "../fans/notice";
 import { FanPreset, FanSuggestion } from "../api";
 import { FanCurveGraph } from "./FanCurveGraph";
 import { Loading } from "./Loading";
@@ -53,7 +54,7 @@ export const FanCurveEditor: FC<Props> = ({ control, liveTemp, suggestion, expan
   if (!curveState.supported) {
     return (
       <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
-        {t("fans.curve.unsupported")}
+        {fanCurveNotice(curveState, t)}
       </div>
     );
   }

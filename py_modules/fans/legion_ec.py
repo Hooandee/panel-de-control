@@ -23,6 +23,10 @@ REG_FACTORY = 0xC6C2
 REG_OVERRIDE = 0xC6C8
 REG_POWER_MODE = 0xC683
 
+# Legion Go original (83E1): fan RPM is readable at EC 0xC664 (16-bit LE) even on
+# kernels whose lenovo_wmi_other driver doesn't publish the hwmon fan node. Read-only.
+REG_RPM_83E1 = 0xC664
+
 # DMI tokens that identify the Legion Go 2 (product_version "Legion Go 8ASP2",
 # product_name "83N0"). Matched case-insensitively against both fields.
 _DMI_MATCH = ("8ASP2", "8AHP2", "83N0")
@@ -68,6 +72,15 @@ class _PortEC:
             return False
 
 
+def _read_le16(ec, addr: int) -> Optional[int]:
+    """16-bit little-endian EC value across addr,addr+1. None if either read fails."""
+    lo = ec.read(addr)
+    hi = ec.read(addr + 1)
+    if lo is None or hi is None:
+        return None
+    return (hi << 8) | lo
+
+
 class LegionGo2FanBackend(SoftwareLoopBackend):
     """Legion Go 2: write a target RPM to the EC override register; release = 0."""
 
@@ -105,11 +118,7 @@ class LegionGo2FanBackend(SoftwareLoopBackend):
         return bool(ok_lo and ok_hi)
 
     def _read_rpm(self) -> Optional[int]:
-        hi = self._ec.read(REG_RPM + 1)
-        lo = self._ec.read(REG_RPM)
-        if hi is None or lo is None:
-            return None  # honest: EC read failed, RPM unknown (not 0)
-        return (hi << 8) | lo
+        return _read_le16(self._ec, REG_RPM)  # None when unreadable (not a fake 0)
 
 
 # Legion Go S: RPM (0xC6C0) and override (0xC6C8) use the same SuperIO 0x4E map as
@@ -159,3 +168,23 @@ class LegionGoSFanBackend(LegionGo2FanBackend):
             return 0  # curve wants the fan off → release to firmware
         frac = min(255, duty) / 255.0
         return int(round(_GOS_MIN_SPIN + frac * (self.max_rpm - _GOS_MIN_SPIN)))
+
+
+class LegionGoRpmReader:
+    """Read-only fan RPM for the Legion Go original (83E1) over the EC. A monitor
+    fallback for kernels where the hwmon fan node is absent. Never writes; never
+    raises — returns None when the RPM can't be read (never a fake 0)."""
+
+    def __init__(self, ec=None) -> None:
+        self._ec = ec or _PortEC()
+
+    def read_rpm(self) -> Optional[int]:
+        return _read_le16(self._ec, REG_RPM_83E1)
+
+
+def select_legion_rpm_reader(device, ec=None):
+    """A read-only EC RPM reader for the Legion Go original, else None. Gated by model:
+    the 0xC664 register is specific to the 83E1 EC map."""
+    if getattr(device, "key", None) == "legion_go":
+        return LegionGoRpmReader(ec=ec)
+    return None

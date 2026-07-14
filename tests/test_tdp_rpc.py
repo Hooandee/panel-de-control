@@ -39,6 +39,20 @@ class FakeBackend:
     def read_applied(self):
         return self._applied
 
+    _profile = "custom"
+
+    def profile_choices(self):
+        return ["low-power", "balanced", "performance", "custom"]
+
+    def read_profile(self):
+        return self._profile
+
+    def set_profile(self, mode):
+        if mode in self.profile_choices():
+            self._profile = mode
+            return True
+        return False
+
 
 @pytest.fixture
 def Plugin(tmp_path, monkeypatch):
@@ -102,6 +116,51 @@ def test_set_tdp_watts_game_without_appid_falls_back_to_global(Plugin):
 def test_set_tdp_watts_unknown_scope_does_not_raise(Plugin):
     res = asyncio.run(Plugin().set_tdp_watts(15, "bogus"))
     assert res["ok"] is False and "unknown scope" in res["detail"]
+
+
+def _force_legion(monkeypatch):
+    import device_registry
+    from device_profiles import DEVICE_TABLE
+    legion = next(d for d in DEVICE_TABLE if d.key == "legion_go")
+    monkeypatch.setattr(device_registry, "detect", lambda *a, **k: legion)
+
+
+def test_firmware_modes_exposed_only_on_capable_device(Plugin, monkeypatch):
+    _force_legion(monkeypatch)
+    st = asyncio.run(Plugin().get_tdp_state())
+    assert st["firmware_modes"] == ["low-power", "balanced", "performance", "custom"]
+    assert st["firmware_mode"] == "custom"  # default: our TDP owns the rails
+
+
+def test_firmware_modes_absent_on_normal_device(Plugin):
+    st = asyncio.run(Plugin().get_tdp_state())  # generic detected device
+    assert st["firmware_modes"] == []
+    assert st["firmware_mode"] == "custom"
+
+
+def test_set_firmware_mode_selects_and_persists(Plugin, monkeypatch):
+    _force_legion(monkeypatch)
+    p = Plugin()
+    st = asyncio.run(p.set_tdp_firmware_mode("performance"))
+    assert st["firmware_mode"] == "performance"
+    # persists across reload (device-global setting) and is re-asserted on startup
+    _force_legion(monkeypatch)
+    assert asyncio.run(Plugin().get_tdp_state())["firmware_mode"] == "performance"
+
+
+def test_moving_slider_leaves_firmware_mode(Plugin, monkeypatch):
+    _force_legion(monkeypatch)
+    p = Plugin()
+    asyncio.run(p.set_tdp_firmware_mode("low-power"))
+    asyncio.run(p.set_tdp_watts(15, "global"))
+    assert asyncio.run(p.get_tdp_state())["firmware_mode"] == "custom"
+
+
+def test_set_firmware_mode_rejects_unknown(Plugin, monkeypatch):
+    _force_legion(monkeypatch)
+    p = Plugin()
+    st = asyncio.run(p.set_tdp_firmware_mode("turbo"))
+    assert st["firmware_mode"] == "custom"  # unchanged
 
 
 def test_state_exposes_advanced_fields(Plugin):
