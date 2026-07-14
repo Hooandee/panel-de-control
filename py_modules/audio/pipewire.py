@@ -23,13 +23,6 @@ _MODULE = "/usr/lib/pipewire-0.3/libpipewire-module-filter-chain.so"
 _SERVICE = "filter-chain.service"
 
 
-def sink_volume_arg(preamp_db):
-    """Pre-amp (negative dB headroom) as a pactl volume percent. 0 dB → 100%, capped at
-    100% (we only ever attenuate to avoid clipping)."""
-    factor = 10.0 ** (preamp_db / 20.0)
-    return f"{min(100, round(factor * 100))}%"
-
-
 def _find_session():
     """The logged-in user's PipeWire session: (uid, runtime_dir, user) from the pipewire
     socket under /run/user/*, or None when no session is present."""
@@ -100,8 +93,11 @@ class PipeWireEq:
     def _restart(self):
         self._runner(["systemctl", "--user", "restart", _SERVICE])
 
-    def ensure_sink(self, gains, preamp):
-        """Create/refresh the EQ sink with these gains, make it default, apply pre-amp."""
+    def ensure_sink(self, gains):
+        """Create/refresh the EQ sink with these gains and make it default. We never
+        touch the sink VOLUME — that is the user's volume (Steam controls it); changing
+        it here would look like the audio dropping on its own. Clip headroom is handled
+        by keeping preset boosts modest, not by attenuating the output."""
         if not self.is_supported() or not self._write_conf(gains):
             return False
         if self._orig_default is None:
@@ -110,12 +106,11 @@ class PipeWireEq:
                 self._orig_default = cur
         self._restart()
         self._runner(["pactl", "set-default-sink", _INPUT])
-        self._runner(["pactl", "set-sink-volume", _INPUT, sink_volume_arg(preamp)])
         return True
 
-    def set_gains(self, gains, preamp):
-        """Apply on release: rewrite the conf + restart, re-assert pre-amp volume."""
-        return self.ensure_sink(gains, preamp)
+    def set_gains(self, gains):
+        """Apply on release: rewrite the conf + restart."""
+        return self.ensure_sink(gains)
 
     def current_route(self):
         # The active port of the physical sink (our virtual sink has none) tells speaker

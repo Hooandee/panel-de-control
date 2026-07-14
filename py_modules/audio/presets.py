@@ -16,11 +16,12 @@ GENERIC = {
 
 _GENERIC_ORDER = ["flat", "voices", "bass", "cinema", "music"]
 
-# Per-device internal-speaker correction (bass lift + presence + air). Provisional; refined
-# on-device per model. Device keys match device_registry.
+# Per-device internal-speaker correction. Small handheld speakers can't reproduce deep
+# bass — boosting 32/64 Hz just distorts them, so the correction keeps the low end modest
+# and lifts upper-mid presence + a little air for clarity. Provisional; refined on-device.
 DEVICE = {
-    "legion_go": {"device_tuned": [5, 4, 2, 0, -1, 0, 1, 3, 4, 3]},
-    "legion_go_2": {"device_tuned": [5, 4, 2, 0, -1, 0, 1, 3, 4, 3]},
+    "legion_go": {"device_tuned": [0, 1, 2, 2, 1, 1, 2, 3, 3, 2]},
+    "legion_go_2": {"device_tuned": [0, 1, 2, 2, 1, 1, 2, 3, 3, 2]},
 }
 
 

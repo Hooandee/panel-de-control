@@ -1,6 +1,6 @@
 import { CSSProperties, FC } from "react";
 import { Focusable, PanelSectionRow, ToggleField } from "@decky/ui";
-import { LuAudioLines, LuHeadphones, LuVolume2 } from "react-icons/lu";
+import { LuAudioLines, LuHeadphones, LuSparkles, LuVolume2 } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
@@ -49,7 +49,7 @@ export const SonidoSection: FC = () => {
         scope={scope}
         gameName={game?.name ?? null}
         hasGameProfile={state.has_game_profile}
-        globalLabel={t("audio.global")}
+        globalLabel={t("tdp.scope.global")}
         inheritHint={t("audio.inherit")}
         onScope={onScope}
       />
@@ -101,7 +101,10 @@ export const SonidoSection: FC = () => {
                 onActivate={() => onPreset(p.id)}
                 onClick={() => onPreset(p.id)}
               >
-                {presetLabel(p.id)}
+                <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  {p.id === "device_tuned" && <LuSparkles size={12} color={theme.color.accent} />}
+                  {presetLabel(p.id)}
+                </span>
               </Focusable>
             ))}
           </Focusable>
@@ -122,19 +125,6 @@ export const SonidoSection: FC = () => {
             summary={presetLabel(state.preset)}
           >
             <EqCurveGraph gains={state.gains} editable onChange={onBands} />
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                fontSize: theme.font.caption,
-                color: theme.color.textMuted,
-                marginTop: 8,
-              }}
-            >
-              <span>{t("audio.preamp")}</span>
-              <span style={{ color: theme.color.textPrimary }}>{state.preamp.toFixed(1)} dB</span>
-            </div>
             <Focusable
               style={{ ...chip(false), textAlign: "center", marginTop: 10 }}
               onActivate={onReset}

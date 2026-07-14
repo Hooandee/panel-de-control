@@ -2361,7 +2361,7 @@ class Plugin:
             if not self._settings.get("audio_eq_enabled") or not self._audio.is_supported():
                 return
             setting = self._effective_audio(self._current_route())
-            self._audio.set_gains(setting["gains"], setting["preamp"])
+            self._audio.set_gains(setting["gains"])
         except Exception:  # noqa: BLE001
             pass
 

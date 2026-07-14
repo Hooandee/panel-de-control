@@ -20,8 +20,8 @@ class _FakePipeWireEq:
     def current_route(self):
         return self._route
 
-    def set_gains(self, gains, preamp):
-        self.applied.append((list(gains), preamp))
+    def set_gains(self, gains):
+        self.applied.append(list(gains))
         return True
 
     def teardown(self):
