@@ -21,7 +21,6 @@ class ScopedProfileStore:
         self._path = path
         self._data = self._load()
 
-    # --- subclass hooks ------------------------------------------------------
     def _clean_global(self, raw):
         """Sanitize a raw profile dict into this store's canonical shape (no
         follow_global). Must never raise."""
@@ -36,7 +35,6 @@ class ScopedProfileStore:
             prof["follow_global"] = True
         return prof
 
-    # --- persistence ---------------------------------------------------------
     def _load(self):
         try:
             with open(self._path) as f:
@@ -52,7 +50,6 @@ class ScopedProfileStore:
     def _save(self):
         atomic_json_save(self._path, self._data)
 
-    # --- scope contract ------------------------------------------------------
     def is_following_global(self, appid):
         """True when this game applies the global profile: no own profile, or its own is
         toggled to follow global. Own values are never deleted — following just deactivates."""
