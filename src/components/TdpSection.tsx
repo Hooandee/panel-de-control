@@ -62,16 +62,20 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
 
   return (
     <>
-      <PanelSectionRow>
-        <ProfileSelector
-          scope={scope}
-          gameName={game?.name ?? null}
-          hasGameProfile={tdp.has_game_profile}
-          globalLabel={t("tdp.scope.global")}
-          inheritHint={t("tdp.inherit")}
-          onScope={onScope}
-        />
-      </PanelSectionRow>
+      {/* Hidden under a firmware mode: it owns the rails, so a per-game TDP scope has
+          no effect there (same as the advanced/boost controls below). */}
+      {!inFwMode && (
+        <PanelSectionRow>
+          <ProfileSelector
+            scope={scope}
+            gameName={game?.name ?? null}
+            hasGameProfile={tdp.has_game_profile}
+            globalLabel={t("tdp.scope.global")}
+            inheritHint={t("tdp.inherit")}
+            onScope={onScope}
+          />
+        </PanelSectionRow>
+      )}
       <PanelSectionRow>
         <PowerArc
           watts={shownWatts}

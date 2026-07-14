@@ -475,3 +475,17 @@ def test_cooler_boost_ignored_when_device_has_no_cooler(Plugin):
     p._init()  # detected device is generic → cooler_max None
     asyncio.run(p.set_cooler_boost(True))
     assert p._limits().max_w == 20  # unchanged
+
+
+def test_adopt_does_not_detach_a_follow_global_game(Plugin):
+    # A game that kept its own stored profile but is toggled back to following global
+    # must NOT be silently detached when an external tool moves PL1 (the adopt path
+    # writes to the live scope = global here, never flipping follow_global off).
+    p = Plugin()
+    p._current_appid = "g"
+    asyncio.run(p.set_tdp_watts(20, "game", "g"))
+    asyncio.run(p.set_tdp_follow_global(True, "g"))
+    assert p._tdp_profiles.is_following_global("g") is True
+    p._tdp_backend._applied = 30  # external tool moved the firmware PL1
+    asyncio.run(p.get_tdp_state())  # triggers adoption
+    assert p._tdp_profiles.is_following_global("g") is True  # still following, not detached

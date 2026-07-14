@@ -1361,7 +1361,8 @@ class Plugin:
         self._init()
         self._ui_active = bool(enabled)
         if (self._qam_boost_active() and self._current_appid is not None
-                and self._tdp_profiles.auto_tdp(self._current_appid)):
+                and self._tdp_profiles.auto_tdp(self._current_appid)
+                and self._firmware_mode() == _CUSTOM_MODE):
             lim = self._limits()
             floor = auto_tdp.effective_floor(lim.min_w, True)
             cur = self._effective_levels(self._current_appid)[0]["pl1"]
@@ -2134,7 +2135,9 @@ class Plugin:
         if abs(int(applied) - int(self._last_written_pl1)) < _EXTERNAL_TDP_THRESHOLD:
             return False
         appid = self._current_appid
-        scope = "game" if (appid is not None and self._tdp_profiles.has_game(appid)) else "global"
+        # Adopt into the scope that's actually live (game only when it has its OWN active
+        # profile) — never detach a follow-global game that merely kept stored values.
+        scope = self._auto_scope()
         self._tdp_profiles.set_pl1(scope, int(applied), appid=appid)
         self._last_written_pl1 = int(applied)
         return True
