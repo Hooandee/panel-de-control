@@ -1,7 +1,7 @@
 """Curated EQ presets. Generic use-presets apply to any device; ``device_tuned`` is the
 per-machine internal-speaker correction (the hero), only meaningful on the speaker route —
 headphones get no speaker correction. The device curves here are a starting point, refined
-per model with measured/community data (see the design doc, sources tracked for attribution)."""
+per model with measured/community data."""
 
 from audio.const import clamp_gain, compute_preamp
 

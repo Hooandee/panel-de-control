@@ -2385,7 +2385,6 @@ class Plugin:
                                  and self._audio_eq.has_game(self._current_appid)),
             "preset": eff["preset"],
             "gains": eff["gains"],
-            "preamp": eff["preamp"],
             "presets": audio_presets.list_presets(getattr(self._device, "key", None)),
             "device_name": self._device.display_name,
         }
@@ -2411,7 +2410,7 @@ class Plugin:
         resolved = self._resolve_scope(scope, appid)
         if resolved is None:
             return await self._offload_call(self._audio_state)
-        route = self._current_route()
+        route = await self._offload_call(self._current_route)  # pactl → off the loop
         setting = audio_presets.resolve_preset(getattr(self._device, "key", None), preset, route)
         self._audio_eq.set_setting(resolved, route, setting, appid=appid)
         self._reapply_audio()
@@ -2422,18 +2421,19 @@ class Plugin:
         resolved = self._resolve_scope(scope, appid)
         if resolved is None:
             return await self._offload_call(self._audio_state)
-        self._audio_eq.set_band(resolved, self._current_route(), int(index), float(gain), appid=appid)
+        route = await self._offload_call(self._current_route)  # pactl → off the loop
+        self._audio_eq.set_band(resolved, route, int(index), float(gain), appid=appid)
         self._reapply_audio()
         return await self._offload_call(self._audio_state)
 
     async def set_audio_bands(self, gains: list, scope: str, appid=None) -> dict:
-        """Replace all 10 band gains for the active route (drag-commit of the whole
-        curve). Marks the profile custom and recomputes the anti-clip pre-amp."""
+        """Replace all 10 band gains for the active route (drag-commit of the whole curve)."""
         self._init()
         resolved = self._resolve_scope(scope, appid)
         if resolved is None:
             return await self._offload_call(self._audio_state)
-        self._audio_eq.set_bands(resolved, self._current_route(), gains, appid=appid)
+        route = await self._offload_call(self._current_route)  # pactl → off the loop
+        self._audio_eq.set_bands(resolved, route, gains, appid=appid)
         self._reapply_audio()
         return await self._offload_call(self._audio_state)
 
@@ -2454,7 +2454,8 @@ class Plugin:
         resolved = self._resolve_scope(scope, appid)
         if resolved is None:
             return await self._offload_call(self._audio_state)
-        self._audio_eq.reset(resolved, self._current_route(), appid=appid)
+        route = await self._offload_call(self._current_route)  # pactl → off the loop
+        self._audio_eq.reset(resolved, route, appid=appid)
         self._reapply_audio()
         return await self._offload_call(self._audio_state)
 

@@ -11,7 +11,6 @@ import {
 } from "../api";
 import { useRunningGame } from "../tdp/useRunningGame";
 import { useScopeSync } from "../useScopeSync";
-import { computePreamp } from "./logic";
 
 export interface EqControl {
   state: AudioState | null;
@@ -69,7 +68,7 @@ export function useEq(): EqControl {
 
   const onBands = useCallback((gains: number[]) => {
     setState((cur) =>
-      cur ? { ...cur, gains, preamp: computePreamp(gains), preset: "custom" } : cur,
+      cur ? { ...cur, gains, preset: "custom" } : cur,
     ); // optimistic — curve moves now, hardware settles on commit
     if (commit.current) clearTimeout(commit.current);
     commit.current = setTimeout(() => {

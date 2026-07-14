@@ -4,7 +4,6 @@ import {
   GAIN_MAX,
   GAIN_MIN,
   clampGain,
-  computePreamp,
   formatHz,
   gainsToCurvePath,
 } from "./logic";
@@ -18,12 +17,6 @@ describe("audio EQ logic", () => {
     expect(clampGain(99)).toBe(GAIN_MAX);
     expect(clampGain(-99)).toBe(GAIN_MIN);
     expect(clampGain(3.5)).toBe(3.5);
-  });
-
-  it("preamp is negative headroom of the positive peak", () => {
-    expect(computePreamp([0, 0, 0, 0, 0, 0, 0, 0, 0, 0])).toBe(0);
-    expect(computePreamp([6, 0, 3, 0, 0, 0, 0, 0, 0, 0])).toBe(-6);
-    expect(computePreamp([-3, -6, 0, 0, 0, 0, 0, 0, 0, 0])).toBe(0);
   });
 
   it("formats frequency labels", () => {

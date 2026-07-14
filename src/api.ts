@@ -594,7 +594,6 @@ export interface AudioState {
   has_game_profile: boolean;
   preset: string;
   gains: number[];
-  preamp: number;
   presets: AudioPresetDef[];
   device_name: string;
 }

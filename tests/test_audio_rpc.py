@@ -109,7 +109,6 @@ def test_set_band_marks_custom(tmp_path, monkeypatch):
     st = asyncio.run(p.set_audio_band(0, 6.0, "global"))
     assert st["gains"][0] == 6.0
     assert st["preset"] == "custom"
-    assert st["preamp"] == -6.0
 
 
 def test_set_bands_replaces_all(tmp_path, monkeypatch):

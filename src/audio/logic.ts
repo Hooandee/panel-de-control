@@ -7,12 +7,6 @@ export const GAIN_MAX = 12;
 
 export const clampGain = (g: number): number => clamp(g, GAIN_MIN, GAIN_MAX);
 
-/** Negative headroom so a boosted band never clips: -(highest positive gain). */
-export function computePreamp(gains: number[]): number {
-  const peak = Math.max(0, ...gains.map(clampGain));
-  return peak > 0 ? -peak : 0;
-}
-
 export function formatHz(freq: number): string {
   return freq >= 1000 ? `${freq / 1000}k` : `${freq}`;
 }

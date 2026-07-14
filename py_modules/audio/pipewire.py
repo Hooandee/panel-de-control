@@ -1,14 +1,9 @@
 """Device layer for the EQ sink: writes the filter-chain conf into the user's
-``filter-chain.conf.d/``, restarts the filter-chain service to apply, sets the sink as
-default and its volume as the pre-amp. Runs session commands (pactl / systemctl --user)
-against the logged-in user from the root backend, mirroring the gamescope/fan spawn
-hygiene (clean_env + XDG_RUNTIME_DIR). "Apply on release": every gain change rewrites the
-conf and restarts (~1s) — live per-band control is not available via the CLI on current
-PipeWire. Pure bits (volume mapping) are unit-tested; the subprocess path is validated
-on-device.
-
-Mechanism validated on SteamOS/PipeWire 1.6.4 — see the design doc and the
-pipewire-filter-chain-eq memory."""
+filter-chain.conf.d/, restarts the filter-chain service to apply, and sets the sink as
+default. Runs session commands (pactl / systemctl --user) against the logged-in user from
+the root backend, mirroring the gamescope/fan spawn hygiene (clean_env + XDG_RUNTIME_DIR).
+Apply on release: every gain change rewrites the conf and restarts (~1s); live per-band
+control isn't available via the CLI on current PipeWire."""
 import glob
 import os
 import pwd
@@ -151,9 +146,14 @@ class PipeWireEq:
         return route_of_default_sink(lambda: self._runner(["pactl", "list", "sinks"]))
 
     def teardown(self):
-        """Remove the sink and restore the previous default (fail-safe on disable/unload)."""
+        """Remove the sink and restore the previous default (fail-safe on disable/unload).
+        No-op when we never created a sink — otherwise we'd needlessly restart the shared
+        filter-chain service (interrupting the user's own filters) on every unload."""
         path = self._conf_path()
-        if path and os.path.exists(path):
+        had_conf = bool(path and os.path.exists(path))
+        if not had_conf and self._orig_default is None:
+            return
+        if had_conf:
             try:
                 os.remove(path)
             except OSError:

@@ -1,7 +1,7 @@
 """Builds the PipeWire filter-chain config text for the EQ sink: 10 biquad bands
 (lowshelf at the bottom, highshelf at the top, peaking in between) chained in series.
 Pure string building — writing/loading the conf and restarting the service live in the
-PipeWire lifecycle module. Pre-amp is applied as the sink volume, not a graph node."""
+PipeWire lifecycle module."""
 
 from audio.const import BAND_FREQS
 
