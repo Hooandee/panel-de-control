@@ -2383,20 +2383,26 @@ class Plugin:
             self._audio_task.cancel()
             self._audio_task = None
 
+    def _audio_check(self) -> dict:
+        """Off-loop probe for the watcher: the active route + whether our EQ sink is still
+        the default (WirePlumber can drop it on resume/hotplug)."""
+        return {"route": self._current_route(), "is_default": self._audio.is_default()}
+
     async def _audio_loop(self) -> None:
-        """While the EQ is enabled, follow the active output route with the QAM closed:
-        re-apply when it changes (headphones ↔ speakers) so each output keeps its own
-        curve. Cheap — one off-loop route read every few seconds; _reapply_audio is
-        diff-gated, so a stable route does no work."""
+        """While the EQ is enabled, keep it live with the QAM closed: re-apply when the
+        output route changes (headphones ↔ speakers, each keeps its own curve) OR when our
+        sink is no longer the default (WirePlumber re-picked the physical device on
+        resume/hotplug → the effect silently dropped). Cheap: one off-loop probe every few
+        seconds; _reapply_audio is diff-gated so a stable state does no audible work."""
         while True:
             try:
                 await asyncio.sleep(_AUDIO_POLL_S)
                 if not self._settings.get("audio_eq_enabled") or not self._audio.is_supported():
                     self._audio_route_last = None
                     continue
-                route = await self._offload_call(self._current_route)
-                if route != self._audio_route_last:
-                    self._audio_route_last = route
+                probe = await self._offload_call(self._audio_check)
+                if not probe["is_default"] or probe["route"] != self._audio_route_last:
+                    self._audio_route_last = probe["route"]
                     self._reapply_audio()
             except asyncio.CancelledError:
                 break

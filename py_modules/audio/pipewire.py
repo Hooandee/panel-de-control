@@ -170,6 +170,12 @@ class PipeWireEq:
         # vs headphone — the default sink is our virtual sink, so read the ports instead.
         return route_of_default_sink(lambda: self._runner(["pactl", "list", "sinks"]))
 
+    def is_default(self):
+        """True when our EQ sink is the current default output. WirePlumber can re-pick
+        the physical device as default on resume/hotplug (dropping the EQ); the watcher
+        uses this to re-assert."""
+        return self._runner(["pactl", "get-default-sink"]) == _INPUT
+
     def teardown(self):
         """Remove the sink and hand the user's current level back to the physical sink
         (fail-safe on disable/unload). No-op when we never created a sink — otherwise we'd
