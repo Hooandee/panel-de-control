@@ -100,7 +100,11 @@ detecta un conflicto de configuración. Esta parte está todavía en fase tempra
 ### Ajustes
 
 Idioma (con banderas, no un desplegable), el interruptor de "aprender de mi uso" (la telemetría es
-100% local y se puede apagar), y un botón para borrar lo aprendido.
+100% local y se puede apagar), y un botón para borrar lo aprendido. En "Personalizar interfaz"
+también puedes elegir el color de acento del panel de una paleta.
+
+Todo el panel se maneja al 100% con el mando: el elemento en el que está el cursor se marca con un
+borde de acento claro, así que no hace falta la pantalla táctil.
 
 ## Compatibilidad por equipo
 

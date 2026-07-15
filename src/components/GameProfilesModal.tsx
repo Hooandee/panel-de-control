@@ -8,6 +8,7 @@ import { Loading } from "./Loading";
 import { GameProfileRow, listGameProfiles, resetGameProfiles } from "../api";
 import { configuredSections, SectionId } from "../system/gameProfiles";
 import { isNonSteamKey, nonSteamName } from "../tdp/gameIdentity";
+import { FocusRoot } from "./FocusRoot";
 
 type T = (key: string, params?: Record<string, string | number>) => string;
 type SectionLine = { label: string; text: string; dim: boolean };
@@ -141,7 +142,9 @@ const GameProfilesBody: FC = () => {
 
 const GameProfilesModal: FC<{ closeModal?: () => void }> = ({ closeModal }) => (
   <ModalRoot closeModal={closeModal} bAllowFullSize>
-    <GameProfilesBody />
+    <FocusRoot>
+      <GameProfilesBody />
+    </FocusRoot>
   </ModalRoot>
 );
 

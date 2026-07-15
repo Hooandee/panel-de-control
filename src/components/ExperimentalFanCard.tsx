@@ -4,6 +4,7 @@ import { LuTriangleAlert } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
+import { FocusRoot } from "./FocusRoot";
 
 interface Props {
   enabled: boolean;
@@ -15,7 +16,7 @@ const ConfirmModal: FC<{ onConfirm: () => void; closeModal?: () => void }> = ({ 
   const { t } = useI18n();
   return (
     <ModalRoot onCancel={closeModal} onEscKeypress={closeModal}>
-      <div style={{ display: "flex", flexDirection: "column", gap: theme.space.md }}>
+      <FocusRoot style={{ display: "flex", flexDirection: "column", gap: theme.space.md }}>
         <div style={{ display: "flex", alignItems: "center", gap: theme.space.xs, fontSize: 20, fontWeight: 700 }}>
           <LuTriangleAlert size={20} color={theme.color.warn} /> {t("fans.experimental.confirm.title")}
         </div>
@@ -30,7 +31,7 @@ const ConfirmModal: FC<{ onConfirm: () => void; closeModal?: () => void }> = ({ 
             {t("fans.experimental.confirm.cancel")}
           </DialogButton>
         </div>
-      </div>
+      </FocusRoot>
     </ModalRoot>
   );
 };

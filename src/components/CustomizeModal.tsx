@@ -1,12 +1,15 @@
 import { FC, Fragment, ReactNode } from "react";
 import { ModalRoot, showModal, Focusable, ButtonItem } from "@decky/ui";
-import { LuChevronUp, LuChevronDown, LuEye, LuEyeOff, LuLock } from "react-icons/lu";
+import { LuChevronUp, LuChevronDown, LuEye, LuEyeOff, LuLock, LuCheck } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { TABS, SECTION_BLOCKS, SUBITEMS, blockOrder, PINNED_TAB, ItemMeta } from "../customize/manifest";
 import { ListPref, orderIds, move, toggle } from "../customize/layout";
 import { useLayout, saveLayout, resetLayout } from "../customize/store";
+import { FocusRoot } from "./FocusRoot";
+import { ACCENTS } from "../system/accentColor";
+import { useAccent, setAccent } from "../system/useAccent";
 
 interface RowMeta {
   id: string;
@@ -137,6 +140,44 @@ const SubitemEditor: FC<{
   );
 };
 
+const AccentPicker: FC = () => {
+  const { t } = useI18n();
+  const active = useAccent();
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
+      <div style={theme.sectionLabel}>{t("customize.accent")}</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: theme.space.sm }}>
+        {ACCENTS.map((a) => {
+          const on = a.id === active.id;
+          return (
+            <Focusable
+              key={a.id}
+              aria-label={t(`accent.${a.id}`)}
+              onActivate={() => setAccent(a.id)}
+              onClick={() => setAccent(a.id)}
+              style={{
+                width: 34,
+                height: 34,
+                borderRadius: 999,
+                background: a.hex,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer",
+                boxShadow: on
+                  ? `0 0 0 2px ${theme.color.surface}, 0 0 0 4px ${a.hex}`
+                  : `inset 0 0 0 1px ${theme.color.hairline}`,
+              }}
+            >
+              {on && <LuCheck size={18} color="#fff" />}
+            </Focusable>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
 const CustomizeBody: FC = () => {
   const { t } = useI18n();
   const layout = useLayout();
@@ -153,6 +194,8 @@ const CustomizeBody: FC = () => {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: theme.space.lg, padding: theme.space.sm, maxWidth: 720, width: "100%", margin: "0 auto" }}>
       <div style={{ fontSize: theme.font.value, color: theme.color.textPrimary }}>{t("customize.title")}</div>
+
+      <AccentPicker />
 
       <ListEditor
         title={t("customize.tabs")}
@@ -196,7 +239,9 @@ const CustomizeBody: FC = () => {
 
 const CustomizeModal: FC<{ closeModal?: () => void }> = ({ closeModal }) => (
   <ModalRoot closeModal={closeModal} bAllowFullSize>
-    <CustomizeBody />
+    <FocusRoot>
+      <CustomizeBody />
+    </FocusRoot>
   </ModalRoot>
 );
 

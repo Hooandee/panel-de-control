@@ -101,7 +101,11 @@ detects a configuration conflict. This part is still early.
 ### Settings (Ajustes)
 
 Language (with flags, not a dropdown), the "learn from my usage" switch (telemetry is 100% local and
-can be turned off), and a button to erase what has been learned.
+can be turned off), and a button to erase what has been learned. Under "Customize interface" you can
+also pick the panel's accent color from a palette.
+
+The whole panel is fully controller-navigable: whatever the cursor is on gets a clear accent outline,
+so you never need the touchscreen.
 
 ## Per-device compatibility
 

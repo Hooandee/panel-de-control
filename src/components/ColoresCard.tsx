@@ -4,6 +4,7 @@ import { LuLightbulb, LuStore } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
+import { FocusRoot } from "./FocusRoot";
 import type { ColoresCardState } from "../system/colores";
 
 interface Props {
@@ -21,7 +22,7 @@ const ColoresInstallModal: FC<{ onConfirm: () => void; closeModal?: () => void }
   const { t } = useI18n();
   return (
     <ModalRoot onCancel={closeModal} onEscKeypress={closeModal}>
-      <div style={{ display: "flex", flexDirection: "column", gap: theme.space.md }}>
+      <FocusRoot style={{ display: "flex", flexDirection: "column", gap: theme.space.md }}>
         <div style={{ fontSize: 20, fontWeight: 700 }}>{t("system.rgb.confirm.title")}</div>
         <div style={{ fontSize: theme.font.body, color: theme.color.textPrimary, lineHeight: 1.4 }}>
           {t("system.rgb.confirm.desc")}
@@ -40,7 +41,7 @@ const ColoresInstallModal: FC<{ onConfirm: () => void; closeModal?: () => void }
             {t("system.rgb.confirm.cancel")}
           </DialogButton>
         </div>
-      </div>
+      </FocusRoot>
     </ModalRoot>
   );
 };
