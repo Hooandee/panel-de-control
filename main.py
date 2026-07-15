@@ -69,6 +69,9 @@ _REPORT_SERVICE_URL = os.environ.get(
 # than the old reactive window; the up-trigger still uses the recent peak to reject
 # transient dips. See py_modules/auto_tdp.py.
 _AUTO_WINDOW = 10
+# How often the audio EQ watcher checks the active output route (headphones vs speakers)
+# to re-apply the per-route curve with the QAM closed.
+_AUDIO_POLL_S = 4
 # Watts of divergence before we treat a firmware PL1 read as an external change to
 # adopt (above rounding/settling jitter).
 _EXTERNAL_TDP_THRESHOLD = 2
@@ -303,6 +306,9 @@ class Plugin:
         self._lifecycle = LifecycleManager(apply_cb=self._reapply_all)
         self._auto_task = None
         self._auto_setpoint = None
+        # Audio EQ output-route watcher: last applied route + its loop task.
+        self._audio_task = None
+        self._audio_route_last = None
         # Rolling GPU% window + slack counter for the GPU-driven auto-TDP control law.
         self._gpu_window = []      # recent GPU% samples
         self._slack_ticks = 0      # consecutive GPU-headroom ticks (temporal gate)
@@ -2363,6 +2369,40 @@ class Plugin:
         except Exception:  # noqa: BLE001
             pass
 
+    def _start_audio_loop(self) -> None:
+        if self._audio_task is not None and not self._audio_task.done():
+            return
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return  # no event loop in tests — skip task creation safely
+        self._audio_task = asyncio.create_task(self._audio_loop())
+
+    def _stop_audio_loop(self) -> None:
+        if self._audio_task is not None:
+            self._audio_task.cancel()
+            self._audio_task = None
+
+    async def _audio_loop(self) -> None:
+        """While the EQ is enabled, follow the active output route with the QAM closed:
+        re-apply when it changes (headphones ↔ speakers) so each output keeps its own
+        curve. Cheap — one off-loop route read every few seconds; _reapply_audio is
+        diff-gated, so a stable route does no work."""
+        while True:
+            try:
+                await asyncio.sleep(_AUDIO_POLL_S)
+                if not self._settings.get("audio_eq_enabled") or not self._audio.is_supported():
+                    self._audio_route_last = None
+                    continue
+                route = await self._offload_call(self._current_route)
+                if route != self._audio_route_last:
+                    self._audio_route_last = route
+                    self._reapply_audio()
+            except asyncio.CancelledError:
+                break
+            except Exception:  # noqa: BLE001
+                pass
+
     def _restore_audio_safe(self) -> None:
         """Remove the EQ sink and restore the previous default output so a
         disabled/uninstalled plugin leaves the audio untouched. Guarded."""
@@ -2484,6 +2524,7 @@ class Plugin:
             # game's effective auto_tdp (holds when off), so it activates for a game that
             # has it on without waiting for the QAM.
             self._start_auto_loop()
+            self._start_audio_loop()
             if self._settings.get("telemetry_enabled", True):
                 self._start_sampler()
         except Exception as e:  # noqa: BLE001
@@ -2504,6 +2545,7 @@ class Plugin:
         await self._offload_call(self._restore_color_safe)
         await self._offload_call(self._restore_audio_safe)
         self._stop_auto_loop()
+        self._stop_audio_loop()
         if getattr(self, "_sampler", None) is not None:
             self._sampler.stop()
         if getattr(self, "_lifecycle", None) is not None:
