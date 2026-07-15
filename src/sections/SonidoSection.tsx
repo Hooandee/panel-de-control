@@ -15,7 +15,7 @@ import { segmentGroupStyle, segmentItemStyle } from "../components/segmented";
  *  per-game or global. Honest when the host has no PipeWire EQ support. */
 export const SonidoSection: FC = () => {
   const { t } = useI18n();
-  const { state, scope, game, onScope, onEnable, onPreset, onBands, onBass, onReset, onTest } =
+  const { state, scope, game, onScope, onEnable, onPreset, onBands, onNudge, onBass, onReset, onTest } =
     useEq();
 
   if (!state) return null;
@@ -117,6 +117,34 @@ export const SonidoSection: FC = () => {
               );
             })}
           </Focusable>
+
+          {/* Quick, non-expert tweaks — tap to nudge the curve toward an intent. */}
+          <div>
+            <div style={{ fontSize: 10, letterSpacing: ".08em", textTransform: "uppercase", color: theme.color.textMuted, margin: "2px 2px 6px" }}>
+              {t("audio.quick")}
+            </div>
+            {(["bass", "voice", "treble"] as const).map((dim) => (
+              <div key={dim} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                <span style={{ flex: 1, fontSize: theme.font.body, color: theme.color.textPrimary }}>
+                  {t(`audio.nudge.${dim}`)}
+                </span>
+                <Focusable
+                  style={{ ...chip(false), minWidth: 40, textAlign: "center", padding: "6px 0" }}
+                  onActivate={() => onNudge(dim, -1)}
+                  onClick={() => onNudge(dim, -1)}
+                >
+                  −
+                </Focusable>
+                <Focusable
+                  style={{ ...chip(false), minWidth: 40, textAlign: "center", padding: "6px 0" }}
+                  onActivate={() => onNudge(dim, 1)}
+                  onClick={() => onNudge(dim, 1)}
+                >
+                  +
+                </Focusable>
+              </div>
+            ))}
+          </div>
 
           {/* One curve — editable, always visible. A preset sets it; drag any band to
               fine-tune (commits on release). */}

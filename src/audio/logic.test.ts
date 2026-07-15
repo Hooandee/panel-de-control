@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  applyNudge,
   BAND_FREQS,
   GAIN_MAX,
   GAIN_MIN,
@@ -29,6 +30,16 @@ describe("audio EQ logic", () => {
     const d = gainsToCurvePath([0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 320, 96);
     expect(d.startsWith("M")).toBe(true);
     expect(d.length).toBeGreaterThan(10);
+  });
+
+  it("nudges the intent bands relatively and clamps", () => {
+    const up = applyNudge([0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "bass", 1);
+    expect(up[1]).toBe(2);
+    expect(up[2]).toBe(2);
+    expect(up[0]).toBe(0); // 32 Hz untouched
+    expect(applyNudge([11, 11, 11, 11, 11, 11, 11, 11, 11, 11], "treble", 1)[9]).toBe(12);
+    const base = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
+    expect(applyNudge(base, "nope", 1)).toEqual(base);
   });
 
   it("higher gain pulls the curve upward (smaller y)", () => {

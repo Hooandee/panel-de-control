@@ -13,6 +13,7 @@ import {
 } from "../api";
 import { useRunningGame } from "../tdp/useRunningGame";
 import { useScopeSync } from "../useScopeSync";
+import { applyNudge } from "./logic";
 
 export interface EqControl {
   state: AudioState | null;
@@ -22,6 +23,7 @@ export interface EqControl {
   onEnable: (enabled: boolean) => void;
   onPreset: (id: string) => void;
   onBands: (gains: number[]) => void;
+  onNudge: (dim: string, direction: number) => void;
   onBass: (amount: number) => void;
   onReset: () => void;
   onTest: () => void;
@@ -37,6 +39,8 @@ export function useEq(): EqControl {
   const game = useRunningGame();
   const [state, setState] = useState<AudioState | null>(null);
   const commit = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stateRef = useRef<AudioState | null>(null);
+  stateRef.current = state;
 
   const refresh = useCallback(() => {
     getAudioState().then(setState).catch(() => {});
@@ -80,6 +84,20 @@ export function useEq(): EqControl {
     }, 350);
   }, [wScope, wTarget]);
 
+  // A relative one-tap tweak. Reads the latest gains (so rapid taps accumulate), updates
+  // the curve optimistically, and commits via setAudioBands on release — one restart, not
+  // one per tap.
+  const onNudge = useCallback((dim: string, direction: number) => {
+    const cur = stateRef.current;
+    if (!cur) return;
+    const gains = applyNudge(cur.gains, dim, direction);
+    setState({ ...cur, gains, preset: "custom" });
+    if (commit.current) clearTimeout(commit.current);
+    commit.current = setTimeout(() => {
+      setAudioBands(gains, wScope, wTarget).then(setState).catch(() => {});
+    }, 350);
+  }, [wScope, wTarget]);
+
   const onBass = useCallback((amount: number) => {
     setState((cur) => (cur ? { ...cur, bass: amount } : cur)); // optimistic
     if (commit.current) clearTimeout(commit.current);
@@ -96,5 +114,7 @@ export function useEq(): EqControl {
     playAudioTest().catch(() => {});
   }, []);
 
-  return { state, scope, game, onScope, onEnable, onPreset, onBands, onBass, onReset, onTest };
+  return {
+    state, scope, game, onScope, onEnable, onPreset, onBands, onNudge, onBass, onReset, onTest,
+  };
 }

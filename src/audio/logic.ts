@@ -7,6 +7,23 @@ export const GAIN_MAX = 12;
 
 export const clampGain = (g: number): number => clamp(g, GAIN_MIN, GAIN_MAX);
 
+// Natural, non-expert tweaks: each intent moves a few bands by ±2 dB. Bass = upper-bass
+// body (deep sub is the enhancer's job); voice = presence; treble = air.
+export const NUDGE_DIMS: Record<string, number[]> = {
+  bass: [1, 2, 3],
+  voice: [5, 6, 7],
+  treble: [8, 9],
+};
+
+/** Shift `gains` by ±2 dB on the bands of `dim` (relative). Unknown dim/direction → unchanged. */
+export function applyNudge(gains: number[], dim: string, direction: number): number[] {
+  const bands = NUDGE_DIMS[dim];
+  const out = [...gains];
+  if (!bands || (direction !== 1 && direction !== -1)) return out;
+  for (const i of bands) out[i] = clampGain(out[i] + direction * 2);
+  return out;
+}
+
 export function formatHz(freq: number): string {
   return freq >= 1000 ? `${freq / 1000}k` : `${freq}`;
 }
