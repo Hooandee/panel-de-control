@@ -126,13 +126,13 @@ class PipeWireEq:
         return bool(self._session) and os.path.exists(_MODULE)
 
     # --- lifecycle ----------------------------------------------------------------
-    def _write_conf(self, gains, bass):
+    def _write_conf(self, gains, bass, loudness):
         path = self._conf_path()
         if not path:
             return False
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w") as f:
-            f.write(build_chain_config(gains, _SINK, self._name, bass))
+            f.write(build_chain_config(gains, _SINK, self._name, bass, loudness))
         uid = self._session[0]
         try:
             os.chown(path, uid, uid)
@@ -152,7 +152,7 @@ class PipeWireEq:
         """The physical sink our EQ feeds (the one that isn't our virtual sink)."""
         return pick_downstream(self._runner(["pactl", "list", "short", "sinks"]), _INPUT)
 
-    def ensure_sink(self, gains, bass=0):
+    def ensure_sink(self, gains, bass=0, loudness=False):
         """Create/refresh the EQ sink (bands + optional bass enhancer), make it default,
         and keep the physical sink it feeds pinned at unity (100%). Steam's volume controls
         the default sink — i.e. ours — so the downstream must stay transparent, or its level
@@ -163,9 +163,9 @@ class PipeWireEq:
         re-asserts default + unity), so a game change with the same sound does no work."""
         if not self.is_supported():
             return False
-        applied = (list(gains), bass)
+        applied = (list(gains), bass, loudness)
         unchanged = self._orig_default is not None and applied == self._last_applied
-        if not unchanged and not self._write_conf(gains, bass):
+        if not unchanged and not self._write_conf(gains, bass, loudness):
             return False
         downstream = self._downstream_sink()
         first = self._orig_default is None
@@ -184,9 +184,9 @@ class PipeWireEq:
         self._last_applied = applied
         return True
 
-    def set_gains(self, gains, bass=0):
+    def set_gains(self, gains, bass=0, loudness=False):
         """Apply on release: rewrite the conf + restart."""
-        return self.ensure_sink(gains, bass)
+        return self.ensure_sink(gains, bass, loudness)
 
     def current_route(self):
         # The active port of the physical sink (our virtual sink has none) tells speaker

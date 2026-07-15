@@ -2369,7 +2369,7 @@ class Plugin:
             if not self._settings.get("audio_eq_enabled") or not self._audio.is_supported():
                 return
             setting = self._effective_audio(self._current_route())
-            self._audio.set_gains(setting["gains"], setting["bass"])
+            self._audio.set_gains(setting["gains"], setting["bass"], setting["loudness"])
         except Exception:  # noqa: BLE001
             pass
 
@@ -2436,6 +2436,7 @@ class Plugin:
             "preset": eff["preset"],
             "gains": eff["gains"],
             "bass": eff["bass"],
+            "loudness": eff["loudness"],
             "test_playing": self._audio.is_test_playing(),
             "presets": audio_presets.list_presets(getattr(self._device, "key", None)),
             "profiles": self._audio_profiles.list(),
@@ -2487,6 +2488,18 @@ class Plugin:
             return await self._offload_call(self._audio_state)
         route = await self._offload_call(self._current_route)  # pactl → off the loop
         self._audio_eq.set_bands(resolved, route, gains, appid=appid)
+        self._reapply_audio()
+        return await self._offload_call(self._audio_state)
+
+    async def set_audio_loudness(self, on: bool, scope: str, appid=None) -> dict:
+        """Toggle volume leveling (compression) for the active route — dialogue stays
+        audible without loud peaks blasting; also protects small speakers."""
+        self._init()
+        resolved = self._resolve_scope(scope, appid)
+        if resolved is None:
+            return await self._offload_call(self._audio_state)
+        route = await self._offload_call(self._current_route)
+        self._audio_eq.set_loudness(resolved, route, bool(on), appid=appid)
         self._reapply_audio()
         return await self._offload_call(self._audio_state)
 

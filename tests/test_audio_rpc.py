@@ -20,8 +20,8 @@ class _FakePipeWireEq:
     def current_route(self):
         return self._route
 
-    def set_gains(self, gains, bass=0):
-        self.applied.append((list(gains), bass))
+    def set_gains(self, gains, bass=0, loudness=False):
+        self.applied.append((list(gains), bass, loudness))
         return True
 
     def start_test(self, path):
@@ -147,6 +147,14 @@ def test_save_apply_delete_profile(tmp_path, monkeypatch):
     assert st["gains"] == [4.0] * 10
     st = asyncio.run(p.delete_audio_profile("Peli"))
     assert st["profiles"] == []
+
+
+def test_loudness_toggle_and_preserved(tmp_path, monkeypatch):
+    p, fake = _make_plugin(tmp_path, monkeypatch)
+    st = asyncio.run(p.set_audio_loudness(True, "global"))
+    assert st["loudness"] is True
+    st = asyncio.run(p.apply_audio_preset("voices", "global"))  # preset keeps loudness
+    assert st["loudness"] is True and st["preset"] == "voices"
 
 
 def test_toggle_test_tone(tmp_path, monkeypatch):

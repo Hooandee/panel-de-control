@@ -11,8 +11,11 @@ _CAPS = "/usr/lib/ladspa/caps.so"
 _BASS_FREQ = 130  # Hz — the low-mid body small handheld speakers can actually reproduce
 _BASS_MAX_DRIVE = 1.0  # lo.gain at bass=100 (harmonic drive); tuned by ear on-device
 
-# Mono Spice (not SpiceX2) so it duplicates per channel like the mono biquads.
-_BASS_LABEL = "Spice"
+# CAPS Compress params for volume leveling (dialogue audible, peaks tamed). Tuned on-device.
+_COMP = '{ "threshold" = -18 "strength" = 0.6 "attack" = 20 "release" = 200 "gain (dB)" = 6 }'
+
+# Mono CAPS effects (not the X2 stereo variants) so they duplicate per channel like the
+# mono biquads. Their audio ports are lowercase in/out (LADSPA), not the builtin In/Out.
 
 
 def _band_nodes(gains):
@@ -23,20 +26,29 @@ def _band_nodes(gains):
     ]
 
 
-def build_chain_config(gains, sink_name, description="Panel de Control", bass=0):
+def build_chain_config(gains, sink_name, description="Panel de Control", bass=0, loudness=False):
     nodes = _band_nodes(gains)
     links = [
         f'          {{ output = "eq_band_{i}:Out" input = "eq_band_{i + 1}:In" }}'
         for i in range(1, 10)
     ]
+    tail = "eq_band_10:Out"  # the current graph output; extra effects chain onto it in order
     if bass > 0:
         drive = round((max(0, min(100, bass)) / 100.0) * _BASS_MAX_DRIVE, 3)
         nodes.append(
-            f'          {{ type = ladspa name = spice plugin = "{_CAPS}" label = {_BASS_LABEL} '
+            f'          {{ type = ladspa name = spice plugin = "{_CAPS}" label = Spice '
             f'control = {{ "lo.f (Hz)" = {_BASS_FREQ} "lo.gain" = {drive} '
             f'"lo.vol (dB)" = 0 "hi.gain" = 0 }} }}'
         )
-        links.append('          { output = "eq_band_10:Out" input = "spice:in" }')
+        links.append(f'          {{ output = "{tail}" input = "spice:in" }}')
+        tail = "spice:out"
+    if loudness:
+        nodes.append(
+            f'          {{ type = ladspa name = comp plugin = "{_CAPS}" label = Compress '
+            f'control = {_COMP} }}'
+        )
+        links.append(f'          {{ output = "{tail}" input = "comp:in" }}')
+        tail = "comp:out"
     nodes_s = "\n".join(nodes)
     links_s = "\n".join(links)
     return f"""context.modules = [

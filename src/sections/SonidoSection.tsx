@@ -30,7 +30,7 @@ const ZONE_BAND: Record<ToneRegion, number> = { graves: 2, voces: 6, agudos: 8 }
 export const SonidoSection: FC = () => {
   const { t } = useI18n();
   const {
-    state, scope, game, onScope, onEnable, onPreset, onBands, onTone, onReset, onTest,
+    state, scope, game, onScope, onEnable, onPreset, onBands, onTone, onLoudness, onReset, onTest,
     onSaveProfile, onApplyProfile, onDeleteProfile, refresh,
   } = useEq();
 
@@ -202,6 +202,15 @@ export const SonidoSection: FC = () => {
               />
             ))}
           </div>
+
+          <PanelSectionRow>
+            <ToggleField
+              label={t("audio.loudness")}
+              description={t("audio.loudness.desc")}
+              checked={state.loudness}
+              onChange={onLoudness}
+            />
+          </PanelSectionRow>
 
           {/* Full 10-band editor, folded for experts — with a full-screen button and
               friendly zone labels on the graph. */}

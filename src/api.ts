@@ -600,6 +600,7 @@ export interface AudioState {
   preset: string;
   gains: number[];
   bass: number;
+  loudness: boolean;
   test_playing: boolean;
   presets: AudioPresetDef[];
   profiles: AudioProfile[];
@@ -619,6 +620,8 @@ export const resetAudio =
   callable<[scope: Scope, appid: string | null], AudioState>("reset_audio");
 export const setAudioCurve =
   callable<[gains: number[], bass: number, scope: Scope, appid: string | null], AudioState>("set_audio_curve");
+export const setAudioLoudness =
+  callable<[on: boolean, scope: Scope, appid: string | null], AudioState>("set_audio_loudness");
 export const setAudioTest =
   callable<[playing: boolean], AudioState>("set_audio_test");
 export const saveAudioProfile = callable<[name: string], AudioState>("save_audio_profile");

@@ -11,6 +11,7 @@ import {
   setAudioCurve,
   setAudioEnabled,
   setAudioFollowGlobal,
+  setAudioLoudness,
   setAudioTest,
   Scope,
 } from "../api";
@@ -27,6 +28,7 @@ export interface EqControl {
   onPreset: (id: string) => void;
   onBands: (gains: number[]) => void;
   onTone: (region: ToneRegion, level: number) => void;
+  onLoudness: (on: boolean) => void;
   onReset: () => void;
   onTest: () => void;
   onSaveProfile: (name: string) => void;
@@ -104,6 +106,11 @@ export function useEq(): EqControl {
     }, 350);
   }, [wScope, wTarget]);
 
+  const onLoudness = useCallback((on: boolean) => {
+    setState((cur) => (cur ? { ...cur, loudness: on } : cur)); // optimistic
+    setAudioLoudness(on, wScope, wTarget).then(setState).catch(() => {});
+  }, [wScope, wTarget]);
+
   const onReset = useCallback(() => {
     resetAudio(wScope, wTarget).then(setState).catch(() => {});
   }, [wScope, wTarget]);
@@ -125,7 +132,7 @@ export function useEq(): EqControl {
   }, []);
 
   return {
-    state, scope, game, onScope, onEnable, onPreset, onBands, onTone, onReset, onTest,
+    state, scope, game, onScope, onEnable, onPreset, onBands, onTone, onLoudness, onReset, onTest,
     onSaveProfile, onApplyProfile, onDeleteProfile, refresh,
   };
 }

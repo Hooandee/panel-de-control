@@ -67,6 +67,15 @@ def test_bass_clamped(tmp_path):
     assert s.effective(appid=None, route="speaker")["bass"] == 100
 
 
+def test_loudness_toggle_and_preserved(tmp_path):
+    s = EqStore(str(tmp_path / "audio.json"))
+    assert s.effective(appid=None, route="speaker")["loudness"] is False
+    s.set_loudness("global", "speaker", True)
+    s.set_band("global", "speaker", 0, 4.0)  # curve edit keeps loudness
+    s.set_bass("global", "speaker", 50)       # bass change keeps loudness
+    assert s.effective(appid=None, route="speaker")["loudness"] is True
+
+
 def test_reset_clears_bass(tmp_path):
     s = EqStore(str(tmp_path / "audio.json"))
     s.set_bass("global", "speaker", 80)
