@@ -1,7 +1,7 @@
 import { CSSProperties, FC, ReactNode } from "react";
 import { Focusable, PanelSectionRow, ToggleField } from "@decky/ui";
 import {
-  LuAudioLines, LuBell, LuHeadphones, LuMaximize, LuMic, LuSparkles, LuVolume2, LuWaves,
+  LuAudioLines, LuBell, LuHeadphones, LuMaximize2, LuMic, LuPlay, LuSparkles, LuVolume2, LuWaves,
 } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
@@ -27,7 +27,7 @@ const ZONE_BAND: Record<ToneRegion, number> = { graves: 2, voces: 6, agudos: 8 }
  *  per-game or global. Honest when the host has no PipeWire EQ support. */
 export const SonidoSection: FC = () => {
   const { t } = useI18n();
-  const { state, scope, game, onScope, onEnable, onPreset, onBands, onTone, onReset, refresh } =
+  const { state, scope, game, onScope, onEnable, onPreset, onBands, onTone, onReset, onTest, refresh } =
     useEq();
 
   if (!state) return null;
@@ -102,6 +102,15 @@ export const SonidoSection: FC = () => {
             >
               {t("audio.route.auto")}
             </span>
+            <Focusable
+              style={{ ...chip(false), marginLeft: "auto", display: "flex", alignItems: "center", gap: 5, padding: "4px 10px" }}
+              onActivate={onTest}
+              onClick={onTest}
+              title={t("audio.test")}
+            >
+              <LuPlay size={12} />
+              {t("audio.test")}
+            </Focusable>
           </div>
 
           {/* Curated presets — the device-tuned one is the hero (first). */}
@@ -162,14 +171,16 @@ export const SonidoSection: FC = () => {
             title={t("audio.advanced")}
             summary={presetLabel(state.preset)}
           >
-            <Focusable
-              style={{ ...chip(false), display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 8 }}
-              onActivate={() => openEqCurveModal(refresh)}
-              onClick={() => openEqCurveModal(refresh)}
-            >
-              <LuMaximize size={13} />
-              {t("audio.fullscreen")}
-            </Focusable>
+            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 4 }}>
+              <Focusable
+                style={{ display: "flex", alignItems: "center", padding: 4, borderRadius: theme.radius.sm, color: theme.color.textMuted, cursor: "pointer" }}
+                onActivate={() => openEqCurveModal(refresh)}
+                onClick={() => openEqCurveModal(refresh)}
+                title={t("audio.fullscreen")}
+              >
+                <LuMaximize2 size={16} />
+              </Focusable>
+            </div>
             <EqCurveGraph
               gains={state.gains}
               editable

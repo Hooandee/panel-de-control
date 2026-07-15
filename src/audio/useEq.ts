@@ -3,6 +3,7 @@ import {
   AudioState,
   applyAudioPreset,
   getAudioState,
+  playAudioTest,
   resetAudio,
   setAudioBands,
   setAudioCurve,
@@ -24,6 +25,7 @@ export interface EqControl {
   onBands: (gains: number[]) => void;
   onTone: (region: ToneRegion, level: number) => void;
   onReset: () => void;
+  onTest: () => void;
   refresh: () => void;
 }
 
@@ -98,5 +100,11 @@ export function useEq(): EqControl {
     resetAudio(wScope, wTarget).then(setState).catch(() => {});
   }, [wScope, wTarget]);
 
-  return { state, scope, game, onScope, onEnable, onPreset, onBands, onTone, onReset, refresh };
+  const onTest = useCallback(() => {
+    playAudioTest().catch(() => {});
+  }, []);
+
+  return {
+    state, scope, game, onScope, onEnable, onPreset, onBands, onTone, onReset, onTest, refresh,
+  };
 }

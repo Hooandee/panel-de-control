@@ -2484,6 +2484,23 @@ class Plugin:
         self._reapply_audio()
         return await self._offload_call(self._audio_state)
 
+    async def play_audio_test(self) -> bool:
+        """Play a short, pleasant reference tone through the current output so the user can
+        audition the EQ without background audio. Fire-and-forget, off the event loop."""
+        self._init()
+        self._offload(self._play_audio_test_sync)
+        return True
+
+    def _play_audio_test_sync(self) -> None:
+        try:
+            path = os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "pdc_test.wav")
+            if not os.path.exists(path):
+                from audio.tone import arpeggio_samples, write_wav
+                write_wav(path, arpeggio_samples())
+            self._audio.play_test(path)
+        except Exception:  # noqa: BLE001
+            pass
+
     async def set_audio_curve(self, gains: list, bass: int, scope: str, appid=None) -> dict:
         """Set the EQ gains and the bass-enhancement amount together in one apply (the tone
         sliders drive both — the Graves slider engages the bass enhancer)."""

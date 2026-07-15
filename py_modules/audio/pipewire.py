@@ -81,6 +81,19 @@ class PipeWireEq:
             return ""
 
 
+    def play_test(self, path):
+        """Fire-and-forget: play a reference tone through the default (EQ) sink so the user
+        can audition the curve. Non-blocking — doesn't hold the apply executor."""
+        cmd, env = self._session_cmd(["pw-play", path])
+        if cmd is None:
+            return
+        try:
+            subprocess.Popen(  # noqa: S603 — fixed argv, session env
+                cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
+        except (OSError, subprocess.SubprocessError):
+            pass
+
     def _conf_path(self):
         if not self._session:
             return None
