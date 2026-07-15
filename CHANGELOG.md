@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.19.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.18.0...panel-de-control-v0.19.0) (2026-07-15)
+
+
+### Features / Novedades
+
+* The whole panel is now fully usable with a controller. Whatever the cursor is on shows a clear colored outline and glow, across every section and the full-screen dialogs, so you no longer need the touchscreen. Switching tabs with L1/R1 carries the focus along, and read-only screens like the glossary scroll with the d-pad. You can also pick the panel's accent color from a palette under Customize interface, and it survives reboots. ([#201](https://github.com/Hooandee/panel-de-control/issues/201)) ([7740403](https://github.com/Hooandee/panel-de-control/commit/77404037c998f2e14a8c25573690fa28317bc193))
+* **ES:** Ya puedes manejar todo el panel con el mando. El elemento en el que está el cursor se marca con un borde y un brillo de color, en todas las secciones y en las ventanas a pantalla completa, así que ya no hace falta la pantalla táctil. Al cambiar de pestaña con L1/R1 el foco te sigue, y las pantallas de solo lectura como el glosario se recorren con la cruceta. Además puedes elegir el color de acento del panel desde una paleta en Personalizar interfaz, y se mantiene tras reiniciar. ([#201](https://github.com/Hooandee/panel-de-control/issues/201)) ([7740403](https://github.com/Hooandee/panel-de-control/commit/77404037c998f2e14a8c25573690fa28317bc193))
+
 ## [0.18.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.17.0...panel-de-control-v0.18.0) (2026-07-14)
 
 
