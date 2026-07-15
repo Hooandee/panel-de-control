@@ -13,8 +13,9 @@ def test_has_ten_bands_at_band_freqs():
 
 
 def test_sink_name_and_class():
-    cfg = build_chain_config(gains=[0.0] * 10, sink_name="pdc_eq")
-    assert "effect_input.pdc_eq" in cfg
+    cfg = build_chain_config(gains=[0.0] * 10, sink_name="pdc_eq", description="Legion Go EQ")
+    assert 'node.name = "Legion Go EQ"' in cfg   # sink shows the friendly name (volume OSD)
+    assert "effect_output.pdc_eq" in cfg          # internal output keeps the stable id
     assert "media.class = Audio/Sink" in cfg
     assert "node.passive = true" in cfg
 

@@ -15,7 +15,6 @@ from audio.filter_chain import build_chain_config
 from audio.route import route_of_default_sink
 
 _SINK = "pdc_eq"
-_INPUT = f"effect_input.{_SINK}"
 _MODULE = "/usr/lib/pipewire-0.3/libpipewire-module-filter-chain.so"
 _SERVICE = "filter-chain.service"
 
@@ -51,8 +50,10 @@ class PipeWireEq:
         self._orig_default = None
         self._last_applied = None
         self._test_proc = None
-        # Human-facing sink name shown in the system/Steam volume UI (the device name).
+        # Human-facing sink name shown in the system/Steam volume OSD (reads node.name),
+        # e.g. "Legion Go EQ". Used both as the label and as the sink's node.name.
         self._name = name or "Panel de Control"
+        self._label = f"{self._name} EQ"
 
     # --- session command plumbing -------------------------------------------------
     def _session_cmd(self, argv):
@@ -81,7 +82,6 @@ class PipeWireEq:
             return out.stdout.strip()
         except (OSError, subprocess.SubprocessError):
             return ""
-
 
     def start_test(self, path):
         """Loop a reference tone through the default (EQ) sink until stop_test(). A
@@ -132,7 +132,7 @@ class PipeWireEq:
             return False
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w") as f:
-            f.write(build_chain_config(gains, _SINK, f"{self._name} EQ", bass, loudness))
+            f.write(build_chain_config(gains, _SINK, self._label, bass, loudness))
         uid = self._session[0]
         try:
             os.chown(path, uid, uid)
@@ -150,7 +150,7 @@ class PipeWireEq:
 
     def _downstream_sink(self):
         """The physical sink our EQ feeds (the one that isn't our virtual sink)."""
-        return pick_downstream(self._runner(["pactl", "list", "short", "sinks"]), _INPUT)
+        return pick_downstream(self._runner(["pactl", "list", "short", "sinks"]), self._label)
 
     def ensure_sink(self, gains, bass=0, loudness=False):
         """Create/refresh the EQ sink (bands + optional bass enhancer), make it default,
@@ -171,7 +171,7 @@ class PipeWireEq:
         first = self._orig_default is None
         if not unchanged:
             self._restart()
-        self._runner(["pactl", "set-default-sink", _INPUT])
+        self._runner(["pactl", "set-default-sink", self._label])
         if downstream:
             if first:
                 # Enabling shouldn't change loudness: carry the downstream's current level
@@ -179,7 +179,7 @@ class PipeWireEq:
                 self._orig_default = downstream
                 vol = self._sink_volume_pct(downstream)
                 if vol:
-                    self._runner(["pactl", "set-sink-volume", _INPUT, vol])
+                    self._runner(["pactl", "set-sink-volume", self._label, vol])
             self._runner(["pactl", "set-sink-volume", downstream, "100%"])
         self._last_applied = applied
         return True
@@ -197,7 +197,7 @@ class PipeWireEq:
         """True when our EQ sink is the current default output. WirePlumber can re-pick
         the physical device as default on resume/hotplug (dropping the EQ); the watcher
         uses this to re-assert."""
-        return self._runner(["pactl", "get-default-sink"]) == _INPUT
+        return self._runner(["pactl", "get-default-sink"]) == self._label
 
     def teardown(self):
         """Remove the sink and hand the user's current level back to the physical sink
@@ -210,7 +210,7 @@ class PipeWireEq:
         if not had_conf and self._orig_default is None:
             return
         downstream = self._orig_default or self._downstream_sink()
-        our_vol = self._sink_volume_pct(_INPUT)  # the level the user set while EQ was on
+        our_vol = self._sink_volume_pct(self._label)  # the level the user set while EQ was on
         if had_conf:
             try:
                 os.remove(path)

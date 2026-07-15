@@ -66,7 +66,7 @@ def build_chain_config(gains, sink_name, description="Panel de Control", bass=0,
       }}
       audio.channels = 2
       audio.position = [ FL FR ]
-      capture.props  = {{ node.name = "effect_input.{sink_name}" node.description = "{description}" node.nick = "{description}" media.class = Audio/Sink priority.session = 2000 }}
+      capture.props  = {{ node.name = "{description}" node.description = "{description}" node.nick = "{description}" media.class = Audio/Sink priority.session = 2000 }}
       playback.props = {{ node.name = "effect_output.{sink_name}" node.passive = true }}
     }}
   }}
