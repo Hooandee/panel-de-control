@@ -1,6 +1,8 @@
-import { CSSProperties, FC } from "react";
+import { CSSProperties, FC, ReactNode } from "react";
 import { Focusable, PanelSectionRow, ToggleField } from "@decky/ui";
-import { LuAudioLines, LuHeadphones, LuSparkles, LuVolume2 } from "react-icons/lu";
+import {
+  LuAudioLines, LuBell, LuHeadphones, LuMaximize, LuMic, LuSparkles, LuVolume2, LuWaves,
+} from "react-icons/lu";
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
@@ -10,14 +12,23 @@ import { ProfileSelector } from "../components/ProfileSelector";
 import { ContainedSlider } from "../components/ContainedSlider";
 import { Collapsible } from "../components/Collapsible";
 import { EqCurveGraph } from "../components/EqCurveGraph";
+import { openEqCurveModal } from "../components/EqCurveModal";
 import { segmentGroupStyle, segmentItemStyle } from "../components/segmented";
+
+const TONE_ICON: Record<ToneRegion, ReactNode> = {
+  graves: <LuWaves size={14} />,
+  voces: <LuMic size={14} />,
+  agudos: <LuBell size={14} />,
+};
+const ZONE_BAND: Record<ToneRegion, number> = { graves: 2, voces: 6, agudos: 8 };
 
 /** Sonido: system audio EQ. Curated per-machine presets up front, a full 10-band
  *  graphic EQ folded below. Independent curve per output route (speaker/headphone),
  *  per-game or global. Honest when the host has no PipeWire EQ support. */
 export const SonidoSection: FC = () => {
   const { t } = useI18n();
-  const { state, scope, game, onScope, onEnable, onPreset, onBands, onTone, onReset } = useEq();
+  const { state, scope, game, onScope, onEnable, onPreset, onBands, onTone, onReset, refresh } =
+    useEq();
 
   if (!state) return null;
 
@@ -34,7 +45,6 @@ export const SonidoSection: FC = () => {
   const chip = (on: boolean): CSSProperties => ({
     ...segmentItemStyle(on),
     padding: "6px 12px",
-    borderRadius: 20,
     whiteSpace: "nowrap",
   });
 
@@ -119,37 +129,57 @@ export const SonidoSection: FC = () => {
             })}
           </Focusable>
 
-          {/* Simple tone: three sliders anyone understands. Graves also engages the
-              bass enhancer on its positive side. */}
+          {/* Simple tone: three sliders anyone understands (icon + label in the slider's
+              own row = compact). Graves also engages the bass enhancer on its positive side. */}
           <div>
-            <div style={{ fontSize: 10, letterSpacing: ".08em", textTransform: "uppercase", color: theme.color.textMuted, margin: "2px 2px 8px" }}>
+            <div style={{ fontSize: 10, letterSpacing: ".08em", textTransform: "uppercase", color: theme.color.textMuted, margin: "2px 2px 6px" }}>
               {t("audio.tone")}
             </div>
             {(["graves", "voces", "agudos"] as ToneRegion[]).map((region) => (
-              <div key={region} style={{ marginBottom: 10 }}>
-                <div style={{ fontSize: theme.font.body, color: theme.color.textPrimary, margin: "0 2px 2px" }}>
-                  {t(`audio.tone.${region}`)}
-                </div>
-                <ContainedSlider
-                  value={toneLevel(state.gains, region)}
-                  min={-12}
-                  max={12}
-                  step={1}
-                  showValue
-                  onChange={(v) => onTone(region, v)}
-                />
-              </div>
+              <ContainedSlider
+                key={region}
+                label={
+                  <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    {TONE_ICON[region]}
+                    {t(`audio.tone.${region}`)}
+                  </span>
+                }
+                value={toneLevel(state.gains, region)}
+                min={-12}
+                max={12}
+                step={1}
+                showValue
+                onChange={(v) => onTone(region, v)}
+              />
             ))}
           </div>
 
-          {/* Full 10-band editor + reset, folded for experts. */}
+          {/* Full 10-band editor, folded for experts — with a full-screen button and
+              friendly zone labels on the graph. */}
           <Collapsible
             id="audioAdvanced"
             icon={<LuAudioLines size={15} />}
             title={t("audio.advanced")}
             summary={presetLabel(state.preset)}
           >
-            <EqCurveGraph gains={state.gains} editable onChange={onBands} />
+            <Focusable
+              style={{ ...chip(false), display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 8 }}
+              onActivate={() => openEqCurveModal(refresh)}
+              onClick={() => openEqCurveModal(refresh)}
+            >
+              <LuMaximize size={13} />
+              {t("audio.fullscreen")}
+            </Focusable>
+            <EqCurveGraph
+              gains={state.gains}
+              editable
+              onChange={onBands}
+              zones={(["graves", "voces", "agudos"] as ToneRegion[]).map((r) => ({
+                label: t(`audio.tone.${r}`),
+                band: ZONE_BAND[r],
+              }))}
+              yTitle={t("audio.axis.y")}
+            />
             <Focusable
               style={{ ...chip(false), textAlign: "center", marginTop: 10 }}
               onActivate={onReset}

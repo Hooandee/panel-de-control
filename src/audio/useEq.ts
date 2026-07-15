@@ -24,6 +24,7 @@ export interface EqControl {
   onBands: (gains: number[]) => void;
   onTone: (region: ToneRegion, level: number) => void;
   onReset: () => void;
+  refresh: () => void;
 }
 
 /**
@@ -97,5 +98,5 @@ export function useEq(): EqControl {
     resetAudio(wScope, wTarget).then(setState).catch(() => {});
   }, [wScope, wTarget]);
 
-  return { state, scope, game, onScope, onEnable, onPreset, onBands, onTone, onReset };
+  return { state, scope, game, onScope, onEnable, onPreset, onBands, onTone, onReset, refresh };
 }

@@ -6,11 +6,17 @@ interface Props {
   gains: number[];
   editable: boolean;
   onChange: (gains: number[]) => void;
+  /** Friendly zone labels under the frequency axis (e.g. Graves/Voces/Agudos), each
+   *  centered on a band index — so non-audio users know what each region is. */
+  zones?: { label: string; band: number }[];
+  /** Rotated Y-axis caption (e.g. "− suave · + fuerte") explaining what the dB numbers mean. */
+  yTitle?: string;
 }
 
-// Inner plot size; margins leave room for the dB labels (left) and freq labels (bottom).
+// Inner plot size; margins leave room for the dB labels (left, + Y caption) and the freq
+// numbers + zone labels (bottom).
 const PLOT = { w: 288, h: 118 };
-const MARGIN = { left: 26, top: 10, right: 10, bottom: 20 };
+const MARGIN = { left: 32, top: 10, right: 10, bottom: 34 };
 const DB_LABELS = [GAIN_MAX, 0, -GAIN_MAX];
 
 const bandX = (i: number, n: number) => (i / (n - 1)) * PLOT.w;
@@ -19,7 +25,7 @@ const span = (PLOT.h / 2) * 0.85;
 const gainToY = (g: number) => PLOT.h / 2 - (clampGain(g) / GAIN_MAX) * span;
 const yToGain = (y: number) => clampGain(((PLOT.h / 2 - y) / span) * GAIN_MAX);
 
-const EqCurveGraphImpl: FC<Props> = ({ gains, editable, onChange }) => {
+const EqCurveGraphImpl: FC<Props> = ({ gains, editable, onChange, zones, yTitle }) => {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const dragging = useRef<number | null>(null);
   const [active, setActive] = useState<number | null>(null);
@@ -71,6 +77,20 @@ const EqCurveGraphImpl: FC<Props> = ({ gains, editable, onChange }) => {
           );
         })}
 
+        {/* rotated Y-axis caption (what the dB numbers mean) */}
+        {yTitle && (
+          <text
+            transform={`rotate(-90 ${-24} ${PLOT.h / 2})`}
+            x={-24}
+            y={PLOT.h / 2}
+            textAnchor="middle"
+            fontSize={8}
+            fill={muted}
+          >
+            {yTitle}
+          </text>
+        )}
+
         {/* the EQ response curve */}
         <path
           d={gainsToCurvePath(gains, PLOT.w, PLOT.h)}
@@ -100,6 +120,20 @@ const EqCurveGraphImpl: FC<Props> = ({ gains, editable, onChange }) => {
             </g>
           );
         })}
+
+        {/* friendly zone labels under the frequency numbers */}
+        {zones?.map((z) => (
+          <text
+            key={z.label}
+            x={bandX(z.band, n)}
+            y={PLOT.h + 27}
+            textAnchor="middle"
+            fontSize={9}
+            fill={theme.color.accent}
+          >
+            {z.label}
+          </text>
+        ))}
 
         {/* value readout for the band being dragged */}
         {active !== null && (
