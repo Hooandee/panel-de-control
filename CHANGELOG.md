@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.19.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.18.0...panel-de-control-v0.19.0) (2026-07-15)
+
+
+### Features
+
+* visible controller-focus indicator and selectable accent color ([#201](https://github.com/Hooandee/panel-de-control/issues/201)) ([7740403](https://github.com/Hooandee/panel-de-control/commit/77404037c998f2e14a8c25573690fa28317bc193))
+
 ## [0.18.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.17.0...panel-de-control-v0.18.0) (2026-07-14)
 
 
