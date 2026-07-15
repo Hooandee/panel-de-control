@@ -609,3 +609,4 @@ export const setAudioFollowGlobal =
   callable<[follow: boolean, appid: string | null], AudioState>("set_audio_follow_global");
 export const resetAudio =
   callable<[scope: Scope, appid: string | null], AudioState>("reset_audio");
+export const playAudioTest = callable<[], boolean>("play_audio_test");

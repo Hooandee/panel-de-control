@@ -43,20 +43,25 @@ class PipeWireEq:
         self._name = name or "Panel de Control"
 
     # --- session command plumbing -------------------------------------------------
-    def _run(self, argv, timeout=8):
-        """Run a session command as the logged-in user with a clean env + XDG runtime,
-        from the (root) backend. Never raises; returns stdout or ''."""
+    def _session_cmd(self, argv):
+        """Build (cmd, env) to run `argv` as the logged-in user with a clean env + XDG
+        runtime, from the (root) backend. Returns (None, None) with no session."""
         if not self._session:
-            return ""
+            return None, None
         from controllers.detect import clean_env
 
-        uid, runtime, user = self._session
+        _uid, runtime, user = self._session
         env = clean_env()
         env["XDG_RUNTIME_DIR"] = runtime
         env["DBUS_SESSION_BUS_ADDRESS"] = f"unix:path={runtime}/bus"
-        cmd = argv
-        if os.geteuid() == 0:
-            cmd = ["runuser", "-u", user, "--", *argv]
+        cmd = ["runuser", "-u", user, "--", *argv] if os.geteuid() == 0 else list(argv)
+        return cmd, env
+
+    def _run(self, argv, timeout=8):
+        """Run a session command and return its stdout (or ''). Never raises."""
+        cmd, env = self._session_cmd(argv)
+        if cmd is None:
+            return ""
         try:
             out = subprocess.run(
                 cmd, env=env, check=False, capture_output=True, timeout=timeout, text=True
@@ -64,6 +69,19 @@ class PipeWireEq:
             return out.stdout.strip()
         except (OSError, subprocess.SubprocessError):
             return ""
+
+    def play_test(self, path):
+        """Fire-and-forget: play a reference tone through the default (EQ) sink so the
+        user can audition the curve. Non-blocking — doesn't hold the apply executor."""
+        cmd, env = self._session_cmd(["pw-play", path])
+        if cmd is None:
+            return
+        try:
+            subprocess.Popen(  # noqa: S603 — fixed argv, session env
+                cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
+        except (OSError, subprocess.SubprocessError):
+            pass
 
     def _conf_path(self):
         if not self._session:

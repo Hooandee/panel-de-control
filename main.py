@@ -2499,6 +2499,23 @@ class Plugin:
         self._reapply_audio()
         return await self._offload_call(self._audio_state)
 
+    async def play_audio_test(self) -> bool:
+        """Play a pink-noise reference through the current output so the user can audition
+        the EQ without launching a game. Fire-and-forget, off the event loop."""
+        self._init()
+        self._offload(self._play_audio_test_sync)
+        return True
+
+    def _play_audio_test_sync(self) -> None:
+        try:
+            path = os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "pdc_test.wav")
+            if not os.path.exists(path):
+                from audio.tone import pink_samples, write_wav
+                write_wav(path, pink_samples(48000 * 3))  # 3 s
+            self._audio.play_test(path)
+        except Exception:  # noqa: BLE001
+            pass
+
     # ---- lifecycle ----------------------------------------------------------
     async def _main(self) -> None:
         self._init()
