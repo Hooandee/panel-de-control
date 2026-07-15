@@ -132,7 +132,7 @@ class PipeWireEq:
             return False
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w") as f:
-            f.write(build_chain_config(gains, _SINK, self._name, bass, loudness))
+            f.write(build_chain_config(gains, _SINK, f"{self._name} EQ", bass, loudness))
         uid = self._session[0]
         try:
             os.chown(path, uid, uid)
