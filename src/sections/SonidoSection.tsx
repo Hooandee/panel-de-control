@@ -170,8 +170,7 @@ export const SonidoSection: FC = () => {
             icon={<LuAudioLines size={15} />}
             title={t("audio.advanced")}
             summary={presetLabel(state.preset)}
-          >
-            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 4 }}>
+            action={
               <Focusable
                 style={{ display: "flex", alignItems: "center", padding: 4, borderRadius: theme.radius.sm, color: theme.color.textMuted, cursor: "pointer" }}
                 onActivate={() => openEqCurveModal(refresh)}
@@ -180,7 +179,8 @@ export const SonidoSection: FC = () => {
               >
                 <LuMaximize2 size={16} />
               </Focusable>
-            </div>
+            }
+          >
             <EqCurveGraph
               gains={state.gains}
               editable

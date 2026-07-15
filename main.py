@@ -2493,7 +2493,7 @@ class Plugin:
 
     def _play_audio_test_sync(self) -> None:
         try:
-            path = os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "pdc_test.wav")
+            path = os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "pdc_tone.wav")
             if not os.path.exists(path):
                 from audio.tone import arpeggio_samples, write_wav
                 write_wav(path, arpeggio_samples())
