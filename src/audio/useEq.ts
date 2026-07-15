@@ -2,8 +2,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AudioState,
   applyAudioPreset,
+  applyAudioProfile,
+  deleteAudioProfile,
   getAudioState,
   resetAudio,
+  saveAudioProfile,
   setAudioBands,
   setAudioCurve,
   setAudioEnabled,
@@ -26,6 +29,9 @@ export interface EqControl {
   onTone: (region: ToneRegion, level: number) => void;
   onReset: () => void;
   onTest: () => void;
+  onSaveProfile: (name: string) => void;
+  onApplyProfile: (name: string) => void;
+  onDeleteProfile: (name: string) => void;
   refresh: () => void;
 }
 
@@ -108,7 +114,18 @@ export function useEq(): EqControl {
     setAudioTest(next).then(setState).catch(() => {});
   }, []);
 
+  const onSaveProfile = useCallback((name: string) => {
+    saveAudioProfile(name).then(setState).catch(() => {});
+  }, []);
+  const onApplyProfile = useCallback((name: string) => {
+    applyAudioProfile(name, wScope, wTarget).then(setState).catch(() => {});
+  }, [wScope, wTarget]);
+  const onDeleteProfile = useCallback((name: string) => {
+    deleteAudioProfile(name).then(setState).catch(() => {});
+  }, []);
+
   return {
-    state, scope, game, onScope, onEnable, onPreset, onBands, onTone, onReset, onTest, refresh,
+    state, scope, game, onScope, onEnable, onPreset, onBands, onTone, onReset, onTest,
+    onSaveProfile, onApplyProfile, onDeleteProfile, refresh,
   };
 }

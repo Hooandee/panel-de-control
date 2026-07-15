@@ -40,6 +40,7 @@ from battery.reader import BatteryReader
 from battery.charge_limit import select_charge_limit
 from audio.eq_store import EqStore
 from audio.pipewire import PipeWireEq
+from audio.profile_store import AudioProfileStore
 from audio import presets as audio_presets
 from cpu.info import read_cpu_info, read_cpu_model
 from cpu.controls import CoreControl, SmtControl, select_boost
@@ -253,6 +254,9 @@ class Plugin:
             os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "audio.json")
         )
         self._audio = PipeWireEq(name=self._device.display_name)
+        self._audio_profiles = AudioProfileStore(
+            os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "audio_profiles.json")
+        )
         # Calibration safety: a change previews live but auto-reverts to the saved
         # value after _COLOR_REVERT_SECS unless confirmed (so a mis-drag to an
         # illegible screen self-heals even if the QAM closes). None = nothing pending.
@@ -2434,6 +2438,7 @@ class Plugin:
             "bass": eff["bass"],
             "test_playing": self._audio.is_test_playing(),
             "presets": audio_presets.list_presets(getattr(self._device, "key", None)),
+            "profiles": self._audio_profiles.list(),
             "device_name": self._device.display_name,
         }
 
@@ -2483,6 +2488,32 @@ class Plugin:
         route = await self._offload_call(self._current_route)  # pactl → off the loop
         self._audio_eq.set_bands(resolved, route, gains, appid=appid)
         self._reapply_audio()
+        return await self._offload_call(self._audio_state)
+
+    async def save_audio_profile(self, name: str) -> dict:
+        """Save the active route's current curve + bass as a named, reusable profile."""
+        self._init()
+        route = await self._offload_call(self._current_route)
+        eff = self._effective_audio(route)
+        self._audio_profiles.save(name, eff["gains"], eff["bass"])
+        return await self._offload_call(self._audio_state)
+
+    async def apply_audio_profile(self, name: str, scope: str, appid=None) -> dict:
+        """Apply a saved profile's curve + bass to the active route for the given scope."""
+        self._init()
+        resolved = self._resolve_scope(scope, appid)
+        prof = self._audio_profiles.get(name)
+        if resolved is None or prof is None:
+            return await self._offload_call(self._audio_state)
+        route = await self._offload_call(self._current_route)
+        self._audio_eq.set_bands(resolved, route, prof["gains"], appid=appid)
+        self._audio_eq.set_bass(resolved, route, prof["bass"], appid=appid)
+        self._reapply_audio()
+        return await self._offload_call(self._audio_state)
+
+    async def delete_audio_profile(self, name: str) -> dict:
+        self._init()
+        self._audio_profiles.delete(name)
         return await self._offload_call(self._audio_state)
 
     async def set_audio_test(self, playing: bool) -> dict:

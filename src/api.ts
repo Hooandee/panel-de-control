@@ -585,6 +585,11 @@ export const resetGameProfiles =
 export interface AudioPresetDef {
   id: string;
 }
+export interface AudioProfile {
+  name: string;
+  gains: number[];
+  bass: number;
+}
 export interface AudioState {
   supported: boolean;
   enabled: boolean;
@@ -597,6 +602,7 @@ export interface AudioState {
   bass: number;
   test_playing: boolean;
   presets: AudioPresetDef[];
+  profiles: AudioProfile[];
   device_name: string;
 }
 export const getAudioState = callable<[], AudioState>("get_audio_state");
@@ -615,3 +621,7 @@ export const setAudioCurve =
   callable<[gains: number[], bass: number, scope: Scope, appid: string | null], AudioState>("set_audio_curve");
 export const setAudioTest =
   callable<[playing: boolean], AudioState>("set_audio_test");
+export const saveAudioProfile = callable<[name: string], AudioState>("save_audio_profile");
+export const applyAudioProfile =
+  callable<[name: string, scope: Scope, appid: string | null], AudioState>("apply_audio_profile");
+export const deleteAudioProfile = callable<[name: string], AudioState>("delete_audio_profile");

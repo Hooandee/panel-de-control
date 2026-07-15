@@ -1,8 +1,8 @@
 import { CSSProperties, FC, ReactNode } from "react";
 import { Focusable, PanelSectionRow, ToggleField } from "@decky/ui";
 import {
-  LuAudioLines, LuBell, LuHeadphones, LuMaximize2, LuMic, LuPause, LuPlay, LuSparkles,
-  LuVolume2, LuWaves,
+  LuAudioLines, LuBell, LuHeadphones, LuMaximize2, LuMic, LuPause, LuPlay, LuPlus, LuSparkles,
+  LuVolume2, LuWaves, LuX,
 } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
@@ -14,6 +14,7 @@ import { ContainedSlider } from "../components/ContainedSlider";
 import { Collapsible } from "../components/Collapsible";
 import { EqCurveGraph } from "../components/EqCurveGraph";
 import { openEqCurveModal } from "../components/EqCurveModal";
+import { openSaveProfileModal } from "../components/SaveProfileModal";
 import { segmentGroupStyle, segmentItemStyle } from "../components/segmented";
 
 const TONE_ICON: Record<ToneRegion, ReactNode> = {
@@ -28,8 +29,10 @@ const ZONE_BAND: Record<ToneRegion, number> = { graves: 2, voces: 6, agudos: 8 }
  *  per-game or global. Honest when the host has no PipeWire EQ support. */
 export const SonidoSection: FC = () => {
   const { t } = useI18n();
-  const { state, scope, game, onScope, onEnable, onPreset, onBands, onTone, onReset, onTest, refresh } =
-    useEq();
+  const {
+    state, scope, game, onScope, onEnable, onPreset, onBands, onTone, onReset, onTest,
+    onSaveProfile, onApplyProfile, onDeleteProfile, refresh,
+  } = useEq();
 
   if (!state) return null;
 
@@ -138,6 +141,42 @@ export const SonidoSection: FC = () => {
               );
             })}
           </Focusable>
+
+          {/* My profiles — named curves the user saves and reuses across games. */}
+          <div>
+            <div style={{ fontSize: 10, letterSpacing: ".08em", textTransform: "uppercase", color: theme.color.textMuted, margin: "2px 2px 6px" }}>
+              {t("audio.profile.mine")}
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {state.profiles.map((pr) => (
+                <span key={pr.name} style={{ ...chip(false), display: "inline-flex", alignItems: "center", gap: 6, paddingRight: 6 }}>
+                  <Focusable
+                    style={{ cursor: "pointer" }}
+                    onActivate={() => onApplyProfile(pr.name)}
+                    onClick={() => onApplyProfile(pr.name)}
+                  >
+                    {pr.name}
+                  </Focusable>
+                  <Focusable
+                    style={{ display: "flex", cursor: "pointer", color: theme.color.textMuted }}
+                    onActivate={() => onDeleteProfile(pr.name)}
+                    onClick={() => onDeleteProfile(pr.name)}
+                    title={t("audio.profile.delete")}
+                  >
+                    <LuX size={12} />
+                  </Focusable>
+                </span>
+              ))}
+              <Focusable
+                style={{ ...chip(false), display: "inline-flex", alignItems: "center", gap: 4 }}
+                onActivate={() => openSaveProfileModal(game?.name ?? "", onSaveProfile)}
+                onClick={() => openSaveProfileModal(game?.name ?? "", onSaveProfile)}
+              >
+                <LuPlus size={12} />
+                {t("audio.profile.saveCurrent")}
+              </Focusable>
+            </div>
+          </div>
 
           {/* Simple tone: three sliders anyone understands (icon + label in the slider's
               own row = compact). Graves also engages the bass enhancer on its positive side. */}

@@ -136,6 +136,19 @@ def test_set_curve_sets_gains_and_bass_together(tmp_path, monkeypatch):
     assert st["bass"] == 60 and st["preset"] == "voices"
 
 
+def test_save_apply_delete_profile(tmp_path, monkeypatch):
+    p, fake = _make_plugin(tmp_path, monkeypatch)
+    asyncio.run(p.set_audio_bands([4] * 10, "global"))
+    st = asyncio.run(p.save_audio_profile("Peli"))
+    assert any(pr["name"] == "Peli" for pr in st["profiles"])
+    # change the curve, then re-apply the saved profile → back to [4]*10
+    asyncio.run(p.set_audio_bands([0] * 10, "global"))
+    st = asyncio.run(p.apply_audio_profile("Peli", "global"))
+    assert st["gains"] == [4.0] * 10
+    st = asyncio.run(p.delete_audio_profile("Peli"))
+    assert st["profiles"] == []
+
+
 def test_toggle_test_tone(tmp_path, monkeypatch):
     p, fake = _make_plugin(tmp_path, monkeypatch)
     st = asyncio.run(p.set_audio_test(True))
