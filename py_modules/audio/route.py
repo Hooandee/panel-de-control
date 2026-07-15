@@ -24,6 +24,21 @@ def route_from_sinks(pactl_list_output):
     return "speaker"
 
 
+def route_of_sink(pactl_list_output, sink_name):
+    """Classify the active port of a specific sink. On multi-sink devices (Intel HDA exposes
+    HDMI1/2/3 alongside the speaker) the first Active Port isn't the real output, so classify
+    the sink we actually feed. Falls back to the first active port when it isn't found."""
+    if sink_name:
+        in_block = False
+        for line in (pactl_list_output or "").splitlines():
+            s = line.strip()
+            if s.startswith("Name:"):
+                in_block = s.split("Name:", 1)[1].strip() == sink_name
+            elif in_block and s.startswith("Active Port:"):
+                return classify_route(s)
+    return route_from_sinks(pactl_list_output)
+
+
 def route_of_default_sink(reader):
     """`reader()` returns `pactl list sinks` text; classify the active port. Never raises
     — an unreadable audio stack falls back to 'speaker'."""

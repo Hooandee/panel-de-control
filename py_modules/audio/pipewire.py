@@ -12,7 +12,9 @@ import signal
 import subprocess
 
 from audio.filter_chain import build_chain_config
-from audio.route import route_of_default_sink
+from audio.route import route_of_sink
+
+_DIGITAL_HINTS = ("hdmi", "displayport", "iec958", "spdif")
 
 _SINK = "pdc_eq"
 _MODULE = "/usr/lib/pipewire-0.3/libpipewire-module-filter-chain.so"
@@ -20,14 +22,18 @@ _SERVICE = "filter-chain.service"
 
 
 def pick_downstream(short_sinks_text, our_name):
-    """The physical sink our EQ feeds: the first sink in `pactl list short sinks` output
-    whose name isn't our virtual sink. None when only ours (or none) is present."""
+    """The physical sink our EQ feeds, from `pactl list short sinks`. Skips our virtual sink
+    and prefers an analog output over the digital ones (Intel HDA always exposes HDMI1/2/3,
+    which aren't the real speaker). Falls back to the first non-ours sink; None when only ours."""
+    candidates = []
     for line in (short_sinks_text or "").splitlines():
         parts = line.split("\t")
         name = parts[1] if len(parts) > 1 else ""
         if name and name != our_name:
-            return name
-    return None
+            candidates.append(name)
+    analog = [c for c in candidates if not any(h in c.lower() for h in _DIGITAL_HINTS)]
+    picked = analog or candidates
+    return picked[0] if picked else None
 
 
 def _find_session():
@@ -191,9 +197,10 @@ class PipeWireEq:
         return self.ensure_sink(gains, bass, loudness)
 
     def current_route(self):
-        # The active port of the physical sink (our virtual sink has none) tells speaker
-        # vs headphone — the default sink is our virtual sink, so read the ports instead.
-        return route_of_default_sink(lambda: self._runner(["pactl", "list", "sinks"]))
+        try:
+            return route_of_sink(self._runner(["pactl", "list", "sinks"]), self._downstream_sink())
+        except Exception:
+            return "speaker"
 
     def is_default(self):
         """True when our EQ sink is the current default output. WirePlumber can re-pick
