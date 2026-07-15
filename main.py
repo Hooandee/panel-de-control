@@ -2493,10 +2493,10 @@ class Plugin:
 
     def _play_audio_test_sync(self) -> None:
         try:
-            path = os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "pdc_tone.wav")
+            path = os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "pdc_loop.wav")
             if not os.path.exists(path):
-                from audio.tone import arpeggio_samples, write_wav
-                write_wav(path, arpeggio_samples())
+                from audio.tone import loop_samples, write_wav
+                write_wav(path, loop_samples())
             self._audio.play_test(path)
         except Exception:  # noqa: BLE001
             pass
