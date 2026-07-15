@@ -1,12 +1,11 @@
 import { CSSProperties, FC } from "react";
 import { Focusable, PanelSectionRow, ToggleField } from "@decky/ui";
-import { LuAudioLines, LuHeadphones, LuSparkles, LuVolume2 } from "react-icons/lu";
+import { LuHeadphones, LuSparkles, LuVolume2 } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { useEq } from "../audio/useEq";
 import { ProfileSelector } from "../components/ProfileSelector";
-import { Collapsible } from "../components/Collapsible";
 import { EqCurveGraph } from "../components/EqCurveGraph";
 import { segmentGroupStyle, segmentItemStyle } from "../components/segmented";
 
@@ -117,30 +116,21 @@ export const SonidoSection: FC = () => {
             })}
           </Focusable>
 
-          {/* Current response curve (read-only preview). */}
-          <div style={{ ...theme.card, padding: "8px 6px 2px" }}>
-            <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, margin: "0 4px 2px" }}>
+          {/* One curve — editable, always visible. A preset sets it; drag any band to
+              fine-tune (commits on release). */}
+          <div style={{ ...theme.card, padding: "8px 6px 4px" }}>
+            <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, margin: "0 4px 4px" }}>
               {t("audio.curve")}
             </div>
-            <EqCurveGraph gains={state.gains} editable={false} onChange={() => {}} />
-          </div>
-
-          {/* Full 10-band editor, folded. Dragging a band commits on release. */}
-          <Collapsible
-            id="audioAdvanced"
-            icon={<LuAudioLines size={15} />}
-            title={t("audio.advanced")}
-            summary={presetLabel(state.preset)}
-          >
             <EqCurveGraph gains={state.gains} editable onChange={onBands} />
             <Focusable
-              style={{ ...chip(false), textAlign: "center", marginTop: 10 }}
+              style={{ ...chip(false), textAlign: "center", marginTop: 8 }}
               onActivate={onReset}
               onClick={onReset}
             >
               {t("audio.reset")}
             </Focusable>
-          </Collapsible>
+          </div>
         </>
       )}
     </div>
