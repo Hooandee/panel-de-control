@@ -36,7 +36,7 @@ def build_chain_config(gains, sink_name, description="Panel de Control", bass=0)
             f'control = {{ "lo.f (Hz)" = {_BASS_FREQ} "lo.gain" = {drive} '
             f'"lo.vol (dB)" = 0 "hi.gain" = 0 }} }}'
         )
-        links.append('          { output = "eq_band_10:Out" input = "spice:In" }')
+        links.append('          { output = "eq_band_10:Out" input = "spice:in" }')
     nodes_s = "\n".join(nodes)
     links_s = "\n".join(links)
     return f"""context.modules = [

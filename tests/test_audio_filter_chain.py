@@ -41,4 +41,4 @@ def test_bass_node_added_and_chained():
     cfg = build_chain_config(gains=[0.0] * 10, sink_name="pdc_eq", bass=50)
     assert "label = Spice" in cfg and "caps.so" in cfg
     assert '"lo.gain" = 0.5' in cfg  # 50% → 0.5 drive
-    assert '{ output = "eq_band_10:Out" input = "spice:In" }' in cfg
+    assert '{ output = "eq_band_10:Out" input = "spice:in" }' in cfg
