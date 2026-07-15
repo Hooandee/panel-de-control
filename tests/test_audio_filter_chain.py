@@ -30,3 +30,15 @@ def test_bands_are_chained_in_order():
     cfg = build_chain_config(gains=[0.0] * 10, sink_name="pdc_eq")
     assert cfg.count("links = [") == 1
     assert '"eq_band_1:Out"' in cfg and '"eq_band_10:In"' in cfg
+
+
+def test_no_bass_node_when_zero():
+    cfg = build_chain_config(gains=[0.0] * 10, sink_name="pdc_eq", bass=0)
+    assert "spice" not in cfg and "caps.so" not in cfg
+
+
+def test_bass_node_added_and_chained():
+    cfg = build_chain_config(gains=[0.0] * 10, sink_name="pdc_eq", bass=50)
+    assert "label = Spice" in cfg and "caps.so" in cfg
+    assert '"lo.gain" = 0.5' in cfg  # 50% → 0.5 drive
+    assert '{ output = "eq_band_10:Out" input = "spice:In" }' in cfg

@@ -20,8 +20,8 @@ class _FakePipeWireEq:
     def current_route(self):
         return self._route
 
-    def set_gains(self, gains):
-        self.applied.append(list(gains))
+    def set_gains(self, gains, bass=0):
+        self.applied.append((list(gains), bass))
         return True
 
     def teardown(self):
@@ -116,6 +116,15 @@ def test_set_bands_replaces_all(tmp_path, monkeypatch):
     st = asyncio.run(p.set_audio_bands([2] * 10, "global"))
     assert st["gains"] == [2.0] * 10
     assert st["preset"] == "custom"
+
+
+def test_set_bass_and_preserved_across_preset(tmp_path, monkeypatch):
+    p, fake = _make_plugin(tmp_path, monkeypatch)
+    st = asyncio.run(p.set_audio_bass(60, "global"))
+    assert st["bass"] == 60
+    # applying an EQ preset must not wipe the bass amount
+    st = asyncio.run(p.apply_audio_preset("voices", "global"))
+    assert st["bass"] == 60 and st["preset"] == "voices"
 
 
 def test_reset_flattens(tmp_path, monkeypatch):

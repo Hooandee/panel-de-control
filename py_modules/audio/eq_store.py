@@ -3,6 +3,13 @@ from scoped_store import ScopedProfileStore
 from audio.const import ROUTES, clamp_gain, compute_preamp
 
 
+def _clean_bass(value):
+    try:
+        return max(0, min(100, int(value)))
+    except (TypeError, ValueError):
+        return 0
+
+
 def _clean_setting(raw):
     raw = raw if isinstance(raw, dict) else {}
     gains = raw.get("gains")
@@ -15,54 +22,74 @@ def _clean_setting(raw):
         preamp = float(raw["preamp"])
     except (KeyError, TypeError, ValueError):
         preamp = compute_preamp(gains)
-    return {"preset": preset, "gains": gains, "preamp": preamp}
+    return {"preset": preset, "gains": gains, "preamp": preamp, "bass": _clean_bass(raw.get("bass"))}
 
 
 class EqStore(ScopedProfileStore):
-    """Per-game audio EQ. Each scope's profile holds one EQ setting per output route
-    (speaker / headphone): ``{route: {preset, gains[10], preamp}}``. Scope contract
+    """Per-game audio EQ. Each scope's profile holds one setting per output route
+    (speaker / headphone): ``{route: {preset, gains[10], preamp, bass}}``. Scope contract
     (global + per-game follow-global) is inherited; the route lives inside the profile.
-    Setters always REPLACE a route's setting with a fresh dict so a game seeded from
-    global (shallow copy) never mutates global's nested settings."""
+    Bass enhancement is orthogonal to the EQ curve, so every setter PRESERVES the fields
+    it doesn't touch (changing a preset keeps bass; changing bass keeps the curve).
+    Setters always write a fresh route dict so a game seeded from global (shallow copy)
+    never mutates global's nested settings."""
 
     def _clean_global(self, raw):
         raw = raw if isinstance(raw, dict) else {}
         return {r: _clean_setting(raw.get(r)) for r in ROUTES}
 
     def effective(self, appid, route):
-        prof = self._effective_prof(appid)
-        s = _clean_setting(prof.get(route))
-        return {"preset": s["preset"], "gains": list(s["gains"]), "preamp": s["preamp"]}
+        s = _clean_setting(self._effective_prof(appid).get(route))
+        return {"preset": s["preset"], "gains": list(s["gains"]), "preamp": s["preamp"], "bass": s["bass"]}
+
+    def _cur(self, scope, appid, route):
+        """The route's current setting (cleaned) within the scope's mutable profile."""
+        return _clean_setting(self._target(scope, appid).get(route))
 
     def set_setting(self, scope, route, setting, appid=None):
+        """Apply an EQ curve (preset/gains) to a route, PRESERVING its bass."""
         if route not in ROUTES:
             return
-        self._target(scope, appid)[route] = _clean_setting(setting)
+        new = _clean_setting(setting)
+        new["bass"] = self._cur(scope, appid, route)["bass"]
+        self._target(scope, appid)[route] = new
         self._save()
 
     def set_band(self, scope, route, index, gain, appid=None):
         if route not in ROUTES or not (0 <= index < 10):
             return
-        prof = self._target(scope, appid)
-        gains = list(_clean_setting(prof.get(route))["gains"])
+        cur = self._cur(scope, appid, route)
+        gains = list(cur["gains"])
         gains[index] = clamp_gain(gain)
-        prof[route] = {"preset": "custom", "gains": gains, "preamp": compute_preamp(gains)}
+        self._target(scope, appid)[route] = {
+            "preset": "custom", "gains": gains, "preamp": compute_preamp(gains), "bass": cur["bass"],
+        }
         self._save()
 
     def set_bands(self, scope, route, gains, appid=None):
-        """Replace all 10 band gains for a route (drag-commit of the whole curve): clamp,
-        pad/truncate to 10, mark custom, recompute the anti-clip preamp. The canonical
-        setting shape lives here, not in the caller."""
+        """Replace all 10 band gains for a route (drag-commit of the whole curve),
+        preserving bass. Clamp, pad/truncate to 10, mark custom, recompute the preamp."""
         if route not in ROUTES:
             return
         clean = [clamp_gain(g) for g in (gains or [])][:10]
         clean += [0.0] * (10 - len(clean))
         self._target(scope, appid)[route] = {
             "preset": "custom", "gains": clean, "preamp": compute_preamp(clean),
+            "bass": self._cur(scope, appid, route)["bass"],
         }
         self._save()
 
+    def set_bass(self, scope, route, value, appid=None):
+        """Set the bass-enhancement amount (0-100) for a route, preserving the EQ curve."""
+        if route not in ROUTES:
+            return
+        cur = self._cur(scope, appid, route)
+        cur["bass"] = _clean_bass(value)
+        self._target(scope, appid)[route] = cur
+        self._save()
+
     def reset(self, scope, route, appid=None):
+        """Neutral route: flat curve + no bass enhancement."""
         if route not in ROUTES:
             return
         self._target(scope, appid)[route] = _clean_setting(None)

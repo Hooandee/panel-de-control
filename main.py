@@ -2365,7 +2365,7 @@ class Plugin:
             if not self._settings.get("audio_eq_enabled") or not self._audio.is_supported():
                 return
             setting = self._effective_audio(self._current_route())
-            self._audio.set_gains(setting["gains"])
+            self._audio.set_gains(setting["gains"], setting["bass"])
         except Exception:  # noqa: BLE001
             pass
 
@@ -2431,6 +2431,7 @@ class Plugin:
                                  and self._audio_eq.has_game(self._current_appid)),
             "preset": eff["preset"],
             "gains": eff["gains"],
+            "bass": eff["bass"],
             "presets": audio_presets.list_presets(getattr(self._device, "key", None)),
             "device_name": self._device.display_name,
         }
@@ -2480,6 +2481,18 @@ class Plugin:
             return await self._offload_call(self._audio_state)
         route = await self._offload_call(self._current_route)  # pactl → off the loop
         self._audio_eq.set_bands(resolved, route, gains, appid=appid)
+        self._reapply_audio()
+        return await self._offload_call(self._audio_state)
+
+    async def set_audio_bass(self, amount: int, scope: str, appid=None) -> dict:
+        """Bass-enhancement amount (0-100) for the active route — orthogonal to the EQ
+        curve (adds a psychoacoustic low-end exciter for small speakers)."""
+        self._init()
+        resolved = self._resolve_scope(scope, appid)
+        if resolved is None:
+            return await self._offload_call(self._audio_state)
+        route = await self._offload_call(self._current_route)  # pactl → off the loop
+        self._audio_eq.set_bass(resolved, route, int(amount), appid=appid)
         self._reapply_audio()
         return await self._offload_call(self._audio_state)
 

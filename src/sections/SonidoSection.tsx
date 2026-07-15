@@ -6,6 +6,7 @@ import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { useEq } from "../audio/useEq";
 import { ProfileSelector } from "../components/ProfileSelector";
+import { ContainedSlider } from "../components/ContainedSlider";
 import { EqCurveGraph } from "../components/EqCurveGraph";
 import { segmentGroupStyle, segmentItemStyle } from "../components/segmented";
 
@@ -14,7 +15,8 @@ import { segmentGroupStyle, segmentItemStyle } from "../components/segmented";
  *  per-game or global. Honest when the host has no PipeWire EQ support. */
 export const SonidoSection: FC = () => {
   const { t } = useI18n();
-  const { state, scope, game, onScope, onEnable, onPreset, onBands, onReset, onTest } = useEq();
+  const { state, scope, game, onScope, onEnable, onPreset, onBands, onBass, onReset, onTest } =
+    useEq();
 
   if (!state) return null;
 
@@ -123,6 +125,19 @@ export const SonidoSection: FC = () => {
               {t("audio.curve")}
             </div>
             <EqCurveGraph gains={state.gains} editable onChange={onBands} />
+            <div style={{ marginTop: 6 }}>
+              <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, margin: "0 4px 2px" }}>
+                {t("audio.bass")}
+              </div>
+              <ContainedSlider
+                value={state.bass}
+                min={0}
+                max={100}
+                step={5}
+                showValue
+                onChange={onBass}
+              />
+            </div>
             <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
               <Focusable
                 style={{ ...chip(false), flex: 1, textAlign: "center" }}

@@ -46,6 +46,34 @@ def test_set_bands_clamps_pads_and_marks_custom(tmp_path):
     assert eff["preamp"] == -12.0
 
 
+def test_bass_defaults_zero_and_sets(tmp_path):
+    s = EqStore(str(tmp_path / "audio.json"))
+    assert s.effective(appid=None, route="speaker")["bass"] == 0
+    s.set_bass("global", "speaker", 70)
+    assert s.effective(appid=None, route="speaker")["bass"] == 70
+
+
+def test_bass_preserved_when_curve_changes(tmp_path):
+    s = EqStore(str(tmp_path / "audio.json"))
+    s.set_bass("global", "speaker", 50)
+    s.set_band("global", "speaker", 0, 4.0)
+    s.set_setting("global", "speaker", {"preset": "bass", "gains": [2.0] * 10})
+    assert s.effective(appid=None, route="speaker")["bass"] == 50  # survived both
+
+
+def test_bass_clamped(tmp_path):
+    s = EqStore(str(tmp_path / "audio.json"))
+    s.set_bass("global", "speaker", 999)
+    assert s.effective(appid=None, route="speaker")["bass"] == 100
+
+
+def test_reset_clears_bass(tmp_path):
+    s = EqStore(str(tmp_path / "audio.json"))
+    s.set_bass("global", "speaker", 80)
+    s.reset("global", "speaker")
+    assert s.effective(appid=None, route="speaker")["bass"] == 0
+
+
 def test_reset_route_to_flat(tmp_path):
     s = EqStore(str(tmp_path / "audio.json"))
     s.set_band("global", "speaker", 0, 9.0)

@@ -6,6 +6,7 @@ import {
   playAudioTest,
   resetAudio,
   setAudioBands,
+  setAudioBass,
   setAudioEnabled,
   setAudioFollowGlobal,
   Scope,
@@ -21,6 +22,7 @@ export interface EqControl {
   onEnable: (enabled: boolean) => void;
   onPreset: (id: string) => void;
   onBands: (gains: number[]) => void;
+  onBass: (amount: number) => void;
   onReset: () => void;
   onTest: () => void;
 }
@@ -78,6 +80,14 @@ export function useEq(): EqControl {
     }, 350);
   }, [wScope, wTarget]);
 
+  const onBass = useCallback((amount: number) => {
+    setState((cur) => (cur ? { ...cur, bass: amount } : cur)); // optimistic
+    if (commit.current) clearTimeout(commit.current);
+    commit.current = setTimeout(() => {
+      setAudioBass(amount, wScope, wTarget).then(setState).catch(() => {});
+    }, 350);
+  }, [wScope, wTarget]);
+
   const onReset = useCallback(() => {
     resetAudio(wScope, wTarget).then(setState).catch(() => {});
   }, [wScope, wTarget]);
@@ -86,5 +96,5 @@ export function useEq(): EqControl {
     playAudioTest().catch(() => {});
   }, []);
 
-  return { state, scope, game, onScope, onEnable, onPreset, onBands, onReset, onTest };
+  return { state, scope, game, onScope, onEnable, onPreset, onBands, onBass, onReset, onTest };
 }
