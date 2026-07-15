@@ -19,6 +19,8 @@ import { useLayout } from "../customize/store";
 import { visibleIds } from "../customize/layout";
 import { PINNED_TAB } from "../customize/manifest";
 import { theme } from "../theme";
+import { FocusRoot } from "./FocusRoot";
+import { useAccent } from "../system/useAccent";
 
 /**
  * The control-center shell: persistent chrome (device header + language flags +
@@ -60,6 +62,7 @@ export const ControlCenter: FC = () => {
   // hook) and the alert dot on the Ajustes tab. Calling useUpdate elsewhere
   // (AjustesSection's UpdatePanel) reuses the same session-cached result.
   const { hasUpdate } = useUpdate(lang);
+  useAccent(); // re-render the shell when the accent changes
 
   useEffect(() => {
     getDevice().then(setDevice).catch(() => setFailed(true));
@@ -106,6 +109,7 @@ export const ControlCenter: FC = () => {
 
   return (
     <PanelSection>
+      <FocusRoot>
       {/* Shell chrome grouped in one row with an explicit gap so the three cards
           (device / learning / tabs) breathe instead of touching. A null
           LearningBanner collapses its slot — no double gap. */}
@@ -136,6 +140,7 @@ export const ControlCenter: FC = () => {
           <Active />
         </ErrorBoundary>
       )}
+      </FocusRoot>
     </PanelSection>
   );
 };

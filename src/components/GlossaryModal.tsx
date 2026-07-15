@@ -4,6 +4,7 @@ import { ModalRoot, showModal, Focusable } from "@decky/ui";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { CATEGORIES, pick } from "../glossary/data";
+import { FocusRoot } from "./FocusRoot";
 
 // Full-screen glossary. Content lives in ../glossary/data (bulky bilingual
 // prose); this component is pure presentation. useI18n degrades gracefully
@@ -41,7 +42,9 @@ const GlossaryBody: FC = () => {
 
 const GlossaryModal: FC<{ closeModal?: () => void }> = ({ closeModal }) => (
   <ModalRoot closeModal={closeModal} bAllowFullSize>
-    <GlossaryBody />
+    <FocusRoot>
+      <GlossaryBody />
+    </FocusRoot>
   </ModalRoot>
 );
 

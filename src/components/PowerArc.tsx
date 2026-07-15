@@ -173,7 +173,7 @@ export const PowerArc: FC<PowerArcProps> = ({
             fontWeight: 700,
             letterSpacing: "0.14em",
             color: theme.color.accent,
-            background: "rgba(78,161,255,0.15)",
+            background: `rgba(${theme.color.accentRgb},0.15)`,
             borderRadius: 4,
             padding: "1px 5px",
             marginTop: 2,

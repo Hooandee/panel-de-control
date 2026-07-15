@@ -1,4 +1,5 @@
 import { DialogButton, ModalRoot } from "@decky/ui";
+import { FocusRoot } from "../components/FocusRoot";
 import { type ReactNode, useState } from "react";
 import type { InstallResult } from "../api";
 import { useUpdate } from "./useUpdate";
@@ -113,7 +114,7 @@ export function UpdateModal({
 
   return (
     <ModalRoot onCancel={closeModal} onEscKeypress={closeModal}>
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <FocusRoot style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         <div style={{ fontSize: 20, fontWeight: 700 }}>
           {t.title} v{latest}
         </div>
@@ -135,7 +136,7 @@ export function UpdateModal({
         {result && !result.ok && (
           <div style={{ fontSize: 12, color: "#ff6b6b" }}>{t.failed}</div>
         )}
-      </div>
+      </FocusRoot>
     </ModalRoot>
   );
 }
