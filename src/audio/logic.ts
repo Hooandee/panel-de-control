@@ -36,6 +36,10 @@ export function bassToEnhancer(gravesLevel: number): number {
   return gravesLevel > 0 ? Math.round((gravesLevel / GAIN_MAX) * 100) : 0;
 }
 
+export function toneCeiling(region: ToneRegion, bandCeilings: number[]): number {
+  return Math.min(...TONE_BANDS[region].map((i) => bandCeilings[i] ?? GAIN_MAX));
+}
+
 export function formatHz(freq: number): string {
   return freq >= 1000 ? `${freq / 1000}k` : `${freq}`;
 }

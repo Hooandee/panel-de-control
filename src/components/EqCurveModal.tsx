@@ -20,6 +20,7 @@ const EqCurveModalBody: FC = () => {
   const { state, onBands, onReset } = useEq();
   if (!state) return null;
 
+  const ceilings = state.route === "headphone" ? undefined : state.safe_limits.bands;
   const zones = [
     { label: t("audio.tone.graves"), band: ZONE_BANDS.graves },
     { label: t("audio.tone.voces"), band: ZONE_BANDS.voces },
@@ -30,7 +31,7 @@ const EqCurveModalBody: FC = () => {
     <div style={{ display: "flex", flexDirection: "column", gap: theme.space.md, padding: theme.space.sm }}>
       <div style={{ fontSize: theme.font.value, color: theme.color.textPrimary }}>{t("audio.advanced")}</div>
       <div style={{ maxWidth: 760, width: "100%", margin: "0 auto" }}>
-        <EqCurveGraph gains={state.gains} editable onChange={onBands} zones={zones} yTitle={t("audio.axis.y")} />
+        <EqCurveGraph gains={state.gains} editable onChange={onBands} ceilings={ceilings} guard={state.guard} zones={zones} yTitle={t("audio.axis.y")} />
         <Focusable
           style={{ ...segmentItemStyle(false), textAlign: "center", padding: "6px 12px", marginTop: 10 }}
           onActivate={onReset}

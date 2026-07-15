@@ -161,8 +161,20 @@ def test_toggle_test_tone(tmp_path, monkeypatch):
     p, fake = _make_plugin(tmp_path, monkeypatch)
     st = asyncio.run(p.set_audio_test(True))
     assert st["test_playing"] is True
+    assert st["test_sample"] == "full"
+    assert st["test_samples"] == ["bass", "voice", "treble", "full"]
     st = asyncio.run(p.set_audio_test(False))
     assert st["test_playing"] is False
+    assert st["test_sample"] is None
+
+
+def test_test_sample_selection(tmp_path, monkeypatch):
+    p, fake = _make_plugin(tmp_path, monkeypatch)
+    st = asyncio.run(p.set_audio_test(True, "bass"))
+    assert st["test_playing"] is True and st["test_sample"] == "bass"
+    # switching focus keeps playing, updates the active sample
+    st = asyncio.run(p.set_audio_test(True, "treble"))
+    assert st["test_sample"] == "treble"
 
 
 def test_reset_flattens(tmp_path, monkeypatch):
@@ -187,3 +199,45 @@ def test_unsupported_hides_controls(tmp_path, monkeypatch):
     p, fake = _make_plugin(tmp_path, monkeypatch, audio=_FakePipeWireEq(supported=False))
     st = asyncio.run(p.get_audio_state())
     assert st["supported"] is False
+
+
+def test_guard_on_by_default_and_exposes_limits(tmp_path, monkeypatch):
+    p, fake = _make_plugin(tmp_path, monkeypatch)
+    st = asyncio.run(p.get_audio_state())
+    assert st["guard"] is True
+    assert len(st["safe_limits"]["bands"]) == 10
+    assert st["safe_limits"]["bass"] > 0
+
+
+def test_guard_clamps_applied_boost_but_keeps_stored_curve(tmp_path, monkeypatch):
+    p, fake = _make_plugin(tmp_path, monkeypatch)
+    asyncio.run(p.set_audio_enabled(True))
+    st = asyncio.run(p.set_audio_bands([12] * 10, "global"))
+    ceilings = st["safe_limits"]["bands"]
+    assert st["gains"] == [12.0] * 10                       # stored/reported curve is raw
+    assert fake.applied[-1][0] == [float(c) for c in ceilings]  # applied is clamped
+
+
+def test_guard_clamps_applied_bass(tmp_path, monkeypatch):
+    p, fake = _make_plugin(tmp_path, monkeypatch)
+    asyncio.run(p.set_audio_enabled(True))
+    st = asyncio.run(p.set_audio_curve([0] * 10, 100, "global"))
+    assert st["bass"] == 100                          # stored raw
+    assert fake.applied[-1][1] == st["safe_limits"]["bass"]  # applied clamped
+
+
+def test_guard_off_applies_raw_boost(tmp_path, monkeypatch):
+    p, fake = _make_plugin(tmp_path, monkeypatch)
+    asyncio.run(p.set_audio_enabled(True))
+    st = asyncio.run(p.set_speaker_guard(False))
+    assert st["guard"] is False
+    st = asyncio.run(p.set_audio_bands([12] * 10, "global"))
+    assert fake.applied[-1][0] == [12.0] * 10
+
+
+def test_guard_does_not_clamp_headphone_route(tmp_path, monkeypatch):
+    p, fake = _make_plugin(tmp_path, monkeypatch, audio=_FakePipeWireEq(route="headphone"))
+    asyncio.run(p.set_audio_enabled(True))
+    st = asyncio.run(p.set_audio_bands([12] * 10, "global"))
+    assert st["route"] == "headphone"
+    assert fake.applied[-1][0] == [12.0] * 10  # guard is speaker-only

@@ -42,6 +42,8 @@ from audio.eq_store import EqStore
 from audio.pipewire import PipeWireEq
 from audio.profile_store import AudioProfileStore
 from audio import presets as audio_presets
+from audio import safe as audio_safe
+from audio import tone as audio_tone
 from cpu.info import read_cpu_info, read_cpu_model
 from cpu.controls import CoreControl, SmtControl, select_boost
 from cpu.profiles import CpuProfileStore
@@ -313,6 +315,7 @@ class Plugin:
         # Audio EQ output-route watcher: last applied route + its loop task.
         self._audio_task = None
         self._audio_route_last = None
+        self._test_sample = None
         # Rolling GPU% window + slack counter for the GPU-driven auto-TDP control law.
         self._gpu_window = []      # recent GPU% samples
         self._slack_ticks = 0      # consecutive GPU-headroom ticks (temporal gate)
@@ -2368,10 +2371,19 @@ class Plugin:
         try:
             if not self._settings.get("audio_eq_enabled") or not self._audio.is_supported():
                 return
-            setting = self._effective_audio(self._current_route())
-            self._audio.set_gains(setting["gains"], setting["bass"], setting["loudness"])
+            route = self._current_route()
+            setting = self._effective_audio(route)
+            gains, bass = self._guarded_gains(route, setting["gains"], setting["bass"])
+            self._audio.set_gains(gains, bass, setting["loudness"])
         except Exception:  # noqa: BLE001
             pass
+
+    def _guarded_gains(self, route, gains, bass):
+        if route == "speaker" and self._settings.get("speaker_guard_enabled", True):
+            key = getattr(self._device, "key", None)
+            gains = audio_safe.clamp_gains(gains, audio_safe.band_ceilings(key))
+            bass = audio_safe.clamp_bass(bass, audio_safe.bass_ceiling(key))
+        return gains, bass
 
     def _start_audio_loop(self) -> None:
         if self._audio_task is not None and not self._audio_task.done():
@@ -2438,9 +2450,13 @@ class Plugin:
             "bass": eff["bass"],
             "loudness": eff["loudness"],
             "test_playing": self._audio.is_test_playing(),
+            "test_sample": self._test_sample if self._audio.is_test_playing() else None,
+            "test_samples": audio_tone.sample_ids(),
             "presets": audio_presets.list_presets(getattr(self._device, "key", None)),
             "profiles": self._audio_profiles.list(),
             "device_name": self._device.display_name,
+            "guard": bool(self._settings.get("speaker_guard_enabled", True)),
+            "safe_limits": audio_safe.safe_limits(getattr(self._device, "key", None)),
         }
 
     async def get_audio_state(self) -> dict:
@@ -2455,6 +2471,13 @@ class Plugin:
             self._reapply_audio()
         else:
             self._offload(self._restore_audio_safe)
+        return await self._offload_call(self._audio_state)
+
+    async def set_speaker_guard(self, enabled: bool) -> dict:
+        self._init()
+        self._settings["speaker_guard_enabled"] = bool(enabled)
+        self._store.save(self._settings)
+        self._reapply_audio()
         return await self._offload_call(self._audio_state)
 
     async def apply_audio_preset(self, preset: str, scope: str = "global", appid=None) -> dict:
@@ -2529,25 +2552,27 @@ class Plugin:
         self._audio_profiles.delete(name)
         return await self._offload_call(self._audio_state)
 
-    async def set_audio_test(self, playing: bool) -> dict:
-        """Start/stop looping the reference tone through the current output so the user can
-        audition the EQ while configuring, until they stop it. Off the event loop."""
+    async def set_audio_test(self, playing: bool, sample: str = "full") -> dict:
         self._init()
         if playing:
-            self._offload(self._start_audio_test_sync)
+            self._offload(lambda: self._start_audio_test_sync(sample))
         else:
+            self._test_sample = None
             self._offload(self._audio.stop_test)
         return await self._offload_call(self._audio_state)
 
-    def _start_audio_test_sync(self) -> None:
+    def _start_audio_test_sync(self, sample: str) -> None:
         try:
-            path = os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "pdc_loop.wav")
+            if sample not in audio_tone.sample_ids():
+                sample = "full"
+            name = f"pdc_test_{sample}_{audio_tone.CACHE_TAG}.wav"
+            path = os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, name)
             if not os.path.exists(path):
-                from audio.tone import loop_samples, write_wav
-                write_wav(path, loop_samples())
+                audio_tone.write_wav(path, audio_tone.render(sample))
             self._audio.start_test(path)
+            self._test_sample = sample
         except Exception:  # noqa: BLE001
-            pass
+            self._test_sample = None
 
     async def set_audio_curve(self, gains: list, bass: int, scope: str, appid=None) -> dict:
         """Set the EQ gains and the bass-enhancement amount together in one apply (the tone

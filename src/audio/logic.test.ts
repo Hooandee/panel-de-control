@@ -8,6 +8,7 @@ import {
   clampGain,
   formatHz,
   gainsToCurvePath,
+  toneCeiling,
   toneLevel,
 } from "./logic";
 
@@ -53,6 +54,13 @@ describe("audio EQ logic", () => {
     expect(bassToEnhancer(-4)).toBe(0);
     expect(bassToEnhancer(12)).toBe(100);
     expect(bassToEnhancer(6)).toBe(50);
+  });
+
+  it("toneCeiling is the tightest band ceiling in the region", () => {
+    const ceilings = [3, 4, 6, 8, 9, 9, 8, 6, 5, 4];
+    expect(toneCeiling("graves", ceilings)).toBe(4); // min of bands 1,2,3 = 4,6,8
+    expect(toneCeiling("voces", ceilings)).toBe(6);  // min of bands 5,6,7 = 9,8,6
+    expect(toneCeiling("agudos", ceilings)).toBe(4); // min of bands 8,9 = 5,4
   });
 
   it("higher gain pulls the curve upward (smaller y)", () => {

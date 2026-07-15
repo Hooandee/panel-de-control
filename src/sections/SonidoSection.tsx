@@ -1,14 +1,14 @@
 import { CSSProperties, FC, ReactNode } from "react";
 import { Focusable, PanelSectionRow, ToggleField } from "@decky/ui";
 import {
-  LuAudioLines, LuBell, LuHeadphones, LuMaximize2, LuMic, LuPause, LuPlay, LuPlus, LuSparkles,
-  LuVolume2, LuWaves, LuX,
+  LuAudioLines, LuBell, LuHeadphones, LuMaximize2, LuMic, LuMusic, LuPause, LuPlay, LuPlus,
+  LuShieldCheck, LuSparkles, LuTriangleAlert, LuVolume2, LuWaves, LuX,
 } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { useEq } from "../audio/useEq";
-import { toneLevel, ToneRegion } from "../audio/logic";
+import { GAIN_MAX, GAIN_MIN, toneCeiling, toneLevel, ToneRegion } from "../audio/logic";
 import { ProfileSelector } from "../components/ProfileSelector";
 import { ContainedSlider } from "../components/ContainedSlider";
 import { Collapsible } from "../components/Collapsible";
@@ -23,6 +23,12 @@ const TONE_ICON: Record<ToneRegion, ReactNode> = {
   agudos: <LuBell size={14} />,
 };
 const ZONE_BAND: Record<ToneRegion, number> = { graves: 2, voces: 6, agudos: 8 };
+const TEST_ICON: Record<string, ReactNode> = {
+  bass: <LuWaves size={12} />,
+  voice: <LuMic size={12} />,
+  treble: <LuBell size={12} />,
+  full: <LuMusic size={12} />,
+};
 
 /** Sonido: system audio EQ. Curated per-machine presets up front, a full 10-band
  *  graphic EQ folded below. Independent curve per output route (speaker/headphone),
@@ -30,8 +36,8 @@ const ZONE_BAND: Record<ToneRegion, number> = { graves: 2, voces: 6, agudos: 8 }
 export const SonidoSection: FC = () => {
   const { t } = useI18n();
   const {
-    state, scope, game, onScope, onEnable, onPreset, onBands, onTone, onLoudness, onReset, onTest,
-    onSaveProfile, onApplyProfile, onDeleteProfile, refresh,
+    state, scope, game, onScope, onEnable, onPreset, onBands, onTone, onLoudness, onGuard, onReset,
+    onTest, onSaveProfile, onApplyProfile, onDeleteProfile, refresh,
   } = useEq();
 
   if (!state) return null;
@@ -58,6 +64,8 @@ export const SonidoSection: FC = () => {
       : t(`audio.preset.${id}`);
 
   const isHeadphone = state.route === "headphone";
+  const guarded = !isHeadphone && state.guard;
+  const ceilings = isHeadphone ? undefined : state.safe_limits.bands;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: theme.space.section }}>
@@ -106,16 +114,35 @@ export const SonidoSection: FC = () => {
             >
               {t("audio.route.auto")}
             </span>
-            <Focusable
-              style={{ ...chip(state.test_playing), marginLeft: "auto", display: "flex", alignItems: "center", gap: 5, padding: "4px 10px" }}
-              onActivate={onTest}
-              onClick={onTest}
-              title={state.test_playing ? t("audio.stop") : t("audio.test")}
-            >
-              {state.test_playing ? <LuPause size={12} /> : <LuPlay size={12} />}
-              {state.test_playing ? t("audio.stop") : t("audio.test")}
-            </Focusable>
           </div>
+
+          <Collapsible
+            id="audioTest"
+            icon={<LuPlay size={15} />}
+            title={t("audio.test.title")}
+            summary={
+              state.test_playing && state.test_sample
+                ? t(`audio.test.${state.test_sample}`)
+                : undefined
+            }
+          >
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {state.test_samples.map((s) => {
+                const on = state.test_playing && state.test_sample === s;
+                return (
+                  <Focusable
+                    key={s}
+                    style={{ ...chip(on), display: "flex", alignItems: "center", gap: 5, padding: "6px 12px" }}
+                    onActivate={() => onTest(s)}
+                    onClick={() => onTest(s)}
+                  >
+                    {on ? <LuPause size={12} /> : TEST_ICON[s]}
+                    {t(`audio.test.${s}`)}
+                  </Focusable>
+                );
+              })}
+            </div>
+          </Collapsible>
 
           {/* Curated presets — the device-tuned one is the hero (first). */}
           <Focusable style={{ ...segmentGroupStyle, flexWrap: "wrap", gap: 6, background: "none", padding: 0 }}>
@@ -141,6 +168,13 @@ export const SonidoSection: FC = () => {
               );
             })}
           </Focusable>
+
+          {state.preset === "device_tuned" &&
+            state.presets.find((p) => p.id === "device_tuned")?.tuned === false && (
+              <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, marginTop: -4 }}>
+                {t("audio.preset.device_tuned.base")}
+              </div>
+            )}
 
           {/* My profiles — named curves the user saves and reuses across games. */}
           <div>
@@ -190,24 +224,48 @@ export const SonidoSection: FC = () => {
             <div style={{ fontSize: 10, letterSpacing: ".08em", textTransform: "uppercase", color: theme.color.textMuted, margin: "2px 2px 6px" }}>
               {t("audio.tone")}
             </div>
-            {(["graves", "voces", "agudos"] as ToneRegion[]).map((region) => (
-              <ContainedSlider
-                key={region}
+            {(["graves", "voces", "agudos"] as ToneRegion[]).map((region) => {
+              const level = toneLevel(state.gains, region);
+              const cap = ceilings ? toneCeiling(region, ceilings) : GAIN_MAX;
+              const over = !isHeadphone && !state.guard && level > cap;
+              return (
+                <ContainedSlider
+                  key={region}
+                  label={
+                    <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      {TONE_ICON[region]}
+                      {t(`audio.tone.${region}`)}
+                      {over && (
+                        <LuTriangleAlert size={12} color={theme.color.danger} title={t("audio.guard.risk")} />
+                      )}
+                    </span>
+                  }
+                  value={guarded ? Math.min(level, cap) : level}
+                  min={GAIN_MIN}
+                  max={guarded ? cap : GAIN_MAX}
+                  step={1}
+                  showValue
+                  onChange={(v) => onTone(region, v)}
+                />
+              );
+            })}
+          </div>
+
+          {!isHeadphone && (
+            <PanelSectionRow>
+              <ToggleField
                 label={
                   <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    {TONE_ICON[region]}
-                    {t(`audio.tone.${region}`)}
+                    <LuShieldCheck size={14} />
+                    {t("audio.guard")}
                   </span>
                 }
-                value={toneLevel(state.gains, region)}
-                min={-12}
-                max={12}
-                step={1}
-                showValue
-                onChange={(v) => onTone(region, v)}
+                description={state.guard ? t("audio.guard.desc") : t("audio.guard.off")}
+                checked={state.guard}
+                onChange={onGuard}
               />
-            ))}
-          </div>
+            </PanelSectionRow>
+          )}
 
           <PanelSectionRow>
             <ToggleField
@@ -240,6 +298,8 @@ export const SonidoSection: FC = () => {
               gains={state.gains}
               editable
               onChange={onBands}
+              ceilings={ceilings}
+              guard={guarded}
               zones={(["graves", "voces", "agudos"] as ToneRegion[]).map((r) => ({
                 label: t(`audio.tone.${r}`),
                 band: ZONE_BAND[r],

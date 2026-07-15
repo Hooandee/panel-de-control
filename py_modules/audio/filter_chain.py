@@ -8,10 +8,9 @@ from audio.const import BAND_FREQS
 _LABELS = ["bq_lowshelf"] + ["bq_peaking"] * 8 + ["bq_highshelf"]
 
 _CAPS = "/usr/lib/ladspa/caps.so"
-_BASS_FREQ = 130  # Hz — the low-mid body small handheld speakers can actually reproduce
-_BASS_MAX_DRIVE = 1.0  # lo.gain at bass=100 (harmonic drive); tuned by ear on-device
+_BASS_FREQ = 130
+_BASS_MAX_DRIVE = 1.0
 
-# CAPS Compress params for volume leveling (dialogue audible, peaks tamed). Tuned on-device.
 _COMP = '{ "threshold" = -18 "strength" = 0.6 "attack" = 20 "release" = 200 "gain (dB)" = 6 }'
 
 # Mono CAPS effects (not the X2 stereo variants) so they duplicate per channel like the

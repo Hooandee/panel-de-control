@@ -11,6 +11,8 @@ interface Props {
   zones?: { label: string; band: number }[];
   /** Rotated Y-axis caption (e.g. "− suave · + fuerte") explaining what the dB numbers mean. */
   yTitle?: string;
+  ceilings?: number[];
+  guard?: boolean;
 }
 
 // Inner plot size; margins leave room for the dB labels (left, + Y caption) and the freq
@@ -25,21 +27,32 @@ const span = (PLOT.h / 2) * 0.85;
 const gainToY = (g: number) => PLOT.h / 2 - (clampGain(g) / GAIN_MAX) * span;
 const yToGain = (y: number) => clampGain(((PLOT.h / 2 - y) / span) * GAIN_MAX);
 
-const EqCurveGraphImpl: FC<Props> = ({ gains, editable, onChange, zones, yTitle }) => {
+const EqCurveGraphImpl: FC<Props> = ({ gains, editable, onChange, zones, yTitle, ceilings, guard }) => {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const dragging = useRef<number | null>(null);
   const [active, setActive] = useState<number | null>(null);
   const n = gains.length;
+  const capOf = (i: number) => ceilings?.[i] ?? GAIN_MAX;
+  const overSafe = (i: number) => !guard && !!ceilings && gains[i] > capOf(i);
 
   const move = (clientY: number) => {
     if (dragging.current === null || !svgRef.current) return;
     const rect = svgRef.current.getBoundingClientRect();
     const scaleY = (PLOT.h + MARGIN.top + MARGIN.bottom) / rect.height;
     const plotY = (clientY - rect.top) * scaleY - MARGIN.top;
-    const g = Math.round(yToGain(Math.max(0, Math.min(PLOT.h, plotY))));
+    let g = Math.round(yToGain(Math.max(0, Math.min(PLOT.h, plotY))));
+    if (guard && ceilings) g = Math.min(g, capOf(dragging.current));
     const next = gains.map((v, i) => (i === dragging.current ? g : v));
     onChange(next);
   };
+
+  const fmtPt = ([x, y]: readonly [number, number]) => `${x.toFixed(1)} ${y.toFixed(1)}`;
+  const ceilPts = ceilings ? gains.map((_, i) => [bandX(i, n), gainToY(capOf(i))] as const) : [];
+  const ceilLine = ceilPts.map(fmtPt).join(" L ");
+  const zoneFill = ceilPts.length
+    ? `M 0 ${gainToY(GAIN_MAX).toFixed(1)} L ${PLOT.w.toFixed(1)} ${gainToY(GAIN_MAX).toFixed(1)} `
+      + `L ${[...ceilPts].reverse().map(fmtPt).join(" L ")} Z`
+    : "";
 
   const startDrag = (i: number) => (e: ReactPointerEvent) => {
     if (!editable) return;
@@ -91,6 +104,20 @@ const EqCurveGraphImpl: FC<Props> = ({ gains, editable, onChange, zones, yTitle 
           </text>
         )}
 
+        {ceilings && (
+          <>
+            <path d={zoneFill} fill={theme.color.warn} fillOpacity={guard ? 0.08 : 0.18} stroke="none" />
+            <path
+              d={`M ${ceilLine}`}
+              fill="none"
+              stroke={theme.color.warn}
+              strokeWidth={1}
+              strokeDasharray="3 3"
+              opacity={0.7}
+            />
+          </>
+        )}
+
         {/* the EQ response curve */}
         <path
           d={gainsToCurvePath(gains, PLOT.w, PLOT.h)}
@@ -110,7 +137,7 @@ const EqCurveGraphImpl: FC<Props> = ({ gains, editable, onChange, zones, yTitle 
                 cx={x}
                 cy={y}
                 r={editable ? 6 : 3}
-                fill={color}
+                fill={overSafe(i) ? theme.color.danger : color}
                 onPointerDown={editable ? startDrag(i) : undefined}
                 style={editable ? { cursor: "ns-resize" } : undefined}
               />

@@ -84,15 +84,17 @@ class PipeWireEq:
             return ""
 
     def start_test(self, path):
-        """Loop a reference tone through the default (EQ) sink until stop_test(). A
-        `while true` shell keeps it going; start_new_session makes the whole tree a process
-        group we can kill cleanly. Non-blocking — doesn't hold the apply executor."""
         self.stop_test()
-        cmd, env = self._session_cmd(["sh", "-c", f'while true; do pw-play "{path}"; done'])
+        loop = (
+            'SDL_AUDIODRIVER=pulseaudio ffplay -nodisp -loop 0 -volume 100 "$PDC_TEST_WAV" '
+            '|| while true; do pw-play "$PDC_TEST_WAV" || sleep 1; done'
+        )
+        cmd, env = self._session_cmd(["sh", "-c", loop])
         if cmd is None:
             return
+        env["PDC_TEST_WAV"] = path
         try:
-            self._test_proc = subprocess.Popen(  # noqa: S603 — fixed argv, session env
+            self._test_proc = subprocess.Popen(  # noqa: S603
                 cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                 start_new_session=True,
             )

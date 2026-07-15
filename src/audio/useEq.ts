@@ -13,6 +13,7 @@ import {
   setAudioFollowGlobal,
   setAudioLoudness,
   setAudioTest,
+  setSpeakerGuard,
   Scope,
 } from "../api";
 import { useRunningGame } from "../tdp/useRunningGame";
@@ -29,8 +30,9 @@ export interface EqControl {
   onBands: (gains: number[]) => void;
   onTone: (region: ToneRegion, level: number) => void;
   onLoudness: (on: boolean) => void;
+  onGuard: (on: boolean) => void;
   onReset: () => void;
-  onTest: () => void;
+  onTest: (sample: string) => void;
   onSaveProfile: (name: string) => void;
   onApplyProfile: (name: string) => void;
   onDeleteProfile: (name: string) => void;
@@ -63,7 +65,7 @@ export function useEq(): EqControl {
   useEffect(() => () => {
     if (commit.current) clearTimeout(commit.current);
     // Never leave the test tone looping after the section unmounts / QAM closes.
-    if (stateRef.current?.test_playing) setAudioTest(false).catch(() => {});
+    if (stateRef.current?.test_playing) setAudioTest(false, "full").catch(() => {});
   }, []);
 
   const applyFollow = useCallback(
@@ -111,14 +113,21 @@ export function useEq(): EqControl {
     setAudioLoudness(on, wScope, wTarget).then(setState).catch(() => {});
   }, [wScope, wTarget]);
 
+  const onGuard = useCallback((on: boolean) => {
+    setState((cur) => (cur ? { ...cur, guard: on } : cur)); // optimistic
+    setSpeakerGuard(on).then(setState).catch(() => {});
+  }, []);
+
   const onReset = useCallback(() => {
     resetAudio(wScope, wTarget).then(setState).catch(() => {});
   }, [wScope, wTarget]);
 
-  const onTest = useCallback(() => {
-    const next = !stateRef.current?.test_playing;
-    setState((cur) => (cur ? { ...cur, test_playing: next } : cur)); // optimistic
-    setAudioTest(next).then(setState).catch(() => {});
+  const onTest = useCallback((sample: string) => {
+    const cur = stateRef.current;
+    const playingThis = !!cur?.test_playing && cur?.test_sample === sample;
+    const next = !playingThis;
+    setState((c) => (c ? { ...c, test_playing: next, test_sample: next ? sample : null } : c));
+    setAudioTest(next, sample).then(setState).catch(() => {});
   }, []);
 
   const onSaveProfile = useCallback((name: string) => {
@@ -132,7 +141,7 @@ export function useEq(): EqControl {
   }, []);
 
   return {
-    state, scope, game, onScope, onEnable, onPreset, onBands, onTone, onLoudness, onReset, onTest,
-    onSaveProfile, onApplyProfile, onDeleteProfile, refresh,
+    state, scope, game, onScope, onEnable, onPreset, onBands, onTone, onLoudness, onGuard, onReset,
+    onTest, onSaveProfile, onApplyProfile, onDeleteProfile, refresh,
   };
 }

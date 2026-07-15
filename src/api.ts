@@ -584,6 +584,7 @@ export const resetGameProfiles =
 // ---- Sonido: audio EQ ----------------------------------------------------
 export interface AudioPresetDef {
   id: string;
+  tuned?: boolean;
 }
 export interface AudioProfile {
   name: string;
@@ -602,11 +603,16 @@ export interface AudioState {
   bass: number;
   loudness: boolean;
   test_playing: boolean;
+  test_sample: string | null;
+  test_samples: string[];
   presets: AudioPresetDef[];
   profiles: AudioProfile[];
   device_name: string;
+  guard: boolean;
+  safe_limits: { bands: number[]; bass: number };
 }
 export const getAudioState = callable<[], AudioState>("get_audio_state");
+export const setSpeakerGuard = callable<[enabled: boolean], AudioState>("set_speaker_guard");
 export const setAudioEnabled = callable<[enabled: boolean], AudioState>("set_audio_enabled");
 export const applyAudioPreset =
   callable<[preset: string, scope: Scope, appid: string | null], AudioState>("apply_audio_preset");
@@ -623,7 +629,7 @@ export const setAudioCurve =
 export const setAudioLoudness =
   callable<[on: boolean, scope: Scope, appid: string | null], AudioState>("set_audio_loudness");
 export const setAudioTest =
-  callable<[playing: boolean], AudioState>("set_audio_test");
+  callable<[playing: boolean, sample: string], AudioState>("set_audio_test");
 export const saveAudioProfile = callable<[name: string], AudioState>("save_audio_profile");
 export const applyAudioProfile =
   callable<[name: string, scope: Scope, appid: string | null], AudioState>("apply_audio_profile");

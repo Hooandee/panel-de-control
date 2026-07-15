@@ -28,6 +28,12 @@ DEVICE = {
     "legion_go_2": {"device_tuned": [0, 0, 3, 1, -1, -4, -3, -2, 0, 1]},
 }
 
+_GENERIC_CORRECTION = [0, 1, 2, 1, -1, -2, -2, -1, 0, 1]
+
+
+def is_tuned(device_key):
+    return "device_tuned" in DEVICE.get(device_key, {})
+
 
 def _setting(preset_id, gains):
     g = [clamp_gain(x) for x in gains]
@@ -38,14 +44,12 @@ def resolve_preset(device_key, preset_id, route):
     if preset_id == "device_tuned":
         if route != "speaker":
             return _setting("device_tuned", [0.0] * 10)
-        gains = DEVICE.get(device_key, {}).get("device_tuned", GENERIC["flat"])
+        gains = DEVICE.get(device_key, {}).get("device_tuned", _GENERIC_CORRECTION)
         return _setting("device_tuned", gains)
     return _setting(preset_id, GENERIC.get(preset_id, GENERIC["flat"]))
 
 
 def list_presets(device_key):
-    out = []
-    if "device_tuned" in DEVICE.get(device_key, {}):
-        out.append({"id": "device_tuned"})
-    out.extend({"id": pid} for pid in GENERIC)  # dict preserves the display order
+    out = [{"id": "device_tuned", "tuned": is_tuned(device_key)}]
+    out.extend({"id": pid} for pid in GENERIC)
     return out

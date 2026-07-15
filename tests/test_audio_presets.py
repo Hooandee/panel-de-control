@@ -1,4 +1,4 @@
-from audio.presets import list_presets, resolve_preset
+from audio.presets import is_tuned, list_presets, resolve_preset
 
 
 def test_flat_preset_is_zero():
@@ -26,12 +26,25 @@ def test_unknown_device_falls_back():
 
 
 def test_list_includes_hero_first_for_known_device():
-    ids = [p["id"] for p in list_presets("legion_go_2")]
-    assert ids[0] == "device_tuned"
+    presets = list_presets("legion_go_2")
+    assert presets[0]["id"] == "device_tuned"
+    assert presets[0]["tuned"] is True  # a real per-model curve
+    ids = [p["id"] for p in presets]
     assert "flat" in ids and "voices" in ids
 
 
-def test_list_no_hero_for_unknown_device():
-    ids = [p["id"] for p in list_presets("some_unknown")]
-    assert "device_tuned" not in ids
-    assert "flat" in ids
+def test_hero_always_offered_as_starting_point_for_unknown_device():
+    presets = list_presets("some_unknown")
+    assert presets[0]["id"] == "device_tuned"
+    assert presets[0]["tuned"] is False  # generic correction, not model-tuned yet
+
+
+def test_unknown_device_hero_is_a_real_correction_not_flat():
+    s = resolve_preset("some_unknown", "device_tuned", "speaker")
+    assert any(g != 0.0 for g in s["gains"])  # a starting-point correction, still applied
+    assert s["preamp"] <= 0.0
+
+
+def test_is_tuned_reflects_the_device_table():
+    assert is_tuned("legion_go") is True
+    assert is_tuned("some_unknown") is False
