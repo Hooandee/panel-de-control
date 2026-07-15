@@ -1,12 +1,14 @@
 import { CSSProperties, FC } from "react";
 import { Focusable, PanelSectionRow, ToggleField } from "@decky/ui";
-import { LuHeadphones, LuSparkles, LuVolume2 } from "react-icons/lu";
+import { LuAudioLines, LuHeadphones, LuSparkles, LuVolume2 } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { useEq } from "../audio/useEq";
+import { toneLevel, ToneRegion } from "../audio/logic";
 import { ProfileSelector } from "../components/ProfileSelector";
 import { ContainedSlider } from "../components/ContainedSlider";
+import { Collapsible } from "../components/Collapsible";
 import { EqCurveGraph } from "../components/EqCurveGraph";
 import { segmentGroupStyle, segmentItemStyle } from "../components/segmented";
 
@@ -15,8 +17,7 @@ import { segmentGroupStyle, segmentItemStyle } from "../components/segmented";
  *  per-game or global. Honest when the host has no PipeWire EQ support. */
 export const SonidoSection: FC = () => {
   const { t } = useI18n();
-  const { state, scope, game, onScope, onEnable, onPreset, onBands, onNudge, onBass, onReset, onTest } =
-    useEq();
+  const { state, scope, game, onScope, onEnable, onPreset, onBands, onTone, onReset } = useEq();
 
   if (!state) return null;
 
@@ -118,71 +119,45 @@ export const SonidoSection: FC = () => {
             })}
           </Focusable>
 
-          {/* Quick, non-expert tweaks — tap to nudge the curve toward an intent. */}
+          {/* Simple tone: three sliders anyone understands. Graves also engages the
+              bass enhancer on its positive side. */}
           <div>
-            <div style={{ fontSize: 10, letterSpacing: ".08em", textTransform: "uppercase", color: theme.color.textMuted, margin: "2px 2px 6px" }}>
-              {t("audio.quick")}
+            <div style={{ fontSize: 10, letterSpacing: ".08em", textTransform: "uppercase", color: theme.color.textMuted, margin: "2px 2px 8px" }}>
+              {t("audio.tone")}
             </div>
-            {(["bass", "voice", "treble"] as const).map((dim) => (
-              <div key={dim} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                <span style={{ flex: 1, fontSize: theme.font.body, color: theme.color.textPrimary }}>
-                  {t(`audio.nudge.${dim}`)}
-                </span>
-                <Focusable
-                  style={{ ...chip(false), minWidth: 40, textAlign: "center", padding: "6px 0" }}
-                  onActivate={() => onNudge(dim, -1)}
-                  onClick={() => onNudge(dim, -1)}
-                >
-                  −
-                </Focusable>
-                <Focusable
-                  style={{ ...chip(false), minWidth: 40, textAlign: "center", padding: "6px 0" }}
-                  onActivate={() => onNudge(dim, 1)}
-                  onClick={() => onNudge(dim, 1)}
-                >
-                  +
-                </Focusable>
+            {(["graves", "voces", "agudos"] as ToneRegion[]).map((region) => (
+              <div key={region} style={{ marginBottom: 10 }}>
+                <div style={{ fontSize: theme.font.body, color: theme.color.textPrimary, margin: "0 2px 2px" }}>
+                  {t(`audio.tone.${region}`)}
+                </div>
+                <ContainedSlider
+                  value={toneLevel(state.gains, region)}
+                  min={-12}
+                  max={12}
+                  step={1}
+                  showValue
+                  onChange={(v) => onTone(region, v)}
+                />
               </div>
             ))}
           </div>
 
-          {/* One curve — editable, always visible. A preset sets it; drag any band to
-              fine-tune (commits on release). */}
-          <div style={{ ...theme.card, padding: "8px 6px 4px" }}>
-            <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, margin: "0 4px 4px" }}>
-              {t("audio.curve")}
-            </div>
+          {/* Full 10-band editor + reset, folded for experts. */}
+          <Collapsible
+            id="audioAdvanced"
+            icon={<LuAudioLines size={15} />}
+            title={t("audio.advanced")}
+            summary={presetLabel(state.preset)}
+          >
             <EqCurveGraph gains={state.gains} editable onChange={onBands} />
-            <div style={{ marginTop: 6 }}>
-              <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, margin: "0 4px 2px" }}>
-                {t("audio.bass")}
-              </div>
-              <ContainedSlider
-                value={state.bass}
-                min={0}
-                max={100}
-                step={5}
-                showValue
-                onChange={onBass}
-              />
-            </div>
-            <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-              <Focusable
-                style={{ ...chip(false), flex: 1, textAlign: "center" }}
-                onActivate={onTest}
-                onClick={onTest}
-              >
-                {t("audio.test")}
-              </Focusable>
-              <Focusable
-                style={{ ...chip(false), flex: 1, textAlign: "center" }}
-                onActivate={onReset}
-                onClick={onReset}
-              >
-                {t("audio.reset")}
-              </Focusable>
-            </div>
-          </div>
+            <Focusable
+              style={{ ...chip(false), textAlign: "center", marginTop: 10 }}
+              onActivate={onReset}
+              onClick={onReset}
+            >
+              {t("audio.reset")}
+            </Focusable>
+          </Collapsible>
         </>
       )}
     </div>

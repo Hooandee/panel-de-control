@@ -1,12 +1,14 @@
 import { describe, it, expect } from "vitest";
 import {
-  applyNudge,
+  applyTone,
+  bassToEnhancer,
   BAND_FREQS,
   GAIN_MAX,
   GAIN_MIN,
   clampGain,
   formatHz,
   gainsToCurvePath,
+  toneLevel,
 } from "./logic";
 
 describe("audio EQ logic", () => {
@@ -32,14 +34,25 @@ describe("audio EQ logic", () => {
     expect(d.length).toBeGreaterThan(10);
   });
 
-  it("nudges the intent bands relatively and clamps", () => {
-    const up = applyNudge([0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "bass", 1);
-    expect(up[1]).toBe(2);
-    expect(up[2]).toBe(2);
-    expect(up[0]).toBe(0); // 32 Hz untouched
-    expect(applyNudge([11, 11, 11, 11, 11, 11, 11, 11, 11, 11], "treble", 1)[9]).toBe(12);
-    const base = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
-    expect(applyNudge(base, "nope", 1)).toEqual(base);
+  it("applyTone sets a region's bands to the level and clamps", () => {
+    const g = applyTone([0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "graves", 4);
+    expect(g[1]).toBe(4);
+    expect(g[2]).toBe(4);
+    expect(g[3]).toBe(4);
+    expect(g[0]).toBe(0); // 32 Hz untouched
+    expect(applyTone([0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "agudos", 99)[9]).toBe(12);
+  });
+
+  it("toneLevel reads a region's average", () => {
+    expect(toneLevel([0, 3, 3, 3, 0, 0, 0, 0, 0, 0], "graves")).toBe(3);
+    expect(toneLevel([0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "voces")).toBe(0);
+  });
+
+  it("bassToEnhancer engages only on the positive side", () => {
+    expect(bassToEnhancer(0)).toBe(0);
+    expect(bassToEnhancer(-4)).toBe(0);
+    expect(bassToEnhancer(12)).toBe(100);
+    expect(bassToEnhancer(6)).toBe(50);
   });
 
   it("higher gain pulls the curve upward (smaller y)", () => {

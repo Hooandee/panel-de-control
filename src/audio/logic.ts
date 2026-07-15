@@ -7,21 +7,33 @@ export const GAIN_MAX = 12;
 
 export const clampGain = (g: number): number => clamp(g, GAIN_MIN, GAIN_MAX);
 
-// Natural, non-expert tweaks: each intent moves a few bands by ±2 dB. Bass = upper-bass
-// body (deep sub is the enhancer's job); voice = presence; treble = air.
-export const NUDGE_DIMS: Record<string, number[]> = {
-  bass: [1, 2, 3],
-  voice: [5, 6, 7],
-  treble: [8, 9],
+// Simple, non-expert tone control: 3 regions the user understands. Graves = upper-bass
+// body small speakers can reproduce (deep sub is the enhancer's job, engaged by the same
+// slider); voces = presence/dialogue; agudos = treble/air.
+export type ToneRegion = "graves" | "voces" | "agudos";
+export const TONE_BANDS: Record<ToneRegion, number[]> = {
+  graves: [1, 2, 3],
+  voces: [5, 6, 7],
+  agudos: [8, 9],
 };
 
-/** Shift `gains` by ±2 dB on the bands of `dim` (relative). Unknown dim/direction → unchanged. */
-export function applyNudge(gains: number[], dim: string, direction: number): number[] {
-  const bands = NUDGE_DIMS[dim];
+/** The region's current level (avg gain of its bands, rounded) — what its slider shows. */
+export function toneLevel(gains: number[], region: ToneRegion): number {
+  const bands = TONE_BANDS[region];
+  return Math.round(bands.reduce((s, i) => s + gains[i], 0) / bands.length);
+}
+
+/** Set every band in a region to `level` (dB), returning new gains. */
+export function applyTone(gains: number[], region: ToneRegion, level: number): number[] {
   const out = [...gains];
-  if (!bands || (direction !== 1 && direction !== -1)) return out;
-  for (const i of bands) out[i] = clampGain(out[i] + direction * 2);
+  for (const i of TONE_BANDS[region]) out[i] = clampGain(level);
   return out;
+}
+
+/** The Graves slider also engages the psychoacoustic bass enhancer on its positive side
+ *  (0-100). A cut (≤0) leaves the enhancer off. */
+export function bassToEnhancer(gravesLevel: number): number {
+  return gravesLevel > 0 ? Math.round((gravesLevel / GAIN_MAX) * 100) : 0;
 }
 
 export function formatHz(freq: number): string {

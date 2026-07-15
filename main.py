@@ -2484,15 +2484,16 @@ class Plugin:
         self._reapply_audio()
         return await self._offload_call(self._audio_state)
 
-    async def set_audio_bass(self, amount: int, scope: str, appid=None) -> dict:
-        """Bass-enhancement amount (0-100) for the active route — orthogonal to the EQ
-        curve (adds a psychoacoustic low-end exciter for small speakers)."""
+    async def set_audio_curve(self, gains: list, bass: int, scope: str, appid=None) -> dict:
+        """Set the EQ gains and the bass-enhancement amount together in one apply (the tone
+        sliders drive both — the Graves slider engages the bass enhancer)."""
         self._init()
         resolved = self._resolve_scope(scope, appid)
         if resolved is None:
             return await self._offload_call(self._audio_state)
         route = await self._offload_call(self._current_route)  # pactl → off the loop
-        self._audio_eq.set_bass(resolved, route, int(amount), appid=appid)
+        self._audio_eq.set_bands(resolved, route, gains, appid=appid)
+        self._audio_eq.set_bass(resolved, route, int(bass), appid=appid)
         self._reapply_audio()
         return await self._offload_call(self._audio_state)
 
@@ -2517,23 +2518,6 @@ class Plugin:
         self._audio_eq.reset(resolved, route, appid=appid)
         self._reapply_audio()
         return await self._offload_call(self._audio_state)
-
-    async def play_audio_test(self) -> bool:
-        """Play a pink-noise reference through the current output so the user can audition
-        the EQ without launching a game. Fire-and-forget, off the event loop."""
-        self._init()
-        self._offload(self._play_audio_test_sync)
-        return True
-
-    def _play_audio_test_sync(self) -> None:
-        try:
-            path = os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "pdc_test.wav")
-            if not os.path.exists(path):
-                from audio.tone import pink_samples, write_wav
-                write_wav(path, pink_samples(48000 * 3))  # 3 s
-            self._audio.play_test(path)
-        except Exception:  # noqa: BLE001
-            pass
 
     # ---- lifecycle ----------------------------------------------------------
     async def _main(self) -> None:

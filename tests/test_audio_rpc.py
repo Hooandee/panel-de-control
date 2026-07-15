@@ -118,10 +118,10 @@ def test_set_bands_replaces_all(tmp_path, monkeypatch):
     assert st["preset"] == "custom"
 
 
-def test_set_bass_and_preserved_across_preset(tmp_path, monkeypatch):
+def test_set_curve_sets_gains_and_bass_together(tmp_path, monkeypatch):
     p, fake = _make_plugin(tmp_path, monkeypatch)
-    st = asyncio.run(p.set_audio_bass(60, "global"))
-    assert st["bass"] == 60
+    st = asyncio.run(p.set_audio_curve([3] * 10, 60, "global"))
+    assert st["gains"] == [3.0] * 10 and st["bass"] == 60
     # applying an EQ preset must not wipe the bass amount
     st = asyncio.run(p.apply_audio_preset("voices", "global"))
     assert st["bass"] == 60 and st["preset"] == "voices"

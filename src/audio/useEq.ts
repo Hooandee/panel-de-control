@@ -3,17 +3,16 @@ import {
   AudioState,
   applyAudioPreset,
   getAudioState,
-  playAudioTest,
   resetAudio,
   setAudioBands,
-  setAudioBass,
+  setAudioCurve,
   setAudioEnabled,
   setAudioFollowGlobal,
   Scope,
 } from "../api";
 import { useRunningGame } from "../tdp/useRunningGame";
 import { useScopeSync } from "../useScopeSync";
-import { applyNudge } from "./logic";
+import { applyTone, bassToEnhancer, ToneRegion } from "./logic";
 
 export interface EqControl {
   state: AudioState | null;
@@ -23,17 +22,15 @@ export interface EqControl {
   onEnable: (enabled: boolean) => void;
   onPreset: (id: string) => void;
   onBands: (gains: number[]) => void;
-  onNudge: (dim: string, direction: number) => void;
-  onBass: (amount: number) => void;
+  onTone: (region: ToneRegion, level: number) => void;
   onReset: () => void;
-  onTest: () => void;
 }
 
 /**
- * Owns the Sonido EQ state + the global/per-game scope. Band drags update the curve
- * optimistically and commit shortly after the last change (the backend applies a preset
- * by rewriting the PipeWire conf + restarting the filter-chain service, so we don't write
- * on every delta). Cancels the pending commit on unmount and on game change.
+ * Owns the Sonido EQ state + the global/per-game scope. Tone sliders and band drags update
+ * the curve optimistically and commit shortly after the last change (the backend applies by
+ * rewriting the PipeWire conf + restarting the filter-chain service, so we don't write on
+ * every delta). Cancels the pending commit on unmount and on game change.
  */
 export function useEq(): EqControl {
   const game = useRunningGame();
@@ -75,34 +72,24 @@ export function useEq(): EqControl {
   }, [wScope, wTarget]);
 
   const onBands = useCallback((gains: number[]) => {
-    setState((cur) =>
-      cur ? { ...cur, gains, preset: "custom" } : cur,
-    ); // optimistic — curve moves now, hardware settles on commit
+    setState((cur) => (cur ? { ...cur, gains, preset: "custom" } : cur)); // optimistic
     if (commit.current) clearTimeout(commit.current);
     commit.current = setTimeout(() => {
       setAudioBands(gains, wScope, wTarget).then(setState).catch(() => {});
     }, 350);
   }, [wScope, wTarget]);
 
-  // A relative one-tap tweak. Reads the latest gains (so rapid taps accumulate), updates
-  // the curve optimistically, and commits via setAudioBands on release — one restart, not
-  // one per tap.
-  const onNudge = useCallback((dim: string, direction: number) => {
+  // A tone slider sets one region's level. Graves also engages the bass enhancer. Reads the
+  // latest state so it composes with the other sliders; commits gains+bass in one apply.
+  const onTone = useCallback((region: ToneRegion, level: number) => {
     const cur = stateRef.current;
     if (!cur) return;
-    const gains = applyNudge(cur.gains, dim, direction);
-    setState({ ...cur, gains, preset: "custom" });
+    const gains = applyTone(cur.gains, region, level);
+    const bass = region === "graves" ? bassToEnhancer(level) : cur.bass;
+    setState({ ...cur, gains, bass, preset: "custom" });
     if (commit.current) clearTimeout(commit.current);
     commit.current = setTimeout(() => {
-      setAudioBands(gains, wScope, wTarget).then(setState).catch(() => {});
-    }, 350);
-  }, [wScope, wTarget]);
-
-  const onBass = useCallback((amount: number) => {
-    setState((cur) => (cur ? { ...cur, bass: amount } : cur)); // optimistic
-    if (commit.current) clearTimeout(commit.current);
-    commit.current = setTimeout(() => {
-      setAudioBass(amount, wScope, wTarget).then(setState).catch(() => {});
+      setAudioCurve(gains, bass, wScope, wTarget).then(setState).catch(() => {});
     }, 350);
   }, [wScope, wTarget]);
 
@@ -110,11 +97,5 @@ export function useEq(): EqControl {
     resetAudio(wScope, wTarget).then(setState).catch(() => {});
   }, [wScope, wTarget]);
 
-  const onTest = useCallback(() => {
-    playAudioTest().catch(() => {});
-  }, []);
-
-  return {
-    state, scope, game, onScope, onEnable, onPreset, onBands, onNudge, onBass, onReset, onTest,
-  };
+  return { state, scope, game, onScope, onEnable, onPreset, onBands, onTone, onReset };
 }
