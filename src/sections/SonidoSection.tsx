@@ -148,8 +148,13 @@ export const SonidoSection: FC = () => {
               {t("audio.profile.mine")}
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-              {state.profiles.map((pr) => (
-                <span key={pr.name} style={{ ...chip(false), display: "inline-flex", alignItems: "center", gap: 6, paddingRight: 6 }}>
+              {state.profiles.map((pr) => {
+                const active =
+                  pr.bass === state.bass &&
+                  pr.gains.length === state.gains.length &&
+                  pr.gains.every((g, i) => g === state.gains[i]);
+                return (
+                <span key={pr.name} style={{ ...chip(active), display: "inline-flex", alignItems: "center", gap: 6, paddingRight: 6 }}>
                   <Focusable
                     style={{ cursor: "pointer" }}
                     onActivate={() => onApplyProfile(pr.name)}
@@ -166,7 +171,8 @@ export const SonidoSection: FC = () => {
                     <LuX size={12} />
                   </Focusable>
                 </span>
-              ))}
+                );
+              })}
               <Focusable
                 style={{ ...chip(false), display: "inline-flex", alignItems: "center", gap: 4 }}
                 onActivate={() => openSaveProfileModal(game?.name ?? "", onSaveProfile)}
