@@ -1,6 +1,5 @@
 from audio.safe import (
     band_ceilings,
-    bass_ceiling,
     clamp_bass,
     clamp_gains,
     safe_limits,
