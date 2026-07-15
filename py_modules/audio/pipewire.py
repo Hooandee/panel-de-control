@@ -19,6 +19,17 @@ _MODULE = "/usr/lib/pipewire-0.3/libpipewire-module-filter-chain.so"
 _SERVICE = "filter-chain.service"
 
 
+def pick_downstream(short_sinks_text, our_name):
+    """The physical sink our EQ feeds: the first sink in `pactl list short sinks` output
+    whose name isn't our virtual sink. None when only ours (or none) is present."""
+    for line in (short_sinks_text or "").splitlines():
+        parts = line.split("\t")
+        name = parts[1] if len(parts) > 1 else ""
+        if name and name != our_name:
+            return name
+    return None
+
+
 def _find_session():
     """The logged-in user's PipeWire session: (uid, runtime_dir, user) from the pipewire
     socket under /run/user/*, or None when no session is present."""
@@ -37,7 +48,6 @@ class PipeWireEq:
         self._runner = runner or self._run
         self._session = _find_session()
         self._orig_default = None
-        self._orig_volume = None
         self._last_gains = None
         # Human-facing sink name shown in the system/Steam volume UI (the device name).
         self._name = name or "Panel de Control"
@@ -116,41 +126,38 @@ class PipeWireEq:
         m = re.search(r"(\d+)%", self._runner(["pactl", "get-sink-volume", sink]) or "")
         return f"{m.group(1)}%" if m else None
 
-    def _make_transparent(self, downstream):
-        """One volume stage, not two. Our sink is the new default (what the volume keys
-        move), but it feeds the previous default which may sit below 100% — so the output
-        is capped there and reads as 'stuck quiet'. Move that volume onto our sink and set
-        the downstream to unity: same loudness now, full range afterwards. Snapshot the
-        downstream volume to restore on teardown."""
-        vol = self._sink_volume_pct(downstream)
-        if vol:
-            self._orig_volume = vol
-            self._runner(["pactl", "set-sink-volume", _INPUT, vol])
-        self._runner(["pactl", "set-sink-volume", downstream, "100%"])
+    def _downstream_sink(self):
+        """The physical sink our EQ feeds (the one that isn't our virtual sink)."""
+        return pick_downstream(self._runner(["pactl", "list", "short", "sinks"]), _INPUT)
 
     def ensure_sink(self, gains):
-        """Create/refresh the EQ sink with these gains and make it default. On the first
-        takeover we make the insert transparent (see _make_transparent); we don't touch
-        volumes again after that, so band edits never disturb the user's level.
+        """Create/refresh the EQ sink with these gains, make it default, and keep the
+        physical sink it feeds pinned at unity (100%). Steam's volume controls the default
+        sink — i.e. ours — so the downstream must stay transparent, or its level becomes a
+        hidden second attenuation the user can't reach. Re-pinning unity every apply is
+        self-healing across resume/reload (no volume snapshot to drift or corrupt).
 
-        Diff-gated: when the gains match what's already applied (e.g. a game change where
-        the effective curve is unchanged) we skip the conf rewrite + the ~1s service
-        restart and only re-assert the default sink — no work, no audio interruption."""
+        Diff-gated: unchanged gains skip the conf rewrite + ~1s restart (just re-assert
+        default + unity), so a game change with the same curve does no audible work."""
         if not self.is_supported():
             return False
         unchanged = self._orig_default is not None and gains == self._last_gains
         if not unchanged and not self._write_conf(gains):
             return False
-        new_takeover = self._orig_default is None
-        if new_takeover:
-            cur = self._runner(["pactl", "get-default-sink"])
-            if cur and cur != _INPUT:
-                self._orig_default = cur
+        downstream = self._downstream_sink()
+        first = self._orig_default is None
         if not unchanged:
             self._restart()
         self._runner(["pactl", "set-default-sink", _INPUT])
-        if new_takeover and self._orig_default:
-            self._make_transparent(self._orig_default)
+        if downstream:
+            if first:
+                # Enabling shouldn't change loudness: carry the downstream's current level
+                # onto our sink (now the volume the user controls) before pinning it unity.
+                self._orig_default = downstream
+                vol = self._sink_volume_pct(downstream)
+                if vol:
+                    self._runner(["pactl", "set-sink-volume", _INPUT, vol])
+            self._runner(["pactl", "set-sink-volume", downstream, "100%"])
         self._last_gains = list(gains)
         return True
 
@@ -164,23 +171,25 @@ class PipeWireEq:
         return route_of_default_sink(lambda: self._runner(["pactl", "list", "sinks"]))
 
     def teardown(self):
-        """Remove the sink and restore the previous default (fail-safe on disable/unload).
-        No-op when we never created a sink — otherwise we'd needlessly restart the shared
-        filter-chain service (interrupting the user's own filters) on every unload."""
+        """Remove the sink and hand the user's current level back to the physical sink
+        (fail-safe on disable/unload). No-op when we never created a sink — otherwise we'd
+        needlessly restart the shared filter-chain service (interrupting the user's own
+        filters) on every unload."""
         path = self._conf_path()
         had_conf = bool(path and os.path.exists(path))
         if not had_conf and self._orig_default is None:
             return
+        downstream = self._orig_default or self._downstream_sink()
+        our_vol = self._sink_volume_pct(_INPUT)  # the level the user set while EQ was on
         if had_conf:
             try:
                 os.remove(path)
             except OSError:
                 pass
         self._restart()
-        if self._orig_default:
-            if self._orig_volume:
-                self._runner(["pactl", "set-sink-volume", self._orig_default, self._orig_volume])
-            self._runner(["pactl", "set-default-sink", self._orig_default])
-            self._orig_default = None
-            self._orig_volume = None
+        if downstream:
+            if our_vol:
+                self._runner(["pactl", "set-sink-volume", downstream, our_vol])
+            self._runner(["pactl", "set-default-sink", downstream])
+        self._orig_default = None
         self._last_gains = None
