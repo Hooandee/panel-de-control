@@ -1,7 +1,8 @@
 import { CSSProperties, FC, ReactNode } from "react";
 import { Focusable, PanelSectionRow, ToggleField } from "@decky/ui";
 import {
-  LuAudioLines, LuBell, LuHeadphones, LuMaximize2, LuMic, LuPlay, LuSparkles, LuVolume2, LuWaves,
+  LuAudioLines, LuBell, LuHeadphones, LuMaximize2, LuMic, LuPause, LuPlay, LuSparkles,
+  LuVolume2, LuWaves,
 } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
@@ -103,13 +104,13 @@ export const SonidoSection: FC = () => {
               {t("audio.route.auto")}
             </span>
             <Focusable
-              style={{ ...chip(false), marginLeft: "auto", display: "flex", alignItems: "center", gap: 5, padding: "4px 10px" }}
+              style={{ ...chip(state.test_playing), marginLeft: "auto", display: "flex", alignItems: "center", gap: 5, padding: "4px 10px" }}
               onActivate={onTest}
               onClick={onTest}
-              title={t("audio.test")}
+              title={state.test_playing ? t("audio.stop") : t("audio.test")}
             >
-              <LuPlay size={12} />
-              {t("audio.test")}
+              {state.test_playing ? <LuPause size={12} /> : <LuPlay size={12} />}
+              {state.test_playing ? t("audio.stop") : t("audio.test")}
             </Focusable>
           </div>
 

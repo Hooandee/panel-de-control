@@ -2432,6 +2432,7 @@ class Plugin:
             "preset": eff["preset"],
             "gains": eff["gains"],
             "bass": eff["bass"],
+            "test_playing": self._audio.is_test_playing(),
             "presets": audio_presets.list_presets(getattr(self._device, "key", None)),
             "device_name": self._device.display_name,
         }
@@ -2484,20 +2485,23 @@ class Plugin:
         self._reapply_audio()
         return await self._offload_call(self._audio_state)
 
-    async def play_audio_test(self) -> bool:
-        """Play a short, pleasant reference tone through the current output so the user can
-        audition the EQ without background audio. Fire-and-forget, off the event loop."""
+    async def set_audio_test(self, playing: bool) -> dict:
+        """Start/stop looping the reference tone through the current output so the user can
+        audition the EQ while configuring, until they stop it. Off the event loop."""
         self._init()
-        self._offload(self._play_audio_test_sync)
-        return True
+        if playing:
+            self._offload(self._start_audio_test_sync)
+        else:
+            self._offload(self._audio.stop_test)
+        return await self._offload_call(self._audio_state)
 
-    def _play_audio_test_sync(self) -> None:
+    def _start_audio_test_sync(self) -> None:
         try:
             path = os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "pdc_loop.wav")
             if not os.path.exists(path):
                 from audio.tone import loop_samples, write_wav
                 write_wav(path, loop_samples())
-            self._audio.play_test(path)
+            self._audio.start_test(path)
         except Exception:  # noqa: BLE001
             pass
 

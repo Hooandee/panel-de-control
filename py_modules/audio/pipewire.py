@@ -8,6 +8,7 @@ import glob
 import os
 import pwd
 import re
+import signal
 import subprocess
 
 from audio.filter_chain import build_chain_config
@@ -49,6 +50,7 @@ class PipeWireEq:
         self._session = _find_session()
         self._orig_default = None
         self._last_applied = None
+        self._test_proc = None
         # Human-facing sink name shown in the system/Steam volume UI (the device name).
         self._name = name or "Panel de Control"
 
@@ -81,18 +83,37 @@ class PipeWireEq:
             return ""
 
 
-    def play_test(self, path):
-        """Fire-and-forget: play a reference tone through the default (EQ) sink so the user
-        can audition the curve. Non-blocking — doesn't hold the apply executor."""
-        cmd, env = self._session_cmd(["pw-play", path])
+    def start_test(self, path):
+        """Loop a reference tone through the default (EQ) sink until stop_test(). A
+        `while true` shell keeps it going; start_new_session makes the whole tree a process
+        group we can kill cleanly. Non-blocking — doesn't hold the apply executor."""
+        self.stop_test()
+        cmd, env = self._session_cmd(["sh", "-c", f'while true; do pw-play "{path}"; done'])
         if cmd is None:
             return
         try:
-            subprocess.Popen(  # noqa: S603 — fixed argv, session env
-                cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            self._test_proc = subprocess.Popen(  # noqa: S603 — fixed argv, session env
+                cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                start_new_session=True,
             )
         except (OSError, subprocess.SubprocessError):
-            pass
+            self._test_proc = None
+
+    def stop_test(self):
+        proc = self._test_proc
+        self._test_proc = None
+        if proc is None:
+            return
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+        except (OSError, ProcessLookupError):
+            try:
+                proc.terminate()
+            except OSError:
+                pass
+
+    def is_test_playing(self):
+        return self._test_proc is not None and self._test_proc.poll() is None
 
     def _conf_path(self):
         if not self._session:
@@ -183,6 +204,7 @@ class PipeWireEq:
         (fail-safe on disable/unload). No-op when we never created a sink — otherwise we'd
         needlessly restart the shared filter-chain service (interrupting the user's own
         filters) on every unload."""
+        self.stop_test()
         path = self._conf_path()
         had_conf = bool(path and os.path.exists(path))
         if not had_conf and self._orig_default is None:

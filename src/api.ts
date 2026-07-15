@@ -595,6 +595,7 @@ export interface AudioState {
   preset: string;
   gains: number[];
   bass: number;
+  test_playing: boolean;
   presets: AudioPresetDef[];
   device_name: string;
 }
@@ -612,4 +613,5 @@ export const resetAudio =
   callable<[scope: Scope, appid: string | null], AudioState>("reset_audio");
 export const setAudioCurve =
   callable<[gains: number[], bass: number, scope: Scope, appid: string | null], AudioState>("set_audio_curve");
-export const playAudioTest = callable<[], boolean>("play_audio_test");
+export const setAudioTest =
+  callable<[playing: boolean], AudioState>("set_audio_test");

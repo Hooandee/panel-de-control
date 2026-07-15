@@ -24,6 +24,15 @@ class _FakePipeWireEq:
         self.applied.append((list(gains), bass))
         return True
 
+    def start_test(self, path):
+        self._playing = True
+
+    def stop_test(self):
+        self._playing = False
+
+    def is_test_playing(self):
+        return getattr(self, "_playing", False)
+
     def teardown(self):
         self.torn_down += 1
 
@@ -125,6 +134,14 @@ def test_set_curve_sets_gains_and_bass_together(tmp_path, monkeypatch):
     # applying an EQ preset must not wipe the bass amount
     st = asyncio.run(p.apply_audio_preset("voices", "global"))
     assert st["bass"] == 60 and st["preset"] == "voices"
+
+
+def test_toggle_test_tone(tmp_path, monkeypatch):
+    p, fake = _make_plugin(tmp_path, monkeypatch)
+    st = asyncio.run(p.set_audio_test(True))
+    assert st["test_playing"] is True
+    st = asyncio.run(p.set_audio_test(False))
+    assert st["test_playing"] is False
 
 
 def test_reset_flattens(tmp_path, monkeypatch):

@@ -3,12 +3,12 @@ import {
   AudioState,
   applyAudioPreset,
   getAudioState,
-  playAudioTest,
   resetAudio,
   setAudioBands,
   setAudioCurve,
   setAudioEnabled,
   setAudioFollowGlobal,
+  setAudioTest,
   Scope,
 } from "../api";
 import { useRunningGame } from "../tdp/useRunningGame";
@@ -54,6 +54,8 @@ export function useEq(): EqControl {
 
   useEffect(() => () => {
     if (commit.current) clearTimeout(commit.current);
+    // Never leave the test tone looping after the section unmounts / QAM closes.
+    if (stateRef.current?.test_playing) setAudioTest(false).catch(() => {});
   }, []);
 
   const applyFollow = useCallback(
@@ -101,7 +103,9 @@ export function useEq(): EqControl {
   }, [wScope, wTarget]);
 
   const onTest = useCallback(() => {
-    playAudioTest().catch(() => {});
+    const next = !stateRef.current?.test_playing;
+    setState((cur) => (cur ? { ...cur, test_playing: next } : cur)); // optimistic
+    setAudioTest(next).then(setState).catch(() => {});
   }, []);
 
   return {
