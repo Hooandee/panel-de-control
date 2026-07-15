@@ -22,9 +22,6 @@ _SERVICE = "filter-chain.service"
 
 
 def pick_downstream(short_sinks_text, our_name):
-    """The physical sink our EQ feeds, from `pactl list short sinks`. Skips our virtual sink
-    and prefers an analog output over the digital ones (Intel HDA always exposes HDMI1/2/3,
-    which aren't the real speaker). Falls back to the first non-ours sink; None when only ours."""
     candidates = []
     for line in (short_sinks_text or "").splitlines():
         parts = line.split("\t")
@@ -73,6 +70,7 @@ class PipeWireEq:
         env = clean_env()
         env["XDG_RUNTIME_DIR"] = runtime
         env["DBUS_SESSION_BUS_ADDRESS"] = f"unix:path={runtime}/bus"
+        env["LC_ALL"] = "C"  # pactl field labels ("Name:", "Active Port:") must stay English to parse
         cmd = ["runuser", "-u", user, "--", *argv] if os.geteuid() == 0 else list(argv)
         return cmd, env
 
