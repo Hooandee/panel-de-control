@@ -23,6 +23,7 @@ const CategoryChip: FC<{ label: string; on: boolean; onClick: () => void }> = ({
   <Focusable
     onActivate={onClick}
     onClick={onClick}
+    noFocusRing
     style={{
       display: "flex",
       alignItems: "center",
