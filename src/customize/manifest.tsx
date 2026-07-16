@@ -3,6 +3,7 @@ import {
   LuGauge, LuSlidersHorizontal, LuFan, LuSettings,
   LuLeaf, LuBatteryFull, LuCpu, LuSun, LuVolume2, LuWind, LuThermometer, LuChartSpline,
   LuLightbulb, LuPalette, LuGamepad2, LuMemoryStick, LuActivity, LuHeartPulse,
+  LuLayoutDashboard,
 } from "react-icons/lu";
 
 /** Presentation metadata shared by a tab and a configurable block. */
@@ -30,6 +31,7 @@ export const TABS: ItemMeta[] = [
   { id: "display", labelKey: "nav.display", icon: <LuPalette size={ICON} /> },
   { id: "fans", labelKey: "nav.fans", icon: <LuFan size={ICON} /> },
   { id: "mandos", labelKey: "nav.mandos", icon: <LuGamepad2 size={ICON} /> },
+  { id: "hud", labelKey: "nav.hud", icon: <LuLayoutDashboard size={ICON} /> },
   { id: "settings", labelKey: "nav.settings", icon: <LuSettings size={ICON} /> },
 ];
 

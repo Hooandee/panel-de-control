@@ -50,6 +50,11 @@ from controllers import factory as controller_factory
 from controllers.store import RemapStore
 from controllers.dbus import IpDbus
 from sysfs import read_str
+from mangohud.store import HudStore
+from mangohud import detect as mangohud_detect
+from mangohud import config as mangohud_config
+from mangohud import pdc_metrics as mangohud_pdc
+from mangohud.apply import apply_hud, clear_presets
 from report import collector as report_collector
 from report import client as report_client
 
@@ -253,6 +258,11 @@ class Plugin:
         # HDR output on/off (gamescope). State lives in settings (hdr_enabled); gated to
         # HDR-capable panels with gamescope.
         self._hdr_backend = HdrBackend(run_gamescopectl)
+        # In-game performance overlay (MangoHud). Single global model; applied by
+        # writing ~/.config/MangoHud/presets.conf, which Steam reads per overlay level.
+        self._hud = HudStore(
+            os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "hud.json")
+        )
         self._power_reader = PowerReader()
         self._battery = BatteryReader()
         self._charge_limit = select_charge_limit(self._device)
@@ -282,6 +292,14 @@ class Plugin:
         self._chip = read_cpu_model() if not self._device.is_generic else None
         self._os_name = osinfo.read_os_name()
         self._current_appid = None
+        self._current_game_name = None  # display name of the running game (for the HUD)
+        # HUD (MangoHud) plugin-state metrics: the presets.conf path + the shown pdc
+        # ids, cached by _apply_hud so the auto loop can re-bake fresh values each tick
+        # without re-scanning /proc. _pdc_written = the last baked values, so a tick
+        # whose values are unchanged skips the presets.conf rewrite (no churn).
+        self._pdc_presets_path = None
+        self._pdc_active_ids = []
+        self._pdc_written = {}
         # Last PL1 WE wrote to the firmware (readback). Adoption compares the live value
         # against this, not the profile, so it fires only for a real external change —
         # never on a stale/default read before our first apply or mid-transition (None).
@@ -1263,6 +1281,11 @@ class Plugin:
         while True:
             try:
                 await asyncio.sleep(2)
+                # Piggyback the HUD plugin-state refresh on this existing tick (no new
+                # loop): re-bake presets.conf so toggling the overlay level shows current
+                # plugin state. Runs regardless of the auto-TDP gating below (it must
+                # update on desktop / manual / eco too). No-op when no pdc metric is shown.
+                await self._refresh_pdc_metrics()
                 # Auto-TDP is a per-GAME dynamic control: don't adjust the global
                 # setpoint from desktop/loading activity. Idle → drop stale window
                 # so re-entry into a game starts homogeneous.
@@ -1577,6 +1600,10 @@ class Plugin:
         self._reapply_hdr()
         self._reapply_color()
         self._reapply_controller()  # diff-gated; no-op unless the effective remap changed
+        # Re-assert the overlay: a game launch is when mangoapp comes up (and exposes the
+        # real config path), so a HUD saved out-of-game lands now. Off-loop — detect scans
+        # /proc. No-op when the overlay isn't running/supported.
+        self._offload(self._apply_hud)
 
     # ---- Battery + charge limit --------------------------------------------
     def _apply_charge_limit(self) -> None:
@@ -1681,6 +1708,180 @@ class Plugin:
         self._save()
         self._reapply_all()
         return self._eco_state()
+
+    # ---- HUD (MangoHud overlay) --------------------------------------------
+    def _hud_state(self) -> dict:
+        cap = mangohud_detect.detect()
+        return {
+            # supported only when mangoapp is running with native preset support
+            "supported": cap["supported"],
+            "running": cap["running"],
+            "model": self._hud.load(),
+            "catalog": list(mangohud_config.METRIC_CATALOG),
+            "presets": {k: list(v) for k, v in mangohud_config.PRESETS.items()},
+        }
+
+    def _apply_hud(self) -> None:
+        """Reflect the saved model to presets.conf (Steam reads it per overlay level).
+        pdc plugin-state metrics are baked into their `custom_text` line as
+        "<label> <value>": Steam's mangoapp does not run `exec` commands (only the label
+        would show), so we bake a value snapshot here (it refreshes on re-apply / the
+        auto loop, picked up when the overlay level changes). We never write Steam's own
+        live config (that steals the file from Steam and freezes its slider). When off:
+        clear presets.conf. No-op when the overlay isn't supported."""
+        cap = mangohud_detect.detect()
+        if not cap["supported"]:
+            self._pdc_active_ids = []
+            return
+        model = self._hud.load()
+        # Cache the presets path + active ids for the auto loop's re-bake (no /proc rescan).
+        self._pdc_presets_path = cap["presetsPath"]
+        self._pdc_active_ids = mangohud_config.enabled_pdc_ids(model) if model["enabled"] else []
+        if model["enabled"]:
+            values = self._pdc_values()
+            self._pdc_written = values
+            apply_hud(model, cap["presetsPath"], values)
+        else:
+            self._pdc_written = {}
+            clear_presets(cap["presetsPath"])
+
+    # ---- HUD plugin-state metrics (pdc_*, baked into custom_text) -----------
+    def _read_pdc_sources(self) -> dict:
+        """Pre-read the sysfs-backed sources the active pdc metrics need (power, fans,
+        battery, charge limit, GPU clock). Called off the event loop by the auto tick so
+        the periodic refresh never blocks it; only reads what the shown metrics require."""
+        active = set(self._pdc_active_ids)
+        src = {}
+        if "pdc_power" in active:
+            src["power"] = self._power_reader.read()
+        if "pdc_fan_rpm" in active:
+            src["fans"] = self._read_fans()
+        if "pdc_bat_health" in active:
+            src["battery"] = self._battery.read()
+        if "pdc_charge" in active:
+            src["charge"] = self._charge_limit_state()
+        if "pdc_gpu_clock" in active:
+            src["gpu_clock"] = self._gpu_clock_state()
+        return src
+
+    def _pdc_snapshot(self, active_ids, extras=None) -> dict:
+        """Gather the live plugin state the active pdc metrics need. Only computes what
+        the shown metrics require; the sysfs-backed sources come pre-read in `extras`
+        (falling back to a direct read for the one-off seed). Honest: unavailable sources
+        stay None and format to a dash."""
+        extras = extras or {}
+        appid = self._current_appid
+        snap = {}
+        if "pdc_tdp" in active_ids or "pdc_eco" in active_ids:
+            snap["eco"] = bool(self._settings.get("eco_enabled"))
+        if "pdc_tdp" in active_ids:
+            snap["auto"] = self._tdp_profiles.auto_tdp(appid)
+            snap["setpoint"] = self._effective_levels(appid)[0]["pl1"]
+        if "pdc_auto_tdp" in active_ids:
+            snap["auto_tdp"] = self._tdp_profiles.auto_tdp(appid)
+        if "pdc_tdp_learn" in active_ids:
+            snap["learn"] = self._tdp_learned_info(appid)
+        if "pdc_fan" in active_ids:
+            prof = self._fan_curves.effective(appid)
+            snap["fan_mode"] = prof.get("preset")
+            snap["fan_learning"] = (prof.get("preset") == "adaptive"
+                                    and not self._fan_suggestion(appid)["available"])
+        if "pdc_fan_rpm" in active_ids:
+            fans = extras.get("fans") or self._read_fans()
+            snap["fan_rpms"] = [f.get("rpm") for f in fans.get("fans", []) if f.get("rpm")]
+        if "pdc_profile" in active_ids:
+            snap["appid"] = appid
+            snap["profile_name"] = self._current_game_name if appid is not None else None
+        if "pdc_power" in active_ids:
+            snap["watts"] = extras.get("power", {}).get("watts")
+            snap["gpu_busy"] = extras.get("power", {}).get("gpu_busy")
+        if "pdc_charge" in active_ids:
+            cl = extras.get("charge") or self._charge_limit_state()
+            snap["charge_supported"] = cl["supported"]
+            snap["charge_enabled"] = cl["enabled"]
+            snap["charge_percent"] = cl["percent"]
+        if "pdc_bat_health" in active_ids:
+            bat = extras.get("battery") or self._battery.read()
+            snap["bat_health"] = bat.get("health_percent")
+        if "pdc_smt" in active_ids:
+            snap["smt_supported"] = self._smt.supported
+            snap["smt_on"] = self._smt.enabled() if self._smt.supported else None
+        if "pdc_boost" in active_ids:
+            snap["boost_supported"] = self._boost.supported
+            snap["boost_on"] = self._boost.enabled() if self._boost.supported else None
+        if "pdc_cores" in active_ids:
+            snap["cores_active"] = self._cores.active() if self._cores.supported else None
+            snap["cores_max"] = self._cores.max_cores
+        if "pdc_gpu_clock" in active_ids:
+            gc = extras.get("gpu_clock") or self._gpu_clock_state()
+            snap["gpu_clock_supported"] = gc["supported"]
+            snap["gpu_clock_manual"] = gc["manual"]
+            snap["gpu_clock_min"] = gc["min"]
+            snap["gpu_clock_max"] = gc["max"]
+        if "pdc_model" in active_ids:
+            snap["model_name"] = self._device.display_name
+        return snap
+
+    def _pdc_values(self, extras=None) -> dict:
+        """The baked value string for each active pdc metric (id -> value; the label is
+        emitted separately in config.py). Reads the sysfs sources it needs (or reuses a
+        pre-read `extras`); honest dash for anything unavailable. Empty when no pdc
+        metric is shown."""
+        active = self._pdc_active_ids
+        if not active:
+            return {}
+        if extras is None:
+            extras = self._read_pdc_sources()
+        snap = self._pdc_snapshot(active, extras)
+        return {mid: mangohud_pdc.render(mid, snap) or mangohud_pdc.DASH for mid in active}
+
+    async def _refresh_pdc_metrics(self) -> None:
+        """Re-bake presets.conf with fresh pdc values on the ~2 s auto-loop tick, so
+        toggling the overlay level shows current plugin state (mangoapp re-reads
+        presets.conf on a level change). Reads the sysfs sources OFF the event loop and
+        only rewrites when a shown value actually changed → no churn on stable values.
+        No-op when the HUD shows no pdc metric."""
+        if not self._pdc_active_ids or not self._pdc_presets_path:
+            return
+        extras = await asyncio.to_thread(self._read_pdc_sources)
+        values = self._pdc_values(extras)
+        if values == self._pdc_written:
+            return
+        self._pdc_written = values
+        model = self._hud.load()
+        if model["enabled"]:
+            await asyncio.to_thread(apply_hud, model, self._pdc_presets_path, values)
+
+    async def get_hud_state(self) -> dict:
+        self._init()
+        return self._hud_state()
+
+    async def set_hud_config(self, model: dict) -> dict:
+        self._init()
+        self._hud.save(model)
+        await self._offload_call(self._apply_hud)  # detect scans /proc + reads sysfs
+        return self._hud_state()
+
+    async def set_hud_enabled(self, enabled: bool) -> dict:
+        self._init()
+        model = self._hud.load()
+        model["enabled"] = bool(enabled)
+        self._hud.save(model)
+        await self._offload_call(self._apply_hud)
+        return self._hud_state()
+
+    async def reset_hud(self) -> dict:
+        self._init()
+        self._hud.save(dict(mangohud_config.DEFAULT_MODEL))
+        await self._offload_call(self._apply_hud)
+        return self._hud_state()
+
+    async def reload_hud(self) -> dict:
+        """Re-bake presets.conf now with fresh pdc values so the overlay picks them up
+        on the next level change, without the user re-saving."""
+        self._init()
+        await self._offload_call(self._apply_hud)
+        return self._hud_state()
 
     def _cpu_state(self) -> dict:
         info = self._cpu_info
@@ -2284,9 +2485,11 @@ class Plugin:
         self._tdp_profiles.create_game_from_global(appid)
         self._current_appid = str(appid)
 
-    async def set_current_game(self, appid) -> dict:
+    async def set_current_game(self, appid, name=None) -> dict:
         self._init()
         self._current_appid = str(appid) if appid is not None else None
+        # Display name for the HUD's Perfil metric (optional; the watcher passes it).
+        self._current_game_name = str(name) if (appid is not None and name) else None
         self._reset_auto_windows()  # don't let the previous game's signal gate the new one
         self._reapply_ticks = 0        # fresh ~30 min re-fit window for the new game
         self._adaptive_applied = False  # re-arm the mid-session adaptive drive for this game
@@ -2346,6 +2549,9 @@ class Plugin:
             self._start_auto_loop()
             if self._settings.get("telemetry_enabled", True):
                 self._start_sampler()
+            # Re-assert the HUD presets.conf (idempotent) so it survives a SteamOS
+            # update that wiped ~/.config; cheap single-file write.
+            self._apply_hud()
         except Exception as e:  # noqa: BLE001
             decky.logger.error("TDP startup failed: %s", e)
 

@@ -61,7 +61,9 @@ export function startGameWatcher(): () => void {
     if (appid === lastAppid || appid === inFlight) return;
     inFlight = appid;
     try {
-      Promise.resolve(setCurrentGame(appid))
+      // Pass the display name too so the HUD's Perfil metric can show it; the backend
+      // ignores it beyond that (the appid stays the profile key).
+      Promise.resolve(setCurrentGame(appid, next ? next.name : null))
         .then(() => {
           if (!alive) return;
           // Commit ONLY on success, so a failed report retries next tick.

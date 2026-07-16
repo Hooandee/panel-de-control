@@ -130,7 +130,7 @@ def test_offload_runs_off_the_loop_thread(tmp_path, monkeypatch):
 
 # ---- reapply paths dispatch off-loop -----------------------------------------
 
-def test_reapply_all_offloads_tdp_fans_and_color(tmp_path, monkeypatch):
+def test_reapply_all_offloads_tdp_fans_color_and_hud(tmp_path, monkeypatch):
     p, _ = _make_plugin(tmp_path, monkeypatch)
     rec = _RecordingExecutor()
     p._apply_executor = rec
@@ -139,9 +139,9 @@ def test_reapply_all_offloads_tdp_fans_and_color(tmp_path, monkeypatch):
         p._reapply_all()  # sync, but under a running loop
 
     asyncio.run(_run())
-    # tdp + fans + color offloaded; charge/cpu/gpu-clock stay inline (sysfs); hdr only
-    # offloads when it's enabled+supported (off by default here).
-    assert rec.count == 3
+    # tdp + fans + color + hud self-heal offloaded; charge/cpu/gpu-clock stay inline
+    # (sysfs); hdr only offloads when it's enabled+supported (off by default here).
+    assert rec.count == 4
 
 
 def test_set_saturation_applies_color_off_loop(tmp_path, monkeypatch):

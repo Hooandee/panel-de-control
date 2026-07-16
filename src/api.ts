@@ -140,7 +140,7 @@ export const getFanState = callable<[], FanState>("get_fan_state");
 export const getTdpState = callable<[], TdpState>("get_tdp_state");
 export const setTdpWatts = callable<[watts: number, scope: TdpScope, appid: string | null], TdpApplyResult>("set_tdp_watts");
 export const createGameProfile = callable<[appid: string], void>("create_game_profile");
-export const setCurrentGame = callable<[appid: string | null], TdpState>("set_current_game");
+export const setCurrentGame = callable<[appid: string | null, name?: string | null], TdpState>("set_current_game");
 export const setTdpLevels = callable<[off2: number, off3: number, scope: TdpScope, appid: string | null], TdpApplyResult>("set_tdp_levels");
 // Sets the boost mode; returns the full new TDP state so the UI updates the segmented
 // control + rails in one round-trip.
@@ -580,3 +580,13 @@ export interface GameProfileRow {
 export const listGameProfiles = callable<[], GameProfileRow[]>("list_game_profiles");
 export const resetGameProfiles =
   callable<[appid: string], GameProfileRow[]>("reset_game_profiles");
+
+// ---- HUD (in-game MangoHud overlay) ----------------------------------------
+import type { HudModel, HudState } from "./mangohud/model";
+export type { HudModel, HudState } from "./mangohud/model";
+
+export const getHudState = callable<[], HudState>("get_hud_state");
+export const setHudConfig = callable<[model: HudModel], HudState>("set_hud_config");
+export const setHudEnabled = callable<[enabled: boolean], HudState>("set_hud_enabled");
+export const resetHud = callable<[], HudState>("reset_hud");
+export const reloadHud = callable<[], HudState>("reload_hud");
