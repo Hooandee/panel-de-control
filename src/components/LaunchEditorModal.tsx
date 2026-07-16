@@ -189,23 +189,16 @@ const LaunchEditorBody: FC<{ game: GameEntry }> = ({ game }) => {
             <LaunchPreview preview={ed.preview} owned={owned} />
           </Fold>
 
-          <Focusable
-            style={{
-              display: "flex", alignItems: "center", justifyContent: "center", gap: theme.space.sm,
-              padding: "10px 12px", borderRadius: theme.radius.sm,
-              background: ed.dirty ? theme.color.accent : theme.color.surfaceRaised,
-              boxShadow: `inset 0 0 0 1px ${theme.color.hairline}`,
-              color: ed.dirty ? theme.color.onAccent : theme.color.textMuted,
-              fontSize: theme.font.body, fontWeight: 600,
-              cursor: ed.dirty ? "pointer" : "default",
-              opacity: ed.dirty || ed.result === "ok" ? 1 : 0.6,
-            }}
-            onActivate={() => ed.dirty && ed.apply()}
-            onClick={() => ed.dirty && ed.apply()}
-          >
-            <LuCheck size={16} />
-            {ed.result === "ok" && !ed.dirty ? t("params.applied") : t("params.apply")}
-          </Focusable>
+          {/* Autosave status — no manual button; changes apply on their own. */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, minHeight: 18, fontSize: theme.font.caption, color: theme.color.textMuted }}>
+            {ed.status === "saving" && <span>{t("params.saving")}</span>}
+            {ed.status === "saved" && (
+              <>
+                <LuCheck size={14} color={theme.color.ok} />
+                <span style={{ color: theme.color.ok }}>{t("params.saved")}</span>
+              </>
+            )}
+          </div>
         </>
       )}
     </div>

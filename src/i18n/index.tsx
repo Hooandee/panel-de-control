@@ -153,8 +153,8 @@ const es: Record<string, string> = {
   "params.preview.preserved": "ya lo tenías",
   "params.preview.added": "lo añade el panel",
   "params.malformed": "Estos parámetros ya son complejos; los muestro tal cual para no romperlos. Edítalos a mano en Steam si hace falta.",
-  "params.apply": "Aplicar",
-  "params.applied": "Guardado",
+  "params.saving": "Guardando…",
+  "params.saved": "Guardado",
   // Mandos (gestor de mando)
   "mandos.title": "Mandos",
   "mandos.manager.label": "Gestor:",
@@ -618,8 +618,8 @@ const en: Record<string, string> = {
   "params.preview.preserved": "already yours",
   "params.preview.added": "added by the panel",
   "params.malformed": "These options are already complex; I show them as-is so I don't break them. Edit them by hand in Steam if needed.",
-  "params.apply": "Apply",
-  "params.applied": "Saved",
+  "params.saving": "Saving…",
+  "params.saved": "Saved",
   // Controllers (controller manager)
   "mandos.title": "Controllers",
   "mandos.manager.label": "Manager:",
