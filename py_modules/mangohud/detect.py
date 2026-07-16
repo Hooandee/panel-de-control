@@ -49,9 +49,9 @@ def _mangoapp_environ():
 
 def detect():
     """Overlay capability for the HUD tab. `supported` is only True when mangoapp is
-    actually running with native presets support. `configFile` is the
-    live per-session config Steam feeds mangoapp (overwriting it hot-reloads the
-    overlay); None when mangoapp isn't running or doesn't expose it."""
+    actually running with native presets support. `configFile` is the live
+    per-session config Steam feeds mangoapp; None when mangoapp isn't running or
+    doesn't expose it."""
     home = os.path.expanduser("~")
     env = _mangoapp_environ()
     if env is None:

@@ -54,7 +54,7 @@ from mangohud.store import HudStore
 from mangohud import detect as mangohud_detect
 from mangohud import config as mangohud_config
 from mangohud import pdc_metrics as mangohud_pdc
-from mangohud.apply import apply_hud, clear_presets
+from mangohud.apply import apply_hud, clear_presets, reload_mangoapp
 from report import collector as report_collector
 from report import client as report_client
 
@@ -1282,9 +1282,9 @@ class Plugin:
             try:
                 await asyncio.sleep(2)
                 # Piggyback the HUD plugin-state refresh on this existing tick (no new
-                # loop): re-bake presets.conf so toggling the overlay level shows current
-                # plugin state. Runs regardless of the auto-TDP gating below (it must
-                # update on desktop / manual / eco too). No-op when no pdc metric is shown.
+                # loop): re-bake presets.conf and reload mangoapp when a shown value
+                # changes. Runs regardless of the auto-TDP gating below (it must update
+                # on desktop / manual / eco too). No-op when no pdc metric is shown.
                 await self._refresh_pdc_metrics()
                 # Auto-TDP is a per-GAME dynamic control: don't adjust the global
                 # setpoint from desktop/loading activity. Idle → drop stale window
@@ -1726,9 +1726,8 @@ class Plugin:
         pdc plugin-state metrics are baked into their `custom_text` line as
         "<label> <value>": Steam's mangoapp does not run `exec` commands (only the label
         would show), so we bake a value snapshot here (it refreshes on re-apply / the
-        auto loop, picked up when the overlay level changes). We never write Steam's own
-        live config (that steals the file from Steam and freezes its slider). When off:
-        clear presets.conf. No-op when the overlay isn't supported."""
+        auto loop, then reloaded through mangohudctl). We never write Steam's own live
+        config. When off: clear presets.conf. No-op when the overlay isn't supported."""
         cap = mangohud_detect.detect()
         if not cap["supported"]:
             self._pdc_active_ids = []
@@ -1739,11 +1738,12 @@ class Plugin:
         self._pdc_active_ids = mangohud_config.enabled_pdc_ids(model) if model["enabled"] else []
         if model["enabled"]:
             values = self._pdc_values()
-            self._pdc_written = values
             apply_hud(model, cap["presetsPath"], values)
+            self._pdc_written = values if reload_mangoapp() else {}
         else:
             self._pdc_written = {}
             clear_presets(cap["presetsPath"])
+            reload_mangoapp()
 
     # ---- HUD plugin-state metrics (pdc_*, baked into custom_text) -----------
     def _read_pdc_sources(self) -> dict:
@@ -1788,7 +1788,9 @@ class Plugin:
                                     and not self._fan_suggestion(appid)["available"])
         if "pdc_fan_rpm" in active_ids:
             fans = extras.get("fans") or self._read_fans()
-            snap["fan_rpms"] = [f.get("rpm") for f in fans.get("fans", []) if f.get("rpm")]
+            snap["fan_rpms"] = [
+                f.get("rpm") for f in fans.get("fans", []) if f.get("rpm") is not None
+            ]
         if "pdc_profile" in active_ids:
             snap["appid"] = appid
             snap["profile_name"] = self._current_game_name if appid is not None else None
@@ -1835,22 +1837,22 @@ class Plugin:
         snap = self._pdc_snapshot(active, extras)
         return {mid: mangohud_pdc.render(mid, snap) or mangohud_pdc.DASH for mid in active}
 
-    async def _refresh_pdc_metrics(self) -> None:
-        """Re-bake presets.conf with fresh pdc values on the ~2 s auto-loop tick, so
-        toggling the overlay level shows current plugin state (mangoapp re-reads
-        presets.conf on a level change). Reads the sysfs sources OFF the event loop and
-        only rewrites when a shown value actually changed → no churn on stable values.
-        No-op when the HUD shows no pdc metric."""
+    def _refresh_pdc_metrics_sync(self) -> None:
         if not self._pdc_active_ids or not self._pdc_presets_path:
             return
-        extras = await asyncio.to_thread(self._read_pdc_sources)
+        extras = self._read_pdc_sources()
         values = self._pdc_values(extras)
         if values == self._pdc_written:
             return
-        self._pdc_written = values
         model = self._hud.load()
         if model["enabled"]:
-            await asyncio.to_thread(apply_hud, model, self._pdc_presets_path, values)
+            apply_hud(model, self._pdc_presets_path, values)
+            if reload_mangoapp():
+                self._pdc_written = values
+
+    async def _refresh_pdc_metrics(self) -> None:
+        """Refresh changed pdc values through the serial apply executor."""
+        await self._offload_call(self._refresh_pdc_metrics_sync)
 
     async def get_hud_state(self) -> dict:
         self._init()
@@ -1877,8 +1879,7 @@ class Plugin:
         return self._hud_state()
 
     async def reload_hud(self) -> dict:
-        """Re-bake presets.conf now with fresh pdc values so the overlay picks them up
-        on the next level change, without the user re-saving."""
+        """Re-bake presets.conf now with fresh pdc values and reload mangoapp."""
         self._init()
         await self._offload_call(self._apply_hud)
         return self._hud_state()
@@ -2549,9 +2550,6 @@ class Plugin:
             self._start_auto_loop()
             if self._settings.get("telemetry_enabled", True):
                 self._start_sampler()
-            # Re-assert the HUD presets.conf (idempotent) so it survives a SteamOS
-            # update that wiped ~/.config; cheap single-file write.
-            self._apply_hud()
         except Exception as e:  # noqa: BLE001
             decky.logger.error("TDP startup failed: %s", e)
 

@@ -1,4 +1,6 @@
 import os
+import shutil
+import subprocess
 
 from mangohud.config import build_presets_conf
 
@@ -37,3 +39,47 @@ def apply_hud(model, path, values=None):
     (pdc id -> value string) bakes the live plugin-state values into the pdc rows."""
     _write_atomic(path, build_presets_conf(model, values))
     return read_presets(path)
+
+
+def _mangoapp_cwd():
+    try:
+        entries = os.scandir("/proc")
+    except OSError:
+        return None
+    with entries:
+        for entry in entries:
+            if not entry.name.isdigit():
+                continue
+            try:
+                with open(f"/proc/{entry.name}/comm") as handle:
+                    if handle.read().strip() == "mangoapp":
+                        return os.readlink(f"/proc/{entry.name}/cwd")
+            except OSError:
+                continue
+    return None
+
+
+def reload_mangoapp():
+    """Ask mangoapp to re-read Steam's config and the selected preset."""
+    search_path = os.pathsep.join(
+        part for part in (os.environ.get("PATH"), "/usr/local/bin:/usr/bin:/bin") if part
+    )
+    binary = shutil.which("mangohudctl", path=search_path)
+    if binary is None:
+        return False
+    env = os.environ.copy()
+    env.pop("LD_LIBRARY_PATH", None)
+    env.pop("LD_PRELOAD", None)
+    try:
+        result = subprocess.run(
+            [binary, "set", "reload_config", "true"],
+            check=False,
+            cwd=_mangoapp_cwd(),
+            env=env,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=2,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return result.returncode == 0

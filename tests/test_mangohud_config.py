@@ -151,12 +151,16 @@ def test_preset_0_is_off_and_1_is_minimal_fps():
     assert _section(text, "1") == directives_for_level(model, 1)
 
 
-def test_minimal_preset_disables_other_metrics_so_nothing_leaks():
-    # Level 1 shows fps but must explicitly turn off the metrics Steam's default level
-    # / the handheld override would otherwise force on (present_mode, resolution, …).
+def test_minimal_preset_omits_unselected_unguarded_metrics():
+    # In MangoHud's ordered layout these render when their directive is present,
+    # even with value 0. A custom preset does not inherit Steam's built-in level.
     lines = directives_for_level(coerce_model({"items": _metrics("fps")}), 1)
     assert "fps=1" in lines
-    for leak in ("present_mode=0", "resolution=0", "refresh_rate=0", "arch=0", "wine=0"):
+    assert not any(line.startswith("present_mode=") for line in lines)
+    assert not any(line.startswith("refresh_rate=") for line in lines)
+    assert not any(line.startswith("hdr=") for line in lines)
+    assert not any(line.startswith("winesync=") for line in lines)
+    for leak in ("resolution=0", "arch=0", "wine=0"):
         assert leak in lines
 
 

@@ -64,7 +64,7 @@ _DIRECTIVE = {
 # Plugin-state metrics (the "Panel de Control" group). They have no MangoHud
 # directive: each shows as a single baked `custom_text=<label> <value>` line. Steam's
 # mangoapp does not run `exec` commands, so the value is baked in by main.py at apply
-# time (a snapshot; it refreshes on re-apply). The string here is the DEFAULT row label
+# time (a snapshot refreshed by the auto loop). The string here is the DEFAULT row label
 # (the user can override it — pdc metrics are labellable). Formatting lives in
 # pdc_metrics.py.
 _PDC_LABEL = {
@@ -99,11 +99,14 @@ def enabled_pdc_ids(model):
 # has no label directive, so a label on it is ignored/stripped.
 _LABEL_DIRECTIVE = {"fps": "fps_text", "cpu": "cpu_text", "gpu": "gpu_text"}
 
-# Metrics whose "on" form takes a value instead of =1 (and whose "off" form is
-# simply omitted — they aren't part of Steam's default level so nothing leaks).
+# Metrics whose "on" form takes a value instead of =1.
 # `fps_metrics=avg` shows the average; `network=1` = auto-detect the active
 # interface (MangoHud reads the first token "1" as "all interfaces bar loopback").
 _VALUE_ON = {"device_battery": "gamepad", "fps_metrics": "avg", "network": "1"}
+
+# Value metrics have no clean =0 form. The four boolean renderers below also draw
+# whenever their directive is present, even when its parsed value is 0.
+_OMIT_WHEN_OFF = frozenset((*_VALUE_ON, "hdr", "refresh_rate", "winesync", "present_mode"))
 
 # A drawn divider row (MangoHud has no first-class per-row separator in vertical
 # layout, so we emulate one with a custom_text line). MangoHud's font has a
@@ -411,19 +414,17 @@ def _enable_lines(item, values):
 
 def to_directives(model, values=None):
     """The MangoHud directive lines for the full HUD. Because a preset merges over
-    Steam's default level, every real metric is written EXPLICITLY as `=1`/`=0` (so an
-    unselected metric can't leak in from the default), and the enabled ones are emitted
-    in item order (== on-screen order) with custom text interleaved. pdc metrics have
-    no directive; `values` (id -> value string) bakes their live value into the row."""
+    parser defaults, disabled real metrics are normally written as `=0`; renderers that
+    ignore that value are omitted. Enabled metrics are emitted in item order
+    (== on-screen order) with custom text interleaved. pdc metrics have no directive;
+    `values` (id -> value string) bakes their live value into the row."""
     model = coerce_model(model)
     enabled = {it["id"] for it in model["items"] if it["kind"] == "metric"}
     lines = _style_lines(model)
     # Turn OFF every real metric not chosen (order irrelevant — they don't show).
     # pdc ids have no directive, so they're never part of this disable set.
     for mid in _DIRECTIVE:
-        if mid in enabled or mid in _VALUE_ON:
-            # _VALUE_ON metrics aren't in Steam's default level, so an off one is
-            # simply omitted (no clean `=0` form for a value directive).
+        if mid in enabled or mid in _OMIT_WHEN_OFF:
             continue
         lines.append(f"{_DIRECTIVE[mid]}=0")
     # Visible content, in item order.
@@ -457,12 +458,9 @@ def build_presets_conf(model, values=None):
     0 = off, 1 = minimal FPS, 2..4 = the user's full HUD. `values` (pdc id -> value
     string) bakes the live plugin-state values into the pdc rows.
 
-    Every preset section is written COMPLETE (level 0 = no_display, level 1 = the full
-    minimal HUD, 2..4 = the full HUD — each with an explicit `=0` for every unselected
-    metric). MangoHud runs its built-in preset switch + handheld-device override (which
-    force metrics like refresh_rate/present_mode/resolution/arch/wine ON) ONLY when it
-    can't find the preset in presets.conf; a complete section per level makes it always
-    find one, so those defaults never leak into our overlay."""
+    Every preset section is present (level 0 = no_display, level 1 = the full minimal
+    HUD, 2..4 = the full HUD). MangoHud only runs its built-in preset switch when it
+    cannot find the requested section, so omitted refresh_rate/present_mode remain off."""
     model = coerce_model(model)
     out = []
     for level in range(5):

@@ -1,5 +1,6 @@
 """RPC-level tests for the HUD (MangoHud overlay) tab."""
 import asyncio
+import concurrent.futures
 import importlib
 import os
 import sys
@@ -90,6 +91,32 @@ def test_enabling_writes_presets_conf_and_disabling_clears_it(tmp_path, monkeypa
     assert not os.path.exists(presets)  # handed back to stock
 
 
+def test_writing_enabled_hud_requests_mangoapp_reload(tmp_path, monkeypatch):
+    presets = str(tmp_path / "presets.conf")
+    main, p = _make_plugin(tmp_path, monkeypatch)
+    _fake_overlay(main, monkeypatch, presets)
+    calls = []
+    monkeypatch.setattr(main, "reload_mangoapp", lambda: calls.append(True) or True, raising=False)
+
+    asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
+
+    assert calls == [True]
+
+
+def test_disabling_hud_requests_mangoapp_reload(tmp_path, monkeypatch):
+    presets = str(tmp_path / "presets.conf")
+    main, p = _make_plugin(tmp_path, monkeypatch)
+    _fake_overlay(main, monkeypatch, presets)
+    calls = []
+    monkeypatch.setattr(main, "reload_mangoapp", lambda: calls.append(True) or True, raising=False)
+    asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
+    calls.clear()
+
+    asyncio.run(p.set_hud_enabled(False))
+
+    assert calls == [True]
+
+
 def test_unsupported_overlay_never_writes(tmp_path, monkeypatch):
     presets = str(tmp_path / "presets.conf")
     main, p = _make_plugin(tmp_path, monkeypatch)
@@ -171,3 +198,76 @@ def test_pdc_metric_gone_from_presets_when_dropped(tmp_path, monkeypatch):
     # Drop the pdc metric → its baked row is gone from presets.conf.
     asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
     assert "Descarga" not in open(presets).read()
+
+
+def test_changed_pdc_value_reloads_running_mangoapp(tmp_path, monkeypatch):
+    presets = str(tmp_path / "presets.conf")
+    main, p = _make_plugin(tmp_path, monkeypatch)
+    _fake_overlay(main, monkeypatch, presets)
+    calls = []
+    monkeypatch.setattr(main, "reload_mangoapp", lambda: calls.append(True) or True, raising=False)
+    asyncio.run(p.set_hud_config({"items": _items("pdc_eco"), "enabled": True}))
+    calls.clear()
+
+    p._settings["eco_enabled"] = True
+    asyncio.run(p._refresh_pdc_metrics())
+
+    assert "custom_text=Descarga Activo" in open(presets).read()
+    assert calls == [True]
+
+
+def test_failed_pdc_reload_is_retried_on_next_tick(tmp_path, monkeypatch):
+    presets = str(tmp_path / "presets.conf")
+    main, p = _make_plugin(tmp_path, monkeypatch)
+    _fake_overlay(main, monkeypatch, presets)
+    results = iter((False, True))
+    calls = []
+
+    def reload():
+        calls.append(True)
+        return next(results)
+
+    monkeypatch.setattr(main, "reload_mangoapp", reload, raising=False)
+    asyncio.run(p.set_hud_config({"items": _items("pdc_eco"), "enabled": True}))
+
+    asyncio.run(p._refresh_pdc_metrics())
+
+    assert calls == [True, True]
+
+
+class _RecordingExecutor(concurrent.futures.Executor):
+    def __init__(self):
+        self.count = 0
+
+    def submit(self, fn, *args, **kwargs):
+        self.count += 1
+        future = concurrent.futures.Future()
+        try:
+            future.set_result(fn(*args, **kwargs))
+        except Exception as exc:  # noqa: BLE001
+            future.set_exception(exc)
+        return future
+
+
+def test_pdc_refresh_uses_serial_apply_executor(tmp_path, monkeypatch):
+    presets = str(tmp_path / "presets.conf")
+    main, p = _make_plugin(tmp_path, monkeypatch)
+    _fake_overlay(main, monkeypatch, presets)
+    monkeypatch.setattr(main, "reload_mangoapp", lambda: True, raising=False)
+    asyncio.run(p.set_hud_config({"items": _items("pdc_eco"), "enabled": True}))
+    executor = _RecordingExecutor()
+    p._apply_executor = executor
+    p._settings["eco_enabled"] = True
+
+    asyncio.run(p._refresh_pdc_metrics())
+
+    assert executor.count == 1
+
+
+def test_zero_fan_rpm_is_a_real_reading(tmp_path, monkeypatch):
+    main, p = _make_plugin(tmp_path, monkeypatch)
+    p._init()
+    p._pdc_active_ids = ["pdc_fan_rpm"]
+    monkeypatch.setattr(p, "_read_fans", lambda: {"fans": [{"rpm": 0}]})
+
+    assert p._pdc_values() == {"pdc_fan_rpm": "0"}

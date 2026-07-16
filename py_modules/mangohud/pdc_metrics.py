@@ -2,9 +2,9 @@
 group). Each id turns a snapshot of live plugin state into the short string the
 overlay shows as that row's VALUE (the label is emitted separately in config.py).
 
-mangoapp reads these via `exec=cat <statefile>`, so the strings must stay ASCII —
-its bundled font renders box-drawing / fancy glyphs as "?". Never raises and never
-invents a number: a missing/None source degrades to a short honest marker."""
+The values are baked into custom_text, so the strings must stay ASCII — its bundled
+font renders box-drawing / fancy glyphs as "?". Never raises and never invents a
+number: a missing/None source degrades to a short honest marker."""
 
 DASH = "-"
 

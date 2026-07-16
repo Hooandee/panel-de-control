@@ -1,3 +1,4 @@
+from mangohud import apply
 from mangohud.apply import apply_hud, clear_presets, read_presets
 from mangohud.config import build_presets_conf, coerce_model
 from mangohud.detect import presets_path, presets_supported
@@ -61,3 +62,58 @@ def test_apply_bakes_pdc_values_into_presets(tmp_path):
     on_disk = apply_hud(model, path, {"pdc_tdp": "21W"})
     assert "custom_text=TDP 21W" in on_disk
     assert "exec=" not in on_disk
+
+
+def test_reload_uses_discovered_mangohud_control_tool(monkeypatch):
+    calls = []
+
+    def run(command, **kwargs):
+        calls.append((command, kwargs))
+        return type("Result", (), {"returncode": 0})()
+
+    tools = {
+        "mangohudctl": "/usr/local/bin/mangohudctl",
+        "mangoapp": "/usr/local/bin/mangoapp",
+    }
+    monkeypatch.setattr(apply.shutil, "which", lambda name, **kwargs: tools.get(name))
+    monkeypatch.setattr(apply, "_mangoapp_cwd", lambda: "/home/deck", raising=False)
+    monkeypatch.setattr(apply.subprocess, "run", run)
+
+    assert apply.reload_mangoapp() is True
+    assert calls[0][0] == ["/usr/local/bin/mangohudctl", "set", "reload_config", "true"]
+    assert calls[0][1]["timeout"] == 2
+    assert calls[0][1]["cwd"] == "/home/deck"
+
+
+def test_reload_failure_is_non_fatal(monkeypatch):
+    def run(command, **kwargs):
+        raise OSError("missing")
+
+    monkeypatch.setattr(apply.shutil, "which", lambda *a, **k: "/usr/bin/mangohudctl")
+    monkeypatch.setattr(apply.subprocess, "run", run)
+
+    assert apply.reload_mangoapp() is False
+
+
+def test_reload_without_control_tool_is_non_fatal(monkeypatch):
+    monkeypatch.setattr(apply.shutil, "which", lambda *a, **k: None)
+
+    assert apply.reload_mangoapp() is False
+
+
+def test_reload_searches_service_path(monkeypatch):
+    monkeypatch.setenv("PATH", "/opt/mangohud/bin")
+
+    def which(name, *, path):
+        if "/opt/mangohud/bin" not in path:
+            return None
+        return f"/opt/mangohud/bin/{name}"
+
+    monkeypatch.setattr(apply.shutil, "which", which)
+    monkeypatch.setattr(
+        apply.subprocess,
+        "run",
+        lambda *a, **k: type("Result", (), {"returncode": 0})(),
+    )
+
+    assert apply.reload_mangoapp() is True
