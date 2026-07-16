@@ -20,7 +20,7 @@ import {
   serialize,
   envToken,
 } from "./compose";
-import { GpuGen, ProtonFamily, UpscalerTier, upscalerSupported } from "./proton";
+import { GpuGen, ProtonFamily } from "./proton";
 
 export type PillKind = "env" | "wrapper" | "arg";
 export type Section = "common" | "advanced";
@@ -61,8 +61,9 @@ export interface Pill {
   requires?: ToolKey;
   /** Show only for these Proton families (absent = base, shown on any Proton). */
   families?: ProtonFamily[];
-  /** FSR/XeSS upgrade gated by GPU generation (hidden where unsupported). */
-  fsr?: UpscalerTier;
+  /** Show only on these GPU generations (absent = any). FSR4 uses this to pick the
+   *  right per-GPU env var: RDNA4 vs RDNA3 need different Proton flags. */
+  gpus?: GpuGen[];
   // env pills
   envName?: string;
   envValue?: string; // fixed value (simple env toggle)
@@ -104,10 +105,10 @@ export const CATALOG: Pill[] = [
   { id: "protonLog", section: "advanced", subgroup: "params.sub.proton", kind: "env", envName: "PROTON_LOG", envValue: "1", raw: "PROTON_LOG", labelKey: "params.pill.protonLog", descKey: "params.pill.protonLog.desc" },
 
   // ── Avanzado · Escalado (según versión + GPU) ─────────────────────────────
-  { id: "fsr4", section: "advanced", subgroup: "params.sub.upscaling", kind: "env", envName: "PROTON_FSR4_UPGRADE", envValue: "1", raw: "PROTON_FSR4_UPGRADE", families: ["ge", "experimental", "cachyos"], fsr: "fsr4", labelKey: "params.pill.fsr4", descKey: "params.pill.fsr4.desc" },
-  { id: "fsr3", section: "advanced", subgroup: "params.sub.upscaling", kind: "env", envName: "PROTON_FSR3_UPGRADE", envValue: "1", raw: "PROTON_FSR3_UPGRADE", families: ["ge", "experimental", "cachyos"], fsr: "fsr3", labelKey: "params.pill.fsr3", descKey: "params.pill.fsr3.desc" },
-  { id: "xess", section: "advanced", subgroup: "params.sub.upscaling", kind: "env", envName: "PROTON_XESS_UPGRADE", envValue: "1", raw: "PROTON_XESS_UPGRADE", families: ["ge", "experimental", "cachyos"], fsr: "xess", labelKey: "params.pill.xess", descKey: "params.pill.xess.desc" },
-  { id: "fsr4Indicator", section: "advanced", subgroup: "params.sub.upscaling", kind: "env", envName: "PROTON_FSR4_INDICATOR", envValue: "1", raw: "PROTON_FSR4_INDICATOR", families: ["ge", "experimental", "cachyos"], fsr: "fsr4", labelKey: "params.pill.fsr4ind", descKey: "params.pill.fsr4ind.desc" },
+  // FSR4 needs a different Proton env var per GPU: RDNA4 vs RDNA3 (the RDNA3 path
+  // adds the wmma workaround). Two pills, same label — only one shows per device.
+  { id: "fsr4", section: "advanced", subgroup: "params.sub.upscaling", kind: "env", envName: "PROTON_FSR4_UPGRADE", envValue: "1", raw: "PROTON_FSR4_UPGRADE", families: ["ge", "experimental", "cachyos"], gpus: ["rdna4"], labelKey: "params.pill.fsr4", descKey: "params.pill.fsr4.desc" },
+  { id: "fsr4Rdna3", section: "advanced", subgroup: "params.sub.upscaling", kind: "env", envName: "PROTON_FSR4_RDNA3_UPGRADE", envValue: "1", raw: "PROTON_FSR4_RDNA3_UPGRADE", families: ["ge", "experimental", "cachyos"], gpus: ["rdna3"], labelKey: "params.pill.fsr4", descKey: "params.pill.fsr4.desc" },
   { id: "optiscaler", section: "advanced", subgroup: "params.sub.upscaling", kind: "env", envName: "PROTON_USE_OPTISCALER", envValue: "1", raw: "PROTON_USE_OPTISCALER", families: ["cachyos"], labelKey: "params.pill.optiscaler", descKey: "params.pill.optiscaler.desc" },
 
   // ── Avanzado · Pantalla ───────────────────────────────────────────────────
@@ -152,7 +153,7 @@ export const SUBGROUP_ORDER: Record<Section, string[]> = {
  *  = hidden). Tool availability is separate — those show disabled, not hidden. */
 export function pillVisible(pill: Pill, family: ProtonFamily, gpu: GpuGen): boolean {
   if (pill.families && !pill.families.includes(family)) return false;
-  if (pill.fsr && !upscalerSupported(pill.fsr, gpu)) return false;
+  if (pill.gpus && !pill.gpus.includes(gpu)) return false;
   return true;
 }
 

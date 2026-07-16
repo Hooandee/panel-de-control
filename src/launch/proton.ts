@@ -20,25 +20,6 @@ export function protonFamily(compatToolName: string | null | undefined): ProtonF
   return "unknown";
 }
 
-/** GPU generation for upscaler gating (from the device profile). */
+/** GPU generation, used to gate GPU-specific launch options (e.g. FSR4 picks a
+ *  different Proton env var on RDNA3 vs RDNA4). From the device profile. */
 export type GpuGen = "rdna2" | "rdna3" | "rdna35" | "rdna4" | "intel" | "unknown";
-
-export type UpscalerTier = "fsr4" | "fsr3" | "xess";
-
-/**
- * Whether an FSR/XeSS "upgrade" env var is worth offering on this GPU.
- * - FSR4: RDNA3 / RDNA4 only (not RDNA2 Deck, not officially RDNA3.5 iGPUs, not Intel).
- * - FSR3: broad AMD support (RDNA2+); not Intel.
- * - XeSS: cross-vendor, surfaced mainly for the Intel Claw.
- * On unknown GPU we stay conservative (offer FSR3 only) rather than promise FSR4.
- */
-export function upscalerSupported(tier: UpscalerTier, gpu: GpuGen): boolean {
-  switch (tier) {
-    case "fsr4":
-      return gpu === "rdna3" || gpu === "rdna4";
-    case "fsr3":
-      return gpu === "rdna2" || gpu === "rdna3" || gpu === "rdna35" || gpu === "rdna4";
-    case "xess":
-      return true;
-  }
-}

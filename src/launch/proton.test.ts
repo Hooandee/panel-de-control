@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { protonFamily, upscalerSupported } from "./proton";
+import { protonFamily } from "./proton";
 
 describe("protonFamily", () => {
   it("maps real compat-tool ids to families", () => {
@@ -19,27 +19,5 @@ describe("protonFamily", () => {
     expect(protonFamily("")).toBe("unknown");
     expect(protonFamily(null)).toBe("unknown");
     expect(protonFamily(undefined)).toBe("unknown");
-  });
-});
-
-describe("upscalerSupported", () => {
-  it("FSR4 only on RDNA3/RDNA4", () => {
-    expect(upscalerSupported("fsr4", "rdna3")).toBe(true);
-    expect(upscalerSupported("fsr4", "rdna4")).toBe(true);
-    expect(upscalerSupported("fsr4", "rdna2")).toBe(false);
-    expect(upscalerSupported("fsr4", "rdna35")).toBe(false);
-    expect(upscalerSupported("fsr4", "intel")).toBe(false);
-    expect(upscalerSupported("fsr4", "unknown")).toBe(false);
-  });
-
-  it("FSR3 across AMD, not Intel", () => {
-    expect(upscalerSupported("fsr3", "rdna2")).toBe(true);
-    expect(upscalerSupported("fsr3", "rdna35")).toBe(true);
-    expect(upscalerSupported("fsr3", "intel")).toBe(false);
-  });
-
-  it("XeSS cross-vendor", () => {
-    expect(upscalerSupported("xess", "intel")).toBe(true);
-    expect(upscalerSupported("xess", "rdna3")).toBe(true);
   });
 });

@@ -172,21 +172,20 @@ describe("pillVisible (Proton family + GPU gating)", () => {
     expect(pillVisible(pill("protonHdr"), "unknown", "rdna3")).toBe(false);
   });
 
-  it("FSR4 needs GE-family AND an RDNA3/4 GPU", () => {
-    expect(pillVisible(pill("fsr4"), "ge", "rdna3")).toBe(true);
-    expect(pillVisible(pill("fsr4"), "ge", "rdna2")).toBe(false); // Steam Deck
-    expect(pillVisible(pill("fsr4"), "ge", "rdna35")).toBe(false);
-    expect(pillVisible(pill("fsr4"), "stable", "rdna3")).toBe(false); // wrong family
+  it("FSR4 picks the right per-GPU variant (RDNA4 vs RDNA3)", () => {
+    // RDNA4 → PROTON_FSR4_UPGRADE variant; RDNA3 → the RDNA3 variant. Never both.
+    expect(pillVisible(pill("fsr4"), "ge", "rdna4")).toBe(true);
+    expect(pillVisible(pill("fsr4"), "ge", "rdna3")).toBe(false);
+    expect(pillVisible(pill("fsr4Rdna3"), "ge", "rdna3")).toBe(true);
+    expect(pillVisible(pill("fsr4Rdna3"), "ge", "rdna4")).toBe(false);
+    // Neither on RDNA2 (Steam Deck) or a wrong family.
+    expect(pillVisible(pill("fsr4Rdna3"), "ge", "rdna2")).toBe(false);
+    expect(pillVisible(pill("fsr4Rdna3"), "stable", "rdna3")).toBe(false);
   });
 
   it("OptiScaler is CachyOS-only", () => {
     expect(pillVisible(pill("optiscaler"), "cachyos", "rdna3")).toBe(true);
     expect(pillVisible(pill("optiscaler"), "ge", "rdna3")).toBe(false);
-  });
-
-  it("XeSS shows on the Intel Claw (GE family)", () => {
-    expect(pillVisible(pill("xess"), "ge", "intel")).toBe(true);
-    expect(pillVisible(pill("fsr4"), "ge", "intel")).toBe(false);
   });
 });
 
