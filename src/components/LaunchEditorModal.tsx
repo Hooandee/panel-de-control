@@ -1,6 +1,9 @@
 import { FC, ReactNode, useEffect, useState } from "react";
 import { ModalRoot, showModal, Focusable } from "@decky/ui";
-import { LuGamepad2, LuCheck, LuTriangleAlert, LuShieldCheck, LuChevronDown, LuChevronRight, LuStar } from "react-icons/lu";
+import {
+  LuGamepad2, LuCheck, LuTriangleAlert, LuShieldCheck, LuChevronDown, LuChevronRight, LuStar, LuSparkles,
+  LuGauge, LuLanguages, LuPlay, LuWrench, LuExpand, LuMonitor, LuImage, LuLibrary, LuTerminal,
+} from "react-icons/lu";
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
@@ -10,8 +13,21 @@ import { LaunchPreview } from "./LaunchPreview";
 import { GameEntry, readCompatTool } from "../launch/steamApi";
 import { getDevice, getLaunchTools, LaunchTools } from "../api";
 import { useLaunchEditor } from "../launch/useLaunchEditor";
-import { CATALOG, SUBGROUP_ORDER, Pill, Section, frequentPills, ownedTokens, pillVisible } from "../launch/catalog";
+import { CATALOG, SUBGROUP_ORDER, Pill, Section, frequentPills, recommendedPills, ownedTokens, pillVisible } from "../launch/catalog";
 import { GpuGen, ProtonFamily, protonFamily } from "../launch/proton";
+
+// Icon per sub-group heading so each group is scannable at a glance.
+const SUBGROUP_ICONS: Record<string, ReactNode> = {
+  "params.sub.perf": <LuGauge size={13} />,
+  "params.sub.lang": <LuLanguages size={13} />,
+  "params.sub.startup": <LuPlay size={13} />,
+  "params.sub.proton": <LuWrench size={13} />,
+  "params.sub.upscaling": <LuExpand size={13} />,
+  "params.sub.display": <LuMonitor size={13} />,
+  "params.sub.render": <LuImage size={13} />,
+  "params.sub.dlls": <LuLibrary size={13} />,
+  "params.sub.gameArgs": <LuTerminal size={13} />,
+};
 
 type Editor = ReturnType<typeof useLaunchEditor>;
 
@@ -54,7 +70,7 @@ const Subgroup: FC<{ section: Section; subgroup: string; ed: Editor; tools: Laun
   if (pills.length === 0) return null;
   return (
     <div>
-      <Heading>{t(subgroup)}</Heading>
+      <Heading icon={SUBGROUP_ICONS[subgroup]}>{t(subgroup)}</Heading>
       {pills.map((p) => (
         <LaunchRow
           key={p.id}
@@ -101,6 +117,8 @@ const LaunchEditorBody: FC<{ game: GameEntry }> = ({ game }) => {
   const advancedCount = CATALOG.filter((p) => p.section === "advanced" && !!ed.selections[p.id] && pillVisible(p, family, gpu)).length;
   const owned = ownedTokens(ed.selections);
   const frequents: Pill[] = tools ? frequentPills(ed.usage, tools).filter((p) => pillVisible(p, family, gpu)) : [];
+  // No usage yet → offer a "Start here" set of safe recommended picks instead.
+  const starters: Pill[] = tools && frequents.length === 0 ? recommendedPills(tools, family, gpu) : [];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: theme.space.md, padding: theme.space.sm, maxWidth: 760, width: "100%", margin: "0 auto" }}>
@@ -144,6 +162,15 @@ const LaunchEditorBody: FC<{ game: GameEntry }> = ({ game }) => {
               <Heading icon={<LuStar size={13} />}>{t("params.frequent")}</Heading>
               {frequents.map((p) => (
                 <LaunchRow key={`fav-${p.id}`} pill={p} ed={ed} tools={tools} />
+              ))}
+            </div>
+          )}
+
+          {starters.length > 0 && (
+            <div>
+              <Heading icon={<LuSparkles size={13} />}>{t("params.startHere")}</Heading>
+              {starters.map((p) => (
+                <LaunchRow key={`start-${p.id}`} pill={p} ed={ed} tools={tools} />
               ))}
             </div>
           )}

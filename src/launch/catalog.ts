@@ -50,6 +50,11 @@ export interface Pill {
   labelKey: string;
   /** Plain-language "what it does" line (required — the whole point of the row). */
   descKey: string;
+  /** Longer explanation + example, shown when the row is expanded. Derived as
+   *  descKey with ".desc"→".help" when absent. */
+  helpKey?: string;
+  /** Safe, broadly-useful pick — gets a "Recomendado" badge + seeds "Empezar aquí". */
+  recommended?: boolean;
   /** The real token/flag, shown small next to the title for those who know it. */
   raw?: string;
   /** Honest availability gate — the row shows disabled when the tool isn't detected. */
@@ -85,14 +90,14 @@ export type Usage = Record<string, number>;
 // right place while any pre-existing (unknown) wrapper stays outermost.
 export const CATALOG: Pill[] = [
   // ── Común ────────────────────────────────────────────────────────────────
-  { id: "mangohud", section: "common", subgroup: "params.sub.perf", kind: "wrapper", wrapper: "mangohud", raw: "mangohud", requires: "mangohud", labelKey: "params.pill.mangohud", descKey: "params.pill.mangohud.desc" },
+  { id: "mangohud", section: "common", recommended: true, subgroup: "params.sub.perf", kind: "wrapper", wrapper: "mangohud", raw: "mangohud", requires: "mangohud", labelKey: "params.pill.mangohud", descKey: "params.pill.mangohud.desc" },
   { id: "gamemode", section: "common", subgroup: "params.sub.perf", kind: "wrapper", wrapper: "gamemoderun", raw: "gamemoderun", requires: "gamemode", labelKey: "params.pill.gamemode", descKey: "params.pill.gamemode.desc" },
   { id: "lsfg", section: "common", subgroup: "params.sub.perf", kind: "wrapper", wrapper: "~/lsfg", raw: "~/lsfg", requires: "lsfg", labelKey: "params.pill.lsfg", descKey: "params.pill.lsfg.desc" },
   { id: "langEs", section: "common", subgroup: "params.sub.lang", kind: "env", envName: "LANG", envValue: "es_ES.UTF-8", raw: "LANG", labelKey: "params.pill.langEs", descKey: "params.pill.langEs.desc" },
-  { id: "noVideo", section: "common", subgroup: "params.sub.startup", kind: "arg", arg: "-novid", raw: "-novid", labelKey: "params.pill.novid", descKey: "params.pill.novid.desc" },
+  { id: "noVideo", section: "common", recommended: true, subgroup: "params.sub.startup", kind: "arg", arg: "-novid", raw: "-novid", labelKey: "params.pill.novid", descKey: "params.pill.novid.desc" },
 
   // ── Avanzado · Proton (compatibilidad) ────────────────────────────────────
-  { id: "protonLaa", section: "advanced", subgroup: "params.sub.proton", kind: "env", envName: "PROTON_FORCE_LARGE_ADDRESS_AWARE", envValue: "1", raw: "PROTON_FORCE_LARGE_ADDRESS_AWARE", labelKey: "params.pill.protonLaa", descKey: "params.pill.protonLaa.desc" },
+  { id: "protonLaa", section: "advanced", recommended: true, subgroup: "params.sub.proton", kind: "env", envName: "PROTON_FORCE_LARGE_ADDRESS_AWARE", envValue: "1", raw: "PROTON_FORCE_LARGE_ADDRESS_AWARE", labelKey: "params.pill.protonLaa", descKey: "params.pill.protonLaa.desc" },
   { id: "protonNoFsync", section: "advanced", subgroup: "params.sub.proton", kind: "env", envName: "PROTON_NO_FSYNC", envValue: "1", raw: "PROTON_NO_FSYNC", labelKey: "params.pill.protonNoFsync", descKey: "params.pill.protonNoFsync.desc" },
   { id: "protonNoNtsync", section: "advanced", subgroup: "params.sub.proton", kind: "env", envName: "PROTON_NO_NTSYNC", envValue: "1", raw: "PROTON_NO_NTSYNC", labelKey: "params.pill.protonNoNtsync", descKey: "params.pill.protonNoNtsync.desc" },
   { id: "protonWined3d", section: "advanced", subgroup: "params.sub.proton", kind: "env", envName: "PROTON_USE_WINED3D", envValue: "1", raw: "PROTON_USE_WINED3D", labelKey: "params.pill.protonWined3d", descKey: "params.pill.protonWined3d.desc" },
@@ -109,7 +114,7 @@ export const CATALOG: Pill[] = [
   { id: "protonWayland", section: "advanced", subgroup: "params.sub.display", kind: "env", envName: "PROTON_ENABLE_WAYLAND", envValue: "1", raw: "PROTON_ENABLE_WAYLAND", families: ["ge", "experimental", "cachyos", "stable"], labelKey: "params.pill.protonWayland", descKey: "params.pill.protonWayland.desc" },
 
   // ── Avanzado · Renderizado ────────────────────────────────────────────────
-  { id: "noDxr", section: "advanced", subgroup: "params.sub.render", kind: "env", envName: "VKD3D_CONFIG", envValue: "nodxr", raw: "VKD3D_CONFIG", labelKey: "params.pill.noDxr", descKey: "params.pill.noDxr.desc" },
+  { id: "noDxr", section: "advanced", recommended: true, subgroup: "params.sub.render", kind: "env", envName: "VKD3D_CONFIG", envValue: "nodxr", raw: "VKD3D_CONFIG", labelKey: "params.pill.noDxr", descKey: "params.pill.noDxr.desc" },
   {
     id: "renderer", section: "advanced", subgroup: "params.sub.render", kind: "arg",
     labelKey: "params.pill.renderer", descKey: "params.pill.renderer.desc",
@@ -287,6 +292,24 @@ export function buildLaunchOptions(
     p = addPill(p, pill, sel);
   }
   return serialize(p);
+}
+
+/** The row's long-help i18n key (explicit helpKey, else descKey with .desc→.help). */
+export function helpKeyOf(pill: Pill): string {
+  return pill.helpKey ?? pill.descKey.replace(/\.desc$/, ".help");
+}
+
+/** Safe recommended picks that apply here — seeds "Empezar aquí" when there's no usage. */
+export function recommendedPills(
+  tools: LaunchTools | null,
+  family: ProtonFamily,
+  gpu: GpuGen,
+  n = 4,
+  catalog: Pill[] = CATALOG,
+): Pill[] {
+  return catalog
+    .filter((p) => p.recommended && isPillAvailable(p, tools) && pillVisible(p, family, gpu))
+    .slice(0, n);
 }
 
 /** The user's most-used AVAILABLE pills (count > 0), most-first, capped at `n` —
