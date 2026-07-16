@@ -9,6 +9,7 @@ import { startEcoAmbient } from "./system/ecoAmbient";
 import { startValueToast, refreshValueToast } from "./system/valueToast";
 import { hydratePrefs, onPrefsHealed } from "./system/pdcStorage";
 import { reloadLayout } from "./customize/store";
+import { installGameContextMenu } from "./launch/gameContextMenu";
 
 export default definePlugin(() => {
   // Restore durable UI prefs into the localStorage cache at plugin scope (so the
@@ -28,6 +29,9 @@ export default definePlugin(() => {
   // so the screen keeps dimming/waking while a game downloads with the QAM closed.
   const stopEcoAmbient = startEcoAmbient();
   const stopValueToast = startValueToast();
+  // Add "Launch parameters" to a game's library context menu. Fully guarded: a no-op
+  // if it can't hook Steam's menu, so it can never break the shared UI.
+  const stopContextMenu = installGameContextMenu();
 
   return {
     name: "Panel de Control",
@@ -44,6 +48,7 @@ export default definePlugin(() => {
       stopGameWatcher();
       stopEcoAmbient();
       stopValueToast();
+      stopContextMenu();
     },
   };
 });
