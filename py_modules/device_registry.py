@@ -48,13 +48,14 @@ def gpu_generation(vendor: str, chip: str) -> str:
     c = (chip or "").lower()
     if "van gogh" in c or "sephiroth" in c:
         return "rdna2"  # Steam Deck
-    if "z2 a" in c:
-        return "rdna2"  # lower-tier Z2
+    # Z2 A and Z2 Go are RDNA 2 class (no FSR4); keep them off the FSR4 path.
+    if "z2 a" in c or "z2 go" in c:
+        return "rdna2"
     # Strix Point / Strix Halo (Ryzen AI ...): RDNA 3.5
     if "ryzen ai" in c or "ai max" in c or "hx 370" in c or "hx 365" in c:
         return "rdna35"
-    # Z1 Extreme / Z2 Go / Phoenix-Hawk (78x0/88x0): RDNA 3
-    if "z1 extreme" in c or "z2 go" in c or "8840" in c or "7840" in c or "8640" in c:
+    # Z1 Extreme / Phoenix-Hawk (78x0/88x0): RDNA 3
+    if "z1 extreme" in c or "8840" in c or "7840" in c or "8640" in c:
         return "rdna3"
     return "unknown"
 

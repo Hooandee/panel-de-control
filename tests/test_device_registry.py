@@ -214,7 +214,7 @@ def test_gpu_generation():
     assert gpu_generation("amd", "AMD Sephiroth") == "rdna2"
     assert gpu_generation("amd", "AMD Van Gogh") == "rdna2"
     assert gpu_generation("amd", "AMD Z1 Extreme") == "rdna3"
-    assert gpu_generation("amd", "AMD Ryzen Z2 Go") == "rdna3"
+    assert gpu_generation("amd", "AMD Ryzen Z2 Go") == "rdna2"
     assert gpu_generation("amd", "AMD Ryzen AI Z2 Extreme") == "rdna35"
     assert gpu_generation("amd", "AMD Ryzen AI 9 HX 370") == "rdna35"
     assert gpu_generation("amd", "AMD Ryzen AI Max+ 395") == "rdna35"
