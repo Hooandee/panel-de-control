@@ -107,6 +107,7 @@ export const CATALOG: Pill[] = [
   { id: "fsr4", section: "advanced", subgroup: "params.sub.upscaling", kind: "env", envName: "PROTON_FSR4_UPGRADE", envValue: "1", raw: "PROTON_FSR4_UPGRADE", families: ["ge", "experimental", "cachyos"], fsr: "fsr4", labelKey: "params.pill.fsr4", descKey: "params.pill.fsr4.desc" },
   { id: "fsr3", section: "advanced", subgroup: "params.sub.upscaling", kind: "env", envName: "PROTON_FSR3_UPGRADE", envValue: "1", raw: "PROTON_FSR3_UPGRADE", families: ["ge", "experimental", "cachyos"], fsr: "fsr3", labelKey: "params.pill.fsr3", descKey: "params.pill.fsr3.desc" },
   { id: "xess", section: "advanced", subgroup: "params.sub.upscaling", kind: "env", envName: "PROTON_XESS_UPGRADE", envValue: "1", raw: "PROTON_XESS_UPGRADE", families: ["ge", "experimental", "cachyos"], fsr: "xess", labelKey: "params.pill.xess", descKey: "params.pill.xess.desc" },
+  { id: "fsr4Indicator", section: "advanced", subgroup: "params.sub.upscaling", kind: "env", envName: "PROTON_FSR4_INDICATOR", envValue: "1", raw: "PROTON_FSR4_INDICATOR", families: ["ge", "experimental", "cachyos"], fsr: "fsr4", labelKey: "params.pill.fsr4ind", descKey: "params.pill.fsr4ind.desc" },
   { id: "optiscaler", section: "advanced", subgroup: "params.sub.upscaling", kind: "env", envName: "PROTON_USE_OPTISCALER", envValue: "1", raw: "PROTON_USE_OPTISCALER", families: ["cachyos"], labelKey: "params.pill.optiscaler", descKey: "params.pill.optiscaler.desc" },
 
   // ── Avanzado · Pantalla ───────────────────────────────────────────────────
