@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { bumpLaunchUsage, getLaunchUsage } from "../api";
 import { Parsed, parse, serialize } from "./compose";
-import { Selections, buildLaunchOptions, detectSelections } from "./catalog";
+import { Selections, Usage, buildLaunchOptions, detectSelections } from "./catalog";
 import { GameEntry, readLaunchOptions, resolveLiveAppid, writeLaunchOptions } from "./steamApi";
 
 export interface LaunchEditor {
@@ -9,6 +10,8 @@ export interface LaunchEditor {
   malformed: boolean;
   raw: string;
   selections: Selections;
+  /** Per-pill apply counts (drives the Frecuentes row). */
+  usage: Usage;
   preview: string;
   dirty: boolean;
   /** "ok" briefly after a successful apply, else null. */
@@ -28,6 +31,7 @@ export interface LaunchEditor {
 export function useLaunchEditor(game: GameEntry): LaunchEditor {
   const [baseline, setBaseline] = useState<Parsed | null>(null);
   const [selections, setSelections] = useState<Selections>({});
+  const [usage, setUsage] = useState<Usage>({});
   const [result, setResult] = useState<"ok" | null>(null);
 
   useEffect(() => {
@@ -44,6 +48,17 @@ export function useLaunchEditor(game: GameEntry): LaunchEditor {
       cancelled = true;
     };
   }, [game.liveAppid]);
+
+  // Usage counts are global (not per-game); load once for the Frecuentes row.
+  useEffect(() => {
+    let cancelled = false;
+    getLaunchUsage()
+      .then((u) => !cancelled && setUsage(u))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const preview = useMemo(
     () => (baseline ? buildLaunchOptions(baseline, selections) : ""),
@@ -72,6 +87,16 @@ export function useLaunchEditor(game: GameEntry): LaunchEditor {
     writeLaunchOptions(appid, target);
     setBaseline(parse(target)); // the composed string is now the saved baseline
     setResult("ok");
+    // Count the applied pills so the Frecuentes row learns what you use.
+    const ids = Object.keys(selections).filter((id) => selections[id] !== undefined && selections[id] !== false);
+    if (ids.length) {
+      setUsage((u) => {
+        const next = { ...u };
+        for (const id of ids) next[id] = (next[id] ?? 0) + 1;
+        return next;
+      });
+      bumpLaunchUsage(ids).catch(() => {});
+    }
   }, [baseline, selections, game.stableKey, game.liveAppid]);
 
   return {
@@ -79,6 +104,7 @@ export function useLaunchEditor(game: GameEntry): LaunchEditor {
     malformed: !!baseline?.malformed,
     raw: baseline?.raw ?? "",
     selections,
+    usage,
     preview,
     dirty,
     result,

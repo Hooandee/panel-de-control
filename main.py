@@ -134,6 +134,9 @@ DEFAULTS = {
     # Frontend UI preferences, mirrored here so they survive a reboot (the
     # frontend's localStorage cache does not). Opaque string map.
     "ui_prefs": {},
+    # Launch-options pill usage counts ({pill_id: times applied}) → the editor
+    # surfaces the ones you use most. Durable so it survives a reboot.
+    "launch_usage": {},
 }
 
 
@@ -328,6 +331,23 @@ class Plugin:
     async def get_launch_tools(self) -> dict:
         self._init()
         return dict(self._launch_tools)
+
+    async def get_launch_usage(self) -> dict:
+        self._init()
+        usage = self._settings.get("launch_usage")
+        return dict(usage) if isinstance(usage, dict) else {}
+
+    async def bump_launch_usage(self, ids: list) -> bool:
+        """Increment the apply-count for each given pill id (drives the Frecuentes row)."""
+        self._init()
+        usage = self._settings.get("launch_usage")
+        usage = dict(usage) if isinstance(usage, dict) else {}
+        for pid in ids or []:
+            if isinstance(pid, str):
+                usage[pid] = int(usage.get(pid, 0)) + 1
+        self._settings["launch_usage"] = usage
+        self._save()
+        return True
 
     async def get_ui_prefs(self) -> dict:
         self._init()

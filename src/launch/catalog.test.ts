@@ -5,6 +5,7 @@ import {
   detectSelections,
   buildLaunchOptions,
   isPillAvailable,
+  frequentPills,
   LaunchTools,
 } from "./catalog";
 
@@ -107,6 +108,51 @@ describe("buildLaunchOptions", () => {
     sel.renderer = "-dx12";
     const out = buildLaunchOptions(base, sel);
     expect(out).toBe("%command% -dx12");
+  });
+});
+
+describe("free-text pill (WINEDLLOVERRIDES)", () => {
+  it("detects and preserves the typed value", () => {
+    const base = parse('WINEDLLOVERRIDES="dxgi=n,b" %command%');
+    expect(detectSelections(base).winedll).toBe('"dxgi=n,b"');
+    expect(buildLaunchOptions(base, detectSelections(base))).toBe('WINEDLLOVERRIDES="dxgi=n,b" %command%');
+  });
+
+  it("writes the user's value", () => {
+    expect(buildLaunchOptions(parse(""), { winedll: "dxgi=n,b" })).toBe("WINEDLLOVERRIDES=dxgi=n,b %command%");
+  });
+
+  it("an empty free-text value contributes nothing", () => {
+    expect(buildLaunchOptions(parse(""), { winedll: "" })).toBe("");
+    expect(buildLaunchOptions(parse(""), { winedll: "   " })).toBe("");
+  });
+});
+
+describe("windowMode single-choice arg", () => {
+  it("switching replaces the flag", () => {
+    let base = parse("%command% -windowed");
+    const sel = detectSelections(base);
+    expect(sel.windowMode).toBe("-windowed");
+    sel.windowMode = "-fullscreen";
+    expect(buildLaunchOptions(base, sel)).toBe("%command% -fullscreen");
+  });
+});
+
+describe("frequentPills", () => {
+  const tools: LaunchTools = { lsfg: true, mangohud: true, gamemode: true, gamescope: true, distro: "bazzite", locale_reliable: true };
+
+  it("returns most-used available pills, most-first, capped", () => {
+    const top = frequentPills({ noVideo: 5, mangohud: 9, protonLog: 1 }, tools, 2);
+    expect(top.map((p) => p.id)).toEqual(["mangohud", "noVideo"]);
+  });
+
+  it("excludes pills with no usage and unavailable tools", () => {
+    const top = frequentPills({ lsfg: 3, noVideo: 2 }, { ...tools, lsfg: false });
+    expect(top.map((p) => p.id)).toEqual(["noVideo"]); // lsfg tool absent → dropped
+  });
+
+  it("empty usage → no frequents", () => {
+    expect(frequentPills({}, tools)).toEqual([]);
   });
 });
 

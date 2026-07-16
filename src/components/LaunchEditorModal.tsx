@@ -1,84 +1,69 @@
 import { FC, ReactNode, useEffect, useState } from "react";
 import { ModalRoot, showModal, Focusable } from "@decky/ui";
-import { LuGamepad2, LuCheck, LuTriangleAlert, LuWrench } from "react-icons/lu";
+import { LuGamepad2, LuCheck, LuTriangleAlert, LuShieldCheck, LuChevronDown, LuChevronRight, LuStar } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { Loading } from "./Loading";
-import { Collapsible } from "./Collapsible";
-import { TogglePill, ValuePills } from "./LaunchPills";
+import { LaunchRow } from "./LaunchRow";
 import { LaunchPreview } from "./LaunchPreview";
 import { GameEntry } from "../launch/steamApi";
 import { getLaunchTools, LaunchTools } from "../api";
-import { useLaunchEditor, LaunchEditor } from "../launch/useLaunchEditor";
-import { CATALOG, GROUP_ORDER, Pill, PillGroup, isPillAvailable, ownedTokens } from "../launch/catalog";
+import { useLaunchEditor } from "../launch/useLaunchEditor";
+import { CATALOG, SUBGROUP_ORDER, Pill, Section, frequentPills, ownedTokens } from "../launch/catalog";
 
-// If tool detection can't be read, assume tools absent (pills that need one show
-// disabled) rather than claim they're present.
+type Editor = ReturnType<typeof useLaunchEditor>;
+
 const TOOLS_FALLBACK: LaunchTools = {
   lsfg: false, mangohud: false, gamemode: false, gamescope: false,
   distro: "other", locale_reliable: true,
 };
 
-const GroupLabel: FC<{ children: ReactNode }> = ({ children }) => (
-  <div style={{ ...theme.sectionLabel, marginBottom: theme.space.sm }}>{children}</div>
+const Heading: FC<{ icon?: ReactNode; children: ReactNode }> = ({ icon, children }) => (
+  <div style={{ ...theme.sectionLabel, marginBottom: theme.space.sm, display: "flex", alignItems: "center", gap: 6 }}>
+    {icon}
+    {children}
+  </div>
 );
 
-/** Render one pill: a value pill becomes a chip row, everything else a toggle. */
-function renderPill(pill: Pill, ed: LaunchEditor, tools: LaunchTools, t: (k: string) => string, showValueLabel: boolean) {
-  if (pill.options) {
-    return (
-      <div key={pill.id} style={{ marginBottom: theme.space.sm }}>
-        {showValueLabel && (
-          <div style={{ fontSize: theme.font.body, color: theme.color.textPrimary, marginBottom: theme.space.xs }}>
-            {t(pill.labelKey)}
-          </div>
-        )}
-        <ValuePills
-          offLabel={t("params.off")}
-          options={pill.options.map((o) => ({ value: o.value, label: t(o.labelKey) }))}
-          current={(ed.selections[pill.id] as string | undefined) ?? null}
-          onSelect={(v) => ed.set(pill.id, v)}
-        />
-      </div>
-    );
-  }
-  const available = isPillAvailable(pill, tools);
+/** Lightweight collapsible for use inside the modal (no PanelSectionRow chrome). */
+const Fold: FC<{ title: ReactNode; summary?: ReactNode; defaultOpen?: boolean; children: ReactNode }> = ({ title, summary, defaultOpen, children }) => {
+  const [open, setOpen] = useState(!!defaultOpen);
+  const Chevron = open ? LuChevronDown : LuChevronRight;
   return (
-    <TogglePill
-      key={pill.id}
-      label={t(pill.labelKey)}
-      active={!!ed.selections[pill.id]}
-      disabled={!available}
-      disabledNote={t("params.notDetected")}
-      onToggle={() => ed.set(pill.id, !ed.selections[pill.id])}
-    />
+    <div>
+      <Focusable
+        style={{ display: "flex", alignItems: "center", gap: theme.space.sm, cursor: "pointer", padding: "9px 2px", borderTop: `1px solid ${theme.color.hairline}` }}
+        onActivate={() => setOpen((o) => !o)}
+        onClick={() => setOpen((o) => !o)}
+      >
+        <Chevron size={16} color={theme.color.textMuted} />
+        <span style={{ flex: 1, fontSize: theme.font.body, color: theme.color.textPrimary }}>{title}</span>
+        {!open && summary && <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{summary}</span>}
+      </Focusable>
+      {open && <div style={{ marginTop: theme.space.sm }}>{children}</div>}
+    </div>
   );
-}
+};
 
-/** A group's pills: toggles wrapped in one flex row, value pills as their own blocks. */
-const GroupBody: FC<{ group: PillGroup; ed: LaunchEditor; tools: LaunchTools }> = ({ group, ed, tools }) => {
+/** Rows for a subgroup within a section. */
+const Subgroup: FC<{ section: Section; subgroup: string; ed: Editor; tools: LaunchTools }> = ({ section, subgroup, ed, tools }) => {
   const { t } = useI18n();
-  const pills = CATALOG.filter((p) => p.group === group);
-  const toggles = pills.filter((p) => !p.options);
-  const values = pills.filter((p) => p.options);
-  const showValueLabel = toggles.length > 0 || values.length > 1;
-  const localeCaveat = group === "langStart" && tools.locale_reliable === false;
+  const pills = CATALOG.filter((p) => p.section === section && p.subgroup === subgroup);
+  if (pills.length === 0) return null;
   return (
-    <>
-      {toggles.length > 0 && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: theme.space.sm, marginBottom: values.length ? theme.space.md : 0 }}>
-          {toggles.map((p) => renderPill(p, ed, tools, t, showValueLabel))}
-        </div>
-      )}
-      {values.map((p) => renderPill(p, ed, tools, t, showValueLabel))}
-      {localeCaveat && (
-        <div style={{ fontSize: theme.font.caption, color: theme.color.warn, display: "flex", gap: 6, alignItems: "flex-start", marginTop: theme.space.xs }}>
-          <LuTriangleAlert size={13} style={{ marginTop: 1, flexShrink: 0 }} />
-          <span>{t("params.caveat.locale")}</span>
-        </div>
-      )}
-    </>
+    <div>
+      <Heading>{t(subgroup)}</Heading>
+      {pills.map((p) => (
+        <LaunchRow
+          key={p.id}
+          pill={p}
+          ed={ed}
+          tools={tools}
+          caveat={p.id === "langEs" && tools.locale_reliable === false ? t("params.caveat.locale") : undefined}
+        />
+      ))}
+    </div>
   );
 };
 
@@ -87,8 +72,6 @@ const LaunchEditorBody: FC<{ game: GameEntry }> = ({ game }) => {
   const ed = useLaunchEditor(game);
   const [tools, setTools] = useState<LaunchTools | null>(null);
 
-  // Detect host tools once for this editor. Until it resolves we show a spinner
-  // rather than flash "not detected" on pills whose tool is actually installed.
   useEffect(() => {
     let cancelled = false;
     getLaunchTools()
@@ -99,8 +82,9 @@ const LaunchEditorBody: FC<{ game: GameEntry }> = ({ game }) => {
     };
   }, []);
 
-  const advancedCount = CATALOG.filter((p) => p.advanced && !!ed.selections[p.id]).length;
+  const advancedCount = CATALOG.filter((p) => p.section === "advanced" && !!ed.selections[p.id]).length;
   const owned = ownedTokens(ed.selections);
+  const frequents: Pill[] = tools ? frequentPills(ed.usage, tools) : [];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: theme.space.md, padding: theme.space.sm, maxWidth: 760, width: "100%", margin: "0 auto" }}>
@@ -128,23 +112,32 @@ const LaunchEditorBody: FC<{ game: GameEntry }> = ({ game }) => {
         </div>
       ) : (
         <>
-          {GROUP_ORDER.filter((g) => g !== "advanced").map((g) => (
-            <div key={g}>
-              <GroupLabel>{t(`params.group.${g}`)}</GroupLabel>
-              <GroupBody group={g} ed={ed} tools={tools} />
+          <div style={{ fontSize: theme.font.caption, color: theme.color.ok, display: "flex", alignItems: "center", gap: 6 }}>
+            <LuShieldCheck size={14} /> {t("params.reassure")}
+          </div>
+
+          {frequents.length > 0 && (
+            <div>
+              <Heading icon={<LuStar size={13} />}>{t("params.frequent")}</Heading>
+              {frequents.map((p) => (
+                <LaunchRow key={`fav-${p.id}`} pill={p} ed={ed} tools={tools} />
+              ))}
             </div>
+          )}
+
+          {SUBGROUP_ORDER.common.map((sg) => (
+            <Subgroup key={sg} section="common" subgroup={sg} ed={ed} tools={tools} />
           ))}
 
-          <Collapsible
-            id="params-advanced"
-            icon={<LuWrench size={15} />}
-            title={t("params.group.advanced")}
-            summary={advancedCount > 0 ? `${advancedCount}` : ""}
-          >
-            <GroupBody group="advanced" ed={ed} tools={tools} />
-          </Collapsible>
+          <Fold title={t("params.advanced")} summary={advancedCount > 0 ? `${advancedCount}` : ""}>
+            {SUBGROUP_ORDER.advanced.map((sg) => (
+              <Subgroup key={sg} section="advanced" subgroup={sg} ed={ed} tools={tools} />
+            ))}
+          </Fold>
 
-          <LaunchPreview preview={ed.preview} owned={owned} />
+          <Fold title={t("params.showCommand")}>
+            <LaunchPreview preview={ed.preview} owned={owned} />
+          </Fold>
 
           <Focusable
             style={{

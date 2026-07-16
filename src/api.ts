@@ -9,6 +9,9 @@ export const getVersion = callable<[], string>("get_version");
 // pills. LaunchTools is defined in the pure catalog module (no @decky import).
 export type { LaunchTools };
 export const getLaunchTools = callable<[], LaunchTools>("get_launch_tools");
+// Pill usage counts ({pill_id: times applied}) → the editor surfaces the most-used.
+export const getLaunchUsage = callable<[], Record<string, number>>("get_launch_usage");
+export const bumpLaunchUsage = callable<[ids: string[]], boolean>("bump_launch_usage");
 
 // Durable mirror of the frontend's localStorage prefs (a null value removes a key).
 export const getUiPrefs = callable<[], Record<string, string>>("get_ui_prefs");
