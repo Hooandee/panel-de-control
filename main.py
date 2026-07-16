@@ -26,6 +26,7 @@ from fans import expose as fan_expose
 from fans import presets as fan_presets
 from fans import suggest as fan_suggest
 from fan_curves import FanCurveStore
+from launch import tools as launch_tools
 from display.color_store import ColorStore, sanitize_calibration
 from display.gamescope import GamescopeColorBackend, run_gamescopectl
 from display.oled_look import oled_look_for
@@ -311,6 +312,9 @@ class Plugin:
         self._sampler = TelemetrySampler(
             self._telemetry, self._collect_sample, on_sample=self._on_sample_collected
         )
+        # Host tools the launch-option pills depend on (lsfg/mangohud/gamemode/…) +
+        # distro. Static for the session; detected once. Never raises.
+        self._launch_tools = launch_tools.detect_tools()
         self._ready = True
 
     def _save(self) -> None:
@@ -320,6 +324,10 @@ class Plugin:
     async def get_version(self) -> str:
         self._init()
         return read_version()
+
+    async def get_launch_tools(self) -> dict:
+        self._init()
+        return dict(self._launch_tools)
 
     async def get_ui_prefs(self) -> dict:
         self._init()

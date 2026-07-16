@@ -1,8 +1,14 @@
 import { callable } from "@decky/api";
+import type { LaunchTools } from "./launch/catalog";
 
 // callable<[arg types], ReturnType>("exact_backend_method_name")
 // Names must match the Python `async def` on the Plugin class exactly.
 export const getVersion = callable<[], string>("get_version");
+
+// Detected host tools (lsfg/mangohud/gamemode/…) + distro for the launch-options
+// pills. LaunchTools is defined in the pure catalog module (no @decky import).
+export type { LaunchTools };
+export const getLaunchTools = callable<[], LaunchTools>("get_launch_tools");
 
 // Durable mirror of the frontend's localStorage prefs (a null value removes a key).
 export const getUiPrefs = callable<[], Record<string, string>>("get_ui_prefs");
