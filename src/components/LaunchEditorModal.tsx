@@ -11,10 +11,10 @@ import { Loading } from "./Loading";
 import { LaunchRow } from "./LaunchRow";
 import { LaunchPreview } from "./LaunchPreview";
 import { GameEntry, readCompatTool } from "../launch/steamApi";
-import { getDevice, getLaunchTools, LaunchTools } from "../api";
+import { getDevice, getLaunchTools, getProtonCaps, LaunchTools } from "../api";
 import { useLaunchEditor } from "../launch/useLaunchEditor";
 import { CATALOG, SUBGROUP_ORDER, Pill, Section, frequentPills, recommendedPills, ownedTokens, pillVisible } from "../launch/catalog";
-import { GpuGen, ProtonFamily, protonFamily } from "../launch/proton";
+import { GpuGen } from "../launch/proton";
 
 // Icon per sub-group heading so each group is scannable at a glance.
 const SUBGROUP_ICONS: Record<string, ReactNode> = {
@@ -63,10 +63,11 @@ const Fold: FC<{ title: ReactNode; summary?: ReactNode; defaultOpen?: boolean; c
   );
 };
 
-/** Rows for a subgroup within a section, filtered to the game's Proton family + GPU. */
-const Subgroup: FC<{ section: Section; subgroup: string; ed: Editor; tools: LaunchTools; family: ProtonFamily; gpu: GpuGen }> = ({ section, subgroup, ed, tools, family, gpu }) => {
+/** Rows for a subgroup within a section, filtered to what the game's Proton build
+ *  supports + GPU. */
+const Subgroup: FC<{ section: Section; subgroup: string; ed: Editor; tools: LaunchTools; envs: string[]; gpu: GpuGen }> = ({ section, subgroup, ed, tools, envs, gpu }) => {
   const { t } = useI18n();
-  const pills = CATALOG.filter((p) => p.section === section && p.subgroup === subgroup && pillVisible(p, family, gpu));
+  const pills = CATALOG.filter((p) => p.section === section && p.subgroup === subgroup && pillVisible(p, envs, gpu));
   if (pills.length === 0) return null;
   return (
     <div>
@@ -89,7 +90,8 @@ const LaunchEditorBody: FC<{ game: GameEntry }> = ({ game }) => {
   const ed = useLaunchEditor(game);
   const [tools, setTools] = useState<LaunchTools | null>(null);
   const [gpu, setGpu] = useState<GpuGen>("unknown");
-  const [family, setFamily] = useState<ProtonFamily>("unknown");
+  // PROTON_* vars the game's Proton build actually supports (null until loaded).
+  const [envs, setEnvs] = useState<string[] | null>(null);
   const [versionLabel, setVersionLabel] = useState("");
 
   useEffect(() => {
@@ -105,20 +107,27 @@ const LaunchEditorBody: FC<{ game: GameEntry }> = ({ game }) => {
     };
   }, []);
 
-  // Read the game's Proton version once its app details are warm (after the editor
-  // loads them). Empty/native → "unknown" family → only base pills show.
+  // Read the game's Proton version + capabilities once its app details are warm.
+  // Empty/native → no PROTON caps → only base pills show.
   useEffect(() => {
     if (ed.loading) return;
+    let cancelled = false;
     const ct = readCompatTool(game.liveAppid);
-    setFamily(protonFamily(ct.name));
     setVersionLabel(ct.display || ct.name);
+    getProtonCaps(ct.name)
+      .then((c) => !cancelled && setEnvs(c.envs))
+      .catch(() => !cancelled && setEnvs([]));
+    return () => {
+      cancelled = true;
+    };
   }, [ed.loading, game.liveAppid]);
 
-  const advancedCount = CATALOG.filter((p) => p.section === "advanced" && !!ed.selections[p.id] && pillVisible(p, family, gpu)).length;
+  const supportedEnvs = envs ?? [];
+  const advancedCount = CATALOG.filter((p) => p.section === "advanced" && !!ed.selections[p.id] && pillVisible(p, supportedEnvs, gpu)).length;
   const owned = ownedTokens(ed.selections);
-  const frequents: Pill[] = tools ? frequentPills(ed.usage, tools).filter((p) => pillVisible(p, family, gpu)) : [];
+  const frequents: Pill[] = tools ? frequentPills(ed.usage, tools).filter((p) => pillVisible(p, supportedEnvs, gpu)) : [];
   // No usage yet → offer a "Start here" set of safe recommended picks instead.
-  const starters: Pill[] = tools && frequents.length === 0 ? recommendedPills(tools, family, gpu) : [];
+  const starters: Pill[] = tools && frequents.length === 0 ? recommendedPills(tools, supportedEnvs, gpu) : [];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: theme.space.md, padding: theme.space.sm, maxWidth: 760, width: "100%", margin: "0 auto" }}>
@@ -132,7 +141,7 @@ const LaunchEditorBody: FC<{ game: GameEntry }> = ({ game }) => {
         </div>
       </div>
 
-      {ed.loading || tools === null ? (
+      {ed.loading || tools === null || envs === null ? (
         <Loading />
       ) : ed.malformed ? (
         <div>
@@ -176,12 +185,12 @@ const LaunchEditorBody: FC<{ game: GameEntry }> = ({ game }) => {
           )}
 
           {SUBGROUP_ORDER.common.map((sg) => (
-            <Subgroup key={sg} section="common" subgroup={sg} ed={ed} tools={tools} family={family} gpu={gpu} />
+            <Subgroup key={sg} section="common" subgroup={sg} ed={ed} tools={tools} envs={supportedEnvs} gpu={gpu} />
           ))}
 
           <Fold title={t("params.advanced")} summary={advancedCount > 0 ? `${advancedCount}` : ""}>
             {SUBGROUP_ORDER.advanced.map((sg) => (
-              <Subgroup key={sg} section="advanced" subgroup={sg} ed={ed} tools={tools} family={family} gpu={gpu} />
+              <Subgroup key={sg} section="advanced" subgroup={sg} ed={ed} tools={tools} envs={supportedEnvs} gpu={gpu} />
             ))}
           </Fold>
 

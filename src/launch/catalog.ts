@@ -20,7 +20,7 @@ import {
   serialize,
   envToken,
 } from "./compose";
-import { GpuGen, ProtonFamily } from "./proton";
+import { GpuGen } from "./proton";
 
 export type PillKind = "env" | "wrapper" | "arg";
 export type Section = "common" | "advanced";
@@ -59,8 +59,6 @@ export interface Pill {
   raw?: string;
   /** Honest availability gate — the row shows disabled when the tool isn't detected. */
   requires?: ToolKey;
-  /** Show only for these Proton families (absent = base, shown on any Proton). */
-  families?: ProtonFamily[];
   /** Show only on these GPU generations (absent = any). FSR4 uses this to pick the
    *  right per-GPU env var: RDNA4 vs RDNA3 need different Proton flags. */
   gpus?: GpuGen[];
@@ -103,20 +101,22 @@ export const CATALOG: Pill[] = [
   { id: "protonNoNtsync", section: "advanced", subgroup: "params.sub.proton", kind: "env", envName: "PROTON_NO_NTSYNC", envValue: "1", raw: "PROTON_NO_NTSYNC", labelKey: "params.pill.protonNoNtsync", descKey: "params.pill.protonNoNtsync.desc" },
   { id: "protonWined3d", section: "advanced", subgroup: "params.sub.proton", kind: "env", envName: "PROTON_USE_WINED3D", envValue: "1", raw: "PROTON_USE_WINED3D", labelKey: "params.pill.protonWined3d", descKey: "params.pill.protonWined3d.desc" },
   { id: "protonLog", section: "advanced", subgroup: "params.sub.proton", kind: "env", envName: "PROTON_LOG", envValue: "1", raw: "PROTON_LOG", labelKey: "params.pill.protonLog", descKey: "params.pill.protonLog.desc" },
+  { id: "heapDelayFree", section: "advanced", subgroup: "params.sub.proton", kind: "env", envName: "PROTON_HEAP_DELAY_FREE", envValue: "1", raw: "PROTON_HEAP_DELAY_FREE", labelKey: "params.pill.heapDelayFree", descKey: "params.pill.heapDelayFree.desc" },
 
   // ── Avanzado · Escalado (según versión + GPU) ─────────────────────────────
   // FSR4 needs a different Proton env var per GPU: RDNA4 vs RDNA3 (the RDNA3 path
   // adds the wmma workaround). Two pills, same label — only one shows per device.
-  { id: "fsr4", section: "advanced", subgroup: "params.sub.upscaling", kind: "env", envName: "PROTON_FSR4_UPGRADE", envValue: "1", raw: "PROTON_FSR4_UPGRADE", families: ["ge", "experimental", "cachyos"], gpus: ["rdna4"], labelKey: "params.pill.fsr4", descKey: "params.pill.fsr4.desc" },
-  { id: "fsr4Rdna3", section: "advanced", subgroup: "params.sub.upscaling", kind: "env", envName: "PROTON_FSR4_RDNA3_UPGRADE", envValue: "1", raw: "PROTON_FSR4_RDNA3_UPGRADE", families: ["ge", "experimental", "cachyos"], gpus: ["rdna3"], labelKey: "params.pill.fsr4", descKey: "params.pill.fsr4.desc" },
-  { id: "optiscaler", section: "advanced", subgroup: "params.sub.upscaling", kind: "env", envName: "PROTON_USE_OPTISCALER", envValue: "1", raw: "PROTON_USE_OPTISCALER", families: ["cachyos"], labelKey: "params.pill.optiscaler", descKey: "params.pill.optiscaler.desc" },
+  { id: "fsr4", section: "advanced", subgroup: "params.sub.upscaling", kind: "env", envName: "PROTON_FSR4_UPGRADE", envValue: "1", raw: "PROTON_FSR4_UPGRADE", gpus: ["rdna4"], labelKey: "params.pill.fsr4", descKey: "params.pill.fsr4.desc" },
+  { id: "fsr4Rdna3", section: "advanced", subgroup: "params.sub.upscaling", kind: "env", envName: "PROTON_FSR4_RDNA3_UPGRADE", envValue: "1", raw: "PROTON_FSR4_RDNA3_UPGRADE", gpus: ["rdna3"], labelKey: "params.pill.fsr4", descKey: "params.pill.fsr4.desc" },
+  { id: "optiscaler", section: "advanced", subgroup: "params.sub.upscaling", kind: "env", envName: "PROTON_USE_OPTISCALER", envValue: "1", raw: "PROTON_USE_OPTISCALER", labelKey: "params.pill.optiscaler", descKey: "params.pill.optiscaler.desc" },
 
   // ── Avanzado · Pantalla ───────────────────────────────────────────────────
-  { id: "protonHdr", section: "advanced", subgroup: "params.sub.display", kind: "env", envName: "PROTON_ENABLE_HDR", envValue: "1", raw: "PROTON_ENABLE_HDR", families: ["ge", "experimental", "cachyos"], labelKey: "params.pill.protonHdr", descKey: "params.pill.protonHdr.desc" },
-  { id: "protonWayland", section: "advanced", subgroup: "params.sub.display", kind: "env", envName: "PROTON_ENABLE_WAYLAND", envValue: "1", raw: "PROTON_ENABLE_WAYLAND", families: ["ge", "experimental", "cachyos", "stable"], labelKey: "params.pill.protonWayland", descKey: "params.pill.protonWayland.desc" },
+  { id: "protonHdr", section: "advanced", subgroup: "params.sub.display", kind: "env", envName: "PROTON_ENABLE_HDR", envValue: "1", raw: "PROTON_ENABLE_HDR", labelKey: "params.pill.protonHdr", descKey: "params.pill.protonHdr.desc" },
+  { id: "protonWayland", section: "advanced", subgroup: "params.sub.display", kind: "env", envName: "PROTON_ENABLE_WAYLAND", envValue: "1", raw: "PROTON_ENABLE_WAYLAND", labelKey: "params.pill.protonWayland", descKey: "params.pill.protonWayland.desc" },
 
   // ── Avanzado · Renderizado ────────────────────────────────────────────────
   { id: "noDxr", section: "advanced", recommended: true, subgroup: "params.sub.render", kind: "env", envName: "VKD3D_CONFIG", envValue: "nodxr", raw: "VKD3D_CONFIG", labelKey: "params.pill.noDxr", descKey: "params.pill.noDxr.desc" },
+  { id: "dxvkD3d8", section: "advanced", subgroup: "params.sub.render", kind: "env", envName: "PROTON_DXVK_D3D8", envValue: "1", raw: "PROTON_DXVK_D3D8", labelKey: "params.pill.dxvkD3d8", descKey: "params.pill.dxvkD3d8.desc" },
   {
     id: "renderer", section: "advanced", subgroup: "params.sub.render", kind: "arg",
     labelKey: "params.pill.renderer", descKey: "params.pill.renderer.desc",
@@ -141,6 +141,7 @@ export const CATALOG: Pill[] = [
   // ── Avanzado · Opciones del juego ─────────────────────────────────────────
   { id: "noJoy", section: "advanced", subgroup: "params.sub.gameArgs", kind: "arg", arg: "-nojoy", raw: "-nojoy", labelKey: "params.pill.nojoy", descKey: "params.pill.nojoy.desc" },
   { id: "highPriority", section: "advanced", subgroup: "params.sub.gameArgs", kind: "arg", arg: "-high", raw: "-high", labelKey: "params.pill.high", descKey: "params.pill.high.desc" },
+  { id: "preferSdl", section: "advanced", subgroup: "params.sub.gameArgs", kind: "env", envName: "PROTON_PREFER_SDL", envValue: "1", raw: "PROTON_PREFER_SDL", labelKey: "params.pill.preferSdl", descKey: "params.pill.preferSdl.desc" },
 ];
 
 /** Sub-group order within each section (kept stable; pills render grouped by these). */
@@ -149,11 +150,16 @@ export const SUBGROUP_ORDER: Record<Section, string[]> = {
   advanced: ["params.sub.proton", "params.sub.upscaling", "params.sub.display", "params.sub.render", "params.sub.dlls", "params.sub.gameArgs"],
 };
 
-/** Whether a pill applies to the detected Proton family + GPU (family/GPU mismatch
- *  = hidden). Tool availability is separate — those show disabled, not hidden. */
-export function pillVisible(pill: Pill, family: ProtonFamily, gpu: GpuGen): boolean {
-  if (pill.families && !pill.families.includes(family)) return false;
+/** Whether a pill applies here. A PROTON_* env pill shows only if the game's
+ *  Proton build actually supports that variable (`supportedEnvs`, read from its
+ *  script) — self-updating per version, never faking unsupported options. GPU-
+ *  gated pills (FSR4) also need a matching GPU. Non-Proton pills always show.
+ *  Tool availability is separate (those show disabled, not hidden). */
+export function pillVisible(pill: Pill, supportedEnvs: string[], gpu: GpuGen): boolean {
   if (pill.gpus && !pill.gpus.includes(gpu)) return false;
+  if (pill.kind === "env" && pill.envName?.startsWith("PROTON_") && !supportedEnvs.includes(pill.envName)) {
+    return false;
+  }
   return true;
 }
 
@@ -304,13 +310,13 @@ export function helpKeyOf(pill: Pill): string {
 /** Safe recommended picks that apply here — seeds "Empezar aquí" when there's no usage. */
 export function recommendedPills(
   tools: LaunchTools | null,
-  family: ProtonFamily,
+  supportedEnvs: string[],
   gpu: GpuGen,
   n = 4,
   catalog: Pill[] = CATALOG,
 ): Pill[] {
   return catalog
-    .filter((p) => p.recommended && isPillAvailable(p, tools) && pillVisible(p, family, gpu))
+    .filter((p) => p.recommended && isPillAvailable(p, tools) && pillVisible(p, supportedEnvs, gpu))
     .slice(0, n);
 }
 

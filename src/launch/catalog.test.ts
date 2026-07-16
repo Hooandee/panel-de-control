@@ -158,34 +158,31 @@ describe("frequentPills", () => {
   });
 });
 
-describe("pillVisible (Proton family + GPU gating)", () => {
+describe("pillVisible (Proton capability + GPU gating)", () => {
   const pill = (id: string) => CATALOG.find((p) => p.id === id)!;
 
-  it("base pills (no family) show on any family", () => {
-    expect(pillVisible(pill("protonLog"), "stable", "rdna3")).toBe(true);
-    expect(pillVisible(pill("protonLog"), "unknown", "unknown")).toBe(true);
+  it("a PROTON_ env pill shows only when the build supports its var", () => {
+    expect(pillVisible(pill("protonHdr"), ["PROTON_ENABLE_HDR"], "rdna3")).toBe(true);
+    expect(pillVisible(pill("protonHdr"), [], "rdna3")).toBe(false);
   });
 
-  it("HDR is GE/experimental/cachyos only, hidden on stable/unknown", () => {
-    expect(pillVisible(pill("protonHdr"), "ge", "rdna3")).toBe(true);
-    expect(pillVisible(pill("protonHdr"), "stable", "rdna3")).toBe(false);
-    expect(pillVisible(pill("protonHdr"), "unknown", "rdna3")).toBe(false);
+  it("non-Proton pills always show (wrappers, LANG, args)", () => {
+    expect(pillVisible(pill("mangohud"), [], "unknown")).toBe(true);
+    expect(pillVisible(pill("langEs"), [], "unknown")).toBe(true);
+    expect(pillVisible(pill("noVideo"), [], "unknown")).toBe(true);
   });
 
-  it("FSR4 picks the right per-GPU variant (RDNA4 vs RDNA3)", () => {
-    // RDNA4 → PROTON_FSR4_UPGRADE variant; RDNA3 → the RDNA3 variant. Never both.
-    expect(pillVisible(pill("fsr4"), "ge", "rdna4")).toBe(true);
-    expect(pillVisible(pill("fsr4"), "ge", "rdna3")).toBe(false);
-    expect(pillVisible(pill("fsr4Rdna3"), "ge", "rdna3")).toBe(true);
-    expect(pillVisible(pill("fsr4Rdna3"), "ge", "rdna4")).toBe(false);
-    // Neither on RDNA2 (Steam Deck) or a wrong family.
-    expect(pillVisible(pill("fsr4Rdna3"), "ge", "rdna2")).toBe(false);
-    expect(pillVisible(pill("fsr4Rdna3"), "stable", "rdna3")).toBe(false);
+  it("FSR4 needs its var supported AND the right GPU", () => {
+    expect(pillVisible(pill("fsr4"), ["PROTON_FSR4_UPGRADE"], "rdna4")).toBe(true);
+    expect(pillVisible(pill("fsr4"), ["PROTON_FSR4_UPGRADE"], "rdna3")).toBe(false); // wrong GPU
+    expect(pillVisible(pill("fsr4Rdna3"), ["PROTON_FSR4_RDNA3_UPGRADE"], "rdna3")).toBe(true);
+    expect(pillVisible(pill("fsr4Rdna3"), [], "rdna3")).toBe(false); // var unsupported by build
+    expect(pillVisible(pill("fsr4Rdna3"), ["PROTON_FSR4_RDNA3_UPGRADE"], "rdna2")).toBe(false); // Steam Deck
   });
 
-  it("OptiScaler is CachyOS-only", () => {
-    expect(pillVisible(pill("optiscaler"), "cachyos", "rdna3")).toBe(true);
-    expect(pillVisible(pill("optiscaler"), "ge", "rdna3")).toBe(false);
+  it("OptiScaler shows only where its var exists (CachyOS)", () => {
+    expect(pillVisible(pill("optiscaler"), ["PROTON_USE_OPTISCALER"], "rdna3")).toBe(true);
+    expect(pillVisible(pill("optiscaler"), [], "rdna3")).toBe(false);
   });
 });
 

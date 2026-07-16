@@ -27,6 +27,7 @@ from fans import presets as fan_presets
 from fans import suggest as fan_suggest
 from fan_curves import FanCurveStore
 from launch import tools as launch_tools
+from launch import proton_caps
 from display.color_store import ColorStore, sanitize_calibration
 from display.gamescope import GamescopeColorBackend, run_gamescopectl
 from display.oled_look import oled_look_for
@@ -331,6 +332,12 @@ class Plugin:
     async def get_launch_tools(self) -> dict:
         self._init()
         return dict(self._launch_tools)
+
+    async def get_proton_caps(self, compat_name: str = "") -> dict:
+        """Which PROTON_* vars the given game's Proton build supports (read from its
+        own script) → the editor only shows options that actually work there."""
+        self._init()
+        return proton_caps.detect_capabilities(compat_name)
 
     async def get_launch_usage(self) -> dict:
         self._init()

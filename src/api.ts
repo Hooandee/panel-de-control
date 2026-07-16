@@ -9,6 +9,14 @@ export const getVersion = callable<[], string>("get_version");
 // pills. LaunchTools is defined in the pure catalog module (no @decky import).
 export type { LaunchTools };
 export const getLaunchTools = callable<[], LaunchTools>("get_launch_tools");
+// Which PROTON_* vars the game's Proton build actually supports (read from its
+// script) → gate version-specific pills honestly. `found` false = couldn't locate
+// the build (stay conservative). envs always includes core Proton vars.
+export interface ProtonCaps {
+  envs: string[];
+  found: boolean;
+}
+export const getProtonCaps = callable<[compatName: string], ProtonCaps>("get_proton_caps");
 // Pill usage counts ({pill_id: times applied}) → the editor surfaces the most-used.
 export const getLaunchUsage = callable<[], Record<string, number>>("get_launch_usage");
 export const bumpLaunchUsage = callable<[ids: string[]], boolean>("bump_launch_usage");
