@@ -12,6 +12,7 @@ import { isValueToastEnabled, setValueToastEnabled } from "../system/valueToast"
 import { UpdatePanel } from "../updater/UpdatePanel";
 import { ControllerConflictCard } from "../components/ControllerConflictCard";
 import { theme } from "../theme";
+import { setDeviceHeaderHidden, useDeviceHeaderHidden } from "../system/deviceHeaderVisibility";
 
 const AUTHOR = "Hooandee";
 const CHANNEL_URL = "https://www.youtube.com/@Hooandee";
@@ -42,6 +43,7 @@ export const AjustesSection: FC = () => {
   const [coolerBoost, onToggleCoolerBoost] = useToggleSetting(getCoolerBoost, setCoolerBoost, false);
   const [qamBoost, onToggleQamBoost] = useToggleSetting(getQamTdpBoost, setQamTdpBoost, false);
   const [valueToast, setValueToast] = useState(isValueToastEnabled());
+  const deviceHeaderHidden = useDeviceHeaderHidden();
   const onToggleValueToast = (next: boolean) => {
     setValueToast(next);
     setValueToastEnabled(next);
@@ -152,6 +154,14 @@ export const AjustesSection: FC = () => {
           description={t("settings.valueToast.desc")}
           checked={valueToast}
           onChange={onToggleValueToast}
+          bottomSeparator="none"
+        />
+
+        <ToggleField
+          label={t("settings.deviceHeader")}
+          description={t("settings.deviceHeader.desc")}
+          checked={deviceHeaderHidden}
+          onChange={setDeviceHeaderHidden}
           bottomSeparator="none"
         />
 
