@@ -15,18 +15,12 @@ const TOOLS: LaunchTools = {
 };
 
 describe("detectSelections", () => {
-  it("lights up wrapper / env-value / arg pills from a string", () => {
-    const sel = detectSelections(parse("DXVK_FRAME_RATE=60 mangohud ~/lsfg %command% -novid"));
+  it("lights up wrapper / arg pills from a string", () => {
+    const sel = detectSelections(parse("mangohud ~/lsfg %command% -novid"));
     expect(sel.mangohud).toBe(true);
     expect(sel.lsfg).toBe(true);
-    expect(sel.fpsLimit).toBe("60");
     expect(sel.noVideo).toBe(true);
     expect(sel.gamemode).toBeUndefined();
-  });
-
-  it("captures an fps value outside our chip set (so it's preserved)", () => {
-    const sel = detectSelections(parse("DXVK_FRAME_RATE=45 %command%"));
-    expect(sel.fpsLimit).toBe("45");
   });
 
   it("detects the chosen renderer flag", () => {
@@ -85,9 +79,16 @@ describe("buildLaunchOptions", () => {
 
   it("preserves EmuDeck/SRM content while adding our tokens", () => {
     const base = parse("SRM_LAUNCH=1 %command%");
-    const out = buildLaunchOptions(base, { fpsLimit: "60", mangohud: true, noVideo: true });
+    const out = buildLaunchOptions(base, { mangohud: true, noVideo: true });
     // SRM env preserved; ours inserted in the right zones.
-    expect(out).toBe("SRM_LAUNCH=1 DXVK_FRAME_RATE=60 mangohud %command% -novid");
+    expect(out).toBe("SRM_LAUNCH=1 mangohud %command% -novid");
+  });
+
+  it("preserves an unknown env we no longer own (e.g. DXVK_FRAME_RATE)", () => {
+    const base = parse("DXVK_FRAME_RATE=60 mangohud %command% -novid");
+    const sel = detectSelections(base); // DXVK_FRAME_RATE not detected (no pill owns it)
+    expect(sel.fpsLimit).toBeUndefined();
+    expect(buildLaunchOptions(base, sel)).toBe("DXVK_FRAME_RATE=60 mangohud %command% -novid");
   });
 
   it("keeps a pre-existing unknown wrapper outermost", () => {

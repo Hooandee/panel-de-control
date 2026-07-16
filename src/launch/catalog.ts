@@ -83,17 +83,6 @@ export const CATALOG: Pill[] = [
   { id: "mangohud", section: "common", subgroup: "params.sub.perf", kind: "wrapper", wrapper: "mangohud", raw: "mangohud", requires: "mangohud", labelKey: "params.pill.mangohud", descKey: "params.pill.mangohud.desc" },
   { id: "gamemode", section: "common", subgroup: "params.sub.perf", kind: "wrapper", wrapper: "gamemoderun", raw: "gamemoderun", requires: "gamemode", labelKey: "params.pill.gamemode", descKey: "params.pill.gamemode.desc" },
   { id: "lsfg", section: "common", subgroup: "params.sub.perf", kind: "wrapper", wrapper: "~/lsfg", raw: "~/lsfg", requires: "lsfg", labelKey: "params.pill.lsfg", descKey: "params.pill.lsfg.desc" },
-  {
-    id: "fpsLimit", section: "common", subgroup: "params.sub.fps", kind: "env", envName: "DXVK_FRAME_RATE",
-    raw: "DXVK_FRAME_RATE", labelKey: "params.pill.fps", descKey: "params.pill.fps.desc",
-    options: [
-      { value: "30", labelKey: "params.fps.30" },
-      { value: "40", labelKey: "params.fps.40" },
-      { value: "60", labelKey: "params.fps.60" },
-      { value: "90", labelKey: "params.fps.90" },
-      { value: "120", labelKey: "params.fps.120" },
-    ],
-  },
   { id: "langEs", section: "common", subgroup: "params.sub.lang", kind: "env", envName: "LANG", envValue: "es_ES.UTF-8", raw: "LANG", labelKey: "params.pill.langEs", descKey: "params.pill.langEs.desc" },
   { id: "noVideo", section: "common", subgroup: "params.sub.startup", kind: "arg", arg: "-novid", raw: "-novid", labelKey: "params.pill.novid", descKey: "params.pill.novid.desc" },
 
@@ -133,7 +122,7 @@ export const CATALOG: Pill[] = [
 
 /** Sub-group order within each section (kept stable; pills render grouped by these). */
 export const SUBGROUP_ORDER: Record<Section, string[]> = {
-  common: ["params.sub.perf", "params.sub.fps", "params.sub.lang", "params.sub.startup"],
+  common: ["params.sub.perf", "params.sub.lang", "params.sub.startup"],
   advanced: ["params.sub.proton", "params.sub.render", "params.sub.dlls", "params.sub.gameArgs"],
 };
 
