@@ -7,10 +7,11 @@ import { theme } from "../theme";
 import { Loading } from "./Loading";
 import { LaunchRow } from "./LaunchRow";
 import { LaunchPreview } from "./LaunchPreview";
-import { GameEntry } from "../launch/steamApi";
-import { getLaunchTools, LaunchTools } from "../api";
+import { GameEntry, readCompatTool } from "../launch/steamApi";
+import { getDevice, getLaunchTools, LaunchTools } from "../api";
 import { useLaunchEditor } from "../launch/useLaunchEditor";
-import { CATALOG, SUBGROUP_ORDER, Pill, Section, frequentPills, ownedTokens } from "../launch/catalog";
+import { CATALOG, SUBGROUP_ORDER, Pill, Section, frequentPills, ownedTokens, pillVisible } from "../launch/catalog";
+import { GpuGen, ProtonFamily, protonFamily } from "../launch/proton";
 
 type Editor = ReturnType<typeof useLaunchEditor>;
 
@@ -46,10 +47,10 @@ const Fold: FC<{ title: ReactNode; summary?: ReactNode; defaultOpen?: boolean; c
   );
 };
 
-/** Rows for a subgroup within a section. */
-const Subgroup: FC<{ section: Section; subgroup: string; ed: Editor; tools: LaunchTools }> = ({ section, subgroup, ed, tools }) => {
+/** Rows for a subgroup within a section, filtered to the game's Proton family + GPU. */
+const Subgroup: FC<{ section: Section; subgroup: string; ed: Editor; tools: LaunchTools; family: ProtonFamily; gpu: GpuGen }> = ({ section, subgroup, ed, tools, family, gpu }) => {
   const { t } = useI18n();
-  const pills = CATALOG.filter((p) => p.section === section && p.subgroup === subgroup);
+  const pills = CATALOG.filter((p) => p.section === section && p.subgroup === subgroup && pillVisible(p, family, gpu));
   if (pills.length === 0) return null;
   return (
     <div>
@@ -71,20 +72,35 @@ const LaunchEditorBody: FC<{ game: GameEntry }> = ({ game }) => {
   const { t } = useI18n();
   const ed = useLaunchEditor(game);
   const [tools, setTools] = useState<LaunchTools | null>(null);
+  const [gpu, setGpu] = useState<GpuGen>("unknown");
+  const [family, setFamily] = useState<ProtonFamily>("unknown");
+  const [versionLabel, setVersionLabel] = useState("");
 
   useEffect(() => {
     let cancelled = false;
     getLaunchTools()
       .then((tt) => !cancelled && setTools(tt))
       .catch(() => !cancelled && setTools(TOOLS_FALLBACK));
+    getDevice()
+      .then((d) => !cancelled && setGpu((d.gpu_gen as GpuGen) || "unknown"))
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
   }, []);
 
-  const advancedCount = CATALOG.filter((p) => p.section === "advanced" && !!ed.selections[p.id]).length;
+  // Read the game's Proton version once its app details are warm (after the editor
+  // loads them). Empty/native → "unknown" family → only base pills show.
+  useEffect(() => {
+    if (ed.loading) return;
+    const ct = readCompatTool(game.liveAppid);
+    setFamily(protonFamily(ct.name));
+    setVersionLabel(ct.display || ct.name);
+  }, [ed.loading, game.liveAppid]);
+
+  const advancedCount = CATALOG.filter((p) => p.section === "advanced" && !!ed.selections[p.id] && pillVisible(p, family, gpu)).length;
   const owned = ownedTokens(ed.selections);
-  const frequents: Pill[] = tools ? frequentPills(ed.usage, tools) : [];
+  const frequents: Pill[] = tools ? frequentPills(ed.usage, tools).filter((p) => pillVisible(p, family, gpu)) : [];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: theme.space.md, padding: theme.space.sm, maxWidth: 760, width: "100%", margin: "0 auto" }}>
@@ -112,8 +128,15 @@ const LaunchEditorBody: FC<{ game: GameEntry }> = ({ game }) => {
         </div>
       ) : (
         <>
-          <div style={{ fontSize: theme.font.caption, color: theme.color.ok, display: "flex", alignItems: "center", gap: 6 }}>
-            <LuShieldCheck size={14} /> {t("params.reassure")}
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <div style={{ fontSize: theme.font.caption, color: theme.color.ok, display: "flex", alignItems: "center", gap: 6 }}>
+              <LuShieldCheck size={14} /> {t("params.reassure")}
+            </div>
+            {versionLabel && (
+              <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
+                {t("params.detectedProton", { name: versionLabel })}
+              </div>
+            )}
           </div>
 
           {frequents.length > 0 && (
@@ -126,12 +149,12 @@ const LaunchEditorBody: FC<{ game: GameEntry }> = ({ game }) => {
           )}
 
           {SUBGROUP_ORDER.common.map((sg) => (
-            <Subgroup key={sg} section="common" subgroup={sg} ed={ed} tools={tools} />
+            <Subgroup key={sg} section="common" subgroup={sg} ed={ed} tools={tools} family={family} gpu={gpu} />
           ))}
 
           <Fold title={t("params.advanced")} summary={advancedCount > 0 ? `${advancedCount}` : ""}>
             {SUBGROUP_ORDER.advanced.map((sg) => (
-              <Subgroup key={sg} section="advanced" subgroup={sg} ed={ed} tools={tools} />
+              <Subgroup key={sg} section="advanced" subgroup={sg} ed={ed} tools={tools} family={family} gpu={gpu} />
             ))}
           </Fold>
 

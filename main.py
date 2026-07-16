@@ -391,6 +391,8 @@ class Plugin:
         # chip when the kernel exposes nothing.
         if self._chip:
             d["chip"] = self._chip
+        # GPU generation for upscaler gating in Parámetros (FSR4 = rdna3/rdna4).
+        d["gpu_gen"] = device_registry.gpu_generation(self._device.vendor, d["chip"])
         return d
 
     # ---- Bug reporter ------------------------------------------------------

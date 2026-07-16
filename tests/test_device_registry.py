@@ -206,3 +206,17 @@ def test_ally_family_curated_presets():
 
 def test_other_devices_have_no_curated_presets():
     assert detect(product_name="Galileo").tdp_presets == ()  # falls back to rail limits
+
+
+def test_gpu_generation():
+    from device_registry import gpu_generation
+    assert gpu_generation("intel", "Intel Core Ultra 7 258V") == "intel"
+    assert gpu_generation("amd", "AMD Sephiroth") == "rdna2"
+    assert gpu_generation("amd", "AMD Van Gogh") == "rdna2"
+    assert gpu_generation("amd", "AMD Z1 Extreme") == "rdna3"
+    assert gpu_generation("amd", "AMD Ryzen Z2 Go") == "rdna3"
+    assert gpu_generation("amd", "AMD Ryzen AI Z2 Extreme") == "rdna35"
+    assert gpu_generation("amd", "AMD Ryzen AI 9 HX 370") == "rdna35"
+    assert gpu_generation("amd", "AMD Ryzen AI Max+ 395") == "rdna35"
+    assert gpu_generation("amd", "AMD Ryzen Z2 A") == "rdna2"
+    assert gpu_generation("amd", "Desconocido") == "unknown"

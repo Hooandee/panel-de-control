@@ -20,6 +20,7 @@ import {
   serialize,
   envToken,
 } from "./compose";
+import { GpuGen, ProtonFamily, UpscalerTier, upscalerSupported } from "./proton";
 
 export type PillKind = "env" | "wrapper" | "arg";
 export type Section = "common" | "advanced";
@@ -53,6 +54,10 @@ export interface Pill {
   raw?: string;
   /** Honest availability gate — the row shows disabled when the tool isn't detected. */
   requires?: ToolKey;
+  /** Show only for these Proton families (absent = base, shown on any Proton). */
+  families?: ProtonFamily[];
+  /** FSR/XeSS upgrade gated by GPU generation (hidden where unsupported). */
+  fsr?: UpscalerTier;
   // env pills
   envName?: string;
   envValue?: string; // fixed value (simple env toggle)
@@ -93,7 +98,18 @@ export const CATALOG: Pill[] = [
   { id: "protonWined3d", section: "advanced", subgroup: "params.sub.proton", kind: "env", envName: "PROTON_USE_WINED3D", envValue: "1", raw: "PROTON_USE_WINED3D", labelKey: "params.pill.protonWined3d", descKey: "params.pill.protonWined3d.desc" },
   { id: "protonLog", section: "advanced", subgroup: "params.sub.proton", kind: "env", envName: "PROTON_LOG", envValue: "1", raw: "PROTON_LOG", labelKey: "params.pill.protonLog", descKey: "params.pill.protonLog.desc" },
 
+  // ── Avanzado · Escalado (según versión + GPU) ─────────────────────────────
+  { id: "fsr4", section: "advanced", subgroup: "params.sub.upscaling", kind: "env", envName: "PROTON_FSR4_UPGRADE", envValue: "1", raw: "PROTON_FSR4_UPGRADE", families: ["ge", "experimental", "cachyos"], fsr: "fsr4", labelKey: "params.pill.fsr4", descKey: "params.pill.fsr4.desc" },
+  { id: "fsr3", section: "advanced", subgroup: "params.sub.upscaling", kind: "env", envName: "PROTON_FSR3_UPGRADE", envValue: "1", raw: "PROTON_FSR3_UPGRADE", families: ["ge", "experimental", "cachyos"], fsr: "fsr3", labelKey: "params.pill.fsr3", descKey: "params.pill.fsr3.desc" },
+  { id: "xess", section: "advanced", subgroup: "params.sub.upscaling", kind: "env", envName: "PROTON_XESS_UPGRADE", envValue: "1", raw: "PROTON_XESS_UPGRADE", families: ["ge", "experimental", "cachyos"], fsr: "xess", labelKey: "params.pill.xess", descKey: "params.pill.xess.desc" },
+  { id: "optiscaler", section: "advanced", subgroup: "params.sub.upscaling", kind: "env", envName: "PROTON_USE_OPTISCALER", envValue: "1", raw: "PROTON_USE_OPTISCALER", families: ["cachyos"], labelKey: "params.pill.optiscaler", descKey: "params.pill.optiscaler.desc" },
+
+  // ── Avanzado · Pantalla ───────────────────────────────────────────────────
+  { id: "protonHdr", section: "advanced", subgroup: "params.sub.display", kind: "env", envName: "PROTON_ENABLE_HDR", envValue: "1", raw: "PROTON_ENABLE_HDR", families: ["ge", "experimental", "cachyos"], labelKey: "params.pill.protonHdr", descKey: "params.pill.protonHdr.desc" },
+  { id: "protonWayland", section: "advanced", subgroup: "params.sub.display", kind: "env", envName: "PROTON_ENABLE_WAYLAND", envValue: "1", raw: "PROTON_ENABLE_WAYLAND", families: ["ge", "experimental", "cachyos", "stable"], labelKey: "params.pill.protonWayland", descKey: "params.pill.protonWayland.desc" },
+
   // ── Avanzado · Renderizado ────────────────────────────────────────────────
+  { id: "noDxr", section: "advanced", subgroup: "params.sub.render", kind: "env", envName: "VKD3D_CONFIG", envValue: "nodxr", raw: "VKD3D_CONFIG", labelKey: "params.pill.noDxr", descKey: "params.pill.noDxr.desc" },
   {
     id: "renderer", section: "advanced", subgroup: "params.sub.render", kind: "arg",
     labelKey: "params.pill.renderer", descKey: "params.pill.renderer.desc",
@@ -123,8 +139,16 @@ export const CATALOG: Pill[] = [
 /** Sub-group order within each section (kept stable; pills render grouped by these). */
 export const SUBGROUP_ORDER: Record<Section, string[]> = {
   common: ["params.sub.perf", "params.sub.lang", "params.sub.startup"],
-  advanced: ["params.sub.proton", "params.sub.render", "params.sub.dlls", "params.sub.gameArgs"],
+  advanced: ["params.sub.proton", "params.sub.upscaling", "params.sub.display", "params.sub.render", "params.sub.dlls", "params.sub.gameArgs"],
 };
+
+/** Whether a pill applies to the detected Proton family + GPU (family/GPU mismatch
+ *  = hidden). Tool availability is separate — those show disabled, not hidden. */
+export function pillVisible(pill: Pill, family: ProtonFamily, gpu: GpuGen): boolean {
+  if (pill.families && !pill.families.includes(family)) return false;
+  if (pill.fsr && !upscalerSupported(pill.fsr, gpu)) return false;
+  return true;
+}
 
 // Wrapper chain order (outer→inner), independent of display order: gamemode wraps
 // mangohud wraps lsfg wraps the game. Newly-enabled wrappers are added in this order.

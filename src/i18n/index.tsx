@@ -76,6 +76,27 @@ const es: Record<string, string> = {
   "params.pill.protonWined3d.desc": "Último recurso si un juego no arranca. Suele ir más lento.",
   "params.pill.protonLog": "Registro de diagnóstico",
   "params.pill.protonLog.desc": "Guarda un log para investigar fallos. Actívalo solo si reportas un problema.",
+  // Subcategorías nuevas + versión detectada
+  "params.sub.upscaling": "Escalado (FSR / XeSS)",
+  "params.sub.display": "Pantalla y HDR",
+  "params.detectedProton": "Versión: {name}",
+  // Pills · Escalado
+  "params.pill.fsr4": "Subir a FSR 4",
+  "params.pill.fsr4.desc": "Mejora los juegos con FSR 3.1 a FSR 4. Solo con GPU compatible.",
+  "params.pill.fsr3": "Subir a FSR 3",
+  "params.pill.fsr3.desc": "Actualiza el escalado del juego a FSR 3.",
+  "params.pill.xess": "Actualizar XeSS",
+  "params.pill.xess.desc": "Usa una versión más nueva de XeSS (ideal en Intel).",
+  "params.pill.optiscaler": "OptiScaler",
+  "params.pill.optiscaler.desc": "Sustituye DLSS por FSR/XeSS y añade generación de fotogramas. Solo Proton‑CachyOS.",
+  // Pills · Pantalla
+  "params.pill.protonHdr": "HDR",
+  "params.pill.protonHdr.desc": "Activa HDR en juegos compatibles. Necesita panel HDR y activa Wayland.",
+  "params.pill.protonWayland": "Driver Wayland",
+  "params.pill.protonWayland.desc": "Usa el driver Wayland (necesario para HDR). Experimental.",
+  // Pills · Render
+  "params.pill.noDxr": "Desactivar ray tracing",
+  "params.pill.noDxr.desc": "Quita el trazado de rayos para ganar rendimiento en la gráfica integrada.",
   // Pills · Render / ventana
   "params.pill.renderer": "Forzar motor gráfico",
   "params.pill.renderer.desc": "Cambia el motor gráfico si el que usa por defecto falla. Según el juego.",
@@ -490,6 +511,27 @@ const en: Record<string, string> = {
   "params.pill.protonWined3d.desc": "Last resort if a game won't start. Usually slower.",
   "params.pill.protonLog": "Diagnostic log",
   "params.pill.protonLog.desc": "Saves a log to investigate crashes. Only turn it on when reporting a problem.",
+  // New subgroups + detected version
+  "params.sub.upscaling": "Upscaling (FSR / XeSS)",
+  "params.sub.display": "Display and HDR",
+  "params.detectedProton": "Version: {name}",
+  // Pills · Upscaling
+  "params.pill.fsr4": "Upgrade to FSR 4",
+  "params.pill.fsr4.desc": "Upgrades FSR 3.1 games to FSR 4. Only on a supported GPU.",
+  "params.pill.fsr3": "Upgrade to FSR 3",
+  "params.pill.fsr3.desc": "Upgrades the game's upscaling to FSR 3.",
+  "params.pill.xess": "Upgrade XeSS",
+  "params.pill.xess.desc": "Uses a newer XeSS build (best on Intel).",
+  "params.pill.optiscaler": "OptiScaler",
+  "params.pill.optiscaler.desc": "Swaps DLSS for FSR/XeSS and adds frame generation. Proton‑CachyOS only.",
+  // Pills · Display
+  "params.pill.protonHdr": "HDR",
+  "params.pill.protonHdr.desc": "Enables HDR in supported games. Needs an HDR panel and turns on Wayland.",
+  "params.pill.protonWayland": "Wayland driver",
+  "params.pill.protonWayland.desc": "Uses the Wayland driver (required for HDR). Experimental.",
+  // Pills · Render
+  "params.pill.noDxr": "Disable ray tracing",
+  "params.pill.noDxr.desc": "Turns off ray tracing to gain performance on the integrated GPU.",
   // Pills · Render / window
   "params.pill.renderer": "Force graphics engine",
   "params.pill.renderer.desc": "Switch the graphics engine if the default one fails. Depends on the game.",

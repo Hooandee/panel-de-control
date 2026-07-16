@@ -38,6 +38,27 @@ def _generic_for(root: str) -> DeviceProfile:
     return dataclasses.replace(GENERIC, vendor=vendor, chip=chip)
 
 
+def gpu_generation(vendor: str, chip: str) -> str:
+    """AMD RDNA generation (or "intel"/"unknown") derived from the real chip name,
+    used to gate FSR/XeSS upgrade launch options. Best-effort by silicon family;
+    a wrong guess only shows/hides an upscaler pill. FSR4 = rdna3/rdna4 only.
+    """
+    if (vendor or "").lower() == "intel":
+        return "intel"
+    c = (chip or "").lower()
+    if "van gogh" in c or "sephiroth" in c:
+        return "rdna2"  # Steam Deck
+    if "z2 a" in c:
+        return "rdna2"  # lower-tier Z2
+    # Strix Point / Strix Halo (Ryzen AI ...): RDNA 3.5
+    if "ryzen ai" in c or "ai max" in c or "hx 370" in c or "hx 365" in c:
+        return "rdna35"
+    # Z1 Extreme / Z2 Go / Phoenix-Hawk (78x0/88x0): RDNA 3
+    if "z1 extreme" in c or "z2 go" in c or "8840" in c or "7840" in c or "8640" in c:
+        return "rdna3"
+    return "unknown"
+
+
 def detect(product_name: str | None = None, root: str = "/") -> DeviceProfile:
     """Return the DeviceProfile for this machine. Never raises. Falls back to a
     GENERIC profile carrying the host's real vendor/chip.

@@ -101,6 +101,17 @@ export function readLaunchOptions(appid: number, timeoutMs = 1200): Promise<stri
   });
 }
 
+/** The game's Proton compat tool (id + human label), from cached app details.
+ *  Empty strings when unknown / native Linux / details not cached. */
+export function readCompatTool(appid: number): { name: string; display: string } {
+  try {
+    const d = w.appDetailsStore?.GetAppDetails?.(appid);
+    return { name: d?.strCompatToolName ?? "", display: d?.strCompatToolDisplayName ?? "" };
+  } catch {
+    return { name: "", display: "" };
+  }
+}
+
 /** Write a game's launch-options string (works for Steam and non-Steam). No-op if unavailable. */
 export function writeLaunchOptions(appid: number, value: string): void {
   try {

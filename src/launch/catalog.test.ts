@@ -6,6 +6,7 @@ import {
   buildLaunchOptions,
   isPillAvailable,
   frequentPills,
+  pillVisible,
   LaunchTools,
 } from "./catalog";
 
@@ -154,6 +155,38 @@ describe("frequentPills", () => {
 
   it("empty usage → no frequents", () => {
     expect(frequentPills({}, tools)).toEqual([]);
+  });
+});
+
+describe("pillVisible (Proton family + GPU gating)", () => {
+  const pill = (id: string) => CATALOG.find((p) => p.id === id)!;
+
+  it("base pills (no family) show on any family", () => {
+    expect(pillVisible(pill("protonLog"), "stable", "rdna3")).toBe(true);
+    expect(pillVisible(pill("protonLog"), "unknown", "unknown")).toBe(true);
+  });
+
+  it("HDR is GE/experimental/cachyos only, hidden on stable/unknown", () => {
+    expect(pillVisible(pill("protonHdr"), "ge", "rdna3")).toBe(true);
+    expect(pillVisible(pill("protonHdr"), "stable", "rdna3")).toBe(false);
+    expect(pillVisible(pill("protonHdr"), "unknown", "rdna3")).toBe(false);
+  });
+
+  it("FSR4 needs GE-family AND an RDNA3/4 GPU", () => {
+    expect(pillVisible(pill("fsr4"), "ge", "rdna3")).toBe(true);
+    expect(pillVisible(pill("fsr4"), "ge", "rdna2")).toBe(false); // Steam Deck
+    expect(pillVisible(pill("fsr4"), "ge", "rdna35")).toBe(false);
+    expect(pillVisible(pill("fsr4"), "stable", "rdna3")).toBe(false); // wrong family
+  });
+
+  it("OptiScaler is CachyOS-only", () => {
+    expect(pillVisible(pill("optiscaler"), "cachyos", "rdna3")).toBe(true);
+    expect(pillVisible(pill("optiscaler"), "ge", "rdna3")).toBe(false);
+  });
+
+  it("XeSS shows on the Intel Claw (GE family)", () => {
+    expect(pillVisible(pill("xess"), "ge", "intel")).toBe(true);
+    expect(pillVisible(pill("fsr4"), "ge", "intel")).toBe(false);
   });
 });
 
