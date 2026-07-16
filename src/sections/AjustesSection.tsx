@@ -7,11 +7,13 @@ import { openCustomizeModal } from "../components/CustomizeModal";
 import { openGameProfilesModal } from "../components/GameProfilesModal";
 import { openGlossaryModal } from "../components/GlossaryModal";
 import { openReportModal } from "../components/ReportModal";
-import { getTelemetryEnabled, setTelemetryEnabled, getUnlockBatteryMax, setUnlockBatteryMax, getCoolerBoost, setCoolerBoost, getQamTdpBoost, setQamTdpBoost, resetTelemetry, getVersion, getControllerConflict, getDevice, DeviceInfo, isUnvalidated } from "../api";
+import { getTelemetryEnabled, setTelemetryEnabled, getUnlockBatteryMax, setUnlockBatteryMax, getCoolerBoost, setCoolerBoost, getQamTdpBoost, setQamTdpBoost, resetTelemetry, getVersion, getControllerConflict, getDevice, getColorState, DeviceInfo, isUnvalidated } from "../api";
 import { isValueToastEnabled, setValueToastEnabled } from "../system/valueToast";
 import { UpdatePanel } from "../updater/UpdatePanel";
 import { ControllerConflictCard } from "../components/ControllerConflictCard";
 import { theme } from "../theme";
+import { setDeviceHeaderHidden, useDeviceHeaderHidden } from "../system/deviceHeaderVisibility";
+import { setOledLookCardHidden, useOledLookCardHidden } from "../system/oledLookVisibility";
 
 const AUTHOR = "Hooandee";
 const CHANNEL_URL = "https://www.youtube.com/@Hooandee";
@@ -42,6 +44,8 @@ export const AjustesSection: FC = () => {
   const [coolerBoost, onToggleCoolerBoost] = useToggleSetting(getCoolerBoost, setCoolerBoost, false);
   const [qamBoost, onToggleQamBoost] = useToggleSetting(getQamTdpBoost, setQamTdpBoost, false);
   const [valueToast, setValueToast] = useState(isValueToastEnabled());
+  const deviceHeaderHidden = useDeviceHeaderHidden();
+  const oledLookCardHidden = useOledLookCardHidden();
   const onToggleValueToast = (next: boolean) => {
     setValueToast(next);
     setValueToastEnabled(next);
@@ -58,6 +62,15 @@ export const AjustesSection: FC = () => {
     getDevice().then(setDevice).catch(() => {});
   }, []);
   const unvalidated = !!device && isUnvalidated(device);
+
+  // Offer the visibility preference only when this device can actually render
+  // the OLED-look card (LCD panel + working gamescope color controls).
+  const [oledLookAvailable, setOledLookAvailable] = useState(false);
+  useEffect(() => {
+    getColorState()
+      .then((color) => setOledLookAvailable(color.supported && !!color.oled_look))
+      .catch(() => {});
+  }, []);
 
   // Power-management conflict with HHD (both driving TDP/fans). Warn only.
   const [conflict, setConflict] = useState(false);
@@ -154,6 +167,24 @@ export const AjustesSection: FC = () => {
           onChange={onToggleValueToast}
           bottomSeparator="none"
         />
+
+        <ToggleField
+          label={t("settings.deviceHeader")}
+          description={t("settings.deviceHeader.desc")}
+          checked={deviceHeaderHidden}
+          onChange={setDeviceHeaderHidden}
+          bottomSeparator="none"
+        />
+
+        {oledLookAvailable && (
+          <ToggleField
+            label={t("settings.oledLookCard")}
+            description={t("settings.oledLookCard.desc")}
+            checked={oledLookCardHidden}
+            onChange={setOledLookCardHidden}
+            bottomSeparator="none"
+          />
+        )}
 
         {/* Open the full-screen plain-language glossary of terms. */}
         <ButtonItem layout="below" description={t("glossary.button.desc")} onClick={() => openGlossaryModal()}>

@@ -16,6 +16,7 @@ import { AdvancedColor } from "../components/AdvancedColor";
 import { NightModeCard } from "../components/NightModeCard";
 import { HdrPanel } from "../components/HdrPanel";
 import { segmentGroupStyle, segmentItemStyle } from "../components/segmented";
+import { useOledLookCardHidden } from "../system/oledLookVisibility";
 
 /** Pantalla: panel color. One-tap OLED look (per model) → saturation (per-game) →
  *  global calibration (temperature / contrast). Honest when the host
@@ -28,6 +29,7 @@ export const PantallaSection: FC = () => {
   } = useColor();
   const night = useNight();
   const hdr = useHdr(scope, game?.appid ?? null);
+  const oledLookCardHidden = useOledLookCardHidden();
 
   if (!state) return null;
 
@@ -111,7 +113,7 @@ export const PantallaSection: FC = () => {
 
       {/* One-tap per-model OLED look — per-game via the scope tab above; hidden on real
           OLED panels (oled_look null). */}
-      {state.oled_look && (
+      {state.oled_look && !oledLookCardHidden && (
         <div style={{ marginTop: theme.space.sm }}>
           <OledLookCard active={active} onApply={onOledLook} onReset={onReset} />
         </div>

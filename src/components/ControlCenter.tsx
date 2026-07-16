@@ -21,6 +21,7 @@ import { PINNED_TAB } from "../customize/manifest";
 import { theme } from "../theme";
 import { FocusRoot } from "./FocusRoot";
 import { useAccent } from "../system/useAccent";
+import { useDeviceHeaderHidden } from "../system/deviceHeaderVisibility";
 
 /**
  * The control-center shell: persistent chrome (device header + language flags +
@@ -63,6 +64,7 @@ export const ControlCenter: FC = () => {
   // (AjustesSection's UpdatePanel) reuses the same session-cached result.
   const { hasUpdate } = useUpdate(lang);
   useAccent(); // re-render the shell when the accent changes
+  const deviceHeaderHidden = useDeviceHeaderHidden();
 
   useEffect(() => {
     getDevice().then(setDevice).catch(() => setFailed(true));
@@ -115,7 +117,7 @@ export const ControlCenter: FC = () => {
           LearningBanner collapses its slot — no double gap. */}
       <PanelSectionRow>
         <div style={{ display: "flex", flexDirection: "column", gap: theme.space.section, marginBottom: theme.space.card }}>
-          <DeviceHeader device={device} />
+          {!deviceHeaderHidden && <DeviceHeader device={device} />}
           <LearningBanner
             gameName={game?.name ?? null}
             status={learning}
