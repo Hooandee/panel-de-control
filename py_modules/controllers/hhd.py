@@ -10,6 +10,8 @@ import json
 import os
 import urllib.request
 
+from . import conflict
+
 _TOKEN_REL = "etc/hhd/.token"
 _BASE = "http://127.0.0.1:5335/api/v1"
 
@@ -68,9 +70,7 @@ def post_state(payload: dict, root: str = "/"):
 def current_tdp_enable(root: str = "/"):
     """HHD's tdp_enable flag (bool), or None when HHD isn't reachable."""
     st = read_state(root)
-    if not st:
-        return None
-    return bool(st.get("hhd", {}).get("settings", {}).get("tdp_enable"))
+    return None if st is None else conflict.hhd_managing_power(st)
 
 
 def set_tdp_enable(enabled: bool, root: str = "/"):

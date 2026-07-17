@@ -128,7 +128,7 @@ def test_conflict_no_hhd_present(Plugin, fake_hhd):
 # Take / release control (reversible, saves previous value)
 # ---------------------------------------------------------------------------
 
-def test_take_and_release_restores_hhd(Plugin, fake_hhd):
+def test_take_and_restore_hands_hhd_back(Plugin, fake_hhd):
     p = Plugin()
     p._init()
     fake_hhd.set(True)
@@ -136,7 +136,7 @@ def test_take_and_release_restores_hhd(Plugin, fake_hhd):
     assert out["ok"] is True
     assert fake_hhd.value is False                 # HHD's TDP handed to us
     assert p._settings["hhd_tdp_prev"] is True     # remembered for restore
-    asyncio.run(p.release_tdp_control())
+    p._restore_hhd_tdp()
     assert fake_hhd.value is True                  # restored
     assert p._settings["hhd_tdp_prev"] is None
 
@@ -162,11 +162,11 @@ def test_take_does_not_overwrite_saved_prev(Plugin, fake_hhd):
     assert p._settings["hhd_tdp_prev"] is True   # unchanged
 
 
-def test_release_noop_when_never_taken(Plugin, fake_hhd):
+def test_restore_noop_when_never_taken(Plugin, fake_hhd):
     p = Plugin()
     p._init()
     fake_hhd.set(True)
-    asyncio.run(p.release_tdp_control())
+    p._restore_hhd_tdp()
     assert fake_hhd.value is True          # untouched — nothing to restore
     assert p._settings["hhd_tdp_prev"] is None
 

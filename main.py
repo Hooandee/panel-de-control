@@ -707,7 +707,10 @@ class Plugin:
         list — the backend can't see it."""
         self._init()
         hhd_present = self._controller_backend.manager == controller_detect.HHD
-        managing = (controller_hhd.current_tdp_enable() or False) if hhd_present else False
+        # current_tdp_enable does a blocking HTTP GET (urllib) — the frontend polls
+        # this every few seconds, so keep it off the event loop.
+        managing = (await self._offload_call(controller_hhd.current_tdp_enable) or False) \
+            if hhd_present else False
         return {"hhd_present": hhd_present, "hhd_managing": bool(managing)}
 
     async def take_tdp_control(self) -> dict:
@@ -737,14 +740,9 @@ class Plugin:
         except Exception:  # noqa: BLE001
             pass
 
-    async def release_tdp_control(self) -> dict:
-        self._init()
-        self._restore_hhd_tdp()
-        return {"ok": True}
-
     async def get_tdp_control_enabled(self) -> bool:
         self._init()
-        return bool(self._settings.get("tdp_control_enabled", True))
+        return self._tdp_control_on()
 
     async def set_tdp_control_enabled(self, enabled: bool) -> bool:
         """OFF = stop writing rails and hand HHD back (step aside). ON = re-assert
@@ -1356,7 +1354,7 @@ class Plugin:
                     self._reset_auto_windows()
                     continue
                 # Master switch off: another tool owns the rails — don't drive PL1.
-                if not self._settings.get("tdp_control_enabled", True):
+                if not self._tdp_control_on():
                     self._reset_auto_windows()
                     continue
                 # Hold when auto-TDP is off for THIS game (per-game, own or global) or a
@@ -1429,7 +1427,7 @@ class Plugin:
 
     async def set_auto_tdp(self, enabled: bool, scope: str = "global", appid=None) -> dict:
         self._init()
-        if not self._settings.get("tdp_control_enabled", True):
+        if not self._tdp_control_on():
             return {"auto_tdp": self._tdp_profiles.auto_tdp(self._current_appid)}
         self._clear_eco()
         self._tdp_profiles.set_auto_tdp(scope, bool(enabled), appid=appid)
@@ -1625,9 +1623,13 @@ class Plugin:
             self._settings["firmware_mode"] = _CUSTOM_MODE
             self._save()
 
+    def _tdp_control_on(self) -> bool:
+        """Master switch: whether we're allowed to write the TDP rails at all."""
+        return bool(self._settings.get("tdp_control_enabled", True))
+
     def _reapply_tdp(self, on_ac=None):
         self._init()
-        if not self._settings.get("tdp_control_enabled", True):
+        if not self._tdp_control_on():
             # Master switch off: we've handed the rails to another tool. Don't write.
             self._last_written_pl1 = None
             return TdpResult(None, None, True, "tdp-control-disabled")
@@ -2272,7 +2274,7 @@ class Plugin:
             "external_change": False,
             # Master switch + one-time-notice flags; the frontend reads these to gate
             # the monitor-only mode and the first-run modals (durable across reboot).
-            "tdp_control_enabled": bool(self._settings.get("tdp_control_enabled", True)),
+            "tdp_control_enabled": self._tdp_control_on(),
             "seen_autotdp_notice": bool(self._settings.get("seen_autotdp_notice", False)),
             "seen_tdp_conflict_takeover": bool(
                 self._settings.get("seen_tdp_conflict_takeover", False)),
@@ -2303,7 +2305,7 @@ class Plugin:
 
     async def set_tdp_watts(self, watts: int, scope: str, appid=None) -> dict:
         self._init()
-        if not self._settings.get("tdp_control_enabled", True):
+        if not self._tdp_control_on():
             return {"requested_w": watts, "applied_w": None, "ok": False,
                     "detail": "tdp-control-disabled"}
         resolved = self._resolve_scope(scope, appid)
@@ -2353,7 +2355,7 @@ class Plugin:
 
     async def set_tdp_levels(self, off2: int, off3: int, scope: str, appid=None) -> dict:
         self._init()
-        if not self._settings.get("tdp_control_enabled", True):
+        if not self._tdp_control_on():
             return {"requested_w": 0, "applied_w": None, "ok": False,
                     "detail": "tdp-control-disabled"}
         resolved = self._resolve_scope(scope, appid)
