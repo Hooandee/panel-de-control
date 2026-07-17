@@ -717,12 +717,13 @@ class Plugin:
         """Hand HHD's TDP module over to us (reversible). Saves its previous value so
         we can restore it later. Honest: ok only when the echo confirms it's off."""
         self._init()
-        prev = controller_hhd.current_tdp_enable()
+        # HHD's REST client is blocking urllib (5 s timeout) — keep it off the loop.
+        prev = await self._offload_call(controller_hhd.current_tdp_enable)
         if prev is None:
             return {"ok": False, "hhd_managing": False}
         if prev and self._settings.get("hhd_tdp_prev") is None:
             self._settings["hhd_tdp_prev"] = True
-        applied = controller_hhd.set_tdp_enable(False)
+        applied = await self._offload_call(lambda: controller_hhd.set_tdp_enable(False))
         self._save()
         await self._offload_call(self._reapply_tdp)
         return {"ok": applied is False, "hhd_managing": bool(applied)}
@@ -752,7 +753,7 @@ class Plugin:
         self._settings["tdp_control_enabled"] = enabled
         self._save()
         if not enabled:
-            self._restore_hhd_tdp()
+            await self._offload_call(self._restore_hhd_tdp)
         else:
             await self._offload_call(self._reapply_tdp)
         return enabled
@@ -2466,7 +2467,7 @@ class Plugin:
             self._display_wait_task = None
         self._stop_night_loop()
         await self._offload_call(self._restore_color_safe)
-        self._restore_hhd_tdp()  # hand HHD's TDP back if we took it (guarded)
+        await self._offload_call(self._restore_hhd_tdp)  # hand HHD's TDP back if we took it
         self._stop_auto_loop()
         if getattr(self, "_sampler", None) is not None:
             self._sampler.stop()
@@ -2484,7 +2485,7 @@ class Plugin:
     async def _uninstall(self) -> None:
         await self._offload_call(self._restore_fans_safe)
         await self._offload_call(self._restore_color_safe)
-        self._restore_hhd_tdp()  # hand HHD's TDP back if we took it (guarded)
+        await self._offload_call(self._restore_hhd_tdp)  # hand HHD's TDP back if we took it
         self._shutdown_apply_executor()
         fan_expose.remove_conf()  # drop the modprobe.d option we added (guarded)
         decky.logger.info("Panel de Control uninstalled")
