@@ -24,13 +24,15 @@ import { useScopeSync } from "../useScopeSync";
  */
 export const PotenciaSection: FC = () => {
   const game = useRunningGame();
-  const conflict = useTdpConflict();
   const [tdp, setTdp] = useState<TdpState | null>(null);
   const [power, setPower] = useState<PowerDraw | null>(null);
   const commitTimerWatts = useRef<ReturnType<typeof setTimeout> | null>(null);
   const commitTimerLevels = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Fires the first-run take-over modal at most once per mount.
   const shownTakeover = useRef(false);
+  // Reuse the state we already have (supported + master switch) instead of making
+  // the conflict hook re-fetch the heavy get_tdp_state.
+  const conflict = useTdpConflict(tdp?.supported ?? false, tdp?.tdp_control_enabled ?? true);
 
   const refresh = useCallback(() => {
     getTdpState().then(setTdp).catch(() => {});

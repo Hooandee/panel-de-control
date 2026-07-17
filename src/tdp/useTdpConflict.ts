@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { getTdpConflict, getTdpControlEnabled, getTdpState, takeTdpControl } from "../api";
+import { getTdpConflict, takeTdpControl } from "../api";
 import {
   ConflictResult,
   SDTDP_NAME,
@@ -24,27 +24,19 @@ export interface TdpConflictHook {
 
 /**
  * Detects rival TDP managers and exposes reversible actions to disable them.
- * Combines HHD (backend RPC) + SimpleDeckyTDP (Decky plugin list) with whether
- * WE control TDP (hardware support + master switch). Polls lightly while mounted.
+ * `supported` and `weControl` come from the caller's existing TDP state (from
+ * get_tdp_state) so this hook doesn't re-fetch that heavy RPC — it only polls the
+ * light get_tdp_conflict + reads Decky's plugin list synchronously.
  */
-export function useTdpConflict(): TdpConflictHook {
+export function useTdpConflict(supported: boolean, weControl: boolean): TdpConflictHook {
   const [hhdManaging, setHhdManaging] = useState(false);
   const [sdtdp, setSdtdp] = useState(false);
-  const [supported, setSupported] = useState(false);
-  const [weControl, setWeControl] = useState(false);
   const alive = useRef(true);
 
   const refetch = useCallback(async () => {
-    // Read the pieces independently so one failing RPC doesn't blank the rest.
-    const [conflictRes, enabled, state] = await Promise.all([
-      getTdpConflict().catch(() => null),
-      getTdpControlEnabled().catch(() => null),
-      getTdpState().catch(() => null),
-    ]);
+    const res = await getTdpConflict().catch(() => null);
     if (!alive.current) return;
-    if (conflictRes) setHhdManaging(!!conflictRes.hhd_managing);
-    if (enabled !== null) setWeControl(!!enabled);
-    if (state) setSupported(!!state.supported);
+    if (res) setHhdManaging(!!res.hhd_managing);
     setSdtdp(sdtdpActive(installedPlugins(), disabledPlugins()));
   }, []);
 
