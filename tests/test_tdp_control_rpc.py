@@ -270,6 +270,25 @@ def test_seen_flag_setters_persist(Plugin):
     assert p2._settings["seen_tdp_conflict_takeover"] is True
 
 
+def test_tdp_state_exposes_control_and_seen_flags(Plugin):
+    p = Plugin()
+    p._init()
+    st = asyncio.run(p.get_tdp_state())
+    # Defaults: control on, notices unseen — the frontend reads these to decide
+    # whether to show the first-run modals (durable, unlike CEF localStorage).
+    assert st["tdp_control_enabled"] is True
+    assert st["seen_autotdp_notice"] is False
+    assert st["seen_tdp_conflict_takeover"] is False
+    # They track the persisted settings.
+    p._settings["tdp_control_enabled"] = False
+    p._settings["seen_autotdp_notice"] = True
+    p._settings["seen_tdp_conflict_takeover"] = True
+    st = asyncio.run(p.get_tdp_state())
+    assert st["tdp_control_enabled"] is False
+    assert st["seen_autotdp_notice"] is True
+    assert st["seen_tdp_conflict_takeover"] is True
+
+
 # ---------------------------------------------------------------------------
 # Lifecycle restore (good citizen: hand HHD back)
 # ---------------------------------------------------------------------------

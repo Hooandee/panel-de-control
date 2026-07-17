@@ -2270,6 +2270,12 @@ class Plugin:
             "firmware_mode": self._firmware_mode(),
             # get_tdp_state flips this True when it adopts an external change.
             "external_change": False,
+            # Master switch + one-time-notice flags; the frontend reads these to gate
+            # the monitor-only mode and the first-run modals (durable across reboot).
+            "tdp_control_enabled": bool(self._settings.get("tdp_control_enabled", True)),
+            "seen_autotdp_notice": bool(self._settings.get("seen_autotdp_notice", False)),
+            "seen_tdp_conflict_takeover": bool(
+                self._settings.get("seen_tdp_conflict_takeover", False)),
         }
 
     def _tdp_presets(self, limits) -> dict:
