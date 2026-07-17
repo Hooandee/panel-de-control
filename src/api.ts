@@ -84,6 +84,11 @@ export interface TdpState {
   firmware_mode: string;
   // True when get_tdp_state adopted an external (HHD/Steam) TDP change on this read.
   external_change: boolean;
+  // Master switch: when false we stop writing rails → Potencia drops to monitor-only.
+  tdp_control_enabled: boolean;
+  // One-time full-screen notices already shown (durable across reboot).
+  seen_autotdp_notice: boolean;
+  seen_tdp_conflict_takeover: boolean;
 }
 
 export interface TdpPresets {
@@ -170,6 +175,26 @@ export const setAutoTdp = callable<[enabled: boolean, scope: TdpScope, appid: st
 // Signals the QAM panel opened/closed so the auto loop can raise its floor (and bump
 // PL1 immediately) to keep the CPU-bound menu render fluid.
 export const setUiActive = callable<[enabled: boolean], boolean>("set_ui_active");
+
+// ---- TDP control / conflict take-over -------------------------------------
+// HHD conflict detection lives in the backend (it reads the REST daemon); SDTDP is
+// detected on the frontend via Decky's plugin list (see tdp/deckyPlugins.ts).
+export const getTdpConflict =
+  callable<[], { hhd_present: boolean; hhd_managing: boolean }>("get_tdp_conflict");
+// Hand HHD's TDP module over to us (reversible; saves its previous value).
+export const takeTdpControl =
+  callable<[], { ok: boolean; hhd_managing: boolean }>("take_tdp_control");
+// Restore HHD to the value it had before we took it.
+export const releaseTdpControl = callable<[], { ok: boolean }>("release_tdp_control");
+// Master switch: OFF stops all rail writes and hands HHD back (Potencia → monitor).
+export const getTdpControlEnabled = callable<[], boolean>("get_tdp_control_enabled");
+export const setTdpControlEnabled =
+  callable<[enabled: boolean], boolean>("set_tdp_control_enabled");
+// One-time-notice flags (durable, backend-persisted).
+export const setSeenAutotdpNotice =
+  callable<[seen: boolean], boolean>("set_seen_autotdp_notice");
+export const setSeenTdpConflictTakeover =
+  callable<[seen: boolean], boolean>("set_seen_tdp_conflict_takeover");
 
 export type FanScope = Scope;
 // "adaptive" = the learned curve (computed live from telemetry). Choosing it IS
