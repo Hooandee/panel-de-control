@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.20.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.19.0...panel-de-control-v0.20.0) (2026-07-17)
+
+
+### Features
+
+* detect and take over conflicting TDP managers (HHD, SimpleDeckyTDP) ([#214](https://github.com/Hooandee/panel-de-control/issues/214)) ([17a55ef](https://github.com/Hooandee/panel-de-control/commit/17a55ef8a51b36d3263a864754b3357a04fade24))
+
 ## [0.19.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.18.0...panel-de-control-v0.19.0) (2026-07-15)
 
 
