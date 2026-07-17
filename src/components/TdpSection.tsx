@@ -11,6 +11,7 @@ import { Presets } from "./Presets";
 import { FirmwareModes } from "./FirmwareModes";
 import { AdvancedBoost } from "./AdvancedBoost";
 import { TdpSuggestionCard } from "./TdpSuggestionCard";
+import { TdpMonitorNotice } from "./TdpMonitorNotice";
 
 // Learned-band reasons worth surfacing as "still learning" (others — no_game,
 // disabled, error — show no line).
@@ -29,9 +30,11 @@ export interface TdpSectionProps {
   onApplySuggestion: (watts: number) => void;
   // Select a firmware performance mode (Legion Go original); "custom" via the slider.
   onFirmwareMode: (mode: string) => void;
+  // Master switch off: show only the live arc + a notice, hide write controls.
+  monitorOnly?: boolean;
 }
 
-export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onScope, onWatts, onSetLevels, onSetMode, onApplySuggestion, onFirmwareMode }) => {
+export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onScope, onWatts, onSetLevels, onSetMode, onApplySuggestion, onFirmwareMode, monitorOnly }) => {
   const { t } = useI18n();
 
   if (!tdp) return <Loading />;
@@ -59,6 +62,29 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
   const hasFwModes = fwModes.length > 0;
   const inFwMode = hasFwModes && tdp.firmware_mode !== "custom";
   const shownWatts = inFwMode ? (tdp.applied_w ?? view.watts) : view.watts;
+
+  // Master switch off: keep the live arc, drop every write control.
+  if (monitorOnly) {
+    return (
+      <>
+        <PanelSectionRow>
+          <TdpMonitorNotice />
+        </PanelSectionRow>
+        <PanelSectionRow>
+          <PowerArc
+            watts={shownWatts}
+            limits={tdp.limits}
+            onAc={tdp.on_ac}
+            actualWatts={power?.watts ?? null}
+            gpuBusy={power?.gpu_busy ?? null}
+            auto={isAutoOn}
+            setpoint={power?.setpoint ?? null}
+            appliedWatts={power?.applied ?? null}
+          />
+        </PanelSectionRow>
+      </>
+    );
+  }
 
   return (
     <>

@@ -102,6 +102,14 @@ DEFAULTS = {
     # the menu would show an inflated number vs the REAL in-game TDP the user wants to
     # see with the QAM open. When ON, the user accepts the menu-time bump for fluidity.
     "qam_tdp_boost": False,
+    # Master switch: when False we stop writing the TDP rails and Potencia drops to
+    # monitor-only, handing TDP to another tool.
+    "tdp_control_enabled": True,
+    # One-time notices (SettingsStore drops keys not in DEFAULTS).
+    "seen_tdp_conflict_takeover": False,
+    "seen_autotdp_notice": False,
+    # HHD's tdp_enable saved when we take control, to restore later. None = never took it.
+    "hhd_tdp_prev": None,
     # HDR output on/off (only meaningful on HDR-capable panels — see device.hdr).
     "hdr_enabled": False,
     # Battery charge limit: when enabled, cap charging at `charge_limit_percent`
@@ -691,6 +699,74 @@ class Plugin:
         out["hhd_present"] = hhd_present
         return out
 
+    # ---- TDP conflict + master switch --------------------------------------
+    async def get_tdp_conflict(self) -> dict:
+        """Whether HHD is currently managing the power rails. SimpleDeckyTDP is
+        detected on the frontend (the backend can't see it)."""
+        self._init()
+        hhd_present = self._controller_backend.manager == controller_detect.HHD
+        # current_tdp_enable does a blocking HTTP GET; the frontend polls this, so
+        # keep it off the event loop.
+        managing = (await self._offload_call(controller_hhd.current_tdp_enable) or False) \
+            if hhd_present else False
+        return {"hhd_present": hhd_present, "hhd_managing": bool(managing)}
+
+    async def take_tdp_control(self) -> dict:
+        """Hand HHD's TDP module over to us (reversible), saving its previous value.
+        ok only when the echo confirms it's off."""
+        self._init()
+        # HHD's REST client is blocking urllib — keep it off the loop.
+        prev = await self._offload_call(controller_hhd.current_tdp_enable)
+        if prev is None:
+            return {"ok": False, "hhd_managing": False}
+        if prev and self._settings.get("hhd_tdp_prev") is None:
+            self._settings["hhd_tdp_prev"] = True
+        applied = await self._offload_call(lambda: controller_hhd.set_tdp_enable(False))
+        self._save()
+        await self._offload_call(self._reapply_tdp)
+        return {"ok": applied is False, "hhd_managing": bool(applied)}
+
+    def _restore_hhd_tdp(self) -> None:
+        """Return HHD to its previous tdp_enable if we took it. Idempotent."""
+        try:
+            prev = self._settings.get("hhd_tdp_prev")
+            if prev is None:
+                return
+            controller_hhd.set_tdp_enable(bool(prev))
+            self._settings["hhd_tdp_prev"] = None
+            self._save()
+        except Exception:  # noqa: BLE001
+            pass
+
+    async def get_tdp_control_enabled(self) -> bool:
+        self._init()
+        return self._tdp_control_on()
+
+    async def set_tdp_control_enabled(self, enabled: bool) -> bool:
+        """OFF = stop writing rails and hand HHD back (step aside). ON = re-assert
+        our setpoint."""
+        self._init()
+        enabled = bool(enabled)
+        self._settings["tdp_control_enabled"] = enabled
+        self._save()
+        if not enabled:
+            await self._offload_call(self._restore_hhd_tdp)
+        else:
+            await self._offload_call(self._reapply_tdp)
+        return enabled
+
+    async def set_seen_autotdp_notice(self, seen: bool) -> bool:
+        self._init()
+        self._settings["seen_autotdp_notice"] = bool(seen)
+        self._save()
+        return bool(seen)
+
+    async def set_seen_tdp_conflict_takeover(self, seen: bool) -> bool:
+        self._init()
+        self._settings["seen_tdp_conflict_takeover"] = bool(seen)
+        self._save()
+        return bool(seen)
+
     # ---- Fans (read-only monitor) ------------------------------------------
     def _read_fans(self) -> dict:
         """hwmon fan/temp reading, with EC-readable RPM merged in for devices that
@@ -1275,6 +1351,10 @@ class Plugin:
                 if self._settings.get("eco_enabled"):
                     self._reset_auto_windows()
                     continue
+                # Master switch off: another tool owns the rails — don't drive PL1.
+                if not self._tdp_control_on():
+                    self._reset_auto_windows()
+                    continue
                 # Hold when auto-TDP is off for THIS game (per-game, own or global) or a
                 # named firmware mode owns the rails — either way we don't drive PL1.
                 if (not self._tdp_profiles.auto_tdp(self._current_appid)
@@ -1345,6 +1425,8 @@ class Plugin:
 
     async def set_auto_tdp(self, enabled: bool, scope: str = "global", appid=None) -> dict:
         self._init()
+        if not self._tdp_control_on():
+            return {"auto_tdp": self._tdp_profiles.auto_tdp(self._current_appid)}
         self._clear_eco()
         self._tdp_profiles.set_auto_tdp(scope, bool(enabled), appid=appid)
         await self._offload_call(self._reapply_tdp)
@@ -1539,8 +1621,16 @@ class Plugin:
             self._settings["firmware_mode"] = _CUSTOM_MODE
             self._save()
 
+    def _tdp_control_on(self) -> bool:
+        """Master switch: whether we're allowed to write the TDP rails at all."""
+        return bool(self._settings.get("tdp_control_enabled", True))
+
     def _reapply_tdp(self, on_ac=None):
         self._init()
+        if not self._tdp_control_on():
+            # Master switch off: we've handed the rails to another tool. Don't write.
+            self._last_written_pl1 = None
+            return TdpResult(None, None, True, "tdp-control-disabled")
         mode = self._firmware_mode()
         if mode != _CUSTOM_MODE:
             # A named firmware mode owns the rails, fan curve and LED — don't force custom.
@@ -2180,6 +2270,12 @@ class Plugin:
             "firmware_mode": self._firmware_mode(),
             # get_tdp_state flips this True when it adopts an external change.
             "external_change": False,
+            # Master switch + one-time-notice flags (durable across reboot; the
+            # frontend gates monitor-only mode + the first-run modals off these).
+            "tdp_control_enabled": self._tdp_control_on(),
+            "seen_autotdp_notice": bool(self._settings.get("seen_autotdp_notice", False)),
+            "seen_tdp_conflict_takeover": bool(
+                self._settings.get("seen_tdp_conflict_takeover", False)),
         }
 
     def _tdp_presets(self, limits) -> dict:
@@ -2207,6 +2303,9 @@ class Plugin:
 
     async def set_tdp_watts(self, watts: int, scope: str, appid=None) -> dict:
         self._init()
+        if not self._tdp_control_on():
+            return {"requested_w": watts, "applied_w": None, "ok": False,
+                    "detail": "tdp-control-disabled"}
         resolved = self._resolve_scope(scope, appid)
         if resolved is None:
             return {"requested_w": watts, "applied_w": None, "ok": False,
@@ -2254,6 +2353,9 @@ class Plugin:
 
     async def set_tdp_levels(self, off2: int, off3: int, scope: str, appid=None) -> dict:
         self._init()
+        if not self._tdp_control_on():
+            return {"requested_w": 0, "applied_w": None, "ok": False,
+                    "detail": "tdp-control-disabled"}
         resolved = self._resolve_scope(scope, appid)
         if resolved is None:
             return {"requested_w": 0, "applied_w": None, "ok": False,
@@ -2362,6 +2464,7 @@ class Plugin:
             self._display_wait_task = None
         self._stop_night_loop()
         await self._offload_call(self._restore_color_safe)
+        await self._offload_call(self._restore_hhd_tdp)  # hand HHD's TDP back if we took it
         self._stop_auto_loop()
         if getattr(self, "_sampler", None) is not None:
             self._sampler.stop()
@@ -2379,6 +2482,7 @@ class Plugin:
     async def _uninstall(self) -> None:
         await self._offload_call(self._restore_fans_safe)
         await self._offload_call(self._restore_color_safe)
+        await self._offload_call(self._restore_hhd_tdp)  # hand HHD's TDP back if we took it
         self._shutdown_apply_executor()
         fan_expose.remove_conf()  # drop the modprobe.d option we added (guarded)
         decky.logger.info("Panel de Control uninstalled")
