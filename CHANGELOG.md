@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.20.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.19.0...panel-de-control-v0.20.0) (2026-07-17)
+
+
+### Features / Novedades
+
+* Panel de Control now spots when another power manager is running (Handheld Daemon or SimpleDeckyTDP) and takes charge instead of quietly fighting it, which was the real reason a game could run worse than with another tool. The first time it finds a conflict it asks, full screen, whether to turn the others off; if you leave it for later, a card in the Power tab keeps a one-tap button for each rival (all reversible) until only one manager is left. A new TDP control switch in Settings lets you hand power management to whatever tool you prefer, and while it's off (or on a machine that can't set TDP, like a desktop) the Power tab just monitors. Turning on Auto-TDP now shows a one-time note about what to expect. ([#214](https://github.com/Hooandee/panel-de-control/issues/214)) ([17a55ef](https://github.com/Hooandee/panel-de-control/commit/17a55ef8a51b36d3263a864754b3357a04fade24))
+* **ES:** Panel de Control ahora detecta cuando hay otro gestor de energía en marcha (Handheld Daemon o SimpleDeckyTDP) y toma el mando en vez de pelearse con él por detrás, que era la razón real de que un juego fuera peor que con otra herramienta. La primera vez que encuentra un conflicto te pregunta, a pantalla completa, si apagar los demás; si lo dejas para luego, una tarjeta en la pestaña Potencia mantiene un botón por cada rival (todo reversible) hasta que solo quede un gestor. Un nuevo interruptor Control de TDP en Ajustes te deja ceder la gestión a la herramienta que prefieras, y mientras está apagado (o en un equipo que no puede fijar el TDP, como un sobremesa) la pestaña Potencia solo monitoriza. Al activar Auto-TDP ahora se muestra un aviso único de qué esperar. ([#214](https://github.com/Hooandee/panel-de-control/issues/214)) ([17a55ef](https://github.com/Hooandee/panel-de-control/commit/17a55ef8a51b36d3263a864754b3357a04fade24))
+
 ## [0.19.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.18.0...panel-de-control-v0.19.0) (2026-07-15)
 
 
