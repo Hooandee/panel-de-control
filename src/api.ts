@@ -517,16 +517,6 @@ export const getHdrState = callable<[], HdrState>("get_hdr_state");
 export const setHdr = callable<[patch: HdrPatch, scope: Scope, appid: string | null], HdrState>("set_hdr");
 
 // ---- Mandos (controller manager) ------------------------------------------
-export interface ControllerConflict {
-  hhd_present: boolean;
-  hhd_managing_power: boolean;
-  // True when HHD manages power AND our TDP backend can too → they fight.
-  conflict: boolean;
-}
-
-export const getControllerConflict =
-  callable<[], ControllerConflict>("get_controller_conflict");
-
 export type ControllerTarget = { gamepad: string } | { key: string };
 
 export interface RemapButton {

@@ -7,10 +7,9 @@ import { openCustomizeModal } from "../components/CustomizeModal";
 import { openGameProfilesModal } from "../components/GameProfilesModal";
 import { openGlossaryModal } from "../components/GlossaryModal";
 import { openReportModal } from "../components/ReportModal";
-import { getTelemetryEnabled, setTelemetryEnabled, getTdpControlEnabled, setTdpControlEnabled, getUnlockBatteryMax, setUnlockBatteryMax, getCoolerBoost, setCoolerBoost, getQamTdpBoost, setQamTdpBoost, resetTelemetry, getVersion, getControllerConflict, getDevice, DeviceInfo, isUnvalidated } from "../api";
+import { getTelemetryEnabled, setTelemetryEnabled, getTdpControlEnabled, setTdpControlEnabled, getUnlockBatteryMax, setUnlockBatteryMax, getCoolerBoost, setCoolerBoost, getQamTdpBoost, setQamTdpBoost, resetTelemetry, getVersion, getDevice, DeviceInfo, isUnvalidated } from "../api";
 import { isValueToastEnabled, setValueToastEnabled } from "../system/valueToast";
 import { UpdatePanel } from "../updater/UpdatePanel";
-import { ControllerConflictCard } from "../components/ControllerConflictCard";
 import { theme } from "../theme";
 
 const AUTHOR = "Hooandee";
@@ -60,11 +59,6 @@ export const AjustesSection: FC = () => {
   }, []);
   const unvalidated = !!device && isUnvalidated(device);
 
-  // Power-management conflict with HHD (both driving TDP/fans). Warn only.
-  const [conflict, setConflict] = useState(false);
-  useEffect(() => {
-    getControllerConflict().then((c) => setConflict(c.conflict)).catch(() => {});
-  }, []);
 
   // Destructive reset: a two-tap confirm avoids accidental wipes on the QAM.
   const [confirming, setConfirming] = useState(false);
@@ -93,8 +87,6 @@ export const AjustesSection: FC = () => {
     // children (not-yet-loaded toggles) collapse their slot — no double gaps.
     <PanelSectionRow>
       <div style={{ display: "flex", flexDirection: "column", gap: theme.space.section, marginTop: theme.space.section }}>
-        {conflict && <ControllerConflictCard />}
-
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: theme.space.sm }}>
           <span style={{ fontSize: theme.font.body, color: theme.color.textPrimary }}>
             {t("settings.language")}

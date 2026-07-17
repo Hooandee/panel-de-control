@@ -69,6 +69,8 @@ export const TdpConflictCard: FC<Props> = ({ rivals, onDisableSdtdp, onTakeHhd }
       style={{
         ...theme.card,
         padding: theme.space.md,
+        marginTop: theme.space.section,
+        marginBottom: theme.space.sm,
         overflow: "hidden",
         boxShadow: `inset 0 0 0 1px ${theme.color.warn}55`,
       }}
