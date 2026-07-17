@@ -9,6 +9,9 @@ from tdp.types import TdpLimits, TdpResult
 # The sustained (STAPM) limit line of `ryzenadj -i`.
 _STAPM_RE = re.compile(r"STAPM LIMIT\s*\|\s*([\d.]+)", re.IGNORECASE)
 
+# Readback slack (W): the STAPM readback rounds, so treat a near-match as applied.
+_READBACK_TOLERANCE_W = 2
+
 
 def _parse_stapm(out: str) -> int | None:
     m = _STAPM_RE.search(out)
@@ -57,6 +60,32 @@ class RyzenadjBackend(TDPBackend):
         if not self.supported:
             return TdpResult(watts, None, False, "ryzenadj binary not found")
         target = self._write_limits.clamp(watts)
+        # amd_pmf (and the firmware on some Z2 handhelds) can silently clobber a single
+        # write, so the limit "doesn't always apply". Write, read back, and re-assert
+        # once. Then classify honestly:
+        #   - reads back the target (±slack) -> applied, confirmed.
+        #   - reads back a different real value -> the write was rejected/clamped -> fail
+        #     and report the value it actually holds (never fake success).
+        #   - can't read the limit at all (STAPM line absent or 0 -- a known quirk on
+        #     some APUs where the write still applies) -> assume applied, unconfirmed;
+        #     the re-assert is our best effort. Don't cry failure on a working device.
+        applied = None
+        for attempt in range(2):
+            try:
+                self._apply(target)
+            except (OSError, subprocess.SubprocessError) as e:
+                return TdpResult(watts, None, False, f"ryzenadj failed: {e}")
+            applied = self.read_applied()
+            if applied is None or applied == 0:
+                continue  # unreadable — re-assert once, then treat as unconfirmed
+            if abs(applied - target) <= _READBACK_TOLERANCE_W:
+                return TdpResult(watts, applied, True, "")
+        if applied is None or applied == 0:
+            return TdpResult(watts, None, True, "applied (limit readback unavailable)")
+        return TdpResult(watts, applied, False,
+                         f"ryzenadj limit did not stick (wanted {target}, holds {applied})")
+
+    def _apply(self, target: int) -> None:
         mw = str(target * 1000)
         argv = [
             self._bin,
@@ -65,13 +94,7 @@ class RyzenadjBackend(TDPBackend):
             "--slow-limit", mw,
             "--tctl-temp", "90",
         ]
-        try:
-            self._runner(argv, capture_output=True, text=True, timeout=5, env=_clean_env())
-        except (OSError, subprocess.SubprocessError) as e:
-            return TdpResult(watts, None, False, f"ryzenadj failed: {e}")
-        applied = self.read_applied()
-        ok = applied is not None
-        return TdpResult(watts, applied, ok, "" if ok else "could not read back ryzenadj limits")
+        self._runner(argv, capture_output=True, text=True, timeout=5, env=_clean_env())
 
     def read_applied(self) -> int | None:
         if not self.supported:
