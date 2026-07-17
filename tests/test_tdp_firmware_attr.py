@@ -233,6 +233,83 @@ def test_trustworthy_firmware_keeps_real_boost_maxes(tmp_path):
     assert (ll["pl1"]["max"], ll["pl2"]["max"], ll["pl3"]["max"]) == (35, 45, 55)
 
 
+def test_lenovo_under_reported_pl1_max_floored_to_profile(tmp_path):
+    # The lenovo-wmi-other capdata under-reports the Legion Go S custom ceiling (as low
+    # as 15 W, inconsistently across identical units) even while the profile is already
+    # in custom mode. A recognised Legion profile (charger max 33) must not be capped
+    # there — the slider and rails rebuild from the profile so the user reaches the real
+    # TDP instead of being stranded at 15 W.
+    root = str(tmp_path)
+    _mk_attr(root, "lenovo-wmi-other-0", "ppt_pl1_spl", 13, 5, 15)
+    _mk_attr(root, "lenovo-wmi-other-0", "ppt_pl2_sppt", 14, 5, 15)
+    _mk_attr(root, "lenovo-wmi-other-0", "ppt_pl3_fppt", 15, 5, 20)
+    fb = TdpLimits.from_profile(detect(product_name="83L3"))  # Legion Go S 5,15,30,33
+    b = FirmwareAttrBackend("lenovo-wmi-other", fb, root=root,
+                            profile_name="lenovo-wmi-gamezone")
+    lim = b.get_limits()
+    assert lim.max_ac_w == 33      # profile charger ceiling, not the bogus 15
+    assert lim.max_w == 30
+    ll = b.level_limits()
+    assert ll["pl1"]["max"] == 33
+    assert ll["pl2"]["max"] == round(33 * 1.2)  # 40
+    assert ll["pl3"]["max"] == round(33 * 1.4)  # 46
+
+
+def test_lenovo_under_report_floors_every_reported_variant(tmp_path):
+    # 83L3 units report a PL1 max of 15 OR 25; a 83N6 (Z2 Go) reports 15 while it has
+    # sustained 33 W in-game. Every value below the profile battery max (30) is floored.
+    for i, mx in enumerate((15, 25)):
+        root = str(tmp_path / f"u{i}")
+        _mk_attr(root, "lenovo-wmi-other-0", "ppt_pl1_spl", mx - 2, 5, mx)
+        fb = TdpLimits.from_profile(detect(product_name="83L3"))
+        b = FirmwareAttrBackend("lenovo-wmi-other", fb, root=root,
+                                profile_name="lenovo-wmi-gamezone")
+        assert b.get_limits().max_ac_w == 33
+
+
+def test_lenovo_trustworthy_pl1_max_not_floored(tmp_path):
+    # A Legion Go 2 unit reporting its real firmware maxes (PL1 35 >= profile battery
+    # max 30) is trusted unchanged — the under-report floor must never touch a healthy
+    # reading, so genuine SPPT/FPPT boost above PL1 is preserved.
+    root = str(tmp_path)
+    _mk_attr(root, "lenovo-wmi-other-0", "ppt_pl1_spl", 30, 5, 35)
+    _mk_attr(root, "lenovo-wmi-other-0", "ppt_pl2_sppt", 30, 5, 37)
+    _mk_attr(root, "lenovo-wmi-other-0", "ppt_pl3_fppt", 30, 5, 45)
+    fb = TdpLimits.from_profile(detect(product_name="83N0"))  # Legion Go 2 5,15,30,33
+    b = FirmwareAttrBackend("lenovo-wmi-other", fb, root=root,
+                            profile_name="lenovo-wmi-gamezone")
+    ll = b.level_limits()
+    assert (ll["pl1"]["max"], ll["pl2"]["max"], ll["pl3"]["max"]) == (35, 37, 45)
+    assert b.get_limits().max_ac_w == 35
+
+
+def test_under_report_floor_scoped_to_lenovo(tmp_path):
+    # The under-report floor only applies to lenovo-wmi-other, whose capdata is known to
+    # lie low. An ASUS device that reports a low PL1 max is trusted as-is (we validate
+    # ASUS on hardware); flooring it could over-drive a genuinely limited unit.
+    root = str(tmp_path)
+    _mk_pl1(root, "asus-armoury", 12, 5, 12)
+    fb = TdpLimits(min_w=5, default_w=15, max_w=30, max_ac_w=33)
+    b = FirmwareAttrBackend("asus-armoury", fb, root=root)
+    assert b.get_limits().max_ac_w == 12
+
+
+def test_lenovo_write_above_under_reported_max_sticks(tmp_path):
+    # The driver's max_value is informational, not enforced (a real unit holds
+    # current_value 30 while max_value reads 15). With the ceiling floored to the
+    # profile, set_tdp(30) writes 30 and reads it back.
+    root = str(tmp_path)
+    _mk_attr(root, "lenovo-wmi-other-0", "ppt_pl1_spl", 13, 5, 15)
+    _mk_attr(root, "lenovo-wmi-other-0", "ppt_pl2_sppt", 14, 5, 15)
+    _mk_attr(root, "lenovo-wmi-other-0", "ppt_pl3_fppt", 15, 5, 20)
+    _mk_profile(root)
+    fb = TdpLimits.from_profile(detect(product_name="83L3"))
+    b = FirmwareAttrBackend("lenovo-wmi-other", fb, root=root,
+                            profile_name="lenovo-wmi-gamezone")
+    res = b.set_tdp(30, ac=True)
+    assert res.ok is True and res.applied_w == 30
+
+
 @pytest.mark.parametrize("product,maxes", _REAL_FW_MAXES.items())
 def test_real_firmware_maxes_are_trusted(tmp_path, product, maxes):
     dev = detect(product_name=product)

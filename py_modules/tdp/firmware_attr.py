@@ -31,6 +31,7 @@ class FirmwareAttrBackend(TDPBackend):
 
     def __init__(self, driver_prefix, fallback, root="/", profile_name=None, is_generic=False):
         self.name = f"firmware-attr:{driver_prefix}"
+        self._driver_prefix = driver_prefix
         self._fallback = fallback
         self._root = root
         self._profile_name = profile_name  # Lenovo: set this platform-profile to "custom" first
@@ -49,11 +50,19 @@ class FirmwareAttrBackend(TDPBackend):
         self._pp_choices = None                  # parsed lazily, then cached
 
     def _sanitize_bounds(self):
-        """Drop bogus firmware rail ceilings so a lying kernel never exposes a
-        dangerous slider (base OR boost). If the sustained PL1 max is implausible on a
-        recognised device (beyond the profile charger max + margin), the whole ppt set
-        is untrusted → rebuild all maxes from the profile (PL1 = charger max, boost
-        rails scaled from it). A trustworthy firmware keeps its real per-rail maxes
+        """Rebuild the firmware rail ceilings from the profile when they can't be
+        trusted, so the slider (base OR boost) is neither dangerous nor stranded:
+
+        - Bogus-high: a lying kernel reports an implausible PL1 max (some ASUS report
+          every rail as 150 W). Beyond the profile charger max + margin → untrusted.
+        - Under-report: the lenovo-wmi-other capdata reads a stale/low custom ceiling
+          (Legion Go S reports 15 W, inconsistently across identical units, while the
+          chip sustains 25-33 W). Below the profile charger max → untrusted. Scoped to
+          lenovo only; its max_value is informational, not enforced. ASUS/MSI keep a
+          low reading — flooring could over-drive a genuinely power-limited unit.
+
+        In both cases the whole ppt set is rebuilt from the profile (PL1 = charger max,
+        boost rails scaled). A trustworthy firmware keeps its real per-rail maxes
         (legitimate boost above PL1). A generic device only drops an impossible value."""
         mx1 = self._bounds.get("ppt_pl1_spl", (None, None))[1]
         if mx1 is None:
@@ -64,7 +73,9 @@ class FirmwareAttrBackend(TDPBackend):
                     self._bounds[attr] = (lo, _FW_ABSURD_W)
             return
         ceil = self._fallback.max_ac_w
-        if mx1 <= ceil + _FW_MARGIN_W:
+        too_high = mx1 > ceil + _FW_MARGIN_W
+        under = mx1 < ceil and self._driver_prefix.startswith("lenovo")
+        if not (too_high or under):
             return  # trustworthy — keep real per-rail maxes
         for attr, ratio in (("ppt_pl1_spl", 1.0),
                             ("ppt_pl2_sppt", _PL2_BOOST_RATIO),
