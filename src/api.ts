@@ -184,8 +184,6 @@ export const getTdpConflict =
 // Hand HHD's TDP module over to us (reversible; saves its previous value).
 export const takeTdpControl =
   callable<[], { ok: boolean; hhd_managing: boolean }>("take_tdp_control");
-// Restore HHD to the value it had before we took it.
-export const releaseTdpControl = callable<[], { ok: boolean }>("release_tdp_control");
 // Master switch: OFF stops all rail writes and hands HHD back (Potencia → monitor).
 export const getTdpControlEnabled = callable<[], boolean>("get_tdp_control_enabled");
 export const setTdpControlEnabled =
