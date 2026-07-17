@@ -2,7 +2,7 @@
 // here that touches @decky/window globals — the compose/catalog logic stays pure
 // and testable. Everything is guarded: a missing global degrades to empty/no-op.
 
-import { stableGameKey, isNonSteam } from "../tdp/gameIdentity";
+import { stableGameKey, isNonSteam, APP_TYPE_TOOL } from "../tdp/gameIdentity";
 
 export interface GameEntry {
   /** The live numeric appid (a non-Steam shortcut's churns; resolve fresh at write). */
@@ -11,6 +11,34 @@ export interface GameEntry {
   stableKey: string;
   name: string;
   isNonSteam: boolean;
+  /** Vertical capsule (portrait) URL, or null → the fallback tile is used. */
+  coverUrl: string | null;
+  /** Unix seconds of last play (0 = never) — drives the default "recent" sort. */
+  lastPlayed: number;
+  /** Total minutes played forever — drives the "most played" sort. */
+  playtime: number;
+}
+
+const STEAM_UI_ORIGIN = "https://steamloopback.host";
+
+/** The portrait Steam already resolved, via its own asset store. Prefers the user's
+ *  custom art when set (SteamGridDB / CSS Loader / "Set custom artwork") — this also
+ *  gives non-Steam shortcuts a real cover — else the store vertical capsule. Custom
+ *  URLs are origin-relative (/customimages/…); absolutize them. Null → fallback tile;
+ *  a dead URL (e.g. a non-Steam shortcut with no art) fails to load → GameCover's
+ *  onError shows the tile. `ov` is a live appStore overview. */
+export function resolveCoverUrl(ov: unknown): string | null {
+  try {
+    const store = w.appStore;
+    const custom = store?.GetCustomVerticalCapsuleURLs?.(ov);
+    if (Array.isArray(custom) && typeof custom[0] === "string" && custom[0]) {
+      return custom[0].startsWith("/") ? STEAM_UI_ORIGIN + custom[0] : custom[0];
+    }
+    const cap = store?.GetVerticalCapsuleURLForApp?.(ov);
+    return typeof cap === "string" && cap ? cap : null;
+  } catch {
+    return null;
+  }
 }
 
 interface Overview {
@@ -18,31 +46,44 @@ interface Overview {
   display_name?: string;
   app_type?: number;
   local_per_client_data?: { installed?: boolean };
+  rt_last_time_played?: number;
+  minutes_playtime_forever?: number;
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const w = window as any;
 
-/** Installed Steam games + non-Steam shortcuts, sorted by name. Never throws. */
+/** Map a live appStore overview to a GameEntry. Shared by the section list and the
+ *  library context menu so the entry shape lives in one place. */
+export function overviewToEntry(ov: Overview): GameEntry {
+  const id = { appid: ov.appid, display_name: ov.display_name, app_type: ov.app_type };
+  const nonSteam = isNonSteam(id);
+  return {
+    liveAppid: ov.appid,
+    stableKey: stableGameKey(id),
+    name: ov.display_name || String(ov.appid),
+    isNonSteam: nonSteam,
+    coverUrl: resolveCoverUrl(ov),
+    lastPlayed: Number(ov.rt_last_time_played) || 0,
+    playtime: Number(ov.minutes_playtime_forever) || 0,
+  };
+}
+
+/** Installed Steam games + non-Steam shortcuts (order applied by the caller). Never throws. */
 export function listInstalledGames(): GameEntry[] {
   try {
     const all: Overview[] = w.collectionStore?.allAppsCollection?.allApps ?? [];
     const out: GameEntry[] = [];
     for (const ov of all) {
       if (!ov || typeof ov.appid !== "number") continue;
-      const id = { appid: ov.appid, display_name: ov.display_name, app_type: ov.app_type };
-      const nonSteam = isNonSteam(id);
+      // Tools (Proton builds, runtimes, redistributables) aren't games you set
+      // launch options on — never list them.
+      if (ov.app_type === APP_TYPE_TOOL) continue;
       // Non-Steam shortcuts are inherently local (they don't reliably populate the
       // installed flag); Steam games are listed only when actually installed.
-      if (!nonSteam && ov.local_per_client_data?.installed !== true) continue;
-      out.push({
-        liveAppid: ov.appid,
-        stableKey: stableGameKey(id),
-        name: ov.display_name || String(ov.appid),
-        isNonSteam: nonSteam,
-      });
+      if (!isNonSteam(ov) && ov.local_per_client_data?.installed !== true) continue;
+      out.push(overviewToEntry(ov));
     }
-    out.sort((a, b) => a.name.localeCompare(b.name));
     return out;
   } catch {
     return [];

@@ -10,7 +10,7 @@
     "test:fe": "vitest run"
   },
   "author": "Hooandee",
-  "license": "BSD-3-Clause",
+  "license": "GPL-3.0-only",
   "devDependencies": {
     "@decky/rollup": "^1.0.2",
     "@decky/ui": "^4.11.0",

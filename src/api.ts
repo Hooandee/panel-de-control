@@ -20,6 +20,12 @@ export const getProtonCaps = callable<[compatName: string], ProtonCaps>("get_pro
 // Pill usage counts ({pill_id: times applied}) → the editor surfaces the most-used.
 export const getLaunchUsage = callable<[], Record<string, number>>("get_launch_usage");
 export const bumpLaunchUsage = callable<[ids: string[]], boolean>("bump_launch_usage");
+// User-defined launch-variable library (env / game args). set_* returns the stored
+// (shape-coerced) list.
+import type { CustomVarDef } from "./launch/customVars";
+export type { CustomVarDef };
+export const getCustomLaunchVars = callable<[], CustomVarDef[]>("get_custom_launch_vars");
+export const setCustomLaunchVars = callable<[vars: CustomVarDef[]], CustomVarDef[]>("set_custom_launch_vars");
 
 // Durable mirror of the frontend's localStorage prefs (a null value removes a key).
 export const getUiPrefs = callable<[], Record<string, string>>("get_ui_prefs");

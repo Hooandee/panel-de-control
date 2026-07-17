@@ -28,6 +28,7 @@ from fans import suggest as fan_suggest
 from fan_curves import FanCurveStore
 from launch import tools as launch_tools
 from launch import proton_caps
+from launch import custom_vars as launch_custom_vars
 from display.color_store import ColorStore, sanitize_calibration
 from display.gamescope import GamescopeColorBackend, run_gamescopectl
 from display.oled_look import oled_look_for
@@ -138,6 +139,9 @@ DEFAULTS = {
     # Launch-options pill usage counts ({pill_id: times applied}) → the editor
     # surfaces the ones you use most. Durable so it survives a reboot.
     "launch_usage": {},
+    # User-defined launch variables (env NAME=VALUE / game args), reusable across
+    # games. The library is global; the on/off is per-game (in Steam's string).
+    "custom_launch_vars": [],
 }
 
 
@@ -355,6 +359,19 @@ class Plugin:
         self._settings["launch_usage"] = usage
         self._save()
         return True
+
+    async def get_custom_launch_vars(self) -> list:
+        """The reusable launch-variable library (shape-coerced)."""
+        self._init()
+        return launch_custom_vars.coerce_custom_vars(self._settings.get("custom_launch_vars"))
+
+    async def set_custom_launch_vars(self, vars: list) -> list:
+        """Persist the whole library; return the stored (coerced) list."""
+        self._init()
+        clean = launch_custom_vars.coerce_custom_vars(vars)
+        self._settings["custom_launch_vars"] = clean
+        self._save()
+        return clean
 
     async def get_ui_prefs(self) -> dict:
         self._init()

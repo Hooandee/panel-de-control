@@ -6,7 +6,7 @@ import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { ValuePills } from "./LaunchPills";
 import { LaunchEditor } from "../launch/useLaunchEditor";
-import { LaunchTools, Pill, helpKeyOf, isPillAvailable } from "../launch/catalog";
+import { LaunchTools, Pill, isPillAvailable, pillLabel, pillDesc, pillHelp } from "../launch/catalog";
 
 /** A round on/off switch matching the section's visual language. */
 const RowSwitch: FC<{ active: boolean; disabled?: boolean; onToggle: () => void }> = ({ active, disabled, onToggle }) => {
@@ -66,19 +66,19 @@ export const LaunchRow: FC<{ pill: Pill; ed: LaunchEditor; tools: LaunchTools; c
         >
           <div style={{ fontSize: theme.font.body, fontWeight: 500, color: theme.color.textPrimary, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
             <Chevron size={14} color={theme.color.textMuted} style={{ flexShrink: 0 }} />
-            {t(pill.labelKey)}
+            {pillLabel(pill, t)}
             {pill.recommended && <Badge text={t("params.recommended")} accent />}
             {pill.raw && <span style={{ fontFamily: "monospace", fontSize: 10, color: theme.color.textMuted }}>{pill.raw}</span>}
             {!available && <Badge text={t("params.notInstalled")} />}
           </div>
-          <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, lineHeight: 1.4, marginLeft: 20 }}>{t(pill.descKey)}</div>
+          <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, lineHeight: 1.4, marginLeft: 20 }}>{pillDesc(pill, t)}</div>
         </Focusable>
         {isToggle && <RowSwitch active={!!sel} disabled={!available} onToggle={() => ed.set(pill.id, !sel)} />}
       </div>
 
       {expanded && (
         <div style={{ fontSize: theme.font.caption, color: theme.color.textPrimary, lineHeight: 1.5, marginLeft: 20, marginTop: theme.space.xs, opacity: 0.85 }}>
-          {t(helpKeyOf(pill))}
+          {pillHelp(pill, t)}
         </div>
       )}
 

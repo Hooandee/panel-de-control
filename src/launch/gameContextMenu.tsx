@@ -11,28 +11,22 @@ import {
 import { FC } from "react";
 
 import { openLaunchEditorModal } from "../components/LaunchEditorModal";
-import { GameEntry } from "./steamApi";
-import { stableGameKey, isNonSteam } from "../tdp/gameIdentity";
+import { GameEntry, overviewToEntry } from "./steamApi";
 import { translate } from "../i18n";
 
 // Add a "Launch parameters" entry to a game's library context menu (the options
-// menu on a game), the way SteamGridDB adds "Change artwork". This patches Steam
-// internals, so the locator + patch mirror SteamGridDB's proven contextMenuPatch
-// (incl. the Oct-2025 SteamUI shape) and everything is guarded: if the menu can't
-// be located we install nothing and leave Steam untouched.
+// menu on a game). Patching Steam's internal LibraryContextMenu is adapted from
+// decky-steamgriddb's contextMenuPatch (GPL-3.0):
+//   https://github.com/SteamGridDB/decky-steamgriddb
+// That derivation is why this project is licensed GPL-3.0 (see THIRD_PARTY_NOTICES).
+// Everything is guarded: if the menu can't be located we install nothing.
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 function entryFor(appid: number): GameEntry | null {
   try {
     const ov = (window as any).appStore?.GetAppOverviewByAppID?.(appid);
-    const id = { appid, display_name: ov?.display_name, app_type: ov?.app_type };
-    return {
-      liveAppid: appid,
-      stableKey: stableGameKey(id),
-      name: ov?.display_name || String(appid),
-      isNonSteam: isNonSteam(id),
-    };
+    return ov ? overviewToEntry(ov) : null;
   } catch {
     return null;
   }

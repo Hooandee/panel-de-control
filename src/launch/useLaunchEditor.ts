@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { bumpLaunchUsage, getLaunchUsage } from "../api";
 import { Parsed, parse, serialize } from "./compose";
-import { Selections, Usage, buildLaunchOptions, detectSelections } from "./catalog";
+import { CATALOG, Pill, Selections, Usage, buildLaunchOptions, detectSelections } from "./catalog";
 import { GameEntry, readLaunchOptions, resolveLiveAppid, writeLaunchOptions } from "./steamApi";
 
 export type SaveStatus = "saving" | "saved" | null;
@@ -31,7 +31,7 @@ const isActive = (v: string | boolean | undefined): boolean => v !== undefined &
  * updates async, so a read-back would race). Usage is counted once per session
  * per newly-enabled pill (drives the Frecuentes row).
  */
-export function useLaunchEditor(game: GameEntry): LaunchEditor {
+export function useLaunchEditor(game: GameEntry, catalog: Pill[] = CATALOG): LaunchEditor {
   const [baseline, setBaseline] = useState<Parsed | null>(null);
   const [selections, setSelections] = useState<Selections>({});
   const [usage, setUsage] = useState<Usage>({});
@@ -39,6 +39,7 @@ export function useLaunchEditor(game: GameEntry): LaunchEditor {
   const bumped = useRef<Set<string>>(new Set());
   const savedFlash = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Read the Steam string once per game (keyed only by appid — no I/O on catalog change).
   useEffect(() => {
     let cancelled = false;
     setBaseline(null);
@@ -47,13 +48,21 @@ export function useLaunchEditor(game: GameEntry): LaunchEditor {
     readLaunchOptions(game.liveAppid).then((rawStr) => {
       if (cancelled) return;
       const p = parse(rawStr);
+      // Seed baseline + selections together so the first painted frame never shows
+      // every pill off (which would strip the string and arm a bogus autosave).
       setBaseline(p);
-      setSelections(detectSelections(p));
+      setSelections(detectSelections(p, catalog));
     });
     return () => {
       cancelled = true;
     };
   }, [game.liveAppid]);
+
+  // Custom pills load async — re-derive from the in-memory baseline when the catalog
+  // grows (no re-read of the Steam string). No-op when it already matches.
+  useEffect(() => {
+    if (baseline) setSelections(detectSelections(baseline, catalog));
+  }, [baseline, catalog]);
 
   // Usage counts are global (not per-game); load once for the Frecuentes row.
   useEffect(() => {
@@ -67,8 +76,8 @@ export function useLaunchEditor(game: GameEntry): LaunchEditor {
   }, []);
 
   const preview = useMemo(
-    () => (baseline ? buildLaunchOptions(baseline, selections) : ""),
-    [baseline, selections],
+    () => (baseline ? buildLaunchOptions(baseline, selections, catalog) : ""),
+    [baseline, selections, catalog],
   );
   const dirty = baseline ? preview !== serialize(baseline) : false;
 

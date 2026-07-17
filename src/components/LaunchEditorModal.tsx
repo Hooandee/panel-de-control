@@ -1,8 +1,9 @@
-import { FC, ReactNode, useEffect, useState } from "react";
+import { FC, ReactNode, useEffect, useMemo, useState } from "react";
 import { ModalRoot, showModal, Focusable } from "@decky/ui";
 import {
-  LuGamepad2, LuCheck, LuTriangleAlert, LuShieldCheck, LuChevronDown, LuChevronRight, LuStar, LuSparkles,
+  LuCheck, LuTriangleAlert, LuShieldCheck, LuChevronDown, LuChevronRight, LuStar, LuSparkles,
   LuGauge, LuLanguages, LuPlay, LuWrench, LuExpand, LuMonitor, LuImage, LuLibrary, LuTerminal,
+  LuSlidersHorizontal, LuEye, LuEyeOff,
 } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
@@ -10,9 +11,14 @@ import { theme } from "../theme";
 import { Loading } from "./Loading";
 import { LaunchRow } from "./LaunchRow";
 import { LaunchPreview } from "./LaunchPreview";
+import { GameCover } from "./GameCover";
+import { FocusableCard } from "./FocusableCard";
+import { useRunningGame } from "../tdp/useRunningGame";
+import { useHiddenGames } from "../launch/useHiddenGames";
 import { GameEntry, readCompatTool } from "../launch/steamApi";
 import { getDevice, getLaunchTools, getProtonCaps, LaunchTools } from "../api";
 import { useLaunchEditor } from "../launch/useLaunchEditor";
+import { useCustomVars } from "../launch/useCustomVars";
 import { CATALOG, SUBGROUP_ORDER, Pill, Section, frequentPills, recommendedPills, ownedTokens, pillVisible } from "../launch/catalog";
 import { GpuGen } from "../launch/proton";
 
@@ -27,6 +33,7 @@ const SUBGROUP_ICONS: Record<string, ReactNode> = {
   "params.sub.render": <LuImage size={13} />,
   "params.sub.dlls": <LuLibrary size={13} />,
   "params.sub.gameArgs": <LuTerminal size={13} />,
+  "params.sub.custom": <LuSlidersHorizontal size={13} />,
 };
 
 type Editor = ReturnType<typeof useLaunchEditor>;
@@ -65,9 +72,9 @@ const Fold: FC<{ title: ReactNode; summary?: ReactNode; defaultOpen?: boolean; c
 
 /** Rows for a subgroup within a section, filtered to what the game's Proton build
  *  supports + GPU. */
-const Subgroup: FC<{ section: Section; subgroup: string; ed: Editor; tools: LaunchTools; envs: string[]; gpu: GpuGen }> = ({ section, subgroup, ed, tools, envs, gpu }) => {
+const Subgroup: FC<{ section: Section; subgroup: string; ed: Editor; tools: LaunchTools; envs: string[]; gpu: GpuGen; catalog: Pill[] }> = ({ section, subgroup, ed, tools, envs, gpu, catalog }) => {
   const { t } = useI18n();
-  const pills = CATALOG.filter((p) => p.section === section && p.subgroup === subgroup && pillVisible(p, envs, gpu));
+  const pills = catalog.filter((p) => p.section === section && p.subgroup === subgroup && pillVisible(p, envs, gpu));
   if (pills.length === 0) return null;
   return (
     <div>
@@ -87,7 +94,14 @@ const Subgroup: FC<{ section: Section; subgroup: string; ed: Editor; tools: Laun
 
 const LaunchEditorBody: FC<{ game: GameEntry }> = ({ game }) => {
   const { t } = useI18n();
-  const ed = useLaunchEditor(game);
+  const running = useRunningGame();
+  const isRunning = !!running && running.appid === game.stableKey;
+  const custom = useCustomVars();
+  const { isHidden, hide, unhide } = useHiddenGames();
+  const gameHidden = isHidden(game.stableKey);
+  // Base catalog + the user's library, so custom pills flow through the same engine.
+  const catalog = useMemo(() => [...CATALOG, ...custom.pills], [custom.pills]);
+  const ed = useLaunchEditor(game, catalog);
   const [tools, setTools] = useState<LaunchTools | null>(null);
   const [gpu, setGpu] = useState<GpuGen>("unknown");
   // PROTON_* vars the game's Proton build actually supports (null until loaded).
@@ -123,25 +137,41 @@ const LaunchEditorBody: FC<{ game: GameEntry }> = ({ game }) => {
   }, [ed.loading, game.liveAppid]);
 
   const supportedEnvs = envs ?? [];
-  const advancedCount = CATALOG.filter((p) => p.section === "advanced" && !!ed.selections[p.id] && pillVisible(p, supportedEnvs, gpu)).length;
-  const owned = ownedTokens(ed.selections);
+  const advancedCount = catalog.filter((p) => p.section === "advanced" && !!ed.selections[p.id] && pillVisible(p, supportedEnvs, gpu)).length;
+  const owned = ownedTokens(ed.selections, catalog);
   const frequents: Pill[] = tools ? frequentPills(ed.usage, tools).filter((p) => pillVisible(p, supportedEnvs, gpu)) : [];
   // No usage yet → offer a "Start here" set of safe recommended picks instead.
   const starters: Pill[] = tools && frequents.length === 0 ? recommendedPills(tools, supportedEnvs, gpu) : [];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: theme.space.md, padding: theme.space.sm, maxWidth: 760, width: "100%", margin: "0 auto" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: theme.space.sm }}>
-        <LuGamepad2 size={18} color={theme.color.accent} />
-        <div style={{ minWidth: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: theme.space.md }}>
+        <GameCover url={game.coverUrl} name={game.name} width={52} />
+        <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: theme.font.value, color: theme.color.textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{game.name}</div>
           <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
             {game.isNonSteam ? t("params.badge.nonSteam") : t("params.badge.steam")}
           </div>
         </div>
+        <FocusableCard
+          onActivate={() => (gameHidden ? unhide(game.stableKey) : hide(game.stableKey))}
+          emphasized={gameHidden}
+          style={{ flexShrink: 0, padding: 8, gap: 6 }}
+        >
+          {gameHidden ? <LuEye size={18} color={theme.color.accent} /> : <LuEyeOff size={18} color={theme.color.textMuted} />}
+          <span style={{ fontSize: theme.font.caption, color: gameHidden ? theme.color.accent : theme.color.textMuted }}>
+            {t(gameHidden ? "params.unhide" : "params.hide")}
+          </span>
+        </FocusableCard>
       </div>
 
-      {ed.loading || tools === null || envs === null ? (
+      {isRunning && (
+        <div style={{ fontSize: theme.font.caption, color: theme.color.warn, display: "flex", alignItems: "center", gap: 6 }}>
+          <LuTriangleAlert size={13} style={{ flexShrink: 0 }} /> {t("params.running.restart")}
+        </div>
+      )}
+
+      {ed.loading || tools === null || envs === null || custom.vars === null ? (
         <Loading />
       ) : ed.malformed ? (
         <div>
@@ -185,12 +215,12 @@ const LaunchEditorBody: FC<{ game: GameEntry }> = ({ game }) => {
           )}
 
           {SUBGROUP_ORDER.common.map((sg) => (
-            <Subgroup key={sg} section="common" subgroup={sg} ed={ed} tools={tools} envs={supportedEnvs} gpu={gpu} />
+            <Subgroup key={sg} section="common" subgroup={sg} ed={ed} tools={tools} envs={supportedEnvs} gpu={gpu} catalog={catalog} />
           ))}
 
           <Fold title={t("params.advanced")} summary={advancedCount > 0 ? `${advancedCount}` : ""}>
             {SUBGROUP_ORDER.advanced.map((sg) => (
-              <Subgroup key={sg} section="advanced" subgroup={sg} ed={ed} tools={tools} envs={supportedEnvs} gpu={gpu} />
+              <Subgroup key={sg} section="advanced" subgroup={sg} ed={ed} tools={tools} envs={supportedEnvs} gpu={gpu} catalog={catalog} />
             ))}
           </Fold>
 

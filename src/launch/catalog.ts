@@ -21,6 +21,7 @@ import {
   envToken,
 } from "./compose";
 import { GpuGen } from "./proton";
+import { isCustomPillId } from "./customVars";
 
 export type PillKind = "env" | "wrapper" | "arg";
 export type Section = "common" | "advanced";
@@ -48,8 +49,12 @@ export interface Pill {
   subgroup: string;
   kind: PillKind;
   labelKey: string;
+  /** Raw user-visible label, used instead of labelKey for user-defined pills. */
+  label?: string;
   /** Plain-language "what it does" line (required — the whole point of the row). */
   descKey: string;
+  /** Raw description, used instead of descKey for user-defined pills. */
+  desc?: string;
   /** Longer explanation + example, shown when the row is expanded. Derived as
    *  descKey with ".desc"→".help" when absent. */
   helpKey?: string;
@@ -147,7 +152,7 @@ export const CATALOG: Pill[] = [
 /** Sub-group order within each section (kept stable; pills render grouped by these). */
 export const SUBGROUP_ORDER: Record<Section, string[]> = {
   common: ["params.sub.perf", "params.sub.lang", "params.sub.startup"],
-  advanced: ["params.sub.proton", "params.sub.upscaling", "params.sub.display", "params.sub.render", "params.sub.dlls", "params.sub.gameArgs"],
+  advanced: ["params.sub.proton", "params.sub.upscaling", "params.sub.display", "params.sub.render", "params.sub.dlls", "params.sub.gameArgs", "params.sub.custom"],
 };
 
 /** Whether a pill applies here. A PROTON_* env pill shows only if the game's
@@ -156,6 +161,8 @@ export const SUBGROUP_ORDER: Record<Section, string[]> = {
  *  gated pills (FSR4) also need a matching GPU. Non-Proton pills always show.
  *  Tool availability is separate (those show disabled, not hidden). */
 export function pillVisible(pill: Pill, supportedEnvs: string[], gpu: GpuGen): boolean {
+  // User-defined pills aren't capability-gated (we can't verify an arbitrary var).
+  if (isCustomPillId(pill.id)) return true;
   if (pill.gpus && !pill.gpus.includes(gpu)) return false;
   if (pill.kind === "env" && pill.envName?.startsWith("PROTON_") && !supportedEnvs.includes(pill.envName)) {
     return false;
@@ -305,6 +312,18 @@ export function buildLaunchOptions(
 /** The row's long-help i18n key (explicit helpKey, else descKey with .desc→.help). */
 export function helpKeyOf(pill: Pill): string {
   return pill.helpKey ?? pill.descKey.replace(/\.desc$/, ".help");
+}
+
+/** Resolved row label/description: raw text for user-defined pills, else the i18n key. */
+export function pillLabel(pill: Pill, t: (k: string) => string): string {
+  return pill.label ?? t(pill.labelKey);
+}
+export function pillDesc(pill: Pill, t: (k: string) => string): string {
+  return pill.desc ?? t(pill.descKey);
+}
+/** Expanded-help text: raw desc for user-defined pills (no i18n key), else the help key. */
+export function pillHelp(pill: Pill, t: (k: string) => string): string {
+  return isCustomPillId(pill.id) ? pill.desc ?? "" : t(helpKeyOf(pill));
 }
 
 /** Safe recommended picks that apply here — seeds "Empezar aquí" when there's no usage. */
