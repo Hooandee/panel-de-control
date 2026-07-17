@@ -1,4 +1,5 @@
 import type { DeviceInfo } from "../api";
+import { callBackend, installedPlugins, setActivePlugin } from "../deckyInternal";
 
 // The sibling RGB plugin we integrate with. `name` must match its plugin.json
 // `name` exactly (that's the key Decky uses in its plugin list + setActivePlugin).
@@ -33,23 +34,14 @@ export function coloresCardState(input: {
   return input.installed ? "open" : "install";
 }
 
-// ── Decky-internal adapters ────────────────────────────────────────────────
-// These reach INTERNAL Decky Loader globals (`window.DeckyPluginLoader`,
-// `window.DeckyBackend`) that are NOT part of the public `@decky/api`. Every one
-// is guarded so a Decky version that moved them degrades honestly: we report
-// "not installed" / fall back to the store rather than throw or lie.
+// ── Colores adapters over the shared Decky-internal reaches ─────────────────
+// All access to the internal Decky globals lives in src/deckyInternal.ts; these
+// are just the Colores-specific wrappers over it. Everything degrades honestly:
+// we report "not installed" / fall back to the store rather than throw or lie.
 
 /** Reads Decky's in-memory installed-plugin list to see if Colores is present. */
 export function isColoresInstalled(): boolean {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const loader = (window as any).DeckyPluginLoader;
-    const plugins = loader?.deckyState?.publicState?.().installedPlugins ?? [];
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return plugins.some((p: any) => p?.name === COLORES_PLUGIN_NAME);
-  } catch {
-    return false;
-  }
+  return installedPlugins().includes(COLORES_PLUGIN_NAME);
 }
 
 /**
@@ -59,26 +51,16 @@ export function isColoresInstalled(): boolean {
  */
 export async function installColores(): Promise<boolean> {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const backend = (window as any).DeckyBackend;
-    if (typeof backend?.call !== "function") return false;
-    await backend.call("utilities/install_plugin", COLORES_RELEASE_URL, COLORES_PLUGIN_NAME);
+    await callBackend("utilities/install_plugin", COLORES_RELEASE_URL, COLORES_PLUGIN_NAME);
     return true;
   } catch {
     return false;
   }
 }
 
-/** Makes Colores the active QAM plugin via Decky's loader state. Internal API —
- *  no-op (user lands on the Decky plugin list) if the setter is gone. Kept here
- *  with its sibling reaches so all internal-global access lives in one file. */
+/** Makes Colores the active QAM plugin via Decky's loader state. */
 export function setActiveColoresPlugin(): void {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (window as any).DeckyPluginLoader?.deckyState?.setActivePlugin?.(COLORES_PLUGIN_NAME);
-  } catch {
-    /* land on the Decky plugin list */
-  }
+  setActivePlugin(COLORES_PLUGIN_NAME);
 }
 
 /**
