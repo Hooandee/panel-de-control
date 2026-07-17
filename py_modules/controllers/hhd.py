@@ -63,3 +63,21 @@ def post_state(payload: dict, root: str = "/"):
         return _post("/state", token, payload)
     except Exception:
         return None
+
+
+def current_tdp_enable(root: str = "/"):
+    """HHD's tdp_enable flag (bool), or None when HHD isn't reachable."""
+    st = read_state(root)
+    if not st:
+        return None
+    return bool(st.get("hhd", {}).get("settings", {}).get("tdp_enable"))
+
+
+def set_tdp_enable(enabled: bool, root: str = "/"):
+    """Write hhd.settings.tdp_enable and return the ECHOED value, or None when HHD
+    is unreachable / didn't echo. Cooperative handshake: never kills the daemon
+    (that would break the controller grab)."""
+    echoed = post_state({"hhd": {"settings": {"tdp_enable": bool(enabled)}}}, root)
+    if not echoed:
+        return None
+    return bool(echoed.get("hhd", {}).get("settings", {}).get("tdp_enable"))
