@@ -102,6 +102,15 @@ DEFAULTS = {
     # the menu would show an inflated number vs the REAL in-game TDP the user wants to
     # see with the QAM open. When ON, the user accepts the menu-time bump for fluidity.
     "qam_tdp_boost": False,
+    # Master switch: when False we stop writing the TDP rails entirely and Potencia
+    # drops to monitor-only. Default ON. Lets the user hand TDP to another tool.
+    "tdp_control_enabled": True,
+    # One-time full-screen notices (SettingsStore drops keys not in DEFAULTS).
+    "seen_tdp_conflict_takeover": False,
+    "seen_autotdp_notice": False,
+    # HHD's tdp_enable saved when we take control, so we can restore it on
+    # release / unload / uninstall. None = we never took it.
+    "hhd_tdp_prev": None,
     # HDR output on/off (only meaningful on HDR-capable panels — see device.hdr).
     "hdr_enabled": False,
     # Battery charge limit: when enabled, cap charging at `charge_limit_percent`
