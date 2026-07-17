@@ -22,12 +22,9 @@ export interface TdpConflictHook {
   takeAll: () => Promise<void>;
 }
 
-/**
- * Detects rival TDP managers and exposes reversible actions to disable them.
- * `supported` and `weControl` come from the caller's existing TDP state (from
- * get_tdp_state) so this hook doesn't re-fetch that heavy RPC — it only polls the
- * light get_tdp_conflict + reads Decky's plugin list synchronously.
- */
+// Detects rival TDP managers and exposes reversible actions to disable them.
+// `supported`/`weControl` come from the caller's TDP state so this hook only polls
+// the light get_tdp_conflict + reads Decky's plugin list.
 export function useTdpConflict(supported: boolean, weControl: boolean): TdpConflictHook {
   const [hhdManaging, setHhdManaging] = useState(false);
   const [sdtdp, setSdtdp] = useState(false);

@@ -57,11 +57,8 @@ interface Props {
   onTakeHhd: () => void;
 }
 
-/**
- * Permanent conflict card shown atop Potencia while another TDP manager is active
- * (after the user dismissed the first-run modal, or if a rival reappears). One row
- * per active rival with a reversible action. Deliberately persistent — it nags.
- */
+// Persistent card atop Potencia while another TDP manager is active. One row per
+// active rival with a reversible action.
 export const TdpConflictCard: FC<Props> = ({ rivals, onDisableSdtdp, onTakeHhd }) => {
   const { t } = useI18n();
   return (

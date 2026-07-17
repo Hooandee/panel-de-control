@@ -1,9 +1,7 @@
-"""RPC-level coverage for the TDP control master switch + HHD take/release.
-
-Locks the glue in main.py: the conflict readout, taking control from HHD
-(reversible, saving the previous value), the master switch gating every TDP
-write, and restoring HHD on release / lifecycle teardown. Pure logic lives in
-test_hhd_tdp_enable / the frontend conflict tests; this covers the wiring.
+"""RPC-level coverage for the TDP control master switch + HHD take/release:
+the conflict readout, taking control from HHD (reversible, saving the previous
+value), the master switch gating every TDP write, and restoring HHD on release
+/ teardown.
 """
 import asyncio
 import importlib
@@ -274,8 +272,7 @@ def test_tdp_state_exposes_control_and_seen_flags(Plugin):
     p = Plugin()
     p._init()
     st = asyncio.run(p.get_tdp_state())
-    # Defaults: control on, notices unseen — the frontend reads these to decide
-    # whether to show the first-run modals (durable, unlike CEF localStorage).
+    # Defaults: control on, notices unseen.
     assert st["tdp_control_enabled"] is True
     assert st["seen_autotdp_notice"] is False
     assert st["seen_tdp_conflict_takeover"] is False
@@ -290,7 +287,7 @@ def test_tdp_state_exposes_control_and_seen_flags(Plugin):
 
 
 # ---------------------------------------------------------------------------
-# Lifecycle restore (good citizen: hand HHD back)
+# Lifecycle restore: hand HHD back
 # ---------------------------------------------------------------------------
 
 def test_unload_restores_hhd(Plugin, fake_hhd):

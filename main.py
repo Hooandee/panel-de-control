@@ -102,14 +102,13 @@ DEFAULTS = {
     # the menu would show an inflated number vs the REAL in-game TDP the user wants to
     # see with the QAM open. When ON, the user accepts the menu-time bump for fluidity.
     "qam_tdp_boost": False,
-    # Master switch: when False we stop writing the TDP rails entirely and Potencia
-    # drops to monitor-only. Default ON. Lets the user hand TDP to another tool.
+    # Master switch: when False we stop writing the TDP rails and Potencia drops to
+    # monitor-only, handing TDP to another tool.
     "tdp_control_enabled": True,
-    # One-time full-screen notices (SettingsStore drops keys not in DEFAULTS).
+    # One-time notices (SettingsStore drops keys not in DEFAULTS).
     "seen_tdp_conflict_takeover": False,
     "seen_autotdp_notice": False,
-    # HHD's tdp_enable saved when we take control, so we can restore it on
-    # release / unload / uninstall. None = we never took it.
+    # HHD's tdp_enable saved when we take control, to restore later. None = never took it.
     "hhd_tdp_prev": None,
     # HDR output on/off (only meaningful on HDR-capable panels — see device.hdr).
     "hdr_enabled": False,
@@ -702,22 +701,21 @@ class Plugin:
 
     # ---- TDP conflict + master switch --------------------------------------
     async def get_tdp_conflict(self) -> dict:
-        """Whether HHD is currently managing the power rails (a live conflict with
-        our control). SimpleDeckyTDP is detected on the frontend via Decky's plugin
-        list — the backend can't see it."""
+        """Whether HHD is currently managing the power rails. SimpleDeckyTDP is
+        detected on the frontend (the backend can't see it)."""
         self._init()
         hhd_present = self._controller_backend.manager == controller_detect.HHD
-        # current_tdp_enable does a blocking HTTP GET (urllib) — the frontend polls
-        # this every few seconds, so keep it off the event loop.
+        # current_tdp_enable does a blocking HTTP GET; the frontend polls this, so
+        # keep it off the event loop.
         managing = (await self._offload_call(controller_hhd.current_tdp_enable) or False) \
             if hhd_present else False
         return {"hhd_present": hhd_present, "hhd_managing": bool(managing)}
 
     async def take_tdp_control(self) -> dict:
-        """Hand HHD's TDP module over to us (reversible). Saves its previous value so
-        we can restore it later. Honest: ok only when the echo confirms it's off."""
+        """Hand HHD's TDP module over to us (reversible), saving its previous value.
+        ok only when the echo confirms it's off."""
         self._init()
-        # HHD's REST client is blocking urllib (5 s timeout) — keep it off the loop.
+        # HHD's REST client is blocking urllib — keep it off the loop.
         prev = await self._offload_call(controller_hhd.current_tdp_enable)
         if prev is None:
             return {"ok": False, "hhd_managing": False}
@@ -729,8 +727,7 @@ class Plugin:
         return {"ok": applied is False, "hhd_managing": bool(applied)}
 
     def _restore_hhd_tdp(self) -> None:
-        """Return HHD to its previous tdp_enable if we took it. Idempotent. Guarded
-        so it never raises from a lifecycle path."""
+        """Return HHD to its previous tdp_enable if we took it. Idempotent."""
         try:
             prev = self._settings.get("hhd_tdp_prev")
             if prev is None:
@@ -2273,8 +2270,8 @@ class Plugin:
             "firmware_mode": self._firmware_mode(),
             # get_tdp_state flips this True when it adopts an external change.
             "external_change": False,
-            # Master switch + one-time-notice flags; the frontend reads these to gate
-            # the monitor-only mode and the first-run modals (durable across reboot).
+            # Master switch + one-time-notice flags (durable across reboot; the
+            # frontend gates monitor-only mode + the first-run modals off these).
             "tdp_control_enabled": self._tdp_control_on(),
             "seen_autotdp_notice": bool(self._settings.get("seen_autotdp_notice", False)),
             "seen_tdp_conflict_takeover": bool(

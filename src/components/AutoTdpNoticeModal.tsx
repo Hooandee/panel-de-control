@@ -34,9 +34,6 @@ const Point: FC<{ icon: ReactNode; color: string; text: string }> = ({ icon, col
   </div>
 );
 
-// Full-screen first-run notice shown once, the first time Auto‑TDP is enabled.
-// Sets expectations honestly (it's dynamic, may draw more, experimental) and points
-// to the fixed-TDP escape hatch. Confirm enables + records the flag; cancel reverts.
 const AutoTdpNoticeBody: FC<Props> = ({ onConfirm, onCancel, closeModal }) => {
   const { t } = useI18n();
   return (
@@ -135,7 +132,6 @@ const AutoTdpNoticeModal: FC<Props> = ({ onConfirm, onCancel, closeModal }) => (
   </ModalRoot>
 );
 
-/** Open the full-screen first-run Auto‑TDP notice. */
 export function openAutoTdpNoticeModal(opts: { onConfirm: () => void; onCancel: () => void }): void {
   showModal(<AutoTdpNoticeModal onConfirm={opts.onConfirm} onCancel={opts.onCancel} />, window);
 }

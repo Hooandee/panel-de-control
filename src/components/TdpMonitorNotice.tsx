@@ -4,11 +4,8 @@ import { LuActivity } from "react-icons/lu";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 
-/**
- * Slim honest banner shown in Potencia when we're NOT controlling the TDP — either
- * the hardware has no TDP backend or the master switch is off. The section renders
- * only the live read (arc) alongside this; no dead controls.
- */
+// Banner shown in Potencia when we're not controlling TDP (no backend, or master
+// switch off). The section shows only the live arc alongside it.
 export const TdpMonitorNotice: FC = () => {
   const { t } = useI18n();
   return (

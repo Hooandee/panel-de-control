@@ -1,5 +1,5 @@
-// Pure conflict logic — no @decky/ui / window reaches, so it stays unit-testable.
-// The hook (useTdpConflict) reads Decky globals + RPCs and feeds the results here.
+// Pure conflict logic (no window/@decky reaches) so it's unit-testable; the hook
+// feeds it the Decky-globals + RPC results.
 
 export const SDTDP_NAME = "SimpleDeckyTDP";
 
@@ -11,8 +11,7 @@ export function sdtdpActive(installed: string[], disabled: string[]): boolean {
 export interface ConflictInput {
   sdtdp: boolean;
   hhdManaging: boolean;
-  // We only flag a conflict when WE actually manage TDP: hardware supports it and
-  // the master switch is on.
+  // Only a conflict when we actually manage TDP (supported + master switch on).
   weControl: boolean;
   tdpSupported: boolean;
 }

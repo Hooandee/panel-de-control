@@ -11,10 +11,8 @@ interface Props {
   closeModal?: () => void;
 }
 
-// Full-screen first-run take-over: shown once when a TDP conflict is first
-// detected. Assertive by design — one gesture ("turn them off and let me manage")
-// disables every rival. "Not now" closes; the persistent card keeps nagging while
-// the conflict lasts.
+// Take-over modal: one gesture disables every rival. "Not now" closes; the
+// persistent card carries on while the conflict lasts.
 const TdpConflictBody: FC<Props> = ({ onTakeAll, closeModal }) => {
   const { t } = useI18n();
   return (
@@ -74,7 +72,6 @@ const TdpConflictModal: FC<Props> = ({ onTakeAll, closeModal }) => (
   </ModalRoot>
 );
 
-/** Open the full-screen first-run TDP take-over modal. */
 export function openTdpConflictModal(onTakeAll: () => void): void {
   showModal(<TdpConflictModal onTakeAll={onTakeAll} />, window);
 }

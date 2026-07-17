@@ -1,6 +1,4 @@
-"""HHD tdp_enable read/write helper — the cooperative handshake that hands the
-power rails between HHD and us. The value is confirmed by the echoed state
-(never a fabricated success)."""
+"""HHD tdp_enable read/write helper. The value is confirmed by the echoed state."""
 from controllers import hhd
 
 
@@ -33,7 +31,7 @@ def test_set_tdp_enable_false(monkeypatch):
     fake = _FakeHHD()
     monkeypatch.setattr(hhd, "read_state", fake.read_state)
     monkeypatch.setattr(hhd, "post_state", fake.post_state)
-    assert hhd.set_tdp_enable(False) is False          # echoed value
+    assert hhd.set_tdp_enable(False) is False
     assert fake.state["hhd"]["settings"]["tdp_enable"] is False
 
 
@@ -47,4 +45,4 @@ def test_set_tdp_enable_true(monkeypatch):
 
 def test_set_tdp_enable_unreachable(monkeypatch):
     monkeypatch.setattr(hhd, "post_state", lambda payload, root="/": None)
-    assert hhd.set_tdp_enable(False) is None            # honest: unknown
+    assert hhd.set_tdp_enable(False) is None            # unreachable → unknown

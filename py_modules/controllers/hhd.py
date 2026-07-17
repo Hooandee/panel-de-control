@@ -74,9 +74,9 @@ def current_tdp_enable(root: str = "/"):
 
 
 def set_tdp_enable(enabled: bool, root: str = "/"):
-    """Write hhd.settings.tdp_enable and return the ECHOED value, or None when HHD
-    is unreachable / didn't echo. Cooperative handshake: never kills the daemon
-    (that would break the controller grab)."""
+    """Write hhd.settings.tdp_enable, returning the echoed value (or None if HHD is
+    unreachable). We flip the flag rather than stop the daemon, which owns the
+    controller grab."""
     echoed = post_state({"hhd": {"settings": {"tdp_enable": bool(enabled)}}}, root)
     if not echoed:
         return None

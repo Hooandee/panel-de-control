@@ -34,12 +34,9 @@ export function coloresCardState(input: {
   return input.installed ? "open" : "install";
 }
 
-// ── Colores adapters over the shared Decky-internal reaches ─────────────────
-// All access to the internal Decky globals lives in src/deckyInternal.ts; these
-// are just the Colores-specific wrappers over it. Everything degrades honestly:
-// we report "not installed" / fall back to the store rather than throw or lie.
+// Colores-specific wrappers over the shared Decky-internal reaches (deckyInternal.ts).
+// Everything degrades: reports "not installed" / falls back to the store.
 
-/** Reads Decky's in-memory installed-plugin list to see if Colores is present. */
 export function isColoresInstalled(): boolean {
   return installedPlugins().includes(COLORES_PLUGIN_NAME);
 }
@@ -58,7 +55,6 @@ export async function installColores(): Promise<boolean> {
   }
 }
 
-/** Makes Colores the active QAM plugin via Decky's loader state. */
 export function setActiveColoresPlugin(): void {
   setActivePlugin(COLORES_PLUGIN_NAME);
 }

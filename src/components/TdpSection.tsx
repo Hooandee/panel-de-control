@@ -30,9 +30,7 @@ export interface TdpSectionProps {
   onApplySuggestion: (watts: number) => void;
   // Select a firmware performance mode (Legion Go original); "custom" via the slider.
   onFirmwareMode: (mode: string) => void;
-  // When true we're not controlling TDP (master switch off): show only the live
-  // read (arc) + a notice, hiding every write control. Unsupported hardware is a
-  // separate case handled above (an honest "unsupported" note, no arc).
+  // Master switch off: show only the live arc + a notice, hide write controls.
   monitorOnly?: boolean;
 }
 
@@ -65,8 +63,7 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
   const inFwMode = hasFwModes && tdp.firmware_mode !== "custom";
   const shownWatts = inFwMode ? (tdp.applied_w ?? view.watts) : view.watts;
 
-  // Monitor-only: we've stepped aside (master switch off). Keep the live arc, drop
-  // every write control.
+  // Master switch off: keep the live arc, drop every write control.
   if (monitorOnly) {
     return (
       <>

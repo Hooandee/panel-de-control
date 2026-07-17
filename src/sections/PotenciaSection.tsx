@@ -30,8 +30,7 @@ export const PotenciaSection: FC = () => {
   const commitTimerLevels = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Fires the first-run take-over modal at most once per mount.
   const shownTakeover = useRef(false);
-  // Reuse the state we already have (supported + master switch) instead of making
-  // the conflict hook re-fetch the heavy get_tdp_state.
+  // Reuse the state we already have so the hook doesn't re-fetch get_tdp_state.
   const conflict = useTdpConflict(tdp?.supported ?? false, tdp?.tdp_control_enabled ?? true);
 
   const refresh = useCallback(() => {
@@ -128,10 +127,7 @@ export const PotenciaSection: FC = () => {
     [resolveTarget, refresh],
   );
 
-  // Gate the FIRST enable of Auto‑TDP behind the one-time experimental notice.
-  // Confirm → record the flag + enable; cancel → leave it off (the toggle is
-  // controlled by the live auto state, so it simply stays off). Disabling is never
-  // gated.
+  // Gate the first enable of Auto‑TDP behind the one-time notice. Disabling isn't gated.
   const onAutoTdpToggle = useCallback(
     (enabled: boolean) => {
       if (enabled && tdp && !tdp.seen_autotdp_notice) {
@@ -189,9 +185,8 @@ export const PotenciaSection: FC = () => {
   const conflictRef = useRef(conflict);
   conflictRef.current = conflict;
 
-  // First-run take-over: the very first time a live conflict appears (and we haven't
-  // shown it before) pop the full-screen modal once, then persist the flag so it
-  // never returns. After that the persistent card carries the nag.
+  // First-run take-over: pop the modal once when a live conflict first appears, then
+  // persist the flag. After that the persistent card handles it.
   useEffect(() => {
     if (!tdp || shownTakeover.current) return;
     if (conflict.conflict && !tdp.seen_tdp_conflict_takeover) {
