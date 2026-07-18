@@ -35,6 +35,10 @@ class DeviceProfile:
     # Only for models where we can't drive the fan curve and the modes are the sole
     # fan lever (Legion Go original); models with real curve control keep custom TDP.
     firmware_modes: bool = False
+    # The charger headroom is only reachable on the charger — the firmware refuses a
+    # higher sustained limit on battery (ROG Ally / Ally X). Hides the on-battery unlock
+    # toggle. Default False: the extra is unlockable on battery (Xbox Ally X, Legion).
+    charger_only_extra: bool = False
 
 
 # Conservative, safe fallback when detection fails - visibly generic.
@@ -69,11 +73,12 @@ DEVICE_TABLE = (
                   tdp_presets=(10, 15, 17, 20)),
     DeviceProfile("rog_ally_x", "ROG Ally X", "AMD Z1 Extreme", "amd",
                   7, 17, 25, 30, match_names=("ROG Ally X",),
-                  tdp_presets=(13, 17, 25, 30)),
+                  tdp_presets=(13, 17, 25, 30), charger_only_extra=True),
     DeviceProfile("rog_ally", "ROG Ally", "AMD Z1 Extreme", "amd",
-                  7, 15, 25, 30, match_names=("ROG Ally RC71", "ROG Ally")),
+                  7, 15, 25, 30, match_names=("ROG Ally RC71", "ROG Ally"),
+                  charger_only_extra=True),
     DeviceProfile("legion_go_2", "Legion Go 2", "AMD Ryzen AI Z2 Extreme", "amd",
-                  5, 15, 30, 33, match_names=("83N0", "83N1", "Legion Go 2"),
+                  5, 15, 30, 35, match_names=("83N0", "83N1", "Legion Go 2"),
                   panel="oled", hdr=True),
     # Legion Go S ships as both 8ARP1 (83L3) and 8APU1 (83N6), each with either a
     # Ryzen Z1 Extreme or a Z2 Go. The real chip is read live from /proc/cpuinfo;

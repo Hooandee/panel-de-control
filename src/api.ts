@@ -21,6 +21,10 @@ export interface DeviceInfo {
   // When true, the shell shows the experimental marker for this recognised model.
   experimental: boolean;
   cooler_max: number | null;
+  // When true, the charger headroom (tdp_max_charger above tdp_max) is only reachable
+  // with the charger connected — the firmware caps the sustained limit on battery. Hide
+  // the "raise on battery" toggle; the arc shows the locked charger segment instead.
+  charger_only_extra: boolean;
 }
 
 export const getDevice = callable<[], DeviceInfo>("get_device");
@@ -168,6 +172,9 @@ export interface PowerDraw {
   // True only while the QAM-open responsive floor is REALLY raising PL1 above where
   // the auto loop would park it → the arc shows a menu-temporary value, so say so.
   ui_floor_engaged: boolean;
+  // Live charger state, polled every second so the UI can refresh the slider ceiling
+  // (battery vs charger) the instant the charger is plugged or unplugged.
+  on_ac: boolean;
 }
 
 export const getPowerDraw = callable<[], PowerDraw>("get_power_draw");

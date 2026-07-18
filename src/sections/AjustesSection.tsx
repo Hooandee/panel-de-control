@@ -120,7 +120,8 @@ export const AjustesSection: FC = () => {
           />
         )}
 
-        {battMax !== null && (
+        {battMax !== null && device &&
+          device.tdp_max_charger > device.tdp_max && !device.charger_only_extra && (
           <ToggleField
             label={t("settings.battmax")}
             description={t("settings.battmax.desc")}

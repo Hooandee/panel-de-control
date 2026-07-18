@@ -13,12 +13,8 @@ _PP_BASE = "sys/class/platform-profile"
 _PL2_BOOST_RATIO = 1.2
 _PL3_BOOST_RATIO = 1.4
 
-# Guard against bogus firmware ppt ceilings (some ASUS kernels report every rail as
-# 150 W). A recognised device trusts its sysfs PL1 max only within this margin of the
-# profile charger max; beyond that the whole ppt set is untrusted and all rails fall
-# back to profile-derived maxes. A generic device has no reference, so it only drops a
-# physically-impossible value per rail.
-_FW_MARGIN_W = 10
+# Guard against a bogus firmware ppt ceiling on a generic device (some ASUS kernels
+# report every rail as 150 W). A recognised device uses its profile, not this.
 _FW_ABSURD_W = 100
 
 
@@ -37,40 +33,18 @@ class FirmwareAttrBackend(TDPBackend):
         self._is_generic = is_generic
         self._dir = self._find_driver_dir(driver_prefix)
         self.supported = self._dir is not None and os.path.exists(self._attr("ppt_pl1_spl"))
-        self._bounds = {}  # attr -> (min, max); static hardware limits, read once
-        if self.supported:
-            for attr in ("ppt_pl1_spl", "ppt_pl2_sppt", "ppt_pl3_fppt"):
-                self._bounds[attr] = (
-                    self._read_int(self._attr(attr, "min_value")),
-                    self._read_int(self._attr(attr, "max_value")),
-                )
-            self._sanitize_bounds()
         self._pp_dir = self._find_profile_dir()  # static, resolved once
         self._pp_choices = None                  # parsed lazily, then cached
 
-    def _sanitize_bounds(self):
-        """Drop bogus firmware rail ceilings so a lying kernel never exposes a
-        dangerous slider (base OR boost). If the sustained PL1 max is implausible on a
-        recognised device (beyond the profile charger max + margin), the whole ppt set
-        is untrusted → rebuild all maxes from the profile (PL1 = charger max, boost
-        rails scaled from it). A trustworthy firmware keeps its real per-rail maxes
-        (legitimate boost above PL1). A generic device only drops an impossible value."""
-        mx1 = self._bounds.get("ppt_pl1_spl", (None, None))[1]
-        if mx1 is None:
-            return
-        if self._is_generic:
-            for attr, (lo, hi) in self._bounds.items():
-                if hi is not None and hi > _FW_ABSURD_W:
-                    self._bounds[attr] = (lo, _FW_ABSURD_W)
-            return
-        ceil = self._fallback.max_ac_w
-        if mx1 <= ceil + _FW_MARGIN_W:
-            return  # trustworthy — keep real per-rail maxes
-        for attr, ratio in (("ppt_pl1_spl", 1.0),
-                            ("ppt_pl2_sppt", _PL2_BOOST_RATIO),
-                            ("ppt_pl3_fppt", _PL3_BOOST_RATIO)):
-            lo = self._bounds.get(attr, (None, None))[0]
-            self._bounds[attr] = (lo, round(ceil * ratio))
+    def _live_bounds(self, attr):
+        # Read live, never cache: the firmware ceiling is dynamic (lower on battery,
+        # momentarily low on Lenovo) and caching it froze a bad read. Generic devices
+        # get a sanity cap; recognised ones take their range from the profile instead.
+        lo = self._read_int(self._attr(attr, "min_value"))
+        hi = self._read_int(self._attr(attr, "max_value"))
+        if self._is_generic and hi is not None and hi > _FW_ABSURD_W:
+            hi = _FW_ABSURD_W
+        return lo, hi
 
     def _find_driver_dir(self, prefix):
         base = os.path.join(self._root, _FW_BASE)
@@ -100,15 +74,16 @@ class FirmwareAttrBackend(TDPBackend):
     def get_limits(self):
         if not self.supported:
             return self._fallback
-        mn, mx = self._pl_bounds("ppt_pl1_spl")  # already sanitized in _sanitize_bounds
+        if not self._is_generic:
+            # The profile is the authority for the range; the firmware's reported max
+            # lies (and, cached, stranded users at 15 W). Writes still clamp live.
+            return self._fallback
+        # Generic device: no profile to trust, so take the firmware's live ceiling.
+        mn, mx = self._live_bounds("ppt_pl1_spl")
         min_w = mn if mn is not None else self._fallback.min_w
-        fw_max = mx if mx is not None else self._fallback.max_ac_w  # firmware (charger) ceiling
-        # Recognised device: keep its intentional on-battery policy (max_w <= firmware).
-        # Generic device: its profile max_w is only a placeholder, so trust the firmware's
-        # real sustained ceiling on battery too instead of capping the slider below it.
-        batt_max = fw_max if self._is_generic else min(self._fallback.max_w, fw_max)
+        fw_max = mx if mx is not None else self._fallback.max_ac_w
         default_w = max(min_w, min(self._fallback.default_w, fw_max))
-        return TdpLimits(min_w=min_w, default_w=default_w, max_w=batt_max, max_ac_w=fw_max)
+        return TdpLimits(min_w=min_w, default_w=default_w, max_w=fw_max, max_ac_w=fw_max)
 
     def _find_profile_dir(self):
         if not self._profile_name:
@@ -144,31 +119,39 @@ class FirmwareAttrBackend(TDPBackend):
         self._write(os.path.join(self._pp_dir, "profile"), mode)
         return self.read_profile() == mode
 
-    def _pl_bounds(self, attr):
-        return self._bounds.get(attr, (None, None))
-
     def level_limits(self):
-        out = {}
-        for key, attr in (("pl1", "ppt_pl1_spl"), ("pl2", "ppt_pl2_sppt"), ("pl3", "ppt_pl3_fppt")):
-            mn, mx = self._pl_bounds(attr)
-            if mn is not None and mx is not None:
-                out[key] = {"min": mn, "max": mx}
-        return out
+        if self._is_generic:
+            out = {}
+            for key, attr in (("pl1", "ppt_pl1_spl"), ("pl2", "ppt_pl2_sppt"), ("pl3", "ppt_pl3_fppt")):
+                mn, mx = self._live_bounds(attr)
+                if mn is not None and mx is not None:
+                    out[key] = {"min": mn, "max": mx}
+            return out
+        # Recognised: rails from the profile (PL1 = charger max, boost scaled); writes
+        # clamp to the live ceiling anyway.
+        mn, mx = self._fallback.min_w, self._fallback.max_ac_w
+        return {
+            "pl1": {"min": mn, "max": mx},
+            "pl2": {"min": mn, "max": round(mx * _PL2_BOOST_RATIO)},
+            "pl3": {"min": mn, "max": round(mx * _PL3_BOOST_RATIO)},
+        }
 
-    def _clamp(self, value, attr, fallback_min, fallback_max):
-        mn, mx = self._pl_bounds(attr)
-        lo = mn if mn is not None else fallback_min
-        hi = mx if mx is not None else fallback_max
+    def _clamp_live(self, value, attr):
+        mn, mx = self._live_bounds(attr)
+        lo = mn if mn is not None else self._fallback.min_w
+        hi = mx if mx is not None else self._fallback.max_ac_w
         return max(lo, min(int(value), hi))
 
     def set_levels(self, pl1, pl2, pl3, ac):
         if not self.supported:
             return TdpResult(pl1, None, False, "firmware-attributes path not present")
-        lim = self.get_limits()
-        c1 = self._clamp(pl1, "ppt_pl1_spl", lim.min_w, lim.max_ac_w)
-        c2 = self._clamp(pl2, "ppt_pl2_sppt", lim.min_w, lim.max_ac_w)
-        c3 = self._clamp(pl3, "ppt_pl3_fppt", lim.min_w, lim.max_ac_w)
+        # Custom mode first (Lenovo prestep), then clamp each rail to the LIVE ceiling:
+        # writing above it is rejected, so the applied value follows what the firmware
+        # accepts now (25 W on battery, 30 W on charger) while the profile range stays put.
         self._set_custom_profile()
+        c1 = self._clamp_live(pl1, "ppt_pl1_spl")
+        c2 = self._clamp_live(pl2, "ppt_pl2_sppt")
+        c3 = self._clamp_live(pl3, "ppt_pl3_fppt")
         self._write(self._attr("ppt_pl3_fppt"), c3)
         self._write(self._attr("ppt_pl2_sppt"), c2)
         ok = self._write(self._attr("ppt_pl1_spl"), c1)

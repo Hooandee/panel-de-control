@@ -27,9 +27,12 @@ def test_firmware_attr_supports_levels(tmp_path):
     assert b.supports_levels is True
 
 
-def test_level_limits_reads_each_pl(tmp_path):
+def test_generic_level_limits_reads_each_pl_from_firmware(tmp_path):
+    # An unrecognised (generic) device has no profile to trust, so its Advanced rails
+    # come live from the firmware. A recognised device uses profile-derived rails
+    # instead (see test_tdp_firmware_attr).
     _mk(str(tmp_path))
-    b = FirmwareAttrBackend("asus-armoury", FALLBACK, root=str(tmp_path))
+    b = FirmwareAttrBackend("asus-armoury", FALLBACK, root=str(tmp_path), is_generic=True)
     ll = b.level_limits()
     assert ll["pl1"] == {"min": 7, "max": 35}
     assert ll["pl2"] == {"min": 13, "max": 45}
