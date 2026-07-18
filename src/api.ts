@@ -172,6 +172,9 @@ export interface PowerDraw {
   // True only while the QAM-open responsive floor is REALLY raising PL1 above where
   // the auto loop would park it → the arc shows a menu-temporary value, so say so.
   ui_floor_engaged: boolean;
+  // Live charger state, polled every second so the UI can refresh the slider ceiling
+  // (battery vs charger) the instant the charger is plugged or unplugged.
+  on_ac: boolean;
 }
 
 export const getPowerDraw = callable<[], PowerDraw>("get_power_draw");

@@ -1421,6 +1421,9 @@ class Plugin:
             "setpoint": setpoint,
             "applied": applied,
             "ui_floor_engaged": self._ui_floor_engaged(),
+            # Cheap here (fast sysfs read) and polled every second, so the UI can refresh
+            # the limits/slider ceiling the moment the charger is plugged or unplugged.
+            "on_ac": read_on_ac(),
         }
 
     async def set_auto_tdp(self, enabled: bool, scope: str = "global", appid=None) -> dict:
