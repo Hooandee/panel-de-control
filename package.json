@@ -13,7 +13,7 @@
   "license": "BSD-3-Clause",
   "devDependencies": {
     "@decky/rollup": "^1.0.2",
-    "@decky/ui": "^4.11.0",
+    "@decky/ui": "^4.12.0",
     "@rollup/rollup-linux-x64-musl": "^4.53.3",
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
