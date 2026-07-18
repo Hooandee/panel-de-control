@@ -38,12 +38,9 @@ class FirmwareAttrBackend(TDPBackend):
         self._pp_choices = None                  # parsed lazily, then cached
 
     def _live_bounds(self, attr):
-        """Read a rail's (min, max) from sysfs LIVE — never cached. The firmware ceiling
-        is dynamic: ASUS reports a lower max on battery than on the charger, and the
-        Lenovo capdata can momentarily read low. Reading once at init and caching froze
-        a bad value forever (the "stuck at 15 W / 25 W" reports). Only a generic device
-        uses these for its range; a lying kernel (150 W everywhere) is capped to a
-        plausible max. A recognised device's range comes from its profile, not here."""
+        # Read live, never cache: the firmware ceiling is dynamic (lower on battery,
+        # momentarily low on Lenovo) and caching it froze a bad read. Generic devices
+        # get a sanity cap; recognised ones take their range from the profile instead.
         lo = self._read_int(self._attr(attr, "min_value"))
         hi = self._read_int(self._attr(attr, "max_value"))
         if self._is_generic and hi is not None and hi > _FW_ABSURD_W:
@@ -79,14 +76,10 @@ class FirmwareAttrBackend(TDPBackend):
         if not self.supported:
             return self._fallback
         if not self._is_generic:
-            # Recognised device: the PROFILE is the authority for the slider range. We
-            # do NOT derive it from the firmware's reported max — that value lies (low
-            # on battery / momentarily) and, cached, stranded users below the real limit
-            # ("stuck at 15 W"). Writes still clamp to the live firmware ceiling so we
-            # never exceed what the hardware accepts (set_levels).
+            # The profile is the authority for the range; the firmware's reported max
+            # lies (and, cached, stranded users at 15 W). Writes still clamp live.
             return self._fallback
-        # Generic device: no trustworthy profile, so read the firmware's real ceiling
-        # live and use it for both battery and charger.
+        # Generic device: no profile to trust, so take the firmware's live ceiling.
         mn, mx = self._live_bounds("ppt_pl1_spl")
         min_w = mn if mn is not None else self._fallback.min_w
         fw_max = mx if mx is not None else self._fallback.max_ac_w
@@ -135,9 +128,8 @@ class FirmwareAttrBackend(TDPBackend):
                 if mn is not None and mx is not None:
                     out[key] = {"min": mn, "max": mx}
             return out
-        # Recognised device: rails derived from the profile (PL1 = charger max, boost
-        # scaled). Not from the firmware's reported max — writes clamp to the live
-        # ceiling anyway, so this stays the stable, honest range the UI shows.
+        # Recognised: rails from the profile (PL1 = charger max, boost scaled); writes
+        # clamp to the live ceiling anyway.
         mn, mx = self._fallback.min_w, self._fallback.max_ac_w
         return {
             "pl1": {"min": mn, "max": mx},
@@ -154,11 +146,9 @@ class FirmwareAttrBackend(TDPBackend):
     def set_levels(self, pl1, pl2, pl3, ac):
         if not self.supported:
             return TdpResult(pl1, None, False, "firmware-attributes path not present")
-        # Custom mode first (Lenovo prestep), then clamp every rail to the LIVE firmware
-        # ceiling: writing above it is rejected (EINVAL) or, on some Lenovo units,
-        # penalised down to a low floor. So the applied value follows what the hardware
-        # accepts right now (25 W on an Ally on battery, 30 W on the charger) while the
-        # profile keeps the slider range stable.
+        # Custom mode first (Lenovo prestep), then clamp each rail to the LIVE ceiling:
+        # writing above it is rejected, so the applied value follows what the firmware
+        # accepts now (25 W on battery, 30 W on charger) while the profile range stays put.
         self._set_custom_profile()
         c1 = self._clamp_live(pl1, "ppt_pl1_spl")
         c2 = self._clamp_live(pl2, "ppt_pl2_sppt")

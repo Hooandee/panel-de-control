@@ -35,11 +35,9 @@ class DeviceProfile:
     # Only for models where we can't drive the fan curve and the modes are the sole
     # fan lever (Legion Go original); models with real curve control keep custom TDP.
     firmware_modes: bool = False
-    # The charger headroom (tdp_max_charger above tdp_max) is only reachable with the
-    # charger connected — the firmware refuses a higher sustained limit on battery
-    # (measured on the ROG Ally / Ally X). Hide the "raise on battery" toggle and let
-    # the arc show the locked charger segment instead. Default False: the extra is
-    # unlockable on battery (firmware accepts it there, e.g. Xbox Ally X, Legion).
+    # The charger headroom is only reachable on the charger — the firmware refuses a
+    # higher sustained limit on battery (ROG Ally / Ally X). Hides the on-battery unlock
+    # toggle. Default False: the extra is unlockable on battery (Xbox Ally X, Legion).
     charger_only_extra: bool = False
 
 

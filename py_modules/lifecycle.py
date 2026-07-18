@@ -30,10 +30,9 @@ class LifecycleManager:
     """Re-applies TDP after resume (wakeup_count change, delayed) and on AC/DC transitions.
     Decision logic is in check(now); run() is a thin async loop around it."""
 
-    # Extra re-applies scheduled after an AC transition. The firmware briefly reverts to
-    # its default power mode while it settles the new source (an ASUS Ally drops to
-    # ~12 W for a few seconds on unplug), and a single re-apply landing mid-transition
-    # can be clamped/rejected. These follow-ups re-assert once it has settled.
+    # Re-apply again this many seconds after an AC change: the firmware briefly reverts
+    # to its default (an Ally drops to ~12 W on unplug) and a single re-apply mid-
+    # transition can be lost, so re-assert once it has settled.
     _AC_SETTLE_RETRIES = (2.0, 4.0)
 
     def __init__(self, apply_cb, root="/", wakeup_delay=4.0, interval=2.0,
