@@ -35,6 +35,12 @@ class DeviceProfile:
     # Only for models where we can't drive the fan curve and the modes are the sole
     # fan lever (Legion Go original); models with real curve control keep custom TDP.
     firmware_modes: bool = False
+    # The charger headroom (tdp_max_charger above tdp_max) is only reachable with the
+    # charger connected — the firmware refuses a higher sustained limit on battery
+    # (measured on the ROG Ally / Ally X). Hide the "raise on battery" toggle and let
+    # the arc show the locked charger segment instead. Default False: the extra is
+    # unlockable on battery (firmware accepts it there, e.g. Xbox Ally X, Legion).
+    charger_only_extra: bool = False
 
 
 # Conservative, safe fallback when detection fails - visibly generic.
@@ -69,11 +75,12 @@ DEVICE_TABLE = (
                   tdp_presets=(10, 15, 17, 20)),
     DeviceProfile("rog_ally_x", "ROG Ally X", "AMD Z1 Extreme", "amd",
                   7, 17, 25, 30, match_names=("ROG Ally X",),
-                  tdp_presets=(13, 17, 25, 30)),
+                  tdp_presets=(13, 17, 25, 30), charger_only_extra=True),
     DeviceProfile("rog_ally", "ROG Ally", "AMD Z1 Extreme", "amd",
-                  7, 15, 25, 30, match_names=("ROG Ally RC71", "ROG Ally")),
+                  7, 15, 25, 30, match_names=("ROG Ally RC71", "ROG Ally"),
+                  charger_only_extra=True),
     DeviceProfile("legion_go_2", "Legion Go 2", "AMD Ryzen AI Z2 Extreme", "amd",
-                  5, 15, 30, 33, match_names=("83N0", "83N1", "Legion Go 2"),
+                  5, 15, 30, 35, match_names=("83N0", "83N1", "Legion Go 2"),
                   panel="oled", hdr=True),
     # Legion Go S ships as both 8ARP1 (83L3) and 8APU1 (83N6), each with either a
     # Ryzen Z1 Extreme or a Z2 Go. The real chip is read live from /proc/cpuinfo;
@@ -83,7 +90,7 @@ DEVICE_TABLE = (
     DeviceProfile("legion_go", "Legion Go", "AMD Z1 Extreme", "amd",
                   5, 15, 30, 30, match_names=("83E1", "Legion Go"), firmware_modes=True),
     DeviceProfile("msi_claw_8_ai_plus", "MSI Claw 8 AI+", "Intel Core Ultra 7 258V", "intel",
-                  8, 17, 30, 35, match_names=("Claw 8 AI+", "Claw 8")),
+                  8, 17, 30, 37, match_names=("Claw 8 AI+", "Claw 8")),
     # OneXPlayer OneXFly Apex (Strix Halo). The chip name is read live from
     # cpuinfo; this string is only a fallback.
     DeviceProfile("onexplayer_apex", "OneXPlayer OneXFly Apex",
