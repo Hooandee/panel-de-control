@@ -71,8 +71,7 @@ class LifecycleManager:
             self._safe_apply(ac)
             self._pending.extend(now + d for d in self._AC_SETTLE_RETRIES)
         # fire every scheduled re-apply whose delay has elapsed (re-reading AC live)
-        due = [t for t in self._pending if now >= t]
-        if due:
+        if any(now >= t for t in self._pending):
             self._pending = [t for t in self._pending if now < t]
             self._safe_apply(self._read_ac())
 

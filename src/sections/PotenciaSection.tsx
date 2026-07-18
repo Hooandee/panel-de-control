@@ -44,14 +44,14 @@ export const PotenciaSection: FC = () => {
   // Poll live power draw every second while the section is mounted. When the charger
   // state flips, re-fetch the TDP state too so the slider ceiling (battery vs charger)
   // updates at once instead of staying stuck on the old source.
+  const lastAc = useRef<boolean | null>(null);
   useEffect(() => {
     const tick = () =>
       getPowerDraw()
         .then((p) => {
-          setPower((prev) => {
-            if (prev && prev.on_ac !== p.on_ac) refresh();
-            return p;
-          });
+          setPower(p);
+          if (lastAc.current !== null && lastAc.current !== p.on_ac) refresh();
+          lastAc.current = p.on_ac;
         })
         .catch(() => {});
     tick();

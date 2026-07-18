@@ -27,7 +27,6 @@ class FirmwareAttrBackend(TDPBackend):
 
     def __init__(self, driver_prefix, fallback, root="/", profile_name=None, is_generic=False):
         self.name = f"firmware-attr:{driver_prefix}"
-        self._driver_prefix = driver_prefix
         self._fallback = fallback
         self._root = root
         self._profile_name = profile_name  # Lenovo: set this platform-profile to "custom" first

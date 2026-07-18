@@ -13,6 +13,12 @@ _STAPM_RE = re.compile(r"STAPM LIMIT\s*\|\s*([\d.]+)", re.IGNORECASE)
 _READBACK_TOLERANCE_W = 2
 
 
+def _unreadable(applied):
+    # No STAPM limit to read back: absent (None) or a 0 that some APUs report even when
+    # the write applied.
+    return applied is None or applied == 0
+
+
 def _parse_stapm(out: str) -> int | None:
     m = _STAPM_RE.search(out)
     if not m:
@@ -70,17 +76,17 @@ class RyzenadjBackend(TDPBackend):
         #     some APUs where the write still applies) -> assume applied, unconfirmed;
         #     the re-assert is our best effort. Don't cry failure on a working device.
         applied = None
-        for attempt in range(2):
+        for _ in range(2):
             try:
                 self._apply(target)
             except (OSError, subprocess.SubprocessError) as e:
                 return TdpResult(watts, None, False, f"ryzenadj failed: {e}")
             applied = self.read_applied()
-            if applied is None or applied == 0:
-                continue  # unreadable — re-assert once, then treat as unconfirmed
+            if _unreadable(applied):
+                continue  # re-assert once, then treat as unconfirmed
             if abs(applied - target) <= _READBACK_TOLERANCE_W:
                 return TdpResult(watts, applied, True, "")
-        if applied is None or applied == 0:
+        if _unreadable(applied):
             return TdpResult(watts, None, True, "applied (limit readback unavailable)")
         return TdpResult(watts, applied, False,
                          f"ryzenadj limit did not stick (wanted {target}, holds {applied})")

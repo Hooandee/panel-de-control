@@ -1409,7 +1409,8 @@ class Plugin:
         self._init()
         pr = await asyncio.to_thread(self._power_reader.read)
         auto = self._tdp_profiles.auto_tdp(self._current_appid)
-        setpoint = self._effective_levels(self._current_appid)[0]["pl1"]
+        ac = read_on_ac()
+        setpoint = self._effective_levels(self._current_appid, ac)[0]["pl1"]
         # Live PL1 the firmware holds (reflects eco + external HHD/Steam changes). Skip
         # it on subprocess-backed backends (ryzenadj) so the 1 s poll doesn't fork a
         # tool every tick — the arc falls back to the setpoint there.
@@ -1421,9 +1422,9 @@ class Plugin:
             "setpoint": setpoint,
             "applied": applied,
             "ui_floor_engaged": self._ui_floor_engaged(),
-            # Cheap here (fast sysfs read) and polled every second, so the UI can refresh
-            # the limits/slider ceiling the moment the charger is plugged or unplugged.
-            "on_ac": read_on_ac(),
+            # Polled every second, so the UI can refresh the slider ceiling the moment
+            # the charger is plugged or unplugged.
+            "on_ac": ac,
         }
 
     async def set_auto_tdp(self, enabled: bool, scope: str = "global", appid=None) -> dict:
@@ -1463,8 +1464,12 @@ class Plugin:
         """Device TDP limits with the user's opt-in ceilings applied (a single
         chokepoint so every clamp/limit path honours the Ajustes toggles): the
         battery-unlock preference, then the GPD Win 5 cooler boost."""
-        lim = self._tdp_backend.get_limits().unlocked(
-            bool(self._settings.get("unlock_battery_max", False)))
+        # Chokepoint for the battery-unlock preference. Ignore it where the firmware
+        # enforces the battery cap (Ally/Ally X) — the write would be refused, so the
+        # reported ceiling must not claim the extra either.
+        unlock = (bool(self._settings.get("unlock_battery_max", False))
+                  and not self._device.charger_only_extra)
+        lim = self._tdp_backend.get_limits().unlocked(unlock)
         cooler_max = self._device.cooler_max
         if cooler_max and self._settings.get("cooler_boost", False):
             lim = lim.with_cooler(cooler_max)
