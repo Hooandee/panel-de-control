@@ -3,9 +3,10 @@
 ## [0.20.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.20.0...panel-de-control-v0.20.1) (2026-07-18)
 
 
-### Bug Fixes
+### Bug Fixes / Correcciones
 
-* profile-authoritative TDP that never freezes on a bad firmware read ([#216](https://github.com/Hooandee/panel-de-control/issues/216)) ([c9be207](https://github.com/Hooandee/panel-de-control/commit/c9be2079b73556d3c2d7c4c489a214bc78755a0a))
+* The TDP slider reaches your machine's real maximum again. On several handhelds it could get stuck below the top (a Legion Go S locked at 15W, a ROG Ally X capped at 25W even with the charger connected) because the plugin read the firmware limit once at startup and kept a low reading forever. Now the range comes from your device's known values, the firmware limit is read live, and what actually gets applied always follows what the hardware accepts. Unplugging the charger no longer leaves the TDP stuck low either. ([#216](https://github.com/Hooandee/panel-de-control/issues/216)) ([c9be207](https://github.com/Hooandee/panel-de-control/commit/c9be2079b73556d3c2d7c4c489a214bc78755a0a))
+* **ES:** El deslizador de TDP vuelve a llegar al máximo real de tu equipo. En varias consolas se quedaba por debajo del tope (una Legion Go S clavada en 15W, una ROG Ally X limitada a 25W incluso con el cargador conectado) porque el plugin leía el límite del firmware una vez al arrancar y se quedaba con una lectura baja para siempre. Ahora el rango sale de los valores conocidos de tu equipo, el límite del firmware se lee en vivo, y lo que se aplica sigue siempre lo que el hardware acepta. Desenchufar el cargador tampoco deja el TDP atascado bajo. ([#216](https://github.com/Hooandee/panel-de-control/issues/216)) ([c9be207](https://github.com/Hooandee/panel-de-control/commit/c9be2079b73556d3c2d7c4c489a214bc78755a0a))
 
 ## [0.20.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.19.0...panel-de-control-v0.20.0) (2026-07-17)
 
