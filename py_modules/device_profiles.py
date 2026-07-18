@@ -88,7 +88,7 @@ DEVICE_TABLE = (
     DeviceProfile("legion_go", "Legion Go", "AMD Z1 Extreme", "amd",
                   5, 15, 30, 30, match_names=("83E1", "Legion Go"), firmware_modes=True),
     DeviceProfile("msi_claw_8_ai_plus", "MSI Claw 8 AI+", "Intel Core Ultra 7 258V", "intel",
-                  8, 17, 30, 37, match_names=("Claw 8 AI+", "Claw 8")),
+                  8, 17, 30, 35, match_names=("Claw 8 AI+", "Claw 8")),
     # OneXPlayer OneXFly Apex (Strix Halo). The chip name is read live from
     # cpuinfo; this string is only a fallback.
     DeviceProfile("onexplayer_apex", "OneXPlayer OneXFly Apex",
