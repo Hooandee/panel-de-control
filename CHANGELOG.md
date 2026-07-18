@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.20.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.20.0...panel-de-control-v0.20.1) (2026-07-18)
+
+
+### Bug Fixes
+
+* profile-authoritative TDP that never freezes on a bad firmware read ([#216](https://github.com/Hooandee/panel-de-control/issues/216)) ([c9be207](https://github.com/Hooandee/panel-de-control/commit/c9be2079b73556d3c2d7c4c489a214bc78755a0a))
+
 ## [0.20.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.19.0...panel-de-control-v0.20.0) (2026-07-17)
 
 
