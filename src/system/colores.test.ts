@@ -15,6 +15,7 @@ const device = (key: string): DeviceInfo => ({
   is_generic: false,
   experimental: false,
   cooler_max: null,
+  charger_only_extra: false,
 });
 
 describe("deviceHasRgb", () => {
