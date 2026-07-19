@@ -3,9 +3,10 @@
 ## [0.22.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.21.0...panel-de-control-v0.22.0) (2026-07-19)
 
 
-### Features
+### Features / Novedades
 
-* harden the experimental fan control (safe EC writes, honest state, reset) ([#238](https://github.com/Hooandee/panel-de-control/issues/238)) ([97b0b12](https://github.com/Hooandee/panel-de-control/commit/97b0b12caff54634d8dc5d468d98ca73ac666902))
+* The experimental fan control (the Legion Go S, and the software-driven fans on the Steam Deck and others) is now safe and honest. A half-finished write can no longer leave the fan stopped with the firmware locked out, so there's no thermal risk if a write fails partway. Handing the fan back to the firmware is double-checked against the chip, and the plugin only says it's driving the fan when the hardware really is, never on a write the firmware refused. The "restart fan control" button now shows on every device where the fan can get stuck, not just the Go S, and it can't fire twice or get stuck itself. ([#238](https://github.com/Hooandee/panel-de-control/issues/238)) ([97b0b12](https://github.com/Hooandee/panel-de-control/commit/97b0b12caff54634d8dc5d468d98ca73ac666902))
+* **ES:** El control experimental de ventilador (la Legion Go S, y los ventiladores por software de la Steam Deck y otros) ahora es seguro y honesto. Una escritura a medias ya no puede dejar el ventilador parado con el firmware bloqueado, así que no hay riesgo térmico si una escritura falla a mitad. La vuelta al control del firmware se comprueba contra el chip, y el plugin solo dice que está llevando el ventilador cuando el hardware lo está de verdad, nunca ante una escritura que el firmware rechazó. El botón de "reiniciar control del ventilador" ahora aparece en todos los equipos donde el ventilador puede atascarse, no solo la Go S, y no se dispara dos veces ni se queda colgado. ([#238](https://github.com/Hooandee/panel-de-control/issues/238)) ([97b0b12](https://github.com/Hooandee/panel-de-control/commit/97b0b12caff54634d8dc5d468d98ca73ac666902))
 
 ## [0.21.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.20.1...panel-de-control-v0.21.0) (2026-07-19)
 
