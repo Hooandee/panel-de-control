@@ -3,9 +3,10 @@
 ## [0.21.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.20.1...panel-de-control-v0.21.0) (2026-07-19)
 
 
-### Features
+### Features / Novedades
 
-* Legion Go S full TDP range, reset-to-default, and system UI language ([#236](https://github.com/Hooandee/panel-de-control/issues/236)) ([d9e922a](https://github.com/Hooandee/panel-de-control/commit/d9e922a72efc44acd28e43d90ad8ac326c21b616))
+* The Legion Go S now reaches its real TDP ceiling, 33W on battery and 40W on the charger, instead of stopping short. The Power tab gets a "reset to default" link that puts TDP back to your device's default value, global or per game. And the plugin now follows your system language: with Steam in English it starts in English and shows as "Control Panel", while any other language stays in Spanish, and a manual choice always wins. It also tidies a stray line under the experimental fan control on the Go S. ([#236](https://github.com/Hooandee/panel-de-control/issues/236)) ([d9e922a](https://github.com/Hooandee/panel-de-control/commit/d9e922a72efc44acd28e43d90ad8ac326c21b616))
+* **ES:** La Legion Go S ahora llega a su techo real de TDP, 33W en batería y 40W con el cargador, en vez de quedarse corta. La pestaña Potencia gana un enlace de "restablecer al valor predeterminado" que devuelve el TDP al valor por defecto de tu equipo, global o por juego. Y el plugin ahora sigue el idioma del sistema: con Steam en inglés arranca en inglés y se muestra como "Control Panel", mientras que en cualquier otro idioma sigue en español, y tu elección manual siempre manda. Además limpia una línea que sobraba bajo el control experimental de ventilador en la Go S. ([#236](https://github.com/Hooandee/panel-de-control/issues/236)) ([d9e922a](https://github.com/Hooandee/panel-de-control/commit/d9e922a72efc44acd28e43d90ad8ac326c21b616))
 
 ## [0.20.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.20.0...panel-de-control-v0.20.1) (2026-07-18)
 
