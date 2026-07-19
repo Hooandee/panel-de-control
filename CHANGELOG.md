@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.21.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.20.1...panel-de-control-v0.21.0) (2026-07-19)
+
+
+### Features
+
+* Legion Go S full TDP range, reset-to-default, and system UI language ([#236](https://github.com/Hooandee/panel-de-control/issues/236)) ([d9e922a](https://github.com/Hooandee/panel-de-control/commit/d9e922a72efc44acd28e43d90ad8ac326c21b616))
+
 ## [0.20.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.20.0...panel-de-control-v0.20.1) (2026-07-18)
 
 
