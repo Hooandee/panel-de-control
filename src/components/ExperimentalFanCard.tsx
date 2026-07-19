@@ -58,8 +58,8 @@ export const ExperimentalFanCard: FC<Props> = ({ enabled, onToggle }) => {
         <ToggleField
           label={t("fans.experimental.toggle")}
           checked={enabled}
+          bottomSeparator="none"
           onChange={(next: boolean) => {
-            // Enabling takes over the EC → confirm first. Disabling is immediate.
             if (next) showModal(<ConfirmModal onConfirm={() => onToggle(true)} />);
             else onToggle(false);
           }}

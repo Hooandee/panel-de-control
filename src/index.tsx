@@ -1,14 +1,21 @@
 import { ErrorBoundary, staticClasses } from "@decky/ui";
 import { definePlugin } from "@decky/api";
+import { FC } from "react";
 import { LuGauge } from "react-icons/lu";
 
-import { I18nProvider } from "./i18n";
+import { I18nProvider, translate } from "./i18n";
 import { ControlCenter } from "./components/ControlCenter";
 import { startGameWatcher } from "./tdp/gameWatcher";
 import { startEcoAmbient } from "./system/ecoAmbient";
 import { startValueToast, refreshValueToast } from "./system/valueToast";
 import { hydratePrefs, onPrefsHealed } from "./system/pdcStorage";
 import { reloadLayout } from "./customize/store";
+
+// Localized header title only; the internal plugin name / install folder stays
+// "Panel de Control" (renaming it would break existing installs and the updater).
+const PluginTitle: FC = () => (
+  <div className={staticClasses.Title}>{translate("app.title")}</div>
+);
 
 export default definePlugin(() => {
   // Restore durable UI prefs into the localStorage cache at plugin scope (so the
@@ -31,7 +38,7 @@ export default definePlugin(() => {
 
   return {
     name: "Panel de Control",
-    titleView: <div className={staticClasses.Title}>Panel de Control</div>,
+    titleView: <PluginTitle />,
     content: (
       <I18nProvider>
         <ErrorBoundary>

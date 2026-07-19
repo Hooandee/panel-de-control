@@ -6,10 +6,19 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { format, Params } from "./format";
-import { hydratePrefs, onPrefsHealed, readString, writeString } from "../system/pdcStorage";
+import {
+  hydratePrefs,
+  onPrefsHealed,
+  prefsHydrated,
+  readString,
+  writeString,
+} from "../system/pdcStorage";
+import { steamLangToLang } from "./detect";
+import { readSteamLanguage } from "./steamLanguage";
 
 export type Lang = "es" | "en";
 
@@ -249,6 +258,7 @@ const es: Record<string, string> = {
   "tdp.preset.save": "Ahorro",
   "tdp.preset.balanced": "Equilibrado",
   "tdp.preset.turbo": "Turbo",
+  "tdp.reset.default": "Restablecer al valor predeterminado ({w} W)",
   "tdp.fwmode.low-power": "Silencioso",
   "tdp.fwmode.balanced": "Equilibrado",
   "tdp.fwmode.performance": "Rendimiento",
@@ -392,7 +402,7 @@ const es: Record<string, string> = {
 };
 
 const en: Record<string, string> = {
-  "app.title": "Control Center",
+  "app.title": "Control Panel",
   "load.error": "Couldn't load the plugin state. Please try again in a moment.",
   "load.retry": "Retry",
   "device.detected": "{name}",
@@ -621,6 +631,7 @@ const en: Record<string, string> = {
   "tdp.preset.save": "Save",
   "tdp.preset.balanced": "Balanced",
   "tdp.preset.turbo": "Turbo",
+  "tdp.reset.default": "Reset to default ({w} W)",
   "tdp.fwmode.low-power": "Quiet",
   "tdp.fwmode.balanced": "Balanced",
   "tdp.fwmode.performance": "Performance",
@@ -780,12 +791,41 @@ const I18nContext = createContext<I18nValue | null>(null);
 
 export const I18nProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const [lang, setLangState] = useState<Lang>(initialLang);
+  const seeded = useRef(false);
 
-  // Re-read once hydratePrefs heals the cache, in case we rendered stale.
+  // On first run only (no saved language), seed the default from Steam's UI
+  // language once the cache is genuinely healed — never overriding a saved choice.
   useEffect(() => {
-    const off = onPrefsHealed(() => setLangState(initialLang()));
-    void hydratePrefs();
-    return off;
+    let cancelled = false;
+    const trySeed = async () => {
+      if (cancelled || seeded.current || readString(STORAGE_KEY)) return;
+      seeded.current = true; // claim the one-shot before the await
+      const raw = await readSteamLanguage();
+      if (cancelled || readString(STORAGE_KEY)) return; // a choice may have landed
+      if (raw === null) {
+        seeded.current = false; // couldn't read Steam → keep the default, retry next load
+        return;
+      }
+      const seed = steamLangToLang(raw);
+      setLangState(seed);
+      writeString(STORAGE_KEY, seed);
+    };
+    const off = onPrefsHealed(() => {
+      if (cancelled) return;
+      setLangState(initialLang());
+      void trySeed();
+    });
+    // Covers a cache already healed before we subscribed; gated on a real heal.
+    void hydratePrefs().then(() => {
+      if (!cancelled && prefsHydrated()) void trySeed();
+    });
+    return () => {
+      cancelled = true;
+      // Release the one-shot so a remount (StrictMode) can still seed; a completed
+      // seed is already guarded by the persisted key.
+      seeded.current = false;
+      off();
+    };
   }, []);
 
   const setLang = useCallback((l: Lang) => {

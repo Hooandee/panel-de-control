@@ -254,22 +254,20 @@ def test_recognised_level_limits_are_profile_derived(tmp_path):
 
 
 def test_legion_go_s_reaches_profile_range_despite_low_firmware(tmp_path):
-    # Legion Go S: the firmware under-reports (15) but the profile (charger 33) drives
-    # the slider + rails, so the user is never stranded at 15 W.
+    # Firmware may under-report; the profile (charger 40) drives the slider + rails.
     root = str(tmp_path)
     _mk_attr(root, "lenovo-wmi-other-0", "ppt_pl1_spl", 13, 5, 15)
-    fb = TdpLimits.from_profile(detect(product_name="83L3"))  # Legion Go S 5,15,30,33
+    fb = TdpLimits.from_profile(detect(product_name="83L3"))  # Legion Go S 5,15,33,40
     b = FirmwareAttrBackend("lenovo-wmi-other", fb, root=root,
                             profile_name="lenovo-wmi-gamezone")
-    assert b.get_limits().max_ac_w == 33
+    assert b.get_limits().max_ac_w == 40
     ll = b.level_limits()
-    assert (ll["pl1"]["max"], ll["pl2"]["max"], ll["pl3"]["max"]) == (33, 40, 46)
+    assert (ll["pl1"]["max"], ll["pl2"]["max"], ll["pl3"]["max"]) == (40, 48, 56)
 
 
 def test_lenovo_write_clamps_to_live_firmware_when_low(tmp_path):
-    # The firmware genuinely accepts only 15 right now (writing above is rejected). The
-    # profile keeps the slider at 33, but the write honestly applies 15 — no fake 30.
-    # When the firmware recovers to 33, the same set reaches 30 (live re-read).
+    # Firmware accepts only 15 now: the slider stays 40 but the write applies 15;
+    # when it recovers to 33 the same set reaches 30 (live re-read).
     root = str(tmp_path)
     _mk_attr(root, "lenovo-wmi-other-0", "ppt_pl1_spl", 13, 5, 15)
     _mk_attr(root, "lenovo-wmi-other-0", "ppt_pl2_sppt", 14, 5, 15)

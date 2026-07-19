@@ -71,6 +71,13 @@ export function onPrefsHealed(cb: () => void): () => void {
 }
 
 let hydration: Promise<void> | null = null;
+let hydrated = false;
+
+/** True once the cache has been healed from the durable backend copy — lets a
+ * caller tell "no saved value" apart from "backend not read yet". */
+export function prefsHydrated(): boolean {
+  return hydrated;
+}
 
 // Heal the localStorage cache from the durable backend copy. Shared promise:
 // the plugin-scope startup and the i18n provider await the same round-trip.
@@ -95,6 +102,7 @@ async function doHydrate(): Promise<void> {
     } catch {}
   }
   if (Object.keys(migrate).length) void setUiPrefs(migrate).catch(() => {});
+  hydrated = true;
   healed.forEach((cb) => {
     try {
       cb();
