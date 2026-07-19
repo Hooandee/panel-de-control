@@ -213,6 +213,8 @@ export interface FanPresetDef {
 
 export interface FanCurveState {
   supported: boolean;
+  // Software-loop backends can wedge → the UI offers a reset; hardware-curve can't.
+  resettable: boolean;
   source: string | null;
   pwm_max: number;
   // Read-only firmware curve (MSI Claw): the device can't be controlled but its
@@ -235,6 +237,8 @@ export interface FanCurveState {
   // control card shows the opt-in toggle instead of the editor.
   experimental_available: boolean;
   experimental_enabled: boolean;
+  // Set only by reset_fan_control: whether the release to firmware actually landed.
+  reset_ok?: boolean;
   // Host OS name (PRETTY_NAME) for the honest "curve not available on this OS"
   // message; null when unreadable.
   os_name: string | null;
@@ -275,6 +279,7 @@ export const getFanCurveState = callable<[], FanCurveState>("get_fan_curve_state
 // Opt in/out of experimental EC fan control (Legion Go S). Returns the fresh state.
 export const setFanExperimental =
   callable<[enabled: boolean], FanCurveState>("set_fan_experimental");
+export const resetFanControl = callable<[], FanCurveState>("reset_fan_control");
 export const setFanPreset =
   callable<[preset: FanPreset, scope: FanScope, appid: string | null], FanCurveState>("set_fan_preset");
 export const setFanFollowGlobal =

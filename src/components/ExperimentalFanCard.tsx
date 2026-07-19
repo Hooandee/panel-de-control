@@ -39,8 +39,8 @@ const ConfirmModal: FC<{ onConfirm: () => void; closeModal?: () => void }> = ({ 
 /**
  * Opt-in for experimental EC fan control on devices whose only channel is
  * unofficial (Legion Go S). Off = read-only monitor; enabling asks for an explicit
- * confirm first. When on, the curve editor renders below (the section handles that);
- * this card just carries the toggle + the honest "unofficial" note.
+ * confirm first. When on, the curve editor (and its reset) render below — the
+ * section handles that; this card just carries the toggle + the note.
  */
 export const ExperimentalFanCard: FC<Props> = ({ enabled, onToggle }) => {
   const { t } = useI18n();

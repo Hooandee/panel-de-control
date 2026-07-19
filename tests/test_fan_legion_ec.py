@@ -27,6 +27,7 @@ class FakeEC:
 
     def write(self, addr, val):
         self.mem[addr] = val & 0xFF
+        return True  # mirror _PortEC.write (True on success)
 
 
 def _dmi(root, version="Legion Go 8ASP2", name="83N0"):
@@ -175,6 +176,181 @@ class TestLegionGoSBackend:
         for temp in range(35, 101):
             t = b.target_for_temp(float(temp))
             assert t == 0 or _GOS_MIN_SPIN <= t <= _GOS_MAX_RPM, f"{temp}C -> {t}"
+
+
+class _WriteFailsEC(FakeEC):
+    """EC whose writes always fail (models /dev/port blocked by the OS/kernel:
+    os.pwrite raises OSError → _PortEC.write returns False)."""
+
+    def write(self, addr, val):
+        return False
+
+
+class _IgnoresWritesEC(FakeEC):
+    """EC whose writes succeed at the syscall level but never move the fan; the
+    tachometer stays at idle regardless of the override."""
+
+    def __init__(self, idle_rpm=1889):
+        super().__init__()
+        self._idle = idle_rpm
+        self.mem[REG_RPM] = idle_rpm & 0xFF
+        self.mem[REG_RPM + 1] = (idle_rpm >> 8) & 0xFF
+
+    def write(self, addr, val):
+        # The override register takes the write (readback matches), but the fan is
+        # unmoved — the tachometer stays pinned at idle.
+        ok = super().write(addr, val)
+        if addr in (REG_OVERRIDE, REG_OVERRIDE + 1):
+            self.mem[REG_RPM] = self._idle & 0xFF
+            self.mem[REG_RPM + 1] = (self._idle >> 8) & 0xFF
+        return ok
+
+
+class _ReflectingEC(FakeEC):
+    """Working EC: the override we write becomes the reported RPM (the fan obeys)."""
+
+    def write(self, addr, val):
+        super().write(addr, val)
+        if addr == REG_OVERRIDE:
+            self.mem[REG_RPM] = val & 0xFF
+        elif addr == REG_OVERRIDE + 1:
+            self.mem[REG_RPM + 1] = val & 0xFF
+        return True
+
+
+class TestLegionGoSEcAccessHonesty:
+    """Control is confirmed against the tachometer, not the syscall. The backend stays
+    DMI-supported but reports manual (enable=1) only when the RPM tracks the asserted
+    target."""
+
+    def test_syscall_write_but_ignored_is_not_reported_as_manual(self, tmp_path):
+        # Writes return ok at the syscall level, but the fan ignores them.
+        _dmi_gos(str(tmp_path))
+        b = LegionGoSFanBackend(root=str(tmp_path), ec=_IgnoresWritesEC(), temp_fn=lambda: 70.0)
+        assert b.supported is True  # DMI channel still present
+        res = b.apply_curve_all(CURVE)
+        assert res["ok"] is True  # the write "landed" at the syscall level
+        b._apply_once()  # a settled tick confirms against the RPM (still idle → off)
+        assert b.read_state()["fans"][0]["enable"] == 2  # honest: firmware, not manual
+
+    def test_blocked_ec_write_not_reported_as_manual(self, tmp_path):
+        _dmi_gos(str(tmp_path))
+        b = LegionGoSFanBackend(root=str(tmp_path), ec=_WriteFailsEC(), temp_fn=lambda: 70.0)
+        res = b.apply_curve_all(CURVE)
+        assert res["ok"] is False  # the write did not even land
+        assert b.read_state()["fans"][0]["enable"] == 2
+
+    def test_confirmed_control_reports_manual(self, tmp_path):
+        # A working EC: RPM tracks the target → read_state reports manual.
+        _dmi_gos(str(tmp_path))
+        b = LegionGoSFanBackend(root=str(tmp_path), ec=_ReflectingEC(), temp_fn=lambda: 70.0)
+        res = b.apply_curve_all(CURVE)
+        assert res["ok"] is True
+        assert b.read_state()["fans"][0]["enable"] == 2  # not yet confirmed
+        b._apply_once()  # settled tick: RPM now equals the asserted target → confirmed
+        assert b.read_state()["fans"][0]["enable"] == 1
+
+
+class _UnzeroableEC(FakeEC):
+    """Accepts override writes at the syscall level (returns ok) but refuses to
+    store the release sentinel 0 — models an EC that won't take a release, so a
+    readback never confirms the override reached 0."""
+
+    def write(self, addr, val):
+        if addr in (REG_OVERRIDE, REG_OVERRIDE + 1) and (val & 0xFF) == 0:
+            return True  # syscall ok, register keeps its prior (nonzero) value
+        return super().write(addr, val)
+
+
+class _HighByteFailsEC(FakeEC):
+    """The override high byte can never be written (a flaky EC data channel)."""
+
+    def write(self, addr, val):
+        if addr == REG_OVERRIDE + 1:
+            return False
+        return super().write(addr, val)
+
+
+class _LowByteFailsEC(FakeEC):
+    """The override low byte can never be written."""
+
+    def write(self, addr, val):
+        if addr == REG_OVERRIDE:
+            return False
+        return super().write(addr, val)
+
+
+class TestReleaseReadbackAndDeadZone:
+    """Release is confirmed by reading the override back (a write returning ok is
+    not proof the EC took it), and a fan is never abandoned in the stopped-but-
+    owned dead zone when release can't be confirmed."""
+
+    def test_release_confirmed_reports_ok_and_zeroes_override(self, tmp_path):
+        _dmi_gos(str(tmp_path))
+        ec = FakeEC()
+        b = LegionGoSFanBackend(root=str(tmp_path), ec=ec, temp_fn=lambda: 70.0)
+        b.apply_curve_all(CURVE)
+        res = b.set_auto(None)
+        assert res["ok"] is True
+        assert ec.read(REG_OVERRIDE) == 0 and ec.read(REG_OVERRIDE + 1) == 0
+
+    def test_release_unconfirmed_keeps_fan_out_of_dead_zone(self, tmp_path):
+        # The EC won't accept 0, so release can't be confirmed. The backend must
+        # report failure AND leave a safe spinning target, never a value in the
+        # stopped-but-owned dead zone (0, MIN_SPIN).
+        _dmi_gos(str(tmp_path))
+        ec = _UnzeroableEC()
+        b = LegionGoSFanBackend(root=str(tmp_path), ec=ec, temp_fn=lambda: 70.0)
+        b.apply_curve_all(CURVE)  # drives a positive override
+        res = b.set_auto(None)
+        assert res["ok"] is False  # readback never confirmed release
+        final = (ec.read(REG_OVERRIDE + 1) << 8) | ec.read(REG_OVERRIDE)
+        assert final >= _GOS_MIN_SPIN
+
+    def test_go2_release_confirms_via_readback(self, tmp_path):
+        _dmi(str(tmp_path))
+        ec = FakeEC()
+        b = _backend(tmp_path, ec, temp=70.0)
+        b.apply_curve_all(CURVE)
+        assert b.set_auto(None)["ok"] is True
+        assert ec.read(REG_OVERRIDE) == 0 and ec.read(REG_OVERRIDE + 1) == 0
+
+    def _ovr(self, ec):
+        return (ec.read(REG_OVERRIDE + 1) << 8) | ec.read(REG_OVERRIDE)
+
+    def test_split_write_high_byte_failure_never_strands_dead_zone(self, tmp_path):
+        # The override high byte can never land: a driven target must not leave a
+        # partial low-only value in the (0, MIN_SPIN) dead zone.
+        _dmi_gos(str(tmp_path))
+        ec = _HighByteFailsEC()
+        b = LegionGoSFanBackend(root=str(tmp_path), ec=ec, temp_fn=lambda: 70.0)
+        b.apply_curve_all(CURVE)
+        assert self._ovr(ec) == 0 or self._ovr(ec) >= _GOS_MIN_SPIN
+        b.set_auto(None)
+        assert self._ovr(ec) == 0 or self._ovr(ec) >= _GOS_MIN_SPIN
+
+    def test_split_write_low_byte_failure_never_strands_dead_zone(self, tmp_path):
+        # The override low byte can never land: high-first leaves high<<8 >= MIN_SPIN.
+        _dmi_gos(str(tmp_path))
+        ec = _LowByteFailsEC()
+        b = LegionGoSFanBackend(root=str(tmp_path), ec=ec, temp_fn=lambda: 70.0)
+        b.apply_curve_all(CURVE)
+        assert self._ovr(ec) == 0 or self._ovr(ec) >= _GOS_MIN_SPIN
+        b.set_auto(None)
+        assert self._ovr(ec) == 0 or self._ovr(ec) >= _GOS_MIN_SPIN
+
+    def test_cool_curve_point_reports_firmware_not_stale_manual(self, tmp_path):
+        # Confirmed driving at 70C, then cool to 40C where the curve commands 0
+        # (firmware). read_state must report firmware(2), not a stale manual(1).
+        _dmi_gos(str(tmp_path))
+        temp = {"v": 70.0}
+        b = LegionGoSFanBackend(root=str(tmp_path), ec=_ReflectingEC(), temp_fn=lambda: temp["v"])
+        b.apply_curve_all(CURVE)
+        b._apply_once()  # settled tick: RPM tracks target → manual
+        assert b.read_state()["fans"][0]["enable"] == 1
+        temp["v"] = 40.0  # curve maps to 0 → hand to firmware
+        b._apply_once()
+        assert b.read_state()["fans"][0]["enable"] == 2
 
 
 class TestLegionGo1RpmReader:
