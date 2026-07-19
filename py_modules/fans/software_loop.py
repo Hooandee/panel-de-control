@@ -22,11 +22,25 @@ from fans.control import _interp, _read, _read_int, _write, sanitize_curve
 _HWMON = "sys/class/hwmon"
 _LOOP_INTERVAL = 1.5  # s — re-assert cadence (EC can reclaim the fan)
 
+# RPM tolerance for deciding whether the fan obeyed an asserted target.
+_DRIVE_CONFIRM_TOL_RPM = 500
+
+
+def drive_confirmed(target, rpm, tol=_DRIVE_CONFIRM_TOL_RPM):
+    """True if RPM is within `tol` of an asserted positive target, False if it's
+    well off, None when indeterminate (no target / release / no reading)."""
+    if target is None or target <= 0 or rpm is None:
+        return None
+    return abs(rpm - target) <= tol
+
 
 class SoftwareLoopBackend:
     """Base: owns the stored curve, the asyncio re-assert loop, and duty→RPM."""
 
     name = "software-loop"
+    # Drives a periodic re-assert loop that can wedge (EC reclaims the fan, a write
+    # path closes) → the UI offers a reset. Hardware-curve backends can't wedge.
+    resettable = True
     min_rpm = 0
     max_rpm = 7000
     # While a curve is ACTIVE the driven target must never be 0 — on these devices
@@ -40,7 +54,14 @@ class SoftwareLoopBackend:
         self._temp_fn = temp_fn
         self._root = root
         self._points: Optional[list] = None
+        # Confirmed against the tachometer each tick: manual only when the RPM tracked
+        # the target we asserted (a write can succeed yet be ignored by the firmware).
+        self._drive_ok: bool = False
+        self._prev_target: Optional[int] = None
         self._task: Optional[asyncio.Task] = None
+        # The loop the task runs on, captured on start() (loop thread). stop() runs
+        # from a worker thread (set_auto off-loop), so it must cancel via this loop.
+        self._loop_ref: Optional[asyncio.AbstractEventLoop] = None
         # Serialises a per-tick write against a release: the tick now runs off-loop
         # (asyncio.to_thread), so without this a release write could interleave with
         # an in-flight tick and leave a stale target after we hand the fan back.
@@ -66,15 +87,16 @@ class SoftwareLoopBackend:
         stopped first (Steam Deck's jupiter-fan-control). Default: always ok."""
         return True
 
-    def _after_release(self) -> None:
+    def _after_release(self) -> bool:
         """Hand ownership back after releasing the fan (fail-safe). Override to
-        restart a stopped daemon. Default: no-op."""
-        return None
+        restart a stopped daemon; return whether the daemon is now running (so a
+        failed handback is reflected in ok). Default: nothing to restart → True."""
+        return True
 
     @property
     def _owns_fan(self) -> bool:
         """True only when we actually drive the fan (points set AND ownership
-        acquired). read_state reports manual only when this holds."""
+        acquired). read_state reports manual only when this AND `_drive_ok` hold."""
         return self._points is not None
 
     # --- common API ------------------------------------------------------------
@@ -96,22 +118,31 @@ class SoftwareLoopBackend:
         if not self.supported:
             return {"supported": False, "source": self.name, "pwm_max": 255, "fans": []}
         rpm = self._read_rpm()
+        # Manual only when we own the fan AND the last asserted target tracked.
+        manual = self._owns_fan and self._drive_ok
         return {"supported": True, "source": self.name, "pwm_max": 255,
-                "fans": [{"key": "fan", "enable": 1 if self._owns_fan else 2,
+                "fans": [{"key": "fan", "enable": 1 if manual else 2,
                           "rpm": rpm, "points": []}]}
 
     def apply_curve_all(self, points: list) -> dict:
         if not self.supported:
             return {"ok": False, "detail": f"{self.name} not found"}
-        # Take ownership of the fan FIRST. If we can't (e.g. jupiter-fan-control
-        # refused to stop), we do NOT own the fan → never claim to drive and
-        # never write a target the OS daemon would fight.
-        if not self._before_drive():
-            return {"ok": False, "detail": f"{self.name} could not take fan control"}
-        self._points = [list(p) for p in sanitize_curve(points)]
-        self._apply_once()   # immediate response, before the loop's first tick
+        # Whole ownership transition under the lock so a concurrent set_auto() can't
+        # interleave (release the fan / restart the daemon) mid-apply.
+        with self._io_lock:
+            # Take ownership of the fan FIRST. If we can't (e.g. jupiter-fan-control
+            # refused to stop), we do NOT own the fan → never claim to drive and
+            # never write a target the OS daemon would fight.
+            if not self._before_drive():
+                return {"ok": False, "detail": f"{self.name} could not take fan control"}
+            self._points = [list(p) for p in sanitize_curve(points)]
+            ok = self._apply_once_locked()  # immediate response, before the loop's first tick
+        # Start the loop even if this write was refused, so control resumes if the
+        # write path reopens; read_state still reports the true drive state.
         self.start()
-        return {"ok": True, "detail": f"{self.name} curve applied (software loop)"}
+        if ok:
+            return {"ok": True, "detail": f"{self.name} curve applied (software loop)"}
+        return {"ok": False, "detail": f"{self.name} target write refused"}
 
     def set_curve(self, fan_key, points: list) -> dict:
         return self.apply_curve_all(points)
@@ -119,47 +150,83 @@ class SoftwareLoopBackend:
     def set_auto(self, fan_key: Optional[str] = None) -> dict:
         if not self.supported:
             return {"ok": False, "detail": f"{self.name} not found"}
-        # Clear points FIRST so any in-flight loop tick computes target_for_temp→None
-        # and writes nothing, then stop the loop and release. (A full fix awaits the
-        # cancelled task — deferred async cancel+await, shared with the sampler.)
-        self._points = None
+        # Stop the periodic loop (cancels the task; a tick already mid-write holds
+        # the io lock and finishes first).
         self.stop()
-        # Under the lock, so a tick already mid-write finishes FIRST and our release
-        # write lands last — the fan is never left driven after we release it.
+        # Clear + release + handback under the lock, mutually exclusive with
+        # apply_curve_all so the two can never leave a torn state.
         with self._io_lock:
-            ok = self._release()
-        # Hand ownership back to the OS/firmware daemon LAST (fail-safe: even if
-        # the target write failed, the device must never be left with our loop
-        # dead AND the daemon stopped).
-        self._after_release()
-        return {"ok": ok, "detail": "released to firmware" if ok else "release write failed"}
+            self._points = None
+            self._drive_ok = False
+            self._prev_target = None
+            released = self._release()
+            # Hand back to the daemon LAST (fail-safe): even a failed release must
+            # never leave the loop dead AND the daemon stopped. Its result counts
+            # toward ok — a fan whose OS daemon didn't restart isn't back to firmware.
+            handed_back = self._after_release()
+        ok = bool(released and handed_back)
+        detail = ("released to firmware" if ok
+                  else "release write failed" if not released
+                  else "firmware handback failed")
+        return {"ok": ok, "detail": detail}
 
     def restore_auto(self) -> dict:
         return self.set_auto(None)
 
     # --- the loop --------------------------------------------------------------
-    def _apply_once(self) -> None:
-        # Locked so a release (set_auto) can't interleave with this write: once we
-        # start writing, the release waits for us, then wins (target released).
+    def _apply_once(self) -> bool:
+        """Write the current target once, holding the io lock so a release can't
+        interleave. The loop path enters here; the apply/set_auto paths already hold
+        the lock and call `_apply_once_locked` directly."""
         with self._io_lock:
-            temp = self._temp_fn() if self._temp_fn else None
-            target = self.target_for_temp(temp)
-            if target is not None:
-                self._write_target(target)
+            return self._apply_once_locked()
+
+    def _apply_once_locked(self) -> bool:
+        """Write the current target once (caller holds `_io_lock`). Before writing,
+        confirm last tick's target against the live RPM to set `_drive_ok`. Returns
+        whether the write landed; a None target (not driving / no temp) writes
+        nothing."""
+        temp = self._temp_fn() if self._temp_fn else None
+        target = self.target_for_temp(temp)
+        if target is None:
+            return False
+        if target <= 0:
+            self._drive_ok = False  # the curve hands the fan to firmware here (not driving)
+        else:
+            verdict = drive_confirmed(self._prev_target, self._read_rpm())
+            if verdict is not None:
+                self._drive_ok = verdict
+        wrote = self._write_target(target)
+        self._prev_target = target
+        return wrote
 
     def start(self) -> None:
         if self._task is not None and not self._task.done():
             return
         try:
-            asyncio.get_running_loop()
+            loop = asyncio.get_running_loop()
         except RuntimeError:
             return  # no event loop (tests / import time) — no-op
-        self._task = asyncio.create_task(self._loop())
+        self._loop_ref = loop
+        self._task = loop.create_task(self._loop())
 
     def stop(self) -> None:
-        if self._task is not None:
-            self._task.cancel()
-            self._task = None
+        # Clear the handle synchronously so a following apply's start() creates a fresh
+        # loop; cancel the task thread-safely (stop runs off-loop via set_auto, and
+        # cancel() isn't thread-safe). A brief overlap with a freshly started loop is
+        # benign — it becomes the single _task and re-writes the same target.
+        task, self._task = self._task, None
+        loop = self._loop_ref
+        if task is None or task.done() or loop is None or loop.is_closed():
+            return
+        try:
+            on_loop = asyncio.get_running_loop() is loop
+        except RuntimeError:
+            on_loop = False
+        if on_loop:
+            task.cancel()
+        else:
+            loop.call_soon_threadsafe(task.cancel)
 
     async def _loop(self) -> None:
         while True:
@@ -273,15 +340,17 @@ class SteamDeckFanBackend(SoftwareLoopBackend):
             return True
         return False
 
-    def _after_release(self) -> None:
+    def _after_release(self) -> bool:
         # Restart jupiter so SteamOS resumes fan control. Always attempt it
         # (defensively, even if we never stopped it) so we can never leave the
         # Deck with jupiter down. Idempotent: start on a running unit is a no-op.
         # Only clear the "we stopped it" flag if the restart actually succeeded —
         # if it failed, jupiter is still down and read_state/_before_drive must not
-        # pretend it's back. reset-failed makes this edge rare.
+        # pretend it's back. reset-failed makes this edge rare. Return whether jupiter
+        # is now up so a failed restart makes set_auto report ok=False.
         started = self._run_jupiter("start")
         self._jupiter_stopped = self._jupiter_stopped and not started
+        return not self._jupiter_stopped
 
     @property
     def _owns_fan(self) -> bool:

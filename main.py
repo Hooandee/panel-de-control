@@ -831,8 +831,10 @@ class Plugin:
             except Exception:  # noqa: BLE001 — starting the loop must never break an RPC
                 pass
 
-    def _reapply_fans_sync(self) -> None:
-        """Apply the effective fan profile for the current game (or global).
+    def _reapply_fans_sync(self) -> bool:
+        """Apply the effective fan profile for the current game (or global). Returns
+        whether the intended state was established (the apply/release reported ok) so
+        callers that care — the reset — don't claim success on a refused re-apply.
 
         - auto      -> firmware control.
         - adaptive  -> drive the LEARNED curve (computed live from telemetry): the
@@ -849,15 +851,18 @@ class Plugin:
             if preset == "adaptive":
                 points = self._adaptive_curve_points(self._current_appid)
                 if points is None:
-                    self._fan_ctrl.set_auto(None)  # not enough data → honest firmware auto
+                    res = self._fan_ctrl.set_auto(None)  # not enough data → firmware auto
                 else:
-                    self._fan_ctrl.apply_curve_all(points)
+                    res = self._fan_ctrl.apply_curve_all(points)
             elif preset == "auto" or not profile["points"]:
-                self._fan_ctrl.set_auto(None)
+                res = self._fan_ctrl.set_auto(None)
             else:
-                self._fan_ctrl.apply_curve_all(profile["points"])
+                res = self._fan_ctrl.apply_curve_all(profile["points"])
+            # A malformed response (None / {} / no "ok") is not success, so reset_ok
+            # can't ride a bad re-apply.
+            return bool(res.get("ok")) if isinstance(res, dict) else False
         except Exception:  # noqa: BLE001
-            pass
+            return False
 
     def _adaptive_curve_points(self, appid):
         """The learned curve to drive in adaptive mode for *appid* (or None if there
@@ -886,6 +891,7 @@ class Plugin:
                 firmware_points = [{"temp": t, "pct": p} for t, p in curve]
         return {
             "supported": hw_state.get("supported", False),
+            "resettable": bool(getattr(self._fan_ctrl, "resettable", False)),
             "firmware_points": firmware_points,
             "source": hw_state.get("source"),
             "pwm_max": hw_state.get("pwm_max", 255),
@@ -1022,6 +1028,25 @@ class Plugin:
         self._fan_curves.set_auto(resolved, appid)
         self._reapply_fans()
         return self._fan_curve_state()
+
+    async def reset_fan_control(self) -> dict:
+        """Recover a wedged software-loop fan control: hand the fan back to firmware
+        (off the event loop), then re-establish the stored curve and read the state
+        back. `reset_ok` reflects whether the release actually landed — a malformed or
+        failed response is not success."""
+        self._init()
+        try:
+            res = await self._offload_call(self._fan_ctrl.restore_auto)
+            released = bool(res.get("ok")) if isinstance(res, dict) else False
+        except Exception:  # noqa: BLE001
+            released = False
+        # Re-establish the stored curve off-loop, then restart the curve loop, before
+        # reading the state back. reset_ok requires BOTH the release and the re-apply.
+        reapplied = await self._offload_call(self._reapply_fans_sync)
+        self._ensure_fan_loop()
+        state = self._fan_curve_state()
+        state["reset_ok"] = released and bool(reapplied)
+        return state
 
     # ---- Fan-curve suggestion (suggestion brain over local telemetry) -------
     def _fan_suggestion(self, appid=None) -> dict:
@@ -1597,10 +1622,13 @@ class Plugin:
                 fut.add_done_callback(run_done)
 
     async def _offload_call(self, fn):
-        """Run a blocking call off the event loop and return its result (awaited)."""
+        """Run a blocking call off the event loop and return its result (awaited).
+        Falls back to a default worker thread when the serial executor isn't up yet
+        (before _main / after shutdown) so blocking work — systemctl, EC writes — never
+        lands on the loop."""
         ex = getattr(self, "_apply_executor", None)
         if ex is None:
-            return fn()
+            return await asyncio.to_thread(fn)
         return await asyncio.get_running_loop().run_in_executor(ex, fn)
 
     async def _drain_offloaded(self):

@@ -13,6 +13,7 @@ import { Sparkline } from "../components/Sparkline";
 import { FanCurveEditor } from "../components/FanCurveEditor";
 import { FanCurveGraph } from "../components/FanCurveGraph";
 import { ExperimentalFanCard } from "../components/ExperimentalFanCard";
+import { FanResetButton } from "../components/FanResetButton";
 import { openFanCurveModal } from "../components/FanCurveModal";
 import { Point, percentToPwm } from "../fans/curve";
 import { Loading } from "../components/Loading";
@@ -143,6 +144,8 @@ export const VentiladoresSection: FC = () => {
               </div>
 
               <FanCurveEditor control={curve} liveTemp={liveTemp} suggestion={suggestion} />
+
+              {curveState.resettable && <FanResetButton onReset={curve.onReset} />}
             </div>
           </PanelSectionRow>
         )}
