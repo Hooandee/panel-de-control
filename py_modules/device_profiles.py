@@ -80,11 +80,11 @@ DEVICE_TABLE = (
     DeviceProfile("legion_go_2", "Legion Go 2", "AMD Ryzen AI Z2 Extreme", "amd",
                   5, 15, 30, 35, match_names=("83N0", "83N1", "Legion Go 2"),
                   panel="oled", hdr=True),
-    # Legion Go S ships as both 8ARP1 (83L3) and 8APU1 (83N6), each with either a
-    # Ryzen Z1 Extreme or a Z2 Go. The real chip is read live from /proc/cpuinfo;
-    # this string is only a fallback when that read fails.
+    # 83L3/83N6, Z1 Extreme or Z2 Go (real chip read live from cpuinfo; this is the
+    # fallback). PL1 33 W on battery, 40 W on charger — the extra is charger-only.
     DeviceProfile("legion_go_s", "Legion Go S", "AMD Ryzen Z1 Extreme / Z2 Go", "amd",
-                  5, 15, 30, 33, match_names=("83L3", "83N6", "Legion Go S")),
+                  5, 15, 33, 40, match_names=("83L3", "83N6", "Legion Go S"),
+                  charger_only_extra=True),
     DeviceProfile("legion_go", "Legion Go", "AMD Z1 Extreme", "amd",
                   5, 15, 30, 30, match_names=("83E1", "Legion Go"), firmware_modes=True),
     DeviceProfile("msi_claw_8_ai_plus", "MSI Claw 8 AI+", "Intel Core Ultra 7 258V", "intel",

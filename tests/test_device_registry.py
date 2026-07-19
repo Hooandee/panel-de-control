@@ -192,6 +192,15 @@ def test_ally_x_has_charger_boost():
     assert prof.tdp_max_charger > prof.tdp_max
 
 
+def test_legion_go_s_reaches_firmware_ceilings():
+    for name in ("83L3", "83N6"):
+        prof = detect(product_name=name)
+        assert prof.key == "legion_go_s"
+        assert prof.tdp_max == 33          # sustained ceiling on battery
+        assert prof.tdp_max_charger == 40  # extra reachable only on charger
+        assert prof.charger_only_extra is True
+
+
 def test_deck_has_no_charger_boost():
     prof = detect(product_name="Galileo")
     assert prof.tdp_max == 15

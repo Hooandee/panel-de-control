@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { fraction, zoneFor, arcColor } from "./logic";
-import { offsetOf, totalFor, maxOffset, dialToWatts, boostWatts, boostEndFraction } from "./logic";
+import { offsetOf, totalFor, maxOffset, dialToWatts, boostWatts, boostEndFraction, resetWatts } from "./logic";
 
 describe("fraction", () => {
   it("maps min→0 and maxAc→1", () => {
@@ -86,6 +86,38 @@ describe("dialToWatts (learned-band suggestion)", () => {
   it("is NaN-safe (→ floor)", () => {
     expect(dialToWatts(15, NaN, 0.5)).toBe(15);
     expect(dialToWatts(15, 21, NaN)).toBe(15);
+  });
+});
+
+describe("resetWatts (device default reference)", () => {
+  it("returns the default when it sits inside the range", () => {
+    expect(resetWatts(15, 7, 35)).toBe(15);
+  });
+
+  it("clamps a default above the active ceiling (on battery)", () => {
+    expect(resetWatts(30, 7, 25)).toBe(25);
+  });
+
+  it("clamps a default below the minimum", () => {
+    expect(resetWatts(3, 7, 35)).toBe(7);
+  });
+
+  it("rounds a fractional default", () => {
+    expect(resetWatts(16.6, 7, 35)).toBe(17);
+  });
+
+  it("survives a degenerate range (activeMax below min)", () => {
+    expect(resetWatts(15, 20, 10)).toBe(20);
+  });
+
+  it("is NaN-safe (→ min)", () => {
+    expect(resetWatts(NaN, 7, 35)).toBe(7);
+  });
+
+  it("never returns NaN when a limit is NaN", () => {
+    expect(resetWatts(15, NaN, 35)).toBe(15);
+    expect(resetWatts(15, 7, NaN)).toBe(7);
+    expect(Number.isFinite(resetWatts(NaN, NaN, NaN))).toBe(true);
   });
 });
 
