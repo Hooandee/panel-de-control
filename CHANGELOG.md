@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.22.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.21.0...panel-de-control-v0.22.0) (2026-07-19)
+
+
+### Features
+
+* harden the experimental fan control (safe EC writes, honest state, reset) ([#238](https://github.com/Hooandee/panel-de-control/issues/238)) ([97b0b12](https://github.com/Hooandee/panel-de-control/commit/97b0b12caff54634d8dc5d468d98ca73ac666902))
+
 ## [0.21.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.20.1...panel-de-control-v0.21.0) (2026-07-19)
 
 
