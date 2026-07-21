@@ -39,13 +39,14 @@ def test_absent_var_not_reported(tmp_path):
     assert "PROTON_XESS_UPGRADE" not in caps["envs"]
 
 
-def test_not_found_is_conservative(tmp_path):
+def test_not_found_offers_nothing(tmp_path):
+    # An unlocatable build promises no options at all (never fake unverified vars).
     caps = detect_capabilities("Nonexistent-Proton", home=str(tmp_path))
     assert caps["found"] is False
-    # Only core vars — never promise unverified options.
-    assert "PROTON_LOG" in caps["envs"]
-    assert "PROTON_ENABLE_HDR" not in caps["envs"]
+    assert caps["envs"] == []
 
 
-def test_never_raises(tmp_path):
-    assert detect_capabilities("", home=str(tmp_path))["found"] is False
+def test_no_compat_tool_offers_nothing(tmp_path):
+    # Native / non-Steam games (empty compat tool) get no Proton options.
+    caps = detect_capabilities("", home=str(tmp_path))
+    assert caps == {"envs": [], "found": False}

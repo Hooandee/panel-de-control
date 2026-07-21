@@ -1,4 +1,4 @@
-import { FC, useState } from "react";
+import { FC, useMemo, useState } from "react";
 import { ModalRoot, showModal, TextField, Focusable } from "@decky/ui";
 import { LuPlus, LuPencil, LuTrash2, LuCheck } from "react-icons/lu";
 
@@ -8,7 +8,8 @@ import { Loading } from "./Loading";
 import { segmentGroupStyle, segmentItemStyle } from "./segmented";
 import { useCustomVars } from "../launch/useCustomVars";
 import { CustomVarDef } from "../api";
-import { validateCustomVar } from "../launch/customVars";
+import { validateCustomVar, customVarToken } from "../launch/customVars";
+import { baseCatalogTokens } from "../launch/catalog";
 
 const emptyDraft = (id: string): CustomVarDef => ({ id, name: "", kind: "env", envName: "", envValue: "", arg: "" });
 
@@ -44,8 +45,13 @@ const ManagerBody: FC = () => {
 
   if (vars === null) return <Loading />;
 
-  const err = validateCustomVar(draft);
   const isEdit = vars.some((v) => v.id === draft.id);
+  const taken = useMemo(() => {
+    const s = baseCatalogTokens();
+    for (const v of vars) if (v.id !== draft.id) s.add(customVarToken(v));
+    return s;
+  }, [vars, draft.id]);
+  const err = validateCustomVar(draft, taken);
   const patch = (p: Partial<CustomVarDef>) => setDraft((d) => ({ ...d, ...p }));
 
   const onSave = () => {

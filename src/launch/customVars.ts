@@ -24,18 +24,25 @@ export function isCustomPillId(id: string): boolean {
 
 const ENV_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
-/** null when valid, else a short reason (which field is wrong). Pure. */
-export function validateCustomVar(def: CustomVarDef): string | null {
+/** The token a def owns: the env NAME, or the arg flag. */
+export function customVarToken(def: CustomVarDef): string {
+  return def.kind === "arg" ? (def.arg ?? "") : (def.envName ?? "");
+}
+
+/** null when valid, else a short reason. `taken` = tokens already owned by base
+ *  pills or other custom vars → a duplicate would create two controls for the same
+ *  token (turning one off leaves the other's, re-appearing active). Pure. */
+export function validateCustomVar(def: CustomVarDef, taken: Set<string> = new Set()): string | null {
   if (!def.name.trim()) return "name";
   if (def.kind === "env") {
     if (!def.envName || !ENV_NAME_RE.test(def.envName)) return "envName";
-    return null;
-  }
-  if (def.kind === "arg") {
+  } else if (def.kind === "arg") {
     if (!def.arg || !def.arg.trim()) return "arg";
-    return null;
+  } else {
+    return "kind";
   }
-  return "kind";
+  if (taken.has(customVarToken(def))) return "duplicate";
+  return null;
 }
 
 /** Convert a definition into a catalog Pill so the engine treats it like any pill.

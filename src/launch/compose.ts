@@ -35,13 +35,22 @@ export interface Parsed {
 const COMMAND = "%command%";
 const ENV_RE = /^[A-Za-z_][A-Za-z0-9_]*=/;
 
-/** Split on whitespace but keep quoted substrings (and their quotes) intact. */
+/** Split on whitespace but keep quoted substrings and backslash-escaped characters
+ *  (including escaped whitespace, e.g. `hello\ world`) intact, so a value never
+ *  gets split mid-token and re-joined into a corrupt command. */
 function tokenize(s: string): string[] {
   const tokens: string[] = [];
   let cur = "";
   let quote: string | null = null;
+  let escaped = false;
   for (const ch of s.trim()) {
-    if (quote) {
+    if (escaped) {
+      cur += ch;
+      escaped = false;
+    } else if (ch === "\\") {
+      cur += ch;
+      escaped = true;
+    } else if (quote) {
       cur += ch;
       if (ch === quote) quote = null;
     } else if (ch === '"' || ch === "'") {

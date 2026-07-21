@@ -59,23 +59,24 @@ _cache: dict = {}
 
 def detect_capabilities(compat_name: str, home: str | None = None) -> dict:
     """Return {"envs": [PROTON_* vars this build supports], "found": bool}.
-    `found` is False when the script couldn't be located → callers stay
-    conservative (show only core vars) rather than promise unverified options.
+    `found` is False when the build's script couldn't be located (no compat tool, a
+    native/non-Steam game, or a missing install). In that case `envs` is empty — we
+    never offer PROTON_* options we haven't confirmed against a real build.
     """
     home = home or os.path.expanduser("~")
     key = (compat_name or "", home)
     if key in _cache:
-        return _cache[key]
-    envs = set(_CORE)
+        return dict(_cache[key])
+    envs: list = []
     found = False
     try:
         path = _find_proton_script(compat_name or "", home)
         if path:
             with open(path, errors="ignore") as f:
-                envs |= set(_ENV_RE.findall(f.read()))
+                envs = sorted(set(_CORE) | set(_ENV_RE.findall(f.read())))
             found = True
     except Exception:  # noqa: BLE001
         pass
-    result = {"envs": sorted(envs), "found": found}
+    result = {"envs": envs, "found": found}
     _cache[key] = result
     return dict(result)

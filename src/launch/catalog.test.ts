@@ -85,6 +85,16 @@ describe("buildLaunchOptions", () => {
     expect(out).toBe("SRM_LAUNCH=1 mangohud %command% -novid");
   });
 
+  it("preserves a backslash-escaped space in a value (round-trip)", () => {
+    const base = parse("FOO=hello\\ world %command%");
+    expect(buildLaunchOptions(base, detectSelections(base))).toBe("FOO=hello\\ world %command%");
+  });
+
+  it("adds a pill without splitting an escaped value (no corruption)", () => {
+    const base = parse("FOO=hello\\ world %command%");
+    expect(buildLaunchOptions(base, { protonLog: true })).toBe("FOO=hello\\ world PROTON_LOG=1 %command%");
+  });
+
   it("preserves an unknown env we no longer own (e.g. DXVK_FRAME_RATE)", () => {
     const base = parse("DXVK_FRAME_RATE=60 mangohud %command% -novid");
     const sel = detectSelections(base); // DXVK_FRAME_RATE not detected (no pill owns it)
@@ -96,6 +106,17 @@ describe("buildLaunchOptions", () => {
     const base = parse("scopebuddy -- %command%");
     const out = buildLaunchOptions(base, { mangohud: true });
     expect(out).toBe("scopebuddy -- mangohud %command%");
+  });
+
+  it("preserves BOTH flags when a single-choice arg is ambiguous (two present)", () => {
+    const base = parse("%command% -dx11 -dx12");
+    // Ambiguous → the pill reads as unset, and neither flag is dropped.
+    expect(detectSelections(base).renderer).toBeUndefined();
+    expect(buildLaunchOptions(base, detectSelections(base))).toBe("%command% -dx11 -dx12");
+    // An unrelated toggle must not drop either flag.
+    expect(buildLaunchOptions(base, { ...detectSelections(base), mangohud: true })).toBe(
+      "mangohud %command% -dx11 -dx12",
+    );
   });
 
   it("does not mutate a malformed (multi-%command%) string", () => {

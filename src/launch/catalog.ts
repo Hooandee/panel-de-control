@@ -155,6 +155,18 @@ export const SUBGROUP_ORDER: Record<Section, string[]> = {
   advanced: ["params.sub.proton", "params.sub.upscaling", "params.sub.display", "params.sub.render", "params.sub.dlls", "params.sub.gameArgs", "params.sub.custom"],
 };
 
+/** Every token the base catalog owns (env names, arg flags, option values) — the
+ *  set a user-defined variable must not collide with. */
+export function baseCatalogTokens(catalog: Pill[] = CATALOG): Set<string> {
+  const s = new Set<string>();
+  for (const p of catalog) {
+    if (p.envName) s.add(p.envName);
+    if (p.arg) s.add(p.arg);
+    for (const o of p.options ?? []) s.add(o.value);
+  }
+  return s;
+}
+
 /** Whether a pill applies here. A PROTON_* env pill shows only if the game's
  *  Proton build actually supports that variable (`supportedEnvs`, read from its
  *  script) — self-updating per version, never faking unsupported options. GPU-
@@ -241,8 +253,11 @@ export function detectSelections(baseline: Parsed, catalog: Pill[] = CATALOG): S
       if (hasWrapper(baseline, pill.wrapper)) out[pill.id] = true;
     } else if (pill.kind === "arg") {
       if (pill.options) {
-        const found = pill.options.find((o) => hasArg(baseline, o.value));
-        if (found) out[pill.id] = found.value;
+        // Only claim the pill when exactly one of its flags is present. Two present
+        // (e.g. `-dx11 -dx12`) is an ambiguous user state → leave it unset so a
+        // rebuild preserves both instead of dropping one.
+        const present = pill.options.filter((o) => hasArg(baseline, o.value));
+        if (present.length === 1) out[pill.id] = present[0].value;
       } else if (pill.arg && hasArg(baseline, pill.arg)) {
         out[pill.id] = true;
       }
@@ -290,6 +305,10 @@ export function buildLaunchOptions(
     const active = isActive(selections[pill.id]);
     if (pill.kind === "wrapper" && pill.wrapper) {
       if (!active) p = removeWrapper(p, pill.wrapper);
+    } else if (pill.options) {
+      // Single-choice pills only clear their flags when we're actively setting one
+      // (a switch). When unset/ambiguous, leave the user's flags untouched.
+      if (active) p = stripPill(p, pill);
     } else {
       p = stripPill(p, pill);
     }

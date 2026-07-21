@@ -41,6 +41,21 @@ describe("validateCustomVar", () => {
   });
 });
 
+describe("validateCustomVar duplicate detection", () => {
+  it("rejects an env whose NAME is already taken (base catalog or another custom)", () => {
+    expect(validateCustomVar(env({ envName: "PROTON_LOG" }), new Set(["PROTON_LOG"]))).toBe("duplicate");
+  });
+  it("rejects an arg flag already taken", () => {
+    expect(validateCustomVar(arg({ arg: "-novid" }), new Set(["-novid"]))).toBe("duplicate");
+  });
+  it("accepts a token that isn't taken", () => {
+    expect(validateCustomVar(env({ envName: "MY_VAR" }), new Set(["PROTON_LOG"]))).toBeNull();
+  });
+  it("field errors win over duplicate", () => {
+    expect(validateCustomVar(env({ envName: "" }), new Set([""]))).toBe("envName");
+  });
+});
+
 describe("customVarToPill", () => {
   it("prefixes the id with custom: and carries the raw user label", () => {
     const p = customVarToPill(env({ id: "abc", name: "Límite FPS" }));

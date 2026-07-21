@@ -321,8 +321,11 @@ class Plugin:
             self._telemetry, self._collect_sample, on_sample=self._on_sample_collected
         )
         # Host tools the launch-option pills depend on (lsfg/mangohud/gamemode/…) +
-        # distro. Static for the session; detected once. Never raises.
-        self._launch_tools = launch_tools.detect_tools()
+        # distro. Static for the session; detected once. Never raises. Decky runs as
+        # root, so detection must look under the real user's home, not root's.
+        self._launch_tools = launch_tools.detect_tools(
+            home=getattr(decky, "DECKY_USER_HOME", None) or os.path.expanduser("~")
+        )
         self._ready = True
 
     def _save(self) -> None:
@@ -341,7 +344,8 @@ class Plugin:
         """Which PROTON_* vars the given game's Proton build supports (read from its
         own script) → the editor only shows options that actually work there."""
         self._init()
-        return proton_caps.detect_capabilities(compat_name)
+        home = getattr(decky, "DECKY_USER_HOME", None) or os.path.expanduser("~")
+        return proton_caps.detect_capabilities(compat_name, home=home)
 
     async def get_launch_usage(self) -> dict:
         self._init()
