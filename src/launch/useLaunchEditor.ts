@@ -3,12 +3,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { bumpLaunchUsage, getLaunchUsage } from "../api";
 import { Parsed, parse, serialize } from "./compose";
 import { CATALOG, Pill, Selections, Usage, buildLaunchOptions, detectSelections } from "./catalog";
-import { GameEntry, readLaunchOptions, resolveLiveAppid, writeLaunchOptions } from "./steamApi";
+import { GameEntry, readLaunchOptions, writeLaunchOptions } from "./steamApi";
 
-export type SaveStatus = "saving" | "saved" | null;
+export type SaveStatus = "saving" | "saved" | "error" | null;
 
 export interface LaunchEditor {
   loading: boolean;
+  /** The Steam string couldn't be read — do not edit (a write would erase it). */
+  error: boolean;
   malformed: boolean;
   raw: string;
   selections: Selections;
@@ -33,20 +35,31 @@ const isActive = (v: string | boolean | undefined): boolean => v !== undefined &
  */
 export function useLaunchEditor(game: GameEntry, catalog: Pill[] = CATALOG): LaunchEditor {
   const [baseline, setBaseline] = useState<Parsed | null>(null);
+  const [error, setError] = useState(false);
   const [selections, setSelections] = useState<Selections>({});
   const [usage, setUsage] = useState<Usage>({});
   const [status, setStatus] = useState<SaveStatus>(null);
   const bumped = useRef<Set<string>>(new Set());
   const savedFlash = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Target awaiting an autosave write (null = nothing pending) — flushed on unmount
+  // so closing the modal before the debounce fires doesn't silently drop the change.
+  const pending = useRef<string | null>(null);
 
   // Read the Steam string once per game (keyed only by appid — no I/O on catalog change).
   useEffect(() => {
     let cancelled = false;
     setBaseline(null);
+    setError(false);
     setStatus(null);
     bumped.current = new Set();
     readLaunchOptions(game.liveAppid).then((rawStr) => {
       if (cancelled) return;
+      // null = couldn't read → error, don't fabricate an empty baseline (a write
+      // from "" would erase the user's real options).
+      if (rawStr === null) {
+        setError(true);
+        return;
+      }
       const p = parse(rawStr);
       // Seed baseline + selections together so the first painted frame never shows
       // every pill off (which would strip the string and arm a bogus autosave).
@@ -90,14 +103,23 @@ export function useLaunchEditor(game: GameEntry, catalog: Pill[] = CATALOG): Lau
     });
   }, []);
 
-  // Autosave: debounce writes so rapid toggles / typing don't hammer Steam.
+  // Autosave: debounce writes so rapid toggles / typing don't hammer Steam. Baseline,
+  // usage and "saved" are adopted ONLY when the write actually succeeds — a missing
+  // or throwing setter surfaces as "error", never a fake "Saved".
   useEffect(() => {
     if (!baseline || baseline.malformed || !dirty) return;
     setStatus("saving");
     const target = preview;
+    pending.current = target;
     const id = setTimeout(() => {
-      const appid = resolveLiveAppid(game.stableKey) ?? game.liveAppid;
-      writeLaunchOptions(appid, target);
+      // Write to the appid we opened + read from — never re-resolve by name (two
+      // non-Steam shortcuts can share a name → wrong game), and no library rescan.
+      const appid = game.liveAppid;
+      if (!writeLaunchOptions(appid, target, game.isNonSteam)) {
+        setStatus("error"); // keep `pending` so the unmount flush can retry
+        return;
+      }
+      pending.current = null;
       setBaseline(parse(target)); // the composed string is now the saved baseline
       // Count newly-enabled pills once per session so the Frecuentes row learns.
       const fresh = Object.keys(selections).filter((k) => isActive(selections[k]) && !bumped.current.has(k));
@@ -115,14 +137,24 @@ export function useLaunchEditor(game: GameEntry, catalog: Pill[] = CATALOG): Lau
       savedFlash.current = setTimeout(() => setStatus(null), 1500);
     }, 500);
     return () => clearTimeout(id);
-  }, [preview, dirty, baseline, selections, game.stableKey, game.liveAppid]);
+  }, [preview, dirty, baseline, selections, game.stableKey, game.liveAppid, game.isNonSteam]);
 
-  useEffect(() => () => {
-    if (savedFlash.current) clearTimeout(savedFlash.current);
-  }, []);
+  // Flush a pending change on unmount (closing before the 500ms debounce fired).
+  // The modal is per-game, so mount-time game identity is correct here.
+  useEffect(
+    () => () => {
+      if (savedFlash.current) clearTimeout(savedFlash.current);
+      if (pending.current !== null) {
+        writeLaunchOptions(game.liveAppid, pending.current, game.isNonSteam);
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
 
   return {
-    loading: baseline === null,
+    loading: baseline === null && !error,
+    error,
     malformed: !!baseline?.malformed,
     raw: baseline?.raw ?? "",
     selections,

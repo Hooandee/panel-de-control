@@ -1,6 +1,6 @@
 import { FC, useMemo, useState } from "react";
 import { ModalRoot, showModal, TextField, Focusable } from "@decky/ui";
-import { LuPlus, LuPencil, LuTrash2, LuCheck } from "react-icons/lu";
+import { LuPlus, LuPencil, LuTrash2, LuCheck, LuTriangleAlert } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
@@ -40,9 +40,18 @@ const Field: FC<{ label: string; value: string; placeholder: string; onChange: (
 
 const ManagerBody: FC = () => {
   const { t } = useI18n();
-  const { vars, save, newId } = useCustomVars();
+  const { vars, error, save, newId } = useCustomVars();
   const [draft, setDraft] = useState<CustomVarDef>(() => emptyDraft(newId()));
 
+  // Don't render the add form on a load error — saving would replace the (unread)
+  // real library with just the new entry.
+  if (error) {
+    return (
+      <div style={{ padding: theme.space.md, fontSize: theme.font.caption, color: theme.color.warn }}>
+        {t("customVars.loadError")}
+      </div>
+    );
+  }
   if (vars === null) return <Loading />;
 
   const isEdit = vars.some((v) => v.id === draft.id);
@@ -69,6 +78,12 @@ const ManagerBody: FC = () => {
       <div>
         <div style={{ fontSize: theme.font.value, color: theme.color.textPrimary }}>{t("customVars.title")}</div>
         <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, lineHeight: 1.4, marginTop: 2 }}>{t("customVars.intro")}</div>
+        {vars.length > 0 && (
+          <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, lineHeight: 1.4, marginTop: 4, display: "flex", gap: 6, alignItems: "flex-start" }}>
+            <LuTriangleAlert size={12} style={{ marginTop: 2, flexShrink: 0 }} />
+            <span>{t("customVars.orphanNote")}</span>
+          </div>
+        )}
       </div>
 
       {vars.length === 0 ? (

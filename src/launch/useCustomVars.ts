@@ -7,6 +7,8 @@ import { customVarToPill } from "./customVars";
 export interface CustomVarsApi {
   /** The library (null while loading). */
   vars: CustomVarDef[] | null;
+  /** The load failed — do NOT treat as empty (adding one would wipe the real list). */
+  error: boolean;
   /** The library as catalog pills (empty while loading). */
   pills: Pill[];
   /** Replace the whole library; optimistic, then adopts the coerced result. */
@@ -23,12 +25,19 @@ function makeId(): string {
  *  SettingsStore — localStorage doesn't survive a CEF reboot. */
 export function useCustomVars(): CustomVarsApi {
   const [vars, setVars] = useState<CustomVarDef[] | null>(null);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     getCustomLaunchVars()
-      .then((v) => !cancelled && setVars(v))
-      .catch(() => !cancelled && setVars([]));
+      .then((v) => {
+        if (cancelled) return;
+        setVars(v);
+        setError(false);
+      })
+      // A failed load must NOT read as an empty library: if the user then adds a
+      // variable we'd persist [new] and wipe whatever the backend really had.
+      .catch(() => !cancelled && setError(true));
     return () => {
       cancelled = true;
     };
@@ -38,10 +47,10 @@ export function useCustomVars(): CustomVarsApi {
     setVars(next); // optimistic
     setCustomLaunchVars(next)
       .then((stored) => setVars(stored)) // adopt what the backend actually stored
-      .catch(() => {});
+      .catch(() => setError(true));
   }, []);
 
   const pills = useMemo(() => (vars ?? []).map(customVarToPill), [vars]);
 
-  return { vars, pills, save, newId: makeId };
+  return { vars, error, pills, save, newId: makeId };
 }

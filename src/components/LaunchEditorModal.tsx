@@ -171,7 +171,12 @@ const LaunchEditorBody: FC<{ game: GameEntry }> = ({ game }) => {
         </div>
       )}
 
-      {ed.loading || tools === null || envs === null || custom.vars === null ? (
+      {ed.error ? (
+        <div style={{ fontSize: theme.font.caption, color: theme.color.warn, display: "flex", gap: 6, alignItems: "flex-start" }}>
+          <LuTriangleAlert size={14} style={{ marginTop: 1, flexShrink: 0 }} />
+          <span>{t("params.readError")}</span>
+        </div>
+      ) : ed.loading || tools === null || envs === null || (custom.vars === null && !custom.error) ? (
         <Loading />
       ) : ed.malformed ? (
         <div>
@@ -235,6 +240,12 @@ const LaunchEditorBody: FC<{ game: GameEntry }> = ({ game }) => {
               <>
                 <LuCheck size={14} color={theme.color.ok} />
                 <span style={{ color: theme.color.ok }}>{t("params.saved")}</span>
+              </>
+            )}
+            {ed.status === "error" && (
+              <>
+                <LuTriangleAlert size={14} color={theme.color.warn} />
+                <span style={{ color: theme.color.warn }}>{t("params.saveError")}</span>
               </>
             )}
           </div>

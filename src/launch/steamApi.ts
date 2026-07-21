@@ -109,14 +109,16 @@ export function readLaunchOptionsSync(appid: number): string | null {
 
 /**
  * Read a game's launch-options string. App details may not be cached yet, so we
- * register for details (which fires the current value) and race it against a
- * sync read + a timeout. Always resolves (empty string worst case).
+ * register for details (which fires the current value) and race it against a sync
+ * read + a timeout. Resolves NULL when nothing real could be read (details not
+ * cached and no callback by the timeout) — callers must NOT treat that as an empty
+ * string, or a later write could erase the user's real options.
  */
-export function readLaunchOptions(appid: number, timeoutMs = 1200): Promise<string> {
+export function readLaunchOptions(appid: number, timeoutMs = 1200): Promise<string | null> {
   return new Promise((resolve) => {
     let done = false;
     let unreg: { unregister?: () => void } | undefined;
-    const finish = (v: string) => {
+    const finish = (v: string | null) => {
       if (done) return;
       done = true;
       try {
@@ -138,7 +140,8 @@ export function readLaunchOptions(appid: number, timeoutMs = 1200): Promise<stri
     }
     const sync = readLaunchOptionsSync(appid);
     if (sync !== null) finish(sync);
-    setTimeout(() => finish(sync ?? ""), timeoutMs);
+    // sync is null when details aren't cached → resolve null (unknown), not "".
+    setTimeout(() => finish(sync), timeoutMs);
   });
 }
 
@@ -153,11 +156,20 @@ export function readCompatTool(appid: number): { name: string; display: string }
   }
 }
 
-/** Write a game's launch-options string (works for Steam and non-Steam). No-op if unavailable. */
-export function writeLaunchOptions(appid: number, value: string): void {
+/** Write a game's launch-options string. Non-Steam shortcuts have their own setter.
+ *  Returns false when no setter exists or the call throws — callers must not report
+ *  success (or adopt the new baseline) unless this returns true. */
+export function writeLaunchOptions(appid: number, value: string, isNonSteam = false): boolean {
   try {
-    w.SteamClient?.Apps?.SetAppLaunchOptions?.(appid, value);
+    const apps = w.SteamClient?.Apps;
+    const setter =
+      isNonSteam && typeof apps?.SetShortcutLaunchOptions === "function"
+        ? apps.SetShortcutLaunchOptions
+        : apps?.SetAppLaunchOptions;
+    if (typeof setter !== "function") return false;
+    setter.call(apps, appid, value);
+    return true;
   } catch {
-    /* ignore */
+    return false;
   }
 }

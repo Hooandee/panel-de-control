@@ -76,8 +76,14 @@ const patchMenuItems = (menuItems: any[], appid: number) => {
 };
 
 function patchContextMenu(LibraryContextMenu: any): { unpatch: () => void } {
-  const patches: { outer?: Patch; inner?: Patch; unpatch: () => void } = { unpatch: () => {} };
-  patches.outer = afterPatch(LibraryContextMenu.prototype, "render", (_: any, component: any) => {
+  // Track EVERY patch handle so unpatch() removes them all — the inner prototype
+  // patches used to be discarded, leaking callbacks onto Steam's menu prototypes
+  // that survived plugin reload/disable and stacked up.
+  const all: Patch[] = [];
+  const patchedProtos = new Set<unknown>();
+  let innerHooked = false;
+
+  const outer = afterPatch(LibraryContextMenu.prototype, "render", (_: any, component: any) => {
     let appid = 0;
     if (component?._owner?.pendingProps?.overview?.appid) {
       appid = component._owner.pendingProps.overview.appid;
@@ -85,40 +91,59 @@ function patchContextMenu(LibraryContextMenu: any): { unpatch: () => void } {
       const foundApp = findInTree(component?.props?.children, (x: any) => x?.app?.appid, { walkable: ["props", "children"] });
       if (foundApp) appid = foundApp.app.appid;
     }
-    if (!patches.inner) {
-      patches.inner = afterPatch(component, "type", (_: any, ret: any) => {
-        afterPatch(ret.type.prototype, "render", (_: any, ret2: any) => {
-          const menuItems = ret2?.props?.children?.[0];
-          if (!isOpeningAppContextMenu(menuItems)) return ret2;
-          try {
-            handleItemDupes(menuItems);
-          } catch {
-            return ret2;
+    if (!innerHooked) {
+      innerHooked = true;
+      all.push(
+        afterPatch(component, "type", (_: any, ret: any) => {
+          const proto = ret?.type?.prototype;
+          if (proto && !patchedProtos.has(proto)) {
+            patchedProtos.add(proto);
+            all.push(
+              afterPatch(proto, "render", (_: any, ret2: any) => {
+                const menuItems = ret2?.props?.children?.[0];
+                if (!isOpeningAppContextMenu(menuItems)) return ret2;
+                try {
+                  handleItemDupes(menuItems);
+                } catch {
+                  return ret2;
+                }
+                patchMenuItems(menuItems, appid);
+                return ret2;
+              }),
+            );
+            all.push(
+              afterPatch(proto, "shouldComponentUpdate", ([nextProps]: any, shouldUpdate: any) => {
+                try {
+                  handleItemDupes(nextProps.children);
+                } catch {
+                  return shouldUpdate;
+                }
+                if (shouldUpdate === true) patchMenuItems(nextProps.children, appid);
+                return shouldUpdate;
+              }),
+            );
           }
-          patchMenuItems(menuItems, appid);
-          return ret2;
-        });
-        afterPatch(ret.type.prototype, "shouldComponentUpdate", ([nextProps]: any, shouldUpdate: any) => {
-          try {
-            handleItemDupes(nextProps.children);
-          } catch {
-            return shouldUpdate;
-          }
-          if (shouldUpdate === true) patchMenuItems(nextProps.children, appid);
-          return shouldUpdate;
-        });
-        return ret;
-      });
+          return ret;
+        }),
+      );
     } else {
       spliceLaunchItem(component.props.children, appid);
     }
     return component;
   });
-  patches.unpatch = () => {
-    patches.outer?.unpatch();
-    patches.inner?.unpatch();
+  all.push(outer);
+
+  return {
+    unpatch: () => {
+      for (const p of all) {
+        try {
+          p.unpatch();
+        } catch {
+          /* ignore */
+        }
+      }
+    },
   };
-  return patches;
 }
 
 /** Locate Steam's game context-menu component (SteamGridDB's approach). */
