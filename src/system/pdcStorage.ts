@@ -31,6 +31,23 @@ export function writeString(key: string, value: string): void {
   mirror(key, value);
 }
 
+export async function writeStringConfirmed(key: string, value: string): Promise<boolean> {
+  const previous = readString(key);
+  dirty.add(key);
+  try {
+    window.localStorage?.setItem(key, value);
+  } catch {}
+  try {
+    if (await setUiPrefs({ [key]: value })) return true;
+  } catch {}
+  dirty.delete(key);
+  try {
+    if (previous === null) window.localStorage?.removeItem(key);
+    else window.localStorage?.setItem(key, previous);
+  } catch {}
+  return false;
+}
+
 export function removeString(key: string): void {
   try {
     window.localStorage?.removeItem(key);
