@@ -604,8 +604,12 @@ export interface ReportResult {
   saved_path?: string | null;
 }
 
+// `context` carries frontend-only diagnostics the backend can't see (e.g. the
+// running game's launch-options string + Proton caps for a "launch" report).
 export const submitReport =
-  callable<[categories: string[], text: string], ReportResult>("submit_report");
+  callable<[categories: string[], text: string, context: Record<string, unknown>], ReportResult>(
+    "submit_report",
+  );
 
 export const getControllerConfig = callable<[], ControllerConfig>("get_controller_config");
 export const setControllerButton =

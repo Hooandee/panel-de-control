@@ -432,15 +432,16 @@ class Plugin:
         return d
 
     # ---- Bug reporter ------------------------------------------------------
-    async def submit_report(self, categories=None, text: str = "") -> dict:
+    async def submit_report(self, categories=None, text: str = "", context=None) -> dict:
         """Collect a redacted diagnostic bundle and send it to the collector
-        service. Write-only: the plugin can never read a report back. Falls back to
-        saving the bundle on disk if the network send fails. Returns
-        {ok, code, issue_url} or {ok:false, error, saved_path}."""
+        service. Write-only: the plugin can never read a report back. `context` is
+        optional frontend-only diagnostics (e.g. a launch report's running-game
+        snapshot). Falls back to saving the bundle on disk if the network send fails.
+        Returns {ok, code, issue_url} or {ok:false, error, saved_path}."""
         self._init()
         home, hostname = self._redact_ids()
         try:
-            bundle = await self._build_report_bundle(categories, text, home, hostname)
+            bundle = await self._build_report_bundle(categories, text, home, hostname, context)
         except Exception as e:  # noqa: BLE001
             decky.logger.error("report bundle failed: %s", e)
             bundle = report_collector.build_bundle(
@@ -476,7 +477,7 @@ class Plugin:
             hostname = None
         return home, hostname
 
-    async def _build_report_bundle(self, categories, text, home, hostname) -> dict:
+    async def _build_report_bundle(self, categories, text, home, hostname, context=None) -> dict:
         """Gather every diagnostic piece (device, live state, stores, logs) and hand
         it to the collector for assembly + redaction. Each state fetch is guarded so
         a single failing subsystem never blocks the report."""
@@ -502,6 +503,10 @@ class Plugin:
             "controller": await loop.run_in_executor(None, self._safe_controller_config),
             "power": await _safe(self.get_power_draw()),
             "eco": await _safe(self.get_eco_state()),
+            # Launch-options subsystem: detected tools + which game the backend thinks
+            # is running + the frontend snapshot (running game's launch string, Proton
+            # caps) that only the frontend can read. Redacted with the rest.
+            "launch": self._launch_report_state(context),
         }
         logs = report_collector.tail_logs(
             getattr(decky, "DECKY_PLUGIN_LOG_DIR", ""), home=home, hostname=hostname
@@ -537,6 +542,25 @@ class Plugin:
             home=home,
             hostname=hostname,
         )
+
+    def _launch_report_state(self, context) -> dict:
+        """Launch-options triage: detected tools, the game the backend thinks is
+        running, the custom-var count, and the frontend's running-game snapshot
+        (launch string + Proton caps). Never raises."""
+        try:
+            tools = dict(self._launch_tools) if isinstance(self._launch_tools, dict) else {}
+        except Exception:  # noqa: BLE001
+            tools = {}
+        try:
+            n_custom = len(launch_custom_vars.coerce_custom_vars(self._settings.get("custom_launch_vars")))
+        except Exception:  # noqa: BLE001
+            n_custom = 0
+        return {
+            "tools": tools,
+            "current_appid": self._current_appid,
+            "custom_var_count": n_custom,
+            "frontend": context if isinstance(context, dict) else {},
+        }
 
     def _safe_controller_config(self) -> dict:
         try:
