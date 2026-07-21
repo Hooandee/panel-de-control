@@ -42,35 +42,32 @@ const IconAction: FC<{ label: string; color: string; disabled?: boolean; onTap: 
     </Focusable>
   );
 
-/** One cosmetic block or sub-item row inside an expanded category: label + eye. */
-const HideRow: FC<{ label: string; icon: ReactNode; hidden: boolean; indent?: number; onToggle: () => void }> =
-  ({ label, icon, hidden, indent = 0, onToggle }) => {
-    const { t } = useI18n();
-    return (
-      <div style={{ display: "flex", alignItems: "center", gap: theme.space.sm, paddingLeft: theme.space.sm + indent, opacity: hidden ? 0.5 : 1 }}>
-        <span style={{ display: "flex", color: theme.color.textMuted }}>{icon}</span>
-        <span style={{ flex: 1, minWidth: 0, fontSize: theme.font.body, color: theme.color.textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
-        <IconAction label={hidden ? t("customize.show") : t("customize.hide")} color={theme.color.textMuted} onTap={onToggle}>
-          {hidden ? <LuEyeOff size={17} /> : <LuEye size={17} />}
-        </IconAction>
-      </div>
-    );
-  };
-
-/** A sub-feature module row inside an expanded category: label + on/off power. */
-const ModuleSubRow: FC<{ label: string; icon: ReactNode; off: boolean; onToggle: () => void }> =
-  ({ label, icon, off, onToggle }) => {
-    const { t } = useI18n();
-    return (
-      <div style={{ display: "flex", alignItems: "center", gap: theme.space.sm, paddingLeft: theme.space.sm, opacity: off ? 0.5 : 1 }}>
-        <span style={{ display: "flex", color: theme.color.textMuted }}>{icon}</span>
-        <span style={{ flex: 1, minWidth: 0, fontSize: theme.font.body, color: theme.color.textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
-        <IconAction label={off ? t("customize.enable") : t("customize.disable")} color={off ? theme.color.textMuted : theme.color.accent} onTap={onToggle}>
+/** A row inside an expanded category. Everything can be hidden (eye); rows with
+ *  backend machinery (Auto‑TDP, fan control) additionally get an on/off power.
+ *  The power column stays reserved (empty) on eye-only rows so they align. */
+const ExpansionRow: FC<{
+  label: string; icon: ReactNode; indent?: number;
+  hidden: boolean; onToggleHide: () => void;
+  off?: boolean; onToggleOff?: () => void;
+}> = ({ label, icon, indent = 0, hidden, onToggleHide, off, onToggleOff }) => {
+  const { t } = useI18n();
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: theme.space.sm, paddingLeft: theme.space.sm + indent, opacity: off || hidden ? 0.55 : 1 }}>
+      <span style={{ display: "flex", color: theme.color.textMuted }}>{icon}</span>
+      <span style={{ flex: 1, minWidth: 0, fontSize: theme.font.body, color: theme.color.textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
+      <IconAction label={hidden ? t("customize.show") : t("customize.hide")} color={theme.color.textMuted} onTap={onToggleHide}>
+        {hidden ? <LuEyeOff size={17} /> : <LuEye size={17} />}
+      </IconAction>
+      {onToggleOff ? (
+        <IconAction label={off ? t("customize.enable") : t("customize.disable")} color={off ? theme.color.textMuted : theme.color.accent} onTap={onToggleOff}>
           <LuPower size={17} />
         </IconAction>
-      </div>
-    );
-  };
+      ) : (
+        <span style={{ width: 30 }} />
+      )}
+    </div>
+  );
+};
 
 const AccentPicker: FC = () => {
   const { t } = useI18n();
@@ -222,15 +219,20 @@ const CustomizeBody: FC = () => {
                     const b = blocks.find((x) => x.id === bid);
                     if (!b) return null;
                     const modId = BLOCK_MODULE[bid];
-                    if (modId) {
-                      const mOff = moduleState(modId, disabled, false, false) === "disabled";
-                      return <ModuleSubRow key={bid} label={t(b.labelKey)} icon={b.icon} off={mOff} onToggle={() => setModuleDisabled(modId, !mOff)} />;
-                    }
+                    const bHidden = (layout.blocks[id]?.hidden ?? []).includes(bid);
+                    const mOff = modId ? moduleState(modId, disabled, false, false) === "disabled" : undefined;
                     return (
                       <Fragment key={bid}>
-                        <HideRow label={t(b.labelKey)} icon={b.icon} hidden={(layout.blocks[id]?.hidden ?? []).includes(bid)} onToggle={() => setBlockHidden(id, bid)} />
+                        <ExpansionRow
+                          label={t(b.labelKey)}
+                          icon={b.icon}
+                          hidden={bHidden}
+                          onToggleHide={() => setBlockHidden(id, bid)}
+                          off={mOff}
+                          onToggleOff={modId ? () => setModuleDisabled(modId, !mOff) : undefined}
+                        />
                         {(SUBITEMS[bid] ?? []).map((s) => (
-                          <HideRow key={s.id} label={t(s.labelKey)} icon={s.icon} indent={theme.space.lg} hidden={(layout.subitems[bid] ?? []).includes(s.id)} onToggle={() => setSubitemHidden(bid, s.id)} />
+                          <ExpansionRow key={s.id} label={t(s.labelKey)} icon={s.icon} indent={theme.space.lg} hidden={(layout.subitems[bid] ?? []).includes(s.id)} onToggleHide={() => setSubitemHidden(bid, s.id)} />
                         ))}
                       </Fragment>
                     );

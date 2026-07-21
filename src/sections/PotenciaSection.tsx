@@ -11,9 +11,6 @@ import { openAutoTdpNoticeModal } from "../components/AutoTdpNoticeModal";
 import { SectionBlocks } from "../customize/SectionBlocks";
 import { useModules } from "../customize/modules";
 import { effectiveEnabled } from "../customize/moduleLogic";
-import { useLayout } from "../customize/store";
-import { visibleIds } from "../customize/layout";
-import { blockOrder } from "../customize/manifest";
 import { useRunningGame } from "../tdp/useRunningGame";
 import { useTdpConflict } from "../tdp/useTdpConflict";
 import { useScopeSync } from "../useScopeSync";
@@ -181,18 +178,11 @@ export const PotenciaSection: FC = () => {
   // Auto‑TDP by default (see the "power" entry in the customization manifest).
   const isAutoOn = power?.auto_tdp ?? false;
 
-  // Safety: if the Auto‑TDP block is hidden while auto is ON, there's no way to
-  // turn it off from Potencia (the core shows the live gauge, no slider). So
-  // hiding it disables auto-TDP — the loop's last PL1 stays as a fixed, editable
-  // value. onAutoTdp(false) is idempotent; this fires once when it becomes hidden.
-  const layout = useLayout();
+  // Hiding the Auto‑TDP block (via the editor's eye) just hides the toggle; the
+  // loop keeps running headless per its setting. Turning the module off (editor
+  // power) stops the loop backend-side. So no hide→off coupling here.
   const disabled = useModules();
   const autoTdpEnabled = effectiveEnabled("autoTdp", disabled);
-  const autoTdpVisible = autoTdpEnabled
-    && visibleIds(blockOrder("power"), layout.blocks["power"]).includes("autoTdp");
-  useEffect(() => {
-    if (!autoTdpVisible && isAutoOn) onAutoTdp(false);
-  }, [autoTdpVisible, isAutoOn, onAutoTdp]);
 
   // Keep the latest conflict actions reachable from the modal callback without
   // re-arming the first-run effect.
