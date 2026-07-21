@@ -4,7 +4,7 @@
 import { useMemo, useSyncExternalStore } from "react";
 import { readString, writeString, onPrefsHealed } from "../system/pdcStorage";
 import { strArray } from "./layout";
-import { getUiModules, setUiModule } from "../api";
+import { getUiModules, setUiModule, resetUiModules } from "../api";
 
 const KEY = "pdc:modules";
 const listeners = new Set<() => void>();
@@ -50,11 +50,13 @@ export function setModuleDisabled(id: string, disabled: boolean): void {
     .catch(() => {});
 }
 
-/** Re-enable every module (used by the editor reset). */
+/** Re-enable every module (used by the editor reset). One authoritative RPC so
+ *  there's no per-id response race and only a single backend re-apply. */
 export function resetModules(): void {
-  const ids = getDisabled();
   commit([]);
-  ids.forEach((id) => setUiModule(id, false).catch(() => {}));
+  resetUiModules()
+    .then((r) => commit(r.disabled))
+    .catch(() => {});
 }
 
 /** Fetch the authoritative set once at startup and reconcile the cache. */

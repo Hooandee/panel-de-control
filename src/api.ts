@@ -12,6 +12,7 @@ export const setUiPrefs = callable<[Record<string, string | null>], boolean>("se
 // ids + power/learning folded in). set_ui_module returns the fresh set after applying.
 export const getUiModules = callable<[], { disabled: string[] }>("get_ui_modules");
 export const setUiModule = callable<[string, boolean], { disabled: string[] }>("set_ui_module");
+export const resetUiModules = callable<[], { disabled: string[] }>("reset_modules");
 
 export interface DeviceInfo {
   key: string;

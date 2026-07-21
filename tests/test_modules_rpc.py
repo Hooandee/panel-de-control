@@ -52,6 +52,19 @@ def test_unknown_module_is_noop():
     assert p._settings["disabled_modules"] == []
 
 
+def test_reset_modules_reenables_everything_in_one_shot():
+    p = _plugin()
+    p._settings = {"disabled_modules": ["fans", "display"], "tdp_control_enabled": False, "telemetry_enabled": False}
+    reapplied = []
+    p._reapply_all = lambda on_ac=None: reapplied.append(1)
+    out = asyncio.run(p.reset_modules())
+    assert out["disabled"] == []
+    assert p._settings["disabled_modules"] == []
+    assert p._settings["tdp_control_enabled"] is True
+    assert p._settings["telemetry_enabled"] is True
+    assert len(reapplied) == 1  # a single re-apply, not one per module
+
+
 def test_get_ui_modules_reports_full_set():
     p = _plugin()
     p._settings = {"disabled_modules": ["display"], "tdp_control_enabled": False, "telemetry_enabled": True}

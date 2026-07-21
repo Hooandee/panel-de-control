@@ -377,6 +377,18 @@ class Plugin:
         self._sync_sampler()  # learning may have (un)gained a consumer
         return {"disabled": self._user_disabled_all()}
 
+    async def reset_modules(self) -> dict:
+        """Re-enable every module in one shot (editor reset) — one save + one
+        re-apply, avoiding a per-module RPC storm and its ordering races."""
+        self._init()
+        self._settings["disabled_modules"] = []
+        for setting in self._MODULE_SETTING.values():
+            self._settings[setting] = True
+        self._save()
+        self._reapply_all()
+        self._sync_sampler()
+        return {"disabled": self._user_disabled_all()}
+
     async def check_update(self, force: bool = False) -> dict:
         self._init()
         return self_updater.check(force)
