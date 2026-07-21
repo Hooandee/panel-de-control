@@ -3,6 +3,7 @@ import {
   LuGauge, LuSlidersHorizontal, LuFan, LuSettings,
   LuLeaf, LuBatteryFull, LuCpu, LuSun, LuVolume2, LuWind, LuThermometer, LuChartSpline,
   LuLightbulb, LuPalette, LuGamepad2, LuMemoryStick, LuActivity, LuHeartPulse,
+  LuSparkles, LuMoon, LuReplace, LuSlidersVertical,
 } from "react-icons/lu";
 
 /** Presentation metadata shared by a tab and a configurable block. */
@@ -59,6 +60,17 @@ export const SECTION_BLOCKS: Record<string, BlockDef[]> = {
     { id: "fanRpm", labelKey: "customize.block.fanRpm", icon: <LuWind size={ICON} /> },
     { id: "temps", labelKey: "customize.block.temps", icon: <LuThermometer size={ICON} /> },
     { id: "curve", labelKey: "fans.curve.title", icon: <LuChartSpline size={ICON} /> },
+  ],
+  display: [
+    { id: "oled", labelKey: "display.oled.title", icon: <LuSparkles size={ICON} /> },
+    { id: "color", labelKey: "customize.block.color", icon: <LuPalette size={ICON} /> },
+    { id: "hdr", labelKey: "display.hdr", icon: <LuSun size={ICON} /> },
+    { id: "night", labelKey: "display.night", icon: <LuMoon size={ICON} /> },
+  ],
+  mandos: [
+    { id: "manager", labelKey: "customize.block.manager", icon: <LuGamepad2 size={ICON} /> },
+    { id: "remap", labelKey: "mandos.remap.title", icon: <LuReplace size={ICON} /> },
+    { id: "settings", labelKey: "mandos.settings.title", icon: <LuSlidersVertical size={ICON} /> },
   ],
 };
 

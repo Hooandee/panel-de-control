@@ -373,6 +373,8 @@ const es: Record<string, string> = {
   "customize.moveDown": "Bajar",
   "customize.block.fanRpm": "Ventiladores",
   "customize.block.temps": "Temperaturas",
+  "customize.block.color": "Color",
+  "customize.block.manager": "Estado del mando",
   // Módulos (activar/desactivar)
   "customize.appearance": "Apariencia",
   "customize.reorder": "Reordenar",
@@ -763,6 +765,8 @@ const en: Record<string, string> = {
   "customize.moveDown": "Move down",
   "customize.block.fanRpm": "Fans",
   "customize.block.temps": "Temperatures",
+  "customize.block.color": "Color",
+  "customize.block.manager": "Controller status",
   // Modules (enable/disable)
   "customize.appearance": "Appearance",
   "customize.reorder": "Reorder",

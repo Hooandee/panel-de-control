@@ -16,6 +16,7 @@ import { AdvancedColor } from "../components/AdvancedColor";
 import { NightModeCard } from "../components/NightModeCard";
 import { HdrPanel } from "../components/HdrPanel";
 import { segmentGroupStyle, segmentItemStyle } from "../components/segmented";
+import { SectionBlocks } from "../customize/SectionBlocks";
 
 /** Pantalla: panel color. One-tap OLED look (per model) → saturation (per-game) →
  *  global calibration (temperature / contrast). Honest when the host
@@ -48,7 +49,96 @@ export const PantallaSection: FC = () => {
     padding: "6px 4px",
   });
 
-  const sdrBody = (
+  // OLED look (per model; hidden on real OLED panels), the color cluster
+  // (Ambiente + saturation + advanced calibration), HDR and Night mode are the
+  // section's reorderable/hideable blocks. The confirm bar, perf note and scope
+  // selector are fixed chrome (they govern the color blocks), rendered above.
+  const blocks = {
+    oled: state.oled_look ? (
+      <div style={{ marginTop: theme.space.sm }}>
+        <OledLookCard active={active} onApply={onOledLook} onReset={onReset} />
+      </div>
+    ) : null,
+    color: (
+      <>
+        <PanelSectionRow>
+          <div style={{ ...theme.card, padding: theme.space.md, marginTop: theme.space.sm, overflow: "hidden" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+              <LuSparkles size={16} color={theme.color.accent} />
+              <span style={{ fontSize: theme.font.body, fontWeight: 600, color: theme.color.textPrimary }}>
+                {t("display.look")}
+              </span>
+            </div>
+            <Focusable style={segmentGroupStyle}>
+              {state.presets.map((key) => (
+                <Focusable key={key} style={chip(state.active_preset === key)}
+                  onActivate={() => onPreset(key)} onClick={() => onPreset(key)}>
+                  {t(`display.look.${key}`)}
+                </Focusable>
+              ))}
+            </Focusable>
+          </div>
+        </PanelSectionRow>
+        <PanelSectionRow>
+          <div style={{ ...theme.card, padding: theme.space.md, margin: `${theme.space.sm}px 0`, overflow: "hidden" }}>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 2 }}>
+              <LuPalette size={16} color={theme.color.accent} />
+              <span style={{ fontSize: theme.font.body, fontWeight: 600, color: theme.color.textPrimary }}>
+                {t("display.saturation")}
+              </span>
+              <span style={{ marginLeft: "auto", fontSize: theme.font.value, fontWeight: 700, color: theme.color.textPrimary }}>
+                {state.saturation}%
+              </span>
+            </div>
+            <ContainedSlider value={state.saturation} min={0} max={200} step={5}
+              scale={0.75} onChange={onSaturation} />
+          </div>
+        </PanelSectionRow>
+        <Collapsible
+          id="color-advanced"
+          icon={<LuSlidersHorizontal size={16} />}
+          title={t("display.advanced")}
+          summary={isCalibrated(state) ? t("display.custom") : t("display.native")}
+        >
+          <AdvancedColor state={state} onChange={onCalibration} />
+          {active && (
+            <Focusable
+              style={{
+                display: "flex", justifyContent: "center", marginTop: 10, padding: "6px 12px",
+                borderRadius: theme.radius.sm, background: theme.color.surfaceRaised,
+                boxShadow: `inset 0 0 0 1px ${theme.color.hairline}`,
+                color: theme.color.textPrimary, fontSize: theme.font.body, cursor: "pointer",
+              }}
+              onActivate={onReset} onClick={onReset}
+            >
+              {t("display.reset")}
+            </Focusable>
+          )}
+        </Collapsible>
+      </>
+    ),
+    hdr: hdr.state?.supported ? (
+      <PanelSectionRow>
+        <HdrPanel state={hdr.state} onChange={hdr.update} />
+      </PanelSectionRow>
+    ) : null,
+    night: night.state?.supported ? (
+      <>
+        <PanelSectionRow>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, margin: `${theme.space.md}px 0 ${theme.space.xs}px`, color: theme.color.textMuted }}>
+            <LuGlobe size={13} />
+            <span style={{ fontSize: theme.font.caption }}>{t("display.general")}</span>
+            <div style={{ flex: 1, height: 1, background: theme.color.hairline }} />
+          </div>
+        </PanelSectionRow>
+        <PanelSectionRow>
+          <NightModeCard state={night.state} onChange={night.update} />
+        </PanelSectionRow>
+      </>
+    ) : null,
+  };
+
+  return (
     <>
       {/* Confirm-or-auto-revert bar for an unconfirmed calibration change (the
           "changing screen resolution" safety pattern). Prominent + always visible. */}
@@ -109,96 +199,8 @@ export const PantallaSection: FC = () => {
         />
       </PanelSectionRow>
 
-      {/* One-tap per-model OLED look — per-game via the scope tab above; hidden on real
-          OLED panels (oled_look null). */}
-      {state.oled_look && (
-        <div style={{ marginTop: theme.space.sm }}>
-          <OledLookCard active={active} onApply={onOledLook} onReset={onReset} />
-        </div>
-      )}
-
-      {/* Ambiente — one-tap balanced looks, per-game via the scope tab above. */}
-      <PanelSectionRow>
-        <div style={{ ...theme.card, padding: theme.space.md, marginTop: theme.space.sm, overflow: "hidden" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
-            <LuSparkles size={16} color={theme.color.accent} />
-            <span style={{ fontSize: theme.font.body, fontWeight: 600, color: theme.color.textPrimary }}>
-              {t("display.look")}
-            </span>
-          </div>
-          <Focusable style={segmentGroupStyle}>
-            {state.presets.map((key) => (
-              <Focusable key={key} style={chip(state.active_preset === key)}
-                onActivate={() => onPreset(key)} onClick={() => onPreset(key)}>
-                {t(`display.look.${key}`)}
-              </Focusable>
-            ))}
-          </Focusable>
-        </div>
-      </PanelSectionRow>
-      <PanelSectionRow>
-        <div style={{ ...theme.card, padding: theme.space.md, margin: `${theme.space.sm}px 0`, overflow: "hidden" }}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 2 }}>
-            <LuPalette size={16} color={theme.color.accent} />
-            <span style={{ fontSize: theme.font.body, fontWeight: 600, color: theme.color.textPrimary }}>
-              {t("display.saturation")}
-            </span>
-            <span style={{ marginLeft: "auto", fontSize: theme.font.value, fontWeight: 700, color: theme.color.textPrimary }}>
-              {state.saturation}%
-            </span>
-          </div>
-          <ContainedSlider value={state.saturation} min={0} max={200} step={5}
-            scale={0.75} onChange={onSaturation} />
-        </div>
-      </PanelSectionRow>
-
-      {/* Advanced color lab (global panel calibration). */}
-      <Collapsible
-        id="color-advanced"
-        icon={<LuSlidersHorizontal size={16} />}
-        title={t("display.advanced")}
-        summary={isCalibrated(state) ? t("display.custom") : t("display.native")}
-      >
-        <AdvancedColor state={state} onChange={onCalibration} />
-        {active && (
-          <Focusable
-            style={{
-              display: "flex", justifyContent: "center", marginTop: 10, padding: "6px 12px",
-              borderRadius: theme.radius.sm, background: theme.color.surfaceRaised,
-              boxShadow: `inset 0 0 0 1px ${theme.color.hairline}`,
-              color: theme.color.textPrimary, fontSize: theme.font.body, cursor: "pointer",
-            }}
-            onActivate={onReset} onClick={onReset}
-          >
-            {t("display.reset")}
-          </Focusable>
-        )}
-      </Collapsible>
-
-      {/* HDR on/off — per-game, governed by the same scope tab as the color above. */}
-      {hdr.state?.supported && (
-        <PanelSectionRow>
-          <HdrPanel state={hdr.state} onChange={hdr.update} />
-        </PanelSectionRow>
-      )}
-
-      {/* General — applies to every game, NOT governed by the scope tab above. */}
-      {night.state?.supported && (
-        <>
-          <PanelSectionRow>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, margin: `${theme.space.md}px 0 ${theme.space.xs}px`, color: theme.color.textMuted }}>
-              <LuGlobe size={13} />
-              <span style={{ fontSize: theme.font.caption }}>{t("display.general")}</span>
-              <div style={{ flex: 1, height: 1, background: theme.color.hairline }} />
-            </div>
-          </PanelSectionRow>
-          <PanelSectionRow>
-            <NightModeCard state={night.state} onChange={night.update} />
-          </PanelSectionRow>
-        </>
-      )}
+      {/* Modular, reorderable/hideable blocks in the user's saved order. */}
+      <SectionBlocks sectionId="display" blocks={blocks} />
     </>
   );
-
-  return sdrBody;
 };

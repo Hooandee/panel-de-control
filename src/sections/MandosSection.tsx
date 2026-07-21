@@ -23,6 +23,7 @@ import {
 import { useRunningGame } from "../tdp/useRunningGame";
 import { useScopeSync } from "../useScopeSync";
 import { ProfileSelector } from "../components/ProfileSelector";
+import { SectionBlocks } from "../customize/SectionBlocks";
 import { Loading } from "../components/Loading";
 
 /** Raised card chrome with a titled header row. */
@@ -175,31 +176,30 @@ export const MandosSection: FC = () => {
   // Remappable physical buttons (empty for non-remap configs / unknown devices).
   const buttons = config.buttons ?? [];
 
-  return (
-    <PanelSectionRow>
-      <div style={{ display: "flex", flexDirection: "column", gap: theme.space.section, marginTop: theme.space.section }}>
-        {/* Manager status — honest, reads the live system. */}
-        <Card title={t("mandos.title")}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: theme.space.xs }}>
-            <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
-              {t("mandos.manager.label")}
-            </span>
-            <span style={{ fontSize: theme.font.body, fontWeight: 700, color: theme.color.textPrimary }}>
-              {t(managerLabelKey(manager))}
-            </span>
-            {version && (
-              <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>v{version}</span>
-            )}
-          </div>
-          <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, marginTop: theme.space.xs, lineHeight: 1.4 }}>
-            {t(managerDescKey(manager))}
-          </div>
-        </Card>
-
-        {/* InputPlumber: real per-button remap editor, per-game (global + game). */}
-        {config.kind === "remap" && (
-          <Card title={t("mandos.remap.title")}>
-            {buttons.length === 0 ? (
+  const blocks = {
+    // Manager status — honest, reads the live system.
+    manager: (
+      <Card title={t("mandos.title")}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: theme.space.xs }}>
+          <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
+            {t("mandos.manager.label")}
+          </span>
+          <span style={{ fontSize: theme.font.body, fontWeight: 700, color: theme.color.textPrimary }}>
+            {t(managerLabelKey(manager))}
+          </span>
+          {version && (
+            <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>v{version}</span>
+          )}
+        </div>
+        <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, marginTop: theme.space.xs, lineHeight: 1.4 }}>
+          {t(managerDescKey(manager))}
+        </div>
+      </Card>
+    ),
+    // InputPlumber: real per-button remap editor, per-game (global + game).
+    remap: config.kind === "remap" ? (
+      <Card title={t("mandos.remap.title")}>
+        {buttons.length === 0 ? (
               // No remappable buttons for this model → nothing to scope per game. Show
               // the honest reason and point to Steam Input for per-game layouts, no
               // scope tab / reset for an empty editor.
@@ -241,38 +241,43 @@ export const MandosSection: FC = () => {
               </>
             )}
           </Card>
+    ) : null,
+    // HHD: controller settings (fine per-game remap goes to Steam Input).
+    settings: config.kind === "settings" ? (
+      <Card title={t("mandos.settings.title")}>
+        <Row label={t("mandos.mode.label")}>
+          <Dropdown
+            rgOptions={(config.mode_options ?? []).map((m) => ({
+              data: m,
+              label: label(`mandos.mode.${m}`, m),
+            }))}
+            selectedOption={config.mode ?? undefined}
+            onChange={(o) => onSetSetting("mode", o.data as string)}
+          />
+        </Row>
+        {config.paddles_as != null && (
+          <Row label={t("mandos.paddles.label")}>
+            <Dropdown
+              rgOptions={(config.paddles_options ?? []).map((p) => ({
+                data: p,
+                label: label(`mandos.paddles.${p}`, p),
+              }))}
+              selectedOption={config.paddles_as ?? undefined}
+              onChange={(o) => onSetSetting("paddles_as", o.data as string)}
+            />
+          </Row>
         )}
+        <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, marginTop: theme.space.sm, lineHeight: 1.4 }}>
+          {t("mandos.settings.note")}
+        </div>
+      </Card>
+    ) : null,
+  };
 
-        {/* HHD: controller settings (fine per-game remap goes to Steam Input). */}
-        {config.kind === "settings" && (
-          <Card title={t("mandos.settings.title")}>
-            <Row label={t("mandos.mode.label")}>
-              <Dropdown
-                rgOptions={(config.mode_options ?? []).map((m) => ({
-                  data: m,
-                  label: label(`mandos.mode.${m}`, m),
-                }))}
-                selectedOption={config.mode ?? undefined}
-                onChange={(o) => onSetSetting("mode", o.data as string)}
-              />
-            </Row>
-            {config.paddles_as != null && (
-              <Row label={t("mandos.paddles.label")}>
-                <Dropdown
-                  rgOptions={(config.paddles_options ?? []).map((p) => ({
-                    data: p,
-                    label: label(`mandos.paddles.${p}`, p),
-                  }))}
-                  selectedOption={config.paddles_as ?? undefined}
-                  onChange={(o) => onSetSetting("paddles_as", o.data as string)}
-                />
-              </Row>
-            )}
-            <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, marginTop: theme.space.sm, lineHeight: 1.4 }}>
-              {t("mandos.settings.note")}
-            </div>
-          </Card>
-        )}
+  return (
+    <PanelSectionRow>
+      <div style={{ display: "flex", flexDirection: "column", gap: theme.space.section, marginTop: theme.space.section }}>
+        <SectionBlocks sectionId="mandos" blocks={blocks} />
       </div>
     </PanelSectionRow>
   );
