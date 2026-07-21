@@ -84,7 +84,7 @@ export function subitemHidden(
   return (subitems[group] ?? []).includes(id);
 }
 
-const strArray = (v: unknown): string[] =>
+export const strArray = (v: unknown): string[] =>
   Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
 
 const asPref = (v: unknown): ListPref => {

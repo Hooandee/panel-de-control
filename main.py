@@ -364,10 +364,8 @@ class Plugin:
         newly-off machinery is released (fans→auto, TDP rails freed, loops idle)."""
         self._init()
         disabled = bool(disabled)
-        if module_id == "power":
-            self._settings["tdp_control_enabled"] = not disabled
-        elif module_id == "learning":
-            self._settings["telemetry_enabled"] = not disabled
+        if module_id in self._MODULE_SETTING:
+            self._settings[self._MODULE_SETTING[module_id]] = not disabled
         elif module_id in self._GENERIC_MODULES:
             cur = set(self._disabled_modules())
             cur.add(module_id) if disabled else cur.discard(module_id)
@@ -1708,12 +1706,16 @@ class Plugin:
 
     # ---- Module enable/disable ---------------------------------------------
     # autoTdp/fanControl cascade from their tab (all); learning needs a consumer (any).
+    # MIRROR of REQUIRES in src/customize/moduleLogic.ts — keep the two in sync.
     _MODULE_REQUIRES = {
         "autoTdp": ("all", ("power",)),
         "fanControl": ("all", ("fans",)),
         "learning": ("any", ("power", "fans")),
     }
     _GENERIC_MODULES = ("system", "display", "fans", "mandos", "autoTdp", "fanControl")
+    # Modules backed by a pre-existing boolean setting instead of disabled_modules
+    # (setting True = module enabled). Single source of truth per concept.
+    _MODULE_SETTING = {"power": "tdp_control_enabled", "learning": "telemetry_enabled"}
 
     def _disabled_modules(self) -> list:
         v = self._settings.get("disabled_modules")
@@ -1721,10 +1723,9 @@ class Plugin:
 
     def _module_user_disabled(self, mid: str) -> bool:
         """Whether the user turned this module off (before cascade/dependency)."""
-        if mid == "power":
-            return not self._tdp_control_on()
-        if mid == "learning":
-            return not bool(self._settings.get("telemetry_enabled", True))
+        setting = self._MODULE_SETTING.get(mid)
+        if setting is not None:
+            return not bool(self._settings.get(setting, True))
         return mid in self._disabled_modules()
 
     def _module_enabled(self, mid: str) -> bool:
@@ -1745,10 +1746,9 @@ class Plugin:
     def _user_disabled_all(self) -> list:
         """The user-disabled set (for the UI), folding the native-setting modules in."""
         out = list(self._disabled_modules())
-        if not self._tdp_control_on():
-            out.append("power")
-        if not bool(self._settings.get("telemetry_enabled", True)):
-            out.append("learning")
+        for mid, setting in self._MODULE_SETTING.items():
+            if not bool(self._settings.get(setting, True)):
+                out.append(mid)
         return out
 
     def _reapply_tdp(self, on_ac=None):

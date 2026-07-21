@@ -183,26 +183,19 @@ const AccentPicker: FC = () => {
 /** The disable-able modules, in display order. Sub-features are indented under
  *  their tab; learning is a global module (no tab). Tabs carry their manifest
  *  icon; sub-features borrow their block icon; learning uses a brain glyph. */
-interface ModuleDef { id: string; parent?: string; }
+// Tab modules take their label/icon from the manifest TABS (labelKey/icon left
+// undefined → resolved below); sub-features and learning carry their own.
+interface ModuleDef { id: string; parent?: string; labelKey?: string; icon?: ReactNode; }
 const MODULE_ROWS: ModuleDef[] = [
   { id: "power" },
-  { id: "autoTdp", parent: "power" },
+  { id: "autoTdp", parent: "power", labelKey: "tdp.auto.title", icon: SECTION_BLOCKS.power?.find((b) => b.id === "autoTdp")?.icon },
   { id: "system" },
   { id: "display" },
   { id: "fans" },
-  { id: "fanControl", parent: "fans" },
+  { id: "fanControl", parent: "fans", labelKey: "fans.curve.title", icon: SECTION_BLOCKS.fans?.find((b) => b.id === "curve")?.icon },
   { id: "mandos" },
-  { id: "learning" },
+  { id: "learning", labelKey: "settings.telemetry", icon: <LuBrain size={15} /> },
 ];
-
-const moduleIcon = (id: string): ReactNode => {
-  const tab = TABS.find((x) => x.id === id);
-  if (tab) return tab.icon;
-  if (id === "autoTdp") return SECTION_BLOCKS.power?.find((b) => b.id === "autoTdp")?.icon;
-  if (id === "fanControl") return SECTION_BLOCKS.fans?.find((b) => b.id === "curve")?.icon;
-  if (id === "learning") return <LuBrain size={15} />;
-  return null;
-};
 
 /** One module card: icon + name + one-line microcopy (or the blocked reason) +
  *  a state chip + the enable/disable power switch. */
@@ -259,19 +252,11 @@ const ModuleEditor: FC = () => {
   const disabled = useModules();
   const tabHidden = (id: string) => (layout.tabs.hidden ?? []).includes(id);
 
-  const labelFor = (id: string): string => {
-    const tab = TABS.find((x) => x.id === id);
-    if (tab) return t(tab.labelKey);
-    if (id === "autoTdp") return t("tdp.auto.title");
-    if (id === "fanControl") return t("fans.curve.title");
-    if (id === "learning") return t("settings.telemetry");
-    return id;
-  };
-
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: theme.space.xs }}>
       <div style={theme.sectionLabel}>{t("customize.modules")}</div>
       {MODULE_ROWS.map((m) => {
+        const tab = TABS.find((x) => x.id === m.id);
         const st = moduleState(m.id, disabled, tabHidden(m.id), false);
         const desc = st === "blocked" && m.id === "learning"
           ? t("customize.module.learning.blocked")
@@ -279,9 +264,9 @@ const ModuleEditor: FC = () => {
         return (
           <ModuleRow
             key={m.id}
-            label={labelFor(m.id)}
+            label={t(m.labelKey ?? tab!.labelKey)}
             desc={desc}
-            icon={moduleIcon(m.id)}
+            icon={m.icon ?? tab?.icon}
             state={st}
             indent={!!m.parent}
             onToggle={() => setModuleDisabled(m.id, st !== "disabled")}

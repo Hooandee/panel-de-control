@@ -1,26 +1,29 @@
 // Durable set of user-disabled module ids. localStorage cache (pdc:modules,
 // auto-mirrored to the backend by pdcStorage → survives reboot, no first-paint
 // flash) reconciled against the authoritative RPC on startup. Never throws.
-import { useSyncExternalStore } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 import { readString, writeString, onPrefsHealed } from "../system/pdcStorage";
+import { strArray } from "./layout";
 import { getUiModules, setUiModule } from "../api";
 
 const KEY = "pdc:modules";
 const listeners = new Set<() => void>();
 let cache: string[] | null = null;
 
-function coerce(raw: string | null): string[] {
+function read(): string[] {
+  const raw = readString(KEY);
   if (!raw) return [];
   try {
-    const v = JSON.parse(raw);
-    return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+    return strArray(JSON.parse(raw));
   } catch {
     return [];
   }
 }
 
-function read(): string[] {
-  return coerce(readString(KEY));
+/** Set cache + notify subscribers (no persistence — callers persist as needed). */
+function emit(next: string[]): void {
+  cache = next;
+  listeners.forEach((l) => l());
 }
 
 /** Current user-disabled ids (stable reference until a change). */
@@ -32,9 +35,8 @@ export function getDisabled(): string[] {
 function commit(next: string[]): void {
   const sorted = [...new Set(next)].sort();
   if (JSON.stringify(sorted) === JSON.stringify(getDisabled())) return;
-  cache = sorted;
   writeString(KEY, JSON.stringify(sorted));
-  listeners.forEach((l) => l());
+  emit(sorted);
 }
 
 /** Optimistic toggle + authoritative RPC (backend routes power/learning + re-applies). */
@@ -66,8 +68,7 @@ export function hydrateModules(): void {
 onPrefsHealed(() => {
   const next = read();
   if (JSON.stringify(next) === JSON.stringify(getDisabled())) return;
-  cache = next;
-  listeners.forEach((l) => l());
+  emit(next); // no writeString — the value came from the backend, don't echo it back
 });
 
 function subscribe(cb: () => void): () => void {
@@ -77,8 +78,9 @@ function subscribe(cb: () => void): () => void {
   };
 }
 
-/** React binding: the disabled set as a Set (re-renders on any change). */
+/** React binding: the disabled set as a Set (re-renders on any change). The
+ *  array snapshot is stable across renders, so the Set is built once per change. */
 export function useModules(): Set<string> {
   const arr = useSyncExternalStore(subscribe, getDisabled, getDisabled);
-  return new Set(arr);
+  return useMemo(() => new Set(arr), [arr]);
 }
