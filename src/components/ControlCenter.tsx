@@ -20,6 +20,7 @@ import { useModules } from "../customize/modules";
 import { effectiveEnabled } from "../customize/moduleLogic";
 import { visibleIds } from "../customize/layout";
 import { PINNED_TAB } from "../customize/manifest";
+import { sectionHiddenOnDevice, allBlocksHidden } from "../sections/availability";
 import { theme } from "../theme";
 import { FocusRoot } from "./FocusRoot";
 import { useAccent } from "../system/useAccent";
@@ -85,18 +86,19 @@ export const ControlCenter: FC = () => {
   // Apply the user's tab order + visibility (reusing the memoized id list above).
   // Settings stays pinned; a hidden active tab falls back to the first visible
   // one via resolveActiveSection.
-  // Controller management isn't offered on the Steam Deck — its gamepad is native
-  // and Steam Input owns remapping — so drop the Mandos tab there (same device gate
-  // as the RGB card, see deviceHasRgb). A stale saved active="mandos" falls back to
-  // the first visible tab via resolveActiveSection below.
-  // Computed BEFORE the early returns so useShoulderNav (a hook) always runs.
-  const hidesMandos = !!device && device.key.startsWith("steam_deck");
+  // Drop tabs that: the device can't use (Mandos on the Steam Deck), whose module
+  // the user disabled, or whose blocks are all hidden (a fully-modular tab with
+  // nothing left to show). Settings is pinned. Computed BEFORE the early returns
+  // so useShoulderNav (a hook) always runs; a stale active id falls back via
+  // resolveActiveSection.
   const orderedTabs = visibleTabIds
     .map((id) => SECTIONS.find((s) => s.id === id))
     .filter((s): s is (typeof SECTIONS)[number] => !!s)
-    .filter((s) => !(hidesMandos && s.id === "mandos"))
-    // Drop tabs whose module the user disabled (Settings is pinned, never disabled).
-    .filter((s) => s.id === PINNED_TAB || effectiveEnabled(s.id, disabled));
+    .filter((s) => s.id === PINNED_TAB || (
+      !sectionHiddenOnDevice(device, s.id)
+      && effectiveEnabled(s.id, disabled)
+      && !allBlocksHidden(s.id, layout.blocks)
+    ));
   const active = resolveActiveSection(orderedTabs, activeId);
   const Active = active?.Component;
 

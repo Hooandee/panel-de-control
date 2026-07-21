@@ -1,4 +1,4 @@
-import { FC, Fragment, ReactNode, useState } from "react";
+import { FC, Fragment, ReactNode, useEffect, useState } from "react";
 import { ModalRoot, showModal, Focusable, ButtonItem } from "@decky/ui";
 import { LuChevronUp, LuChevronDown, LuEye, LuEyeOff, LuPower, LuPencil, LuCheck, LuBrain } from "react-icons/lu";
 
@@ -12,6 +12,8 @@ import { moduleState } from "../customize/moduleLogic";
 import { FocusRoot } from "./FocusRoot";
 import { ACCENTS } from "../system/accentColor";
 import { useAccent, setAccent } from "../system/useAccent";
+import { getDevice, DeviceInfo } from "../api";
+import { sectionHiddenOnDevice } from "../sections/availability";
 
 // Blocks that are actually backend MODULES (get the on/off power control) rather
 // than cosmetic cards (which get the show/hide eye). Everything else is cosmetic.
@@ -106,8 +108,13 @@ const CustomizeBody: FC = () => {
   useAccent(); // re-render the whole modal live when the accent changes (separate root)
   const [editing, setEditing] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
+  // Device (one-time) so we don't list a category this machine can't use (e.g.
+  // Mandos on the Steam Deck) — mirrors the shell's tab gating.
+  const [device, setDevice] = useState<DeviceInfo | null>(null);
+  useEffect(() => { getDevice().then(setDevice).catch(() => {}); }, []);
 
-  const catOrder = orderIds(CATEGORY_IDS, layout.tabs.order).filter((id) => CATEGORY_IDS.includes(id));
+  const catOrder = orderIds(CATEGORY_IDS, layout.tabs.order)
+    .filter((id) => CATEGORY_IDS.includes(id) && !sectionHiddenOnDevice(device, id));
   const tabHidden = (id: string) => (layout.tabs.hidden ?? []).includes(id);
 
   const save = (next: Layout) => saveLayout(next);
