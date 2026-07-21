@@ -2,13 +2,15 @@
 // here that touches @decky/window globals — the compose/catalog logic stays pure
 // and testable. Everything is guarded: a missing global degrades to empty/no-op.
 
-import { stableGameKey, isNonSteam, APP_TYPE_TOOL } from "../tdp/gameIdentity";
+import { stableGameKey, gameInstanceKey, isNonSteam, APP_TYPE_TOOL } from "../tdp/gameIdentity";
 
 export interface GameEntry {
-  /** The live numeric appid (a non-Steam shortcut's churns; resolve fresh at write). */
+  /** The exact numeric appid of the library entry opened by the user. */
   liveAppid: number;
   /** Stable identity (ns:name for shortcuts, numeric string for Steam games). */
   stableKey: string;
+  /** Exact current library entry, used for UI preferences that must not merge shortcuts. */
+  instanceKey: string;
   name: string;
   isNonSteam: boolean;
   /** Vertical capsule (portrait) URL candidates, tried in order; empty → fallback tile. */
@@ -64,6 +66,7 @@ export function overviewToEntry(ov: Overview): GameEntry {
   return {
     liveAppid: ov.appid,
     stableKey: stableGameKey(id),
+    instanceKey: gameInstanceKey(id),
     name: ov.display_name || String(ov.appid),
     isNonSteam: nonSteam,
     coverUrls: resolveCoverUrls(ov),

@@ -13,6 +13,7 @@ export interface CustomVarDef {
   envName?: string;
   envValue?: string;
   arg?: string;
+  retired?: boolean;
 }
 
 /** Marks a Pill as user-defined (skips capability gating in pillVisible). */
@@ -51,6 +52,65 @@ export function validateCustomVar(def: CustomVarDef, taken: Set<string> = new Se
   return null;
 }
 
+export function sanitizeCustomVars(defs: CustomVarDef[], taken: Set<string> = new Set()): CustomVarDef[] {
+  const owned = new Set(taken);
+  const out: CustomVarDef[] = [];
+  for (const def of defs) {
+    if (validateCustomVar(def, owned)) continue;
+    out.push(def);
+    owned.add(customVarToken(def));
+  }
+  return out;
+}
+
+export function customPillVisible(pill: Pill, selection: string | boolean | undefined): boolean {
+  return !pill.retired || (selection !== undefined && selection !== false);
+}
+
+function activeDef(def: CustomVarDef): CustomVarDef {
+  const { retired: _retired, ...active } = def;
+  return active;
+}
+
+export function retireCustomVar(defs: CustomVarDef[], id: string): CustomVarDef[] {
+  return defs.map((def) => (def.id === id ? { ...def, retired: true } : def));
+}
+
+export function saveCustomDraft(
+  defs: CustomVarDef[],
+  draft: CustomVarDef,
+  newId: () => string,
+): CustomVarDef[] {
+  const cleanDraft = activeDef(draft);
+  const index = defs.findIndex((def) => def.id === draft.id);
+  if (index < 0) {
+    const retiredIndex = defs.findIndex(
+      (def) => def.retired && customVarToken(def) === customVarToken(cleanDraft),
+    );
+    if (retiredIndex >= 0) {
+      return defs.map((def, i) => (i === retiredIndex ? { ...cleanDraft, id: def.id } : def));
+    }
+    return [...defs, cleanDraft];
+  }
+  const previous = defs[index];
+  if (customVarToken(previous) === customVarToken(cleanDraft)) {
+    return defs.map((def, i) => (i === index ? cleanDraft : def));
+  }
+  const retiredIndex = defs.findIndex(
+    (def, i) => i !== index && def.retired && customVarToken(def) === customVarToken(cleanDraft),
+  );
+  if (retiredIndex >= 0) {
+    return defs.map((def, i) => {
+      if (i === retiredIndex) return { ...cleanDraft, id: def.id };
+      if (i === index) return { ...def, retired: true };
+      return def;
+    });
+  }
+  return defs.flatMap((def, i) =>
+    i === index ? [{ ...def, id: newId(), retired: true }, cleanDraft] : [def],
+  );
+}
+
 /** Convert a definition into a catalog Pill so the engine treats it like any pill.
  *  An env var is a fixed KEY=VALUE (we own it only when the value matches ours). */
 export function customVarToPill(def: CustomVarDef): Pill {
@@ -61,6 +121,7 @@ export function customVarToPill(def: CustomVarDef): Pill {
     label: def.name,
     labelKey: "",
     descKey: "",
+    retired: def.retired === true,
   };
   if (def.kind === "arg") {
     return { ...base, kind: "arg", arg: def.arg, raw: def.arg, desc: def.arg };

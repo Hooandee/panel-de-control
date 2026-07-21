@@ -8,7 +8,7 @@ import { Loading } from "./Loading";
 import { segmentGroupStyle, segmentItemStyle } from "./segmented";
 import { useCustomVars } from "../launch/useCustomVars";
 import { CustomVarDef } from "../api";
-import { validateCustomVar, customVarToken } from "../launch/customVars";
+import { validateCustomVar, customVarToken, retireCustomVar, saveCustomDraft } from "../launch/customVars";
 import { baseCatalogTokens } from "../launch/catalog";
 
 const emptyDraft = (id: string): CustomVarDef => ({ id, name: "", kind: "env", envName: "", envValue: "", arg: "" });
@@ -46,7 +46,7 @@ const ManagerBody: FC = () => {
   // All hooks must run before any early return (rules of hooks) — use `vars ?? []`.
   const taken = useMemo(() => {
     const s = baseCatalogTokens();
-    for (const v of vars ?? []) if (v.id !== draft.id) s.add(customVarToken(v));
+    for (const v of vars ?? []) if (!v.retired && v.id !== draft.id) s.add(customVarToken(v));
     return s;
   }, [vars, draft.id]);
 
@@ -61,17 +61,18 @@ const ManagerBody: FC = () => {
   }
   if (vars === null) return <Loading />;
 
-  const isEdit = vars.some((v) => v.id === draft.id);
+  const activeVars = vars.filter((v) => !v.retired);
+  const isEdit = activeVars.some((v) => v.id === draft.id);
   const err = validateCustomVar(draft, taken);
   const patch = (p: Partial<CustomVarDef>) => setDraft((d) => ({ ...d, ...p }));
 
   const onSave = () => {
     if (err) return;
-    save(isEdit ? vars.map((v) => (v.id === draft.id ? draft : v)) : [...vars, draft]);
+    save(saveCustomDraft(vars, draft, newId));
     setDraft(emptyDraft(newId()));
   };
   const onDelete = (id: string) => {
-    save(vars.filter((v) => v.id !== id));
+    save(retireCustomVar(vars, id));
     if (draft.id === id) setDraft(emptyDraft(newId()));
   };
 
@@ -80,7 +81,7 @@ const ManagerBody: FC = () => {
       <div>
         <div style={{ fontSize: theme.font.value, color: theme.color.textPrimary }}>{t("customVars.title")}</div>
         <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, lineHeight: 1.4, marginTop: 2 }}>{t("customVars.intro")}</div>
-        {vars.length > 0 && (
+        {activeVars.length > 0 && (
           <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, lineHeight: 1.4, marginTop: 4, display: "flex", gap: 6, alignItems: "flex-start" }}>
             <LuTriangleAlert size={12} style={{ marginTop: 2, flexShrink: 0 }} />
             <span>{t("customVars.orphanNote")}</span>
@@ -88,11 +89,11 @@ const ManagerBody: FC = () => {
         )}
       </div>
 
-      {vars.length === 0 ? (
+      {activeVars.length === 0 ? (
         <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{t("customVars.empty")}</div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
-          {vars.map((v) => (
+          {activeVars.map((v) => (
             <div key={v.id} style={{ ...theme.card, display: "flex", alignItems: "center", gap: theme.space.md, padding: `${theme.space.sm}px ${theme.space.md}px` }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: theme.font.body, fontWeight: 600, color: theme.color.textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.name}</div>

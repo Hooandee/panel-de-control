@@ -93,7 +93,7 @@ export function parse(str: string): Parsed {
   // Read-only (never mutate) when the string is beyond our simple 3-zone model:
   // dangling quote/escape, shell operators, more than one %command%, or a %command%
   // that isn't a standalone token (e.g. embedded in a quoted `sh -c "…%command%"`).
-  if (unbalanced || SHELL_OPS_RE.test(raw) || cmdCount > 1 || rawCmdCount !== cmdCount) {
+  if (unbalanced || /[\r\n]/.test(raw) || SHELL_OPS_RE.test(raw) || cmdCount > 1 || rawCmdCount !== cmdCount) {
     return { ...empty, malformed: true };
   }
 

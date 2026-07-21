@@ -56,3 +56,8 @@ export function stableGameKey(overview: GameOverview): string {
   }
   return rawAppid;
 }
+
+export function gameInstanceKey(overview: GameOverview): string {
+  const rawAppid = String(overview.appid);
+  return isNonSteam(overview) ? `nsid:${rawAppid}` : rawAppid;
+}

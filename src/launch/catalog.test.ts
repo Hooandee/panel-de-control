@@ -17,6 +17,10 @@ const TOOLS: LaunchTools = {
 };
 
 describe("detectSelections", () => {
+  it("uses a text-safe ambiguity marker", () => {
+    expect(AMBIGUOUS).not.toContain("\0");
+  });
+
   it("lights up wrapper / arg pills from a string", () => {
     const sel = detectSelections(parse("mangohud ~/lsfg %command% -novid"));
     expect(sel.mangohud).toBe(true);

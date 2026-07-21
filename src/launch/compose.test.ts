@@ -48,6 +48,11 @@ describe("parse", () => {
     const p = parse("%command% %command%");
     expect(p.malformed).toBe(true);
   });
+
+  it("treats shell line breaks as malformed", () => {
+    expect(parse("echo prep\n%command%").malformed).toBe(true);
+    expect(parse("%command%\r--second-command").malformed).toBe(true);
+  });
 });
 
 describe("serialize", () => {

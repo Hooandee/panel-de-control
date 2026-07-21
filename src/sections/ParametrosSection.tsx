@@ -29,11 +29,15 @@ const GameRow: FC<{ game: GameListItem; hidden: boolean; onClosed: () => void }>
           {game.isNonSteam ? t("params.badge.nonSteam") : t("params.badge.steam")}
         </div>
       </div>
-      {game.activeCount > 0 && (
+      {game.activeCount === null ? (
+        <span style={{ fontSize: 10, color: theme.color.textMuted, flexShrink: 0 }}>
+          {t("params.activeLoading")}
+        </span>
+      ) : game.activeCount > 0 ? (
         <span style={{ fontSize: 10, color: theme.color.onAccent, background: theme.color.accent, borderRadius: 20, padding: "2px 8px", flexShrink: 0 }}>
           {t("params.activeCount", { n: game.activeCount })}
         </span>
-      )}
+      ) : null}
       <LuChevronRight size={16} color={theme.color.textMuted} style={{ flexShrink: 0 }} />
     </FocusableCard>
   );
@@ -44,8 +48,7 @@ const GameRow: FC<{ game: GameListItem; hidden: boolean; onClosed: () => void }>
 const RunningNowCard: FC<{ games: GameListItem[]; onClosed: () => void }> = ({ games, onClosed }) => {
   const { t } = useI18n();
   const running = useRunningGame();
-  // running.appid is the STABLE key (stableGameKey) — join on that, not liveAppid.
-  const game = running ? games.find((g) => g.stableKey === running.appid) : undefined;
+  const game = running ? games.find((g) => g.liveAppid === running.liveAppid) : undefined;
   if (!game) return null;
   return (
     <FocusableCard emphasized onActivate={() => openLaunchEditorModal(game, onClosed)}>
@@ -80,11 +83,11 @@ export const ParametrosSection: FC = () => {
   const shown = useMemo(() => {
     if (!games) return null;
     const needle = query.trim().toLowerCase();
-    let f = games.filter((g) => hidden.has(g.stableKey) === showHidden);
+    let f = games.filter((g) => hidden.has(g.instanceKey) === showHidden);
     if (needle) f = f.filter((g) => g.name.toLowerCase().includes(needle));
     return sortGames(f, sort);
   }, [games, query, sort, hidden, showHidden]);
-  const hiddenCount = useMemo(() => (games ? games.filter((g) => hidden.has(g.stableKey)).length : 0), [games, hidden]);
+  const hiddenCount = useMemo(() => (games ? games.filter((g) => hidden.has(g.instanceKey)).length : 0), [games, hidden]);
 
   if (games === null) return <Loading />;
 

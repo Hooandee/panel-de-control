@@ -1,5 +1,6 @@
 import { FC, ReactNode, useEffect, useMemo, useState } from "react";
 import { ModalRoot, showModal, Focusable } from "@decky/ui";
+import { toaster } from "@decky/api";
 import {
   LuCheck, LuTriangleAlert, LuShieldCheck, LuChevronDown, LuChevronRight, LuStar, LuSparkles,
   LuGauge, LuLanguages, LuPlay, LuWrench, LuExpand, LuMonitor, LuImage, LuLibrary, LuTerminal,
@@ -20,6 +21,7 @@ import { getDevice, getLaunchTools, getProtonCaps, LaunchTools } from "../api";
 import { useLaunchEditor } from "../launch/useLaunchEditor";
 import { useCustomVars } from "../launch/useCustomVars";
 import { CATALOG, SUBGROUP_ORDER, Pill, Section, frequentPills, recommendedPills, ownedTokens, pillVisible } from "../launch/catalog";
+import { customPillVisible } from "../launch/customVars";
 import { GpuGen } from "../launch/proton";
 
 // Icon per sub-group heading so each group is scannable at a glance.
@@ -74,7 +76,13 @@ const Fold: FC<{ title: ReactNode; summary?: ReactNode; defaultOpen?: boolean; c
  *  supports + GPU. */
 const Subgroup: FC<{ section: Section; subgroup: string; ed: Editor; tools: LaunchTools; envs: string[]; gpu: GpuGen; catalog: Pill[] }> = ({ section, subgroup, ed, tools, envs, gpu, catalog }) => {
   const { t } = useI18n();
-  const pills = catalog.filter((p) => p.section === section && p.subgroup === subgroup && pillVisible(p, envs, gpu));
+  const pills = catalog.filter(
+    (p) =>
+      p.section === section &&
+      p.subgroup === subgroup &&
+      pillVisible(p, envs, gpu) &&
+      customPillVisible(p, ed.selections[p.id]),
+  );
   if (pills.length === 0) return null;
   return (
     <div>
@@ -95,10 +103,14 @@ const Subgroup: FC<{ section: Section; subgroup: string; ed: Editor; tools: Laun
 const LaunchEditorBody: FC<{ game: GameEntry }> = ({ game }) => {
   const { t } = useI18n();
   const running = useRunningGame();
-  const isRunning = !!running && running.appid === game.stableKey;
+  const isRunning = !!running && running.liveAppid === game.liveAppid;
   const custom = useCustomVars();
   const { isHidden, hide, unhide } = useHiddenGames();
-  const gameHidden = isHidden(game.stableKey);
+  const gameHidden = isHidden(game.instanceKey);
+  const toggleHidden = async () => {
+    const saved = gameHidden ? await unhide(game.instanceKey) : await hide(game.instanceKey);
+    if (!saved) toaster.toast({ title: game.name, body: t("params.hiddenSaveError") });
+  };
   // Base catalog + the user's library, so custom pills flow through the same engine.
   const catalog = useMemo(() => [...CATALOG, ...custom.pills], [custom.pills]);
   const ed = useLaunchEditor(game, catalog);
@@ -153,7 +165,7 @@ const LaunchEditorBody: FC<{ game: GameEntry }> = ({ game }) => {
           </div>
         </div>
         <FocusableCard
-          onActivate={() => (gameHidden ? unhide(game.stableKey) : hide(game.stableKey))}
+          onActivate={() => void toggleHidden()}
           emphasized={gameHidden}
           style={{ flexShrink: 0, padding: 8, gap: 6 }}
         >

@@ -1,7 +1,15 @@
 import { describe, it, expect } from "vitest";
 import { parse } from "./compose";
 import { buildLaunchOptions, detectSelections, pillVisible } from "./catalog";
-import { CustomVarDef, validateCustomVar, customVarToPill } from "./customVars";
+import {
+  CustomVarDef,
+  validateCustomVar,
+  customVarToPill,
+  customPillVisible,
+  sanitizeCustomVars,
+  saveCustomDraft,
+  retireCustomVar,
+} from "./customVars";
 
 const env = (over: Partial<CustomVarDef> = {}): CustomVarDef => ({
   id: "a", name: "Mi FPS", kind: "env", envName: "DXVK_FRAME_RATE", envValue: "60", ...over,
@@ -101,6 +109,64 @@ describe("customVarToPill", () => {
     const catalog = [customVarToPill(arg({ id: "j" }))];
     expect(buildLaunchOptions(parse("%command%"), { "custom:j": true }, catalog)).toBe("%command% -nojoy");
     expect(detectSelections(parse("%command% -nojoy"), catalog)["custom:j"]).toBe(true);
+  });
+
+  it("carries a retired definition into the pill", () => {
+    expect(customVarToPill(arg({ retired: true })).retired).toBe(true);
+  });
+});
+
+describe("retired custom vars", () => {
+  it("shows a retired pill only while its token is active", () => {
+    const pill = customVarToPill(arg({ retired: true }));
+    expect(customPillVisible(pill, undefined)).toBe(false);
+    expect(customPillVisible(pill, true)).toBe(true);
+  });
+
+  it("drops persisted definitions that collide with base or earlier custom tokens", () => {
+    const vars = [
+      env({ id: "base", envName: "PROTON_LOG" }),
+      arg({ id: "first", arg: "-custom" }),
+      arg({ id: "second", arg: "-custom" }),
+    ];
+    expect(sanitizeCustomVars(vars, new Set(["PROTON_LOG"])).map((v) => v.id)).toEqual(["first"]);
+  });
+
+  it("retires a deleted definition instead of forgetting its token", () => {
+    expect(retireCustomVar([arg({ id: "old" })], "old")).toEqual([arg({ id: "old", retired: true })]);
+  });
+
+  it("keeps the old token retired when an edit changes ownership", () => {
+    const before = [arg({ id: "same", arg: "-old" })];
+    const draft = arg({ id: "same", arg: "-new" });
+    expect(saveCustomDraft(before, draft, () => "retired-id")).toEqual([
+      arg({ id: "retired-id", arg: "-old", retired: true }),
+      draft,
+    ]);
+  });
+
+  it("replaces in place when an edit keeps the same token", () => {
+    const before = [arg({ id: "same", name: "Before" })];
+    const draft = arg({ id: "same", name: "After" });
+    expect(saveCustomDraft(before, draft, () => "unused")).toEqual([draft]);
+  });
+
+  it("reactivates a retired token instead of creating an unpersistable duplicate", () => {
+    const retired = arg({ id: "retired", name: "Old", arg: "-same", retired: true });
+    const draft = arg({ id: "new", name: "New", arg: "-same" });
+    expect(saveCustomDraft([retired], draft, () => "unused")).toEqual([
+      arg({ id: "retired", name: "New", arg: "-same" }),
+    ]);
+  });
+
+  it("reactivates a retired token when an existing variable is edited to use it", () => {
+    const retired = arg({ id: "retired", name: "Old", arg: "-same", retired: true });
+    const active = arg({ id: "active", name: "Active", arg: "-other" });
+    const draft = arg({ id: "active", name: "Reused", arg: "-same" });
+    expect(saveCustomDraft([retired, active], draft, () => "unused")).toEqual([
+      arg({ id: "retired", name: "Reused", arg: "-same" }),
+      arg({ id: "active", name: "Active", arg: "-other", retired: true }),
+    ]);
   });
 });
 

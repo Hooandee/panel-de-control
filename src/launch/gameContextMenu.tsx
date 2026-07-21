@@ -12,6 +12,7 @@ import { FC } from "react";
 
 import { openLaunchEditorModal } from "../components/LaunchEditorModal";
 import { GameEntry, overviewToEntry } from "./steamApi";
+import { replaceMenuItem } from "./menuItems";
 import { translate } from "../i18n";
 
 // Add a "Launch parameters" entry to a game's library context menu (the options
@@ -34,11 +35,8 @@ function entryFor(appid: number): GameEntry | null {
 
 // Insert our item just before "Properties…". No-op when the appid is unknown, so we
 // never attach a menu entry that would open the wrong game.
-const spliceLaunchItem = (children: any[], appid: number) => {
-  if (!appid) return;
-  const propertiesIdx = children.findIndex((item) =>
-    findInReactTree(item, (x) => x?.onSelected && x.onSelected.toString().includes("AppProperties")),
-  );
+const spliceLaunchItem = (children: unknown, appid: number) => {
+  if (!appid) return false;
   const item = (
     <MenuItem
       key="pdc-launch-params"
@@ -50,31 +48,33 @@ const spliceLaunchItem = (children: any[], appid: number) => {
       {translate("params.contextMenu")}
     </MenuItem>
   );
-  if (propertiesIdx >= 0) children.splice(propertiesIdx, 0, item);
-  else children.push(item);
+  return replaceMenuItem<any>(children, "pdc-launch-params", item, (candidate) =>
+    !!findInReactTree(candidate, (x) => x?.onSelected && x.onSelected.toString().includes("AppProperties")),
+  );
 };
 
 // Only the game's own context menu (has an item whose onSelected mentions launchSource).
-const isOpeningAppContextMenu = (items: any[]) =>
-  !!items?.length &&
+const isOpeningAppContextMenu = (items: unknown) =>
+  Array.isArray(items) &&
+  items.length > 0 &&
   !!findInReactTree(items, (x) => x?.props?.onSelected && x.props.onSelected.toString().includes("launchSource"));
-
-const handleItemDupes = (items: any[]) => {
-  const idx = items.findIndex((x: any) => x?.key === "pdc-launch-params");
-  if (idx !== -1) items.splice(idx, 1);
-};
 
 // Derive the appid from THIS menu's own tree (never a stale value captured when the
 // prototype was first patched); insert nothing if it can't be determined.
-const patchMenuItems = (menuItems: any[]) => {
-  let appid = 0;
-  const parent = menuItems.find((x: any) => x?._owner?.pendingProps?.overview?.appid);
-  if (parent) appid = parent._owner.pendingProps.overview.appid;
-  if (!appid) {
-    const foundApp = findInTree(menuItems, (x: any) => x?.app?.appid, { walkable: ["props", "children"] });
-    if (foundApp) appid = foundApp.app.appid;
+const patchMenuItems = (menuItems: unknown) => {
+  try {
+    if (!isOpeningAppContextMenu(menuItems) || !Array.isArray(menuItems)) return;
+    let appid = 0;
+    const parent = menuItems.find((x: any) => x?._owner?.pendingProps?.overview?.appid);
+    if (parent) appid = parent._owner.pendingProps.overview.appid;
+    if (!appid) {
+      const foundApp = findInTree(menuItems, (x: any) => x?.app?.appid, { walkable: ["props", "children"] });
+      if (foundApp) appid = foundApp.app.appid;
+    }
+    spliceLaunchItem(menuItems, appid);
+  } catch {
+    /* Steam changed the internal menu shape. */
   }
-  spliceLaunchItem(menuItems, appid);
 };
 
 function patchContextMenu(LibraryContextMenu: any): { unpatch: () => void } {
@@ -86,13 +86,6 @@ function patchContextMenu(LibraryContextMenu: any): { unpatch: () => void } {
   let innerHooked = false;
 
   const outer = afterPatch(LibraryContextMenu.prototype, "render", (_: any, component: any) => {
-    let appid = 0;
-    if (component?._owner?.pendingProps?.overview?.appid) {
-      appid = component._owner.pendingProps.overview.appid;
-    } else {
-      const foundApp = findInTree(component?.props?.children, (x: any) => x?.app?.appid, { walkable: ["props", "children"] });
-      if (foundApp) appid = foundApp.app.appid;
-    }
     if (!innerHooked) {
       innerHooked = true;
       all.push(
@@ -103,23 +96,12 @@ function patchContextMenu(LibraryContextMenu: any): { unpatch: () => void } {
             all.push(
               afterPatch(proto, "render", (_: any, ret2: any) => {
                 const menuItems = ret2?.props?.children?.[0];
-                if (!isOpeningAppContextMenu(menuItems)) return ret2;
-                try {
-                  handleItemDupes(menuItems);
-                } catch {
-                  return ret2;
-                }
                 patchMenuItems(menuItems);
                 return ret2;
               }),
             );
             all.push(
               afterPatch(proto, "shouldComponentUpdate", ([nextProps]: any, shouldUpdate: any) => {
-                try {
-                  handleItemDupes(nextProps.children);
-                } catch {
-                  return shouldUpdate;
-                }
                 if (shouldUpdate === true) patchMenuItems(nextProps.children);
                 return shouldUpdate;
               }),
@@ -129,7 +111,7 @@ function patchContextMenu(LibraryContextMenu: any): { unpatch: () => void } {
         }),
       );
     } else {
-      spliceLaunchItem(component.props.children, appid);
+      patchMenuItems(component?.props?.children);
     }
     return component;
   });

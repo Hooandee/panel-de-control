@@ -1,29 +1,39 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-import { parse } from "./compose";
-import { detectSelections } from "./catalog";
-import { GameEntry, listInstalledGames, readLaunchOptionsSync } from "./steamApi";
+import { activeCountFromRaw, hydrateUnknownCounts } from "./gameList";
+import { GameEntry, listInstalledGames, readAppDetails, readLaunchOptionsSync } from "./steamApi";
 
 export interface GameListItem extends GameEntry {
-  /** How many of our pills are already active in this game's string (0 = none / uncached). */
-  activeCount: number;
+  /** How many of our pills are active; null until Steam supplies uncached details. */
+  activeCount: number | null;
 }
 
 /** Installed games (Steam + non-Steam) for the section, with a per-row active-pill count. */
 export function useGames(): { games: GameListItem[] | null; reload: () => void } {
   const [games, setGames] = useState<GameListItem[] | null>(null);
+  const generation = useRef(0);
 
   const reload = useCallback(() => {
+    const current = ++generation.current;
     const list = listInstalledGames().map((g) => {
       const raw = readLaunchOptionsSync(g.liveAppid);
-      const activeCount = raw == null ? 0 : Object.keys(detectSelections(parse(raw))).length;
+      const activeCount = activeCountFromRaw(raw);
       return { ...g, activeCount };
     });
     setGames(list);
+    void hydrateUnknownCounts(list, readAppDetails, (appid, activeCount) => {
+      if (generation.current !== current) return;
+      setGames((previous) =>
+        previous?.map((game) => (game.liveAppid === appid ? { ...game, activeCount } : game)) ?? null,
+      );
+    });
   }, []);
 
   useEffect(() => {
     reload();
+    return () => {
+      generation.current += 1;
+    };
   }, [reload]);
 
   return { games, reload };

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { getCustomLaunchVars, setCustomLaunchVars, CustomVarDef } from "../api";
-import { Pill } from "./catalog";
-import { customVarToPill } from "./customVars";
+import { baseCatalogTokens, type Pill } from "./catalog";
+import { customVarToPill, sanitizeCustomVars } from "./customVars";
 
 export interface CustomVarsApi {
   /** The library (null while loading). */
@@ -32,7 +32,7 @@ export function useCustomVars(): CustomVarsApi {
     getCustomLaunchVars()
       .then((v) => {
         if (cancelled) return;
-        setVars(v);
+        setVars(sanitizeCustomVars(v, baseCatalogTokens()));
         setError(false);
       })
       // A failed load must NOT read as an empty library: if the user then adds a
@@ -46,7 +46,7 @@ export function useCustomVars(): CustomVarsApi {
   const save = useCallback((next: CustomVarDef[]) => {
     setVars(next); // optimistic
     setCustomLaunchVars(next)
-      .then((stored) => setVars(stored)) // adopt what the backend actually stored
+      .then((stored) => setVars(sanitizeCustomVars(stored, baseCatalogTokens())))
       .catch(() => setError(true));
   }, []);
 
