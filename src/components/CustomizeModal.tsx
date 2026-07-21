@@ -1,12 +1,14 @@
 import { FC, Fragment, ReactNode } from "react";
 import { ModalRoot, showModal, Focusable, ButtonItem } from "@decky/ui";
-import { LuChevronUp, LuChevronDown, LuEye, LuEyeOff, LuLock, LuCheck } from "react-icons/lu";
+import { LuChevronUp, LuChevronDown, LuEye, LuEyeOff, LuLock, LuCheck, LuPower, LuBrain } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { TABS, SECTION_BLOCKS, SUBITEMS, blockOrder, PINNED_TAB, ItemMeta } from "../customize/manifest";
 import { ListPref, orderIds, move, toggle } from "../customize/layout";
 import { useLayout, saveLayout, resetLayout } from "../customize/store";
+import { useModules, setModuleDisabled, resetModules } from "../customize/modules";
+import { moduleState, countStates, ModuleState } from "../customize/moduleLogic";
 import { FocusRoot } from "./FocusRoot";
 import { ACCENTS } from "../system/accentColor";
 import { useAccent, setAccent } from "../system/useAccent";
@@ -178,9 +180,122 @@ const AccentPicker: FC = () => {
   );
 };
 
+/** The disable-able modules, in display order. Sub-features are indented under
+ *  their tab; learning is a global module (no tab). Tabs carry their manifest
+ *  icon; sub-features borrow their block icon; learning uses a brain glyph. */
+interface ModuleDef { id: string; parent?: string; }
+const MODULE_ROWS: ModuleDef[] = [
+  { id: "power" },
+  { id: "autoTdp", parent: "power" },
+  { id: "system" },
+  { id: "display" },
+  { id: "fans" },
+  { id: "fanControl", parent: "fans" },
+  { id: "mandos" },
+  { id: "learning" },
+];
+
+const moduleIcon = (id: string): ReactNode => {
+  const tab = TABS.find((x) => x.id === id);
+  if (tab) return tab.icon;
+  if (id === "autoTdp") return SECTION_BLOCKS.power?.find((b) => b.id === "autoTdp")?.icon;
+  if (id === "fanControl") return SECTION_BLOCKS.fans?.find((b) => b.id === "curve")?.icon;
+  if (id === "learning") return <LuBrain size={15} />;
+  return null;
+};
+
+/** One module card: icon + name + one-line microcopy (or the blocked reason) +
+ *  a state chip + the enable/disable power switch. */
+const ModuleRow: FC<{
+  label: string;
+  desc: string;
+  icon: ReactNode;
+  state: ModuleState;
+  indent: boolean;
+  onToggle: () => void;
+}> = ({ label, desc, icon, state, indent, onToggle }) => {
+  const { t } = useI18n();
+  const off = state === "disabled" || state === "blocked";
+  const stateLabel =
+    state === "background" ? t("customize.state.background")
+      : state === "disabled" ? t("customize.state.disabled")
+        : state === "blocked" ? t("customize.state.blocked")
+          : "";
+  return (
+    <div
+      style={{
+        display: "flex", alignItems: "center", gap: theme.space.sm,
+        padding: `${theme.space.sm}px ${theme.space.md}px`, ...theme.card,
+        marginLeft: indent ? theme.space.lg : 0,
+        opacity: off ? 0.5 : 1,
+      }}
+    >
+      <span style={{ display: "flex", color: state === "visible" || state === "background" ? theme.color.accent : theme.color.textMuted }}>{icon}</span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: theme.space.xs }}>
+          <span style={{ fontSize: theme.font.body, color: theme.color.textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
+          {stateLabel && (
+            <span style={{ fontSize: theme.font.caption, color: state === "background" ? theme.color.accent : theme.color.textMuted }}>· {stateLabel}</span>
+          )}
+        </div>
+        <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{desc}</div>
+      </div>
+      <Focusable
+        style={{ ...iconBtn(false), color: off ? theme.color.textMuted : theme.color.accent }}
+        aria-label={off ? t("customize.enable") : t("customize.disable")}
+        onActivate={onToggle}
+        onClick={onToggle}
+      >
+        <LuPower size={18} />
+      </Focusable>
+    </div>
+  );
+};
+
+/** The enable/disable list — the functional half of the editor (Módulos). */
+const ModuleEditor: FC = () => {
+  const { t } = useI18n();
+  const layout = useLayout();
+  const disabled = useModules();
+  const tabHidden = (id: string) => (layout.tabs.hidden ?? []).includes(id);
+
+  const labelFor = (id: string): string => {
+    const tab = TABS.find((x) => x.id === id);
+    if (tab) return t(tab.labelKey);
+    if (id === "autoTdp") return t("tdp.auto.title");
+    if (id === "fanControl") return t("fans.curve.title");
+    if (id === "learning") return t("settings.telemetry");
+    return id;
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: theme.space.xs }}>
+      <div style={theme.sectionLabel}>{t("customize.modules")}</div>
+      {MODULE_ROWS.map((m) => {
+        const st = moduleState(m.id, disabled, tabHidden(m.id), false);
+        const desc = st === "blocked" && m.id === "learning"
+          ? t("customize.module.learning.blocked")
+          : t(`customize.module.${m.id}.desc`);
+        return (
+          <ModuleRow
+            key={m.id}
+            label={labelFor(m.id)}
+            desc={desc}
+            icon={moduleIcon(m.id)}
+            state={st}
+            indent={!!m.parent}
+            onToggle={() => setModuleDisabled(m.id, st !== "disabled")}
+          />
+        );
+      })}
+    </div>
+  );
+};
+
 const CustomizeBody: FC = () => {
   const { t } = useI18n();
   const layout = useLayout();
+  const disabled = useModules();
 
   // One metadata lookup for both tabs and blocks (label via i18n key + icon).
   const metaFor = (items: ItemMeta[] | undefined) => (id: string): RowMeta => {
@@ -191,9 +306,24 @@ const CustomizeBody: FC = () => {
   // Tabs that expose configurable blocks, in tab order.
   const blockSections = TABS.filter((s) => SECTION_BLOCKS[s.id]?.length);
 
+  // Summary over the real tabs (Settings excluded — it's always on). Disabled +
+  // blocked both read as "off" for the count.
+  const tabHidden = (id: string) => (layout.tabs.hidden ?? []).includes(id);
+  const c = countStates(
+    TABS.filter((s) => s.id !== PINNED_TAB).map((s) => ({ id: s.id, hidden: tabHidden(s.id) })),
+    disabled,
+  );
+  const summary = t("customize.summary")
+    .replace("{on}", String(c.visible))
+    .replace("{bg}", String(c.background))
+    .replace("{off}", String(c.disabled + c.blocked));
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: theme.space.lg, padding: theme.space.sm, maxWidth: 720, width: "100%", margin: "0 auto" }}>
       <div style={{ fontSize: theme.font.value, color: theme.color.textPrimary }}>{t("customize.title")}</div>
+      <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{summary}</div>
+
+      <ModuleEditor />
 
       <AccentPicker />
 
@@ -230,7 +360,7 @@ const CustomizeBody: FC = () => {
         ))}
       </div>
 
-      <ButtonItem layout="below" onClick={() => resetLayout()}>
+      <ButtonItem layout="below" onClick={() => { resetLayout(); resetModules(); }}>
         {t("customize.reset")}
       </ButtonItem>
     </div>
