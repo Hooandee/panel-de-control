@@ -203,11 +203,15 @@ const CustomizeBody: FC = () => {
                     <IconAction label={off ? t("customize.enable") : t("customize.disable")} color={off ? theme.color.textMuted : theme.color.accent} onTap={() => setModuleDisabled(id, !off)}>
                       <LuPower size={18} />
                     </IconAction>
-                    {/* Fixed chevron slot so eye/power stay aligned across rows,
-                        whether or not the category is expandable. */}
-                    <span style={{ display: "flex", justifyContent: "center", width: 17, color: theme.color.textMuted }}>
-                      {expandable && (open ? <LuChevronUp size={17} /> : <LuChevronDown size={17} />)}
-                    </span>
+                    {/* Fixed chevron slot so eye/power stay aligned across rows. When
+                        expandable it's tappable too (the chevron looks like a button). */}
+                    {expandable ? (
+                      <IconAction label={t(meta.labelKey)} color={theme.color.textMuted} onTap={() => setOpenId(open ? null : id)}>
+                        {open ? <LuChevronUp size={17} /> : <LuChevronDown size={17} />}
+                      </IconAction>
+                    ) : (
+                      <span style={{ display: "flex", justifyContent: "center", width: 30 }} />
+                    )}
                   </>
                 )}
               </div>
@@ -258,7 +262,7 @@ const CustomizeBody: FC = () => {
               >
                 <LuPower size={18} />
               </IconAction>
-              <span style={{ width: 17 }} />{/* empty chevron slot */}
+              <span style={{ width: 30 }} />{/* empty chevron slot */}
             </div>
           </div>
         )}
