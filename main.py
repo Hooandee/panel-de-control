@@ -105,6 +105,9 @@ DEFAULTS = {
     # Master switch: when False we stop writing the TDP rails and Potencia drops to
     # monitor-only, handing TDP to another tool.
     "tdp_control_enabled": True,
+    # Modules the user turned off in the customization editor (generic ids only;
+    # power/learning are folded from tdp_control_enabled/telemetry_enabled).
+    "disabled_modules": [],
     # One-time notices (SettingsStore drops keys not in DEFAULTS).
     "seen_tdp_conflict_takeover": False,
     "seen_autotdp_notice": False,
@@ -1660,6 +1663,51 @@ class Plugin:
     def _tdp_control_on(self) -> bool:
         """Master switch: whether we're allowed to write the TDP rails at all."""
         return bool(self._settings.get("tdp_control_enabled", True))
+
+    # ---- Module enable/disable ---------------------------------------------
+    # autoTdp/fanControl cascade from their tab (all); learning needs a consumer (any).
+    _MODULE_REQUIRES = {
+        "autoTdp": ("all", ("power",)),
+        "fanControl": ("all", ("fans",)),
+        "learning": ("any", ("power", "fans")),
+    }
+    _GENERIC_MODULES = ("system", "display", "fans", "mandos", "autoTdp", "fanControl")
+
+    def _disabled_modules(self) -> list:
+        v = self._settings.get("disabled_modules")
+        return [x for x in v if isinstance(x, str)] if isinstance(v, list) else []
+
+    def _module_user_disabled(self, mid: str) -> bool:
+        """Whether the user turned this module off (before cascade/dependency)."""
+        if mid == "power":
+            return not self._tdp_control_on()
+        if mid == "learning":
+            return not bool(self._settings.get("telemetry_enabled", True))
+        return mid in self._disabled_modules()
+
+    def _module_enabled(self, mid: str) -> bool:
+        """Effective state: user flag AND requirements (cascade = all, dependency = any)."""
+        if self._module_user_disabled(mid):
+            return False
+        req = self._MODULE_REQUIRES.get(mid)
+        if not req:
+            return True
+        mode, ids = req
+        checks = [self._module_enabled(d) for d in ids]
+        return any(checks) if mode == "any" else all(checks)
+
+    def _learning_active(self) -> bool:
+        """Learning runs only when enabled AND it has a consumer (Power or Fans)."""
+        return self._module_enabled("learning")
+
+    def _user_disabled_all(self) -> list:
+        """The user-disabled set (for the UI), folding the native-setting modules in."""
+        out = list(self._disabled_modules())
+        if not self._tdp_control_on():
+            out.append("power")
+        if not bool(self._settings.get("telemetry_enabled", True)):
+            out.append("learning")
+        return out
 
     def _reapply_tdp(self, on_ac=None):
         self._init()
