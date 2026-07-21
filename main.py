@@ -353,6 +353,32 @@ class Plugin:
         self._save()
         return True
 
+    async def get_ui_modules(self) -> dict:
+        """The user-disabled module set (generic ids + power/learning folded from
+        their native settings). The frontend derives the effective state."""
+        self._init()
+        return {"disabled": self._user_disabled_all()}
+
+    async def set_ui_module(self, module_id: str, disabled: bool) -> dict:
+        """Enable/disable a module durably, then re-apply everything honestly so the
+        newly-off machinery is released (fans→auto, TDP rails freed, loops idle)."""
+        self._init()
+        disabled = bool(disabled)
+        if module_id == "power":
+            self._settings["tdp_control_enabled"] = not disabled
+        elif module_id == "learning":
+            self._settings["telemetry_enabled"] = not disabled
+        elif module_id in self._GENERIC_MODULES:
+            cur = set(self._disabled_modules())
+            cur.add(module_id) if disabled else cur.discard(module_id)
+            self._settings["disabled_modules"] = sorted(cur)
+        else:
+            return {"disabled": self._user_disabled_all()}  # unknown id → no-op
+        self._save()
+        self._reapply_all()   # already dispatches its subprocess work off-loop
+        self._sync_sampler()  # learning may have (un)gained a consumer
+        return {"disabled": self._user_disabled_all()}
+
     async def check_update(self, force: bool = False) -> dict:
         self._init()
         return self_updater.check(force)
