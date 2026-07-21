@@ -106,6 +106,7 @@ const CustomizeBody: FC = () => {
   const { t } = useI18n();
   const layout = useLayout();
   const disabled = useModules();
+  useAccent(); // re-render the whole modal live when the accent changes (separate root)
   const [editing, setEditing] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
 
@@ -190,19 +191,23 @@ const CustomizeBody: FC = () => {
                   </>
                 ) : (
                   <>
-                    {!off && (
-                      <IconAction label={hidden ? t("customize.show") : t("customize.hide")} color={theme.color.textMuted} onTap={() => setTabHidden(id)}>
-                        {hidden ? <LuEyeOff size={18} /> : <LuEye size={18} />}
-                      </IconAction>
-                    )}
+                    {/* Fixed eye slot: empty when off (nothing to hide) so the power
+                        column stays aligned with enabled rows. */}
+                    <span style={{ display: "flex", justifyContent: "center", width: 30 }}>
+                      {!off && (
+                        <IconAction label={hidden ? t("customize.show") : t("customize.hide")} color={theme.color.textMuted} onTap={() => setTabHidden(id)}>
+                          {hidden ? <LuEyeOff size={18} /> : <LuEye size={18} />}
+                        </IconAction>
+                      )}
+                    </span>
                     <IconAction label={off ? t("customize.enable") : t("customize.disable")} color={off ? theme.color.textMuted : theme.color.accent} onTap={() => setModuleDisabled(id, !off)}>
                       <LuPower size={18} />
                     </IconAction>
-                    {expandable && (
-                      <span style={{ display: "flex", color: theme.color.textMuted }}>
-                        {open ? <LuChevronUp size={17} /> : <LuChevronDown size={17} />}
-                      </span>
-                    )}
+                    {/* Fixed chevron slot so eye/power stay aligned across rows,
+                        whether or not the category is expandable. */}
+                    <span style={{ display: "flex", justifyContent: "center", width: 17, color: theme.color.textMuted }}>
+                      {expandable && (open ? <LuChevronUp size={17} /> : <LuChevronDown size={17} />)}
+                    </span>
                   </>
                 )}
               </div>
