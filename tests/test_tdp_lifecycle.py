@@ -61,6 +61,25 @@ def test_reapplies_on_ac_transition():
     assert events == [True]
 
 
+def test_ac_transition_re_asserts_after_firmware_settles():
+    # On unplug the ASUS firmware briefly reverts to ~12 W; a single re-apply landing
+    # mid-transition can be lost. The transition fires now + 2 follow-ups (at +2s, +4s),
+    # re-reading AC live, so the setpoint is re-asserted once the firmware settles.
+    events = []
+    ac = {"v": True}
+    lm = LifecycleManager(apply_cb=lambda on_ac: events.append(on_ac),
+                          read_wakeup=lambda: 0, read_ac=lambda: ac["v"])
+    lm.check(now=0.0)           # first observation, on charger
+    ac["v"] = False            # unplug
+    lm.check(now=1.0)          # immediate re-apply
+    assert events == [False]
+    lm.check(now=2.5)          # no follow-up due yet (first at 1.0+2.0=3.0)
+    assert events == [False]
+    lm.check(now=3.0)          # +2s follow-up
+    lm.check(now=5.0)          # +4s follow-up
+    assert events == [False, False, False]
+
+
 def test_check_survives_apply_exception():
     def boom(_on_ac):
         raise RuntimeError("boom")

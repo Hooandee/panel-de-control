@@ -1,5 +1,45 @@
 # Changelog
 
+## [0.22.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.21.0...panel-de-control-v0.22.0) (2026-07-19)
+
+
+### Features / Novedades
+
+* The experimental fan control (the Legion Go S, and the software-driven fans on the Steam Deck and others) is now safe and honest. A half-finished write can no longer leave the fan stopped with the firmware locked out, so there's no thermal risk if a write fails partway. Handing the fan back to the firmware is double-checked against the chip, and the plugin only says it's driving the fan when the hardware really is, never on a write the firmware refused. The "restart fan control" button now shows on every device where the fan can get stuck, not just the Go S, and it can't fire twice or get stuck itself. ([#238](https://github.com/Hooandee/panel-de-control/issues/238)) ([97b0b12](https://github.com/Hooandee/panel-de-control/commit/97b0b12caff54634d8dc5d468d98ca73ac666902))
+* **ES:** El control experimental de ventilador (la Legion Go S, y los ventiladores por software de la Steam Deck y otros) ahora es seguro y honesto. Una escritura a medias ya no puede dejar el ventilador parado con el firmware bloqueado, así que no hay riesgo térmico si una escritura falla a mitad. La vuelta al control del firmware se comprueba contra el chip, y el plugin solo dice que está llevando el ventilador cuando el hardware lo está de verdad, nunca ante una escritura que el firmware rechazó. El botón de "reiniciar control del ventilador" ahora aparece en todos los equipos donde el ventilador puede atascarse, no solo la Go S, y no se dispara dos veces ni se queda colgado. ([#238](https://github.com/Hooandee/panel-de-control/issues/238)) ([97b0b12](https://github.com/Hooandee/panel-de-control/commit/97b0b12caff54634d8dc5d468d98ca73ac666902))
+
+## [0.21.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.20.1...panel-de-control-v0.21.0) (2026-07-19)
+
+
+### Features / Novedades
+
+* The Legion Go S now reaches its real TDP ceiling, 33W on battery and 40W on the charger, instead of stopping short. The Power tab gets a "reset to default" link that puts TDP back to your device's default value, global or per game. And the plugin now follows your system language: with Steam in English it starts in English and shows as "Control Panel", while any other language stays in Spanish, and a manual choice always wins. It also tidies a stray line under the experimental fan control on the Go S. ([#236](https://github.com/Hooandee/panel-de-control/issues/236)) ([d9e922a](https://github.com/Hooandee/panel-de-control/commit/d9e922a72efc44acd28e43d90ad8ac326c21b616))
+* **ES:** La Legion Go S ahora llega a su techo real de TDP, 33W en batería y 40W con el cargador, en vez de quedarse corta. La pestaña Potencia gana un enlace de "restablecer al valor predeterminado" que devuelve el TDP al valor por defecto de tu equipo, global o por juego. Y el plugin ahora sigue el idioma del sistema: con Steam en inglés arranca en inglés y se muestra como "Control Panel", mientras que en cualquier otro idioma sigue en español, y tu elección manual siempre manda. Además limpia una línea que sobraba bajo el control experimental de ventilador en la Go S. ([#236](https://github.com/Hooandee/panel-de-control/issues/236)) ([d9e922a](https://github.com/Hooandee/panel-de-control/commit/d9e922a72efc44acd28e43d90ad8ac326c21b616))
+
+## [0.20.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.20.0...panel-de-control-v0.20.1) (2026-07-18)
+
+
+### Bug Fixes / Correcciones
+
+* The TDP slider reaches your machine's real maximum again. On several handhelds it could get stuck below the top (a Legion Go S locked at 15W, a ROG Ally X capped at 25W even with the charger connected) because the plugin read the firmware limit once at startup and kept a low reading forever. Now the range comes from your device's known values, the firmware limit is read live, and what actually gets applied always follows what the hardware accepts. Unplugging the charger no longer leaves the TDP stuck low either. ([#216](https://github.com/Hooandee/panel-de-control/issues/216)) ([c9be207](https://github.com/Hooandee/panel-de-control/commit/c9be2079b73556d3c2d7c4c489a214bc78755a0a))
+* **ES:** El deslizador de TDP vuelve a llegar al máximo real de tu equipo. En varias consolas se quedaba por debajo del tope (una Legion Go S clavada en 15W, una ROG Ally X limitada a 25W incluso con el cargador conectado) porque el plugin leía el límite del firmware una vez al arrancar y se quedaba con una lectura baja para siempre. Ahora el rango sale de los valores conocidos de tu equipo, el límite del firmware se lee en vivo, y lo que se aplica sigue siempre lo que el hardware acepta. Desenchufar el cargador tampoco deja el TDP atascado bajo. ([#216](https://github.com/Hooandee/panel-de-control/issues/216)) ([c9be207](https://github.com/Hooandee/panel-de-control/commit/c9be2079b73556d3c2d7c4c489a214bc78755a0a))
+
+## [0.20.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.19.0...panel-de-control-v0.20.0) (2026-07-17)
+
+
+### Features / Novedades
+
+* Panel de Control now spots when another power manager is running (Handheld Daemon or SimpleDeckyTDP) and takes charge instead of quietly fighting it, which was the real reason a game could run worse than with another tool. The first time it finds a conflict it asks, full screen, whether to turn the others off; if you leave it for later, a card in the Power tab keeps a one-tap button for each rival (all reversible) until only one manager is left. A new TDP control switch in Settings lets you hand power management to whatever tool you prefer, and while it's off (or on a machine that can't set TDP, like a desktop) the Power tab just monitors. Turning on Auto-TDP now shows a one-time note about what to expect. ([#214](https://github.com/Hooandee/panel-de-control/issues/214)) ([17a55ef](https://github.com/Hooandee/panel-de-control/commit/17a55ef8a51b36d3263a864754b3357a04fade24))
+* **ES:** Panel de Control ahora detecta cuando hay otro gestor de energía en marcha (Handheld Daemon o SimpleDeckyTDP) y toma el mando en vez de pelearse con él por detrás, que era la razón real de que un juego fuera peor que con otra herramienta. La primera vez que encuentra un conflicto te pregunta, a pantalla completa, si apagar los demás; si lo dejas para luego, una tarjeta en la pestaña Potencia mantiene un botón por cada rival (todo reversible) hasta que solo quede un gestor. Un nuevo interruptor Control de TDP en Ajustes te deja ceder la gestión a la herramienta que prefieras, y mientras está apagado (o en un equipo que no puede fijar el TDP, como un sobremesa) la pestaña Potencia solo monitoriza. Al activar Auto-TDP ahora se muestra un aviso único de qué esperar. ([#214](https://github.com/Hooandee/panel-de-control/issues/214)) ([17a55ef](https://github.com/Hooandee/panel-de-control/commit/17a55ef8a51b36d3263a864754b3357a04fade24))
+
+## [0.19.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.18.0...panel-de-control-v0.19.0) (2026-07-15)
+
+
+### Features / Novedades
+
+* The whole panel is now fully usable with a controller. Whatever the cursor is on shows a clear colored outline and glow, across every section and the full-screen dialogs, so you no longer need the touchscreen. Switching tabs with L1/R1 carries the focus along, and read-only screens like the glossary scroll with the d-pad. You can also pick the panel's accent color from a palette under Customize interface, and it survives reboots. ([#201](https://github.com/Hooandee/panel-de-control/issues/201)) ([7740403](https://github.com/Hooandee/panel-de-control/commit/77404037c998f2e14a8c25573690fa28317bc193))
+* **ES:** Ya puedes manejar todo el panel con el mando. El elemento en el que está el cursor se marca con un borde y un brillo de color, en todas las secciones y en las ventanas a pantalla completa, así que ya no hace falta la pantalla táctil. Al cambiar de pestaña con L1/R1 el foco te sigue, y las pantallas de solo lectura como el glosario se recorren con la cruceta. Además puedes elegir el color de acento del panel desde una paleta en Personalizar interfaz, y se mantiene tras reiniciar. ([#201](https://github.com/Hooandee/panel-de-control/issues/201)) ([7740403](https://github.com/Hooandee/panel-de-control/commit/77404037c998f2e14a8c25573690fa28317bc193))
+
 ## [0.18.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.17.0...panel-de-control-v0.18.0) (2026-07-14)
 
 

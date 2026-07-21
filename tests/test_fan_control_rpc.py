@@ -365,3 +365,127 @@ class TestFirmwareCurveReadOnly:
         Plugin = self._fixture(tmp_path, monkeypatch, None)
         st = asyncio.run(Plugin().get_fan_curve_state())
         assert st["firmware_points"] is None
+
+
+class _ResetBackend:
+    """Records calls; restore_auto returns a configurable ok so the RPC's honest
+    reset_ok can be asserted both ways."""
+    supported = True
+    name = "legion-go-s-ec"
+
+    def __init__(self, release_ok=True, apply_ok=True):
+        self.release_ok = release_ok
+        self.apply_ok = apply_ok
+        self.calls = []
+
+    def read_state(self):
+        return {"supported": True, "source": self.name, "pwm_max": 255,
+                "fans": [{"key": "fan", "enable": 2, "rpm": 1900, "points": []}]}
+
+    def apply_curve_all(self, points):
+        self.calls.append("apply")
+        return {"ok": self.apply_ok, "detail": ""}
+
+    def set_auto(self, fan_key=None):
+        self.calls.append("set_auto")
+        return {"ok": self.release_ok, "detail": ""}
+
+    def restore_auto(self):
+        self.calls.append("restore_auto")
+        return {"ok": self.release_ok, "detail": ""}
+
+
+def test_reset_fan_control_reports_release_success(tmp_path, monkeypatch):
+    backend = _ResetBackend(release_ok=True)
+    Plugin = _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=backend)
+    p = Plugin()
+    asyncio.run(p.set_fan_preset("performance", "global", None))
+    backend.calls.clear()
+    st = asyncio.run(p.reset_fan_control())
+    assert "restore_auto" in backend.calls
+    assert st["supported"] is True
+    assert st["reset_ok"] is True
+
+
+def test_reset_fan_control_reports_release_failure(tmp_path, monkeypatch):
+    # The release did not land — the RPC must say so, never a fake success.
+    backend = _ResetBackend(release_ok=False)
+    Plugin = _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=backend)
+    p = Plugin()
+    st = asyncio.run(p.reset_fan_control())
+    assert st["reset_ok"] is False
+
+
+class _MalformedResetBackend(_ResetBackend):
+    """restore_auto returns a malformed value (no/absent 'ok'). The RPC must not
+    read that as success."""
+
+    def __init__(self, ret):
+        super().__init__()
+        self._ret = ret
+
+    def restore_auto(self):
+        self.calls.append("restore_auto")
+        return self._ret
+
+
+@pytest.mark.parametrize("ret", [{}, None, {"detail": "x"}])
+def test_reset_fan_control_malformed_release_is_not_success(tmp_path, monkeypatch, ret):
+    backend = _MalformedResetBackend(ret)
+    Plugin = _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=backend)
+    st = asyncio.run(Plugin().reset_fan_control())
+    assert st["reset_ok"] is False
+
+
+def test_state_resettable_true_for_software_loop_backend(tmp_path, monkeypatch):
+    # A software-loop backend (Deck / EC / generic PWM) can wedge → expose a reset.
+    backend = _ResetBackend()
+    backend.resettable = True
+    Plugin = _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=backend)
+    assert asyncio.run(Plugin().get_fan_curve_state())["resettable"] is True
+
+
+def test_state_resettable_false_for_hardware_curve_backend(tmp_path, monkeypatch):
+    # A hardware-curve backend (ASUS/MSI) or Null doesn't wedge → no reset offered.
+    Plugin = _make_plugin_fixture(tmp_path, monkeypatch)  # NullFanBackend
+    assert asyncio.run(Plugin().get_fan_curve_state())["resettable"] is False
+
+
+def test_reset_fan_control_reestablishes_the_stored_curve(tmp_path, monkeypatch):
+    # After releasing, the reset must re-apply the stored curve (awaited), not just
+    # release — otherwise a manual curve would silently drop to firmware auto.
+    backend = _ResetBackend(release_ok=True)
+    Plugin = _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=backend)
+    p = Plugin()
+    asyncio.run(p.set_fan_preset("performance", "global", None))
+    backend.calls.clear()
+    asyncio.run(p.reset_fan_control())
+    assert "restore_auto" in backend.calls
+    assert "apply" in backend.calls  # stored curve re-established
+
+
+def test_reset_ok_false_when_reapply_refuses(tmp_path, monkeypatch):
+    # Released fine, but the stored curve couldn't be re-established → reset_ok must
+    # be False, so "Control reiniciado" never shows on a still-wedged fan.
+    backend = _ResetBackend(release_ok=True, apply_ok=False)
+    Plugin = _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=backend)
+    p = Plugin()
+    asyncio.run(p.set_fan_preset("performance", "global", None))  # a curve profile
+    st = asyncio.run(p.reset_fan_control())
+    assert st["reset_ok"] is False
+
+
+class _MalformedReapplyBackend(_ResetBackend):
+    def apply_curve_all(self, points):
+        self.calls.append("apply")
+        return {}  # malformed: no "ok" key
+
+
+def test_reset_ok_false_when_reapply_malformed(tmp_path, monkeypatch):
+    # A malformed re-apply response (no "ok") must not ride an optimistic default.
+    backend = _MalformedReapplyBackend(release_ok=True)
+    Plugin = _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=backend)
+    p = Plugin()
+    asyncio.run(p.set_fan_preset("performance", "global", None))
+    st = asyncio.run(p.reset_fan_control())
+    assert st["reset_ok"] is False

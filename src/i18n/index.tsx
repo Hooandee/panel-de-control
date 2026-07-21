@@ -6,10 +6,19 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { format, Params } from "./format";
-import { hydratePrefs, onPrefsHealed, readString, writeString } from "../system/pdcStorage";
+import {
+  hydratePrefs,
+  onPrefsHealed,
+  prefsHydrated,
+  readString,
+  writeString,
+} from "../system/pdcStorage";
+import { steamLangToLang } from "./detect";
+import { readSteamLanguage } from "./steamLanguage";
 
 export type Lang = "es" | "en";
 
@@ -195,8 +204,6 @@ const es: Record<string, string> = {
   "mandos.desc.hhd": "En este sistema, Handheld Daemon gestiona tu mando: unifica los botones y controla el remapeo. El remapeo fino por juego se hace en Steam Input.",
   "mandos.desc.inputplumber": "En este sistema, InputPlumber gestiona tu mando y lo presenta como un mando unificado. El remapeo por juego se hace en Steam Input.",
   "mandos.desc.none": "No detectamos un gestor de mando activo. El remapeo lo gestiona tu sistema o Steam Input.",
-  "mandos.conflict.title": "Conflicto de gestión de energía",
-  "mandos.conflict.desc": "Handheld Daemon y Panel de Control están gestionando el TDP/ventiladores a la vez y pueden pelearse (uno pisa al otro). Desactiva el control de TDP en HHD, o desactiva el auto-TDP aquí, para evitarlo.",
   "mandos.remap.title": "Remapeo de botones",
   "mandos.remap.note": "«Global» se aplica a todos los juegos; elige el juego para darle su propio remapeo.",
   "mandos.inherit": "Este juego usa la configuración global hasta que cambies un botón.",
@@ -310,6 +317,11 @@ const es: Record<string, string> = {
   "fans.experimental.confirm.desc": "Control no oficial del ventilador, bajo tu responsabilidad. Tope de seguridad activo; vuelve al firmware al desactivarlo.",
   "fans.experimental.confirm.ok": "Activar",
   "fans.experimental.confirm.cancel": "Cancelar",
+  "fans.experimental.reset": "Reiniciar control del ventilador",
+  "fans.experimental.resetNote": "Úsalo si el ventilador se queda bloqueado o no responde a la curva.",
+  "fans.experimental.resetPending": "Reiniciando…",
+  "fans.experimental.resetDone": "Control reiniciado",
+  "fans.experimental.resetFail": "No se pudo reiniciar; reinicia el equipo si persiste.",
   "fans.firmware.title": "Curva del firmware",
   "fans.firmware.note": "Se muestra la curva que aplica el firmware.",
   "fans.firmware.wip": "Estoy trabajando en controlar la velocidad del ventilador de forma segura.",
@@ -405,6 +417,7 @@ const es: Record<string, string> = {
   "tdp.preset.save": "Ahorro",
   "tdp.preset.balanced": "Equilibrado",
   "tdp.preset.turbo": "Turbo",
+  "tdp.reset.default": "Restablecer al valor predeterminado ({w} W)",
   "tdp.fwmode.low-power": "Silencioso",
   "tdp.fwmode.balanced": "Equilibrado",
   "tdp.fwmode.performance": "Rendimiento",
@@ -436,6 +449,32 @@ const es: Record<string, string> = {
   "tdp.suggest.title": "Aprendí que este juego trabaja entre {lo}–{hi} W",
   "tdp.suggest.value": "{w} W",
   "tdp.suggest.apply": "Aplicar {w} W",
+  // Control de TDP + conflictos con otros gestores
+  "tdp.control.title": "Control de TDP",
+  "tdp.control.desc": "Permite controlar el TDP del handheld PC.",
+  "tdp.monitor.notice": "Control de TDP desactivado · modo monitoreo",
+  "tdp.conflict.take.title": "Tomo el control del TDP",
+  "tdp.conflict.take.body": "Detecté otros gestores de TDP funcionando a la vez. Para que los juegos vayan bien, debe mandar solo uno.",
+  "tdp.conflict.take.confirm": "Desactivarlos y gestionar yo",
+  "tdp.conflict.take.later": "Ahora no",
+  "tdp.conflict.take.fine": "Reversible. Solo aparece una vez.",
+  "tdp.conflict.card.title": "Hay otros gestores de TDP activos",
+  "tdp.conflict.card.desc": "Se pisan entre ellos y el TDP fluctúa. Deja solo a Panel de Control al mando.",
+  "tdp.conflict.sdtdp": "SimpleDeckyTDP",
+  "tdp.conflict.sdtdp.desc": "Otro plugin · escribe el TDP",
+  "tdp.conflict.hhd": "Handheld Daemon",
+  "tdp.conflict.hhd.desc": "Gestiona el TDP del sistema",
+  "tdp.conflict.disable": "Desactivar",
+  "tdp.conflict.cede": "Ceder a PdC",
+  "tdp.autotdp.title": "Activar Auto‑TDP",
+  "tdp.autotdp.experimental": "Experimental",
+  "tdp.autotdp.p1": "Ajusta la potencia en vivo según lo que pide el juego. No es un número fijo.",
+  "tdp.autotdp.p2": "Puede consumir algo más que un TDP fijo en momentos de carga: es normal, se está autorregulando.",
+  "tdp.autotdp.p3": "Funciona mejor con un tope de FPS en el juego (p. ej. 40 o 60). Sin límite, tiende a subir de más.",
+  "tdp.autotdp.warn": "Si notas los juegos lentos, desactívalo y usa un TDP fijo. El fijo siempre manda lo que pongas, ni más ni menos.",
+  "tdp.autotdp.confirm": "Entendido, activar Auto‑TDP",
+  "tdp.autotdp.cancel": "Mejor no, usar TDP fijo",
+  "tdp.autotdp.once": "No volverá a mostrarse.",
   "settings.reset": "Borrar lo aprendido",
   "settings.reset.confirm": "Toca otra vez para borrar",
   "settings.reset.done": "Aprendizaje borrado",
@@ -468,6 +507,15 @@ const es: Record<string, string> = {
   "gameProfiles.cores": "{n} núcleos",
   "gameProfiles.buttons": "{n} botones",
   "customize.title": "Personalizar",
+  "customize.accent": "Color de acento",
+  "accent.blue": "Azul",
+  "accent.teal": "Turquesa",
+  "accent.green": "Verde",
+  "accent.amber": "Ámbar",
+  "accent.orange": "Naranja",
+  "accent.pink": "Rosa",
+  "accent.purple": "Morado",
+  "accent.red": "Rojo",
   "customize.tabs": "Pestañas",
   "customize.blocks": "Bloques",
   "customize.reset": "Restablecer valores por defecto",
@@ -513,7 +561,7 @@ const es: Record<string, string> = {
 };
 
 const en: Record<string, string> = {
-  "app.title": "Control Center",
+  "app.title": "Control Panel",
   "load.error": "Couldn't load the plugin state. Please try again in a moment.",
   "load.retry": "Retry",
   "device.detected": "{name}",
@@ -691,8 +739,6 @@ const en: Record<string, string> = {
   "mandos.desc.hhd": "On this system, Handheld Daemon manages your controller: it unifies the buttons and owns remapping. Fine per-game remapping is done in Steam Input.",
   "mandos.desc.inputplumber": "On this system, InputPlumber manages your controller and presents it as a unified gamepad. Per-game remapping is done in Steam Input.",
   "mandos.desc.none": "No active controller manager detected. Remapping is handled by your system or Steam Input.",
-  "mandos.conflict.title": "Power-management conflict",
-  "mandos.conflict.desc": "Handheld Daemon and Panel de Control are both managing TDP/fans and may fight (one overrides the other). Turn off TDP control in HHD, or turn off auto-TDP here, to avoid it.",
   "mandos.remap.title": "Button remapping",
   "mandos.remap.note": "“Global” applies to every game; pick the game to give it its own remap.",
   "mandos.inherit": "This game uses the global setup until you change a button.",
@@ -806,6 +852,11 @@ const en: Record<string, string> = {
   "fans.experimental.confirm.desc": "Unofficial fan control, at your own risk. A safety cap is active; it hands back to firmware when you disable it.",
   "fans.experimental.confirm.ok": "Enable",
   "fans.experimental.confirm.cancel": "Cancel",
+  "fans.experimental.reset": "Restart fan control",
+  "fans.experimental.resetNote": "Use this if the fan gets stuck or stops responding to the curve.",
+  "fans.experimental.resetPending": "Restarting…",
+  "fans.experimental.resetDone": "Fan control restarted",
+  "fans.experimental.resetFail": "Couldn't restart; reboot the device if it persists.",
   "fans.firmware.title": "Firmware curve",
   "fans.firmware.note": "Showing the curve the firmware applies.",
   "fans.firmware.wip": "I'm working on controlling the fan speed safely.",
@@ -898,6 +949,7 @@ const en: Record<string, string> = {
   "tdp.preset.save": "Save",
   "tdp.preset.balanced": "Balanced",
   "tdp.preset.turbo": "Turbo",
+  "tdp.reset.default": "Reset to default ({w} W)",
   "tdp.fwmode.low-power": "Quiet",
   "tdp.fwmode.balanced": "Balanced",
   "tdp.fwmode.performance": "Performance",
@@ -929,6 +981,32 @@ const en: Record<string, string> = {
   "tdp.suggest.title": "I learned this game runs between {lo}–{hi} W",
   "tdp.suggest.value": "{w} W",
   "tdp.suggest.apply": "Apply {w} W",
+  // TDP control + conflicts with other managers
+  "tdp.control.title": "TDP control",
+  "tdp.control.desc": "Lets the plugin control the handheld's TDP.",
+  "tdp.monitor.notice": "TDP control off · monitor only",
+  "tdp.conflict.take.title": "I'll take over the TDP",
+  "tdp.conflict.take.body": "I detected other TDP managers running at the same time. For games to run well, only one should be in charge.",
+  "tdp.conflict.take.confirm": "Turn them off and let me manage",
+  "tdp.conflict.take.later": "Not now",
+  "tdp.conflict.take.fine": "Reversible. Only shows once.",
+  "tdp.conflict.card.title": "Other TDP managers are active",
+  "tdp.conflict.card.desc": "They override each other and the TDP fluctuates. Leave only Panel de Control in charge.",
+  "tdp.conflict.sdtdp": "SimpleDeckyTDP",
+  "tdp.conflict.sdtdp.desc": "Another plugin · writes the TDP",
+  "tdp.conflict.hhd": "Handheld Daemon",
+  "tdp.conflict.hhd.desc": "Manages the system TDP",
+  "tdp.conflict.disable": "Disable",
+  "tdp.conflict.cede": "Hand to PdC",
+  "tdp.autotdp.title": "Enable Auto‑TDP",
+  "tdp.autotdp.experimental": "Experimental",
+  "tdp.autotdp.p1": "Adjusts power live to match what the game asks for. It's not a fixed number.",
+  "tdp.autotdp.p2": "It may draw a bit more than a fixed TDP under load: that's normal, it's self-regulating.",
+  "tdp.autotdp.p3": "Works best with an FPS cap in the game (e.g. 40 or 60). Without a cap, it tends to climb too high.",
+  "tdp.autotdp.warn": "If games feel slow, turn it off and use a fixed TDP. Fixed always applies exactly what you set, no more, no less.",
+  "tdp.autotdp.confirm": "Got it, enable Auto‑TDP",
+  "tdp.autotdp.cancel": "No thanks, use fixed TDP",
+  "tdp.autotdp.once": "It won't show again.",
   "settings.reset": "Clear learned data",
   "settings.reset.confirm": "Tap again to clear",
   "settings.reset.done": "Learning cleared",
@@ -961,6 +1039,15 @@ const en: Record<string, string> = {
   "gameProfiles.buttons": "{n} buttons",
   "customize.button.desc": "Reorder or hide tabs and blocks to your taste.",
   "customize.title": "Customize",
+  "customize.accent": "Accent color",
+  "accent.blue": "Blue",
+  "accent.teal": "Teal",
+  "accent.green": "Green",
+  "accent.amber": "Amber",
+  "accent.orange": "Orange",
+  "accent.pink": "Pink",
+  "accent.purple": "Purple",
+  "accent.red": "Red",
   "customize.tabs": "Tabs",
   "customize.blocks": "Blocks",
   "customize.reset": "Reset to defaults",
@@ -1022,12 +1109,41 @@ const I18nContext = createContext<I18nValue | null>(null);
 
 export const I18nProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const [lang, setLangState] = useState<Lang>(initialLang);
+  const seeded = useRef(false);
 
-  // Re-read once hydratePrefs heals the cache, in case we rendered stale.
+  // On first run only (no saved language), seed the default from Steam's UI
+  // language once the cache is genuinely healed — never overriding a saved choice.
   useEffect(() => {
-    const off = onPrefsHealed(() => setLangState(initialLang()));
-    void hydratePrefs();
-    return off;
+    let cancelled = false;
+    const trySeed = async () => {
+      if (cancelled || seeded.current || readString(STORAGE_KEY)) return;
+      seeded.current = true; // claim the one-shot before the await
+      const raw = await readSteamLanguage();
+      if (cancelled || readString(STORAGE_KEY)) return; // a choice may have landed
+      if (raw === null) {
+        seeded.current = false; // couldn't read Steam → keep the default, retry next load
+        return;
+      }
+      const seed = steamLangToLang(raw);
+      setLangState(seed);
+      writeString(STORAGE_KEY, seed);
+    };
+    const off = onPrefsHealed(() => {
+      if (cancelled) return;
+      setLangState(initialLang());
+      void trySeed();
+    });
+    // Covers a cache already healed before we subscribed; gated on a real heal.
+    void hydratePrefs().then(() => {
+      if (!cancelled && prefsHydrated()) void trySeed();
+    });
+    return () => {
+      cancelled = true;
+      // Release the one-shot so a remount (StrictMode) can still seed; a completed
+      // seed is already guarded by the persisted key.
+      seeded.current = false;
+      off();
+    };
   }, []);
 
   const setLang = useCallback((l: Lang) => {

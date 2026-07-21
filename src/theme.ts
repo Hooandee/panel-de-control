@@ -1,3 +1,5 @@
+import { currentAccentHex, currentAccentRgb } from "./system/accentColor";
+
 // PdC UI design tokens - the shared visual language for every Panel de Control screen.
 // Keep this lightweight (no CSS-in-JS lib): plain objects consumed via inline styles.
 const color = {
@@ -6,11 +8,16 @@ const color = {
   hairline: "rgba(255,255,255,0.06)",
   textPrimary: "rgba(255,255,255,0.92)",
   textMuted: "rgba(255,255,255,0.45)",
-  // Signature blue. Also the color of every card/section TITLE icon (the icon
-  // beside a card heading) — the one exception is a "green" feature card
-  // (eco/learning/adaptive), whose title icon uses `ok`. Semantic status icons
-  // (charging bolt, temperature, conflict warning) keep their own meaning color.
-  accent: "#4ea1ff",
+  // Signature accent, user-selectable (a getter → the live hex). Also the colour of
+  // every card/section TITLE icon; the exception is a "green" feature card
+  // (eco/learning/adaptive), whose title icon uses `ok`.
+  get accent(): string {
+    return currentAccentHex();
+  },
+  // The accent as "r,g,b" for rgba() tints.
+  get accentRgb(): string {
+    return currentAccentRgb();
+  },
   // Text/icon color on top of `accent` (e.g. the Apply button label) — a deep
   // navy so light-on-accent stays legible without a pure-black hard edge.
   onAccent: "#06121f",

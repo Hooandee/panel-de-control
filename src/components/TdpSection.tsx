@@ -1,7 +1,8 @@
-import { PanelSectionRow, SliderField } from "@decky/ui";
+import { PanelSectionRow, SliderField, Focusable } from "@decky/ui";
 import { FC } from "react";
 
 import { TdpState, TdpScope, PowerDraw, BoostMode } from "../api";
+import { resetWatts } from "../tdp/logic";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { Loading } from "./Loading";
@@ -11,6 +12,7 @@ import { Presets } from "./Presets";
 import { FirmwareModes } from "./FirmwareModes";
 import { AdvancedBoost } from "./AdvancedBoost";
 import { TdpSuggestionCard } from "./TdpSuggestionCard";
+import { TdpMonitorNotice } from "./TdpMonitorNotice";
 
 // Learned-band reasons worth surfacing as "still learning" (others — no_game,
 // disabled, error — show no line).
@@ -29,9 +31,11 @@ export interface TdpSectionProps {
   onApplySuggestion: (watts: number) => void;
   // Select a firmware performance mode (Legion Go original); "custom" via the slider.
   onFirmwareMode: (mode: string) => void;
+  // Master switch off: show only the live arc + a notice, hide write controls.
+  monitorOnly?: boolean;
 }
 
-export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onScope, onWatts, onSetLevels, onSetMode, onApplySuggestion, onFirmwareMode }) => {
+export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onScope, onWatts, onSetLevels, onSetMode, onApplySuggestion, onFirmwareMode, monitorOnly }) => {
   const { t } = useI18n();
 
   if (!tdp) return <Loading />;
@@ -53,12 +57,39 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
   const activeMax = tdp.on_ac ? tdp.limits.max_ac : tdp.limits.max;
   const isAutoOn = power?.auto_tdp ?? false;
   const atCeiling = Math.min(view.watts, activeMax) >= activeMax;
+  // Reference watts clamped to the active ceiling; the reset link shows only when
+  // the current value differs from it.
+  const resetTarget = resetWatts(tdp.limits.default, tdp.limits.min, activeMax);
+  const showReset = Math.round(view.watts) !== resetTarget;
   // Firmware modes replace the watt presets. In a named mode the firmware owns
   // power+fan, so the arc/slider show its applied watts; the slider drops to custom.
   const fwModes = tdp.firmware_modes ?? [];
   const hasFwModes = fwModes.length > 0;
   const inFwMode = hasFwModes && tdp.firmware_mode !== "custom";
   const shownWatts = inFwMode ? (tdp.applied_w ?? view.watts) : view.watts;
+
+  // Master switch off: keep the live arc, drop every write control.
+  if (monitorOnly) {
+    return (
+      <>
+        <PanelSectionRow>
+          <TdpMonitorNotice />
+        </PanelSectionRow>
+        <PanelSectionRow>
+          <PowerArc
+            watts={shownWatts}
+            limits={tdp.limits}
+            onAc={tdp.on_ac}
+            actualWatts={power?.watts ?? null}
+            gpuBusy={power?.gpu_busy ?? null}
+            auto={isAutoOn}
+            setpoint={power?.setpoint ?? null}
+            appliedWatts={power?.applied ?? null}
+          />
+        </PanelSectionRow>
+      </>
+    );
+  }
 
   return (
     <>
@@ -168,19 +199,40 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
               </PanelSectionRow>
             </>
           ) : (
-            <PanelSectionRow>
-              <Presets
-                presets={tdp.presets}
-                onAc={tdp.on_ac}
-                activeWatts={view.watts}
-                labels={{
-                  save: t("tdp.preset.save"),
-                  balanced: t("tdp.preset.balanced"),
-                  turbo: t("tdp.preset.turbo"),
-                }}
-                onPick={onWatts}
-              />
-            </PanelSectionRow>
+            <>
+              <PanelSectionRow>
+                <Presets
+                  presets={tdp.presets}
+                  onAc={tdp.on_ac}
+                  activeWatts={view.watts}
+                  labels={{
+                    save: t("tdp.preset.save"),
+                    balanced: t("tdp.preset.balanced"),
+                    turbo: t("tdp.preset.turbo"),
+                  }}
+                  onPick={onWatts}
+                />
+              </PanelSectionRow>
+              {showReset && (
+                <PanelSectionRow>
+                  <Focusable
+                    style={{
+                      display: "flex",
+                      justifyContent: "center",
+                      padding: "4px 0",
+                      marginTop: 4,
+                      color: theme.color.textMuted,
+                      fontSize: theme.font.caption,
+                      cursor: "pointer",
+                    }}
+                    onActivate={() => onWatts(resetTarget)}
+                    onClick={() => onWatts(resetTarget)}
+                  >
+                    {t("tdp.reset.default", { w: resetTarget })}
+                  </Focusable>
+                </PanelSectionRow>
+              )}
+            </>
           )}
           {!inFwMode && tdp.supports_advanced && (
             <PanelSectionRow>

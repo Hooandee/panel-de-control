@@ -10,8 +10,8 @@ export const getVersion = callable<[], string>("get_version");
 export type { LaunchTools };
 export const getLaunchTools = callable<[], LaunchTools>("get_launch_tools");
 // Which PROTON_* vars the game's Proton build actually supports (read from its
-// script) → gate version-specific pills honestly. `found` false = couldn't locate
-// the build (stay conservative). envs always includes core Proton vars.
+// script) → gate version-specific pills honestly. `found` false = the build wasn't
+// located (native/non-Steam/missing), and then `envs` is empty — never fake options.
 export interface ProtonCaps {
   envs: string[];
   found: boolean;
@@ -47,6 +47,10 @@ export interface DeviceInfo {
   // GPU generation ("rdna2"|"rdna3"|"rdna35"|"rdna4"|"intel"|"unknown") for the
   // launch-options upscaler gating (FSR4 = rdna3/rdna4).
   gpu_gen: string;
+  // When true, the charger headroom (tdp_max_charger above tdp_max) is only reachable
+  // with the charger connected — the firmware caps the sustained limit on battery. Hide
+  // the "raise on battery" toggle; the arc shows the locked charger segment instead.
+  charger_only_extra: boolean;
 }
 
 export const getDevice = callable<[], DeviceInfo>("get_device");
@@ -110,6 +114,11 @@ export interface TdpState {
   firmware_mode: string;
   // True when get_tdp_state adopted an external (HHD/Steam) TDP change on this read.
   external_change: boolean;
+  // Master switch: when false we stop writing rails → Potencia drops to monitor-only.
+  tdp_control_enabled: boolean;
+  // One-time full-screen notices already shown (durable across reboot).
+  seen_autotdp_notice: boolean;
+  seen_tdp_conflict_takeover: boolean;
 }
 
 export interface TdpPresets {
@@ -189,6 +198,9 @@ export interface PowerDraw {
   // True only while the QAM-open responsive floor is REALLY raising PL1 above where
   // the auto loop would park it → the arc shows a menu-temporary value, so say so.
   ui_floor_engaged: boolean;
+  // Live charger state, polled every second so the UI can refresh the slider ceiling
+  // (battery vs charger) the instant the charger is plugged or unplugged.
+  on_ac: boolean;
 }
 
 export const getPowerDraw = callable<[], PowerDraw>("get_power_draw");
@@ -196,6 +208,24 @@ export const setAutoTdp = callable<[enabled: boolean, scope: TdpScope, appid: st
 // Signals the QAM panel opened/closed so the auto loop can raise its floor (and bump
 // PL1 immediately) to keep the CPU-bound menu render fluid.
 export const setUiActive = callable<[enabled: boolean], boolean>("set_ui_active");
+
+// ---- TDP control / conflict take-over -------------------------------------
+// HHD conflict detection lives in the backend (it reads the REST daemon); SDTDP is
+// detected on the frontend via Decky's plugin list (see tdp/deckyPlugins.ts).
+export const getTdpConflict =
+  callable<[], { hhd_present: boolean; hhd_managing: boolean }>("get_tdp_conflict");
+// Hand HHD's TDP module over to us (reversible; saves its previous value).
+export const takeTdpControl =
+  callable<[], { ok: boolean; hhd_managing: boolean }>("take_tdp_control");
+// Master switch: OFF stops all rail writes and hands HHD back (Potencia → monitor).
+export const getTdpControlEnabled = callable<[], boolean>("get_tdp_control_enabled");
+export const setTdpControlEnabled =
+  callable<[enabled: boolean], boolean>("set_tdp_control_enabled");
+// One-time-notice flags (durable, backend-persisted).
+export const setSeenAutotdpNotice =
+  callable<[seen: boolean], boolean>("set_seen_autotdp_notice");
+export const setSeenTdpConflictTakeover =
+  callable<[seen: boolean], boolean>("set_seen_tdp_conflict_takeover");
 
 export type FanScope = Scope;
 // "adaptive" = the learned curve (computed live from telemetry). Choosing it IS
@@ -209,6 +239,8 @@ export interface FanPresetDef {
 
 export interface FanCurveState {
   supported: boolean;
+  // Software-loop backends can wedge → the UI offers a reset; hardware-curve can't.
+  resettable: boolean;
   source: string | null;
   pwm_max: number;
   // Read-only firmware curve (MSI Claw): the device can't be controlled but its
@@ -231,6 +263,8 @@ export interface FanCurveState {
   // control card shows the opt-in toggle instead of the editor.
   experimental_available: boolean;
   experimental_enabled: boolean;
+  // Set only by reset_fan_control: whether the release to firmware actually landed.
+  reset_ok?: boolean;
   // Host OS name (PRETTY_NAME) for the honest "curve not available on this OS"
   // message; null when unreadable.
   os_name: string | null;
@@ -271,6 +305,7 @@ export const getFanCurveState = callable<[], FanCurveState>("get_fan_curve_state
 // Opt in/out of experimental EC fan control (Legion Go S). Returns the fresh state.
 export const setFanExperimental =
   callable<[enabled: boolean], FanCurveState>("set_fan_experimental");
+export const resetFanControl = callable<[], FanCurveState>("reset_fan_control");
 export const setFanPreset =
   callable<[preset: FanPreset, scope: FanScope, appid: string | null], FanCurveState>("set_fan_preset");
 export const setFanFollowGlobal =
@@ -520,16 +555,6 @@ export const getHdrState = callable<[], HdrState>("get_hdr_state");
 export const setHdr = callable<[patch: HdrPatch, scope: Scope, appid: string | null], HdrState>("set_hdr");
 
 // ---- Mandos (controller manager) ------------------------------------------
-export interface ControllerConflict {
-  hhd_present: boolean;
-  hhd_managing_power: boolean;
-  // True when HHD manages power AND our TDP backend can too → they fight.
-  conflict: boolean;
-}
-
-export const getControllerConflict =
-  callable<[], ControllerConflict>("get_controller_conflict");
-
 export type ControllerTarget = { gamepad: string } | { key: string };
 
 export interface RemapButton {

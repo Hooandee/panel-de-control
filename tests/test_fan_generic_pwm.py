@@ -128,6 +128,49 @@ def test_oxp_style_release_restores_captured_auto_value(tmp_path):
     assert _r(d, "pwm1_enable") == "0"  # restored to the captured auto value
 
 
+def test_read_state_reflects_the_manual_mode_readback(tmp_path):
+    # enable = the ACTUAL manual-mode readback, not our write and not the tach: a fan
+    # in manual mode reads manual even if it isn't (yet) spinning.
+    d = _mk_pwm_chip(str(tmp_path))
+    _w(d, "fan1_input", "0")            # not spinning
+    b = _backend(tmp_path, temp=70.0)
+    b.apply_curve_all(CURVE)
+    assert b.read_state()["fans"][0]["enable"] == 1  # manual mode is active
+
+
+def test_read_state_firmware_when_enable_reverted_even_if_spinning(tmp_path):
+    # The firmware owns the mode (enable=2) and the fan happens to spin — a positive
+    # RPM must NOT confirm manual on its own; the enable readback rules.
+    d = _mk_pwm_chip(str(tmp_path))
+    _w(d, "fan1_input", "1800")         # spinning (firmware's doing)
+    b = _backend(tmp_path, temp=70.0)
+    b.apply_curve_all(CURVE)
+    _w(d, "pwm1_enable", "2")           # firmware reclaimed the mode
+    assert b.read_state()["fans"][0]["enable"] == 2
+
+
+def test_read_state_firmware_when_not_driving(tmp_path):
+    _mk_pwm_chip(str(tmp_path), enable="2")
+    assert _backend(tmp_path).read_state()["fans"][0]["enable"] == 2  # never applied
+
+
+def test_partial_write_leaves_failed_fan_in_firmware(tmp_path):
+    # fan2's pwm write fails → PWM-first means fan2 never switches to manual (no stuck
+    # manual@0); fan1 (fully written) reads manual. One failure ≠ all firmware.
+    import os as _os
+    d = _mk_pwm_chip(str(tmp_path), fans=(1, 2))
+    _w(d, "fan1_input", "1800")
+    _w(d, "fan2_input", "1800")
+    _os.chmod(_os.path.join(d, "pwm2"), 0o444)  # fan2 pwm write fails
+    b = _backend(tmp_path, temp=80.0)
+    res = b.apply_curve_all(CURVE)
+    assert res["ok"] is False
+    st = {f["key"]: f["enable"] for f in b.read_state()["fans"]}
+    assert st["fan1"] == 1                    # fully driven → manual
+    assert st["fan2"] == 2                    # never switched to manual → firmware
+    assert _r(d, "pwm2_enable") == "2"        # stays auto, never stuck manual@0
+
+
 def test_factory_selects_generic_pwm_last(tmp_path):
     _mk_pwm_chip(str(tmp_path))
     backend = select_fan_backend(None, root=str(tmp_path), temp_fn=lambda: 60.0)

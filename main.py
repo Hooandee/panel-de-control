@@ -105,6 +105,14 @@ DEFAULTS = {
     # the menu would show an inflated number vs the REAL in-game TDP the user wants to
     # see with the QAM open. When ON, the user accepts the menu-time bump for fluidity.
     "qam_tdp_boost": False,
+    # Master switch: when False we stop writing the TDP rails and Potencia drops to
+    # monitor-only, handing TDP to another tool.
+    "tdp_control_enabled": True,
+    # One-time notices (SettingsStore drops keys not in DEFAULTS).
+    "seen_tdp_conflict_takeover": False,
+    "seen_autotdp_notice": False,
+    # HHD's tdp_enable saved when we take control, to restore later. None = never took it.
+    "hhd_tdp_prev": None,
     # HDR output on/off (only meaningful on HDR-capable panels — see device.hdr).
     "hdr_enabled": False,
     # Battery charge limit: when enabled, cap charging at `charge_limit_percent`
@@ -749,6 +757,74 @@ class Plugin:
         out["hhd_present"] = hhd_present
         return out
 
+    # ---- TDP conflict + master switch --------------------------------------
+    async def get_tdp_conflict(self) -> dict:
+        """Whether HHD is currently managing the power rails. SimpleDeckyTDP is
+        detected on the frontend (the backend can't see it)."""
+        self._init()
+        hhd_present = self._controller_backend.manager == controller_detect.HHD
+        # current_tdp_enable does a blocking HTTP GET; the frontend polls this, so
+        # keep it off the event loop.
+        managing = (await self._offload_call(controller_hhd.current_tdp_enable) or False) \
+            if hhd_present else False
+        return {"hhd_present": hhd_present, "hhd_managing": bool(managing)}
+
+    async def take_tdp_control(self) -> dict:
+        """Hand HHD's TDP module over to us (reversible), saving its previous value.
+        ok only when the echo confirms it's off."""
+        self._init()
+        # HHD's REST client is blocking urllib — keep it off the loop.
+        prev = await self._offload_call(controller_hhd.current_tdp_enable)
+        if prev is None:
+            return {"ok": False, "hhd_managing": False}
+        if prev and self._settings.get("hhd_tdp_prev") is None:
+            self._settings["hhd_tdp_prev"] = True
+        applied = await self._offload_call(lambda: controller_hhd.set_tdp_enable(False))
+        self._save()
+        await self._offload_call(self._reapply_tdp)
+        return {"ok": applied is False, "hhd_managing": bool(applied)}
+
+    def _restore_hhd_tdp(self) -> None:
+        """Return HHD to its previous tdp_enable if we took it. Idempotent."""
+        try:
+            prev = self._settings.get("hhd_tdp_prev")
+            if prev is None:
+                return
+            controller_hhd.set_tdp_enable(bool(prev))
+            self._settings["hhd_tdp_prev"] = None
+            self._save()
+        except Exception:  # noqa: BLE001
+            pass
+
+    async def get_tdp_control_enabled(self) -> bool:
+        self._init()
+        return self._tdp_control_on()
+
+    async def set_tdp_control_enabled(self, enabled: bool) -> bool:
+        """OFF = stop writing rails and hand HHD back (step aside). ON = re-assert
+        our setpoint."""
+        self._init()
+        enabled = bool(enabled)
+        self._settings["tdp_control_enabled"] = enabled
+        self._save()
+        if not enabled:
+            await self._offload_call(self._restore_hhd_tdp)
+        else:
+            await self._offload_call(self._reapply_tdp)
+        return enabled
+
+    async def set_seen_autotdp_notice(self, seen: bool) -> bool:
+        self._init()
+        self._settings["seen_autotdp_notice"] = bool(seen)
+        self._save()
+        return bool(seen)
+
+    async def set_seen_tdp_conflict_takeover(self, seen: bool) -> bool:
+        self._init()
+        self._settings["seen_tdp_conflict_takeover"] = bool(seen)
+        self._save()
+        return bool(seen)
+
     # ---- Fans (read-only monitor) ------------------------------------------
     def _read_fans(self) -> dict:
         """hwmon fan/temp reading, with EC-readable RPM merged in for devices that
@@ -813,8 +889,10 @@ class Plugin:
             except Exception:  # noqa: BLE001 — starting the loop must never break an RPC
                 pass
 
-    def _reapply_fans_sync(self) -> None:
-        """Apply the effective fan profile for the current game (or global).
+    def _reapply_fans_sync(self) -> bool:
+        """Apply the effective fan profile for the current game (or global). Returns
+        whether the intended state was established (the apply/release reported ok) so
+        callers that care — the reset — don't claim success on a refused re-apply.
 
         - auto      -> firmware control.
         - adaptive  -> drive the LEARNED curve (computed live from telemetry): the
@@ -831,15 +909,18 @@ class Plugin:
             if preset == "adaptive":
                 points = self._adaptive_curve_points(self._current_appid)
                 if points is None:
-                    self._fan_ctrl.set_auto(None)  # not enough data → honest firmware auto
+                    res = self._fan_ctrl.set_auto(None)  # not enough data → firmware auto
                 else:
-                    self._fan_ctrl.apply_curve_all(points)
+                    res = self._fan_ctrl.apply_curve_all(points)
             elif preset == "auto" or not profile["points"]:
-                self._fan_ctrl.set_auto(None)
+                res = self._fan_ctrl.set_auto(None)
             else:
-                self._fan_ctrl.apply_curve_all(profile["points"])
+                res = self._fan_ctrl.apply_curve_all(profile["points"])
+            # A malformed response (None / {} / no "ok") is not success, so reset_ok
+            # can't ride a bad re-apply.
+            return bool(res.get("ok")) if isinstance(res, dict) else False
         except Exception:  # noqa: BLE001
-            pass
+            return False
 
     def _adaptive_curve_points(self, appid):
         """The learned curve to drive in adaptive mode for *appid* (or None if there
@@ -868,6 +949,7 @@ class Plugin:
                 firmware_points = [{"temp": t, "pct": p} for t, p in curve]
         return {
             "supported": hw_state.get("supported", False),
+            "resettable": bool(getattr(self._fan_ctrl, "resettable", False)),
             "firmware_points": firmware_points,
             "source": hw_state.get("source"),
             "pwm_max": hw_state.get("pwm_max", 255),
@@ -1004,6 +1086,25 @@ class Plugin:
         self._fan_curves.set_auto(resolved, appid)
         self._reapply_fans()
         return self._fan_curve_state()
+
+    async def reset_fan_control(self) -> dict:
+        """Recover a wedged software-loop fan control: hand the fan back to firmware
+        (off the event loop), then re-establish the stored curve and read the state
+        back. `reset_ok` reflects whether the release actually landed — a malformed or
+        failed response is not success."""
+        self._init()
+        try:
+            res = await self._offload_call(self._fan_ctrl.restore_auto)
+            released = bool(res.get("ok")) if isinstance(res, dict) else False
+        except Exception:  # noqa: BLE001
+            released = False
+        # Re-establish the stored curve off-loop, then restart the curve loop, before
+        # reading the state back. reset_ok requires BOTH the release and the re-apply.
+        reapplied = await self._offload_call(self._reapply_fans_sync)
+        self._ensure_fan_loop()
+        state = self._fan_curve_state()
+        state["reset_ok"] = released and bool(reapplied)
+        return state
 
     # ---- Fan-curve suggestion (suggestion brain over local telemetry) -------
     def _fan_suggestion(self, appid=None) -> dict:
@@ -1333,6 +1434,10 @@ class Plugin:
                 if self._settings.get("eco_enabled"):
                     self._reset_auto_windows()
                     continue
+                # Master switch off: another tool owns the rails — don't drive PL1.
+                if not self._tdp_control_on():
+                    self._reset_auto_windows()
+                    continue
                 # Hold when auto-TDP is off for THIS game (per-game, own or global) or a
                 # named firmware mode owns the rails — either way we don't drive PL1.
                 if (not self._tdp_profiles.auto_tdp(self._current_appid)
@@ -1387,7 +1492,8 @@ class Plugin:
         self._init()
         pr = await asyncio.to_thread(self._power_reader.read)
         auto = self._tdp_profiles.auto_tdp(self._current_appid)
-        setpoint = self._effective_levels(self._current_appid)[0]["pl1"]
+        ac = read_on_ac()
+        setpoint = self._effective_levels(self._current_appid, ac)[0]["pl1"]
         # Live PL1 the firmware holds (reflects eco + external HHD/Steam changes). Skip
         # it on subprocess-backed backends (ryzenadj) so the 1 s poll doesn't fork a
         # tool every tick — the arc falls back to the setpoint there.
@@ -1399,10 +1505,15 @@ class Plugin:
             "setpoint": setpoint,
             "applied": applied,
             "ui_floor_engaged": self._ui_floor_engaged(),
+            # Polled every second, so the UI can refresh the slider ceiling the moment
+            # the charger is plugged or unplugged.
+            "on_ac": ac,
         }
 
     async def set_auto_tdp(self, enabled: bool, scope: str = "global", appid=None) -> dict:
         self._init()
+        if not self._tdp_control_on():
+            return {"auto_tdp": self._tdp_profiles.auto_tdp(self._current_appid)}
         self._clear_eco()
         self._tdp_profiles.set_auto_tdp(scope, bool(enabled), appid=appid)
         await self._offload_call(self._reapply_tdp)
@@ -1436,8 +1547,12 @@ class Plugin:
         """Device TDP limits with the user's opt-in ceilings applied (a single
         chokepoint so every clamp/limit path honours the Ajustes toggles): the
         battery-unlock preference, then the GPD Win 5 cooler boost."""
-        lim = self._tdp_backend.get_limits().unlocked(
-            bool(self._settings.get("unlock_battery_max", False)))
+        # Chokepoint for the battery-unlock preference. Ignore it where the firmware
+        # enforces the battery cap (Ally/Ally X) — the write would be refused, so the
+        # reported ceiling must not claim the extra either.
+        unlock = (bool(self._settings.get("unlock_battery_max", False))
+                  and not self._device.charger_only_extra)
+        lim = self._tdp_backend.get_limits().unlocked(unlock)
         cooler_max = self._device.cooler_max
         if cooler_max and self._settings.get("cooler_boost", False):
             lim = lim.with_cooler(cooler_max)
@@ -1565,10 +1680,13 @@ class Plugin:
                 fut.add_done_callback(run_done)
 
     async def _offload_call(self, fn):
-        """Run a blocking call off the event loop and return its result (awaited)."""
+        """Run a blocking call off the event loop and return its result (awaited).
+        Falls back to a default worker thread when the serial executor isn't up yet
+        (before _main / after shutdown) so blocking work — systemctl, EC writes — never
+        lands on the loop."""
         ex = getattr(self, "_apply_executor", None)
         if ex is None:
-            return fn()
+            return await asyncio.to_thread(fn)
         return await asyncio.get_running_loop().run_in_executor(ex, fn)
 
     async def _drain_offloaded(self):
@@ -1597,8 +1715,16 @@ class Plugin:
             self._settings["firmware_mode"] = _CUSTOM_MODE
             self._save()
 
+    def _tdp_control_on(self) -> bool:
+        """Master switch: whether we're allowed to write the TDP rails at all."""
+        return bool(self._settings.get("tdp_control_enabled", True))
+
     def _reapply_tdp(self, on_ac=None):
         self._init()
+        if not self._tdp_control_on():
+            # Master switch off: we've handed the rails to another tool. Don't write.
+            self._last_written_pl1 = None
+            return TdpResult(None, None, True, "tdp-control-disabled")
         mode = self._firmware_mode()
         if mode != _CUSTOM_MODE:
             # A named firmware mode owns the rails, fan curve and LED — don't force custom.
@@ -2238,6 +2364,12 @@ class Plugin:
             "firmware_mode": self._firmware_mode(),
             # get_tdp_state flips this True when it adopts an external change.
             "external_change": False,
+            # Master switch + one-time-notice flags (durable across reboot; the
+            # frontend gates monitor-only mode + the first-run modals off these).
+            "tdp_control_enabled": self._tdp_control_on(),
+            "seen_autotdp_notice": bool(self._settings.get("seen_autotdp_notice", False)),
+            "seen_tdp_conflict_takeover": bool(
+                self._settings.get("seen_tdp_conflict_takeover", False)),
         }
 
     def _tdp_presets(self, limits) -> dict:
@@ -2265,6 +2397,9 @@ class Plugin:
 
     async def set_tdp_watts(self, watts: int, scope: str, appid=None) -> dict:
         self._init()
+        if not self._tdp_control_on():
+            return {"requested_w": watts, "applied_w": None, "ok": False,
+                    "detail": "tdp-control-disabled"}
         resolved = self._resolve_scope(scope, appid)
         if resolved is None:
             return {"requested_w": watts, "applied_w": None, "ok": False,
@@ -2312,6 +2447,9 @@ class Plugin:
 
     async def set_tdp_levels(self, off2: int, off3: int, scope: str, appid=None) -> dict:
         self._init()
+        if not self._tdp_control_on():
+            return {"requested_w": 0, "applied_w": None, "ok": False,
+                    "detail": "tdp-control-disabled"}
         resolved = self._resolve_scope(scope, appid)
         if resolved is None:
             return {"requested_w": 0, "applied_w": None, "ok": False,
@@ -2420,6 +2558,7 @@ class Plugin:
             self._display_wait_task = None
         self._stop_night_loop()
         await self._offload_call(self._restore_color_safe)
+        await self._offload_call(self._restore_hhd_tdp)  # hand HHD's TDP back if we took it
         self._stop_auto_loop()
         if getattr(self, "_sampler", None) is not None:
             self._sampler.stop()
@@ -2437,6 +2576,7 @@ class Plugin:
     async def _uninstall(self) -> None:
         await self._offload_call(self._restore_fans_safe)
         await self._offload_call(self._restore_color_safe)
+        await self._offload_call(self._restore_hhd_tdp)  # hand HHD's TDP back if we took it
         self._shutdown_apply_executor()
         fan_expose.remove_conf()  # drop the modprobe.d option we added (guarded)
         decky.logger.info("Panel de Control uninstalled")

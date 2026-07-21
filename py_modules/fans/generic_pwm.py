@@ -59,20 +59,33 @@ class GenericPwmFanBackend(SoftwareLoopBackend):
                 m, prior if prior not in (None, _ENABLE_MANUAL) else _ENABLE_AUTO)
         return True
 
-    def _apply_once(self) -> None:
+    def _apply_once_locked(self) -> bool:
+        """Write the interpolated pwm to every fan (caller holds `_io_lock`). Writes
+        the PWM FIRST and switches to manual only after it lands, so a fan is never
+        put in manual holding a stale/0 duty (no stuck-manual dead state); a failed
+        write just leaves that fan in firmware auto. `all_ok` requires the manual mode
+        to actually read back — never our write alone. Returns True only when every
+        fan landed. No temp → release."""
         if self._points is None:
-            return
+            self._drive_ok = False
+            return False
         temp = self._temp_fn() if self._temp_fn else None
         if temp is None:
             self._release()  # no safe reading → hand back rather than hold a stale duty
-            return
+            self._drive_ok = False
+            return False
         pwm = _interp(self._points, temp)
         if temp >= self._points[-1][0]:
             pwm = max(pwm, _SAFE_MAX_TEMP_FLOOR)  # never idle at/above the hottest point
         pwm = max(0, min(255, pwm))
+        all_ok = True
         for m in self._fans:
-            _write(self._enable(m), str(_ENABLE_MANUAL))
-            _write(self._pwm(m), str(pwm))
+            pwm_ok = _write(self._pwm(m), str(pwm))
+            en_ok = _write(self._enable(m), str(_ENABLE_MANUAL)) if pwm_ok else False
+            if not (pwm_ok and en_ok and _read_int(self._enable(m)) == _ENABLE_MANUAL):
+                all_ok = False
+        self._drive_ok = all_ok
+        return all_ok
 
     def _release(self) -> bool:
         ok = True
@@ -80,10 +93,19 @@ class GenericPwmFanBackend(SoftwareLoopBackend):
             ok = _write(self._enable(m), str(self._orig_enable.get(m, _ENABLE_AUTO))) and ok
         return ok
 
+    def _fan_enable(self, m: int) -> int:
+        """Manual(1) iff the hardware is ACTUALLY in manual mode (enable node read
+        back) — never our write alone (it can be refused), and never a tachometer
+        reading (a spin can be the firmware's, and 0 rpm can't tell spin-up/dead from
+        ignored). The readback is the actual control state."""
+        return _ENABLE_MANUAL if _read_int(self._enable(m)) == _ENABLE_MANUAL else _ENABLE_AUTO
+
     def read_state(self) -> dict:
         if not self.supported:
             return {"supported": False, "source": self.name, "pwm_max": 255, "fans": []}
-        fans = [{"key": f"fan{m}", "enable": _read_int(self._enable(m)),
-                 "rpm": _read_int(os.path.join(self._dir, f"fan{m}_input")),
-                 "points": []} for m in self._fans]
+        fans = []
+        for m in self._fans:
+            rpm = _read_int(os.path.join(self._dir, f"fan{m}_input"))
+            fans.append({"key": f"fan{m}", "enable": self._fan_enable(m),
+                         "rpm": rpm, "points": []})
         return {"supported": True, "source": self.name, "pwm_max": 255, "fans": fans}

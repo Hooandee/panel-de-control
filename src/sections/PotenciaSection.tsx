@@ -1,14 +1,19 @@
 import { FC, useCallback, useEffect, useRef, useState } from "react";
+import { PanelSectionRow } from "@decky/ui";
 
-import { getTdpState, setTdpWatts, setTdpLevels, setTdpBoostMode, setTdpFirmwareMode, getPowerDraw, setAutoTdp, setTdpFollowGlobal, TdpState, TdpScope, PowerDraw, BoostMode } from "../api";
+import { getTdpState, setTdpWatts, setTdpLevels, setTdpBoostMode, setTdpFirmwareMode, getPowerDraw, setAutoTdp, setTdpFollowGlobal, setSeenAutotdpNotice, setSeenTdpConflictTakeover, TdpState, TdpScope, PowerDraw, BoostMode } from "../api";
 import { TdpSection } from "../components/TdpSection";
 import { GpuClockCard } from "../components/GpuClockCard";
 import { AutoTdpToggle } from "../components/AutoTdpToggle";
+import { TdpConflictCard } from "../components/TdpConflictCard";
+import { openTdpConflictModal } from "../components/TdpConflictModal";
+import { openAutoTdpNoticeModal } from "../components/AutoTdpNoticeModal";
 import { SectionBlocks } from "../customize/SectionBlocks";
 import { useLayout } from "../customize/store";
 import { visibleIds } from "../customize/layout";
 import { blockOrder } from "../customize/manifest";
 import { useRunningGame } from "../tdp/useRunningGame";
+import { useTdpConflict } from "../tdp/useTdpConflict";
 import { useScopeSync } from "../useScopeSync";
 
 /**
@@ -23,6 +28,10 @@ export const PotenciaSection: FC = () => {
   const [power, setPower] = useState<PowerDraw | null>(null);
   const commitTimerWatts = useRef<ReturnType<typeof setTimeout> | null>(null);
   const commitTimerLevels = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Fires the first-run take-over modal at most once per mount.
+  const shownTakeover = useRef(false);
+  // Reuse the state we already have so the hook doesn't re-fetch get_tdp_state.
+  const conflict = useTdpConflict(tdp?.supported ?? false, tdp?.tdp_control_enabled ?? true);
 
   const refresh = useCallback(() => {
     getTdpState().then(setTdp).catch(() => {});
@@ -32,14 +41,23 @@ export const PotenciaSection: FC = () => {
     refresh();
   }, [refresh]);
 
-  // Poll live power draw every second while the section is mounted.
+  // Poll live power draw every second while the section is mounted. When the charger
+  // state flips, re-fetch the TDP state too so the slider ceiling (battery vs charger)
+  // updates at once instead of staying stuck on the old source.
+  const lastAc = useRef<boolean | null>(null);
   useEffect(() => {
-    getPowerDraw().then(setPower).catch(() => {});
-    const id = setInterval(() => {
-      getPowerDraw().then(setPower).catch(() => {});
-    }, 1000);
+    const tick = () =>
+      getPowerDraw()
+        .then((p) => {
+          setPower(p);
+          if (lastAc.current !== null && lastAc.current !== p.on_ac) refresh();
+          lastAc.current = p.on_ac;
+        })
+        .catch(() => {});
+    tick();
+    const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, []);
+  }, [refresh]);
 
   const appid = game?.appid;
   useEffect(() => {
@@ -118,6 +136,24 @@ export const PotenciaSection: FC = () => {
     [resolveTarget, refresh],
   );
 
+  // Gate the first enable of Auto‑TDP behind the one-time notice. Disabling isn't gated.
+  const onAutoTdpToggle = useCallback(
+    (enabled: boolean) => {
+      if (enabled && tdp && !tdp.seen_autotdp_notice) {
+        openAutoTdpNoticeModal({
+          onConfirm: () => {
+            setSeenAutotdpNotice(true).then(() => refresh()).catch(() => {});
+            onAutoTdp(true);
+          },
+          onCancel: () => {},
+        });
+        return;
+      }
+      onAutoTdp(enabled);
+    },
+    [tdp, onAutoTdp, refresh],
+  );
+
   // Firmware performance mode (Legion Go original). Device-global; the RPC returns the
   // full new state so the arc + chips update in one round-trip.
   const onFirmwareMode = useCallback((mode: string) => {
@@ -153,8 +189,33 @@ export const PotenciaSection: FC = () => {
     if (!autoTdpVisible && isAutoOn) onAutoTdp(false);
   }, [autoTdpVisible, isAutoOn, onAutoTdp]);
 
+  // Keep the latest conflict actions reachable from the modal callback without
+  // re-arming the first-run effect.
+  const conflictRef = useRef(conflict);
+  conflictRef.current = conflict;
+
+  // First-run take-over: pop the modal once when a live conflict first appears, then
+  // persist the flag. After that the persistent card handles it.
+  useEffect(() => {
+    if (!tdp || shownTakeover.current) return;
+    if (conflict.conflict && !tdp.seen_tdp_conflict_takeover) {
+      shownTakeover.current = true;
+      openTdpConflictModal(() => void conflictRef.current.takeAll());
+      setSeenTdpConflictTakeover(true).then(() => refresh()).catch(() => {});
+    }
+  }, [conflict.conflict, tdp, refresh]);
+
   return (
     <>
+      {conflict.conflict && (
+        <PanelSectionRow>
+          <TdpConflictCard
+            rivals={conflict.rivals}
+            onDisableSdtdp={() => void conflict.disableSdtdp()}
+            onTakeHhd={() => void conflict.takeHhd()}
+          />
+        </PanelSectionRow>
+      )}
       <TdpSection
         tdp={tdp}
         scope={scope}
@@ -166,14 +227,18 @@ export const PotenciaSection: FC = () => {
         onSetMode={onSetMode}
         onApplySuggestion={onApplySuggestion}
         onFirmwareMode={onFirmwareMode}
+        monitorOnly={conflict.monitorOnly}
       />
-      <SectionBlocks
-        sectionId="power"
-        blocks={{
-          gpu: <GpuClockCard scope={scope} appid={game?.appid ?? null} />,
-          autoTdp: <AutoTdpToggle checked={isAutoOn} onChange={onAutoTdp} />,
-        }}
-      />
+      {/* Every write control drops away in monitor-only mode (we've stepped aside). */}
+      {!conflict.monitorOnly && (
+        <SectionBlocks
+          sectionId="power"
+          blocks={{
+            gpu: <GpuClockCard scope={scope} appid={game?.appid ?? null} />,
+            autoTdp: <AutoTdpToggle checked={isAutoOn} onChange={onAutoTdpToggle} />,
+          }}
+        />
+      )}
     </>
   );
 };

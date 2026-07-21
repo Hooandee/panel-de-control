@@ -10,6 +10,7 @@ import {
   canSubmit,
   toggleCategory,
 } from "../report/logic";
+import { FocusRoot } from "./FocusRoot";
 
 type Phase = "form" | "sending" | "done" | "error";
 
@@ -22,6 +23,7 @@ const CategoryChip: FC<{ label: string; on: boolean; onClick: () => void }> = ({
   <Focusable
     onActivate={onClick}
     onClick={onClick}
+    noFocusRing
     style={{
       display: "flex",
       alignItems: "center",
@@ -29,7 +31,7 @@ const CategoryChip: FC<{ label: string; on: boolean; onClick: () => void }> = ({
       padding: `${theme.space.sm}px ${theme.space.md}px`,
       borderRadius: theme.radius.sm,
       boxShadow: `inset 0 0 0 1px ${on ? theme.color.accent : theme.color.hairline}`,
-      background: on ? "rgba(78,161,255,0.12)" : "transparent",
+      background: on ? `rgba(${theme.color.accentRgb},0.12)` : "transparent",
       fontSize: theme.font.body,
       color: theme.color.textPrimary,
       flex: "1 1 45%",
@@ -234,7 +236,9 @@ const ReportBody: FC<{ closeModal?: () => void }> = ({ closeModal }) => {
 
 const ReportModal: FC<{ closeModal?: () => void }> = ({ closeModal }) => (
   <ModalRoot closeModal={closeModal} bAllowFullSize>
-    <ReportBody closeModal={closeModal} />
+    <FocusRoot>
+      <ReportBody closeModal={closeModal} />
+    </FocusRoot>
   </ModalRoot>
 );
 

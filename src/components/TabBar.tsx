@@ -1,4 +1,4 @@
-import { FC, ReactNode } from "react";
+import { FC, ReactNode, useEffect, useRef } from "react";
 import { Focusable } from "@decky/ui";
 import { segmentGroupStyle, segmentItemStyle } from "./segmented";
 import { MarqueeText } from "./MarqueeText";
@@ -24,6 +24,14 @@ interface TabBarProps {
  * (a dropdown could later replace this with zero change to the registry).
  */
 export const TabBar: FC<TabBarProps> = ({ tabs, activeId, onSelect }) => {
+  // Move focus onto the active tab when it changes (e.g. via L1/R1); skip first render.
+  const activeTabRef = useRef<HTMLDivElement>(null);
+  const mounted = useRef(false);
+  useEffect(() => {
+    if (mounted.current) activeTabRef.current?.focus();
+    else mounted.current = true;
+  }, [activeId]);
+
   return (
     <Focusable style={segmentGroupStyle}>
       {tabs.map((tab) => {
@@ -31,6 +39,7 @@ export const TabBar: FC<TabBarProps> = ({ tabs, activeId, onSelect }) => {
         return (
           <Focusable
             key={tab.id}
+            ref={active ? activeTabRef : undefined}
             style={{
               ...segmentItemStyle(active),
               flex: active ? 1 : "0 0 auto",
