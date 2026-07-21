@@ -18,6 +18,8 @@ import { openFanCurveModal } from "../components/FanCurveModal";
 import { Point, percentToPwm } from "../fans/curve";
 import { Loading } from "../components/Loading";
 import { SectionBlocks } from "../customize/SectionBlocks";
+import { useModules } from "../customize/modules";
+import { effectiveEnabled } from "../customize/moduleLogic";
 import { theme } from "../theme";
 
 const card = { ...theme.card, padding: theme.space.md, marginBottom: theme.space.card } as const;
@@ -33,6 +35,12 @@ export const VentiladoresSection: FC = () => {
   const { state, fanHistory } = useFanState();
   const curve = useFanCurve();
   const { suggestion } = useFanSuggestion(curve.game?.appid ?? null);
+  // Module gates: fan control (drive curves) and learning (suggestions). The live
+  // monitor (RPM/temps) is never gated — only control + suggestion. Hooks stay
+  // before the early return below (rules of hooks).
+  const disabled = useModules();
+  const canControl = effectiveEnabled("fanControl", disabled);
+  const canLearn = effectiveEnabled("learning", disabled);
 
   // Read-only firmware curve (MSI Claw): map pct→pwm once per fetch so the memoized
   // FanCurveGraph isn't rebuilt on every 1.5 s monitor poll (points are static).
@@ -126,7 +134,7 @@ export const VentiladoresSection: FC = () => {
         {curveState?.experimental_available && (
           <ExperimentalFanCard enabled={curveState.experimental_enabled} onToggle={curve.onExperimental} />
         )}
-        {curveState?.supported && (
+        {curveState?.supported && canControl && (
           <PanelSectionRow>
             <div style={{ ...card, display: "flex", flexDirection: "column", gap: theme.space.sm, overflow: "hidden" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -143,7 +151,7 @@ export const VentiladoresSection: FC = () => {
                 </Focusable>
               </div>
 
-              <FanCurveEditor control={curve} liveTemp={liveTemp} suggestion={suggestion} />
+              <FanCurveEditor control={curve} liveTemp={liveTemp} suggestion={canLearn ? suggestion : null} />
 
               {curveState.resettable && <FanResetButton onReset={curve.onReset} />}
             </div>

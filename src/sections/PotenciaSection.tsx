@@ -9,6 +9,8 @@ import { TdpConflictCard } from "../components/TdpConflictCard";
 import { openTdpConflictModal } from "../components/TdpConflictModal";
 import { openAutoTdpNoticeModal } from "../components/AutoTdpNoticeModal";
 import { SectionBlocks } from "../customize/SectionBlocks";
+import { useModules } from "../customize/modules";
+import { effectiveEnabled } from "../customize/moduleLogic";
 import { useLayout } from "../customize/store";
 import { visibleIds } from "../customize/layout";
 import { blockOrder } from "../customize/manifest";
@@ -184,7 +186,10 @@ export const PotenciaSection: FC = () => {
   // hiding it disables auto-TDP — the loop's last PL1 stays as a fixed, editable
   // value. onAutoTdp(false) is idempotent; this fires once when it becomes hidden.
   const layout = useLayout();
-  const autoTdpVisible = visibleIds(blockOrder("power"), layout.blocks["power"]).includes("autoTdp");
+  const disabled = useModules();
+  const autoTdpEnabled = effectiveEnabled("autoTdp", disabled);
+  const autoTdpVisible = autoTdpEnabled
+    && visibleIds(blockOrder("power"), layout.blocks["power"]).includes("autoTdp");
   useEffect(() => {
     if (!autoTdpVisible && isAutoOn) onAutoTdp(false);
   }, [autoTdpVisible, isAutoOn, onAutoTdp]);
@@ -235,7 +240,9 @@ export const PotenciaSection: FC = () => {
           sectionId="power"
           blocks={{
             gpu: <GpuClockCard scope={scope} appid={game?.appid ?? null} />,
-            autoTdp: <AutoTdpToggle checked={isAutoOn} onChange={onAutoTdpToggle} />,
+            autoTdp: autoTdpEnabled
+              ? <AutoTdpToggle checked={isAutoOn} onChange={onAutoTdpToggle} />
+              : null,
           }}
         />
       )}
