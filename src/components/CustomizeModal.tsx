@@ -76,9 +76,9 @@ const AccentPicker: FC = () => {
   const { t } = useI18n();
   const active = useAccent();
   return (
-    <div style={{ ...theme.card, padding: `${theme.space.md}px ${theme.space.md}px`, display: "flex", alignItems: "center", gap: theme.space.sm }}>
-      <span style={{ flex: 1, fontSize: theme.font.body, color: theme.color.textPrimary }}>{t("customize.accent")}</span>
-      <div style={{ display: "flex", gap: theme.space.sm }}>
+    <div style={{ ...theme.card, padding: theme.space.md, display: "flex", flexDirection: "column", gap: theme.space.sm }}>
+      <span style={{ fontSize: theme.font.body, color: theme.color.textPrimary }}>{t("customize.accent")}</span>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: theme.space.sm }}>
         {ACCENTS.map((a) => {
           const on = a.id === active.id;
           return (
@@ -248,6 +248,8 @@ const CustomizeBody: FC = () => {
                   {learningState === "blocked" ? t("customize.module.learning.blocked") : t("customize.module.learning.desc")}
                 </span>
               </span>
+              {/* Empty eye slot so the power lands in the same column as the categories. */}
+              <span style={{ width: 30 }} />
               <IconAction
                 label={learningState === "disabled" ? t("customize.enable") : t("customize.disable")}
                 color={learningState === "visible" ? theme.color.accent : theme.color.textMuted}
@@ -256,6 +258,7 @@ const CustomizeBody: FC = () => {
               >
                 <LuPower size={18} />
               </IconAction>
+              <span style={{ width: 17 }} />{/* empty chevron slot */}
             </div>
           </div>
         )}
