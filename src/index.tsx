@@ -10,6 +10,7 @@ import { startEcoAmbient } from "./system/ecoAmbient";
 import { startValueToast, refreshValueToast } from "./system/valueToast";
 import { hydratePrefs, onPrefsHealed } from "./system/pdcStorage";
 import { reloadLayout } from "./customize/store";
+import { hydrateModules } from "./customize/modules";
 
 // Localized header title only; the internal plugin name / install folder stays
 // "Panel de Control" (renaming it would break existing installs and the updater).
@@ -25,6 +26,8 @@ export default definePlugin(() => {
     reloadLayout();
   });
   void hydratePrefs();
+  // Reconcile the durable module enable/disable set (authoritative backend copy).
+  hydrateModules();
 
   // Persistent current-game watcher: runs at plugin scope (while Steam runs),
   // independent of the QAM being open. It is the single source that reports the

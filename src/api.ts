@@ -8,6 +8,11 @@ export const getVersion = callable<[], string>("get_version");
 export const getUiPrefs = callable<[], Record<string, string>>("get_ui_prefs");
 export const setUiPrefs = callable<[Record<string, string | null>], boolean>("set_ui_prefs");
 
+// Durable module enable/disable state. `disabled` = the user-disabled set (generic
+// ids + power/learning folded in). set_ui_module returns the fresh set after applying.
+export const getUiModules = callable<[], { disabled: string[] }>("get_ui_modules");
+export const setUiModule = callable<[string, boolean], { disabled: string[] }>("set_ui_module");
+
 export interface DeviceInfo {
   key: string;
   display_name: string;
