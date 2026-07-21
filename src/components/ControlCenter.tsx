@@ -16,6 +16,8 @@ import { useLearningStatus } from "../learning/useLearningStatus";
 import { useUpdate } from "../updater/useUpdate";
 import { AlertDot } from "../updater/AlertDot";
 import { useLayout } from "../customize/store";
+import { useModules } from "../customize/modules";
+import { effectiveEnabled } from "../customize/moduleLogic";
 import { visibleIds } from "../customize/layout";
 import { PINNED_TAB } from "../customize/manifest";
 import { theme } from "../theme";
@@ -33,6 +35,7 @@ export const ControlCenter: FC = () => {
   const [device, setDevice] = useState<DeviceInfo | null>(null);
   const [failed, setFailed] = useState(false);
   const layout = useLayout();
+  const disabled = useModules();
   // The user's visible tabs in their saved order (Settings always kept). One
   // memoized computation feeds both the initial-tab pick and the rendered tab
   // list (the shell re-renders on every poll tick, so avoid recomputing it).
@@ -91,7 +94,9 @@ export const ControlCenter: FC = () => {
   const orderedTabs = visibleTabIds
     .map((id) => SECTIONS.find((s) => s.id === id))
     .filter((s): s is (typeof SECTIONS)[number] => !!s)
-    .filter((s) => !(hidesMandos && s.id === "mandos"));
+    .filter((s) => !(hidesMandos && s.id === "mandos"))
+    // Drop tabs whose module the user disabled (Settings is pinned, never disabled).
+    .filter((s) => s.id === PINNED_TAB || effectiveEnabled(s.id, disabled));
   const active = resolveActiveSection(orderedTabs, activeId);
   const Active = active?.Component;
 
