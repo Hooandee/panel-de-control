@@ -20,7 +20,7 @@ const GameRow: FC<{ game: GameListItem; hidden: boolean; onClosed: () => void }>
   const { t } = useI18n();
   return (
     <FocusableCard onActivate={() => openLaunchEditorModal(game, onClosed)} style={{ opacity: hidden ? 0.55 : 1 }}>
-      <GameCover url={game.coverUrl} name={game.name} width={40} />
+      <GameCover urls={game.coverUrls} name={game.name} width={40} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: theme.font.body, fontWeight: 600, color: theme.color.textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {game.name}
@@ -49,7 +49,7 @@ const RunningNowCard: FC<{ games: GameListItem[]; onClosed: () => void }> = ({ g
   if (!game) return null;
   return (
     <FocusableCard emphasized onActivate={() => openLaunchEditorModal(game, onClosed)}>
-      <GameCover url={game.coverUrl} name={game.name} width={44} />
+      <GameCover urls={game.coverUrls} name={game.name} width={44} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: theme.font.caption, color: theme.color.accent, display: "flex", alignItems: "center", gap: 4 }}>
           <LuPlay size={11} /> {t("params.running.now")}
@@ -143,7 +143,9 @@ export const ParametrosSection: FC = () => {
           </div>
         ) : (
           shown!.map((g) => (
-            <GameRow key={g.stableKey} game={g} hidden={showHidden} onClosed={reload} />
+            // Key by the unique live appid — two non-Steam shortcuts can share a
+            // stableKey (name), which would collide as a React key.
+            <GameRow key={g.liveAppid} game={g} hidden={showHidden} onClosed={reload} />
           ))
         )}
       </div>

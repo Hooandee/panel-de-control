@@ -11,19 +11,21 @@ function initials(name: string): string {
   return (words[0][0] + words[1][0]).toUpperCase();
 }
 
-/** Vertical game portrait (2:3) with rounded corners + gradient backdrop. Falls back
- *  to a gradient tile with the game's initials when there's no art (or it fails to load). */
-export const GameCover: FC<{ url: string | null; name: string; width?: number }> = ({
-  url,
+/** Vertical game portrait (2:3) with rounded corners + gradient backdrop. Steam can
+ *  return several candidates (e.g. a stale JPG then a valid PNG); we try them in order
+ *  and fall back to a gradient tile with the game's initials when none load. */
+export const GameCover: FC<{ urls: string[]; name: string; width?: number }> = ({
+  urls,
   name,
   width = 46,
 }) => {
-  const [err, setErr] = useState(false);
-  // Reset the error on url change — this instance is reused (e.g. the running-now
-  // card) as the game changes, so a prior 404 must not stick to the next cover.
-  useEffect(() => setErr(false), [url]);
+  const [idx, setIdx] = useState(0);
+  // Reset to the first candidate when the list changes — this instance is reused
+  // (e.g. the running-now card) as the game changes, so a prior failure can't stick.
+  useEffect(() => setIdx(0), [urls.join("|")]);
   const height = Math.round(width * 1.5);
-  const showImg = !!url && !err;
+  const url = urls[idx];
+  const showImg = !!url;
   return (
     <div
       style={{
@@ -41,8 +43,8 @@ export const GameCover: FC<{ url: string | null; name: string; width?: number }>
     >
       {showImg ? (
         <img
-          src={url!}
-          onError={() => setErr(true)}
+          src={url}
+          onError={() => setIdx((i) => i + 1)}
           loading="lazy"
           decoding="async"
           style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}

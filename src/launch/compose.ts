@@ -38,7 +38,7 @@ const ENV_RE = /^[A-Za-z_][A-Za-z0-9_]*=/;
 /** Split on whitespace but keep quoted substrings and backslash-escaped characters
  *  (including escaped whitespace, e.g. `hello\ world`) intact, so a value never
  *  gets split mid-token and re-joined into a corrupt command. */
-function tokenize(s: string): string[] {
+function tokenize(s: string): { tokens: string[]; unbalanced: boolean } {
   const tokens: string[] = [];
   let cur = "";
   let quote: string | null = null;
@@ -66,8 +66,12 @@ function tokenize(s: string): string[] {
     }
   }
   if (cur) tokens.push(cur);
-  return tokens;
+  // A dangling quote or trailing backslash means we can't reason about the string.
+  return { tokens, unbalanced: quote !== null || escaped };
 }
+
+// Shell operators / expansions our simple model can't safely rewrite around.
+const SHELL_OPS_RE = /[;&|`<>$]|\$\(/;
 
 function toEnv(token: string): EnvVar {
   const eq = token.indexOf("=");
@@ -82,10 +86,16 @@ export function envToken(name: string, value: string): string {
 
 export function parse(str: string): Parsed {
   const raw = str ?? "";
-  const tokens = tokenize(raw);
+  const { tokens, unbalanced } = tokenize(raw);
   const cmdCount = tokens.filter((t) => t === COMMAND).length;
+  const rawCmdCount = (raw.match(/%command%/g) || []).length;
   const empty: Parsed = { envs: [], wrappers: [], suffix: [], hasCommand: false, malformed: false, raw };
-  if (cmdCount > 1) return { ...empty, malformed: true };
+  // Read-only (never mutate) when the string is beyond our simple 3-zone model:
+  // dangling quote/escape, shell operators, more than one %command%, or a %command%
+  // that isn't a standalone token (e.g. embedded in a quoted `sh -c "…%command%"`).
+  if (unbalanced || SHELL_OPS_RE.test(raw) || cmdCount > 1 || rawCmdCount !== cmdCount) {
+    return { ...empty, malformed: true };
+  }
 
   if (cmdCount === 0) {
     // No token: the whole string is game args.

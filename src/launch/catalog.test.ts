@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { parse } from "./compose";
 import {
   CATALOG,
+  AMBIGUOUS,
   detectSelections,
   buildLaunchOptions,
   isPillAvailable,
@@ -110,13 +111,28 @@ describe("buildLaunchOptions", () => {
 
   it("preserves BOTH flags when a single-choice arg is ambiguous (two present)", () => {
     const base = parse("%command% -dx11 -dx12");
-    // Ambiguous → the pill reads as unset, and neither flag is dropped.
-    expect(detectSelections(base).renderer).toBeUndefined();
+    expect(detectSelections(base).renderer).toBe(AMBIGUOUS);
     expect(buildLaunchOptions(base, detectSelections(base))).toBe("%command% -dx11 -dx12");
     // An unrelated toggle must not drop either flag.
     expect(buildLaunchOptions(base, { ...detectSelections(base), mangohud: true })).toBe(
       "mangohud %command% -dx11 -dx12",
     );
+    // Explicitly picking one resolves the ambiguity.
+    expect(buildLaunchOptions(base, { renderer: "-dx12" })).toBe("%command% -dx12");
+  });
+
+  it("turning a single-choice arg OFF removes its flag (not preserved)", () => {
+    const base = parse("mangohud %command% -dx11");
+    const sel = detectSelections(base);
+    expect(sel.renderer).toBe("-dx11");
+    delete sel.renderer; // user turns the renderer off; MangoHud stays
+    expect(buildLaunchOptions(base, sel)).toBe("mangohud %command%");
+  });
+
+  it("treats shell operators / embedded %command% as read-only (no corruption)", () => {
+    const base = parse('sh -c "echo prep; %command%"');
+    expect(base.malformed).toBe(true);
+    expect(buildLaunchOptions(base, { protonLog: true })).toBe('sh -c "echo prep; %command%"');
   });
 
   it("does not mutate a malformed (multi-%command%) string", () => {

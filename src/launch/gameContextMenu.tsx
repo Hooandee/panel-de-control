@@ -32,8 +32,10 @@ function entryFor(appid: number): GameEntry | null {
   }
 }
 
-// Insert our item just before "Properties…".
+// Insert our item just before "Properties…". No-op when the appid is unknown, so we
+// never attach a menu entry that would open the wrong game.
 const spliceLaunchItem = (children: any[], appid: number) => {
+  if (!appid) return;
   const propertiesIdx = children.findIndex((item) =>
     findInReactTree(item, (x) => x?.onSelected && x.onSelected.toString().includes("AppProperties")),
   );
@@ -62,17 +64,17 @@ const handleItemDupes = (items: any[]) => {
   if (idx !== -1) items.splice(idx, 1);
 };
 
-const patchMenuItems = (menuItems: any[], appid: number) => {
-  let updated = appid;
-  const parent = menuItems.find(
-    (x: any) => x?._owner?.pendingProps?.overview?.appid && x._owner.pendingProps.overview.appid !== appid,
-  );
-  if (parent) updated = parent._owner.pendingProps.overview.appid;
-  if (updated === appid) {
+// Derive the appid from THIS menu's own tree (never a stale value captured when the
+// prototype was first patched); insert nothing if it can't be determined.
+const patchMenuItems = (menuItems: any[]) => {
+  let appid = 0;
+  const parent = menuItems.find((x: any) => x?._owner?.pendingProps?.overview?.appid);
+  if (parent) appid = parent._owner.pendingProps.overview.appid;
+  if (!appid) {
     const foundApp = findInTree(menuItems, (x: any) => x?.app?.appid, { walkable: ["props", "children"] });
-    if (foundApp) updated = foundApp.app.appid;
+    if (foundApp) appid = foundApp.app.appid;
   }
-  spliceLaunchItem(menuItems, updated);
+  spliceLaunchItem(menuItems, appid);
 };
 
 function patchContextMenu(LibraryContextMenu: any): { unpatch: () => void } {
@@ -107,7 +109,7 @@ function patchContextMenu(LibraryContextMenu: any): { unpatch: () => void } {
                 } catch {
                   return ret2;
                 }
-                patchMenuItems(menuItems, appid);
+                patchMenuItems(menuItems);
                 return ret2;
               }),
             );
@@ -118,7 +120,7 @@ function patchContextMenu(LibraryContextMenu: any): { unpatch: () => void } {
                 } catch {
                   return shouldUpdate;
                 }
-                if (shouldUpdate === true) patchMenuItems(nextProps.children, appid);
+                if (shouldUpdate === true) patchMenuItems(nextProps.children);
                 return shouldUpdate;
               }),
             );

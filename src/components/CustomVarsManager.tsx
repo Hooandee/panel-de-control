@@ -43,6 +43,13 @@ const ManagerBody: FC = () => {
   const { vars, error, save, newId } = useCustomVars();
   const [draft, setDraft] = useState<CustomVarDef>(() => emptyDraft(newId()));
 
+  // All hooks must run before any early return (rules of hooks) — use `vars ?? []`.
+  const taken = useMemo(() => {
+    const s = baseCatalogTokens();
+    for (const v of vars ?? []) if (v.id !== draft.id) s.add(customVarToken(v));
+    return s;
+  }, [vars, draft.id]);
+
   // Don't render the add form on a load error — saving would replace the (unread)
   // real library with just the new entry.
   if (error) {
@@ -55,11 +62,6 @@ const ManagerBody: FC = () => {
   if (vars === null) return <Loading />;
 
   const isEdit = vars.some((v) => v.id === draft.id);
-  const taken = useMemo(() => {
-    const s = baseCatalogTokens();
-    for (const v of vars) if (v.id !== draft.id) s.add(customVarToken(v));
-    return s;
-  }, [vars, draft.id]);
   const err = validateCustomVar(draft, taken);
   const patch = (p: Partial<CustomVarDef>) => setDraft((d) => ({ ...d, ...p }));
 

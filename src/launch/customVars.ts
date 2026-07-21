@@ -23,6 +23,10 @@ export function isCustomPillId(id: string): boolean {
 }
 
 const ENV_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+// Chars we can't safely place in the composed command without a shell parser:
+// whitespace splits the token, quotes/backslash/operators change meaning. Rejected
+// until values are auto-escaped and args are real tokens.
+const UNSAFE_RE = /[\s"'\\`$;&|<>()]/;
 
 /** The token a def owns: the env NAME, or the arg flag. */
 export function customVarToken(def: CustomVarDef): string {
@@ -36,8 +40,10 @@ export function validateCustomVar(def: CustomVarDef, taken: Set<string> = new Se
   if (!def.name.trim()) return "name";
   if (def.kind === "env") {
     if (!def.envName || !ENV_NAME_RE.test(def.envName)) return "envName";
+    if (def.envValue && UNSAFE_RE.test(def.envValue)) return "unsafe";
   } else if (def.kind === "arg") {
     if (!def.arg || !def.arg.trim()) return "arg";
+    if (UNSAFE_RE.test(def.arg)) return "unsafe";
   } else {
     return "kind";
   }

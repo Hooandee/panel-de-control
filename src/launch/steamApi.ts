@@ -11,8 +11,8 @@ export interface GameEntry {
   stableKey: string;
   name: string;
   isNonSteam: boolean;
-  /** Vertical capsule (portrait) URL, or null → the fallback tile is used. */
-  coverUrl: string | null;
+  /** Vertical capsule (portrait) URL candidates, tried in order; empty → fallback tile. */
+  coverUrls: string[];
   /** Unix seconds of last play (0 = never) — drives the default "recent" sort. */
   lastPlayed: number;
   /** Total minutes played forever — drives the "most played" sort. */
@@ -27,18 +27,21 @@ const STEAM_UI_ORIGIN = "https://steamloopback.host";
  *  URLs are origin-relative (/customimages/…); absolutize them. Null → fallback tile;
  *  a dead URL (e.g. a non-Steam shortcut with no art) fails to load → GameCover's
  *  onError shows the tile. `ov` is a live appStore overview. */
-export function resolveCoverUrl(ov: unknown): string | null {
+export function resolveCoverUrls(ov: unknown): string[] {
+  const abs = (u: string) => (u.startsWith("/") ? STEAM_UI_ORIGIN + u : u);
+  const out: string[] = [];
   try {
     const store = w.appStore;
+    // Custom art can yield several candidates (e.g. a stale JPG then a valid PNG);
+    // keep them all so GameCover can fall through to the one that loads.
     const custom = store?.GetCustomVerticalCapsuleURLs?.(ov);
-    if (Array.isArray(custom) && typeof custom[0] === "string" && custom[0]) {
-      return custom[0].startsWith("/") ? STEAM_UI_ORIGIN + custom[0] : custom[0];
-    }
+    if (Array.isArray(custom)) for (const u of custom) if (typeof u === "string" && u) out.push(abs(u));
     const cap = store?.GetVerticalCapsuleURLForApp?.(ov);
-    return typeof cap === "string" && cap ? cap : null;
+    if (typeof cap === "string" && cap) out.push(abs(cap));
   } catch {
-    return null;
+    /* ignore */
   }
+  return out;
 }
 
 interface Overview {
@@ -63,7 +66,7 @@ export function overviewToEntry(ov: Overview): GameEntry {
     stableKey: stableGameKey(id),
     name: ov.display_name || String(ov.appid),
     isNonSteam: nonSteam,
-    coverUrl: resolveCoverUrl(ov),
+    coverUrls: resolveCoverUrls(ov),
     lastPlayed: Number(ov.rt_last_time_played) || 0,
     playtime: Number(ov.minutes_playtime_forever) || 0,
   };
@@ -107,18 +110,37 @@ export function readLaunchOptionsSync(appid: number): string | null {
   }
 }
 
+export interface AppDetails {
+  launch: string;
+  /** Proton compat tool id + human label ("" when native / none). */
+  compatName: string;
+  compatDisplay: string;
+}
+
+function detailsOf(d: {
+  strLaunchOptions?: string;
+  strCompatToolName?: string;
+  strCompatToolDisplayName?: string;
+}): AppDetails {
+  return {
+    launch: d?.strLaunchOptions ?? "",
+    compatName: d?.strCompatToolName ?? "",
+    compatDisplay: d?.strCompatToolDisplayName ?? "",
+  };
+}
+
 /**
- * Read a game's launch-options string. App details may not be cached yet, so we
- * register for details (which fires the current value) and race it against a sync
- * read + a timeout. Resolves NULL when nothing real could be read (details not
- * cached and no callback by the timeout) — callers must NOT treat that as an empty
- * string, or a later write could erase the user's real options.
+ * Read a game's launch options AND compat tool together. Steam's details store is
+ * often empty on open, so we register for details (fires the current value) and
+ * PREFER that callback; the cached sync read is only a timeout fallback (a stale
+ * cache must not beat a fresh callback). Resolves NULL when nothing real could be
+ * read — callers must NOT treat that as empty (a write from "" would erase options).
  */
-export function readLaunchOptions(appid: number, timeoutMs = 1200): Promise<string | null> {
+export function readAppDetails(appid: number, timeoutMs = 1200): Promise<AppDetails | null> {
   return new Promise((resolve) => {
     let done = false;
     let unreg: { unregister?: () => void } | undefined;
-    const finish = (v: string | null) => {
+    const finish = (v: AppDetails | null) => {
       if (done) return;
       done = true;
       try {
@@ -129,31 +151,22 @@ export function readLaunchOptions(appid: number, timeoutMs = 1200): Promise<stri
       resolve(v);
     };
     try {
-      unreg = w.SteamClient?.Apps?.RegisterForAppDetails?.(appid, (d: { strLaunchOptions?: string }) =>
-        finish(d?.strLaunchOptions ?? ""),
+      unreg = w.SteamClient?.Apps?.RegisterForAppDetails?.(appid, (d: Parameters<typeof detailsOf>[0]) =>
+        finish(detailsOf(d)),
       );
-      // If the callback fired synchronously during registration, `unreg` was still
-      // undefined inside finish() — unregister now so the subscription can't leak.
       if (done) unreg?.unregister?.();
     } catch {
       /* ignore */
     }
-    const sync = readLaunchOptionsSync(appid);
-    if (sync !== null) finish(sync);
-    // sync is null when details aren't cached → resolve null (unknown), not "".
-    setTimeout(() => finish(sync), timeoutMs);
+    setTimeout(() => {
+      try {
+        const d = w.appDetailsStore?.GetAppDetails?.(appid);
+        finish(d ? detailsOf(d) : null);
+      } catch {
+        finish(null);
+      }
+    }, timeoutMs);
   });
-}
-
-/** The game's Proton compat tool (id + human label), from cached app details.
- *  Empty strings when unknown / native Linux / details not cached. */
-export function readCompatTool(appid: number): { name: string; display: string } {
-  try {
-    const d = w.appDetailsStore?.GetAppDetails?.(appid);
-    return { name: d?.strCompatToolName ?? "", display: d?.strCompatToolDisplayName ?? "" };
-  } catch {
-    return { name: "", display: "" };
-  }
 }
 
 /** Write a game's launch-options string. Non-Steam shortcuts have their own setter.

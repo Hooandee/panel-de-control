@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toaster } from "@decky/api";
 
 import { bumpLaunchUsage, getLaunchUsage } from "../api";
+import { translate } from "../i18n";
 import { Parsed, parse, serialize } from "./compose";
-import { CATALOG, Pill, Selections, Usage, buildLaunchOptions, detectSelections } from "./catalog";
-import { GameEntry, readLaunchOptions, writeLaunchOptions } from "./steamApi";
+import { AMBIGUOUS, CATALOG, Pill, Selections, Usage, buildLaunchOptions, detectSelections } from "./catalog";
+import { GameEntry, readAppDetails, writeLaunchOptions } from "./steamApi";
 
 export type SaveStatus = "saving" | "saved" | "error" | null;
 
@@ -13,6 +15,10 @@ export interface LaunchEditor {
   error: boolean;
   malformed: boolean;
   raw: string;
+  /** Proton compat tool id + label for this game ("" when native / none). Read from
+   *  the same details callback so Proton gating doesn't depend on a warm cache. */
+  compatName: string;
+  compatDisplay: string;
   selections: Selections;
   /** Per-pill apply counts (drives the Frecuentes row). */
   usage: Usage;
@@ -23,7 +29,7 @@ export interface LaunchEditor {
   set: (id: string, value: string | boolean | null) => void;
 }
 
-const isActive = (v: string | boolean | undefined): boolean => v !== undefined && v !== false;
+const isActive = (v: string | boolean | undefined): boolean => v !== undefined && v !== false && v !== AMBIGUOUS;
 
 /**
  * Drives the launch-options editor for one game. The Steam string is the source
@@ -36,6 +42,7 @@ const isActive = (v: string | boolean | undefined): boolean => v !== undefined &
 export function useLaunchEditor(game: GameEntry, catalog: Pill[] = CATALOG): LaunchEditor {
   const [baseline, setBaseline] = useState<Parsed | null>(null);
   const [error, setError] = useState(false);
+  const [compat, setCompat] = useState<{ name: string; display: string }>({ name: "", display: "" });
   const [selections, setSelections] = useState<Selections>({});
   const [usage, setUsage] = useState<Usage>({});
   const [status, setStatus] = useState<SaveStatus>(null);
@@ -52,19 +59,20 @@ export function useLaunchEditor(game: GameEntry, catalog: Pill[] = CATALOG): Lau
     setError(false);
     setStatus(null);
     bumped.current = new Set();
-    readLaunchOptions(game.liveAppid).then((rawStr) => {
+    readAppDetails(game.liveAppid).then((d) => {
       if (cancelled) return;
       // null = couldn't read → error, don't fabricate an empty baseline (a write
       // from "" would erase the user's real options).
-      if (rawStr === null) {
+      if (d === null) {
         setError(true);
         return;
       }
-      const p = parse(rawStr);
+      const p = parse(d.launch);
       // Seed baseline + selections together so the first painted frame never shows
       // every pill off (which would strip the string and arm a bogus autosave).
       setBaseline(p);
       setSelections(detectSelections(p, catalog));
+      setCompat({ name: d.compatName, display: d.compatDisplay });
     });
     return () => {
       cancelled = true;
@@ -144,8 +152,9 @@ export function useLaunchEditor(game: GameEntry, catalog: Pill[] = CATALOG): Lau
   useEffect(
     () => () => {
       if (savedFlash.current) clearTimeout(savedFlash.current);
-      if (pending.current !== null) {
-        writeLaunchOptions(game.liveAppid, pending.current, game.isNonSteam);
+      if (pending.current !== null && !writeLaunchOptions(game.liveAppid, pending.current, game.isNonSteam)) {
+        // The modal is gone — surface the lost change with a toast, don't swallow it.
+        toaster.toast({ title: game.name, body: translate("params.saveError") });
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -157,6 +166,8 @@ export function useLaunchEditor(game: GameEntry, catalog: Pill[] = CATALOG): Lau
     error,
     malformed: !!baseline?.malformed,
     raw: baseline?.raw ?? "",
+    compatName: compat.name,
+    compatDisplay: compat.display,
     selections,
     usage,
     preview,

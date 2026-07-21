@@ -56,6 +56,23 @@ describe("validateCustomVar duplicate detection", () => {
   });
 });
 
+describe("validateCustomVar rejects unescapable values (would corrupt the command)", () => {
+  it("rejects a space in an env value", () => {
+    expect(validateCustomVar(env({ envValue: "hello world" }))).toBe("unsafe");
+  });
+  it("rejects quotes / shell metacharacters in an env value", () => {
+    expect(validateCustomVar(env({ envValue: 'a"b' }))).toBe("unsafe");
+    expect(validateCustomVar(env({ envValue: "a;b" }))).toBe("unsafe");
+  });
+  it("rejects a multi-token arg", () => {
+    expect(validateCustomVar(arg({ arg: "--foo bar" }))).toBe("unsafe");
+  });
+  it("still accepts ordinary values (commas, dots, equals-free)", () => {
+    expect(validateCustomVar(env({ envValue: "dxgi=n,b" }))).toBeNull();
+    expect(validateCustomVar(env({ envValue: "es_ES.UTF-8" }))).toBeNull();
+  });
+});
+
 describe("customVarToPill", () => {
   it("prefixes the id with custom: and carries the raw user label", () => {
     const p = customVarToPill(env({ id: "abc", name: "Límite FPS" }));

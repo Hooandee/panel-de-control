@@ -15,7 +15,7 @@ import { GameCover } from "./GameCover";
 import { FocusableCard } from "./FocusableCard";
 import { useRunningGame } from "../tdp/useRunningGame";
 import { useHiddenGames } from "../launch/useHiddenGames";
-import { GameEntry, readCompatTool } from "../launch/steamApi";
+import { GameEntry } from "../launch/steamApi";
 import { getDevice, getLaunchTools, getProtonCaps, LaunchTools } from "../api";
 import { useLaunchEditor } from "../launch/useLaunchEditor";
 import { useCustomVars } from "../launch/useCustomVars";
@@ -121,20 +121,19 @@ const LaunchEditorBody: FC<{ game: GameEntry }> = ({ game }) => {
     };
   }, []);
 
-  // Read the game's Proton version + capabilities once its app details are warm.
-  // Empty/native → no PROTON caps → only base pills show.
+  // Read the game's Proton capabilities from the compat tool the editor resolved
+  // (via the details callback). Empty/native → no PROTON caps → only base pills show.
   useEffect(() => {
     if (ed.loading) return;
     let cancelled = false;
-    const ct = readCompatTool(game.liveAppid);
-    setVersionLabel(ct.display || ct.name);
-    getProtonCaps(ct.name)
+    setVersionLabel(ed.compatDisplay || ed.compatName);
+    getProtonCaps(ed.compatName)
       .then((c) => !cancelled && setEnvs(c.envs))
       .catch(() => !cancelled && setEnvs([]));
     return () => {
       cancelled = true;
     };
-  }, [ed.loading, game.liveAppid]);
+  }, [ed.loading, ed.compatName, ed.compatDisplay]);
 
   const supportedEnvs = envs ?? [];
   const advancedCount = catalog.filter((p) => p.section === "advanced" && !!ed.selections[p.id] && pillVisible(p, supportedEnvs, gpu)).length;
@@ -146,7 +145,7 @@ const LaunchEditorBody: FC<{ game: GameEntry }> = ({ game }) => {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: theme.space.md, padding: theme.space.sm, maxWidth: 760, width: "100%", margin: "0 auto" }}>
       <div style={{ display: "flex", alignItems: "center", gap: theme.space.md }}>
-        <GameCover url={game.coverUrl} name={game.name} width={52} />
+        <GameCover urls={game.coverUrls} name={game.name} width={52} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: theme.font.value, color: theme.color.textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{game.name}</div>
           <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
