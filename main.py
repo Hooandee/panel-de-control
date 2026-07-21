@@ -617,6 +617,8 @@ class Plugin:
         (following global, or the same profile) never touches the daemon and can't
         race its own re-grab on game launch. Offloaded (dbus + YAML subprocess). No-op
         on HHD/none (effective_overrides returns None)."""
+        if not self._module_enabled("mandos"):
+            return
         ov = self._controller_backend.effective_overrides(self._current_appid)
         if ov is None or ov == self._last_controller_overrides:
             return
@@ -848,6 +850,10 @@ class Plugin:
 
         Guarded: a bad fan apply must never brick load.
         """
+        if not self._module_enabled("fanControl"):
+            # Fan control disabled: hand the fans back to firmware auto, never drive.
+            self._restore_fans_safe()
+            return True
         try:
             profile = self._fan_curves.effective(self._current_appid)
             preset = profile["preset"]
@@ -1073,7 +1079,7 @@ class Plugin:
         # "unsupported" (card stays silent) rather than nudging "turn on learning".
         if not self._fan_ctrl.supported:  # cheap property — no sysfs/EC read
             return unavail("unsupported")
-        if not bool(self._settings.get("telemetry_enabled", True)):
+        if not self._learning_active():
             return unavail("disabled")
         if key is None:
             return unavail("no_game")
@@ -1152,6 +1158,8 @@ class Plugin:
         Returns (appid, sample_dict) while in-game, or None when idle.
         Never raises; any error degrades to None (no sample recorded).
         """
+        if not self._learning_active():
+            return None
         try:
             # Snapshot the appid once: this method now runs on a worker thread
             # (via asyncio.to_thread) and spans a ~120 ms gpu_busy burst + fan
@@ -1243,6 +1251,16 @@ class Plugin:
         self._reapply_ticks = 0
         self._sampler.start()
 
+    def _sync_sampler(self) -> None:
+        """Start the sampler iff learning is effectively active (enabled AND a consumer
+        — Power or Fans — is on), else stop it. Called when module state changes."""
+        if getattr(self, "_sampler", None) is None:
+            return
+        if self._learning_active():
+            self._start_sampler()
+        else:
+            self._sampler.stop()
+
     async def get_telemetry_enabled(self) -> bool:
         self._init()
         return bool(self._settings.get("telemetry_enabled", True))
@@ -1254,10 +1272,7 @@ class Plugin:
         enabled = bool(enabled)
         self._settings["telemetry_enabled"] = enabled
         self._save()
-        if enabled:
-            self._start_sampler()
-        else:
-            self._sampler.stop()  # also flushes any buffered samples
+        self._sync_sampler()  # honours the Power/Fans dependency (also flushes on stop)
         return enabled
 
     async def get_learning_status(self) -> dict:
@@ -1379,8 +1394,9 @@ class Plugin:
                 if self._settings.get("eco_enabled"):
                     self._reset_auto_windows()
                     continue
-                # Master switch off: another tool owns the rails — don't drive PL1.
-                if not self._tdp_control_on():
+                # TDP master switch off (module 'power') or Auto-TDP disabled — don't
+                # drive PL1. _module_enabled folds the power cascade into autoTdp.
+                if not self._module_enabled("autoTdp"):
                     self._reset_auto_windows()
                     continue
                 # Hold when auto-TDP is off for THIS game (per-game, own or global) or a
@@ -1561,7 +1577,7 @@ class Plugin:
                     "enough": False, "reason": reason, "minutes": 0,
                     "target_minutes": tdp_suggest.MIN_MINUTES}
 
-        if not bool(self._settings.get("telemetry_enabled", True)):
+        if not self._learning_active():
             return unavail("disabled")
         key = str(appid) if appid is not None else self._current_appid
         if key is None:
@@ -1758,6 +1774,8 @@ class Plugin:
         call on any device — a Null backend no-ops."""
         if not self._charge_limit.supported:
             return
+        if not self._module_enabled("system"):
+            return
         enabled = bool(self._settings.get("charge_limit_enabled", False))
         if enabled:
             self._charge_limit.set(int(self._settings.get("charge_limit_percent", 80)))
@@ -1804,6 +1822,8 @@ class Plugin:
         ORDER MATTERS: cores FIRST (onlining the kept cores brings their SMT siblings
         online too), then SMT — so SMT-off re-offlines those siblings and the two
         controls, which write the same cpuN/online nodes, end up consistent."""
+        if not self._module_enabled("system"):
+            return
         # Effective per-game CPU controls (own when the game has them, else global).
         eff = self._cpu_profiles.effective(self._current_appid)
         # Re-assert the active-core count. None = "all cores" → actively restore the full
@@ -1905,6 +1925,8 @@ class Plugin:
     def _apply_gpu_clock(self) -> None:
         """Re-assert the GPU clock window when manual (cleared to auto after suspend).
         When not manual we leave the GPU alone (don't fight other tools). Guarded."""
+        if not self._module_enabled("power"):
+            return
         try:
             g = self._tdp_profiles.gpu_clock(self._current_appid)  # effective per game
             if not self._gpu_clock.supported or not g.get("manual"):
@@ -1981,6 +2003,8 @@ class Plugin:
         """Push the effective color to gamescope. No-op when unsupported. Guarded.
         Applied in HDR mode too — it colors all composited/SDR content; a native-HDR
         game (direct scanout) is simply out of the LUT's reach, no handling needed."""
+        if not self._module_enabled("display"):
+            return
         try:
             if self._color_backend.supported:
                 self._color_backend.apply(self._effective_color())
@@ -2530,7 +2554,7 @@ class Plugin:
             # game's effective auto_tdp (holds when off), so it activates for a game that
             # has it on without waiting for the QAM.
             self._start_auto_loop()
-            if self._settings.get("telemetry_enabled", True):
+            if self._learning_active():
                 self._start_sampler()
         except Exception as e:  # noqa: BLE001
             decky.logger.error("TDP startup failed: %s", e)
