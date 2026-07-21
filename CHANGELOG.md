@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.23.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.22.0...panel-de-control-v0.23.0) (2026-07-21)
+
+
+### Features
+
+* launch-options manager (Parámetros) ([#206](https://github.com/Hooandee/panel-de-control/issues/206)) ([b136d2d](https://github.com/Hooandee/panel-de-control/commit/b136d2d8fec8f0ffdbb192352cbed72a3a6f6140))
+
 ## [0.22.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.21.0...panel-de-control-v0.22.0) (2026-07-19)
 
 
