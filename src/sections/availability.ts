@@ -18,12 +18,19 @@ export function sectionHiddenOnDevice(device: DeviceInfo | null, id: string): bo
   return false;
 }
 
-/** True when a fully-modular section has every one of its blocks hidden by the
- *  user → the tab would be empty, so hide the parent tab (recoverable from the
- *  editor, which still lists it). */
-export function allBlocksHidden(id: string, blocks: Record<string, ListPref>): boolean {
+/** True when a fully-modular section has nothing left to show → hide the parent
+ *  tab (recoverable from the editor, which still lists it). "Nothing" means: it
+ *  renders zero blocks on this machine, or every block it does render is hidden.
+ *  `presentIds` (from the present registry) scopes the check to blocks that
+ *  actually exist here; falls back to the manifest before the section has rendered. */
+export function allBlocksHidden(
+  id: string,
+  blocks: Record<string, ListPref>,
+  presentIds?: string[] | null,
+): boolean {
   if (!FULLY_MODULAR.has(id)) return false;
-  const ids = blockOrder(id);
+  if (presentIds && presentIds.length === 0) return true; // renders nothing → empty
+  const ids = presentIds && presentIds.length ? presentIds : blockOrder(id);
   if (!ids.length) return false;
   const hidden = new Set(blocks[id]?.hidden ?? []);
   return ids.every((b) => hidden.has(b));

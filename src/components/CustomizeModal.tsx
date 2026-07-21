@@ -13,7 +13,8 @@ import { FocusRoot } from "./FocusRoot";
 import { ACCENTS } from "../system/accentColor";
 import { useAccent, setAccent } from "../system/useAccent";
 import { getDevice, DeviceInfo } from "../api";
-import { sectionHiddenOnDevice } from "../sections/availability";
+import { sectionHiddenOnDevice, allBlocksHidden } from "../sections/availability";
+import { getPresent, usePresentVersion } from "../customize/present";
 
 // Blocks that are actually backend MODULES (get the on/off power control) rather
 // than cosmetic cards (which get the show/hide eye). Everything else is cosmetic.
@@ -106,6 +107,7 @@ const CustomizeBody: FC = () => {
   const layout = useLayout();
   const disabled = useModules();
   useAccent(); // re-render the whole modal live when the accent changes (separate root)
+  usePresentVersion(); // reflect which blocks each machine actually has
   const [editing, setEditing] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   // Device (one-time) so we don't list a category this machine can't use (e.g.
@@ -120,6 +122,16 @@ const CustomizeBody: FC = () => {
   const save = (next: Layout) => saveLayout(next);
   const setTabHidden = (id: string) =>
     save({ ...layout, tabs: { order: layout.tabs.order ?? [], hidden: toggle(layout.tabs.hidden ?? [], id) } });
+  // Show a category again: clear its own hide AND un-hide all its children (a tab
+  // hidden only because every child was hidden comes back when we restore them).
+  const showCategory = (id: string) => {
+    const pref = layout.blocks[id] ?? { order: [], hidden: [] };
+    save({
+      ...layout,
+      tabs: { order: layout.tabs.order ?? [], hidden: (layout.tabs.hidden ?? []).filter((x) => x !== id) },
+      blocks: { ...layout.blocks, [id]: { ...pref, hidden: [] } },
+    });
+  };
   const moveCat = (id: string, dir: -1 | 1) => {
     const next = move(catOrder, id, dir);
     // Settings stays pinned last; persist the reordered categories + it.
@@ -159,10 +171,15 @@ const CustomizeBody: FC = () => {
       <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
         {catOrder.map((id, i) => {
           const meta = catMeta(id);
-          const st = moduleState(id, disabled, tabHidden(id), false);
-          const off = st === "disabled";
-          const hidden = st === "background";
-          const blocks = SECTION_BLOCKS[id] ?? [];
+          const present = getPresent(id);
+          const off = disabled.has(id);
+          // Effective hidden = the tab won't show: user hid it, or every block it
+          // has on this machine is hidden. Reflected on the parent's eye so it
+          // doesn't read "visible" while the tab is gone.
+          const hidden = !off && (tabHidden(id) || allBlocksHidden(id, layout.blocks, present));
+          // Only the blocks this machine actually renders (fallback: manifest).
+          const manifestBlocks = SECTION_BLOCKS[id] ?? [];
+          const blocks = present ? manifestBlocks.filter((b) => present.includes(b.id)) : manifestBlocks;
           const expandable = blocks.length > 0 && !off && !editing;
           const open = openId === id && expandable;
           const stateNote = off ? t("customize.state.disabled") : hidden ? t("customize.state.background") : "";
@@ -199,7 +216,7 @@ const CustomizeBody: FC = () => {
                         column stays aligned with enabled rows. */}
                     <span style={{ display: "flex", justifyContent: "center", width: 30 }}>
                       {!off && (
-                        <IconAction label={hidden ? t("customize.show") : t("customize.hide")} color={theme.color.textMuted} onTap={() => setTabHidden(id)}>
+                        <IconAction label={hidden ? t("customize.show") : t("customize.hide")} color={theme.color.textMuted} onTap={() => (hidden ? showCategory(id) : setTabHidden(id))}>
                           {hidden ? <LuEyeOff size={18} /> : <LuEye size={18} />}
                         </IconAction>
                       )}

@@ -21,6 +21,7 @@ import { effectiveEnabled } from "../customize/moduleLogic";
 import { visibleIds } from "../customize/layout";
 import { PINNED_TAB } from "../customize/manifest";
 import { sectionHiddenOnDevice, allBlocksHidden } from "../sections/availability";
+import { getPresent, usePresentVersion } from "../customize/present";
 import { theme } from "../theme";
 import { FocusRoot } from "./FocusRoot";
 import { useAccent } from "../system/useAccent";
@@ -37,6 +38,7 @@ export const ControlCenter: FC = () => {
   const [failed, setFailed] = useState(false);
   const layout = useLayout();
   const disabled = useModules();
+  usePresentVersion(); // re-evaluate tab emptiness as sections report their real blocks
   // The user's visible tabs in their saved order (Settings always kept). One
   // memoized computation feeds both the initial-tab pick and the rendered tab
   // list (the shell re-renders on every poll tick, so avoid recomputing it).
@@ -97,7 +99,7 @@ export const ControlCenter: FC = () => {
     .filter((s) => s.id === PINNED_TAB || (
       !sectionHiddenOnDevice(device, s.id)
       && effectiveEnabled(s.id, disabled)
-      && !allBlocksHidden(s.id, layout.blocks)
+      && !allBlocksHidden(s.id, layout.blocks, getPresent(s.id))
     ));
   const active = resolveActiveSection(orderedTabs, activeId);
   const Active = active?.Component;
