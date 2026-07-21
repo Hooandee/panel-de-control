@@ -503,9 +503,7 @@ class Plugin:
             "controller": await loop.run_in_executor(None, self._safe_controller_config),
             "power": await _safe(self.get_power_draw()),
             "eco": await _safe(self.get_eco_state()),
-            # Launch-options subsystem: detected tools + which game the backend thinks
-            # is running + the frontend snapshot (running game's launch string, Proton
-            # caps) that only the frontend can read. Redacted with the rest.
+            # Detected tools + current game + the frontend's running-game snapshot.
             "launch": self._launch_report_state(context),
         }
         logs = report_collector.tail_logs(
@@ -544,9 +542,8 @@ class Plugin:
         )
 
     def _launch_report_state(self, context) -> dict:
-        """Launch-options triage: detected tools, the game the backend thinks is
-        running, the custom-var count, and the frontend's running-game snapshot
-        (launch string + Proton caps). Never raises."""
+        """Launch-options triage: tools, current game, custom-var count, and the
+        frontend snapshot. Never raises."""
         try:
             tools = dict(self._launch_tools) if isinstance(self._launch_tools, dict) else {}
         except Exception:  # noqa: BLE001

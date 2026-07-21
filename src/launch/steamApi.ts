@@ -23,19 +23,15 @@ export interface GameEntry {
 
 const STEAM_UI_ORIGIN = "https://steamloopback.host";
 
-/** The portrait Steam already resolved, via its own asset store. Prefers the user's
- *  custom art when set (SteamGridDB / CSS Loader / "Set custom artwork") — this also
- *  gives non-Steam shortcuts a real cover — else the store vertical capsule. Custom
- *  URLs are origin-relative (/customimages/…); absolutize them. Null → fallback tile;
- *  a dead URL (e.g. a non-Steam shortcut with no art) fails to load → GameCover's
- *  onError shows the tile. `ov` is a live appStore overview. */
+/** Portrait candidates Steam resolved: the user's custom art (SteamGridDB / CSS
+ *  Loader / "Set custom artwork") first, then the store capsule. Origin-relative
+ *  custom URLs are absolutized. Empty → GameCover shows the fallback tile. */
 export function resolveCoverUrls(ov: unknown): string[] {
   const abs = (u: string) => (u.startsWith("/") ? STEAM_UI_ORIGIN + u : u);
   const out: string[] = [];
   try {
     const store = w.appStore;
-    // Custom art can yield several candidates (e.g. a stale JPG then a valid PNG);
-    // keep them all so GameCover can fall through to the one that loads.
+    // Several candidates (e.g. a stale JPG then a valid PNG) — keep all; GameCover falls through.
     const custom = store?.GetCustomVerticalCapsuleURLs?.(ov);
     if (Array.isArray(custom)) for (const u of custom) if (typeof u === "string" && u) out.push(abs(u));
     const cap = store?.GetVerticalCapsuleURLForApp?.(ov);
@@ -132,13 +128,9 @@ function detailsOf(d: {
   };
 }
 
-/**
- * Read a game's launch options AND compat tool together. Steam's details store is
- * often empty on open, so we register for details (fires the current value) and
- * PREFER that callback; the cached sync read is only a timeout fallback (a stale
- * cache must not beat a fresh callback). Resolves NULL when nothing real could be
- * read — callers must NOT treat that as empty (a write from "" would erase options).
- */
+/** Read a game's launch options + compat tool together, preferring the details
+ *  callback (fresh) over the often-empty/stale sync cache. Resolves NULL when
+ *  nothing real could be read — callers must NOT treat that as an empty string. */
 export function readAppDetails(appid: number, timeoutMs = 1200): Promise<AppDetails | null> {
   return new Promise((resolve) => {
     let done = false;

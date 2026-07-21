@@ -11,7 +11,7 @@ export type { LaunchTools };
 export const getLaunchTools = callable<[], LaunchTools>("get_launch_tools");
 // Which PROTON_* vars the game's Proton build actually supports (read from its
 // script) → gate version-specific pills honestly. `found` false = the build wasn't
-// located (native/non-Steam/missing), and then `envs` is empty — never fake options.
+// located (native/non-Steam/missing), and then `envs` is empty — no unconfirmed options.
 export interface ProtonCaps {
   envs: string[];
   found: boolean;

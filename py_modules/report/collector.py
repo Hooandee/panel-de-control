@@ -372,9 +372,7 @@ def capabilities_from(states: dict) -> dict:
         "color_supported": bool(color.get("supported")),
         "controller_manager": ctl.get("manager"),
         "controller_kind": ctl.get("kind"),
-        # Launch options: are the wrapper tools detected, and (for the running game)
-        # did our parser reject its string / did Proton caps resolve? These read very
-        # differently for a "launch options don't work" report.
+        # Launch options: tools detected + (running game) malformed string / Proton resolved.
         "launch_lsfg": bool(ltools.get("lsfg")),
         "launch_mangohud": bool(ltools.get("mangohud")),
         "launch_distro": ltools.get("distro"),

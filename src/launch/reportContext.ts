@@ -5,11 +5,8 @@ import { parse } from "./compose";
 import { detectSelections } from "./catalog";
 
 /** Best-effort launch diagnostics for a bug report — the frontend-only signals the
- *  backend can't read: the running game's actual launch-options string, whether our
- *  parser rejects it, and its Proton compat tool + supported var count. (Tools,
- *  custom-var count and hidden count come from the backend `launch` state.) Never
- *  throws; any missing piece is simply absent. The launch string (which may hold
- *  paths) is redacted server-side with the rest of the bundle. */
+ *  backend can't read (the running game's launch string, malformed flag, Proton caps).
+ *  Never throws; the launch string is redacted server-side with the rest of the bundle. */
 export async function launchReportContext(): Promise<Record<string, unknown>> {
   const ctx: Record<string, unknown> = {};
   try {

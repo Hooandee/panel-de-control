@@ -1,7 +1,5 @@
-// User-defined launch variables — a small library reusable across every game. A
-// custom var is just a Pill, so it flows through the same compose engine (preserving
-// foreign content, ownership rules). The definition lives global (backend store); the
-// on/off is per-game, stored in Steam's launch string like any other pill.
+// User-defined launch variables. A custom var is just a Pill, so it flows through
+// the same compose engine. Library is global (backend store); on/off is per-game.
 
 import type { Pill } from "./catalog";
 
@@ -24,9 +22,7 @@ export function isCustomPillId(id: string): boolean {
 }
 
 const ENV_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
-// Chars we can't safely place in the composed command without a shell parser:
-// whitespace splits the token, quotes/backslash/operators change meaning. Rejected
-// until values are auto-escaped and args are real tokens.
+// Chars that would break the composed command (split tokens / change shell meaning).
 const UNSAFE_RE = /[\s"'\\`$;&|<>()]/;
 
 /** The token a def owns: the env NAME, or the arg flag. */
@@ -34,9 +30,8 @@ export function customVarToken(def: CustomVarDef): string {
   return def.kind === "arg" ? (def.arg ?? "") : (def.envName ?? "");
 }
 
-/** null when valid, else a short reason. `taken` = tokens already owned by base
- *  pills or other custom vars → a duplicate would create two controls for the same
- *  token (turning one off leaves the other's, re-appearing active). Pure. */
+/** null when valid, else a short reason. `taken` = tokens already owned (base pills
+ *  or other customs) → reject duplicates that would create two controls for one token. */
 export function validateCustomVar(def: CustomVarDef, taken: Set<string> = new Set()): string | null {
   if (!def.name.trim()) return "name";
   if (def.kind === "env") {

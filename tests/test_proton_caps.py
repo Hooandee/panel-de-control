@@ -40,7 +40,7 @@ def test_absent_var_not_reported(tmp_path):
 
 
 def test_not_found_offers_nothing(tmp_path):
-    # An unlocatable build promises no options at all (never fake unverified vars).
+    # An unlocatable build offers nothing (don't surface unverified vars).
     caps = detect_capabilities("Nonexistent-Proton", home=str(tmp_path))
     assert caps["found"] is False
     assert caps["envs"] == []

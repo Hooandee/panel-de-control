@@ -31,14 +31,8 @@ export interface LaunchEditor {
 
 const isActive = (v: string | boolean | undefined): boolean => v !== undefined && v !== false && v !== AMBIGUOUS;
 
-/**
- * Drives the launch-options editor for one game. The Steam string is the source
- * of truth: we read it once (baseline), derive active pills, and recompose on
- * every toggle. Changes AUTOSAVE (debounced) — no manual button; we write via
- * Steam's API and adopt the composed string as the new baseline (Steam's store
- * updates async, so a read-back would race). Usage is counted once per session
- * per newly-enabled pill (drives the Frecuentes row).
- */
+/** Drives the launch-options editor for one game: read the Steam string once
+ *  (baseline), derive active pills, recompose + autosave on every toggle. */
 export function useLaunchEditor(game: GameEntry, catalog: Pill[] = CATALOG): LaunchEditor {
   const [baseline, setBaseline] = useState<Parsed | null>(null);
   const [error, setError] = useState(false);
@@ -48,11 +42,9 @@ export function useLaunchEditor(game: GameEntry, catalog: Pill[] = CATALOG): Lau
   const [status, setStatus] = useState<SaveStatus>(null);
   const bumped = useRef<Set<string>>(new Set());
   const savedFlash = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Target awaiting an autosave write (null = nothing pending) — flushed on unmount
-  // so closing the modal before the debounce fires doesn't silently drop the change.
+  // Flushed on unmount so closing before the debounce fires doesn't drop the change.
   const pending = useRef<string | null>(null);
 
-  // Read the Steam string once per game (keyed only by appid — no I/O on catalog change).
   useEffect(() => {
     let cancelled = false;
     setBaseline(null);
@@ -61,15 +53,14 @@ export function useLaunchEditor(game: GameEntry, catalog: Pill[] = CATALOG): Lau
     bumped.current = new Set();
     readAppDetails(game.liveAppid).then((d) => {
       if (cancelled) return;
-      // null = couldn't read → error, don't fabricate an empty baseline (a write
-      // from "" would erase the user's real options).
+      // null = couldn't read → error, never a fake empty baseline (a write from ""
+      // would erase the real options).
       if (d === null) {
         setError(true);
         return;
       }
       const p = parse(d.launch);
-      // Seed baseline + selections together so the first painted frame never shows
-      // every pill off (which would strip the string and arm a bogus autosave).
+      // Seed baseline + selections together (no all-off frame that would strip + autosave).
       setBaseline(p);
       setSelections(detectSelections(p, catalog));
       setCompat({ name: d.compatName, display: d.compatDisplay });
@@ -79,13 +70,11 @@ export function useLaunchEditor(game: GameEntry, catalog: Pill[] = CATALOG): Lau
     };
   }, [game.liveAppid]);
 
-  // Custom pills load async — re-derive from the in-memory baseline when the catalog
-  // grows (no re-read of the Steam string). No-op when it already matches.
+  // Custom pills load async → re-derive from the in-memory baseline (no re-read).
   useEffect(() => {
     if (baseline) setSelections(detectSelections(baseline, catalog));
   }, [baseline, catalog]);
 
-  // Usage counts are global (not per-game); load once for the Frecuentes row.
   useEffect(() => {
     let cancelled = false;
     getLaunchUsage()
@@ -111,17 +100,15 @@ export function useLaunchEditor(game: GameEntry, catalog: Pill[] = CATALOG): Lau
     });
   }, []);
 
-  // Autosave: debounce writes so rapid toggles / typing don't hammer Steam. Baseline,
-  // usage and "saved" are adopted ONLY when the write actually succeeds — a missing
-  // or throwing setter surfaces as "error", never a fake "Saved".
+  // Debounced autosave. Baseline/usage/"saved" adopted ONLY on a successful write;
+  // a missing/throwing setter surfaces as "error", never a fake "Saved".
   useEffect(() => {
     if (!baseline || baseline.malformed || !dirty) return;
     setStatus("saving");
     const target = preview;
     pending.current = target;
     const id = setTimeout(() => {
-      // Write to the appid we opened + read from — never re-resolve by name (two
-      // non-Steam shortcuts can share a name → wrong game), and no library rescan.
+      // The opened appid — never re-resolve by name (duplicate shortcut names → wrong game).
       const appid = game.liveAppid;
       if (!writeLaunchOptions(appid, target, game.isNonSteam)) {
         setStatus("error"); // keep `pending` so the unmount flush can retry
@@ -129,7 +116,6 @@ export function useLaunchEditor(game: GameEntry, catalog: Pill[] = CATALOG): Lau
       }
       pending.current = null;
       setBaseline(parse(target)); // the composed string is now the saved baseline
-      // Count newly-enabled pills once per session so the Frecuentes row learns.
       const fresh = Object.keys(selections).filter((k) => isActive(selections[k]) && !bumped.current.has(k));
       if (fresh.length) {
         fresh.forEach((k) => bumped.current.add(k));
@@ -147,13 +133,11 @@ export function useLaunchEditor(game: GameEntry, catalog: Pill[] = CATALOG): Lau
     return () => clearTimeout(id);
   }, [preview, dirty, baseline, selections, game.stableKey, game.liveAppid, game.isNonSteam]);
 
-  // Flush a pending change on unmount (closing before the 500ms debounce fired).
-  // The modal is per-game, so mount-time game identity is correct here.
+  // Flush a pending change on unmount (closed before the debounce fired).
   useEffect(
     () => () => {
       if (savedFlash.current) clearTimeout(savedFlash.current);
       if (pending.current !== null && !writeLaunchOptions(game.liveAppid, pending.current, game.isNonSteam)) {
-        // The modal is gone — surface the lost change with a toast, don't swallow it.
         toaster.toast({ title: game.name, body: translate("params.saveError") });
       }
     },
