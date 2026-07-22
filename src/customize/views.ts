@@ -22,7 +22,6 @@ export interface CustomView {
 /** Shell tab id for a custom view. */
 export const viewTabId = (id: string): string => `view:${id}`;
 export const isViewTabId = (tabId: string): boolean => tabId.startsWith("view:");
-export const viewIdFromTab = (tabId: string): string => tabId.slice("view:".length);
 
 /** The distinct sections (in stable input order) that a set of blocks belongs to.
  *  A custom view mounts each section's provider so its context blocks work. */

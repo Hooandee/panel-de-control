@@ -1,5 +1,5 @@
 import { PanelSection, PanelSectionRow, ErrorBoundary } from "@decky/ui";
-import { FC, useCallback, useEffect, useMemo, useState } from "react";
+import { FC, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { getDevice, DeviceInfo, setUiActive } from "../api";
 import { useI18n } from "../i18n";
@@ -45,16 +45,21 @@ export const ControlCenter: FC = () => {
   const disabled = useModules();
   const views = useViews();
   usePresentVersion(); // re-evaluate tab emptiness as sections report their real blocks
+  // Stable Component per view id, so editing one view (or another) doesn't hand the
+  // active view a fresh element type and remount it (re-fetching its providers).
+  const viewComponents = useRef(new Map<string, FC>());
   // Default sections + a virtual section per custom view (its blocks composed from
   // the registry). Views sit before the pinned Settings tab.
   const allSections = useMemo<SectionDef[]>(() => {
-    const viewSections: SectionDef[] = views.map((v) => ({
-      id: viewTabId(v.id),
-      icon: viewIconNode(v.icon),
-      labelKey: "",
-      label: v.name,
-      Component: () => <CustomView viewId={v.id} />,
-    }));
+    const cache = viewComponents.current;
+    const viewSections: SectionDef[] = views.map((v) => {
+      let Component = cache.get(v.id);
+      if (!Component) {
+        Component = () => <CustomView viewId={v.id} />;
+        cache.set(v.id, Component);
+      }
+      return { id: viewTabId(v.id), icon: viewIconNode(v.icon), labelKey: "", label: v.name, Component };
+    });
     const base = SECTIONS.filter((s) => s.id !== PINNED_TAB);
     const pinned = SECTIONS.filter((s) => s.id === PINNED_TAB);
     return [...base, ...viewSections, ...pinned];

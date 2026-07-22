@@ -32,8 +32,9 @@ export const PantallaProviderMount: FC<{ children: ReactNode }> = ({ children })
   const { state, revertIn, confirmCalibration } = color;
   const hdr = useHdr(color.scope, color.game?.appid ?? null);
   const night = useNight();
-  if (!state) return null;
-  const active = !isNativeColor(state);
+  // Always provide (blocks self-gate on state), so a still-loading color panel
+  // doesn't blank sibling blocks in a custom view.
+  const active = !!state && !isNativeColor(state);
   return (
     <PantallaProvider value={{ color, hdr, night }}>
       {revertIn !== null && (
@@ -65,7 +66,7 @@ export const PantallaProviderMount: FC<{ children: ReactNode }> = ({ children })
           </div>
         </PanelSectionRow>
       )}
-      {state.perf_cost && active && (
+      {state?.perf_cost && active && (
         <PanelSectionRow>
           <div style={{
             fontSize: theme.font.caption, color: theme.color.textMuted, lineHeight: 1.4,

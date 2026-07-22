@@ -1,10 +1,11 @@
-import { FC, Fragment, ReactNode, useEffect, useState } from "react";
+import { FC, Fragment, ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { ModalRoot, showModal, Focusable, ButtonItem } from "@decky/ui";
 import { LuChevronUp, LuChevronDown, LuEye, LuEyeOff, LuPower, LuPencil, LuCheck, LuBrain, LuPlus } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
-import { TABS, SECTION_BLOCKS, SUBITEMS, blockOrder, PINNED_TAB } from "../customize/manifest";
+import { TABS, SECTION_BLOCKS, SUBITEMS, blockOrder, PINNED_TAB, CATEGORY_IDS } from "../customize/manifest";
+import { iconBtn, IconAction } from "./IconAction";
 import { orderIds, move, toggle, Layout } from "../customize/layout";
 import { useLayout, saveLayout, resetLayout } from "../customize/store";
 import { useModules, setModuleDisabled, resetModules } from "../customize/modules";
@@ -22,31 +23,12 @@ import { openViewEditorModal } from "./ViewEditor";
 // Blocks that are actually backend MODULES (get the on/off power control) rather
 // than cosmetic cards (which get the show/hide eye). Everything else is cosmetic.
 const BLOCK_MODULE: Record<string, string> = { autoTdp: "autoTdp", curve: "fanControl" };
-// Category ids (tabs minus the pinned Settings), in default order.
-const CATEGORY_IDS = TABS.map((t) => t.id).filter((id) => id !== PINNED_TAB);
 
-const iconBtn: React.CSSProperties = {
-  display: "flex", alignItems: "center", justifyContent: "center",
-  padding: 6, borderRadius: theme.radius.sm, cursor: "pointer",
-};
 const iconSquare = (on: boolean): React.CSSProperties => ({
   width: 30, height: 30, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center",
   background: on ? `rgba(${theme.color.accentRgb},0.14)` : "rgba(255,255,255,0.06)",
   color: on ? theme.color.accent : theme.color.textMuted,
 });
-
-/** Small tappable icon (eye / power / arrow). */
-const IconAction: FC<{ label: string; color: string; disabled?: boolean; onTap: () => void; children: ReactNode }> =
-  ({ label, color, disabled, onTap, children }) => (
-    <Focusable
-      style={{ ...iconBtn, color, opacity: disabled ? 0.3 : 1, cursor: disabled ? "default" : "pointer" }}
-      aria-label={label}
-      onActivate={() => !disabled && onTap()}
-      onClick={() => !disabled && onTap()}
-    >
-      {children}
-    </Focusable>
-  );
 
 /** A row inside an expanded category. Everything can be hidden (eye); rows with
  *  backend machinery (Auto‑TDP, fan control) additionally get an on/off power.
@@ -150,6 +132,15 @@ const CustomizeBody: FC = () => {
   const catMeta = (id: string) => TABS.find((x) => x.id === id)!;
   const learningState = moduleState("learning", disabled, false, false);
   const views = useViews();
+  // Create exactly once per press: Focusable can deliver onActivate AND onClick, and
+  // createView mutates (unlike the idempotent setters), so guard the double-fire.
+  const creating = useRef(false);
+  const onNewView = useCallback(() => {
+    if (creating.current) return;
+    creating.current = true;
+    setTimeout(() => { creating.current = false; }, 0);
+    openViewEditorModal(createView(""));
+  }, []);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: theme.space.md, padding: theme.space.sm, maxWidth: 640, width: "100%", margin: "0 auto" }}>
@@ -324,8 +315,8 @@ const CustomizeBody: FC = () => {
             <Focusable
               style={{ ...iconBtn, gap: theme.space.xs, justifyContent: "center", padding: `${theme.space.sm}px`, color: theme.color.accent, boxShadow: `inset 0 0 0 1px ${theme.color.hairline}` }}
               aria-label={t("customize.views.new")}
-              onActivate={() => openViewEditorModal(createView(""))}
-              onClick={() => openViewEditorModal(createView(""))}
+              onActivate={onNewView}
+              onClick={onNewView}
             >
               <LuPlus size={16} /> <span style={{ fontSize: theme.font.body }}>{t("customize.views.new")}</span>
             </Focusable>

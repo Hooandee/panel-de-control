@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { coerceViews, viewTabId, isViewTabId, viewIdFromTab, DEFAULT_VIEW_ICON, providersFor } from "./views";
+import { coerceViews, viewTabId, isViewTabId, DEFAULT_VIEW_ICON, providersFor } from "./views";
 
 describe("providersFor", () => {
   const section: Record<string, string> = {
@@ -48,10 +48,9 @@ describe("coerceViews", () => {
 });
 
 describe("view tab id helpers", () => {
-  it("round-trips a view id through the tab id", () => {
+  it("builds and detects a view tab id", () => {
     expect(viewTabId("abc")).toBe("view:abc");
     expect(isViewTabId("view:abc")).toBe(true);
     expect(isViewTabId("system")).toBe(false);
-    expect(viewIdFromTab(viewTabId("abc"))).toBe("abc");
   });
 });

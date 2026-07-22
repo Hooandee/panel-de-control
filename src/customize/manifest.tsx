@@ -34,6 +34,9 @@ export const TABS: ItemMeta[] = [
   { id: "settings", labelKey: "nav.settings", icon: <LuSettings size={ICON} /> },
 ];
 
+/** Category (section) ids the editor lists: the tabs minus the pinned Settings. */
+export const CATEGORY_IDS = TABS.map((t) => t.id).filter((id) => id !== PINNED_TAB);
+
 /**
  * The configurable blocks per section, in DEFAULT order. Single source of truth
  * for BOTH the customization editor (labels/icons) and each section's default

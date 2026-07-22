@@ -1,18 +1,17 @@
-import { FC, Fragment, ReactNode, useState } from "react";
+import { FC, Fragment, useState } from "react";
 import { ModalRoot, showModal, Focusable, TextField, ButtonItem } from "@decky/ui";
 import { LuChevronUp, LuChevronDown, LuPlus, LuX } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { FocusRoot } from "./FocusRoot";
-import { TABS, PICKABLE_BLOCKS, blockOrder, PINNED_TAB } from "../customize/manifest";
+import { IconAction } from "./IconAction";
+import { TABS, PICKABLE_BLOCKS, blockOrder, CATEGORY_IDS } from "../customize/manifest";
 import { move } from "../customize/layout";
 import { getPresent } from "../customize/present";
 import { useViews, renameView, setViewIcon, setViewBlocks, deleteView } from "../customize/viewStore";
 import { VIEW_ICON_KEYS, ViewIconKey } from "../customize/views";
 import { viewIconNode } from "../customize/viewIcons";
-
-const CATEGORY_IDS = TABS.map((t) => t.id).filter((id) => id !== PINNED_TAB);
 
 /** Block metadata (label + icon) by id, across every pickable section. */
 const META = new Map(
@@ -29,23 +28,6 @@ function pickableIds(cat: string): string[] {
     .filter((id) => !blockOrder(cat).includes(id));
   return [...extras, ...base];
 }
-
-const iconBtn: React.CSSProperties = {
-  display: "flex", alignItems: "center", justifyContent: "center",
-  padding: 6, borderRadius: theme.radius.sm, cursor: "pointer",
-};
-
-const Tap: FC<{ label: string; color: string; disabled?: boolean; onTap: () => void; children: ReactNode }> =
-  ({ label, color, disabled, onTap, children }) => (
-    <Focusable
-      style={{ ...iconBtn, color, opacity: disabled ? 0.3 : 1, cursor: disabled ? "default" : "pointer" }}
-      aria-label={label}
-      onActivate={() => !disabled && onTap()}
-      onClick={() => !disabled && onTap()}
-    >
-      {children}
-    </Focusable>
-  );
 
 const ViewEditorBody: FC<{ viewId: string; closeModal?: () => void }> = ({ viewId, closeModal }) => {
   const { t } = useI18n();
@@ -103,9 +85,9 @@ const ViewEditorBody: FC<{ viewId: string; closeModal?: () => void }> = ({ viewI
             <div key={id} style={{ display: "flex", alignItems: "center", gap: theme.space.sm }}>
               <span style={{ display: "flex", color: theme.color.textMuted }}>{META.get(id)?.icon}</span>
               <span style={{ flex: 1, minWidth: 0, fontSize: theme.font.body, color: theme.color.textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label(id)}</span>
-              <Tap label={t("customize.moveUp")} color={i === 0 ? theme.color.textMuted : theme.color.accent} disabled={i === 0} onTap={() => moveBlock(id, -1)}><LuChevronUp size={18} /></Tap>
-              <Tap label={t("customize.moveDown")} color={i === blocks.length - 1 ? theme.color.textMuted : theme.color.accent} disabled={i === blocks.length - 1} onTap={() => moveBlock(id, 1)}><LuChevronDown size={18} /></Tap>
-              <Tap label={t("customize.hide")} color={theme.color.danger} onTap={() => removeBlock(id)}><LuX size={18} /></Tap>
+              <IconAction label={t("customize.moveUp")} color={i === 0 ? theme.color.textMuted : theme.color.accent} disabled={i === 0} onTap={() => moveBlock(id, -1)}><LuChevronUp size={18} /></IconAction>
+              <IconAction label={t("customize.moveDown")} color={i === blocks.length - 1 ? theme.color.textMuted : theme.color.accent} disabled={i === blocks.length - 1} onTap={() => moveBlock(id, 1)}><LuChevronDown size={18} /></IconAction>
+              <IconAction label={t("customize.hide")} color={theme.color.danger} onTap={() => removeBlock(id)}><LuX size={18} /></IconAction>
             </div>
           ))
         )}
@@ -127,7 +109,7 @@ const ViewEditorBody: FC<{ viewId: string; closeModal?: () => void }> = ({ viewI
                 <div key={id} style={{ display: "flex", alignItems: "center", gap: theme.space.sm, paddingLeft: theme.space.md }}>
                   <span style={{ display: "flex", color: theme.color.textMuted }}>{META.get(id)?.icon}</span>
                   <span style={{ flex: 1, minWidth: 0, fontSize: theme.font.body, color: theme.color.textPrimary }}>{label(id)}</span>
-                  <Tap label={t("customize.views.add")} color={theme.color.accent} onTap={() => addBlock(id)}><LuPlus size={18} /></Tap>
+                  <IconAction label={t("customize.views.add")} color={theme.color.accent} onTap={() => addBlock(id)}><LuPlus size={18} /></IconAction>
                 </div>
               ))}
             </Fragment>
