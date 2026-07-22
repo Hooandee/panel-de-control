@@ -107,7 +107,7 @@ const CurveBlock: FC = () => {
 
   return (
     <>
-      {curveState?.experimental_available && (
+      {curveState?.experimental_available && canControl && (
         <ExperimentalFanCard enabled={curveState.experimental_enabled} onToggle={curve.onExperimental} />
       )}
       {curveState?.supported && canControl && (

@@ -31,16 +31,15 @@ const GpuBlock: FC = () => {
 };
 
 const AutoTdpBlock: FC = () => {
-  const { power, onAutoTdpToggle } = usePotencia();
+  const { power, onAutoTdpToggle, autoTdpEnabled } = usePotencia();
+  if (!autoTdpEnabled) return null;
   return <AutoTdpToggle checked={power?.auto_tdp ?? false} onChange={onAutoTdpToggle} />;
 };
 
 export function registerPowerBlocks(): void {
   registerBlock("tdp", { sectionId: "power", Component: TdpCoreBlock });
   registerBlock("gpu", { sectionId: "power", Component: GpuBlock });
-  registerBlock("autoTdp", {
-    sectionId: "power",
-    Component: AutoTdpBlock,
-    useAvailable: () => usePotencia().autoTdpEnabled,
-  });
+  // Availability = hardware capability, not the module on/off (the block self-gates
+  // on autoTdpEnabled). Keeps the editor row so a disabled module can be re-enabled.
+  registerBlock("autoTdp", { sectionId: "power", Component: AutoTdpBlock });
 }

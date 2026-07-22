@@ -47,7 +47,7 @@ export function setModuleDisabled(id: string, disabled: boolean): void {
   commit([...cur]);
   setUiModule(id, disabled)
     .then((r) => commit(r.disabled))
-    .catch(() => {});
+    .catch(() => hydrateModules()); // RPC failed → reconcile with the backend truth
 }
 
 /** Re-enable every module (used by the editor reset). One authoritative RPC so

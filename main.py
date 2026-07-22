@@ -374,6 +374,10 @@ class Plugin:
             return {"disabled": self._user_disabled_all()}  # unknown id → no-op
         self._save()
         self._reapply_all()   # already dispatches its subprocess work off-loop
+        # Turning the power module off = stepping aside; hand HHD's TDP back, same
+        # as set_tdp_control_enabled(False). Otherwise no manager drives the TDP.
+        if module_id == "power" and disabled:
+            await self._offload_call(self._restore_hhd_tdp)
         self._sync_sampler()  # learning may have (un)gained a consumer
         return {"disabled": self._user_disabled_all()}
 

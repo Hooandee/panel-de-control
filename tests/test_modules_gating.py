@@ -81,3 +81,36 @@ def test_collect_sample_none_when_learning_inactive():
     p._current_appid = "123"
     assert p._collect_sample() is None
 
+
+def test_disabling_power_module_hands_hhd_back():
+    import asyncio
+
+    p = main.Plugin.__new__(main.Plugin)
+    p._settings = {
+        "disabled_modules": [],
+        "tdp_control_enabled": True,
+        "telemetry_enabled": True,
+        "hhd_tdp_prev": True,
+    }
+    p._init = lambda: None
+    p._save = lambda: None
+    p._reapply_all = lambda *a, **k: None
+    p._sync_sampler = lambda: None
+
+    async def _offload(fn):
+        return fn()
+
+    p._offload_call = _offload
+
+    calls = []
+    orig = main.controller_hhd.set_tdp_enable
+    main.controller_hhd.set_tdp_enable = lambda v: calls.append(v)
+    try:
+        res = asyncio.run(p.set_ui_module("power", True))
+    finally:
+        main.controller_hhd.set_tdp_enable = orig
+
+    assert calls == [True]  # HHD's TDP handed back
+    assert p._settings["hhd_tdp_prev"] is None  # and the marker cleared
+    assert "power" in res["disabled"]
+
