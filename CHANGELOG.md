@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.25.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.24.0...panel-de-control-v0.25.0) (2026-07-22)
+
+
+### Features
+
+* rear-button remap for the MSI Claw A8 ([#257](https://github.com/Hooandee/panel-de-control/issues/257)) ([2f8548a](https://github.com/Hooandee/panel-de-control/commit/2f8548a1d44a9d5f588f372dc64948aa4979b66c))
+
 ## [0.24.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.23.0...panel-de-control-v0.24.0) (2026-07-22)
 
 
