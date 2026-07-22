@@ -56,7 +56,7 @@ export const ControlCenter: FC = () => {
         Component = () => <CustomView viewId={v.id} />;
         cache.set(v.id, Component);
       }
-      return { id: viewTabId(v.id), icon: viewIconNode(v.icon), labelKey: "", label: v.name, Component };
+      return { id: viewTabId(v.id), icon: viewIconNode(v.icon), labelKey: "customize.views.namePlaceholder", label: v.name, Component };
     });
     const base = SECTIONS.filter((s) => s.id !== PINNED_TAB);
     const pinned = SECTIONS.filter((s) => s.id === PINNED_TAB);
@@ -156,7 +156,7 @@ export const ControlCenter: FC = () => {
             tabs={orderedTabs.map((s) => ({
               id: s.id,
               icon: s.icon,
-              label: s.label ?? t(s.labelKey),
+              label: s.label || t(s.labelKey),
               // Red dot on the tab that leads to the updater (Ajustes) when an
               // update is available.
               badge: s.id === PINNED_TAB ? <AlertDot show={hasUpdate} /> : undefined,

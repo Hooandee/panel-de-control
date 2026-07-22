@@ -18,7 +18,6 @@ import { useModules } from "../customize/modules";
 import { effectiveEnabled } from "../customize/moduleLogic";
 import { TdpConflictCard } from "../components/TdpConflictCard";
 import { openTdpConflictModal } from "../components/TdpConflictModal";
-import { Loading } from "../components/Loading";
 
 // A section's shared hooks + context in one instance, shared by the section and any
 // custom view hosting its blocks. Machinery-bound safety chrome travels with the
@@ -80,7 +79,9 @@ export const PantallaProviderMount: FC<{ children: ReactNode }> = ({ children })
 
 export const MandosProviderMount: FC<{ children: ReactNode }> = ({ children }) => {
   const controller = useController();
-  if (!controller.config) return <Loading />;
+  // Provide the context regardless of load state (config resets to null on every
+  // game change): the Mandos blocks each render null while config is absent, so a
+  // custom view hosting a Mandos block alongside others never blanks its siblings.
   return <MandosProvider value={controller}>{children}</MandosProvider>;
 };
 
