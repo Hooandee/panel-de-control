@@ -53,6 +53,15 @@ def test_buttons_msi_claw_two_grips():
     ]
 
 
+def test_buttons_msi_claw_a8_two_grips():
+    caps = ["Gamepad:Button:South", "Gamepad:Button:LeftPaddle1",
+            "Gamepad:Button:RightPaddle1", "Gamepad:Button:Guide"]
+    assert ip.buttons_for("msi_claw_a8", caps) == [
+        ("RightPaddle1", "M1"),
+        ("LeftPaddle1", "M2"),
+    ]
+
+
 def test_buttons_defensively_intersect_live_capabilities():
     # A known device that (for whatever reason) doesn't report a capability →
     # that button is omitted, never invented.
@@ -73,6 +82,7 @@ def test_buttons_unknown_device_is_empty():
 def test_is_known_device():
     assert ip.is_known_device("legion_go_2") is True
     assert ip.is_known_device("msi_claw_8_ai_plus") is True
+    assert ip.is_known_device("msi_claw_a8") is True
     assert ip.is_known_device("legion_go_s") is False  # no known button map
     assert ip.is_known_device(None) is False
 
