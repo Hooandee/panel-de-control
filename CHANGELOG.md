@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.24.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.23.0...panel-de-control-v0.24.0) (2026-07-22)
+
+
+### Features
+
+* customizable modules with a redesigned editor and block registry ([#252](https://github.com/Hooandee/panel-de-control/issues/252)) ([fc6ba12](https://github.com/Hooandee/panel-de-control/commit/fc6ba1204816f9ebc742982d8adedf43b6cb8bbf))
+
 ## [0.23.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.22.0...panel-de-control-v0.23.0) (2026-07-21)
 
 
