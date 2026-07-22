@@ -24,15 +24,8 @@ import { theme } from "../theme";
 
 const card = { ...theme.card, padding: theme.space.md, marginBottom: theme.space.card } as const;
 
-// Map a curated temp sensor token (CPU/GPU) to its localized display name
-// ("Procesador" / "Gráfica"); unknown sensors show their raw label.
 const tempLabel = (t: (k: string) => string, sensor: string) =>
   sensor === "CPU" ? t("fans.temp.cpu") : sensor === "GPU" ? t("fans.temp.gpu") : sensor;
-
-// Ventiladores blocks: the live monitor (RPM/temps) + the fan-curve control. Each
-// owns its data via the shared useFanState monitor (one poll, ref-counted). In the
-// "solo" case (one fan + one temp) the temp is merged into the fan card, so the
-// temps block reports itself unavailable and renders nothing.
 
 const FanRpmBlock: FC = () => {
   const { t } = useI18n();
@@ -104,21 +97,16 @@ const CurveBlock: FC = () => {
   const canControl = effectiveEnabled("fanControl", disabled);
   const canLearn = effectiveEnabled("learning", disabled);
 
-  // Read-only firmware curve (MSI Claw): map pct→pwm once per fetch so the memoized
-  // FanCurveGraph isn't rebuilt on every 1.5 s monitor poll (points are static).
   const firmwarePoints = useMemo<Point[] | null>(
     () => curve.state?.firmware_points?.map((p) => [p.temp, percentToPwm(p.pct)]) ?? null,
     [curve.state?.firmware_points],
   );
 
-  // Live max temp drives the "you are here" marker on the curve.
   const liveTemp = state && state.temps.length ? Math.max(...state.temps.map((x) => x.celsius)) : null;
   const curveState = curve.state;
 
   return (
     <>
-      {/* Legion Go S: opt-in to the unofficial EC channel. Enabling flips
-          `supported` on → the editor below renders. */}
       {curveState?.experimental_available && (
         <ExperimentalFanCard enabled={curveState.experimental_enabled} onToggle={curve.onExperimental} />
       )}
@@ -145,8 +133,6 @@ const CurveBlock: FC = () => {
           </div>
         </PanelSectionRow>
       )}
-      {/* Can't control, but the firmware curve is legible (MSI Claw EC): show it
-          read-only with the live temperature marker on the curve. */}
       {curveState && !curveState.supported && firmwarePoints && (
         <PanelSectionRow>
           <div style={{ ...card, display: "flex", flexDirection: "column", gap: theme.space.sm, overflow: "hidden" }}>
@@ -163,9 +149,6 @@ const CurveBlock: FC = () => {
           </div>
         </PanelSectionRow>
       )}
-      {/* Uncontrollable fan: a firmware mode governs it (Legion Go original, shown
-          even with no fan detected), or the honest OS note when we can monitor but
-          not control and there's no firmware curve. */}
       {curveState && !curveState.supported
         && (curveState.firmware_mode || curveState.has_firmware_modes
             || (!firmwarePoints && !curveState.experimental_available && (state?.fans.length ?? 0) > 0)) && (

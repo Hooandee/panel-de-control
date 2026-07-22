@@ -14,7 +14,6 @@ import { useMandos } from "../mandos/mandosContext";
 import { ProfileSelector } from "../components/ProfileSelector";
 import { registerBlock } from "../customize/blocks";
 
-/** Raised card chrome with a titled header row. */
 const Card: FC<{ title: string; children: ReactNode }> = ({ title, children }) => (
   <div style={{ ...theme.card, padding: theme.space.md, overflow: "hidden" }}>
     <div style={{ display: "flex", alignItems: "center", gap: theme.space.xs, fontSize: theme.font.body, fontWeight: 700, color: theme.color.textPrimary, marginBottom: theme.space.sm }}>
@@ -24,8 +23,6 @@ const Card: FC<{ title: string; children: ReactNode }> = ({ title, children }) =
   </div>
 );
 
-/** A labelled control: a small muted caption above a full-width control. Vertical
- *  so the dropdown never fights the label for width in the narrow QAM. */
 const Row: FC<{ label: string; children: ReactNode }> = ({ label, children }) => (
   <div style={{ display: "flex", flexDirection: "column", gap: theme.space.xs, padding: `${theme.space.xs}px 0` }}>
     <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted, letterSpacing: 0.2 }}>{label}</span>
@@ -33,8 +30,6 @@ const Row: FC<{ label: string; children: ReactNode }> = ({ label, children }) =>
   </div>
 );
 
-/** A remap entry: the physical button's silkscreen legend (Y1/M1…) as a keycap
- *  chip beside its target selector. */
 const RemapRow: FC<{ label: string; children: ReactNode }> = ({ label, children }) => (
   <div style={{ display: "flex", alignItems: "center", gap: theme.space.sm, padding: theme.space.xs, marginBottom: theme.space.xs, borderRadius: theme.radius.sm, boxShadow: `inset 0 0 0 1px ${theme.color.hairline}` }}>
     <span style={{ flex: "0 0 auto", minWidth: 38, height: 30, padding: `0 ${theme.space.sm}px`, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: theme.radius.sm, background: theme.color.accent, color: theme.color.onAccent, fontWeight: 700, fontSize: theme.font.body, letterSpacing: 0.5, boxShadow: "0 1px 2px rgba(0,0,0,0.4)" }}>
@@ -43,10 +38,6 @@ const RemapRow: FC<{ label: string; children: ReactNode }> = ({ label, children 
     <div style={{ flex: 1, minWidth: 0, overflow: "hidden" }}>{children}</div>
   </div>
 );
-
-// Mandos blocks. All read the shared MandosProvider (one controller config + scope
-// owned by the section). Availability of remap/settings is state-derived from the
-// live config's kind (InputPlumber → remap, HHD → settings); manager is always shown.
 
 const ManagerBlock: FC = () => {
   const { t } = useI18n();
@@ -81,8 +72,6 @@ const RemapBlock: FC = () => {
   return (
     <Card title={t("mandos.remap.title")}>
       {buttons.length === 0 ? (
-        // No remappable buttons for this model → nothing to scope per game. Show the
-        // honest reason and point to Steam Input, no scope tab / reset for an empty editor.
         <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, lineHeight: 1.4 }}>
           {t(config.device_known === false ? "mandos.remap.uncalibrated" : "mandos.remap.nobuttons")}
         </div>
@@ -99,7 +88,6 @@ const RemapBlock: FC = () => {
             />
           </div>
           {buttons.map((b) => (
-            // b.label is the literal silkscreen name (Y1/M2/…) — render as-is.
             <RemapRow key={b.source} label={b.label}>
               <Dropdown
                 rgOptions={targetGroups}

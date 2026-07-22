@@ -15,11 +15,6 @@ import { HdrPanel } from "../components/HdrPanel";
 import { segmentGroupStyle, segmentItemStyle } from "../components/segmented";
 import { registerBlock } from "../customize/blocks";
 
-// Pantalla's blocks. All read the shared PantallaProvider (one useColor/useHdr/
-// useNight owned by the section), so they never diverge the optimistic state.
-// Availability is state-derived (OLED look offered per model, HDR/night per device
-// support) and reported by the block's useAvailable hook.
-
 const OledBlock: FC = () => {
   const { color } = usePantalla();
   if (!color.state?.oled_look) return null;

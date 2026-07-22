@@ -7,15 +7,6 @@ import { MandosProvider } from "../mandos/mandosContext";
 import { SectionView } from "../customize/blocks";
 import { Loading } from "../components/Loading";
 
-/**
- * Mandos — controller manager hub.
- *
- * Cooperates with whichever daemon owns the gamepad (Handheld Daemon on Bazzite,
- * InputPlumber on SteamOS) — we never grab evdev ourselves. On InputPlumber we
- * offer a real per-button remap editor; on HHD we expose its controller settings.
- * The manager status, remap editor and settings are self-contained blocks sharing
- * one controller config via MandosProvider.
- */
 export const MandosSection: FC = () => {
   const controller = useController();
   if (!controller.config) return <Loading />;

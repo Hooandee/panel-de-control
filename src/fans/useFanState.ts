@@ -13,13 +13,7 @@ export interface FanMonitor {
 
 const EMPTY: FanMonitor = { state: null, fanHistory: {} };
 
-/**
- * Ref-counted singleton monitor: one get_fan_state() poll (~1.5 s) shared by every
- * consumer, so the fanRpm/temps/curve blocks each read the same tick instead of
- * registering their own poll. History is keyed by label, not array index, so a fan
- * keeps its own buffer even when curation changes the set (no cross-contaminated
- * graphs). One snapshot update per tick (single render). Never throws.
- */
+// Ref-counted singleton: one poll shared by every consumer (fanRpm/temps/curve).
 class FanStateStore {
   private monitor: FanMonitor = EMPTY;
   private refs = 0;
@@ -33,15 +27,12 @@ class FanStateStore {
         const fanHistory: Record<string, number[]> = {};
         for (const f of s.fans) {
           const prevBuf = prev.fanHistory[f.label] ?? [];
-          // Skip glitch reads (rpm null) so they never poison the sparkline.
           fanHistory[f.label] = f.rpm == null ? prevBuf : pushSample(prevBuf, f.rpm, MAX_SAMPLES);
         }
         this.monitor = { state: s, fanHistory };
         this.listeners.forEach((l) => l());
       })
-      .catch(() => {
-        /* keep last values */
-      });
+      .catch(() => {});
   };
 
   subscribe = (cb: () => void): (() => void) => {

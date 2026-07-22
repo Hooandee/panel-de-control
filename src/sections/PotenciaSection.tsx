@@ -11,11 +11,6 @@ import { useTdp } from "../tdp/useTdp";
 import { useTdpConflict } from "../tdp/useTdpConflict";
 import { PotenciaProvider } from "../tdp/potenciaContext";
 
-/**
- * Power section: owns the TDP state (via useTdp) and renders the power-arc core as
- * fixed chrome, with the GPU-clock and Auto‑TDP blocks below it from the registry.
- * The conflict card + first-run take-over modal are chrome that governs the core.
- */
 export const PotenciaSection: FC = () => {
   const tdpCtl = useTdp();
   const { tdp, refresh } = tdpCtl;
@@ -23,10 +18,7 @@ export const PotenciaSection: FC = () => {
   const disabled = useModules();
   const autoTdpEnabled = effectiveEnabled("autoTdp", disabled);
 
-  // Fires the first-run take-over modal at most once per mount.
   const shownTakeover = useRef(false);
-  // Keep the latest conflict actions reachable from the modal callback without
-  // re-arming the first-run effect.
   const conflictRef = useRef(conflict);
   conflictRef.current = conflict;
   useEffect(() => {
@@ -50,7 +42,6 @@ export const PotenciaSection: FC = () => {
         </PanelSectionRow>
       )}
       <Block id="tdp" />
-      {/* Every write control drops away in monitor-only mode (we've stepped aside). */}
       {!conflict.monitorOnly && <SectionView sectionId="power" />}
     </PotenciaProvider>
   );

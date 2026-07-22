@@ -11,11 +11,6 @@ import { PantallaProvider } from "../display/pantallaContext";
 import { ProfileSelector } from "../components/ProfileSelector";
 import { SectionView } from "../customize/blocks";
 
-/** Pantalla: panel color. The scope tab, confirm/auto-revert bar and perf note are
- *  fixed chrome that governs the color blocks; the OLED look, color cluster, HDR
- *  and night mode are self-contained blocks rendered from the registry. All share
- *  one useColor/useHdr/useNight via PantallaProvider. Honest when the host has no
- *  gamescope color control. */
 export const PantallaSection: FC = () => {
   const { t } = useI18n();
   const color = useColor();
@@ -39,8 +34,6 @@ export const PantallaSection: FC = () => {
 
   return (
     <PantallaProvider value={{ color, hdr, night }}>
-      {/* Confirm-or-auto-revert bar for an unconfirmed calibration change (the
-          "changing screen resolution" safety pattern). Prominent + always visible. */}
       {revertIn !== null && (
         <PanelSectionRow>
           <div style={{
@@ -71,8 +64,6 @@ export const PantallaSection: FC = () => {
         </PanelSectionRow>
       )}
 
-      {/* Honest, device-named note where a look costs extra power (Intel forces
-          composition). Padded so it doesn't crowd the cards. */}
       {state.perf_cost && active && (
         <PanelSectionRow>
           <div style={{
@@ -85,7 +76,6 @@ export const PantallaSection: FC = () => {
         </PanelSectionRow>
       )}
 
-      {/* Scope tab — governs the per-game color controls below. */}
       <PanelSectionRow>
         <ProfileSelector
           scope={scope}

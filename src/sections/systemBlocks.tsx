@@ -21,11 +21,6 @@ import { registerBlock } from "../customize/blocks";
 import { useLayout } from "../customize/store";
 import { subitemHidden } from "../customize/layout";
 
-// Sistema's blocks, each self-contained: it owns its data hook and its own
-// loading gate (renders nothing until the first read, never a fake 0%), so it
-// can render inside the Sistema tab or any custom view. Availability is declared
-// on the registry entry (poll-free) so the editor lists a block even when hidden.
-
 const EcoBlock: FC = () => {
   const eco = useEco();
   const brightness = useBrightness();
@@ -127,7 +122,6 @@ export function registerSystemBlocks(): void {
   registerBlock("cpu", { sectionId: "system", Component: CpuBlock });
   registerBlock("brightness", { sectionId: "system", Component: BrightnessBlock });
   registerBlock("volume", { sectionId: "system", Component: VolumeBlock });
-  // RGB lighting is device-specific: absent on the Steam Deck (no RGB LEDs).
   registerBlock("colores", {
     sectionId: "system",
     Component: ColoresBlock,

@@ -2,14 +2,11 @@
 // path. Kept pure so they're unit-testable; components consume them.
 import type { FanState } from "../api";
 
-/** "Solo" cooling: exactly one fan + one temp — a single system, shown merged
- *  (fan ring + its temperature) in one card instead of two blocks. */
+/** One fan + one temp: shown merged in the fan card, not as two blocks. */
 export function isSolo(state: FanState): boolean {
   return state.fans.length === 1 && state.temps.length === 1;
 }
 
-/** Whether the standalone temperatures block has content: the device reports
- *  temps AND it isn't the solo case (where the single temp lives in the fan card). */
 export function tempsAvailable(state: FanState | null): boolean {
   return !!state && !isSolo(state) && state.temps.length > 0;
 }

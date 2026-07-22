@@ -23,12 +23,6 @@ export interface ControllerControl {
   onReset: () => void;
 }
 
-/**
- * Owns the Mandos controller config + the global/per-game scope. Fetches on mount
- * and whenever the running game changes (the backend keys the remap by the running
- * appid); clears first so a game switch never shows the previous game's remap. The
- * scope tab reflects the game's active remap and IS the control (shared wiring).
- */
 export function useController(): ControllerControl {
   const game = useRunningGame();
   const [config, setConfig] = useState<ControllerConfig | null>(null);
@@ -45,7 +39,6 @@ export function useController(): ControllerControl {
   );
   const { scope, onScope } = useScopeSync(appid, config?.follows_global, applyFollow);
 
-  // Write target for the active scope (a game write needs the appid; global ignores it).
   const targetAppid = scope === "game" && game ? game.appid : null;
   const targetScope: Scope = targetAppid ? "game" : "global";
 

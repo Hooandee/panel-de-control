@@ -14,8 +14,7 @@ import { registerDisplayBlocks } from "./displayBlocks";
 import { registerMandosBlocks } from "./mandosBlocks";
 import { registerPowerBlocks } from "./powerBlocks";
 
-// Populate the block registry at import (before any section renders). Called via
-// used imports — not bare side-effect imports, which the bundler tree-shakes.
+// Called functions, not bare side-effect imports (which get tree-shaken away).
 registerSystemBlocks();
 registerFanBlocks();
 registerDisplayBlocks();

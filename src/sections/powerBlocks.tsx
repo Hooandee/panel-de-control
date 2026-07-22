@@ -6,11 +6,6 @@ import { AutoTdpToggle } from "../components/AutoTdpToggle";
 import { usePotencia } from "../tdp/potenciaContext";
 import { registerBlock } from "../customize/blocks";
 
-// Potencia blocks. All read the shared PotenciaProvider (one TDP state owned by the
-// section). The core (arc + slider + presets) is registered so a custom view can
-// host it, but the Potencia tab renders it as fixed chrome — only GPU clock and
-// Auto‑TDP are reorderable/hideable there.
-
 const TdpCoreBlock: FC = () => {
   const c = usePotencia();
   return (
@@ -43,8 +38,6 @@ const AutoTdpBlock: FC = () => {
 export function registerPowerBlocks(): void {
   registerBlock("tdp", { sectionId: "power", Component: TdpCoreBlock });
   registerBlock("gpu", { sectionId: "power", Component: GpuBlock });
-  // Hiding the Auto‑TDP block just hides the toggle; turning the module off (editor
-  // power) stops the loop backend-side. Availability follows the module state.
   registerBlock("autoTdp", {
     sectionId: "power",
     Component: AutoTdpBlock,

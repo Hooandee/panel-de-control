@@ -23,12 +23,6 @@ export interface TdpControl {
   onApplySuggestion: (w: number) => void;
 }
 
-/**
- * Owns the TDP state: global/per-game scope, the running game, live power-draw
- * polling and the debounced watt/level commits. Relocated out of the section so
- * the power-arc core and the GPU/Auto‑TDP blocks share one instance (one poll, one
- * optimistic state) through the section provider.
- */
 export function useTdp(): TdpControl {
   const game = useRunningGame();
   const [tdp, setTdp] = useState<TdpState | null>(null);
@@ -40,8 +34,7 @@ export function useTdp(): TdpControl {
     getTdpState().then(setTdp).catch(() => {});
   }, []);
 
-  // Poll live power draw every second. When the charger state flips, re-fetch the
-  // TDP state too so the slider ceiling (battery vs charger) updates at once.
+  // Re-fetch TDP on a charger flip so the ceiling (battery vs charger) updates.
   const lastAc = useRef<boolean | null>(null);
   useEffect(() => {
     const tick = () =>
@@ -62,7 +55,6 @@ export function useTdp(): TdpControl {
     refresh();
   }, [appid, refresh]);
 
-  // The scope tab reflects the game's active profile and IS the control (shared wiring).
   const applyFollow = useCallback(
     (f: boolean, a: string) => { setTdpFollowGlobal(f, a).then(setTdp).catch(() => {}); },
     [],
@@ -107,8 +99,6 @@ export function useTdp(): TdpControl {
     [resolveTarget, refresh],
   );
 
-  // The RPC returns the full new state so the segmented control + rails update
-  // together in one round-trip (no transient mode/rail mismatch).
   const onSetMode = useCallback((mode: BoostMode) => {
     const { target, sc } = resolveTarget();
     setTdpBoostMode(mode, sc, target).then(setTdp).catch(() => {});
@@ -122,7 +112,7 @@ export function useTdp(): TdpControl {
     [resolveTarget, refresh],
   );
 
-  // Gate the first enable of Auto‑TDP behind the one-time notice. Disabling isn't gated.
+  // First enable is gated behind the one-time notice; disabling isn't.
   const onAutoTdpToggle = useCallback(
     (enabled: boolean) => {
       if (enabled && tdp && !tdp.seen_autotdp_notice) {
@@ -140,14 +130,11 @@ export function useTdp(): TdpControl {
     [tdp, onAutoTdp, refresh],
   );
 
-  // Firmware performance mode (Legion Go original). Device-global; the RPC returns
-  // the full new state so the arc + chips update in one round-trip.
   const onFirmwareMode = useCallback((mode: string) => {
     setTdpFirmwareMode(mode).then(setTdp).catch(() => {});
   }, []);
 
-  // Apply the learned-band suggestion: a FIXED PL1 at the dial-picked value, a
-  // distinct mode from dynamic auto-TDP → turn auto OFF, then commit the watts.
+  // A fixed PL1 is a distinct mode from dynamic auto-TDP → turn auto off first.
   const onApplySuggestion = useCallback(
     (w: number) => {
       const { target, sc } = resolveTarget();
