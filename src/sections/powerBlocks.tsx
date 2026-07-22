@@ -26,13 +26,14 @@ const TdpCoreBlock: FC = () => {
 };
 
 const GpuBlock: FC = () => {
-  const { scope, game } = usePotencia();
+  const { scope, game, monitorOnly } = usePotencia();
+  if (monitorOnly) return null;
   return <GpuClockCard scope={scope} appid={game?.appid ?? null} />;
 };
 
 const AutoTdpBlock: FC = () => {
-  const { power, onAutoTdpToggle, autoTdpEnabled } = usePotencia();
-  if (!autoTdpEnabled) return null;
+  const { power, onAutoTdpToggle, autoTdpEnabled, monitorOnly } = usePotencia();
+  if (monitorOnly || !autoTdpEnabled) return null;
   return <AutoTdpToggle checked={power?.auto_tdp ?? false} onChange={onAutoTdpToggle} />;
 };
 

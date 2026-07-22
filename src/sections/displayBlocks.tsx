@@ -17,7 +17,7 @@ import { registerBlock } from "../customize/blocks";
 
 const OledBlock: FC = () => {
   const { color } = usePantalla();
-  if (!color.state?.oled_look) return null;
+  if (!color.state?.supported || !color.state.oled_look) return null;
   const active = !isNativeColor(color.state);
   return (
     <div style={{ marginTop: theme.space.sm }}>
@@ -30,7 +30,7 @@ const ColorBlock: FC = () => {
   const { t } = useI18n();
   const { color } = usePantalla();
   const state = color.state;
-  if (!state) return null;
+  if (!state?.supported) return null;
   const active = !isNativeColor(state);
   const chip = (on: boolean) => ({ ...segmentItemStyle(on), flex: 1, padding: "6px 4px" });
   return (
@@ -127,9 +127,16 @@ export function registerDisplayBlocks(): void {
   registerBlock("oled", {
     sectionId: "display",
     Component: OledBlock,
-    useAvailable: () => !!usePantalla().color.state?.oled_look,
+    useAvailable: () => {
+      const s = usePantalla().color.state;
+      return !!(s?.supported && s.oled_look);
+    },
   });
-  registerBlock("color", { sectionId: "display", Component: ColorBlock });
+  registerBlock("color", {
+    sectionId: "display",
+    Component: ColorBlock,
+    useAvailable: () => !!usePantalla().color.state?.supported,
+  });
   registerBlock("hdr", {
     sectionId: "display",
     Component: HdrBlock,
