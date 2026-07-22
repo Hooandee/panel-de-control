@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.25.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.25.0...panel-de-control-v0.25.1) (2026-07-22)
+
+
+### Bug Fixes / Correcciones
+
+* The Power tab no longer disappears when TDP control is handed to another manager. It stays visible in a live monitoring view, with a button to take control back whenever you want. ([#259](https://github.com/Hooandee/panel-de-control/issues/259)) ([2e67d27](https://github.com/Hooandee/panel-de-control/commit/2e67d2747b55eb4d5a94175ca40e35a0944e825f))
+* **ES:** La pestaña Potencia ya no desaparece cuando el control del TDP pasa a otro gestor. Se queda visible en modo monitoreo, con el consumo en vivo y un botón para retomar el control cuando quieras. ([#259](https://github.com/Hooandee/panel-de-control/issues/259)) ([2e67d27](https://github.com/Hooandee/panel-de-control/commit/2e67d2747b55eb4d5a94175ca40e35a0944e825f))
+
 ## [0.25.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.24.0...panel-de-control-v0.25.0) (2026-07-22)
 
 
