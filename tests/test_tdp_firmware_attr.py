@@ -114,6 +114,79 @@ def test_bounds_are_read_live_not_cached(tmp_path):
     assert b.set_tdp(30, ac=True).applied_w == 30   # picked up live, no reload
 
 
+def test_write_never_exceeds_profile_ceiling_when_firmware_lies(tmp_path):
+    # Safety invariant: a recognised device's WRITE clamp must bound to the profile
+    # ceiling, not the firmware's live max. The Xbox Ally X firmware reports a bogus
+    # ppt max of 150 W; a write must still land at the 35 W profile charger max — never
+    # cook a 35 W handheld at 150 W, whatever value reaches set_levels.
+    root = str(tmp_path)
+    _mk_attr(root, "asus-armoury", "ppt_pl1_spl", 35, 5, 150)
+    _mk_attr(root, "asus-armoury", "ppt_pl2_sppt", 42, 5, 150)
+    _mk_attr(root, "asus-armoury", "ppt_pl3_fppt", 49, 5, 150)
+    fb = TdpLimits(min_w=7, default_w=17, max_w=25, max_ac_w=35)
+    b = FirmwareAttrBackend("asus-armoury", fb, root=root)
+    # Even asked for the bogus 150 directly on every rail, each rail clamps to its
+    # profile-derived ceiling (PL1 35, SPPT 42, FPPT 49).
+    res = b.set_levels(150, 150, 150, ac=True)
+    assert res.applied_w == 35
+    p = os.path.join(root, "sys/class/firmware-attributes/asus-armoury/attributes")
+    assert open(os.path.join(p, "ppt_pl2_sppt/current_value")).read().strip() == "42"
+    assert open(os.path.join(p, "ppt_pl3_fppt/current_value")).read().strip() == "49"
+
+
+def test_write_still_honours_a_low_live_firmware_ceiling(tmp_path):
+    # The profile cap must not defeat the dynamic battery/charger behaviour: when the
+    # firmware genuinely reports a LOWER live max (25 on battery) the write clamps to
+    # min(firmware, profile) = 25, not the profile's 35.
+    root = str(tmp_path)
+    _mk_attr(root, "asus-armoury", "ppt_pl1_spl", 13, 7, 25)
+    _mk_attr(root, "asus-armoury", "ppt_pl2_sppt", 13, 7, 30)
+    _mk_attr(root, "asus-armoury", "ppt_pl3_fppt", 13, 7, 35)
+    fb = TdpLimits(min_w=7, default_w=17, max_w=25, max_ac_w=35)
+    b = FirmwareAttrBackend("asus-armoury", fb, root=root)
+    assert b.set_levels(35, 42, 49, ac=True).applied_w == 25
+
+
+def _mk_legacy(root, pl1="20", pl2="24", fppt="28"):
+    # The ASUS legacy interface (asus-nb-wmi): direct ppt files, not the current_value/
+    # min_value/max_value triplet. This is the second PL1 interface Steam/HHD write.
+    d = os.path.join(root, "sys/devices/platform/asus-nb-wmi")
+    os.makedirs(d, exist_ok=True)
+    for f, v in (("ppt_pl1_spl", pl1), ("ppt_pl2_sppt", pl2), ("ppt_fppt", fppt)):
+        with open(os.path.join(d, f), "w") as fh:
+            fh.write(v)
+    return d
+
+
+def test_writes_both_pl1_interfaces_when_legacy_present(tmp_path):
+    # On an ASUS device with the dual PL1 interface, a write must also assert the legacy
+    # asus-nb-wmi nodes so our setpoint is the last writer and Steam/HHD/firmware can't
+    # silently hold the effective PL1 higher. Firmware max lies (150) → both interfaces
+    # land at the profile ceiling (PL1 35, SPPT 42, FPPT 49), never 150.
+    root = str(tmp_path)
+    _mk_attr(root, "asus-armoury", "ppt_pl1_spl", 35, 5, 150)
+    _mk_attr(root, "asus-armoury", "ppt_pl2_sppt", 42, 5, 150)
+    _mk_attr(root, "asus-armoury", "ppt_pl3_fppt", 49, 5, 150)
+    legacy = _mk_legacy(root)
+    fb = TdpLimits(min_w=7, default_w=17, max_w=25, max_ac_w=35)
+    b = FirmwareAttrBackend("asus-armoury", fb, root=root)
+    b.set_levels(150, 150, 150, ac=True)
+    assert open(os.path.join(legacy, "ppt_pl1_spl")).read().strip() == "35"
+    assert open(os.path.join(legacy, "ppt_pl2_sppt")).read().strip() == "42"
+    assert open(os.path.join(legacy, "ppt_fppt")).read().strip() == "49"
+
+
+def test_legacy_interface_absent_is_a_clean_noop(tmp_path):
+    # No asus-nb-wmi (non-ASUS, or a kernel that dropped the legacy ppt nodes): the write
+    # still succeeds via the firmware-attributes path, no error.
+    root = str(tmp_path)
+    _mk_full(root, "asus-armoury")
+    fb = TdpLimits(min_w=7, default_w=17, max_w=25, max_ac_w=35)
+    b = FirmwareAttrBackend("asus-armoury", fb, root=root)
+    res = b.set_levels(20, 24, 28, ac=True)
+    assert res.ok is True and res.applied_w == 20
+
+
 def test_lenovo_profile_prestep_sets_custom(tmp_path):
     root = str(tmp_path)
     _mk_full(root)

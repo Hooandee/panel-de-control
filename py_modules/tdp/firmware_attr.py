@@ -7,6 +7,11 @@ from tdp.types import TdpLimits, TdpResult
 
 _FW_BASE = "sys/class/firmware-attributes"
 _PP_BASE = "sys/class/platform-profile"
+# ASUS exposes a SECOND, legacy PL1 interface (asus-nb-wmi: direct ppt files) that Steam
+# and HHD also write. The effective SoC limit is the last write across BOTH interfaces,
+# so a write mirrors our (clamped) setpoint here too to stay authoritative under a game.
+_LEGACY_BASE = "sys/devices/platform/asus-nb-wmi"
+_LEGACY_NODES = (("pl1", "ppt_pl1_spl"), ("pl2", "ppt_pl2_sppt"), ("pl3", "ppt_fppt"))
 
 # Boost headroom derived from sustained PL1 when the user sets a single TDP value.
 # PL2 (slow) and PL3 (fast) are scaled above PL1, then clamped to each rail's sysfs max.
@@ -35,6 +40,7 @@ class FirmwareAttrBackend(TDPBackend):
         self.supported = self._dir is not None and os.path.exists(self._attr("ppt_pl1_spl"))
         self._pp_dir = self._find_profile_dir()  # static, resolved once
         self._pp_choices = None                  # parsed lazily, then cached
+        self._legacy = self._find_legacy_nodes(driver_prefix)  # ASUS dual-interface
 
     def _live_bounds(self, attr):
         # Read live, never cache: the firmware ceiling is dynamic (lower on battery,
@@ -45,6 +51,25 @@ class FirmwareAttrBackend(TDPBackend):
         if self._is_generic and hi is not None and hi > _FW_ABSURD_W:
             hi = _FW_ABSURD_W
         return lo, hi
+
+    def _find_legacy_nodes(self, driver_prefix):
+        """Detect the legacy asus-nb-wmi ppt files (the second PL1 interface). ASUS only;
+        empty on other vendors and on kernels that dropped the legacy nodes."""
+        if not driver_prefix.startswith("asus"):
+            return {}
+        base = os.path.join(self._root, _LEGACY_BASE)
+        return {rail: os.path.join(base, node)
+                for rail, node in _LEGACY_NODES
+                if os.path.exists(os.path.join(base, node))}
+
+    def _write_legacy(self, pl1, pl2, pl3):
+        """Mirror the profile-clamped rails to the legacy interface, PL1 last, so our
+        setpoint wins the last-writer-wins SMU arbitration against Steam/HHD/firmware.
+        Best-effort: never touches the firmware-attributes result."""
+        for rail, val in (("pl3", pl3), ("pl2", pl2), ("pl1", pl1)):
+            p = self._legacy.get(rail)
+            if p:
+                self._write(p, val)
 
     def _find_driver_dir(self, prefix):
         base = os.path.join(self._root, _FW_BASE)
@@ -136,10 +161,27 @@ class FirmwareAttrBackend(TDPBackend):
             "pl3": {"min": mn, "max": round(mx * _PL3_BOOST_RATIO)},
         }
 
+    def _profile_rail_max(self, attr):
+        """Recognised-device write ceiling for a rail, mirroring level_limits(): PL1 =
+        charger max, boost rails profile-scaled. The profile is the authority — not the
+        firmware's reported max, which some ASUS kernels report as a bogus 150 W."""
+        mx = self._fallback.max_ac_w
+        if attr == "ppt_pl2_sppt":
+            return round(mx * _PL2_BOOST_RATIO)
+        if attr == "ppt_pl3_fppt":
+            return round(mx * _PL3_BOOST_RATIO)
+        return mx
+
     def _clamp_live(self, value, attr):
         mn, mx = self._live_bounds(attr)
         lo = mn if mn is not None else self._fallback.min_w
         hi = mx if mx is not None else self._fallback.max_ac_w
+        if not self._is_generic:
+            # Bound the write to the profile ceiling too, keeping the LOWER of the two:
+            # the live firmware max still applies the dynamic battery/charger ceiling,
+            # but a bogus-high firmware read (150 W) can never leak into a write and
+            # cook the machine.
+            hi = min(hi, self._profile_rail_max(attr))
         return max(lo, min(int(value), hi))
 
     def set_levels(self, pl1, pl2, pl3, ac):
@@ -155,6 +197,8 @@ class FirmwareAttrBackend(TDPBackend):
         self._write(self._attr("ppt_pl3_fppt"), c3)
         self._write(self._attr("ppt_pl2_sppt"), c2)
         ok = self._write(self._attr("ppt_pl1_spl"), c1)
+        # Also assert the legacy interface (ASUS dual PL1) so our value is the last writer.
+        self._write_legacy(c1, c2, c3)
         applied = self.read_applied()
         success = ok and applied == c1
         detail = "" if success else f"write not confirmed (wanted {c1}, read {applied})"
