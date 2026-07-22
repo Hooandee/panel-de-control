@@ -1,34 +1,28 @@
-import { CSSProperties, FC } from "react";
+import { FC } from "react";
 import { Focusable, PanelSectionRow } from "@decky/ui";
-import { LuGlobe, LuPalette, LuSlidersHorizontal, LuSparkles } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { useColor } from "../display/useColor";
 import { useNight } from "../display/useNight";
 import { useHdr } from "../display/useHdr";
-import { isNativeColor, isCalibrated } from "../display/color";
+import { isNativeColor } from "../display/color";
+import { PantallaProvider } from "../display/pantallaContext";
 import { ProfileSelector } from "../components/ProfileSelector";
-import { ContainedSlider } from "../components/ContainedSlider";
-import { Collapsible } from "../components/Collapsible";
-import { OledLookCard } from "../components/OledLookCard";
-import { AdvancedColor } from "../components/AdvancedColor";
-import { NightModeCard } from "../components/NightModeCard";
-import { HdrPanel } from "../components/HdrPanel";
-import { segmentGroupStyle, segmentItemStyle } from "../components/segmented";
-import { SectionBlocks } from "../customize/SectionBlocks";
+import { SectionView } from "../customize/blocks";
+import "./displayBlocks"; // registers the Pantalla blocks
 
-/** Pantalla: panel color. One-tap OLED look (per model) → saturation (per-game) →
- *  global calibration (temperature / contrast). Honest when the host
- *  has no gamescope color control. */
+/** Pantalla: panel color. The scope tab, confirm/auto-revert bar and perf note are
+ *  fixed chrome that governs the color blocks; the OLED look, color cluster, HDR
+ *  and night mode are self-contained blocks rendered from the registry. All share
+ *  one useColor/useHdr/useNight via PantallaProvider. Honest when the host has no
+ *  gamescope color control. */
 export const PantallaSection: FC = () => {
   const { t } = useI18n();
-  const {
-    state, scope, game, revertIn, onScope,
-    onSaturation, onCalibration, confirmCalibration, onOledLook, onPreset, onReset,
-  } = useColor();
-  const night = useNight();
+  const color = useColor();
+  const { state, scope, game, revertIn, confirmCalibration, onScope } = color;
   const hdr = useHdr(scope, game?.appid ?? null);
+  const night = useNight();
 
   if (!state) return null;
 
@@ -43,103 +37,9 @@ export const PantallaSection: FC = () => {
   }
 
   const active = !isNativeColor(state);
-  const chip = (on: boolean): CSSProperties => ({
-    ...segmentItemStyle(on),
-    flex: 1,
-    padding: "6px 4px",
-  });
-
-  // OLED look (per model; hidden on real OLED panels), the color cluster
-  // (Ambiente + saturation + advanced calibration), HDR and Night mode are the
-  // section's reorderable/hideable blocks. The confirm bar, perf note and scope
-  // selector are fixed chrome (they govern the color blocks), rendered above.
-  const blocks = {
-    oled: state.oled_look ? (
-      <div style={{ marginTop: theme.space.sm }}>
-        <OledLookCard active={active} onApply={onOledLook} onReset={onReset} />
-      </div>
-    ) : null,
-    color: (
-      <>
-        <PanelSectionRow>
-          <div style={{ ...theme.card, padding: theme.space.md, marginTop: theme.space.sm, overflow: "hidden" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
-              <LuSparkles size={16} color={theme.color.accent} />
-              <span style={{ fontSize: theme.font.body, fontWeight: 600, color: theme.color.textPrimary }}>
-                {t("display.look")}
-              </span>
-            </div>
-            <Focusable style={segmentGroupStyle}>
-              {state.presets.map((key) => (
-                <Focusable key={key} style={chip(state.active_preset === key)}
-                  onActivate={() => onPreset(key)} onClick={() => onPreset(key)}>
-                  {t(`display.look.${key}`)}
-                </Focusable>
-              ))}
-            </Focusable>
-          </div>
-        </PanelSectionRow>
-        <PanelSectionRow>
-          <div style={{ ...theme.card, padding: theme.space.md, margin: `${theme.space.sm}px 0`, overflow: "hidden" }}>
-            <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 2 }}>
-              <LuPalette size={16} color={theme.color.accent} />
-              <span style={{ fontSize: theme.font.body, fontWeight: 600, color: theme.color.textPrimary }}>
-                {t("display.saturation")}
-              </span>
-              <span style={{ marginLeft: "auto", fontSize: theme.font.value, fontWeight: 700, color: theme.color.textPrimary }}>
-                {state.saturation}%
-              </span>
-            </div>
-            <ContainedSlider value={state.saturation} min={0} max={200} step={5}
-              scale={0.75} onChange={onSaturation} />
-          </div>
-        </PanelSectionRow>
-        <Collapsible
-          id="color-advanced"
-          icon={<LuSlidersHorizontal size={16} />}
-          title={t("display.advanced")}
-          summary={isCalibrated(state) ? t("display.custom") : t("display.native")}
-        >
-          <AdvancedColor state={state} onChange={onCalibration} />
-          {active && (
-            <Focusable
-              style={{
-                display: "flex", justifyContent: "center", marginTop: 10, padding: "6px 12px",
-                borderRadius: theme.radius.sm, background: theme.color.surfaceRaised,
-                boxShadow: `inset 0 0 0 1px ${theme.color.hairline}`,
-                color: theme.color.textPrimary, fontSize: theme.font.body, cursor: "pointer",
-              }}
-              onActivate={onReset} onClick={onReset}
-            >
-              {t("display.reset")}
-            </Focusable>
-          )}
-        </Collapsible>
-      </>
-    ),
-    hdr: hdr.state?.supported ? (
-      <PanelSectionRow>
-        <HdrPanel state={hdr.state} onChange={hdr.update} />
-      </PanelSectionRow>
-    ) : null,
-    night: night.state?.supported ? (
-      <>
-        <PanelSectionRow>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, margin: `${theme.space.md}px 0 ${theme.space.xs}px`, color: theme.color.textMuted }}>
-            <LuGlobe size={13} />
-            <span style={{ fontSize: theme.font.caption }}>{t("display.general")}</span>
-            <div style={{ flex: 1, height: 1, background: theme.color.hairline }} />
-          </div>
-        </PanelSectionRow>
-        <PanelSectionRow>
-          <NightModeCard state={night.state} onChange={night.update} />
-        </PanelSectionRow>
-      </>
-    ) : null,
-  };
 
   return (
-    <>
+    <PantallaProvider value={{ color, hdr, night }}>
       {/* Confirm-or-auto-revert bar for an unconfirmed calibration change (the
           "changing screen resolution" safety pattern). Prominent + always visible. */}
       {revertIn !== null && (
@@ -186,8 +86,7 @@ export const PantallaSection: FC = () => {
         </PanelSectionRow>
       )}
 
-      {/* Scope tab — governs the per-game color controls below (OLED look, Ambiente,
-          saturation, calibration, HDR). */}
+      {/* Scope tab — governs the per-game color controls below. */}
       <PanelSectionRow>
         <ProfileSelector
           scope={scope}
@@ -199,8 +98,7 @@ export const PantallaSection: FC = () => {
         />
       </PanelSectionRow>
 
-      {/* Modular, reorderable/hideable blocks in the user's saved order. */}
-      <SectionBlocks sectionId="display" blocks={blocks} />
-    </>
+      <SectionView sectionId="display" />
+    </PantallaProvider>
   );
 };
