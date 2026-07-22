@@ -1,8 +1,31 @@
 import { callable } from "@decky/api";
+import type { LaunchTools } from "./launch/catalog";
 
 // callable<[arg types], ReturnType>("exact_backend_method_name")
 // Names must match the Python `async def` on the Plugin class exactly.
 export const getVersion = callable<[], string>("get_version");
+
+// Detected host tools (lsfg/mangohud/gamemode/…) + distro for the launch-options
+// pills. LaunchTools is defined in the pure catalog module (no @decky import).
+export type { LaunchTools };
+export const getLaunchTools = callable<[], LaunchTools>("get_launch_tools");
+// Which PROTON_* vars the game's Proton build actually supports (read from its
+// script) → gate version-specific pills honestly. `found` false = the build wasn't
+// located (native/non-Steam/missing), and then `envs` is empty — no unconfirmed options.
+export interface ProtonCaps {
+  envs: string[];
+  found: boolean;
+}
+export const getProtonCaps = callable<[compatName: string], ProtonCaps>("get_proton_caps");
+// Pill usage counts ({pill_id: times applied}) → the editor surfaces the most-used.
+export const getLaunchUsage = callable<[], Record<string, number>>("get_launch_usage");
+export const bumpLaunchUsage = callable<[ids: string[]], boolean>("bump_launch_usage");
+// User-defined launch-variable library (env / game args). set_* returns the stored
+// (shape-coerced) list.
+import type { CustomVarDef } from "./launch/customVars";
+export type { CustomVarDef };
+export const getCustomLaunchVars = callable<[], CustomVarDef[]>("get_custom_launch_vars");
+export const setCustomLaunchVars = callable<[vars: CustomVarDef[]], CustomVarDef[]>("set_custom_launch_vars");
 
 // Durable mirror of the frontend's localStorage prefs (a null value removes a key).
 export const getUiPrefs = callable<[], Record<string, string>>("get_ui_prefs");
@@ -27,6 +50,9 @@ export interface DeviceInfo {
   // When true, the shell shows the experimental marker for this recognised model.
   experimental: boolean;
   cooler_max: number | null;
+  // GPU generation ("rdna2"|"rdna3"|"rdna35"|"rdna4"|"intel"|"unknown") for the
+  // launch-options upscaler gating (FSR4 = rdna3/rdna4).
+  gpu_gen: string;
   // When true, the charger headroom (tdp_max_charger above tdp_max) is only reachable
   // with the charger connected — the firmware caps the sustained limit on battery. Hide
   // the "raise on battery" toggle; the arc shows the locked charger segment instead.
@@ -582,8 +608,12 @@ export interface ReportResult {
   saved_path?: string | null;
 }
 
+// `context` carries frontend-only diagnostics the backend can't see (e.g. the
+// running game's launch-options string + Proton caps for a "launch" report).
 export const submitReport =
-  callable<[categories: string[], text: string], ReportResult>("submit_report");
+  callable<[categories: string[], text: string, context: Record<string, unknown>], ReportResult>(
+    "submit_report",
+  );
 
 export const getControllerConfig = callable<[], ControllerConfig>("get_controller_config");
 export const setControllerButton =

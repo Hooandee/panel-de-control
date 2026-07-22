@@ -352,6 +352,10 @@ def capabilities_from(states: dict) -> dict:
     gpu = states.get("gpu") or {}
     color = states.get("color") or {}
     ctl = states.get("controller") or {}
+    launch = states.get("launch") or {}
+    ltools = launch.get("tools") or {}
+    running = (launch.get("frontend") or {}).get("runningGame")
+    running = running if isinstance(running, dict) else {}
     return {
         "tdp_backend": tdp.get("backend"),
         "tdp_supported": bool(tdp.get("supported")),
@@ -368,6 +372,13 @@ def capabilities_from(states: dict) -> dict:
         "color_supported": bool(color.get("supported")),
         "controller_manager": ctl.get("manager"),
         "controller_kind": ctl.get("kind"),
+        # Launch options: tools detected + (running game) malformed string / Proton resolved.
+        "launch_lsfg": bool(ltools.get("lsfg")),
+        "launch_mangohud": bool(ltools.get("mangohud")),
+        "launch_distro": ltools.get("distro"),
+        "launch_running_compat": running.get("compatTool"),
+        "launch_running_proton_found": running.get("protonFound"),
+        "launch_running_malformed": running.get("malformed"),
     }
 
 

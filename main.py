@@ -26,6 +26,9 @@ from fans import expose as fan_expose
 from fans import presets as fan_presets
 from fans import suggest as fan_suggest
 from fan_curves import FanCurveStore
+from launch import tools as launch_tools
+from launch import proton_caps
+from launch import custom_vars as launch_custom_vars
 from display.color_store import ColorStore, sanitize_calibration
 from display.gamescope import GamescopeColorBackend, run_gamescopectl
 from display.oled_look import oled_look_for
@@ -144,6 +147,12 @@ DEFAULTS = {
     # Frontend UI preferences, mirrored here so they survive a reboot (the
     # frontend's localStorage cache does not). Opaque string map.
     "ui_prefs": {},
+    # Launch-options pill usage counts ({pill_id: times applied}) → the editor
+    # surfaces the ones you use most. Durable so it survives a reboot.
+    "launch_usage": {},
+    # User-defined launch variables (env NAME=VALUE / game args), reusable across
+    # games. The library is global; the on/off is per-game (in Steam's string).
+    "custom_launch_vars": [],
 }
 
 
@@ -322,6 +331,12 @@ class Plugin:
         self._sampler = TelemetrySampler(
             self._telemetry, self._collect_sample, on_sample=self._on_sample_collected
         )
+        # Host tools the launch-option pills depend on (lsfg/mangohud/gamemode/…) +
+        # distro. Static for the session; detected once. Never raises. Decky runs as
+        # root, so detection must look under the real user's home, not root's.
+        self._launch_tools = launch_tools.detect_tools(
+            home=getattr(decky, "DECKY_USER_HOME", None) or os.path.expanduser("~")
+        )
         self._ready = True
 
     def _save(self) -> None:
@@ -331,6 +346,47 @@ class Plugin:
     async def get_version(self) -> str:
         self._init()
         return read_version()
+
+    async def get_launch_tools(self) -> dict:
+        self._init()
+        return dict(self._launch_tools)
+
+    async def get_proton_caps(self, compat_name: str = "") -> dict:
+        """Which PROTON_* vars the given game's Proton build supports (read from its
+        own script) → the editor only shows options that actually work there."""
+        self._init()
+        home = getattr(decky, "DECKY_USER_HOME", None) or os.path.expanduser("~")
+        return proton_caps.detect_capabilities(compat_name, home=home)
+
+    async def get_launch_usage(self) -> dict:
+        self._init()
+        usage = self._settings.get("launch_usage")
+        return dict(usage) if isinstance(usage, dict) else {}
+
+    async def bump_launch_usage(self, ids: list) -> bool:
+        """Increment the apply-count for each given pill id (drives the Frecuentes row)."""
+        self._init()
+        usage = self._settings.get("launch_usage")
+        usage = dict(usage) if isinstance(usage, dict) else {}
+        for pid in ids or []:
+            if isinstance(pid, str):
+                usage[pid] = int(usage.get(pid, 0)) + 1
+        self._settings["launch_usage"] = usage
+        self._save()
+        return True
+
+    async def get_custom_launch_vars(self) -> list:
+        """The reusable launch-variable library (shape-coerced)."""
+        self._init()
+        return launch_custom_vars.coerce_custom_vars(self._settings.get("custom_launch_vars"))
+
+    async def set_custom_launch_vars(self, vars: list) -> list:
+        """Persist the whole library; return the stored (coerced) list."""
+        self._init()
+        clean = launch_custom_vars.coerce_custom_vars(vars)
+        self._settings["custom_launch_vars"] = clean
+        self._save()
+        return clean
 
     async def get_ui_prefs(self) -> dict:
         self._init()
@@ -414,18 +470,21 @@ class Plugin:
         # chip when the kernel exposes nothing.
         if self._chip:
             d["chip"] = self._chip
+        # GPU generation for upscaler gating in Parámetros (FSR4 = rdna3/rdna4).
+        d["gpu_gen"] = device_registry.gpu_generation(self._device.vendor, d["chip"])
         return d
 
     # ---- Bug reporter ------------------------------------------------------
-    async def submit_report(self, categories=None, text: str = "") -> dict:
+    async def submit_report(self, categories=None, text: str = "", context=None) -> dict:
         """Collect a redacted diagnostic bundle and send it to the collector
-        service. Write-only: the plugin can never read a report back. Falls back to
-        saving the bundle on disk if the network send fails. Returns
-        {ok, code, issue_url} or {ok:false, error, saved_path}."""
+        service. Write-only: the plugin can never read a report back. `context` is
+        optional frontend-only diagnostics (e.g. a launch report's running-game
+        snapshot). Falls back to saving the bundle on disk if the network send fails.
+        Returns {ok, code, issue_url} or {ok:false, error, saved_path}."""
         self._init()
         home, hostname = self._redact_ids()
         try:
-            bundle = await self._build_report_bundle(categories, text, home, hostname)
+            bundle = await self._build_report_bundle(categories, text, home, hostname, context)
         except Exception as e:  # noqa: BLE001
             decky.logger.error("report bundle failed: %s", e)
             bundle = report_collector.build_bundle(
@@ -461,7 +520,7 @@ class Plugin:
             hostname = None
         return home, hostname
 
-    async def _build_report_bundle(self, categories, text, home, hostname) -> dict:
+    async def _build_report_bundle(self, categories, text, home, hostname, context=None) -> dict:
         """Gather every diagnostic piece (device, live state, stores, logs) and hand
         it to the collector for assembly + redaction. Each state fetch is guarded so
         a single failing subsystem never blocks the report."""
@@ -487,6 +546,8 @@ class Plugin:
             "controller": await loop.run_in_executor(None, self._safe_controller_config),
             "power": await _safe(self.get_power_draw()),
             "eco": await _safe(self.get_eco_state()),
+            # Detected tools + current game + the frontend's running-game snapshot.
+            "launch": self._launch_report_state(context),
         }
         logs = report_collector.tail_logs(
             getattr(decky, "DECKY_PLUGIN_LOG_DIR", ""), home=home, hostname=hostname
@@ -522,6 +583,24 @@ class Plugin:
             home=home,
             hostname=hostname,
         )
+
+    def _launch_report_state(self, context) -> dict:
+        """Launch-options triage: tools, current game, custom-var count, and the
+        frontend snapshot. Never raises."""
+        try:
+            tools = dict(self._launch_tools) if isinstance(self._launch_tools, dict) else {}
+        except Exception:  # noqa: BLE001
+            tools = {}
+        try:
+            n_custom = len(launch_custom_vars.coerce_custom_vars(self._settings.get("custom_launch_vars")))
+        except Exception:  # noqa: BLE001
+            n_custom = 0
+        return {
+            "tools": tools,
+            "current_appid": self._current_appid,
+            "custom_var_count": n_custom,
+            "frontend": context if isinstance(context, dict) else {},
+        }
 
     def _safe_controller_config(self) -> dict:
         try:

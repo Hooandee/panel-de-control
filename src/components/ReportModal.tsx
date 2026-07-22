@@ -11,6 +11,7 @@ import {
   toggleCategory,
 } from "../report/logic";
 import { FocusRoot } from "./FocusRoot";
+import { launchReportContext } from "../launch/reportContext";
 
 type Phase = "form" | "sending" | "done" | "error";
 
@@ -71,9 +72,14 @@ const ReportBody: FC<{ closeModal?: () => void }> = ({ closeModal }) => {
     getDevice().then(setDevice).catch(() => {});
   }, []);
 
-  const submit = () => {
+  const submit = async () => {
     setPhase("sending");
-    submitReport(selected, text)
+    // Launch reports carry a frontend-only snapshot (the running game's launch
+    // string + Proton caps) the backend can't read. Best-effort; never blocks send.
+    const context = selected.includes("launch")
+      ? await launchReportContext().catch(() => ({}))
+      : {};
+    submitReport(selected, text, context)
       .then((r) => {
         setResult(r);
         setPhase(r.ok ? "done" : "error");

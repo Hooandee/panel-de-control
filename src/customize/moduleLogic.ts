@@ -10,6 +10,11 @@ interface Requirement {
   ids: ModuleId[];
 }
 
+// Section tabs backed by a real backend module (can be disabled). Others (e.g.
+// Parámetros) are sections without background machinery → hide/reorder only.
+const SECTION_MODULES = new Set<string>(["power", "system", "display", "fans", "mandos"]);
+export const isDisableableSection = (id: string): boolean => SECTION_MODULES.has(id);
+
 // autoTdp/fanControl cascade from their tab (all); learning needs a consumer (any).
 export const REQUIRES: Partial<Record<ModuleId, Requirement>> = {
   autoTdp: { mode: "all", ids: ["power"] },

@@ -9,7 +9,7 @@ import { iconBtn, IconAction } from "./IconAction";
 import { orderIds, move, toggle, Layout } from "../customize/layout";
 import { useLayout, saveLayout, resetLayout } from "../customize/store";
 import { useModules, setModuleDisabled, resetModules } from "../customize/modules";
-import { moduleState } from "../customize/moduleLogic";
+import { moduleState, isDisableableSection } from "../customize/moduleLogic";
 import { FocusRoot } from "./FocusRoot";
 import { ACCENTS } from "../system/accentColor";
 import { useAccent, setAccent } from "../system/useAccent";
@@ -216,9 +216,15 @@ const CustomizeBody: FC = () => {
                         </IconAction>
                       )}
                     </span>
-                    <IconAction label={off ? t("customize.enable") : t("customize.disable")} color={off ? theme.color.textMuted : theme.color.accent} onTap={() => setModuleDisabled(id, !off)}>
-                      <LuPower size={18} />
-                    </IconAction>
+                    {/* Sections without a backend module (Parámetros) can't be
+                        disabled — hide/reorder only. Keep the slot for alignment. */}
+                    {isDisableableSection(id) ? (
+                      <IconAction label={off ? t("customize.enable") : t("customize.disable")} color={off ? theme.color.textMuted : theme.color.accent} onTap={() => setModuleDisabled(id, !off)}>
+                        <LuPower size={18} />
+                      </IconAction>
+                    ) : (
+                      <span style={{ display: "flex", justifyContent: "center", width: 30 }} />
+                    )}
                     {/* Fixed chevron slot so eye/power stay aligned across rows. When
                         expandable it's tappable too (the chevron looks like a button). */}
                     {expandable ? (

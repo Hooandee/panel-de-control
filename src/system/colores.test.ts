@@ -15,6 +15,7 @@ const device = (key: string): DeviceInfo => ({
   is_generic: false,
   experimental: false,
   cooler_max: null,
+  gpu_gen: "unknown",
   charger_only_extra: false,
 });
 

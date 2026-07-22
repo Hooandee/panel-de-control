@@ -97,6 +97,18 @@ Remapeo de botones cooperando con el demonio que ya controla el mando en tu sist
 en Bazzite, InputPlumber en SteamOS), en lugar de pelearse con él. Incluye un aviso en Ajustes si
 detecta un conflicto de configuración. Esta parte está todavía en fase temprana.
 
+### Parámetros
+
+Gestiona las opciones de lanzamiento de cada juego sin pelearte con la sintaxis de Steam. La lista
+muestra tus juegos con su portada (Steam y no‑Steam, incluido el arte que tú les hayas puesto), ordenada
+por uso reciente, con buscador y otros criterios de orden. Cada opción es una fila con su explicación en
+claro y un interruptor: activas variables de Proton (FSR4, sincronización, HDR, escalado…) y envoltorios
+como MangoHud, y solo te ofrece las que tu versión de Proton soporta de verdad, comprobándolo en el
+propio juego. Respeta lo que ya tuvieras puesto (EmuDeck, launchers, tus ajustes a mano). Puedes definir
+tus propias variables reutilizables entre juegos, ocultar los que no usas (las herramientas como las
+versiones de Proton se ocultan solas) y saltar directo al juego que tengas abierto. También añade una
+entrada en el menú del juego en tu biblioteca.
+
 ### Ajustes
 
 Idioma (con banderas, no un desplegable), el interruptor de "aprender de mi uso" (la telemetría es
@@ -268,6 +280,9 @@ código lo cito aquí. La lista completa con licencias está en [THIRD_PARTY_NOT
   Referencia para el monitor y el control de ventiladores y para la reaplicación periódica.
 - **[Decky Loader](https://decky.xyz/)** y su plantilla de plugins. La base sobre la que corre todo
   esto.
+- **[decky-steamgriddb](https://github.com/SteamGridDB/decky-steamgriddb)** (GPL-3.0). De aquí adapté la
+  técnica para añadir la entrada de Parámetros al menú contextual de un juego en la biblioteca. Esa
+  adaptación es la razón de que el plugin sea GPL-3.0.
 - **La documentación del kernel de Linux** (firmware-attributes, powercap, asus-wmi, hwmon,
   power_supply). De donde salen las rutas de sysfs que leo y escribo.
 
@@ -283,6 +298,8 @@ No abras un issue público.
 
 ## Licencia
 
-[BSD-3-Clause](LICENSE) © Hooandee. Las atribuciones de terceros y los detalles de licencia (incluido
-ryzenadj, que se invoca como proceso externo y no se empaqueta) están en
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+[GPL-3.0](LICENSE) © Hooandee. Software libre para la comunidad: cualquiera puede usarlo, estudiarlo y
+modificarlo, y quien lo distribuya (con o sin cambios) debe hacerlo también bajo GPL con el código
+disponible. Las atribuciones de terceros y los detalles de licencia (incluido decky-steamgriddb, del
+que adapto el menú contextual, y ryzenadj, que se invoca como proceso externo y no se empaqueta) están
+en [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

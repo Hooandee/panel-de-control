@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.23.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.22.0...panel-de-control-v0.23.0) (2026-07-21)
+
+
+### Features / Novedades
+
+* A new Parameters tab manages each game's launch options without touching Steam's syntax by hand. Your games show up with their cover art (Steam and non-Steam, including custom artwork), sorted by recent play, with search and sorting. Each option is a plain-language row with a switch: Proton variables (FSR4, sync, HDR, upscaling) and wrappers like MangoHud, and only the ones your game's Proton build really supports are offered. Whatever you already had set is kept. You can define your own variables to reuse across games, hide the ones you don't play, jump straight to the game you're running, and open it all from the game's library context menu. ([#206](https://github.com/Hooandee/panel-de-control/issues/206)) ([b136d2d](https://github.com/Hooandee/panel-de-control/commit/b136d2d8fec8f0ffdbb192352cbed72a3a6f6140))
+* **ES:** Una nueva pestaña Parámetros gestiona las opciones de lanzamiento de cada juego sin tocar la sintaxis de Steam a mano. Tus juegos salen con su portada (de Steam y no-Steam, incluida la ilustración personalizada), ordenados por uso reciente, con buscador y ordenación. Cada opción es una fila en lenguaje claro con un interruptor: variables de Proton (FSR4, sincronización, HDR, escalado) y envoltorios como MangoHud, y solo se ofrecen las que el Proton de ese juego soporta de verdad. Se conserva lo que ya tuvieras puesto. Puedes definir tus propias variables reutilizables entre juegos, ocultar los que no juegas, saltar directo al juego que tengas en marcha, y abrirlo todo desde el menú contextual del juego en la biblioteca. ([#206](https://github.com/Hooandee/panel-de-control/issues/206)) ([b136d2d](https://github.com/Hooandee/panel-de-control/commit/b136d2d8fec8f0ffdbb192352cbed72a3a6f6140))
+
 ## [0.22.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.21.0...panel-de-control-v0.22.0) (2026-07-19)
 
 
