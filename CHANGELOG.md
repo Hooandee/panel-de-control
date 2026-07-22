@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.25.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.25.1...panel-de-control-v0.25.2) (2026-07-22)
+
+
+### Bug Fixes
+
+* keep TDP within the device ceiling on ASUS handhelds and self-heal bad saved profiles ([#261](https://github.com/Hooandee/panel-de-control/issues/261)) ([f5ce7f7](https://github.com/Hooandee/panel-de-control/commit/f5ce7f79c0fe7592ad8d3fbf3069bdb3a7183aba))
+
 ## [0.25.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.25.0...panel-de-control-v0.25.1) (2026-07-22)
 
 
