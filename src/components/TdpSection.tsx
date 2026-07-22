@@ -33,9 +33,11 @@ export interface TdpSectionProps {
   onFirmwareMode: (mode: string) => void;
   // Master switch off: show only the live arc + a notice, hide write controls.
   monitorOnly?: boolean;
+  // Flip the master switch back on from the monitor notice.
+  onReactivate?: () => void;
 }
 
-export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onScope, onWatts, onSetLevels, onSetMode, onApplySuggestion, onFirmwareMode, monitorOnly }) => {
+export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onScope, onWatts, onSetLevels, onSetMode, onApplySuggestion, onFirmwareMode, monitorOnly, onReactivate }) => {
   const { t } = useI18n();
 
   if (!tdp) return <Loading />;
@@ -73,7 +75,7 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
     return (
       <>
         <PanelSectionRow>
-          <TdpMonitorNotice />
+          <TdpMonitorNotice onReactivate={onReactivate} />
         </PanelSectionRow>
         <PanelSectionRow>
           <PowerArc

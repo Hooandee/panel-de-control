@@ -23,6 +23,7 @@ const TdpCoreBlock: FC = () => {
       onApplySuggestion={c.onApplySuggestion}
       onFirmwareMode={c.onFirmwareMode}
       monitorOnly={c.monitorOnly}
+      onReactivate={c.onReactivate}
     />
   );
 };

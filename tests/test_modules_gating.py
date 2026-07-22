@@ -137,12 +137,30 @@ def test_disabling_power_module_hands_hhd_back():
 
     calls = []
     orig = main.controller_hhd.set_tdp_enable
-    main.controller_hhd.set_tdp_enable = lambda v: calls.append(v)
+    # Echo the requested value back = HHD confirmed the write.
+    main.controller_hhd.set_tdp_enable = lambda v: (calls.append(v), v)[1]
     try:
         res = asyncio.run(p.set_ui_module("power", True))
     finally:
         main.controller_hhd.set_tdp_enable = orig
 
     assert calls == [True]  # HHD's TDP handed back
-    assert p._settings["hhd_tdp_prev"] is None  # and the marker cleared
+    assert p._settings["hhd_tdp_prev"] is None  # confirmed → marker cleared
     assert "power" in res["disabled"]
+
+
+def test_hhd_restore_keeps_marker_when_hhd_unreachable():
+    # HHD down → set_tdp_enable returns None. We must NOT clear hhd_tdp_prev, or we'd
+    # lose how to hand control back once HHD returns.
+    p = main.Plugin.__new__(main.Plugin)
+    p._settings = {"hhd_tdp_prev": True}
+    p._save = lambda: None
+
+    orig = main.controller_hhd.set_tdp_enable
+    main.controller_hhd.set_tdp_enable = lambda v: None  # unreachable
+    try:
+        p._restore_hhd_tdp()
+    finally:
+        main.controller_hhd.set_tdp_enable = orig
+
+    assert p._settings["hhd_tdp_prev"] is True  # kept for a later retry
