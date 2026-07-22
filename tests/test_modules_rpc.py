@@ -52,16 +52,18 @@ def test_unknown_module_is_noop():
     assert p._settings["disabled_modules"] == []
 
 
-def test_reset_modules_reenables_everything_in_one_shot():
+def test_reset_modules_clears_layout_but_keeps_functional_switches():
+    # A layout reset re-shows hidden tabs but must not flip TDP control / telemetry.
     p = _plugin()
     p._settings = {"disabled_modules": ["fans", "display"], "tdp_control_enabled": False, "telemetry_enabled": False}
     reapplied = []
     p._reapply_all = lambda on_ac=None: reapplied.append(1)
     out = asyncio.run(p.reset_modules())
-    assert out["disabled"] == []
+    # Layout cleared, but the functional switches stay off, so their folds remain.
+    assert set(out["disabled"]) == {"power", "learning"}
     assert p._settings["disabled_modules"] == []
-    assert p._settings["tdp_control_enabled"] is True
-    assert p._settings["telemetry_enabled"] is True
+    assert p._settings["tdp_control_enabled"] is False  # untouched
+    assert p._settings["telemetry_enabled"] is False    # untouched
     assert len(reapplied) == 1  # a single re-apply, not one per module
 
 

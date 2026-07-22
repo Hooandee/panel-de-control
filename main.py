@@ -444,12 +444,10 @@ class Plugin:
         return {"disabled": self._user_disabled_all()}
 
     async def reset_modules(self) -> dict:
-        """Re-enable every module in one shot (editor reset) — one save + one
-        re-apply, avoiding a per-module RPC storm and its ordering races."""
+        """Reset the customization layout. Leaves the functional switches (TDP control,
+        telemetry) as-is; a visual reset must not silently re-enable them."""
         self._init()
         self._settings["disabled_modules"] = []
-        for setting in self._MODULE_SETTING.values():
-            self._settings[setting] = True
         self._save()
         self._reapply_all()
         self._sync_sampler()
@@ -857,12 +855,15 @@ class Plugin:
         return {"ok": applied is False, "hhd_managing": bool(applied)}
 
     def _restore_hhd_tdp(self) -> None:
-        """Return HHD to its previous tdp_enable if we took it. Idempotent."""
+        """Return HHD to its previous tdp_enable if we took it. Idempotent. Clears the
+        marker only once the write confirms, so a failed hand-back is retried later."""
         try:
             prev = self._settings.get("hhd_tdp_prev")
             if prev is None:
                 return
-            controller_hhd.set_tdp_enable(bool(prev))
+            echoed = controller_hhd.set_tdp_enable(bool(prev))
+            if echoed != bool(prev):
+                return  # unreachable/mismatch → keep the marker to retry
             self._settings["hhd_tdp_prev"] = None
             self._save()
         except Exception:  # noqa: BLE001
@@ -1888,6 +1889,9 @@ class Plugin:
         self._apply_cpu()
         self._apply_gpu_clock()
         self._offload(lambda: self._reapply_tdp(on_ac))
+        # Stepped aside: retry a pending HHD hand-back (no-op while we control / no marker).
+        if not self._tdp_control_on():
+            self._offload(self._restore_hhd_tdp)
         self._reapply_fans()   # self-offloading
         # HDR before color: switching the HDR mode can drop the loaded LUT, so re-assert
         # HDR first and load the color look after (both self-offloading, FIFO executor).

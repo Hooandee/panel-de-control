@@ -24,7 +24,7 @@ import { useLayout } from "../customize/store";
 import { useModules } from "../customize/modules";
 import { effectiveEnabled } from "../customize/moduleLogic";
 import { visibleIds, pinnedLast } from "../customize/layout";
-import { PINNED_TAB } from "../customize/manifest";
+import { PINNED_TAB, POWER_TAB } from "../customize/manifest";
 import { sectionHiddenOnDevice, allBlocksHidden } from "../sections/availability";
 import { getPresent, usePresentVersion } from "../customize/present";
 import { theme } from "../theme";
@@ -111,14 +111,15 @@ export const ControlCenter: FC = () => {
   // Settings stays pinned; a hidden active tab falls back to the first visible
   // one via resolveActiveSection.
   // Drop tabs that: the device can't use (Mandos on the Steam Deck), whose module
-  // the user disabled, or whose blocks are all hidden (a fully-modular tab with
-  // nothing left to show). Settings is pinned. Computed BEFORE the early returns
-  // so useShoulderNav (a hook) always runs; a stale active id falls back via
+  // the user disabled, or whose blocks are all hidden. Settings is pinned; Potencia
+  // too — its master switch being off drops it to monitor-only, never hides it (still
+  // hidable explicitly via visibleTabIds above). Computed BEFORE the early returns so
+  // useShoulderNav (a hook) always runs; a stale active id falls back via
   // resolveActiveSection.
   const orderedTabs = visibleTabIds
     .map((id) => allSections.find((s) => s.id === id))
     .filter((s): s is SectionDef => !!s)
-    .filter((s) => s.id === PINNED_TAB || isViewTabId(s.id) || (
+    .filter((s) => s.id === PINNED_TAB || s.id === POWER_TAB || isViewTabId(s.id) || (
       !sectionHiddenOnDevice(device, s.id)
       && effectiveEnabled(s.id, disabled)
       && !allBlocksHidden(s.id, layout.blocks, getPresent(s.id))

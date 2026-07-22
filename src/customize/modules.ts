@@ -39,21 +39,24 @@ function commit(next: string[]): void {
   emit(sorted);
 }
 
-/** Optimistic toggle + authoritative RPC (backend routes power/learning + re-applies). */
-export function setModuleDisabled(id: string, disabled: boolean): void {
+/** Optimistic toggle + authoritative RPC (backend routes power/learning + re-applies).
+ *  Returns the RPC promise so callers can sequence follow-up reads (e.g. a TDP refresh
+ *  after re-enabling the power module) on the confirmed result. */
+export function setModuleDisabled(id: string, disabled: boolean): Promise<void> {
   const cur = new Set(getDisabled());
   if (disabled) cur.add(id);
   else cur.delete(id);
   commit([...cur]);
-  setUiModule(id, disabled)
+  return setUiModule(id, disabled)
     .then((r) => commit(r.disabled))
     .catch(() => hydrateModules()); // RPC failed → reconcile with the backend truth
 }
 
-/** Re-enable every module (used by the editor reset). One authoritative RPC so
- *  there's no per-id response race and only a single backend re-apply. */
+/** Reset the customization layout (used by the editor reset). One authoritative RPC.
+ *  No optimistic pre-commit: the backend keeps the functional folds (power/learning
+ *  stay off if their switches are off), so we let the RPC's result drive the set
+ *  rather than briefly claiming everything is on. */
 export function resetModules(): void {
-  commit([]);
   resetUiModules()
     .then((r) => commit(r.disabled))
     .catch(() => hydrateModules()); // RPC failed → reconcile with the backend truth

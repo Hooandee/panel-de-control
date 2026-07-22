@@ -1,4 +1,4 @@
-import { FC, ReactNode, useEffect, useRef } from "react";
+import { FC, ReactNode, useCallback, useEffect, useRef } from "react";
 import { Focusable, PanelSectionRow } from "@decky/ui";
 
 import { setSeenTdpConflictTakeover } from "../api";
@@ -14,7 +14,7 @@ import { MandosProvider } from "../mandos/mandosContext";
 import { useTdp } from "../tdp/useTdp";
 import { useTdpConflict } from "../tdp/useTdpConflict";
 import { PotenciaProvider } from "../tdp/potenciaContext";
-import { useModules } from "../customize/modules";
+import { useModules, setModuleDisabled } from "../customize/modules";
 import { effectiveEnabled } from "../customize/moduleLogic";
 import { TdpConflictCard } from "../components/TdpConflictCard";
 import { openTdpConflictModal } from "../components/TdpConflictModal";
@@ -92,6 +92,13 @@ export const PotenciaProviderMount: FC<{ children: ReactNode }> = ({ children })
   const disabled = useModules();
   const autoTdpEnabled = effectiveEnabled("autoTdp", disabled);
 
+  // Re-enable the power module (master switch on) via the editor's path, then re-pull
+  // the TDP state so the monitor view clears. Returns the promise for the button guard.
+  const onReactivate = useCallback(
+    () => setModuleDisabled("power", false).then(() => refresh()),
+    [refresh],
+  );
+
   const shownTakeover = useRef(false);
   const conflictRef = useRef(conflict);
   conflictRef.current = conflict;
@@ -105,7 +112,7 @@ export const PotenciaProviderMount: FC<{ children: ReactNode }> = ({ children })
   }, [conflict.conflict, tdp, refresh]);
 
   return (
-    <PotenciaProvider value={{ ...tdpCtl, monitorOnly: conflict.monitorOnly, autoTdpEnabled }}>
+    <PotenciaProvider value={{ ...tdpCtl, monitorOnly: conflict.monitorOnly, autoTdpEnabled, onReactivate }}>
       {conflict.conflict && (
         <PanelSectionRow>
           <TdpConflictCard
