@@ -1,5 +1,5 @@
-import { createContext, useContext } from "react";
 import { TdpControl } from "./useTdp";
+import { createSectionContext } from "../sectionContext";
 
 // Potencia's core (power arc + slider + presets) and its GPU-clock / Auto‑TDP
 // blocks share ONE TDP state through the section provider: scope, live power draw
@@ -11,12 +11,4 @@ export interface PotenciaCtx extends TdpControl {
   autoTdpEnabled: boolean;
 }
 
-const Ctx = createContext<PotenciaCtx | null>(null);
-export const PotenciaProvider = Ctx.Provider;
-
-/** The shared Potencia controls. Only valid inside <PotenciaProvider>. */
-export function usePotencia(): PotenciaCtx {
-  const c = useContext(Ctx);
-  if (!c) throw new Error("usePotencia outside PotenciaProvider");
-  return c;
-}
+export const [PotenciaProvider, usePotencia] = createSectionContext<PotenciaCtx>("usePotencia");

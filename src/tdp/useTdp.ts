@@ -40,10 +40,6 @@ export function useTdp(): TdpControl {
     getTdpState().then(setTdp).catch(() => {});
   }, []);
 
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
-
   // Poll live power draw every second. When the charger state flips, re-fetch the
   // TDP state too so the slider ceiling (battery vs charger) updates at once.
   const lastAc = useRef<boolean | null>(null);
