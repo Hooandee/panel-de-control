@@ -452,6 +452,7 @@ const es: Record<string, string> = {
   "tdp.suggest.apply": "Aplicar {w} W",
   // Control de TDP + conflictos con otros gestores
   "tdp.monitor.notice": "Control de TDP desactivado · modo monitoreo",
+  "tdp.monitor.reactivate": "Reactivar control de TDP",
   "tdp.conflict.take.title": "Tomo el control del TDP",
   "tdp.conflict.take.body": "Detecté otros gestores de TDP funcionando a la vez. Para que los juegos vayan bien, debe mandar solo uno.",
   "tdp.conflict.take.confirm": "Desactivarlos y gestionar yo",
@@ -1022,6 +1023,7 @@ const en: Record<string, string> = {
   "tdp.suggest.apply": "Apply {w} W",
   // TDP control + conflicts with other managers
   "tdp.monitor.notice": "TDP control off · monitor only",
+  "tdp.monitor.reactivate": "Re-enable TDP control",
   "tdp.conflict.take.title": "I'll take over the TDP",
   "tdp.conflict.take.body": "I detected other TDP managers running at the same time. For games to run well, only one should be in charge.",
   "tdp.conflict.take.confirm": "Turn them off and let me manage",

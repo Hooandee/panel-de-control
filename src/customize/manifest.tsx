@@ -18,6 +18,10 @@ export type BlockDef = ItemMeta;
  *  editor. Single source of truth for both the shell and the editor. */
 export const PINNED_TAB = "settings";
 
+/** Potencia is never auto-hidden: its master switch being off drops it to a
+ *  monitor-only view, not gone. Still hidable explicitly from the editor. */
+export const POWER_TAB = "power";
+
 const ICON = 15;
 
 /**
