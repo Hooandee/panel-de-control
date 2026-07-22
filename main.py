@@ -1896,6 +1896,8 @@ class Plugin:
         if not self._charge_limit.supported:
             return
         if not self._module_enabled("system"):
+            # Module off = step aside: release any cap, don't keep limiting.
+            self._charge_limit.disable()
             return
         enabled = bool(self._settings.get("charge_limit_enabled", False))
         if enabled:
@@ -1944,6 +1946,14 @@ class Plugin:
         online too), then SMT — so SMT-off re-offlines those siblings and the two
         controls, which write the same cpuN/online nodes, end up consistent."""
         if not self._module_enabled("system"):
+            # Module off = step aside: hand the CPU back to its defaults (all cores
+            # online, SMT on, boost on) instead of leaving it as we last set it.
+            if self._cores.supported and self._cores.max_cores is not None:
+                self._cores.set(int(self._cores.max_cores))
+            if self._smt.supported:
+                self._smt.set(True)
+            if self._boost.supported:
+                self._boost.set(True)
             return
         # Effective per-game CPU controls (own when the game has them, else global).
         eff = self._cpu_profiles.effective(self._current_appid)

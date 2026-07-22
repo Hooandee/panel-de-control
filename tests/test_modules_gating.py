@@ -62,16 +62,49 @@ def _plugin_cl(disabled=None):
     return p
 
 
-def test_charge_limit_skipped_when_system_disabled():
+def test_charge_limit_released_when_system_disabled():
+    # Disabling the System module steps aside: release the cap, don't keep limiting.
     p = _plugin_cl(disabled=["system"])
     p._apply_charge_limit()
-    assert p._charge_limit.calls == []
+    assert p._charge_limit.calls == [("disable",)]
 
 
 def test_charge_limit_applied_when_system_enabled():
     p = _plugin_cl()
     p._apply_charge_limit()
     assert ("set", 80) in p._charge_limit.calls
+
+
+class _FakeToggle:
+    def __init__(self, supported=True, max_cores=8):
+        self.supported = supported
+        self.max_cores = max_cores
+        self.calls = []
+
+    def set(self, v):
+        self.calls.append(v)
+
+
+def _plugin_cpu(disabled=None):
+    p = main.Plugin.__new__(main.Plugin)
+    p._settings = {
+        "disabled_modules": list(disabled or []),
+        "tdp_control_enabled": True,
+        "telemetry_enabled": True,
+    }
+    p._cores = _FakeToggle(max_cores=8)
+    p._smt = _FakeToggle()
+    p._boost = _FakeToggle()
+    return p
+
+
+def test_cpu_released_to_defaults_when_system_disabled():
+    # All cores online, SMT on, boost on — hand the CPU back, don't leave it parked.
+    p = _plugin_cpu(disabled=["system"])
+    p._apply_cpu()
+    assert p._cores.calls == [8]
+    assert p._smt.calls == [True]
+    assert p._boost.calls == [True]
 
 
 def test_collect_sample_none_when_learning_inactive():
