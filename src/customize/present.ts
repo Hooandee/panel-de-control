@@ -49,6 +49,19 @@ export function markPresent(sectionId: string, ids: string[]): void {
   notify();
 }
 
+/** Report a single block's presence (from its availability probe). Add on true,
+ *  remove on false → self-heals when availability flips, and remembers a block
+ *  across hides (a hidden block still has a mounted probe, so it stays reported). */
+export function markBlockPresent(sectionId: string, id: string, present: boolean): void {
+  const cur = state()[sectionId] ?? [];
+  const has = cur.includes(id);
+  if (present === has) return;
+  const next = present ? [...cur, id].sort() : cur.filter((x) => x !== id);
+  cache = { ...state(), [sectionId]: next };
+  writeString(KEY, JSON.stringify(cache));
+  notify();
+}
+
 /** The block ids known present for a section, or null if never seen. */
 export function getPresent(sectionId: string): string[] | null {
   return state()[sectionId] ?? null;

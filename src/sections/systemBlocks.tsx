@@ -11,6 +11,7 @@ import { ColoresCard } from "../components/ColoresCard";
 import { Collapsible } from "../components/Collapsible";
 import { batteryStatusKey } from "../system/battery";
 import { deviceHasRgb } from "../system/colores";
+import { useDevice } from "../system/useDevice";
 import { useBrightness, useVolume } from "../system/useScalar";
 import { useBattery } from "../system/useBattery";
 import { useCpu } from "../system/useCpu";
@@ -129,5 +130,5 @@ registerBlock("volume", { sectionId: "system", Component: VolumeBlock });
 registerBlock("colores", {
   sectionId: "system",
   Component: ColoresBlock,
-  available: ({ device }) => deviceHasRgb(device),
+  useAvailable: () => deviceHasRgb(useDevice()),
 });
