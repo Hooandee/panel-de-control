@@ -128,19 +128,21 @@ const NightBlock: FC = () => {
   );
 };
 
-registerBlock("oled", {
-  sectionId: "display",
-  Component: OledBlock,
-  useAvailable: () => !!usePantalla().color.state?.oled_look,
-});
-registerBlock("color", { sectionId: "display", Component: ColorBlock });
-registerBlock("hdr", {
-  sectionId: "display",
-  Component: HdrBlock,
-  useAvailable: () => !!usePantalla().hdr.state?.supported,
-});
-registerBlock("night", {
-  sectionId: "display",
-  Component: NightBlock,
-  useAvailable: () => !!usePantalla().night.state?.supported,
-});
+export function registerDisplayBlocks(): void {
+  registerBlock("oled", {
+    sectionId: "display",
+    Component: OledBlock,
+    useAvailable: () => !!usePantalla().color.state?.oled_look,
+  });
+  registerBlock("color", { sectionId: "display", Component: ColorBlock });
+  registerBlock("hdr", {
+    sectionId: "display",
+    Component: HdrBlock,
+    useAvailable: () => !!usePantalla().hdr.state?.supported,
+  });
+  registerBlock("night", {
+    sectionId: "display",
+    Component: NightBlock,
+    useAvailable: () => !!usePantalla().night.state?.supported,
+  });
+}

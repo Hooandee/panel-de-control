@@ -121,14 +121,16 @@ const ColoresBlock: FC = () => {
   );
 };
 
-registerBlock("eco", { sectionId: "system", Component: EcoBlock });
-registerBlock("battery", { sectionId: "system", Component: BatteryBlock });
-registerBlock("cpu", { sectionId: "system", Component: CpuBlock });
-registerBlock("brightness", { sectionId: "system", Component: BrightnessBlock });
-registerBlock("volume", { sectionId: "system", Component: VolumeBlock });
-// RGB lighting is device-specific: absent on the Steam Deck (no RGB LEDs).
-registerBlock("colores", {
-  sectionId: "system",
-  Component: ColoresBlock,
-  useAvailable: () => deviceHasRgb(useDevice()),
-});
+export function registerSystemBlocks(): void {
+  registerBlock("eco", { sectionId: "system", Component: EcoBlock });
+  registerBlock("battery", { sectionId: "system", Component: BatteryBlock });
+  registerBlock("cpu", { sectionId: "system", Component: CpuBlock });
+  registerBlock("brightness", { sectionId: "system", Component: BrightnessBlock });
+  registerBlock("volume", { sectionId: "system", Component: VolumeBlock });
+  // RGB lighting is device-specific: absent on the Steam Deck (no RGB LEDs).
+  registerBlock("colores", {
+    sectionId: "system",
+    Component: ColoresBlock,
+    useAvailable: () => deviceHasRgb(useDevice()),
+  });
+}

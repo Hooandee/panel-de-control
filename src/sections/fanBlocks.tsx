@@ -179,10 +179,12 @@ const CurveBlock: FC = () => {
   );
 };
 
-registerBlock("fanRpm", { sectionId: "fans", Component: FanRpmBlock });
-registerBlock("temps", {
-  sectionId: "fans",
-  Component: TempsBlock,
-  useAvailable: () => tempsAvailable(useFanState().state),
-});
-registerBlock("curve", { sectionId: "fans", Component: CurveBlock });
+export function registerFanBlocks(): void {
+  registerBlock("fanRpm", { sectionId: "fans", Component: FanRpmBlock });
+  registerBlock("temps", {
+    sectionId: "fans",
+    Component: TempsBlock,
+    useAvailable: () => tempsAvailable(useFanState().state),
+  });
+  registerBlock("curve", { sectionId: "fans", Component: CurveBlock });
+}

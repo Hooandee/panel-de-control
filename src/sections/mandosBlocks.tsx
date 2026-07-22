@@ -157,14 +157,16 @@ const SettingsBlock: FC = () => {
   );
 };
 
-registerBlock("manager", { sectionId: "mandos", Component: ManagerBlock });
-registerBlock("remap", {
-  sectionId: "mandos",
-  Component: RemapBlock,
-  useAvailable: () => useMandos().config?.kind === "remap",
-});
-registerBlock("settings", {
-  sectionId: "mandos",
-  Component: SettingsBlock,
-  useAvailable: () => useMandos().config?.kind === "settings",
-});
+export function registerMandosBlocks(): void {
+  registerBlock("manager", { sectionId: "mandos", Component: ManagerBlock });
+  registerBlock("remap", {
+    sectionId: "mandos",
+    Component: RemapBlock,
+    useAvailable: () => useMandos().config?.kind === "remap",
+  });
+  registerBlock("settings", {
+    sectionId: "mandos",
+    Component: SettingsBlock,
+    useAvailable: () => useMandos().config?.kind === "settings",
+  });
+}

@@ -10,7 +10,6 @@ import { isNativeColor } from "../display/color";
 import { PantallaProvider } from "../display/pantallaContext";
 import { ProfileSelector } from "../components/ProfileSelector";
 import { SectionView } from "../customize/blocks";
-import "./displayBlocks"; // registers the Pantalla blocks
 
 /** Pantalla: panel color. The scope tab, confirm/auto-revert bar and perf note are
  *  fixed chrome that governs the color blocks; the OLED look, color cluster, HDR

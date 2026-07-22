@@ -10,7 +10,6 @@ import { effectiveEnabled } from "../customize/moduleLogic";
 import { useTdp } from "../tdp/useTdp";
 import { useTdpConflict } from "../tdp/useTdpConflict";
 import { PotenciaProvider } from "../tdp/potenciaContext";
-import "./powerBlocks"; // registers the Potencia blocks
 
 /**
  * Power section: owns the TDP state (via useTdp) and renders the power-arc core as

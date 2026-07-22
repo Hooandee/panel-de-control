@@ -8,6 +8,19 @@ import { PantallaSection } from "./PantallaSection";
 import { VentiladoresSection } from "./VentiladoresSection";
 import { MandosSection } from "./MandosSection";
 import { AjustesSection } from "./AjustesSection";
+import { registerSystemBlocks } from "./systemBlocks";
+import { registerFanBlocks } from "./fanBlocks";
+import { registerDisplayBlocks } from "./displayBlocks";
+import { registerMandosBlocks } from "./mandosBlocks";
+import { registerPowerBlocks } from "./powerBlocks";
+
+// Populate the block registry at import (before any section renders). Called via
+// used imports — not bare side-effect imports, which the bundler tree-shakes.
+registerSystemBlocks();
+registerFanBlocks();
+registerDisplayBlocks();
+registerMandosBlocks();
+registerPowerBlocks();
 
 // Section body per tab id. The tab metadata (order, label, icon) lives in the
 // customization manifest (TABS) so the editor can read it without importing the

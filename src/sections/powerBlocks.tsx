@@ -40,12 +40,14 @@ const AutoTdpBlock: FC = () => {
   return <AutoTdpToggle checked={power?.auto_tdp ?? false} onChange={onAutoTdpToggle} />;
 };
 
-registerBlock("tdp", { sectionId: "power", Component: TdpCoreBlock });
-registerBlock("gpu", { sectionId: "power", Component: GpuBlock });
-// Hiding the Auto‑TDP block just hides the toggle; turning the module off (editor
-// power) stops the loop backend-side. Availability follows the module state.
-registerBlock("autoTdp", {
-  sectionId: "power",
-  Component: AutoTdpBlock,
-  useAvailable: () => usePotencia().autoTdpEnabled,
-});
+export function registerPowerBlocks(): void {
+  registerBlock("tdp", { sectionId: "power", Component: TdpCoreBlock });
+  registerBlock("gpu", { sectionId: "power", Component: GpuBlock });
+  // Hiding the Auto‑TDP block just hides the toggle; turning the module off (editor
+  // power) stops the loop backend-side. Availability follows the module state.
+  registerBlock("autoTdp", {
+    sectionId: "power",
+    Component: AutoTdpBlock,
+    useAvailable: () => usePotencia().autoTdpEnabled,
+  });
+}

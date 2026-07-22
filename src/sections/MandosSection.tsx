@@ -6,7 +6,6 @@ import { useController } from "../mandos/useController";
 import { MandosProvider } from "../mandos/mandosContext";
 import { SectionView } from "../customize/blocks";
 import { Loading } from "../components/Loading";
-import "./mandosBlocks"; // registers the Mandos blocks
 
 /**
  * Mandos — controller manager hub.
