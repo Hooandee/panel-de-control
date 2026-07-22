@@ -5,7 +5,7 @@ import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { usePantalla } from "../display/pantallaContext";
 import { ProfileSelector } from "../components/ProfileSelector";
-import { SectionView } from "../customize/blocks";
+import { SectionView, BLOCK_GAP } from "../customize/blocks";
 import { PantallaProviderMount } from "./providerMounts";
 
 const PantallaBody: FC = () => {
@@ -25,7 +25,7 @@ const PantallaBody: FC = () => {
   }
 
   return (
-    <>
+    <div style={{ display: "flex", flexDirection: "column", gap: BLOCK_GAP }}>
       <PanelSectionRow>
         <ProfileSelector
           scope={scope}
@@ -37,7 +37,7 @@ const PantallaBody: FC = () => {
         />
       </PanelSectionRow>
       <SectionView sectionId="display" />
-    </>
+    </div>
   );
 };
 

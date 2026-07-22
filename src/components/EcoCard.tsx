@@ -28,7 +28,7 @@ export const EcoCard: FC<Props> = ({ state, brightnessSupported, onToggle }) => 
 
   return (
     <PanelSectionRow>
-      <div style={{ ...theme.card, padding: theme.space.md, overflow: "hidden", marginBottom: theme.space.card, boxShadow: on ? `inset 0 0 0 1px ${theme.color.ok}` : theme.card.boxShadow }}>
+      <div style={{ ...theme.card, padding: theme.space.md, overflow: "hidden", boxShadow: on ? `inset 0 0 0 1px ${theme.color.ok}` : theme.card.boxShadow }}>
         <div style={{ display: "flex", alignItems: "center", gap: theme.space.xs, fontSize: theme.font.body, fontWeight: 700, color: theme.color.textPrimary }}>
           <LuLeaf size={16} color={theme.color.ok} /> {t("system.eco.title")}
         </div>
