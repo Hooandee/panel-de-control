@@ -49,19 +49,6 @@ export function markPresent(sectionId: string, ids: string[]): void {
   notify();
 }
 
-/** Report a single block's presence (used by standalone block components that
- *  know their own availability). Additive over markPresent — no unmount reset, so
- *  the editor remembers a block after the first visit. */
-export function markBlockPresent(sectionId: string, id: string, present: boolean): void {
-  const cur = state()[sectionId] ?? [];
-  const has = cur.includes(id);
-  if (present === has) return;
-  const next = present ? [...cur, id].sort() : cur.filter((x) => x !== id);
-  cache = { ...state(), [sectionId]: next };
-  writeString(KEY, JSON.stringify(cache));
-  notify();
-}
-
 /** The block ids known present for a section, or null if never seen. */
 export function getPresent(sectionId: string): string[] | null {
   return state()[sectionId] ?? null;
