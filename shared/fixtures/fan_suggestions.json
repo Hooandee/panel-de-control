@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "algorithm": "fans.suggest",
+  "cases": [
+    {
+      "id": "empty_histogram_is_unavailable",
+      "operation": "enough_data",
+      "input": {"histogram": {}},
+      "expected": {"ok": false, "reason": "no_data"}
+    },
+    {
+      "id": "short_histogram_is_unavailable",
+      "operation": "enough_data",
+      "input": {"histogram": {"54": 100.0, "74": 100.0}},
+      "expected": {"ok": false, "reason": "too_few"}
+    },
+    {
+      "id": "flat_histogram_is_unavailable",
+      "operation": "enough_data",
+      "input": {"histogram": {"60": 1000.0, "62": 1000.0}},
+      "expected": {"ok": false, "reason": "flat"}
+    },
+    {
+      "id": "varied_histogram_has_enough_data",
+      "operation": "enough_data",
+      "input": {
+        "histogram": {"54": 120.0, "58": 300.0, "62": 600.0, "66": 900.0, "70": 800.0, "74": 500.0, "78": 300.0, "82": 120.0}
+      },
+      "expected": {"ok": true, "reason": "ok"}
+    },
+    {
+      "id": "thermal_band_uses_weighted_percentiles",
+      "operation": "band",
+      "input": {
+        "histogram": {"54": 120.0, "58": 300.0, "62": 600.0, "66": 900.0, "70": 800.0, "74": 500.0, "78": 300.0, "82": 120.0}
+      },
+      "expected": {"floor": 58, "typical": 66, "high": 78, "peak": 82}
+    },
+    {
+      "id": "suggested_curves_are_stable",
+      "operation": "suggest_curves",
+      "input": {
+        "histogram": {"54": 120.0, "58": 300.0, "62": 600.0, "66": 900.0, "70": 800.0, "74": 500.0, "78": 300.0, "82": 120.0}
+      },
+      "expected": {
+        "quiet": [[40, 0], [50, 0], [60, 8], [70, 52], [80, 126], [85, 174], [90, 201], [95, 228]],
+        "balanced": [[40, 0], [50, 0], [60, 19], [70, 98], [80, 172], [85, 212], [90, 227], [95, 241]],
+        "cool": [[40, 46], [50, 46], [60, 65], [70, 144], [80, 218], [85, 251], [90, 252], [95, 254]]
+      }
+    },
+    {
+      "id": "negative_bias_blends_toward_quiet",
+      "operation": "biased_curve",
+      "input": {
+        "histogram": {"54": 120.0, "58": 300.0, "62": 600.0, "66": 900.0, "70": 800.0, "74": 500.0, "78": 300.0, "82": 120.0},
+        "bias": -40
+      },
+      "expected": [[40, 0], [50, 0], [60, 15], [70, 80], [80, 154], [85, 197], [90, 217], [95, 236]]
+    }
+  ]
+}
