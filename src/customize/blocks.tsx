@@ -4,6 +4,11 @@ import { useLayout } from "./store";
 import { visibleIds } from "./layout";
 import { blockOrder } from "./manifest";
 import { markBlockPresent } from "./present";
+import { theme } from "../theme";
+
+/** Uniform vertical spacing between blocks — the container owns it so blocks stay
+ *  margin-neutral and space evenly in a section or a custom view. */
+export const BLOCK_GAP = theme.space.card;
 
 export interface BlockDef {
   Component: FC;
@@ -53,9 +58,11 @@ export const SectionView: FC<{ sectionId: string }> = ({ sectionId }) => {
       {ids.map((id) => (
         <BlockProbe key={`probe:${id}`} sectionKey={sectionId} id={id} />
       ))}
-      {visible.map((id) => (
-        <Block key={id} id={id} />
-      ))}
+      <div style={{ display: "flex", flexDirection: "column", gap: BLOCK_GAP }}>
+        {visible.map((id) => (
+          <Block key={id} id={id} />
+        ))}
+      </div>
     </>
   );
 };

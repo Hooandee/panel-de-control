@@ -19,11 +19,7 @@ const OledBlock: FC = () => {
   const { color } = usePantalla();
   if (!color.state?.supported || !color.state.oled_look) return null;
   const active = !isNativeColor(color.state);
-  return (
-    <div style={{ marginTop: theme.space.sm }}>
-      <OledLookCard active={active} onApply={color.onOledLook} onReset={color.onReset} />
-    </div>
-  );
+  return <OledLookCard active={active} onApply={color.onOledLook} onReset={color.onReset} />;
 };
 
 const ColorBlock: FC = () => {
@@ -36,7 +32,7 @@ const ColorBlock: FC = () => {
   return (
     <>
       <PanelSectionRow>
-        <div style={{ ...theme.card, padding: theme.space.md, marginTop: theme.space.sm, overflow: "hidden" }}>
+        <div style={{ ...theme.card, padding: theme.space.md, overflow: "hidden" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
             <LuSparkles size={16} color={theme.color.accent} />
             <span style={{ fontSize: theme.font.body, fontWeight: 600, color: theme.color.textPrimary }}>
@@ -54,7 +50,7 @@ const ColorBlock: FC = () => {
         </div>
       </PanelSectionRow>
       <PanelSectionRow>
-        <div style={{ ...theme.card, padding: theme.space.md, margin: `${theme.space.sm}px 0`, overflow: "hidden" }}>
+        <div style={{ ...theme.card, padding: theme.space.md, overflow: "hidden" }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 2 }}>
             <LuPalette size={16} color={theme.color.accent} />
             <span style={{ fontSize: theme.font.body, fontWeight: 600, color: theme.color.textPrimary }}>

@@ -22,7 +22,7 @@ import { useModules } from "../customize/modules";
 import { effectiveEnabled } from "../customize/moduleLogic";
 import { theme } from "../theme";
 
-const card = { ...theme.card, padding: theme.space.md, marginBottom: theme.space.card } as const;
+const card = { ...theme.card, padding: theme.space.md } as const;
 
 const tempLabel = (t: (k: string) => string, sensor: string) =>
   sensor === "CPU" ? t("fans.temp.cpu") : sensor === "GPU" ? t("fans.temp.gpu") : sensor;
