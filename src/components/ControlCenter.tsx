@@ -23,7 +23,7 @@ import { AlertDot } from "../updater/AlertDot";
 import { useLayout } from "../customize/store";
 import { useModules } from "../customize/modules";
 import { effectiveEnabled } from "../customize/moduleLogic";
-import { visibleIds } from "../customize/layout";
+import { visibleIds, pinnedLast } from "../customize/layout";
 import { PINNED_TAB } from "../customize/manifest";
 import { sectionHiddenOnDevice, allBlocksHidden } from "../sections/availability";
 import { getPresent, usePresentVersion } from "../customize/present";
@@ -67,7 +67,7 @@ export const ControlCenter: FC = () => {
   // The user's visible tabs in their saved order (Settings always kept). One
   // memoized computation feeds both the initial-tab pick and the rendered tab list.
   const visibleTabIds = useMemo(
-    () => visibleIds(allSections.map((s) => s.id), layout.tabs, [PINNED_TAB]),
+    () => pinnedLast(visibleIds(allSections.map((s) => s.id), layout.tabs, [PINNED_TAB]), PINNED_TAB),
     [layout, allSections],
   );
   // Restore the last active tab (persisted) so a panel remount — Decky remounts on

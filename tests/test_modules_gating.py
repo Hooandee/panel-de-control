@@ -113,4 +113,3 @@ def test_disabling_power_module_hands_hhd_back():
     assert calls == [True]  # HHD's TDP handed back
     assert p._settings["hhd_tdp_prev"] is None  # and the marker cleared
     assert "power" in res["disabled"]
-

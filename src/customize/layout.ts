@@ -75,6 +75,17 @@ export function toggle(set: string[], id: string): string[] {
   return set.includes(id) ? set.filter((x) => x !== id) : [...set, id];
 }
 
+/** Idempotent add — "hide" (ensure present), as opposed to toggle. */
+export function ensure(set: string[], id: string): string[] {
+  return set.includes(id) ? set : [...set, id];
+}
+
+/** Move `pinned` to the end if present, so the escape-hatch tab stays last even
+ *  after new tabs (custom views) append to a saved order. */
+export function pinnedLast(ids: string[], pinned: string): string[] {
+  return ids.includes(pinned) ? [...ids.filter((x) => x !== pinned), pinned] : ids;
+}
+
 /** Whether a fixed sub-item within a block is hidden by the user's prefs. */
 export function subitemHidden(
   subitems: Record<string, string[]>,

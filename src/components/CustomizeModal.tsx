@@ -6,7 +6,7 @@ import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { TABS, SECTION_BLOCKS, SUBITEMS, blockOrder, PINNED_TAB, CATEGORY_IDS } from "../customize/manifest";
 import { iconBtn, IconAction } from "./IconAction";
-import { orderIds, move, toggle, Layout } from "../customize/layout";
+import { orderIds, move, toggle, ensure, Layout } from "../customize/layout";
 import { useLayout, saveLayout, resetLayout } from "../customize/store";
 import { useModules, setModuleDisabled, resetModules } from "../customize/modules";
 import { moduleState, isDisableableSection } from "../customize/moduleLogic";
@@ -129,6 +129,14 @@ const CustomizeBody: FC = () => {
   };
   const setSubitemHidden = (block: string, sub: string) =>
     save({ ...layout, subitems: { ...layout.subitems, [block]: toggle(layout.subitems[block] ?? [], sub) } });
+  // Idempotent "hide" (never un-hides) — used by the disable modal's hide-instead,
+  // so choosing it from an already-hidden element keeps it hidden.
+  const hideTab = (id: string) =>
+    save({ ...layout, tabs: { order: layout.tabs.order ?? [], hidden: ensure(layout.tabs.hidden ?? [], id) } });
+  const hideBlock = (cat: string, block: string) => {
+    const pref = layout.blocks[cat] ?? { order: [], hidden: [] };
+    save({ ...layout, blocks: { ...layout.blocks, [cat]: { ...pref, hidden: ensure(pref.hidden ?? [], block) } } });
+  };
 
   const catMeta = (id: string) => TABS.find((x) => x.id === id)!;
   const learningState = moduleState("learning", disabled, false, false);
@@ -227,7 +235,7 @@ const CustomizeBody: FC = () => {
                     {/* Sections without a backend module (Parámetros) can't be
                         disabled — hide/reorder only. Keep the slot for alignment. */}
                     {isDisableableSection(id) ? (
-                      <IconAction label={off ? t("customize.enable") : t("customize.disable")} color={off ? theme.color.textMuted : theme.color.accent} onTap={() => toggleModule(id, t(meta.labelKey), off, () => setTabHidden(id))}>
+                      <IconAction label={off ? t("customize.enable") : t("customize.disable")} color={off ? theme.color.textMuted : theme.color.accent} onTap={() => toggleModule(id, t(meta.labelKey), off, () => hideTab(id))}>
                         <LuPower size={18} />
                       </IconAction>
                     ) : (
@@ -262,7 +270,7 @@ const CustomizeBody: FC = () => {
                           hidden={bHidden}
                           onToggleHide={() => setBlockHidden(id, bid)}
                           off={mOff}
-                          onToggleOff={modId ? () => toggleModule(modId, t(b.labelKey), !!mOff, () => setBlockHidden(id, bid)) : undefined}
+                          onToggleOff={modId ? () => toggleModule(modId, t(b.labelKey), !!mOff, () => hideBlock(id, bid)) : undefined}
                         />
                         {(SUBITEMS[bid] ?? []).map((s) => (
                           <ExpansionRow key={s.id} label={t(s.labelKey)} icon={s.icon} indent={theme.space.lg} hidden={(layout.subitems[bid] ?? []).includes(s.id)} onToggleHide={() => setSubitemHidden(bid, s.id)} />

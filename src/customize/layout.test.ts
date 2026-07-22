@@ -1,5 +1,23 @@
 import { describe, it, expect } from "vitest";
-import { orderIds, visibleIds, move, toggle, coerceLayout, subitemHidden } from "./layout";
+import { orderIds, visibleIds, move, toggle, coerceLayout, subitemHidden, ensure, pinnedLast } from "./layout";
+
+describe("ensure (idempotent hide)", () => {
+  it("adds when absent, no-op when present", () => {
+    expect(ensure([], "a")).toEqual(["a"]);
+    expect(ensure(["b"], "a")).toEqual(["b", "a"]);
+    expect(ensure(["a"], "a")).toEqual(["a"]);
+  });
+});
+
+describe("pinnedLast", () => {
+  it("moves the pinned id to the end (new tab appended after settings)", () => {
+    expect(pinnedLast(["system", "settings", "view:v1"], "settings")).toEqual(["system", "view:v1", "settings"]);
+  });
+  it("no-op when already last or absent", () => {
+    expect(pinnedLast(["a", "settings"], "settings")).toEqual(["a", "settings"]);
+    expect(pinnedLast(["a", "b"], "settings")).toEqual(["a", "b"]);
+  });
+});
 
 describe("coerceLayout", () => {
   const EMPTY = { tabs: { order: [], hidden: [] }, blocks: {}, subitems: {} };
