@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.24.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.23.0...panel-de-control-v0.24.0) (2026-07-22)
+
+
+### Features / Novedades
+
+* A big upgrade to Customize interface. Every section is now built from blocks you can reorder or hide one by one, and whole modules can be turned on or off: disabling one stops that feature across the entire panel (fans return to firmware control, power management steps aside, and the CPU and charge limit go back to their defaults), while hiding it just takes it out of view. You can build your own tabs, custom views, from any blocks you like across any category, and place them anywhere in the tab order next to the built-in ones. And when there are more tabs than fit, the tab bar scrolls like a wheel with a soft fade at the edges instead of squeezing everything until it's unreadable. ([#252](https://github.com/Hooandee/panel-de-control/issues/252)) ([fc6ba12](https://github.com/Hooandee/panel-de-control/commit/fc6ba1204816f9ebc742982d8adedf43b6cb8bbf))
+* **ES:** Personalizar interfaz mejora a fondo. Ahora cada sección está formada por bloques que puedes reordenar u ocultar por separado, y puedes activar o desactivar módulos completos: al desactivar uno, esa función deja de actuar en todo el panel (los ventiladores vuelven al control del firmware, la gestión de potencia deja de intervenir, y la CPU y el límite de carga regresan a sus valores por defecto); ocultarlo, en cambio, solo lo retira de la vista. También puedes crear tus propias pestañas, las vistas personalizadas, con los bloques que quieras de cualquier categoría, y situarlas en el orden que prefieras junto a las de siempre. Y cuando hay más pestañas de las que caben, la barra se desplaza en horizontal con un degradado suave en los bordes, en lugar de apretujarlas hasta que no se lean. ([#252](https://github.com/Hooandee/panel-de-control/issues/252)) ([fc6ba12](https://github.com/Hooandee/panel-de-control/commit/fc6ba1204816f9ebc742982d8adedf43b6cb8bbf))
+
 ## [0.23.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.22.0...panel-de-control-v0.23.0) (2026-07-21)
 
 
