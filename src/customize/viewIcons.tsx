@@ -6,8 +6,6 @@ import {
 
 import { ViewIconKey } from "./views";
 
-/** The curated tab-icon set for custom views (key → node). Used by the shell's
- *  tab bar and the editor's icon picker. */
 export function viewIconNode(key: ViewIconKey, size = 15): ReactNode {
   const Icon = ICONS[key] ?? LuStar;
   return <Icon size={size} />;

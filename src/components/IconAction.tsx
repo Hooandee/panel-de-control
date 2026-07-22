@@ -8,7 +8,6 @@ export const iconBtn: React.CSSProperties = {
   padding: 6, borderRadius: theme.radius.sm, cursor: "pointer",
 };
 
-/** Small tappable icon (eye / power / arrow / +). */
 export const IconAction: FC<{ label: string; color: string; disabled?: boolean; onTap: () => void; children: ReactNode }> =
   ({ label, color, disabled, onTap, children }) => (
     <Focusable

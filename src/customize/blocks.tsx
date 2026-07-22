@@ -6,8 +6,7 @@ import { blockOrder } from "./manifest";
 import { markBlockPresent } from "./present";
 import { theme } from "../theme";
 
-/** Uniform vertical spacing between blocks — the container owns it so blocks stay
- *  margin-neutral and space evenly in a section or a custom view. */
+// Container-owned spacing between blocks (blocks stay margin-neutral).
 export const BLOCK_GAP = theme.space.card;
 
 export interface BlockDef {
@@ -35,9 +34,8 @@ export const Block: FC<{ id: string }> = ({ id }) => {
 
 const alwaysAvailable = () => true;
 
-// Reports availability without rendering the block, so the editor lists a block
-// even while it's hidden. useAvailable reads only shared state → no extra poll.
-// `sectionKey` is the section id, or `view:<id>` for a custom view.
+// Reports availability without rendering the block (so the editor lists hidden
+// blocks). sectionKey is a section id or `view:<id>`.
 export const BlockProbe: FC<{ sectionKey: string; id: string }> = ({ sectionKey, id }) => {
   const available = (getBlockDef(id)?.useAvailable ?? alwaysAvailable)();
   useEffect(() => {

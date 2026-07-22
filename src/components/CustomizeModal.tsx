@@ -129,8 +129,7 @@ const CustomizeBody: FC = () => {
   };
   const setSubitemHidden = (block: string, sub: string) =>
     save({ ...layout, subitems: { ...layout.subitems, [block]: toggle(layout.subitems[block] ?? [], sub) } });
-  // Idempotent "hide" (never un-hides) — used by the disable modal's hide-instead,
-  // so choosing it from an already-hidden element keeps it hidden.
+  // Idempotent hide for the disable modal's hide-instead (never un-hides).
   const hideTab = (id: string) =>
     save({ ...layout, tabs: { order: layout.tabs.order ?? [], hidden: ensure(layout.tabs.hidden ?? [], id) } });
   const hideBlock = (cat: string, block: string) => {
@@ -141,15 +140,13 @@ const CustomizeBody: FC = () => {
   const catMeta = (id: string) => TABS.find((x) => x.id === id)!;
   const learningState = moduleState("learning", disabled, false, false);
 
-  // Enabling is immediate; disabling is GLOBAL, so confirm it first and offer to
-  // hide-here instead when the module has a placement to hide.
+  // Enabling is immediate; disabling is global → confirm first.
   const toggleModule = (id: string, name: string, off: boolean, onHideInstead?: () => void) => {
     if (off) { setModuleDisabled(id, false); return; }
     openDisableModuleModal({ moduleName: name, onDisable: () => setModuleDisabled(id, true), onHideInstead });
   };
   const views = useViews();
-  // Create exactly once per press: Focusable can deliver onActivate AND onClick, and
-  // createView mutates (unlike the idempotent setters), so guard the double-fire.
+  // Create once per press (Focusable can fire both onActivate and onClick).
   const creating = useRef(false);
   const onNewView = useCallback(() => {
     if (creating.current) return;
@@ -232,8 +229,6 @@ const CustomizeBody: FC = () => {
                         </IconAction>
                       )}
                     </span>
-                    {/* Sections without a backend module (Parámetros) can't be
-                        disabled — hide/reorder only. Keep the slot for alignment. */}
                     {isDisableableSection(id) ? (
                       <IconAction label={off ? t("customize.enable") : t("customize.disable")} color={off ? theme.color.textMuted : theme.color.accent} onTap={() => toggleModule(id, t(meta.labelKey), off, () => hideTab(id))}>
                         <LuPower size={18} />

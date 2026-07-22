@@ -13,14 +13,10 @@ import { useViews, renameView, setViewIcon, setViewBlocks, deleteView } from "..
 import { VIEW_ICON_KEYS, ViewIconKey } from "../customize/views";
 import { viewIconNode } from "../customize/viewIcons";
 
-/** Block metadata (label + icon) by id, across every pickable section. */
 const META = new Map(
   Object.values(PICKABLE_BLOCKS).flat().map((b) => [b.id, b] as const),
 );
 
-/** Ids a category offers to a view: the machine's real blocks (present, else the
- *  manifest) plus fixed cores (e.g. the TDP arc) that aren't reorderable in their
- *  own tab but can live in a view. */
 function pickableIds(cat: string): string[] {
   const base = getPresent(cat) ?? blockOrder(cat);
   const extras = (PICKABLE_BLOCKS[cat] ?? [])

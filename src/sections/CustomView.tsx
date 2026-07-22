@@ -7,15 +7,11 @@ import { useModules } from "../customize/modules";
 import { effectiveEnabled } from "../customize/moduleLogic";
 import { SECTION_PROVIDERS } from "./providerMounts";
 
-/** A user-composed tab: renders the view's blocks from the registry, wrapping them
- *  in the section providers their context blocks need. Blocks self-gate when absent
- *  on this device. */
 export const CustomView: FC<{ viewId: string }> = ({ viewId }) => {
   const views = useViews();
   const disabled = useModules();
   const view = views.find((v) => v.id === viewId);
-  // Disabling a module is GLOBAL: its blocks must not appear/operate in a custom
-  // view either. Drop blocks whose section module the user turned off.
+  // Disabling a module is global — drop blocks whose section module is off.
   const blocks = useMemo(
     () => (view?.blocks ?? []).filter((id) => {
       const sid = getBlockDef(id)?.sectionId;

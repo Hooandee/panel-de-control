@@ -2,8 +2,6 @@ import { useSyncExternalStore } from "react";
 import { readString, writeString, onPrefsHealed } from "../system/pdcStorage";
 import { CustomView, DEFAULT_VIEW_ICON, ViewIconKey, coerceViews } from "./views";
 
-// Custom-view store: a module singleton persisted in localStorage (pdc:views,
-// durable-mirrored). Never throws; degrades to no views if storage is unavailable.
 const KEY = "pdc:views";
 const SEQ_KEY = "pdc:views:seq";
 const listeners = new Set<() => void>();
@@ -41,7 +39,6 @@ function nextId(): string {
   return `v${n}`;
 }
 
-/** Create an empty view; returns its id. */
 export function createView(name: string): string {
   const id = nextId();
   commit([...getViews(), { id, name, icon: DEFAULT_VIEW_ICON, blocks: [] }]);

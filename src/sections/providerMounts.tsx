@@ -20,11 +20,9 @@ import { TdpConflictCard } from "../components/TdpConflictCard";
 import { openTdpConflictModal } from "../components/TdpConflictModal";
 import { Loading } from "../components/Loading";
 
-// Provider mounts own a section's shared hooks and expose them via context, so the
-// section AND any custom view hosting its blocks share one instance. Safety/honesty
-// chrome tied to the machinery travels with the mount (Pantalla confirm+perf,
-// Potencia conflict card); the section-only chrome (scope tab, unsupported note)
-// stays in the section body.
+// A section's shared hooks + context in one instance, shared by the section and any
+// custom view hosting its blocks. Machinery-bound safety chrome travels with the
+// mount (Pantalla confirm/perf, Potencia conflict card).
 
 export const PantallaProviderMount: FC<{ children: ReactNode }> = ({ children }) => {
   const { t } = useI18n();
@@ -32,8 +30,6 @@ export const PantallaProviderMount: FC<{ children: ReactNode }> = ({ children })
   const { state, revertIn, confirmCalibration } = color;
   const hdr = useHdr(color.scope, color.game?.appid ?? null);
   const night = useNight();
-  // Always provide (blocks self-gate on state), so a still-loading color panel
-  // doesn't blank sibling blocks in a custom view.
   const active = !!state && !isNativeColor(state);
   return (
     <PantallaProvider value={{ color, hdr, night }}>

@@ -10,8 +10,7 @@ interface Requirement {
   ids: ModuleId[];
 }
 
-// Section tabs backed by a real backend module (can be disabled). Others (e.g.
-// Parámetros) are sections without background machinery → hide/reorder only.
+// Section tabs backed by a backend module (disable-able); others are hide-only.
 const SECTION_MODULES = new Set<string>(["power", "system", "display", "fans", "mandos"]);
 export const isDisableableSection = (id: string): boolean => SECTION_MODULES.has(id);
 

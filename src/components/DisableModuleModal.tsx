@@ -9,8 +9,6 @@ import { FocusRoot } from "./FocusRoot";
 interface Opts {
   moduleName: string;
   onDisable: () => void;
-  /** When set, offer "hide here instead" — for a module that has a placement to
-   *  hide (a tab or block). Omitted for placeless modules (e.g. learning). */
   onHideInstead?: () => void;
 }
 
@@ -66,8 +64,6 @@ const DisableModuleModalRoot: FC<Opts & { closeModal?: () => void }> = (p) => (
   </ModalRoot>
 );
 
-/** Warn that disabling a module is GLOBAL (stops it across the whole panel), and
- *  offer to hide it here instead when it has a placement to hide. */
 export function openDisableModuleModal(opts: Opts): void {
   showModal(<DisableModuleModalRoot {...opts} />, window);
 }

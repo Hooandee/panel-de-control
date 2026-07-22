@@ -45,11 +45,9 @@ export const ControlCenter: FC = () => {
   const disabled = useModules();
   const views = useViews();
   usePresentVersion(); // re-evaluate tab emptiness as sections report their real blocks
-  // Stable Component per view id, so editing one view (or another) doesn't hand the
-  // active view a fresh element type and remount it (re-fetching its providers).
+  // Stable Component per view id so editing a view doesn't remount the active one.
   const viewComponents = useRef(new Map<string, FC>());
-  // Default sections + a virtual section per custom view (its blocks composed from
-  // the registry). Views sit before the pinned Settings tab.
+  // Default sections + one virtual section per custom view, before pinned Settings.
   const allSections = useMemo<SectionDef[]>(() => {
     const cache = viewComponents.current;
     const viewSections: SectionDef[] = views.map((v) => {
