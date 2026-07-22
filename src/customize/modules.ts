@@ -56,7 +56,7 @@ export function resetModules(): void {
   commit([]);
   resetUiModules()
     .then((r) => commit(r.disabled))
-    .catch(() => {});
+    .catch(() => hydrateModules()); // RPC failed → reconcile with the backend truth
 }
 
 /** Fetch the authoritative set once at startup and reconcile the cache. */

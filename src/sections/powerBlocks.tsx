@@ -8,12 +8,15 @@ import { registerBlock } from "../customize/blocks";
 
 const TdpCoreBlock: FC = () => {
   const c = usePotencia();
+  // With the Auto-TDP module off, the loop is stopped backend-side; reflect that in
+  // the arc (show manual) rather than the raw setting flag.
+  const power = c.power && !c.autoTdpEnabled ? { ...c.power, auto_tdp: false } : c.power;
   return (
     <TdpSection
       tdp={c.tdp}
       scope={c.scope}
       game={c.game}
-      power={c.power}
+      power={power}
       onScope={c.onScope}
       onWatts={c.onWatts}
       onSetLevels={c.onSetLevels}
@@ -40,7 +43,11 @@ const AutoTdpBlock: FC = () => {
 export function registerPowerBlocks(): void {
   registerBlock("tdp", { sectionId: "power", Component: TdpCoreBlock });
   registerBlock("gpu", { sectionId: "power", Component: GpuBlock });
-  // Availability = hardware capability, not the module on/off (the block self-gates
-  // on autoTdpEnabled). Keeps the editor row so a disabled module can be re-enabled.
-  registerBlock("autoTdp", { sectionId: "power", Component: AutoTdpBlock });
+  // Availability = hardware capability (TDP control exists), not the module on/off:
+  // the block self-gates on autoTdpEnabled, so its editor row survives a disable.
+  registerBlock("autoTdp", {
+    sectionId: "power",
+    Component: AutoTdpBlock,
+    useAvailable: () => !!usePotencia().tdp?.supported,
+  });
 }
