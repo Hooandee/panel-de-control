@@ -19,6 +19,7 @@ import { getPresent, usePresentVersion } from "../customize/present";
 import { useViews, createView } from "../customize/viewStore";
 import { viewIconNode } from "../customize/viewIcons";
 import { openViewEditorModal } from "./ViewEditor";
+import { openDisableModuleModal } from "./DisableModuleModal";
 
 // Blocks that are actually backend MODULES (get the on/off power control) rather
 // than cosmetic cards (which get the show/hide eye). Everything else is cosmetic.
@@ -131,6 +132,13 @@ const CustomizeBody: FC = () => {
 
   const catMeta = (id: string) => TABS.find((x) => x.id === id)!;
   const learningState = moduleState("learning", disabled, false, false);
+
+  // Enabling is immediate; disabling is GLOBAL, so confirm it first and offer to
+  // hide-here instead when the module has a placement to hide.
+  const toggleModule = (id: string, name: string, off: boolean, onHideInstead?: () => void) => {
+    if (off) { setModuleDisabled(id, false); return; }
+    openDisableModuleModal({ moduleName: name, onDisable: () => setModuleDisabled(id, true), onHideInstead });
+  };
   const views = useViews();
   // Create exactly once per press: Focusable can deliver onActivate AND onClick, and
   // createView mutates (unlike the idempotent setters), so guard the double-fire.
@@ -219,7 +227,7 @@ const CustomizeBody: FC = () => {
                     {/* Sections without a backend module (Parámetros) can't be
                         disabled — hide/reorder only. Keep the slot for alignment. */}
                     {isDisableableSection(id) ? (
-                      <IconAction label={off ? t("customize.enable") : t("customize.disable")} color={off ? theme.color.textMuted : theme.color.accent} onTap={() => setModuleDisabled(id, !off)}>
+                      <IconAction label={off ? t("customize.enable") : t("customize.disable")} color={off ? theme.color.textMuted : theme.color.accent} onTap={() => toggleModule(id, t(meta.labelKey), off, () => setTabHidden(id))}>
                         <LuPower size={18} />
                       </IconAction>
                     ) : (
@@ -254,7 +262,7 @@ const CustomizeBody: FC = () => {
                           hidden={bHidden}
                           onToggleHide={() => setBlockHidden(id, bid)}
                           off={mOff}
-                          onToggleOff={modId ? () => setModuleDisabled(modId, !mOff) : undefined}
+                          onToggleOff={modId ? () => toggleModule(modId, t(b.labelKey), !!mOff, () => setBlockHidden(id, bid)) : undefined}
                         />
                         {(SUBITEMS[bid] ?? []).map((s) => (
                           <ExpansionRow key={s.id} label={t(s.labelKey)} icon={s.icon} indent={theme.space.lg} hidden={(layout.subitems[bid] ?? []).includes(s.id)} onToggleHide={() => setSubitemHidden(bid, s.id)} />
@@ -285,7 +293,7 @@ const CustomizeBody: FC = () => {
                 label={learningState === "disabled" ? t("customize.enable") : t("customize.disable")}
                 color={learningState === "visible" ? theme.color.accent : theme.color.textMuted}
                 disabled={learningState === "blocked"}
-                onTap={() => setModuleDisabled("learning", learningState !== "disabled")}
+                onTap={() => toggleModule("learning", t("settings.telemetry"), learningState === "disabled")}
               >
                 <LuPower size={18} />
               </IconAction>
