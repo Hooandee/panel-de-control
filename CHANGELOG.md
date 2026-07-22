@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.25.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.24.0...panel-de-control-v0.25.0) (2026-07-22)
+
+
+### Features / Novedades
+
+* The MSI Claw A8's two rear buttons (M1 and M2) can now be remapped from the Controllers tab, the same as on the other supported handhelds. ([#257](https://github.com/Hooandee/panel-de-control/issues/257)) ([2f8548a](https://github.com/Hooandee/panel-de-control/commit/2f8548a1d44a9d5f588f372dc64948aa4979b66c))
+* **ES:** Los dos botones traseros de la MSI Claw A8 (M1 y M2) ya se pueden remapear desde la pestaña Mandos, igual que en el resto de equipos compatibles. ([#257](https://github.com/Hooandee/panel-de-control/issues/257)) ([2f8548a](https://github.com/Hooandee/panel-de-control/commit/2f8548a1d44a9d5f588f372dc64948aa4979b66c))
+
 ## [0.24.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.23.0...panel-de-control-v0.24.0) (2026-07-22)
 
 
