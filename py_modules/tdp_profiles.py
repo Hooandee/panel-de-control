@@ -79,6 +79,36 @@ class ProfileStore(ScopedProfileStore):
             return self._profile_dict(int(raw["watts"]))
         return self._profile_dict(self._default)
 
+    def sanitize(self, min_w, max_w):
+        """Correct any stored TDP value outside the device's real range and rewrite the
+        store once if anything changed (returns True when it did). An older version could
+        persist a bogus firmware-max (e.g. 150 W) — this self-heals it on load so a stale
+        value can never be applied, not merely clamped on read. Clamps PL1 into
+        [min_w, max_w] and the boost offsets into [0, max_w] across global + every game."""
+        min_w, max_w = int(min_w), int(max_w)
+
+        def fix(prof):
+            changed = False
+            pl1 = int(prof.get("pl1", min_w))
+            capped = max(min_w, min(pl1, max_w))
+            if capped != pl1:
+                prof["pl1"] = capped
+                changed = True
+            for k in ("off2", "off3"):
+                v = int(prof.get(k, 0) or 0)
+                cv = max(0, min(v, max_w))
+                if cv != v:
+                    prof[k] = cv
+                    changed = True
+            return changed
+
+        dirty = fix(self._data["global"])
+        for g in self._data["games"].values():
+            dirty = fix(g) or dirty
+        if dirty:
+            self._save()
+        return dirty
+
     # Auto-TDP and GPU-clock are part of the Potencia profile: per-scope, gated by the
     # same follow_global as the TDP value (one tab governs the whole section).
     def auto_tdp(self, appid):

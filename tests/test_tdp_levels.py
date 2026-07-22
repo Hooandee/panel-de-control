@@ -40,17 +40,20 @@ def test_generic_level_limits_reads_each_pl_from_firmware(tmp_path):
 
 
 def test_set_levels_writes_each_clamped_pl1_last(tmp_path):
+    # On a recognised device the write clamps each rail to its PROFILE-derived ceiling
+    # (the same one level_limits advertises: PL1 charger max 35, SPPT ×1.2 = 42), not the
+    # firmware's reported max (45/55 here). pl2 over→42, pl3 under min→19.
     root = str(tmp_path)
     base = _mk(root)
     b = FirmwareAttrBackend("asus-armoury", FALLBACK, root=root)
-    res = b.set_levels(30, 99, 1, ac=True)  # pl2 over max→45, pl3 under min→19
+    res = b.set_levels(30, 99, 1, ac=True)
     assert res.ok is True and res.applied_w == 30
 
     def rd(a):
         return open(os.path.join(base, a, "current_value")).read().strip()
 
     assert rd("ppt_pl1_spl") == "30"
-    assert rd("ppt_pl2_sppt") == "45"
+    assert rd("ppt_pl2_sppt") == "42"
     assert rd("ppt_pl3_fppt") == "19"
 
 

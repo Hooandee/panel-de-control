@@ -197,6 +197,12 @@ class Plugin:
             self._settings["_potencia_scope_migrated"] = True
             self._store.save(self._settings)
         self._tdp_backend = tdp_factory.select_backend(self._device)
+        # Safety self-heal: correct any stored TDP value an older version persisted
+        # outside the device's real range (a bogus firmware max could leak in) so it can
+        # never be applied — not merely clamped on read.
+        _lim = self._limits()
+        if self._tdp_profiles.sanitize(_lim.min_w, _lim.max_ac_w):
+            decky.logger.info("Corrected out-of-range stored TDP profiles")
         # Which daemon owns the controller (HHD / InputPlumber / none). Detected
         # once — the resident daemon doesn't change at runtime. Probe never raises.
         self._controller = controller_detect.detect()
