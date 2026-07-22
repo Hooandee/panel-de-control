@@ -5,6 +5,7 @@ import { FALLBACK_ACCENT_RGB } from "./system/accentColor";
 // our root covers every control. Colour comes from the --pdc-accent-rgb variable.
 export const PDC_ROOT = "pdc-root";
 export const FOCUS_STYLE_ID = "pdc-focus-styles";
+export const PDC_TABSTRIP = "pdc-tabstrip";
 
 // box-shadow (not outline: this CEF draws outline square) + a forced radius so square
 // controls round too; a dark gap ring, the accent ring, then a soft halo.
@@ -21,7 +22,9 @@ export function buildFocusCss(): string {
   transition: box-shadow 120ms ease, filter 120ms ease;
   position: relative;
   z-index: 1;
-}`.trim();
+}
+.${PDC_TABSTRIP} { scrollbar-width: none; -ms-overflow-style: none; }
+.${PDC_TABSTRIP}::-webkit-scrollbar { display: none; width: 0; height: 0; }`.trim();
 }
 
 export function ensureFocusStyles(doc: Document = document): void {

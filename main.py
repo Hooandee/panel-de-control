@@ -108,6 +108,9 @@ DEFAULTS = {
     # Master switch: when False we stop writing the TDP rails and Potencia drops to
     # monitor-only, handing TDP to another tool.
     "tdp_control_enabled": True,
+    # Modules the user turned off in the customization editor (generic ids only;
+    # power/learning are folded from tdp_control_enabled/telemetry_enabled).
+    "disabled_modules": [],
     # One-time notices (SettingsStore drops keys not in DEFAULTS).
     "seen_tdp_conflict_takeover": False,
     "seen_autotdp_notice": False,
@@ -406,6 +409,46 @@ class Plugin:
         self._save()
         return True
 
+    async def get_ui_modules(self) -> dict:
+        """The user-disabled module set (generic ids + power/learning folded from
+        their native settings). The frontend derives the effective state."""
+        self._init()
+        return {"disabled": self._user_disabled_all()}
+
+    async def set_ui_module(self, module_id: str, disabled: bool) -> dict:
+        """Enable/disable a module durably, then re-apply everything honestly so the
+        newly-off machinery is released (fans→auto, TDP rails freed, loops idle)."""
+        self._init()
+        disabled = bool(disabled)
+        if module_id in self._MODULE_SETTING:
+            self._settings[self._MODULE_SETTING[module_id]] = not disabled
+        elif module_id in self._GENERIC_MODULES:
+            cur = set(self._disabled_modules())
+            cur.add(module_id) if disabled else cur.discard(module_id)
+            self._settings["disabled_modules"] = sorted(cur)
+        else:
+            return {"disabled": self._user_disabled_all()}  # unknown id → no-op
+        self._save()
+        self._reapply_all()   # already dispatches its subprocess work off-loop
+        # Turning the power module off = stepping aside; hand HHD's TDP back, same
+        # as set_tdp_control_enabled(False). Otherwise no manager drives the TDP.
+        if module_id == "power" and disabled:
+            await self._offload_call(self._restore_hhd_tdp)
+        self._sync_sampler()  # learning may have (un)gained a consumer
+        return {"disabled": self._user_disabled_all()}
+
+    async def reset_modules(self) -> dict:
+        """Re-enable every module in one shot (editor reset) — one save + one
+        re-apply, avoiding a per-module RPC storm and its ordering races."""
+        self._init()
+        self._settings["disabled_modules"] = []
+        for setting in self._MODULE_SETTING.values():
+            self._settings[setting] = True
+        self._save()
+        self._reapply_all()
+        self._sync_sampler()
+        return {"disabled": self._user_disabled_all()}
+
     async def check_update(self, force: bool = False) -> dict:
         self._init()
         return self_updater.check(force)
@@ -693,6 +736,8 @@ class Plugin:
         (following global, or the same profile) never touches the daemon and can't
         race its own re-grab on game launch. Offloaded (dbus + YAML subprocess). No-op
         on HHD/none (effective_overrides returns None)."""
+        if not self._module_enabled("mandos"):
+            return
         ov = self._controller_backend.effective_overrides(self._current_appid)
         if ov is None or ov == self._last_controller_overrides:
             return
@@ -924,6 +969,10 @@ class Plugin:
 
         Guarded: a bad fan apply must never brick load.
         """
+        if not self._module_enabled("fanControl"):
+            # Fan control disabled: hand the fans back to firmware auto, never drive.
+            self._restore_fans_safe()
+            return True
         try:
             profile = self._fan_curves.effective(self._current_appid)
             preset = profile["preset"]
@@ -1149,7 +1198,7 @@ class Plugin:
         # "unsupported" (card stays silent) rather than nudging "turn on learning".
         if not self._fan_ctrl.supported:  # cheap property — no sysfs/EC read
             return unavail("unsupported")
-        if not bool(self._settings.get("telemetry_enabled", True)):
+        if not self._learning_active():
             return unavail("disabled")
         if key is None:
             return unavail("no_game")
@@ -1228,6 +1277,8 @@ class Plugin:
         Returns (appid, sample_dict) while in-game, or None when idle.
         Never raises; any error degrades to None (no sample recorded).
         """
+        if not self._learning_active():
+            return None
         try:
             # Snapshot the appid once: this method now runs on a worker thread
             # (via asyncio.to_thread) and spans a ~120 ms gpu_busy burst + fan
@@ -1319,6 +1370,16 @@ class Plugin:
         self._reapply_ticks = 0
         self._sampler.start()
 
+    def _sync_sampler(self) -> None:
+        """Start the sampler iff learning is effectively active (enabled AND a consumer
+        — Power or Fans — is on), else stop it. Called when module state changes."""
+        if getattr(self, "_sampler", None) is None:
+            return
+        if self._learning_active():
+            self._start_sampler()
+        else:
+            self._sampler.stop()
+
     async def get_telemetry_enabled(self) -> bool:
         self._init()
         return bool(self._settings.get("telemetry_enabled", True))
@@ -1330,10 +1391,7 @@ class Plugin:
         enabled = bool(enabled)
         self._settings["telemetry_enabled"] = enabled
         self._save()
-        if enabled:
-            self._start_sampler()
-        else:
-            self._sampler.stop()  # also flushes any buffered samples
+        self._sync_sampler()  # honours the Power/Fans dependency (also flushes on stop)
         return enabled
 
     async def get_learning_status(self) -> dict:
@@ -1455,8 +1513,9 @@ class Plugin:
                 if self._settings.get("eco_enabled"):
                     self._reset_auto_windows()
                     continue
-                # Master switch off: another tool owns the rails — don't drive PL1.
-                if not self._tdp_control_on():
+                # TDP master switch off (module 'power') or Auto-TDP disabled — don't
+                # drive PL1. _module_enabled folds the power cascade into autoTdp.
+                if not self._module_enabled("autoTdp"):
                     self._reset_auto_windows()
                     continue
                 # Hold when auto-TDP is off for THIS game (per-game, own or global) or a
@@ -1637,7 +1696,7 @@ class Plugin:
                     "enough": False, "reason": reason, "minutes": 0,
                     "target_minutes": tdp_suggest.MIN_MINUTES}
 
-        if not bool(self._settings.get("telemetry_enabled", True)):
+        if not self._learning_active():
             return unavail("disabled")
         key = str(appid) if appid is not None else self._current_appid
         if key is None:
@@ -1740,6 +1799,53 @@ class Plugin:
         """Master switch: whether we're allowed to write the TDP rails at all."""
         return bool(self._settings.get("tdp_control_enabled", True))
 
+    # ---- Module enable/disable ---------------------------------------------
+    # autoTdp/fanControl cascade from their tab (all); learning needs a consumer (any).
+    # MIRROR of REQUIRES in src/customize/moduleLogic.ts — keep the two in sync.
+    _MODULE_REQUIRES = {
+        "autoTdp": ("all", ("power",)),
+        "fanControl": ("all", ("fans",)),
+        "learning": ("any", ("power", "fans")),
+    }
+    _GENERIC_MODULES = ("system", "display", "fans", "mandos", "autoTdp", "fanControl")
+    # Modules backed by a pre-existing boolean setting instead of disabled_modules
+    # (setting True = module enabled). Single source of truth per concept.
+    _MODULE_SETTING = {"power": "tdp_control_enabled", "learning": "telemetry_enabled"}
+
+    def _disabled_modules(self) -> list:
+        v = self._settings.get("disabled_modules")
+        return [x for x in v if isinstance(x, str)] if isinstance(v, list) else []
+
+    def _module_user_disabled(self, mid: str) -> bool:
+        """Whether the user turned this module off (before cascade/dependency)."""
+        setting = self._MODULE_SETTING.get(mid)
+        if setting is not None:
+            return not bool(self._settings.get(setting, True))
+        return mid in self._disabled_modules()
+
+    def _module_enabled(self, mid: str) -> bool:
+        """Effective state: user flag AND requirements (cascade = all, dependency = any)."""
+        if self._module_user_disabled(mid):
+            return False
+        req = self._MODULE_REQUIRES.get(mid)
+        if not req:
+            return True
+        mode, ids = req
+        checks = [self._module_enabled(d) for d in ids]
+        return any(checks) if mode == "any" else all(checks)
+
+    def _learning_active(self) -> bool:
+        """Learning runs only when enabled AND it has a consumer (Power or Fans)."""
+        return self._module_enabled("learning")
+
+    def _user_disabled_all(self) -> list:
+        """The user-disabled set (for the UI), folding the native-setting modules in."""
+        out = list(self._disabled_modules())
+        for mid, setting in self._MODULE_SETTING.items():
+            if not bool(self._settings.get(setting, True)):
+                out.append(mid)
+        return out
+
     def _reapply_tdp(self, on_ac=None):
         self._init()
         if not self._tdp_control_on():
@@ -1789,6 +1895,10 @@ class Plugin:
         call on any device — a Null backend no-ops."""
         if not self._charge_limit.supported:
             return
+        if not self._module_enabled("system"):
+            # Module off = step aside: release any cap, don't keep limiting.
+            self._charge_limit.disable()
+            return
         enabled = bool(self._settings.get("charge_limit_enabled", False))
         if enabled:
             self._charge_limit.set(int(self._settings.get("charge_limit_percent", 80)))
@@ -1835,6 +1945,16 @@ class Plugin:
         ORDER MATTERS: cores FIRST (onlining the kept cores brings their SMT siblings
         online too), then SMT — so SMT-off re-offlines those siblings and the two
         controls, which write the same cpuN/online nodes, end up consistent."""
+        if not self._module_enabled("system"):
+            # Module off = step aside: hand the CPU back to its defaults (all cores
+            # online, SMT on, boost on) instead of leaving it as we last set it.
+            if self._cores.supported and self._cores.max_cores is not None:
+                self._cores.set(int(self._cores.max_cores))
+            if self._smt.supported:
+                self._smt.set(True)
+            if self._boost.supported:
+                self._boost.set(True)
+            return
         # Effective per-game CPU controls (own when the game has them, else global).
         eff = self._cpu_profiles.effective(self._current_appid)
         # Re-assert the active-core count. None = "all cores" → actively restore the full
@@ -1936,6 +2056,8 @@ class Plugin:
     def _apply_gpu_clock(self) -> None:
         """Re-assert the GPU clock window when manual (cleared to auto after suspend).
         When not manual we leave the GPU alone (don't fight other tools). Guarded."""
+        if not self._module_enabled("power"):
+            return
         try:
             g = self._tdp_profiles.gpu_clock(self._current_appid)  # effective per game
             if not self._gpu_clock.supported or not g.get("manual"):
@@ -2012,6 +2134,8 @@ class Plugin:
         """Push the effective color to gamescope. No-op when unsupported. Guarded.
         Applied in HDR mode too — it colors all composited/SDR content; a native-HDR
         game (direct scanout) is simply out of the LUT's reach, no handling needed."""
+        if not self._module_enabled("display"):
+            return
         try:
             if self._color_backend.supported:
                 self._color_backend.apply(self._effective_color())
@@ -2561,7 +2685,7 @@ class Plugin:
             # game's effective auto_tdp (holds when off), so it activates for a game that
             # has it on without waiting for the QAM.
             self._start_auto_loop()
-            if self._settings.get("telemetry_enabled", True):
+            if self._learning_active():
                 self._start_sampler()
         except Exception as e:  # noqa: BLE001
             decky.logger.error("TDP startup failed: %s", e)

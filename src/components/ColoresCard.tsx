@@ -63,7 +63,7 @@ export const ColoresCard: FC<Props> = ({ state, onInstall, onOpen, onOpenStore }
 
   return (
     <PanelSectionRow>
-      <div style={{ ...theme.card, padding: theme.space.md, overflow: "hidden", marginBottom: theme.space.card }}>
+      <div style={{ ...theme.card, padding: theme.space.md, overflow: "hidden" }}>
         <div
           style={{
             display: "flex",

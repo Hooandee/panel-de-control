@@ -1,5 +1,28 @@
 import { describe, it, expect } from "vitest";
-import { sparklinePath, pushSample, rpmFraction, presetConverges } from "./logic";
+import { sparklinePath, pushSample, rpmFraction, presetConverges, isSolo, tempsAvailable } from "./logic";
+import type { FanState } from "../api";
+
+const fanState = (fans: number, temps: number): FanState =>
+  ({
+    supported: true,
+    fans: Array.from({ length: fans }, (_, i) => ({ label: `fan${i}`, rpm: 1000, percent: null })),
+    temps: Array.from({ length: temps }, (_, i) => ({ label: `t${i}`, celsius: 50 })),
+    source: "hwmon",
+  } as unknown as FanState);
+
+describe("isSolo / tempsAvailable", () => {
+  it("solo = exactly one fan and one temp", () => {
+    expect(isSolo(fanState(1, 1))).toBe(true);
+    expect(isSolo(fanState(2, 1))).toBe(false);
+    expect(isSolo(fanState(1, 2))).toBe(false);
+  });
+  it("temps block is available only with temps and not in the solo case", () => {
+    expect(tempsAvailable(fanState(2, 2))).toBe(true); // multi → separate temps block
+    expect(tempsAvailable(fanState(1, 1))).toBe(false); // solo → temp merged into fan card
+    expect(tempsAvailable(fanState(2, 0))).toBe(false); // no temps
+    expect(tempsAvailable(null)).toBe(false); // not loaded yet
+  });
+});
 
 describe("presetConverges", () => {
   // On these devices the fan sits at a physical floor when cool, so silent/

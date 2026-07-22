@@ -9,13 +9,21 @@ export interface Accent {
 
 export const ACCENTS: Accent[] = [
   { id: "blue", hex: "#4ea1ff" },
+  { id: "sky", hex: "#38bdf8" },
+  { id: "cyan", hex: "#22b8e0" },
   { id: "teal", hex: "#22c7c0" },
+  { id: "mint", hex: "#34d399" },
   { id: "green", hex: "#3fbf6f" },
+  { id: "lime", hex: "#a3d43f" },
+  { id: "yellow", hex: "#f5c542" },
   { id: "amber", hex: "#e0952a" },
   { id: "orange", hex: "#f2683c" },
-  { id: "pink", hex: "#ec5c9d" },
-  { id: "purple", hex: "#9b7bf0" },
   { id: "red", hex: "#e5484d" },
+  { id: "rose", hex: "#fb7185" },
+  { id: "pink", hex: "#ec5c9d" },
+  { id: "fuchsia", hex: "#d946ef" },
+  { id: "purple", hex: "#9b7bf0" },
+  { id: "indigo", hex: "#6366f1" },
 ];
 
 export const DEFAULT_ACCENT = ACCENTS[0];

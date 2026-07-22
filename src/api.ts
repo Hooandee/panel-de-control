@@ -31,6 +31,12 @@ export const setCustomLaunchVars = callable<[vars: CustomVarDef[]], CustomVarDef
 export const getUiPrefs = callable<[], Record<string, string>>("get_ui_prefs");
 export const setUiPrefs = callable<[Record<string, string | null>], boolean>("set_ui_prefs");
 
+// Durable module enable/disable state. `disabled` = the user-disabled set (generic
+// ids + power/learning folded in). set_ui_module returns the fresh set after applying.
+export const getUiModules = callable<[], { disabled: string[] }>("get_ui_modules");
+export const setUiModule = callable<[string, boolean], { disabled: string[] }>("set_ui_module");
+export const resetUiModules = callable<[], { disabled: string[] }>("reset_modules");
+
 export interface DeviceInfo {
   key: string;
   display_name: string;
@@ -217,10 +223,8 @@ export const getTdpConflict =
 // Hand HHD's TDP module over to us (reversible; saves its previous value).
 export const takeTdpControl =
   callable<[], { ok: boolean; hhd_managing: boolean }>("take_tdp_control");
-// Master switch: OFF stops all rail writes and hands HHD back (Potencia → monitor).
-export const getTdpControlEnabled = callable<[], boolean>("get_tdp_control_enabled");
-export const setTdpControlEnabled =
-  callable<[enabled: boolean], boolean>("set_tdp_control_enabled");
+// The TDP master switch (get/set_tdp_control_enabled) is driven via the module
+// editor now (power module → set_ui_module), so it has no dedicated frontend binding.
 // One-time-notice flags (durable, backend-persisted).
 export const setSeenAutotdpNotice =
   callable<[seen: boolean], boolean>("set_seen_autotdp_notice");
@@ -276,8 +280,8 @@ export interface FanCurveState {
   has_firmware_modes: boolean;
 }
 
-export const getTelemetryEnabled = callable<[], boolean>("get_telemetry_enabled");
-export const setTelemetryEnabled = callable<[enabled: boolean], boolean>("set_telemetry_enabled");
+// Learning on/off (get/set_telemetry_enabled) is driven via the module editor now
+// (learning module → set_ui_module), so it has no dedicated frontend binding.
 // Wipe all learned usage data (start from scratch). Doesn't touch manual profiles.
 export const resetTelemetry = callable<[], boolean>("reset_telemetry");
 

@@ -113,7 +113,10 @@ the game you're playing. It also adds an entry to the game's library context men
 
 Language (with flags, not a dropdown), the "learn from my usage" switch (telemetry is 100% local and
 can be turned off), and a button to erase what has been learned. Under "Customize interface" you can
-also pick the panel's accent color from a palette.
+reorder and hide tabs and blocks, turn whole modules on or off (disabling stops that feature across
+the panel; hiding just stops showing it here), build your own tabs (custom views) from whichever
+blocks you want across categories and place them anywhere in the tab order, and pick the panel's
+accent color from a palette.
 
 The whole panel is fully controller-navigable: whatever the cursor is on gets a clear accent outline,
 so you never need the touchscreen.

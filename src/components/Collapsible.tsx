@@ -33,7 +33,7 @@ export const Collapsible: FC<Props> = ({ id, icon, title, summary, children }) =
 
   return (
     <PanelSectionRow>
-      <div style={{ ...theme.card, padding: theme.space.md, overflow: "hidden", marginBottom: theme.space.card }}>
+      <div style={{ ...theme.card, padding: theme.space.md, overflow: "hidden" }}>
         <Focusable
           style={{ display: "flex", alignItems: "center", gap: theme.space.sm, cursor: "pointer" }}
           onActivate={toggle}
