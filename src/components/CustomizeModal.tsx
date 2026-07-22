@@ -17,6 +17,7 @@ import { getDevice, DeviceInfo } from "../api";
 import { sectionHiddenOnDevice, allBlocksHidden } from "../sections/availability";
 import { getPresent, usePresentVersion } from "../customize/present";
 import { useViews, createView } from "../customize/viewStore";
+import { viewTabId, isViewTabId } from "../customize/views";
 import { viewIconNode } from "../customize/viewIcons";
 import { openViewEditorModal } from "./ViewEditor";
 import { openDisableModuleModal } from "./DisableModuleModal";
@@ -30,6 +31,12 @@ const iconSquare = (on: boolean): React.CSSProperties => ({
   background: on ? `rgba(${theme.color.accentRgb},0.14)` : "rgba(255,255,255,0.06)",
   color: on ? theme.color.accent : theme.color.textMuted,
 });
+
+const viewTag: React.CSSProperties = {
+  flexShrink: 0, fontSize: theme.font.caption, color: theme.color.accent,
+  background: `rgba(${theme.color.accentRgb},0.14)`,
+  padding: "1px 7px", borderRadius: 6, whiteSpace: "nowrap",
+};
 
 /** A row inside an expanded category. Everything can be hidden (eye); rows with
  *  backend machinery (Auto‑TDP, fan control) additionally get an on/off power.
@@ -101,8 +108,10 @@ const CustomizeBody: FC = () => {
   const [device, setDevice] = useState<DeviceInfo | null>(null);
   useEffect(() => { getDevice().then(setDevice).catch(() => {}); }, []);
 
-  const catOrder = orderIds(CATEGORY_IDS, layout.tabs.order)
-    .filter((id) => CATEGORY_IDS.includes(id) && !sectionHiddenOnDevice(device, id));
+  const views = useViews();
+  const viewOf = (tabId: string) => views.find((v) => viewTabId(v.id) === tabId);
+  const tabOrder = orderIds([...CATEGORY_IDS, ...views.map((v) => viewTabId(v.id))], layout.tabs.order)
+    .filter((id) => isViewTabId(id) || (CATEGORY_IDS.includes(id) && !sectionHiddenOnDevice(device, id)));
   const tabHidden = (id: string) => (layout.tabs.hidden ?? []).includes(id);
 
   const save = (next: Layout) => saveLayout(next);
@@ -118,9 +127,8 @@ const CustomizeBody: FC = () => {
       blocks: { ...layout.blocks, [id]: { ...pref, hidden: [] } },
     });
   };
-  const moveCat = (id: string, dir: -1 | 1) => {
-    const next = move(catOrder, id, dir);
-    // Settings stays pinned last; persist the reordered categories + it.
+  const moveTab = (id: string, dir: -1 | 1) => {
+    const next = move(tabOrder, id, dir);
     save({ ...layout, tabs: { ...layout.tabs, order: [...next, PINNED_TAB] } });
   };
   const setBlockHidden = (cat: string, block: string) => {
@@ -145,7 +153,6 @@ const CustomizeBody: FC = () => {
     if (off) { setModuleDisabled(id, false); return; }
     openDisableModuleModal({ moduleName: name, onDisable: () => setModuleDisabled(id, true), onHideInstead });
   };
-  const views = useViews();
   // Create once per press (Focusable can fire both onActivate and onClick).
   const creating = useRef(false);
   const onNewView = useCallback(() => {
@@ -177,7 +184,56 @@ const CustomizeBody: FC = () => {
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
-        {catOrder.map((id, i) => {
+        {tabOrder.map((id, i) => {
+          if (isViewTabId(id)) {
+            const v = viewOf(id);
+            if (!v) return null;
+            const hidden = tabHidden(id);
+            const name = v.name || t("customize.views.namePlaceholder");
+            return (
+              <div key={id} style={{ ...theme.card, padding: `${theme.space.sm + 2}px ${theme.space.md}px`, opacity: hidden ? 0.55 : 1 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: theme.space.sm }}>
+                  <Focusable
+                    style={{ display: "flex", alignItems: "center", gap: theme.space.sm, flex: 1, minWidth: 0, cursor: editing ? "default" : "pointer" }}
+                    aria-label={name}
+                    onActivate={() => !editing && openViewEditorModal(v.id)}
+                    onClick={() => !editing && openViewEditorModal(v.id)}
+                  >
+                    <span style={iconSquare(!hidden)}>{viewIconNode(v.icon, 16)}</span>
+                    <span style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: theme.space.xs }}>
+                      <span style={{ minWidth: 0, fontSize: theme.font.body, color: theme.color.textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {name}
+                      </span>
+                      <span style={viewTag}>{t("customize.views.tag")}</span>
+                      {hidden && <span style={{ color: theme.color.textMuted, fontSize: theme.font.caption, whiteSpace: "nowrap" }}> · {t("customize.state.background")}</span>}
+                    </span>
+                  </Focusable>
+                  {editing ? (
+                    <>
+                      <IconAction label={t("customize.moveUp")} color={i === 0 ? theme.color.textMuted : theme.color.accent} disabled={i === 0} onTap={() => moveTab(id, -1)}>
+                        <LuChevronUp size={18} />
+                      </IconAction>
+                      <IconAction label={t("customize.moveDown")} color={i === tabOrder.length - 1 ? theme.color.textMuted : theme.color.accent} disabled={i === tabOrder.length - 1} onTap={() => moveTab(id, 1)}>
+                        <LuChevronDown size={18} />
+                      </IconAction>
+                    </>
+                  ) : (
+                    <>
+                      <span style={{ display: "flex", justifyContent: "center", width: 30 }}>
+                        <IconAction label={hidden ? t("customize.show") : t("customize.hide")} color={theme.color.textMuted} onTap={() => setTabHidden(id)}>
+                          {hidden ? <LuEyeOff size={18} /> : <LuEye size={18} />}
+                        </IconAction>
+                      </span>
+                      <span style={{ display: "flex", justifyContent: "center", width: 30 }} />
+                      <IconAction label={name} color={theme.color.textMuted} onTap={() => openViewEditorModal(v.id)}>
+                        <LuPencil size={17} />
+                      </IconAction>
+                    </>
+                  )}
+                </div>
+              </div>
+            );
+          }
           const meta = catMeta(id);
           const present = getPresent(id);
           const off = disabled.has(id);
@@ -211,10 +267,10 @@ const CustomizeBody: FC = () => {
 
                 {editing ? (
                   <>
-                    <IconAction label={t("customize.moveUp")} color={i === 0 ? theme.color.textMuted : theme.color.accent} disabled={i === 0} onTap={() => moveCat(id, -1)}>
+                    <IconAction label={t("customize.moveUp")} color={i === 0 ? theme.color.textMuted : theme.color.accent} disabled={i === 0} onTap={() => moveTab(id, -1)}>
                       <LuChevronUp size={18} />
                     </IconAction>
-                    <IconAction label={t("customize.moveDown")} color={i === catOrder.length - 1 ? theme.color.textMuted : theme.color.accent} disabled={i === catOrder.length - 1} onTap={() => moveCat(id, 1)}>
+                    <IconAction label={t("customize.moveDown")} color={i === tabOrder.length - 1 ? theme.color.textMuted : theme.color.accent} disabled={i === tabOrder.length - 1} onTap={() => moveTab(id, 1)}>
                       <LuChevronDown size={18} />
                     </IconAction>
                   </>
@@ -310,25 +366,9 @@ const CustomizeBody: FC = () => {
         <>
           <div style={theme.sectionLabel}>{t("customize.views.title")}</div>
           <div style={{ ...theme.card, padding: theme.space.md, display: "flex", flexDirection: "column", gap: theme.space.sm }}>
-            {views.length === 0 ? (
-              <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{t("customize.views.none")}</span>
-            ) : (
-              views.map((v) => (
-                <Focusable
-                  key={v.id}
-                  style={{ display: "flex", alignItems: "center", gap: theme.space.sm, cursor: "pointer" }}
-                  aria-label={v.name}
-                  onActivate={() => openViewEditorModal(v.id)}
-                  onClick={() => openViewEditorModal(v.id)}
-                >
-                  <span style={iconSquare(true)}>{viewIconNode(v.icon, 16)}</span>
-                  <span style={{ flex: 1, minWidth: 0, fontSize: theme.font.body, color: theme.color.textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {v.name || t("customize.views.namePlaceholder")}
-                  </span>
-                  <LuPencil size={16} color={theme.color.textMuted} />
-                </Focusable>
-              ))
-            )}
+            <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
+              {views.length === 0 ? t("customize.views.none") : t("customize.views.reorderHint")}
+            </span>
             <Focusable
               style={{ ...iconBtn, gap: theme.space.xs, justifyContent: "center", padding: `${theme.space.sm}px`, color: theme.color.accent, boxShadow: `inset 0 0 0 1px ${theme.color.hairline}` }}
               aria-label={t("customize.views.new")}
