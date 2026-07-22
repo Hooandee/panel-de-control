@@ -1,10 +1,9 @@
-// Which block ids a section actually rendered (non-null) on THIS machine/config,
-// reported by SectionBlocks. Lets the shell and editor reflect what the device
-// really has instead of every block the manifest could show — a machine that
-// can't configure a block never offers it, and a tab that renders nothing hides
-// itself. Persisted (pdc:present, durable-mirrored) so the editor knows a
+// Which block ids each section has on THIS machine/config, reported per block by
+// the availability probes in SectionView. Lets the shell and editor reflect what
+// the device really has instead of every block the manifest could show — a machine
+// that can't configure a block never offers it, and a tab that renders nothing
+// hides itself. Persisted (pdc:present, durable-mirrored) so the editor knows a
 // section's real blocks after the first-ever visit, and self-heals each render.
-// Groundwork for the global block registry (custom views).
 import { useSyncExternalStore } from "react";
 import { readString, writeString, onPrefsHealed } from "../system/pdcStorage";
 
@@ -37,16 +36,6 @@ function state(): Record<string, string[]> {
 function notify(): void {
   version++;
   listeners.forEach((l) => l());
-}
-
-/** Record the block ids a section rendered (order-insensitive → no churn). */
-export function markPresent(sectionId: string, ids: string[]): void {
-  const next = [...ids].sort();
-  const cur = state()[sectionId];
-  if (cur && cur.length === next.length && cur.every((x, i) => x === next[i])) return;
-  cache = { ...state(), [sectionId]: next };
-  writeString(KEY, JSON.stringify(cache));
-  notify();
 }
 
 /** Report a single block's presence (from its availability probe). Add on true,

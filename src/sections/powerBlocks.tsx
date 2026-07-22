@@ -1,0 +1,51 @@
+import { FC } from "react";
+
+import { TdpSection } from "../components/TdpSection";
+import { GpuClockCard } from "../components/GpuClockCard";
+import { AutoTdpToggle } from "../components/AutoTdpToggle";
+import { usePotencia } from "../tdp/potenciaContext";
+import { registerBlock } from "../customize/blocks";
+
+// Potencia blocks. All read the shared PotenciaProvider (one TDP state owned by the
+// section). The core (arc + slider + presets) is registered so a custom view can
+// host it, but the Potencia tab renders it as fixed chrome — only GPU clock and
+// Auto‑TDP are reorderable/hideable there.
+
+const TdpCoreBlock: FC = () => {
+  const c = usePotencia();
+  return (
+    <TdpSection
+      tdp={c.tdp}
+      scope={c.scope}
+      game={c.game}
+      power={c.power}
+      onScope={c.onScope}
+      onWatts={c.onWatts}
+      onSetLevels={c.onSetLevels}
+      onSetMode={c.onSetMode}
+      onApplySuggestion={c.onApplySuggestion}
+      onFirmwareMode={c.onFirmwareMode}
+      monitorOnly={c.monitorOnly}
+    />
+  );
+};
+
+const GpuBlock: FC = () => {
+  const { scope, game } = usePotencia();
+  return <GpuClockCard scope={scope} appid={game?.appid ?? null} />;
+};
+
+const AutoTdpBlock: FC = () => {
+  const { power, onAutoTdpToggle } = usePotencia();
+  return <AutoTdpToggle checked={power?.auto_tdp ?? false} onChange={onAutoTdpToggle} />;
+};
+
+registerBlock("tdp", { sectionId: "power", Component: TdpCoreBlock });
+registerBlock("gpu", { sectionId: "power", Component: GpuBlock });
+// Hiding the Auto‑TDP block just hides the toggle; turning the module off (editor
+// power) stops the loop backend-side. Availability follows the module state.
+registerBlock("autoTdp", {
+  sectionId: "power",
+  Component: AutoTdpBlock,
+  useAvailable: () => usePotencia().autoTdpEnabled,
+});
