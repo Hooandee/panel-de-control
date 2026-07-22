@@ -7,6 +7,8 @@ on:
       - ".github/workflows/release-please.yml"
       - ".release-please-manifest.json"
       - "release-please-config.json"
+      - "shared/fixtures/**"
+      - "windows/**"
       - "src/**"
       - "py_modules/**"
       - "main.py"
@@ -40,7 +42,7 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
-      # Build + attach the plugin zip only when a release was just tagged.
+      # Decky packaging only runs for the root component.
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         if: ${{ steps.release.outputs.release_created }}
         with:
