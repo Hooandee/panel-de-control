@@ -1,6 +1,6 @@
 import { FC, Fragment, ReactNode, useEffect, useState } from "react";
 import { ModalRoot, showModal, Focusable, ButtonItem } from "@decky/ui";
-import { LuChevronUp, LuChevronDown, LuEye, LuEyeOff, LuPower, LuPencil, LuCheck, LuBrain } from "react-icons/lu";
+import { LuChevronUp, LuChevronDown, LuEye, LuEyeOff, LuPower, LuPencil, LuCheck, LuBrain, LuPlus } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
@@ -15,6 +15,9 @@ import { useAccent, setAccent } from "../system/useAccent";
 import { getDevice, DeviceInfo } from "../api";
 import { sectionHiddenOnDevice, allBlocksHidden } from "../sections/availability";
 import { getPresent, usePresentVersion } from "../customize/present";
+import { useViews, createView } from "../customize/viewStore";
+import { viewIconNode } from "../customize/viewIcons";
+import { openViewEditorModal } from "./ViewEditor";
 
 // Blocks that are actually backend MODULES (get the on/off power control) rather
 // than cosmetic cards (which get the show/hide eye). Everything else is cosmetic.
@@ -146,6 +149,7 @@ const CustomizeBody: FC = () => {
 
   const catMeta = (id: string) => TABS.find((x) => x.id === id)!;
   const learningState = moduleState("learning", disabled, false, false);
+  const views = useViews();
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: theme.space.md, padding: theme.space.sm, maxWidth: 640, width: "100%", margin: "0 auto" }}>
@@ -296,6 +300,37 @@ const CustomizeBody: FC = () => {
 
       {!editing && (
         <>
+          <div style={theme.sectionLabel}>{t("customize.views.title")}</div>
+          <div style={{ ...theme.card, padding: theme.space.md, display: "flex", flexDirection: "column", gap: theme.space.sm }}>
+            {views.length === 0 ? (
+              <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{t("customize.views.none")}</span>
+            ) : (
+              views.map((v) => (
+                <Focusable
+                  key={v.id}
+                  style={{ display: "flex", alignItems: "center", gap: theme.space.sm, cursor: "pointer" }}
+                  aria-label={v.name}
+                  onActivate={() => openViewEditorModal(v.id)}
+                  onClick={() => openViewEditorModal(v.id)}
+                >
+                  <span style={iconSquare(true)}>{viewIconNode(v.icon, 16)}</span>
+                  <span style={{ flex: 1, minWidth: 0, fontSize: theme.font.body, color: theme.color.textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {v.name || t("customize.views.namePlaceholder")}
+                  </span>
+                  <LuPencil size={16} color={theme.color.textMuted} />
+                </Focusable>
+              ))
+            )}
+            <Focusable
+              style={{ ...iconBtn, gap: theme.space.xs, justifyContent: "center", padding: `${theme.space.sm}px`, color: theme.color.accent, boxShadow: `inset 0 0 0 1px ${theme.color.hairline}` }}
+              aria-label={t("customize.views.new")}
+              onActivate={() => openViewEditorModal(createView(""))}
+              onClick={() => openViewEditorModal(createView(""))}
+            >
+              <LuPlus size={16} /> <span style={{ fontSize: theme.font.body }}>{t("customize.views.new")}</span>
+            </Focusable>
+          </div>
+
           <div style={theme.sectionLabel}>{t("customize.appearance")}</div>
           <AccentPicker />
           <ButtonItem layout="below" onClick={() => { resetLayout(); resetModules(); }}>

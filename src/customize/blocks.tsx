@@ -32,15 +32,12 @@ const alwaysAvailable = () => true;
 
 // Reports availability without rendering the block, so the editor lists a block
 // even while it's hidden. useAvailable reads only shared state → no extra poll.
-const Probe: FC<{ sectionId: string; id: string; useAvailable: () => boolean }> = ({
-  sectionId,
-  id,
-  useAvailable,
-}) => {
-  const available = useAvailable();
+// `sectionKey` is the section id, or `view:<id>` for a custom view.
+export const BlockProbe: FC<{ sectionKey: string; id: string }> = ({ sectionKey, id }) => {
+  const available = (getBlockDef(id)?.useAvailable ?? alwaysAvailable)();
   useEffect(() => {
-    markBlockPresent(sectionId, id, available);
-  }, [sectionId, id, available]);
+    markBlockPresent(sectionKey, id, available);
+  }, [sectionKey, id, available]);
   return null;
 };
 
@@ -54,7 +51,7 @@ export const SectionView: FC<{ sectionId: string }> = ({ sectionId }) => {
   return (
     <>
       {ids.map((id) => (
-        <Probe key={`probe:${id}`} sectionId={sectionId} id={id} useAvailable={getBlockDef(id)?.useAvailable ?? alwaysAvailable} />
+        <BlockProbe key={`probe:${id}`} sectionKey={sectionId} id={id} />
       ))}
       {visible.map((id) => (
         <Block key={id} id={id} />

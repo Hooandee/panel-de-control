@@ -8,6 +8,11 @@ import { Loading } from "./Loading";
 import { LearningBanner } from "./LearningBanner";
 import { TabBar } from "./TabBar";
 import { SECTIONS } from "../sections/registry";
+import { SectionDef } from "../sections/types";
+import { CustomView } from "../sections/CustomView";
+import { useViews } from "../customize/viewStore";
+import { viewTabId, isViewTabId } from "../customize/views";
+import { viewIconNode } from "../customize/viewIcons";
 import { resolveActiveSection } from "../sections/nav";
 import { useShoulderNav } from "../sections/useShoulderNav";
 import { readActiveTab, writeActiveTab } from "../sections/activeTab";
@@ -38,13 +43,27 @@ export const ControlCenter: FC = () => {
   const [failed, setFailed] = useState(false);
   const layout = useLayout();
   const disabled = useModules();
+  const views = useViews();
   usePresentVersion(); // re-evaluate tab emptiness as sections report their real blocks
+  // Default sections + a virtual section per custom view (its blocks composed from
+  // the registry). Views sit before the pinned Settings tab.
+  const allSections = useMemo<SectionDef[]>(() => {
+    const viewSections: SectionDef[] = views.map((v) => ({
+      id: viewTabId(v.id),
+      icon: viewIconNode(v.icon),
+      labelKey: "",
+      label: v.name,
+      Component: () => <CustomView viewId={v.id} />,
+    }));
+    const base = SECTIONS.filter((s) => s.id !== PINNED_TAB);
+    const pinned = SECTIONS.filter((s) => s.id === PINNED_TAB);
+    return [...base, ...viewSections, ...pinned];
+  }, [views]);
   // The user's visible tabs in their saved order (Settings always kept). One
-  // memoized computation feeds both the initial-tab pick and the rendered tab
-  // list (the shell re-renders on every poll tick, so avoid recomputing it).
+  // memoized computation feeds both the initial-tab pick and the rendered tab list.
   const visibleTabIds = useMemo(
-    () => visibleIds(SECTIONS.map((s) => s.id), layout.tabs, [PINNED_TAB]),
-    [layout],
+    () => visibleIds(allSections.map((s) => s.id), layout.tabs, [PINNED_TAB]),
+    [layout, allSections],
   );
   // Restore the last active tab (persisted) so a panel remount — Decky remounts on
   // each QAM open, and applying a controller remap reloads the gamepad which makes
@@ -94,9 +113,9 @@ export const ControlCenter: FC = () => {
   // so useShoulderNav (a hook) always runs; a stale active id falls back via
   // resolveActiveSection.
   const orderedTabs = visibleTabIds
-    .map((id) => SECTIONS.find((s) => s.id === id))
-    .filter((s): s is (typeof SECTIONS)[number] => !!s)
-    .filter((s) => s.id === PINNED_TAB || (
+    .map((id) => allSections.find((s) => s.id === id))
+    .filter((s): s is SectionDef => !!s)
+    .filter((s) => s.id === PINNED_TAB || isViewTabId(s.id) || (
       !sectionHiddenOnDevice(device, s.id)
       && effectiveEnabled(s.id, disabled)
       && !allBlocksHidden(s.id, layout.blocks, getPresent(s.id))
@@ -134,7 +153,7 @@ export const ControlCenter: FC = () => {
             tabs={orderedTabs.map((s) => ({
               id: s.id,
               icon: s.icon,
-              label: t(s.labelKey),
+              label: s.label ?? t(s.labelKey),
               // Red dot on the tab that leads to the updater (Ajustes) when an
               // update is available.
               badge: s.id === PINNED_TAB ? <AlertDot show={hasUpdate} /> : undefined,

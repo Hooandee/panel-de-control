@@ -10,6 +10,8 @@ export interface SectionDef {
   icon: ReactNode;
   /** i18n key for the tab label. */
   labelKey: string;
+  /** Direct label (custom views: the user-set name), used instead of labelKey. */
+  label?: string;
   /** Self-contained section body; owns its own state. */
   Component: FC;
   // fullScreen?: boolean — RESERVED for a future heavy editor (e.g. fan curves).

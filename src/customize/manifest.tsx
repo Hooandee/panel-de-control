@@ -89,3 +89,16 @@ export const SUBITEMS: Record<string, ItemMeta[]> = {
 export function blockOrder(sectionId: string): string[] {
   return (SECTION_BLOCKS[sectionId] ?? []).map((b) => b.id);
 }
+
+/**
+ * Blocks a custom view can pick, per section. Superset of SECTION_BLOCKS: adds the
+ * fixed cores that aren't reorderable in their own tab but CAN be placed in a view
+ * (Potencia's TDP arc). Used only by the custom-view editor's block picker.
+ */
+export const PICKABLE_BLOCKS: Record<string, BlockDef[]> = {
+  ...SECTION_BLOCKS,
+  power: [
+    { id: "tdp", labelKey: "customize.block.tdp", icon: <LuGauge size={ICON} /> },
+    ...SECTION_BLOCKS.power,
+  ],
+};
