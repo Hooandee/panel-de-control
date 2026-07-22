@@ -1,6 +1,6 @@
 import { FC, Fragment, useState } from "react";
 import { ModalRoot, showModal, Focusable, TextField, ButtonItem } from "@decky/ui";
-import { LuChevronUp, LuChevronDown, LuPlus, LuX } from "react-icons/lu";
+import { LuChevronUp, LuChevronDown, LuPlus, LuX, LuCheck } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
@@ -46,7 +46,22 @@ const ViewEditorBody: FC<{ viewId: string; closeModal?: () => void }> = ({ viewI
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: theme.space.md, padding: theme.space.sm, maxWidth: 640, width: "100%", margin: "0 auto" }}>
-      <div style={{ fontSize: theme.font.value, color: theme.color.textPrimary }}>{t("customize.views.title")}</div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: theme.space.sm }}>
+        <div style={{ fontSize: theme.font.value, color: theme.color.textPrimary }}>{t("customize.views.title")}</div>
+        <Focusable
+          style={{
+            display: "flex", alignItems: "center", justifyContent: "center", gap: theme.space.xs,
+            padding: `${theme.space.xs}px ${theme.space.md}px`, borderRadius: theme.radius.sm,
+            background: theme.color.accent, color: theme.color.onAccent, fontWeight: 700,
+            fontSize: theme.font.body, cursor: "pointer", whiteSpace: "nowrap",
+          }}
+          aria-label={t("customize.views.done")}
+          onActivate={() => closeModal?.()}
+          onClick={() => closeModal?.()}
+        >
+          <LuCheck size={16} /> {t("customize.views.done")}
+        </Focusable>
+      </div>
 
       <div style={{ ...theme.card, padding: theme.space.md, display: "flex", flexDirection: "column", gap: theme.space.sm }}>
         <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{t("customize.views.name")}</span>
