@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.26.0...panel-de-control-v0.26.1) (2026-07-23)
+
+
+### Bug Fixes
+
+* restore generic-pwm fan control by engaging manual mode before writing duty ([#269](https://github.com/Hooandee/panel-de-control/issues/269)) ([1d18308](https://github.com/Hooandee/panel-de-control/commit/1d1830838973c44f8f0c26362f4df40d63b9a19d))
+
 ## [0.26.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.25.3...panel-de-control-v0.26.0) (2026-07-23)
 
 
