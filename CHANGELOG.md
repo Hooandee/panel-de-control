@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.26.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.25.3...panel-de-control-v0.26.0) (2026-07-23)
+
+
+### Features / Novedades
+
+* A new Sound tab adds a system equalizer: curated presets and a per-machine correction curve as a starting point, three simple controls (bass, voice, treble) plus a full 10-band editor with a fullscreen view, an independent curve for speakers and headphones (per game or global), a bass enhancer and volume leveling, test samples to hear the effect, and a guard that keeps you from overdriving the speakers. Works on SteamOS, Bazzite and CachyOS. ([#200](https://github.com/Hooandee/panel-de-control/issues/200)) ([e613526](https://github.com/Hooandee/panel-de-control/commit/e6135260bfb11ac3e1885839e119bf780323bbd3))
+* **ES:** Una nueva pestaña Sonido añade un ecualizador del sistema: presets curados y una curva de mejora por equipo como punto de partida, tres controles simples (graves, voces, agudos) y un editor completo de 10 bandas a pantalla completa, una curva independiente para altavoces y auriculares (por juego o global), realce de graves y nivelado de volumen, muestras de prueba para oír el efecto, y una guarda que evita forzar los altavoces. Funciona en SteamOS, Bazzite y CachyOS. ([#200](https://github.com/Hooandee/panel-de-control/issues/200)) ([e613526](https://github.com/Hooandee/panel-de-control/commit/e6135260bfb11ac3e1885839e119bf780323bbd3))
+
 ## [0.25.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.25.2...panel-de-control-v0.25.3) (2026-07-23)
 
 
