@@ -11,9 +11,11 @@ import re
 import signal
 import subprocess
 
+from osinfo import _parse_os_release
+
+from audio.const import WIDTH_NEUTRAL
 from audio.filter_chain import build_chain_config
 from audio.route import route_of_sink
-from osinfo import _parse_os_release
 
 _DIGITAL_HINTS = ("hdmi", "displayport", "iec958", "spdif")
 
@@ -170,7 +172,7 @@ class PipeWireEq:
         return bool(self._session) and filter_chain_module() is not None
 
     # --- lifecycle ----------------------------------------------------------------
-    def _write_conf(self, gains, bass, loudness):
+    def _write_conf(self, gains, bass, loudness, crossfeed, stereo_width):
         path = self._conf_path()
         if not path:
             return False
@@ -188,7 +190,10 @@ class PipeWireEq:
             except OSError:
                 pass
         with open(path, "w") as f:
-            f.write(build_chain_config(gains, _SINK, self._label, bass, loudness, caps_plugin()))
+            f.write(build_chain_config(
+                gains, _SINK, self._label, bass, loudness, caps_plugin(),
+                crossfeed=crossfeed, stereo_width=stereo_width,
+            ))
         try:
             os.chown(path, uid, uid)
         except OSError:
@@ -210,20 +215,21 @@ class PipeWireEq:
             self._label,
         )
 
-    def ensure_sink(self, gains, bass=0, loudness=False):
-        """Create/refresh the EQ sink (bands + optional bass enhancer), make it default,
-        and keep the physical sink it feeds pinned at unity (100%). Steam's volume controls
-        the default sink — i.e. ours — so the downstream must stay transparent, or its level
-        becomes a hidden second attenuation the user can't reach. Re-pinning unity every
+    def ensure_sink(self, gains, bass=0, loudness=False, crossfeed=0, stereo_width=WIDTH_NEUTRAL):
+        """Create/refresh the EQ sink (bands + optional bass enhancer + spatial stage), make
+        it default, and keep the physical sink it feeds pinned at unity (100%). Steam's volume
+        controls the default sink — i.e. ours — so the downstream must stay transparent, or its
+        level becomes a hidden second attenuation the user can't reach. Re-pinning unity every
         apply is self-healing across resume/reload (no volume snapshot to drift or corrupt).
 
-        Diff-gated: an unchanged (gains, bass) skips the conf rewrite + ~1s restart (just
-        re-asserts default + unity), so a game change with the same sound does no work."""
+        Diff-gated: an unchanged (gains, bass, loudness, crossfeed, width) skips the conf
+        rewrite + ~1s restart (just re-asserts default + unity), so a game change with the same
+        sound does no work."""
         if not self.is_supported():
             return False
-        applied = (list(gains), bass, loudness)
+        applied = (list(gains), bass, loudness, crossfeed, stereo_width)
         unchanged = self._orig_default is not None and applied == self._last_applied
-        if not unchanged and not self._write_conf(gains, bass, loudness):
+        if not unchanged and not self._write_conf(gains, bass, loudness, crossfeed, stereo_width):
             return False
         downstream = self._downstream_sink()
         first = self._orig_default is None
@@ -242,9 +248,9 @@ class PipeWireEq:
         self._last_applied = applied
         return True
 
-    def set_gains(self, gains, bass=0, loudness=False):
+    def set_gains(self, gains, bass=0, loudness=False, crossfeed=0, stereo_width=WIDTH_NEUTRAL):
         """Apply on release: rewrite the conf + restart."""
-        return self.ensure_sink(gains, bass, loudness)
+        return self.ensure_sink(gains, bass, loudness, crossfeed, stereo_width)
 
     def current_route(self):
         try:

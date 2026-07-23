@@ -1,14 +1,17 @@
 import { CSSProperties, FC, ReactNode } from "react";
 import { Focusable, PanelSectionRow, ToggleField } from "@decky/ui";
 import {
-  LuAudioLines, LuBell, LuHeadphones, LuMaximize2, LuMic, LuMusic, LuPause, LuPlay, LuPlus,
-  LuShieldCheck, LuSparkles, LuTriangleAlert, LuVolume2, LuWaves, LuX,
+  LuArrowLeftRight, LuAudioLines, LuBell, LuHeadphones, LuMaximize2, LuMic, LuMusic, LuPause,
+  LuPlay, LuPlus, LuShieldCheck, LuSparkles, LuTriangleAlert, LuVolume2, LuWaves, LuX,
 } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { useEq } from "../audio/useEq";
-import { GAIN_MAX, GAIN_MIN, toneCeiling, toneLevel, ToneRegion } from "../audio/logic";
+import {
+  CROSSFEED_DEFAULT, crossfeedOn, GAIN_MAX, GAIN_MIN, toneCeiling, toneLevel, ToneRegion,
+  WIDTH_DEFAULT, WIDTH_NEUTRAL, widthOn,
+} from "../audio/logic";
 import { ProfileSelector } from "../components/ProfileSelector";
 import { ContainedSlider } from "../components/ContainedSlider";
 import { Collapsible } from "../components/Collapsible";
@@ -36,7 +39,8 @@ const TEST_ICON: Record<string, ReactNode> = {
 export const SonidoSection: FC = () => {
   const { t } = useI18n();
   const {
-    state, scope, game, onScope, onEnable, onPreset, onBands, onTone, onLoudness, onGuard, onReset,
+    state, scope, game, onScope, onEnable, onPreset, onBands, onTone, onLoudness,
+    onCrossfeed, onStereoWidth, onGuard, onReset,
     onTest, onSaveProfile, onApplyProfile, onDeleteProfile, refresh,
   } = useEq();
 
@@ -66,6 +70,20 @@ export const SonidoSection: FC = () => {
   const isHeadphone = state.route === "headphone";
   const guarded = !isHeadphone && state.guard;
   const ceilings = isHeadphone ? undefined : state.safe_limits.bands;
+
+  // Spatial effect for the active route: crossfeed on headphones, stereo width on speakers.
+  // One config → one control block (they render identically, only the values differ).
+  const spatial = isHeadphone
+    ? {
+        icon: <LuHeadphones size={14} />, label: t("audio.crossfeed"), desc: t("audio.crossfeed.desc"),
+        sliderLabel: t("audio.intensity"), value: state.crossfeed, on: crossfeedOn(state.crossfeed),
+        toggle: (on: boolean) => onCrossfeed(on ? CROSSFEED_DEFAULT : 0), change: onCrossfeed,
+      }
+    : {
+        icon: <LuArrowLeftRight size={14} />, label: t("audio.width"), desc: t("audio.width.desc"),
+        sliderLabel: t("audio.width.amount"), value: state.stereo_width, on: widthOn(state.stereo_width),
+        toggle: (on: boolean) => onStereoWidth(on ? WIDTH_DEFAULT : WIDTH_NEUTRAL), change: onStereoWidth,
+      };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: theme.space.section }}>
@@ -249,6 +267,37 @@ export const SonidoSection: FC = () => {
                 />
               );
             })}
+          </div>
+
+          {/* Spatial: crossfeed on headphones, stereo width on speakers (route-aware). */}
+          <div>
+            <div style={{ fontSize: 10, letterSpacing: ".08em", textTransform: "uppercase", color: theme.color.textMuted, margin: "2px 2px 6px" }}>
+              {t("audio.spatial")}
+            </div>
+            <PanelSectionRow>
+              <ToggleField
+                label={
+                  <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    {spatial.icon}
+                    {spatial.label}
+                  </span>
+                }
+                description={spatial.desc}
+                checked={spatial.on}
+                onChange={spatial.toggle}
+              />
+            </PanelSectionRow>
+            {spatial.on && (
+              <ContainedSlider
+                label={spatial.sliderLabel}
+                value={spatial.value}
+                min={0}
+                max={100}
+                step={5}
+                showValue
+                onChange={spatial.change}
+              />
+            )}
           </div>
 
           {!isHeadphone && (

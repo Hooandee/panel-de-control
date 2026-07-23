@@ -8,10 +8,12 @@ import {
   resetAudio,
   saveAudioProfile,
   setAudioBands,
+  setAudioCrossfeed,
   setAudioCurve,
   setAudioEnabled,
   setAudioFollowGlobal,
   setAudioLoudness,
+  setAudioStereoWidth,
   setAudioTest,
   setSpeakerGuard,
   Scope,
@@ -30,6 +32,8 @@ export interface EqControl {
   onBands: (gains: number[]) => void;
   onTone: (region: ToneRegion, level: number) => void;
   onLoudness: (on: boolean) => void;
+  onCrossfeed: (value: number) => void;
+  onStereoWidth: (value: number) => void;
   onGuard: (on: boolean) => void;
   onReset: () => void;
   onTest: (sample: string) => void;
@@ -119,6 +123,17 @@ export function useEq(): EqControl {
     setAudioLoudness(on, wScope, wTarget).then(setState).catch(() => {});
   }, [wScope, wTarget]);
 
+  // Spatial sliders rewrite the conf + restart the service, so debounce-commit like bands.
+  const onCrossfeed = useCallback((value: number) => {
+    setState((cur) => (cur ? { ...cur, crossfeed: value } : cur)); // optimistic
+    schedule(() => { setAudioCrossfeed(value, wScope, wTarget).then(setState).catch(() => {}); });
+  }, [wScope, wTarget, schedule]);
+
+  const onStereoWidth = useCallback((value: number) => {
+    setState((cur) => (cur ? { ...cur, stereo_width: value } : cur)); // optimistic
+    schedule(() => { setAudioStereoWidth(value, wScope, wTarget).then(setState).catch(() => {}); });
+  }, [wScope, wTarget, schedule]);
+
   const onGuard = useCallback((on: boolean) => {
     setState((cur) => (cur ? { ...cur, guard: on } : cur)); // optimistic
     setSpeakerGuard(on).then(setState).catch(() => {});
@@ -147,7 +162,8 @@ export function useEq(): EqControl {
   }, []);
 
   return {
-    state, scope, game, onScope, onEnable, onPreset, onBands, onTone, onLoudness, onGuard, onReset,
+    state, scope, game, onScope, onEnable, onPreset, onBands, onTone, onLoudness,
+    onCrossfeed, onStereoWidth, onGuard, onReset,
     onTest, onSaveProfile, onApplyProfile, onDeleteProfile, refresh,
   };
 }

@@ -2729,7 +2729,11 @@ class Plugin:
             route = self._current_route()
             setting = self._effective_audio(route)
             gains, bass = self._guarded_gains(route, setting["gains"], setting["bass"])
-            self._audio.set_gains(gains, bass, setting["loudness"])
+            # effective() already projects spatial effects per route (crossfeed only on
+            # headphones, stereo width only on speakers), so pass them straight through.
+            self._audio.set_gains(
+                gains, bass, setting["loudness"], setting["crossfeed"], setting["stereo_width"]
+            )
         except Exception as e:  # noqa: BLE001
             decky.logger.warning("audio EQ apply failed: %s", e)
 
@@ -2809,6 +2813,8 @@ class Plugin:
             "gains": eff["gains"],
             "bass": eff["bass"],
             "loudness": eff["loudness"],
+            "crossfeed": eff["crossfeed"],
+            "stereo_width": eff["stereo_width"],
             "test_playing": self._audio.is_test_playing(),
             "test_sample": self._test_sample if self._audio.is_test_playing() else None,
             "test_samples": audio_tone.sample_ids(),
@@ -2883,6 +2889,30 @@ class Plugin:
             return await self._offload_call(self._audio_state)
         route = await self._offload_call(self._current_route)
         self._audio_eq.set_loudness(resolved, route, bool(on), appid=appid)
+        self._reapply_audio()
+        return await self._offload_call(self._audio_state)
+
+    async def set_audio_crossfeed(self, value: int, scope: str, appid=None) -> dict:
+        """Set headphone crossfeed intensity (0-100) for the active route. Only audible on
+        the headphone route (the apply loop ignores it on speakers)."""
+        self._init()
+        resolved = self._resolve_scope(scope, appid)
+        if resolved is None:
+            return await self._offload_call(self._audio_state)
+        route = await self._offload_call(self._current_route)
+        self._audio_eq.set_crossfeed(resolved, route, int(value), appid=appid)
+        self._reapply_audio()
+        return await self._offload_call(self._audio_state)
+
+    async def set_audio_stereo_width(self, value: int, scope: str, appid=None) -> dict:
+        """Set speaker stereo width (0-100, 50 neutral) for the active route. Only audible on
+        the speaker route (the apply loop ignores it on headphones)."""
+        self._init()
+        resolved = self._resolve_scope(scope, appid)
+        if resolved is None:
+            return await self._offload_call(self._audio_state)
+        route = await self._offload_call(self._current_route)
+        self._audio_eq.set_stereo_width(resolved, route, int(value), appid=appid)
         self._reapply_audio()
         return await self._offload_call(self._audio_state)
 
