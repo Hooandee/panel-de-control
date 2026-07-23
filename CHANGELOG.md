@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.25.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.25.2...panel-de-control-v0.25.3) (2026-07-23)
+
+
+### Bug Fixes / Correcciones
+
+* When another power manager (like SimpleDeckyTDP) is running, you can now turn Panel de Control's TDP control off from Settings, so the two stop fighting over the power limit. Turning it off hands control back and leaves the Power tab in a live monitoring view; it does not change your current TDP. The switch appears only on devices that can set TDP. ([#265](https://github.com/Hooandee/panel-de-control/issues/265)) ([f3d157a](https://github.com/Hooandee/panel-de-control/commit/f3d157afc7e115a9fa9675e11e8f901e0721711f))
+* **ES:** Cuando hay otro gestor de energía en marcha (como SimpleDeckyTDP), ahora puedes desactivar el control de TDP de Panel de Control desde Ajustes, para que dejen de pelearse por el límite de potencia. Al desactivarlo, se cede el control y la pestaña Potencia queda en modo monitoreo; no cambia tu TDP actual. El interruptor solo aparece en equipos que pueden fijar el TDP. ([#265](https://github.com/Hooandee/panel-de-control/issues/265)) ([f3d157a](https://github.com/Hooandee/panel-de-control/commit/f3d157afc7e115a9fa9675e11e8f901e0721711f))
+
 ## [0.25.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.25.1...panel-de-control-v0.25.2) (2026-07-22)
 
 
