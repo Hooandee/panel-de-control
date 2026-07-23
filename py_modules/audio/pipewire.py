@@ -10,7 +10,6 @@ import pwd
 import re
 import signal
 import subprocess
-from functools import lru_cache
 
 from audio.filter_chain import build_chain_config
 from audio.route import route_of_sink
@@ -23,21 +22,24 @@ _SERVICE = "filter-chain.service"
 
 
 def _find_lib(*relative):
-    # SteamOS/Arch/CachyOS: /usr/lib; Fedora/Bazzite: /usr/lib64; Debian/Ubuntu: multiarch dir.
+    # 64-bit-safe order (Fedora/Bazzite: /usr/lib64; SteamOS/Arch/CachyOS: /usr/lib), then the
+    # Debian/Ubuntu multiarch dir. Never /usr/lib32 — a 32-bit .so would break the load.
     sub = os.path.join(*relative)
-    for pattern in (f"/usr/lib*/{sub}", f"/usr/lib/*-linux-gnu/{sub}", f"/usr/local/lib*/{sub}"):
-        hits = glob.glob(pattern)
+    for base in ("/usr/lib64", "/usr/lib", "/usr/local/lib64", "/usr/local/lib"):
+        candidate = os.path.join(base, sub)
+        if os.path.exists(candidate):
+            return candidate
+    for pattern in (f"/usr/lib/*-linux-gnu/{sub}", f"/usr/local/lib/*-linux-gnu/{sub}"):
+        hits = sorted(glob.glob(pattern))
         if hits:
             return hits[0]
     return None
 
 
-@lru_cache(maxsize=None)  # the resolved paths are static for the process; don't re-glob on the loop
 def filter_chain_module():
     return _find_lib("pipewire-0.3", "libpipewire-module-filter-chain.so")
 
 
-@lru_cache(maxsize=None)
 def caps_plugin():
     return _find_lib("ladspa", "caps.so")
 
@@ -51,11 +53,14 @@ def pick_downstream(short_sinks_text, our_name):
     for line in (short_sinks_text or "").splitlines():
         parts = line.split("\t")
         name = parts[1] if len(parts) > 1 else ""
+        state = parts[4] if len(parts) > 4 else ""
         if name and name != our_name:
-            candidates.append(name)
-    analog = [c for c in candidates if not _is_digital(c)]
-    picked = analog or candidates
-    return picked[0] if picked else None
+            candidates.append((name, state))
+    pool = [c for c in candidates if not _is_digital(c[0])] or candidates
+    if not pool:
+        return None
+    running = [n for n, s in pool if s == "RUNNING"]  # the active output on multi-sink devices
+    return running[0] if running else pool[0][0]
 
 
 def choose_downstream(default_sink, short_sinks_text, our_name):
@@ -160,6 +165,8 @@ class PipeWireEq:
 
     # --- capability ---------------------------------------------------------------
     def is_supported(self):
+        if not self._session:  # re-probe: the session may come up after _init (self-heal)
+            self._session = _find_session()
         return bool(self._session) and filter_chain_module() is not None
 
     # --- lifecycle ----------------------------------------------------------------

@@ -51,8 +51,14 @@ def test_choose_downstream_prefers_the_active_default():
     )
 
 
-def test_choose_downstream_falls_back_when_default_is_our_eq():
-    assert choose_downstream("X EQ", _DECK_SHORT, "X EQ").endswith("Speaker__sink")
+def test_choose_downstream_falls_back_to_the_running_sink_when_default_is_our_eq():
+    # EQ is the default → enumerate, and prefer the RUNNING output (headphones here) so the
+    # per-route curve + volume-pin follow the active device, not just the first-listed one.
+    assert choose_downstream("X EQ", _DECK_SHORT, "X EQ").endswith("Headphones__sink")
+
+
+def test_pick_downstream_prefers_running_analog():
+    assert pick_downstream(_DECK_SHORT, "X EQ").endswith("Headphones__sink")
 
 
 def test_choose_downstream_skips_a_digital_default():
