@@ -2,8 +2,9 @@ import { FC, memo } from "react";
 import { Focusable } from "@decky/ui";
 import { LuPlus } from "react-icons/lu";
 
-import { ResolvedPresets, PresetItem } from "../tdp/powerPresets";
+import { ResolvedPresets, PresetItem, BUILTIN_LABEL_KEY } from "../tdp/powerPresets";
 import { presetIconNode } from "../tdp/powerPresetIcons";
+import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { iconChipStyle, rowChipStyle } from "./chipStyle";
 
@@ -23,6 +24,12 @@ const BoostDot: FC<{ active: boolean }> = ({ active }) => (
 );
 
 export const Presets: FC<PresetsProps> = memo(({ resolved, manageLabel, hiddenLabel, onPick, onEdit }) => {
+  const { t } = useI18n();
+  // Title = the preset's name (builtin name via i18n, custom user name); the watts read as
+  // a secondary line. A nameless custom preset falls back to its watts as the title.
+  const title = (it: PresetItem) =>
+    it.kind === "builtin" ? t(BUILTIN_LABEL_KEY[it.id]) : it.name || it.label;
+  const sub = (it: PresetItem) => (it.kind === "builtin" || it.name ? it.label : "");
   // Three or fewer visible presets read better as big column tiles; more wrap compactly.
   const big = resolved.visible.length <= 3;
   return (
@@ -36,10 +43,11 @@ export const Presets: FC<PresetsProps> = memo(({ resolved, manageLabel, hiddenLa
           {resolved.visible.map((it) => (
             <Focusable key={it.id} style={iconChipStyle(it.active)} onActivate={() => onPick(it)} onClick={() => onPick(it)}>
               {presetIconNode(it.icon, 20)}
-              <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                {it.label}
+              <span style={{ display: "flex", alignItems: "center", gap: 4, fontWeight: 600, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {title(it)}
                 {hasBoost(it) && <BoostDot active={it.active} />}
               </span>
+              {sub(it) && <span style={{ color: theme.color.textMuted }}>{sub(it)}</span>}
             </Focusable>
           ))}
         </Focusable>
@@ -48,7 +56,8 @@ export const Presets: FC<PresetsProps> = memo(({ resolved, manageLabel, hiddenLa
           {resolved.visible.map((it) => (
             <Focusable key={it.id} style={rowChipStyle(it.active)} onActivate={() => onPick(it)} onClick={() => onPick(it)}>
               {presetIconNode(it.icon, 15)}
-              <span>{it.label}</span>
+              <span>{title(it)}</span>
+              {sub(it) && <span style={{ color: theme.color.textMuted }}>{sub(it)}</span>}
               {hasBoost(it) && <BoostDot active={it.active} />}
             </Focusable>
           ))}

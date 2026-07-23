@@ -11,6 +11,14 @@ const BUILTIN_ICON: Record<BuiltinId, string> = {
   turbo: "rocket",
 };
 
+// i18n keys for the built-in preset names (resolved by the component, kept here so the
+// modal and the chip row agree on the mapping).
+export const BUILTIN_LABEL_KEY: Record<string, string> = {
+  quiet: "tdp.preset.save",
+  balanced: "tdp.preset.balanced",
+  turbo: "tdp.preset.turbo",
+};
+
 export interface BuiltinWatts {
   quiet: number;
   balanced: number;
@@ -23,6 +31,7 @@ export interface PresetItem {
   kind: "builtin" | "custom";
   watts: number;
   label: string; // "12W"
+  name: string; // custom user name ("" if none); builtin names come from BUILTIN_LABEL_KEY
   icon: string;
   boost: PowerPresetBoost | null;
   hidden: boolean;
@@ -69,7 +78,7 @@ export function resolveItems(
     if (isBuiltin(id)) {
       const w = builtinWattsFor(id, watts, onAc);
       rows.push({
-        id, kind: "builtin", watts: w, label: `${w}W`, icon: BUILTIN_ICON[id], boost: null,
+        id, kind: "builtin", watts: w, label: `${w}W`, name: "", icon: BUILTIN_ICON[id], boost: null,
         hidden: hidden.has(id), active: false, editable: false, deletable: false,
         wm: Math.round(w) === cur,
       });
@@ -81,7 +90,7 @@ export function resolveItems(
         // re-clamps server-side too, keeping the active highlight honest).
         const w = Math.min(c.watts, activeMax);
         rows.push({
-          id, kind: "custom", watts: w, label: `${w}W`, icon: c.icon, boost: c.boost,
+          id, kind: "custom", watts: w, label: `${w}W`, name: c.name ?? "", icon: c.icon, boost: c.boost,
           hidden: hidden.has(id), active: false, editable: true, deletable: true,
           wm: Math.round(w) === cur,
         });

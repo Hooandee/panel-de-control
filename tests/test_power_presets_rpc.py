@@ -92,8 +92,8 @@ def test_crud_and_hide_roundtrip_persists(Plugin):
     p = Plugin()
     st = asyncio.run(p.create_power_preset(12, "bolt", None))
     cid = st["order"][-1]
-    st = asyncio.run(p.update_power_preset(cid, 14, "leaf", None))
-    assert st["custom"][cid] == {"watts": 14, "icon": "leaf", "boost": None}
+    st = asyncio.run(p.update_power_preset(cid, 14, "leaf", None, "Emu"))
+    assert st["custom"][cid] == {"watts": 14, "icon": "leaf", "name": "Emu", "boost": None}
     st = asyncio.run(p.set_power_preset_hidden("quiet", True))
     assert "quiet" in st["hidden"]
     st = asyncio.run(p.move_power_preset("turbo", -1))

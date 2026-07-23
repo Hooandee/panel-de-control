@@ -19,9 +19,19 @@ def test_create_appends_custom_with_sequential_id(tmp_path):
     s = _store(tmp_path)
     st = s.create(12, "bolt", None)
     assert st["order"][-1] == "c1"
-    assert st["custom"]["c1"] == {"watts": 12, "icon": "bolt", "boost": None}
+    assert st["custom"]["c1"] == {"watts": 12, "icon": "bolt", "name": "", "boost": None}
     st2 = s.create(8, "leaf", None)
     assert st2["order"][-1] == "c2"  # never reuses ids
+
+
+def test_create_and_update_store_a_name(tmp_path):
+    s = _store(tmp_path)
+    st = s.create(12, "bolt", None, name="  Streaming  ")
+    assert st["custom"]["c1"]["name"] == "Streaming"  # trimmed
+    st = s.update("c1", 12, "bolt", None, name="Emu")
+    assert st["custom"]["c1"]["name"] == "Emu"
+    # persists
+    assert PowerPresetStore(str(tmp_path / "power_presets.json")).state()["custom"]["c1"]["name"] == "Emu"
 
 
 def test_create_clamps_and_coerces_boost(tmp_path):
@@ -36,7 +46,7 @@ def test_update_only_custom(tmp_path):
     s = _store(tmp_path)
     s.create(12, "bolt", None)
     st = s.update("c1", 15, "leaf", None)
-    assert st["custom"]["c1"] == {"watts": 15, "icon": "leaf", "boost": None}
+    assert st["custom"]["c1"] == {"watts": 15, "icon": "leaf", "name": "", "boost": None}
     # updating a builtin id is a no-op (not editable)
     before = s.state()
     assert s.update("quiet", 5, "x", None) == before

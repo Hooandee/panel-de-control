@@ -2678,15 +2678,15 @@ class Plugin:
         self._init()
         return self._power_presets.state()
 
-    async def create_power_preset(self, watts: int, icon: str, boost=None) -> dict:
+    async def create_power_preset(self, watts: int, icon: str, boost=None, name="") -> dict:
         self._init()
         lo, hi = self._preset_wclamp()
-        return self._power_presets.create(watts, icon, boost, min_w=lo, max_w=hi)
+        return self._power_presets.create(watts, icon, boost, name=name, min_w=lo, max_w=hi)
 
-    async def update_power_preset(self, cid: str, watts: int, icon: str, boost=None) -> dict:
+    async def update_power_preset(self, cid: str, watts: int, icon: str, boost=None, name="") -> dict:
         self._init()
         lo, hi = self._preset_wclamp()
-        return self._power_presets.update(cid, watts, icon, boost, min_w=lo, max_w=hi)
+        return self._power_presets.update(cid, watts, icon, boost, name=name, min_w=lo, max_w=hi)
 
     async def delete_power_preset(self, cid: str) -> dict:
         self._init()

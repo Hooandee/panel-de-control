@@ -34,8 +34,11 @@ def _clean_custom_entry(raw, min_w=1, max_w=1000):
     if not isinstance(raw, dict):
         raw = {}
     watts = max(int(min_w), min(_as_int(raw.get("watts"), 10), int(max_w)))
+    name = raw.get("name")
+    name = name.strip()[:40] if isinstance(name, str) else ""
     return {"watts": watts,
             "icon": raw.get("icon") if isinstance(raw.get("icon"), str) else "bolt",
+            "name": name,
             "boost": _clean_boost(raw.get("boost"))}
 
 
@@ -87,22 +90,22 @@ class PowerPresetStore:
                 "hidden": list(self._data["hidden"]),
                 "custom": {k: dict(v) for k, v in self._data["custom"].items()}}
 
-    def create(self, watts, icon, boost, min_w=1, max_w=1000):
+    def create(self, watts, icon, boost, name="", min_w=1, max_w=1000):
         if len(self._data["custom"]) >= _MAX_CUSTOM:
             return self.state()
         self._data["seq"] += 1
         cid = f"c{self._data['seq']}"
         self._data["custom"][cid] = _clean_custom_entry(
-            {"watts": watts, "icon": icon, "boost": boost}, min_w, max_w)
+            {"watts": watts, "icon": icon, "name": name, "boost": boost}, min_w, max_w)
         self._data["order"].append(cid)
         self._save()
         return self.state()
 
-    def update(self, cid, watts, icon, boost, min_w=1, max_w=1000):
+    def update(self, cid, watts, icon, boost, name="", min_w=1, max_w=1000):
         if cid not in self._data["custom"]:
             return self.state()
         self._data["custom"][cid] = _clean_custom_entry(
-            {"watts": watts, "icon": icon, "boost": boost}, min_w, max_w)
+            {"watts": watts, "icon": icon, "name": name, "boost": boost}, min_w, max_w)
         self._save()
         return self.state()
 

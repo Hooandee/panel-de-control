@@ -29,7 +29,7 @@ describe("resolveItems", () => {
     const st: PowerPresetState = {
       order: ["quiet", "balanced", "turbo", "c1"],
       hidden: [],
-      custom: { c1: { watts: 12, icon: "bolt", boost: null } },
+      custom: { c1: { watts: 12, icon: "bolt", name: "", boost: null } },
     };
     const r = resolveItems(st, builtinWatts, false, 12, MAX, FLAT);
     const c = r.visible.find((i) => i.id === "c1")!;
@@ -43,7 +43,7 @@ describe("resolveItems", () => {
     const st: PowerPresetState = {
       order: ["quiet", "balanced", "turbo", "c1"],
       hidden: [],
-      custom: { c1: { watts: 60, icon: "bolt", boost: null } },
+      custom: { c1: { watts: 60, icon: "bolt", name: "", boost: null } },
     };
     const r = resolveItems(st, builtinWatts, false, 25, 25, FLAT);
     const c = r.visible.find((i) => i.id === "c1")!;
@@ -92,8 +92,8 @@ describe("resolveItems", () => {
     order: ["quiet", "balanced", "turbo", "c1", "c2"],
     hidden: [],
     custom: {
-      c1: { watts: 15, icon: "bolt", boost: null }, // watts-only
-      c2: { watts: 15, icon: "flame", boost: { mode: "custom", off2: 8, off3: 4 } }, // boosted
+      c1: { watts: 15, icon: "bolt", name: "", boost: null }, // watts-only
+      c2: { watts: 15, icon: "flame", name: "", boost: { mode: "custom", off2: 8, off3: 4 } }, // boosted
     },
   };
 
