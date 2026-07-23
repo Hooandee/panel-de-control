@@ -1,5 +1,4 @@
 import os
-import subprocess
 
 import acpi_call as _acpi_call
 from tdp.backend import TDPBackend
@@ -25,15 +24,6 @@ _BUF_LEN = "05"
 
 # Result substrings that mean the method was not applied.
 _REJECT_TOKENS = ("error", "not found", "not called", "not supported", "not executed")
-
-
-def _default_modprobe(module: str) -> None:
-    # Decky's frozen (PyInstaller) loader hands children an empty PATH + a
-    # poisoned LD_LIBRARY_PATH, so a bare "modprobe" silently no-ops. Resolve the
-    # absolute binary and restore a sane env, as the other module loaders do.
-    from controllers.detect import clean_env, resolve_bin
-    subprocess.run([resolve_bin("modprobe"), module],
-                   capture_output=True, timeout=5, env=clean_env())
 
 
 def _buffer_arg(cmd_byte: int, value_mw: int) -> str:
@@ -74,58 +64,29 @@ class AlibBackend(TDPBackend):
     name = "acpi-alib"
 
     def __init__(self, fallback: TdpLimits, root: str = "/",
-                 modprobe=_default_modprobe, caller=None, write_max: int | None = None) -> None:
+                 modprobe=_acpi_call.default_modprobe, caller=None, write_max: int | None = None) -> None:
         self._fallback = fallback
         self._write_limits = fallback.with_cooler(write_max)
         self._root = root
         self._call_path = os.path.join(root, _CALL_REL)
         self._modprobe = modprobe
         self._loaded = False
-        # Construction runs on the asyncio loop (backend selection), so it must not
-        # shell out: support is decided without loading the module — the call node
-        # is already writable, or acpi_call is in the kernel's module index. The
-        # modprobe is deferred to the first set_tdp, which runs off the loop.
+        # Construction runs on the asyncio loop (backend selection), so support is
+        # decided without shelling out; the modprobe is deferred to set_tdp (off-loop).
         self._call = caller or _make_file_caller(self._call_path)
-        self.supported = self._node_writable() or self._module_loadable()
-
-    def _node_writable(self) -> bool:
-        return os.path.exists(self._call_path) and os.access(self._call_path, os.W_OK)
-
-    def _module_loadable(self) -> bool:
-        try:
-            release = os.uname().release
-        except OSError:
-            return False
-        # usrmerge distros keep modules under /usr/lib/modules; older layouts under
-        # /lib/modules. Scan both, line by line with an early break, so ALIB isn't
-        # falsely skipped and a large index is never slurped whole.
-        for base in ("usr/lib/modules", "lib/modules"):
-            path = os.path.join(self._root, base, release, "modules.dep")
-            try:
-                with open(path, encoding="utf-8", errors="ignore") as fh:
-                    for line in fh:
-                        if "acpi_call" in line:
-                            return True
-            except OSError:
-                continue
-        return False
+        self.supported = _acpi_call.available(root)
 
     def _ensure_loaded(self) -> None:
         # Best-effort: load acpi_call so /proc/acpi/call exists. Fires from set_tdp
-        # (off-loop). Mark "loaded" only once the node is actually writable, so a
-        # transient or late-appearing failure self-heals on a later set_tdp instead
-        # of latching the first failed attempt.
-        if self._loaded:
-            return
-        if self._node_writable():
+        # (off-loop). Self-healing: mark loaded only once the node is writable.
+        if self._loaded or _acpi_call.node_writable(self._root):
             self._loaded = True
             return
         try:
             self._modprobe("acpi_call")
         except Exception:  # noqa: BLE001
             return
-        if self._node_writable():
-            self._loaded = True
+        self._loaded = _acpi_call.node_writable(self._root)
 
     def get_limits(self) -> TdpLimits:
         return self._fallback
@@ -134,7 +95,7 @@ class AlibBackend(TDPBackend):
         if not self.supported:
             return TdpResult(watts, None, False, "acpi_call ALIB interface unavailable")
         self._ensure_loaded()
-        if not self._node_writable():
+        if not _acpi_call.node_writable(self._root):
             return TdpResult(watts, None, False, "acpi_call ALIB interface unavailable")
         target = self._write_limits.clamp(watts, ac)
         mw = target * 1000

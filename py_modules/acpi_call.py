@@ -1,12 +1,8 @@
 """Shared access to the single global /proc/acpi/call kernel node.
 
-Both the TDP ALIB backend (\\_SB.ALIB) and the Legion fan backend (\\_SB.GZFD)
-write this one node. A write immediately followed by a read is how acpi_call
-returns a method's result, so two backends interleaving would tear each other's
-response. A module-level lock serializes every write-then-read. Both callers are
-low frequency (user actions, no re-assert loop) so contention is negligible.
-
-Never raises.
+The TDP ALIB backend and the Legion fan backend both write this one node, and a
+write-then-read is how acpi_call returns a method's result, so a module-level lock
+serializes each pair to stop the two backends tearing each other's response.
 """
 
 import os
@@ -20,8 +16,8 @@ _LOCK = threading.Lock()
 
 
 def serialized_call(path: str, command: str):
-    """Write *command* to the acpi_call node and return its echoed result, holding
-    the shared lock across the write+read. Returns None if the write fails."""
+    """Write *command* and return its echoed result, holding the lock across the
+    write+read. None if the write fails."""
     with _LOCK:
         if not write_str(path, command):
             return None
@@ -34,9 +30,8 @@ def node_writable(root: str = "/") -> bool:
 
 
 def module_loadable(root: str = "/") -> bool:
-    """True if acpi_call appears in the running kernel's module index (so a deferred
-    modprobe can succeed). Line-by-line with an early break, never slurps a large
-    modules.dep."""
+    """True if acpi_call is in the running kernel's module index (a deferred modprobe
+    can then succeed). Line-by-line with an early break, never slurps modules.dep."""
     try:
         release = os.uname().release
     except OSError:
@@ -54,9 +49,8 @@ def module_loadable(root: str = "/") -> bool:
 
 
 def available(root: str = "/") -> bool:
-    """Decided WITHOUT shelling out (safe on the asyncio loop): the node is already
-    writable, or acpi_call is loadable. The actual modprobe is deferred to the first
-    write (off-loop) via a backend's own ensure-loaded step."""
+    """Decided without shelling out (safe on the asyncio loop): node already writable
+    or acpi_call loadable. The modprobe itself is deferred off-loop to the first write."""
     return node_writable(root) or module_loadable(root)
 
 
