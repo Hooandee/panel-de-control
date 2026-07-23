@@ -1,7 +1,7 @@
 import os
 import subprocess
 
-from sysfs import read_str, write_str
+import acpi_call as _acpi_call
 from tdp.backend import TDPBackend
 from tdp.types import TdpLimits, TdpResult
 
@@ -60,10 +60,10 @@ def _accepted(result) -> bool:
 
 
 def _make_file_caller(path):
+    # Route through the shared, lock-serialized acpi_call node so the ALIB (TDP) and
+    # GZFD (fan) backends never tear each other's write-then-read response.
     def call(command: str):
-        if not write_str(path, command):
-            return None
-        return read_str(path)
+        return _acpi_call.serialized_call(path, command)
 
     return call
 

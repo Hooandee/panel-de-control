@@ -8,6 +8,19 @@ from tdp.types import TdpLimits
 FALLBACK = TdpLimits(min_w=5, default_w=20, max_w=45, max_ac_w=54)
 
 
+def test_default_caller_uses_shared_serialized_call(tmp_path, monkeypatch):
+    """The default (non-injected) caller must go through acpi_call.serialized_call so
+    the /proc/acpi/call node is shared under one lock with the fan backend."""
+    import acpi_call
+    p = _mk_call(str(tmp_path))
+    seen = []
+    monkeypatch.setattr(acpi_call, "serialized_call",
+                        lambda path, cmd: seen.append((path, cmd)) or "0x0")
+    b = AlibBackend(FALLBACK, root=str(tmp_path), modprobe=lambda m: None)
+    b.set_tdp(20, ac=True)
+    assert seen and seen[0][0] == p
+
+
 def _mk_call(root):
     d = os.path.join(root, "proc/acpi")
     os.makedirs(d, exist_ok=True)
