@@ -141,7 +141,7 @@ export const ControlCenter: FC = () => {
 
   return (
     <PanelSection>
-      <FocusRoot>
+      <FocusRoot publishDocument>
       {/* Shell chrome grouped in one row with an explicit gap so the three cards
           (device / learning / tabs) breathe instead of touching. A null
           LearningBanner collapses its slot — no double gap. */}
