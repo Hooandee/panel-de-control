@@ -216,11 +216,13 @@ from the Settings tab are what confirm how it really behaves.
 10. The Legion Go 2 exposes no writable hwmon fan; RPM would have to be read over the EC, and on the
     current build it isn't showing up in the monitor. Marked as not available / unconfirmed until I
     can review it.
-11. The original Legion Go drives its fan curve through the `legion_wmi_fan` kernel driver, which ships
-    on some kernels and turns on by itself when present. Where it's absent (current SteamOS and some
-    kernels), the fan is governed by the **firmware modes** (Quiet/Balanced/Performance) from the Power
-    arc, which set power and fan together. The speed monitor always works: if the driver publishes no
-    hwmon node, RPM is read over the EC.
+11. The original Legion Go drives its fan curve through the `legion_wmi_fan` kernel driver when the
+    kernel ships it, and where that's absent but `acpi_call` is present (Bazzite and CachyOS), through
+    the firmware's ACPI path, the same one Handheld Daemon uses. On those systems there's also a
+    **Fans at max** switch to force full speed instantly. On SteamOS, which has no `acpi_call`, the
+    curve can't be adjusted and the fan is governed by the **firmware modes** (Quiet/Balanced/
+    Performance) from the Power arc, which set power and fan together. The speed monitor always works:
+    if the driver publishes no hwmon node, RPM is read over the EC.
 12. The Legion Go S drives its fan over an unofficial embedded-controller (EC) path, so it's an
     optional experimental control: you enable it by hand, with a safety speed cap. Left off, it stays
     monitor-only.
