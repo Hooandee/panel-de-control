@@ -116,7 +116,8 @@ const Body: FC<Props> = ({ builtinWatts, onAc, currentWatts, min, max, supportsA
 
   if (!state) return <Loading />;
 
-  const items = resolveItems(state, builtinWatts, onAc, currentWatts, max).manager;
+  // The manager doesn't use the active flag, so a neutral live boost is fine here.
+  const items = resolveItems(state, builtinWatts, onAc, currentWatts, max, { mode: "estable", off2: 0, off3: 0 }).manager;
   const wrap = (p: Promise<PowerPresetState>) => p.then((s) => alive.current && setState(s)).catch(() => {});
   const patch = (id: string, entry: CustomEntry) =>
     setState((cur) => (cur ? { ...cur, custom: { ...cur.custom, [id]: entry } } : cur));

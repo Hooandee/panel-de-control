@@ -55,7 +55,10 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
     const lib = presets ?? { order: [...BUILTIN_IDS], hidden: [], custom: {} };
     const ceiling = tdp.on_ac ? tdp.limits.max_ac : tdp.limits.max;
     const w = scope === "global" ? tdp.global_watts : tdp.watts;
-    return resolveItems(lib, tdp.presets, tdp.on_ac, w, ceiling);
+    const lv = scope === "global" ? tdp.global_levels : tdp.levels;
+    const mode = scope === "global" ? tdp.global_boost_mode : tdp.boost_mode;
+    const liveBoost = { mode, off2: lv.pl2 - lv.pl1, off3: lv.pl3 - lv.pl2 };
+    return resolveItems(lib, tdp.presets, tdp.on_ac, w, ceiling, liveBoost);
   }, [tdp, presets, scope]);
 
   // Stable so React.memo(Presets) isn't defeated by a fresh arrow every render (the 1s
@@ -244,7 +247,7 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
                 <PanelSectionRow>
                   <Presets
                     resolved={resolved}
-                    editLabel={t("tdp.presets.edit")}
+                    manageLabel={t("tdp.presets.manage")}
                     hiddenLabel={t("tdp.presets.hidden")}
                     onPick={onApplyPreset}
                     onEdit={onEditPresets}

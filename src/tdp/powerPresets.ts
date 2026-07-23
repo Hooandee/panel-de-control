@@ -45,32 +45,34 @@ function builtinWattsFor(id: BuiltinId, w: BuiltinWatts, onAc: boolean): number 
   return w[id];
 }
 
+/** Comparable signature of a boost config; custom includes its margins. */
+function boostKey(b: PowerPresetBoost): string {
+  return b.mode === "custom" ? `custom:${b.off2}:${b.off3}` : b.mode;
+}
+
 export function resolveItems(
   state: PowerPresetState,
   watts: BuiltinWatts,
   onAc: boolean,
   currentWatts: number,
   activeMax: number,
+  liveBoost: PowerPresetBoost,
 ): ResolvedPresets {
   const hidden = new Set(state.hidden);
   const cur = Math.round(currentWatts);
-  const manager: PresetItem[] = [];
+  const liveKey = boostKey(liveBoost);
+  // Build the rows first with a watts-match flag; active is resolved in a second pass
+  // because a watts-only preset is only active when NO fuller (watts+boost) preset
+  // reproduces the live state — otherwise two same-watt presets would both light.
+  const rows: (PresetItem & { wm: boolean })[] = [];
   for (const id of state.order) {
-    let item: PresetItem | null = null;
     if (isBuiltin(id)) {
       const w = builtinWattsFor(id, watts, onAc);
-      item = {
-        id,
-        kind: "builtin",
-        watts: w,
-        label: `${w}W`,
-        icon: BUILTIN_ICON[id],
-        boost: null,
-        hidden: hidden.has(id),
-        active: Math.round(w) === cur,
-        editable: false,
-        deletable: false,
-      };
+      rows.push({
+        id, kind: "builtin", watts: w, label: `${w}W`, icon: BUILTIN_ICON[id], boost: null,
+        hidden: hidden.has(id), active: false, editable: false, deletable: false,
+        wm: Math.round(w) === cur,
+      });
     } else {
       const c = state.custom[id];
       if (c) {
@@ -78,22 +80,22 @@ export function resolveItems(
         // charger-created preset doesn't advertise unreachable watts on battery (apply
         // re-clamps server-side too, keeping the active highlight honest).
         const w = Math.min(c.watts, activeMax);
-        item = {
-          id,
-          kind: "custom",
-          watts: w,
-          label: `${w}W`,
-          icon: c.icon,
-          boost: c.boost,
-          hidden: hidden.has(id),
-          active: Math.round(w) === cur,
-          editable: true,
-          deletable: true,
-        };
+        rows.push({
+          id, kind: "custom", watts: w, label: `${w}W`, icon: c.icon, boost: c.boost,
+          hidden: hidden.has(id), active: false, editable: true, deletable: true,
+          wm: Math.round(w) === cur,
+        });
       }
     }
-    if (item) manager.push(item);
   }
+  const isFull = (r: (typeof rows)[number]) => r.wm && r.boost != null && boostKey(r.boost) === liveKey;
+  const anyFull = rows.some(isFull);
+  const manager: PresetItem[] = rows.map(({ wm, ...item }) => ({
+    ...item,
+    // Boosted preset: active on an exact watts+boost match. Watts-only preset (incl.
+    // builtins): active on a watts match only when nothing fuller matches the live state.
+    active: isFull({ ...item, wm }) || (item.boost == null && wm && !anyFull),
+  }));
   const visible = manager.filter((i) => !i.hidden);
   return {
     visible,
