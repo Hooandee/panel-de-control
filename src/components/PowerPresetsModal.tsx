@@ -6,6 +6,7 @@ import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { FocusRoot } from "./FocusRoot";
 import { IconAction } from "./IconAction";
+import { IconPickerGrid } from "./IconPickerGrid";
 import { Loading } from "./Loading";
 import { ContainedSlider } from "./ContainedSlider";
 import { PRESET_ICON_KEYS, presetIconNode } from "../tdp/powerPresetIcons";
@@ -30,31 +31,6 @@ const BUILTIN_LABEL_KEY: Record<string, string> = {
   balanced: "tdp.preset.balanced",
   turbo: "tdp.preset.turbo",
 };
-
-const IconGrid: FC<{ value: string; onPick: (k: string) => void }> = ({ value, onPick }) => (
-  <div style={{ display: "flex", flexWrap: "wrap", gap: theme.space.sm }}>
-    {PRESET_ICON_KEYS.map((key) => {
-      const on = value === key;
-      return (
-        <Focusable
-          key={key}
-          aria-label={key}
-          onActivate={() => onPick(key)}
-          onClick={() => onPick(key)}
-          style={{
-            width: 34, height: 34, borderRadius: 9, display: "flex", alignItems: "center",
-            justifyContent: "center", cursor: "pointer",
-            background: on ? `rgba(${theme.color.accentRgb},0.14)` : "rgba(255,255,255,0.06)",
-            color: on ? theme.color.accent : theme.color.textMuted,
-            boxShadow: on ? `inset 0 0 0 1px ${theme.color.accent}` : "none",
-          }}
-        >
-          {presetIconNode(key, 17)}
-        </Focusable>
-      );
-    })}
-  </div>
-);
 
 const Body: FC<Props> = ({ builtinWatts, onAc, currentWatts, min, max, closeModal }) => {
   const { t } = useI18n();
@@ -109,7 +85,7 @@ const Body: FC<Props> = ({ builtinWatts, onAc, currentWatts, min, max, closeModa
             {it.editable && editing === it.id && (
               <div style={{ paddingLeft: theme.space.lg, display: "flex", flexDirection: "column", gap: theme.space.xs }}>
                 <ContainedSlider value={it.watts} min={min} max={max} step={1} showValue onChange={(w) => wrap(updatePowerPreset(it.id, w, it.icon, it.boost))} />
-                <IconGrid value={it.icon} onPick={(k) => wrap(updatePowerPreset(it.id, it.watts, k, it.boost))} />
+                <IconPickerGrid keys={PRESET_ICON_KEYS} value={it.icon} renderIcon={presetIconNode} onPick={(k) => wrap(updatePowerPreset(it.id, it.watts, k, it.boost))} />
               </div>
             )}
             {it.editable && (

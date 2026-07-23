@@ -175,6 +175,17 @@ class ProfileStore(ScopedProfileStore):
         prof["off3"] = max(0, int(off3))
         self._save()
 
+    def apply_preset(self, scope, pl1, boost, appid=None):
+        """Apply a power preset: sustained pl1 plus optional boost. boost=None (or an
+        unknown mode) leaves the boost mode/margins untouched. Keeps the mode model
+        (names + off2/off3 shape) owned here rather than leaking into the RPC layer."""
+        self.set_pl1(scope, pl1, appid=appid)
+        if isinstance(boost, dict) and boost.get("mode") in _MODES:
+            if boost["mode"] == "custom":
+                self.set_offsets(scope, boost.get("off2", 0), boost.get("off3", 0), appid=appid)
+            else:
+                self.set_boost_mode(scope, boost["mode"], appid=appid)
+
     def set_levels(self, scope, pl1, pl2, pl3, appid=None):
         """Absolute API (back-compat / game copy): converts absolute (pl1, pl2, pl3) to
         explicit margins (off2=pl2-pl1, off3=pl3-pl2) and stores as custom mode."""

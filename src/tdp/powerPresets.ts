@@ -34,7 +34,6 @@ export interface PresetItem {
 export interface ResolvedPresets {
   visible: PresetItem[]; // ordered, not hidden — for the chip row
   manager: PresetItem[]; // ordered, ALL (incl. hidden) — for the modal
-  anyHidden: boolean;
   allHidden: boolean;
 }
 
@@ -94,7 +93,6 @@ export function resolveItems(
   return {
     visible,
     manager,
-    anyHidden: manager.some((i) => i.hidden),
     allHidden: manager.length > 0 && visible.length === 0,
   };
 }

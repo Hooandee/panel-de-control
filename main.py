@@ -2587,6 +2587,11 @@ class Plugin:
             self._current_appid = str(appid)
         return scope
 
+    @staticmethod
+    def _apply_result(res) -> dict:
+        return {"requested_w": res.requested_w, "applied_w": res.applied_w,
+                "ok": res.ok, "detail": res.detail}
+
     async def set_tdp_watts(self, watts: int, scope: str, appid=None) -> dict:
         self._init()
         if not self._tdp_control_on():
@@ -2602,8 +2607,7 @@ class Plugin:
         clamped = limits.clamp(watts, read_on_ac())
         self._tdp_profiles.set_pl1(resolved, clamped, appid=appid)
         res = await self._offload_call(self._reapply_tdp)
-        return {"requested_w": res.requested_w, "applied_w": res.applied_w,
-                "ok": res.ok, "detail": res.detail}
+        return self._apply_result(res)
 
     async def set_tdp_follow_global(self, follow: bool, appid) -> dict:
         """Toggle a game between its own TDP profile and following the global one,
@@ -2651,8 +2655,7 @@ class Plugin:
         self._tdp_profiles.set_offsets(resolved, off2, off3, appid=appid)
         res = await self._offload_call(self._reapply_tdp)
         # requested_w/applied_w reflect resulting sustained pl1 (readback), not the offsets
-        return {"requested_w": res.requested_w, "applied_w": res.applied_w,
-                "ok": res.ok, "detail": res.detail}
+        return self._apply_result(res)
 
     async def set_tdp_boost_mode(self, mode: str, scope: str, appid=None) -> dict:
         """Set the boost behaviour (estable/auto/custom) for a scope and re-apply.
@@ -2711,16 +2714,9 @@ class Plugin:
         self._clear_eco()
         self._exit_firmware_mode()
         limits = self._limits()
-        self._tdp_profiles.set_pl1(resolved, limits.clamp(watts, read_on_ac()), appid=appid)
-        if isinstance(boost, dict) and boost.get("mode") in ("estable", "auto", "custom"):
-            if boost["mode"] == "custom":
-                self._tdp_profiles.set_offsets(resolved, boost.get("off2", 0),
-                                               boost.get("off3", 0), appid=appid)
-            else:
-                self._tdp_profiles.set_boost_mode(resolved, boost["mode"], appid=appid)
+        self._tdp_profiles.apply_preset(resolved, limits.clamp(watts, read_on_ac()), boost, appid=appid)
         res = await self._offload_call(self._reapply_tdp)
-        return {"requested_w": res.requested_w, "applied_w": res.applied_w,
-                "ok": res.ok, "detail": res.detail}
+        return self._apply_result(res)
 
     async def create_game_profile(self, appid) -> None:
         self._init()

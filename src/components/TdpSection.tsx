@@ -1,5 +1,5 @@
 import { PanelSectionRow, SliderField, Focusable } from "@decky/ui";
-import { FC } from "react";
+import { FC, useMemo } from "react";
 
 import { TdpState, TdpScope, PowerDraw, BoostMode, PowerPresetState } from "../api";
 import { resetWatts } from "../tdp/logic";
@@ -45,6 +45,16 @@ export interface TdpSectionProps {
 
 export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onScope, onWatts, onSetLevels, onSetMode, onApplySuggestion, onFirmwareMode, monitorOnly, onReactivate, presets, refreshPresets, onApplyPreset }) => {
   const { t } = useI18n();
+
+  // Resolved before the early returns (rules-of-hooks) and memoized so the 1s power
+  // poll's re-renders don't rebuild the chip list; recomputes only when its inputs change.
+  const resolved = useMemo(
+    () =>
+      tdp && presets
+        ? resolveItems(presets, tdp.presets, tdp.on_ac, scope === "global" ? tdp.global_watts : tdp.watts)
+        : null,
+    [tdp, presets, scope],
+  );
 
   if (!tdp) return <Loading />;
 
@@ -208,10 +218,10 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
             </>
           ) : (
             <>
-              {presets && (
+              {resolved && (
                 <PanelSectionRow>
                   <Presets
-                    resolved={resolveItems(presets, tdp.presets, tdp.on_ac, view.watts)}
+                    resolved={resolved}
                     editLabel={t("tdp.presets.edit")}
                     hiddenLabel={t("tdp.presets.hidden")}
                     onPick={onApplyPreset}

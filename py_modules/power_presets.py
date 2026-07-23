@@ -30,10 +30,11 @@ def _clean_boost(raw):
             "off3": max(0, _as_int(raw.get("off3"), 0))}
 
 
-def _clean_custom_entry(raw):
+def _clean_custom_entry(raw, min_w=1, max_w=1000):
     if not isinstance(raw, dict):
         raw = {}
-    return {"watts": max(1, _as_int(raw.get("watts"), 10)),
+    watts = max(int(min_w), min(_as_int(raw.get("watts"), 10), int(max_w)))
+    return {"watts": watts,
             "icon": raw.get("icon") if isinstance(raw.get("icon"), str) else "bolt",
             "boost": _clean_boost(raw.get("boost"))}
 
@@ -91,9 +92,8 @@ class PowerPresetStore:
             return self.state()
         self._data["seq"] += 1
         cid = f"c{self._data['seq']}"
-        entry = _clean_custom_entry({"watts": watts, "icon": icon, "boost": boost})
-        entry["watts"] = max(int(min_w), min(entry["watts"], int(max_w)))
-        self._data["custom"][cid] = entry
+        self._data["custom"][cid] = _clean_custom_entry(
+            {"watts": watts, "icon": icon, "boost": boost}, min_w, max_w)
         self._data["order"].append(cid)
         self._save()
         return self.state()
@@ -101,9 +101,8 @@ class PowerPresetStore:
     def update(self, cid, watts, icon, boost, min_w=1, max_w=1000):
         if cid not in self._data["custom"]:
             return self.state()
-        entry = _clean_custom_entry({"watts": watts, "icon": icon, "boost": boost})
-        entry["watts"] = max(int(min_w), min(entry["watts"], int(max_w)))
-        self._data["custom"][cid] = entry
+        self._data["custom"][cid] = _clean_custom_entry(
+            {"watts": watts, "icon": icon, "boost": boost}, min_w, max_w)
         self._save()
         return self.state()
 

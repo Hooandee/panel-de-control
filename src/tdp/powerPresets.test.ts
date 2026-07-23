@@ -10,7 +10,6 @@ describe("resolveItems", () => {
     const r = resolveItems(base, builtinWatts, false, 15);
     expect(r.visible.map((i) => i.id)).toEqual(["quiet", "balanced", "turbo"]);
     expect(r.visible.map((i) => i.watts)).toEqual([8, 15, 25]);
-    expect(r.anyHidden).toBe(false);
     expect(r.allHidden).toBe(false);
   });
 
@@ -44,7 +43,6 @@ describe("resolveItems", () => {
     expect(r.visible.map((i) => i.id)).toEqual(["quiet", "balanced"]);
     expect(r.manager.map((i) => i.id)).toEqual(["quiet", "balanced", "turbo"]);
     expect(r.manager.find((i) => i.id === "turbo")!.hidden).toBe(true);
-    expect(r.anyHidden).toBe(true);
   });
 
   it("flags allHidden when nothing is visible", () => {
