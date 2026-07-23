@@ -96,8 +96,9 @@ con HDR (Steam Deck OLED y Legion Go 2) hay además un interruptor de HDR.
 Ecualizador del sistema con presets curados y una curva de mejora por máquina como punto de partida,
 tres controles simples (graves, voces, agudos) y un ecualizador avanzado de 10 bandas a pantalla
 completa. Curva independiente para altavoz y auriculares, y por juego o global. Incluye realce de
-graves, nivelado de volumen, muestras de prueba para escuchar el efecto y una guarda que limita
-cuánto se pueden realzar graves y agudos para no forzar los altavoces (se puede desactivar).
+graves, nivelado de volumen, balance izquierda/derecha, muestras de prueba para escuchar el efecto
+y una guarda que limita cuánto se pueden realzar graves y agudos para no forzar los altavoces (se
+puede desactivar).
 
 ### Mandos
 
