@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.25.3...panel-de-control-v0.26.0) (2026-07-23)
+
+
+### Features
+
+* audio equalizer (Sonido section) ([#200](https://github.com/Hooandee/panel-de-control/issues/200)) ([e613526](https://github.com/Hooandee/panel-de-control/commit/e6135260bfb11ac3e1885839e119bf780323bbd3))
+
 ## [0.25.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.25.2...panel-de-control-v0.25.3) (2026-07-23)
 
 
