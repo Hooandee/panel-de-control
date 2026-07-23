@@ -193,6 +193,27 @@ export const setTdpFirmwareMode = callable<[mode: string], TdpState>("set_tdp_fi
 // the game's stored values). Returns the full new state.
 export const setTdpFollowGlobal = callable<[follow: boolean, appid: string | null], TdpState>("set_tdp_follow_global");
 
+// User power-preset library: quick-apply chips beyond the 3 built-ins, plus a full-screen
+// manager. Stores order/hidden/custom; built-in watts come from TdpState.presets.
+export interface PowerPresetBoost { mode: BoostMode; off2: number; off3: number }
+export interface PowerPresetCustom { watts: number; icon: string; boost: PowerPresetBoost | null }
+export interface PowerPresetState {
+  order: string[];
+  hidden: string[];
+  custom: Record<string, PowerPresetCustom>;
+}
+
+export const getPowerPresets = callable<[], PowerPresetState>("get_power_presets");
+export const createPowerPreset =
+  callable<[watts: number, icon: string, boost: PowerPresetBoost | null], PowerPresetState>("create_power_preset");
+export const updatePowerPreset =
+  callable<[cid: string, watts: number, icon: string, boost: PowerPresetBoost | null], PowerPresetState>("update_power_preset");
+export const deletePowerPreset = callable<[cid: string], PowerPresetState>("delete_power_preset");
+export const movePowerPreset = callable<[cid: string, direction: number], PowerPresetState>("move_power_preset");
+export const setPowerPresetHidden = callable<[cid: string, hidden: boolean], PowerPresetState>("set_power_preset_hidden");
+export const applyPowerPreset =
+  callable<[watts: number, scope: TdpScope, appid: string | null, boost: PowerPresetBoost | null], TdpApplyResult>("apply_power_preset");
+
 export interface PowerDraw {
   watts: number | null;
   gpu_busy: number | null;
