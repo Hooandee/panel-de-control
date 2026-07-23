@@ -7,7 +7,6 @@ from audio.const import BAND_FREQS
 
 _LABELS = ["bq_lowshelf"] + ["bq_peaking"] * 8 + ["bq_highshelf"]
 
-_CAPS = "/usr/lib/ladspa/caps.so"
 _BASS_FREQ = 130
 _BASS_MAX_DRIVE = 1.0
 
@@ -25,25 +24,27 @@ def _band_nodes(gains):
     ]
 
 
-def build_chain_config(gains, sink_name, description="Panel de Control", bass=0, loudness=False):
+def build_chain_config(gains, sink_name, description="Panel de Control", bass=0, loudness=False, caps=None):
     nodes = _band_nodes(gains)
     links = [
         f'          {{ output = "eq_band_{i}:Out" input = "eq_band_{i + 1}:In" }}'
         for i in range(1, 10)
     ]
     tail = "eq_band_10:Out"  # the current graph output; extra effects chain onto it in order
-    if bass > 0:
+    # Bass and loudness are CAPS (LADSPA) effects; without caps.so on this system they're
+    # dropped rather than pointing the graph at a missing plugin (which fails the whole chain).
+    if caps and bass > 0:
         drive = round((max(0, min(100, bass)) / 100.0) * _BASS_MAX_DRIVE, 3)
         nodes.append(
-            f'          {{ type = ladspa name = spice plugin = "{_CAPS}" label = Spice '
+            f'          {{ type = ladspa name = spice plugin = "{caps}" label = Spice '
             f'control = {{ "lo.f (Hz)" = {_BASS_FREQ} "lo.gain" = {drive} '
             f'"lo.vol (dB)" = 0 "hi.gain" = 0 }} }}'
         )
         links.append(f'          {{ output = "{tail}" input = "spice:in" }}')
         tail = "spice:out"
-    if loudness:
+    if caps and loudness:
         nodes.append(
-            f'          {{ type = ladspa name = comp plugin = "{_CAPS}" label = Compress '
+            f'          {{ type = ladspa name = comp plugin = "{caps}" label = Compress '
             f'control = {_COMP} }}'
         )
         links.append(f'          {{ output = "{tail}" input = "comp:in" }}')

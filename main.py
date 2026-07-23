@@ -578,6 +578,9 @@ class Plugin:
             "power": await _safe(self.get_power_draw()),
             "eco": await _safe(self.get_eco_state()),
             "audio": await _safe(self.get_audio_state()),
+            # Deeper audio snapshot (module/CAPS paths, session, sinks, route, conf) so
+            # "no sound" / "EQ not detected" / volume reports are diagnosable.
+            "audio_diag": await _safe(self._offload_call(self._audio.diagnostics)),
             # Detected tools + current game + the frontend's running-game snapshot.
             "launch": self._launch_report_state(context),
         }
@@ -2726,8 +2729,8 @@ class Plugin:
             setting = self._effective_audio(route)
             gains, bass = self._guarded_gains(route, setting["gains"], setting["bass"])
             self._audio.set_gains(gains, bass, setting["loudness"])
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as e:  # noqa: BLE001
+            decky.logger.warning("audio EQ apply failed: %s", e)
 
     def _guarded_gains(self, route, gains, bass):
         if route == "speaker" and self._settings.get("speaker_guard_enabled", True):

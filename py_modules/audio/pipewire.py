@@ -17,8 +17,41 @@ from audio.route import route_of_sink
 _DIGITAL_HINTS = ("hdmi", "displayport", "iec958", "spdif")
 
 _SINK = "pdc_eq"
-_MODULE = "/usr/lib/pipewire-0.3/libpipewire-module-filter-chain.so"
 _SERVICE = "filter-chain.service"
+
+
+def _find_lib(*relative):
+    """First matching library path across the prefixes distros actually use: SteamOS/Arch/
+    CachyOS put libs in /usr/lib, Fedora/Bazzite in /usr/lib64, Debian/Ubuntu under a
+    multiarch triplet dir. Globbed so an untested distro's prefix still resolves."""
+    sub = os.path.join(*relative)
+    for pattern in (f"/usr/lib*/{sub}", f"/usr/lib/*-linux-gnu/{sub}", f"/usr/local/lib*/{sub}"):
+        hits = glob.glob(pattern)
+        if hits:
+            return hits[0]
+    return None
+
+
+def filter_chain_module():
+    return _find_lib("pipewire-0.3", "libpipewire-module-filter-chain.so")
+
+
+def caps_plugin():
+    """The CAPS LADSPA plugin (bass + loudness). Optional — the biquad EQ works without it."""
+    return _find_lib("ladspa", "caps.so")
+
+
+def _os_release():
+    out = {}
+    try:
+        with open("/etc/os-release") as f:
+            for line in f:
+                key, sep, val = line.strip().partition("=")
+                if sep and key in ("ID", "VARIANT_ID", "VERSION_ID"):
+                    out[key] = val.strip('"')
+    except OSError:
+        pass
+    return out
 
 
 def pick_downstream(short_sinks_text, our_name):
@@ -129,17 +162,29 @@ class PipeWireEq:
 
     # --- capability ---------------------------------------------------------------
     def is_supported(self):
-        return bool(self._session) and os.path.exists(_MODULE)
+        return bool(self._session) and filter_chain_module() is not None
 
     # --- lifecycle ----------------------------------------------------------------
     def _write_conf(self, gains, bass, loudness):
         path = self._conf_path()
         if not path:
             return False
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w") as f:
-            f.write(build_chain_config(gains, _SINK, self._label, bass, loudness))
         uid = self._session[0]
+        # Create the config dirs owned by the session user (root would otherwise leave
+        # ~/.config/pipewire root-owned, so the user couldn't manage their own filters).
+        d = os.path.dirname(path)
+        made = []
+        while d and not os.path.exists(d):
+            made.append(d)
+            d = os.path.dirname(d)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        for created in made:
+            try:
+                os.chown(created, uid, uid)
+            except OSError:
+                pass
+        with open(path, "w") as f:
+            f.write(build_chain_config(gains, _SINK, self._label, bass, loudness, caps_plugin()))
         try:
             os.chown(path, uid, uid)
         except OSError:
@@ -205,6 +250,40 @@ class PipeWireEq:
         the physical device as default on resume/hotplug (dropping the EQ); the watcher
         uses this to re-assert."""
         return self._runner(["pactl", "get-default-sink"]) == self._label
+
+    def diagnostics(self):
+        """Read-only audio snapshot for bug reports: why the EQ is (or isn't) available and
+        what the graph looks like, so 'no sound' / 'not detected' / volume reports are
+        diagnosable. Never raises."""
+        info = {
+            "supported": self.is_supported(),
+            "module": filter_chain_module(),
+            "caps": caps_plugin(),
+            "os_release": _os_release(),
+            "session": None,
+        }
+        if self._session:
+            info["session"] = {"uid": self._session[0], "user": self._session[2]}
+        try:
+            downstream = self._downstream_sink()
+            info.update({
+                "default_sink": self._runner(["pactl", "get-default-sink"]) or None,
+                "default_is_eq": self.is_default(),
+                "sinks": self._runner(["pactl", "list", "short", "sinks"]) or "",
+                "downstream": downstream,
+                "route": self.current_route(),
+                "eq_volume": self._sink_volume_pct(self._label),
+                "downstream_volume": self._sink_volume_pct(downstream) if downstream else None,
+            })
+        except (OSError, subprocess.SubprocessError):
+            pass
+        path = self._conf_path()
+        info["conf_path"] = path
+        try:
+            info["conf"] = open(path).read() if path and os.path.exists(path) else None
+        except OSError:
+            info["conf"] = None
+        return info
 
     def teardown(self):
         """Remove the sink and hand the user's current level back to the physical sink

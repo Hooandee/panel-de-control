@@ -38,21 +38,32 @@ def test_no_bass_node_when_zero():
     assert "spice" not in cfg and "caps.so" not in cfg
 
 
+_CAPS = "/usr/lib/ladspa/caps.so"
+
+
 def test_bass_node_added_and_chained():
-    cfg = build_chain_config(gains=[0.0] * 10, sink_name="pdc_eq", bass=50)
+    cfg = build_chain_config(gains=[0.0] * 10, sink_name="pdc_eq", bass=50, caps=_CAPS)
     assert "label = Spice" in cfg and "caps.so" in cfg
     assert '"lo.gain" = 0.5' in cfg  # 50% → 0.5 drive
     assert '{ output = "eq_band_10:Out" input = "spice:in" }' in cfg
 
 
 def test_loudness_adds_compressor():
-    cfg = build_chain_config(gains=[0.0] * 10, sink_name="pdc_eq", loudness=True)
+    cfg = build_chain_config(gains=[0.0] * 10, sink_name="pdc_eq", loudness=True, caps=_CAPS)
     assert "label = Compress" in cfg
     assert '{ output = "eq_band_10:Out" input = "comp:in" }' in cfg
 
 
 def test_bass_then_compressor_chained_in_order():
-    cfg = build_chain_config(gains=[0.0] * 10, sink_name="pdc_eq", bass=50, loudness=True)
+    cfg = build_chain_config(gains=[0.0] * 10, sink_name="pdc_eq", bass=50, loudness=True, caps=_CAPS)
     # eq -> spice -> comp
     assert '{ output = "eq_band_10:Out" input = "spice:in" }' in cfg
     assert '{ output = "spice:out" input = "comp:in" }' in cfg
+
+
+def test_bass_and_loudness_dropped_without_caps():
+    # No CAPS on this system → the biquad EQ still builds, effects are omitted (not a
+    # dangling reference to a missing plugin that would fail the whole chain).
+    cfg = build_chain_config(gains=[0.0] * 10, sink_name="pdc_eq", bass=50, loudness=True, caps=None)
+    assert "spice" not in cfg and "comp" not in cfg and "caps.so" not in cfg
+    assert cfg.count("bq_peaking") == 8  # the EQ itself is intact
