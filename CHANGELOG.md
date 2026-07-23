@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.27.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.26.1...panel-de-control-v0.27.0) (2026-07-23)
+
+
+### Features / Novedades
+
+* The plugin's name in the Decky plugin list now follows the selected language, matching the title shown inside the panel. ([#275](https://github.com/Hooandee/panel-de-control/issues/275)) ([f5bdf22](https://github.com/Hooandee/panel-de-control/commit/f5bdf22d245fb2e351f8687fc66c2389d7dcb304))
+* **ES:** El nombre del plugin en la lista de Decky ahora sigue el idioma seleccionado, igual que el título que se ve dentro del panel. ([#275](https://github.com/Hooandee/panel-de-control/issues/275)) ([f5bdf22](https://github.com/Hooandee/panel-de-control/commit/f5bdf22d245fb2e351f8687fc66c2389d7dcb304))
+
 ## [0.26.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.26.0...panel-de-control-v0.26.1) (2026-07-23)
 
 
