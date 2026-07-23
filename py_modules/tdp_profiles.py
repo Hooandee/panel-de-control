@@ -178,11 +178,17 @@ class ProfileStore(ScopedProfileStore):
     def apply_preset(self, scope, pl1, boost, appid=None):
         """Apply a power preset: sustained pl1 plus optional boost. boost=None (or an
         unknown mode) leaves the boost mode/margins untouched. Keeps the mode model
-        (names + off2/off3 shape) owned here rather than leaking into the RPC layer."""
+        (names + off2/off3 shape) owned here rather than leaking into the RPC layer.
+        Coerces the margins so a malformed boost payload can't raise."""
         self.set_pl1(scope, pl1, appid=appid)
         if isinstance(boost, dict) and boost.get("mode") in _MODES:
             if boost["mode"] == "custom":
-                self.set_offsets(scope, boost.get("off2", 0), boost.get("off3", 0), appid=appid)
+                def _int0(v):
+                    try:
+                        return int(v)
+                    except (TypeError, ValueError):
+                        return 0
+                self.set_offsets(scope, _int0(boost.get("off2")), _int0(boost.get("off3")), appid=appid)
             else:
                 self.set_boost_mode(scope, boost["mode"], appid=appid)
 

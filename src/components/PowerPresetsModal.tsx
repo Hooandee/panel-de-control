@@ -34,6 +34,7 @@ interface Props {
 
 type CustomEntry = PowerPresetState["custom"][string];
 
+const CAP = 30; // mirrors PowerPresetStore._MAX_CUSTOM — hide "Add" once reached
 const BOOST_MODES: BoostMode[] = ["estable", "auto", "custom"];
 
 /** Per-preset boost picker (only shown on boost-capable devices). "none" = leave the
@@ -91,14 +92,31 @@ const Body: FC<Props> = ({ builtinWatts, onAc, currentWatts, min, max, supportsA
   const { t } = useI18n();
   const [state, setState] = useState<PowerPresetState | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
+  // Local edit buffer for the open row: inputs render from this, not the server snapshot,
+  // so an in-flight debounced echo can't snap a slider/text field back mid-edit.
+  const [draft, setDraft] = useState<CustomEntry | null>(null);
   const alive = useRef(true);
   const editTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingSave = useRef<{ id: string; entry: CustomEntry } | null>(null);
+
+  const flushSave = () => {
+    if (editTimer.current) {
+      clearTimeout(editTimer.current);
+      editTimer.current = null;
+    }
+    const p = pendingSave.current;
+    pendingSave.current = null;
+    if (p) wrap(updatePowerPreset(p.id, p.entry.watts, p.entry.icon, p.entry.boost, p.entry.name));
+  };
 
   useEffect(() => {
     getPowerPresets().then((s) => alive.current && setState(s)).catch(() => {});
     return () => {
       alive.current = false;
       if (editTimer.current) clearTimeout(editTimer.current);
+      // Persist a still-pending edit (fire-and-forget; setState is alive-guarded).
+      const p = pendingSave.current;
+      if (p) updatePowerPreset(p.id, p.entry.watts, p.entry.icon, p.entry.boost, p.entry.name).catch(() => {});
     };
   }, []);
 
@@ -106,17 +124,28 @@ const Body: FC<Props> = ({ builtinWatts, onAc, currentWatts, min, max, supportsA
 
   // The manager doesn't use the active flag, so a neutral live boost is fine here.
   const items = resolveItems(state, builtinWatts, onAc, currentWatts, max, { mode: "estable", off2: 0, off3: 0 }).manager;
+  const customCount = items.filter((it) => it.kind === "custom").length;
   const wrap = (p: Promise<PowerPresetState>) => p.then((s) => alive.current && setState(s)).catch(() => {});
   const patch = (id: string, entry: CustomEntry) =>
     setState((cur) => (cur ? { ...cur, custom: { ...cur.custom, [id]: entry } } : cur));
-  // Optimistic local + debounced commit for dragged/typed values; immediate for discrete taps.
+  // Dragged/typed values: update the draft, optimistically patch the list, debounce the save.
   const commitDebounced = (id: string, entry: CustomEntry) => {
+    setDraft(entry);
     patch(id, entry);
+    pendingSave.current = { id, entry };
     if (editTimer.current) clearTimeout(editTimer.current);
-    editTimer.current = setTimeout(() => wrap(updatePowerPreset(id, entry.watts, entry.icon, entry.boost, entry.name)), 200);
+    editTimer.current = setTimeout(() => {
+      editTimer.current = null;
+      pendingSave.current = null;
+      wrap(updatePowerPreset(id, entry.watts, entry.icon, entry.boost, entry.name));
+    }, 200);
   };
+  // Discrete taps (icon / boost mode): save immediately.
   const commitNow = (id: string, entry: CustomEntry) => {
     if (editTimer.current) clearTimeout(editTimer.current);
+    editTimer.current = null;
+    pendingSave.current = null;
+    setDraft(entry);
     patch(id, entry);
     wrap(updatePowerPreset(id, entry.watts, entry.icon, entry.boost, entry.name));
   };
@@ -130,9 +159,25 @@ const Body: FC<Props> = ({ builtinWatts, onAc, currentWatts, min, max, supportsA
         icon={<LuTrash2 size={20} color={theme.color.danger} />}
         onConfirm={() => wrap(deletePowerPreset(id))}
       />,
+      window,
     );
   // The editable fields of a preset, for building a commit payload with one field changed.
   const entryOf = (it: PresetItem): CustomEntry => ({ watts: it.watts, icon: it.icon, name: it.name, boost: it.boost });
+  // Open/close the editor for a row, flushing any pending save so switching rows never drops it.
+  const toggleEdit = (it: PresetItem) => {
+    flushSave();
+    if (editing === it.id) {
+      setEditing(null);
+      setDraft(null);
+    } else {
+      setEditing(it.id);
+      setDraft(entryOf(it));
+    }
+  };
+  const onDone = () => {
+    flushSave();
+    closeModal?.();
+  };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: theme.space.md, padding: theme.space.sm, maxWidth: 640, width: "100%", margin: "0 auto" }}>
@@ -144,8 +189,8 @@ const Body: FC<Props> = ({ builtinWatts, onAc, currentWatts, min, max, supportsA
             padding: `${theme.space.xs}px ${theme.space.md}px`, borderRadius: theme.radius.sm,
             background: theme.color.accent, color: theme.color.onAccent, fontWeight: 700, cursor: "pointer",
           }}
-          onActivate={() => closeModal?.()}
-          onClick={() => closeModal?.()}
+          onActivate={onDone}
+          onClick={onDone}
         >
           <LuCheck size={16} /> {t("customize.views.done")}
         </Focusable>
@@ -169,28 +214,31 @@ const Body: FC<Props> = ({ builtinWatts, onAc, currentWatts, min, max, supportsA
                 </IconAction>
               )}
             </div>
-            {it.editable && editing === it.id && (
-              <div style={{ paddingLeft: theme.space.lg, display: "flex", flexDirection: "column", gap: theme.space.xs }}>
-                <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{t("tdp.presets.name")}</span>
-                <TextField value={it.name} bShowClearAction onChange={(e) => commitDebounced(it.id, { ...entryOf(it), name: e.target.value })} />
-                <ContainedSlider value={it.watts} min={min} max={max} step={1} showValue onChange={(w) => commitDebounced(it.id, { ...entryOf(it), watts: w })} />
-                <IconPickerGrid keys={PRESET_ICON_KEYS} value={it.icon} renderIcon={presetIconNode} onPick={(k) => commitNow(it.id, { ...entryOf(it), icon: k })} />
-                {supportsAdvanced && (
-                  <BoostEditor
-                    boost={it.boost}
-                    off2Max={off2Max}
-                    off3Max={off3Max}
-                    onPickMode={(b) => commitNow(it.id, { ...entryOf(it), boost: b })}
-                    onOffsets={(b) => commitDebounced(it.id, { ...entryOf(it), boost: b })}
-                  />
-                )}
-              </div>
-            )}
+            {it.editable && editing === it.id && (() => {
+              const d = draft ?? entryOf(it);
+              return (
+                <div style={{ paddingLeft: theme.space.lg, display: "flex", flexDirection: "column", gap: theme.space.xs }}>
+                  <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{t("tdp.presets.name")}</span>
+                  <TextField value={d.name} bShowClearAction onChange={(e) => commitDebounced(it.id, { ...d, name: e.target.value })} />
+                  <ContainedSlider value={d.watts} min={min} max={max} step={1} showValue onChange={(w) => commitDebounced(it.id, { ...d, watts: w })} />
+                  <IconPickerGrid keys={PRESET_ICON_KEYS} value={d.icon} renderIcon={presetIconNode} onPick={(k) => commitNow(it.id, { ...d, icon: k })} />
+                  {supportsAdvanced && (
+                    <BoostEditor
+                      boost={d.boost}
+                      off2Max={off2Max}
+                      off3Max={off3Max}
+                      onPickMode={(b) => commitNow(it.id, { ...d, boost: b })}
+                      onOffsets={(b) => commitDebounced(it.id, { ...d, boost: b })}
+                    />
+                  )}
+                </div>
+              );
+            })()}
             {it.editable && (
               <Focusable
                 style={{ paddingLeft: theme.space.lg, fontSize: theme.font.caption, color: theme.color.textMuted, cursor: "pointer" }}
-                onActivate={() => setEditing(editing === it.id ? null : it.id)}
-                onClick={() => setEditing(editing === it.id ? null : it.id)}
+                onActivate={() => toggleEdit(it)}
+                onClick={() => toggleEdit(it)}
               >
                 {editing === it.id ? t("tdp.presets.doneEdit") : t("tdp.presets.edit")}
               </Focusable>
@@ -199,11 +247,13 @@ const Body: FC<Props> = ({ builtinWatts, onAc, currentWatts, min, max, supportsA
         ))}
       </div>
 
-      <ButtonItem layout="below" onClick={() => wrap(createPowerPreset(Math.round(currentWatts), "bolt", null, ""))}>
-        <span style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: theme.space.xs }}>
-          <LuPlus size={16} /> {t("tdp.presets.add")}
-        </span>
-      </ButtonItem>
+      {customCount < CAP && (
+        <ButtonItem layout="below" onClick={() => wrap(createPowerPreset(Math.round(currentWatts), "bolt", null, ""))}>
+          <span style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: theme.space.xs }}>
+            <LuPlus size={16} /> {t("tdp.presets.add")}
+          </span>
+        </ButtonItem>
+      )}
     </div>
   );
 };
