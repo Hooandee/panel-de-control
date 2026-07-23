@@ -91,6 +91,14 @@ y un preset "Aspecto OLED" para los paneles que no son OLED. Un temporizador de 
 los cambios solo si algo se ve mal, para que no te quedes con una pantalla ilegible. En los paneles
 con HDR (Steam Deck OLED y Legion Go 2) hay además un interruptor de HDR.
 
+### Sonido
+
+Ecualizador del sistema con presets curados y una curva de mejora por máquina como punto de partida,
+tres controles simples (graves, voces, agudos) y un ecualizador avanzado de 10 bandas a pantalla
+completa. Curva independiente para altavoz y auriculares, y por juego o global. Incluye realce de
+graves, nivelado de volumen, muestras de prueba para escuchar el efecto y una guarda que limita
+cuánto se pueden realzar graves y agudos para no forzar los altavoces (se puede desactivar).
+
 ### Mandos
 
 Remapeo de botones cooperando con el demonio que ya controla el mando en tu sistema (Handheld Daemon
@@ -144,6 +152,7 @@ Leyenda: **✅** comprobado en ese equipo · **⚠️** limitado o solo por defe
 | CPU: multihilo (SMT) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [⁸](#notas) |
 | CPU: núcleos activos | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Brillo y volumen | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Ecualizador de sonido | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ [¹⁷](#notas) |
 | Modo Descarga | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Monitor de temperaturas | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ [⁹](#notas) |
 | Monitor de RPM de ventilador | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹⁰](#notas) | ✅ [⁹](#notas) |
@@ -225,6 +234,9 @@ tenemos en mano, los reportes desde Ajustes son los que confirman lo que respond
     fase temprana. En Steam Deck no aparece; en Legion Go S y ROG Xbox Ally X la app indica que
     todavía no hay remapeo para ese mando. En Legion algunos botones traseros aún no se detectan bien.
 16. La Steam Deck no lleva iluminación RGB, así que esta tarjeta no aparece.
+17. El ecualizador usa el filter-chain de PipeWire (disponible en SteamOS y Bazzite). El realce de
+    graves y el nivelado de volumen necesitan el plugin CAPS del sistema; si no está instalado, el
+    ecualizador funciona igual pero sin esos dos extras.
 
 > Las celdas marcadas **❔** son las que aún no he confirmado en ese equipo concreto. Si tienes el
 > hardware delante y ves que algo va (o no va), dímelo y lo corrijo: la idea es que esta tabla
