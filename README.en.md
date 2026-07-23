@@ -92,6 +92,14 @@ aren't OLED. A confirmation timer reverts changes only if something looks wrong,
 stuck with an unreadable screen. On HDR panels (Steam Deck OLED and Legion Go 2) there's also an HDR
 toggle.
 
+### Sound (Sonido)
+
+A system equalizer with curated presets and a per-machine correction curve as a starting point,
+three simple controls (bass, voice, treble) and a full 10-band advanced EQ with a fullscreen view.
+Independent curve for speaker and headphones, per game or global. Includes a bass enhancer, volume
+leveling, test samples to hear the effect, and a guard that caps how far you can boost bass and
+treble so the speakers aren't overdriven (can be turned off).
+
 ### Controllers (Mandos)
 
 Button remapping that cooperates with the daemon already controlling your gamepad (Handheld Daemon on
@@ -144,6 +152,7 @@ supported in code but not confirmed on that device yet
 | CPU: multithreading (SMT) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [⁸](#notes) |
 | CPU: active cores | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Brightness and volume | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Sound equalizer | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ [¹⁷](#notes) |
 | Download Mode | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Temperature monitor | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ [⁹](#notes) |
 | Fan RPM monitor | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹⁰](#notes) | ✅ [⁹](#notes) |
@@ -223,6 +232,9 @@ from the Settings tab are what confirm how it really behaves.
     early. It doesn't appear on the Steam Deck; on the Legion Go S and ROG Xbox Ally X the app says
     there's no remapping for that controller yet. On Legion some back buttons aren't detected well yet.
 16. The Steam Deck has no RGB lighting, so this card doesn't appear.
+17. The equalizer uses PipeWire's filter-chain (available on SteamOS and Bazzite). The bass enhancer
+    and volume leveling need the system's CAPS plugin; if it isn't installed the equalizer still
+    works, just without those two extras.
 
 > Cells marked **❔** are the ones I haven't confirmed on that specific device. If you have the
 > hardware in front of you and see something works (or doesn't), tell me and I'll fix it: this table

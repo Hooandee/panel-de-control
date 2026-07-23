@@ -52,6 +52,9 @@ function sectionLine(section: SectionId, row: GameProfileRow, t: T): SectionLine
   if (section === "mandos" && row.mandos) {
     return { label: t("gameProfiles.sec.mandos"), text: t("gameProfiles.buttons", { n: row.mandos.count }), dim: row.mandos.follows_global };
   }
+  if (section === "audio" && row.audio) {
+    return { label: t("gameProfiles.sec.audio"), text: t("gameProfiles.audioCustom"), dim: row.audio.follows_global };
+  }
   return null;
 }
 

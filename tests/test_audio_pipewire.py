@@ -1,0 +1,69 @@
+from audio.pipewire import choose_downstream, pick_downstream
+
+_SINKS = (
+    "45\teffect_input.pdc_eq\tPipeWire\ts16le 2ch 48000Hz\tRUNNING\n"
+    "61\talsa_loopback_device.alsa_output.pci-0000_c2_00.6.analog-stereo\tPipeWire\t...\tIDLE\n"
+)
+
+
+def test_pick_downstream_skips_our_sink():
+    assert pick_downstream(_SINKS, "effect_input.pdc_eq") == (
+        "alsa_loopback_device.alsa_output.pci-0000_c2_00.6.analog-stereo"
+    )
+
+
+def test_pick_downstream_none_when_only_ours():
+    only_ours = "45\teffect_input.pdc_eq\tPipeWire\ts16le 2ch\tRUNNING\n"
+    assert pick_downstream(only_ours, "effect_input.pdc_eq") is None
+
+
+def test_pick_downstream_empty():
+    assert pick_downstream("", "effect_input.pdc_eq") is None
+    assert pick_downstream(None, "effect_input.pdc_eq") is None
+
+
+_MULTI_SINKS = (
+    "45\teffect_input.pdc_eq\tPipeWire\ts16le 2ch\tRUNNING\n"
+    "73\talsa_loopback_device.HiFi__HDMI3__sink\tPipeWire\t...\tSUSPENDED\n"
+    "79\talsa_loopback_device.HiFi__Speaker__sink\tPipeWire\t...\tIDLE\n"
+)
+
+
+def test_pick_downstream_prefers_analog_over_hdmi():
+    assert pick_downstream(_MULTI_SINKS, "effect_input.pdc_eq").endswith("Speaker__sink")
+
+
+def test_pick_downstream_falls_back_to_first_when_all_digital():
+    only_hdmi = "73\talsa_loopback_device.HiFi__HDMI3__sink\tPipeWire\t...\tSUSPENDED\n"
+    assert pick_downstream(only_hdmi, "x").endswith("HDMI3__sink")
+
+
+_DECK_SHORT = (
+    "60\talsa_output.HiFi__Speaker__sink\tPipeWire\ts16le 2ch\tIDLE\n"
+    "61\talsa_output.HiFi__Headphones__sink\tPipeWire\ts16le 2ch\tRUNNING\n"
+)
+
+
+def test_choose_downstream_prefers_the_active_default():
+    assert (
+        choose_downstream("alsa_output.HiFi__Headphones__sink", _DECK_SHORT, "X EQ")
+        == "alsa_output.HiFi__Headphones__sink"
+    )
+
+
+def test_choose_downstream_falls_back_to_the_running_sink_when_default_is_our_eq():
+    # EQ is the default → enumerate, and prefer the RUNNING output (headphones here) so the
+    # per-route curve + volume-pin follow the active device, not just the first-listed one.
+    assert choose_downstream("X EQ", _DECK_SHORT, "X EQ").endswith("Headphones__sink")
+
+
+def test_pick_downstream_prefers_running_analog():
+    assert pick_downstream(_DECK_SHORT, "X EQ").endswith("Headphones__sink")
+
+
+def test_choose_downstream_skips_a_digital_default():
+    short = (
+        "73\talsa_output.HiFi__HDMI1__sink\tPipeWire\t...\tSUSPENDED\n"
+        "79\talsa_output.HiFi__Speaker__sink\tPipeWire\t...\tIDLE\n"
+    )
+    assert choose_downstream("alsa_output.HiFi__HDMI1__sink", short, "X EQ").endswith("Speaker__sink")

@@ -41,6 +41,12 @@ from gpu.clock import select_gpu_clock
 from power.reader import PowerReader
 from battery.reader import BatteryReader
 from battery.charge_limit import select_charge_limit
+from audio.eq_store import EqStore
+from audio.pipewire import PipeWireEq
+from audio.profile_store import AudioProfileStore
+from audio import presets as audio_presets
+from audio import safe as audio_safe
+from audio import tone as audio_tone
 from cpu.info import read_cpu_info, read_cpu_model
 from cpu.controls import CoreControl, SmtControl, select_boost
 from cpu.profiles import CpuProfileStore
@@ -69,6 +75,9 @@ _REPORT_SERVICE_URL = os.environ.get(
 # than the old reactive window; the up-trigger still uses the recent peak to reject
 # transient dips. See py_modules/auto_tdp.py.
 _AUTO_WINDOW = 10
+# How often the audio EQ watcher checks the active output route (headphones vs speakers)
+# to re-apply the per-route curve with the QAM closed.
+_AUDIO_POLL_S = 4
 # Watts of divergence before we treat a firmware PL1 read as an external change to
 # adopt (above rounding/settling jitter).
 _EXTERNAL_TDP_THRESHOLD = 2
@@ -144,6 +153,10 @@ DEFAULTS = {
     # Firmware performance mode (Legion Go original). "custom" = our TDP; a named mode
     # hands power+fan+LED to the firmware. Device-global; ignored where unsupported.
     "firmware_mode": "custom",
+    # Audio EQ (Sonido): opt-in. Off = we never create the PipeWire EQ sink, audio is
+    # untouched. On → the effective per-route/per-game curve is applied. The curves
+    # themselves live in their own store (audio.json).
+    "audio_eq_enabled": False,
     # Frontend UI preferences, mirrored here so they survive a reboot (the
     # frontend's localStorage cache does not). Opaque string map.
     "ui_prefs": {},
@@ -262,6 +275,16 @@ class Plugin:
             "color: supported=%s (%s)",
             self._color_backend.supported, self._color_backend.probe_detail,
         )
+        # Sonido: system audio EQ. Per-game + per output route (speaker/headphone),
+        # applied via a PipeWire filter-chain sink. Opt-in — the sink is only created
+        # when audio_eq_enabled. Backend is probe-gated (UI hidden without PipeWire).
+        self._audio_eq = EqStore(
+            os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "audio.json")
+        )
+        self._audio = PipeWireEq(name=self._device.display_name)
+        self._audio_profiles = AudioProfileStore(
+            os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "audio_profiles.json")
+        )
         # Calibration safety: a change previews live but auto-reverts to the saved
         # value after _COLOR_REVERT_SECS unless confirmed (so a mis-drag to an
         # illegible screen self-heals even if the QAM closes). None = nothing pending.
@@ -315,6 +338,11 @@ class Plugin:
         self._lifecycle = LifecycleManager(apply_cb=self._reapply_all)
         self._auto_task = None
         self._auto_setpoint = None
+        # Audio EQ output-route watcher: last applied route + its loop task.
+        self._audio_task = None
+        self._audio_route_last = None
+        self._audio_shutdown = False
+        self._test_sample = None
         # Rolling GPU% window + slack counter for the GPU-driven auto-TDP control law.
         self._gpu_window = []      # recent GPU% samples
         self._slack_ticks = 0      # consecutive GPU-headroom ticks (temporal gate)
@@ -550,6 +578,8 @@ class Plugin:
             "controller": await loop.run_in_executor(None, self._safe_controller_config),
             "power": await _safe(self.get_power_draw()),
             "eco": await _safe(self.get_eco_state()),
+            "audio": await _safe(self.get_audio_state()),
+            "audio_diag": await _safe(self._offload_call(self._audio.diagnostics)),
             # Detected tools + current game + the frontend's running-game snapshot.
             "launch": self._launch_report_state(context),
         }
@@ -667,6 +697,7 @@ class Plugin:
             "tdp_profiles": _rj("tdp_profiles.json"),
             "fan_curves": _rj("fan_curves.json"),
             "color": _rj("color.json"),
+            "audio": _rj("audio.json"),
             "controller_remap": _rj("controller_remap.json"),
             "telemetry": _rj("telemetry.json"),
         }
@@ -762,7 +793,7 @@ class Plugin:
         """Every store that keeps per-game profiles, all sharing list_games/forget_game
         (the controller backend no-ops when it's not InputPlumber)."""
         return (self._tdp_profiles, self._fan_curves, self._color, self._cpu_profiles,
-                self._controller_backend)
+                self._audio_eq, self._controller_backend)
 
     def _game_profile_row(self, appid: str) -> dict:
         """A game's per-section profiles for the overview — RAW own values (what the user
@@ -795,6 +826,8 @@ class Plugin:
         if self._controller_backend.differs_from_global(appid):
             row["mandos"] = {"count": len(self._controller_backend.game_profile(appid)),
                              "follows_global": self._controller_backend.is_following_global(appid)}
+        if self._audio_eq.differs_from_global(appid):
+            row["audio"] = {"follows_global": self._audio_eq.is_following_global(appid)}
         return row
 
     async def list_game_profiles(self) -> list:
@@ -1897,6 +1930,7 @@ class Plugin:
         # HDR first and load the color look after (both self-offloading, FIFO executor).
         self._reapply_hdr()
         self._reapply_color()
+        self._reapply_audio()  # self-offloading; no-op when the EQ is disabled
         self._reapply_controller()  # diff-gated; no-op unless the effective remap changed
 
     # ---- Battery + charge limit --------------------------------------------
@@ -2670,6 +2704,271 @@ class Plugin:
         except Exception:  # noqa: BLE001
             pass
 
+    # ---- Sonido: audio EQ ---------------------------------------------------
+    def _current_route(self) -> str:
+        try:
+            return self._audio.current_route()
+        except Exception:  # noqa: BLE001
+            return "speaker"
+
+    def _effective_audio(self, route) -> dict:
+        return self._audio_eq.effective(self._current_appid, route)
+
+    def _reapply_audio(self) -> None:
+        """Apply the effective EQ off the event loop (rewrites a conf + restarts the
+        filter-chain service). Only offloads when the EQ is enabled — disabling tears the
+        sink down explicitly, so a disabled EQ needs no work on resume/game change."""
+        if self._audio_shutdown or not self._settings.get("audio_eq_enabled"):
+            return
+        self._offload(self._reapply_audio_sync)
+
+    def _reapply_audio_sync(self) -> None:
+        try:
+            if not self._settings.get("audio_eq_enabled") or not self._audio.is_supported():
+                return
+            route = self._current_route()
+            setting = self._effective_audio(route)
+            gains, bass = self._guarded_gains(route, setting["gains"], setting["bass"])
+            self._audio.set_gains(gains, bass, setting["loudness"])
+        except Exception as e:  # noqa: BLE001
+            decky.logger.warning("audio EQ apply failed: %s", e)
+
+    def _guarded_gains(self, route, gains, bass):
+        if route == "speaker" and self._settings.get("speaker_guard_enabled", True):
+            key = getattr(self._device, "key", None)
+            gains = audio_safe.clamp_gains(gains, audio_safe.band_ceilings(key))
+            bass = audio_safe.clamp_bass(bass, audio_safe.bass_ceiling(key))
+        return gains, bass
+
+    def _start_audio_loop(self) -> None:
+        if self._audio_task is not None and not self._audio_task.done():
+            return
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return  # no event loop in tests — skip task creation safely
+        self._audio_task = asyncio.create_task(self._audio_loop())
+
+    async def _stop_audio_loop(self) -> None:
+        task = self._audio_task
+        self._audio_task = None
+        if task is not None:
+            task.cancel()
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):  # noqa: BLE001
+                pass
+
+    def _audio_check(self) -> dict:
+        """Off-loop probe for the watcher: the active route + whether our EQ sink is still
+        the default (WirePlumber can drop it on resume/hotplug)."""
+        return {"route": self._current_route(), "is_default": self._audio.is_default()}
+
+    async def _audio_loop(self) -> None:
+        """While the EQ is enabled, keep it live with the QAM closed: re-apply when the
+        output route changes (headphones ↔ speakers, each keeps its own curve) OR when our
+        sink is no longer the default (WirePlumber re-picked the physical device on
+        resume/hotplug → the effect silently dropped). Cheap: one off-loop probe every few
+        seconds; _reapply_audio is diff-gated so a stable state does no audible work."""
+        while True:
+            try:
+                await asyncio.sleep(_AUDIO_POLL_S)
+                if not self._settings.get("audio_eq_enabled") or not self._audio.is_supported():
+                    self._audio_route_last = None
+                    continue
+                probe = await self._offload_call(self._audio_check)
+                if not probe["is_default"] or probe["route"] != self._audio_route_last:
+                    self._audio_route_last = probe["route"]
+                    self._reapply_audio()
+            except asyncio.CancelledError:
+                break
+            except Exception:  # noqa: BLE001
+                pass
+
+    def _restore_audio_safe(self) -> None:
+        """Remove the EQ sink and restore the previous default output so a
+        disabled/uninstalled plugin leaves the audio untouched. Guarded."""
+        try:
+            if getattr(self, "_audio", None) is not None:
+                self._audio.teardown()
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _audio_state(self) -> dict:
+        route = self._current_route()
+        eff = self._effective_audio(route)
+        return {
+            "supported": self._audio.is_supported(),
+            "enabled": bool(self._settings.get("audio_eq_enabled", False)),
+            "route": route,
+            "appid": self._current_appid,
+            "follows_global": self._audio_eq.is_following_global(self._current_appid),
+            "has_game_profile": (self._current_appid is not None
+                                 and self._audio_eq.has_game(self._current_appid)),
+            "preset": eff["preset"],
+            "gains": eff["gains"],
+            "bass": eff["bass"],
+            "loudness": eff["loudness"],
+            "test_playing": self._audio.is_test_playing(),
+            "test_sample": self._test_sample if self._audio.is_test_playing() else None,
+            "test_samples": audio_tone.sample_ids(),
+            "presets": audio_presets.list_presets(getattr(self._device, "key", None)),
+            "profiles": self._audio_profiles.list(),
+            "device_name": self._device.display_name,
+            "guard": bool(self._settings.get("speaker_guard_enabled", True)),
+            "safe_limits": audio_safe.safe_limits(getattr(self._device, "key", None)),
+        }
+
+    async def get_audio_state(self) -> dict:
+        self._init()
+        return await self._offload_call(self._audio_state)
+
+    async def set_audio_enabled(self, enabled: bool) -> dict:
+        self._init()
+        self._settings["audio_eq_enabled"] = bool(enabled)
+        self._store.save(self._settings)
+        if enabled:
+            self._reapply_audio()
+        else:
+            self._offload(self._restore_audio_safe)
+        return await self._offload_call(self._audio_state)
+
+    async def set_speaker_guard(self, enabled: bool) -> dict:
+        self._init()
+        self._settings["speaker_guard_enabled"] = bool(enabled)
+        self._store.save(self._settings)
+        self._reapply_audio()
+        return await self._offload_call(self._audio_state)
+
+    async def apply_audio_preset(self, preset: str, scope: str = "global", appid=None) -> dict:
+        """Apply a preset to the active route for the given scope. device_tuned resolves
+        to the per-machine speaker correction (flat on headphones)."""
+        self._init()
+        resolved = self._resolve_scope(scope, appid)
+        if resolved is None:
+            return await self._offload_call(self._audio_state)
+        route = await self._offload_call(self._current_route)  # pactl → off the loop
+        setting = audio_presets.resolve_preset(getattr(self._device, "key", None), preset, route)
+        self._audio_eq.set_setting(resolved, route, setting, appid=appid)
+        self._reapply_audio()
+        return await self._offload_call(self._audio_state)
+
+    async def set_audio_band(self, index: int, gain: float, scope: str, appid=None) -> dict:
+        self._init()
+        resolved = self._resolve_scope(scope, appid)
+        if resolved is None:
+            return await self._offload_call(self._audio_state)
+        route = await self._offload_call(self._current_route)  # pactl → off the loop
+        self._audio_eq.set_band(resolved, route, int(index), float(gain), appid=appid)
+        self._reapply_audio()
+        return await self._offload_call(self._audio_state)
+
+    async def set_audio_bands(self, gains: list, scope: str, appid=None) -> dict:
+        """Replace all 10 band gains for the active route (drag-commit of the whole curve)."""
+        self._init()
+        resolved = self._resolve_scope(scope, appid)
+        if resolved is None:
+            return await self._offload_call(self._audio_state)
+        route = await self._offload_call(self._current_route)  # pactl → off the loop
+        self._audio_eq.set_bands(resolved, route, gains, appid=appid)
+        self._reapply_audio()
+        return await self._offload_call(self._audio_state)
+
+    async def set_audio_loudness(self, on: bool, scope: str, appid=None) -> dict:
+        """Toggle volume leveling (compression) for the active route — dialogue stays
+        audible without loud peaks blasting; also protects small speakers."""
+        self._init()
+        resolved = self._resolve_scope(scope, appid)
+        if resolved is None:
+            return await self._offload_call(self._audio_state)
+        route = await self._offload_call(self._current_route)
+        self._audio_eq.set_loudness(resolved, route, bool(on), appid=appid)
+        self._reapply_audio()
+        return await self._offload_call(self._audio_state)
+
+    async def save_audio_profile(self, name: str) -> dict:
+        """Save the active route's current curve + bass as a named, reusable profile."""
+        self._init()
+        route = await self._offload_call(self._current_route)
+        eff = self._effective_audio(route)
+        self._audio_profiles.save(name, eff["gains"], eff["bass"])
+        return await self._offload_call(self._audio_state)
+
+    async def apply_audio_profile(self, name: str, scope: str, appid=None) -> dict:
+        """Apply a saved profile's curve + bass to the active route for the given scope."""
+        self._init()
+        resolved = self._resolve_scope(scope, appid)
+        prof = self._audio_profiles.get(name)
+        if resolved is None or prof is None:
+            return await self._offload_call(self._audio_state)
+        route = await self._offload_call(self._current_route)
+        self._audio_eq.set_bands(resolved, route, prof["gains"], appid=appid)
+        self._audio_eq.set_bass(resolved, route, prof["bass"], appid=appid)
+        self._reapply_audio()
+        return await self._offload_call(self._audio_state)
+
+    async def delete_audio_profile(self, name: str) -> dict:
+        self._init()
+        self._audio_profiles.delete(name)
+        return await self._offload_call(self._audio_state)
+
+    async def set_audio_test(self, playing: bool, sample: str = "full") -> dict:
+        self._init()
+        if playing:
+            self._offload(lambda: self._start_audio_test_sync(sample))
+        else:
+            self._test_sample = None
+            self._offload(self._audio.stop_test)
+        return await self._offload_call(self._audio_state)
+
+    def _start_audio_test_sync(self, sample: str) -> None:
+        try:
+            if sample not in audio_tone.sample_ids():
+                sample = "full"
+            name = f"pdc_test_{sample}_{audio_tone.CACHE_TAG}.wav"
+            path = os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, name)
+            if not os.path.exists(path):
+                audio_tone.write_wav(path, audio_tone.render(sample))
+            self._audio.start_test(path)
+            self._test_sample = sample
+        except Exception:  # noqa: BLE001
+            self._test_sample = None
+
+    async def set_audio_curve(self, gains: list, bass: int, scope: str, appid=None) -> dict:
+        """Set the EQ gains and the bass-enhancement amount together in one apply (the tone
+        sliders drive both — the Graves slider engages the bass enhancer)."""
+        self._init()
+        resolved = self._resolve_scope(scope, appid)
+        if resolved is None:
+            return await self._offload_call(self._audio_state)
+        route = await self._offload_call(self._current_route)  # pactl → off the loop
+        self._audio_eq.set_bands(resolved, route, gains, appid=appid)
+        self._audio_eq.set_bass(resolved, route, int(bass), appid=appid)
+        self._reapply_audio()
+        return await self._offload_call(self._audio_state)
+
+    async def set_audio_follow_global(self, follow: bool, appid) -> dict:
+        self._init()
+        if appid is not None:
+            appid = str(appid)
+            if not follow and not self._audio_eq.has_game(appid):
+                self._audio_eq.create_game_from_global(appid)
+            self._audio_eq.set_follow_global(appid, bool(follow))
+            self._current_appid = appid
+        self._reapply_audio()
+        return await self._offload_call(self._audio_state)
+
+    async def reset_audio(self, scope: str = "global", appid=None) -> dict:
+        """Flatten the active route's EQ for the given scope."""
+        self._init()
+        resolved = self._resolve_scope(scope, appid)
+        if resolved is None:
+            return await self._offload_call(self._audio_state)
+        route = await self._offload_call(self._current_route)  # pactl → off the loop
+        self._audio_eq.reset(resolved, route, appid=appid)
+        self._reapply_audio()
+        return await self._offload_call(self._audio_state)
+
     # ---- lifecycle ----------------------------------------------------------
     async def _main(self) -> None:
         self._init()
@@ -2695,6 +2994,7 @@ class Plugin:
             # game's effective auto_tdp (holds when off), so it activates for a game that
             # has it on without waiting for the QAM.
             self._start_auto_loop()
+            self._start_audio_loop()
             if self._learning_active():
                 self._start_sampler()
         except Exception as e:  # noqa: BLE001
@@ -2713,6 +3013,9 @@ class Plugin:
             self._display_wait_task = None
         self._stop_night_loop()
         await self._offload_call(self._restore_color_safe)
+        self._audio_shutdown = True
+        await self._stop_audio_loop()
+        await self._offload_call(self._restore_audio_safe)
         await self._offload_call(self._restore_hhd_tdp)  # hand HHD's TDP back if we took it
         self._stop_auto_loop()
         if getattr(self, "_sampler", None) is not None:
@@ -2731,6 +3034,9 @@ class Plugin:
     async def _uninstall(self) -> None:
         await self._offload_call(self._restore_fans_safe)
         await self._offload_call(self._restore_color_safe)
+        self._audio_shutdown = True
+        await self._stop_audio_loop()
+        await self._offload_call(self._restore_audio_safe)
         await self._offload_call(self._restore_hhd_tdp)  # hand HHD's TDP back if we took it
         self._shutdown_apply_executor()
         fan_expose.remove_conf()  # drop the modprobe.d option we added (guarded)

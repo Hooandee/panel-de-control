@@ -2,7 +2,7 @@ import { ReactNode } from "react";
 import {
   LuGauge, LuSlidersHorizontal, LuFan, LuSettings,
   LuLeaf, LuBatteryFull, LuCpu, LuSun, LuVolume2, LuWind, LuThermometer, LuChartSpline,
-  LuLightbulb, LuPalette, LuGamepad2, LuMemoryStick, LuActivity, LuHeartPulse,
+  LuLightbulb, LuPalette, LuGamepad2, LuMemoryStick, LuActivity, LuHeartPulse, LuAudioLines,
   LuSparkles, LuMoon, LuReplace, LuSlidersVertical, LuRocket,
 } from "react-icons/lu";
 
@@ -34,6 +34,7 @@ export const TABS: ItemMeta[] = [
   { id: "system", labelKey: "nav.system", icon: <LuSlidersHorizontal size={ICON} /> },
   { id: "display", labelKey: "nav.display", icon: <LuPalette size={ICON} /> },
   { id: "fans", labelKey: "nav.fans", icon: <LuFan size={ICON} /> },
+  { id: "audio", labelKey: "nav.audio", icon: <LuAudioLines size={ICON} /> },
   { id: "mandos", labelKey: "nav.mandos", icon: <LuGamepad2 size={ICON} /> },
   { id: "params", labelKey: "nav.params", icon: <LuRocket size={ICON} /> },
   { id: "settings", labelKey: "nav.settings", icon: <LuSettings size={ICON} /> },

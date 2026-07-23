@@ -1,0 +1,153 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  AudioState,
+  applyAudioPreset,
+  applyAudioProfile,
+  deleteAudioProfile,
+  getAudioState,
+  resetAudio,
+  saveAudioProfile,
+  setAudioBands,
+  setAudioCurve,
+  setAudioEnabled,
+  setAudioFollowGlobal,
+  setAudioLoudness,
+  setAudioTest,
+  setSpeakerGuard,
+  Scope,
+} from "../api";
+import { useRunningGame } from "../tdp/useRunningGame";
+import { useScopeSync } from "../useScopeSync";
+import { applyTone, bassToEnhancer, ToneRegion } from "./logic";
+
+export interface EqControl {
+  state: AudioState | null;
+  scope: Scope;
+  game: ReturnType<typeof useRunningGame>;
+  onScope: (s: Scope) => void;
+  onEnable: (enabled: boolean) => void;
+  onPreset: (id: string) => void;
+  onBands: (gains: number[]) => void;
+  onTone: (region: ToneRegion, level: number) => void;
+  onLoudness: (on: boolean) => void;
+  onGuard: (on: boolean) => void;
+  onReset: () => void;
+  onTest: (sample: string) => void;
+  onSaveProfile: (name: string) => void;
+  onApplyProfile: (name: string) => void;
+  onDeleteProfile: (name: string) => void;
+  refresh: () => void;
+}
+
+/**
+ * Owns the Sonido EQ state + the global/per-game scope. Tone sliders and band drags update
+ * the curve optimistically and commit shortly after the last change (the backend applies by
+ * rewriting the PipeWire conf + restarting the filter-chain service, so we don't write on
+ * every delta). Cancels the pending commit on unmount and on game change.
+ */
+export function useEq(): EqControl {
+  const game = useRunningGame();
+  const [state, setState] = useState<AudioState | null>(null);
+  const commit = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pending = useRef<(() => void) | null>(null);
+  const stateRef = useRef<AudioState | null>(null);
+  stateRef.current = state;
+
+  const flush = useCallback(() => {
+    if (commit.current) { clearTimeout(commit.current); commit.current = null; }
+    const fn = pending.current;
+    pending.current = null;
+    if (fn) fn();
+  }, []);
+  const schedule = useCallback((fn: () => void) => {
+    pending.current = fn;
+    if (commit.current) clearTimeout(commit.current);
+    commit.current = setTimeout(() => { commit.current = null; pending.current = null; fn(); }, 350);
+  }, []);
+
+  const refresh = useCallback(() => {
+    getAudioState().then(setState).catch(() => {});
+  }, []);
+
+  const appid = game?.appid;
+  useEffect(() => {
+    flush();
+    refresh();
+  }, [appid, refresh, flush]);
+
+  useEffect(() => () => {
+    flush();
+    if (stateRef.current?.test_playing) setAudioTest(false, "full").catch(() => {});
+  }, [flush]);
+
+  const applyFollow = useCallback(
+    (f: boolean, a: string) => { setAudioFollowGlobal(f, a).then(setState).catch(() => {}); },
+    [],
+  );
+  const { scope, onScope } = useScopeSync(appid, state?.follows_global, applyFollow);
+
+  // Write target for the active scope (a game write needs the appid; global ignores it).
+  const wScope: Scope = scope === "game" && game ? "game" : "global";
+  const wTarget = wScope === "game" && game ? game.appid : null;
+
+  const onEnable = useCallback((enabled: boolean) => {
+    setAudioEnabled(enabled).then(setState).catch(() => {});
+  }, []);
+
+  const onPreset = useCallback((id: string) => {
+    applyAudioPreset(id, wScope, wTarget).then(setState).catch(() => {});
+  }, [wScope, wTarget]);
+
+  const onBands = useCallback((gains: number[]) => {
+    setState((cur) => (cur ? { ...cur, gains, preset: "custom" } : cur)); // optimistic
+    schedule(() => { setAudioBands(gains, wScope, wTarget).then(setState).catch(() => {}); });
+  }, [wScope, wTarget, schedule]);
+
+  // A tone slider sets one region's level. Graves also engages the bass enhancer. Reads the
+  // latest state so it composes with the other sliders; commits gains+bass in one apply.
+  const onTone = useCallback((region: ToneRegion, level: number) => {
+    const cur = stateRef.current;
+    if (!cur) return;
+    const gains = applyTone(cur.gains, region, level);
+    const bass = region === "graves" ? bassToEnhancer(level) : cur.bass;
+    setState({ ...cur, gains, bass, preset: "custom" });
+    schedule(() => { setAudioCurve(gains, bass, wScope, wTarget).then(setState).catch(() => {}); });
+  }, [wScope, wTarget, schedule]);
+
+  const onLoudness = useCallback((on: boolean) => {
+    setState((cur) => (cur ? { ...cur, loudness: on } : cur)); // optimistic
+    setAudioLoudness(on, wScope, wTarget).then(setState).catch(() => {});
+  }, [wScope, wTarget]);
+
+  const onGuard = useCallback((on: boolean) => {
+    setState((cur) => (cur ? { ...cur, guard: on } : cur)); // optimistic
+    setSpeakerGuard(on).then(setState).catch(() => {});
+  }, []);
+
+  const onReset = useCallback(() => {
+    resetAudio(wScope, wTarget).then(setState).catch(() => {});
+  }, [wScope, wTarget]);
+
+  const onTest = useCallback((sample: string) => {
+    const cur = stateRef.current;
+    const playingThis = !!cur?.test_playing && cur?.test_sample === sample;
+    const next = !playingThis;
+    setState((c) => (c ? { ...c, test_playing: next, test_sample: next ? sample : null } : c));
+    setAudioTest(next, sample).then(setState).catch(() => {});
+  }, []);
+
+  const onSaveProfile = useCallback((name: string) => {
+    saveAudioProfile(name).then(setState).catch(() => {});
+  }, []);
+  const onApplyProfile = useCallback((name: string) => {
+    applyAudioProfile(name, wScope, wTarget).then(setState).catch(() => {});
+  }, [wScope, wTarget]);
+  const onDeleteProfile = useCallback((name: string) => {
+    deleteAudioProfile(name).then(setState).catch(() => {});
+  }, []);
+
+  return {
+    state, scope, game, onScope, onEnable, onPreset, onBands, onTone, onLoudness, onGuard, onReset,
+    onTest, onSaveProfile, onApplyProfile, onDeleteProfile, refresh,
+  };
+}
