@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.25.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.25.1...panel-de-control-v0.25.2) (2026-07-22)
+
+
+### Bug Fixes / Correcciones
+
+* On ASUS ROG Ally handhelds, a game could sometimes start at a far-too-high power limit instead of your saved profile, heating the device and running the fans at full. Power limits now always stay within the device's real range, and any saved profile left with an out-of-range value is corrected automatically. ([#261](https://github.com/Hooandee/panel-de-control/issues/261)) ([f5ce7f7](https://github.com/Hooandee/panel-de-control/commit/f5ce7f79c0fe7592ad8d3fbf3069bdb3a7183aba))
+* **ES:** En los equipos ASUS ROG Ally, a veces un juego arrancaba con un límite de potencia disparado en vez de tu perfil guardado, calentando el equipo y poniendo los ventiladores al máximo. Ahora el límite de potencia se mantiene siempre dentro del rango real del equipo, y cualquier perfil guardado con un valor fuera de rango se corrige automáticamente. ([#261](https://github.com/Hooandee/panel-de-control/issues/261)) ([f5ce7f7](https://github.com/Hooandee/panel-de-control/commit/f5ce7f79c0fe7592ad8d3fbf3069bdb3a7183aba))
+
+## [0.25.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.25.0...panel-de-control-v0.25.1) (2026-07-22)
+
+
+### Bug Fixes / Correcciones
+
+* The Power tab no longer disappears when TDP control is handed to another manager. It stays visible in a live monitoring view, with a button to take control back whenever you want. ([#259](https://github.com/Hooandee/panel-de-control/issues/259)) ([2e67d27](https://github.com/Hooandee/panel-de-control/commit/2e67d2747b55eb4d5a94175ca40e35a0944e825f))
+* **ES:** La pestaña Potencia ya no desaparece cuando el control del TDP pasa a otro gestor. Se queda visible en modo monitoreo, con el consumo en vivo y un botón para retomar el control cuando quieras. ([#259](https://github.com/Hooandee/panel-de-control/issues/259)) ([2e67d27](https://github.com/Hooandee/panel-de-control/commit/2e67d2747b55eb4d5a94175ca40e35a0944e825f))
+
 ## [0.25.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.24.0...panel-de-control-v0.25.0) (2026-07-22)
 
 

@@ -258,6 +258,32 @@ def _snap_platform_profile(root: str) -> dict:
     return out
 
 
+_LEGACY_PPT = ("ppt_pl1_spl", "ppt_pl2_sppt", "ppt_fppt")
+
+
+def _snap_asus_ppt(root: str) -> dict:
+    """Both ASUS PL1 interfaces WITH their live values: asus-armoury (firmware-attributes,
+    current/min/max triplet) and the legacy asus-nb-wmi (direct value files). Values, not
+    just names — a triager needs to see a bogus firmware ceiling (e.g. 150) and whether
+    the second interface exists and what it holds vs the first."""
+    out: dict = {"asus_armoury": {}, "asus_nb_wmi": {}}
+    fw = os.path.join(root, "sys/class/firmware-attributes/asus-armoury/attributes")
+    for a in ("ppt_pl1_spl", "ppt_pl2_sppt", "ppt_pl3_fppt"):
+        d = os.path.join(fw, a)
+        if os.path.isdir(d):
+            out["asus_armoury"][a] = {
+                "current": read_str(os.path.join(d, "current_value")),
+                "min": read_str(os.path.join(d, "min_value")),
+                "max": read_str(os.path.join(d, "max_value")),
+            }
+    legacy = os.path.join(root, "sys/devices/platform/asus-nb-wmi")
+    for a in _LEGACY_PPT:
+        v = read_str(os.path.join(legacy, a))
+        if v is not None:
+            out["asus_nb_wmi"][a] = v
+    return out
+
+
 def _snap_acpi(root: str) -> dict:
     path = os.path.join(root, "proc/acpi/call")
     try:
@@ -304,7 +330,8 @@ def sysfs_snapshot(
     bounded-depth globs, NEVER a recursive walk of /sys. Never raises: any missing
     or unreadable path records an absent/empty marker."""
     snap: dict = {"hwmon": [], "firmware_attributes": {}, "power_supply": {},
-                  "platform_profile": {"acpi": {}, "class": {}}, "acpi": {}, "modules": []}
+                  "platform_profile": {"acpi": {}, "class": {}}, "acpi": {}, "modules": [],
+                  "asus_ppt": {"asus_armoury": {}, "asus_nb_wmi": {}}}
     try:
         snap["hwmon"] = _snap_hwmon(root)
     except Exception:  # noqa: BLE001
@@ -321,6 +348,10 @@ def sysfs_snapshot(
         pass
     try:
         snap["platform_profile"] = _snap_platform_profile(root)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        snap["asus_ppt"] = _snap_asus_ppt(root)
     except Exception:  # noqa: BLE001
         pass
     try:
