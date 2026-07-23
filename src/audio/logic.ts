@@ -44,6 +44,15 @@ export function formatHz(freq: number): string {
   return freq >= 1000 ? `${freq / 1000}k` : `${freq}`;
 }
 
+// Spatial effects (route-aware). Crossfeed lives on the headphone route (0 = off);
+// stereo width on the speaker route (50 = neutral). Mirrors py_modules/audio/const.py.
+export const CROSSFEED_DEFAULT = 60; // sensible feel when first switched on
+export const WIDTH_NEUTRAL = 50;
+export const WIDTH_DEFAULT = 70; // a touch wider than neutral when first switched on
+
+export const crossfeedOn = (v: number): boolean => v > 0;
+export const widthOn = (v: number): boolean => v !== WIDTH_NEUTRAL;
+
 /**
  * Smooth SVG path (Catmull-Rom → cubic Bézier) of the EQ response across the panel
  * width. Band i sits at x = i/(n-1)·width; gain maps around the vertical centre, +gain

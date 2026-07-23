@@ -3,6 +3,7 @@ import {
   applyTone,
   bassToEnhancer,
   BAND_FREQS,
+  crossfeedOn,
   GAIN_MAX,
   GAIN_MIN,
   clampGain,
@@ -10,6 +11,8 @@ import {
   gainsToCurvePath,
   toneCeiling,
   toneLevel,
+  WIDTH_NEUTRAL,
+  widthOn,
 } from "./logic";
 
 describe("audio EQ logic", () => {
@@ -67,5 +70,17 @@ describe("audio EQ logic", () => {
     const flat = gainsToCurvePath([0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 320, 96);
     const boosted = gainsToCurvePath([12, 12, 12, 12, 12, 12, 12, 12, 12, 12], 320, 96);
     expect(boosted).not.toBe(flat);
+  });
+
+  it("crossfeedOn is true only above zero", () => {
+    expect(crossfeedOn(0)).toBe(false);
+    expect(crossfeedOn(1)).toBe(true);
+    expect(crossfeedOn(60)).toBe(true);
+  });
+
+  it("widthOn is true only away from neutral", () => {
+    expect(widthOn(WIDTH_NEUTRAL)).toBe(false);
+    expect(widthOn(0)).toBe(true);   // mono fold-down still counts as engaged
+    expect(widthOn(80)).toBe(true);
   });
 });

@@ -3,8 +3,12 @@ from audio.const import (
     GAIN_MAX,
     GAIN_MIN,
     ROUTES,
+    WIDTH_NEUTRAL,
     clamp_gain,
+    clamp_pct,
     compute_preamp,
+    crossfeed_gain,
+    width_factor,
 )
 
 
@@ -27,3 +31,23 @@ def test_preamp_is_negative_headroom():
     assert compute_preamp([0] * 10) == 0.0
     assert compute_preamp([6, 0, 3, 0, 0, 0, 0, 0, 0, 0]) == -6.0
     assert compute_preamp([-3, -6, 0, 0, 0, 0, 0, 0, 0, 0]) == 0.0
+
+
+def test_clamp_pct():
+    assert clamp_pct(150) == 100
+    assert clamp_pct(-5) == 0
+    assert clamp_pct(37) == 37
+    assert clamp_pct("bad") == 0
+
+
+def test_width_factor_neutral_is_one():
+    assert width_factor(WIDTH_NEUTRAL) == 1.0
+    assert width_factor(0) == 0.0        # mono
+    assert width_factor(100) == 2.0      # max wide
+    assert width_factor(25) == 0.5
+
+
+def test_crossfeed_gain():
+    assert crossfeed_gain(0) == 0.0      # off
+    assert crossfeed_gain(100) == 0.6    # full
+    assert crossfeed_gain(50) == 0.3

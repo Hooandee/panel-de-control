@@ -20,8 +20,8 @@ class _FakePipeWireEq:
     def current_route(self):
         return self._route
 
-    def set_gains(self, gains, bass=0, loudness=False):
-        self.applied.append((list(gains), bass, loudness))
+    def set_gains(self, gains, bass=0, loudness=False, crossfeed=0, stereo_width=50):
+        self.applied.append((list(gains), bass, loudness, crossfeed, stereo_width))
         return True
 
     def start_test(self, path):
@@ -241,3 +241,52 @@ def test_guard_does_not_clamp_headphone_route(tmp_path, monkeypatch):
     st = asyncio.run(p.set_audio_bands([12] * 10, "global"))
     assert st["route"] == "headphone"
     assert fake.applied[-1][0] == [12.0] * 10  # guard is speaker-only
+
+
+# --- spatial effects: crossfeed (headphone) + stereo width (speaker) ------------------
+
+def test_spatial_defaults_in_state(tmp_path, monkeypatch):
+    p, fake = _make_plugin(tmp_path, monkeypatch)
+    st = asyncio.run(p.get_audio_state())
+    assert st["crossfeed"] == 0 and st["stereo_width"] == 50
+
+
+def test_crossfeed_applies_on_headphone(tmp_path, monkeypatch):
+    p, fake = _make_plugin(tmp_path, monkeypatch, audio=_FakePipeWireEq(route="headphone"))
+    asyncio.run(p.set_audio_enabled(True))
+    st = asyncio.run(p.set_audio_crossfeed(70, "global"))
+    assert st["crossfeed"] == 70
+    assert fake.applied[-1][3] == 70          # crossfeed passed to set_gains
+    assert fake.applied[-1][4] == 50          # width stays neutral on headphones
+
+
+def test_crossfeed_ignored_on_speaker_route(tmp_path, monkeypatch):
+    p, fake = _make_plugin(tmp_path, monkeypatch, audio=_FakePipeWireEq(route="speaker"))
+    asyncio.run(p.set_audio_enabled(True))
+    st = asyncio.run(p.set_audio_crossfeed(70, "global"))
+    assert fake.applied[-1][3] == 0           # not applied on speakers
+    assert st["crossfeed"] == 0               # speaker route view reports neutral (route-exclusive)
+
+
+def test_stereo_width_applies_on_speaker(tmp_path, monkeypatch):
+    p, fake = _make_plugin(tmp_path, monkeypatch, audio=_FakePipeWireEq(route="speaker"))
+    asyncio.run(p.set_audio_enabled(True))
+    st = asyncio.run(p.set_audio_stereo_width(80, "global"))
+    assert st["stereo_width"] == 80
+    assert fake.applied[-1][4] == 80          # width passed to set_gains
+    assert fake.applied[-1][3] == 0           # crossfeed neutral on speakers
+
+
+def test_stereo_width_ignored_on_headphone_route(tmp_path, monkeypatch):
+    p, fake = _make_plugin(tmp_path, monkeypatch, audio=_FakePipeWireEq(route="headphone"))
+    asyncio.run(p.set_audio_enabled(True))
+    st = asyncio.run(p.set_audio_stereo_width(80, "global"))
+    assert fake.applied[-1][4] == 50          # neutral (unapplied) on headphones
+    assert st["stereo_width"] == 50           # headphone route view reports neutral (route-exclusive)
+
+
+def test_spatial_preserved_across_preset(tmp_path, monkeypatch):
+    p, fake = _make_plugin(tmp_path, monkeypatch, audio=_FakePipeWireEq(route="headphone"))
+    asyncio.run(p.set_audio_crossfeed(40, "global"))
+    st = asyncio.run(p.apply_audio_preset("music", "global"))
+    assert st["crossfeed"] == 40 and st["preset"] == "music"
