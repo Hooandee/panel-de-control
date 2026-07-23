@@ -1,8 +1,10 @@
 import { PanelSectionRow, SliderField, Focusable } from "@decky/ui";
 import { FC } from "react";
 
-import { TdpState, TdpScope, PowerDraw, BoostMode } from "../api";
+import { TdpState, TdpScope, PowerDraw, BoostMode, PowerPresetState } from "../api";
 import { resetWatts } from "../tdp/logic";
+import { resolveItems, PresetItem } from "../tdp/powerPresets";
+import { openPowerPresetsModal } from "./PowerPresetsModal";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { Loading } from "./Loading";
@@ -35,9 +37,13 @@ export interface TdpSectionProps {
   monitorOnly?: boolean;
   // Flip the master switch back on from the monitor notice.
   onReactivate?: () => void;
+  // Custom power-preset library (built-in watts resolved from `tdp.presets`).
+  presets: PowerPresetState | null;
+  refreshPresets: () => void;
+  onApplyPreset: (item: PresetItem) => void;
 }
 
-export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onScope, onWatts, onSetLevels, onSetMode, onApplySuggestion, onFirmwareMode, monitorOnly, onReactivate }) => {
+export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onScope, onWatts, onSetLevels, onSetMode, onApplySuggestion, onFirmwareMode, monitorOnly, onReactivate, presets, refreshPresets, onApplyPreset }) => {
   const { t } = useI18n();
 
   if (!tdp) return <Loading />;
@@ -202,19 +208,26 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
             </>
           ) : (
             <>
-              <PanelSectionRow>
-                <Presets
-                  presets={tdp.presets}
-                  onAc={tdp.on_ac}
-                  activeWatts={view.watts}
-                  labels={{
-                    save: t("tdp.preset.save"),
-                    balanced: t("tdp.preset.balanced"),
-                    turbo: t("tdp.preset.turbo"),
-                  }}
-                  onPick={onWatts}
-                />
-              </PanelSectionRow>
+              {presets && (
+                <PanelSectionRow>
+                  <Presets
+                    resolved={resolveItems(presets, tdp.presets, tdp.on_ac, view.watts)}
+                    editLabel={t("tdp.presets.edit")}
+                    hiddenLabel={t("tdp.presets.hidden")}
+                    onPick={onApplyPreset}
+                    onEdit={() =>
+                      openPowerPresetsModal({
+                        builtinWatts: tdp.presets,
+                        onAc: tdp.on_ac,
+                        currentWatts: view.watts,
+                        min: tdp.limits.min,
+                        max: activeMax,
+                        onClose: refreshPresets,
+                      })
+                    }
+                  />
+                </PanelSectionRow>
+              )}
               {showReset && (
                 <PanelSectionRow>
                   <Focusable
