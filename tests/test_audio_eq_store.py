@@ -4,7 +4,6 @@ from audio.eq_store import EqStore
 
 
 def test_malformed_games_shape_does_not_crash(tmp_path):
-    # A corrupt/incompatible store where "games" isn't a dict must not brick init.
     p = tmp_path / "audio.json"
     p.write_text(json.dumps({"global": {}, "games": [{}]}))
     s = EqStore(str(p))

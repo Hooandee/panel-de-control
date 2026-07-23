@@ -31,8 +31,6 @@ def build_chain_config(gains, sink_name, description="Panel de Control", bass=0,
         for i in range(1, 10)
     ]
     tail = "eq_band_10:Out"  # the current graph output; extra effects chain onto it in order
-    # Bass and loudness are CAPS (LADSPA) effects; without caps.so on this system they're
-    # dropped rather than pointing the graph at a missing plugin (which fails the whole chain).
     if caps and bass > 0:
         drive = round((max(0, min(100, bass)) / 100.0) * _BASS_MAX_DRIVE, 3)
         nodes.append(

@@ -45,7 +45,7 @@ class ScopedProfileStore:
             raw = {}
         glob = self._clean_global(raw.get("global"))
         games_raw = raw.get("games")
-        if not isinstance(games_raw, dict):  # a list/str/null here would crash .items()
+        if not isinstance(games_raw, dict):
             games_raw = {}
         games = {str(a): self._clean_game(p, glob) for a, p in games_raw.items()}
         return {"global": glob, "games": games}

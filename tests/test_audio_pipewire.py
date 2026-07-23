@@ -45,7 +45,6 @@ _DECK_SHORT = (
 
 
 def test_choose_downstream_prefers_the_active_default():
-    # Speaker is first in the list, but headphones is the default → feed headphones.
     assert (
         choose_downstream("alsa_output.HiFi__Headphones__sink", _DECK_SHORT, "X EQ")
         == "alsa_output.HiFi__Headphones__sink"

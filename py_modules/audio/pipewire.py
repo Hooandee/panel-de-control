@@ -10,9 +10,11 @@ import pwd
 import re
 import signal
 import subprocess
+from functools import lru_cache
 
 from audio.filter_chain import build_chain_config
 from audio.route import route_of_sink
+from osinfo import _parse_os_release
 
 _DIGITAL_HINTS = ("hdmi", "displayport", "iec958", "spdif")
 
@@ -21,9 +23,7 @@ _SERVICE = "filter-chain.service"
 
 
 def _find_lib(*relative):
-    """First matching library path across the prefixes distros actually use: SteamOS/Arch/
-    CachyOS put libs in /usr/lib, Fedora/Bazzite in /usr/lib64, Debian/Ubuntu under a
-    multiarch triplet dir. Globbed so an untested distro's prefix still resolves."""
+    # SteamOS/Arch/CachyOS: /usr/lib; Fedora/Bazzite: /usr/lib64; Debian/Ubuntu: multiarch dir.
     sub = os.path.join(*relative)
     for pattern in (f"/usr/lib*/{sub}", f"/usr/lib/*-linux-gnu/{sub}", f"/usr/local/lib*/{sub}"):
         hits = glob.glob(pattern)
@@ -32,26 +32,14 @@ def _find_lib(*relative):
     return None
 
 
+@lru_cache(maxsize=None)  # the resolved paths are static for the process; don't re-glob on the loop
 def filter_chain_module():
     return _find_lib("pipewire-0.3", "libpipewire-module-filter-chain.so")
 
 
+@lru_cache(maxsize=None)
 def caps_plugin():
-    """The CAPS LADSPA plugin (bass + loudness). Optional — the biquad EQ works without it."""
     return _find_lib("ladspa", "caps.so")
-
-
-def _os_release():
-    out = {}
-    try:
-        with open("/etc/os-release") as f:
-            for line in f:
-                key, sep, val = line.strip().partition("=")
-                if sep and key in ("ID", "VARIANT_ID", "VERSION_ID"):
-                    out[key] = val.strip('"')
-    except OSError:
-        pass
-    return out
 
 
 def _is_digital(name):
@@ -71,9 +59,6 @@ def pick_downstream(short_sinks_text, our_name):
 
 
 def choose_downstream(default_sink, short_sinks_text, our_name):
-    """The physical sink our EQ feeds. Prefer the current default output — the sink the user
-    actually selected (e.g. headphones over the built-in speaker) — when it isn't ours or a
-    digital output; otherwise fall back to enumerating the sinks (skipping digital)."""
     if default_sink and default_sink != our_name and not _is_digital(default_sink):
         return default_sink
     return pick_downstream(short_sinks_text, our_name)
@@ -183,8 +168,7 @@ class PipeWireEq:
         if not path:
             return False
         uid = self._session[0]
-        # Create the config dirs owned by the session user (root would otherwise leave
-        # ~/.config/pipewire root-owned, so the user couldn't manage their own filters).
+        # Create the config dirs owned by the session user, not root.
         d = os.path.dirname(path)
         made = []
         while d and not os.path.exists(d):
@@ -213,8 +197,6 @@ class PipeWireEq:
         return f"{m.group(1)}%" if m else None
 
     def _downstream_sink(self):
-        """The physical sink our EQ feeds — the user's active output when we haven't taken
-        over yet, else the best physical sink."""
         return choose_downstream(
             self._runner(["pactl", "get-default-sink"]),
             self._runner(["pactl", "list", "short", "sinks"]),
@@ -270,14 +252,12 @@ class PipeWireEq:
         return self._runner(["pactl", "get-default-sink"]) == self._label
 
     def diagnostics(self):
-        """Read-only audio snapshot for bug reports: why the EQ is (or isn't) available and
-        what the graph looks like, so 'no sound' / 'not detected' / volume reports are
-        diagnosable. Never raises."""
         info = {
             "supported": self.is_supported(),
             "module": filter_chain_module(),
             "caps": caps_plugin(),
-            "os_release": _os_release(),
+            "os_release": {k: v for k, v in _parse_os_release().items()
+                           if k in ("ID", "VARIANT_ID", "VERSION_ID")},
             "session": None,
         }
         if self._session:

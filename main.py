@@ -341,7 +341,7 @@ class Plugin:
         # Audio EQ output-route watcher: last applied route + its loop task.
         self._audio_task = None
         self._audio_route_last = None
-        self._audio_shutdown = False  # set on unload so a late re-apply can't recreate the sink
+        self._audio_shutdown = False
         self._test_sample = None
         # Rolling GPU% window + slack counter for the GPU-driven auto-TDP control law.
         self._gpu_window = []      # recent GPU% samples
@@ -579,8 +579,6 @@ class Plugin:
             "power": await _safe(self.get_power_draw()),
             "eco": await _safe(self.get_eco_state()),
             "audio": await _safe(self.get_audio_state()),
-            # Deeper audio snapshot (module/CAPS paths, session, sinks, route, conf) so
-            # "no sound" / "EQ not detected" / volume reports are diagnosable.
             "audio_diag": await _safe(self._offload_call(self._audio.diagnostics)),
             # Detected tools + current game + the frontend's running-game snapshot.
             "launch": self._launch_report_state(context),
@@ -3015,8 +3013,6 @@ class Plugin:
             self._display_wait_task = None
         self._stop_night_loop()
         await self._offload_call(self._restore_color_safe)
-        # Stop the audio watcher (cancel + await) and block further re-applies BEFORE the
-        # teardown, or the loop could re-create the sink during the awaits below.
         self._audio_shutdown = True
         await self._stop_audio_loop()
         await self._offload_call(self._restore_audio_safe)

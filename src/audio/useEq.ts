@@ -53,8 +53,6 @@ export function useEq(): EqControl {
   const stateRef = useRef<AudioState | null>(null);
   stateRef.current = state;
 
-  // Debounced commit that can be flushed: closing the QAM or changing game runs the
-  // pending write immediately (with its original scope) instead of dropping it.
   const flush = useCallback(() => {
     if (commit.current) { clearTimeout(commit.current); commit.current = null; }
     const fn = pending.current;
@@ -73,13 +71,12 @@ export function useEq(): EqControl {
 
   const appid = game?.appid;
   useEffect(() => {
-    flush();  // persist any pending edit for the previous game before switching
+    flush();
     refresh();
   }, [appid, refresh, flush]);
 
   useEffect(() => () => {
-    flush();  // persist a pending edit if the section unmounts / QAM closes mid-debounce
-    // Never leave the test tone looping after the section unmounts / QAM closes.
+    flush();
     if (stateRef.current?.test_playing) setAudioTest(false, "full").catch(() => {});
   }, [flush]);
 

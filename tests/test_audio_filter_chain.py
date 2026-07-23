@@ -62,8 +62,6 @@ def test_bass_then_compressor_chained_in_order():
 
 
 def test_bass_and_loudness_dropped_without_caps():
-    # No CAPS on this system → the biquad EQ still builds, effects are omitted (not a
-    # dangling reference to a missing plugin that would fail the whole chain).
     cfg = build_chain_config(gains=[0.0] * 10, sink_name="pdc_eq", bass=50, loudness=True, caps=None)
     assert "spice" not in cfg and "comp" not in cfg and "caps.so" not in cfg
-    assert cfg.count("bq_peaking") == 8  # the EQ itself is intact
+    assert cfg.count("bq_peaking") == 8
