@@ -3,9 +3,10 @@
 ## [0.26.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.26.0...panel-de-control-v0.26.1) (2026-07-23)
 
 
-### Bug Fixes
+### Bug Fixes / Errores corregidos
 
-* restore generic-pwm fan control by engaging manual mode before writing duty ([#269](https://github.com/Hooandee/panel-de-control/issues/269)) ([1d18308](https://github.com/Hooandee/panel-de-control/commit/1d1830838973c44f8f0c26362f4df40d63b9a19d))
+* Fixes fan control on handhelds with a generic fan chip (such as the GPD Win Mini and OneXPlayer), where the fan stopped responding after a recent update. ([#269](https://github.com/Hooandee/panel-de-control/issues/269)) ([1d18308](https://github.com/Hooandee/panel-de-control/commit/1d1830838973c44f8f0c26362f4df40d63b9a19d))
+* **ES:** Arregla el control del ventilador en handhelds con chip de ventilador genérico (como la GPD Win Mini y OneXPlayer), donde el ventilador dejó de responder tras una actualización reciente. ([#269](https://github.com/Hooandee/panel-de-control/issues/269)) ([1d18308](https://github.com/Hooandee/panel-de-control/commit/1d1830838973c44f8f0c26362f4df40d63b9a19d))
 
 ## [0.26.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.25.3...panel-de-control-v0.26.0) (2026-07-23)
 
