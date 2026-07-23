@@ -49,6 +49,16 @@ export interface ResolvedPresets {
 const isBuiltin = (id: string): id is BuiltinId =>
   (BUILTIN_IDS as readonly string[]).includes(id);
 
+// Shared label logic for the chip row and the manager row (kept together so they can't
+// drift). Title = builtin name (via i18n) or the custom name, falling back to the watts;
+// the watts read as a secondary line whenever the title isn't already the watts.
+export function presetTitle(it: PresetItem, t: (key: string) => string): string {
+  return it.kind === "builtin" ? t(BUILTIN_LABEL_KEY[it.id]) : it.name || it.label;
+}
+export function presetSub(it: PresetItem): string {
+  return it.kind === "builtin" || it.name ? it.label : "";
+}
+
 function builtinWattsFor(id: BuiltinId, w: BuiltinWatts, onAc: boolean): number {
   if (id === "turbo") return onAc ? w.turbo_ac : w.turbo;
   return w[id];
@@ -99,12 +109,12 @@ export function resolveItems(
   }
   const isFull = (r: (typeof rows)[number]) => r.wm && r.boost != null && boostKey(r.boost) === liveKey;
   const anyFull = rows.some(isFull);
-  const manager: PresetItem[] = rows.map(({ wm, ...item }) => ({
-    ...item,
+  const manager: PresetItem[] = rows.map((r) => {
+    const { wm, ...item } = r;
     // Boosted preset: active on an exact watts+boost match. Watts-only preset (incl.
     // builtins): active on a watts match only when nothing fuller matches the live state.
-    active: isFull({ ...item, wm }) || (item.boost == null && wm && !anyFull),
-  }));
+    return { ...item, active: isFull(r) || (r.boost == null && wm && !anyFull) };
+  });
   const visible = manager.filter((i) => !i.hidden);
   return {
     visible,

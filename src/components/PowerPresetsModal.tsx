@@ -1,17 +1,18 @@
 import { FC, useEffect, useRef, useState } from "react";
-import { ModalRoot, showModal, Focusable, ButtonItem, TextField, DialogButton } from "@decky/ui";
+import { ModalRoot, showModal, Focusable, ButtonItem, TextField } from "@decky/ui";
 import { LuChevronUp, LuChevronDown, LuEye, LuEyeOff, LuTrash2, LuPlus, LuCheck } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { FocusRoot } from "./FocusRoot";
+import { ConfirmDialog } from "./ConfirmDialog";
 import { IconAction } from "./IconAction";
 import { IconPickerGrid } from "./IconPickerGrid";
 import { Loading } from "./Loading";
 import { ContainedSlider } from "./ContainedSlider";
 import { segmentGroupStyle, segmentItemStyle } from "./segmented";
 import { PRESET_ICON_KEYS, presetIconNode } from "../tdp/powerPresetIcons";
-import { resolveItems, BuiltinWatts, BUILTIN_LABEL_KEY } from "../tdp/powerPresets";
+import { resolveItems, BuiltinWatts, PresetItem, presetTitle, presetSub } from "../tdp/powerPresets";
 import {
   PowerPresetState, PowerPresetBoost, BoostMode,
   getPowerPresets, createPowerPreset, updatePowerPreset,
@@ -34,31 +35,6 @@ interface Props {
 type CustomEntry = PowerPresetState["custom"][string];
 
 const BOOST_MODES: BoostMode[] = ["estable", "auto", "custom"];
-
-/** Alert-style confirm before deleting a preset. */
-const DeleteConfirm: FC<{ onConfirm: () => void; closeModal?: () => void }> = ({ onConfirm, closeModal }) => {
-  const { t } = useI18n();
-  return (
-    <ModalRoot onCancel={closeModal} onEscKeypress={closeModal}>
-      <FocusRoot style={{ display: "flex", flexDirection: "column", gap: theme.space.md }}>
-        <div style={{ display: "flex", alignItems: "center", gap: theme.space.xs, fontSize: 20, fontWeight: 700 }}>
-          <LuTrash2 size={20} color={theme.color.danger} /> {t("tdp.presets.delete.title")}
-        </div>
-        <div style={{ fontSize: theme.font.body, color: theme.color.textPrimary, lineHeight: 1.4 }}>
-          {t("tdp.presets.delete.desc")}
-        </div>
-        <div style={{ display: "flex", gap: theme.space.sm }}>
-          <DialogButton style={{ flex: 1, minWidth: 0 }} onClick={() => { closeModal?.(); onConfirm(); }}>
-            {t("tdp.presets.delete")}
-          </DialogButton>
-          <DialogButton style={{ flex: 1, minWidth: 0 }} onClick={() => closeModal?.()}>
-            {t("tdp.presets.delete.cancel")}
-          </DialogButton>
-        </div>
-      </FocusRoot>
-    </ModalRoot>
-  );
-};
 
 /** Per-preset boost picker (only shown on boost-capable devices). "none" = leave the
  *  boost mode untouched on apply; a mode makes it explicit; custom reveals the margins. */
@@ -145,11 +121,18 @@ const Body: FC<Props> = ({ builtinWatts, onAc, currentWatts, min, max, supportsA
     wrap(updatePowerPreset(id, entry.watts, entry.icon, entry.boost, entry.name));
   };
   const confirmDelete = (id: string) =>
-    showModal(<DeleteConfirm onConfirm={() => wrap(deletePowerPreset(id))} />);
-
-  const rowTitle = (it: (typeof items)[number]) =>
-    it.kind === "builtin" ? t(BUILTIN_LABEL_KEY[it.id]) : it.name || it.label;
-  const rowSub = (it: (typeof items)[number]) => (it.kind === "builtin" || it.name ? it.label : "");
+    showModal(
+      <ConfirmDialog
+        title={t("tdp.presets.delete.title")}
+        desc={t("tdp.presets.delete.desc")}
+        confirmLabel={t("tdp.presets.delete")}
+        cancelLabel={t("tdp.presets.delete.cancel")}
+        icon={<LuTrash2 size={20} color={theme.color.danger} />}
+        onConfirm={() => wrap(deletePowerPreset(id))}
+      />,
+    );
+  // The editable fields of a preset, for building a commit payload with one field changed.
+  const entryOf = (it: PresetItem): CustomEntry => ({ watts: it.watts, icon: it.icon, name: it.name, boost: it.boost });
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: theme.space.md, padding: theme.space.sm, maxWidth: 640, width: "100%", margin: "0 auto" }}>
@@ -174,8 +157,8 @@ const Body: FC<Props> = ({ builtinWatts, onAc, currentWatts, min, max, supportsA
             <div style={{ display: "flex", alignItems: "center", gap: theme.space.sm }}>
               <span style={{ display: "flex", color: it.hidden ? theme.color.textMuted : theme.color.accent }}>{presetIconNode(it.icon, 16)}</span>
               <span style={{ flex: 1, minWidth: 0, fontSize: theme.font.body, color: theme.color.textPrimary, opacity: it.hidden ? 0.5 : 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {rowTitle(it)}
-                {rowSub(it) && <span style={{ color: theme.color.textMuted }}> · {rowSub(it)}</span>}
+                {presetTitle(it, t)}
+                {presetSub(it) && <span style={{ color: theme.color.textMuted }}> · {presetSub(it)}</span>}
               </span>
               <IconAction label={t("customize.moveUp")} color={i === 0 ? theme.color.textMuted : theme.color.accent} disabled={i === 0} onTap={() => wrap(movePowerPreset(it.id, -1))}><LuChevronUp size={18} /></IconAction>
               <IconAction label={t("customize.moveDown")} color={i === items.length - 1 ? theme.color.textMuted : theme.color.accent} disabled={i === items.length - 1} onTap={() => wrap(movePowerPreset(it.id, 1))}><LuChevronDown size={18} /></IconAction>
@@ -189,16 +172,16 @@ const Body: FC<Props> = ({ builtinWatts, onAc, currentWatts, min, max, supportsA
             {it.editable && editing === it.id && (
               <div style={{ paddingLeft: theme.space.lg, display: "flex", flexDirection: "column", gap: theme.space.xs }}>
                 <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{t("tdp.presets.name")}</span>
-                <TextField value={it.name} bShowClearAction onChange={(e) => commitDebounced(it.id, { watts: it.watts, icon: it.icon, name: e.target.value, boost: it.boost })} />
-                <ContainedSlider value={it.watts} min={min} max={max} step={1} showValue onChange={(w) => commitDebounced(it.id, { watts: w, icon: it.icon, name: it.name, boost: it.boost })} />
-                <IconPickerGrid keys={PRESET_ICON_KEYS} value={it.icon} renderIcon={presetIconNode} onPick={(k) => commitNow(it.id, { watts: it.watts, icon: k, name: it.name, boost: it.boost })} />
+                <TextField value={it.name} bShowClearAction onChange={(e) => commitDebounced(it.id, { ...entryOf(it), name: e.target.value })} />
+                <ContainedSlider value={it.watts} min={min} max={max} step={1} showValue onChange={(w) => commitDebounced(it.id, { ...entryOf(it), watts: w })} />
+                <IconPickerGrid keys={PRESET_ICON_KEYS} value={it.icon} renderIcon={presetIconNode} onPick={(k) => commitNow(it.id, { ...entryOf(it), icon: k })} />
                 {supportsAdvanced && (
                   <BoostEditor
                     boost={it.boost}
                     off2Max={off2Max}
                     off3Max={off3Max}
-                    onPickMode={(b) => commitNow(it.id, { watts: it.watts, icon: it.icon, name: it.name, boost: b })}
-                    onOffsets={(b) => commitDebounced(it.id, { watts: it.watts, icon: it.icon, name: it.name, boost: b })}
+                    onPickMode={(b) => commitNow(it.id, { ...entryOf(it), boost: b })}
+                    onOffsets={(b) => commitDebounced(it.id, { ...entryOf(it), boost: b })}
                   />
                 )}
               </div>

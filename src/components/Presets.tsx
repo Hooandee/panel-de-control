@@ -2,7 +2,7 @@ import { FC, memo } from "react";
 import { Focusable } from "@decky/ui";
 import { LuPlus } from "react-icons/lu";
 
-import { ResolvedPresets, PresetItem, BUILTIN_LABEL_KEY } from "../tdp/powerPresets";
+import { ResolvedPresets, PresetItem, presetTitle, presetSub } from "../tdp/powerPresets";
 import { presetIconNode } from "../tdp/powerPresetIcons";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
@@ -25,11 +25,8 @@ const BoostDot: FC<{ active: boolean }> = ({ active }) => (
 
 export const Presets: FC<PresetsProps> = memo(({ resolved, manageLabel, hiddenLabel, onPick, onEdit }) => {
   const { t } = useI18n();
-  // Title = the preset's name (builtin name via i18n, custom user name); the watts read as
-  // a secondary line. A nameless custom preset falls back to its watts as the title.
-  const title = (it: PresetItem) =>
-    it.kind === "builtin" ? t(BUILTIN_LABEL_KEY[it.id]) : it.name || it.label;
-  const sub = (it: PresetItem) => (it.kind === "builtin" || it.name ? it.label : "");
+  const title = (it: PresetItem) => presetTitle(it, t);
+  const sub = presetSub;
   // Three or fewer visible presets read better as big column tiles; more wrap compactly.
   const big = resolved.visible.length <= 3;
   return (

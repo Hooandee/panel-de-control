@@ -2,7 +2,7 @@ import { PanelSectionRow, SliderField, Focusable } from "@decky/ui";
 import { FC, useCallback, useMemo } from "react";
 
 import { TdpState, TdpScope, PowerDraw, BoostMode, PowerPresetState } from "../api";
-import { resetWatts } from "../tdp/logic";
+import { resetWatts, offsetOf } from "../tdp/logic";
 import { resolveItems, PresetItem, BUILTIN_IDS } from "../tdp/powerPresets";
 import { openPowerPresetsModal } from "./PowerPresetsModal";
 import { useI18n } from "../i18n";
@@ -57,7 +57,7 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
     const w = scope === "global" ? tdp.global_watts : tdp.watts;
     const lv = scope === "global" ? tdp.global_levels : tdp.levels;
     const mode = scope === "global" ? tdp.global_boost_mode : tdp.boost_mode;
-    const liveBoost = { mode, off2: lv.pl2 - lv.pl1, off3: lv.pl3 - lv.pl2 };
+    const liveBoost = { mode, off2: offsetOf(lv.pl2, lv.pl1), off3: offsetOf(lv.pl3, lv.pl2) };
     return resolveItems(lib, tdp.presets, tdp.on_ac, w, ceiling, liveBoost);
   }, [tdp, presets, scope]);
 
