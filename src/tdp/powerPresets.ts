@@ -50,6 +50,7 @@ export function resolveItems(
   watts: BuiltinWatts,
   onAc: boolean,
   currentWatts: number,
+  activeMax: number,
 ): ResolvedPresets {
   const hidden = new Set(state.hidden);
   const cur = Math.round(currentWatts);
@@ -73,15 +74,19 @@ export function resolveItems(
     } else {
       const c = state.custom[id];
       if (c) {
+        // Clamp the shown/active watts to what the current power source can deliver, so a
+        // charger-created preset doesn't advertise unreachable watts on battery (apply
+        // re-clamps server-side too, keeping the active highlight honest).
+        const w = Math.min(c.watts, activeMax);
         item = {
           id,
           kind: "custom",
-          watts: c.watts,
-          label: `${c.watts}W`,
+          watts: w,
+          label: `${w}W`,
           icon: c.icon,
           boost: c.boost,
           hidden: hidden.has(id),
-          active: Math.round(c.watts) === cur,
+          active: Math.round(w) === cur,
           editable: true,
           deletable: true,
         };

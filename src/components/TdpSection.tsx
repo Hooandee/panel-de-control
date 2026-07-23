@@ -1,9 +1,9 @@
 import { PanelSectionRow, SliderField, Focusable } from "@decky/ui";
-import { FC, useMemo } from "react";
+import { FC, useCallback, useMemo } from "react";
 
 import { TdpState, TdpScope, PowerDraw, BoostMode, PowerPresetState } from "../api";
 import { resetWatts } from "../tdp/logic";
-import { resolveItems, PresetItem } from "../tdp/powerPresets";
+import { resolveItems, PresetItem, BUILTIN_IDS } from "../tdp/powerPresets";
 import { openPowerPresetsModal } from "./PowerPresetsModal";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
@@ -48,13 +48,30 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
 
   // Resolved before the early returns (rules-of-hooks) and memoized so the 1s power
   // poll's re-renders don't rebuild the chip list; recomputes only when its inputs change.
-  const resolved = useMemo(
-    () =>
-      tdp && presets
-        ? resolveItems(presets, tdp.presets, tdp.on_ac, scope === "global" ? tdp.global_watts : tdp.watts)
-        : null,
-    [tdp, presets, scope],
-  );
+  // Falls back to a builtins-only library so the preset chips still render if the custom
+  // library RPC hasn't loaded or failed.
+  const resolved = useMemo(() => {
+    if (!tdp) return null;
+    const lib = presets ?? { order: [...BUILTIN_IDS], hidden: [], custom: {} };
+    const ceiling = tdp.on_ac ? tdp.limits.max_ac : tdp.limits.max;
+    const w = scope === "global" ? tdp.global_watts : tdp.watts;
+    return resolveItems(lib, tdp.presets, tdp.on_ac, w, ceiling);
+  }, [tdp, presets, scope]);
+
+  // Stable so React.memo(Presets) isn't defeated by a fresh arrow every render (the 1s
+  // power poll re-renders this section). Editing range is the charger ceiling (max_ac) so
+  // a charger-created preset isn't clipped when edited on battery.
+  const onEditPresets = useCallback(() => {
+    if (!tdp) return;
+    openPowerPresetsModal({
+      builtinWatts: tdp.presets,
+      onAc: tdp.on_ac,
+      currentWatts: scope === "global" ? tdp.global_watts : tdp.watts,
+      min: tdp.limits.min,
+      max: tdp.limits.max_ac,
+      onClose: refreshPresets,
+    });
+  }, [tdp, scope, refreshPresets]);
 
   if (!tdp) return <Loading />;
 
@@ -225,16 +242,7 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
                     editLabel={t("tdp.presets.edit")}
                     hiddenLabel={t("tdp.presets.hidden")}
                     onPick={onApplyPreset}
-                    onEdit={() =>
-                      openPowerPresetsModal({
-                        builtinWatts: tdp.presets,
-                        onAc: tdp.on_ac,
-                        currentWatts: view.watts,
-                        min: tdp.limits.min,
-                        max: activeMax,
-                        onClose: refreshPresets,
-                      })
-                    }
+                    onEdit={onEditPresets}
                   />
                 </PanelSectionRow>
               )}
