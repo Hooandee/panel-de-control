@@ -7,7 +7,9 @@ import { openCustomizeModal } from "../components/CustomizeModal";
 import { openGameProfilesModal } from "../components/GameProfilesModal";
 import { openGlossaryModal } from "../components/GlossaryModal";
 import { openReportModal } from "../components/ReportModal";
-import { getUnlockBatteryMax, setUnlockBatteryMax, getCoolerBoost, setCoolerBoost, getQamTdpBoost, setQamTdpBoost, resetTelemetry, getVersion, getDevice, DeviceInfo, isUnvalidated } from "../api";
+import { getUnlockBatteryMax, setUnlockBatteryMax, getCoolerBoost, setCoolerBoost, getQamTdpBoost, setQamTdpBoost, resetTelemetry, getVersion, getDevice, getLearningStatus, DeviceInfo, isUnvalidated } from "../api";
+import { useModules, setModuleDisabled } from "../customize/modules";
+import { effectiveEnabled } from "../customize/moduleLogic";
 import { isValueToastEnabled, setValueToastEnabled } from "../system/valueToast";
 import { UpdatePanel } from "../updater/UpdatePanel";
 import { theme } from "../theme";
@@ -39,6 +41,15 @@ export const AjustesSection: FC = () => {
   const [battMax, onToggleBattMax] = useToggleSetting(getUnlockBatteryMax, setUnlockBatteryMax, false);
   const [coolerBoost, onToggleCoolerBoost] = useToggleSetting(getCoolerBoost, setCoolerBoost, false);
   const [qamBoost, onToggleQamBoost] = useToggleSetting(getQamTdpBoost, setQamTdpBoost, false);
+
+  // Master TDP switch via the power module (shared with the layout editor): off hands
+  // control back. Shown only on TDP-capable devices.
+  const disabled = useModules();
+  const tdpControlOn = effectiveEnabled("power", disabled);
+  const [tdpSupported, setTdpSupported] = useState<boolean | null>(null);
+  useEffect(() => {
+    getLearningStatus().then((s) => setTdpSupported(!!s.tdp_supported)).catch(() => setTdpSupported(false));
+  }, []);
   const [valueToast, setValueToast] = useState(isValueToastEnabled());
   const onToggleValueToast = (next: boolean) => {
     setValueToast(next);
@@ -91,6 +102,16 @@ export const AjustesSection: FC = () => {
           </span>
           <LanguageToggle />
         </div>
+
+        {tdpSupported && (
+          <ToggleField
+            label={t("settings.tdpcontrol")}
+            description={t("settings.tdpcontrol.desc")}
+            checked={tdpControlOn}
+            onChange={(next) => { void setModuleDisabled("power", !next); }}
+            bottomSeparator="none"
+          />
+        )}
 
         {battMax !== null && device &&
           device.tdp_max_charger > device.tdp_max && !device.charger_only_extra && (
