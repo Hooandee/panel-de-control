@@ -24,7 +24,7 @@ _GET_CURVE_ID = "0x05"
 _SET_FEATURE_ID = "0x12"
 _FULL_SPEED_FEATURE = 0x04020000
 
-_READBACK_TOLERANCE = 3   # firmware may round a percent by a couple of points
+_READBACK_TOLERANCE = 5   # firmware may quantize speed to a coarse grid
 
 
 def encode_set_curve(speeds: list) -> str:
@@ -173,7 +173,9 @@ class LegionAcpiCallFanBackend:
             return {"supported": False, "source": self.name, "pwm_max": 255, "fans": []}
         speeds = self._last_speeds or [0] * 10
         points = [{"temp": ANCHORS[i], "pwm": round(speeds[i] / 100 * 255)} for i in range(10)]
-        enable = 1 if self._last_speeds is not None else 2
+        # Manual (1) only when WE are actually driving; a plain prime GET leaves the
+        # fan on firmware auto (2), even though it populated the displayed curve.
+        enable = 1 if (self._drove_curve or self._max_on) else 2
         return {"supported": True, "source": self.name, "pwm_max": 255,
                 "fans": [{"key": "fan", "enable": enable, "points": points}]}
 
@@ -195,11 +197,15 @@ class LegionAcpiCallFanBackend:
         if self._stock_speeds is None:
             self._stock_speeds = list(current)
         self._call(f"{GZFD}.WMAB 0x00 {_SET_CURVE_ID} {encode_set_curve(speeds)}")
+        # We issued the write, so we now own the fan and must restore stock on release,
+        # regardless of whether the readback confirms (a coarse-quantizing firmware can
+        # read back off by more than the tolerance even when the write landed). The
+        # readback only decides what we honestly report to the caller.
+        self._last_speeds = speeds
+        self._drove_curve = True
         got = self._get_speeds()
         if got is None or any(abs(got[i] - speeds[i]) > _READBACK_TOLERANCE for i in range(10)):
             return {"ok": False, "detail": "readback did not confirm curve"}
-        self._last_speeds = speeds
-        self._drove_curve = True
         return {"ok": True, "detail": "fan curve applied (GZFD)"}
 
     def apply_curve_all(self, points: list) -> dict:

@@ -169,3 +169,11 @@ def test_set_auto_is_noop_curve_when_never_drove(tmp_path):
     assert b.set_auto()["ok"] is True
     assert fake.speeds == [40] * 10                      # untouched
     assert not any(".WMAB 0x00 0x06 " in c for c in fake.commands)   # no curve write
+
+
+def test_read_state_enable_reflects_driving_not_prime(tmp_path):
+    b, _ = _mk_backend(tmp_path)
+    b.prime()                                              # populates the curve, not driving
+    assert b.read_state()["fans"][0]["enable"] == 2        # firmware auto
+    b.set_curve("fan", [(50, 255)])
+    assert b.read_state()["fans"][0]["enable"] == 1        # now manual

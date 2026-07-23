@@ -499,6 +499,7 @@ class _MaxBackend:
 
     def __init__(self):
         self.max_calls = []
+        self.curve_calls = []
 
     def read_state(self):
         return {"supported": True, "source": self.name, "pwm_max": 255, "fans": []}
@@ -511,6 +512,7 @@ class _MaxBackend:
         return {"ok": True, "detail": ""}
 
     def apply_curve_all(self, points):
+        self.curve_calls.append(points)
         return {"ok": True, "detail": ""}
 
     def restore_auto(self):
@@ -539,3 +541,16 @@ def test_set_fan_max_noop_on_backend_without_support(tmp_path, monkeypatch):
     Plugin = _make_plugin_fixture(tmp_path, monkeypatch)
     st = asyncio.run(Plugin().set_fan_max(True))
     assert st["max_enabled"] is False
+
+
+def test_reapply_reasserts_max_and_skips_curve_when_fan_max_on(tmp_path, monkeypatch):
+    # "A tope" ON must survive a game change / adaptive re-fit: _reapply re-asserts the
+    # override and does NOT rewrite the curve (which would silently end full-blast).
+    backend = _MaxBackend()
+    Plugin = _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=backend)
+    p = Plugin()
+    asyncio.run(p.get_fan_curve_state())   # runs _init (sets _settings, _fan_curves)
+    p._fan_max = True
+    assert p._reapply_fans_sync() is True
+    assert backend.max_calls[-1] is True
+    assert backend.curve_calls == []

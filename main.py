@@ -1013,6 +1013,13 @@ class Plugin:
             # Fan control disabled: hand the fans back to firmware auto, never drive.
             self._restore_fans_safe()
             return True
+        if getattr(self, "_fan_max", False):
+            # Full-blast override is on: keep it across game changes / re-fits instead
+            # of letting a curve re-apply silently end it (state would then lie).
+            set_max = getattr(self._fan_ctrl, "set_max", None)
+            if callable(set_max):
+                res = set_max(True)
+                return bool(res.get("ok")) if isinstance(res, dict) else False
         try:
             profile = self._fan_curves.effective(self._current_appid)
             preset = profile["preset"]
