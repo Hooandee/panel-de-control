@@ -60,12 +60,13 @@ class GenericPwmFanBackend(SoftwareLoopBackend):
         return True
 
     def _apply_once_locked(self) -> bool:
-        """Write the interpolated pwm to every fan (caller holds `_io_lock`). Writes
-        the PWM FIRST and switches to manual only after it lands, so a fan is never
-        put in manual holding a stale/0 duty (no stuck-manual dead state); a failed
-        write just leaves that fan in firmware auto. `all_ok` requires the manual mode
-        to actually read back — never our write alone. Returns True only when every
-        fan landed. No temp → release."""
+        """Write the interpolated pwm to every fan (caller holds `_io_lock`). Engage
+        manual mode (`pwmN_enable` = 1) and confirm it by readback BEFORE writing the
+        duty: `pwmN` only takes effect in manual mode and some drivers (gpd_fan) reject
+        a `pwmN` write with -EPERM while still in auto. If manual engages but the duty
+        write is refused, hand that fan back to firmware auto rather than leave it stuck
+        in manual at a stale/max duty. Returns True only when every fan landed (manual
+        readback AND duty write, never a write alone). No temp → release."""
         if self._points is None:
             self._drive_ok = False
             return False
@@ -80,9 +81,13 @@ class GenericPwmFanBackend(SoftwareLoopBackend):
         pwm = max(0, min(255, pwm))
         all_ok = True
         for m in self._fans:
-            pwm_ok = _write(self._pwm(m), str(pwm))
-            en_ok = _write(self._enable(m), str(_ENABLE_MANUAL)) if pwm_ok else False
-            if not (pwm_ok and en_ok and _read_int(self._enable(m)) == _ENABLE_MANUAL):
+            manual = (_write(self._enable(m), str(_ENABLE_MANUAL))
+                      and _read_int(self._enable(m)) == _ENABLE_MANUAL)
+            pwm_ok = _write(self._pwm(m), str(pwm)) if manual else False
+            if not (manual and pwm_ok):
+                # Couldn't take manual control or the duty was refused → return this
+                # fan to its firmware auto mode (never leave it stuck manual@max).
+                _write(self._enable(m), str(self._orig_enable.get(m, _ENABLE_AUTO)))
                 all_ok = False
         self._drive_ok = all_ok
         return all_ok
