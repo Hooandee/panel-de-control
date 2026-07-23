@@ -121,6 +121,7 @@ class LegionAcpiCallFanBackend:
         self._probe_ok = False
         self._stock_speeds: Optional[list] = None
         self._last_speeds: Optional[list] = None
+        self._drove_curve = False   # True once we've written a manual curve
         self._max_on = False
 
     # --- support / lifecycle ------------------------------------------------
@@ -198,6 +199,7 @@ class LegionAcpiCallFanBackend:
         if got is None or any(abs(got[i] - speeds[i]) > _READBACK_TOLERANCE for i in range(10)):
             return {"ok": False, "detail": "readback did not confirm curve"}
         self._last_speeds = speeds
+        self._drove_curve = True
         return {"ok": True, "detail": "fan curve applied (GZFD)"}
 
     def apply_curve_all(self, points: list) -> dict:
@@ -214,16 +216,20 @@ class LegionAcpiCallFanBackend:
         return {"ok": True, "detail": f"full fan speed {'on' if on else 'off'}"}
 
     def set_auto(self, fan_key: Optional[str] = None) -> dict:
-        # No firmware manual/auto bit on the 83E1: 'auto' = clear full-speed and write
-        # back the stock curve (or MIN_CURVE if we never captured one).
+        # There is no firmware manual/auto bit on the 83E1, so 'auto' means: undo what
+        # WE changed and leave the firmware exactly as we found it. Clear full-speed,
+        # and write back the stock curve captured before our first write — only if we
+        # actually drove a curve. If we never touched the fan, this is a no-op (never
+        # write MIN_CURVE here: it would floor the idle fan louder than stock).
         if not self._available:
             return {"ok": False, "detail": "acpi_call unavailable"}
         if not self._ensure_loaded():
             return {"ok": False, "detail": "acpi_call could not be loaded"}
         if self._max_on:
             self.set_max(False)
-        target = clamp_floor(self._stock_speeds) if self._stock_speeds else list(MIN_CURVE)
-        self._call(f"{GZFD}.WMAB 0x00 {_SET_CURVE_ID} {encode_set_curve(target)}")
+        if self._drove_curve and self._stock_speeds is not None:
+            self._call(f"{GZFD}.WMAB 0x00 {_SET_CURVE_ID} {encode_set_curve(self._stock_speeds)}")
+            self._drove_curve = False
         self._last_speeds = None
         return {"ok": True, "detail": "fan returned to firmware baseline"}
 

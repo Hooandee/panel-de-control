@@ -148,11 +148,24 @@ def test_read_state_after_prime_reports_curve(tmp_path):
     assert st["fans"] and len(st["fans"][0]["points"]) == 10
 
 
-def test_restore_auto_writes_stock_curve_and_clears_max(tmp_path):
+def test_restore_auto_writes_raw_stock_curve_and_clears_max(tmp_path):
     b, fake = _mk_backend(tmp_path)
-    b.prime()
+    b.prime()                       # captures stock [40]*10
     b.set_max(True)
     b.set_curve("fan", [(50, 255)])
     assert b.restore_auto()["ok"] is True
     assert fake.max_on is False
-    assert fake.speeds == [max(40, la.MIN_CURVE[i]) for i in range(10)]
+    # Restores the stock curve verbatim — NOT re-floored to MIN_CURVE (which would
+    # leave the idle fan louder than the firmware baseline).
+    assert fake.speeds == [40] * 10
+
+
+def test_set_auto_is_noop_curve_when_never_drove(tmp_path):
+    # We never wrote a manual curve: 'auto' must not touch the curve at all (writing
+    # MIN_CURVE here would floor the idle fan above stock). Only max is cleared.
+    b, fake = _mk_backend(tmp_path)
+    b.prime()
+    fake.commands.clear()
+    assert b.set_auto()["ok"] is True
+    assert fake.speeds == [40] * 10                      # untouched
+    assert not any(".WMAB 0x00 0x06 " in c for c in fake.commands)   # no curve write
