@@ -1,6 +1,6 @@
 """Legion Go original (83E1) fan control via acpi_call -> \\_SB.GZFD (HHD's path).
 
-Pure encoders/decoders for the GameZone WMI methods (facts only, no GPL code):
+Pure encoders/decoders for the GameZone WMI methods:
   WMAB 0x06  set 10-point fan curve      WMAB 0x05  get curve
   WMAE 0x12  set_feature(0x04020000,v)   full fan speed on/off ("a tope")
 The firmware runs the written curve autonomously, so this is a HARDWARE-curve
