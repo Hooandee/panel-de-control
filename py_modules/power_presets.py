@@ -13,10 +13,14 @@ _MODES = ("estable", "auto", "custom")
 _MAX_CUSTOM = 30
 
 
+_ESTABLE = {"mode": "estable", "off2": 0, "off3": 0}
+
+
 def _as_int(v, default):
+    # OverflowError covers a JSON `1e309` → float('inf'); int(inf) would otherwise raise.
     try:
         return int(v)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return default
 
 
@@ -36,10 +40,13 @@ def _clean_custom_entry(raw, min_w=1, max_w=1000):
     watts = max(int(min_w), min(_as_int(raw.get("watts"), 10), int(max_w)))
     name = raw.get("name")
     name = name.strip()[:40] if isinstance(name, str) else ""
+    # A custom preset always carries a definite boost (estable = flat/no headroom by
+    # default); "leave the boost untouched" is expressed by the built-ins (boost=null),
+    # not a custom-preset option.
     return {"watts": watts,
             "icon": raw.get("icon") if isinstance(raw.get("icon"), str) else "bolt",
             "name": name,
-            "boost": _clean_boost(raw.get("boost"))}
+            "boost": _clean_boost(raw.get("boost")) or dict(_ESTABLE)}
 
 
 class PowerPresetStore:
@@ -83,7 +90,13 @@ class PowerPresetStore:
         return {"order": order, "hidden": hidden, "custom": custom, "seq": seq}
 
     def _save(self):
-        atomic_json_save(self._path, self._data)
+        # On a write failure revert in-memory to what's on disk so a rejected mutation
+        # can't linger as a fake success; re-raise so the RPC surfaces it.
+        try:
+            atomic_json_save(self._path, self._data)
+        except OSError:
+            self._data = self._load()
+            raise
 
     def state(self):
         return {"order": list(self._data["order"]),

@@ -118,19 +118,16 @@ describe("resolveItems", () => {
     expect(r.visible.find((i) => i.id === "c2")!.active).toBe(false);
   });
 
-  it("an estable-boost preset behaves as watts-only (adds no headroom)", () => {
+  it("an estable preset is a specific flat target, not a match for live auto", () => {
     const st: PowerPresetState = {
-      order: ["quiet", "balanced", "turbo", "c1", "c2"],
+      order: ["quiet", "balanced", "turbo", "c2"],
       hidden: [],
-      custom: {
-        c1: { watts: 15, icon: "bolt", name: "", boost: null }, // watts-only
-        c2: { watts: 15, icon: "flame", name: "", boost: { mode: "estable", off2: 0, off3: 0 } },
-      },
+      custom: { c2: { watts: 15, icon: "flame", name: "", boost: { mode: "estable", off2: 0, off3: 0 } } },
     };
-    const r = resolveItems(st, builtinWatts, false, 15, MAX, FLAT);
-    const actives = r.visible.filter((i) => i.active).map((i) => i.id);
-    // estable adds nothing over PL1, so it doesn't out-compete the watts-only preset.
-    expect(actives).toContain("c1");
-    expect(actives).toContain("c2");
+    // Live is 15W + auto: the estable preset forces flat, so it does NOT represent it.
+    const live = { mode: "auto" as const, off2: 3, off3: 6 };
+    expect(resolveItems(st, builtinWatts, false, 15, MAX, live).visible.find((i) => i.id === "c2")!.active).toBe(false);
+    // Live is 15W + flat: now the estable preset matches exactly.
+    expect(resolveItems(st, builtinWatts, false, 15, MAX, FLAT).visible.find((i) => i.id === "c2")!.active).toBe(true);
   });
 });

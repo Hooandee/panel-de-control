@@ -1,6 +1,11 @@
 import json
 
+import pytest
+
+import power_presets
 from power_presets import PowerPresetStore, BUILTIN_IDS
+
+_ESTABLE = {"mode": "estable", "off2": 0, "off3": 0}
 
 
 def _store(tmp_path):
@@ -19,7 +24,7 @@ def test_create_appends_custom_with_sequential_id(tmp_path):
     s = _store(tmp_path)
     st = s.create(12, "bolt", None)
     assert st["order"][-1] == "c1"
-    assert st["custom"]["c1"] == {"watts": 12, "icon": "bolt", "name": "", "boost": None}
+    assert st["custom"]["c1"] == {"watts": 12, "icon": "bolt", "name": "", "boost": _ESTABLE}
     st2 = s.create(8, "leaf", None)
     assert st2["order"][-1] == "c2"  # never reuses ids
 
@@ -46,7 +51,7 @@ def test_update_only_custom(tmp_path):
     s = _store(tmp_path)
     s.create(12, "bolt", None)
     st = s.update("c1", 15, "leaf", None)
-    assert st["custom"]["c1"] == {"watts": 15, "icon": "leaf", "name": "", "boost": None}
+    assert st["custom"]["c1"] == {"watts": 15, "icon": "leaf", "name": "", "boost": _ESTABLE}
     # updating a builtin id is a no-op (not editable)
     before = s.state()
     assert s.update("quiet", 5, "x", None) == before
@@ -88,6 +93,27 @@ def test_persists_across_instances(tmp_path):
     s2 = PowerPresetStore(str(p))
     assert s2.state()["custom"]["c1"]["watts"] == 12
     assert "quiet" in s2.state()["hidden"]
+
+
+def test_coerce_survives_non_finite_watts(tmp_path):
+    # JSON `1e309` parses to float('inf'); int(inf) raises OverflowError. Must not brick.
+    p = tmp_path / "power_presets.json"
+    p.write_text('{"custom":{"c1":{"watts":1e309}}}')
+    s = PowerPresetStore(str(p))
+    assert s.state()["custom"]["c1"]["watts"] == 10  # fell back to the default
+
+
+def test_save_failure_reverts_and_raises(tmp_path, monkeypatch):
+    s = _store(tmp_path)
+
+    def boom(*_a, **_k):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(power_presets, "atomic_json_save", boom)
+    with pytest.raises(OSError):
+        s.create(12, "bolt", None)
+    # In-memory reverted to disk (last good) — no fake preset lingers.
+    assert s.state()["custom"] == {}
 
 
 def test_coerce_survives_garbage_and_phantom_ids(tmp_path):

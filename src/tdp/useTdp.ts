@@ -149,9 +149,12 @@ export function useTdp(): TdpControl {
   }, []);
 
   // Apply a preset chip: sustained watts (+ optional boost) to the current scope,
-  // atomically server-side, then refresh so the arc/slider reflect it.
+  // atomically server-side, then refresh so the arc/slider reflect it. Cancel any pending
+  // debounced slider/levels write first, or its stale value would land after and override.
   const onApplyPreset = useCallback(
     (item: PresetItem) => {
+      if (commitTimerWatts.current) clearTimeout(commitTimerWatts.current);
+      if (commitTimerLevels.current) clearTimeout(commitTimerLevels.current);
       const { target, sc } = resolveTarget();
       applyPowerPreset(item.watts, sc, target, item.boost).then(() => refresh()).catch(() => {});
     },

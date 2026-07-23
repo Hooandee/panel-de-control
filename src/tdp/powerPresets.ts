@@ -107,16 +107,15 @@ export function resolveItems(
       }
     }
   }
-  // Flat = no extra headroom over PL1: a watts-only preset, or one whose boost is estable.
-  // These share the watts-only active rule; only auto/custom count as a "full" boost match.
-  const isFlat = (b: PowerPresetBoost | null) => b == null || b.mode === "estable";
-  const isFull = (r: (typeof rows)[number]) => r.wm && !isFlat(r.boost) && boostKey(r.boost!) === liveKey;
+  // A preset with a defined boost (estable/auto/custom) is a "full" match only when its
+  // exact boost equals the live boost — estable included, since it forces flat rails, which
+  // differs from live auto/custom. A boost=null preset (builtins: leave-untouched) matches
+  // on watts alone, but only when nothing fuller reproduces the live state.
+  const isFull = (r: (typeof rows)[number]) => r.wm && r.boost != null && boostKey(r.boost) === liveKey;
   const anyFull = rows.some(isFull);
   const manager: PresetItem[] = rows.map((r) => {
     const { wm, ...item } = r;
-    // Boosted preset: active on an exact watts+boost match. Flat preset (watts-only,
-    // estable, or builtin): active on a watts match only when nothing fuller matches.
-    return { ...item, active: isFull(r) || (isFlat(r.boost) && wm && !anyFull) };
+    return { ...item, active: isFull(r) || (r.boost == null && wm && !anyFull) };
   });
   const visible = manager.filter((i) => !i.hidden);
   return {

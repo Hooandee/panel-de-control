@@ -43,24 +43,19 @@ const BoostEditor: FC<{
   boost: PowerPresetBoost | null;
   off2Max: number;
   off3Max: number;
-  onPickMode: (boost: PowerPresetBoost | null) => void;
+  onPickMode: (boost: PowerPresetBoost) => void;
   onOffsets: (boost: PowerPresetBoost) => void;
 }> = ({ boost, off2Max, off3Max, onPickMode, onOffsets }) => {
   const { t } = useI18n();
-  const active = boost?.mode ?? "none";
+  const active = boost?.mode ?? "estable";
   const off2 = boost?.off2 ?? 0;
   const off3 = boost?.off3 ?? 0;
+  // "Sin boost" IS estable (flat, no headroom over PL1) — that's what "no boost" means.
+  const label = (m: BoostMode) => (m === "estable" ? t("tdp.presets.boost.none") : t(`tdp.boost.mode.${m}`));
   return (
     <div style={{ marginTop: theme.space.xs }}>
       <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{t("tdp.boost.title")}</span>
       <div style={{ ...segmentGroupStyle, marginTop: theme.space.xs }}>
-        <Focusable
-          style={{ ...segmentItemStyle(active === "none"), flex: 1, padding: "4px 6px" }}
-          onActivate={() => onPickMode(null)}
-          onClick={() => onPickMode(null)}
-        >
-          {t("tdp.presets.boost.none")}
-        </Focusable>
         {BOOST_MODES.map((m) => (
           <Focusable
             key={m}
@@ -68,7 +63,7 @@ const BoostEditor: FC<{
             onActivate={() => onPickMode({ mode: m, off2: m === "custom" ? off2 : 0, off3: m === "custom" ? off3 : 0 })}
             onClick={() => onPickMode({ mode: m, off2: m === "custom" ? off2 : 0, off3: m === "custom" ? off3 : 0 })}
           >
-            {t(`tdp.boost.mode.${m}`)}
+            {label(m)}
           </Focusable>
         ))}
       </div>
@@ -88,7 +83,7 @@ const BoostEditor: FC<{
   );
 };
 
-const Body: FC<Props> = ({ builtinWatts, onAc, currentWatts, min, max, supportsAdvanced, off2Max, off3Max, closeModal }) => {
+const Body: FC<Props> = ({ builtinWatts, onAc, currentWatts, min, max, supportsAdvanced, off2Max, off3Max, onClose, closeModal }) => {
   const { t } = useI18n();
   const [state, setState] = useState<PowerPresetState | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
@@ -114,9 +109,16 @@ const Body: FC<Props> = ({ builtinWatts, onAc, currentWatts, min, max, supportsA
     return () => {
       alive.current = false;
       if (editTimer.current) clearTimeout(editTimer.current);
-      // Persist a still-pending edit (fire-and-forget; setState is alive-guarded).
+      // On close: persist a still-pending edit, THEN refresh the chip row — so the parent
+      // never reads a pre-save snapshot. If nothing is pending, refresh right away.
       const p = pendingSave.current;
-      if (p) updatePowerPreset(p.id, p.entry.watts, p.entry.icon, p.entry.boost, p.entry.name).catch(() => {});
+      if (p) {
+        updatePowerPreset(p.id, p.entry.watts, p.entry.icon, p.entry.boost, p.entry.name)
+          .catch(() => {})
+          .then(() => onClose?.());
+      } else {
+        onClose?.();
+      }
     };
   }, []);
 
@@ -175,7 +177,7 @@ const Body: FC<Props> = ({ builtinWatts, onAc, currentWatts, min, max, supportsA
     }
   };
   const onDone = () => {
-    flushSave();
+    // Just dismiss — unmount cleanup flushes the pending save and then refreshes the parent.
     closeModal?.();
   };
 
@@ -258,19 +260,15 @@ const Body: FC<Props> = ({ builtinWatts, onAc, currentWatts, min, max, supportsA
   );
 };
 
-const PowerPresetsModal: FC<Props> = (props) => {
-  const close = () => {
-    props.onClose?.();
-    props.closeModal?.();
-  };
-  return (
-    <ModalRoot closeModal={close} bAllowFullSize>
-      <FocusRoot>
-        <Body {...props} closeModal={close} />
-      </FocusRoot>
-    </ModalRoot>
-  );
-};
+const PowerPresetsModal: FC<Props> = (props) => (
+  // Dismiss on every path (Done / B / esc) goes through the raw closeModal → Body's unmount
+  // cleanup flushes any pending save and then calls onClose to refresh the parent, in order.
+  <ModalRoot closeModal={props.closeModal} bAllowFullSize>
+    <FocusRoot>
+      <Body {...props} />
+    </FocusRoot>
+  </ModalRoot>
+);
 
 export function openPowerPresetsModal(props: Omit<Props, "closeModal">): void {
   showModal(<PowerPresetsModal {...props} />, window);
