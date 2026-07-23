@@ -1082,6 +1082,10 @@ class Plugin:
             # Active firmware mode governing the fan; None = custom / no firmware modes.
             "firmware_mode": (fw if (fw := self._firmware_mode()) != _CUSTOM_MODE else None),
             "has_firmware_modes": bool(self._firmware_choices()),
+            # Manual full-blast override ("a tope"): available only on backends that
+            # expose it (Legion Go original via GZFD full-speed); enabled = live state.
+            "max_available": bool(getattr(self._fan_ctrl, "supports_max", False)),
+            "max_enabled": bool(getattr(self, "_fan_max", False)),
         }
 
     async def _prime_firmware_curve(self) -> None:
@@ -1091,9 +1095,38 @@ class Plugin:
         if self._ec_curve is not None and not self._fan_ctrl.supported:
             await asyncio.to_thread(self._ec_curve.read_curve)
 
+    async def _prime_fan_backend(self) -> None:
+        """Off-loop one-time probe for backends that must modprobe/handshake before a
+        clean on-loop read_state (Legion GZFD via acpi_call). No-op otherwise."""
+        primer = getattr(self._fan_ctrl, "prime", None)
+        if callable(primer):
+            await asyncio.to_thread(primer)
+
     async def get_fan_curve_state(self) -> dict:
         self._init()
         await self._prime_firmware_curve()
+        await self._prime_fan_backend()
+        return self._fan_curve_state()
+
+    async def get_fan_max(self) -> bool:
+        self._init()
+        return bool(getattr(self, "_fan_max", False))
+
+    async def set_fan_max(self, enabled: bool) -> dict:
+        """Toggle the manual full-blast override. On → drive the backend to max off the
+        loop; off → clear it and revert to the effective curve. Session state (not
+        persisted); physically released on unload via _restore_fans_safe."""
+        self._init()
+        enabled = bool(enabled)
+        set_max = getattr(self._fan_ctrl, "set_max", None)
+        if not callable(set_max):
+            return self._fan_curve_state()   # backend can't drive max; nothing to do
+        self._fan_max = enabled
+        if enabled:
+            await self._offload_call(lambda: set_max(True))
+        else:
+            await self._offload_call(lambda: set_max(False))
+            self._reapply_fans()   # back to the curve / firmware auto
         return self._fan_curve_state()
 
     async def set_fan_experimental(self, enabled: bool) -> dict:
@@ -2688,6 +2721,7 @@ class Plugin:
         return await self.get_tdp_state()
 
     def _restore_fans_safe(self) -> None:
+        self._fan_max = False   # release the "a tope" override with the fans
         try:
             if getattr(self, "_fan_ctrl", None) is not None:
                 self._fan_ctrl.restore_auto()

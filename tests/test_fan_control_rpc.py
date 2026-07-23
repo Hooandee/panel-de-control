@@ -489,3 +489,53 @@ def test_reset_ok_false_when_reapply_malformed(tmp_path, monkeypatch):
     asyncio.run(p.set_fan_preset("performance", "global", None))
     st = asyncio.run(p.reset_fan_control())
     assert st["reset_ok"] is False
+
+
+class _MaxBackend:
+    """Legion Go original GZFD stand-in exposing the full-blast ('a tope') control."""
+    supported = True
+    supports_max = True
+    name = "legion-acpi-gzfd"
+
+    def __init__(self):
+        self.max_calls = []
+
+    def read_state(self):
+        return {"supported": True, "source": self.name, "pwm_max": 255, "fans": []}
+
+    def set_max(self, on):
+        self.max_calls.append(bool(on))
+        return {"ok": True, "detail": ""}
+
+    def set_auto(self, fan_key=None):
+        return {"ok": True, "detail": ""}
+
+    def apply_curve_all(self, points):
+        return {"ok": True, "detail": ""}
+
+    def restore_auto(self):
+        return {"ok": True, "detail": ""}
+
+
+def test_fan_curve_state_exposes_max_flags(tmp_path, monkeypatch):
+    Plugin = _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=_MaxBackend())
+    st = asyncio.run(Plugin().get_fan_curve_state())
+    assert st["max_available"] is True
+    assert st["max_enabled"] is False
+
+
+def test_set_fan_max_drives_backend(tmp_path, monkeypatch):
+    backend = _MaxBackend()
+    Plugin = _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=backend)
+    p = Plugin()
+    st = asyncio.run(p.set_fan_max(True))
+    assert st["max_enabled"] is True
+    assert backend.max_calls == [True]
+    assert asyncio.run(p.get_fan_max()) is True
+
+
+def test_set_fan_max_noop_on_backend_without_support(tmp_path, monkeypatch):
+    # The Null-ish default backend (no set_max) must not raise; state stays off.
+    Plugin = _make_plugin_fixture(tmp_path, monkeypatch)
+    st = asyncio.run(Plugin().set_fan_max(True))
+    assert st["max_enabled"] is False
