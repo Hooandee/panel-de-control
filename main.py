@@ -795,7 +795,7 @@ class Plugin:
         """Every store that keeps per-game profiles, all sharing list_games/forget_game
         (the controller backend no-ops when it's not InputPlumber)."""
         return (self._tdp_profiles, self._fan_curves, self._color, self._cpu_profiles,
-                self._controller_backend)
+                self._audio_eq, self._controller_backend)
 
     def _game_profile_row(self, appid: str) -> dict:
         """A game's per-section profiles for the overview — RAW own values (what the user
@@ -828,6 +828,8 @@ class Plugin:
         if self._controller_backend.differs_from_global(appid):
             row["mandos"] = {"count": len(self._controller_backend.game_profile(appid)),
                              "follows_global": self._controller_backend.is_following_global(appid)}
+        if self._audio_eq.differs_from_global(appid):
+            row["audio"] = {"follows_global": self._audio_eq.is_following_global(appid)}
         return row
 
     async def list_game_profiles(self) -> list:

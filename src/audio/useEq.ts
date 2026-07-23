@@ -49,8 +49,23 @@ export function useEq(): EqControl {
   const game = useRunningGame();
   const [state, setState] = useState<AudioState | null>(null);
   const commit = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pending = useRef<(() => void) | null>(null);
   const stateRef = useRef<AudioState | null>(null);
   stateRef.current = state;
+
+  // Debounced commit that can be flushed: closing the QAM or changing game runs the
+  // pending write immediately (with its original scope) instead of dropping it.
+  const flush = useCallback(() => {
+    if (commit.current) { clearTimeout(commit.current); commit.current = null; }
+    const fn = pending.current;
+    pending.current = null;
+    if (fn) fn();
+  }, []);
+  const schedule = useCallback((fn: () => void) => {
+    pending.current = fn;
+    if (commit.current) clearTimeout(commit.current);
+    commit.current = setTimeout(() => { commit.current = null; pending.current = null; fn(); }, 350);
+  }, []);
 
   const refresh = useCallback(() => {
     getAudioState().then(setState).catch(() => {});
@@ -58,15 +73,15 @@ export function useEq(): EqControl {
 
   const appid = game?.appid;
   useEffect(() => {
-    if (commit.current) clearTimeout(commit.current);
+    flush();  // persist any pending edit for the previous game before switching
     refresh();
-  }, [appid, refresh]);
+  }, [appid, refresh, flush]);
 
   useEffect(() => () => {
-    if (commit.current) clearTimeout(commit.current);
+    flush();  // persist a pending edit if the section unmounts / QAM closes mid-debounce
     // Never leave the test tone looping after the section unmounts / QAM closes.
     if (stateRef.current?.test_playing) setAudioTest(false, "full").catch(() => {});
-  }, []);
+  }, [flush]);
 
   const applyFollow = useCallback(
     (f: boolean, a: string) => { setAudioFollowGlobal(f, a).then(setState).catch(() => {}); },
@@ -88,11 +103,8 @@ export function useEq(): EqControl {
 
   const onBands = useCallback((gains: number[]) => {
     setState((cur) => (cur ? { ...cur, gains, preset: "custom" } : cur)); // optimistic
-    if (commit.current) clearTimeout(commit.current);
-    commit.current = setTimeout(() => {
-      setAudioBands(gains, wScope, wTarget).then(setState).catch(() => {});
-    }, 350);
-  }, [wScope, wTarget]);
+    schedule(() => { setAudioBands(gains, wScope, wTarget).then(setState).catch(() => {}); });
+  }, [wScope, wTarget, schedule]);
 
   // A tone slider sets one region's level. Graves also engages the bass enhancer. Reads the
   // latest state so it composes with the other sliders; commits gains+bass in one apply.
@@ -102,11 +114,8 @@ export function useEq(): EqControl {
     const gains = applyTone(cur.gains, region, level);
     const bass = region === "graves" ? bassToEnhancer(level) : cur.bass;
     setState({ ...cur, gains, bass, preset: "custom" });
-    if (commit.current) clearTimeout(commit.current);
-    commit.current = setTimeout(() => {
-      setAudioCurve(gains, bass, wScope, wTarget).then(setState).catch(() => {});
-    }, 350);
-  }, [wScope, wTarget]);
+    schedule(() => { setAudioCurve(gains, bass, wScope, wTarget).then(setState).catch(() => {}); });
+  }, [wScope, wTarget, schedule]);
 
   const onLoudness = useCallback((on: boolean) => {
     setState((cur) => (cur ? { ...cur, loudness: on } : cur)); // optimistic

@@ -635,6 +635,7 @@ export interface GameProfileRow {
   color?: { saturation: number; calibrated: boolean; hdr: boolean; follows_global: boolean };
   cpu?: { smt: boolean; boost: boolean; cores: number | null; follows_global: boolean };
   mandos?: { count: number; follows_global: boolean };
+  audio?: { follows_global: boolean };
 }
 export const listGameProfiles = callable<[], GameProfileRow[]>("list_game_profiles");
 export const resetGameProfiles =
