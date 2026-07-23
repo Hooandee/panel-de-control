@@ -1,4 +1,15 @@
+import json
+
 from audio.eq_store import EqStore
+
+
+def test_malformed_games_shape_does_not_crash(tmp_path):
+    # A corrupt/incompatible store where "games" isn't a dict must not brick init.
+    p = tmp_path / "audio.json"
+    p.write_text(json.dumps({"global": {}, "games": [{}]}))
+    s = EqStore(str(p))
+    assert s.list_games() == []
+    assert s.effective(appid=None, route="speaker")["gains"] == [0.0] * 10
 
 
 def test_global_defaults_flat(tmp_path):

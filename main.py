@@ -341,6 +341,7 @@ class Plugin:
         # Audio EQ output-route watcher: last applied route + its loop task.
         self._audio_task = None
         self._audio_route_last = None
+        self._audio_shutdown = False  # set on unload so a late re-apply can't recreate the sink
         self._test_sample = None
         # Rolling GPU% window + slack counter for the GPU-driven auto-TDP control law.
         self._gpu_window = []      # recent GPU% samples
@@ -2717,7 +2718,7 @@ class Plugin:
         """Apply the effective EQ off the event loop (rewrites a conf + restarts the
         filter-chain service). Only offloads when the EQ is enabled — disabling tears the
         sink down explicitly, so a disabled EQ needs no work on resume/game change."""
-        if not self._settings.get("audio_eq_enabled"):
+        if self._audio_shutdown or not self._settings.get("audio_eq_enabled"):
             return
         self._offload(self._reapply_audio_sync)
 
@@ -2748,10 +2749,15 @@ class Plugin:
             return  # no event loop in tests — skip task creation safely
         self._audio_task = asyncio.create_task(self._audio_loop())
 
-    def _stop_audio_loop(self) -> None:
-        if self._audio_task is not None:
-            self._audio_task.cancel()
-            self._audio_task = None
+    async def _stop_audio_loop(self) -> None:
+        task = self._audio_task
+        self._audio_task = None
+        if task is not None:
+            task.cancel()
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):  # noqa: BLE001
+                pass
 
     def _audio_check(self) -> dict:
         """Off-loop probe for the watcher: the active route + whether our EQ sink is still
@@ -3007,10 +3013,13 @@ class Plugin:
             self._display_wait_task = None
         self._stop_night_loop()
         await self._offload_call(self._restore_color_safe)
+        # Stop the audio watcher (cancel + await) and block further re-applies BEFORE the
+        # teardown, or the loop could re-create the sink during the awaits below.
+        self._audio_shutdown = True
+        await self._stop_audio_loop()
         await self._offload_call(self._restore_audio_safe)
         await self._offload_call(self._restore_hhd_tdp)  # hand HHD's TDP back if we took it
         self._stop_auto_loop()
-        self._stop_audio_loop()
         if getattr(self, "_sampler", None) is not None:
             self._sampler.stop()
         if getattr(self, "_lifecycle", None) is not None:
@@ -3027,6 +3036,8 @@ class Plugin:
     async def _uninstall(self) -> None:
         await self._offload_call(self._restore_fans_safe)
         await self._offload_call(self._restore_color_safe)
+        self._audio_shutdown = True
+        await self._stop_audio_loop()
         await self._offload_call(self._restore_audio_safe)
         await self._offload_call(self._restore_hhd_tdp)  # hand HHD's TDP back if we took it
         self._shutdown_apply_executor()

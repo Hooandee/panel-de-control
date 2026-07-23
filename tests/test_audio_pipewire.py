@@ -1,4 +1,4 @@
-from audio.pipewire import pick_downstream
+from audio.pipewire import choose_downstream, pick_downstream
 
 _SINKS = (
     "45\teffect_input.pdc_eq\tPipeWire\ts16le 2ch 48000Hz\tRUNNING\n"
@@ -36,3 +36,29 @@ def test_pick_downstream_prefers_analog_over_hdmi():
 def test_pick_downstream_falls_back_to_first_when_all_digital():
     only_hdmi = "73\talsa_loopback_device.HiFi__HDMI3__sink\tPipeWire\t...\tSUSPENDED\n"
     assert pick_downstream(only_hdmi, "x").endswith("HDMI3__sink")
+
+
+_DECK_SHORT = (
+    "60\talsa_output.HiFi__Speaker__sink\tPipeWire\ts16le 2ch\tIDLE\n"
+    "61\talsa_output.HiFi__Headphones__sink\tPipeWire\ts16le 2ch\tRUNNING\n"
+)
+
+
+def test_choose_downstream_prefers_the_active_default():
+    # Speaker is first in the list, but headphones is the default → feed headphones.
+    assert (
+        choose_downstream("alsa_output.HiFi__Headphones__sink", _DECK_SHORT, "X EQ")
+        == "alsa_output.HiFi__Headphones__sink"
+    )
+
+
+def test_choose_downstream_falls_back_when_default_is_our_eq():
+    assert choose_downstream("X EQ", _DECK_SHORT, "X EQ").endswith("Speaker__sink")
+
+
+def test_choose_downstream_skips_a_digital_default():
+    short = (
+        "73\talsa_output.HiFi__HDMI1__sink\tPipeWire\t...\tSUSPENDED\n"
+        "79\talsa_output.HiFi__Speaker__sink\tPipeWire\t...\tIDLE\n"
+    )
+    assert choose_downstream("alsa_output.HiFi__HDMI1__sink", short, "X EQ").endswith("Speaker__sink")

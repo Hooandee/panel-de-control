@@ -54,6 +54,10 @@ def _os_release():
     return out
 
 
+def _is_digital(name):
+    return any(h in (name or "").lower() for h in _DIGITAL_HINTS)
+
+
 def pick_downstream(short_sinks_text, our_name):
     candidates = []
     for line in (short_sinks_text or "").splitlines():
@@ -61,9 +65,18 @@ def pick_downstream(short_sinks_text, our_name):
         name = parts[1] if len(parts) > 1 else ""
         if name and name != our_name:
             candidates.append(name)
-    analog = [c for c in candidates if not any(h in c.lower() for h in _DIGITAL_HINTS)]
+    analog = [c for c in candidates if not _is_digital(c)]
     picked = analog or candidates
     return picked[0] if picked else None
+
+
+def choose_downstream(default_sink, short_sinks_text, our_name):
+    """The physical sink our EQ feeds. Prefer the current default output — the sink the user
+    actually selected (e.g. headphones over the built-in speaker) — when it isn't ours or a
+    digital output; otherwise fall back to enumerating the sinks (skipping digital)."""
+    if default_sink and default_sink != our_name and not _is_digital(default_sink):
+        return default_sink
+    return pick_downstream(short_sinks_text, our_name)
 
 
 def _find_session():
@@ -200,8 +213,13 @@ class PipeWireEq:
         return f"{m.group(1)}%" if m else None
 
     def _downstream_sink(self):
-        """The physical sink our EQ feeds (the one that isn't our virtual sink)."""
-        return pick_downstream(self._runner(["pactl", "list", "short", "sinks"]), self._label)
+        """The physical sink our EQ feeds — the user's active output when we haven't taken
+        over yet, else the best physical sink."""
+        return choose_downstream(
+            self._runner(["pactl", "get-default-sink"]),
+            self._runner(["pactl", "list", "short", "sinks"]),
+            self._label,
+        )
 
     def ensure_sink(self, gains, bass=0, loudness=False):
         """Create/refresh the EQ sink (bands + optional bass enhancer), make it default,
