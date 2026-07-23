@@ -1,5 +1,5 @@
 import { FC, useMemo } from "react";
-import { PanelSectionRow, Focusable } from "@decky/ui";
+import { PanelSectionRow, Focusable, ToggleField } from "@decky/ui";
 import { LuMaximize2 } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
@@ -7,7 +7,7 @@ import { useFanState } from "../fans/useFanState";
 import { useFanCurve } from "../fans/useFanCurve";
 import { useFanSuggestion } from "../fans/useFanSuggestion";
 import { fanCurveNotice } from "../fans/notice";
-import { isSolo, tempsAvailable } from "../fans/logic";
+import { isSolo, tempsAvailable, shouldShowFanMax } from "../fans/logic";
 import { FanChip } from "../components/FanChip";
 import { TempStat } from "../components/TempStat";
 import { Sparkline } from "../components/Sparkline";
@@ -109,6 +109,16 @@ const CurveBlock: FC = () => {
     <>
       {curveState?.experimental_available && canControl && (
         <ExperimentalFanCard enabled={curveState.experimental_enabled} onToggle={curve.onExperimental} />
+      )}
+      {shouldShowFanMax(curveState) && canControl && (
+        <PanelSectionRow>
+          <ToggleField
+            label={t("fans.max.title")}
+            description={t("fans.max.desc")}
+            checked={!!curveState?.max_enabled}
+            onChange={curve.onMax}
+          />
+        </PanelSectionRow>
       )}
       {curveState?.supported && canControl && (
         <PanelSectionRow>
