@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.25.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.25.2...panel-de-control-v0.25.3) (2026-07-23)
+
+
+### Bug Fixes
+
+* add a discoverable TDP control toggle in Ajustes ([#265](https://github.com/Hooandee/panel-de-control/issues/265)) ([f3d157a](https://github.com/Hooandee/panel-de-control/commit/f3d157afc7e115a9fa9675e11e8f901e0721711f))
+
 ## [0.25.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.25.1...panel-de-control-v0.25.2) (2026-07-22)
 
 
