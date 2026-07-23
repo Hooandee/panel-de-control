@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.27.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.26.1...panel-de-control-v0.27.0) (2026-07-23)
+
+
+### Features
+
+* localize the plugin name in the plugin list ([#275](https://github.com/Hooandee/panel-de-control/issues/275)) ([f5bdf22](https://github.com/Hooandee/panel-de-control/commit/f5bdf22d245fb2e351f8687fc66c2389d7dcb304))
+
 ## [0.26.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.26.0...panel-de-control-v0.26.1) (2026-07-23)
 
 
