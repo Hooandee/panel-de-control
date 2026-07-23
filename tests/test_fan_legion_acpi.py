@@ -1,4 +1,7 @@
+import os
+
 from fans import legion_acpi as la
+from fans.legion_acpi import LegionAcpiCallFanBackend
 
 
 def test_encode_set_curve_layout():
@@ -45,3 +48,111 @@ def test_clamp_floor_raises_each_point_to_min_curve():
 def test_curve_to_speeds_resamples_and_floors():
     assert la.curve_to_speeds([(0, 0), (100, 0)]) == la.MIN_CURVE
     assert la.curve_to_speeds([(0, 255), (100, 255)]) == [100] * 10
+
+
+class FakeGzfd:
+    """Simulates \\_SB.GZFD over acpi_call: remembers the last SET curve and echoes it
+    back on GET in the stride-4 wire layout; records full-speed writes."""
+
+    def __init__(self):
+        self.speeds = [40] * 10   # firmware "stock" curve
+        self.max_on = False
+        self.commands = []
+
+    def __call__(self, command):
+        self.commands.append(command)
+        if ".WMAB 0x00 0x06 " in command:
+            arg = command.rsplit(" ", 1)[-1]
+            raw = bytes.fromhex(arg[1:])
+            self.speeds = [raw[6 + 2 * i] for i in range(10)]
+            return "0x0"
+        if ".WMAB 0x00 0x05 " in command:
+            b = [0] * 44
+            for i in range(10):
+                b[4 + 4 * i] = self.speeds[i]
+            return "{" + ", ".join(hex(v) for v in b[:41]) + "}"
+        if ".WMAE 0x00 0x12 " in command:
+            self.max_on = command.rstrip().endswith("01000000")
+            return "0x0"
+        return "0x0"
+
+
+def _writable_node(root):
+    d = os.path.join(root, "proc/acpi")
+    os.makedirs(d, exist_ok=True)
+    p = os.path.join(d, "call")
+    with open(p, "w") as f:
+        f.write("not called")
+    return p
+
+
+def _mk_backend(tmp_path):
+    _writable_node(tmp_path)
+    fake = FakeGzfd()
+    b = LegionAcpiCallFanBackend(root=str(tmp_path), caller=fake, modprobe=lambda m: None)
+    return b, fake
+
+
+def test_supported_when_acpi_call_available(tmp_path):
+    b, _ = _mk_backend(tmp_path)
+    assert b.supported is True
+    assert b.supports_max is True
+
+
+def test_unsupported_when_no_acpi_call(tmp_path):
+    fake = FakeGzfd()
+    b = LegionAcpiCallFanBackend(root=str(tmp_path), caller=fake, modprobe=lambda m: None)
+    assert b.supported is False
+
+
+def test_set_curve_writes_floored_curve_and_readback_confirms(tmp_path):
+    b, fake = _mk_backend(tmp_path)
+    res = b.set_curve("fan", [(0, 0), (100, 255)])
+    assert res["ok"] is True
+    assert fake.speeds[-1] == 100
+    assert all(fake.speeds[i] >= la.MIN_CURVE[i] for i in range(10))
+
+
+def test_set_curve_fails_when_readback_mismatches(tmp_path):
+    b, fake = _mk_backend(tmp_path)
+
+    def liar(command):
+        if ".WMAB 0x00 0x05 " in command:
+            return "{" + ", ".join(["0x0"] * 41) + "}"
+        return fake(command)
+
+    b._call = liar
+    res = b.set_curve("fan", [(50, 255)])
+    assert res["ok"] is False
+    assert "readback" in res["detail"]
+
+
+def test_apply_curve_all_is_single_fan(tmp_path):
+    b, fake = _mk_backend(tmp_path)
+    assert b.apply_curve_all([(0, 128), (100, 255)])["ok"] is True
+
+
+def test_set_max_on_then_off(tmp_path):
+    b, fake = _mk_backend(tmp_path)
+    assert b.set_max(True)["ok"] is True
+    assert fake.max_on is True
+    assert b.set_max(False)["ok"] is True
+    assert fake.max_on is False
+
+
+def test_read_state_after_prime_reports_curve(tmp_path):
+    b, fake = _mk_backend(tmp_path)
+    b.prime()
+    st = b.read_state()
+    assert st["supported"] is True
+    assert st["fans"] and len(st["fans"][0]["points"]) == 10
+
+
+def test_restore_auto_writes_stock_curve_and_clears_max(tmp_path):
+    b, fake = _mk_backend(tmp_path)
+    b.prime()
+    b.set_max(True)
+    b.set_curve("fan", [(50, 255)])
+    assert b.restore_auto()["ok"] is True
+    assert fake.max_on is False
+    assert fake.speeds == [max(40, la.MIN_CURVE[i]) for i in range(10)]
