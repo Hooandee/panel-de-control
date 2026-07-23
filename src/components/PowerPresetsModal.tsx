@@ -9,10 +9,12 @@ import { IconAction } from "./IconAction";
 import { IconPickerGrid } from "./IconPickerGrid";
 import { Loading } from "./Loading";
 import { ContainedSlider } from "./ContainedSlider";
+import { segmentGroupStyle, segmentItemStyle } from "./segmented";
 import { PRESET_ICON_KEYS, presetIconNode } from "../tdp/powerPresetIcons";
 import { resolveItems, BuiltinWatts } from "../tdp/powerPresets";
 import {
-  PowerPresetState, getPowerPresets, createPowerPreset, updatePowerPreset,
+  PowerPresetState, PowerPresetBoost, BoostMode,
+  getPowerPresets, createPowerPreset, updatePowerPreset,
   deletePowerPreset, movePowerPreset, setPowerPresetHidden,
 } from "../api";
 
@@ -21,10 +23,15 @@ interface Props {
   onAc: boolean;
   currentWatts: number; // seed for a freshly-added preset
   min: number;
-  max: number;
+  max: number; // charger ceiling: the real cap for a stored preset
+  supportsAdvanced: boolean;
+  off2Max: number;
+  off3Max: number;
   onClose?: () => void; // refresh the chip row when the manager closes
   closeModal?: () => void;
 }
+
+type CustomEntry = PowerPresetState["custom"][string];
 
 const BUILTIN_LABEL_KEY: Record<string, string> = {
   quiet: "tdp.preset.save",
@@ -32,19 +39,72 @@ const BUILTIN_LABEL_KEY: Record<string, string> = {
   turbo: "tdp.preset.turbo",
 };
 
-const Body: FC<Props> = ({ builtinWatts, onAc, currentWatts, min, max, closeModal }) => {
+const BOOST_MODES: BoostMode[] = ["estable", "auto", "custom"];
+
+/** Per-preset boost picker (only shown on boost-capable devices). "none" = leave the
+ *  boost mode untouched on apply; a mode makes it explicit; custom reveals the margins. */
+const BoostEditor: FC<{
+  boost: PowerPresetBoost | null;
+  off2Max: number;
+  off3Max: number;
+  onPickMode: (boost: PowerPresetBoost | null) => void;
+  onOffsets: (boost: PowerPresetBoost) => void;
+}> = ({ boost, off2Max, off3Max, onPickMode, onOffsets }) => {
+  const { t } = useI18n();
+  const active = boost?.mode ?? "none";
+  const off2 = boost?.off2 ?? 0;
+  const off3 = boost?.off3 ?? 0;
+  return (
+    <div style={{ marginTop: theme.space.xs }}>
+      <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{t("tdp.boost.title")}</span>
+      <div style={{ ...segmentGroupStyle, marginTop: theme.space.xs }}>
+        <Focusable
+          style={{ ...segmentItemStyle(active === "none"), flex: 1, padding: "4px 6px" }}
+          onActivate={() => onPickMode(null)}
+          onClick={() => onPickMode(null)}
+        >
+          {t("tdp.presets.boost.none")}
+        </Focusable>
+        {BOOST_MODES.map((m) => (
+          <Focusable
+            key={m}
+            style={{ ...segmentItemStyle(active === m), flex: 1, padding: "4px 6px" }}
+            onActivate={() => onPickMode({ mode: m, off2: m === "custom" ? off2 : 0, off3: m === "custom" ? off3 : 0 })}
+            onClick={() => onPickMode({ mode: m, off2: m === "custom" ? off2 : 0, off3: m === "custom" ? off3 : 0 })}
+          >
+            {t(`tdp.boost.mode.${m}`)}
+          </Focusable>
+        ))}
+      </div>
+      {active === "custom" && (
+        <>
+          <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, marginTop: theme.space.xs }}>
+            {t("tdp.level.slow")} · +{off2} W
+          </div>
+          <ContainedSlider value={off2} min={0} max={off2Max} step={1} onChange={(v) => onOffsets({ mode: "custom", off2: v, off3 })} />
+          <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
+            {t("tdp.level.fast")} · +{off3} W
+          </div>
+          <ContainedSlider value={off3} min={0} max={off3Max} step={1} onChange={(v) => onOffsets({ mode: "custom", off2, off3: v })} />
+        </>
+      )}
+    </div>
+  );
+};
+
+const Body: FC<Props> = ({ builtinWatts, onAc, currentWatts, min, max, supportsAdvanced, off2Max, off3Max, closeModal }) => {
   const { t } = useI18n();
   const [state, setState] = useState<PowerPresetState | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
   const alive = useRef(true);
-  const wattsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const editTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     getPowerPresets().then((s) => alive.current && setState(s)).catch(() => {});
     return () => {
       alive.current = false;
-      if (wattsTimer.current) clearTimeout(wattsTimer.current);
+      if (editTimer.current) clearTimeout(editTimer.current);
     };
   }, []);
   // Auto-disarm the delete confirm so a stale armed row can't one-tap-delete later.
@@ -58,14 +118,19 @@ const Body: FC<Props> = ({ builtinWatts, onAc, currentWatts, min, max, closeModa
 
   const items = resolveItems(state, builtinWatts, onAc, currentWatts, max).manager;
   const wrap = (p: Promise<PowerPresetState>) => p.then((s) => alive.current && setState(s)).catch(() => {});
-  // Optimistic local watts while dragging, debounced commit (mirrors the main TDP slider) —
-  // avoids a synchronous JSON write + round-trip per drag step.
-  const onWatts = (id: string, w: number, icon: string, boost: PowerPresetState["custom"][string]["boost"]) => {
-    setState((cur) =>
-      cur ? { ...cur, custom: { ...cur.custom, [id]: { ...cur.custom[id], watts: w } } } : cur,
-    );
-    if (wattsTimer.current) clearTimeout(wattsTimer.current);
-    wattsTimer.current = setTimeout(() => wrap(updatePowerPreset(id, w, icon, boost)), 200);
+  const patch = (id: string, entry: CustomEntry) =>
+    setState((cur) => (cur ? { ...cur, custom: { ...cur.custom, [id]: entry } } : cur));
+  // Optimistic local + debounced commit for dragged values (watts / boost margins);
+  // immediate commit for discrete taps (icon / boost mode).
+  const commitDebounced = (id: string, entry: CustomEntry) => {
+    patch(id, entry);
+    if (editTimer.current) clearTimeout(editTimer.current);
+    editTimer.current = setTimeout(() => wrap(updatePowerPreset(id, entry.watts, entry.icon, entry.boost)), 200);
+  };
+  const commitNow = (id: string, entry: CustomEntry) => {
+    if (editTimer.current) clearTimeout(editTimer.current);
+    patch(id, entry);
+    wrap(updatePowerPreset(id, entry.watts, entry.icon, entry.boost));
   };
 
   return (
@@ -116,8 +181,17 @@ const Body: FC<Props> = ({ builtinWatts, onAc, currentWatts, min, max, closeModa
             </div>
             {it.editable && editing === it.id && (
               <div style={{ paddingLeft: theme.space.lg, display: "flex", flexDirection: "column", gap: theme.space.xs }}>
-                <ContainedSlider value={it.watts} min={min} max={max} step={1} showValue onChange={(w) => onWatts(it.id, w, it.icon, it.boost)} />
-                <IconPickerGrid keys={PRESET_ICON_KEYS} value={it.icon} renderIcon={presetIconNode} onPick={(k) => wrap(updatePowerPreset(it.id, it.watts, k, it.boost))} />
+                <ContainedSlider value={it.watts} min={min} max={max} step={1} showValue onChange={(w) => commitDebounced(it.id, { watts: w, icon: it.icon, boost: it.boost })} />
+                <IconPickerGrid keys={PRESET_ICON_KEYS} value={it.icon} renderIcon={presetIconNode} onPick={(k) => commitNow(it.id, { watts: it.watts, icon: k, boost: it.boost })} />
+                {supportsAdvanced && (
+                  <BoostEditor
+                    boost={it.boost}
+                    off2Max={off2Max}
+                    off3Max={off3Max}
+                    onPickMode={(b) => commitNow(it.id, { watts: it.watts, icon: it.icon, boost: b })}
+                    onOffsets={(b) => commitDebounced(it.id, { watts: it.watts, icon: it.icon, boost: b })}
+                  />
+                )}
               </div>
             )}
             {it.editable && (
