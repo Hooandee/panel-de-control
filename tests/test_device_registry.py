@@ -192,6 +192,15 @@ def test_ally_x_has_charger_boost():
     assert prof.tdp_max_charger > prof.tdp_max
 
 
+def test_legion_go_s_reaches_firmware_ceilings():
+    for name in ("83L3", "83N6"):
+        prof = detect(product_name=name)
+        assert prof.key == "legion_go_s"
+        assert prof.tdp_max == 33          # sustained ceiling on battery
+        assert prof.tdp_max_charger == 40  # extra reachable only on charger
+        assert prof.charger_only_extra is True
+
+
 def test_deck_has_no_charger_boost():
     prof = detect(product_name="Galileo")
     assert prof.tdp_max == 15
@@ -206,3 +215,17 @@ def test_ally_family_curated_presets():
 
 def test_other_devices_have_no_curated_presets():
     assert detect(product_name="Galileo").tdp_presets == ()  # falls back to rail limits
+
+
+def test_gpu_generation():
+    from device_registry import gpu_generation
+    assert gpu_generation("intel", "Intel Core Ultra 7 258V") == "intel"
+    assert gpu_generation("amd", "AMD Sephiroth") == "rdna2"
+    assert gpu_generation("amd", "AMD Van Gogh") == "rdna2"
+    assert gpu_generation("amd", "AMD Z1 Extreme") == "rdna3"
+    assert gpu_generation("amd", "AMD Ryzen Z2 Go") == "rdna2"
+    assert gpu_generation("amd", "AMD Ryzen AI Z2 Extreme") == "rdna35"
+    assert gpu_generation("amd", "AMD Ryzen AI 9 HX 370") == "rdna35"
+    assert gpu_generation("amd", "AMD Ryzen AI Max+ 395") == "rdna35"
+    assert gpu_generation("amd", "AMD Ryzen Z2 A") == "rdna2"
+    assert gpu_generation("amd", "Desconocido") == "unknown"

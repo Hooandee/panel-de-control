@@ -1,6 +1,6 @@
 {
   "name": "panel-de-control",
-  "version": "0.18.0",
+  "version": "0.25.3",
   "description": "Panel de control definitivo para PCs portátiles: TDP, ventiladores y más.",
   "type": "module",
   "scripts": {
@@ -10,10 +10,10 @@
     "test:fe": "vitest run"
   },
   "author": "Hooandee",
-  "license": "BSD-3-Clause",
+  "license": "GPL-3.0-only",
   "devDependencies": {
     "@decky/rollup": "^1.0.2",
-    "@decky/ui": "^4.11.0",
+    "@decky/ui": "^4.12.0",
     "@rollup/rollup-linux-x64-musl": "^4.53.3",
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",

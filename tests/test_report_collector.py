@@ -244,7 +244,11 @@ def _build_fake_sysfs(root):
     _mk(os.path.join(root, "sys/class/hwmon/hwmon1/temp1_label"), "Tctl\n")
     # firmware-attributes: vendor WMI TDP attributes.
     _mk(os.path.join(root, "sys/class/firmware-attributes/asus-armoury/attributes/ppt_pl1_spl/current_value"), "17\n")
+    _mk(os.path.join(root, "sys/class/firmware-attributes/asus-armoury/attributes/ppt_pl1_spl/max_value"), "150\n")
     _mk(os.path.join(root, "sys/class/firmware-attributes/asus-armoury/attributes/ppt_pl2_sppt/current_value"), "25\n")
+    # legacy asus-nb-wmi PL1 interface (direct value files) = the second interface.
+    _mk(os.path.join(root, "sys/devices/platform/asus-nb-wmi/ppt_pl1_spl"), "35\n")
+    _mk(os.path.join(root, "sys/devices/platform/asus-nb-wmi/ppt_fppt"), "49\n")
     # power_supply: a battery with a charge threshold + a charger without one.
     _mk(os.path.join(root, "sys/class/power_supply/BAT0/energy_full"), "1\n")
     _mk(os.path.join(root, "sys/class/power_supply/BAT0/cycle_count"), "38\n")
@@ -271,6 +275,23 @@ def test_sysfs_snapshot_firmware_attributes(tmp_path):
     _build_fake_sysfs(str(tmp_path))
     snap = sysfs_snapshot(root=str(tmp_path))
     assert snap["firmware_attributes"]["asus-armoury"] == ["ppt_pl1_spl", "ppt_pl2_sppt"]
+
+
+def test_sysfs_snapshot_asus_ppt_captures_both_interfaces_with_values(tmp_path):
+    # The two ASUS PL1 interfaces + their live values, so a report shows a bogus firmware
+    # ceiling (150) and whether the legacy interface exists + what it holds — the signal
+    # the plain listings miss.
+    _build_fake_sysfs(str(tmp_path))
+    ppt = sysfs_snapshot(root=str(tmp_path))["asus_ppt"]
+    assert ppt["asus_armoury"]["ppt_pl1_spl"]["current"] == "17"
+    assert ppt["asus_armoury"]["ppt_pl1_spl"]["max"] == "150"
+    assert ppt["asus_nb_wmi"]["ppt_pl1_spl"] == "35"
+    assert ppt["asus_nb_wmi"]["ppt_fppt"] == "49"
+
+
+def test_sysfs_snapshot_asus_ppt_absent_is_empty(tmp_path):
+    snap = sysfs_snapshot(root=str(tmp_path))
+    assert snap["asus_ppt"] == {"asus_armoury": {}, "asus_nb_wmi": {}}
 
 
 def test_sysfs_snapshot_power_supply(tmp_path):
@@ -336,6 +357,7 @@ def test_sysfs_snapshot_empty_root_never_raises(tmp_path):
         "platform_profile": {"acpi": {}, "class": {}},
         "acpi": {"call_present": False, "call_writable": False},
         "modules": [],
+        "asus_ppt": {"asus_armoury": {}, "asus_nb_wmi": {}},
     }
 
 

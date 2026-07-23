@@ -98,10 +98,28 @@ Button remapping that cooperates with the daemon already controlling your gamepa
 Bazzite, InputPlumber on SteamOS) instead of fighting it. It shows a warning in Settings if it
 detects a configuration conflict. This part is still early.
 
+### Parameters (Parámetros)
+
+Manage each game's launch options without wrestling Steam's syntax. The list shows your games with
+their cover art (Steam and non‑Steam, including any artwork you've set), sorted by recent play, with
+search and other sort orders. Each option is a row with a plain‑language explanation and a toggle: turn
+on Proton variables (FSR4, sync tweaks, HDR, upscaling…) and wrappers like MangoHud, and it only offers
+the ones your Proton build actually supports, checked against the game itself. It keeps whatever you
+already had (EmuDeck, launchers, your manual tweaks). You can define your own variables to reuse across
+games, hide the ones you don't use (tools like Proton versions hide themselves), and jump straight to
+the game you're playing. It also adds an entry to the game's library context menu.
+
 ### Settings (Ajustes)
 
 Language (with flags, not a dropdown), the "learn from my usage" switch (telemetry is 100% local and
-can be turned off), and a button to erase what has been learned.
+can be turned off), and a button to erase what has been learned. Under "Customize interface" you can
+reorder and hide tabs and blocks, turn whole modules on or off (disabling stops that feature across
+the panel; hiding just stops showing it here), build your own tabs (custom views) from whichever
+blocks you want across categories and place them anywhere in the tab order, and pick the panel's
+accent color from a palette.
+
+The whole panel is fully controller-navigable: whatever the cursor is on gets a clear accent outline,
+so you never need the touchscreen.
 
 ## Per-device compatibility
 
@@ -260,6 +278,9 @@ here. The full list with licenses is in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOT
 - **[Fantastic](https://git.ngram.ca/NG-SD-Plugins/Fantastic)** and **[PowerTools](https://git.ngni.us/NG-SD-Plugins/PowerTools)**.
   Reference for the fan monitor and curve control and for periodic re-apply.
 - **[Decky Loader](https://decky.xyz/)** and its plugin template. The base everything runs on.
+- **[decky-steamgriddb](https://github.com/SteamGridDB/decky-steamgriddb)** (GPL-3.0). I adapted its
+  technique for adding the Parameters entry to a game's library context menu. That adaptation is why
+  this plugin is GPL-3.0.
 - **The Linux kernel documentation** (firmware-attributes, powercap, asus-wmi, hwmon, power_supply).
   The source of the sysfs paths I read and write.
 
@@ -275,6 +296,8 @@ open a public issue.
 
 ## License
 
-[BSD-3-Clause](LICENSE) © Hooandee. Third-party attributions and license details (including ryzenadj,
-which is invoked as an external process and not bundled) are listed in
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+[GPL-3.0](LICENSE) © Hooandee. Free software for the community: anyone can use, study, and modify it,
+and anyone who distributes it (with or without changes) must do so under the GPL too, with the source
+available. Third-party attributions and license details (including decky-steamgriddb, whose context-menu
+technique this adapts, and ryzenadj, which is invoked as an external process and not bundled) are listed
+in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

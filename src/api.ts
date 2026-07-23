@@ -1,12 +1,41 @@
 import { callable } from "@decky/api";
+import type { LaunchTools } from "./launch/catalog";
 
 // callable<[arg types], ReturnType>("exact_backend_method_name")
 // Names must match the Python `async def` on the Plugin class exactly.
 export const getVersion = callable<[], string>("get_version");
 
+// Detected host tools (lsfg/mangohud/gamemode/…) + distro for the launch-options
+// pills. LaunchTools is defined in the pure catalog module (no @decky import).
+export type { LaunchTools };
+export const getLaunchTools = callable<[], LaunchTools>("get_launch_tools");
+// Which PROTON_* vars the game's Proton build actually supports (read from its
+// script) → gate version-specific pills honestly. `found` false = the build wasn't
+// located (native/non-Steam/missing), and then `envs` is empty — no unconfirmed options.
+export interface ProtonCaps {
+  envs: string[];
+  found: boolean;
+}
+export const getProtonCaps = callable<[compatName: string], ProtonCaps>("get_proton_caps");
+// Pill usage counts ({pill_id: times applied}) → the editor surfaces the most-used.
+export const getLaunchUsage = callable<[], Record<string, number>>("get_launch_usage");
+export const bumpLaunchUsage = callable<[ids: string[]], boolean>("bump_launch_usage");
+// User-defined launch-variable library (env / game args). set_* returns the stored
+// (shape-coerced) list.
+import type { CustomVarDef } from "./launch/customVars";
+export type { CustomVarDef };
+export const getCustomLaunchVars = callable<[], CustomVarDef[]>("get_custom_launch_vars");
+export const setCustomLaunchVars = callable<[vars: CustomVarDef[]], CustomVarDef[]>("set_custom_launch_vars");
+
 // Durable mirror of the frontend's localStorage prefs (a null value removes a key).
 export const getUiPrefs = callable<[], Record<string, string>>("get_ui_prefs");
 export const setUiPrefs = callable<[Record<string, string | null>], boolean>("set_ui_prefs");
+
+// Durable module enable/disable state. `disabled` = the user-disabled set (generic
+// ids + power/learning folded in). set_ui_module returns the fresh set after applying.
+export const getUiModules = callable<[], { disabled: string[] }>("get_ui_modules");
+export const setUiModule = callable<[string, boolean], { disabled: string[] }>("set_ui_module");
+export const resetUiModules = callable<[], { disabled: string[] }>("reset_modules");
 
 export interface DeviceInfo {
   key: string;
@@ -21,6 +50,13 @@ export interface DeviceInfo {
   // When true, the shell shows the experimental marker for this recognised model.
   experimental: boolean;
   cooler_max: number | null;
+  // GPU generation ("rdna2"|"rdna3"|"rdna35"|"rdna4"|"intel"|"unknown") for the
+  // launch-options upscaler gating (FSR4 = rdna3/rdna4).
+  gpu_gen: string;
+  // When true, the charger headroom (tdp_max_charger above tdp_max) is only reachable
+  // with the charger connected — the firmware caps the sustained limit on battery. Hide
+  // the "raise on battery" toggle; the arc shows the locked charger segment instead.
+  charger_only_extra: boolean;
 }
 
 export const getDevice = callable<[], DeviceInfo>("get_device");
@@ -84,6 +120,11 @@ export interface TdpState {
   firmware_mode: string;
   // True when get_tdp_state adopted an external (HHD/Steam) TDP change on this read.
   external_change: boolean;
+  // Master switch: when false we stop writing rails → Potencia drops to monitor-only.
+  tdp_control_enabled: boolean;
+  // One-time full-screen notices already shown (durable across reboot).
+  seen_autotdp_notice: boolean;
+  seen_tdp_conflict_takeover: boolean;
 }
 
 export interface TdpPresets {
@@ -163,6 +204,9 @@ export interface PowerDraw {
   // True only while the QAM-open responsive floor is REALLY raising PL1 above where
   // the auto loop would park it → the arc shows a menu-temporary value, so say so.
   ui_floor_engaged: boolean;
+  // Live charger state, polled every second so the UI can refresh the slider ceiling
+  // (battery vs charger) the instant the charger is plugged or unplugged.
+  on_ac: boolean;
 }
 
 export const getPowerDraw = callable<[], PowerDraw>("get_power_draw");
@@ -170,6 +214,22 @@ export const setAutoTdp = callable<[enabled: boolean, scope: TdpScope, appid: st
 // Signals the QAM panel opened/closed so the auto loop can raise its floor (and bump
 // PL1 immediately) to keep the CPU-bound menu render fluid.
 export const setUiActive = callable<[enabled: boolean], boolean>("set_ui_active");
+
+// ---- TDP control / conflict take-over -------------------------------------
+// HHD conflict detection lives in the backend (it reads the REST daemon); SDTDP is
+// detected on the frontend via Decky's plugin list (see tdp/deckyPlugins.ts).
+export const getTdpConflict =
+  callable<[], { hhd_present: boolean; hhd_managing: boolean }>("get_tdp_conflict");
+// Hand HHD's TDP module over to us (reversible; saves its previous value).
+export const takeTdpControl =
+  callable<[], { ok: boolean; hhd_managing: boolean }>("take_tdp_control");
+// The TDP master switch (get/set_tdp_control_enabled) is driven via the module
+// editor now (power module → set_ui_module), so it has no dedicated frontend binding.
+// One-time-notice flags (durable, backend-persisted).
+export const setSeenAutotdpNotice =
+  callable<[seen: boolean], boolean>("set_seen_autotdp_notice");
+export const setSeenTdpConflictTakeover =
+  callable<[seen: boolean], boolean>("set_seen_tdp_conflict_takeover");
 
 export type FanScope = Scope;
 // "adaptive" = the learned curve (computed live from telemetry). Choosing it IS
@@ -183,6 +243,8 @@ export interface FanPresetDef {
 
 export interface FanCurveState {
   supported: boolean;
+  // Software-loop backends can wedge → the UI offers a reset; hardware-curve can't.
+  resettable: boolean;
   source: string | null;
   pwm_max: number;
   // Read-only firmware curve (MSI Claw): the device can't be controlled but its
@@ -205,6 +267,8 @@ export interface FanCurveState {
   // control card shows the opt-in toggle instead of the editor.
   experimental_available: boolean;
   experimental_enabled: boolean;
+  // Set only by reset_fan_control: whether the release to firmware actually landed.
+  reset_ok?: boolean;
   // Host OS name (PRETTY_NAME) for the honest "curve not available on this OS"
   // message; null when unreadable.
   os_name: string | null;
@@ -216,8 +280,8 @@ export interface FanCurveState {
   has_firmware_modes: boolean;
 }
 
-export const getTelemetryEnabled = callable<[], boolean>("get_telemetry_enabled");
-export const setTelemetryEnabled = callable<[enabled: boolean], boolean>("set_telemetry_enabled");
+// Learning on/off (get/set_telemetry_enabled) is driven via the module editor now
+// (learning module → set_ui_module), so it has no dedicated frontend binding.
 // Wipe all learned usage data (start from scratch). Doesn't touch manual profiles.
 export const resetTelemetry = callable<[], boolean>("reset_telemetry");
 
@@ -245,6 +309,7 @@ export const getFanCurveState = callable<[], FanCurveState>("get_fan_curve_state
 // Opt in/out of experimental EC fan control (Legion Go S). Returns the fresh state.
 export const setFanExperimental =
   callable<[enabled: boolean], FanCurveState>("set_fan_experimental");
+export const resetFanControl = callable<[], FanCurveState>("reset_fan_control");
 export const setFanPreset =
   callable<[preset: FanPreset, scope: FanScope, appid: string | null], FanCurveState>("set_fan_preset");
 export const setFanFollowGlobal =
@@ -494,16 +559,6 @@ export const getHdrState = callable<[], HdrState>("get_hdr_state");
 export const setHdr = callable<[patch: HdrPatch, scope: Scope, appid: string | null], HdrState>("set_hdr");
 
 // ---- Mandos (controller manager) ------------------------------------------
-export interface ControllerConflict {
-  hhd_present: boolean;
-  hhd_managing_power: boolean;
-  // True when HHD manages power AND our TDP backend can too → they fight.
-  conflict: boolean;
-}
-
-export const getControllerConflict =
-  callable<[], ControllerConflict>("get_controller_conflict");
-
 export type ControllerTarget = { gamepad: string } | { key: string };
 
 export interface RemapButton {
@@ -553,8 +608,12 @@ export interface ReportResult {
   saved_path?: string | null;
 }
 
+// `context` carries frontend-only diagnostics the backend can't see (e.g. the
+// running game's launch-options string + Proton caps for a "launch" report).
 export const submitReport =
-  callable<[categories: string[], text: string], ReportResult>("submit_report");
+  callable<[categories: string[], text: string, context: Record<string, unknown>], ReportResult>(
+    "submit_report",
+  );
 
 export const getControllerConfig = callable<[], ControllerConfig>("get_controller_config");
 export const setControllerButton =

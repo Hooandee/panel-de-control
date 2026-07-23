@@ -30,6 +30,11 @@ class LifecycleManager:
     """Re-applies TDP after resume (wakeup_count change, delayed) and on AC/DC transitions.
     Decision logic is in check(now); run() is a thin async loop around it."""
 
+    # Re-apply again this many seconds after an AC change: the firmware briefly reverts
+    # to its default (an Ally drops to ~12 W on unplug) and a single re-apply mid-
+    # transition can be lost, so re-assert once it has settled.
+    _AC_SETTLE_RETRIES = (2.0, 4.0)
+
     def __init__(self, apply_cb, root="/", wakeup_delay=4.0, interval=2.0,
                  read_wakeup=None, read_ac=None):
         self._apply = apply_cb
@@ -40,7 +45,7 @@ class LifecycleManager:
         self._read_ac = read_ac or (lambda: read_on_ac(root))
         self._last_wakeup = None
         self._last_ac = None
-        self._pending_apply_at = None
+        self._pending = []   # times at which to re-apply (resume delay + AC settle)
         self._task = None
 
     def _safe_apply(self, ac):
@@ -59,18 +64,16 @@ class LifecycleManager:
         # resume detected → schedule a delayed re-apply
         if wc != self._last_wakeup:
             self._last_wakeup = wc
-            self._pending_apply_at = now + self._wakeup_delay
-        # AC transition → re-apply immediately
-        applied = False
+            self._pending.append(now + self._wakeup_delay)
+        # AC transition → re-apply now, then again as the firmware settles
         if ac != self._last_ac:
             self._last_ac = ac
             self._safe_apply(ac)
-            applied = True
-        # fire a scheduled re-apply once its delay elapses
-        if self._pending_apply_at is not None and now >= self._pending_apply_at:
-            self._pending_apply_at = None
-            if not applied:
-                self._safe_apply(ac)
+            self._pending.extend(now + d for d in self._AC_SETTLE_RETRIES)
+        # fire every scheduled re-apply whose delay has elapsed (re-reading AC live)
+        if any(now >= t for t in self._pending):
+            self._pending = [t for t in self._pending if now < t]
+            self._safe_apply(self._read_ac())
 
     async def run(self):
         import time

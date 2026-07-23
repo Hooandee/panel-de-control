@@ -26,11 +26,10 @@ export const OledLookCard: FC<Props> = ({ active, onApply, onReset }) => {
         style={{
           borderRadius: theme.radius.md,
           padding: theme.space.md,
-          marginBottom: theme.space.card,
           overflow: "hidden",
           // Accent-tinted gradient so the hero card stands apart from the plain cards.
-          background: `linear-gradient(135deg, rgba(78,161,255,0.18), rgba(78,161,255,0.04))`,
-          boxShadow: `inset 0 0 0 1px rgba(78,161,255,0.35)`,
+          background: `linear-gradient(135deg, rgba(${theme.color.accentRgb},0.18), rgba(${theme.color.accentRgb},0.04))`,
+          boxShadow: `inset 0 0 0 1px rgba(${theme.color.accentRgb},0.35)`,
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: theme.space.sm }}>

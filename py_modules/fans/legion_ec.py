@@ -12,10 +12,14 @@ real matching device, and only on the first write/read.
 """
 
 import os
+import threading
 from typing import Callable, Optional
 
 from fans.control import _read, _interp
 from fans.software_loop import SoftwareLoopBackend
+
+# Number of write+readback attempts to confirm a release reached the EC.
+_RELEASE_CONFIRM_RETRIES = 3
 
 # EC register map (16-bit addresses; RPM/override are little-endian across addr,addr+1).
 REG_RPM = 0xC6C0
@@ -38,6 +42,11 @@ class _PortEC:
 
     def __init__(self) -> None:
         self._fd: Optional[int] = None
+        # The index/data protocol selects a GLOBAL address then reads/writes the data
+        # window. A concurrent access (e.g. read_state's RPM read off the io lock, on
+        # the loop thread) would re-select mid-sequence and land on the wrong register.
+        # Serialise each select+access so every op is atomic.
+        self._lock = threading.Lock()
 
     def _idx(self, reg: int, val: int) -> None:
         """Write one index-port pair: select index `reg` (at 0x4E), set `val` (at 0x4F)."""
@@ -57,19 +66,21 @@ class _PortEC:
         os.pwrite(self._fd, b"\x2f", 0x4E)
 
     def read(self, addr: int) -> Optional[int]:
-        try:
-            self._select(addr)
-            return os.pread(self._fd, 1, 0x4F)[0]
-        except OSError:
-            return None  # honest: read failed != 0 RPM
+        with self._lock:
+            try:
+                self._select(addr)
+                return os.pread(self._fd, 1, 0x4F)[0]
+            except OSError:
+                return None  # read failed != 0 RPM
 
     def write(self, addr: int, val: int) -> bool:
-        try:
-            self._select(addr)
-            os.pwrite(self._fd, bytes([val & 0xFF]), 0x4F)
-            return True
-        except OSError:
-            return False
+        with self._lock:
+            try:
+                self._select(addr)
+                os.pwrite(self._fd, bytes([val & 0xFF]), 0x4F)
+                return True
+            except OSError:
+                return False
 
 
 def _read_le16(ec, addr: int) -> Optional[int]:
@@ -108,14 +119,30 @@ class LegionGo2FanBackend(SoftwareLoopBackend):
         return any(tok in text for tok in _DMI_MATCH)
 
     def _write_target(self, rpm: int) -> bool:
-        ok_lo = self._ec.write(REG_OVERRIDE, rpm & 0xFF)
-        ok_hi = self._ec.write(REG_OVERRIDE + 1, (rpm >> 8) & 0xFF)
-        return bool(ok_lo and ok_hi)
+        # Two byte writes, either can fail — order them so a partial write never strands
+        # the (0, MIN_SPIN) dead zone, and write the second only if the first (the safe
+        # anchor) landed: releasing (0) writes LOW first (a lone low=0 leaves the old safe
+        # high); driving writes HIGH first (a lone high >= 0x06 already reads >= 1536).
+        # Truth is the readback.
+        lo, hi = rpm & 0xFF, (rpm >> 8) & 0xFF
+        if rpm == 0:
+            if self._ec.write(REG_OVERRIDE, lo):
+                self._ec.write(REG_OVERRIDE + 1, hi)
+        else:
+            if self._ec.write(REG_OVERRIDE + 1, hi):
+                self._ec.write(REG_OVERRIDE, lo)
+        return _read_le16(self._ec, REG_OVERRIDE) == rpm
 
     def _release(self) -> bool:
-        ok_lo = self._ec.write(REG_OVERRIDE, 0)
-        ok_hi = self._ec.write(REG_OVERRIDE + 1, 0)
-        return bool(ok_lo and ok_hi)
+        # A write returning ok is not proof the EC took it: _write_target confirms 0
+        # by readback. Retry so a transient single-byte failure self-heals.
+        for _ in range(_RELEASE_CONFIRM_RETRIES):
+            if self._write_target(0):
+                return True
+        # Could not confirm release — never leave a stale value in the stopped-but-
+        # owned dead zone; drive the capped max (safe, spinning) instead.
+        self._write_target(self.max_rpm)
+        return False
 
     def _read_rpm(self) -> Optional[int]:
         return _read_le16(self._ec, REG_RPM)  # None when unreadable (not a fake 0)
@@ -133,7 +160,9 @@ _GOS_MAX_RPM = 4500
 # (hand control back to the firmware) or a value in [MIN_SPIN, MAX_RPM]. This also
 # makes a stuck override safe if the plugin ever dies — either firmware-controlled or
 # genuinely cooling, never stopped-and-abandoned.
-_GOS_MIN_SPIN = 1500
+# 0x0600: the high byte of every driven target is >= 6, so even a low-byte write that
+# fails leaves the override at high<<8 >= 1536 (never the dead zone).
+_GOS_MIN_SPIN = 1536
 # Above this temperature we ignore the user's curve and force full (capped) cooling —
 # a bad curve must never leave the fan slow while hot.
 _GOS_TEMP_GUARD_C = 90

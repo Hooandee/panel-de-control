@@ -281,3 +281,49 @@ def test_new_mode_shape_round_trips(tmp_path):
     s1.set_boost_mode("global", "auto")
     s2 = ProfileStore(path, default_watts=15)
     assert s2.effective(None)["mode"] == "auto" and s2.effective(None)["pl2"] == 18
+
+
+def test_sanitize_corrects_corrupt_stored_tdp_to_device_ceiling(tmp_path):
+    # A profile persisted by an older version at a bogus 150 W (firmware-max leak) is
+    # corrected to the device ceiling on load — not just clamped on read — and rewritten
+    # to disk so the landmine is gone for good. Valid values and the global are untouched.
+    path = str(tmp_path / "tdp_profiles.json")
+    with open(path, "w") as f:
+        json.dump({
+            "global": {"pl1": 17, "mode": "auto", "off2": 3, "off3": 2},
+            "games": {
+                "990080": {"pl1": 150, "mode": "auto", "off2": 0, "off3": 0},
+                "1593500": {"pl1": 150, "mode": "custom", "off2": 30, "off3": 30},
+                "555": {"pl1": 25, "mode": "estable", "off2": 0, "off3": 0},
+            },
+        }, f)
+    s = ProfileStore(path, default_watts=17)
+    assert s.sanitize(7, 35) is True
+    assert s.game_profile("990080")["pl1"] == 35
+    assert s.game_profile("1593500")["pl1"] == 35
+    assert s.game_profile("1593500")["off2"] <= 35
+    assert s.game_profile("1593500")["off3"] <= 35
+    assert s.game_profile("555")["pl1"] == 25   # a valid value is untouched
+    assert s.effective(None)["pl1"] == 17       # global untouched
+    on_disk = json.load(open(path))
+    assert on_disk["games"]["990080"]["pl1"] == 35
+
+
+def test_sanitize_is_noop_and_no_write_when_all_valid(tmp_path):
+    s = _store(tmp_path, default=15)
+    s.set_pl1("global", 20)
+    s.set_pl1("game", 25, appid="42")
+    assert s.sanitize(5, 30) is False
+    assert s.effective(None)["pl1"] == 20
+    assert s.effective("42")["pl1"] == 25
+
+
+def test_sanitize_raises_below_minimum(tmp_path):
+    # Corrupt low values (0) are floored to the device minimum too.
+    path = str(tmp_path / "tdp_profiles.json")
+    with open(path, "w") as f:
+        json.dump({"global": {"pl1": 0, "mode": "estable", "off2": 0, "off3": 0},
+                   "games": {}}, f)
+    s = ProfileStore(path, default_watts=15)
+    assert s.sanitize(7, 35) is True
+    assert s.effective(None)["pl1"] == 7

@@ -6,6 +6,8 @@ import { LearningStatus } from "../api";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { learningBadge, LearningTag } from "../learning/logic";
+import { useModules } from "../customize/modules";
+import { effectiveEnabled } from "../customize/moduleLogic";
 
 interface Props {
   /** Foreground game name (null when Steam/desktop is in front). */
@@ -29,13 +31,17 @@ const TAG_KEY: Record<LearningTag, string> = {
  */
 export const LearningBanner: FC<Props> = ({ gameName, status, onOpenSettings }) => {
   const { t } = useI18n();
+  const disabled = useModules();
   if (!status) return null;
 
+  // Fold in the live module state so the banner is honest and updates the moment a
+  // module is toggled: learning only runs with the learning module on, and a
+  // subsystem is only being learned while its own module (Power/Fans) is enabled.
   const { state, tags } = learningBadge({
     inGame: gameName !== null,
-    telemetryOn: status.telemetry_enabled,
-    tdpSupported: status.tdp_supported,
-    fanSupported: status.fan_supported,
+    telemetryOn: status.telemetry_enabled && effectiveEnabled("learning", disabled),
+    tdpSupported: status.tdp_supported && effectiveEnabled("power", disabled),
+    fanSupported: status.fan_supported && effectiveEnabled("fans", disabled),
   });
 
   if (state === "hidden") return null;

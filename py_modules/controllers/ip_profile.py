@@ -45,6 +45,9 @@ DEVICE_BUTTONS = {
     "msi_claw_8_ai_plus": [
         ("RightPaddle1", "M1"), ("LeftPaddle1", "M2"),
     ],
+    "msi_claw_a8": [
+        ("RightPaddle1", "M1"), ("LeftPaddle1", "M2"),
+    ],
 }
 
 # Gamepad buttons offered as remap targets (what an extra button can become).

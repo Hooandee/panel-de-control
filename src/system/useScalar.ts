@@ -1,58 +1,96 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useSyncExternalStore } from "react";
 import { ScalarControl, SystemControl } from "./types";
 import { acceptEcho, fromPercent, toPercent } from "./logic";
 import { displayBrightness } from "./display";
 import { systemVolume } from "./audio";
 
 /**
- * Drives a ScalarControl as an integer-percent value. Distinguishes three
- * states so the UI never shows a value it doesn't really have:
- *  - `supported=false` → the API is absent (subscribe returned no registration).
- *  - `supported && loading` → API present, but no real value has arrived yet
- *    (e.g. volume seeds via an async GetDevices and only emits on change). The
- *    UI must show a placeholder, NOT an interactive slider parked at a fake 0%.
- *  - otherwise → a real value is in `percent`.
- * Writes optimistically on set (the change event corrects if the hardware lands
- * elsewhere).
- *
- * `control` must be a stable module singleton (see display.ts / audio.ts).
+ * Ref-counted singleton store per ScalarControl: one subscription shared by every
+ * consumer (a block in a section AND the same block in a custom view read the same
+ * poll — no duplicate registrations). The control's subscribe runs while ≥1 hook is
+ * mounted. Three honest states preserved (supported / loading / value); writes are
+ * optimistic with late-echo rejection.
  */
-export function useScalar(control: ScalarControl): SystemControl {
-  const [percent, setPercent] = useState<number | null>(null);
-  const [supported, setSupported] = useState(true);
-  // The value we last wrote optimistically, and when. Used to reject late echoes
-  // from an earlier drag position that would otherwise snap the slider backward.
-  const pendingRef = useRef<number | null>(null);
-  const lastSetAtRef = useRef(0);
+class ScalarStore {
+  private percent: number | null = null;
+  private supported = true;
+  private pending: number | null = null;
+  private lastSetAt = 0;
+  private refs = 0;
+  private unsub: (() => void) | null = null;
+  private listeners = new Set<() => void>();
+  private snap: SystemControl;
 
-  useEffect(() => {
-    let alive = true;
-    const unsub = control.subscribe((fraction) => {
-      if (!alive) return;
+  constructor(private control: ScalarControl) {
+    this.snap = this.compute();
+  }
+
+  private compute(): SystemControl {
+    return {
+      supported: this.supported,
+      loading: this.supported && this.percent === null,
+      percent: this.percent ?? 0,
+      set: this.set,
+    };
+  }
+
+  private emit(): void {
+    this.snap = this.compute();
+    this.listeners.forEach((l) => l());
+  }
+
+  private set = (p: number): void => {
+    this.pending = p; // optimistic; ignore echoes until this value confirms
+    this.lastSetAt = Date.now();
+    this.percent = p;
+    this.emit();
+    this.control.set(fromPercent(p));
+  };
+
+  private start(): void {
+    const unsub = this.control.subscribe((fraction) => {
       const echo = toPercent(fraction);
-      if (acceptEcho(pendingRef.current, echo, Date.now() - lastSetAtRef.current)) {
-        pendingRef.current = null;
-        setPercent(echo);
+      if (acceptEcho(this.pending, echo, Date.now() - this.lastSetAt)) {
+        this.pending = null;
+        this.percent = echo;
+        this.emit();
       }
     });
-    setSupported(unsub !== null);
+    this.supported = unsub !== null;
+    this.unsub = unsub;
+    this.emit();
+  }
+
+  subscribe = (cb: () => void): (() => void) => {
+    this.listeners.add(cb);
+    if (this.refs++ === 0) this.start();
     return () => {
-      alive = false;
-      if (unsub) unsub();
+      this.listeners.delete(cb);
+      if (--this.refs === 0 && this.unsub) {
+        this.unsub();
+        this.unsub = null;
+      }
     };
-  }, [control]);
+  };
 
-  const set = useCallback(
-    (p: number) => {
-      pendingRef.current = p; // optimistic; ignore echoes until this value confirms
-      lastSetAtRef.current = Date.now();
-      setPercent(p);
-      control.set(fromPercent(p));
-    },
-    [control],
-  );
+  getSnapshot = (): SystemControl => this.snap;
+}
 
-  return { supported, loading: supported && percent === null, percent: percent ?? 0, set };
+const stores = new Map<ScalarControl, ScalarStore>();
+function storeFor(control: ScalarControl): ScalarStore {
+  let s = stores.get(control);
+  if (!s) {
+    s = new ScalarStore(control);
+    stores.set(control, s);
+  }
+  return s;
+}
+
+/** Drives a ScalarControl as an integer-percent value, sharing one subscription
+ *  across all consumers. `control` must be a stable module singleton. */
+export function useScalar(control: ScalarControl): SystemControl {
+  const store = storeFor(control);
+  return useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
 }
 
 /** Current screen brightness as an integer percent, with a setter. */

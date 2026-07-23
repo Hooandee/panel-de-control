@@ -1,14 +1,23 @@
 import { ErrorBoundary, staticClasses } from "@decky/ui";
 import { definePlugin } from "@decky/api";
+import { FC } from "react";
 import { LuGauge } from "react-icons/lu";
 
-import { I18nProvider } from "./i18n";
+import { I18nProvider, translate } from "./i18n";
 import { ControlCenter } from "./components/ControlCenter";
 import { startGameWatcher } from "./tdp/gameWatcher";
 import { startEcoAmbient } from "./system/ecoAmbient";
 import { startValueToast, refreshValueToast } from "./system/valueToast";
 import { hydratePrefs, onPrefsHealed } from "./system/pdcStorage";
 import { reloadLayout } from "./customize/store";
+import { hydrateModules } from "./customize/modules";
+import { installGameContextMenu } from "./launch/gameContextMenu";
+
+// Localized header title only; the internal plugin name / install folder stays
+// "Panel de Control" (renaming it would break existing installs and the updater).
+const PluginTitle: FC = () => (
+  <div className={staticClasses.Title}>{translate("app.title")}</div>
+);
 
 export default definePlugin(() => {
   // Restore durable UI prefs into the localStorage cache at plugin scope (so the
@@ -18,6 +27,8 @@ export default definePlugin(() => {
     reloadLayout();
   });
   void hydratePrefs();
+  // Reconcile the durable module enable/disable set (authoritative backend copy).
+  hydrateModules();
 
   // Persistent current-game watcher: runs at plugin scope (while Steam runs),
   // independent of the QAM being open. It is the single source that reports the
@@ -28,10 +39,13 @@ export default definePlugin(() => {
   // so the screen keeps dimming/waking while a game downloads with the QAM closed.
   const stopEcoAmbient = startEcoAmbient();
   const stopValueToast = startValueToast();
+  // Add "Launch parameters" to a game's library context menu. Fully guarded: a no-op
+  // if it can't hook Steam's menu, so it can never break the shared UI.
+  const stopContextMenu = installGameContextMenu();
 
   return {
     name: "Panel de Control",
-    titleView: <div className={staticClasses.Title}>Panel de Control</div>,
+    titleView: <PluginTitle />,
     content: (
       <I18nProvider>
         <ErrorBoundary>
@@ -44,6 +58,7 @@ export default definePlugin(() => {
       stopGameWatcher();
       stopEcoAmbient();
       stopValueToast();
+      stopContextMenu();
     },
   };
 });
