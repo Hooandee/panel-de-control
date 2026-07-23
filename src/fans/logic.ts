@@ -73,10 +73,7 @@ export function presetConverges(preset: string, liveTemp: number | null): boolea
   return liveTemp < _DIVERGENCE_TEMP_C;
 }
 
-/**
- * Whether to show the manual full-blast ("a tope") control: only on backends that
- * expose it (Legion Go original via GZFD full-speed).
- */
+/** Show the full-blast ("a tope") control only where the backend exposes it. */
 export function shouldShowFanMax(s: { max_available?: boolean } | null | undefined): boolean {
   return !!s?.max_available;
 }

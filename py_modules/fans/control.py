@@ -427,9 +427,8 @@ def select_fan_backend(device, root: str = "/", temp_fn=None, ec=None, experimen
         backend = backend_cls(root=root)
         if backend.supported:
             return backend
-    # 83E1 (Legion Go original) fallback: no in-kernel legion_wmi_fan driver, but
-    # acpi_call is loadable (Bazzite/CachyOS) — drive the firmware curve via GZFD,
-    # exactly as HHD does. Absent on SteamOS -> falls through to the read-only Null.
+    # 83E1 without the in-kernel driver but with acpi_call (Bazzite/CachyOS): drive the
+    # firmware curve via GZFD. Absent on SteamOS -> falls through to the read-only Null.
     if getattr(device, "key", None) == "legion_go":
         from fans.legion_acpi import LegionAcpiCallFanBackend
         lego = LegionAcpiCallFanBackend(root=root)

@@ -1014,8 +1014,8 @@ class Plugin:
             self._restore_fans_safe()
             return True
         if getattr(self, "_fan_max", False):
-            # Full-blast override is on: keep it across game changes / re-fits instead
-            # of letting a curve re-apply silently end it (state would then lie).
+            # Keep full-blast across game changes / re-fits; a curve re-apply would
+            # silently end it and leave the reported state lying.
             set_max = getattr(self._fan_ctrl, "set_max", None)
             if callable(set_max):
                 res = set_max(True)
@@ -1089,8 +1089,7 @@ class Plugin:
             # Active firmware mode governing the fan; None = custom / no firmware modes.
             "firmware_mode": (fw if (fw := self._firmware_mode()) != _CUSTOM_MODE else None),
             "has_firmware_modes": bool(self._firmware_choices()),
-            # Manual full-blast override ("a tope"): available only on backends that
-            # expose it (Legion Go original via GZFD full-speed); enabled = live state.
+            # Full-blast override ("a tope"): available only where the backend exposes it.
             "max_available": bool(getattr(self._fan_ctrl, "supports_max", False)),
             "max_enabled": bool(getattr(self, "_fan_max", False)),
         }

@@ -322,8 +322,7 @@ export const setFanCurvePoints =
   callable<[points: [number, number][], scope: FanScope, appid: string | null], FanCurveState>("set_fan_curve_points");
 export const setFanCurveAuto =
   callable<[scope: FanScope, appid: string | null], FanCurveState>("set_fan_auto");
-// Manual full-blast override ("Ventiladores a tope"): forces the fan to max now,
-// independent of temperature (Legion Go original via GZFD full-speed).
+// Full-blast override: forces the fan to max now, independent of temperature.
 export const getFanMax = callable<[], boolean>("get_fan_max");
 export const setFanMax = callable<[enabled: boolean], FanCurveState>("set_fan_max");
 // Adaptive (learned) mode. Selecting it drives the learned curve (or firmware auto

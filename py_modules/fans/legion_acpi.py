@@ -11,10 +11,8 @@ from typing import Optional
 import acpi_call as _acpi_call
 from fans.control import _interp
 
-# Fixed firmware temp anchors (°C); only the 10 speed bytes are ever substituted.
-ANCHORS = (10, 20, 30, 40, 50, 60, 70, 80, 90, 100)
-# Per-point safety floor (percent): curves are clamped up to this, never rejected.
-MIN_CURVE = [44, 48, 55, 60, 71, 79, 87, 87, 100, 100]
+ANCHORS = (10, 20, 30, 40, 50, 60, 70, 80, 90, 100)   # fixed firmware temp anchors (°C)
+MIN_CURVE = [44, 48, 55, 60, 71, 79, 87, 87, 100, 100]   # per-point floor (percent)
 
 GZFD = r"\_SB.GZFD"
 _SET_CURVE_ID = "0x06"
@@ -164,7 +162,6 @@ class LegionAcpiCallFanBackend:
             return {"supported": False, "source": self.name, "pwm_max": 255, "fans": []}
         speeds = self._last_speeds or [0] * 10
         points = [{"temp": ANCHORS[i], "pwm": round(speeds[i] / 100 * 255)} for i in range(10)]
-        # Manual only when we actually drive; a prime GET alone leaves it on firmware auto.
         enable = 1 if (self._drove_curve or self._max_on) else 2
         return {"supported": True, "source": self.name, "pwm_max": 255,
                 "fans": [{"key": "fan", "enable": enable, "points": points}]}
@@ -175,8 +172,8 @@ class LegionAcpiCallFanBackend:
         if not self._ensure_loaded():
             return {"ok": False, "detail": "acpi_call could not be loaded"}
         speeds = curve_to_speeds(points)
-        # First time only: GET to prove the method exists and capture the stock curve.
-        # Once confirmed we skip it (the post-write readback still catches a dead node).
+        # First time only: GET to prove the method exists and capture stock (the
+        # post-write readback still catches a dead node on later calls).
         if not self._probe_ok or self._stock_speeds is None:
             current = self._get_speeds()
             if current is None:
@@ -188,9 +185,8 @@ class LegionAcpiCallFanBackend:
             if self._stock_speeds is None:
                 self._stock_speeds = list(current)
         self._call(f"{GZFD}.WMAB 0x00 {_SET_CURVE_ID} {encode_set_curve(speeds)}")
-        # Own the fan (restore stock on release) the moment we issue the write; a coarse
-        # firmware can read back beyond tolerance even when it landed. Readback only
-        # decides the reported result, so keep this before the readback check.
+        # Own the fan the moment we write (must precede the readback): a coarse firmware
+        # can read back beyond tolerance even when the write landed — restore must run.
         self._last_speeds = speeds
         self._drove_curve = True
         got = self._get_speeds()
