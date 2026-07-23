@@ -278,6 +278,10 @@ export interface FanCurveState {
   // True when the device exposes firmware modes at all (even in custom) — the fan
   // can't be curve-controlled here; a TDP mode governs it.
   has_firmware_modes: boolean;
+  // Manual full-blast override ("a tope") support + live state (Legion Go original
+  // via GZFD full-speed). max_available false → the control is hidden.
+  max_available: boolean;
+  max_enabled: boolean;
 }
 
 // Learning on/off (get/set_telemetry_enabled) is driven via the module editor now
@@ -318,6 +322,10 @@ export const setFanCurvePoints =
   callable<[points: [number, number][], scope: FanScope, appid: string | null], FanCurveState>("set_fan_curve_points");
 export const setFanCurveAuto =
   callable<[scope: FanScope, appid: string | null], FanCurveState>("set_fan_auto");
+// Manual full-blast override ("Ventiladores a tope"): forces the fan to max now,
+// independent of temperature (Legion Go original via GZFD full-speed).
+export const getFanMax = callable<[], boolean>("get_fan_max");
+export const setFanMax = callable<[enabled: boolean], FanCurveState>("set_fan_max");
 // Adaptive (learned) mode. Selecting it drives the learned curve (or firmware auto
 // until enough data). The bias variant sets the silence↔cool dial for the mode.
 export const setFanAdaptive =
