@@ -29,13 +29,28 @@ def _parse_stapm(out: str) -> int | None:
         return None
 
 
+def _ensure_executable(path: str) -> None:
+    """Make our bundled binary runnable. A plain zip extract (the self-updater) drops
+    the exec bit, so it can land mode 0o644, and execve gives EACCES even as root when
+    no exec bit is set. We own this file, so restore +x. Best-effort: never raise."""
+    try:
+        mode = os.stat(path).st_mode
+        if mode & 0o111 != 0o111:
+            os.chmod(path, mode | 0o111)
+    except OSError:
+        pass
+
+
 def _default_resolve():
     found = shutil.which("ryzenadj")
     if found:
         return found
     bundled = os.path.join(os.path.dirname(__file__), "..", "..", "bin", "ryzenadj")
     bundled = os.path.abspath(bundled)
-    return bundled if os.path.exists(bundled) else None
+    if not os.path.exists(bundled):
+        return None
+    _ensure_executable(bundled)
+    return bundled
 
 
 def _clean_env():

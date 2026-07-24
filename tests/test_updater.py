@@ -183,6 +183,45 @@ def test_shape_matches_github_dotted_asset_name(updater, monkeypatch):
     assert result["has_update"] is True
 
 
+def test_extract_zip_preserves_executable_bit(updater, tmp_path):
+    # zipfile.extractall() drops the unix mode the archive records, so a bundled
+    # executable (bin/ryzenadj) lands non-executable and fails to run (EACCES).
+    # _extract_zip must restore the recorded mode.
+    import os
+    import zipfile
+
+    zpath = tmp_path / "release.zip"
+    with zipfile.ZipFile(zpath, "w") as zf:
+        exe = zipfile.ZipInfo("Plugin/bin/ryzenadj")
+        exe.external_attr = 0o755 << 16
+        zf.writestr(exe, b"\x7fELF binary")
+        plain = zipfile.ZipInfo("Plugin/main.py")
+        plain.external_attr = 0o644 << 16
+        zf.writestr(plain, b"x = 1\n")
+
+    dest = tmp_path / "out"
+    with zipfile.ZipFile(zpath) as zf:
+        updater._extract_zip(zf, dest)
+
+    assert os.stat(dest / "Plugin/bin/ryzenadj").st_mode & 0o111 == 0o111
+    assert os.stat(dest / "Plugin/main.py").st_mode & 0o111 == 0
+
+
+def test_extract_zip_tolerates_missing_unix_mode(updater, tmp_path):
+    # A zip made by a tool that records no unix mode (external_attr high bits == 0,
+    # e.g. some Windows zippers) must still extract without error.
+    import zipfile
+
+    zpath = tmp_path / "nomodes.zip"
+    with zipfile.ZipFile(zpath, "w") as zf:
+        zf.writestr("Plugin/main.py", b"x = 1\n")
+
+    dest = tmp_path / "out"
+    with zipfile.ZipFile(zpath) as zf:
+        updater._extract_zip(zf, dest)
+    assert (dest / "Plugin/main.py").read_text() == "x = 1\n"
+
+
 def test_check_404_is_benign(updater, monkeypatch):
     import urllib.error
 
