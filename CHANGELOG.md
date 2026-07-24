@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.27.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.26.1...panel-de-control-v0.27.0) (2026-07-23)
+
+
+### Features / Novedades
+
+* The plugin's name in the Decky plugin list now follows the selected language, matching the title shown inside the panel. ([#275](https://github.com/Hooandee/panel-de-control/issues/275)) ([f5bdf22](https://github.com/Hooandee/panel-de-control/commit/f5bdf22d245fb2e351f8687fc66c2389d7dcb304))
+* **ES:** El nombre del plugin en la lista de Decky ahora sigue el idioma seleccionado, igual que el título que se ve dentro del panel. ([#275](https://github.com/Hooandee/panel-de-control/issues/275)) ([f5bdf22](https://github.com/Hooandee/panel-de-control/commit/f5bdf22d245fb2e351f8687fc66c2389d7dcb304))
+
+## [0.26.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.26.0...panel-de-control-v0.26.1) (2026-07-23)
+
+
+### Bug Fixes / Errores corregidos
+
+* Fixes fan control on handhelds with a generic fan chip (such as the GPD Win Mini and OneXPlayer), where the fan stopped responding after a recent update. ([#269](https://github.com/Hooandee/panel-de-control/issues/269)) ([1d18308](https://github.com/Hooandee/panel-de-control/commit/1d1830838973c44f8f0c26362f4df40d63b9a19d))
+* **ES:** Arregla el control del ventilador en handhelds con chip de ventilador genérico (como la GPD Win Mini y OneXPlayer), donde el ventilador dejó de responder tras una actualización reciente. ([#269](https://github.com/Hooandee/panel-de-control/issues/269)) ([1d18308](https://github.com/Hooandee/panel-de-control/commit/1d1830838973c44f8f0c26362f4df40d63b9a19d))
+
 ## [0.26.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.25.3...panel-de-control-v0.26.0) (2026-07-23)
 
 

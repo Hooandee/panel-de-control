@@ -12,6 +12,7 @@ import { hydratePrefs, onPrefsHealed } from "./system/pdcStorage";
 import { reloadLayout } from "./customize/store";
 import { hydrateModules } from "./customize/modules";
 import { installGameContextMenu } from "./launch/gameContextMenu";
+import { startPluginListLocalizer } from "./pluginListLocalizer";
 
 // Localized header title only; the internal plugin name / install folder stays
 // "Panel de Control" (renaming it would break existing installs and the updater).
@@ -42,6 +43,9 @@ export default definePlugin(() => {
   // Add "Launch parameters" to a game's library context menu. Fully guarded: a no-op
   // if it can't hook Steam's menu, so it can never break the shared UI.
   const stopContextMenu = installGameContextMenu();
+  // Decky renders the plugin-list row from the (fixed) install name, ignoring the
+  // localized title. Relabel that row in place to follow the selected language.
+  const stopListLocalizer = startPluginListLocalizer();
 
   return {
     name: "Panel de Control",
@@ -59,6 +63,7 @@ export default definePlugin(() => {
       stopEcoAmbient();
       stopValueToast();
       stopContextMenu();
+      stopListLocalizer();
     },
   };
 });
