@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { sparklinePath, pushSample, rpmFraction, presetConverges, isSolo, tempsAvailable } from "./logic";
+import { sparklinePath, pushSample, rpmFraction, presetConverges, isSolo, tempsAvailable, shouldShowFanMax } from "./logic";
 import type { FanState } from "../api";
 
 const fanState = (fans: number, temps: number): FanState =>
@@ -90,5 +90,13 @@ describe("rpmFraction", () => {
   });
   it("is 0 at rest", () => {
     expect(rpmFraction(0, 0, 7000)).toBe(0);
+  });
+});
+
+describe("shouldShowFanMax", () => {
+  it("shows only when the backend supports it", () => {
+    expect(shouldShowFanMax({ max_available: true } as never)).toBe(true);
+    expect(shouldShowFanMax({ max_available: false } as never)).toBe(false);
+    expect(shouldShowFanMax(null)).toBe(false);
   });
 });

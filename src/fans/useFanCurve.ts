@@ -8,6 +8,7 @@ import {
   setFanAdaptive,
   setFanAdaptiveBias,
   setFanExperimental,
+  setFanMax,
   resetFanControl,
   FanCurveState,
   FanScope,
@@ -31,6 +32,7 @@ export interface FanCurveControl {
   onAdaptiveBias: (bias: number) => void;
   onCurve: (points: Point[]) => void;
   onExperimental: (enabled: boolean) => void;
+  onMax: (enabled: boolean) => void;
   onReset: () => Promise<boolean>;
 }
 
@@ -181,6 +183,10 @@ export function useFanCurve(): FanCurveControl {
     setFanExperimental(enabled).then(setStateSafe).catch(() => {});
   }, [setStateSafe]);
 
+  const onMax = useCallback((enabled: boolean) => {
+    setFanMax(enabled).then(setStateSafe).catch(() => {});
+  }, [setStateSafe]);
+
   const onReset = useCallback(
     () =>
       resetFanControl()
@@ -192,5 +198,5 @@ export function useFanCurve(): FanCurveControl {
     [setStateSafe],
   );
 
-  return { state, scope, game, saved, refresh, onScope, onPreset, onCustomMode, onAdaptive, onAdaptiveBias, onCurve, onExperimental, onReset };
+  return { state, scope, game, saved, refresh, onScope, onPreset, onCustomMode, onAdaptive, onAdaptiveBias, onCurve, onExperimental, onMax, onReset };
 }

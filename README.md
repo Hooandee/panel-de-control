@@ -219,9 +219,11 @@ tenemos en mano, los reportes desde Ajustes son los que confirman lo que respond
 10. La Legion Go 2 no expone un ventilador escribible por hwmon; el RPM tendría que leerse por el EC
     y en la build actual no está apareciendo en el monitor. Por eso lo marco como no disponible / sin
     confirmar hasta que pueda revisarlo.
-11. La Legion Go original controla la curva de ventilador por el driver de kernel `legion_wmi_fan`, que
-    va en los kernels que lo incluyen y se enciende solo cuando está presente. Donde no está (SteamOS
-    actual y algunos kernels), el ventilador lo gobiernan los **modos de firmware**
+11. La Legion Go original controla la curva de ventilador por el driver de kernel `legion_wmi_fan`
+    cuando el kernel lo incluye, y si no está pero `acpi_call` sí (Bazzite y CachyOS), por la vía ACPI
+    del firmware, la misma que usa Handheld Daemon. En esos sistemas hay además un interruptor de
+    **Ventiladores a tope** para forzar el máximo al instante. En SteamOS, que no trae `acpi_call`, la
+    curva no se puede tocar y el ventilador lo gobiernan los **modos de firmware**
     (Silencioso/Equilibrado/Rendimiento) desde el arco de Potencia, que ajustan potencia y ventilador a
     la vez. El monitor de velocidad funciona siempre: si el driver no publica el nodo hwmon, la RPM se
     lee por el EC.

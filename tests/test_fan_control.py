@@ -1,5 +1,6 @@
 """Tests for fans/control.py — fan-curve backend (TDD)."""
 import os
+from types import SimpleNamespace
 
 from fans.control import (
     AsusFanCurveBackend,
@@ -8,6 +9,7 @@ from fans.control import (
     sanitize_curve,
     select_fan_backend,
 )
+from fans.legion_acpi import LegionAcpiCallFanBackend
 from device_profiles import GENERIC
 
 
@@ -446,3 +448,36 @@ class TestApplyCurveAll:
 
     def test_null_backend_returns_ok_false(self):
         assert NullFanBackend().apply_curve_all([[40, 0]])["ok"] is False
+
+
+# ---------------------------------------------------------------------------
+# Legion Go original acpi_call→GZFD fallback selection
+# ---------------------------------------------------------------------------
+
+def _acpi_node(root):
+    d = os.path.join(root, "proc/acpi")
+    os.makedirs(d, exist_ok=True)
+    with open(os.path.join(d, "call"), "w") as f:
+        f.write("not called")
+
+
+def test_legion_go_bazzite_selects_acpi_gzfd_backend(tmp_path):
+    _acpi_node(tmp_path)   # acpi_call node writable, no hwmon curve chip present
+    device = SimpleNamespace(key="legion_go", firmware_modes=True)
+    b = select_fan_backend(device, root=str(tmp_path))
+    assert isinstance(b, LegionAcpiCallFanBackend)
+    assert b.supported
+
+
+def test_non_legion_never_selects_acpi_gzfd(tmp_path):
+    _acpi_node(tmp_path)
+    device = SimpleNamespace(key="rog_ally", firmware_modes=False)
+    b = select_fan_backend(device, root=str(tmp_path))
+    assert not isinstance(b, LegionAcpiCallFanBackend)
+
+
+def test_legion_go_without_acpi_call_falls_through_to_null(tmp_path):
+    device = SimpleNamespace(key="legion_go", firmware_modes=True)
+    b = select_fan_backend(device, root=str(tmp_path))
+    assert not isinstance(b, LegionAcpiCallFanBackend)
+    assert b.name == "null"

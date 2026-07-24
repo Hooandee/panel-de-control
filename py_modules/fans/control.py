@@ -408,6 +408,9 @@ def select_fan_backend(device, root: str = "/", temp_fn=None, ec=None, experimen
        kernel exposes a WRITABLE pwm point; read-only kernels fall through).
     3. ``legion_wmi_fan`` (Legion Go original) — hardware curve table, present
        only when the kernel ships the lenovo/legion WMI fan driver.
+    3b. Legion Go original acpi_call→GZFD firmware curve — the fallback when that
+       driver is absent but acpi_call is loadable (Bazzite/CachyOS); SteamOS lacks
+       acpi_call → falls through to the read-only monitor.
     4. ``steamdeck_hwmon`` (Steam Deck) — software loop (needs ``temp_fn``).
     5. Legion Go 2 raw-EC software loop.
     6. Legion Go S raw-EC software loop — ONLY when ``experimental`` is on (its
@@ -424,6 +427,13 @@ def select_fan_backend(device, root: str = "/", temp_fn=None, ec=None, experimen
         backend = backend_cls(root=root)
         if backend.supported:
             return backend
+    # 83E1 without the in-kernel driver but with acpi_call (Bazzite/CachyOS): drive the
+    # firmware curve via GZFD. Absent on SteamOS -> falls through to the read-only Null.
+    if getattr(device, "key", None) == "legion_go":
+        from fans.legion_acpi import LegionAcpiCallFanBackend
+        lego = LegionAcpiCallFanBackend(root=root)
+        if lego.supported:
+            return lego
     # Software-loop backends (lazy import avoids a circular dependency).
     from fans.software_loop import SteamDeckFanBackend
     from fans.legion_ec import LegionGo2FanBackend

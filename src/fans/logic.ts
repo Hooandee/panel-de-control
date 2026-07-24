@@ -72,3 +72,8 @@ export function presetConverges(preset: string, liveTemp: number | null): boolea
   if (!(_FIXED_PRESETS as readonly string[]).includes(preset)) return false;
   return liveTemp < _DIVERGENCE_TEMP_C;
 }
+
+/** Show the full-blast ("a tope") control only where the backend exposes it. */
+export function shouldShowFanMax(s: { max_available?: boolean } | null | undefined): boolean {
+  return !!s?.max_available;
+}

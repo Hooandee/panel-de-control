@@ -6,7 +6,8 @@ import type { FanCurveState } from "../api";
 const t = (key: string, params?: Record<string, string | number>) =>
   params ? `${key}|${Object.entries(params).map(([k, v]) => `${k}=${v}`).join(",")}` : key;
 
-const base = { supported: false, firmware_mode: null, has_firmware_modes: false, os_name: null } as unknown as FanCurveState;
+const base = { supported: false, firmware_mode: null, has_firmware_modes: false, os_name: null,
+  max_available: false, max_enabled: false } as unknown as FanCurveState;
 
 describe("fanCurveNotice", () => {
   it("names the active firmware mode when one governs the fan", () => {
