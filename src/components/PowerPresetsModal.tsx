@@ -50,9 +50,8 @@ const BoostEditor: FC<{
 }> = ({ boost, watts, pl2Max, pl3Max, onPickMode, onOffsets }) => {
   const { t } = useI18n();
   const active = boost?.mode ?? "estable";
-  // Sliders are ABSOLUTE watts (SPPT/FPPT), not deltas — "+51 W" reads as nonsense; users
-  // think "FPPT = 56 W". Stored as offsets (off2 over PL1, off3 over SPPT); bounded so a
-  // rail can never exceed its firmware max (SPPT ≤ pl2Max, FPPT ≤ pl3Max).
+  // Sliders show absolute SPPT/FPPT watts (not deltas); stored as offsets over PL1/SPPT,
+  // each bounded to its rail max (SPPT ≤ pl2Max, FPPT ≤ pl3Max).
   const off2 = Math.min(Math.max(0, boost?.off2 ?? 0), Math.max(0, pl2Max - watts));
   const sppt = watts + off2;
   const off3 = Math.min(Math.max(0, boost?.off3 ?? 0), Math.max(0, pl3Max - sppt));

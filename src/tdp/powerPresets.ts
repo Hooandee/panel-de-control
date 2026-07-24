@@ -95,9 +95,8 @@ export function resolveItems(
     } else {
       const c = state.custom[id];
       if (c) {
-        // Clamp the shown/active watts to what the current power source can deliver, so a
-        // charger-created preset doesn't advertise unreachable watts on battery (apply
-        // re-clamps server-side too, keeping the active highlight honest).
+        // Clamp shown watts to the active ceiling so a charger-made preset doesn't show
+        // watts the current source can't reach (apply re-clamps server-side too).
         const w = Math.min(c.watts, activeMax);
         rows.push({
           id, kind: "custom", watts: w, label: `${w}W`, name: c.name ?? "", icon: c.icon, boost: c.boost,
@@ -113,9 +112,8 @@ export function resolveItems(
   // on watts alone, but only when nothing fuller reproduces the live state.
   const isFull = (r: (typeof rows)[number]) => r.wm && r.boost != null && boostKey(r.boost) === liveKey;
   const anyFull = rows.some(isFull);
-  // Only the FIRST full match lights, so two identical presets can't both read as active
-  // (you'd never know which is applied). Watts-only builtins still light together — they're
-  // interchangeable, so it doesn't matter which.
+  // Only the first full match lights, so two identical presets don't both read active.
+  // Flat/watts-only presets can light together — they're interchangeable.
   let fullClaimed = false;
   const manager: PresetItem[] = rows.map((r) => {
     const { wm, ...item } = r;

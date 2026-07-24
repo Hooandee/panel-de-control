@@ -46,10 +46,8 @@ export interface TdpSectionProps {
 export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onScope, onWatts, onSetLevels, onSetMode, onApplySuggestion, onFirmwareMode, monitorOnly, onReactivate, presets, refreshPresets, onApplyPreset }) => {
   const { t } = useI18n();
 
-  // Resolved before the early returns (rules-of-hooks) and memoized so the 1s power
-  // poll's re-renders don't rebuild the chip list; recomputes only when its inputs change.
-  // Falls back to a builtins-only library so the preset chips still render if the custom
-  // library RPC hasn't loaded or failed.
+  // Memoized (and above the early returns) so re-renders don't rebuild the chip list.
+  // Falls back to a builtins-only library if the custom library hasn't loaded.
   const resolved = useMemo(() => {
     if (!tdp) return null;
     const lib = presets ?? { order: [...BUILTIN_IDS], hidden: [], custom: {} };
@@ -61,9 +59,8 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
     return resolveItems(lib, tdp.presets, tdp.on_ac, w, ceiling, liveBoost);
   }, [tdp, presets, scope]);
 
-  // Stable so React.memo(Presets) isn't defeated by a fresh arrow every render (the 1s
-  // power poll re-renders this section). Editing range is the charger ceiling (max_ac) so
-  // a charger-created preset isn't clipped when edited on battery.
+  // Stable identity so the memoized chip row doesn't re-render on every tick. Edit range is
+  // the charger ceiling so a charger-made preset isn't clipped when edited on battery.
   const onEditPresets = useCallback(() => {
     if (!tdp) return;
     openPowerPresetsModal({

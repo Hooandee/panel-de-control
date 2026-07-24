@@ -83,9 +83,8 @@ class PowerPresetStore:
             if c not in seen:
                 order.append(c)
                 seen.add(c)
-        # Enforce the custom cap on load too: a stale/hand-edited file with thousands of
-        # entries would otherwise build thousands of focusable rows and freeze the QAM.
-        # Keep the first _MAX_CUSTOM customs by display order; drop the rest everywhere.
+        # Cap on load too: a hand-edited file with thousands of entries would build as many
+        # rows. Keep the first _MAX_CUSTOM by display order; drop the rest everywhere.
         if len(custom) > _MAX_CUSTOM:
             keep = set([i for i in order if i in custom][:_MAX_CUSTOM])
             custom = {k: v for k, v in custom.items() if k in keep}
@@ -98,8 +97,8 @@ class PowerPresetStore:
         return {"order": order, "hidden": hidden, "custom": custom, "seq": seq}
 
     def _save(self):
-        # On a write failure revert in-memory to what's on disk so a rejected mutation
-        # can't linger as a fake success; re-raise so the RPC surfaces it.
+        # On write failure, revert in-memory to disk so a rejected change doesn't linger,
+        # and re-raise so the caller sees it.
         try:
             atomic_json_save(self._path, self._data)
         except OSError:
