@@ -160,6 +160,22 @@ def test_lenovo_conservation_found_via_acpi_flat_path(tmp_path):
     assert cl.disable() is True
 
 
+def test_lenovo_conservation_prefers_ideapad_driver_path(tmp_path):
+    # Legion Go S (Z2 Go, 83L3): the deep sys/devices tree exposes a
+    # passthrough conservation_mode node that does nothing, while the real
+    # control lives under the ideapad_acpi driver symlink. The driver path must
+    # win over the bounded-depth /sys/devices fallback.
+    root = str(tmp_path)
+    driver = os.path.join(root, "sys/bus/platform/drivers/ideapad_acpi/VPC2004:00")
+    os.makedirs(driver, exist_ok=True)
+    with open(os.path.join(driver, "conservation_mode"), "w") as f:
+        f.write("0")
+    _mk_conservation(root, value="0")  # decoy passthrough node in the device tree
+    cl = LenovoConservationMode(root=root)
+    assert cl.supported is True
+    assert cl._path == os.path.join(driver, "conservation_mode")
+
+
 def test_sysfs_is_adjustable(tmp_path):
     _mk_bat(str(tmp_path), value="80")
     assert SysfsChargeLimit(root=str(tmp_path)).adjustable is True

@@ -134,6 +134,7 @@ class LenovoConservationMode(ChargeLimitBackend):
         # tree and blocks _init, hanging the UI on its spinner. Probe the stable
         # flat ACPI/platform symlinks first, then a bounded-depth fallback.
         patterns = [
+            "sys/bus/platform/drivers/ideapad_acpi/VPC2004:*/conservation_mode",
             "sys/bus/acpi/devices/VPC2004:*/conservation_mode",
             "sys/bus/platform/devices/VPC2004:*/conservation_mode",
         ]
