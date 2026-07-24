@@ -1,36 +1,23 @@
-"""OneXPlayer OneXFly Apex fan backend: raw EC I/O via ec_sys debugfs.
+"""OneXPlayer Apex fan control over the EC (opt-in, experimental).
 
-On SteamOS the Valve kernel ships the ``oxpec`` driver but WITHOUT the Apex in its
-DMI table (the entry is upstream and backported to 6.18.y/6.19.y, newer than the
-current SteamOS kernel), so no hwmon fan node exists and fan control/monitoring is
-impossible through the normal path. On Bazzite the newer kernel has it and control
-works.
+The SteamOS 6.16 kernel ships ``oxpec`` without the Apex in its DMI table, so no
+hwmon fan node exists there (it works on Bazzite's newer kernel). Until SteamOS
+rebases, drive the fan through the EC using the map the driver documents for the
+``oxp_fly`` board: ``0x4A`` mode (0=auto, 1=manual), ``0x4B`` duty (0-255, no
+scaling), ``0x76``/``0x77`` RPM (16-bit big-endian, read-only).
 
-Until SteamOS rebases its kernel we drive the fan ourselves through the Embedded
-Controller, using the register map the upstream driver documents for the
-``oxp_fly`` board (same as the OneXFly F1):
-
-  * ``0x4A`` mode: 0x00 firmware/auto, 0x01 manual
-  * ``0x4B`` duty: PWM 0-255 (raw, no scaling on oxp_fly)
-  * ``0x76``/``0x77`` RPM: 16-bit big-endian (read-only)
-
-Access goes through ``ec_sys`` debugfs (``/sys/kernel/debug/ec/ec0/io``), where the
-byte offset IS the EC register and every access is serialised by the kernel's ACPI
-EC lock, which is safer than a raw ``/dev/port`` handshake. Writing needs ec_sys
-loaded with ``write_support=1``; if that isn't available on the running kernel the
-backend degrades honestly (control is refused, not reported as working).
-
-Opt-in / experimental: gated behind the same toggle as the Legion Go S. Detection
-is DMI-only (no EC I/O at construction), and this backend stands down the moment a
-kernel exposes the real oxpec hwmon node, so the generic pwm path then takes over.
+Access is via ``ec_sys`` debugfs (byte offset == register), serialised by the kernel
+ACPI EC lock. Writing needs ec_sys with ``write_support=1``; without it the backend
+refuses control rather than reporting success. DMI-gated, and it stands down as soon
+as an oxpec hwmon node appears (the generic pwm path then owns the fan).
 """
 
 import glob
 import os
-import threading
 from typing import Callable, Optional
 
 from fans.control import _interp, _read
+from fans.ec_io import EcSys
 from fans.software_loop import SoftwareLoopBackend
 
 # EC register map (oxp_fly board — source: drivers/platform/x86/oxpec.c).
@@ -50,14 +37,6 @@ _DMI_MATCH_APEX = ("ONEXPLAYER APEX",)
 # raw-EC backend must stand down (generic pwm handles it).
 _OXP_HWMON_NAMES = ("oxp_ec", "oxpec", "oxp-sensors")
 
-_DEBUGFS_IO = "sys/kernel/debug/ec/ec0/io"
-_WRITE_PARAM = "sys/module/ec_sys/parameters/write_support"
-_MODPROBE_CONF = "etc/modprobe.d/panel-de-control-apex-ec.conf"
-_CONF_BODY = (
-    "# Panel de Control: EC fan control for the OneXPlayer Apex (opt-in)\n"
-    "options ec_sys write_support=1\n"
-)
-
 
 def oxpec_hwmon_present(root: str = "/") -> bool:
     """True when the kernel exposes the oxpec hwmon fan node (pwm or fan input). When
@@ -71,69 +50,6 @@ def oxpec_hwmon_present(root: str = "/") -> bool:
     return False
 
 
-class _EcSysIO:
-    """EC access via ec_sys debugfs. The byte offset is the EC register; the kernel
-    serialises each access under the ACPI EC lock. fd is opened lazily (only on a
-    real device, first access) and every op is guarded — never raises."""
-
-    def __init__(self, root: str = "/") -> None:
-        self._path = os.path.join(root, _DEBUGFS_IO)
-        self._fd: Optional[int] = None
-        self._lock = threading.Lock()
-
-    def _open(self) -> None:
-        if self._fd is None:
-            self._fd = os.open(self._path, os.O_RDWR)
-
-    def read(self, addr: int) -> Optional[int]:
-        with self._lock:
-            try:
-                self._open()
-                return os.pread(self._fd, 1, addr)[0]
-            except OSError:
-                return None
-
-    def write(self, addr: int, val: int) -> bool:
-        with self._lock:
-            try:
-                self._open()
-                os.pwrite(self._fd, bytes([val & 0xFF]), addr)
-                return True
-            except OSError:
-                return False  # e.g. ec_sys without write_support → EINVAL
-
-
-def _ensure_ec_sys_write() -> None:
-    """Best-effort: make ec_sys expose the EC with write support. Persist the option
-    for reboots, flip the runtime param if the module is already loaded, and modprobe
-    it (loads if absent). Never raises; a kernel without ec_sys/write support simply
-    leaves the EC unwritable and the caller degrades honestly."""
-    try:
-        conf = os.path.join("/", _MODPROBE_CONF)
-        if not os.path.exists(conf):
-            with open(conf, "w") as f:
-                f.write(_CONF_BODY)
-    except OSError:
-        pass
-    # If already loaded, try to flip the runtime parameter (bool module params are
-    # commonly writable via sysfs).
-    try:
-        param = os.path.join("/", _WRITE_PARAM)
-        if os.path.exists(param) and (_read(param) or "").strip() in ("N", "0"):
-            with open(param, "w") as f:
-                f.write("Y")
-    except OSError:
-        pass
-    try:
-        import subprocess
-
-        from controllers.detect import clean_env, resolve_bin
-        subprocess.run([resolve_bin("modprobe"), "ec_sys", "write_support=1"],
-                       check=False, capture_output=True, timeout=5, env=clean_env())
-    except Exception:  # noqa: BLE001
-        pass
-
-
 class OxpEcFanBackend(SoftwareLoopBackend):
     """OneXPlayer Apex EC fan control (opt-in, experimental). Duty-based (0x4B), with
     manual mode asserted at 0x4A. Confirmed by register readback (RPM does not
@@ -141,13 +57,16 @@ class OxpEcFanBackend(SoftwareLoopBackend):
 
     name = "oxp-apex-ec"
     min_rpm = 0
-    max_rpm = 255  # the "target" IS the duty (0–255)
+    max_rpm = 255  # the "target" IS the duty (0–255): base _duty_to_target is identity
 
     def __init__(self, temp_fn: Optional[Callable[[], Optional[float]]] = None,
                  root: str = "/", ec=None) -> None:
-        self._ec = ec or _EcSysIO(root)
+        self._ec = ec or EcSys(root=root)
         super().__init__(temp_fn=temp_fn, root=root)
         self._dmi_ok = self._dmi_matches()
+        # The hwmon-vs-EC handoff can only flip on a kernel update (→ reboot → _init
+        # re-runs), so probe once; supported is read on every monitor poll.
+        self._hwmon_present = oxpec_hwmon_present(root)
 
     def _find_chip(self) -> Optional[str]:
         return None  # no hwmon node — support is DMI-based (see `supported`)
@@ -156,19 +75,13 @@ class OxpEcFanBackend(SoftwareLoopBackend):
     def supported(self) -> bool:
         # Stand down if the kernel already exposes the oxpec hwmon fan node: the
         # generic pwm backend owns it then, so we never fight the real driver.
-        return self._dmi_ok and not self._hwmon_fan_present()
+        return self._dmi_ok and not self._hwmon_present
 
     def _dmi_matches(self) -> bool:
         dmi = os.path.join(self._root, "sys/class/dmi/id")
         text = ((_read(os.path.join(dmi, "board_name")) or "") + " "
                 + (_read(os.path.join(dmi, "product_name")) or "")).upper()
         return any(tok in text for tok in _DMI_MATCH_APEX)
-
-    def _hwmon_fan_present(self) -> bool:
-        return oxpec_hwmon_present(self._root)
-
-    def _duty_to_target(self, duty: int) -> int:
-        return max(0, min(255, int(duty)))
 
     def target_for_temp(self, temp: Optional[float]) -> Optional[int]:
         """Curve → duty (0–255). Duty 0 is a valid quiet point (fan off but still in
@@ -182,21 +95,16 @@ class OxpEcFanBackend(SoftwareLoopBackend):
         return self._duty_to_target(_interp(self._points, temp))
 
     def _before_drive(self) -> bool:
-        # Only touch the module on a real device; the probe (a benign same-value
-        # write) tells us honestly whether the EC is writable on this kernel.
-        if self._root == "/":
-            _ensure_ec_sys_write()
-        cur = self._ec.read(REG_MODE)
-        if cur is None:
-            return False
-        return self._ec.write(REG_MODE, cur)
+        # Take ownership only if the EC is actually writable on this kernel (this also
+        # loads ec_sys with write support); honest False otherwise.
+        return self._ec.writable()
 
     def _write_target(self, duty: int) -> bool:
         duty = max(0, min(255, int(duty)))
-        # Assert manual mode BEFORE the duty (the EC only honours 0x4B in manual), then
-        # confirm both by readback — a write returning ok is not proof the EC took it.
-        if self._ec.read(REG_MODE) != MODE_MANUAL:
-            self._ec.write(REG_MODE, MODE_MANUAL)
+        # Assert manual mode before the duty (the EC only honours 0x4B in manual);
+        # the write is idempotent and the loop re-asserts, so write it unconditionally.
+        # Confirm both by readback — a write returning ok is not proof the EC took it.
+        self._ec.write(REG_MODE, MODE_MANUAL)
         mode_ok = self._ec.read(REG_MODE) == MODE_MANUAL
         self._ec.write(REG_DUTY, duty)
         duty_ok = self._ec.read(REG_DUTY) == duty

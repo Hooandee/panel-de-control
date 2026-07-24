@@ -31,6 +31,9 @@ class FakeEC:
         self.writes.append((addr, val & 0xFF))
         return True
 
+    def writable(self):
+        return self._writable
+
 
 def _apex_root(tmp_path, board="ONEXPLAYER APEX", product="ONEXPLAYER APEX"):
     dmi = tmp_path / "sys/class/dmi/id"

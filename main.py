@@ -246,11 +246,8 @@ class Plugin:
         # Go S / OneXPlayer Apex). DMI-only check (no EC I/O) → the UI shows the
         # experimental toggle.
         try:
-            from fans.legion_ec import LegionGoSFanBackend
-            from fans.oxp_ec import OxpEcFanBackend
-            self._fan_experimental_available = (
-                LegionGoSFanBackend(root="/").supported
-                or OxpEcFanBackend(root="/").supported)
+            self._fan_experimental_available = any(
+                b.supported for b in fan_control.experimental_ec_backends(root="/"))
         except Exception:  # noqa: BLE001 — availability probe must never break load
             self._fan_experimental_available = False
         # MSI Claw only: the firmware fan curve is read-only-legible in the EC even
