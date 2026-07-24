@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.30.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.29.3...panel-de-control-v0.30.0) (2026-07-24)
+
+
+### Features
+
+* add an audio report category and capture the audio routing graph ([#299](https://github.com/Hooandee/panel-de-control/issues/299)) ([74392ba](https://github.com/Hooandee/panel-de-control/commit/74392bad378f49148a0476e98b91253367f90ca9))
+
 ## [0.29.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.29.2...panel-de-control-v0.29.3) (2026-07-24)
 
 
