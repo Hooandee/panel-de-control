@@ -1,40 +1,15 @@
 import { FC } from "react";
-import { DialogButton, ModalRoot, PanelSectionRow, ToggleField, showModal } from "@decky/ui";
+import { PanelSectionRow, ToggleField, showModal } from "@decky/ui";
 import { LuTriangleAlert } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
-import { FocusRoot } from "./FocusRoot";
+import { ConfirmDialog } from "./ConfirmDialog";
 
 interface Props {
   enabled: boolean;
   onToggle: (enabled: boolean) => void;
 }
-
-/** Warn before taking over an unofficial EC channel. Only enables on confirm. */
-const ConfirmModal: FC<{ onConfirm: () => void; closeModal?: () => void }> = ({ onConfirm, closeModal }) => {
-  const { t } = useI18n();
-  return (
-    <ModalRoot onCancel={closeModal} onEscKeypress={closeModal}>
-      <FocusRoot style={{ display: "flex", flexDirection: "column", gap: theme.space.md }}>
-        <div style={{ display: "flex", alignItems: "center", gap: theme.space.xs, fontSize: 20, fontWeight: 700 }}>
-          <LuTriangleAlert size={20} color={theme.color.warn} /> {t("fans.experimental.confirm.title")}
-        </div>
-        <div style={{ fontSize: theme.font.body, color: theme.color.textPrimary, lineHeight: 1.4 }}>
-          {t("fans.experimental.confirm.desc")}
-        </div>
-        <div style={{ display: "flex", gap: theme.space.sm }}>
-          <DialogButton style={{ flex: 1, minWidth: 0 }} onClick={() => { closeModal?.(); onConfirm(); }}>
-            {t("fans.experimental.confirm.ok")}
-          </DialogButton>
-          <DialogButton style={{ flex: 1, minWidth: 0 }} onClick={() => closeModal?.()}>
-            {t("fans.experimental.confirm.cancel")}
-          </DialogButton>
-        </div>
-      </FocusRoot>
-    </ModalRoot>
-  );
-};
 
 /**
  * Opt-in for experimental EC fan control on devices whose only channel is
@@ -60,7 +35,17 @@ export const ExperimentalFanCard: FC<Props> = ({ enabled, onToggle }) => {
           checked={enabled}
           bottomSeparator="none"
           onChange={(next: boolean) => {
-            if (next) showModal(<ConfirmModal onConfirm={() => onToggle(true)} />);
+            if (next)
+              showModal(
+                <ConfirmDialog
+                  title={t("fans.experimental.confirm.title")}
+                  desc={t("fans.experimental.confirm.desc")}
+                  confirmLabel={t("fans.experimental.confirm.ok")}
+                  cancelLabel={t("fans.experimental.confirm.cancel")}
+                  icon={<LuTriangleAlert size={20} color={theme.color.warn} />}
+                  onConfirm={() => onToggle(true)}
+                />,
+              );
             else onToggle(false);
           }}
         />

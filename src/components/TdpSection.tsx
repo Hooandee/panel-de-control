@@ -1,8 +1,10 @@
 import { PanelSectionRow, SliderField, Focusable } from "@decky/ui";
-import { FC } from "react";
+import { FC, useCallback, useMemo } from "react";
 
-import { TdpState, TdpScope, PowerDraw, BoostMode } from "../api";
-import { resetWatts } from "../tdp/logic";
+import { TdpState, TdpScope, PowerDraw, BoostMode, PowerPresetState } from "../api";
+import { resetWatts, offsetOf } from "../tdp/logic";
+import { resolveItems, PresetItem, BUILTIN_IDS } from "../tdp/powerPresets";
+import { openPowerPresetsModal } from "./PowerPresetsModal";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { Loading } from "./Loading";
@@ -35,10 +37,46 @@ export interface TdpSectionProps {
   monitorOnly?: boolean;
   // Flip the master switch back on from the monitor notice.
   onReactivate?: () => void;
+  // Custom power-preset library (built-in watts resolved from `tdp.presets`).
+  presets: PowerPresetState | null;
+  refreshPresets: () => void;
+  onApplyPreset: (item: PresetItem) => void;
 }
 
-export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onScope, onWatts, onSetLevels, onSetMode, onApplySuggestion, onFirmwareMode, monitorOnly, onReactivate }) => {
+export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onScope, onWatts, onSetLevels, onSetMode, onApplySuggestion, onFirmwareMode, monitorOnly, onReactivate, presets, refreshPresets, onApplyPreset }) => {
   const { t } = useI18n();
+
+  // Memoized (and above the early returns) so re-renders don't rebuild the chip list.
+  // Falls back to a builtins-only library if the custom library hasn't loaded.
+  const resolved = useMemo(() => {
+    if (!tdp) return null;
+    const lib = presets ?? { order: [...BUILTIN_IDS], hidden: [], custom: {} };
+    const ceiling = tdp.on_ac ? tdp.limits.max_ac : tdp.limits.max;
+    const w = scope === "global" ? tdp.global_watts : tdp.watts;
+    const lv = scope === "global" ? tdp.global_levels : tdp.levels;
+    const mode = scope === "global" ? tdp.global_boost_mode : tdp.boost_mode;
+    const liveBoost = { mode, off2: offsetOf(lv.pl2, lv.pl1), off3: offsetOf(lv.pl3, lv.pl2) };
+    return resolveItems(lib, tdp.presets, tdp.on_ac, w, ceiling, liveBoost);
+  }, [tdp, presets, scope]);
+
+  // Stable identity so the memoized chip row doesn't re-render on every tick. Edit range is
+  // the charger ceiling so a charger-made preset isn't clipped when edited on battery.
+  const onEditPresets = useCallback(() => {
+    if (!tdp) return;
+    openPowerPresetsModal({
+      builtinWatts: tdp.presets,
+      onAc: tdp.on_ac,
+      currentWatts: scope === "global" ? tdp.global_watts : tdp.watts,
+      min: tdp.limits.min,
+      max: tdp.limits.max_ac,
+      supportsAdvanced: tdp.supports_advanced,
+      // Absolute rail ceilings; the editor bounds each margin against the preset's own PL1
+      // so a rail can never exceed its firmware max.
+      pl2Max: tdp.level_limits.pl2?.max ?? tdp.limits.max_ac,
+      pl3Max: tdp.level_limits.pl3?.max ?? tdp.limits.max_ac,
+      onClose: refreshPresets,
+    });
+  }, [tdp, scope, refreshPresets]);
 
   if (!tdp) return <Loading />;
 
@@ -202,19 +240,17 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
             </>
           ) : (
             <>
-              <PanelSectionRow>
-                <Presets
-                  presets={tdp.presets}
-                  onAc={tdp.on_ac}
-                  activeWatts={view.watts}
-                  labels={{
-                    save: t("tdp.preset.save"),
-                    balanced: t("tdp.preset.balanced"),
-                    turbo: t("tdp.preset.turbo"),
-                  }}
-                  onPick={onWatts}
-                />
-              </PanelSectionRow>
+              {resolved && (
+                <PanelSectionRow>
+                  <Presets
+                    resolved={resolved}
+                    manageLabel={t("tdp.presets.manage")}
+                    hiddenLabel={t("tdp.presets.hidden")}
+                    onPick={onApplyPreset}
+                    onEdit={onEditPresets}
+                  />
+                </PanelSectionRow>
+              )}
               {showReset && (
                 <PanelSectionRow>
                   <Focusable

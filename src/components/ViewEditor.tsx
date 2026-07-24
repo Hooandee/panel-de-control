@@ -6,6 +6,7 @@ import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { FocusRoot } from "./FocusRoot";
 import { IconAction } from "./IconAction";
+import { IconPickerGrid } from "./IconPickerGrid";
 import { TABS, PICKABLE_BLOCKS, blockOrder, CATEGORY_IDS } from "../customize/manifest";
 import { move } from "../customize/layout";
 import { getPresent } from "../customize/present";
@@ -63,28 +64,12 @@ const ViewEditorBody: FC<{ viewId: string; closeModal?: () => void }> = ({ viewI
         <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>{t("customize.views.name")}</span>
         <TextField value={view.name} onChange={(e) => renameView(viewId, e.target.value)} bShowClearAction />
         <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted, marginTop: theme.space.xs }}>{t("customize.views.icon")}</span>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: theme.space.sm }}>
-          {VIEW_ICON_KEYS.map((key: ViewIconKey) => {
-            const on = view.icon === key;
-            return (
-              <Focusable
-                key={key}
-                aria-label={key}
-                onActivate={() => setViewIcon(viewId, key)}
-                onClick={() => setViewIcon(viewId, key)}
-                style={{
-                  width: 34, height: 34, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center",
-                  cursor: "pointer",
-                  background: on ? `rgba(${theme.color.accentRgb},0.14)` : "rgba(255,255,255,0.06)",
-                  color: on ? theme.color.accent : theme.color.textMuted,
-                  boxShadow: on ? `inset 0 0 0 1px ${theme.color.accent}` : "none",
-                }}
-              >
-                {viewIconNode(key, 17)}
-              </Focusable>
-            );
-          })}
-        </div>
+        <IconPickerGrid
+          keys={VIEW_ICON_KEYS}
+          value={view.icon}
+          renderIcon={(key, size) => viewIconNode(key as ViewIconKey, size)}
+          onPick={(key) => setViewIcon(viewId, key as ViewIconKey)}
+        />
       </div>
 
       <div style={{ ...theme.card, padding: theme.space.md, display: "flex", flexDirection: "column", gap: theme.space.sm }}>
