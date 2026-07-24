@@ -428,11 +428,27 @@ def test_adopt_external_tdp_syncs_and_flags(Plugin):
     p = Plugin()
     asyncio.run(p.set_tdp_watts(15, "global"))
     p._tdp_backend._applied = 18  # HHD/Steam moved the firmware PL1 behind our back
+    # Debounced: a real external change persists, so it's adopted on the second read.
+    assert asyncio.run(p.get_tdp_state())["external_change"] is False  # first read arms
     st = asyncio.run(p.get_tdp_state())
-    assert st["external_change"] is True
+    assert st["external_change"] is True  # confirmed on the second read → adopt
     assert st["global_watts"] == 18  # adopted → our setpoint follows, no stomp next reapply
-    # already adopted → a second read is no longer flagged
+    # already adopted → a further read is no longer flagged
     assert asyncio.run(p.get_tdp_state())["external_change"] is False
+
+
+def test_transient_firmware_spike_not_adopted(Plugin):
+    # A one-shot spike (seen for a single read, then gone) must NOT be adopted as the
+    # user's setpoint — this debounce is what stops the slider "jumping" to the spike
+    # value on newer kernels that momentarily bump the rail under load.
+    p = Plugin()
+    asyncio.run(p.set_tdp_watts(15, "global"))
+    p._tdp_backend._applied = 30  # firmware spiked for a moment
+    assert asyncio.run(p.get_tdp_state())["external_change"] is False  # armed, not adopted
+    p._tdp_backend._applied = 15  # next read is back at our setpoint
+    st = asyncio.run(p.get_tdp_state())
+    assert st["external_change"] is False
+    assert st["global_watts"] == 15  # setpoint untouched by the transient
 
 
 def test_adopt_skipped_in_download_mode(Plugin):

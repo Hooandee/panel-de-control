@@ -16,6 +16,7 @@ from version import read_version
 from settings_store import SettingsStore
 from tdp import factory as tdp_factory
 from tdp import suggest as tdp_suggest
+from tdp.adopt import should_adopt_external
 from tdp.types import TdpResult
 from tdp_profiles import ProfileStore
 from power_presets import PowerPresetStore
@@ -338,6 +339,9 @@ class Plugin:
         # against this, not the profile, so it fires only for a real external change —
         # never on a stale/default read before our first apply or mid-transition (None).
         self._last_written_pl1 = None
+        # Divergent PL1 candidate awaiting a second matching read before adoption
+        # (debounce against one-shot firmware spikes). See tdp/adopt.py.
+        self._adopt_pending = None
         self._lifecycle = LifecycleManager(apply_cb=self._reapply_all,
                                            reassert_cb=self._reassert_tdp_only)
         self._auto_task = None
@@ -1904,9 +1908,14 @@ class Plugin:
             return TdpResult(None, self._tdp_backend.read_applied(), True, f"firmware-mode:{mode}")
         lv, _active, ac = self._effective_levels(self._current_appid, on_ac)
         res = self._tdp_backend.set_levels(lv["pl1"], lv["pl2"], lv["pl3"], ac)
+        # A fresh write is a new baseline for adoption — drop any armed spike candidate.
+        self._adopt_pending = None
         # Record what the firmware now holds (readback), so adoption can tell a real
         # external change from our own write.
         self._last_written_pl1 = res.applied_w if res.applied_w is not None else lv["pl1"]
+        if not res.ok and not self._tdp_profiles.auto_tdp(self._current_appid):
+            decky.logger.info("TDP: write pl1=%sW not confirmed (firmware holds %sW) %s",
+                              lv["pl1"], res.applied_w, res.detail)
         return res
 
     def _reassert_tdp_only(self, on_ac=None) -> None:
@@ -2509,18 +2518,31 @@ class Plugin:
         so a later re-apply doesn't stomp it. Compares against the value WE last wrote
         (``_last_written_pl1``): None until our first apply and cleared during a
         re-apply, so a stale/default read at startup or mid-transition never adopts.
-        Skipped in eco / auto (we own the setpoint there). True when adopted."""
+        Skipped in eco / auto (we own the setpoint there). To avoid mistaking a one-shot
+        firmware spike for a deliberate change, a divergent value must persist across two
+        consecutive reads before we adopt it (see tdp/adopt.py). True when adopted."""
         if applied is None or self._last_written_pl1 is None:
+            self._adopt_pending = None
             return False
         if self._settings.get("eco_enabled") or self._tdp_profiles.auto_tdp(self._current_appid):
+            self._adopt_pending = None
             return False
-        if abs(int(applied) - int(self._last_written_pl1)) < _EXTERNAL_TDP_THRESHOLD:
+        prev_pending = self._adopt_pending
+        adopt, self._adopt_pending = should_adopt_external(
+            applied, self._last_written_pl1, prev_pending, _EXTERNAL_TDP_THRESHOLD)
+        if self._adopt_pending is not None and self._adopt_pending != prev_pending:
+            decky.logger.info(
+                "TDP: external PL1 read %sW vs our %sW; waiting to confirm before adopting",
+                int(applied), self._last_written_pl1)
+        if not adopt:
             return False
         appid = self._current_appid
         # Adopt into the scope that's actually live (game only when it has its OWN active
         # profile) — never detach a follow-global game that merely kept stored values.
         scope = self._auto_scope()
         self._tdp_profiles.set_pl1(scope, int(applied), appid=appid)
+        decky.logger.info("TDP: adopted external change %sW -> %sW (scope=%s appid=%s)",
+                          self._last_written_pl1, int(applied), scope, appid)
         self._last_written_pl1 = int(applied)
         return True
 
