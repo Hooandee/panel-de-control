@@ -1,4 +1,4 @@
-from audio.pipewire import choose_downstream, pick_downstream
+from audio.pipewire import PipeWireEq, choose_downstream, pick_downstream
 
 _SINKS = (
     "45\teffect_input.pdc_eq\tPipeWire\ts16le 2ch 48000Hz\tRUNNING\n"
@@ -67,3 +67,57 @@ def test_choose_downstream_skips_a_digital_default():
         "79\talsa_output.HiFi__Speaker__sink\tPipeWire\t...\tIDLE\n"
     )
     assert choose_downstream("alsa_output.HiFi__HDMI1__sink", short, "X EQ").endswith("Speaker__sink")
+
+
+class _FakeRunner:
+    def __init__(self, downstream_vol="40%"):
+        self.calls = []
+        self._vol = downstream_vol
+
+    def __call__(self, argv, timeout=8):
+        self.calls.append(argv)
+        s = " ".join(argv)
+        if "get-default-sink" in s:
+            return "alsa_speaker"
+        if "list" in s and "sinks" in s:
+            return "1\talsa_speaker\tPipeWire\t...\tRUNNING\n"
+        if "get-sink-volume" in s:
+            return f"Volume: front-left: 26214 / {self._vol} / ..."
+        return ""
+
+    def volume_sets(self, sink):
+        return [c for c in self.calls
+                if c[:2] == ["pactl", "set-sink-volume"] and c[2] == sink]
+
+
+def _make_eq(tmp_path, fake, conf_exists):
+    eq = PipeWireEq(runner=fake, name="X")
+    eq._session = (1000, "/run/user/1000", "deck")
+    conf = tmp_path / "pdc-eq.conf"
+    if conf_exists:
+        conf.write_text("x")
+    eq._conf_path = lambda: str(conf)
+    eq.is_supported = lambda: True
+    eq._write_conf = lambda *a, **k: True
+    return eq
+
+
+def test_ensure_sink_first_enable_carries_downstream_volume(tmp_path):
+    # Genuine first-ever enable (no persisted conf): carry the downstream's real level
+    # onto our sink so enabling the EQ doesn't jump loudness to unity.
+    fake = _FakeRunner(downstream_vol="40%")
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    assert eq.ensure_sink([0] * 10) is True
+    assert fake.volume_sets("X EQ") == [["pactl", "set-sink-volume", "X EQ", "40%"]]
+    assert ["pactl", "set-sink-volume", "alsa_speaker", "100%"] in fake.calls
+
+
+def test_ensure_sink_boot_reassert_preserves_user_volume(tmp_path):
+    # A persisted conf already exists → the EQ sink comes back with the user's level
+    # (WirePlumber restores it by node.name). A boot/reload re-assert must NOT copy the
+    # always-unity downstream onto it, or the user's volume is wiped to 100% every boot.
+    fake = _FakeRunner(downstream_vol="100%")
+    eq = _make_eq(tmp_path, fake, conf_exists=True)
+    assert eq.ensure_sink([0] * 10) is True
+    assert fake.volume_sets("X EQ") == []
+    assert ["pactl", "set-sink-volume", "alsa_speaker", "100%"] in fake.calls

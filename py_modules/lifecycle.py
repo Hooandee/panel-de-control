@@ -34,10 +34,16 @@ class LifecycleManager:
     # to its default (an Ally drops to ~12 W on unplug) and a single re-apply mid-
     # transition can be lost, so re-assert once it has settled.
     _AC_SETTLE_RETRIES = (2.0, 4.0)
+    # Resume has the same problem: the firmware reverts ppt to its default on wake and can
+    # do so after the base delay, so a lone re-apply is lost. Re-assert across a window.
+    _RESUME_SETTLE_RETRIES = (2.0, 5.0, 9.0)
 
     def __init__(self, apply_cb, root="/", wakeup_delay=4.0, interval=2.0,
-                 read_wakeup=None, read_ac=None):
+                 read_wakeup=None, read_ac=None, reassert_cb=None):
         self._apply = apply_cb
+        # Settle-retries re-assert only the power rails, not the full re-apply; fall back to
+        # the full apply when not given.
+        self._reassert = reassert_cb or apply_cb
         self._root = root
         self._wakeup_delay = wakeup_delay
         self._interval = interval
@@ -45,14 +51,22 @@ class LifecycleManager:
         self._read_ac = read_ac or (lambda: read_on_ac(root))
         self._last_wakeup = None
         self._last_ac = None
-        self._pending = []   # times at which to re-apply (resume delay + AC settle)
+        self._pending = []        # times for the full re-apply (base resume delay)
+        self._pending_light = []  # times for the TDP-only settle-retries
         self._task = None
 
-    def _safe_apply(self, ac):
+    def _safe(self, cb, ac):
         try:
-            self._apply(ac)
+            cb(ac)
         except Exception:  # noqa: BLE001 - one bad apply must not abort check()
             pass
+
+    def _fire_due(self, pending, cb, now):
+        """Fire cb once (with live AC) if any scheduled time is due; return the times left."""
+        if not any(now >= t for t in pending):
+            return pending
+        self._safe(cb, self._read_ac())
+        return [t for t in pending if now < t]
 
     def check(self, now):
         wc = self._read_wakeup()
@@ -61,19 +75,20 @@ class LifecycleManager:
         if self._last_wakeup is None:
             self._last_wakeup, self._last_ac = wc, ac
             return
-        # resume detected → schedule a delayed re-apply
+        # resume → full re-apply after the base delay, then TDP-only settle retries
         if wc != self._last_wakeup:
             self._last_wakeup = wc
-            self._pending.append(now + self._wakeup_delay)
-        # AC transition → re-apply now, then again as the firmware settles
+            base = now + self._wakeup_delay
+            self._pending.append(base)
+            self._pending_light.extend(base + d for d in self._RESUME_SETTLE_RETRIES)
+        # AC transition → full re-apply now, then TDP-only re-asserts as the firmware settles
         if ac != self._last_ac:
             self._last_ac = ac
-            self._safe_apply(ac)
-            self._pending.extend(now + d for d in self._AC_SETTLE_RETRIES)
-        # fire every scheduled re-apply whose delay has elapsed (re-reading AC live)
-        if any(now >= t for t in self._pending):
-            self._pending = [t for t in self._pending if now < t]
-            self._safe_apply(self._read_ac())
+            self._safe(self._apply, ac)
+            self._pending_light.extend(now + d for d in self._AC_SETTLE_RETRIES)
+        # fire scheduled re-applies whose delay has elapsed (re-reading AC live)
+        self._pending = self._fire_due(self._pending, self._apply, now)
+        self._pending_light = self._fire_due(self._pending_light, self._reassert, now)
 
     async def run(self):
         import time

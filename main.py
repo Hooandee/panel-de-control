@@ -338,7 +338,8 @@ class Plugin:
         # against this, not the profile, so it fires only for a real external change —
         # never on a stale/default read before our first apply or mid-transition (None).
         self._last_written_pl1 = None
-        self._lifecycle = LifecycleManager(apply_cb=self._reapply_all)
+        self._lifecycle = LifecycleManager(apply_cb=self._reapply_all,
+                                           reassert_cb=self._reassert_tdp_only)
         self._auto_task = None
         self._auto_setpoint = None
         # Audio EQ output-route watcher: last applied route + its loop task.
@@ -1907,6 +1908,11 @@ class Plugin:
         # external change from our own write.
         self._last_written_pl1 = res.applied_w if res.applied_w is not None else lv["pl1"]
         return res
+
+    def _reassert_tdp_only(self, on_ac=None) -> None:
+        """Settle-retry callback: re-assert only the power rails off the loop, winning the
+        firmware's post-transition reset without re-running the full re-apply each time."""
+        self._offload(lambda: self._reapply_tdp(on_ac))
 
     def _reapply_all(self, on_ac=None) -> None:
         """Lifecycle callback: re-assert TDP, the fan curve, the charge limit and the
