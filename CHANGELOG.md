@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.28.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.28.0...panel-de-control-v0.28.1) (2026-07-24)
+
+
+### Bug Fixes / Errores corregidos
+
+* Turning a launch parameter off (like MangoHud) no longer leaves a leftover behind that could keep the game from starting. ([#286](https://github.com/Hooandee/panel-de-control/issues/286)) ([add3157](https://github.com/Hooandee/panel-de-control/commit/add3157beddd2452924d623129c9c87eff8dc0b2))
+* **ES:** Al desactivar un parámetro de lanzamiento (como MangoHud) ya no queda ningún resto que pudiera impedir que el juego arranque. ([#286](https://github.com/Hooandee/panel-de-control/issues/286)) ([add3157](https://github.com/Hooandee/panel-de-control/commit/add3157beddd2452924d623129c9c87eff8dc0b2))
+
+## [0.28.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.27.0...panel-de-control-v0.28.0) (2026-07-24)
+
+
+### Features / Novedades
+
+* Create your own power presets on top of the three built-in ones, each with a name, an icon and an optional boost, and reorder, hide or delete them from a full-screen menu. ([#284](https://github.com/Hooandee/panel-de-control/issues/284)) ([38dffff](https://github.com/Hooandee/panel-de-control/commit/38dffff633ae1dcfef2f347de44f04cd053b4379))
+* **ES:** Crea tus propios presets de potencia además de los tres de fábrica, cada uno con nombre, icono y boost opcional, y ordénalos, ocúltalos o bórralos desde un menú a pantalla completa. ([#284](https://github.com/Hooandee/panel-de-control/issues/284)) ([38dffff](https://github.com/Hooandee/panel-de-control/commit/38dffff633ae1dcfef2f347de44f04cd053b4379))
+
 ## [0.27.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.26.1...panel-de-control-v0.27.0) (2026-07-23)
 
 
