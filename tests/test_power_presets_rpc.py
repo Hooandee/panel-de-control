@@ -6,7 +6,6 @@ import sys
 import types
 
 import pytest
-
 from tdp.types import TdpLimits, TdpResult
 
 
@@ -63,7 +62,7 @@ def Plugin(tmp_path, monkeypatch):
                                         warning=lambda *a, **k: None,
                                         error=lambda *a, **k: None)
     monkeypatch.setitem(sys.modules, "decky", fake)
-    import tdp.factory as factory
+    from tdp import factory
     monkeypatch.setattr(factory, "select_backend", lambda device, **kw: FakeBackend())
     import lifecycle
     monkeypatch.setattr(lifecycle, "read_on_ac", lambda root="/": True)

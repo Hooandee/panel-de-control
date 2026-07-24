@@ -1,9 +1,8 @@
 import json
 
-import pytest
-
 import power_presets
-from power_presets import PowerPresetStore, BUILTIN_IDS
+import pytest
+from power_presets import BUILTIN_IDS, PowerPresetStore
 
 _ESTABLE = {"mode": "estable", "off2": 0, "off3": 0}
 
