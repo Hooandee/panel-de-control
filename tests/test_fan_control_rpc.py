@@ -395,6 +395,30 @@ class _ResetBackend:
         return {"ok": self.release_ok, "detail": ""}
 
 
+def test_disabling_experimental_keeps_control_when_release_fails(tmp_path, monkeypatch):
+    backend = _ResetBackend(release_ok=False)
+    backend.supported = False
+    backend.experimental = True
+    Plugin = _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=backend)
+    p = Plugin()
+    p._init()
+    p._init = lambda: None
+    p._settings["fan_experimental"] = True
+    replacements = []
+    main = sys.modules["main"]
+    monkeypatch.setattr(
+        main.fan_control,
+        "select_fan_backend",
+        lambda *a, **k: replacements.append(True),
+    )
+
+    st = asyncio.run(p.set_fan_experimental(False))
+
+    assert replacements == []
+    assert p._fan_ctrl is backend
+    assert st["experimental_enabled"] is True
+
+
 def test_reset_fan_control_reports_release_success(tmp_path, monkeypatch):
     backend = _ResetBackend(release_ok=True)
     Plugin = _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=backend)

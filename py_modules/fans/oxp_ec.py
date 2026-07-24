@@ -30,9 +30,11 @@ MODE_MANUAL = 0x01
 # Above this temperature the curve is ignored and the fan forced to full duty — a
 # bad or lazy curve must never leave the fan slow while hot (mirrors the Go S guard).
 _APEX_TEMP_GUARD_C = 90
+_APEX_DUTY_FLOOR = 76
 _RELEASE_CONFIRM_RETRIES = 3
 
-_DMI_MATCH_APEX = ("ONEXPLAYER APEX",)
+_DMI_VENDOR = "ONE-NETBOOK"
+_DMI_BOARD = "ONEXPLAYER APEX"
 # oxpec hwmon chip names — when one appears the kernel driver owns the fan and this
 # raw-EC backend must stand down (generic pwm handles it).
 _OXP_HWMON_NAMES = ("oxp_ec", "oxpec", "oxp-sensors")
@@ -56,12 +58,15 @@ class OxpEcFanBackend(SoftwareLoopBackend):
     reliably track a duty on these fans), with a high-temp guardian on top."""
 
     name = "oxp-apex-ec"
+    experimental = True
+    release_without_support = True
     min_rpm = 0
     max_rpm = 255  # the "target" IS the duty (0–255): base _duty_to_target is identity
 
     def __init__(self, temp_fn: Optional[Callable[[], Optional[float]]] = None,
                  root: str = "/", ec=None) -> None:
         self._ec = ec or EcSys(root=root)
+        self._write_supported: Optional[bool] = None
         super().__init__(temp_fn=temp_fn, root=root)
         self._dmi_ok = self._dmi_matches()
         # The hwmon-vs-EC handoff can only flip on a kernel update (→ reboot → _init
@@ -72,52 +77,85 @@ class OxpEcFanBackend(SoftwareLoopBackend):
         return None  # no hwmon node — support is DMI-based (see `supported`)
 
     @property
-    def supported(self) -> bool:
-        # Stand down if the kernel already exposes the oxpec hwmon fan node: the
-        # generic pwm backend owns it then, so we never fight the real driver.
+    def eligible(self) -> bool:
         return self._dmi_ok and not self._hwmon_present
+
+    @property
+    def supported(self) -> bool:
+        return self.eligible and self._write_supported is True
+
+    def _probe_supported(self) -> bool:
+        self._write_supported = bool(self.eligible and self._ec.writable())
+        return self._write_supported
 
     def _dmi_matches(self) -> bool:
         dmi = os.path.join(self._root, "sys/class/dmi/id")
-        text = ((_read(os.path.join(dmi, "board_name")) or "") + " "
-                + (_read(os.path.join(dmi, "product_name")) or "")).upper()
-        return any(tok in text for tok in _DMI_MATCH_APEX)
+        vendor = (_read(os.path.join(dmi, "board_vendor")) or "").upper()
+        board = (_read(os.path.join(dmi, "board_name")) or "").upper()
+        return vendor == _DMI_VENDOR and board == _DMI_BOARD
 
     def target_for_temp(self, temp: Optional[float]) -> Optional[int]:
-        """Curve → duty (0–255). Duty 0 is a valid quiet point (fan off but still in
-        manual mode — NOT a firmware release, which goes through the mode register).
-        Past the hard temp limit, force full duty regardless of the curve. None
-        (writes nothing) when not driving."""
+        """Curve → a non-zero duty. A hot device forces full duty."""
         if self._points is None or temp is None:
             return None
         if temp >= _APEX_TEMP_GUARD_C:
             return 255
-        return self._duty_to_target(_interp(self._points, temp))
+        return max(_APEX_DUTY_FLOOR, self._duty_to_target(_interp(self._points, temp)))
+
+    def _apply_once_locked(self) -> bool:
+        if self._points is not None:
+            temp = self._temp_fn() if self._temp_fn else None
+            if temp is None:
+                self._drive_ok = False
+                self._prev_target = None
+                self._release()
+                return False
+        return super()._apply_once_locked()
 
     def _before_drive(self) -> bool:
-        # Take ownership only if the EC is actually writable on this kernel (this also
-        # loads ec_sys with write support); honest False otherwise.
-        return self._ec.writable()
+        return self._probe_supported()
+
+    def apply_curve_all(self, points: list) -> dict:
+        self._probe_supported()
+        return super().apply_curve_all(points)
 
     def _write_target(self, duty: int) -> bool:
-        duty = max(0, min(255, int(duty)))
-        # Assert manual mode before the duty (the EC only honours 0x4B in manual);
-        # the write is idempotent and the loop re-asserts, so write it unconditionally.
-        # Confirm both by readback — a write returning ok is not proof the EC took it.
-        self._ec.write(REG_MODE, MODE_MANUAL)
-        mode_ok = self._ec.read(REG_MODE) == MODE_MANUAL
+        duty = max(_APEX_DUTY_FLOOR, min(255, int(duty)))
+        # Land a non-zero duty before taking manual control.
         self._ec.write(REG_DUTY, duty)
         duty_ok = self._ec.read(REG_DUTY) == duty
-        return mode_ok and duty_ok
+        if not duty_ok:
+            return False
+        self._ec.write(REG_MODE, MODE_MANUAL)
+        mode_ok = self._ec.read(REG_MODE) == MODE_MANUAL
+        if not mode_ok:
+            if not self._try_auto():
+                self._force_full_manual()
+            return False
+        return True
 
-    def _release(self) -> bool:
-        # Hand the fan back to firmware by clearing the mode register. Confirm by
-        # readback; retry so a transient failure self-heals. Auto mode is a clean
-        # handback (no dead zone), so no fallback target is needed.
+    def _try_auto(self) -> bool:
         for _ in range(_RELEASE_CONFIRM_RETRIES):
             self._ec.write(REG_MODE, MODE_AUTO)
             if self._ec.read(REG_MODE) == MODE_AUTO:
                 return True
+        return False
+
+    def _force_full_manual(self) -> bool:
+        self._ec.write(REG_DUTY, 255)
+        duty_ok = self._ec.read(REG_DUTY) == 255
+        if not duty_ok:
+            return False
+        self._ec.write(REG_MODE, MODE_MANUAL)
+        mode_ok = self._ec.read(REG_MODE) == MODE_MANUAL
+        return mode_ok
+
+    def _release(self) -> bool:
+        # Hand the fan back to firmware by clearing the mode register. Confirm by
+        # readback; retry so a transient failure self-heals.
+        if self._try_auto():
+            return True
+        self._force_full_manual()
         return False
 
     def _read_rpm(self) -> Optional[int]:
@@ -128,7 +166,7 @@ class OxpEcFanBackend(SoftwareLoopBackend):
         return (hi << 8) | lo
 
     def read_state(self) -> dict:
-        if not self.supported:
+        if not self._probe_supported():
             return {"supported": False, "source": self.name, "pwm_max": 255, "fans": []}
         rpm = self._read_rpm()
         mode = self._ec.read(REG_MODE)

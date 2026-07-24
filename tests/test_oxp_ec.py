@@ -17,6 +17,7 @@ class FakeEC:
     def __init__(self, mem=None, writable=True):
         self.mem = dict(mem or {})
         self._writable = writable
+        self.writable_calls = 0
         self.writes = []
         self.reads = []
 
@@ -32,15 +33,50 @@ class FakeEC:
         return True
 
     def writable(self):
+        self.writable_calls += 1
         return self._writable
 
 
-def _apex_root(tmp_path, board="ONEXPLAYER APEX", product="ONEXPLAYER APEX"):
+class RefusesAutoEC(FakeEC):
+    def write(self, addr, val):
+        if addr == REG_MODE and val == MODE_AUTO:
+            return False
+        return super().write(addr, val)
+
+
+class RefusesDutyEC(FakeEC):
+    def write(self, addr, val):
+        if addr == REG_DUTY:
+            return False
+        return super().write(addr, val)
+
+
+class LosesManualReadbackEC(FakeEC):
+    def read(self, addr):
+        if addr == REG_MODE and self.mem.get(addr) == MODE_MANUAL:
+            return None
+        return super().read(addr)
+
+
+class LosesAutoReadbackAndFullDutyEC(FakeEC):
+    def read(self, addr):
+        if addr == REG_MODE and self.mem.get(addr) == MODE_AUTO:
+            return None
+        return super().read(addr)
+
+    def write(self, addr, val):
+        if addr == REG_DUTY and val == 255:
+            return False
+        return super().write(addr, val)
+
+
+def _apex_root(tmp_path, board="ONEXPLAYER APEX", product="ONEXPLAYER APEX",
+               vendor="ONE-NETBOOK"):
     dmi = tmp_path / "sys/class/dmi/id"
     dmi.mkdir(parents=True)
     (dmi / "board_name").write_text(board + "\n")
     (dmi / "product_name").write_text(product + "\n")
-    (dmi / "board_vendor").write_text("ONE-NETBOOK\n")
+    (dmi / "board_vendor").write_text(vendor + "\n")
     return str(tmp_path)
 
 
@@ -51,14 +87,43 @@ def _make(tmp_path, ec=None, **kw):
 
 # --- detection / handoff ----------------------------------------------------
 
-def test_supported_on_apex_dmi(tmp_path):
-    assert _make(tmp_path).supported is True
+def test_eligible_on_apex_dmi_without_probing_ec(tmp_path):
+    ec = FakeEC()
+    b = _make(tmp_path, ec=ec)
+    assert b.eligible is True
+    assert b.supported is False
+    assert ec.writable_calls == 0
+
+
+def test_read_state_probes_writability_offloop_caller(tmp_path):
+    ec = FakeEC()
+    b = _make(tmp_path, ec=ec)
+    assert b.read_state()["supported"] is True
+    assert b.supported is True
+    assert ec.writable_calls == 1
+
+
+def test_read_state_is_unsupported_when_ec_is_not_writable(tmp_path):
+    b = _make(tmp_path, ec=FakeEC(writable=False))
+    st = b.read_state()
+    assert st["supported"] is False
+    assert st["fans"] == []
 
 
 def test_not_supported_off_apex_dmi(tmp_path):
     b = OxpEcFanBackend(root=_apex_root(tmp_path, board="ROG Ally RC71L", product="ROG Ally RC71L"),
                         ec=FakeEC())
     assert b.supported is False
+
+
+def test_product_name_alone_does_not_enable_raw_ec(tmp_path):
+    root = _apex_root(tmp_path, board="OTHER BOARD", product="ONEXPLAYER APEX")
+    assert OxpEcFanBackend(root=root, ec=FakeEC()).supported is False
+
+
+def test_wrong_board_vendor_does_not_enable_raw_ec(tmp_path):
+    root = _apex_root(tmp_path, vendor="OTHER VENDOR")
+    assert OxpEcFanBackend(root=root, ec=FakeEC()).supported is False
 
 
 def test_hands_off_when_oxp_hwmon_fan_node_present(tmp_path):
@@ -74,13 +139,11 @@ def test_hands_off_when_oxp_hwmon_fan_node_present(tmp_path):
 
 # --- driving (duty + mode), confirmed by readback ---------------------------
 
-def test_write_target_sets_manual_then_duty_confirmed(tmp_path):
+def test_write_target_sets_duty_before_manual(tmp_path):
     ec = FakeEC(mem={REG_MODE: MODE_AUTO})
     b = _make(tmp_path, ec=ec)
     assert b._write_target(180) is True
-    # manual mode asserted before the duty write
-    assert ec.writes[0] == (REG_MODE, MODE_MANUAL)
-    assert (REG_DUTY, 180) in ec.writes
+    assert ec.writes[:2] == [(REG_DUTY, 180), (REG_MODE, MODE_MANUAL)]
     assert ec.mem[REG_MODE] == MODE_MANUAL and ec.mem[REG_DUTY] == 180
 
 
@@ -89,6 +152,27 @@ def test_write_target_clamps_duty_to_255(tmp_path):
     b = _make(tmp_path, ec=ec)
     b._write_target(999)
     assert ec.mem[REG_DUTY] == 255
+
+
+def test_write_target_clamps_zero_to_nonzero_floor(tmp_path):
+    ec = FakeEC(mem={REG_MODE: MODE_AUTO})
+    b = _make(tmp_path, ec=ec)
+    assert b._write_target(0) is True
+    assert ec.mem[REG_DUTY] == oxp_ec._APEX_DUTY_FLOOR
+
+
+def test_write_target_does_not_enter_manual_when_duty_fails(tmp_path):
+    ec = RefusesDutyEC(mem={REG_MODE: MODE_AUTO, REG_DUTY: 120})
+    b = _make(tmp_path, ec=ec)
+    assert b._write_target(180) is False
+    assert ec.mem[REG_MODE] == MODE_AUTO
+
+
+def test_write_target_recovers_to_auto_when_manual_readback_is_lost(tmp_path):
+    ec = LosesManualReadbackEC(mem={REG_MODE: MODE_AUTO, REG_DUTY: 120})
+    b = _make(tmp_path, ec=ec)
+    assert b._write_target(180) is False
+    assert ec.mem[REG_MODE] == MODE_AUTO
 
 
 def test_write_target_fails_when_not_writable(tmp_path):
@@ -109,6 +193,21 @@ def test_release_false_when_write_refused(tmp_path):
     b = _make(tmp_path, ec=ec)
     assert b._release() is False
 
+
+def test_release_failure_leaves_full_duty(tmp_path):
+    ec = RefusesAutoEC(mem={REG_MODE: MODE_MANUAL, REG_DUTY: oxp_ec._APEX_DUTY_FLOOR})
+    b = _make(tmp_path, ec=ec)
+    assert b._release() is False
+    assert ec.mem[REG_MODE] == MODE_MANUAL
+    assert ec.mem[REG_DUTY] == 255
+
+
+def test_release_does_not_reenter_manual_without_confirmed_full_duty(tmp_path):
+    ec = LosesAutoReadbackAndFullDutyEC(mem={REG_MODE: MODE_MANUAL, REG_DUTY: 120})
+    b = _make(tmp_path, ec=ec)
+    assert b._release() is False
+    assert ec.mem[REG_MODE] == MODE_AUTO
+    assert ec.mem[REG_DUTY] == 120
 
 # --- RPM read (big-endian) --------------------------------------------------
 
@@ -139,11 +238,24 @@ def test_target_for_temp_guardian_forces_full_when_hot(tmp_path):
     assert b.target_for_temp(95) == 255  # guardian overrides
 
 
+def test_target_for_temp_clamps_cool_point_to_nonzero_floor(tmp_path):
+    b = _make(tmp_path)
+    b._points = [[40, 0], [70, 30], [90, 255]]
+    assert b.target_for_temp(40) == oxp_ec._APEX_DUTY_FLOOR
+
+
+def test_missing_temperature_releases_to_firmware(tmp_path):
+    ec = FakeEC(mem={REG_MODE: MODE_AUTO, REG_DUTY: 120})
+    b = _make(tmp_path, ec=ec)
+    b._temp_fn = lambda: None
+    res = b.apply_curve_all([[40, 0], [90, 255]])
+    assert res["ok"] is False
+    assert ec.mem[REG_MODE] == MODE_AUTO
+
+
 def test_target_for_temp_none_without_points_or_temp(tmp_path):
     b = _make(tmp_path)
     assert b.target_for_temp(70) is None
-    b._points = [[40, 0], [90, 255]]
-    assert b.target_for_temp(None) is None
 
 
 # --- read_state reports the true hardware mode ------------------------------

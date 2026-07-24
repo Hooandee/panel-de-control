@@ -174,7 +174,12 @@ class LegionGoSFanBackend(LegionGo2FanBackend):
     guardian layered on top."""
 
     name = "legion-go-s-ec"
+    experimental = True
     max_rpm = _GOS_MAX_RPM
+
+    @property
+    def eligible(self) -> bool:
+        return self.supported
 
     def _dmi_matches(self) -> bool:
         dmi = os.path.join(self._root, "sys/class/dmi/id")

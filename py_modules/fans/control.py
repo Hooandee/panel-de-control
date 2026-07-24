@@ -447,7 +447,7 @@ def select_fan_backend(device, root: str = "/", temp_fn=None, ec=None, experimen
     # below. Each is DMI-gated and mutually exclusive, so order is irrelevant.
     if experimental:
         for backend in experimental_ec_backends(temp_fn=temp_fn, root=root):
-            if backend.supported:
+            if backend.eligible:
                 return backend
     # Last resort for unrecognised hardware: the standard hwmon manual-PWM interface.
     from fans.generic_pwm import GenericPwmFanBackend
