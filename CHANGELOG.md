@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.28.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.28.0...panel-de-control-v0.28.1) (2026-07-24)
+
+
+### Bug Fixes
+
+* clear residual launch parameters when disabling a pill ([#286](https://github.com/Hooandee/panel-de-control/issues/286)) ([add3157](https://github.com/Hooandee/panel-de-control/commit/add3157beddd2452924d623129c9c87eff8dc0b2))
+
 ## [0.28.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.27.0...panel-de-control-v0.28.0) (2026-07-24)
 
 
