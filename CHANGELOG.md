@@ -3,9 +3,10 @@
 ## [0.29.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.28.1...panel-de-control-v0.29.0) (2026-07-24)
 
 
-### Features
+### Features / Novedades
 
-* L/R balance in the audio equalizer ([#282](https://github.com/Hooandee/panel-de-control/issues/282)) ([6b530e6](https://github.com/Hooandee/panel-de-control/commit/6b530e655a5e21fa8922f3a76903b9224eb6bba4))
+* Set a left/right balance for the sound, per output (speakers or headphones) and per game, so you can shift it toward one side. ([#282](https://github.com/Hooandee/panel-de-control/issues/282)) ([6b530e6](https://github.com/Hooandee/panel-de-control/commit/6b530e655a5e21fa8922f3a76903b9224eb6bba4))
+* **ES:** Ajusta el balance izquierda/derecha del sonido, por salida (altavoces o auriculares) y por juego, para desplazarlo hacia un lado. ([#282](https://github.com/Hooandee/panel-de-control/issues/282)) ([6b530e6](https://github.com/Hooandee/panel-de-control/commit/6b530e655a5e21fa8922f3a76903b9224eb6bba4))
 
 ## [0.28.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.28.0...panel-de-control-v0.28.1) (2026-07-24)
 
