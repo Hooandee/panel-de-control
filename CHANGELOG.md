@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.29.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.29.1...panel-de-control-v0.29.2) (2026-07-24)
+
+
+### Bug Fixes
+
+* report the game exit so per-game TDP profiles don't leak into Global ([#293](https://github.com/Hooandee/panel-de-control/issues/293)) ([e16ce38](https://github.com/Hooandee/panel-de-control/commit/e16ce3839254e078f690a1a1f85d64c1562823af))
+
 ## [0.29.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.29.0...panel-de-control-v0.29.1) (2026-07-24)
 
 
