@@ -3,9 +3,10 @@
 ## [0.30.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.30.0...panel-de-control-v0.30.1) (2026-07-24)
 
 
-### Bug Fixes
+### Bug Fixes / Correcciones
 
-* keep the bundled power binary executable after a self-update ([#305](https://github.com/Hooandee/panel-de-control/issues/305)) ([6d20d68](https://github.com/Hooandee/panel-de-control/commit/6d20d686ef5144fe3839303a3ae445cf7a81fe40))
+* Fix the power (TDP) limit doing nothing on handhelds that use the bundled power tool (such as the OneXPlayer Apex): after updating from within the plugin the tool lost its permission to run, so the limit was never applied and the chip kept boosting to its maximum. ([#305](https://github.com/Hooandee/panel-de-control/issues/305)) ([6d20d68](https://github.com/Hooandee/panel-de-control/commit/6d20d686ef5144fe3839303a3ae445cf7a81fe40))
+* **ES:** Corrige que el límite de potencia (TDP) no hiciera nada en las handhelds que usan la herramienta de potencia incluida (como la OneXPlayer Apex): al actualizar desde el propio plugin la herramienta perdía el permiso de ejecución, el límite nunca se aplicaba y el chip seguía subiendo a su máximo. ([#305](https://github.com/Hooandee/panel-de-control/issues/305)) ([6d20d68](https://github.com/Hooandee/panel-de-control/commit/6d20d686ef5144fe3839303a3ae445cf7a81fe40))
 
 ## [0.30.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.29.3...panel-de-control-v0.30.0) (2026-07-24)
 
