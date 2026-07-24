@@ -431,13 +431,16 @@ def select_fan_backend(device, root: str = "/", temp_fn=None, ec=None, experimen
                     LegionGo2FanBackend(temp_fn=temp_fn, root=root)):
         if backend.supported:
             return backend
-    # Legion Go S EC control is opt-in (unofficial interface). When the toggle is
-    # off it falls through to the read-only monitor below.
+    # Raw-EC control on devices with no hardware curve table is opt-in (unofficial
+    # interface). When the toggle is off these fall through to the read-only monitor
+    # below. Both are DMI-gated and mutually exclusive, so order is irrelevant.
     if experimental:
         from fans.legion_ec import LegionGoSFanBackend
-        gos = LegionGoSFanBackend(temp_fn=temp_fn, root=root)
-        if gos.supported:
-            return gos
+        from fans.oxp_ec import OxpEcFanBackend
+        for backend in (LegionGoSFanBackend(temp_fn=temp_fn, root=root),
+                        OxpEcFanBackend(temp_fn=temp_fn, root=root)):
+            if backend.supported:
+                return backend
     # Last resort for unrecognised hardware: the standard hwmon manual-PWM interface.
     from fans.generic_pwm import GenericPwmFanBackend
     generic = GenericPwmFanBackend(temp_fn=temp_fn, root=root)

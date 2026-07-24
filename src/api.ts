@@ -299,6 +299,10 @@ export interface FanCurveState {
   // True when the device exposes firmware modes at all (even in custom) — the fan
   // can't be curve-controlled here; a TDP mode governs it.
   has_firmware_modes: boolean;
+  // OneXPlayer Apex on SteamOS: the running kernel lacks the fan driver (it ships in
+  // a newer kernel), so control will start working once SteamOS updates. Drives an
+  // honest note; meanwhile the experimental EC path is offered.
+  kernel_pending?: boolean;
 }
 
 // Learning on/off (get/set_telemetry_enabled) is driven via the module editor now

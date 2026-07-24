@@ -24,6 +24,7 @@ from lifecycle import LifecycleManager, read_on_ac
 from fans.hwmon import FanReader, extract_cpu_gpu_temps
 from fans import control as fan_control
 from fans import legion_ec
+from fans import oxp_ec
 from fans import expose as fan_expose
 from fans import presets as fan_presets
 from fans import suggest as fan_suggest
@@ -242,10 +243,14 @@ class Plugin:
             self._device, temp_fn=self._driving_temp,
             experimental=bool(self._settings.get("fan_experimental", False)))
         # True only on a device with an opt-in experimental EC fan channel (Legion
-        # Go S). DMI-only check (no EC I/O) → the UI shows the experimental toggle.
+        # Go S / OneXPlayer Apex). DMI-only check (no EC I/O) → the UI shows the
+        # experimental toggle.
         try:
             from fans.legion_ec import LegionGoSFanBackend
-            self._fan_experimental_available = LegionGoSFanBackend(root="/").supported
+            from fans.oxp_ec import OxpEcFanBackend
+            self._fan_experimental_available = (
+                LegionGoSFanBackend(root="/").supported
+                or OxpEcFanBackend(root="/").supported)
         except Exception:  # noqa: BLE001 — availability probe must never break load
             self._fan_experimental_available = False
         # MSI Claw only: the firmware fan curve is read-only-legible in the EC even
@@ -1087,10 +1092,21 @@ class Plugin:
             "experimental_available": getattr(self, "_fan_experimental_available", False),
             "experimental_enabled": bool(self._settings.get("fan_experimental", False)),
             "os_name": self._os_name,
+            # OneXPlayer Apex on SteamOS: the kernel lacks the oxpec fan driver (it
+            # lands in a newer kernel). Flag it so the UI can say control will work
+            # once SteamOS updates — and offer the opt-in EC path meanwhile.
+            "kernel_pending": self._fan_kernel_pending(),
             # Active firmware mode governing the fan; None = custom / no firmware modes.
             "firmware_mode": (fw if (fw := self._firmware_mode()) != _CUSTOM_MODE else None),
             "has_firmware_modes": bool(self._firmware_choices()),
         }
+
+    def _fan_kernel_pending(self) -> bool:
+        if getattr(self._device, "key", None) != "onexplayer_apex":
+            return False
+        if "steamos" not in (self._os_name or "").lower():
+            return False
+        return not oxp_ec.oxpec_hwmon_present()
 
     async def _prime_firmware_curve(self) -> None:
         """Read the EC firmware curve off the event loop (modprobe + EC handshake can
