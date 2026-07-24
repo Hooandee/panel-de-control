@@ -3,9 +3,10 @@
 ## [0.30.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.29.3...panel-de-control-v0.30.0) (2026-07-24)
 
 
-### Features
+### Features / Novedades
 
-* add an audio report category and capture the audio routing graph ([#299](https://github.com/Hooandee/panel-de-control/issues/299)) ([74392ba](https://github.com/Hooandee/panel-de-control/commit/74392bad378f49148a0476e98b91253367f90ca9))
+* Add a "Sound / equalizer" category to the problem reporter and include more audio routing detail, so sound issues (like the equalizer playing no sound) can be diagnosed. ([#299](https://github.com/Hooandee/panel-de-control/issues/299)) ([74392ba](https://github.com/Hooandee/panel-de-control/commit/74392bad378f49148a0476e98b91253367f90ca9))
+* **ES:** Añade la categoría "Sonido / ecualizador" al reporte de problemas e incluye más detalle del enrutado de audio, para poder diagnosticar fallos de sonido (como que el ecualizador no suene). ([#299](https://github.com/Hooandee/panel-de-control/issues/299)) ([74392ba](https://github.com/Hooandee/panel-de-control/commit/74392bad378f49148a0476e98b91253367f90ca9))
 
 ## [0.29.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.29.2...panel-de-control-v0.29.3) (2026-07-24)
 
