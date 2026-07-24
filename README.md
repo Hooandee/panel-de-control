@@ -44,8 +44,9 @@ El panel se organiza en pestañas. Cada una cubre una parte del equipo.
 ### Potencia
 
 El corazón del plugin. Un arco visual que se llena con el TDP a lo largo del rango real de tu
-máquina (no valores inventados: los lee del firmware). Ajustas los vatios con un deslizador, tienes
-presets rápidos, y puedes guardar un perfil global o uno propio por juego.
+máquina (no valores inventados: los lee del firmware). Ajustas los vatios con un deslizador y tienes
+presets rápidos. Puedes crear los tuyos, con nombre e icono, y ordenarlos u ocultarlos desde un menú
+a pantalla completa, además de guardar un perfil global o uno propio por juego.
 
 - **Auto-TDP.** Un modo automático que observa la carga de la GPU y sube o baja la potencia sola
   para darte los fotogramas que necesitas gastando lo mínimo. Aprende de cómo juegas y se

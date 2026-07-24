@@ -17,6 +17,36 @@ def test_global_default_is_estable_and_flat(tmp_path):
     assert s.effective("1091500")["pl1"] == 15  # no game profile -> global
 
 
+def test_apply_preset_persists_pl1_and_boost_in_one_save(tmp_path):
+    # Atomicity: pl1 + boost must land in a single write so a crash can't strand a
+    # half-applied preset (pl1 saved, boost not).
+    s = _store(tmp_path)
+    saves = {"n": 0}
+    orig = s._save
+
+    def counting():
+        saves["n"] += 1
+        orig()
+
+    s._save = counting
+    s.apply_preset("global", 20, {"mode": "custom", "off2": 8, "off3": 4})
+    assert saves["n"] == 1
+    eff = s.effective(None)
+    assert (eff["pl1"], eff["pl2"], eff["pl3"]) == (20, 28, 32)
+    assert eff["mode"] == "custom"
+    # survives reload (both fields persisted together)
+    eff2 = ProfileStore(str(tmp_path / "tdp_profiles.json"), default_watts=15).effective(None)
+    assert (eff2["pl2"], eff2["pl3"]) == (28, 32)
+
+
+def test_apply_preset_bad_offsets_do_not_raise(tmp_path):
+    s = _store(tmp_path)
+    s.apply_preset("global", 18, {"mode": "custom", "off2": "x", "off3": None})
+    eff = s.effective(None)
+    assert eff["pl1"] == 18 and eff["mode"] == "custom"
+    assert eff["pl2"] == 18 and eff["pl3"] == 18  # bad offsets coerced to 0
+
+
 def test_set_pl1_keeps_estable_flat(tmp_path):
     s = _store(tmp_path)
     s.set_pl1("global", 12)

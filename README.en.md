@@ -44,8 +44,9 @@ The panel is organized into tabs. Each one covers a part of the machine.
 ### Power (Potencia)
 
 The heart of the plugin. A visual arc that fills with TDP across your machine's real range (no made
-up numbers, it reads them from firmware). You set the watts with a slider, get quick presets, and
-can save a global profile or a per-game one.
+up numbers, it reads them from firmware). You set the watts with a slider and get quick presets. You
+can create your own, with a name and icon, and reorder or hide them from a full-screen menu, plus
+save a global profile or a per-game one.
 
 - **Auto-TDP.** An automatic mode that watches GPU load and raises or lowers power on its own to give
   you the frames you need while spending as little as possible. It learns from how you play and
