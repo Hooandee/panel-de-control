@@ -71,6 +71,30 @@ def test_resume_re_asserts_after_firmware_settles():
     assert events == [False, False, False, False]
 
 
+def test_resume_base_is_full_reapply_and_retries_are_tdp_only():
+    # The base resume re-apply runs the full callback (the firmware may drop color/HDR/fans
+    # too); the settle-retries use the lighter TDP-only callback so a wake doesn't re-run
+    # the whole re-apply four times.
+    full = []
+    light = []
+    wc = {"v": 0}
+    lm = LifecycleManager(apply_cb=lambda ac: full.append(ac),
+                          reassert_cb=lambda ac: light.append(ac),
+                          wakeup_delay=4.0,
+                          read_wakeup=lambda: wc["v"],
+                          read_ac=lambda: False)
+    lm.check(now=0.0)
+    wc["v"] = 1
+    lm.check(now=1.0)            # resume detected
+    lm.check(now=5.0)            # base (1 + 4) → FULL only
+    assert (full, light) == ([False], [])
+    lm.check(now=7.0)           # 5 + 2 → light
+    lm.check(now=10.0)          # 5 + 5 → light
+    lm.check(now=14.0)          # 5 + 9 → light
+    assert full == [False]                       # full ran exactly once
+    assert light == [False, False, False]        # three TDP-only re-asserts
+
+
 def test_reapplies_on_ac_transition():
     events = []
     ac = {"v": False}

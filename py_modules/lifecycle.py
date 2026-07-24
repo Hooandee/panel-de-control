@@ -40,8 +40,12 @@ class LifecycleManager:
     _RESUME_SETTLE_RETRIES = (2.0, 5.0, 9.0)
 
     def __init__(self, apply_cb, root="/", wakeup_delay=4.0, interval=2.0,
-                 read_wakeup=None, read_ac=None):
+                 read_wakeup=None, read_ac=None, reassert_cb=None):
         self._apply = apply_cb
+        # Lighter callback for the settle-retries: only the power rails need re-asserting
+        # once the firmware settles, not the full color/HDR/fan/controller re-apply. Falls
+        # back to the full apply when not provided (keeps the callback optional for tests).
+        self._reassert = reassert_cb or apply_cb
         self._root = root
         self._wakeup_delay = wakeup_delay
         self._interval = interval
@@ -49,13 +53,20 @@ class LifecycleManager:
         self._read_ac = read_ac or (lambda: read_on_ac(root))
         self._last_wakeup = None
         self._last_ac = None
-        self._pending = []   # times at which to re-apply (resume delay + AC settle)
+        self._pending = []        # times for the full re-apply (base resume delay)
+        self._pending_light = []  # times for the TDP-only settle-retries
         self._task = None
 
     def _safe_apply(self, ac):
         try:
             self._apply(ac)
         except Exception:  # noqa: BLE001 - one bad apply must not abort check()
+            pass
+
+    def _safe_reassert(self, ac):
+        try:
+            self._reassert(ac)
+        except Exception:  # noqa: BLE001 - one bad re-assert must not abort check()
             pass
 
     def check(self, now):
@@ -65,21 +76,25 @@ class LifecycleManager:
         if self._last_wakeup is None:
             self._last_wakeup, self._last_ac = wc, ac
             return
-        # resume detected → schedule a delayed re-apply, then settle retries after it
+        # resume detected → a full re-apply after the base delay (the firmware may have
+        # dropped color/HDR too), then TDP-only settle retries as the rails settle
         if wc != self._last_wakeup:
             self._last_wakeup = wc
             base = now + self._wakeup_delay
             self._pending.append(base)
-            self._pending.extend(base + d for d in self._RESUME_SETTLE_RETRIES)
-        # AC transition → re-apply now, then again as the firmware settles
+            self._pending_light.extend(base + d for d in self._RESUME_SETTLE_RETRIES)
+        # AC transition → full re-apply now, then TDP-only re-asserts as the firmware settles
         if ac != self._last_ac:
             self._last_ac = ac
             self._safe_apply(ac)
-            self._pending.extend(now + d for d in self._AC_SETTLE_RETRIES)
-        # fire every scheduled re-apply whose delay has elapsed (re-reading AC live)
+            self._pending_light.extend(now + d for d in self._AC_SETTLE_RETRIES)
+        # fire scheduled re-applies whose delay has elapsed (re-reading AC live)
         if any(now >= t for t in self._pending):
             self._pending = [t for t in self._pending if now < t]
             self._safe_apply(self._read_ac())
+        if any(now >= t for t in self._pending_light):
+            self._pending_light = [t for t in self._pending_light if now < t]
+            self._safe_reassert(self._read_ac())
 
     async def run(self):
         import time
