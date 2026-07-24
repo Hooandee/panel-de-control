@@ -37,8 +37,9 @@ type CustomEntry = PowerPresetState["custom"][string];
 const CAP = 30; // mirrors PowerPresetStore._MAX_CUSTOM — hide "Add" once reached
 const BOOST_MODES: BoostMode[] = ["estable", "auto", "custom"];
 
-/** Per-preset boost picker (only shown on boost-capable devices). "none" = leave the
- *  boost mode untouched on apply; a mode makes it explicit; custom reveals the margins. */
+/** Per-preset boost picker (only shown on boost-capable devices). A custom preset always
+ *  carries a definite boost: "Sin boost" = estable (flat, no headroom), auto, or custom
+ *  (reveals the margins). Only built-ins leave the live boost untouched. */
 const BoostEditor: FC<{
   boost: PowerPresetBoost | null;
   off2Max: number;

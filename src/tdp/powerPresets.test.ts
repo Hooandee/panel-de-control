@@ -118,6 +118,20 @@ describe("resolveItems", () => {
     expect(r.visible.find((i) => i.id === "c2")!.active).toBe(false);
   });
 
+  it("two identical full presets: only the first is marked active", () => {
+    const st: PowerPresetState = {
+      order: ["quiet", "balanced", "turbo", "c1", "c2"],
+      hidden: [],
+      custom: {
+        c1: { watts: 15, icon: "bolt", name: "", boost: { mode: "custom", off2: 8, off3: 4 } },
+        c2: { watts: 15, icon: "flame", name: "", boost: { mode: "custom", off2: 8, off3: 4 } },
+      },
+    };
+    const live = { mode: "custom" as const, off2: 8, off3: 4 };
+    const r = resolveItems(st, builtinWatts, false, 15, MAX, live);
+    expect(r.visible.filter((i) => i.active).map((i) => i.id)).toEqual(["c1"]);
+  });
+
   it("an estable preset is a specific flat target, not a match for live auto", () => {
     const st: PowerPresetState = {
       order: ["quiet", "balanced", "turbo", "c2"],

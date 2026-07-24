@@ -116,6 +116,22 @@ def test_save_failure_reverts_and_raises(tmp_path, monkeypatch):
     assert s.state()["custom"] == {}
 
 
+def test_load_caps_custom_at_max(tmp_path):
+    # A stale/hand-edited file with thousands of presets must not load them all — the
+    # frontend would build thousands of focusable rows and freeze the QAM.
+    from power_presets import _MAX_CUSTOM
+    p = tmp_path / "power_presets.json"
+    n = _MAX_CUSTOM + 50
+    customs = {f"c{i}": {"watts": 10, "icon": "bolt"} for i in range(1, n + 1)}
+    p.write_text(json.dumps({"custom": customs, "order": list(customs), "seq": n}))
+    st = PowerPresetStore(str(p)).state()
+    assert len(st["custom"]) == _MAX_CUSTOM
+    assert len([i for i in st["order"] if i.startswith("c")]) == _MAX_CUSTOM
+    assert set(BUILTIN_IDS).issubset(set(st["order"]))
+    # keeps the first N by order
+    assert st["order"][:1] == ["c1"] or "c1" in st["custom"]
+
+
 def test_coerce_survives_garbage_and_phantom_ids(tmp_path):
     p = tmp_path / "power_presets.json"
     p.write_text(json.dumps({

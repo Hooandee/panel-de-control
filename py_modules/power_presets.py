@@ -83,6 +83,14 @@ class PowerPresetStore:
             if c not in seen:
                 order.append(c)
                 seen.add(c)
+        # Enforce the custom cap on load too: a stale/hand-edited file with thousands of
+        # entries would otherwise build thousands of focusable rows and freeze the QAM.
+        # Keep the first _MAX_CUSTOM customs by display order; drop the rest everywhere.
+        if len(custom) > _MAX_CUSTOM:
+            keep = set([i for i in order if i in custom][:_MAX_CUSTOM])
+            custom = {k: v for k, v in custom.items() if k in keep}
+            order = [i for i in order if i in BUILTIN_IDS or i in keep]
+        valid = set(BUILTIN_IDS) | set(custom)
         raw_hidden = raw.get("hidden") if isinstance(raw.get("hidden"), list) else []
         hidden = [i for i in raw_hidden if isinstance(i, str) and i in valid]
         highest = max((_as_int(c[1:], 0) for c in custom), default=0)

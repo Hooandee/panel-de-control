@@ -113,9 +113,20 @@ export function resolveItems(
   // on watts alone, but only when nothing fuller reproduces the live state.
   const isFull = (r: (typeof rows)[number]) => r.wm && r.boost != null && boostKey(r.boost) === liveKey;
   const anyFull = rows.some(isFull);
+  // Only the FIRST full match lights, so two identical presets can't both read as active
+  // (you'd never know which is applied). Watts-only builtins still light together — they're
+  // interchangeable, so it doesn't matter which.
+  let fullClaimed = false;
   const manager: PresetItem[] = rows.map((r) => {
     const { wm, ...item } = r;
-    return { ...item, active: isFull(r) || (r.boost == null && wm && !anyFull) };
+    let active = false;
+    if (isFull(r)) {
+      active = !fullClaimed;
+      fullClaimed = true;
+    } else if (r.boost == null && wm && !anyFull) {
+      active = true;
+    }
+    return { ...item, active };
   });
   const visible = manager.filter((i) => !i.hidden);
   return {
