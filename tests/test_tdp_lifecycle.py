@@ -48,6 +48,29 @@ def test_reapplies_after_wakeup_delay():
     assert events == [("apply", True)]
 
 
+def test_resume_re_asserts_after_firmware_settles():
+    # On resume the Lenovo firmware reverts ppt to its default (a Legion Go 2 wakes at
+    # ~30 W); a single re-apply can land before that reset and be lost. Resume schedules
+    # the base delay + follow-ups so the setpoint is re-asserted once the firmware settles.
+    events = []
+    wc = {"v": 5}
+    lm = LifecycleManager(apply_cb=lambda on_ac: events.append(on_ac),
+                          wakeup_delay=4.0,
+                          read_wakeup=lambda: wc["v"],
+                          read_ac=lambda: False)
+    lm.check(now=100.0)          # first observation
+    wc["v"] = 6                  # a suspend/resume bumped wakeup_count
+    lm.check(now=101.0)          # detected → schedule base (105) + settle retries
+    assert events == []
+    lm.check(now=105.0)          # base re-apply (101 + 4)
+    lm.check(now=107.0)          # +2s settle
+    lm.check(now=110.0)          # +5s settle
+    lm.check(now=114.0)          # +9s settle
+    assert events == [False, False, False, False]
+    lm.check(now=120.0)          # window elapsed → no more
+    assert events == [False, False, False, False]
+
+
 def test_reapplies_on_ac_transition():
     events = []
     ac = {"v": False}

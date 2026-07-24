@@ -34,6 +34,10 @@ class LifecycleManager:
     # to its default (an Ally drops to ~12 W on unplug) and a single re-apply mid-
     # transition can be lost, so re-assert once it has settled.
     _AC_SETTLE_RETRIES = (2.0, 4.0)
+    # Same problem on resume: the firmware reverts ppt to its default when it wakes (a
+    # Legion Go 2 comes back at ~30 W) and can reset it later than the base wakeup delay,
+    # so a lone re-apply lands too early and is lost. Re-assert across a window after it.
+    _RESUME_SETTLE_RETRIES = (2.0, 5.0, 9.0)
 
     def __init__(self, apply_cb, root="/", wakeup_delay=4.0, interval=2.0,
                  read_wakeup=None, read_ac=None):
@@ -61,10 +65,12 @@ class LifecycleManager:
         if self._last_wakeup is None:
             self._last_wakeup, self._last_ac = wc, ac
             return
-        # resume detected → schedule a delayed re-apply
+        # resume detected → schedule a delayed re-apply, then settle retries after it
         if wc != self._last_wakeup:
             self._last_wakeup = wc
-            self._pending.append(now + self._wakeup_delay)
+            base = now + self._wakeup_delay
+            self._pending.append(base)
+            self._pending.extend(base + d for d in self._RESUME_SETTLE_RETRIES)
         # AC transition → re-apply now, then again as the firmware settles
         if ac != self._last_ac:
             self._last_ac = ac
