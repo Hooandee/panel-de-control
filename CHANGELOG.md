@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.29.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.29.1...panel-de-control-v0.29.2) (2026-07-24)
+
+
+### Bug Fixes / Correcciones
+
+* Fix the per-game power (TDP) profile staying applied to the Global profile after you quit a game, which also made Auto-TDP look like it stayed on. ([#293](https://github.com/Hooandee/panel-de-control/issues/293)) ([e16ce38](https://github.com/Hooandee/panel-de-control/commit/e16ce3839254e078f690a1a1f85d64c1562823af))
+* **ES:** Corrige que el perfil de potencia (TDP) por juego se quedara aplicado en el perfil Global al salir del juego, lo que además hacía que el Auto-TDP pareciera seguir activado. ([#293](https://github.com/Hooandee/panel-de-control/issues/293)) ([e16ce38](https://github.com/Hooandee/panel-de-control/commit/e16ce3839254e078f690a1a1f85d64c1562823af))
+
 ## [0.29.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.29.0...panel-de-control-v0.29.1) (2026-07-24)
 
 
