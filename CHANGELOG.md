@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.28.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.27.0...panel-de-control-v0.28.0) (2026-07-24)
+
+
+### Features
+
+* custom power presets with a full-screen manager ([#284](https://github.com/Hooandee/panel-de-control/issues/284)) ([38dffff](https://github.com/Hooandee/panel-de-control/commit/38dffff633ae1dcfef2f347de44f04cd053b4379))
+
 ## [0.27.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.26.1...panel-de-control-v0.27.0) (2026-07-23)
 
 
