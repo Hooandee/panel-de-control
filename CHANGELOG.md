@@ -3,9 +3,10 @@
 ## [0.29.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.29.2...panel-de-control-v0.29.3) (2026-07-24)
 
 
-### Bug Fixes
+### Bug Fixes / Correcciones
 
-* debounce external-TDP adoption so a firmware spike doesn't stick ([#295](https://github.com/Hooandee/panel-de-control/issues/295)) ([dbe92c1](https://github.com/Hooandee/panel-de-control/commit/dbe92c1d22047efcd207df2cc53dd63fdefdc401))
+* Fix the power (TDP) setting jumping to a higher value on its own and staying there, by ignoring one-off firmware spikes instead of taking them as your setting. ([#295](https://github.com/Hooandee/panel-de-control/issues/295)) ([dbe92c1](https://github.com/Hooandee/panel-de-control/commit/dbe92c1d22047efcd207df2cc53dd63fdefdc401))
+* **ES:** Corrige que el ajuste de potencia (TDP) se subiera solo a un valor más alto y se quedara ahí: ahora se ignoran los picos puntuales del firmware en lugar de tomarlos como tu ajuste. ([#295](https://github.com/Hooandee/panel-de-control/issues/295)) ([dbe92c1](https://github.com/Hooandee/panel-de-control/commit/dbe92c1d22047efcd207df2cc53dd63fdefdc401))
 
 ## [0.29.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.29.1...panel-de-control-v0.29.2) (2026-07-24)
 
