@@ -24,6 +24,7 @@ from lifecycle import LifecycleManager, read_on_ac
 from fans.hwmon import FanReader, extract_cpu_gpu_temps
 from fans import control as fan_control
 from fans import legion_ec
+from fans import oxp_ec
 from fans import expose as fan_expose
 from fans import presets as fan_presets
 from fans import suggest as fan_suggest
@@ -242,10 +243,11 @@ class Plugin:
             self._device, temp_fn=self._driving_temp,
             experimental=bool(self._settings.get("fan_experimental", False)))
         # True only on a device with an opt-in experimental EC fan channel (Legion
-        # Go S). DMI-only check (no EC I/O) → the UI shows the experimental toggle.
+        # Go S / OneXPlayer Apex). DMI-only check (no EC I/O) → the UI shows the
+        # experimental toggle.
         try:
-            from fans.legion_ec import LegionGoSFanBackend
-            self._fan_experimental_available = LegionGoSFanBackend(root="/").supported
+            self._fan_experimental_available = any(
+                b.eligible for b in fan_control.experimental_ec_backends(root="/"))
         except Exception:  # noqa: BLE001 — availability probe must never break load
             self._fan_experimental_available = False
         # MSI Claw only: the firmware fan curve is read-only-legible in the EC even
@@ -969,7 +971,7 @@ class Plugin:
 
     async def get_fan_state(self) -> dict:
         self._init()
-        return self._read_fans()
+        return await self._offload_call(self._read_fans)
 
     def _driving_temp(self):
         """Live driving temperature (max of CPU/GPU) for software-loop backends.
@@ -1051,8 +1053,8 @@ class Plugin:
         pts = fan_suggest.biased_curve(sugg["curves"], bias)
         return [list(p) for p in pts]
 
-    def _fan_curve_state(self) -> dict:
-        hw_state = self._fan_ctrl.read_state()
+    def _fan_curve_state(self, hw_state=None) -> dict:
+        hw_state = hw_state if hw_state is not None else self._fan_ctrl.read_state()
         effective = self._fan_curves.effective(self._current_appid)
         # When idle (no game) the effective profile IS the global one — skip the
         # second store read.
@@ -1087,45 +1089,56 @@ class Plugin:
             "experimental_available": getattr(self, "_fan_experimental_available", False),
             "experimental_enabled": bool(self._settings.get("fan_experimental", False)),
             "os_name": self._os_name,
+            # OneXPlayer Apex on SteamOS: the kernel lacks the oxpec fan driver (it
+            # lands in a newer kernel). Flag it so the UI can say control will work
+            # once SteamOS updates — and offer the opt-in EC path meanwhile.
+            "kernel_pending": self._fan_kernel_pending(),
             # Active firmware mode governing the fan; None = custom / no firmware modes.
             "firmware_mode": (fw if (fw := self._firmware_mode()) != _CUSTOM_MODE else None),
             "has_firmware_modes": bool(self._firmware_choices()),
         }
 
-    async def _prime_firmware_curve(self) -> None:
-        """Read the EC firmware curve off the event loop (modprobe + EC handshake can
-        block). Cached in the reader, so this is a one-time cost; _fan_curve_state
-        then reads the cached value without blocking. No-op when there's no reader."""
-        if self._ec_curve is not None and not self._fan_ctrl.supported:
-            await asyncio.to_thread(self._ec_curve.read_curve)
+    def _fan_kernel_pending(self) -> bool:
+        if getattr(self._device, "key", None) != "onexplayer_apex":
+            return False
+        if "steamos" not in (self._os_name or "").lower():
+            return False
+        return not oxp_ec.oxpec_hwmon_present()
+
+    async def _fan_curve_state_offloop(self) -> dict:
+        return await self._offload_call(self._fan_curve_state)
 
     async def get_fan_curve_state(self) -> dict:
         self._init()
-        await self._prime_firmware_curve()
-        return self._fan_curve_state()
+        return await self._fan_curve_state_offloop()
 
     async def set_fan_experimental(self, enabled: bool) -> dict:
-        """Opt in/out of experimental EC fan control (Legion Go S). The swap probes
-        sysfs (backend selection) + drives the EC, so it runs OFF the event loop to
-        keep the QAM render fluid; only the small state read stays on the loop."""
+        """Opt in/out of experimental EC fan control. Backend I/O runs off-loop."""
         self._init()
         enabled = bool(enabled)
-        self._settings["fan_experimental"] = enabled
-        self._store.save(self._settings)
-        await self._offload_call(lambda: self._swap_fan_backend(enabled))
-        self._ensure_fan_loop()  # swap ran off-loop; start the curve loop here
-        return self._fan_curve_state()
+        swapped = await self._offload_call(lambda: self._swap_fan_backend(enabled))
+        if swapped:
+            self._settings["fan_experimental"] = enabled
+            self._store.save(self._settings)
+            self._ensure_fan_loop()
+        return await self._fan_curve_state_offloop()
 
-    def _swap_fan_backend(self, enabled: bool) -> None:
-        """Release the current backend (never leave the fan driven), rebuild it for
-        the new experimental flag, and re-apply the effective curve. Off-loop."""
-        try:
-            self._fan_ctrl.restore_auto()  # hand any active EC drive back to firmware
-        except Exception:  # noqa: BLE001 — release is best-effort; must not raise
-            pass
+    def _swap_fan_backend(self, enabled: bool) -> bool:
+        """Release the current backend, rebuild it, and re-apply the effective curve."""
+        active_experimental = bool(getattr(self._fan_ctrl, "experimental", False))
+        if active_experimental or getattr(self._fan_ctrl, "supported", False):
+            try:
+                released = self._fan_ctrl.restore_auto()
+            except Exception:  # noqa: BLE001
+                released = None
+            if not enabled and active_experimental and (
+                not isinstance(released, dict) or not bool(released.get("ok"))
+            ):
+                return False
         self._fan_ctrl = fan_control.select_fan_backend(
             self._device, temp_fn=self._driving_temp, experimental=enabled)
         self._reapply_fans_sync()
+        return True
 
     async def set_fan_follow_global(self, follow: bool, appid) -> dict:
         """Toggle a game between its own fan curve and following the global one, keeping
@@ -1138,18 +1151,18 @@ class Plugin:
                 self._fan_curves.create_game_from_global(appid)
             self._fan_curves.set_follow_global(appid, bool(follow))
             self._reapply_fans()
-        return self._fan_curve_state()
+        return await self._fan_curve_state_offloop()
 
     async def set_fan_preset(self, preset: str, scope: str, appid=None) -> dict:
         self._init()
         if preset not in fan_presets.PRESETS:
-            return self._fan_curve_state()
+            return await self._fan_curve_state_offloop()
         resolved = self._resolve_scope(scope, appid)
         if resolved is None:
-            return self._fan_curve_state()
+            return await self._fan_curve_state_offloop()
         self._fan_curves.set_preset(resolved, preset, fan_presets.RESOLVED[preset], appid)
         self._reapply_fans()
-        return self._fan_curve_state()
+        return await self._fan_curve_state_offloop()
 
     async def set_fan_adaptive(self, scope: str, appid=None) -> dict:
         """Select the Adaptive (learned) curve mode. Choosing this IS the opt-in to
@@ -1157,7 +1170,7 @@ class Plugin:
         self._init()
         resolved = self._resolve_scope(scope, appid)
         if resolved is None:
-            return self._fan_curve_state()
+            return await self._fan_curve_state_offloop()
         self._fan_curves.set_adaptive(resolved, appid)
         # Re-arm the mid-session drive, then drive the learned curve now (also sets the
         # anti-churn baseline so the periodic re-fit doesn't needlessly re-drive).
@@ -1165,7 +1178,7 @@ class Plugin:
         self._last_adaptive_points = None
         self._maybe_drive_adaptive_fan_curve()
         self._reapply_fans()  # covers the no-data case (firmware auto) honestly
-        return self._fan_curve_state()
+        return await self._fan_curve_state_offloop()
 
     async def set_fan_adaptive_bias(self, bias: int, scope: str, appid=None) -> dict:
         """Set the silence↔cool bias of the Adaptive mode (also selects it). Drives
@@ -1173,37 +1186,37 @@ class Plugin:
         self._init()
         resolved = self._resolve_scope(scope, appid)
         if resolved is None:
-            return self._fan_curve_state()
+            return await self._fan_curve_state_offloop()
         self._fan_curves.set_adaptive_bias(resolved, bias, appid)
         # A new bias changes the target curve → reset the anti-churn baseline and drive.
         self._last_adaptive_points = None
         self._maybe_drive_adaptive_fan_curve()
         self._reapply_fans()
-        return self._fan_curve_state()
+        return await self._fan_curve_state_offloop()
 
     async def set_fan_curve_points(self, points: list, scope: str, appid=None) -> dict:
         self._init()
         if not isinstance(points, list) or not points:
-            return self._fan_curve_state()
+            return await self._fan_curve_state_offloop()
         resolved = self._resolve_scope(scope, appid)
         if resolved is None:
-            return self._fan_curve_state()
+            return await self._fan_curve_state_offloop()
         # Store the SANITIZED curve (8 points, monotonic, hot-point safety floor) —
         # the same transform applied at write time — so the persisted/returned state
         # reflects what the hardware will actually run. Never show a curve we override.
         safe_points = [list(p) for p in fan_control.sanitize_curve(points)]
         self._fan_curves.set_custom(resolved, safe_points, appid)
         self._reapply_fans()
-        return self._fan_curve_state()
+        return await self._fan_curve_state_offloop()
 
     async def set_fan_auto(self, scope: str, appid=None) -> dict:
         self._init()
         resolved = self._resolve_scope(scope, appid)
         if resolved is None:
-            return self._fan_curve_state()
+            return await self._fan_curve_state_offloop()
         self._fan_curves.set_auto(resolved, appid)
         self._reapply_fans()
-        return self._fan_curve_state()
+        return await self._fan_curve_state_offloop()
 
     async def reset_fan_control(self) -> dict:
         """Recover a wedged software-loop fan control: hand the fan back to firmware
@@ -1220,7 +1233,7 @@ class Plugin:
         # reading the state back. reset_ok requires BOTH the release and the re-apply.
         reapplied = await self._offload_call(self._reapply_fans_sync)
         self._ensure_fan_loop()
-        state = self._fan_curve_state()
+        state = await self._fan_curve_state_offloop()
         state["reset_ok"] = released and bool(reapplied)
         return state
 

@@ -216,6 +216,56 @@ class _FakeFan:
         self.write_threads.append(threading.get_ident())
 
 
+class _RecordingReadFan(_FakeFan):
+    def __init__(self):
+        super().__init__()
+        self.supported = False
+        self.read_threads = []
+
+    def read_state(self):
+        self.read_threads.append(threading.get_ident())
+        return {"supported": False, "source": "fake", "pwm_max": 255, "fans": []}
+
+
+class _EmptyFanReader:
+    def read(self):
+        return {"supported": False, "fans": [], "temps": []}
+
+
+class _RecordingCurveReader:
+    def __init__(self):
+        self.read_threads = []
+
+    def read_curve(self):
+        self.read_threads.append(threading.get_ident())
+        return None
+
+
+def test_fan_state_rpcs_read_hardware_off_the_loop_thread(tmp_path, monkeypatch):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    fan = _RecordingReadFan()
+    curve = _RecordingCurveReader()
+    p._fan_ctrl = fan
+    p._fan_reader = _EmptyFanReader()
+    p._ec_curve = curve
+    ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    p._apply_executor = ex
+
+    async def read_states():
+        loop_tid = threading.get_ident()
+        await p.get_fan_state()
+        await p.get_fan_curve_state()
+        await p.set_fan_preset("balanced", "global", None)
+        return loop_tid
+
+    loop_tid = asyncio.run(read_states())
+    ex.shutdown()
+    assert fan.read_threads
+    assert curve.read_threads
+    assert loop_tid not in fan.read_threads
+    assert loop_tid not in curve.read_threads
+
+
 def test_apply_rpcs_keep_subprocess_backends_off_the_loop_thread(tmp_path, monkeypatch):
     """Tripwire: every user apply path (color + fan RPCs, game change) must run the
     subprocess-spawning backends OFF the event-loop thread. Catches a future change

@@ -49,6 +49,7 @@ class SoftwareLoopBackend:
     # back to the EC while read_state still reports manual. Clamp to >=1 so driving
     # stays manual (matches LeGo2's 0→1 behaviour); explicit release still writes 0.
     min_drive_rpm = 1
+    release_without_support = False
 
     def __init__(self, temp_fn: Optional[Callable[[], Optional[float]]] = None, root: str = "/") -> None:
         self._temp_fn = temp_fn
@@ -148,7 +149,7 @@ class SoftwareLoopBackend:
         return self.apply_curve_all(points)
 
     def set_auto(self, fan_key: Optional[str] = None) -> dict:
-        if not self.supported:
+        if not self.supported and not self.release_without_support:
             return {"ok": False, "detail": f"{self.name} not found"}
         # Stop the periodic loop (cancels the task; a tick already mid-write holds
         # the io lock and finishes first).

@@ -150,7 +150,7 @@ const CurveBlock: FC = () => {
         </PanelSectionRow>
       )}
       {curveState && !curveState.supported
-        && (curveState.firmware_mode || curveState.has_firmware_modes
+        && (curveState.firmware_mode || curveState.has_firmware_modes || curveState.kernel_pending
             || (!firmwarePoints && !curveState.experimental_available && (state?.fans.length ?? 0) > 0)) && (
         <PanelSectionRow>
           <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>

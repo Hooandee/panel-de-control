@@ -358,7 +358,79 @@ def test_sysfs_snapshot_empty_root_never_raises(tmp_path):
         "acpi": {"call_present": False, "call_writable": False},
         "modules": [],
         "asus_ppt": {"asus_armoury": {}, "asus_nb_wmi": {}},
+        "dmi": {},
+        "leds": [],
+        "ec": {
+            "debugfs_present": False,
+            "ec_sys_loaded": False,
+            "ec_sys_write_support": None,
+            "ec_sys_module_available": False,
+            "oxpec_module_available": False,
+            "dump": None,
+        },
     }
+
+
+# ---- new: dmi / leds / ec (Apex fan + LED diagnosis) ----------------------
+def test_sysfs_snapshot_dmi(tmp_path):
+    d = os.path.join(str(tmp_path), "sys/class/dmi/id")
+    _mk(os.path.join(d, "board_vendor"), "ONE-NETBOOK\n")
+    _mk(os.path.join(d, "board_name"), "ONEXPLAYER APEX\n")
+    _mk(os.path.join(d, "product_name"), "ONEXPLAYER APEX\n")
+    snap = sysfs_snapshot(root=str(tmp_path))
+    assert snap["dmi"]["board_name"] == "ONEXPLAYER APEX"
+    assert snap["dmi"]["product_name"] == "ONEXPLAYER APEX"
+
+
+def test_sysfs_snapshot_leds_multicolor(tmp_path):
+    led = os.path.join(str(tmp_path), "sys/class/leds/oxp:rgb:joystick_rings")
+    _mk(os.path.join(led, "max_brightness"), "255\n")
+    _mk(os.path.join(led, "multi_index"), "red green blue\n")
+    _mk(os.path.join(led, "multi_intensity"), "255 40 0\n")
+    snap = sysfs_snapshot(root=str(tmp_path))
+    leds = {x["name"]: x for x in snap["leds"]}
+    assert "oxp:rgb:joystick_rings" in leds
+    assert leds["oxp:rgb:joystick_rings"]["multi_index"] == "red green blue"
+    assert leds["oxp:rgb:joystick_rings"]["max_brightness"] == "255"
+
+
+def test_sysfs_snapshot_ec_write_support_and_dump(tmp_path):
+    root = str(tmp_path)
+    _mk(os.path.join(root, "sys/kernel/debug/ec/ec0/io"), "")
+    # 4 raw EC bytes → the dump is a plain hex string.
+    with open(os.path.join(root, "sys/kernel/debug/ec/ec0/io"), "wb") as f:
+        f.write(bytes([0x01, 0x80, 0x00, 0x12]))
+    _mk(os.path.join(root, "sys/module/ec_sys/parameters/write_support"), "Y\n")
+    snap = sysfs_snapshot(root=root)
+    ec = snap["ec"]
+    assert ec["debugfs_present"] is True
+    assert ec["ec_sys_loaded"] is True
+    assert ec["ec_sys_write_support"] == "Y"
+    assert ec["dump"].startswith("018000")
+
+
+def test_sysfs_snapshot_ec_dump_survives_serial_redaction(tmp_path):
+    # A real hex dump mixes a–f and digits in long runs — the serial scrubber must
+    # NOT shred it (it carries hardware register bytes, no PII).
+    root = str(tmp_path)
+    io = os.path.join(root, "sys/kernel/debug/ec/ec0/io")
+    _mk(io, "")
+    with open(io, "wb") as f:
+        f.write(bytes(range(64)))  # 0x00..0x3f → hex with plenty of a–f runs
+    snap = sysfs_snapshot(root=root, home="/home/deck")
+    assert snap["ec"]["dump"] == bytes(range(64)).hex()
+    assert "[redacted]" not in snap["ec"]["dump"]
+
+
+def test_sysfs_snapshot_ec_module_available_when_not_loaded(tmp_path):
+    root = str(tmp_path)
+    _mk(os.path.join(root, "proc/sys/kernel/osrelease"), "6.16.12-valve24.5\n")
+    _mk(os.path.join(root, "lib/modules/6.16.12-valve24.5/kernel/drivers/acpi/ec_sys.ko.zst"), "")
+    _mk(os.path.join(root, "lib/modules/6.16.12-valve24.5/kernel/drivers/platform/x86/oxpec.ko.zst"), "")
+    snap = sysfs_snapshot(root=root)
+    assert snap["ec"]["ec_sys_module_available"] is True
+    assert snap["ec"]["oxpec_module_available"] is True
+    assert snap["ec"]["ec_sys_loaded"] is False
 
 
 def test_sysfs_snapshot_missing_root_never_raises():
