@@ -50,13 +50,13 @@ const BoostEditor: FC<{
 }> = ({ boost, watts, pl2Max, pl3Max, onPickMode, onOffsets }) => {
   const { t } = useI18n();
   const active = boost?.mode ?? "estable";
-  // Bound each margin so the resulting rail can't exceed its firmware max: SPPT = PL1+off2
-  // ≤ pl2Max, FPPT = SPPT+off3 ≤ pl3Max. Same rule as the advanced boost editor — never
-  // offer a rail the hardware won't hold.
-  const off2Max = Math.max(1, pl2Max - watts);
-  const off2 = Math.min(boost?.off2 ?? 0, off2Max);
-  const off3Max = Math.max(1, pl3Max - (watts + off2));
-  const off3 = Math.min(boost?.off3 ?? 0, off3Max);
+  // Sliders are ABSOLUTE watts (SPPT/FPPT), not deltas — "+51 W" reads as nonsense; users
+  // think "FPPT = 56 W". Stored as offsets (off2 over PL1, off3 over SPPT); bounded so a
+  // rail can never exceed its firmware max (SPPT ≤ pl2Max, FPPT ≤ pl3Max).
+  const off2 = Math.min(Math.max(0, boost?.off2 ?? 0), Math.max(0, pl2Max - watts));
+  const sppt = watts + off2;
+  const off3 = Math.min(Math.max(0, boost?.off3 ?? 0), Math.max(0, pl3Max - sppt));
+  const fppt = sppt + off3;
   // "Sin boost" IS estable (flat, no headroom over PL1) — that's what "no boost" means.
   const label = (m: BoostMode) => (m === "estable" ? t("tdp.presets.boost.none") : t(`tdp.boost.mode.${m}`));
   return (
@@ -77,19 +77,27 @@ const BoostEditor: FC<{
       {active === "custom" && (
         <>
           <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, marginTop: theme.space.xs }}>
-            {t("tdp.level.slow")} · +{off2} W → {watts + off2} W
+            {t("tdp.level.slow")} · {sppt} W
           </div>
           <ContainedSlider
-            value={off2}
-            min={0}
-            max={off2Max}
+            value={sppt}
+            min={watts}
+            max={Math.max(watts + 1, pl2Max)}
             step={1}
-            onChange={(v) => onOffsets({ mode: "custom", off2: v, off3: Math.min(off3, Math.max(0, pl3Max - (watts + v))) })}
+            onChange={(v) =>
+              onOffsets({ mode: "custom", off2: Math.max(0, v - watts), off3: Math.min(off3, Math.max(0, pl3Max - v)) })
+            }
           />
           <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
-            {t("tdp.level.fast")} · +{off3} W → {watts + off2 + off3} W
+            {t("tdp.level.fast")} · {fppt} W
           </div>
-          <ContainedSlider value={off3} min={0} max={off3Max} step={1} onChange={(v) => onOffsets({ mode: "custom", off2, off3: v })} />
+          <ContainedSlider
+            value={fppt}
+            min={sppt}
+            max={Math.max(sppt + 1, pl3Max)}
+            step={1}
+            onChange={(v) => onOffsets({ mode: "custom", off2, off3: Math.max(0, v - sppt) })}
+          />
         </>
       )}
     </div>
