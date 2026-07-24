@@ -1,3 +1,6 @@
+import os
+
+from tdp import ryzenadj
 from tdp.ryzenadj import RyzenadjBackend
 from tdp.types import TdpLimits
 
@@ -26,6 +29,21 @@ class FakeRun:
             stderr = ""
 
         return R()
+
+
+def test_ensure_executable_adds_exec_bit(tmp_path):
+    # The bundled binary can arrive mode 0o644 (a plain zip extract drops the exec
+    # bit). Even root gets EACCES on a file with no exec bits set, so we self-heal.
+    p = tmp_path / "ryzenadj"
+    p.write_bytes(b"\x7fELF")
+    os.chmod(p, 0o644)
+    ryzenadj._ensure_executable(str(p))
+    assert os.stat(p).st_mode & 0o111 == 0o111
+
+
+def test_ensure_executable_missing_path_is_silent(tmp_path):
+    # Never raises on a path that isn't there.
+    ryzenadj._ensure_executable(str(tmp_path / "does-not-exist"))
 
 
 def test_unsupported_when_binary_missing():

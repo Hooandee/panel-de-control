@@ -12,6 +12,7 @@ Repo-specific values are read at runtime, so this file is identical across plugi
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import tempfile
@@ -137,6 +138,19 @@ def check(force: bool = False) -> dict:
     return result
 
 
+def _extract_zip(zf: zipfile.ZipFile, dest: Path) -> None:
+    """Extract preserving the unix permission bits the archive records. plain
+    extractall() drops them, so a bundled executable (bin/ryzenadj) would land
+    non-executable and fail to run. A zip with no recorded mode (external_attr high
+    bits == 0) keeps the default extract."""
+    for info in zf.infolist():
+        out = zf.extract(info, dest)
+        # Low 9 bits only (rwx for u/g/o); never carry setuid/setgid/sticky from a zip.
+        mode = (info.external_attr >> 16) & 0o777
+        if mode:
+            os.chmod(out, mode)
+
+
 def install() -> dict:
     """Download the latest release zip and overwrite the installed plugin dir in place.
 
@@ -156,7 +170,7 @@ def install() -> dict:
             zpath.write_bytes(blob)
             extract = tmpd / "x"
             with zipfile.ZipFile(zpath) as zf:
-                zf.extractall(extract)
+                _extract_zip(zf, extract)
             src = extract / name  # top folder == plugin.json name
             if not src.is_dir():
                 subdirs = [p for p in extract.iterdir() if p.is_dir()]
@@ -182,7 +196,6 @@ def install() -> dict:
 def restart_loader() -> None:
     """Restart Decky to load the just-installed files. Fire-and-forget (kills this process)."""
     try:
-        import os
         import subprocess
 
         # Decky's PyInstaller build points LD_LIBRARY_PATH at its bundled libs
