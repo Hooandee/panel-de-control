@@ -24,6 +24,9 @@ const TdpCoreBlock: FC = () => {
       onFirmwareMode={c.onFirmwareMode}
       monitorOnly={c.monitorOnly}
       onReactivate={c.onReactivate}
+      presets={c.presets}
+      refreshPresets={c.refreshPresets}
+      onApplyPreset={c.onApplyPreset}
     />
   );
 };

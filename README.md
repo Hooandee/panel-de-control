@@ -44,8 +44,9 @@ El panel se organiza en pestañas. Cada una cubre una parte del equipo.
 ### Potencia
 
 El corazón del plugin. Un arco visual que se llena con el TDP a lo largo del rango real de tu
-máquina (no valores inventados: los lee del firmware). Ajustas los vatios con un deslizador, tienes
-presets rápidos, y puedes guardar un perfil global o uno propio por juego.
+máquina (no valores inventados: los lee del firmware). Ajustas los vatios con un deslizador y tienes
+presets rápidos. Puedes crear los tuyos, con nombre e icono, y ordenarlos u ocultarlos desde un menú
+a pantalla completa, además de guardar un perfil global o uno propio por juego.
 
 - **Auto-TDP.** Un modo automático que observa la carga de la GPU y sube o baja la potencia sola
   para darte los fotogramas que necesitas gastando lo mínimo. Aprende de cómo juegas y se
@@ -96,8 +97,9 @@ con HDR (Steam Deck OLED y Legion Go 2) hay además un interruptor de HDR.
 Ecualizador del sistema con presets curados y una curva de mejora por máquina como punto de partida,
 tres controles simples (graves, voces, agudos) y un ecualizador avanzado de 10 bandas a pantalla
 completa. Curva independiente para altavoz y auriculares, y por juego o global. Incluye realce de
-graves, nivelado de volumen, muestras de prueba para escuchar el efecto y una guarda que limita
-cuánto se pueden realzar graves y agudos para no forzar los altavoces (se puede desactivar).
+graves, nivelado de volumen, balance izquierda/derecha, muestras de prueba para escuchar el efecto
+y una guarda que limita cuánto se pueden realzar graves y agudos para no forzar los altavoces (se
+puede desactivar).
 
 ### Mandos
 

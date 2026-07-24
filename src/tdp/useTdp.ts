@@ -2,8 +2,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   getTdpState, setTdpWatts, setTdpLevels, setTdpBoostMode, setTdpFirmwareMode,
   getPowerDraw, setAutoTdp, setTdpFollowGlobal, setSeenAutotdpNotice,
-  TdpState, TdpScope, PowerDraw, BoostMode,
+  getPowerPresets, applyPowerPreset,
+  TdpState, TdpScope, PowerDraw, BoostMode, PowerPresetState,
 } from "../api";
+import { PresetItem } from "./powerPresets";
 import { openAutoTdpNoticeModal } from "../components/AutoTdpNoticeModal";
 import { useRunningGame } from "./useRunningGame";
 import { useScopeSync } from "../useScopeSync";
@@ -21,18 +23,30 @@ export interface TdpControl {
   onAutoTdpToggle: (enabled: boolean) => void;
   onFirmwareMode: (mode: string) => void;
   onApplySuggestion: (w: number) => void;
+  // Custom power-preset library (order/hidden/custom); built-in watts come from `tdp`.
+  presets: PowerPresetState | null;
+  refreshPresets: () => void;
+  onApplyPreset: (item: PresetItem) => void;
 }
 
 export function useTdp(): TdpControl {
   const game = useRunningGame();
   const [tdp, setTdp] = useState<TdpState | null>(null);
   const [power, setPower] = useState<PowerDraw | null>(null);
+  const [presets, setPresets] = useState<PowerPresetState | null>(null);
   const commitTimerWatts = useRef<ReturnType<typeof setTimeout> | null>(null);
   const commitTimerLevels = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const refresh = useCallback(() => {
     getTdpState().then(setTdp).catch(() => {});
   }, []);
+
+  const refreshPresets = useCallback(() => {
+    getPowerPresets().then(setPresets).catch(() => {});
+  }, []);
+  useEffect(() => {
+    refreshPresets();
+  }, [refreshPresets]);
 
   // Re-fetch TDP on a charger flip so the ceiling (battery vs charger) updates.
   const lastAc = useRef<boolean | null>(null);
@@ -134,6 +148,19 @@ export function useTdp(): TdpControl {
     setTdpFirmwareMode(mode).then(setTdp).catch(() => {});
   }, []);
 
+  // Apply a preset chip: sustained watts (+ optional boost) to the current scope,
+  // atomically server-side, then refresh so the arc/slider reflect it. Cancel any pending
+  // debounced slider/levels write first, or its stale value would land after and override.
+  const onApplyPreset = useCallback(
+    (item: PresetItem) => {
+      if (commitTimerWatts.current) clearTimeout(commitTimerWatts.current);
+      if (commitTimerLevels.current) clearTimeout(commitTimerLevels.current);
+      const { target, sc } = resolveTarget();
+      applyPowerPreset(item.watts, sc, target, item.boost).then(() => refresh()).catch(() => {});
+    },
+    [resolveTarget, refresh],
+  );
+
   // A fixed PL1 is a distinct mode from dynamic auto-TDP → turn auto off first.
   const onApplySuggestion = useCallback(
     (w: number) => {
@@ -143,5 +170,5 @@ export function useTdp(): TdpControl {
     [resolveTarget, refresh],
   );
 
-  return { tdp, power, scope, game, refresh, onScope, onWatts, onSetLevels, onSetMode, onAutoTdpToggle, onFirmwareMode, onApplySuggestion };
+  return { tdp, power, scope, game, refresh, onScope, onWatts, onSetLevels, onSetMode, onAutoTdpToggle, onFirmwareMode, onApplySuggestion, presets, refreshPresets, onApplyPreset };
 }

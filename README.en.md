@@ -44,8 +44,9 @@ The panel is organized into tabs. Each one covers a part of the machine.
 ### Power (Potencia)
 
 The heart of the plugin. A visual arc that fills with TDP across your machine's real range (no made
-up numbers, it reads them from firmware). You set the watts with a slider, get quick presets, and
-can save a global profile or a per-game one.
+up numbers, it reads them from firmware). You set the watts with a slider and get quick presets. You
+can create your own, with a name and icon, and reorder or hide them from a full-screen menu, plus
+save a global profile or a per-game one.
 
 - **Auto-TDP.** An automatic mode that watches GPU load and raises or lowers power on its own to give
   you the frames you need while spending as little as possible. It learns from how you play and
@@ -97,8 +98,8 @@ toggle.
 A system equalizer with curated presets and a per-machine correction curve as a starting point,
 three simple controls (bass, voice, treble) and a full 10-band advanced EQ with a fullscreen view.
 Independent curve for speaker and headphones, per game or global. Includes a bass enhancer, volume
-leveling, test samples to hear the effect, and a guard that caps how far you can boost bass and
-treble so the speakers aren't overdriven (can be turned off).
+leveling, left/right balance, test samples to hear the effect, and a guard that caps how far you can
+boost bass and treble so the speakers aren't overdriven (can be turned off).
 
 ### Controllers (Mandos)
 

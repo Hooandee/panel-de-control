@@ -7,6 +7,18 @@ export const GAIN_MAX = 12;
 
 export const clampGain = (g: number): number => clamp(g, GAIN_MIN, GAIN_MAX);
 
+export const BALANCE_MIN = -100;
+export const BALANCE_MAX = 100;
+
+export const clampBalance = (b: number): number =>
+  clamp(Math.round(b), BALANCE_MIN, BALANCE_MAX);
+
+export function balanceLabel(b: number): { side: "center" | "left" | "right"; amount: number } {
+  const v = clampBalance(b);
+  if (v === 0) return { side: "center", amount: 0 };
+  return { side: v < 0 ? "left" : "right", amount: Math.abs(v) };
+}
+
 // Simple, non-expert tone control: 3 regions the user understands. Graves = upper-bass
 // body small speakers can reproduce (deep sub is the enhancer's job, engaged by the same
 // slider); voces = presence/dialogue; agudos = treble/air.

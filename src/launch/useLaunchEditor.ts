@@ -5,6 +5,7 @@ import { bumpLaunchUsage, getLaunchUsage } from "../api";
 import { translate } from "../i18n";
 import { Parsed, parse, serialize } from "./compose";
 import { AMBIGUOUS, CATALOG, Pill, Selections, Usage, buildLaunchOptions, detectSelections } from "./catalog";
+import { pendingSave } from "./editorSave";
 import { GameEntry, readAppDetails, writeLaunchOptions } from "./steamApi";
 
 export type SaveStatus = "saving" | "saved" | "error" | null;
@@ -103,10 +104,11 @@ export function useLaunchEditor(game: GameEntry, catalog: Pill[] = CATALOG): Lau
   // Debounced autosave. Baseline/usage/"saved" adopted ONLY on a successful write;
   // a missing/throwing setter surfaces as "error", never a fake "Saved".
   useEffect(() => {
-    if (!baseline || baseline.malformed || !dirty) return;
+    // Recomputed every render so the unmount flush never writes a stale value.
+    pending.current = pendingSave({ loaded: !!baseline, malformed: !!baseline?.malformed, dirty, preview });
+    if (pending.current === null) return;
     setStatus("saving");
-    const target = preview;
-    pending.current = target;
+    const target = pending.current;
     const id = setTimeout(() => {
       // The opened appid — never re-resolve by name (duplicate shortcut names → wrong game).
       const appid = game.liveAppid;

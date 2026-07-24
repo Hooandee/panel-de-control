@@ -1,14 +1,14 @@
 import { CSSProperties, FC, ReactNode } from "react";
 import { Focusable, PanelSectionRow, ToggleField } from "@decky/ui";
 import {
-  LuAudioLines, LuBell, LuHeadphones, LuMaximize2, LuMic, LuMusic, LuPause, LuPlay, LuPlus,
-  LuShieldCheck, LuSparkles, LuTriangleAlert, LuVolume2, LuWaves, LuX,
+  LuArrowLeftRight, LuAudioLines, LuBell, LuHeadphones, LuMaximize2, LuMic, LuMusic, LuPause,
+  LuPlay, LuPlus, LuShieldCheck, LuSparkles, LuTriangleAlert, LuVolume2, LuWaves, LuX,
 } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { useEq } from "../audio/useEq";
-import { GAIN_MAX, GAIN_MIN, toneCeiling, toneLevel, ToneRegion } from "../audio/logic";
+import { balanceLabel, GAIN_MAX, GAIN_MIN, toneCeiling, toneLevel, ToneRegion } from "../audio/logic";
 import { ProfileSelector } from "../components/ProfileSelector";
 import { ContainedSlider } from "../components/ContainedSlider";
 import { Collapsible } from "../components/Collapsible";
@@ -36,8 +36,8 @@ const TEST_ICON: Record<string, ReactNode> = {
 export const SonidoSection: FC = () => {
   const { t } = useI18n();
   const {
-    state, scope, game, onScope, onEnable, onPreset, onBands, onTone, onLoudness, onGuard, onReset,
-    onTest, onSaveProfile, onApplyProfile, onDeleteProfile, refresh,
+    state, scope, game, onScope, onEnable, onPreset, onBands, onTone, onLoudness, onBalance, onGuard,
+    onReset, onTest, onSaveProfile, onApplyProfile, onDeleteProfile, refresh,
   } = useEq();
 
   if (!state) return null;
@@ -66,6 +66,12 @@ export const SonidoSection: FC = () => {
   const isHeadphone = state.route === "headphone";
   const guarded = !isHeadphone && state.guard;
   const ceilings = isHeadphone ? undefined : state.safe_limits.bands;
+
+  const bal = balanceLabel(state.balance);
+  const balanceReadout =
+    bal.side === "center"
+      ? t("audio.balance.centered")
+      : `${t(`audio.balance.${bal.side}`)} ${bal.amount}%`;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: theme.space.section }}>
@@ -218,8 +224,6 @@ export const SonidoSection: FC = () => {
             </div>
           </div>
 
-          {/* Simple tone: three sliders anyone understands (icon + label in the slider's
-              own row = compact). Graves also engages the bass enhancer on its positive side. */}
           <div>
             <div style={{ fontSize: 10, letterSpacing: ".08em", textTransform: "uppercase", color: theme.color.textMuted, margin: "2px 2px 6px" }}>
               {t("audio.tone")}
@@ -267,17 +271,6 @@ export const SonidoSection: FC = () => {
             </PanelSectionRow>
           )}
 
-          <PanelSectionRow>
-            <ToggleField
-              label={t("audio.loudness")}
-              description={t("audio.loudness.desc")}
-              checked={state.loudness}
-              onChange={onLoudness}
-            />
-          </PanelSectionRow>
-
-          {/* Full 10-band editor, folded for experts — with a full-screen button and
-              friendly zone labels on the graph. */}
           <Collapsible
             id="audioAdvanced"
             icon={<LuAudioLines size={15} />}
@@ -314,6 +307,48 @@ export const SonidoSection: FC = () => {
               {t("audio.reset")}
             </Focusable>
           </Collapsible>
+
+          <PanelSectionRow>
+            <ToggleField
+              label={t("audio.loudness")}
+              description={t("audio.loudness.desc")}
+              checked={state.loudness}
+              onChange={onLoudness}
+            />
+          </PanelSectionRow>
+
+          <div>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                margin: "2px 2px 6px",
+              }}
+            >
+              <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 10, letterSpacing: ".08em", textTransform: "uppercase", color: theme.color.textMuted }}>
+                <LuArrowLeftRight size={12} />
+                {t("audio.balance")}
+              </span>
+              {bal.side !== "center" && (
+                <Focusable
+                  style={{ cursor: "pointer", color: theme.color.accent, fontSize: theme.font.caption }}
+                  onActivate={() => onBalance(0)}
+                  onClick={() => onBalance(0)}
+                >
+                  {t("audio.balance.center")}
+                </Focusable>
+              )}
+            </div>
+            <ContainedSlider
+              label={balanceReadout}
+              value={state.balance}
+              min={-100}
+              max={100}
+              step={5}
+              onChange={onBalance}
+            />
+          </div>
         </>
       )}
     </div>

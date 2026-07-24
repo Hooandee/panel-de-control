@@ -7,6 +7,7 @@ import {
   getAudioState,
   resetAudio,
   saveAudioProfile,
+  setAudioBalance,
   setAudioBands,
   setAudioCurve,
   setAudioEnabled,
@@ -30,6 +31,7 @@ export interface EqControl {
   onBands: (gains: number[]) => void;
   onTone: (region: ToneRegion, level: number) => void;
   onLoudness: (on: boolean) => void;
+  onBalance: (value: number) => void;
   onGuard: (on: boolean) => void;
   onReset: () => void;
   onTest: (sample: string) => void;
@@ -48,21 +50,39 @@ export interface EqControl {
 export function useEq(): EqControl {
   const game = useRunningGame();
   const [state, setState] = useState<AudioState | null>(null);
-  const commit = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pending = useRef<(() => void) | null>(null);
+  // Debounced commits, one slot per domain so one control never cancels another's pending write.
+  const timers = useRef<Record<string, ReturnType<typeof setTimeout> | null>>({});
+  const pendings = useRef<Record<string, () => void>>({});
   const stateRef = useRef<AudioState | null>(null);
   stateRef.current = state;
 
   const flush = useCallback(() => {
-    if (commit.current) { clearTimeout(commit.current); commit.current = null; }
-    const fn = pending.current;
-    pending.current = null;
-    if (fn) fn();
+    for (const key of Object.keys(pendings.current)) {
+      const timer = timers.current[key];
+      if (timer) { clearTimeout(timer); timers.current[key] = null; }
+      const fn = pendings.current[key];
+      delete pendings.current[key];
+      fn();
+    }
   }, []);
-  const schedule = useCallback((fn: () => void) => {
-    pending.current = fn;
-    if (commit.current) clearTimeout(commit.current);
-    commit.current = setTimeout(() => { commit.current = null; pending.current = null; fn(); }, 350);
+  // Drop pending commits without firing them (a reset must not be undone by a stale debounce).
+  const cancel = useCallback(() => {
+    for (const key of Object.keys(pendings.current)) {
+      const timer = timers.current[key];
+      if (timer) clearTimeout(timer);
+      timers.current[key] = null;
+      delete pendings.current[key];
+    }
+  }, []);
+  const schedule = useCallback((key: string, fn: () => void) => {
+    pendings.current[key] = fn;
+    const timer = timers.current[key];
+    if (timer) clearTimeout(timer);
+    timers.current[key] = setTimeout(() => {
+      timers.current[key] = null;
+      delete pendings.current[key];
+      fn();
+    }, 350);
   }, []);
 
   const refresh = useCallback(() => {
@@ -100,7 +120,7 @@ export function useEq(): EqControl {
 
   const onBands = useCallback((gains: number[]) => {
     setState((cur) => (cur ? { ...cur, gains, preset: "custom" } : cur)); // optimistic
-    schedule(() => { setAudioBands(gains, wScope, wTarget).then(setState).catch(() => {}); });
+    schedule("curve", () => { setAudioBands(gains, wScope, wTarget).then(setState).catch(() => {}); });
   }, [wScope, wTarget, schedule]);
 
   // A tone slider sets one region's level. Graves also engages the bass enhancer. Reads the
@@ -111,7 +131,7 @@ export function useEq(): EqControl {
     const gains = applyTone(cur.gains, region, level);
     const bass = region === "graves" ? bassToEnhancer(level) : cur.bass;
     setState({ ...cur, gains, bass, preset: "custom" });
-    schedule(() => { setAudioCurve(gains, bass, wScope, wTarget).then(setState).catch(() => {}); });
+    schedule("curve", () => { setAudioCurve(gains, bass, wScope, wTarget).then(setState).catch(() => {}); });
   }, [wScope, wTarget, schedule]);
 
   const onLoudness = useCallback((on: boolean) => {
@@ -119,14 +139,20 @@ export function useEq(): EqControl {
     setAudioLoudness(on, wScope, wTarget).then(setState).catch(() => {});
   }, [wScope, wTarget]);
 
+  const onBalance = useCallback((value: number) => {
+    setState((cur) => (cur ? { ...cur, balance: value } : cur)); // optimistic
+    schedule("balance", () => { setAudioBalance(value, wScope, wTarget).then(setState).catch(() => {}); });
+  }, [wScope, wTarget, schedule]);
+
   const onGuard = useCallback((on: boolean) => {
     setState((cur) => (cur ? { ...cur, guard: on } : cur)); // optimistic
     setSpeakerGuard(on).then(setState).catch(() => {});
   }, []);
 
   const onReset = useCallback(() => {
+    cancel();
     resetAudio(wScope, wTarget).then(setState).catch(() => {});
-  }, [wScope, wTarget]);
+  }, [wScope, wTarget, cancel]);
 
   const onTest = useCallback((sample: string) => {
     const cur = stateRef.current;
@@ -147,7 +173,7 @@ export function useEq(): EqControl {
   }, []);
 
   return {
-    state, scope, game, onScope, onEnable, onPreset, onBands, onTone, onLoudness, onGuard, onReset,
-    onTest, onSaveProfile, onApplyProfile, onDeleteProfile, refresh,
+    state, scope, game, onScope, onEnable, onPreset, onBands, onTone, onLoudness, onBalance, onGuard,
+    onReset, onTest, onSaveProfile, onApplyProfile, onDeleteProfile, refresh,
   };
 }

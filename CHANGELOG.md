@@ -1,5 +1,53 @@
 # Changelog
 
+## [0.29.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.28.1...panel-de-control-v0.29.0) (2026-07-24)
+
+
+### Features / Novedades
+
+* Set a left/right balance for the sound, per output (speakers or headphones) and per game, so you can shift it toward one side. ([#282](https://github.com/Hooandee/panel-de-control/issues/282)) ([6b530e6](https://github.com/Hooandee/panel-de-control/commit/6b530e655a5e21fa8922f3a76903b9224eb6bba4))
+* **ES:** Ajusta el balance izquierda/derecha del sonido, por salida (altavoces o auriculares) y por juego, para desplazarlo hacia un lado. ([#282](https://github.com/Hooandee/panel-de-control/issues/282)) ([6b530e6](https://github.com/Hooandee/panel-de-control/commit/6b530e655a5e21fa8922f3a76903b9224eb6bba4))
+
+## [0.28.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.28.0...panel-de-control-v0.28.1) (2026-07-24)
+
+
+### Bug Fixes / Errores corregidos
+
+* Turning a launch parameter off (like MangoHud) no longer leaves a leftover behind that could keep the game from starting. ([#286](https://github.com/Hooandee/panel-de-control/issues/286)) ([add3157](https://github.com/Hooandee/panel-de-control/commit/add3157beddd2452924d623129c9c87eff8dc0b2))
+* **ES:** Al desactivar un parámetro de lanzamiento (como MangoHud) ya no queda ningún resto que pudiera impedir que el juego arranque. ([#286](https://github.com/Hooandee/panel-de-control/issues/286)) ([add3157](https://github.com/Hooandee/panel-de-control/commit/add3157beddd2452924d623129c9c87eff8dc0b2))
+
+## [0.28.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.27.0...panel-de-control-v0.28.0) (2026-07-24)
+
+
+### Features / Novedades
+
+* Create your own power presets on top of the three built-in ones, each with a name, an icon and an optional boost, and reorder, hide or delete them from a full-screen menu. ([#284](https://github.com/Hooandee/panel-de-control/issues/284)) ([38dffff](https://github.com/Hooandee/panel-de-control/commit/38dffff633ae1dcfef2f347de44f04cd053b4379))
+* **ES:** Crea tus propios presets de potencia además de los tres de fábrica, cada uno con nombre, icono y boost opcional, y ordénalos, ocúltalos o bórralos desde un menú a pantalla completa. ([#284](https://github.com/Hooandee/panel-de-control/issues/284)) ([38dffff](https://github.com/Hooandee/panel-de-control/commit/38dffff633ae1dcfef2f347de44f04cd053b4379))
+
+## [0.27.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.26.1...panel-de-control-v0.27.0) (2026-07-23)
+
+
+### Features / Novedades
+
+* The plugin's name in the Decky plugin list now follows the selected language, matching the title shown inside the panel. ([#275](https://github.com/Hooandee/panel-de-control/issues/275)) ([f5bdf22](https://github.com/Hooandee/panel-de-control/commit/f5bdf22d245fb2e351f8687fc66c2389d7dcb304))
+* **ES:** El nombre del plugin en la lista de Decky ahora sigue el idioma seleccionado, igual que el título que se ve dentro del panel. ([#275](https://github.com/Hooandee/panel-de-control/issues/275)) ([f5bdf22](https://github.com/Hooandee/panel-de-control/commit/f5bdf22d245fb2e351f8687fc66c2389d7dcb304))
+
+## [0.26.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.26.0...panel-de-control-v0.26.1) (2026-07-23)
+
+
+### Bug Fixes / Errores corregidos
+
+* Fixes fan control on handhelds with a generic fan chip (such as the GPD Win Mini and OneXPlayer), where the fan stopped responding after a recent update. ([#269](https://github.com/Hooandee/panel-de-control/issues/269)) ([1d18308](https://github.com/Hooandee/panel-de-control/commit/1d1830838973c44f8f0c26362f4df40d63b9a19d))
+* **ES:** Arregla el control del ventilador en handhelds con chip de ventilador genérico (como la GPD Win Mini y OneXPlayer), donde el ventilador dejó de responder tras una actualización reciente. ([#269](https://github.com/Hooandee/panel-de-control/issues/269)) ([1d18308](https://github.com/Hooandee/panel-de-control/commit/1d1830838973c44f8f0c26362f4df40d63b9a19d))
+
+## [0.26.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.25.3...panel-de-control-v0.26.0) (2026-07-23)
+
+
+### Features / Novedades
+
+* A new Sound tab adds a system equalizer: curated presets and a per-machine correction curve as a starting point, three simple controls (bass, voice, treble) plus a full 10-band editor with a fullscreen view, an independent curve for speakers and headphones (per game or global), a bass enhancer and volume leveling, test samples to hear the effect, and a guard that keeps you from overdriving the speakers. Works on SteamOS, Bazzite and CachyOS. ([#200](https://github.com/Hooandee/panel-de-control/issues/200)) ([e613526](https://github.com/Hooandee/panel-de-control/commit/e6135260bfb11ac3e1885839e119bf780323bbd3))
+* **ES:** Una nueva pestaña Sonido añade un ecualizador del sistema: presets curados y una curva de mejora por equipo como punto de partida, tres controles simples (graves, voces, agudos) y un editor completo de 10 bandas a pantalla completa, una curva independiente para altavoces y auriculares (por juego o global), realce de graves y nivelado de volumen, muestras de prueba para oír el efecto, y una guarda que evita forzar los altavoces. Funciona en SteamOS, Bazzite y CachyOS. ([#200](https://github.com/Hooandee/panel-de-control/issues/200)) ([e613526](https://github.com/Hooandee/panel-de-control/commit/e6135260bfb11ac3e1885839e119bf780323bbd3))
+
 ## [0.25.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.25.2...panel-de-control-v0.25.3) (2026-07-23)
 
 

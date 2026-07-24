@@ -18,6 +18,7 @@ from tdp import factory as tdp_factory
 from tdp import suggest as tdp_suggest
 from tdp.types import TdpResult
 from tdp_profiles import ProfileStore
+from power_presets import PowerPresetStore
 from lifecycle import LifecycleManager, read_on_ac
 from fans.hwmon import FanReader, extract_cpu_gpu_temps
 from fans import control as fan_control
@@ -197,6 +198,8 @@ class Plugin:
             os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "tdp_profiles.json"),
             default_watts=self._device.tdp_default or 15,
         )
+        self._power_presets = PowerPresetStore(
+            os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "power_presets.json"))
         # One-time migration: auto-TDP and GPU clock used to be flat global settings.
         # Seed them into the global Potencia profile so they take part in per-game scope.
         if not self._settings.get("_potencia_scope_migrated"):
@@ -2590,6 +2593,11 @@ class Plugin:
             self._current_appid = str(appid)
         return scope
 
+    @staticmethod
+    def _apply_result(res) -> dict:
+        return {"requested_w": res.requested_w, "applied_w": res.applied_w,
+                "ok": res.ok, "detail": res.detail}
+
     async def set_tdp_watts(self, watts: int, scope: str, appid=None) -> dict:
         self._init()
         if not self._tdp_control_on():
@@ -2605,8 +2613,7 @@ class Plugin:
         clamped = limits.clamp(watts, read_on_ac())
         self._tdp_profiles.set_pl1(resolved, clamped, appid=appid)
         res = await self._offload_call(self._reapply_tdp)
-        return {"requested_w": res.requested_w, "applied_w": res.applied_w,
-                "ok": res.ok, "detail": res.detail}
+        return self._apply_result(res)
 
     async def set_tdp_follow_global(self, follow: bool, appid) -> dict:
         """Toggle a game between its own TDP profile and following the global one,
@@ -2654,8 +2661,7 @@ class Plugin:
         self._tdp_profiles.set_offsets(resolved, off2, off3, appid=appid)
         res = await self._offload_call(self._reapply_tdp)
         # requested_w/applied_w reflect resulting sustained pl1 (readback), not the offsets
-        return {"requested_w": res.requested_w, "applied_w": res.applied_w,
-                "ok": res.ok, "detail": res.detail}
+        return self._apply_result(res)
 
     async def set_tdp_boost_mode(self, mode: str, scope: str, appid=None) -> dict:
         """Set the boost behaviour (estable/auto/custom) for a scope and re-apply.
@@ -2669,6 +2675,54 @@ class Plugin:
             self._tdp_profiles.set_boost_mode(resolved, mode, appid=appid)
             await self._offload_call(self._reapply_tdp)
         return self._tdp_state(await self._read_applied())
+
+    def _preset_wclamp(self):
+        lim = self._limits()
+        return lim.min_w, lim.max_ac_w
+
+    async def get_power_presets(self) -> dict:
+        self._init()
+        return self._power_presets.state()
+
+    async def create_power_preset(self, watts: int, icon: str, boost=None, name="") -> dict:
+        self._init()
+        lo, hi = self._preset_wclamp()
+        return self._power_presets.create(watts, icon, boost, name=name, min_w=lo, max_w=hi)
+
+    async def update_power_preset(self, cid: str, watts: int, icon: str, boost=None, name="") -> dict:
+        self._init()
+        lo, hi = self._preset_wclamp()
+        return self._power_presets.update(cid, watts, icon, boost, name=name, min_w=lo, max_w=hi)
+
+    async def delete_power_preset(self, cid: str) -> dict:
+        self._init()
+        return self._power_presets.delete(cid)
+
+    async def move_power_preset(self, cid: str, direction: int) -> dict:
+        self._init()
+        return self._power_presets.move(cid, direction)
+
+    async def set_power_preset_hidden(self, cid: str, hidden: bool) -> dict:
+        self._init()
+        return self._power_presets.set_hidden(cid, bool(hidden))
+
+    async def apply_power_preset(self, watts: int, scope: str, appid=None, boost=None) -> dict:
+        """Apply a preset atomically: sustained watts (+ optional boost mode/offsets) in
+        one re-apply. Mirrors set_tdp_watts' guards. boost=None leaves boost untouched."""
+        self._init()
+        if not self._tdp_control_on():
+            return {"requested_w": watts, "applied_w": None, "ok": False,
+                    "detail": "tdp-control-disabled"}
+        resolved = self._resolve_scope(scope, appid)
+        if resolved is None:
+            return {"requested_w": watts, "applied_w": None, "ok": False,
+                    "detail": f"unknown scope: {scope}"}
+        self._clear_eco()
+        self._exit_firmware_mode()
+        limits = self._limits()
+        self._tdp_profiles.apply_preset(resolved, limits.clamp(watts, read_on_ac()), boost, appid=appid)
+        res = await self._offload_call(self._reapply_tdp)
+        return self._apply_result(res)
 
     async def create_game_profile(self, appid) -> None:
         self._init()
@@ -2735,7 +2789,7 @@ class Plugin:
             route = self._current_route()
             setting = self._effective_audio(route)
             gains, bass = self._guarded_gains(route, setting["gains"], setting["bass"])
-            self._audio.set_gains(gains, bass, setting["loudness"])
+            self._audio.set_gains(gains, bass, setting["loudness"], setting["balance"])
         except Exception as e:  # noqa: BLE001
             decky.logger.warning("audio EQ apply failed: %s", e)
 
@@ -2815,6 +2869,7 @@ class Plugin:
             "gains": eff["gains"],
             "bass": eff["bass"],
             "loudness": eff["loudness"],
+            "balance": eff["balance"],
             "test_playing": self._audio.is_test_playing(),
             "test_sample": self._test_sample if self._audio.is_test_playing() else None,
             "test_samples": audio_tone.sample_ids(),
@@ -2889,6 +2944,18 @@ class Plugin:
             return await self._offload_call(self._audio_state)
         route = await self._offload_call(self._current_route)
         self._audio_eq.set_loudness(resolved, route, bool(on), appid=appid)
+        self._reapply_audio()
+        return await self._offload_call(self._audio_state)
+
+    async def set_audio_balance(self, value: int, scope: str, appid=None) -> dict:
+        """Set the L/R balance (-100..100) for the active route. Applies instantly — it
+        only offsets the downstream pin, no filter-chain restart."""
+        self._init()
+        resolved = self._resolve_scope(scope, appid)
+        if resolved is None:
+            return await self._offload_call(self._audio_state)
+        route = await self._offload_call(self._current_route)
+        self._audio_eq.set_balance(resolved, route, int(value), appid=appid)
         self._reapply_audio()
         return await self._offload_call(self._audio_state)
 

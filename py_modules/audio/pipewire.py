@@ -11,6 +11,7 @@ import re
 import signal
 import subprocess
 
+from audio.const import balance_channels
 from audio.filter_chain import build_chain_config
 from audio.route import route_of_sink
 from osinfo import _parse_os_release
@@ -88,6 +89,8 @@ class PipeWireEq:
         self._session = _find_session()
         self._orig_default = None
         self._last_applied = None
+        self._user_vol = None
+        self._pinned = set()
         self._test_proc = None
         # Human-facing sink name shown in the system/Steam volume OSD (reads node.name),
         # e.g. "Legion Go EQ". Used both as the label and as the sink's node.name.
@@ -210,15 +213,26 @@ class PipeWireEq:
             self._label,
         )
 
-    def ensure_sink(self, gains, bass=0, loudness=False):
-        """Create/refresh the EQ sink (bands + optional bass enhancer), make it default,
-        and keep the physical sink it feeds pinned at unity (100%). Steam's volume controls
-        the default sink — i.e. ours — so the downstream must stay transparent, or its level
-        becomes a hidden second attenuation the user can't reach. Re-pinning unity every
-        apply is self-healing across resume/reload (no volume snapshot to drift or corrupt).
+    def _pin_downstream(self, downstream, balance):
+        """Hold the physical sink at unity, offset per-channel for L/R balance (far side
+        attenuated, near side at unity). Pin unity first so a non-stereo sink stays
+        transparent when the two-value write fails, rather than a hidden attenuation."""
+        left, right = balance_channels(balance)
+        self._runner(["pactl", "set-sink-volume", downstream, "100%"])
+        if left != right:
+            self._runner(["pactl", "set-sink-volume", downstream, f"{left}%", f"{right}%"])
 
-        Diff-gated: an unchanged (gains, bass) skips the conf rewrite + ~1s restart (just
-        re-asserts default + unity), so a game change with the same sound does no work."""
+    def ensure_sink(self, gains, bass=0, loudness=False, balance=0):
+        """Create/refresh the EQ sink (bands + optional bass enhancer), make it default,
+        and keep the physical sink it feeds pinned at unity (100%), offset for balance.
+        Steam's volume controls the default sink — i.e. ours — so the downstream must stay
+        transparent, or its level becomes a hidden second attenuation the user can't reach.
+        Re-pinning every apply is self-healing across resume/reload (no volume snapshot to
+        drift or corrupt).
+
+        Diff-gated: an unchanged (gains, bass, loudness) skips the conf rewrite + ~1s restart
+        (just re-asserts default + the pin). Balance is outside the gate — it only moves the
+        pin, so it re-applies without a restart."""
         if not self.is_supported():
             return False
         applied = (list(gains), bass, loudness)
@@ -243,14 +257,17 @@ class PipeWireEq:
                     # level (WirePlumber restores it), and the downstream is always unity.
                     vol = self._sink_volume_pct(downstream)
                     if vol:
+                        self._user_vol = vol
                         self._runner(["pactl", "set-sink-volume", self._label, vol])
-            self._runner(["pactl", "set-sink-volume", downstream, "100%"])
+            self._pin_downstream(downstream, balance)
+            if balance:
+                self._pinned.add(downstream)
         self._last_applied = applied
         return True
 
-    def set_gains(self, gains, bass=0, loudness=False):
-        """Apply on release: rewrite the conf + restart."""
-        return self.ensure_sink(gains, bass, loudness)
+    def set_gains(self, gains, bass=0, loudness=False, balance=0):
+        """Apply on release: rewrite the conf + restart (balance just moves the pin)."""
+        return self.ensure_sink(gains, bass, loudness, balance)
 
     def current_route(self):
         try:
@@ -307,16 +324,20 @@ class PipeWireEq:
         if not had_conf and self._orig_default is None:
             return
         downstream = self._orig_default or self._downstream_sink()
-        our_vol = self._sink_volume_pct(self._label)  # the level the user set while EQ was on
+        our_vol = self._sink_volume_pct(self._label) or self._user_vol
+        pinned = self._pinned
         if had_conf:
             try:
                 os.remove(path)
             except OSError:
                 pass
         self._restart()
+        for sink in pinned:  # re-centre any sink a route change left panned
+            self._runner(["pactl", "set-sink-volume", sink, "100%"])
         if downstream:
-            if our_vol:
-                self._runner(["pactl", "set-sink-volume", downstream, our_vol])
+            self._runner(["pactl", "set-sink-volume", downstream, our_vol or "100%"])
             self._runner(["pactl", "set-default-sink", downstream])
         self._orig_default = None
         self._last_applied = None
+        self._user_vol = None
+        self._pinned = set()

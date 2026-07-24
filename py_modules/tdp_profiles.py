@@ -21,6 +21,13 @@ def _norm_mode(mode):
     return mode if mode in _MODES else _DEFAULT_MODE
 
 
+def _int0(v):
+    try:
+        return int(v)
+    except (TypeError, ValueError, OverflowError):
+        return 0
+
+
 class ProfileStore(ScopedProfileStore):
     """Global TDP profile + per-appid overrides. See ScopedProfileStore for the per-game
     scope contract (follow_global).
@@ -173,6 +180,25 @@ class ProfileStore(ScopedProfileStore):
         prof["mode"] = "custom"
         prof["off2"] = max(0, int(off2))
         prof["off3"] = max(0, int(off3))
+        self._save()
+
+    def apply_preset(self, scope, pl1, boost, appid=None):
+        """Apply a power preset: sustained pl1 plus optional boost, in a SINGLE save so a
+        crash between writes can't strand a half-applied preset (pl1 saved, boost not).
+        boost=None (or an unknown mode) leaves the boost mode/margins untouched. Keeps the
+        mode model here rather than leaking mode names into the RPC layer; margins coerced
+        so a malformed payload can't raise. Mirrors set_pl1's fresh-estable seed for a game
+        with no profile yet."""
+        if scope == "game" and appid is not None and str(appid) not in self._data["games"]:
+            prof = self._data["games"][str(appid)] = self._profile_dict(int(pl1))
+        else:
+            prof = self._target(scope, appid)
+            prof["pl1"] = int(pl1)
+        if isinstance(boost, dict) and boost.get("mode") in _MODES:
+            prof["mode"] = boost["mode"]
+            if boost["mode"] == "custom":
+                prof["off2"] = max(0, _int0(boost.get("off2")))
+                prof["off3"] = max(0, _int0(boost.get("off3")))
         self._save()
 
     def set_levels(self, scope, pl1, pl2, pl3, appid=None):
