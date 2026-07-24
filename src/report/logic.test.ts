@@ -32,6 +32,7 @@ describe("canSubmit", () => {
 describe("REPORT_CATEGORIES", () => {
   it("includes the expected ids", () => {
     expect(REPORT_CATEGORIES).toContain("tdp");
+    expect(REPORT_CATEGORIES).toContain("audio");
     expect(REPORT_CATEGORIES).toContain("other");
   });
 });

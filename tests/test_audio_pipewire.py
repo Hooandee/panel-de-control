@@ -1,4 +1,9 @@
-from audio.pipewire import PipeWireEq, choose_downstream, pick_downstream
+from audio.pipewire import (
+    PipeWireEq,
+    _relevant_links,
+    choose_downstream,
+    pick_downstream,
+)
 
 _SINKS = (
     "45\teffect_input.pdc_eq\tPipeWire\ts16le 2ch 48000Hz\tRUNNING\n"
@@ -121,3 +126,29 @@ def test_ensure_sink_boot_reassert_preserves_user_volume(tmp_path):
     assert eq.ensure_sink([0] * 10) is True
     assert fake.volume_sets("X EQ") == []
     assert ["pactl", "set-sink-volume", "alsa_speaker", "100%"] in fake.calls
+
+
+_PW_LINK = """effect_output.pdc_eq:output_FL
+  |-> alsa_loopback_device.alsa_output.pci-0000_c2_00.6.analog-stereo:playback_FL
+alsa_output.pci-0000_c2_00.6.analog-stereo:playback_FL
+  |<- alsa_loopback_stream.alsa_output.pci-0000_c2_00.6.analog-stereo:output_FL
+some_unrelated_node:port
+  |-> another_unrelated:in
+"""
+
+
+def test_relevant_links_keeps_eq_and_hardware_drops_noise():
+    out = _relevant_links(_PW_LINK)
+    assert "effect_output.pdc_eq" in out          # our node
+    assert "alsa_output.pci-0000_c2_00.6" in out   # hardware output
+    assert "loopback" in out                        # the virtual hop it routes through
+    assert "some_unrelated_node" not in out         # noise dropped
+    # the indented continuation of a kept node is preserved
+    assert "|-> alsa_loopback_device" in out
+
+
+def test_relevant_links_empty_and_capped():
+    assert _relevant_links("") == ""
+    assert _relevant_links(None) == ""
+    big = "\n".join("alsa_output.sink%d:port" % i for i in range(5000))
+    assert len(_relevant_links(big, cap=500)) == 500
