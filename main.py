@@ -1907,10 +1907,8 @@ class Plugin:
         return res
 
     def _reassert_tdp_only(self, on_ac=None) -> None:
-        """Lifecycle settle-retry callback: re-assert only the power rails off the loop.
-        The firmware resets ppt across a resume/AC transition and can do so later than the
-        base re-apply; these follow-ups win that race without re-running the full color/HDR/
-        fan/controller re-apply each time."""
+        """Settle-retry callback: re-assert only the power rails off the loop, winning the
+        firmware's post-transition reset without re-running the full re-apply each time."""
         self._offload(lambda: self._reapply_tdp(on_ac))
 
     def _reapply_all(self, on_ac=None) -> None:

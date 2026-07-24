@@ -34,17 +34,15 @@ class LifecycleManager:
     # to its default (an Ally drops to ~12 W on unplug) and a single re-apply mid-
     # transition can be lost, so re-assert once it has settled.
     _AC_SETTLE_RETRIES = (2.0, 4.0)
-    # Same problem on resume: the firmware reverts ppt to its default when it wakes (a
-    # Legion Go 2 comes back at ~30 W) and can reset it later than the base wakeup delay,
-    # so a lone re-apply lands too early and is lost. Re-assert across a window after it.
+    # Resume has the same problem: the firmware reverts ppt to its default on wake and can
+    # do so after the base delay, so a lone re-apply is lost. Re-assert across a window.
     _RESUME_SETTLE_RETRIES = (2.0, 5.0, 9.0)
 
     def __init__(self, apply_cb, root="/", wakeup_delay=4.0, interval=2.0,
                  read_wakeup=None, read_ac=None, reassert_cb=None):
         self._apply = apply_cb
-        # Lighter callback for the settle-retries: only the power rails need re-asserting
-        # once the firmware settles, not the full color/HDR/fan/controller re-apply. Falls
-        # back to the full apply when not provided (keeps the callback optional for tests).
+        # Settle-retries re-assert only the power rails, not the full re-apply; fall back to
+        # the full apply when not given.
         self._reassert = reassert_cb or apply_cb
         self._root = root
         self._wakeup_delay = wakeup_delay
@@ -57,17 +55,18 @@ class LifecycleManager:
         self._pending_light = []  # times for the TDP-only settle-retries
         self._task = None
 
-    def _safe_apply(self, ac):
+    def _safe(self, cb, ac):
         try:
-            self._apply(ac)
+            cb(ac)
         except Exception:  # noqa: BLE001 - one bad apply must not abort check()
             pass
 
-    def _safe_reassert(self, ac):
-        try:
-            self._reassert(ac)
-        except Exception:  # noqa: BLE001 - one bad re-assert must not abort check()
-            pass
+    def _fire_due(self, pending, cb, now):
+        """Fire cb once (with live AC) if any scheduled time is due; return the times left."""
+        if not any(now >= t for t in pending):
+            return pending
+        self._safe(cb, self._read_ac())
+        return [t for t in pending if now < t]
 
     def check(self, now):
         wc = self._read_wakeup()
@@ -76,8 +75,7 @@ class LifecycleManager:
         if self._last_wakeup is None:
             self._last_wakeup, self._last_ac = wc, ac
             return
-        # resume detected → a full re-apply after the base delay (the firmware may have
-        # dropped color/HDR too), then TDP-only settle retries as the rails settle
+        # resume → full re-apply after the base delay, then TDP-only settle retries
         if wc != self._last_wakeup:
             self._last_wakeup = wc
             base = now + self._wakeup_delay
@@ -86,15 +84,11 @@ class LifecycleManager:
         # AC transition → full re-apply now, then TDP-only re-asserts as the firmware settles
         if ac != self._last_ac:
             self._last_ac = ac
-            self._safe_apply(ac)
+            self._safe(self._apply, ac)
             self._pending_light.extend(now + d for d in self._AC_SETTLE_RETRIES)
         # fire scheduled re-applies whose delay has elapsed (re-reading AC live)
-        if any(now >= t for t in self._pending):
-            self._pending = [t for t in self._pending if now < t]
-            self._safe_apply(self._read_ac())
-        if any(now >= t for t in self._pending_light):
-            self._pending_light = [t for t in self._pending_light if now < t]
-            self._safe_reassert(self._read_ac())
+        self._pending = self._fire_due(self._pending, self._apply, now)
+        self._pending_light = self._fire_due(self._pending_light, self._reassert, now)
 
     async def run(self):
         import time

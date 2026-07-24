@@ -223,8 +223,8 @@ class PipeWireEq:
             return False
         applied = (list(gains), bass, loudness)
         unchanged = self._orig_default is not None and applied == self._last_applied
-        # A genuine first-ever enable has no persisted conf yet; a boot/reload re-assert
-        # finds one. Distinguish them BEFORE _write_conf creates the file.
+        # First-ever enable (no conf yet) vs a boot re-assert (conf exists) — check before
+        # _write_conf creates it.
         conf_path = self._conf_path()
         first_ever = not (conf_path and os.path.exists(conf_path))
         if not unchanged and not self._write_conf(gains, bass, loudness):
@@ -238,11 +238,9 @@ class PipeWireEq:
             if first:
                 self._orig_default = downstream
                 if first_ever:
-                    # Enabling for the first time shouldn't change loudness: carry the
-                    # downstream's current level onto our sink (now the volume the user
-                    # controls) before pinning it unity. On a boot re-assert the EQ sink
-                    # already holds the user's level (WirePlumber restores it by node.name)
-                    # — copying the always-unity downstream here would wipe it to 100%.
+                    # Carry the downstream's level onto our sink so enabling doesn't jump
+                    # loudness. Skip on a boot re-assert: the sink already holds the user's
+                    # level (WirePlumber restores it), and the downstream is always unity.
                     vol = self._sink_volume_pct(downstream)
                     if vol:
                         self._runner(["pactl", "set-sink-volume", self._label, vol])
