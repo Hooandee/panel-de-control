@@ -1,10 +1,14 @@
 import { describe, it, expect } from "vitest";
 import {
   applyTone,
+  balanceLabel,
   bassToEnhancer,
+  BALANCE_MAX,
+  BALANCE_MIN,
   BAND_FREQS,
   GAIN_MAX,
   GAIN_MIN,
+  clampBalance,
   clampGain,
   formatHz,
   gainsToCurvePath,
@@ -61,6 +65,20 @@ describe("audio EQ logic", () => {
     expect(toneCeiling("graves", ceilings)).toBe(4); // min of bands 1,2,3 = 4,6,8
     expect(toneCeiling("voces", ceilings)).toBe(6);  // min of bands 5,6,7 = 9,8,6
     expect(toneCeiling("agudos", ceilings)).toBe(4); // min of bands 8,9 = 5,4
+  });
+
+  it("clamps balance to [-100, 100] and rounds", () => {
+    expect(clampBalance(200)).toBe(BALANCE_MAX);
+    expect(clampBalance(-200)).toBe(BALANCE_MIN);
+    expect(clampBalance(0)).toBe(0);
+    expect(clampBalance(33.6)).toBe(34);
+  });
+
+  it("balanceLabel splits into side + magnitude", () => {
+    expect(balanceLabel(0)).toEqual({ side: "center", amount: 0 });
+    expect(balanceLabel(-40)).toEqual({ side: "left", amount: 40 });
+    expect(balanceLabel(25)).toEqual({ side: "right", amount: 25 });
+    expect(balanceLabel(150)).toEqual({ side: "right", amount: 100 });
   });
 
   it("higher gain pulls the curve upward (smaller y)", () => {

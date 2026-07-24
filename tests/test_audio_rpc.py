@@ -20,8 +20,8 @@ class _FakePipeWireEq:
     def current_route(self):
         return self._route
 
-    def set_gains(self, gains, bass=0, loudness=False):
-        self.applied.append((list(gains), bass, loudness))
+    def set_gains(self, gains, bass=0, loudness=False, balance=0):
+        self.applied.append((list(gains), bass, loudness, balance))
         return True
 
     def start_test(self, path):
@@ -155,6 +155,29 @@ def test_loudness_toggle_and_preserved(tmp_path, monkeypatch):
     assert st["loudness"] is True
     st = asyncio.run(p.apply_audio_preset("voices", "global"))  # preset keeps loudness
     assert st["loudness"] is True and st["preset"] == "voices"
+
+
+def test_balance_defaults_centred(tmp_path, monkeypatch):
+    p, fake = _make_plugin(tmp_path, monkeypatch)
+    st = asyncio.run(p.get_audio_state())
+    assert st["balance"] == 0
+
+
+def test_balance_set_clamped_and_preserved(tmp_path, monkeypatch):
+    p, fake = _make_plugin(tmp_path, monkeypatch)
+    st = asyncio.run(p.set_audio_balance(-40, "global"))
+    assert st["balance"] == -40
+    st = asyncio.run(p.set_audio_balance(999, "global"))
+    assert st["balance"] == 100
+    st = asyncio.run(p.apply_audio_preset("voices", "global"))
+    assert st["balance"] == 100 and st["preset"] == "voices"
+
+
+def test_balance_reaches_apply(tmp_path, monkeypatch):
+    p, fake = _make_plugin(tmp_path, monkeypatch)
+    asyncio.run(p.set_audio_enabled(True))
+    asyncio.run(p.set_audio_balance(-30, "global"))
+    assert fake.applied[-1][3] == -30
 
 
 def test_toggle_test_tone(tmp_path, monkeypatch):

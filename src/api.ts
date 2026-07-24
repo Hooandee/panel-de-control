@@ -683,6 +683,7 @@ export interface AudioState {
   gains: number[];
   bass: number;
   loudness: boolean;
+  balance: number;
   test_playing: boolean;
   test_sample: string | null;
   test_samples: string[];
@@ -709,6 +710,8 @@ export const setAudioCurve =
   callable<[gains: number[], bass: number, scope: Scope, appid: string | null], AudioState>("set_audio_curve");
 export const setAudioLoudness =
   callable<[on: boolean, scope: Scope, appid: string | null], AudioState>("set_audio_loudness");
+export const setAudioBalance =
+  callable<[value: number, scope: Scope, appid: string | null], AudioState>("set_audio_balance");
 export const setAudioTest =
   callable<[playing: boolean, sample: string], AudioState>("set_audio_test");
 export const saveAudioProfile = callable<[name: string], AudioState>("save_audio_profile");

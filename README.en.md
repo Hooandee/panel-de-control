@@ -98,8 +98,8 @@ toggle.
 A system equalizer with curated presets and a per-machine correction curve as a starting point,
 three simple controls (bass, voice, treble) and a full 10-band advanced EQ with a fullscreen view.
 Independent curve for speaker and headphones, per game or global. Includes a bass enhancer, volume
-leveling, test samples to hear the effect, and a guard that caps how far you can boost bass and
-treble so the speakers aren't overdriven (can be turned off).
+leveling, left/right balance, test samples to hear the effect, and a guard that caps how far you can
+boost bass and treble so the speakers aren't overdriven (can be turned off).
 
 ### Controllers (Mandos)
 

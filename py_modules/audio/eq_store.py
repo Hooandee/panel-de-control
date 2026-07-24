@@ -1,6 +1,6 @@
 from scoped_store import ScopedProfileStore
 
-from audio.const import ROUTES, clamp_gain, compute_preamp
+from audio.const import ROUTES, clamp_balance, clamp_gain, compute_preamp
 
 
 def _clean_bass(value):
@@ -25,6 +25,7 @@ def _clean_setting(raw):
     return {
         "preset": preset, "gains": gains, "preamp": preamp,
         "bass": _clean_bass(raw.get("bass")), "loudness": bool(raw.get("loudness")),
+        "balance": clamp_balance(raw.get("balance", 0)),
     }
 
 
@@ -43,7 +44,7 @@ class EqStore(ScopedProfileStore):
         s = _clean_setting(self._effective_prof(appid).get(route))
         return {
             "preset": s["preset"], "gains": list(s["gains"]), "preamp": s["preamp"],
-            "bass": s["bass"], "loudness": s["loudness"],
+            "bass": s["bass"], "loudness": s["loudness"], "balance": s["balance"],
         }
 
     def _cur(self, scope, appid, route):
@@ -51,12 +52,13 @@ class EqStore(ScopedProfileStore):
         return _clean_setting(self._target(scope, appid).get(route))
 
     def set_setting(self, scope, route, setting, appid=None):
-        """Apply an EQ curve (preset/gains) to a route, PRESERVING its bass + loudness."""
+        """Apply an EQ curve (preset/gains) to a route, PRESERVING its bass, loudness and
+        balance."""
         if route not in ROUTES:
             return
         cur = self._cur(scope, appid, route)
         new = _clean_setting(setting)
-        new["bass"], new["loudness"] = cur["bass"], cur["loudness"]
+        new["bass"], new["loudness"], new["balance"] = cur["bass"], cur["loudness"], cur["balance"]
         self._target(scope, appid)[route] = new
         self._save()
 
@@ -68,13 +70,14 @@ class EqStore(ScopedProfileStore):
         gains[index] = clamp_gain(gain)
         self._target(scope, appid)[route] = {
             "preset": "custom", "gains": gains, "preamp": compute_preamp(gains),
-            "bass": cur["bass"], "loudness": cur["loudness"],
+            "bass": cur["bass"], "loudness": cur["loudness"], "balance": cur["balance"],
         }
         self._save()
 
     def set_bands(self, scope, route, gains, appid=None):
         """Replace all 10 band gains for a route (drag-commit of the whole curve),
-        preserving bass + loudness. Clamp, pad/truncate to 10, mark custom, recompute preamp."""
+        preserving bass, loudness and balance. Clamp, pad/truncate to 10, mark custom,
+        recompute preamp."""
         if route not in ROUTES:
             return
         clean = [clamp_gain(g) for g in (gains or [])][:10]
@@ -82,7 +85,7 @@ class EqStore(ScopedProfileStore):
         cur = self._cur(scope, appid, route)
         self._target(scope, appid)[route] = {
             "preset": "custom", "gains": clean, "preamp": compute_preamp(clean),
-            "bass": cur["bass"], "loudness": cur["loudness"],
+            "bass": cur["bass"], "loudness": cur["loudness"], "balance": cur["balance"],
         }
         self._save()
 
@@ -101,6 +104,15 @@ class EqStore(ScopedProfileStore):
             return
         cur = self._cur(scope, appid, route)
         cur["loudness"] = bool(on)
+        self._target(scope, appid)[route] = cur
+        self._save()
+
+    def set_balance(self, scope, route, value, appid=None):
+        """Set the L/R balance (-100..100) for a route, preserving the EQ curve."""
+        if route not in ROUTES:
+            return
+        cur = self._cur(scope, appid, route)
+        cur["balance"] = clamp_balance(value)
         self._target(scope, appid)[route] = cur
         self._save()
 
