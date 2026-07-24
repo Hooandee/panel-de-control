@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.31.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.30.1...panel-de-control-v0.31.0) (2026-07-24)
+
+
+### Features
+
+* experimental fan control for the OneXPlayer Apex ([#308](https://github.com/Hooandee/panel-de-control/issues/308)) ([d690409](https://github.com/Hooandee/panel-de-control/commit/d690409dc32dc4331f39b9ae3e5d8328bbf6a4f9))
+
 ## [0.30.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.30.0...panel-de-control-v0.30.1) (2026-07-24)
 
 
