@@ -1,10 +1,10 @@
 import { FC } from "react";
-import { DialogButton, ModalRoot, PanelSectionRow, showModal } from "@decky/ui";
+import { DialogButton, PanelSectionRow, showModal } from "@decky/ui";
 import { LuLightbulb, LuStore } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
-import { FocusRoot } from "./FocusRoot";
+import { ConfirmDialog } from "./ConfirmDialog";
 import type { ColoresCardState } from "../system/colores";
 
 interface Props {
@@ -13,38 +13,6 @@ interface Props {
   onOpen: () => void;
   onOpenStore: () => void;
 }
-
-/** Confirm before downloading + installing software from GitHub. */
-const ColoresInstallModal: FC<{ onConfirm: () => void; closeModal?: () => void }> = ({
-  onConfirm,
-  closeModal,
-}) => {
-  const { t } = useI18n();
-  return (
-    <ModalRoot onCancel={closeModal} onEscKeypress={closeModal}>
-      <FocusRoot style={{ display: "flex", flexDirection: "column", gap: theme.space.md }}>
-        <div style={{ fontSize: 20, fontWeight: 700 }}>{t("system.rgb.confirm.title")}</div>
-        <div style={{ fontSize: theme.font.body, color: theme.color.textPrimary, lineHeight: 1.4 }}>
-          {t("system.rgb.confirm.desc")}
-        </div>
-        <div style={{ display: "flex", gap: theme.space.sm }}>
-          <DialogButton
-            style={{ flex: 1, minWidth: 0 }}
-            onClick={() => {
-              closeModal?.();
-              onConfirm();
-            }}
-          >
-            {t("system.rgb.confirm.ok")}
-          </DialogButton>
-          <DialogButton style={{ flex: 1, minWidth: 0 }} onClick={() => closeModal?.()}>
-            {t("system.rgb.confirm.cancel")}
-          </DialogButton>
-        </div>
-      </FocusRoot>
-    </ModalRoot>
-  );
-};
 
 /**
  * RGB-lighting integration card (Sistema). Bridges to the sibling Colores plugin:
@@ -96,7 +64,17 @@ export const ColoresCard: FC<Props> = ({ state, onInstall, onOpen, onOpenStore }
         {state === "install" && (
           <DialogButton
             style={btn}
-            onClick={() => showModal(<ColoresInstallModal onConfirm={onInstall} />)}
+            onClick={() =>
+              showModal(
+                <ConfirmDialog
+                  title={t("system.rgb.confirm.title")}
+                  desc={t("system.rgb.confirm.desc")}
+                  confirmLabel={t("system.rgb.confirm.ok")}
+                  cancelLabel={t("system.rgb.confirm.cancel")}
+                  onConfirm={onInstall}
+                />,
+              )
+            }
           >
             {t("system.rgb.install")}
           </DialogButton>
