@@ -1,4 +1,5 @@
 import { setCurrentGame } from "../api";
+import { shouldReportAppid } from "./gameReport";
 import { readRunningGame } from "./runningGame";
 
 /**
@@ -41,8 +42,9 @@ export function startGameWatcher(): () => void {
   let eventFallbackTimer: ReturnType<typeof setInterval> | null = null;
   let lastAppid: string | null = null;
   // The appid currently being sent to the backend (in-flight), so overlapping
-  // ticks/events don't fire duplicate RPCs for the same target.
-  let inFlight: string | null = null;
+  // ticks/events don't fire duplicate RPCs for the same target. `undefined` = idle;
+  // `null` is a real target ("no game"), so it must not be the idle value.
+  let inFlight: string | null | undefined = undefined;
   let sawRealAppid = false; // have we ever SUCCESSFULLY reported a non-null appid?
   let startupTicks = 0;
 
@@ -58,7 +60,7 @@ export function startGameWatcher(): () => void {
     const next = readRunningGame();
     const appid = next ? next.appid : null;
     // Nothing to do if it's already committed or the same request is in flight.
-    if (appid === lastAppid || appid === inFlight) return;
+    if (!shouldReportAppid(appid, lastAppid, inFlight)) return;
     inFlight = appid;
     try {
       Promise.resolve(setCurrentGame(appid))
@@ -66,7 +68,7 @@ export function startGameWatcher(): () => void {
           if (!alive) return;
           // Commit ONLY on success, so a failed report retries next tick.
           lastAppid = appid;
-          inFlight = null;
+          inFlight = undefined;
           if (appid !== null) {
             sawRealAppid = true;
             stopStartupPoll(); // got a real game → startup retries no longer needed
@@ -74,11 +76,11 @@ export function startGameWatcher(): () => void {
         })
         .catch(() => {
           // Backend not ready / RPC failed → do NOT commit; allow a retry.
-          if (inFlight === appid) inFlight = null;
+          if (inFlight === appid) inFlight = undefined;
         });
     } catch {
       // setCurrentGame threw synchronously (API missing) → allow a retry.
-      if (inFlight === appid) inFlight = null;
+      if (inFlight === appid) inFlight = undefined;
     }
   };
 
