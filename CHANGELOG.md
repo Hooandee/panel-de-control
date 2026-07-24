@@ -3,9 +3,10 @@
 ## [0.29.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.29.0...panel-de-control-v0.29.1) (2026-07-24)
 
 
-### Bug Fixes
+### Bug Fixes / Correcciones
 
-* Legion Go 2 volume reset to 100% and TDP not persisting on boot ([#291](https://github.com/Hooandee/panel-de-control/issues/291)) ([33e8a65](https://github.com/Hooandee/panel-de-control/commit/33e8a65da6101c6a8f06f90beb8d1c9ad0c5219b))
+* Fix the sound volume jumping to 100% every time the device boots, and re-apply your power (TDP) setting after waking from sleep. ([#291](https://github.com/Hooandee/panel-de-control/issues/291)) ([33e8a65](https://github.com/Hooandee/panel-de-control/commit/33e8a65da6101c6a8f06f90beb8d1c9ad0c5219b))
+* **ES:** Corrige que el volumen del sonido saltara al 100% en cada arranque, y reaplica tu ajuste de potencia (TDP) al despertar de la suspensión. ([#291](https://github.com/Hooandee/panel-de-control/issues/291)) ([33e8a65](https://github.com/Hooandee/panel-de-control/commit/33e8a65da6101c6a8f06f90beb8d1c9ad0c5219b))
 
 ## [0.29.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.28.1...panel-de-control-v0.29.0) (2026-07-24)
 
