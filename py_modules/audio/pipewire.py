@@ -70,6 +70,22 @@ def choose_downstream(default_sink, short_sinks_text, our_name):
     return pick_downstream(short_sinks_text, our_name)
 
 
+def _relevant_links(pw_link_text, *, cap=2500):
+    """Filter `pw-link -l` to the lines that reveal the EQ routing — our node, hardware
+    outputs and loopbacks — keeping each matched node line with its indented `|->`/`|<-`
+    continuation. Capped so the report bundle stays small."""
+    if not pw_link_text:
+        return ""
+    keep = ("pdc_eq", "alsa_output", "bluez_output", "loopback")
+    out, keeping = [], False
+    for line in pw_link_text.splitlines():
+        if line[:1] not in (" ", "\t"):  # a node line (not an indented peer)
+            keeping = any(k in line.lower() for k in keep)
+        if keeping:
+            out.append(line)
+    return "\n".join(out)[:cap]
+
+
 def _find_session():
     """The logged-in user's PipeWire session: (uid, runtime_dir, user) from the pipewire
     socket under /run/user/*, or None when no session is present."""
@@ -302,6 +318,13 @@ class PipeWireEq:
                 "route": self.current_route(),
                 "eq_volume": self._sink_volume_pct(self._label),
                 "downstream_volume": self._sink_volume_pct(downstream) if downstream else None,
+                # Where the EQ node's output actually routes (does it reach a hardware
+                # output, or a virtual/loopback sink that swallows it?). This is the
+                # signal that tells a "no sound with the EQ on" report apart: node graph
+                # + whether the filter-chain loaded. Filtered to the relevant nodes and
+                # capped so the bundle stays small.
+                "links": _relevant_links(self._runner(["pw-link", "-l"])),
+                "modules": self._runner(["pactl", "list", "short", "modules"]) or "",
             })
         except (OSError, subprocess.SubprocessError):
             pass

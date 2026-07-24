@@ -9,6 +9,7 @@ export const REPORT_CATEGORIES = [
   "controllers",
   "battery",
   "system",
+  "audio",
   "launch",
   "other",
 ] as const;
