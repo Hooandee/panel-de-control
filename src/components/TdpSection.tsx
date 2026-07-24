@@ -66,8 +66,6 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
   // a charger-created preset isn't clipped when edited on battery.
   const onEditPresets = useCallback(() => {
     if (!tdp) return;
-    const off2Max = Math.max(1, (tdp.level_limits.pl2?.max ?? tdp.limits.max_ac) - tdp.limits.min);
-    const off3Max = Math.max(1, (tdp.level_limits.pl3?.max ?? tdp.limits.max_ac) - tdp.limits.min);
     openPowerPresetsModal({
       builtinWatts: tdp.presets,
       onAc: tdp.on_ac,
@@ -75,8 +73,10 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
       min: tdp.limits.min,
       max: tdp.limits.max_ac,
       supportsAdvanced: tdp.supports_advanced,
-      off2Max,
-      off3Max,
+      // Absolute rail ceilings; the editor bounds each margin against the preset's own PL1
+      // so a rail can never exceed its firmware max.
+      pl2Max: tdp.level_limits.pl2?.max ?? tdp.limits.max_ac,
+      pl3Max: tdp.level_limits.pl3?.max ?? tdp.limits.max_ac,
       onClose: refreshPresets,
     });
   }, [tdp, scope, refreshPresets]);

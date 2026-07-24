@@ -26,8 +26,8 @@ interface Props {
   min: number;
   max: number; // charger ceiling: the real cap for a stored preset
   supportsAdvanced: boolean;
-  off2Max: number;
-  off3Max: number;
+  pl2Max: number; // firmware SPPT rail ceiling
+  pl3Max: number; // firmware FPPT rail ceiling
   onClose?: () => void; // refresh the chip row when the manager closes
   closeModal?: () => void;
 }
@@ -42,15 +42,21 @@ const BOOST_MODES: BoostMode[] = ["estable", "auto", "custom"];
  *  (reveals the margins). Only built-ins leave the live boost untouched. */
 const BoostEditor: FC<{
   boost: PowerPresetBoost | null;
-  off2Max: number;
-  off3Max: number;
+  watts: number; // the preset's PL1 — the base the margins stack on
+  pl2Max: number;
+  pl3Max: number;
   onPickMode: (boost: PowerPresetBoost) => void;
   onOffsets: (boost: PowerPresetBoost) => void;
-}> = ({ boost, off2Max, off3Max, onPickMode, onOffsets }) => {
+}> = ({ boost, watts, pl2Max, pl3Max, onPickMode, onOffsets }) => {
   const { t } = useI18n();
   const active = boost?.mode ?? "estable";
-  const off2 = boost?.off2 ?? 0;
-  const off3 = boost?.off3 ?? 0;
+  // Bound each margin so the resulting rail can't exceed its firmware max: SPPT = PL1+off2
+  // ≤ pl2Max, FPPT = SPPT+off3 ≤ pl3Max. Same rule as the advanced boost editor — never
+  // offer a rail the hardware won't hold.
+  const off2Max = Math.max(1, pl2Max - watts);
+  const off2 = Math.min(boost?.off2 ?? 0, off2Max);
+  const off3Max = Math.max(1, pl3Max - (watts + off2));
+  const off3 = Math.min(boost?.off3 ?? 0, off3Max);
   // "Sin boost" IS estable (flat, no headroom over PL1) — that's what "no boost" means.
   const label = (m: BoostMode) => (m === "estable" ? t("tdp.presets.boost.none") : t(`tdp.boost.mode.${m}`));
   return (
@@ -71,11 +77,17 @@ const BoostEditor: FC<{
       {active === "custom" && (
         <>
           <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, marginTop: theme.space.xs }}>
-            {t("tdp.level.slow")} · +{off2} W
+            {t("tdp.level.slow")} · +{off2} W → {watts + off2} W
           </div>
-          <ContainedSlider value={off2} min={0} max={off2Max} step={1} onChange={(v) => onOffsets({ mode: "custom", off2: v, off3 })} />
+          <ContainedSlider
+            value={off2}
+            min={0}
+            max={off2Max}
+            step={1}
+            onChange={(v) => onOffsets({ mode: "custom", off2: v, off3: Math.min(off3, Math.max(0, pl3Max - (watts + v))) })}
+          />
           <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
-            {t("tdp.level.fast")} · +{off3} W
+            {t("tdp.level.fast")} · +{off3} W → {watts + off2 + off3} W
           </div>
           <ContainedSlider value={off3} min={0} max={off3Max} step={1} onChange={(v) => onOffsets({ mode: "custom", off2, off3: v })} />
         </>
@@ -84,7 +96,7 @@ const BoostEditor: FC<{
   );
 };
 
-const Body: FC<Props> = ({ builtinWatts, onAc, currentWatts, min, max, supportsAdvanced, off2Max, off3Max, onClose, closeModal }) => {
+const Body: FC<Props> = ({ builtinWatts, onAc, currentWatts, min, max, supportsAdvanced, pl2Max, pl3Max, onClose, closeModal }) => {
   const { t } = useI18n();
   const [state, setState] = useState<PowerPresetState | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
@@ -228,8 +240,9 @@ const Body: FC<Props> = ({ builtinWatts, onAc, currentWatts, min, max, supportsA
                   {supportsAdvanced && (
                     <BoostEditor
                       boost={d.boost}
-                      off2Max={off2Max}
-                      off3Max={off3Max}
+                      watts={d.watts}
+                      pl2Max={pl2Max}
+                      pl3Max={pl3Max}
                       onPickMode={(b) => commitNow(it.id, { ...d, boost: b })}
                       onOffsets={(b) => commitDebounced(it.id, { ...d, boost: b })}
                     />
