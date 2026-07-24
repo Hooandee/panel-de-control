@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.30.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.30.0...panel-de-control-v0.30.1) (2026-07-24)
+
+
+### Bug Fixes
+
+* keep the bundled power binary executable after a self-update ([#305](https://github.com/Hooandee/panel-de-control/issues/305)) ([6d20d68](https://github.com/Hooandee/panel-de-control/commit/6d20d686ef5144fe3839303a3ae445cf7a81fe40))
+
 ## [0.30.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.29.3...panel-de-control-v0.30.0) (2026-07-24)
 
 
