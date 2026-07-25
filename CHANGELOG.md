@@ -3,9 +3,10 @@
 ## [0.31.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.31.0...panel-de-control-v0.31.1) (2026-07-25)
 
 
-### Bug Fixes
+### Bug Fixes / Correcciones
 
-* keep TDP authority reconciled ([#319](https://github.com/Hooandee/panel-de-control/issues/319)) ([62e1991](https://github.com/Hooandee/panel-de-control/commit/62e19918cddd0de2e6525f9bf58ae651b6fa1201))
+* Keep the configured TDP in effect while Panel de Control's power control is enabled, safely recovering from firmware or SteamOS changes and preserving the requested value when the hardware temporarily accepts a lower limit. The interface and problem reports now also distinguish the requested, safe and applied values. ([#319](https://github.com/Hooandee/panel-de-control/issues/319)) ([62e1991](https://github.com/Hooandee/panel-de-control/commit/62e19918cddd0de2e6525f9bf58ae651b6fa1201))
+* **ES:** Mantiene activo el TDP configurado mientras el control de potencia de Panel de Control está habilitado, recuperándolo de forma segura si el firmware o SteamOS lo modifica y conservando el valor solicitado cuando el hardware solo admite temporalmente un límite inferior. La interfaz y los reportes de problemas ahora también distinguen entre el valor solicitado, el seguro y el aplicado. ([#319](https://github.com/Hooandee/panel-de-control/issues/319)) ([62e1991](https://github.com/Hooandee/panel-de-control/commit/62e19918cddd0de2e6525f9bf58ae651b6fa1201))
 
 ## [0.31.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.30.1...panel-de-control-v0.31.0) (2026-07-24)
 
