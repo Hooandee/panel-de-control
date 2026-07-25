@@ -110,7 +110,11 @@ def test_conflict_reports_hhd_managing(Plugin, fake_hhd):
     p._controller_backend.manager = main_mod.controller_detect.HHD
     fake_hhd.set(True)
     out = asyncio.run(p.get_tdp_conflict())
-    assert out == {"hhd_present": True, "hhd_managing": True}
+    assert out == {
+        "hhd_present": True,
+        "hhd_managing": True,
+        "powerstation_active": False,
+    }
 
 
 def test_conflict_no_hhd_present(Plugin, fake_hhd):
@@ -120,6 +124,16 @@ def test_conflict_no_hhd_present(Plugin, fake_hhd):
     out = asyncio.run(p.get_tdp_conflict())
     assert out["hhd_present"] is False
     assert out["hhd_managing"] is False
+
+
+def test_conflict_reports_active_powerstation_tdp_interface(Plugin):
+    p = Plugin()
+    p._init()
+    p._powerstation_detector.tdp_active = lambda: True
+
+    out = asyncio.run(p.get_tdp_conflict())
+
+    assert out["powerstation_active"] is True
 
 
 # ---------------------------------------------------------------------------

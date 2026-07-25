@@ -98,18 +98,26 @@ export const PotenciaProviderMount: FC<{ children: ReactNode }> = ({ children })
     () => setModuleDisabled("power", false).then(() => refresh()),
     [refresh],
   );
+  const onDisablePdcTdp = useCallback(
+    () => setModuleDisabled("power", true).then(() => refresh()),
+    [refresh],
+  );
 
   const shownTakeover = useRef(false);
   const conflictRef = useRef(conflict);
   conflictRef.current = conflict;
   useEffect(() => {
     if (!tdp || shownTakeover.current) return;
-    if (conflict.conflict && !tdp.seen_tdp_conflict_takeover) {
+    if (
+      conflict.conflict &&
+      conflict.takeoverAvailable &&
+      !tdp.seen_tdp_conflict_takeover
+    ) {
       shownTakeover.current = true;
       openTdpConflictModal(() => void conflictRef.current.takeAll());
       setSeenTdpConflictTakeover(true).then(() => refresh()).catch(() => {});
     }
-  }, [conflict.conflict, tdp, refresh]);
+  }, [conflict.conflict, conflict.takeoverAvailable, tdp, refresh]);
 
   return (
     <PotenciaProvider value={{ ...tdpCtl, monitorOnly: conflict.monitorOnly, autoTdpEnabled, onReactivate }}>
@@ -119,6 +127,7 @@ export const PotenciaProviderMount: FC<{ children: ReactNode }> = ({ children })
             rivals={conflict.rivals}
             onDisableSdtdp={() => void conflict.disableSdtdp()}
             onTakeHhd={() => void conflict.takeHhd()}
+            onDisablePdcTdp={() => void onDisablePdcTdp()}
           />
         </PanelSectionRow>
       )}

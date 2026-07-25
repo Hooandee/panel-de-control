@@ -8,6 +8,7 @@ import {
   REPORT_CATEGORIES,
   ReportCategory,
   canSubmit,
+  displayReportContext,
   toggleCategory,
 } from "../report/logic";
 import { FocusRoot } from "./FocusRoot";
@@ -74,11 +75,16 @@ const ReportBody: FC<{ closeModal?: () => void }> = ({ closeModal }) => {
 
   const submit = async () => {
     setPhase("sending");
-    // Launch reports carry a frontend-only snapshot (the running game's launch
-    // string + Proton caps) the backend can't read. Best-effort; never blocks send.
-    const context = selected.includes("launch")
+    // Collect category-specific signals that exist only in the frontend.
+    const launchContext = selected.includes("launch")
       ? await launchReportContext().catch(() => ({}))
       : {};
+    const steamDisplay =
+      typeof SteamClient === "undefined" ? undefined : SteamClient?.System?.Display;
+    const context = {
+      ...launchContext,
+      ...displayReportContext(selected, steamDisplay),
+    };
     submitReport(selected, text, context)
       .then((r) => {
         setResult(r);

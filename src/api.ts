@@ -263,10 +263,14 @@ export const setAutoTdp = callable<[enabled: boolean, scope: TdpScope, appid: st
 export const setUiActive = callable<[enabled: boolean], boolean>("set_ui_active");
 
 // ---- TDP control / conflict take-over -------------------------------------
-// HHD conflict detection lives in the backend (it reads the REST daemon); SDTDP is
-// detected on the frontend via Decky's plugin list (see tdp/deckyPlugins.ts).
+// System-daemon conflicts live in the backend; SDTDP is detected on the frontend
+// via Decky's plugin list (see tdp/deckyPlugins.ts).
 export const getTdpConflict =
-  callable<[], { hhd_present: boolean; hhd_managing: boolean }>("get_tdp_conflict");
+  callable<[], {
+    hhd_present: boolean;
+    hhd_managing: boolean;
+    powerstation_active: boolean;
+  }>("get_tdp_conflict");
 // Hand HHD's TDP module over to us (reversible; saves its previous value).
 export const takeTdpControl =
   callable<[], { ok: boolean; hhd_managing: boolean }>("take_tdp_control");
