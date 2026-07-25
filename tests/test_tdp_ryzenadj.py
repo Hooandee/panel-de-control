@@ -1,4 +1,5 @@
 import os
+from types import SimpleNamespace
 
 from tdp import ryzenadj
 from tdp.ryzenadj import RyzenadjBackend
@@ -149,6 +150,251 @@ class StickyRun:
     @property
     def write_count(self):
         return sum(1 for c in self.calls if "--stapm-limit" in c[0])
+
+
+class ScriptedRun:
+    def __init__(
+        self,
+        *,
+        write_rcs,
+        infos,
+        info_rcs=None,
+        write_stdout="",
+        write_stderr="",
+    ):
+        self.calls = []
+        self._write_rcs = list(write_rcs)
+        self._infos = list(infos)
+        self._info_rcs = list(info_rcs or [0] * len(self._infos))
+        self._write_stdout = write_stdout
+        self._write_stderr = write_stderr
+
+    def __call__(self, argv, **kwargs):
+        self.calls.append((argv, kwargs))
+        if "-i" in argv or "--info" in argv:
+            return SimpleNamespace(
+                returncode=self._info_rcs.pop(0),
+                stdout=self._infos.pop(0),
+                stderr="",
+            )
+        return SimpleNamespace(
+            returncode=self._write_rcs.pop(0),
+            stdout=self._write_stdout,
+            stderr=self._write_stderr,
+        )
+
+    @property
+    def writes(self):
+        return [call[0] for call in self.calls if "--stapm-limit" in call[0]]
+
+
+def _stapm(watts):
+    return f"| STAPM LIMIT | {watts}.000 | stapm-limit |\n"
+
+
+def _unreadable_info():
+    return "| Name | Value | Parameter |\n| PPT FAST | 20.000 | fast-limit |\n"
+
+
+def test_non_gpd_preserves_nonzero_exit_semantics():
+    fake = FakeRun(info=_unreadable_info(), rc=1)
+    backend = RyzenadjBackend(
+        FALLBACK,
+        resolve=lambda: "/usr/bin/ryzenadj",
+        runner=fake,
+    )
+
+    result = backend.set_tdp(20, ac=True)
+
+    assert result.ok is True
+    assert result.applied_w is None
+    assert "readback unavailable" in result.detail
+    assert sum(1 for argv, _kwargs in fake.calls if "--stapm-limit" in argv) == 2
+
+
+def test_gpd_primary_success_never_uses_power_only():
+    fake = ScriptedRun(write_rcs=[0], infos=[_stapm(20)])
+    backend = RyzenadjBackend(
+        FALLBACK,
+        resolve=lambda: "/usr/bin/ryzenadj",
+        runner=fake,
+        power_only_retry=True,
+    )
+
+    result = backend.set_tdp(20, ac=True)
+
+    assert result.ok is True and result.applied_w == 20
+    assert len(fake.writes) == 1
+    assert "--tctl-temp" in fake.writes[0]
+
+
+def test_gpd_primary_zero_with_no_readback_keeps_historical_reassert():
+    fake = ScriptedRun(
+        write_rcs=[0, 0],
+        infos=[_unreadable_info(), _unreadable_info()],
+    )
+    backend = RyzenadjBackend(
+        FALLBACK,
+        resolve=lambda: "/usr/bin/ryzenadj",
+        runner=fake,
+        power_only_retry=True,
+    )
+
+    result = backend.set_tdp(20, ac=True)
+
+    assert result.ok is True and result.applied_w is None
+    assert len(fake.writes) == 2
+    assert all("--tctl-temp" in write for write in fake.writes)
+    assert "readback unavailable" in result.detail
+
+
+def test_gpd_primary_nonzero_with_confirmed_readback_succeeds_without_retry():
+    fake = ScriptedRun(write_rcs=[1], infos=[_stapm(20)])
+    backend = RyzenadjBackend(
+        FALLBACK,
+        resolve=lambda: "/usr/bin/ryzenadj",
+        runner=fake,
+        power_only_retry=True,
+    )
+
+    result = backend.set_tdp(20, ac=True)
+
+    assert result.ok is True and result.applied_w == 20
+    assert len(fake.writes) == 1
+    assert "variant=primary" in result.detail
+    assert "primary_exit=1" in result.detail
+    assert "readback=confirmed" in result.detail
+
+
+def test_gpd_retries_power_only_after_primary_failure():
+    fake = ScriptedRun(
+        write_rcs=[1, 0],
+        infos=[_unreadable_info(), _stapm(20)],
+    )
+    backend = RyzenadjBackend(
+        FALLBACK,
+        resolve=lambda: "/usr/bin/ryzenadj",
+        runner=fake,
+        power_only_retry=True,
+    )
+
+    result = backend.set_tdp(20, ac=True)
+
+    assert result.ok is True and result.applied_w == 20
+    assert len(fake.writes) == 2
+    assert "--tctl-temp" in fake.writes[0]
+    assert fake.writes[1] == [
+        "/usr/bin/ryzenadj",
+        "--stapm-limit", "20000",
+        "--fast-limit", "20000",
+        "--slow-limit", "20000",
+    ]
+    assert "variant=power-only" in result.detail
+
+
+def test_gpd_nonzero_info_exit_cannot_confirm_primary_write():
+    fake = ScriptedRun(
+        write_rcs=[1, 0],
+        infos=[_stapm(20), _stapm(20)],
+        info_rcs=[1, 0],
+    )
+    backend = RyzenadjBackend(
+        FALLBACK,
+        resolve=lambda: "/usr/bin/ryzenadj",
+        runner=fake,
+        power_only_retry=True,
+    )
+
+    result = backend.set_tdp(20, ac=True)
+
+    assert result.ok is True and result.applied_w == 20
+    assert len(fake.writes) == 2
+    assert "variant=power-only" in result.detail
+
+
+def test_gpd_power_only_success_without_readback_is_unverifiable():
+    fake = ScriptedRun(
+        write_rcs=[1, 0],
+        infos=[_unreadable_info(), _unreadable_info()],
+    )
+    backend = RyzenadjBackend(
+        FALLBACK,
+        resolve=lambda: "/usr/bin/ryzenadj",
+        runner=fake,
+        power_only_retry=True,
+    )
+
+    result = backend.set_tdp(20, ac=True)
+
+    assert result.ok is True
+    assert result.applied_w is None
+    assert len(fake.writes) == 2
+    assert "variant=power-only" in result.detail
+    assert "readback=unavailable" in result.detail
+
+
+def test_gpd_power_only_nonzero_is_rejected_without_raw_output():
+    fake = ScriptedRun(
+        write_rcs=[1, 2],
+        infos=[_unreadable_info(), _unreadable_info()],
+        write_stdout="/home/private-user/device-serial",
+        write_stderr="hostname=private-host",
+    )
+    backend = RyzenadjBackend(
+        FALLBACK,
+        resolve=lambda: "/usr/bin/ryzenadj",
+        runner=fake,
+        power_only_retry=True,
+    )
+
+    result = backend.set_tdp(20, ac=True)
+
+    assert result.ok is False
+    assert result.applied_w is None
+    assert "primary_exit=1" in result.detail
+    assert "exit=2" in result.detail
+    assert "private-user" not in result.detail
+    assert "device-serial" not in result.detail
+    assert "private-host" not in result.detail
+
+
+def test_gpd_power_only_nonzero_rejects_even_if_readback_matches():
+    fake = ScriptedRun(
+        write_rcs=[1, 2],
+        infos=[_unreadable_info(), _stapm(20)],
+    )
+    backend = RyzenadjBackend(
+        FALLBACK,
+        resolve=lambda: "/usr/bin/ryzenadj",
+        runner=fake,
+        power_only_retry=True,
+    )
+
+    result = backend.set_tdp(20, ac=True)
+
+    assert result.ok is False
+    assert result.applied_w == 20
+    assert "exit=2" in result.detail
+    assert "readback=confirmed" in result.detail
+
+
+def test_gpd_power_only_mismatch_reports_real_value():
+    fake = ScriptedRun(
+        write_rcs=[1, 0],
+        infos=[_stapm(10), _stapm(12)],
+    )
+    backend = RyzenadjBackend(
+        FALLBACK,
+        resolve=lambda: "/usr/bin/ryzenadj",
+        runner=fake,
+        power_only_retry=True,
+    )
+
+    result = backend.set_tdp(20, ac=True)
+
+    assert result.ok is False
+    assert result.applied_w == 12
+    assert "readback=mismatch" in result.detail
 
 
 def test_set_tdp_not_ok_when_write_clamped_to_other_value():

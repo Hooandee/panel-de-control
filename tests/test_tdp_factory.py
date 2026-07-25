@@ -30,6 +30,14 @@ def _mk_hwmon(root):
         f.write("15000000")
 
 
+def _mk_dmi(root, vendor, product):
+    base = os.path.join(root, "sys/class/dmi/id")
+    os.makedirs(base, exist_ok=True)
+    for name, value in (("sys_vendor", vendor), ("product_name", product)):
+        with open(os.path.join(base, name), "w") as f:
+            f.write(value)
+
+
 _NO_RYZENADJ = lambda: None  # noqa: E731
 
 
@@ -88,6 +96,38 @@ def test_generic_amd_uses_ryzenadj_when_present(tmp_path):
         "msi",
         "ryzenadj",
     ]
+
+
+def test_only_exact_gpd_enables_ryzenadj_power_only_retry(tmp_path):
+    root = str(tmp_path)
+    _mk_dmi(root, "GPD", "G1617-02")
+
+    exact = select_backend(
+        _p("gpd_win_mini_2025"),
+        root=root,
+        ryzenadj_resolve=lambda: "/usr/bin/ryzenadj",
+    )
+    other = select_backend(
+        _p("onexplayer_f1pro"),
+        root=root,
+        ryzenadj_resolve=lambda: "/usr/bin/ryzenadj",
+    )
+
+    assert exact._power_only_retry is True
+    assert other._power_only_retry is False
+
+
+def test_gpd_profile_with_different_dmi_keeps_default_ryzenadj(tmp_path):
+    root = str(tmp_path)
+    _mk_dmi(root, "GPD", "G1617-02-L")
+
+    backend = select_backend(
+        _p("gpd_win_mini_2025"),
+        root=root,
+        ryzenadj_resolve=lambda: "/usr/bin/ryzenadj",
+    )
+
+    assert backend._power_only_retry is False
 
 
 def test_backend_probe_failure_is_recorded_and_falls_through(tmp_path, monkeypatch):

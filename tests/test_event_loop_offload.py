@@ -114,6 +114,36 @@ def test_offload_call_dispatches_through_executor(tmp_path, monkeypatch):
     assert rec.count == 1  # went THROUGH the executor, not the inline branch
 
 
+def test_gpd_fan_recovery_dispatches_through_executor(tmp_path, monkeypatch):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    rec = _RecordingExecutor()
+    calls = []
+    p._device = types.SimpleNamespace(key="gpd_win_mini_2025")
+    p._fan_ctrl = types.SimpleNamespace(supported=False)
+    p._apply_executor = rec
+    p._recover_gpd_fan_sync = lambda: calls.append("recover")
+
+    asyncio.run(p._recover_gpd_fan())
+
+    assert calls == ["recover"]
+    assert rec.count == 1
+
+
+def test_non_gpd_device_never_dispatches_fan_recovery(tmp_path, monkeypatch):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    rec = _RecordingExecutor()
+    calls = []
+    p._device = types.SimpleNamespace(key="generic")
+    p._fan_ctrl = types.SimpleNamespace(supported=False)
+    p._apply_executor = rec
+    p._recover_gpd_fan_sync = lambda: calls.append("recover")
+
+    asyncio.run(p._recover_gpd_fan())
+
+    assert calls == []
+    assert rec.count == 0
+
+
 def test_offload_runs_off_the_loop_thread(tmp_path, monkeypatch):
     p, _ = _make_plugin(tmp_path, monkeypatch)
     ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)

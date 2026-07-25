@@ -1,3 +1,4 @@
+from device_quirks import is_gpd_win_mini_2025
 from tdp.alib import AlibBackend
 from tdp.backend import NullBackend, TDPBackend
 from tdp.firmware_attr import FirmwareAttrBackend
@@ -61,9 +62,13 @@ def select_backend(device, root="/", ryzenadj_resolve=None) -> TDPBackend:
     fallback = TdpLimits.from_profile(device)
 
     def ryzenadj():
-        if ryzenadj_resolve is not None:
-            return RyzenadjBackend(fallback, resolve=ryzenadj_resolve, write_max=device.cooler_max)
-        return RyzenadjBackend(fallback, write_max=device.cooler_max)
+        kwargs = {"resolve": ryzenadj_resolve} if ryzenadj_resolve is not None else {}
+        return RyzenadjBackend(
+            fallback,
+            write_max=device.cooler_max,
+            power_only_retry=is_gpd_win_mini_2025(device, root),
+            **kwargs,
+        )
 
     trace = []
     for make in _candidates(device, fallback, root, ryzenadj):

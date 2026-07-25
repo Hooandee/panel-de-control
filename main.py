@@ -35,6 +35,7 @@ from fans import control as fan_control
 from fans import legion_ec
 from fans import oxp_ec
 from fans import expose as fan_expose
+from fans import gpd_recovery
 from fans import presets as fan_presets
 from fans import suggest as fan_suggest
 from fan_curves import FanCurveStore
@@ -1023,6 +1024,49 @@ class Plugin:
             return None
 
     # ---- Fan-curve control (global + per-game, persisted) -------------------
+    def _recover_gpd_fan_sync(self):
+        if getattr(self, "_gpd_fan_recovery_done", False):
+            return None
+        self._gpd_fan_recovery_done = True
+        if bool(getattr(self._fan_ctrl, "supported", False)):
+            return None
+
+        outcome = gpd_recovery.ensure_gpd_fan(self._device)
+        if outcome["eligible"] and outcome["abi_after"]:
+            try:
+                self._fan_ctrl = fan_control.select_fan_backend(
+                    self._device,
+                    temp_fn=self._driving_temp,
+                    experimental=bool(
+                        self._settings.get("fan_experimental", False)
+                    ),
+                )
+            except Exception as exc:  # noqa: BLE001 — retain firmware-auto/null
+                outcome["error"] = type(exc).__name__
+
+        return {
+            **outcome,
+            "backend": getattr(self._fan_ctrl, "name", "null"),
+            "supported": bool(getattr(self._fan_ctrl, "supported", False)),
+        }
+
+    async def _recover_gpd_fan(self) -> None:
+        if (
+            getattr(self._fan_ctrl, "supported", False)
+            or getattr(self._device, "key", None) != "gpd_win_mini_2025"
+        ):
+            return
+        try:
+            outcome = await self._offload_call(self._recover_gpd_fan_sync)
+        except Exception as exc:  # noqa: BLE001 — startup must continue
+            decky.logger.warning("GPD fan recovery error=%s", type(exc).__name__)
+            return
+        if outcome is None or not outcome["eligible"]:
+            return
+        encoded = json.dumps(outcome, sort_keys=True, separators=(",", ":"))
+        log = decky.logger.info if outcome["supported"] else decky.logger.warning
+        log("GPD fan recovery %s", encoded)
+
     def _reapply_fans(self) -> None:
         """Push the effective fan curve off the event loop (Steam Deck's software-loop
         backend spawns a blocking systemctl). `done` (re)starts the curve loop on the
@@ -3707,6 +3751,7 @@ class Plugin:
         # expose_all_fans=Y — enable it (idempotent, no-op elsewhere, never raises).
         if fan_expose.ensure_fan_sensor():
             decky.logger.info("Legion fan sensor exposed (lenovo_wmi_other)")
+        await self._recover_gpd_fan()
         try:
             self._reapply_all()
             self._lifecycle.start()

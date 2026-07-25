@@ -10,13 +10,14 @@ Two scenarios are tested:
 """
 import asyncio
 import importlib
+import json
 import os
 import sys
 import types
 
 import pytest
 
-from fans.control import AsusFanCurveBackend
+from fans.control import AsusFanCurveBackend, NullFanBackend
 
 
 # ---------------------------------------------------------------------------
@@ -103,6 +104,150 @@ def _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=None):
         monkeypatch.setattr(main.Plugin, "_init", patched_init)
 
     return main.Plugin
+
+
+def _recovered_gpd_fan():
+    return types.SimpleNamespace(supported=True, name="generic-pwm")
+
+
+_COMPLETE_GPD_OUTCOME = {
+    "eligible": True,
+    "abi_before": False,
+    "attempted": True,
+    "exit": 0,
+    "error": None,
+    "abi_after": True,
+}
+
+
+def test_recovery_reselects_existing_fan_factory_after_complete_abi(tmp_path, monkeypatch):
+    Plugin = _make_plugin_fixture(tmp_path, monkeypatch)
+    main = importlib.import_module("main")
+    recovered = _recovered_gpd_fan()
+    monkeypatch.setattr(
+        main.gpd_recovery,
+        "ensure_gpd_fan",
+        lambda device: dict(_COMPLETE_GPD_OUTCOME),
+    )
+    monkeypatch.setattr(
+        main.fan_control,
+        "select_fan_backend",
+        lambda device, **kwargs: recovered,
+    )
+    plugin = Plugin()
+    plugin._init()
+    plugin._fan_ctrl = NullFanBackend()
+
+    outcome = plugin._recover_gpd_fan_sync()
+
+    assert plugin._fan_ctrl is recovered
+    assert outcome["backend"] == "generic-pwm"
+    assert outcome["supported"] is True
+
+
+def test_supported_fan_backend_skips_gpd_recovery(tmp_path, monkeypatch):
+    Plugin = _make_plugin_fixture(tmp_path, monkeypatch)
+    main = importlib.import_module("main")
+    called = []
+    monkeypatch.setattr(
+        main.gpd_recovery,
+        "ensure_gpd_fan",
+        lambda device: called.append(device),
+    )
+    plugin = Plugin()
+    plugin._init()
+    plugin._fan_ctrl = _recovered_gpd_fan()
+
+    assert plugin._recover_gpd_fan_sync() is None
+    assert called == []
+
+
+def test_gpd_fan_recovery_is_attempted_only_once_per_plugin_life(tmp_path, monkeypatch):
+    Plugin = _make_plugin_fixture(tmp_path, monkeypatch)
+    main = importlib.import_module("main")
+    outcomes = []
+
+    def incomplete(device):
+        outcomes.append(device)
+        return {
+            **_COMPLETE_GPD_OUTCOME,
+            "exit": 1,
+            "abi_after": False,
+        }
+
+    monkeypatch.setattr(main.gpd_recovery, "ensure_gpd_fan", incomplete)
+    plugin = Plugin()
+    plugin._init()
+    plugin._fan_ctrl = NullFanBackend()
+
+    assert plugin._recover_gpd_fan_sync()["supported"] is False
+    assert plugin._recover_gpd_fan_sync() is None
+    assert len(outcomes) == 1
+
+
+def test_incomplete_gpd_abi_keeps_null_backend(tmp_path, monkeypatch):
+    Plugin = _make_plugin_fixture(tmp_path, monkeypatch)
+    main = importlib.import_module("main")
+    incomplete = {**_COMPLETE_GPD_OUTCOME, "exit": 1, "abi_after": False}
+    monkeypatch.setattr(
+        main.gpd_recovery,
+        "ensure_gpd_fan",
+        lambda device: dict(incomplete),
+    )
+    selected = []
+    monkeypatch.setattr(
+        main.fan_control,
+        "select_fan_backend",
+        lambda device, **kwargs: selected.append(device),
+    )
+    plugin = Plugin()
+    plugin._init()
+    plugin._fan_ctrl = NullFanBackend()
+    selected.clear()
+
+    outcome = plugin._recover_gpd_fan_sync()
+
+    assert isinstance(plugin._fan_ctrl, NullFanBackend)
+    assert selected == []
+    assert outcome["backend"] == "null"
+    assert outcome["supported"] is False
+
+
+def test_gpd_recovery_log_is_compact_and_structured(tmp_path, monkeypatch):
+    Plugin = _make_plugin_fixture(tmp_path, monkeypatch)
+    main = importlib.import_module("main")
+    logs = []
+    main.decky.logger = types.SimpleNamespace(
+        info=lambda *args: logs.append(("info", args)),
+        warning=lambda *args: logs.append(("warning", args)),
+        error=lambda *args: logs.append(("error", args)),
+    )
+    monkeypatch.setattr(
+        main.gpd_recovery,
+        "ensure_gpd_fan",
+        lambda device: dict(_COMPLETE_GPD_OUTCOME),
+    )
+    monkeypatch.setattr(
+        main.fan_control,
+        "select_fan_backend",
+        lambda device, **kwargs: _recovered_gpd_fan(),
+    )
+    plugin = Plugin()
+    plugin._init()
+    plugin._device = types.SimpleNamespace(key="gpd_win_mini_2025")
+    plugin._fan_ctrl = NullFanBackend()
+
+    asyncio.run(plugin._recover_gpd_fan())
+
+    level, (fmt, encoded) = logs[-1]
+    assert level == "info"
+    assert fmt == "GPD fan recovery %s"
+    assert "\n" not in encoded
+    assert json.loads(encoded)["backend"] == "generic-pwm"
+    assert all(
+        token not in encoded.casefold()
+        for token in ("stdout", "stderr", "/home/", "serial", "hostname")
+    )
 
 
 # ---------------------------------------------------------------------------
