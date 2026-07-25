@@ -13,6 +13,7 @@ import { disablePlugin, disabledPlugins, installedPlugins } from "./deckyPlugins
 export interface TdpConflictHook {
   conflict: boolean;
   rivals: ConflictResult["rivals"];
+  takeoverAvailable: boolean;
   monitorOnly: boolean;
   // Turn off SimpleDeckyTDP (Decky) — reversible from Decky.
   disableSdtdp: () => Promise<void>;
@@ -27,13 +28,17 @@ export interface TdpConflictHook {
 // the light get_tdp_conflict + reads Decky's plugin list.
 export function useTdpConflict(supported: boolean, weControl: boolean): TdpConflictHook {
   const [hhdManaging, setHhdManaging] = useState(false);
+  const [powerstationActive, setPowerstationActive] = useState(false);
   const [sdtdp, setSdtdp] = useState(false);
   const alive = useRef(true);
 
   const refetch = useCallback(async () => {
     const res = await getTdpConflict().catch(() => null);
     if (!alive.current) return;
-    if (res) setHhdManaging(!!res.hhd_managing);
+    if (res) {
+      setHhdManaging(!!res.hhd_managing);
+      setPowerstationActive(!!res.powerstation_active);
+    }
     setSdtdp(sdtdpActive(installedPlugins(), disabledPlugins()));
   }, []);
 
@@ -47,7 +52,13 @@ export function useTdpConflict(supported: boolean, weControl: boolean): TdpConfl
     };
   }, [refetch]);
 
-  const { conflict, rivals } = tdpConflict({ sdtdp, hhdManaging, weControl, tdpSupported: supported });
+  const { conflict, rivals, takeoverAvailable } = tdpConflict({
+    sdtdp,
+    hhdManaging,
+    powerstationActive,
+    weControl,
+    tdpSupported: supported,
+  });
 
   const disableSdtdp = useCallback(async () => {
     await disablePlugin(SDTDP_NAME);
@@ -68,6 +79,7 @@ export function useTdpConflict(supported: boolean, weControl: boolean): TdpConfl
   return {
     conflict,
     rivals,
+    takeoverAvailable,
     monitorOnly: computeMonitorOnly(supported, weControl),
     disableSdtdp,
     takeHhd,

@@ -14,7 +14,13 @@ describe("sdtdpActive", () => {
 });
 
 describe("tdpConflict", () => {
-  const base = { sdtdp: false, hhdManaging: false, weControl: true, tdpSupported: true };
+  const base = {
+    sdtdp: false,
+    hhdManaging: false,
+    powerstationActive: false,
+    weControl: true,
+    tdpSupported: true,
+  };
   it("no rivals -> false", () => {
     expect(tdpConflict(base).conflict).toBe(false);
   });
@@ -24,6 +30,12 @@ describe("tdpConflict", () => {
   it("HHD managing and we control -> true", () => {
     expect(tdpConflict({ ...base, hhdManaging: true }).conflict).toBe(true);
   });
+  it("active PowerStation TDP interface -> true without a takeover path", () => {
+    const result = tdpConflict({ ...base, powerstationActive: true });
+    expect(result.conflict).toBe(true);
+    expect(result.rivals.powerstation).toBe(true);
+    expect(result.takeoverAvailable).toBe(false);
+  });
   it("we don't control (toggle off) -> false", () => {
     expect(tdpConflict({ ...base, sdtdp: true, weControl: false }).conflict).toBe(false);
   });
@@ -32,7 +44,15 @@ describe("tdpConflict", () => {
   });
   it("reports which rivals are active", () => {
     const r = tdpConflict({ ...base, sdtdp: true, hhdManaging: false });
-    expect(r.rivals).toEqual({ sdtdp: true, hhd: false });
+    expect(r.rivals).toEqual({ sdtdp: true, hhd: false, powerstation: false });
+  });
+  it("keeps the reversible takeover for SDTDP and HHD", () => {
+    expect(tdpConflict({ ...base, sdtdp: true }).takeoverAvailable).toBe(true);
+    expect(tdpConflict({ ...base, hhdManaging: true }).takeoverAvailable).toBe(true);
+  });
+  it("does not offer partial takeover when PowerStation is also active", () => {
+    const r = tdpConflict({ ...base, hhdManaging: true, powerstationActive: true });
+    expect(r.takeoverAvailable).toBe(false);
   });
 });
 

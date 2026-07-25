@@ -17,6 +17,7 @@ import self_updater
 from version import read_version
 from settings_store import SettingsStore
 from tdp import factory as tdp_factory
+from tdp import powerstation as powerstation_conflict
 from tdp import suggest as tdp_suggest
 from tdp.reconcile import (
     CONFIRM_S,
@@ -230,6 +231,7 @@ class Plugin:
             self._settings["_potencia_scope_migrated"] = True
             self._store.save(self._settings)
         self._tdp_backend = tdp_factory.select_backend(self._device)
+        self._powerstation_detector = powerstation_conflict.Detector()
         # Safety self-heal: correct any stored TDP value an older version persisted
         # outside the device's real range (a bogus firmware max could leak in) so it can
         # never be applied — not merely clamped on read.
@@ -600,11 +602,15 @@ class Plugin:
             "device": await _safe(self.get_device()),
             "tdp": await _safe(self.get_tdp_state()),
             "tdp_diagnostics": self._tdp_diagnostics(),
+            "tdp_conflict": await _safe(self.get_tdp_conflict()),
             "fan_curve": await _safe(self.get_fan_curve_state()),
             "fan_monitor": await _safe(self.get_fan_state()),
             "battery": await _safe(self.get_battery_state()),
             "cpu": await _safe(self.get_cpu_state()),
             "color": await _safe(self.get_color_state()),
+            "display_diagnostics": await _safe(
+                self._offload_call(lambda: self._display_diagnostics(context))
+            ),
             "gpu": await _safe(self.get_gpu_clock()),
             # get_controller_config can block (HHD localhost HTTP / busctl spawn) →
             # run it off the event loop, unlike the cheap sysfs reads above.
@@ -650,6 +656,32 @@ class Plugin:
             home=home,
             hostname=hostname,
         )
+
+    def _display_diagnostics(self, context) -> dict:
+        diagnostics = getattr(self._color_backend, "diagnostics", None)
+        if callable(diagnostics):
+            backend = diagnostics()
+        else:
+            backend = {
+                "supported": bool(self._color_backend.supported),
+                "probe_detail": getattr(self._color_backend, "probe_detail", ""),
+                "wayland_display": None,
+                "last_apply": None,
+            }
+        frontend = {}
+        if isinstance(context, dict):
+            display = context.get("display")
+            brightness = display.get("brightness") if isinstance(display, dict) else None
+            if isinstance(brightness, dict):
+                frontend = {
+                    "brightness": {
+                        "subscribe_available": bool(
+                            brightness.get("subscribe_available", False)
+                        ),
+                        "set_available": bool(brightness.get("set_available", False)),
+                    },
+                }
+        return {"backend": backend, "frontend": frontend}
 
     def _launch_report_state(self, context) -> dict:
         """Launch-options triage: tools, current game, custom-var count, and the
@@ -895,15 +927,23 @@ class Plugin:
 
     # ---- TDP conflict + master switch --------------------------------------
     async def get_tdp_conflict(self) -> dict:
-        """Whether HHD is currently managing the power rails. SimpleDeckyTDP is
-        detected on the frontend (the backend can't see it)."""
+        """Which external managers can currently write the power rails."""
         self._init()
         hhd_present = self._controller_backend.manager == controller_detect.HHD
-        # current_tdp_enable does a blocking HTTP GET; the frontend polls this, so
-        # keep it off the event loop.
-        managing = (await self._offload_call(controller_hhd.current_tdp_enable) or False) \
-            if hhd_present else False
-        return {"hhd_present": hhd_present, "hhd_managing": bool(managing)}
+        hhd_call = (
+            self._offload_call(controller_hhd.current_tdp_enable)
+            if hhd_present
+            else asyncio.sleep(0, result=False)
+        )
+        managing, powerstation = await asyncio.gather(
+            hhd_call,
+            self._offload_call(self._powerstation_detector.tdp_active),
+        )
+        return {
+            "hhd_present": hhd_present,
+            "hhd_managing": bool(managing),
+            "powerstation_active": bool(powerstation),
+        }
 
     async def take_tdp_control(self) -> dict:
         """Hand HHD's TDP module over to us (reversible), saving its previous value.

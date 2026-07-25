@@ -456,12 +456,21 @@ def test_report_contains_tdp_transition_history(plugin, monkeypatch):
     plugin._execute_tdp_command(
         plugin._capture_tdp_command("report-test")
     )
+    plugin._powerstation_detector.tdp_active = lambda: True
     bundle = asyncio.run(
         plugin._build_report_bundle(
             ["tdp"],
             "test",
             "/home/deck",
             "handheld",
+            {
+                "display": {
+                    "brightness": {
+                        "subscribe_available": False,
+                        "set_available": True,
+                    },
+                },
+            },
         )
     )
     history = bundle["state"]["tdp_diagnostics"]["history"]
@@ -479,6 +488,17 @@ def test_report_contains_tdp_transition_history(plugin, monkeypatch):
     } <= last.keys()
     diagnostics = bundle["state"]["tdp_diagnostics"]
     assert diagnostics["backend_descriptor"] == plugin._tdp_backend_diagnostics()
+    assert bundle["state"]["tdp_conflict"]["powerstation_active"] is True
+    display = bundle["state"]["display_diagnostics"]
+    assert display["frontend"] == {
+        "brightness": {
+            "subscribe_available": False,
+            "set_available": True,
+        },
+    }
+    assert {"supported", "probe_detail", "wayland_display", "last_apply"} <= (
+        display["backend"].keys()
+    )
 
 
 def test_backend_diagnostics_explain_selection_without_personal_identifiers(plugin):

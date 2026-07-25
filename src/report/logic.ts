@@ -32,3 +32,25 @@ export function toggleCategory(
 export function canSubmit(_selected: ReportCategory[], text: string): boolean {
   return text.trim().length > 0;
 }
+
+interface DisplayApi {
+  RegisterForBrightnessChanges?: unknown;
+  SetBrightness?: unknown;
+}
+
+export function displayReportContext(
+  selected: ReportCategory[],
+  display: unknown,
+): Record<string, unknown> {
+  if (!selected.includes("display") && !selected.includes("system")) return {};
+  const api = (display ?? {}) as DisplayApi;
+  return {
+    display: {
+      brightness: {
+        subscribe_available:
+          typeof api.RegisterForBrightnessChanges === "function",
+        set_available: typeof api.SetBrightness === "function",
+      },
+    },
+  };
+}

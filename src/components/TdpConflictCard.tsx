@@ -52,14 +52,20 @@ const RivalRow: FC<RivalRowProps> = ({ name, desc, action, onAction }) => (
 );
 
 interface Props {
-  rivals: { sdtdp: boolean; hhd: boolean };
+  rivals: { sdtdp: boolean; hhd: boolean; powerstation: boolean };
   onDisableSdtdp: () => void;
   onTakeHhd: () => void;
+  onDisablePdcTdp: () => void;
 }
 
 // Persistent card atop Potencia while another TDP manager is active. One row per
 // active rival with a reversible action.
-export const TdpConflictCard: FC<Props> = ({ rivals, onDisableSdtdp, onTakeHhd }) => {
+export const TdpConflictCard: FC<Props> = ({
+  rivals,
+  onDisableSdtdp,
+  onTakeHhd,
+  onDisablePdcTdp,
+}) => {
   const { t } = useI18n();
   return (
     <div
@@ -108,6 +114,14 @@ export const TdpConflictCard: FC<Props> = ({ rivals, onDisableSdtdp, onTakeHhd }
           desc={t("tdp.conflict.hhd.desc")}
           action={t("tdp.conflict.cede")}
           onAction={onTakeHhd}
+        />
+      )}
+      {rivals.powerstation && (
+        <RivalRow
+          name={t("tdp.conflict.powerstation")}
+          desc={t("tdp.conflict.powerstation.desc")}
+          action={t("tdp.conflict.powerstation.disablePdc")}
+          onAction={onDisablePdcTdp}
         />
       )}
     </div>
