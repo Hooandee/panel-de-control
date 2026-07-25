@@ -19,6 +19,17 @@ def _unreadable(applied):
     return applied is None or applied == 0
 
 
+def _matches(applied, target):
+    return not _unreadable(applied) and abs(applied - target) <= _READBACK_TOLERANCE_W
+
+
+def _gpd_detail(*, variant, primary_exit, exit_code, readback):
+    return (
+        f"gpd recovery variant={variant} primary_exit={int(primary_exit)} "
+        f"exit={int(exit_code)} readback={readback}"
+    )
+
+
 def _parse_stapm(out: str) -> int | None:
     m = _STAPM_RE.search(out)
     if not m:
@@ -68,12 +79,13 @@ class RyzenadjBackend(TDPBackend):
     read_tolerance_w = _READBACK_TOLERANCE_W
 
     def __init__(self, fallback: TdpLimits, resolve=_default_resolve, runner=subprocess.run,
-                 write_max: int | None = None):
+                 write_max: int | None = None, power_only_retry: bool = False):
         self._fallback = fallback
         # Writes clamp to the absolute ceiling (cooler_max); get_limits keeps the base.
         self._write_limits = fallback.with_cooler(write_max)
         self._runner = runner
         self._bin = resolve()
+        self._power_only_retry = power_only_retry
         self.supported = self._bin is not None
 
     def get_limits(self) -> TdpLimits:
@@ -95,31 +107,86 @@ class RyzenadjBackend(TDPBackend):
         applied = None
         for _ in range(2):
             try:
-                self._apply(target)
+                primary_exit = self._apply(target)
             except (OSError, subprocess.SubprocessError) as e:
+                if self._power_only_retry:
+                    return TdpResult(
+                        watts, None, False,
+                        f"ryzenadj primary failed ({type(e).__name__})",
+                    )
                 return TdpResult(watts, None, False, f"ryzenadj failed: {e}")
+            if self._power_only_retry and primary_exit:
+                return self._recover_gpd(watts, target, primary_exit)
             applied = self.read_applied()
             if _unreadable(applied):
                 continue  # re-assert once, then treat as unconfirmed
-            if abs(applied - target) <= _READBACK_TOLERANCE_W:
+            if _matches(applied, target):
                 return TdpResult(watts, applied, True, "")
         if _unreadable(applied):
             return TdpResult(watts, None, True, "applied (limit readback unavailable)")
         return TdpResult(watts, applied, False,
                          f"ryzenadj limit did not stick (wanted {target}, holds {applied})")
 
-    def _apply(self, target: int) -> None:
+    def _recover_gpd(self, watts: int, target: int, primary_exit: int) -> TdpResult:
+        applied = self._read_applied(require_zero_exit=True)
+        if _matches(applied, target):
+            return TdpResult(
+                watts,
+                applied,
+                True,
+                _gpd_detail(
+                    variant="primary",
+                    primary_exit=primary_exit,
+                    exit_code=primary_exit,
+                    readback="confirmed",
+                ),
+            )
+        try:
+            fallback_exit = self._apply(target, include_temp=False)
+        except (OSError, subprocess.SubprocessError) as e:
+            return TdpResult(
+                watts,
+                applied,
+                False,
+                f"ryzenadj power-only failed ({type(e).__name__}) "
+                f"primary_exit={int(primary_exit)}",
+            )
+        applied = self._read_applied(require_zero_exit=True)
+        if _unreadable(applied):
+            readback = "unavailable"
+        elif _matches(applied, target):
+            readback = "confirmed"
+        else:
+            readback = "mismatch"
+        detail = _gpd_detail(
+            variant="power-only",
+            primary_exit=primary_exit,
+            exit_code=fallback_exit,
+            readback=readback,
+        )
+        if fallback_exit:
+            return TdpResult(watts, applied, False, detail)
+        if _unreadable(applied):
+            return TdpResult(watts, None, True, detail)
+        return TdpResult(watts, applied, _matches(applied, target), detail)
+
+    def _apply(self, target: int, *, include_temp: bool = True) -> int:
         mw = str(target * 1000)
         argv = [
             self._bin,
             "--stapm-limit", mw,
             "--fast-limit", mw,
             "--slow-limit", mw,
-            "--tctl-temp", "90",
         ]
-        self._runner(argv, capture_output=True, text=True, timeout=5, env=_clean_env())
+        if include_temp:
+            argv.extend(["--tctl-temp", "90"])
+        res = self._runner(argv, capture_output=True, text=True, timeout=5, env=_clean_env())
+        return int(getattr(res, "returncode", 0) or 0)
 
     def read_applied(self) -> int | None:
+        return self._read_applied()
+
+    def _read_applied(self, *, require_zero_exit: bool = False) -> int | None:
         if not self.supported:
             return None
         try:
@@ -131,6 +198,8 @@ class RyzenadjBackend(TDPBackend):
                 env=_clean_env(),
             )
         except (OSError, subprocess.SubprocessError):
+            return None
+        if require_zero_exit and getattr(res, "returncode", 0):
             return None
         out = getattr(res, "stdout", "") or ""
         return _parse_stapm(out)
