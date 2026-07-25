@@ -1,8 +1,10 @@
 import asyncio
 import json
 import os
+import time
+from collections import deque
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from datetime import datetime
 
 import decky
@@ -16,8 +18,15 @@ from version import read_version
 from settings_store import SettingsStore
 from tdp import factory as tdp_factory
 from tdp import suggest as tdp_suggest
-from tdp.adopt import should_adopt_external
-from tdp.types import TdpResult
+from tdp.reconcile import (
+    CONFIRM_S,
+    MIN_CORRECTION_S,
+    ReconcileMemory,
+    after_apply,
+    build_targets,
+    decide,
+)
+from tdp.types import RailReading, TdpObservation, TdpResult
 from tdp_profiles import ProfileStore
 from power_presets import PowerPresetStore
 from lifecycle import LifecycleManager, read_on_ac
@@ -81,14 +90,19 @@ _AUTO_WINDOW = 10
 # How often the audio EQ watcher checks the active output route (headphones vs speakers)
 # to re-apply the per-route curve with the QAM closed.
 _AUDIO_POLL_S = 4
-# Watts of divergence before we treat a firmware PL1 read as an external change to
-# adopt (above rounding/settling jitter).
-_EXTERNAL_TDP_THRESHOLD = 2
-
 _NIGHT_TICK_S = 30  # how often the night-mode clock checks for a schedule-edge crossing
 
 # "custom" = our TDP owns the rails, vs a named platform_profile mode.
 _CUSTOM_MODE = "custom"
+
+
+@dataclass(frozen=True)
+class _TdpCommand:
+    generation: int
+    reason: str
+    requested: dict
+    safe_bounds: dict
+    on_ac: bool
 
 
 def _now_minutes() -> int:
@@ -337,13 +351,20 @@ class Plugin:
         self._chip = read_cpu_model() if not self._device.is_generic else None
         self._os_name = osinfo.read_os_name()
         self._current_appid = None
-        # Last PL1 WE wrote to the firmware (readback). Adoption compares the live value
-        # against this, not the profile, so it fires only for a real external change —
-        # never on a stale/default read before our first apply or mid-transition (None).
-        self._last_written_pl1 = None
-        # Divergent PL1 candidate awaiting a second matching read before adoption
-        # (debounce against one-shot firmware spikes). See tdp/adopt.py.
-        self._adopt_pending = None
+        self._tdp_generation = 0
+        self._tdp_targets = None
+        self._tdp_observation = TdpObservation(
+            readable=bool(getattr(self._tdp_backend, "readback", True)),
+        )
+        self._tdp_reconcile_memory = ReconcileMemory()
+        self._tdp_status = (
+            "settling" if self._tdp_backend.supported else "unsupported"
+        )
+        self._tdp_reason = ""
+        self._tdp_conflict_persistent = False
+        self._tdp_history = deque(maxlen=32)
+        self._tdp_guard_task = None
+        self._tdp_shutdown = False
         self._lifecycle = LifecycleManager(apply_cb=self._reapply_all,
                                            reassert_cb=self._reassert_tdp_only)
         self._auto_task = None
@@ -577,6 +598,7 @@ class Plugin:
         states = {
             "device": await _safe(self.get_device()),
             "tdp": await _safe(self.get_tdp_state()),
+            "tdp_diagnostics": self._tdp_diagnostics(),
             "fan_curve": await _safe(self.get_fan_curve_state()),
             "fan_monitor": await _safe(self.get_fan_state()),
             "battery": await _safe(self.get_battery_state()),
@@ -894,7 +916,7 @@ class Plugin:
             self._settings["hhd_tdp_prev"] = True
         applied = await self._offload_call(lambda: controller_hhd.set_tdp_enable(False))
         self._save()
-        await self._offload_call(self._reapply_tdp)
+        await self._apply_tdp_now("take-control")
         return {"ok": applied is False, "hhd_managing": bool(applied)}
 
     def _restore_hhd_tdp(self) -> None:
@@ -924,9 +946,26 @@ class Plugin:
         self._settings["tdp_control_enabled"] = enabled
         self._save()
         if not enabled:
+            requested = (
+                dict(self._tdp_targets.requested)
+                if self._tdp_targets is not None
+                else {}
+            )
+            self._advance_tdp_generation()
             await self._offload_call(self._restore_hhd_tdp)
+            self._tdp_observation = await self._offload_call(
+                self._observe_tdp_sync
+            )
+            self._tdp_targets = None
+            self._tdp_status = "unverifiable"
+            self._tdp_reason = "control_disabled"
+            self._record_tdp_transition(
+                "control-disabled",
+                action="release",
+                requested=requested,
+            )
         else:
-            await self._offload_call(self._reapply_tdp)
+            await self._apply_tdp_now("control-enabled")
         return enabled
 
     async def set_seen_autotdp_notice(self, seen: bool) -> bool:
@@ -1481,7 +1520,7 @@ class Plugin:
         enabled = bool(enabled)
         self._settings["unlock_battery_max"] = enabled
         self._save()
-        await self._offload_call(self._reapply_tdp)
+        await self._apply_tdp_now("battery-ceiling")
         return enabled
 
     async def get_cooler_boost(self) -> bool:
@@ -1495,7 +1534,7 @@ class Plugin:
         enabled = bool(enabled)
         self._settings["cooler_boost"] = enabled
         self._save()
-        await self._offload_call(self._reapply_tdp)
+        await self._apply_tdp_now("cooler-ceiling")
         return enabled
 
     def _qam_boost_active(self) -> bool:
@@ -1550,6 +1589,16 @@ class Plugin:
         self._clear_auto_windows()
         self._slack_ticks = 0
 
+    def _auto_control_pl1(self, requested):
+        targets = self._tdp_targets
+        if (
+            self._tdp_status == "constrained"
+            and targets is not None
+            and targets.requested.get("pl1") == requested
+        ):
+            return int(targets.target.get("pl1", requested))
+        return int(requested)
+
     async def _auto_loop(self) -> None:
         """Autonomous, band-DECOUPLED GPU-driven controller. Runs over the full
         device range [min_w, active_max]: every 2 s it feeds the rolling GPU%
@@ -1589,7 +1638,7 @@ class Plugin:
                 # the event loop so it can't stall other Decky RPC handling.
                 pr = await asyncio.to_thread(self._power_reader.read)
                 levels, active, _ac = self._effective_levels(self._current_appid)
-                cur = levels["pl1"]
+                cur = self._auto_control_pl1(levels["pl1"])
                 lim = self._limits()
 
                 self._gpu_window.append(pr.get("gpu_busy"))
@@ -1600,7 +1649,7 @@ class Plugin:
                     cur, self._gpu_window, self._slack_ticks, floor, active)
                 if nxt != cur:
                     self._tdp_profiles.set_pl1(self._auto_scope(), nxt, appid=self._current_appid)
-                    await self._offload_call(self._reapply_tdp)
+                    await self._apply_tdp_now("auto-step")
                     # PL1 changed → drop the now-stale window (samples taken at the
                     # OLD setpoint) so the next reads are homogeneous at the new PL1.
                     self._clear_auto_windows()
@@ -1635,10 +1684,17 @@ class Plugin:
         auto = self._tdp_profiles.auto_tdp(self._current_appid)
         ac = read_on_ac()
         setpoint = self._effective_levels(self._current_appid, ac)[0]["pl1"]
-        # Live PL1 the firmware holds (reflects eco + external HHD/Steam changes). Skip
-        # it on subprocess-backed backends (ryzenadj) so the 1 s poll doesn't fork a
-        # tool every tick — the arc falls back to the setpoint there.
-        applied = None if getattr(self._tdp_backend, "blocking", False) else await self._read_applied()
+        if getattr(self._tdp_backend, "blocking", False):
+            observation = self._tdp_observation
+            applied = None
+        else:
+            observation = self._observe_tdp_sync()
+            primary = observation.surfaces.get(
+                self._tdp_backend.name,
+                {},
+            )
+            pl1 = primary.get("pl1")
+            applied = pl1.applied_w if pl1 is not None else None
         return {
             "watts": pr["watts"],
             "gpu_busy": pr["gpu_busy"],
@@ -1649,6 +1705,7 @@ class Plugin:
             # Polled every second, so the UI can refresh the slider ceiling the moment
             # the charger is plugged or unplugged.
             "on_ac": ac,
+            "ownership": self._tdp_ownership_state(observation),
         }
 
     async def set_auto_tdp(self, enabled: bool, scope: str = "global", appid=None) -> dict:
@@ -1657,7 +1714,7 @@ class Plugin:
             return {"auto_tdp": self._tdp_profiles.auto_tdp(self._current_appid)}
         self._clear_eco()
         self._tdp_profiles.set_auto_tdp(scope, bool(enabled), appid=appid)
-        await self._offload_call(self._reapply_tdp)
+        await self._apply_tdp_now("auto-toggle")
         return {"auto_tdp": self._tdp_profiles.auto_tdp(self._current_appid)}
 
     async def set_ui_active(self, enabled: bool) -> bool:
@@ -1679,7 +1736,7 @@ class Plugin:
             if cur < floor:  # only raise if actually below the responsive floor
                 self._tdp_profiles.set_pl1(self._auto_scope(), floor,
                                            appid=self._current_appid)
-                await self._offload_call(self._reapply_tdp)
+                await self._apply_tdp_now("qam-floor")
                 self._clear_auto_windows()  # PL1 changed → window is now stale
         return self._ui_active
 
@@ -1907,34 +1964,511 @@ class Plugin:
                 out.append(mid)
         return out
 
-    def _reapply_tdp(self, on_ac=None):
-        self._init()
+    def _capture_tdp_command(self, reason, on_ac=None, bump=True):
+        ac = read_on_ac() if on_ac is None else bool(on_ac)
+        limits = self._limits()
+        active = self._active_max(limits, ac)
+        requested = self._tdp_profiles.effective(self._current_appid)
+        if self._settings.get("eco_enabled"):
+            minimum = limits.min_w
+            requested = {
+                "pl1": minimum,
+                "pl2": minimum,
+                "pl3": minimum,
+            }
+        select_levels = getattr(
+            self._tdp_backend,
+            "reconciliation_levels",
+            None,
+        )
+        if callable(select_levels):
+            requested = select_levels(requested)
+        elif getattr(self._tdp_backend, "supports_levels", False):
+            requested = {
+                rail: int(requested[rail])
+                for rail in ("pl1", "pl2", "pl3")
+            }
+        else:
+            requested = {"pl1": int(requested["pl1"])}
+        safe = self._cap_level_limits(
+            self._tdp_backend.level_limits(),
+            active,
+        )
+        for rail in requested:
+            safe.setdefault(
+                rail,
+                {"min": limits.min_w, "max": active},
+            )
+        if bump:
+            self._advance_tdp_generation()
+        return _TdpCommand(
+            generation=self._tdp_generation,
+            reason=str(reason),
+            requested={
+                rail: int(requested[rail])
+                for rail in requested
+            },
+            safe_bounds=safe,
+            on_ac=ac,
+        )
+
+    def _advance_tdp_generation(self):
+        self._tdp_generation += 1
+        self._tdp_reconcile_memory = ReconcileMemory(
+            drift_times=self._tdp_reconcile_memory.drift_times,
+        )
+
+    def _observe_tdp_sync(self):
+        observe = getattr(self._tdp_backend, "observe", None)
+        if callable(observe):
+            return observe()
+        applied = self._tdp_backend.read_applied()
+        surfaces = {}
+        if applied is not None:
+            surfaces[self._tdp_backend.name] = {
+                "pl1": RailReading(applied),
+            }
+        return TdpObservation(readable=True, surfaces=surfaces)
+
+    def _execute_tdp_command(self, command):
+        if self._tdp_shutdown:
+            return TdpResult(
+                command.requested["pl1"],
+                None,
+                False,
+                "tdp-shutdown",
+            )
+        if command.generation != self._tdp_generation:
+            return TdpResult(
+                command.requested["pl1"],
+                None,
+                False,
+                "stale-generation",
+            )
+        if not self._tdp_backend.supported:
+            self._tdp_status, self._tdp_reason = "unsupported", ""
+            result = TdpResult(
+                command.requested["pl1"],
+                None,
+                False,
+                "tdp-unsupported",
+            )
+            self._record_tdp_transition(
+                command.reason,
+                action="apply",
+                result=result,
+                on_ac=command.on_ac,
+                requested=command.requested,
+            )
+            return result
         if not self._tdp_control_on():
-            # Master switch off: we've handed the rails to another tool. Don't write.
-            self._last_written_pl1 = None
-            return TdpResult(None, None, True, "tdp-control-disabled")
+            self._tdp_status = "unverifiable"
+            self._tdp_reason = "control_disabled"
+            return TdpResult(
+                command.requested["pl1"],
+                None,
+                True,
+                "tdp-control-disabled",
+            )
         mode = self._firmware_mode()
         if mode != _CUSTOM_MODE:
-            # A named firmware mode owns the rails, fan curve and LED — don't force custom.
-            self._tdp_backend.set_profile(mode)
-            self._last_written_pl1 = None
-            return TdpResult(None, self._tdp_backend.read_applied(), True, f"firmware-mode:{mode}")
-        lv, _active, ac = self._effective_levels(self._current_appid, on_ac)
-        res = self._tdp_backend.set_levels(lv["pl1"], lv["pl2"], lv["pl3"], ac)
-        # A fresh write is a new baseline for adoption — drop any armed spike candidate.
-        self._adopt_pending = None
-        # Record what the firmware now holds (readback), so adoption can tell a real
-        # external change from our own write.
-        self._last_written_pl1 = res.applied_w if res.applied_w is not None else lv["pl1"]
-        if not res.ok and not self._tdp_profiles.auto_tdp(self._current_appid):
-            decky.logger.info("TDP: write pl1=%sW not confirmed (firmware holds %sW) %s",
-                              lv["pl1"], res.applied_w, res.detail)
-        return res
+            if not self._tdp_backend.set_profile(mode):
+                self._tdp_status = "rejected"
+                self._tdp_reason = "firmware_mode_rejected"
+                self._tdp_targets = None
+                self._tdp_observation = self._observe_tdp_sync()
+                result = TdpResult(
+                    command.requested["pl1"],
+                    self._tdp_backend.read_applied(),
+                    False,
+                    f"firmware-mode-rejected:{mode}",
+                )
+                self._record_tdp_transition(
+                    command.reason,
+                    action="profile",
+                    result=result,
+                    on_ac=command.on_ac,
+                    requested=command.requested,
+                )
+                return result
+            self._tdp_status = "unverifiable"
+            self._tdp_reason = "firmware_mode"
+            self._tdp_targets = None
+            self._tdp_observation = self._observe_tdp_sync()
+            result = TdpResult(
+                command.requested["pl1"],
+                self._tdp_backend.read_applied(),
+                True,
+                f"firmware-mode:{mode}",
+            )
+            self._record_tdp_transition(
+                command.reason,
+                action="profile",
+                result=result,
+                on_ac=command.on_ac,
+                requested=command.requested,
+            )
+            return result
+        before = self._observe_tdp_sync()
+        if command.generation != self._tdp_generation:
+            return TdpResult(
+                command.requested["pl1"],
+                None,
+                False,
+                "stale-generation",
+            )
+        targets = build_targets(
+            command.requested,
+            command.safe_bounds,
+            before,
+        )
+        result = self._tdp_backend.set_levels(
+            targets.target["pl1"],
+            targets.target.get("pl2", targets.target["pl1"]),
+            targets.target.get(
+                "pl3",
+                targets.target.get("pl2", targets.target["pl1"]),
+            ),
+            command.on_ac,
+        )
+        after = self._observe_tdp_sync()
+        if command.generation != self._tdp_generation:
+            return TdpResult(
+                command.requested["pl1"],
+                result.applied_w,
+                False,
+                "stale-generation",
+            )
+        outcome = after_apply(
+            targets,
+            after,
+            self._tdp_reconcile_memory,
+            time.monotonic(),
+            result.ok,
+            getattr(self._tdp_backend, "read_tolerance_w", 0),
+            write_only=not getattr(
+                self._tdp_backend,
+                "readback",
+                True,
+            ),
+            heartbeat_s=getattr(
+                self._tdp_backend,
+                "heartbeat_s",
+                None,
+            ),
+        )
+        self._tdp_targets = targets
+        self._tdp_observation = after
+        self._tdp_reconcile_memory = outcome.memory
+        self._tdp_status = outcome.status
+        self._tdp_reason = outcome.reason
+        self._tdp_conflict_persistent = outcome.conflict_persistent
+        self._record_tdp_transition(
+            command.reason,
+            action="apply",
+            result=result,
+            on_ac=command.on_ac,
+            requested=command.requested,
+        )
+        return TdpResult(
+            command.requested["pl1"],
+            result.applied_w,
+            result.ok,
+            result.detail,
+        )
+
+    async def _apply_tdp_now(self, reason, on_ac=None):
+        if self._tdp_shutdown:
+            requested = self._tdp_profiles.effective(
+                self._current_appid,
+            )
+            return TdpResult(
+                int(requested["pl1"]),
+                None,
+                False,
+                "tdp-shutdown",
+            )
+        command = self._capture_tdp_command(reason, on_ac)
+        return await self._offload_call(
+            lambda: self._execute_tdp_command(command)
+        )
+
+    def _schedule_tdp_apply(self, reason, on_ac=None):
+        if self._tdp_shutdown:
+            return
+        command = self._capture_tdp_command(reason, on_ac)
+        self._offload(lambda: self._execute_tdp_command(command))
+
+    def _tdp_guard_tick(self, now=None):
+        now = time.monotonic() if now is None else float(now)
+        if self._tdp_shutdown:
+            return
+        if not self._tdp_backend.supported:
+            self._tdp_status, self._tdp_reason = "unsupported", ""
+            self._tdp_reconcile_memory = ReconcileMemory()
+            return
+        if not self._tdp_control_on():
+            self._tdp_status = "unverifiable"
+            self._tdp_reason = "control_disabled"
+            self._tdp_reconcile_memory = ReconcileMemory()
+            return
+        if self._firmware_mode() != _CUSTOM_MODE:
+            self._tdp_status = "unverifiable"
+            self._tdp_reason = "firmware_mode"
+            self._tdp_reconcile_memory = ReconcileMemory()
+            return
+        command = self._capture_tdp_command("guard", bump=False)
+        observation = self._observe_tdp_sync()
+        if command.generation != self._tdp_generation:
+            return
+        targets = build_targets(
+            command.requested,
+            command.safe_bounds,
+            observation,
+        )
+        outcome = decide(
+            targets,
+            observation,
+            self._tdp_reconcile_memory,
+            now,
+            getattr(self._tdp_backend, "read_tolerance_w", 0),
+            write_only=not getattr(
+                self._tdp_backend,
+                "readback",
+                True,
+            ),
+            heartbeat_s=getattr(
+                self._tdp_backend,
+                "heartbeat_s",
+                None,
+            ),
+        )
+        action = outcome.action
+        result = None
+        if command.generation != self._tdp_generation:
+            return
+        if outcome.action == "apply":
+            result = self._tdp_backend.set_levels(
+                targets.target["pl1"],
+                targets.target.get("pl2", targets.target["pl1"]),
+                targets.target.get(
+                    "pl3",
+                    targets.target.get("pl2", targets.target["pl1"]),
+                ),
+                command.on_ac,
+            )
+            after = self._observe_tdp_sync()
+            if command.generation != self._tdp_generation:
+                return
+            outcome = after_apply(
+                targets,
+                after,
+                outcome.memory,
+                now,
+                result.ok,
+                getattr(self._tdp_backend, "read_tolerance_w", 0),
+                write_only=not getattr(
+                    self._tdp_backend,
+                    "readback",
+                    True,
+                ),
+                heartbeat_s=getattr(
+                    self._tdp_backend,
+                    "heartbeat_s",
+                    None,
+                ),
+            )
+            observation = after
+        if command.generation != self._tdp_generation:
+            return
+        self._tdp_targets = targets
+        self._tdp_observation = observation
+        self._tdp_reconcile_memory = outcome.memory
+        self._tdp_status = outcome.status
+        self._tdp_reason = outcome.reason
+        self._tdp_conflict_persistent = outcome.conflict_persistent
+        self._record_tdp_transition(
+            "guard",
+            action=action,
+            result=result,
+            on_ac=command.on_ac,
+            requested=command.requested,
+        )
+
+    def _tdp_guard_delay(self):
+        now = time.monotonic()
+        interval = float(
+            getattr(self._tdp_backend, "guard_interval_s", 2.0)
+        )
+        due = []
+        memory = self._tdp_reconcile_memory
+        if memory.pending_since is not None:
+            ready_at = memory.pending_since + CONFIRM_S
+            if memory.last_write_at is not None:
+                ready_at = max(
+                    ready_at,
+                    memory.last_write_at + MIN_CORRECTION_S,
+                )
+            due.append(ready_at)
+        if memory.next_retry_at > now:
+            due.append(memory.next_retry_at)
+        if not due:
+            return interval
+        return max(0.05, min(interval, min(due) - now))
+
+    async def _tdp_guard_loop(self):
+        while True:
+            try:
+                await asyncio.sleep(self._tdp_guard_delay())
+                await self._offload_call(self._tdp_guard_tick)
+            except asyncio.CancelledError:
+                return
+            except Exception:
+                decky.logger.exception("TDP guard tick failed")
+
+    def _start_tdp_guard_loop(self):
+        if (
+            self._tdp_shutdown
+            or not self._tdp_backend.supported
+            or self._tdp_guard_task is not None
+        ):
+            return
+        self._tdp_guard_task = asyncio.create_task(
+            self._tdp_guard_loop()
+        )
+
+    def _stop_tdp_guard_loop(self):
+        if self._tdp_guard_task is not None:
+            self._tdp_guard_task.cancel()
+            self._tdp_guard_task = None
+
+    def _begin_tdp_shutdown(self):
+        if self._tdp_shutdown:
+            return
+        self._tdp_shutdown = True
+        self._stop_tdp_guard_loop()
+        self._stop_auto_loop()
+        if getattr(self, "_lifecycle", None) is not None:
+            self._lifecycle.stop()
+        self._advance_tdp_generation()
+
+    def _reapply_tdp(self, on_ac=None):
+        self._init()
+        command = self._capture_tdp_command("reapply", on_ac)
+        return self._execute_tdp_command(command)
+
+    def _tdp_scope_label(self):
+        if self._current_appid is None:
+            return "global"
+        if self._tdp_profiles.is_following_global(self._current_appid):
+            return "game_follow_global"
+        return "game"
+
+    def _record_tdp_transition(
+        self,
+        reason,
+        *,
+        action,
+        result=None,
+        on_ac=None,
+        requested=None,
+    ):
+        current_requested = (
+            dict(self._tdp_targets.requested)
+            if self._tdp_targets is not None
+            else dict(requested or {})
+        )
+        current_target = (
+            dict(self._tdp_targets.target)
+            if self._tdp_targets is not None
+            else {}
+        )
+        target_reasons = (
+            dict(self._tdp_targets.reasons)
+            if self._tdp_targets is not None
+            else {}
+        )
+        fingerprint = {
+            "generation": self._tdp_generation,
+            "reason": reason,
+            "action": action,
+            "scope": self._tdp_scope_label(),
+            "control_enabled": self._tdp_control_on(),
+            "on_ac": read_on_ac() if on_ac is None else bool(on_ac),
+            "firmware_mode": self._firmware_mode(),
+            "status": self._tdp_status,
+            "status_reason": self._tdp_reason,
+            "requested": current_requested,
+            "target": current_target,
+            "target_reasons": target_reasons,
+            "observation": self._tdp_observation.as_dict(),
+            "conflict_persistent": self._tdp_conflict_persistent,
+            "failures": self._tdp_reconcile_memory.failures,
+            "write": (
+                None
+                if result is None
+                else {
+                    "ok": bool(result.ok),
+                    "applied": result.applied_w,
+                    "detail": result.detail,
+                }
+            ),
+        }
+        if self._tdp_history:
+            previous_full = self._tdp_history[-1]
+            previous = {
+                key: value
+                for key, value in previous_full.items()
+                if key != "at"
+            }
+            if previous == fingerprint:
+                return
+            stable_keys = (
+                "scope",
+                "control_enabled",
+                "on_ac",
+                "firmware_mode",
+                "status",
+                "status_reason",
+                "requested",
+                "target",
+                "target_reasons",
+                "observation",
+                "conflict_persistent",
+                "failures",
+            )
+            if (
+                reason == "guard"
+                and action == "hold"
+                and result is None
+                and all(
+                    previous_full.get(key) == fingerprint[key]
+                    for key in stable_keys
+                )
+            ):
+                return
+        event = {
+            "at": round(time.monotonic(), 3),
+            **fingerprint,
+        }
+        self._tdp_history.append(event)
+        encoded = json.dumps(
+            event,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        warning = (
+            self._tdp_status in ("rejected", "unsupported")
+            or self._tdp_conflict_persistent
+            or (result is not None and not result.ok)
+        )
+        log = decky.logger.warning if warning else decky.logger.info
+        log("TDP transition %s", encoded)
 
     def _reassert_tdp_only(self, on_ac=None) -> None:
         """Settle-retry callback: re-assert only the power rails off the loop, winning the
         firmware's post-transition reset without re-running the full re-apply each time."""
-        self._offload(lambda: self._reapply_tdp(on_ac))
+        self._schedule_tdp_apply("settle-retry", on_ac)
 
     def _reapply_all(self, on_ac=None) -> None:
         """Lifecycle callback: re-assert TDP, the fan curve, the charge limit and the
@@ -1944,15 +2478,11 @@ class Plugin:
         # stale preview can't leak onto the new context (nor a dangling timer fire).
         self._cancel_color_revert()
         self._color_preview = None
-        # A context change is landing (resume/AC/game/eco) — the firmware may be mid-
-        # transition until the offloaded re-apply below writes. Suspend adoption until
-        # then so a transient/default read isn't mistaken for an external change.
-        self._last_written_pl1 = None
         # sysfs (fast) → inline; subprocess-backed (tdp-ryzenadj/fans/color) → off-loop.
         self._apply_charge_limit()
         self._apply_cpu()
         self._apply_gpu_clock()
-        self._offload(lambda: self._reapply_tdp(on_ac))
+        self._schedule_tdp_apply("lifecycle", on_ac)
         # Stepped aside: retry a pending HHD hand-back (no-op while we control / no marker).
         if not self._tdp_control_on():
             self._offload(self._restore_hhd_tdp)
@@ -2518,54 +3048,24 @@ class Plugin:
             return await self._offload_call(b.read_applied)
         return b.read_applied()
 
+    async def _read_tdp_observation(self):
+        return await self._offload_call(self._observe_tdp_sync)
+
     async def get_tdp_state(self) -> dict:
         self._init()
-        applied = await self._read_applied()
-        external = self._adopt_external_tdp(applied)
-        st = self._tdp_state(applied)
-        st["external_change"] = external
-        return st
+        observation = await self._read_tdp_observation()
+        return self._tdp_state(observation)
 
-    def _adopt_external_tdp(self, applied) -> bool:
-        """Adopt a firmware PL1 moved by an external tool (HHD/Steam) as our setpoint,
-        so a later re-apply doesn't stomp it. Compares against the value WE last wrote
-        (``_last_written_pl1``): None until our first apply and cleared during a
-        re-apply, so a stale/default read at startup or mid-transition never adopts.
-        Skipped in eco / auto (we own the setpoint there). To avoid mistaking a one-shot
-        firmware spike for a deliberate change, a divergent value must persist across two
-        consecutive reads before we adopt it (see tdp/adopt.py). True when adopted."""
-        if applied is None or self._last_written_pl1 is None:
-            self._adopt_pending = None
-            return False
-        if self._settings.get("eco_enabled") or self._tdp_profiles.auto_tdp(self._current_appid):
-            self._adopt_pending = None
-            return False
-        prev_pending = self._adopt_pending
-        adopt, self._adopt_pending = should_adopt_external(
-            applied, self._last_written_pl1, prev_pending, _EXTERNAL_TDP_THRESHOLD)
-        if self._adopt_pending is not None and self._adopt_pending != prev_pending:
-            decky.logger.info(
-                "TDP: external PL1 read %sW vs our %sW; waiting to confirm before adopting",
-                int(applied), self._last_written_pl1)
-        if not adopt:
-            return False
-        appid = self._current_appid
-        # Adopt into the scope that's actually live (game only when it has its OWN active
-        # profile) — never detach a follow-global game that merely kept stored values.
-        scope = self._auto_scope()
-        self._tdp_profiles.set_pl1(scope, int(applied), appid=appid)
-        decky.logger.info("TDP: adopted external change %sW -> %sW (scope=%s appid=%s)",
-                          self._last_written_pl1, int(applied), scope, appid)
-        self._last_written_pl1 = int(applied)
-        return True
-
-    def _tdp_state(self, applied_w) -> dict:
+    def _tdp_state(self, observation) -> dict:
         levels, active, ac = self._effective_levels(self._current_appid)
         global_levels, _active, _ac = self._effective_levels(None, ac)
         limits = self._limits()
         ll = self._cap_level_limits(self._tdp_backend.level_limits(), active)
         eff = self._tdp_profiles.effective(self._current_appid)
         geff = self._tdp_profiles.effective(None)
+        primary = observation.surfaces.get(self._tdp_backend.name, {})
+        pl1 = primary.get("pl1")
+        applied_w = pl1.applied_w if pl1 is not None else None
         return {
             "supported": self._tdp_backend.supported,
             "backend": self._tdp_backend.name,
@@ -2595,8 +3095,7 @@ class Plugin:
             # Selectable firmware performance modes; empty on devices without them.
             "firmware_modes": self._firmware_choices(),
             "firmware_mode": self._firmware_mode(),
-            # get_tdp_state flips this True when it adopts an external change.
-            "external_change": False,
+            "ownership": self._tdp_ownership_state(observation),
             # Master switch + one-time-notice flags (durable across reboot; the
             # frontend gates monitor-only mode + the first-run modals off these).
             "tdp_control_enabled": self._tdp_control_on(),
@@ -2604,6 +3103,115 @@ class Plugin:
             "seen_tdp_conflict_takeover": bool(
                 self._settings.get("seen_tdp_conflict_takeover", False)),
         }
+
+    def _tdp_ownership_state(self, observation):
+        requested = (
+            dict(self._tdp_targets.requested)
+            if self._tdp_targets is not None
+            else {}
+        )
+        target = (
+            dict(self._tdp_targets.target)
+            if self._tdp_targets is not None
+            else {}
+        )
+        applied = {}
+        primary = observation.surfaces.get(
+            self._tdp_backend.name,
+            {},
+        )
+        for rail, reading in primary.items():
+            applied[rail] = reading.applied_w
+        return {
+            "status": self._tdp_status,
+            "reason": self._tdp_reason,
+            "requested": requested,
+            "target": target,
+            "applied": applied,
+            "surfaces": observation.as_dict()["surfaces"],
+            "conflict_persistent": self._tdp_conflict_persistent,
+            "failures": self._tdp_reconcile_memory.failures,
+        }
+
+    def _tdp_diagnostics(self):
+        return {
+            "generation": self._tdp_generation,
+            "backend": self._tdp_backend.name,
+            "backend_descriptor": self._tdp_backend_diagnostics(),
+            "history": list(self._tdp_history),
+        }
+
+    def _tdp_backend_diagnostics(self):
+        errors = {}
+        try:
+            limits = self._limits()
+            limit_values = {
+                "min": limits.min_w,
+                "default": limits.default_w,
+                "max": limits.max_w,
+                "max_ac": limits.max_ac_w,
+            }
+            limits_source = "backend"
+        except Exception as exc:  # noqa: BLE001
+            errors["limits"] = type(exc).__name__
+            limit_values = {
+                "min": self._device.tdp_min,
+                "default": self._device.tdp_default,
+                "max": self._device.tdp_max,
+                "max_ac": self._device.tdp_max_charger,
+            }
+            limits_source = "profile_fallback"
+        try:
+            level_limits = self._tdp_backend.level_limits()
+        except Exception as exc:  # noqa: BLE001
+            errors["level_limits"] = type(exc).__name__
+            level_limits = {}
+        try:
+            levels = self._tdp_backend.reconciliation_levels(
+                self._tdp_profiles.effective(None)
+            )
+            rails = sorted(levels)
+        except Exception as exc:  # noqa: BLE001
+            errors["rails"] = type(exc).__name__
+            rails = []
+        return {
+            "device_key": self._device.key,
+            "generic": bool(self._device.is_generic),
+            "vendor": self._device.vendor,
+            "backend": self._tdp_backend.name,
+            "supported": bool(self._tdp_backend.supported),
+            "readback": bool(getattr(self._tdp_backend, "readback", True)),
+            "rails": rails,
+            "guard_interval_s": float(
+                getattr(self._tdp_backend, "guard_interval_s", 0.0)
+            ),
+            "heartbeat_s": getattr(self._tdp_backend, "heartbeat_s", None),
+            "read_tolerance_w": int(
+                getattr(self._tdp_backend, "read_tolerance_w", 0)
+            ),
+            "limits": limit_values,
+            "limits_source": limits_source,
+            "level_limits": level_limits,
+            "probe_trace": [
+                dict(item)
+                for item in getattr(self._tdp_backend, "probe_trace", ())
+            ],
+            "errors": errors,
+        }
+
+    def _log_tdp_backend_diagnostics(self):
+        descriptor = self._tdp_backend_diagnostics()
+        encoded = json.dumps(
+            descriptor,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        log = (
+            decky.logger.info
+            if descriptor["supported"] and not descriptor["errors"]
+            else decky.logger.warning
+        )
+        log("TDP backend %s", encoded)
 
     def _tdp_presets(self, limits) -> dict:
         """Quick-preset watts for the arc's preset buttons. Curated per-model values
@@ -2647,7 +3255,7 @@ class Plugin:
         limits = self._limits()
         clamped = limits.clamp(watts, read_on_ac())
         self._tdp_profiles.set_pl1(resolved, clamped, appid=appid)
-        res = await self._offload_call(self._reapply_tdp)
+        res = await self._apply_tdp_now("manual-watts")
         return self._apply_result(res)
 
     async def set_tdp_follow_global(self, follow: bool, appid) -> dict:
@@ -2663,8 +3271,8 @@ class Plugin:
             if not follow and not self._tdp_profiles.has_game(appid):
                 self._tdp_profiles.create_game_from_global(appid)
             self._tdp_profiles.set_follow_global(appid, bool(follow))
-            await self._offload_call(self._reapply_tdp)
-        return self._tdp_state(await self._read_applied())
+            await self._apply_tdp_now("follow-global")
+        return self._tdp_state(await self._read_tdp_observation())
 
     async def set_tdp_firmware_mode(self, mode: str) -> dict:
         """Select a firmware performance mode (Legion Go original). 'low-power' /
@@ -2677,9 +3285,16 @@ class Plugin:
         if mode not in valid:
             return await self.get_tdp_state()
         self._clear_eco()
+        previous = self._firmware_mode()
         self._settings["firmware_mode"] = mode
-        self._save()
-        await self._offload_call(self._reapply_tdp)
+        result = await self._apply_tdp_now("firmware-mode")
+        if result.ok:
+            self._save()
+        else:
+            self._settings["firmware_mode"] = previous
+            await self._apply_tdp_now("firmware-mode-rollback")
+            self._tdp_status = "rejected"
+            self._tdp_reason = "firmware_mode_rejected"
         return await self.get_tdp_state()
 
     async def set_tdp_levels(self, off2: int, off3: int, scope: str, appid=None) -> dict:
@@ -2694,7 +3309,7 @@ class Plugin:
         self._clear_eco()
         self._exit_firmware_mode()
         self._tdp_profiles.set_offsets(resolved, off2, off3, appid=appid)
-        res = await self._offload_call(self._reapply_tdp)
+        res = await self._apply_tdp_now("manual-levels")
         # requested_w/applied_w reflect resulting sustained pl1 (readback), not the offsets
         return self._apply_result(res)
 
@@ -2708,8 +3323,8 @@ class Plugin:
         if resolved is not None:  # invalid scope → no-op (never from the UI)
             self._clear_eco()
             self._tdp_profiles.set_boost_mode(resolved, mode, appid=appid)
-            await self._offload_call(self._reapply_tdp)
-        return self._tdp_state(await self._read_applied())
+            await self._apply_tdp_now("boost-mode")
+        return self._tdp_state(await self._read_tdp_observation())
 
     def _preset_wclamp(self):
         lim = self._limits()
@@ -2756,7 +3371,7 @@ class Plugin:
         self._exit_firmware_mode()
         limits = self._limits()
         self._tdp_profiles.apply_preset(resolved, limits.clamp(watts, read_on_ac()), boost, appid=appid)
-        res = await self._offload_call(self._reapply_tdp)
+        res = await self._apply_tdp_now("preset")
         return self._apply_result(res)
 
     async def create_game_profile(self, appid) -> None:
@@ -3087,6 +3702,7 @@ class Plugin:
         decky.logger.info(
             "Panel de Control v%s loaded (euid=%s)", read_version(), os.geteuid()
         )
+        self._log_tdp_backend_diagnostics()
         # Legion Go S hides its fan sensor unless lenovo_wmi_other is loaded with
         # expose_all_fans=Y — enable it (idempotent, no-op elsewhere, never raises).
         if fan_expose.ensure_fan_sensor():
@@ -3094,6 +3710,7 @@ class Plugin:
         try:
             self._reapply_all()
             self._lifecycle.start()
+            self._start_tdp_guard_loop()
             self._start_night_loop()
             # Re-assert the look across gamescope's session bringup, when a single apply
             # doesn't stick (see _await_display_backend). Always runs, not just cold boot.
@@ -3113,6 +3730,8 @@ class Plugin:
         # so the hardware is never left with a stale manual curve. The restores
         # spawn subprocesses (systemctl / gamescopectl) → run them off the loop and
         # await, then shut the executor down.
+        self._begin_tdp_shutdown()
+        await self._drain_offloaded()
         await self._offload_call(self._restore_fans_safe)
         self._cancel_color_revert()
         wait_task = getattr(self, "_display_wait_task", None)
@@ -3125,11 +3744,8 @@ class Plugin:
         await self._stop_audio_loop()
         await self._offload_call(self._restore_audio_safe)
         await self._offload_call(self._restore_hhd_tdp)  # hand HHD's TDP back if we took it
-        self._stop_auto_loop()
         if getattr(self, "_sampler", None) is not None:
             self._sampler.stop()
-        if getattr(self, "_lifecycle", None) is not None:
-            self._lifecycle.stop()
         self._shutdown_apply_executor()
         decky.logger.info("Panel de Control unloaded")
 
@@ -3140,6 +3756,8 @@ class Plugin:
             self._apply_executor = None
 
     async def _uninstall(self) -> None:
+        self._begin_tdp_shutdown()
+        await self._drain_offloaded()
         await self._offload_call(self._restore_fans_safe)
         await self._offload_call(self._restore_color_safe)
         self._audio_shutdown = True

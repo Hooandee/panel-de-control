@@ -180,6 +180,10 @@ def test_read_applied_is_none_write_only_interface(tmp_path):
     b = AlibBackend(FALLBACK, root=str(tmp_path), modprobe=_NO_MODPROBE)
     # ALIB does not expose the applied watts for read-back; never fabricate one.
     assert b.read_applied() is None
+    assert b.readback is False
+    assert b.guard_interval_s == 15.0
+    assert b.heartbeat_s == 15.0
+    assert b.observe().as_dict() == {"readable": False, "surfaces": {}}
 
 
 def test_file_caller_writes_encoded_command(tmp_path):

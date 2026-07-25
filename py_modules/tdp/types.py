@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
@@ -45,3 +45,43 @@ class TdpResult:
     applied_w: int | None   # read back after writing (None if unreadable)
     ok: bool                # did the write stick / succeed
     detail: str             # detail surfaced to UI/log on failure
+
+
+@dataclass(frozen=True)
+class RailReading:
+    applied_w: int | None
+    min_w: int | None = None
+    max_w: int | None = None
+
+    def as_dict(self) -> dict:
+        return {
+            "applied": self.applied_w,
+            "min": self.min_w,
+            "max": self.max_w,
+        }
+
+
+@dataclass(frozen=True)
+class TdpObservation:
+    readable: bool
+    surfaces: dict[str, dict[str, RailReading]] = field(default_factory=dict)
+
+    def applied_values(self) -> dict[tuple[str, str], int]:
+        return {
+            (surface, rail): reading.applied_w
+            for surface, rails in self.surfaces.items()
+            for rail, reading in rails.items()
+            if reading.applied_w is not None
+        }
+
+    def as_dict(self) -> dict:
+        return {
+            "readable": self.readable,
+            "surfaces": {
+                surface: {
+                    rail: reading.as_dict()
+                    for rail, reading in rails.items()
+                }
+                for surface, rails in self.surfaces.items()
+            },
+        }

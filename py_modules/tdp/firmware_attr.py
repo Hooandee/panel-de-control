@@ -3,7 +3,7 @@ import os
 
 from sysfs import read_str
 from tdp.backend import TDPBackend
-from tdp.types import TdpLimits, TdpResult
+from tdp.types import RailReading, TdpLimits, TdpObservation, TdpResult
 
 _FW_BASE = "sys/class/firmware-attributes"
 _PP_BASE = "sys/class/platform-profile"
@@ -12,23 +12,21 @@ _PP_BASE = "sys/class/platform-profile"
 # so a write mirrors our (clamped) setpoint here too to stay authoritative under a game.
 _LEGACY_BASE = "sys/devices/platform/asus-nb-wmi"
 _LEGACY_NODES = (("pl1", "ppt_pl1_spl"), ("pl2", "ppt_pl2_sppt"), ("pl3", "ppt_fppt"))
+_RAIL_ATTRS = (
+    ("pl1", "ppt_pl1_spl"),
+    ("pl2", "ppt_pl2_sppt"),
+    ("pl3", "ppt_pl3_fppt"),
+)
 
 # Boost headroom derived from sustained PL1 when the user sets a single TDP value.
 # PL2 (slow) and PL3 (fast) are scaled above PL1, then clamped to each rail's sysfs max.
 _PL2_BOOST_RATIO = 1.2
 _PL3_BOOST_RATIO = 1.4
 
-# Guard against a bogus firmware ppt ceiling on a generic device (some ASUS kernels
-# report every rail as 150 W). A recognised device uses its profile, not this.
-_FW_ABSURD_W = 100
-
-
 class FirmwareAttrBackend(TDPBackend):
     """TDP via kernel firmware-attributes. Covers ASUS (asus-armoury), Lenovo
     (lenovo-wmi-other), MSI (msi-wmi-platform): ppt_pl1_spl/ppt_pl2_sppt/ppt_pl3_fppt
     with current_value (watts) + min_value/max_value. Never raises."""
-
-    supports_levels = True
 
     def __init__(self, driver_prefix, fallback, root="/", profile_name=None, is_generic=False):
         self.name = f"firmware-attr:{driver_prefix}"
@@ -41,15 +39,17 @@ class FirmwareAttrBackend(TDPBackend):
         self._pp_dir = self._find_profile_dir()  # static, resolved once
         self._pp_choices = None                  # parsed lazily, then cached
         self._legacy = self._find_legacy_nodes(driver_prefix)  # ASUS dual-interface
+        self._rails = tuple(
+            rail
+            for rail, attr in _RAIL_ATTRS
+            if os.path.exists(self._attr(attr)) or rail in self._legacy
+        )
+        self.supports_levels = any(rail != "pl1" for rail in self._rails)
 
     def _live_bounds(self, attr):
-        # Read live, never cache: the firmware ceiling is dynamic (lower on battery,
-        # momentarily low on Lenovo) and caching it froze a bad read. Generic devices
-        # get a sanity cap; recognised ones take their range from the profile instead.
+        # Read live, never cache: the firmware ceiling is dynamic.
         lo = self._read_int(self._attr(attr, "min_value"))
         hi = self._read_int(self._attr(attr, "max_value"))
-        if self._is_generic and hi is not None and hi > _FW_ABSURD_W:
-            hi = _FW_ABSURD_W
         return lo, hi
 
     def _find_legacy_nodes(self, driver_prefix):
@@ -62,14 +62,20 @@ class FirmwareAttrBackend(TDPBackend):
                 for rail, node in _LEGACY_NODES
                 if os.path.exists(os.path.join(base, node))}
 
-    def _write_legacy(self, pl1, pl2, pl3):
-        """Mirror the profile-clamped rails to the legacy interface, PL1 last, so our
-        setpoint wins the last-writer-wins SMU arbitration against Steam/HHD/firmware.
-        Best-effort: never touches the firmware-attributes result."""
-        for rail, val in (("pl3", pl3), ("pl2", pl2), ("pl1", pl1)):
-            p = self._legacy.get(rail)
-            if p:
-                self._write(p, val)
+    def _write_legacy(self, targets):
+        failed = []
+        for rail in ("pl3", "pl2", "pl1"):
+            path = self._legacy.get(rail)
+            if path and rail in targets and not self._write(path, targets[rail]):
+                failed.append(f"asus-nb-wmi/{rail}")
+        return failed
+
+    def reconciliation_levels(self, levels):
+        return {
+            rail: int(levels[rail])
+            for rail in self._rails
+            if rail in levels
+        }
 
     def _find_driver_dir(self, prefix):
         base = os.path.join(self._root, _FW_BASE)
@@ -103,12 +109,21 @@ class FirmwareAttrBackend(TDPBackend):
             # The profile is the authority for the range; the firmware's reported max
             # lies (and, cached, stranded users at 15 W). Writes still clamp live.
             return self._fallback
-        # Generic device: no profile to trust, so take the firmware's live ceiling.
         mn, mx = self._live_bounds("ppt_pl1_spl")
-        min_w = mn if mn is not None else self._fallback.min_w
-        fw_max = mx if mx is not None else self._fallback.max_ac_w
-        default_w = max(min_w, min(self._fallback.default_w, fw_max))
-        return TdpLimits(min_w=min_w, default_w=default_w, max_w=fw_max, max_ac_w=fw_max)
+        max_ac_w = min(
+            self._fallback.max_ac_w,
+            mx if mx is not None else self._fallback.max_ac_w,
+        )
+        max_w = min(self._fallback.max_w, max_ac_w)
+        live_min = mn if mn is not None else self._fallback.min_w
+        min_w = min(max_w, max(self._fallback.min_w, live_min))
+        default_w = max(min_w, min(self._fallback.default_w, max_w))
+        return TdpLimits(
+            min_w=min_w,
+            default_w=default_w,
+            max_w=max_w,
+            max_ac_w=max_ac_w,
+        )
 
     def _find_profile_dir(self):
         if not self._profile_name:
@@ -147,19 +162,24 @@ class FirmwareAttrBackend(TDPBackend):
     def level_limits(self):
         if self._is_generic:
             out = {}
-            for key, attr in (("pl1", "ppt_pl1_spl"), ("pl2", "ppt_pl2_sppt"), ("pl3", "ppt_pl3_fppt")):
+            for key, attr in _RAIL_ATTRS:
+                if key not in self._rails:
+                    continue
                 mn, mx = self._live_bounds(attr)
                 if mn is not None and mx is not None:
-                    out[key] = {"min": mn, "max": mx}
+                    hi = min(mx, self._profile_rail_max(attr))
+                    lo = min(hi, max(self._fallback.min_w, mn))
+                    out[key] = {"min": lo, "max": hi}
             return out
         # Recognised: rails from the profile (PL1 = charger max, boost scaled); writes
         # clamp to the live ceiling anyway.
         mn, mx = self._fallback.min_w, self._fallback.max_ac_w
-        return {
+        bounds = {
             "pl1": {"min": mn, "max": mx},
             "pl2": {"min": mn, "max": round(mx * _PL2_BOOST_RATIO)},
             "pl3": {"min": mn, "max": round(mx * _PL3_BOOST_RATIO)},
         }
+        return {rail: bounds[rail] for rail in self._rails}
 
     def _profile_rail_max(self, attr):
         """Recognised-device write ceiling for a rail, mirroring level_limits(): PL1 =
@@ -174,14 +194,10 @@ class FirmwareAttrBackend(TDPBackend):
 
     def _clamp_live(self, value, attr):
         mn, mx = self._live_bounds(attr)
-        lo = mn if mn is not None else self._fallback.min_w
-        hi = mx if mx is not None else self._fallback.max_ac_w
-        if not self._is_generic:
-            # Bound the write to the profile ceiling too, keeping the LOWER of the two:
-            # the live firmware max still applies the dynamic battery/charger ceiling,
-            # but a bogus-high firmware read (150 W) can never leak into a write and
-            # cook the machine.
-            hi = min(hi, self._profile_rail_max(attr))
+        safe_hi = self._profile_rail_max(attr)
+        hi = min(mx if mx is not None else safe_hi, safe_hi)
+        live_lo = mn if mn is not None else self._fallback.min_w
+        lo = min(hi, max(self._fallback.min_w, live_lo))
         return max(lo, min(int(value), hi))
 
     def set_levels(self, pl1, pl2, pl3, ac):
@@ -191,18 +207,32 @@ class FirmwareAttrBackend(TDPBackend):
         # writing above it is rejected, so the applied value follows what the firmware
         # accepts now (25 W on battery, 30 W on charger) while the profile range stays put.
         self._set_custom_profile()
-        c1 = self._clamp_live(pl1, "ppt_pl1_spl")
-        c2 = self._clamp_live(pl2, "ppt_pl2_sppt")
-        c3 = self._clamp_live(pl3, "ppt_pl3_fppt")
-        self._write(self._attr("ppt_pl3_fppt"), c3)
-        self._write(self._attr("ppt_pl2_sppt"), c2)
-        ok = self._write(self._attr("ppt_pl1_spl"), c1)
-        # Also assert the legacy interface (ASUS dual PL1) so our value is the last writer.
-        self._write_legacy(c1, c2, c3)
-        applied = self.read_applied()
-        success = ok and applied == c1
-        detail = "" if success else f"write not confirmed (wanted {c1}, read {applied})"
-        return TdpResult(pl1, applied, success, detail)
+        values = {"pl1": pl1, "pl2": pl2, "pl3": pl3}
+        attrs = dict(_RAIL_ATTRS)
+        targets = {
+            rail: self._clamp_live(values[rail], attrs[rail])
+            for rail in self._rails
+        }
+        failed = []
+        for rail in reversed(self._rails):
+            attr = attrs[rail]
+            if os.path.exists(self._attr(attr)) and not self._write(
+                self._attr(attr),
+                targets[rail],
+            ):
+                failed.append(f"{self.name}/{rail}")
+        failed.extend(self._write_legacy(targets))
+        observation = self.observe()
+        mismatches = self._observation_mismatches(observation, targets)
+        applied = observation.surfaces.get(self.name, {}).get("pl1")
+        applied_w = applied.applied_w if applied else None
+        problems = failed + mismatches
+        return TdpResult(
+            pl1,
+            applied_w,
+            not problems,
+            "" if not problems else "write not confirmed: " + ", ".join(problems),
+        )
 
     def set_tdp(self, watts, ac):
         # Single-value entry: write all rails flat (SPPT = FPPT = PL1). Boost headroom
@@ -214,4 +244,35 @@ class FirmwareAttrBackend(TDPBackend):
         return self.set_levels(target, target, target, ac)
 
     def read_applied(self):
-        return self._read_int(self._attr("ppt_pl1_spl"))
+        primary = self.observe().surfaces.get(self.name, {})
+        reading = primary.get("pl1")
+        return reading.applied_w if reading else None
+
+    def observe(self):
+        if not self.supported:
+            return TdpObservation(readable=True)
+        primary = {}
+        for rail, attr in _RAIL_ATTRS:
+            path = self._attr(attr)
+            if not os.path.exists(path):
+                continue
+            lo, hi = self._live_bounds(attr)
+            primary[rail] = RailReading(self._read_int(path), lo, hi)
+        surfaces = {self.name: primary} if primary else {}
+        legacy = {
+            rail: RailReading(self._read_int(path))
+            for rail, path in self._legacy.items()
+        }
+        if legacy:
+            surfaces["asus-nb-wmi"] = legacy
+        return TdpObservation(readable=True, surfaces=surfaces)
+
+    @staticmethod
+    def _observation_mismatches(observation, targets):
+        bad = []
+        for surface, rails in observation.surfaces.items():
+            for rail, reading in rails.items():
+                target = targets.get(rail)
+                if target is not None and reading.applied_w != target:
+                    bad.append(f"{surface}/{rail}={reading.applied_w}")
+        return bad

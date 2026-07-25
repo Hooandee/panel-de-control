@@ -2,6 +2,8 @@ import dataclasses
 import os
 
 from device_profiles import DEVICE_TABLE, GENERIC
+from tdp import factory
+from tdp.backend import NullBackend
 from tdp.factory import select_backend
 
 
@@ -36,6 +38,11 @@ def test_rog_uses_asus_armoury_firmware_attr(tmp_path):
     _mk_fw(root, "asus-armoury")
     b = select_backend(_p("rog_xbox_ally_x"), root=root, ryzenadj_resolve=_NO_RYZENADJ)
     assert b.supported and "asus-armoury" in b.name
+    assert b.probe_trace == ({
+        "candidate": "asus",
+        "backend": "firmware-attr:asus-armoury",
+        "supported": True,
+    },)
 
 
 def test_legion_uses_lenovo_firmware_attr(tmp_path):
@@ -62,11 +69,74 @@ def test_steam_deck_uses_hwmon(tmp_path):
 def test_falls_back_to_null_when_nothing_present(tmp_path):
     b = select_backend(_p("rog_ally_x"), root=str(tmp_path), ryzenadj_resolve=_NO_RYZENADJ)
     assert b.supported is False and b.name == "unsupported"
+    assert [item["candidate"] for item in b.probe_trace] == [
+        "asus",
+        "lenovo",
+        "msi",
+        "ryzenadj",
+        "alib",
+    ]
+    assert all(item["supported"] is False for item in b.probe_trace)
 
 
 def test_generic_amd_uses_ryzenadj_when_present(tmp_path):
     b = select_backend(GENERIC, root=str(tmp_path), ryzenadj_resolve=lambda: "/usr/bin/ryzenadj")
     assert b.supported and b.name == "ryzenadj"
+    assert [item["candidate"] for item in b.probe_trace] == [
+        "asus",
+        "lenovo",
+        "msi",
+        "ryzenadj",
+    ]
+
+
+def test_backend_probe_failure_is_recorded_and_falls_through(tmp_path, monkeypatch):
+    calls = []
+
+    def broken():
+        calls.append("broken")
+        raise OSError("probe failed")
+
+    def working():
+        calls.append("working")
+
+        class Working(NullBackend):
+            supported = True
+            name = "working"
+
+        return Working("x")
+
+    def unreachable():
+        calls.append("unreachable")
+        raise AssertionError("lazy selection continued after a match")
+
+    monkeypatch.setattr(
+        factory,
+        "_candidates",
+        lambda *args: [broken, working, unreachable],
+    )
+
+    backend = select_backend(
+        GENERIC,
+        root=str(tmp_path),
+        ryzenadj_resolve=_NO_RYZENADJ,
+    )
+
+    assert backend.name == "working"
+    assert calls == ["broken", "working"]
+    assert backend.probe_trace == (
+        {
+            "candidate": "broken",
+            "backend": None,
+            "supported": False,
+            "error": "OSError",
+        },
+        {
+            "candidate": "working",
+            "backend": "working",
+            "supported": True,
+        },
+    )
 
 
 def _mk_rapl(root):

@@ -1,14 +1,18 @@
 from abc import ABC, abstractmethod
 
-from tdp.types import TdpLimits, TdpResult
+from tdp.types import RailReading, TdpLimits, TdpObservation, TdpResult
 
 
 class TDPBackend(ABC):
     supported: bool = True
     supports_levels: bool = False
-    # True when read_applied()/set_tdp() spawn a subprocess and must run off the loop.
     blocking: bool = False
     name: str = "base"
+    readback: bool = True
+    guard_interval_s: float = 2.0
+    heartbeat_s: float | None = None
+    read_tolerance_w: int = 0
+    probe_trace: tuple[dict, ...] = ()
 
     @abstractmethod
     def get_limits(self) -> TdpLimits:
@@ -30,8 +34,17 @@ class TDPBackend(ABC):
         """Set explicit per-PL targets. Defaults to applying pl1 via set_tdp."""
         return self.set_tdp(pl1, ac)
 
-    # Firmware performance modes (platform_profile). Only backends that expose a named
-    # platform-profile override these; every other backend is a safe no-op.
+    def observe(self) -> TdpObservation:
+        applied = self.read_applied()
+        surfaces = {}
+        if applied is not None:
+            surfaces[self.name] = {"pl1": RailReading(applied)}
+        return TdpObservation(readable=self.readback, surfaces=surfaces)
+
+    def reconciliation_levels(self, levels: dict) -> dict[str, int]:
+        rails = ("pl1", "pl2", "pl3") if self.supports_levels else ("pl1",)
+        return {rail: int(levels[rail]) for rail in rails}
+
     def profile_choices(self) -> list:
         return []
 
@@ -45,6 +58,8 @@ class TDPBackend(ABC):
 class NullBackend(TDPBackend):
     supported = False
     name = "unsupported"
+    readback = False
+    guard_interval_s = 0.0
 
     def __init__(self, reason: str) -> None:
         self._reason = reason

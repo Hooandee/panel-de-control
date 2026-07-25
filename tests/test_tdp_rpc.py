@@ -5,7 +5,7 @@ import types
 
 import pytest
 
-from tdp.types import TdpLimits, TdpResult
+from tdp.types import RailReading, TdpLimits, TdpObservation, TdpResult
 
 _FAKE_POWER = {"watts": 13.1, "gpu_busy": 49}
 
@@ -18,6 +18,8 @@ class FakeBackend:
     def __init__(self):
         self._applied = None
         self._levels = None
+        self.live_max = 60
+        self.set_levels_calls = 0
 
     def get_limits(self):
         return TdpLimits(min_w=5, default_w=15, max_w=20, max_ac_w=60)
@@ -32,12 +34,42 @@ class FakeBackend:
         return TdpResult(watts, watts, True, "")
 
     def set_levels(self, pl1, pl2, pl3, ac):
-        self._applied = pl1
-        self._levels = (pl1, pl2, pl3)
-        return TdpResult(pl1, pl1, True, "")
+        self.set_levels_calls += 1
+        self._applied = min(pl1, self.live_max)
+        self._levels = (self._applied, pl2, pl3)
+        return TdpResult(pl1, self._applied, True, "")
 
     def read_applied(self):
         return self._applied
+
+    def observe(self):
+        if self._applied is None:
+            return TdpObservation(
+                readable=True,
+                surfaces={
+                    self.name: {
+                        "pl1": RailReading(None, 5, self.live_max),
+                        "pl2": RailReading(None, 5, 40),
+                        "pl3": RailReading(None, 5, 50),
+                    },
+                },
+            )
+        pl2 = self._levels[1] if self._levels else self._applied
+        pl3 = self._levels[2] if self._levels else self._applied
+        return TdpObservation(
+            readable=True,
+            surfaces={
+                self.name: {
+                    "pl1": RailReading(
+                        self._applied,
+                        5,
+                        self.live_max,
+                    ),
+                    "pl2": RailReading(pl2, 5, 40),
+                    "pl3": RailReading(pl3, 5, 50),
+                },
+            },
+        )
 
     _profile = "custom"
 
@@ -81,6 +113,27 @@ def test_get_tdp_state_shape(Plugin):
     # Presets fall back to the rail limits when the profile carries none, clamped
     # to [min, max_ac].
     assert st["presets"] == {"quiet": 5, "balanced": 15, "turbo": 20, "turbo_ac": 60}
+
+
+def test_tdp_state_exposes_requested_target_and_applied(Plugin):
+    p = Plugin()
+    p._init()
+    p._tdp_backend.live_max = 15
+    asyncio.run(p.set_tdp_watts(25, "global"))
+    st = asyncio.run(p.get_tdp_state())
+    own = st["ownership"]
+    assert own["requested"]["pl1"] == 25
+    assert own["target"]["pl1"] == 15
+    assert own["applied"]["pl1"] == 15
+    assert own["status"] == "constrained"
+    assert own["reason"] == "live_max"
+
+
+def test_tdp_state_surfaces_are_structured(Plugin):
+    p = Plugin()
+    st = asyncio.run(p.get_tdp_state())
+    assert isinstance(st["ownership"]["surfaces"], dict)
+    assert "external_change" not in st
 
 
 def test_set_tdp_watts_global_clamps_persists_applies(Plugin):
@@ -287,7 +340,8 @@ def test_get_power_draw_has_all_keys(PluginWithPower):
     p = PluginWithPower()
     r = asyncio.run(p.get_power_draw())
     assert set(r.keys()) == {"watts", "gpu_busy", "auto_tdp", "setpoint", "applied",
-                             "ui_floor_engaged", "on_ac"}
+                             "ui_floor_engaged", "on_ac", "ownership"}
+    assert r["ownership"] == asyncio.run(p.get_tdp_state())["ownership"]
 
 
 def test_get_power_draw_values(PluginWithPower):
@@ -424,54 +478,22 @@ def test_get_telemetry_aggregates_after_collect(Plugin, monkeypatch):
     assert len(agg["recent"]) == 1
 
 
-def test_adopt_external_tdp_syncs_and_flags(Plugin):
+def test_get_state_never_adopts_external_tdp(Plugin):
     p = Plugin()
     asyncio.run(p.set_tdp_watts(15, "global"))
-    p._tdp_backend._applied = 18  # HHD/Steam moved the firmware PL1 behind our back
-    # Debounced: a real external change persists, so it's adopted on the second read.
-    assert asyncio.run(p.get_tdp_state())["external_change"] is False  # first read arms
-    st = asyncio.run(p.get_tdp_state())
-    assert st["external_change"] is True  # confirmed on the second read → adopt
-    assert st["global_watts"] == 18  # adopted → our setpoint follows, no stomp next reapply
-    # already adopted → a further read is no longer flagged
-    assert asyncio.run(p.get_tdp_state())["external_change"] is False
+    p._tdp_backend._applied = 30
+    asyncio.run(p.get_tdp_state())
+    asyncio.run(p.get_tdp_state())
+    assert p._tdp_profiles.effective(None)["pl1"] == 15
 
 
-def test_transient_firmware_spike_not_adopted(Plugin):
-    # A one-shot spike (seen for a single read, then gone) must NOT be adopted as the
-    # user's setpoint — this debounce is what stops the slider "jumping" to the spike
-    # value on newer kernels that momentarily bump the rail under load.
+def test_opening_qam_state_never_writes_hardware(Plugin):
     p = Plugin()
     asyncio.run(p.set_tdp_watts(15, "global"))
-    p._tdp_backend._applied = 30  # firmware spiked for a moment
-    assert asyncio.run(p.get_tdp_state())["external_change"] is False  # armed, not adopted
-    p._tdp_backend._applied = 15  # next read is back at our setpoint
-    st = asyncio.run(p.get_tdp_state())
-    assert st["external_change"] is False
-    assert st["global_watts"] == 15  # setpoint untouched by the transient
-
-
-def test_adopt_skipped_in_download_mode(Plugin):
-    p = Plugin()
-    asyncio.run(p.set_tdp_watts(15, "global"))
-    asyncio.run(p.set_eco(True, 50))
-    assert p._adopt_external_tdp(18) is False  # eco owns the setpoint (forced min)
-
-
-def test_adopt_skipped_within_threshold(Plugin):
-    p = Plugin()
-    asyncio.run(p.set_tdp_watts(15, "global"))
-    assert p._adopt_external_tdp(16) is False  # 1 W jitter, not an external change
-
-
-def test_no_adopt_before_first_apply(Plugin):
-    # Startup race: the firmware still holds a default before we've applied our saved
-    # profile — it must NOT be mistaken for an external change and overwrite the profile.
-    p = Plugin()
-    asyncio.run(p.get_tdp_state())  # init backends; nothing applied yet
-    p._tdp_backend._applied = 28    # firmware default, we've written nothing
-    st = asyncio.run(p.get_tdp_state())
-    assert st["external_change"] is False
+    p._tdp_backend.set_levels_calls = 0
+    asyncio.run(p.get_tdp_state())
+    asyncio.run(p.get_tdp_state())
+    assert p._tdp_backend.set_levels_calls == 0
 
 
 def test_cooler_boost_raises_ceiling_on_win5(Plugin):
@@ -493,15 +515,12 @@ def test_cooler_boost_ignored_when_device_has_no_cooler(Plugin):
     assert p._limits().max_w == 20  # unchanged
 
 
-def test_adopt_does_not_detach_a_follow_global_game(Plugin):
-    # A game that kept its own stored profile but is toggled back to following global
-    # must NOT be silently detached when an external tool moves PL1 (the adopt path
-    # writes to the live scope = global here, never flipping follow_global off).
+def test_external_read_does_not_detach_a_follow_global_game(Plugin):
     p = Plugin()
     p._current_appid = "g"
     asyncio.run(p.set_tdp_watts(20, "game", "g"))
     asyncio.run(p.set_tdp_follow_global(True, "g"))
     assert p._tdp_profiles.is_following_global("g") is True
-    p._tdp_backend._applied = 30  # external tool moved the firmware PL1
-    asyncio.run(p.get_tdp_state())  # triggers adoption
-    assert p._tdp_profiles.is_following_global("g") is True  # still following, not detached
+    p._tdp_backend._applied = 30
+    asyncio.run(p.get_tdp_state())
+    assert p._tdp_profiles.is_following_global("g") is True

@@ -1,7 +1,7 @@
 import os
 
 from tdp.backend import TDPBackend
-from tdp.types import TdpLimits, TdpResult
+from tdp.types import RailReading, TdpLimits, TdpObservation, TdpResult
 
 _POWERCAP = "sys/devices/virtual/powercap"
 # Prefer the MMIO interface (current on recent kernels), fall back to the legacy one.
@@ -23,6 +23,7 @@ class IntelRaplBackend(TDPBackend):
 
     name = "intel-rapl"
     supports_levels = False  # PL1 (+ derived PL2 boost); no manual per-rail UI for now
+    read_tolerance_w = 1
 
     def __init__(self, fallback: TdpLimits, root: str = "/") -> None:
         self._fallback = fallback
@@ -74,5 +75,21 @@ class IntelRaplBackend(TDPBackend):
         return TdpResult(target, applied, success, detail)
 
     def read_applied(self) -> int | None:
-        uw = self._read_int(self._constraint(0))
-        return round(uw / 1_000_000) if uw is not None else None
+        return self._read_constraint_w(0)
+
+    def _read_constraint_w(self, index):
+        value = self._read_int(self._constraint(index))
+        return round(value / 1_000_000) if value is not None else None
+
+    def observe(self):
+        if not self.supported:
+            return TdpObservation(readable=True)
+        rails = {}
+        for rail, index in (("pl1", 0), ("pl2", 1)):
+            value = self._read_constraint_w(index)
+            if value is not None:
+                rails[rail] = RailReading(value)
+        return TdpObservation(
+            readable=True,
+            surfaces={self.name: rails} if rails else {},
+        )

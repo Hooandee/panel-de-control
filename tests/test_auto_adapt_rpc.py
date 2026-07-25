@@ -257,6 +257,24 @@ def test_loop_steps_up_when_saturated(Plugin, monkeypatch):
     assert p._tdp_profiles.effective("g")["pl1"] == 28  # +2 W each of 4 ticks
 
 
+def test_loop_uses_constrained_target_as_control_baseline(Plugin, monkeypatch):
+    from tdp.reconcile import TargetSet
+
+    p = Plugin()
+    p._init()
+    p._current_appid = "g"
+    p._tdp_profiles.set_pl1("game", 25, appid="g")
+    p._tdp_targets = TargetSet(
+        requested={"pl1": 25},
+        target={"pl1": 15},
+        reasons={"pl1": "live_max"},
+    )
+    p._tdp_status = "constrained"
+    reads = [{"gpu_busy": 99}]
+    _run_loop_ticks(p, reads, monkeypatch)
+    assert p._tdp_profiles.effective("g")["pl1"] == 17
+
+
 def test_loop_holds_with_no_signal(Plugin, monkeypatch):
     # Level 4 (Claw today): no gpu_busy → hold, never thrash.
     p = Plugin()

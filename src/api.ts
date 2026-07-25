@@ -83,6 +83,32 @@ export interface Levels {
   pl3: number;
 }
 
+export type TdpOwnershipStatus =
+  | "in_sync"
+  | "constrained"
+  | "settling"
+  | "drift"
+  | "rejected"
+  | "unverifiable"
+  | "unsupported";
+
+export interface TdpRailReading {
+  applied: number | null;
+  min: number | null;
+  max: number | null;
+}
+
+export interface TdpOwnership {
+  status: TdpOwnershipStatus;
+  reason: string;
+  requested: Partial<Levels>;
+  target: Partial<Levels>;
+  applied: Partial<Record<keyof Levels, number | null>>;
+  surfaces: Record<string, Partial<Record<keyof Levels, TdpRailReading>>>;
+  conflict_persistent: boolean;
+  failures: number;
+}
+
 // Boost behaviour: how the SPPT/FPPT rails relate to the sustained PL1.
 //   estable — flat (SPPT = FPPT = PL1), the default; "what you set is what it draws".
 //   auto    — managed headroom (SPPT ≈ 1.2x, FPPT ≈ 1.4x), clamped to firmware max.
@@ -118,8 +144,7 @@ export interface TdpState {
   // hides the selector. firmware_mode is the active one ("custom" = our TDP slider).
   firmware_modes: string[];
   firmware_mode: string;
-  // True when get_tdp_state adopted an external (HHD/Steam) TDP change on this read.
-  external_change: boolean;
+  ownership: TdpOwnership;
   // Master switch: when false we stop writing rails → Potencia drops to monitor-only.
   tdp_control_enabled: boolean;
   // One-time full-screen notices already shown (durable across reboot).
@@ -228,6 +253,7 @@ export interface PowerDraw {
   // Live charger state, polled every second so the UI can refresh the slider ceiling
   // (battery vs charger) the instant the charger is plugged or unplugged.
   on_ac: boolean;
+  ownership: TdpOwnership;
 }
 
 export const getPowerDraw = callable<[], PowerDraw>("get_power_draw");
