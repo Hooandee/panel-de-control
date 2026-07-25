@@ -7,6 +7,7 @@ RETRY_S = (0.5, 2.0, 5.0)
 DEGRADED_RETRY_S = 30.0
 CONFLICT_WINDOW_S = 30.0
 CONFLICT_COUNT = 3
+UNVERIFIABLE_HEARTBEAT_S = 15.0
 
 
 @dataclass(frozen=True)
@@ -136,12 +137,29 @@ def decide(
 ):
     memory, conflict = _recent_memory(memory, now)
     if write_only:
+        if memory.failures:
+            status = (
+                "rejected"
+                if memory.failures > len(RETRY_S)
+                else "settling"
+            )
+            action = "apply" if now >= memory.next_retry_at else "hold"
+            return ReconcileDecision(
+                action,
+                status,
+                "write_rejected",
+                memory,
+                conflict,
+            )
         if force or now >= memory.next_retry_at:
             return ReconcileDecision(
                 "apply",
                 "unverifiable",
                 "read_unavailable",
-                replace(memory, next_retry_at=now + 15.0),
+                replace(
+                    memory,
+                    next_retry_at=now + UNVERIFIABLE_HEARTBEAT_S,
+                ),
                 conflict,
             )
         return ReconcileDecision(
@@ -163,6 +181,18 @@ def decide(
                 action,
                 status,
                 "write_rejected",
+                memory,
+                conflict,
+            )
+        if (
+            memory.last_write_at is not None
+            and memory.next_retry_at > 0.0
+            and now >= memory.next_retry_at
+        ):
+            return ReconcileDecision(
+                "apply",
+                "unverifiable",
+                "read_unavailable",
                 memory,
                 conflict,
             )
@@ -260,12 +290,12 @@ def after_apply(
     write_only=False,
 ):
     memory, conflict = _recent_memory(memory, now)
-    if write_only:
+    if write_only and wrote_ok:
         pending = replace(
             memory,
             pending_signature=None,
             pending_since=None,
-            next_retry_at=now + 15.0,
+            next_retry_at=now + UNVERIFIABLE_HEARTBEAT_S,
             last_write_at=now,
         )
         return ReconcileDecision(
@@ -293,7 +323,7 @@ def after_apply(
             memory,
             pending_signature=None,
             pending_since=None,
-            next_retry_at=now + VERIFY_S,
+            next_retry_at=now + UNVERIFIABLE_HEARTBEAT_S,
             last_write_at=now,
         )
         return ReconcileDecision(

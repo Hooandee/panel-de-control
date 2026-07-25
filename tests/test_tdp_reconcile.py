@@ -178,6 +178,30 @@ def test_write_only_apply_stays_unverifiable():
     assert out.memory.next_retry_at == 25.0
 
 
+def test_write_only_failure_enters_retry_ladder():
+    targets = build_targets(
+        {"pl1": 15},
+        {"pl1": {"min": 7, "max": 30}},
+        TdpObservation(readable=False),
+    )
+    failed = after_apply(
+        targets,
+        TdpObservation(readable=False),
+        ReconcileMemory(),
+        now=10.0,
+        wrote_ok=False,
+        tolerance=0,
+        write_only=True,
+    )
+    assert (failed.action, failed.status, failed.reason) == (
+        "retry",
+        "settling",
+        "write_rejected",
+    )
+    assert failed.memory.failures == 1
+    assert failed.memory.next_retry_at == 10.5
+
+
 def test_readable_backend_retries_after_failed_empty_readback():
     targets = build_targets(
         {"pl1": 15},
@@ -217,6 +241,26 @@ def test_empty_readback_never_confirms_a_successful_write():
         tolerance=0,
     )
     assert (out.status, out.reason) == ("unverifiable", "read_unavailable")
+    before_due = decide(
+        targets,
+        TdpObservation(readable=True),
+        out.memory,
+        now=24.9,
+        tolerance=0,
+    )
+    due = decide(
+        targets,
+        TdpObservation(readable=True),
+        out.memory,
+        now=25.0,
+        tolerance=0,
+    )
+    assert before_due.action == "hold"
+    assert (due.action, due.status, due.reason) == (
+        "apply",
+        "unverifiable",
+        "read_unavailable",
+    )
 
 
 def test_any_asus_surface_can_report_drift():
