@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.31.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.31.1...panel-de-control-v0.31.2) (2026-07-25)
+
+
+### Bug Fixes
+
+* recover GPD Win Mini TDP and fan control ([#323](https://github.com/Hooandee/panel-de-control/issues/323)) ([963d20e](https://github.com/Hooandee/panel-de-control/commit/963d20ef793d90764a2d4284ba212c020f731f2d))
+
 ## [0.31.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.31.0...panel-de-control-v0.31.1) (2026-07-25)
 
 
