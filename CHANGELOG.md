@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.31.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.31.0...panel-de-control-v0.31.1) (2026-07-25)
+
+
+### Bug Fixes
+
+* keep TDP authority reconciled ([#319](https://github.com/Hooandee/panel-de-control/issues/319)) ([62e1991](https://github.com/Hooandee/panel-de-control/commit/62e19918cddd0de2e6525f9bf58ae651b6fa1201))
+
 ## [0.31.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.30.1...panel-de-control-v0.31.0) (2026-07-24)
 
 
