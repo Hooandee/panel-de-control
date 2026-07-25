@@ -223,6 +223,24 @@ def test_named_firmware_mode_does_not_write_rails(plugin):
     assert result.detail == "firmware-mode:performance"
 
 
+def test_rejected_firmware_mode_is_reported_and_not_persisted(
+    plugin,
+    monkeypatch,
+):
+    plugin._device = replace(plugin._device, firmware_modes=True)
+    monkeypatch.setattr(
+        plugin._tdp_backend,
+        "set_profile",
+        lambda mode: False,
+    )
+    state = asyncio.run(
+        plugin.set_tdp_firmware_mode("performance")
+    )
+    assert state["firmware_mode"] == "custom"
+    assert state["ownership"]["status"] == "rejected"
+    assert state["ownership"]["reason"] == "firmware_mode_rejected"
+
+
 def _reset_guard_memory(plugin):
     plugin._tdp_reconcile_memory = ReconcileMemory()
 
@@ -249,6 +267,53 @@ def test_guard_corrects_confirmed_drift_without_mutating_profile(plugin):
     assert plugin._tdp_backend.set_levels_calls == 1
     assert plugin._tdp_backend._levels["pl1"] == 15
     assert plugin._tdp_profiles.effective(None)["pl1"] == 15
+
+
+def test_guard_keeps_global_and_game_profiles_independent(plugin):
+    plugin._tdp_profiles.set_pl1("global", 18)
+    plugin._tdp_profiles.create_game_from_global("42")
+    plugin._tdp_profiles.set_pl1("game", 25, appid="42")
+
+    plugin._current_appid = "42"
+    plugin._execute_tdp_command(plugin._capture_tdp_command("game"))
+    _reset_guard_memory(plugin)
+    plugin._tdp_backend._levels["pl1"] = 30
+    plugin._tdp_guard_tick(now=10.0)
+    plugin._tdp_guard_tick(now=10.75)
+    assert plugin._tdp_backend._levels["pl1"] == 25
+    assert plugin._tdp_profiles.effective("42")["pl1"] == 25
+    assert plugin._tdp_profiles.effective(None)["pl1"] == 18
+
+    plugin._current_appid = None
+    plugin._advance_tdp_generation()
+    plugin._execute_tdp_command(plugin._capture_tdp_command("global"))
+    _reset_guard_memory(plugin)
+    plugin._tdp_backend._levels["pl1"] = 30
+    plugin._tdp_guard_tick(now=20.0)
+    plugin._tdp_guard_tick(now=20.75)
+    assert plugin._tdp_backend._levels["pl1"] == 18
+    assert plugin._tdp_profiles.effective(None)["pl1"] == 18
+    assert plugin._tdp_profiles.effective("42")["pl1"] == 25
+
+
+def test_guard_respects_follow_global_without_losing_stored_game_value(plugin):
+    plugin._tdp_profiles.set_pl1("global", 22)
+    plugin._tdp_profiles.create_game_from_global("42")
+    plugin._tdp_profiles.set_pl1("game", 12, appid="42")
+    plugin._tdp_profiles.set_follow_global("42", True)
+    plugin._current_appid = "42"
+
+    plugin._execute_tdp_command(plugin._capture_tdp_command("follow-global"))
+    _reset_guard_memory(plugin)
+    plugin._tdp_backend._levels["pl1"] = 30
+    plugin._tdp_guard_tick(now=10.0)
+    plugin._tdp_guard_tick(now=10.75)
+
+    assert plugin._tdp_backend._levels["pl1"] == 22
+    assert plugin._tdp_profiles.effective("42")["pl1"] == 22
+    assert plugin._tdp_profiles.effective(None)["pl1"] == 22
+    plugin._tdp_profiles.set_follow_global("42", False)
+    assert plugin._tdp_profiles.effective("42")["pl1"] == 12
 
 
 def test_guard_does_nothing_with_control_off(plugin):

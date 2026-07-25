@@ -364,6 +364,7 @@ class Plugin:
         self._tdp_conflict_persistent = False
         self._tdp_history = deque(maxlen=32)
         self._tdp_guard_task = None
+        self._tdp_shutdown = False
         self._lifecycle = LifecycleManager(apply_cb=self._reapply_all,
                                            reassert_cb=self._reassert_tdp_only)
         self._auto_task = None
@@ -1667,10 +1668,19 @@ class Plugin:
         auto = self._tdp_profiles.auto_tdp(self._current_appid)
         ac = read_on_ac()
         setpoint = self._effective_levels(self._current_appid, ac)[0]["pl1"]
-        # Live PL1 the firmware holds (reflects eco + external HHD/Steam changes). Skip
-        # it on subprocess-backed backends (ryzenadj) so the 1 s poll doesn't fork a
-        # tool every tick — the arc falls back to the setpoint there.
-        applied = None if getattr(self._tdp_backend, "blocking", False) else await self._read_applied()
+        # Skip subprocess readback on the 1 s poll. Other backends are cheap and the
+        # same observation also refreshes the ownership status shown in the QAM.
+        if getattr(self._tdp_backend, "blocking", False):
+            observation = self._tdp_observation
+            applied = None
+        else:
+            observation = self._observe_tdp_sync()
+            primary = observation.surfaces.get(
+                self._tdp_backend.name,
+                {},
+            )
+            pl1 = primary.get("pl1")
+            applied = pl1.applied_w if pl1 is not None else None
         return {
             "watts": pr["watts"],
             "gpu_busy": pr["gpu_busy"],
@@ -1681,6 +1691,7 @@ class Plugin:
             # Polled every second, so the UI can refresh the slider ceiling the moment
             # the charger is plugged or unplugged.
             "on_ac": ac,
+            "ownership": self._tdp_ownership_state(observation),
         }
 
     async def set_auto_tdp(self, enabled: bool, scope: str = "global", appid=None) -> dict:
@@ -2006,6 +2017,13 @@ class Plugin:
         return TdpObservation(readable=True, surfaces=surfaces)
 
     def _execute_tdp_command(self, command):
+        if self._tdp_shutdown:
+            return TdpResult(
+                command.requested["pl1"],
+                None,
+                False,
+                "tdp-shutdown",
+            )
         if command.generation != self._tdp_generation:
             return TdpResult(
                 command.requested["pl1"],
@@ -2032,7 +2050,16 @@ class Plugin:
             )
         mode = self._firmware_mode()
         if mode != _CUSTOM_MODE:
-            self._tdp_backend.set_profile(mode)
+            if not self._tdp_backend.set_profile(mode):
+                self._tdp_status = "rejected"
+                self._tdp_reason = "firmware_mode_rejected"
+                self._record_tdp_transition(command.reason)
+                return TdpResult(
+                    command.requested["pl1"],
+                    self._tdp_backend.read_applied(),
+                    False,
+                    f"firmware-mode-rejected:{mode}",
+                )
             self._tdp_status = "unverifiable"
             self._tdp_reason = "firmware_mode"
             return TdpResult(
@@ -2099,17 +2126,31 @@ class Plugin:
         )
 
     async def _apply_tdp_now(self, reason, on_ac=None):
+        if self._tdp_shutdown:
+            requested = self._tdp_profiles.effective(
+                self._current_appid,
+            )
+            return TdpResult(
+                int(requested["pl1"]),
+                None,
+                False,
+                "tdp-shutdown",
+            )
         command = self._capture_tdp_command(reason, on_ac)
         return await self._offload_call(
             lambda: self._execute_tdp_command(command)
         )
 
     def _schedule_tdp_apply(self, reason, on_ac=None):
+        if self._tdp_shutdown:
+            return
         command = self._capture_tdp_command(reason, on_ac)
         self._offload(lambda: self._execute_tdp_command(command))
 
     def _tdp_guard_tick(self, now=None):
         now = time.monotonic() if now is None else float(now)
+        if self._tdp_shutdown:
+            return
         if not self._tdp_backend.supported:
             self._tdp_status, self._tdp_reason = "unsupported", ""
             self._tdp_reconcile_memory = ReconcileMemory()
@@ -2217,7 +2258,8 @@ class Plugin:
 
     def _start_tdp_guard_loop(self):
         if (
-            not self._tdp_backend.supported
+            self._tdp_shutdown
+            or not self._tdp_backend.supported
             or self._tdp_guard_task is not None
         ):
             return
@@ -2229,6 +2271,16 @@ class Plugin:
         if self._tdp_guard_task is not None:
             self._tdp_guard_task.cancel()
             self._tdp_guard_task = None
+
+    def _begin_tdp_shutdown(self):
+        if self._tdp_shutdown:
+            return
+        self._tdp_shutdown = True
+        self._stop_tdp_guard_loop()
+        self._stop_auto_loop()
+        if getattr(self, "_lifecycle", None) is not None:
+            self._lifecycle.stop()
+        self._advance_tdp_generation()
 
     def _reapply_tdp(self, on_ac=None):
         self._init()
@@ -3017,9 +3069,16 @@ class Plugin:
         if mode not in valid:
             return await self.get_tdp_state()
         self._clear_eco()
+        previous = self._firmware_mode()
         self._settings["firmware_mode"] = mode
-        self._save()
-        await self._apply_tdp_now("firmware-mode")
+        result = await self._apply_tdp_now("firmware-mode")
+        if result.ok:
+            self._save()
+        else:
+            self._settings["firmware_mode"] = previous
+            await self._apply_tdp_now("firmware-mode-rollback")
+            self._tdp_status = "rejected"
+            self._tdp_reason = "firmware_mode_rejected"
         return await self.get_tdp_state()
 
     async def set_tdp_levels(self, off2: int, off3: int, scope: str, appid=None) -> dict:
@@ -3454,7 +3513,8 @@ class Plugin:
         # so the hardware is never left with a stale manual curve. The restores
         # spawn subprocesses (systemctl / gamescopectl) → run them off the loop and
         # await, then shut the executor down.
-        self._stop_tdp_guard_loop()
+        self._begin_tdp_shutdown()
+        await self._drain_offloaded()
         await self._offload_call(self._restore_fans_safe)
         self._cancel_color_revert()
         wait_task = getattr(self, "_display_wait_task", None)
@@ -3467,11 +3527,8 @@ class Plugin:
         await self._stop_audio_loop()
         await self._offload_call(self._restore_audio_safe)
         await self._offload_call(self._restore_hhd_tdp)  # hand HHD's TDP back if we took it
-        self._stop_auto_loop()
         if getattr(self, "_sampler", None) is not None:
             self._sampler.stop()
-        if getattr(self, "_lifecycle", None) is not None:
-            self._lifecycle.stop()
         self._shutdown_apply_executor()
         decky.logger.info("Panel de Control unloaded")
 
@@ -3482,7 +3539,8 @@ class Plugin:
             self._apply_executor = None
 
     async def _uninstall(self) -> None:
-        self._stop_tdp_guard_loop()
+        self._begin_tdp_shutdown()
+        await self._drain_offloaded()
         await self._offload_call(self._restore_fans_safe)
         await self._offload_call(self._restore_color_safe)
         self._audio_shutdown = True

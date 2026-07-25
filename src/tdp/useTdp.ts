@@ -55,6 +55,9 @@ export function useTdp(): TdpControl {
       getPowerDraw()
         .then((p) => {
           setPower(p);
+          setTdp((current) =>
+            current ? { ...current, ownership: p.ownership } : current
+          );
           if (lastAc.current !== null && lastAc.current !== p.on_ac) refresh();
           lastAc.current = p.on_ac;
         })

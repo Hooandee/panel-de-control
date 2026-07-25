@@ -165,6 +165,93 @@ def test_set_tdp_watts_keeps_result_contract_when_offloaded(tmp_path, monkeypatc
     assert rec.count >= 1  # the TDP write went through the executor
 
 
+def test_unload_invalidates_a_queued_tdp_write_before_handoff(tmp_path, monkeypatch):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    events = []
+    blocker_started = threading.Event()
+    release_blocker = threading.Event()
+
+    def block_executor():
+        blocker_started.set()
+        release_blocker.wait(timeout=2)
+
+    def write_levels(pl1, pl2, pl3, ac):
+        from tdp.types import TdpResult
+        events.append("write")
+        return TdpResult(pl1, pl1, True, "")
+
+    p._tdp_backend.set_levels = write_levels
+    p._restore_fans_safe = lambda: None
+    p._restore_color_safe = lambda: None
+    p._restore_audio_safe = lambda: None
+    p._restore_hhd_tdp = lambda: events.append("handoff")
+
+    async def run():
+        p._apply_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        p._offload(block_executor)
+        while not blocker_started.is_set():
+            await asyncio.sleep(0)
+        p._schedule_tdp_apply("queued-before-unload")
+        unload = asyncio.create_task(p._unload())
+        await asyncio.sleep(0)
+        release_blocker.set()
+        await unload
+
+    asyncio.run(run())
+    assert events == ["handoff"]
+
+
+def test_unload_stops_new_tdp_writes_before_handoff(tmp_path, monkeypatch):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    events = []
+
+    def write_levels(pl1, pl2, pl3, ac):
+        from tdp.types import TdpResult
+        events.append("write")
+        return TdpResult(pl1, pl1, True, "")
+
+    def handoff():
+        events.append("handoff")
+        p._schedule_tdp_apply("late-lifecycle")
+
+    p._tdp_backend.set_levels = write_levels
+    p._restore_fans_safe = lambda: None
+    p._restore_color_safe = lambda: None
+    p._restore_audio_safe = lambda: None
+    p._restore_hhd_tdp = handoff
+
+    asyncio.run(p._unload())
+    assert events == ["handoff"]
+
+
+def test_uninstall_stops_new_tdp_writes_before_handoff(tmp_path, monkeypatch):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    events = []
+
+    def write_levels(pl1, pl2, pl3, ac):
+        from tdp.types import TdpResult
+        events.append("write")
+        return TdpResult(pl1, pl1, True, "")
+
+    def handoff():
+        events.append("handoff")
+        p._schedule_tdp_apply("late-lifecycle")
+
+    p._tdp_backend.set_levels = write_levels
+    p._restore_fans_safe = lambda: None
+    p._restore_color_safe = lambda: None
+    p._restore_audio_safe = lambda: None
+    p._restore_hhd_tdp = handoff
+    monkeypatch.setattr(
+        importlib.import_module("main").fan_expose,
+        "remove_conf",
+        lambda: None,
+    )
+
+    asyncio.run(p._uninstall())
+    assert events == ["handoff"]
+
+
 class _SlowBackend:
     """TDP backend whose set_levels lags — so a readback that races an offloaded
     apply is deterministic (reads the stale value if not awaited)."""

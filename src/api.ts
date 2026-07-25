@@ -253,6 +253,7 @@ export interface PowerDraw {
   // Live charger state, polled every second so the UI can refresh the slider ceiling
   // (battery vs charger) the instant the charger is plugged or unplugged.
   on_ac: boolean;
+  ownership: TdpOwnership;
 }
 
 export const getPowerDraw = callable<[], PowerDraw>("get_power_draw");
