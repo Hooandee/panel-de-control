@@ -3,9 +3,10 @@
 ## [0.31.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.31.2...panel-de-control-v0.31.3) (2026-07-25)
 
 
-### Bug Fixes
+### Bug Fixes / Correcciones
 
-* handle PowerStation TDP conflicts ([#326](https://github.com/Hooandee/panel-de-control/issues/326)) ([8cd33f3](https://github.com/Hooandee/panel-de-control/commit/8cd33f39e2df47c60084eb0460d5ef5bce0f7766))
+* Detect and explain TDP conflicts with PowerStation, and let you disable Panel de Control's TDP management so both tools do not continually overwrite each other's power limits. Problem reports now also include additional power and display diagnostics. ([#326](https://github.com/Hooandee/panel-de-control/issues/326)) ([8cd33f3](https://github.com/Hooandee/panel-de-control/commit/8cd33f39e2df47c60084eb0460d5ef5bce0f7766))
+* **ES:** Detecta y explica los conflictos de TDP con PowerStation, y permite desactivar el control de TDP de Panel de Control para que ambas herramientas no sobrescriban continuamente los mismos límites de potencia. Los reportes de problemas ahora también incluyen diagnósticos adicionales de potencia y pantalla. ([#326](https://github.com/Hooandee/panel-de-control/issues/326)) ([8cd33f3](https://github.com/Hooandee/panel-de-control/commit/8cd33f39e2df47c60084eb0460d5ef5bce0f7766))
 
 ## [0.31.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.31.1...panel-de-control-v0.31.2) (2026-07-25)
 
