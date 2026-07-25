@@ -98,7 +98,11 @@ export const TdpConflictCard: FC<Props> = ({
           lineHeight: 1.4,
         }}
       >
-        {t("tdp.conflict.card.desc")}
+        {t(
+          rivals.powerstation
+            ? "tdp.conflict.card.desc.powerstation"
+            : "tdp.conflict.card.desc",
+        )}
       </div>
       {rivals.sdtdp && (
         <RivalRow
