@@ -1,5 +1,5 @@
 from device_profiles import DEVICE_TABLE
-from tdp.types import TdpLimits, TdpResult
+from tdp.types import RailReading, TdpLimits, TdpObservation, TdpResult
 
 
 def _profile(key):
@@ -40,3 +40,32 @@ def test_with_cooler_noop_when_not_higher():
     lim = TdpLimits(min_w=5, default_w=25, max_w=55, max_ac_w=55)
     assert lim.with_cooler(50) is lim
     assert lim.with_cooler(55) is lim
+
+
+def test_observation_serializes_surfaces_and_bounds():
+    obs = TdpObservation(
+        readable=True,
+        surfaces={
+            "primary": {
+                "pl1": RailReading(15, 7, 30),
+                "pl2": RailReading(20, 15, 43),
+            },
+            "legacy": {"pl1": RailReading(15)},
+        },
+    )
+    assert obs.applied_values() == {
+        ("primary", "pl1"): 15,
+        ("primary", "pl2"): 20,
+        ("legacy", "pl1"): 15,
+    }
+    assert obs.as_dict()["surfaces"]["primary"]["pl1"] == {
+        "applied": 15,
+        "min": 7,
+        "max": 30,
+    }
+
+
+def test_readable_observation_can_have_a_transient_empty_read():
+    obs = TdpObservation(readable=True, surfaces={})
+    assert obs.readable is True
+    assert obs.applied_values() == {}

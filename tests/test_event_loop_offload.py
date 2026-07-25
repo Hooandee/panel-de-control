@@ -351,3 +351,51 @@ def test_set_current_game_state_reflects_the_offloaded_apply(tmp_path, monkeypat
     ex.shutdown()
     # The returned state must reflect the completed apply, not the stale 999.
     assert st["applied_w"] == 25
+
+
+def test_tdp_guard_observes_and_writes_off_the_loop_thread(tmp_path, monkeypatch):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    observe_threads = []
+    write_threads = []
+
+    class _RecordingBackend(_SlowBackend):
+        supports_levels = False
+
+        def observe(self):
+            from tdp.types import RailReading, TdpObservation
+
+            observe_threads.append(threading.get_ident())
+            return TdpObservation(
+                readable=True,
+                surfaces={
+                    self.name: {
+                        "pl1": RailReading(self._applied, 5, 40),
+                    },
+                },
+            )
+
+        def set_levels(self, pl1, pl2, pl3, ac):
+            from tdp.types import TdpResult
+
+            write_threads.append(threading.get_ident())
+            self._applied = pl1
+            return TdpResult(pl1, pl1, True, "")
+
+    backend = _RecordingBackend()
+    backend._applied = 30
+    p._tdp_backend = backend
+    ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    p._apply_executor = ex
+
+    async def drive():
+        loop_tid = threading.get_ident()
+        await p._offload_call(lambda: p._tdp_guard_tick(now=10.0))
+        await p._offload_call(lambda: p._tdp_guard_tick(now=10.75))
+        return loop_tid
+
+    loop_tid = asyncio.run(drive())
+    ex.shutdown()
+    assert observe_threads
+    assert write_threads
+    assert loop_tid not in observe_threads
+    assert loop_tid not in write_threads

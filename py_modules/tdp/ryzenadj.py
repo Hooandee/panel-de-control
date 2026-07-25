@@ -64,6 +64,8 @@ class RyzenadjBackend(TDPBackend):
 
     name = "ryzenadj"
     blocking = True
+    guard_interval_s = 15.0
+    read_tolerance_w = _READBACK_TOLERANCE_W
 
     def __init__(self, fallback: TdpLimits, resolve=_default_resolve, runner=subprocess.run,
                  write_max: int | None = None):

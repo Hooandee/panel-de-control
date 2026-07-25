@@ -2,7 +2,7 @@ import glob
 import os
 
 from tdp.backend import TDPBackend
-from tdp.types import TdpLimits, TdpResult
+from tdp.types import RailReading, TdpLimits, TdpObservation, TdpResult
 
 _HWMON = "sys/class/hwmon"
 _PREFERRED_NAMES = ("steamdeck_hwmon", "amdgpu", "jupiter")
@@ -65,3 +65,16 @@ class SteamDeckHwmonBackend(TDPBackend):
                 return round(int(f.read().strip()) / 1_000_000)
         except (OSError, ValueError):
             return None
+
+    def observe(self):
+        value = self.read_applied()
+        surfaces = {}
+        if value is not None:
+            surfaces[self.name] = {
+                "pl1": RailReading(
+                    value,
+                    self._fallback.min_w,
+                    self._fallback.max_ac_w,
+                ),
+            }
+        return TdpObservation(readable=True, surfaces=surfaces)

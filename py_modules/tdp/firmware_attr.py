@@ -3,7 +3,7 @@ import os
 
 from sysfs import read_str
 from tdp.backend import TDPBackend
-from tdp.types import TdpLimits, TdpResult
+from tdp.types import RailReading, TdpLimits, TdpObservation, TdpResult
 
 _FW_BASE = "sys/class/firmware-attributes"
 _PP_BASE = "sys/class/platform-profile"
@@ -12,6 +12,11 @@ _PP_BASE = "sys/class/platform-profile"
 # so a write mirrors our (clamped) setpoint here too to stay authoritative under a game.
 _LEGACY_BASE = "sys/devices/platform/asus-nb-wmi"
 _LEGACY_NODES = (("pl1", "ppt_pl1_spl"), ("pl2", "ppt_pl2_sppt"), ("pl3", "ppt_fppt"))
+_RAIL_ATTRS = (
+    ("pl1", "ppt_pl1_spl"),
+    ("pl2", "ppt_pl2_sppt"),
+    ("pl3", "ppt_pl3_fppt"),
+)
 
 # Boost headroom derived from sustained PL1 when the user sets a single TDP value.
 # PL2 (slow) and PL3 (fast) are scaled above PL1, then clamped to each rail's sysfs max.
@@ -63,13 +68,12 @@ class FirmwareAttrBackend(TDPBackend):
                 if os.path.exists(os.path.join(base, node))}
 
     def _write_legacy(self, pl1, pl2, pl3):
-        """Mirror the profile-clamped rails to the legacy interface, PL1 last, so our
-        setpoint wins the last-writer-wins SMU arbitration against Steam/HHD/firmware.
-        Best-effort: never touches the firmware-attributes result."""
+        failed = []
         for rail, val in (("pl3", pl3), ("pl2", pl2), ("pl1", pl1)):
-            p = self._legacy.get(rail)
-            if p:
-                self._write(p, val)
+            path = self._legacy.get(rail)
+            if path and not self._write(path, val):
+                failed.append(f"asus-nb-wmi/{rail}")
+        return failed
 
     def _find_driver_dir(self, prefix):
         base = os.path.join(self._root, _FW_BASE)
@@ -194,15 +198,27 @@ class FirmwareAttrBackend(TDPBackend):
         c1 = self._clamp_live(pl1, "ppt_pl1_spl")
         c2 = self._clamp_live(pl2, "ppt_pl2_sppt")
         c3 = self._clamp_live(pl3, "ppt_pl3_fppt")
-        self._write(self._attr("ppt_pl3_fppt"), c3)
-        self._write(self._attr("ppt_pl2_sppt"), c2)
-        ok = self._write(self._attr("ppt_pl1_spl"), c1)
-        # Also assert the legacy interface (ASUS dual PL1) so our value is the last writer.
-        self._write_legacy(c1, c2, c3)
-        applied = self.read_applied()
-        success = ok and applied == c1
-        detail = "" if success else f"write not confirmed (wanted {c1}, read {applied})"
-        return TdpResult(pl1, applied, success, detail)
+        targets = {"pl1": c1, "pl2": c2, "pl3": c3}
+        failed = []
+        for rail, attr, value in (
+            ("pl3", "ppt_pl3_fppt", c3),
+            ("pl2", "ppt_pl2_sppt", c2),
+            ("pl1", "ppt_pl1_spl", c1),
+        ):
+            if not self._write(self._attr(attr), value):
+                failed.append(f"{self.name}/{rail}")
+        failed.extend(self._write_legacy(c1, c2, c3))
+        observation = self.observe()
+        mismatches = self._observation_mismatches(observation, targets)
+        applied = observation.surfaces.get(self.name, {}).get("pl1")
+        applied_w = applied.applied_w if applied else None
+        problems = failed + mismatches
+        return TdpResult(
+            pl1,
+            applied_w,
+            not problems,
+            "" if not problems else "write not confirmed: " + ", ".join(problems),
+        )
 
     def set_tdp(self, watts, ac):
         # Single-value entry: write all rails flat (SPPT = FPPT = PL1). Boost headroom
@@ -214,4 +230,35 @@ class FirmwareAttrBackend(TDPBackend):
         return self.set_levels(target, target, target, ac)
 
     def read_applied(self):
-        return self._read_int(self._attr("ppt_pl1_spl"))
+        primary = self.observe().surfaces.get(self.name, {})
+        reading = primary.get("pl1")
+        return reading.applied_w if reading else None
+
+    def observe(self):
+        if not self.supported:
+            return TdpObservation(readable=True)
+        primary = {}
+        for rail, attr in _RAIL_ATTRS:
+            path = self._attr(attr)
+            if not os.path.exists(path):
+                continue
+            lo, hi = self._live_bounds(attr)
+            primary[rail] = RailReading(self._read_int(path), lo, hi)
+        surfaces = {self.name: primary} if primary else {}
+        legacy = {
+            rail: RailReading(self._read_int(path))
+            for rail, path in self._legacy.items()
+        }
+        if legacy:
+            surfaces["asus-nb-wmi"] = legacy
+        return TdpObservation(readable=True, surfaces=surfaces)
+
+    @staticmethod
+    def _observation_mismatches(observation, targets):
+        bad = []
+        for surface, rails in observation.surfaces.items():
+            for rail, reading in rails.items():
+                target = targets.get(rail)
+                if target is not None and reading.applied_w != target:
+                    bad.append(f"{surface}/{rail}={reading.applied_w}")
+        return bad

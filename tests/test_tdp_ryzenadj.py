@@ -69,6 +69,9 @@ def test_read_applied_parses_watts_from_info():
     fake = FakeRun()
     b = RyzenadjBackend(FALLBACK, resolve=lambda: "/usr/bin/ryzenadj", runner=fake)
     assert b.read_applied() == 15
+    assert b.guard_interval_s == 15.0
+    assert b.read_tolerance_w == 2
+    assert b.blocking is True
 
 
 def test_set_tdp_clamps():

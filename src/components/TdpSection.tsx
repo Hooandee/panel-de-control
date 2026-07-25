@@ -15,6 +15,8 @@ import { FirmwareModes } from "./FirmwareModes";
 import { AdvancedBoost } from "./AdvancedBoost";
 import { TdpSuggestionCard } from "./TdpSuggestionCard";
 import { TdpMonitorNotice } from "./TdpMonitorNotice";
+import { TdpOwnershipStatus } from "./TdpOwnershipStatus";
+import { ownershipView } from "../tdp/ownership";
 
 // Learned-band reasons worth surfacing as "still learning" (others — no_game,
 // disabled, error — show no line).
@@ -107,6 +109,7 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
   const hasFwModes = fwModes.length > 0;
   const inFwMode = hasFwModes && tdp.firmware_mode !== "custom";
   const shownWatts = inFwMode ? (tdp.applied_w ?? view.watts) : view.watts;
+  const ownership = ownershipView(tdp.ownership);
 
   // Master switch off: keep the live arc, drop every write control.
   if (monitorOnly) {
@@ -159,13 +162,9 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
           appliedWatts={power?.applied ?? null}
         />
       </PanelSectionRow>
-      {tdp.external_change && (
-        // An external tool moved the TDP and we adopted it — say so, so the value
-        // doesn't read as a bug.
+      {ownership.show && (
         <PanelSectionRow>
-          <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
-            {t("tdp.external_change")}
-          </div>
+          <TdpOwnershipStatus ownership={tdp.ownership} />
         </PanelSectionRow>
       )}
       {/* Auto status, sitting directly under the arc so it fills what would

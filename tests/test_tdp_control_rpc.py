@@ -236,6 +236,17 @@ def test_set_control_enabled_off_restores_hhd(Plugin, fake_hhd):
     assert p._settings["tdp_control_enabled"] is False
 
 
+def test_set_control_enabled_off_invalidates_queued_write(Plugin):
+    p = Plugin()
+    p._init()
+    queued = p._capture_tdp_command("queued")
+    asyncio.run(p.set_tdp_control_enabled(False))
+    p._tdp_backend.set_levels_calls = 0
+    result = p._execute_tdp_command(queued)
+    assert result.detail == "stale-generation"
+    assert p._tdp_backend.set_levels_calls == 0
+
+
 def test_set_control_enabled_on_reapplies(Plugin):
     p = Plugin()
     p._init()

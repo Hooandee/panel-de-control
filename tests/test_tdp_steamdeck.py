@@ -45,3 +45,15 @@ def test_set_tdp_clamps_to_limits(tmp_path):
     b = SteamDeckHwmonBackend(FALLBACK, root=root)
     assert b.set_tdp(99, ac=False).applied_w == 15
     assert b.set_tdp(1, ac=False).applied_w == 3
+
+
+def test_observe_reports_powercap_and_safe_bounds(tmp_path):
+    root = str(tmp_path)
+    _mk_hwmon(root, 0, "steamdeck_hwmon", cap_uw="12000000")
+    b = SteamDeckHwmonBackend(FALLBACK, root=root)
+    obs = b.observe()
+    rail = obs.surfaces["steamdeck-hwmon"]["pl1"]
+    assert rail.applied_w == 12
+    assert (rail.min_w, rail.max_w) == (3, 15)
+    assert b.guard_interval_s == 2.0
+    assert b.readback is True

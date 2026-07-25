@@ -187,6 +187,65 @@ def test_legacy_interface_absent_is_a_clean_noop(tmp_path):
     assert res.ok is True and res.applied_w == 20
 
 
+def test_observe_reads_every_primary_rail_and_live_bound(tmp_path):
+    root = str(tmp_path)
+    _mk_attr(root, "asus-armoury", "ppt_pl1_spl", 10, 7, 30)
+    _mk_attr(root, "asus-armoury", "ppt_pl2_sppt", 15, 15, 43)
+    _mk_attr(root, "asus-armoury", "ppt_pl3_fppt", 15, 15, 53)
+    b = FirmwareAttrBackend("asus-armoury", FALLBACK, root=root)
+    obs = b.observe()
+    rails = obs.surfaces["firmware-attr:asus-armoury"]
+    assert rails["pl1"].as_dict() == {
+        "applied": 10,
+        "min": 7,
+        "max": 30,
+    }
+    assert rails["pl2"].as_dict() == {
+        "applied": 15,
+        "min": 15,
+        "max": 43,
+    }
+    assert rails["pl3"].as_dict() == {
+        "applied": 15,
+        "min": 15,
+        "max": 53,
+    }
+
+
+def test_observe_includes_asus_legacy_surface(tmp_path):
+    root = str(tmp_path)
+    _mk_full(root, "asus-armoury")
+    _mk_legacy(root, pl1="30", pl2="35", fppt="40")
+    b = FirmwareAttrBackend("asus-armoury", FALLBACK, root=root)
+    legacy = b.observe().surfaces["asus-nb-wmi"]
+    assert {rail: value.applied_w for rail, value in legacy.items()} == {
+        "pl1": 30,
+        "pl2": 35,
+        "pl3": 40,
+    }
+
+
+def test_set_levels_fails_if_one_legacy_rail_does_not_stick(
+    tmp_path,
+    monkeypatch,
+):
+    root = str(tmp_path)
+    _mk_full(root, "asus-armoury")
+    legacy = _mk_legacy(root)
+    b = FirmwareAttrBackend("asus-armoury", FALLBACK, root=root)
+    original_write = b._write
+
+    def reject_legacy_pl2(path, value):
+        if path == os.path.join(legacy, "ppt_pl2_sppt"):
+            return False
+        return original_write(path, value)
+
+    monkeypatch.setattr(b, "_write", reject_legacy_pl2)
+    res = b.set_levels(20, 24, 28, ac=True)
+    assert res.ok is False
+    assert "asus-nb-wmi/pl2" in res.detail
+
+
 def test_lenovo_profile_prestep_sets_custom(tmp_path):
     root = str(tmp_path)
     _mk_full(root)
