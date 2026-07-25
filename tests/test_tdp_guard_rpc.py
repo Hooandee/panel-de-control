@@ -397,11 +397,11 @@ def test_guard_delay_respects_minimum_correction_interval(
     assert plugin._tdp_guard_delay() == 1.0
 
 
-def test_write_only_guard_heartbeats_every_fifteen_seconds(plugin):
+def test_write_only_guard_uses_backend_heartbeat(plugin):
     class WriteOnly(FakeBackend):
         readback = False
         guard_interval_s = 15.0
-        heartbeat_s = 15.0
+        heartbeat_s = 30.0
 
         def observe(self):
             return TdpObservation(readable=False)
@@ -414,8 +414,9 @@ def test_write_only_guard_heartbeats_every_fifteen_seconds(plugin):
     plugin._tdp_observation = TdpObservation(readable=False)
     plugin._tdp_reconcile_memory = ReconcileMemory()
     plugin._tdp_guard_tick(now=0.0)
-    plugin._tdp_guard_tick(now=14.9)
     plugin._tdp_guard_tick(now=15.0)
+    plugin._tdp_guard_tick(now=29.9)
+    plugin._tdp_guard_tick(now=30.0)
     assert plugin._tdp_backend.set_levels_calls == 2
 
 

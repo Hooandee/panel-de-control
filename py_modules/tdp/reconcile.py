@@ -118,6 +118,14 @@ def _steady_status(targets):
     return "constrained", reason
 
 
+def _heartbeat_delay(value):
+    try:
+        delay = float(value)
+    except (TypeError, ValueError):
+        return UNVERIFIABLE_HEARTBEAT_S
+    return delay if delay > 0 else UNVERIFIABLE_HEARTBEAT_S
+
+
 def _recent_memory(memory, now):
     recent = tuple(
         seen for seen in memory.drift_times
@@ -134,8 +142,10 @@ def decide(
     tolerance,
     write_only=False,
     force=False,
+    heartbeat_s=None,
 ):
     memory, conflict = _recent_memory(memory, now)
+    heartbeat = _heartbeat_delay(heartbeat_s)
     if write_only:
         if memory.failures:
             status = (
@@ -158,7 +168,7 @@ def decide(
                 "read_unavailable",
                 replace(
                     memory,
-                    next_retry_at=now + UNVERIFIABLE_HEARTBEAT_S,
+                    next_retry_at=now + heartbeat,
                 ),
                 conflict,
             )
@@ -288,14 +298,16 @@ def after_apply(
     wrote_ok,
     tolerance,
     write_only=False,
+    heartbeat_s=None,
 ):
     memory, conflict = _recent_memory(memory, now)
+    heartbeat = _heartbeat_delay(heartbeat_s)
     if write_only and wrote_ok:
         pending = replace(
             memory,
             pending_signature=None,
             pending_since=None,
-            next_retry_at=now + UNVERIFIABLE_HEARTBEAT_S,
+            next_retry_at=now + heartbeat,
             last_write_at=now,
         )
         return ReconcileDecision(
@@ -323,7 +335,7 @@ def after_apply(
             memory,
             pending_signature=None,
             pending_since=None,
-            next_retry_at=now + UNVERIFIABLE_HEARTBEAT_S,
+            next_retry_at=now + heartbeat,
             last_write_at=now,
         )
         return ReconcileDecision(

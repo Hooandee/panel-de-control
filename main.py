@@ -2110,6 +2110,11 @@ class Plugin:
                 "readback",
                 True,
             ),
+            heartbeat_s=getattr(
+                self._tdp_backend,
+                "heartbeat_s",
+                None,
+            ),
         )
         self._tdp_targets = targets
         self._tdp_observation = after
@@ -2185,6 +2190,11 @@ class Plugin:
                 "readback",
                 True,
             ),
+            heartbeat_s=getattr(
+                self._tdp_backend,
+                "heartbeat_s",
+                None,
+            ),
         )
         if command.generation != self._tdp_generation:
             return
@@ -2212,6 +2222,11 @@ class Plugin:
                     self._tdp_backend,
                     "readback",
                     True,
+                ),
+                heartbeat_s=getattr(
+                    self._tdp_backend,
+                    "heartbeat_s",
+                    None,
                 ),
             )
             observation = after

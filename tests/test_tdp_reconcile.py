@@ -178,6 +178,25 @@ def test_write_only_apply_stays_unverifiable():
     assert out.memory.next_retry_at == 25.0
 
 
+def test_unverifiable_apply_uses_backend_heartbeat():
+    targets = build_targets(
+        {"pl1": 15},
+        {"pl1": {"min": 7, "max": 30}},
+        TdpObservation(readable=False),
+    )
+    out = after_apply(
+        targets,
+        TdpObservation(readable=False),
+        ReconcileMemory(),
+        now=10.0,
+        wrote_ok=True,
+        tolerance=0,
+        write_only=True,
+        heartbeat_s=30.0,
+    )
+    assert out.memory.next_retry_at == 40.0
+
+
 def test_write_only_failure_enters_retry_ladder():
     targets = build_targets(
         {"pl1": 15},
