@@ -318,30 +318,36 @@ def test_rog_xbox_ally_z2a_bogus_100w_capped_to_profile(tmp_path):
     assert lim.max_w == 17
 
 
-def test_generic_device_only_rejects_absurd_pl1_max(tmp_path):
-    # No trustworthy reference on an unrecognised device: a high-but-possible value
-    # is trusted; a physically-impossible one is dropped to the absurd bound.
+def test_generic_device_never_expands_conservative_pl1_max(tmp_path):
     root = str(tmp_path)
     _mk_pl1(root, "asus-armoury", 20, 7, 50)
     b = FirmwareAttrBackend("asus-armoury", FALLBACK, root=root, is_generic=True)
-    assert b.get_limits().max_ac_w == 50
+    assert b.get_limits().max_ac_w == FALLBACK.max_ac_w
     root2 = str(tmp_path / "b")
     _mk_pl1(root2, "asus-armoury", 20, 7, 150)
     b2 = FirmwareAttrBackend("asus-armoury", FALLBACK, root=root2, is_generic=True)
-    assert b2.get_limits().max_ac_w == 100
+    assert b2.get_limits().max_ac_w == FALLBACK.max_ac_w
 
 
-def test_generic_device_battery_max_trusts_firmware(tmp_path):
-    # A generic (unrecognised) device's profile max_w is only a placeholder (15 W).
-    # On battery, trust the firmware's real sustained ceiling instead of capping there
-    # — else a capable handheld is stuck far below what its firmware allows.
+def test_generic_device_keeps_conservative_battery_max(tmp_path):
     root = str(tmp_path)
     _mk_pl1(root, "asus-armoury", 20, 5, 30)
     generic_fb = TdpLimits(min_w=4, default_w=10, max_w=15, max_ac_w=15)
     b = FirmwareAttrBackend("asus-armoury", generic_fb, root=root, is_generic=True)
     lim = b.get_limits()
-    assert lim.max_w == 30
-    assert lim.max_ac_w == 30
+    assert lim.max_w == 15
+    assert lim.max_ac_w == 15
+
+
+def test_contradictory_live_min_never_overrides_safe_ceiling(tmp_path):
+    root = str(tmp_path)
+    for attr in ("ppt_pl1_spl", "ppt_pl2_sppt", "ppt_pl3_fppt"):
+        _mk_attr(root, "asus-armoury", attr, 80, 80, 150)
+    fb = TdpLimits(min_w=7, default_w=17, max_w=25, max_ac_w=35)
+    b = FirmwareAttrBackend("asus-armoury", fb, root=root)
+    result = b.set_levels(35, 42, 49, ac=True)
+    assert result.ok is True
+    assert result.applied_w == 35
 
 
 def test_recognised_device_keeps_battery_policy_below_firmware(tmp_path):
@@ -389,6 +395,8 @@ def test_legion_go_s_reaches_profile_range_despite_low_firmware(tmp_path):
     # Firmware may under-report; the profile (charger 40) drives the slider + rails.
     root = str(tmp_path)
     _mk_attr(root, "lenovo-wmi-other-0", "ppt_pl1_spl", 13, 5, 15)
+    _mk_attr(root, "lenovo-wmi-other-0", "ppt_pl2_sppt", 14, 5, 15)
+    _mk_attr(root, "lenovo-wmi-other-0", "ppt_pl3_fppt", 15, 5, 20)
     fb = TdpLimits.from_profile(detect(product_name="83L3"))  # Legion Go S 5,15,33,40
     b = FirmwareAttrBackend("lenovo-wmi-other", fb, root=root,
                             profile_name="lenovo-wmi-gamezone")
