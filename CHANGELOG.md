@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.31.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.31.1...panel-de-control-v0.31.2) (2026-07-25)
+
+
+### Bug Fixes / Correcciones
+
+* Add a device-specific fallback for the GPD Win Mini 2025 when TDP adjustment or fan detection fails on newer kernels: retry power limits without the auxiliary temperature operation, and attempt to restore the existing `gpd_fan` interface while leaving older working kernels unchanged. ([#323](https://github.com/Hooandee/panel-de-control/issues/323)) ([963d20e](https://github.com/Hooandee/panel-de-control/commit/963d20ef793d90764a2d4284ba212c020f731f2d))
+* **ES:** Añade una ruta alternativa específica para la GPD Win Mini 2025 cuando el ajuste de TDP o la detección del ventilador fallan en kernels nuevos: reintenta los límites de potencia sin la operación auxiliar de temperatura e intenta recuperar la interfaz `gpd_fan` existente, sin cambiar la ruta de los kernels antiguos que ya funcionan. ([#323](https://github.com/Hooandee/panel-de-control/issues/323)) ([963d20e](https://github.com/Hooandee/panel-de-control/commit/963d20ef793d90764a2d4284ba212c020f731f2d))
+
 ## [0.31.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.31.0...panel-de-control-v0.31.1) (2026-07-25)
 
 
