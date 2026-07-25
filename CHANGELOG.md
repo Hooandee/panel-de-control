@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.31.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.31.2...panel-de-control-v0.31.3) (2026-07-25)
+
+
+### Bug Fixes
+
+* handle PowerStation TDP conflicts ([#326](https://github.com/Hooandee/panel-de-control/issues/326)) ([8cd33f3](https://github.com/Hooandee/panel-de-control/commit/8cd33f39e2df47c60084eb0460d5ef5bce0f7766))
+
 ## [0.31.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.31.1...panel-de-control-v0.31.2) (2026-07-25)
 
 
