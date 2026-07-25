@@ -946,8 +946,24 @@ class Plugin:
         self._settings["tdp_control_enabled"] = enabled
         self._save()
         if not enabled:
+            requested = (
+                dict(self._tdp_targets.requested)
+                if self._tdp_targets is not None
+                else {}
+            )
             self._advance_tdp_generation()
             await self._offload_call(self._restore_hhd_tdp)
+            self._tdp_observation = await self._offload_call(
+                self._observe_tdp_sync
+            )
+            self._tdp_targets = None
+            self._tdp_status = "unverifiable"
+            self._tdp_reason = "control_disabled"
+            self._record_tdp_transition(
+                "control-disabled",
+                action="release",
+                requested=requested,
+            )
         else:
             await self._apply_tdp_now("control-enabled")
         return enabled
@@ -1668,8 +1684,6 @@ class Plugin:
         auto = self._tdp_profiles.auto_tdp(self._current_appid)
         ac = read_on_ac()
         setpoint = self._effective_levels(self._current_appid, ac)[0]["pl1"]
-        # Skip subprocess readback on the 1 s poll. Other backends are cheap and the
-        # same observation also refreshes the ownership status shown in the QAM.
         if getattr(self._tdp_backend, "blocking", False):
             observation = self._tdp_observation
             applied = None
@@ -2033,12 +2047,20 @@ class Plugin:
             )
         if not self._tdp_backend.supported:
             self._tdp_status, self._tdp_reason = "unsupported", ""
-            return TdpResult(
+            result = TdpResult(
                 command.requested["pl1"],
                 None,
                 False,
                 "tdp-unsupported",
             )
+            self._record_tdp_transition(
+                command.reason,
+                action="apply",
+                result=result,
+                on_ac=command.on_ac,
+                requested=command.requested,
+            )
+            return result
         if not self._tdp_control_on():
             self._tdp_status = "unverifiable"
             self._tdp_reason = "control_disabled"
@@ -2053,21 +2075,40 @@ class Plugin:
             if not self._tdp_backend.set_profile(mode):
                 self._tdp_status = "rejected"
                 self._tdp_reason = "firmware_mode_rejected"
-                self._record_tdp_transition(command.reason)
-                return TdpResult(
+                self._tdp_targets = None
+                self._tdp_observation = self._observe_tdp_sync()
+                result = TdpResult(
                     command.requested["pl1"],
                     self._tdp_backend.read_applied(),
                     False,
                     f"firmware-mode-rejected:{mode}",
                 )
+                self._record_tdp_transition(
+                    command.reason,
+                    action="profile",
+                    result=result,
+                    on_ac=command.on_ac,
+                    requested=command.requested,
+                )
+                return result
             self._tdp_status = "unverifiable"
             self._tdp_reason = "firmware_mode"
-            return TdpResult(
+            self._tdp_targets = None
+            self._tdp_observation = self._observe_tdp_sync()
+            result = TdpResult(
                 command.requested["pl1"],
                 self._tdp_backend.read_applied(),
                 True,
                 f"firmware-mode:{mode}",
             )
+            self._record_tdp_transition(
+                command.reason,
+                action="profile",
+                result=result,
+                on_ac=command.on_ac,
+                requested=command.requested,
+            )
+            return result
         before = self._observe_tdp_sync()
         if command.generation != self._tdp_generation:
             return TdpResult(
@@ -2122,7 +2163,13 @@ class Plugin:
         self._tdp_status = outcome.status
         self._tdp_reason = outcome.reason
         self._tdp_conflict_persistent = outcome.conflict_persistent
-        self._record_tdp_transition(command.reason)
+        self._record_tdp_transition(
+            command.reason,
+            action="apply",
+            result=result,
+            on_ac=command.on_ac,
+            requested=command.requested,
+        )
         return TdpResult(
             command.requested["pl1"],
             result.applied_w,
@@ -2196,6 +2243,8 @@ class Plugin:
                 None,
             ),
         )
+        action = outcome.action
+        result = None
         if command.generation != self._tdp_generation:
             return
         if outcome.action == "apply":
@@ -2238,7 +2287,13 @@ class Plugin:
         self._tdp_status = outcome.status
         self._tdp_reason = outcome.reason
         self._tdp_conflict_persistent = outcome.conflict_persistent
-        self._record_tdp_transition("guard")
+        self._record_tdp_transition(
+            "guard",
+            action=action,
+            result=result,
+            on_ac=command.on_ac,
+            requested=command.requested,
+        )
 
     def _tdp_guard_delay(self):
         now = time.monotonic()
@@ -2300,42 +2355,115 @@ class Plugin:
     def _reapply_tdp(self, on_ac=None):
         self._init()
         command = self._capture_tdp_command("reapply", on_ac)
-        res = self._execute_tdp_command(command)
-        if not res.ok and not self._tdp_profiles.auto_tdp(self._current_appid):
-            decky.logger.info("TDP: write pl1=%sW not confirmed (firmware holds %sW) %s",
-                              command.requested["pl1"], res.applied_w, res.detail)
-        return res
+        return self._execute_tdp_command(command)
 
-    def _record_tdp_transition(self, reason):
+    def _tdp_scope_label(self):
+        if self._current_appid is None:
+            return "global"
+        if self._tdp_profiles.is_following_global(self._current_appid):
+            return "game_follow_global"
+        return "game"
+
+    def _record_tdp_transition(
+        self,
+        reason,
+        *,
+        action,
+        result=None,
+        on_ac=None,
+        requested=None,
+    ):
+        current_requested = (
+            dict(self._tdp_targets.requested)
+            if self._tdp_targets is not None
+            else dict(requested or {})
+        )
+        current_target = (
+            dict(self._tdp_targets.target)
+            if self._tdp_targets is not None
+            else {}
+        )
+        target_reasons = (
+            dict(self._tdp_targets.reasons)
+            if self._tdp_targets is not None
+            else {}
+        )
         fingerprint = {
             "generation": self._tdp_generation,
             "reason": reason,
+            "action": action,
+            "scope": self._tdp_scope_label(),
+            "control_enabled": self._tdp_control_on(),
+            "on_ac": read_on_ac() if on_ac is None else bool(on_ac),
+            "firmware_mode": self._firmware_mode(),
             "status": self._tdp_status,
             "status_reason": self._tdp_reason,
-            "requested": (
-                dict(self._tdp_targets.requested)
-                if self._tdp_targets is not None
-                else {}
-            ),
-            "target": (
-                dict(self._tdp_targets.target)
-                if self._tdp_targets is not None
-                else {}
-            ),
+            "requested": current_requested,
+            "target": current_target,
+            "target_reasons": target_reasons,
             "observation": self._tdp_observation.as_dict(),
+            "conflict_persistent": self._tdp_conflict_persistent,
+            "failures": self._tdp_reconcile_memory.failures,
+            "write": (
+                None
+                if result is None
+                else {
+                    "ok": bool(result.ok),
+                    "applied": result.applied_w,
+                    "detail": result.detail,
+                }
+            ),
         }
         if self._tdp_history:
+            previous_full = self._tdp_history[-1]
             previous = {
                 key: value
-                for key, value in self._tdp_history[-1].items()
+                for key, value in previous_full.items()
                 if key != "at"
             }
             if previous == fingerprint:
                 return
-        self._tdp_history.append({
+            stable_keys = (
+                "scope",
+                "control_enabled",
+                "on_ac",
+                "firmware_mode",
+                "status",
+                "status_reason",
+                "requested",
+                "target",
+                "target_reasons",
+                "observation",
+                "conflict_persistent",
+                "failures",
+            )
+            if (
+                reason == "guard"
+                and action == "hold"
+                and result is None
+                and all(
+                    previous_full.get(key) == fingerprint[key]
+                    for key in stable_keys
+                )
+            ):
+                return
+        event = {
             "at": round(time.monotonic(), 3),
             **fingerprint,
-        })
+        }
+        self._tdp_history.append(event)
+        encoded = json.dumps(
+            event,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        warning = (
+            self._tdp_status in ("rejected", "unsupported")
+            or self._tdp_conflict_persistent
+            or (result is not None and not result.ok)
+        )
+        log = decky.logger.warning if warning else decky.logger.info
+        log("TDP transition %s", encoded)
 
     def _reassert_tdp_only(self, on_ac=None) -> None:
         """Settle-retry callback: re-assert only the power rails off the loop, winning the
@@ -3009,8 +3137,81 @@ class Plugin:
         return {
             "generation": self._tdp_generation,
             "backend": self._tdp_backend.name,
+            "backend_descriptor": self._tdp_backend_diagnostics(),
             "history": list(self._tdp_history),
         }
+
+    def _tdp_backend_diagnostics(self):
+        errors = {}
+        try:
+            limits = self._limits()
+            limit_values = {
+                "min": limits.min_w,
+                "default": limits.default_w,
+                "max": limits.max_w,
+                "max_ac": limits.max_ac_w,
+            }
+            limits_source = "backend"
+        except Exception as exc:  # noqa: BLE001
+            errors["limits"] = type(exc).__name__
+            limit_values = {
+                "min": self._device.tdp_min,
+                "default": self._device.tdp_default,
+                "max": self._device.tdp_max,
+                "max_ac": self._device.tdp_max_charger,
+            }
+            limits_source = "profile_fallback"
+        try:
+            level_limits = self._tdp_backend.level_limits()
+        except Exception as exc:  # noqa: BLE001
+            errors["level_limits"] = type(exc).__name__
+            level_limits = {}
+        try:
+            levels = self._tdp_backend.reconciliation_levels(
+                self._tdp_profiles.effective(None)
+            )
+            rails = sorted(levels)
+        except Exception as exc:  # noqa: BLE001
+            errors["rails"] = type(exc).__name__
+            rails = []
+        return {
+            "device_key": self._device.key,
+            "generic": bool(self._device.is_generic),
+            "vendor": self._device.vendor,
+            "backend": self._tdp_backend.name,
+            "supported": bool(self._tdp_backend.supported),
+            "readback": bool(getattr(self._tdp_backend, "readback", True)),
+            "rails": rails,
+            "guard_interval_s": float(
+                getattr(self._tdp_backend, "guard_interval_s", 0.0)
+            ),
+            "heartbeat_s": getattr(self._tdp_backend, "heartbeat_s", None),
+            "read_tolerance_w": int(
+                getattr(self._tdp_backend, "read_tolerance_w", 0)
+            ),
+            "limits": limit_values,
+            "limits_source": limits_source,
+            "level_limits": level_limits,
+            "probe_trace": [
+                dict(item)
+                for item in getattr(self._tdp_backend, "probe_trace", ())
+            ],
+            "errors": errors,
+        }
+
+    def _log_tdp_backend_diagnostics(self):
+        descriptor = self._tdp_backend_diagnostics()
+        encoded = json.dumps(
+            descriptor,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        log = (
+            decky.logger.info
+            if descriptor["supported"] and not descriptor["errors"]
+            else decky.logger.warning
+        )
+        log("TDP backend %s", encoded)
 
     def _tdp_presets(self, limits) -> dict:
         """Quick-preset watts for the arc's preset buttons. Curated per-model values
@@ -3501,6 +3702,7 @@ class Plugin:
         decky.logger.info(
             "Panel de Control v%s loaded (euid=%s)", read_version(), os.geteuid()
         )
+        self._log_tdp_backend_diagnostics()
         # Legion Go S hides its fan sensor unless lenovo_wmi_other is loaded with
         # expose_all_fans=Y — enable it (idempotent, no-op elsewhere, never raises).
         if fan_expose.ensure_fan_sensor():

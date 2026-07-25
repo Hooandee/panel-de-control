@@ -1,5 +1,6 @@
 import asyncio
 import importlib
+import json
 import sys
 import types
 from dataclasses import replace
@@ -123,11 +124,17 @@ def plugin(tmp_path, monkeypatch):
     fake = types.ModuleType("decky")
     fake.DECKY_PLUGIN_SETTINGS_DIR = str(tmp_path)
     fake.DECKY_USER = "deck"
+    logs = {
+        "info": [],
+        "warning": [],
+        "error": [],
+        "exception": [],
+    }
     fake.logger = types.SimpleNamespace(
-        info=lambda *a, **k: None,
-        warning=lambda *a, **k: None,
-        error=lambda *a, **k: None,
-        exception=lambda *a, **k: None,
+        info=lambda *a, **k: logs["info"].append(a),
+        warning=lambda *a, **k: logs["warning"].append(a),
+        error=lambda *a, **k: logs["error"].append(a),
+        exception=lambda *a, **k: logs["exception"].append(a),
     )
     monkeypatch.setitem(sys.modules, "decky", fake)
     import tdp.factory as factory
@@ -151,6 +158,7 @@ def plugin(tmp_path, monkeypatch):
     monkeypatch.setattr(main, "read_on_ac", lambda root="/": True, raising=False)
     instance = main.Plugin()
     instance._init()
+    instance._test_logs = logs
     return instance
 
 
@@ -221,6 +229,8 @@ def test_named_firmware_mode_does_not_write_rails(plugin):
     )
     assert plugin._tdp_backend.set_levels_calls == 0
     assert result.detail == "firmware-mode:performance"
+    assert plugin._tdp_history[-1]["action"] == "profile"
+    assert plugin._tdp_history[-1]["firmware_mode"] == "performance"
 
 
 def test_rejected_firmware_mode_is_reported_and_not_persisted(
@@ -458,11 +468,170 @@ def test_report_contains_tdp_transition_history(plugin, monkeypatch):
     assert history
     last = history[-1]
     assert {
+        "action",
+        "scope",
+        "write",
         "requested",
         "target",
+        "target_reasons",
         "observation",
         "status",
     } <= last.keys()
+    diagnostics = bundle["state"]["tdp_diagnostics"]
+    assert diagnostics["backend_descriptor"] == plugin._tdp_backend_diagnostics()
+
+
+def test_backend_diagnostics_explain_selection_without_personal_identifiers(plugin):
+    plugin._tdp_backend.probe_trace = ({
+        "candidate": "fake",
+        "backend": "fake",
+        "supported": True,
+    },)
+
+    descriptor = plugin._tdp_backend_diagnostics()
+
+    assert descriptor["device_key"] == plugin._device.key
+    assert descriptor["generic"] is plugin._device.is_generic
+    assert descriptor["backend"] == "fake"
+    assert descriptor["supported"] is True
+    assert descriptor["readback"] is True
+    assert descriptor["rails"] == ["pl1", "pl2", "pl3"]
+    assert descriptor["guard_interval_s"] == 2.0
+    assert descriptor["read_tolerance_w"] == 0
+    assert descriptor["limits"]["default"] == 15
+    assert descriptor["level_limits"]["pl1"]["max"] == 35
+    assert descriptor["probe_trace"][0]["candidate"] == "fake"
+    assert descriptor["errors"] == {}
+    encoded = json.dumps(descriptor).lower()
+    for forbidden in ("appid", "title", "hostname", "serial", "uuid", "/home/"):
+        assert forbidden not in encoded
+
+
+def test_backend_diagnostics_are_logged_once_as_compact_json(plugin):
+    plugin._test_logs["info"].clear()
+
+    plugin._log_tdp_backend_diagnostics()
+
+    assert len(plugin._test_logs["info"]) == 1
+    fmt, encoded = plugin._test_logs["info"][0]
+    assert fmt == "TDP backend %s"
+    assert json.loads(encoded)["backend"] == "fake"
+    assert "\n" not in encoded
+
+
+def test_unsupported_backend_diagnostics_use_warning(plugin):
+    plugin._tdp_backend.supported = False
+    plugin._test_logs["warning"].clear()
+
+    plugin._log_tdp_backend_diagnostics()
+
+    assert plugin._test_logs["warning"][0][0] == "TDP backend %s"
+
+
+def test_backend_diagnostics_survive_broken_live_limits(plugin, monkeypatch):
+    monkeypatch.setattr(
+        plugin._tdp_backend,
+        "get_limits",
+        lambda: (_ for _ in ()).throw(OSError("unreadable")),
+    )
+    plugin._test_logs["warning"].clear()
+
+    descriptor = plugin._tdp_backend_diagnostics()
+    plugin._log_tdp_backend_diagnostics()
+
+    assert descriptor["limits_source"] == "profile_fallback"
+    assert descriptor["limits"]["default"] == plugin._device.tdp_default
+    assert descriptor["errors"]["limits"] == "OSError"
+    assert plugin._test_logs["warning"][0][0] == "TDP backend %s"
+
+
+def test_transition_records_action_scope_and_write_result(plugin):
+    plugin._test_logs["info"].clear()
+
+    plugin._execute_tdp_command(plugin._capture_tdp_command("manual"))
+
+    event = plugin._tdp_history[-1]
+    assert event["action"] == "apply"
+    assert event["scope"] == "global"
+    assert event["control_enabled"] is True
+    assert event["on_ac"] is True
+    assert event["firmware_mode"] == "custom"
+    assert event["write"] == {
+        "ok": True,
+        "applied": event["target"]["pl1"],
+        "detail": "",
+    }
+    assert event["target_reasons"]["pl2"] == "live_min"
+    assert "appid" not in json.dumps(event).lower()
+    fmt, encoded = plugin._test_logs["info"][-1]
+    assert fmt == "TDP transition %s"
+    assert json.loads(encoded)["action"] == "apply"
+
+
+def test_disabling_control_records_handoff_without_writing(plugin, monkeypatch):
+    plugin._tdp_backend.set_levels_calls = 0
+
+    def handoff():
+        plugin._tdp_backend._levels["pl1"] = 20
+
+    monkeypatch.setattr(plugin, "_restore_hhd_tdp", handoff)
+    asyncio.run(plugin.set_tdp_control_enabled(False))
+
+    event = plugin._tdp_history[-1]
+    assert event["reason"] == "control-disabled"
+    assert event["action"] == "release"
+    assert event["control_enabled"] is False
+    assert event["write"] is None
+    assert event["observation"]["surfaces"]["fake"]["pl1"]["applied"] == 20
+    assert plugin._tdp_backend.set_levels_calls == 0
+
+
+def test_stable_guard_does_not_add_history_or_logs(plugin):
+    plugin._execute_tdp_command(plugin._capture_tdp_command("initial"))
+    history_size = len(plugin._tdp_history)
+    plugin._test_logs["info"].clear()
+
+    plugin._tdp_guard_tick(now=10.0)
+    plugin._tdp_guard_tick(now=12.0)
+
+    assert len(plugin._tdp_history) == history_size
+    assert plugin._test_logs["info"] == []
+
+
+def test_rejected_write_warns_and_later_recovery_is_logged(plugin, monkeypatch):
+    original = plugin._tdp_backend.set_levels
+    monkeypatch.setattr(
+        plugin._tdp_backend,
+        "set_levels",
+        lambda pl1, pl2, pl3, ac: TdpResult(pl1, 15, False, "busy"),
+    )
+
+    plugin._execute_tdp_command(plugin._capture_tdp_command("manual"))
+
+    rejected = plugin._tdp_history[-1]
+    assert rejected["write"]["ok"] is False
+    assert rejected["status"] == "settling"
+    assert plugin._test_logs["warning"][-1][0] == "TDP transition %s"
+
+    monkeypatch.setattr(plugin._tdp_backend, "set_levels", original)
+    plugin._execute_tdp_command(plugin._capture_tdp_command("retry"))
+
+    recovered = plugin._tdp_history[-1]
+    assert recovered["write"]["ok"] is True
+    assert recovered["status"] in {"in_sync", "constrained"}
+    assert plugin._test_logs["info"][-1][0] == "TDP transition %s"
+
+
+def test_follow_global_transition_uses_scope_without_appid(plugin):
+    plugin._tdp_profiles.create_game_from_global("42")
+    plugin._tdp_profiles.set_follow_global("42", True)
+    plugin._current_appid = "42"
+
+    plugin._execute_tdp_command(plugin._capture_tdp_command("follow-global"))
+
+    event = plugin._tdp_history[-1]
+    assert event["scope"] == "game_follow_global"
+    assert "appid" not in json.dumps(event).lower()
 
 
 def test_asus_steam_profile_drift_is_recovered_under_four_seconds(plugin):
