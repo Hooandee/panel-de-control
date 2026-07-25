@@ -12,6 +12,7 @@ class TDPBackend(ABC):
     guard_interval_s: float = 2.0
     heartbeat_s: float | None = None
     read_tolerance_w: int = 0
+    probe_trace: tuple[dict, ...] = ()
 
     @abstractmethod
     def get_limits(self) -> TdpLimits:

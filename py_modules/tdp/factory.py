@@ -65,8 +65,27 @@ def select_backend(device, root="/", ryzenadj_resolve=None) -> TDPBackend:
             return RyzenadjBackend(fallback, resolve=ryzenadj_resolve, write_max=device.cooler_max)
         return RyzenadjBackend(fallback, write_max=device.cooler_max)
 
+    trace = []
     for make in _candidates(device, fallback, root, ryzenadj):
-        backend = make()
+        candidate = make.__name__
+        try:
+            backend = make()
+        except Exception as exc:  # noqa: BLE001
+            trace.append({
+                "candidate": candidate,
+                "backend": None,
+                "supported": False,
+                "error": type(exc).__name__,
+            })
+            continue
+        trace.append({
+            "candidate": candidate,
+            "backend": backend.name,
+            "supported": bool(backend.supported),
+        })
         if backend.supported:
+            backend.probe_trace = tuple(trace)
             return backend
-    return NullBackend(f"no supported TDP interface for {device.key}")
+    backend = NullBackend(f"no supported TDP interface for {device.key}")
+    backend.probe_trace = tuple(trace)
+    return backend
