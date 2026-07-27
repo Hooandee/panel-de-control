@@ -23,17 +23,44 @@ _RAIL_ATTRS = (
 _PL2_BOOST_RATIO = 1.2
 _PL3_BOOST_RATIO = 1.4
 
+
+def _normalise_rail_floors(values):
+    if not isinstance(values, dict):
+        return {}
+    known_rails = {rail for rail, _attr in _RAIL_ATTRS}
+    floors = {}
+    for rail, value in values.items():
+        if rail not in known_rails:
+            continue
+        try:
+            floor = int(value)
+        except (TypeError, ValueError):
+            continue
+        if floor > 0:
+            floors[rail] = floor
+    return floors
+
+
 class FirmwareAttrBackend(TDPBackend):
     """TDP via kernel firmware-attributes. Covers ASUS (asus-armoury), Lenovo
     (lenovo-wmi-other), MSI (msi-wmi-platform): ppt_pl1_spl/ppt_pl2_sppt/ppt_pl3_fppt
     with current_value (watts) + min_value/max_value. Never raises."""
 
-    def __init__(self, driver_prefix, fallback, root="/", profile_name=None, is_generic=False):
+    def __init__(
+        self,
+        driver_prefix,
+        fallback,
+        root="/",
+        profile_name=None,
+        is_generic=False,
+        rail_floors=None,
+    ):
         self.name = f"firmware-attr:{driver_prefix}"
         self._fallback = fallback
         self._root = root
         self._profile_name = profile_name  # Lenovo: set this platform-profile to "custom" first
         self._is_generic = is_generic
+        self._rail_floors = _normalise_rail_floors(rail_floors)
         self._dir = self._find_driver_dir(driver_prefix)
         self.supported = self._dir is not None and os.path.exists(self._attr("ppt_pl1_spl"))
         self._pp_dir = self._find_profile_dir()  # static, resolved once
@@ -168,7 +195,14 @@ class FirmwareAttrBackend(TDPBackend):
                 mn, mx = self._live_bounds(attr)
                 if mn is not None and mx is not None:
                     hi = min(mx, self._profile_rail_max(attr))
-                    lo = min(hi, max(self._fallback.min_w, mn))
+                    lo = min(
+                        hi,
+                        max(
+                            self._fallback.min_w,
+                            mn,
+                            self._rail_floors.get(key, self._fallback.min_w),
+                        ),
+                    )
                     out[key] = {"min": lo, "max": hi}
             return out
         # Recognised: rails from the profile (PL1 = charger max, boost scaled); writes
@@ -179,6 +213,9 @@ class FirmwareAttrBackend(TDPBackend):
             "pl2": {"min": mn, "max": round(mx * _PL2_BOOST_RATIO)},
             "pl3": {"min": mn, "max": round(mx * _PL3_BOOST_RATIO)},
         }
+        for rail, floor in self._rail_floors.items():
+            bound = bounds[rail]
+            bound["min"] = min(bound["max"], max(bound["min"], floor))
         return {rail: bounds[rail] for rail in self._rails}
 
     def _profile_rail_max(self, attr):
@@ -197,7 +234,12 @@ class FirmwareAttrBackend(TDPBackend):
         safe_hi = self._profile_rail_max(attr)
         hi = min(mx if mx is not None else safe_hi, safe_hi)
         live_lo = mn if mn is not None else self._fallback.min_w
-        lo = min(hi, max(self._fallback.min_w, live_lo))
+        rail = next(
+            (rail for rail, rail_attr in _RAIL_ATTRS if rail_attr == attr),
+            None,
+        )
+        floor = self._rail_floors.get(rail, self._fallback.min_w)
+        lo = min(hi, max(self._fallback.min_w, live_lo, floor))
         return max(lo, min(int(value), hi))
 
     def set_levels(self, pl1, pl2, pl3, ac):

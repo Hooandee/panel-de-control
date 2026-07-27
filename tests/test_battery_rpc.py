@@ -13,8 +13,11 @@ def _make_plugin(tmp_path, monkeypatch, charge_limit=None):
     fake_decky = types.ModuleType("decky")
     fake_decky.DECKY_PLUGIN_SETTINGS_DIR = str(tmp_path)
     fake_decky.DECKY_USER = "deck"
+    logs = {"info": [], "warning": [], "error": []}
     fake_decky.logger = types.SimpleNamespace(
-        info=lambda *a, **k: None, warning=lambda *a, **k: None, error=lambda *a, **k: None
+        info=lambda *a, **k: logs["info"].append(a),
+        warning=lambda *a, **k: logs["warning"].append(a),
+        error=lambda *a, **k: logs["error"].append(a),
     )
     monkeypatch.setitem(sys.modules, "decky", fake_decky)
 
@@ -58,7 +61,9 @@ def _make_plugin(tmp_path, monkeypatch, charge_limit=None):
 
         monkeypatch.setattr(main.Plugin, "_init", patched_init)
 
-    return main.Plugin()
+    plugin = main.Plugin()
+    plugin._test_logs = logs
+    return plugin
 
 
 class _FakeChargeLimit:
@@ -87,6 +92,28 @@ class _FakeChargeLimit:
         return True
 
 
+class _FailingChargeLimit(_FakeChargeLimit):
+    def __init__(self):
+        super().__init__()
+        self.attempts = 0
+
+    def set(self, percent):
+        self.attempts += 1
+        return False
+
+
+class _FlakyChargeLimit(_FakeChargeLimit):
+    def __init__(self):
+        super().__init__()
+        self.attempts = 0
+
+    def set(self, percent):
+        self.attempts += 1
+        if self.attempts == 1:
+            return False
+        return super().set(percent)
+
+
 def test_get_battery_state_shape(tmp_path, monkeypatch):
     p = _make_plugin(tmp_path, monkeypatch, charge_limit=_FakeChargeLimit())
     state = asyncio.run(p.get_battery_state())
@@ -105,6 +132,49 @@ def test_set_charge_limit_enables_and_applies(tmp_path, monkeypatch):
     assert result["enabled"] is True
     assert result["percent"] == 70
     assert cl_backend.value == 70  # applied to hardware
+
+
+def test_failed_charge_limit_write_keeps_intent_and_reports_readback(tmp_path, monkeypatch):
+    backend = _FailingChargeLimit()
+    p = _make_plugin(
+        tmp_path,
+        monkeypatch,
+        charge_limit=backend,
+    )
+
+    result = asyncio.run(p.set_charge_limit(True, 70))
+
+    assert result["enabled"] is True
+    assert backend.attempts == 2
+    assert result["percent"] == 100
+    assert result["last_apply"] == {
+        "action": "set",
+        "requested": 70,
+        "ok": False,
+        "readback": 100,
+        "attempts": 2,
+    }
+    assert any(
+        args[0] == "Charge limit transition %s"
+        for args in p._test_logs["warning"]
+    )
+
+
+def test_transient_charge_limit_failure_retries_once(tmp_path, monkeypatch):
+    backend = _FlakyChargeLimit()
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=backend)
+
+    result = asyncio.run(p.set_charge_limit(True, 70))
+
+    assert backend.attempts == 2
+    assert result["percent"] == 70
+    assert result["last_apply"] == {
+        "action": "set",
+        "requested": 70,
+        "ok": True,
+        "readback": 70,
+        "attempts": 2,
+    }
 
 
 def test_disable_writes_no_cap(tmp_path, monkeypatch):

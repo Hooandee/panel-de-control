@@ -7,6 +7,21 @@ export const GAIN_MAX = 12;
 
 export const clampGain = (g: number): number => clamp(g, GAIN_MIN, GAIN_MAX);
 
+export function audioOperationalView(
+  enabled: boolean,
+  active: boolean,
+  lastApplyOk: boolean | null = null,
+): {
+  showControls: boolean;
+  showApplyWarning: boolean;
+} {
+  const confirmed = active && lastApplyOk !== false;
+  return {
+    showControls: enabled && confirmed,
+    showApplyWarning: enabled && !confirmed,
+  };
+}
+
 export const BALANCE_MIN = -100;
 export const BALANCE_MAX = 100;
 

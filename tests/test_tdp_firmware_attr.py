@@ -1,4 +1,5 @@
 import os
+import inspect
 
 from device_registry import detect
 from tdp.firmware_attr import FirmwareAttrBackend
@@ -421,6 +422,68 @@ def test_lenovo_write_clamps_to_live_firmware_when_low(tmp_path):
     with open(os.path.join(p1, "max_value"), "w") as f:
         f.write("33")                               # firmware recovered
     assert b.set_tdp(30, ac=True).applied_w == 30   # now reaches the setpoint
+
+
+def test_measured_rail_floors_turn_flat_15w_into_confirmed_15_15_20(tmp_path):
+    assert "rail_floors" in inspect.signature(FirmwareAttrBackend).parameters
+    root = str(tmp_path)
+    _mk_attr(root, "lenovo-wmi-other-0", "ppt_pl1_spl", 30, 5, 15)
+    _mk_attr(root, "lenovo-wmi-other-0", "ppt_pl2_sppt", 15, 5, 15)
+    _mk_attr(root, "lenovo-wmi-other-0", "ppt_pl3_fppt", 20, 5, 20)
+    _mk_profile(root)
+    fb = TdpLimits.from_profile(detect(product_name="83N6"))
+    b = FirmwareAttrBackend(
+        "lenovo-wmi-other",
+        fb,
+        root=root,
+        profile_name="lenovo-wmi-gamezone",
+        rail_floors={"pl2": 15, "pl3": 20},
+    )
+
+    assert b.level_limits()["pl2"]["min"] == 15
+    assert b.level_limits()["pl3"]["min"] == 20
+    result = b.set_tdp(15, ac=True)
+    assert result.ok is True
+    assert result.applied_w == 15
+    rails = b.observe().surfaces[b.name]
+    assert {rail: reading.applied_w for rail, reading in rails.items()} == {
+        "pl1": 15,
+        "pl2": 15,
+        "pl3": 20,
+    }
+
+
+def test_invalid_rail_floors_are_ignored_without_breaking_backend_init(tmp_path):
+    _mk_full(str(tmp_path))
+
+    backend = FirmwareAttrBackend(
+        "lenovo-wmi-other",
+        FALLBACK,
+        root=str(tmp_path),
+        rail_floors={"pl2": "invalid", "pl3": -1, "unknown": 20},
+    )
+
+    assert backend.supported is True
+    assert backend._rail_floors == {}
+
+
+def test_rail_floor_never_writes_above_live_ceiling(tmp_path):
+    root = str(tmp_path)
+    _mk_attr(root, "lenovo-wmi-other-0", "ppt_pl1_spl", 15, 5, 15)
+    _mk_attr(root, "lenovo-wmi-other-0", "ppt_pl2_sppt", 10, 5, 10)
+    _mk_attr(root, "lenovo-wmi-other-0", "ppt_pl3_fppt", 12, 5, 12)
+    backend = FirmwareAttrBackend(
+        "lenovo-wmi-other",
+        FALLBACK,
+        root=root,
+        rail_floors={"pl2": 15, "pl3": 20},
+    )
+
+    backend.set_tdp(15, ac=True)
+
+    rails = backend.observe().surfaces[backend.name]
+    assert rails["pl2"].applied_w == 10
+    assert rails["pl3"].applied_w == 12
 
 
 def test_legion_go_2_profile_bumped_to_35(tmp_path):

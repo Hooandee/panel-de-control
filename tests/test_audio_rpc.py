@@ -8,9 +8,17 @@ import types
 
 
 class _FakePipeWireEq:
-    def __init__(self, supported=True, route="speaker"):
+    def __init__(
+        self,
+        supported=True,
+        route="speaker",
+        apply_ok=True,
+        raise_apply=False,
+    ):
         self._supported = supported
         self._route = route
+        self._apply_ok = apply_ok
+        self._raise_apply = raise_apply
         self.applied = []
         self.torn_down = 0
 
@@ -21,8 +29,21 @@ class _FakePipeWireEq:
         return self._route
 
     def set_gains(self, gains, bass=0, loudness=False, balance=0):
+        if self._raise_apply:
+            raise RuntimeError("apply failed")
         self.applied.append((list(gains), bass, loudness, balance))
-        return True
+        return self._apply_ok
+
+    def apply_diagnostics(self):
+        if self._raise_apply:
+            return None
+        return {
+            "ok": self._apply_ok,
+            "reason": None if self._apply_ok else "default_sink_not_confirmed",
+        }
+
+    def is_active(self):
+        return self._apply_ok
 
     def start_test(self, path):
         self._playing = True
@@ -41,8 +62,11 @@ def _make_plugin(tmp_path, monkeypatch, audio=None):
     fake_decky = types.ModuleType("decky")
     fake_decky.DECKY_PLUGIN_SETTINGS_DIR = str(tmp_path)
     fake_decky.DECKY_USER = "deck"
+    logs = {"info": [], "warning": [], "error": []}
     fake_decky.logger = types.SimpleNamespace(
-        info=lambda *a, **k: None, warning=lambda *a, **k: None, error=lambda *a, **k: None
+        info=lambda *a, **k: logs["info"].append(a),
+        warning=lambda *a, **k: logs["warning"].append(a),
+        error=lambda *a, **k: logs["error"].append(a),
     )
     monkeypatch.setitem(sys.modules, "decky", fake_decky)
 
@@ -79,7 +103,9 @@ def _make_plugin(tmp_path, monkeypatch, audio=None):
 
     fake_audio = audio if audio is not None else _FakePipeWireEq()
     monkeypatch.setattr(main, "PipeWireEq", lambda *a, **k: fake_audio)
-    return main.Plugin(), fake_audio
+    plugin = main.Plugin()
+    plugin._test_logs = logs
+    return plugin, fake_audio
 
 
 def test_default_disabled_but_supported(tmp_path, monkeypatch):
@@ -96,6 +122,75 @@ def test_enable_applies(tmp_path, monkeypatch):
     st = asyncio.run(p.set_audio_enabled(True))
     assert st["enabled"] is True
     assert fake.applied  # set_gains was called
+
+
+def test_failed_audio_apply_is_logged_with_structured_reason(tmp_path, monkeypatch):
+    p, fake = _make_plugin(
+        tmp_path,
+        monkeypatch,
+        audio=_FakePipeWireEq(apply_ok=False),
+    )
+
+    state = asyncio.run(p.set_audio_enabled(True))
+
+    warning = next(
+        args
+        for args in p._test_logs["warning"]
+        if args and args[0] == "audio EQ apply rejected: %s"
+    )
+    assert warning[1] == (
+        '{"ok":false,"reason":"default_sink_not_confirmed"}'
+    )
+    assert state["enabled"] is True
+    assert state["active"] is False
+    assert state["last_apply"] == {
+        "ok": False,
+        "reason": "default_sink_not_confirmed",
+    }
+
+
+def test_audio_apply_exception_is_preserved_in_state(tmp_path, monkeypatch):
+    p, fake = _make_plugin(
+        tmp_path,
+        monkeypatch,
+        audio=_FakePipeWireEq(apply_ok=False, raise_apply=True),
+    )
+
+    state = asyncio.run(p.set_audio_enabled(True))
+
+    assert state["active"] is False
+    assert state["last_apply"] == {
+        "ok": False,
+        "reason": "exception",
+        "error": "RuntimeError",
+    }
+
+
+def test_audio_watcher_retries_inactive_eq_on_unchanged_route(tmp_path, monkeypatch):
+    async def scenario():
+        p, fake = _make_plugin(
+            tmp_path,
+            monkeypatch,
+            audio=_FakePipeWireEq(apply_ok=False),
+        )
+        await p.get_audio_state()
+        p._settings["audio_eq_enabled"] = True
+        p._audio_route_last = "speaker"
+        reapplies = []
+        p._reapply_audio = lambda: reapplies.append(True)
+        sleeps = 0
+
+        async def one_iteration(_delay):
+            nonlocal sleeps
+            sleeps += 1
+            if sleeps > 1:
+                raise asyncio.CancelledError
+
+        monkeypatch.setattr(asyncio, "sleep", one_iteration)
+        await p._audio_loop()
+        return reapplies
+
+    assert asyncio.run(scenario()) == [True]
 
 
 def test_disable_tears_down(tmp_path, monkeypatch):

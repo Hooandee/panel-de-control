@@ -105,6 +105,9 @@ class PipeWireEq:
         self._session = _find_session()
         self._orig_default = None
         self._last_applied = None
+        self._last_apply = None
+        self._active = False
+        self._owns_sink = False
         self._user_vol = None
         self._pinned = set()
         self._test_proc = None
@@ -238,6 +241,25 @@ class PipeWireEq:
         if left != right:
             self._runner(["pactl", "set-sink-volume", downstream, f"{left}%", f"{right}%"])
 
+    def _record_apply(self, ok, reason=None, **details):
+        if not ok:
+            self._active = False
+        self._last_apply = {
+            "ok": bool(ok),
+            **({"reason": reason} if reason is not None else {}),
+            **details,
+        }
+
+    def apply_diagnostics(self):
+        return dict(self._last_apply) if self._last_apply is not None else None
+
+    def is_active(self):
+        return (
+            self._active
+            and self.is_default()
+            and self._downstream_sink() is not None
+        )
+
     def ensure_sink(self, gains, bass=0, loudness=False, balance=0):
         """Create/refresh the EQ sink (bands + optional bass enhancer), make it default,
         and keep the physical sink it feeds pinned at unity (100%), offset for balance.
@@ -250,6 +272,11 @@ class PipeWireEq:
         (just re-asserts default + the pin). Balance is outside the gate — it only moves the
         pin, so it re-applies without a restart."""
         if not self.is_supported():
+            self._record_apply(False, "unsupported")
+            return False
+        downstream = self._downstream_sink()
+        if not downstream:
+            self._record_apply(False, "downstream_missing")
             return False
         applied = (list(gains), bass, loudness)
         unchanged = self._orig_default is not None and applied == self._last_applied
@@ -258,27 +285,43 @@ class PipeWireEq:
         conf_path = self._conf_path()
         first_ever = not (conf_path and os.path.exists(conf_path))
         if not unchanged and not self._write_conf(gains, bass, loudness):
+            self._record_apply(False, "config_write_failed", downstream=downstream)
             return False
-        downstream = self._downstream_sink()
         first = self._orig_default is None
         if not unchanged:
             self._restart()
         self._runner(["pactl", "set-default-sink", self._label])
-        if downstream:
-            if first:
-                self._orig_default = downstream
-                if first_ever:
-                    # Carry the downstream's level onto our sink so enabling doesn't jump
-                    # loudness. Skip on a boot re-assert: the sink already holds the user's
-                    # level (WirePlumber restores it), and the downstream is always unity.
-                    vol = self._sink_volume_pct(downstream)
-                    if vol:
-                        self._user_vol = vol
-                        self._runner(["pactl", "set-sink-volume", self._label, vol])
-            self._pin_downstream(downstream, balance)
-            if balance:
-                self._pinned.add(downstream)
+        if not self.is_default():
+            if first and first_ever:
+                try:
+                    os.remove(conf_path)
+                except OSError:
+                    pass
+                self._restart()
+                self._runner(["pactl", "set-default-sink", downstream])
+            self._record_apply(
+                False,
+                "default_sink_not_confirmed",
+                downstream=downstream,
+            )
+            return False
+        if first:
+            self._orig_default = downstream
+            if first_ever:
+                # Carry the downstream's level onto our sink so enabling doesn't jump
+                # loudness. Skip on a boot re-assert: the sink already holds the user's
+                # level (WirePlumber restores it), and the downstream is always unity.
+                vol = self._sink_volume_pct(downstream)
+                if vol:
+                    self._user_vol = vol
+                    self._runner(["pactl", "set-sink-volume", self._label, vol])
+        self._owns_sink = True
+        self._pin_downstream(downstream, balance)
+        if balance:
+            self._pinned.add(downstream)
         self._last_applied = applied
+        self._active = True
+        self._record_apply(True, downstream=downstream, unchanged=unchanged)
         return True
 
     def set_gains(self, gains, bass=0, loudness=False, balance=0):
@@ -330,6 +373,7 @@ class PipeWireEq:
             pass
         path = self._conf_path()
         info["conf_path"] = path
+        info["last_apply"] = self.apply_diagnostics()
         try:
             info["conf"] = open(path).read() if path and os.path.exists(path) else None
         except OSError:
@@ -345,9 +389,16 @@ class PipeWireEq:
         path = self._conf_path()
         had_conf = bool(path and os.path.exists(path))
         if not had_conf and self._orig_default is None:
+            self._active = False
+            self._owns_sink = False
             return
+        transfer_volume = self._owns_sink and self.is_default()
         downstream = self._orig_default or self._downstream_sink()
-        our_vol = self._sink_volume_pct(self._label) or self._user_vol
+        our_vol = (
+            self._sink_volume_pct(self._label) or self._user_vol
+            if transfer_volume
+            else None
+        )
         pinned = self._pinned
         if had_conf:
             try:
@@ -358,9 +409,14 @@ class PipeWireEq:
         for sink in pinned:  # re-centre any sink a route change left panned
             self._runner(["pactl", "set-sink-volume", sink, "100%"])
         if downstream:
-            self._runner(["pactl", "set-sink-volume", downstream, our_vol or "100%"])
+            if transfer_volume:
+                self._runner(
+                    ["pactl", "set-sink-volume", downstream, our_vol or "100%"]
+                )
             self._runner(["pactl", "set-default-sink", downstream])
         self._orig_default = None
         self._last_applied = None
         self._user_vol = None
         self._pinned = set()
+        self._active = False
+        self._owns_sink = False

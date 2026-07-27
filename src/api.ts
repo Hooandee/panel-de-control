@@ -709,6 +709,12 @@ export interface AudioProfile {
 export interface AudioState {
   supported: boolean;
   enabled: boolean;
+  active: boolean;
+  last_apply: {
+    ok: boolean;
+    reason?: string;
+    error?: string;
+  } | null;
   route: "speaker" | "headphone";
   appid: string | null;
   follows_global: boolean;

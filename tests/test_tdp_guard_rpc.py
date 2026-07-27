@@ -488,6 +488,10 @@ def test_report_contains_tdp_transition_history(plugin, monkeypatch):
     } <= last.keys()
     diagnostics = bundle["state"]["tdp_diagnostics"]
     assert diagnostics["backend_descriptor"] == plugin._tdp_backend_diagnostics()
+    assert bundle["state"]["lifecycle_diagnostics"] == plugin._lifecycle.diagnostics()
+    assert bundle["state"]["controller_diagnostics"] == (
+        plugin._controller_backend.diagnostics()
+    )
     assert bundle["state"]["tdp_conflict"]["powerstation_active"] is True
     display = bundle["state"]["display_diagnostics"]
     assert display["frontend"] == {
@@ -499,6 +503,46 @@ def test_report_contains_tdp_transition_history(plugin, monkeypatch):
     assert {"supported", "probe_detail", "wayland_display", "last_apply"} <= (
         display["backend"].keys()
     )
+
+
+def test_confirmed_resume_is_written_to_plugin_log(plugin):
+    wakeup = {"value": 10}
+    suspended = {"value": 0.0}
+    plugin._lifecycle._read_wakeup = lambda: wakeup["value"]
+    plugin._lifecycle._read_suspend = lambda: suspended["value"]
+    plugin._lifecycle._read_ac = lambda: True
+    plugin._lifecycle.check(now=0.0)
+    wakeup["value"] = 11
+    suspended["value"] = 2.5
+
+    plugin._lifecycle.check(now=2.0)
+
+    lifecycle_logs = [
+        args
+        for args in plugin._test_logs["info"]
+        if args and args[0] == "Lifecycle transition %s"
+    ]
+    assert lifecycle_logs
+    assert json.loads(lifecycle_logs[-1][1]) == {
+        "event": "resume_detected",
+        "full_delay_seconds": 4.0,
+        "suspend_seconds": 2.5,
+        "tdp_settle_retries": 3,
+    }
+
+
+def test_controller_dbus_failure_is_written_to_plugin_log(plugin):
+    event = {
+        "operation": "reset_default",
+        "ok": False,
+        "reason": "busctl_exit",
+        "returncode": 1,
+    }
+
+    plugin._log_controller_event(event)
+
+    assert plugin._test_logs["warning"][-1][0] == "Controller transition %s"
+    assert json.loads(plugin._test_logs["warning"][-1][1]) == event
 
 
 def test_backend_diagnostics_explain_selection_without_personal_identifiers(plugin):
@@ -586,6 +630,47 @@ def test_transition_records_action_scope_and_write_result(plugin):
     fmt, encoded = plugin._test_logs["info"][-1]
     assert fmt == "TDP transition %s"
     assert json.loads(encoded)["action"] == "apply"
+
+
+def test_backend_diagnostics_include_selected_rail_floors(plugin):
+    plugin._tdp_backend._rail_floors = {"pl2": 15, "pl3": 20}
+
+    descriptor = plugin._tdp_backend_diagnostics()
+
+    assert descriptor.get("rail_floors") == {"pl2": 15, "pl3": 20}
+
+
+def test_confirmed_secondary_rail_floor_is_constrained_without_retry(plugin):
+    plugin._tdp_backend._rail_floors = {"pl2": 15, "pl3": 20}
+    plugin._tdp_backend.level_limits = lambda: {
+        "pl1": {"min": 5, "max": 35},
+        "pl2": {"min": 15, "max": 42},
+        "pl3": {"min": 20, "max": 49},
+    }
+    plugin._tdp_backend._levels = {"pl1": 15, "pl2": 15, "pl3": 20}
+    plugin._tdp_profiles.set_levels("global", 15, 15, 15)
+
+    result = plugin._execute_tdp_command(
+        plugin._capture_tdp_command("manual")
+    )
+
+    assert result.ok is True
+    assert plugin._tdp_targets.requested == {
+        "pl1": 15,
+        "pl2": 15,
+        "pl3": 15,
+    }
+    assert plugin._tdp_targets.target == {
+        "pl1": 15,
+        "pl2": 15,
+        "pl3": 20,
+    }
+    assert plugin._tdp_targets.reasons == {"pl3": "safe_min"}
+    assert plugin._tdp_status == "constrained"
+    assert plugin._tdp_reconcile_memory.failures == 0
+    plugin._tdp_backend.set_levels_calls = 0
+    plugin._tdp_guard_tick(now=10.0)
+    assert plugin._tdp_backend.set_levels_calls == 0
 
 
 def test_disabling_control_records_handoff_without_writing(plugin, monkeypatch):

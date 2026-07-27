@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   applyTone,
+  audioOperationalView,
   balanceLabel,
   bassToEnhancer,
   BALANCE_MAX,
@@ -17,6 +18,25 @@ import {
 } from "./logic";
 
 describe("audio EQ logic", () => {
+  it("shows controls only for a confirmed active equalizer", () => {
+    expect(audioOperationalView(true, true)).toEqual({
+      showControls: true,
+      showApplyWarning: false,
+    });
+    expect(audioOperationalView(true, false)).toEqual({
+      showControls: false,
+      showApplyWarning: true,
+    });
+    expect(audioOperationalView(false, false)).toEqual({
+      showControls: false,
+      showApplyWarning: false,
+    });
+    expect(audioOperationalView(true, true, false)).toEqual({
+      showControls: false,
+      showApplyWarning: true,
+    });
+  });
+
   it("has 10 band frequencies", () => {
     expect(BAND_FREQS).toEqual([32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000]);
   });

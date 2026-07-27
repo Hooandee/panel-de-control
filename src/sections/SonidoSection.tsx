@@ -8,7 +8,15 @@ import {
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { useEq } from "../audio/useEq";
-import { balanceLabel, GAIN_MAX, GAIN_MIN, toneCeiling, toneLevel, ToneRegion } from "../audio/logic";
+import {
+  audioOperationalView,
+  balanceLabel,
+  GAIN_MAX,
+  GAIN_MIN,
+  toneCeiling,
+  toneLevel,
+  ToneRegion,
+} from "../audio/logic";
 import { ProfileSelector } from "../components/ProfileSelector";
 import { ContainedSlider } from "../components/ContainedSlider";
 import { Collapsible } from "../components/Collapsible";
@@ -68,6 +76,11 @@ export const SonidoSection: FC = () => {
   const ceilings = isHeadphone ? undefined : state.safe_limits.bands;
 
   const bal = balanceLabel(state.balance);
+  const operationalView = audioOperationalView(
+    state.enabled,
+    state.active,
+    state.last_apply?.ok ?? null,
+  );
   const balanceReadout =
     bal.side === "center"
       ? t("audio.balance.centered")
@@ -93,7 +106,23 @@ export const SonidoSection: FC = () => {
         />
       </PanelSectionRow>
 
-      {state.enabled && (
+      {operationalView.showApplyWarning && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 7,
+            color: theme.color.warn,
+            fontSize: theme.font.caption,
+            lineHeight: 1.4,
+          }}
+        >
+          <LuTriangleAlert size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+          {t("audio.apply.unconfirmed")}
+        </div>
+      )}
+
+      {operationalView.showControls && (
         <>
           {/* Active output route (auto-detected) — the curve you edit follows it. */}
           <div
