@@ -46,15 +46,10 @@ def _named_preset(contents: str, name: str) -> str:
 
 
 def _event_paths(contents: str, event: str) -> list[str]:
-    event_match = re.search(
-        rf"(?ms)^  {re.escape(event)}:\n(?P<body>.*?)(?=^  [a-z_]+:|\npermissions:)",
-        contents,
-    )
-    if event_match is None:
-        raise AssertionError(f"Workflow event not found: {event}")
+    event_body = _event_body(contents, event)
     paths_match = re.search(
         r"(?ms)^    paths:\n(?P<paths>(?:      - .*\n)+)",
-        event_match.group("body"),
+        event_body,
     )
     if paths_match is None:
         raise AssertionError(f"Positive paths not found for: {event}")
@@ -62,6 +57,48 @@ def _event_paths(contents: str, event: str) -> list[str]:
         line.strip()[2:].strip('"')
         for line in paths_match.group("paths").splitlines()
     ]
+
+
+def _event_body(contents: str, event: str) -> str:
+    event_match = re.search(
+        rf"(?ms)^  {re.escape(event)}:\n(?P<body>.*?)(?=^  [a-z_]+:|\npermissions:)",
+        contents,
+    )
+    if event_match is None:
+        raise AssertionError(f"Workflow event not found: {event}")
+    return event_match.group("body")
+
+
+def _filter_paths(contents: str, filter_name: str) -> list[str]:
+    filter_match = re.search(
+        rf"(?ms)^            {re.escape(filter_name)}:\n"
+        r"(?P<paths>(?:              - .*\n)+)",
+        contents,
+    )
+    if filter_match is None:
+        raise AssertionError(f"Workflow filter not found: {filter_name}")
+    return [
+        line.strip()[2:].strip("'\"")
+        for line in filter_match.group("paths").splitlines()
+    ]
+
+
+def _job_body(contents: str, job_name: str) -> str:
+    job_match = re.search(
+        rf"(?ms)^  {re.escape(job_name)}:\n"
+        r"(?P<body>.*?)(?=^  [a-z][a-z0-9-]*:\n|\Z)",
+        contents,
+    )
+    if job_match is None:
+        raise AssertionError(f"Workflow job not found: {job_name}")
+    return job_match.group("body")
+
+
+def _job_steps(contents: str, job_name: str) -> list[str]:
+    return re.findall(
+        r"(?ms)^      - (?P<step>.*?)(?=^      - |\Z)",
+        _job_body(contents, job_name),
+    )
 
 
 def _matches(path: str, patterns: list[str]) -> bool:
@@ -613,22 +650,81 @@ class BuildContractTests(unittest.TestCase):
 
 
 class WorkflowIsolationTests(unittest.TestCase):
-    def test_path_filters_isolate_ogui_and_decky_changes(self) -> None:
+    def test_decky_classifier_routes_ogui_decky_and_mixed_changes(self) -> None:
         decky = DECKY_WORKFLOW.read_text(encoding="utf-8")
         ogui = OGUI_WORKFLOW.read_text(encoding="utf-8")
+        decky_paths = _filter_paths(decky, "decky")
+
         for event in ("push", "pull_request"):
-            decky_paths = _event_paths(decky, event)
             ogui_paths = _event_paths(ogui, event)
 
-            self.assertFalse(_matches("opengamepadui/plugin.gd", decky_paths))
+            self.assertNotIn("paths:", _event_body(decky, event))
             self.assertTrue(_matches("opengamepadui/plugin.gd", ogui_paths))
-            self.assertTrue(_matches("src/index.tsx", decky_paths))
             self.assertFalse(_matches("src/index.tsx", ogui_paths))
-            self.assertTrue(_matches(".github/workflows/ci.yml", decky_paths))
-            self.assertTrue(_matches("conftest.py", decky_paths))
             self.assertTrue(
                 _matches(".github/workflows/opengamepadui-ci.yml", ogui_paths)
             )
+
+        cases = (
+            (["opengamepadui/plugin.gd"], False),
+            (["src/index.tsx"], True),
+            (["opengamepadui/plugin.gd", "src/index.tsx"], True),
+            (["conftest.py"], True),
+            ([".github/workflows/ci.yml"], True),
+        )
+        for changed_paths, expected_decky in cases:
+            with self.subTest(changed_paths=changed_paths):
+                self.assertEqual(
+                    any(_matches(path, decky_paths) for path in changed_paths),
+                    expected_decky,
+                )
+
+    def test_decky_required_jobs_report_without_running_expensive_ogui_steps(
+        self,
+    ) -> None:
+        workflow = DECKY_WORKFLOW.read_text(encoding="utf-8")
+
+        changes = _job_body(workflow, "changes")
+        self.assertIn("decky: ${{ steps.filter.outputs.decky }}", changes)
+
+        for job_name in ("backend-tests", "frontend-build"):
+            job = _job_body(workflow, job_name)
+            header = job.split("steps:", maxsplit=1)[0]
+            self.assertIn("needs: changes", header)
+            self.assertNotIn("\n    if:", header)
+
+            steps = _job_steps(workflow, job_name)
+            skipped = [step for step in steps if "Decky paths unchanged" in step]
+            expensive = [step for step in steps if step not in skipped]
+            self.assertEqual(len(skipped), 1)
+            self.assertIn(
+                "if: needs.changes.outputs.decky != 'true'",
+                skipped[0],
+            )
+            self.assertGreater(len(expensive), 0)
+            for step in expensive:
+                self.assertIn(
+                    "if: needs.changes.outputs.decky == 'true'",
+                    step,
+                )
+
+    def test_decky_classifier_is_pinned_and_read_only(self) -> None:
+        workflow = DECKY_WORKFLOW.read_text(encoding="utf-8")
+        changes = _job_body(workflow, "changes")
+
+        self.assertIn("contents: read", workflow)
+        self.assertIn("pull-requests: read", workflow)
+        self.assertNotRegex(workflow, r"(?m)^\s+[a-z-]+: write$")
+        self.assertRegex(
+            changes,
+            r"actions/checkout@[0-9a-f]{40}",
+        )
+        self.assertIn("persist-credentials: false", changes)
+        self.assertIn(
+            "dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36",
+            changes,
+        )
+        self.assertNotRegex(workflow, r"(?m)^\s*(release|tags):")
 
     def test_ogui_ci_is_read_only_pinned_and_artifact_only(self) -> None:
         workflow = OGUI_WORKFLOW.read_text(encoding="utf-8")
