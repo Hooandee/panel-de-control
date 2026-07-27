@@ -11,8 +11,9 @@ DIST_DIR ?= $(PLUGIN_DIR)/dist
 PACKAGE := $(DIST_DIR)/$(PLUGIN_ID).zip
 OGUI_PLUGIN := $(OGUI_DIR)/plugins/$(PLUGIN_ID)
 GUT_SCRIPT := res://addons/gut/gut_cmdln.gd
+SMOKE_SCRIPT := $(PLUGIN_DIR)/tests/package_smoke.gd
 
-.PHONY: link test dist validate install configure
+.PHONY: link test dist validate smoke install configure
 
 link:
 	@test -f "$(OGUI_DIR)/project.godot" || { echo "OpenGamepadUI checkout not found: $(OGUI_DIR)" >&2; exit 1; }
@@ -50,6 +51,19 @@ validate:
 	$(PYTHON) "$(PLUGIN_DIR)/scripts/validate_package.py" \
 		--package "$(PACKAGE)" \
 		--source "$(PLUGIN_DIR)"
+
+smoke: link validate
+	@set -eu; \
+	link_target=$$(readlink "$(OGUI_PLUGIN)"); \
+	restore_link() { \
+		if ! test -e "$(OGUI_PLUGIN)" && ! test -L "$(OGUI_PLUGIN)"; then \
+			ln -s "$$link_target" "$(OGUI_PLUGIN)"; \
+		fi; \
+	}; \
+	trap restore_link EXIT; \
+	unlink "$(OGUI_PLUGIN)"; \
+	$(GODOT) --headless --path "$(OGUI_DIR)" \
+		--script "$(SMOKE_SCRIPT)" -- "$(PACKAGE)"
 
 install: dist
 	bash "$(PLUGIN_DIR)/scripts/install_to_device.sh" \

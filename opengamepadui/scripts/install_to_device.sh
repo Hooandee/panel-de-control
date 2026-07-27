@@ -53,5 +53,12 @@ if [[ "$(basename "$package")" != "panel-de-control.zip" ]]; then
 fi
 
 destination=".local/share/opengamepadui/plugins/panel-de-control.zip"
-scp "$package" "${ssh_user}@${host}:${destination}"
+remote="${ssh_user}@${host}"
+scp_host="$host"
+if [[ "$host" == *:* ]]; then
+  scp_host="[$host]"
+fi
+
+ssh "$remote" "mkdir -p .local/share/opengamepadui/plugins"
+scp "$package" "${ssh_user}@${scp_host}:${destination}"
 echo "Installed panel-de-control.zip on ${ssh_user}@${host}"

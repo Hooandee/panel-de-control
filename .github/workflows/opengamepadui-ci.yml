@@ -21,7 +21,7 @@ jobs:
   build-plugin:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/shadowblip/opengamepadui-builder:4.7.1
+      image: ghcr.io/shadowblip/opengamepadui-builder:4.7.1@sha256:d1f816502509e00f931e93b60fac570bc8ab757b694b68d450de7cf191b5e005
     steps:
       - name: Check out Panel de Control
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -59,6 +59,12 @@ jobs:
       - name: Export installable plugin pack
         run: |
           make -C opengamepadui dist \
+            OGUI_DIR="$GITHUB_WORKSPACE/OpenGamepadUI" \
+            GODOT=godot
+
+      - name: Smoke test exported resource pack
+        run: |
+          make -C opengamepadui smoke \
             OGUI_DIR="$GITHUB_WORKSPACE/OpenGamepadUI" \
             GODOT=godot
 

@@ -177,7 +177,21 @@ platform="Linux"
 
 
 class PackageValidationTests(unittest.TestCase):
-    def _source(self, directory: Path, version: str = "0.1.0") -> Path:
+    def _source(
+        self,
+        directory: Path,
+        version: str = "0.1.0",
+        *,
+        import_source: str = (
+            "res://plugins/panel-de-control/assets/icon.svg"
+        ),
+        import_path: str = (
+            "res://.godot/imported/icon.svg-test.ctex"
+        ),
+        import_destination: str = (
+            "res://.godot/imported/icon.svg-test.ctex"
+        ),
+    ) -> Path:
         source = directory / "source"
         source.mkdir()
         (source / "VERSION").write_text(f"{version}\n", encoding="utf-8")
@@ -201,6 +215,21 @@ class PackageValidationTests(unittest.TestCase):
             '[gd_scene format=3]\n',
             encoding="utf-8",
         )
+        assets = source / "assets"
+        assets.mkdir()
+        (assets / "icon.svg").write_text("<svg/>", encoding="utf-8")
+        (assets / "icon.svg.import").write_text(
+            (
+                "[remap]\n\n"
+                'importer="texture"\n'
+                'type="CompressedTexture2D"\n'
+                f'path="{import_path}"\n\n'
+                "[deps]\n\n"
+                f'source_file="{import_source}"\n'
+                f'dest_files=["{import_destination}"]\n'
+            ),
+            encoding="utf-8",
+        )
         return source
 
     def _package(
@@ -211,6 +240,7 @@ class PackageValidationTests(unittest.TestCase):
         extra_entries: tuple[str, ...] = (),
         include_compiled_entrypoint: bool = True,
         include_compiled_dependency: bool = True,
+        include_imported_texture: bool = True,
     ) -> Path:
         package = directory / "panel-de-control.zip"
         manifest = {
@@ -248,7 +278,21 @@ class PackageValidationTests(unittest.TestCase):
                 b"compiled scene",
             )
             archive.writestr("icudt_godot.dat", b"Godot ICU data")
-            archive.writestr("plugins/panel-de-control/assets/icon.svg", b"<svg/>")
+            archive.writestr(
+                "plugins/panel-de-control/assets/icon.svg.import",
+                (
+                    "[remap]\n\n"
+                    'importer="texture"\n'
+                    'type="CompressedTexture2D"\n'
+                    'path="res://.godot/imported/icon.svg-test.ctex"\n'
+                    "\0"
+                ).encode(),
+            )
+            if include_imported_texture:
+                archive.writestr(
+                    ".godot/imported/icon.svg-test.ctex",
+                    b"imported texture",
+                )
             for entry in extra_entries:
                 archive.writestr(entry, b"forbidden")
         return package
@@ -363,25 +407,91 @@ class PackageValidationTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("compiled script", result.stderr.lower())
 
+    def test_rejects_pack_without_referenced_imported_texture(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = self._source(root)
+            package = self._package(root, include_imported_texture=False)
+
+            result = _run(
+                "python3",
+                str(VALIDATE_PACKAGE),
+                "--package",
+                str(package),
+                "--source",
+                str(source),
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("imported texture", result.stderr.lower())
+
+    def test_rejects_invalid_icon_import_contract(self) -> None:
+        cases = (
+            {
+                "import_source": "res://assets/wrong.svg",
+                "expected": "source_file",
+            },
+            {
+                "import_path": "res://outside/icon.ctex",
+                "expected": "path",
+            },
+            {
+                "import_destination": "res://outside/icon.ctex",
+                "expected": "dest_files",
+            },
+        )
+        for case in cases:
+            with self.subTest(case=case):
+                with tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    source_args = {
+                        key: value
+                        for key, value in case.items()
+                        if key != "expected"
+                    }
+                    source = self._source(root, **source_args)
+                    package = self._package(root)
+
+                    result = _run(
+                        "python3",
+                        str(VALIDATE_PACKAGE),
+                        "--package",
+                        str(package),
+                        "--source",
+                        str(source),
+                    )
+
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn(case["expected"], result.stderr)
+
 
 class InstallScriptTests(unittest.TestCase):
-    def test_copies_only_the_requested_archive_to_the_ogui_plugin_path(self) -> None:
+    def _fake_remote_commands(self, root: Path) -> tuple[Path, dict[str, str]]:
+        calls = root / "remote-calls"
+        fake_bin = root / "bin"
+        fake_bin.mkdir()
+        for command in ("ssh", "scp"):
+            executable = fake_bin / command
+            executable.write_text(
+                (
+                    "#!/bin/sh\n"
+                    f"printf '{command}\\n' >> \"$REMOTE_CALLS\"\n"
+                    "printf '%s\\n' \"$@\" >> \"$REMOTE_CALLS\"\n"
+                ),
+                encoding="utf-8",
+            )
+            executable.chmod(executable.stat().st_mode | stat.S_IXUSR)
+        environment = os.environ.copy()
+        environment["PATH"] = f"{fake_bin}:{environment['PATH']}"
+        environment["REMOTE_CALLS"] = str(calls)
+        return calls, environment
+
+    def test_creates_plugin_directory_then_copies_only_requested_archive(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             package = root / "panel-de-control.zip"
             package.write_bytes(b"package")
-            calls = root / "scp-arguments"
-            fake_bin = root / "bin"
-            fake_bin.mkdir()
-            fake_scp = fake_bin / "scp"
-            fake_scp.write_text(
-                '#!/bin/sh\nprintf "%s\\n" "$@" > "$SCP_CALLS"\n',
-                encoding="utf-8",
-            )
-            fake_scp.chmod(fake_scp.stat().st_mode | stat.S_IXUSR)
-            environment = os.environ.copy()
-            environment["PATH"] = f"{fake_bin}:{environment['PATH']}"
-            environment["SCP_CALLS"] = str(calls)
+            calls, environment = self._fake_remote_commands(root)
 
             result = _run(
                 "bash",
@@ -399,8 +509,45 @@ class InstallScriptTests(unittest.TestCase):
             self.assertEqual(
                 calls.read_text(encoding="utf-8").splitlines(),
                 [
+                    "ssh",
+                    "deck@192.0.2.10",
+                    "mkdir -p .local/share/opengamepadui/plugins",
+                    "scp",
                     str(package),
                     "deck@192.0.2.10:.local/share/opengamepadui/plugins/"
+                    "panel-de-control.zip",
+                ],
+            )
+
+    def test_brackets_ipv6_host_for_scp(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            package = root / "panel-de-control.zip"
+            package.write_bytes(b"package")
+            calls, environment = self._fake_remote_commands(root)
+
+            result = _run(
+                "bash",
+                str(INSTALL_TO_DEVICE),
+                "--host",
+                "2001:db8::10",
+                "--user",
+                "deck",
+                "--package",
+                str(package),
+                env=environment,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(
+                calls.read_text(encoding="utf-8").splitlines(),
+                [
+                    "ssh",
+                    "deck@2001:db8::10",
+                    "mkdir -p .local/share/opengamepadui/plugins",
+                    "scp",
+                    str(package),
+                    "deck@[2001:db8::10]:.local/share/opengamepadui/plugins/"
                     "panel-de-control.zip",
                 ],
             )
@@ -444,6 +591,24 @@ class BuildContractTests(unittest.TestCase):
         self.assertIn("dist/panel-de-control.zip", result.stdout)
         self.assertNotRegex(result.stdout, r"(^|\s)zip(\s|$)")
 
+    def test_smoke_target_loads_pack_without_source_symlink(self) -> None:
+        result = _run(
+            "make",
+            "--dry-run",
+            "--file",
+            str(PLUGIN_DIR / "Makefile"),
+            "smoke",
+            "OGUI_DIR=/tmp/OpenGamepadUI",
+            "GODOT=/opt/godot",
+            cwd=PLUGIN_DIR,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("package_smoke.gd", result.stdout)
+        self.assertIn("panel-de-control.zip", result.stdout)
+        self.assertIn("unlink", result.stdout)
+        self.assertIn("trap", result.stdout)
+
 
 class WorkflowIsolationTests(unittest.TestCase):
     def test_path_filters_isolate_ogui_and_decky_changes(self) -> None:
@@ -458,6 +623,7 @@ class WorkflowIsolationTests(unittest.TestCase):
             self.assertTrue(_matches("src/index.tsx", decky_paths))
             self.assertFalse(_matches("src/index.tsx", ogui_paths))
             self.assertTrue(_matches(".github/workflows/ci.yml", decky_paths))
+            self.assertTrue(_matches("conftest.py", decky_paths))
             self.assertTrue(
                 _matches(".github/workflows/opengamepadui-ci.yml", ogui_paths)
             )
@@ -468,10 +634,21 @@ class WorkflowIsolationTests(unittest.TestCase):
         self.assertIn("contents: read", workflow)
         self.assertIn("persist-credentials: false", workflow)
         self.assertIn("b149644f46b71e175a2ad223e84c18361596691e", workflow)
-        self.assertIn("ghcr.io/shadowblip/opengamepadui-builder:4.7.1", workflow)
+        self.assertIn(
+            "ghcr.io/shadowblip/opengamepadui-builder:4.7.1"
+            "@sha256:d1f816502509e00f931e93b60fac570b"
+            "c8ab757b694b68d450de7cf191b5e005",
+            workflow,
+        )
         self.assertIn("apt-get install -y --no-install-recommends python3", workflow)
         self.assertNotIn("repository: bitwes/Gut", workflow)
         self.assertNotIn("gut-source", workflow)
+        export_step = workflow.index("Export installable plugin pack")
+        smoke_step = workflow.index("Smoke test exported resource pack")
+        upload_step = workflow.index("Upload installable plugin")
+        self.assertLess(export_step, smoke_step)
+        self.assertLess(smoke_step, upload_step)
+        self.assertIn("make -C opengamepadui smoke", workflow)
         self.assertRegex(
             workflow,
             r"actions/upload-artifact@[0-9a-f]{40}",

@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path, PurePosixPath
+import re
 import sys
 import zipfile
 
@@ -30,6 +31,10 @@ ALLOWED_SUPPORT_ROOTS = {
     "icudt_godot.dat",
     "project.binary",
 }
+ICON_SOURCE = "res://plugins/panel-de-control/assets/icon.svg"
+IMPORTED_TEXTURE_PATTERN = re.compile(
+    r"^res://\.godot/imported/[A-Za-z0-9][A-Za-z0-9._-]*\.ctex$"
+)
 
 
 def _load_json(contents: bytes, label: str) -> dict[str, object]:
@@ -70,6 +75,63 @@ def _product_sources(source: Path, suffix: str) -> list[Path]:
     return paths
 
 
+def _quoted_import_value(contents: str, key: str) -> str:
+    match = re.search(rf'(?m)^{re.escape(key)}="([^"\n]+)"$', contents)
+    if match is None:
+        raise ValueError(f"icon.svg.import is missing {key}")
+    return match.group(1)
+
+
+def _validate_icon_import(contents: bytes) -> str:
+    try:
+        text = contents.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise ValueError(f"Invalid icon.svg.import encoding: {error}") from error
+
+    source_file = _quoted_import_value(text, "source_file")
+    if source_file != ICON_SOURCE:
+        raise ValueError(
+            f"icon.svg.import source_file must be {ICON_SOURCE}"
+        )
+    imported_path = _quoted_import_value(text, "path")
+    if IMPORTED_TEXTURE_PATTERN.fullmatch(imported_path) is None:
+        raise ValueError(
+            "icon.svg.import path must point inside res://.godot/imported/"
+        )
+
+    destinations_match = re.search(r"(?m)^dest_files=(\[[^\n]*\])$", text)
+    if destinations_match is None:
+        raise ValueError("icon.svg.import is missing dest_files")
+    try:
+        destinations = json.loads(destinations_match.group(1))
+    except json.JSONDecodeError as error:
+        raise ValueError(f"Invalid icon.svg.import dest_files: {error}") from error
+    if destinations != [imported_path]:
+        raise ValueError(
+            "icon.svg.import dest_files must contain only the imported path"
+        )
+    return imported_path.removeprefix("res://")
+
+
+def _validate_packaged_icon_import(
+    contents: bytes,
+    expected_texture: str,
+) -> None:
+    try:
+        text = contents.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise ValueError(f"Invalid packaged icon.svg.import: {error}") from error
+    imported_path = _quoted_import_value(text, "path")
+    if IMPORTED_TEXTURE_PATTERN.fullmatch(imported_path) is None:
+        raise ValueError(
+            "Packaged icon.svg.import path must point inside res://.godot/imported/"
+        )
+    if imported_path.removeprefix("res://") != expected_texture:
+        raise ValueError(
+            "Packaged icon.svg.import path does not match source dest_files"
+        )
+
+
 def validate_package(package: Path, source: Path) -> str:
     if package.name != PACKAGE_NAME:
         raise ValueError(f"Package must be named {PACKAGE_NAME}")
@@ -85,6 +147,8 @@ def validate_package(package: Path, source: Path) -> str:
         raise ValueError(f"Source plugin.id must be {PLUGIN_ID}")
     if source_manifest.get("plugin.version") != source_version:
         raise ValueError("Source plugin.json version does not match VERSION")
+    icon_sidecar = (source / "assets" / "icon.svg.import").read_bytes()
+    imported_texture = _validate_icon_import(icon_sidecar)
 
     try:
         with zipfile.ZipFile(package) as archive:
@@ -96,6 +160,17 @@ def validate_package(package: Path, source: Path) -> str:
             package_manifest = _load_json(
                 archive.read(manifest_name),
                 "package plugin.json",
+            )
+            packaged_sidecar_name = (
+                PLUGIN_ROOT / "assets" / "icon.svg.import"
+            ).as_posix()
+            if packaged_sidecar_name not in names:
+                raise ValueError(
+                    f"Package is missing imported resource: {packaged_sidecar_name}"
+                )
+            _validate_packaged_icon_import(
+                archive.read(packaged_sidecar_name),
+                imported_texture,
             )
     except zipfile.BadZipFile as error:
         raise ValueError(f"Invalid ZIP package: {error}") from error
@@ -136,6 +211,8 @@ def validate_package(package: Path, source: Path) -> str:
         packaged_sidecar = (PLUGIN_ROOT / sidecar).as_posix()
         if packaged_sidecar not in package_names:
             raise ValueError(f"Package is missing imported resource: {sidecar.as_posix()}")
+    if imported_texture not in package_names:
+        raise ValueError(f"Package is missing imported texture: {imported_texture}")
 
     digest = hashlib.sha256(package.read_bytes()).hexdigest()
     hash_path = package.with_suffix(f"{package.suffix}.sha256")
