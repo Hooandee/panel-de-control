@@ -1,10 +1,11 @@
 import { FC, useState } from "react";
-import { Focusable, ModalRoot, SliderField, TextField, showModal } from "@decky/ui";
+import { ModalRoot, SliderField, TextField, showModal } from "@decky/ui";
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { Rgb, hexToRgb, normalizeHex, rgbToHex } from "../mangohud/model";
 import { FocusRoot } from "./FocusRoot";
+import { QamAction } from "./QamAction";
 
 // The Steam CEF native <input type=color> does nothing (MangoPeel hit the same
 // wall), so colours are picked with RGB sliders + a hex field in a modal. Live:
@@ -76,16 +77,16 @@ const ColorModal: FC<{ label: string; initial: string; onChange: (hex: string) =
 /** A colour swatch button; tapping it opens the RGB/hex modal. `value`/`onChange`
  *  are 6-digit hex without '#'. Changes stream live while the modal is open. */
 export const ColorPicker: FC<{ label: string; value: string; onChange: (hex: string) => void; size?: number }> = ({ label, value, onChange, size = 28 }) => (
-  <Focusable
-    onActivate={() => showModal(<ColorModal label={label} initial={value} onChange={onChange} />)}
-    onClick={() => showModal(<ColorModal label={label} initial={value} onChange={onChange} />)}
-    aria-label={label}
-    title={label}
+  <QamAction
+    onPress={() => {
+      showModal(<ColorModal label={label} initial={value} onChange={onChange} />);
+    }}
+    label={label}
     style={{
       width: size, height: size, flexShrink: 0, borderRadius: 6, cursor: "pointer",
       background: `#${value}`, boxShadow: `inset 0 0 0 1px ${theme.color.hairline}`,
     }}
   >
     <span />
-  </Focusable>
+  </QamAction>
 );
