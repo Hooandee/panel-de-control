@@ -64,6 +64,16 @@ func test_zero_tdp_from_wrapper_is_unknown_even_when_capability_is_false() -> vo
 	_assert_observed(snapshot.tdp_w, ObservedValue.UNKNOWN, "tdp_not_supported")
 
 
+func test_zero_tdp_with_explicit_capability_is_invalid() -> void:
+	_powerstation = FakePowerStation.new([_card({
+		"supports_tdp": true,
+		"tdp": 0.0,
+	})])
+	var snapshot = PowerStationAdapter.new(_powerstation).read_snapshot()
+
+	_assert_observed(snapshot.tdp_w, ObservedValue.UNKNOWN, "tdp_value_invalid")
+
+
 func test_wrapper_error_defaults_are_never_promoted_to_known_values() -> void:
 	_powerstation = FakePowerStation.new([_card({
 		"dbus_path": "",
