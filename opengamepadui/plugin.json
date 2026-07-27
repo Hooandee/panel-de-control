@@ -1,0 +1,9 @@
+{
+  "id": "panel-de-control",
+  "name": "Panel de Control",
+  "version": "0.1.0",
+  "minimum_api_version": "2.0.0",
+  "tags": ["quick-bar"],
+  "description": "Controles de rendimiento observables de Panel de Control para OpenGamepadUI.",
+  "license": "GPL-3.0-only"
+}
