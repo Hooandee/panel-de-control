@@ -1,98 +1,203 @@
 import { useEffect, useRef, useState } from "react";
-import { HudModel, HudState, getHudState, reloadHud, resetHud, setHudConfig, setHudEnabled } from "../api";
+
+import { HudModel, HudState, getHudState, reloadHud, resetHud, setHudConfig } from "../api";
+import { useMountedRef } from "../hooks/useMountedRef";
 
 const POLL_MS = 4000;
-const DEBOUNCE_MS = 250; // coalesce rapid slider/color drags into one write
+const DEBOUNCE_MS = 250;
+const FEEDBACK_MS = 1800;
 
-export type ReloadStatus = "idle" | "busy" | "ok";
+export type ReloadStatus = "idle" | "busy" | "ok" | "pending" | "error";
+export type SaveStatus = "idle" | "saving" | "saved" | "error";
 
 export interface HudController {
   state: HudState | null;
-  /** Update the whole model (optimistic + debounced persist/apply). */
   setModel: (model: HudModel) => void;
-  /** Flip "Mostrar HUD" (writes/clears presets.conf immediately). */
   setEnabled: (enabled: boolean) => void;
-  /** Re-push the saved HUD to the live overlay so mangoapp reloads it now. */
   reload: () => void;
-  /** Visible feedback for the reload button (busy → ok → idle). */
   reloadStatus: ReloadStatus;
+  saveStatus: SaveStatus;
   reset: () => void;
 }
 
 export function useHud(): HudController {
   const [state, setState] = useState<HudState | null>(null);
   const [reloadStatus, setReloadStatus] = useState<ReloadStatus>("idle");
-  const pending = useRef(false);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const okTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const mounted = useMountedRef();
+  const stateRef = useRef<HudState | null>(null);
+  const modelRef = useRef<HudModel | null>(null);
+  const dirtyRef = useRef(false);
+  const pendingRef = useRef(0);
+  const revisionRef = useRef(0);
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const accept = (remote: HudState) => {
+    stateRef.current = remote;
+    modelRef.current = remote.model;
+    setState(remote);
+  };
+
+  const clearDebounce = () => {
+    if (!debounceTimer.current) return;
+    clearTimeout(debounceTimer.current);
+    debounceTimer.current = null;
+  };
+
+  const scheduleFeedbackReset = () => {
+    if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
+    feedbackTimer.current = setTimeout(() => {
+      if (!mounted.current) return;
+      setReloadStatus("idle");
+      setSaveStatus("idle");
+    }, FEEDBACK_MS);
+  };
+
+  const persist = (model: HudModel, revision: number) => {
+    pendingRef.current += 1;
+    if (mounted.current) setSaveStatus("saving");
+    void setHudConfig(model)
+      .then((remote) => {
+        if (!mounted.current || revision !== revisionRef.current) return;
+        accept(remote);
+        setSaveStatus(remote.applyStatus === "failed" ? "error" : "saved");
+        if (remote.applyStatus !== "failed") scheduleFeedbackReset();
+      })
+      .catch(() => {
+        if (!mounted.current || revision !== revisionRef.current) return;
+        setSaveStatus("error");
+      })
+      .finally(() => {
+        pendingRef.current = Math.max(0, pendingRef.current - 1);
+      });
+  };
 
   useEffect(() => {
-    let alive = true;
     const tick = () => {
+      if (dirtyRef.current || pendingRef.current > 0) return;
+      const revision = revisionRef.current;
       getHudState()
-        .then((s) => {
-          if (alive && !pending.current) setState(s);
+        .then((remote) => {
+          if (
+            mounted.current
+            && revision === revisionRef.current
+            && !dirtyRef.current
+            && pendingRef.current === 0
+          ) {
+            accept(remote);
+          }
         })
         .catch(() => {});
     };
+
     tick();
     const poll = setInterval(tick, POLL_MS);
     return () => {
-      alive = false;
       clearInterval(poll);
-      if (timer.current) clearTimeout(timer.current);
-      if (okTimer.current) clearTimeout(okTimer.current);
+      if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
+      if (debounceTimer.current && modelRef.current) {
+        clearTimeout(debounceTimer.current);
+        debounceTimer.current = null;
+        dirtyRef.current = false;
+        revisionRef.current += 1;
+        void setHudConfig(modelRef.current);
+      }
     };
   }, []);
 
   const setModel = (model: HudModel) => {
-    setState((prev) => (prev ? { ...prev, model } : prev)); // optimistic
-    pending.current = true;
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => {
-      setHudConfig(model)
-        .then(setState)
-        .catch(() => {})
-        .finally(() => {
-          pending.current = false;
-        });
+    const current = stateRef.current;
+    if (!current) return;
+    const optimistic = { ...current, model };
+    stateRef.current = optimistic;
+    modelRef.current = model;
+    dirtyRef.current = true;
+    revisionRef.current += 1;
+    setState(optimistic);
+    setSaveStatus("idle");
+    clearDebounce();
+    debounceTimer.current = setTimeout(() => {
+      debounceTimer.current = null;
+      dirtyRef.current = false;
+      persist(modelRef.current ?? model, revisionRef.current);
     }, DEBOUNCE_MS);
   };
 
   const setEnabled = (enabled: boolean) => {
-    setState((prev) => (prev ? { ...prev, model: { ...prev.model, enabled } } : prev));
-    pending.current = true;
-    setHudEnabled(enabled)
-      .then(setState)
-      .catch(() => {})
-      .finally(() => {
-        pending.current = false;
-      });
+    const current = stateRef.current;
+    const latest = modelRef.current;
+    if (!current || !latest) return;
+    clearDebounce();
+    dirtyRef.current = false;
+    const model = { ...latest, enabled };
+    const optimistic = { ...current, model };
+    const revision = revisionRef.current + 1;
+    revisionRef.current = revision;
+    stateRef.current = optimistic;
+    modelRef.current = model;
+    setState(optimistic);
+    persist(model, revision);
   };
 
   const reload = () => {
-    pending.current = true;
+    const latest = modelRef.current;
+    if (!latest) return;
+    const hadUnsavedModel = dirtyRef.current;
+    clearDebounce();
+    dirtyRef.current = false;
+    const revision = revisionRef.current + 1;
+    revisionRef.current = revision;
+    pendingRef.current += 1;
     setReloadStatus("busy");
-    if (okTimer.current) clearTimeout(okTimer.current);
-    reloadHud()
-      .then(setState)
-      .catch(() => {})
+    if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
+
+    const flush = hadUnsavedModel ? setHudConfig(latest) : Promise.resolve(null);
+    void flush
+      .then(() => reloadHud())
+      .then((remote) => {
+        if (!mounted.current || revision !== revisionRef.current) return;
+        accept(remote);
+        if (remote.applyStatus === "failed" || remote.applyStatus === "unavailable") {
+          setReloadStatus("error");
+        } else if (remote.applyStatus === "pending") {
+          setReloadStatus("pending");
+        } else {
+          setReloadStatus("ok");
+          scheduleFeedbackReset();
+        }
+      })
+      .catch(() => {
+        if (!mounted.current || revision !== revisionRef.current) return;
+        setReloadStatus("error");
+      })
       .finally(() => {
-        pending.current = false;
-        setReloadStatus("ok");
-        okTimer.current = setTimeout(() => setReloadStatus("idle"), 1800);
+        pendingRef.current = Math.max(0, pendingRef.current - 1);
       });
   };
 
   const reset = () => {
-    pending.current = true;
-    resetHud()
-      .then(setState)
-      .catch(() => {})
+    clearDebounce();
+    dirtyRef.current = false;
+    const revision = revisionRef.current + 1;
+    revisionRef.current = revision;
+    pendingRef.current += 1;
+    setSaveStatus("saving");
+    void resetHud()
+      .then((remote) => {
+        if (!mounted.current || revision !== revisionRef.current) return;
+        accept(remote);
+        setSaveStatus(remote.applyStatus === "failed" ? "error" : "saved");
+        if (remote.applyStatus !== "failed") scheduleFeedbackReset();
+      })
+      .catch(() => {
+        if (!mounted.current || revision !== revisionRef.current) return;
+        setSaveStatus("error");
+      })
       .finally(() => {
-        pending.current = false;
+        pendingRef.current = Math.max(0, pendingRef.current - 1);
       });
   };
 
-  return { state, setModel, setEnabled, reload, reloadStatus, reset };
+  return { state, setModel, setEnabled, reload, reloadStatus, saveStatus, reset };
 }

@@ -5,6 +5,10 @@ import tempfile
 
 from mangohud.config import build_presets_conf
 
+_PROC = "/proc"
+_BACKUP_SUFFIX = ".pdc-backup"
+_MANAGED_SUFFIX = ".pdc-managed"
+
 
 def read_presets(path):
     """The presets.conf text on disk, or None if it isn't there."""
@@ -53,8 +57,21 @@ def _write_atomic(path, text, owner=None):
 
 
 def clear_presets(path):
-    """Remove our presets.conf so MangoHud falls back to its stock presets — the
-    honest "HUD off" (we stop hijacking Steam's overlay levels). Idempotent."""
+    """Restore a file that existed before Panel de Control, or remove only our own."""
+    marker = f"{path}{_MANAGED_SUFFIX}"
+    if not os.path.exists(marker):
+        return True
+    try:
+        os.remove(marker)
+    except OSError:
+        return False
+    backup = f"{path}{_BACKUP_SUFFIX}"
+    if os.path.exists(backup):
+        try:
+            os.replace(backup, path)
+        except OSError:
+            return False
+        return read_presets(path) is not None and not os.path.exists(backup)
     try:
         os.remove(path)
     except FileNotFoundError:
@@ -69,15 +86,47 @@ def apply_hud(model, path, values=None, owner=None):
     on disk (readback — the UI reflects reality, never an assumed write). `values`
     (pdc id -> value string) bakes the live plugin-state values into the pdc rows."""
     desired = build_presets_conf(model, values)
-    if read_presets(path) == desired:
+    current = read_presets(path)
+    marker = f"{path}{_MANAGED_SUFFIX}"
+    backup = f"{path}{_BACKUP_SUFFIX}"
+    managed = os.path.exists(marker)
+    if managed and current == desired:
         return desired
-    _write_atomic(path, desired, owner)
+    if not managed:
+        if current is not None:
+            _write_atomic(backup, current, owner)
+        _write_atomic(marker, "1\n", owner)
+    try:
+        _write_atomic(path, desired, owner)
+    except Exception:
+        if not managed:
+            try:
+                os.remove(marker)
+            except OSError:
+                pass
+            if os.path.exists(backup):
+                try:
+                    os.replace(backup, path)
+                except OSError:
+                    pass
+        raise
     return read_presets(path)
 
 
-def _mangoapp_cwd():
+def _process_uid(pid):
     try:
-        entries = os.scandir("/proc")
+        with open(f"{_PROC}/{pid}/status") as handle:
+            for line in handle:
+                if line.startswith("Uid:"):
+                    return int(line.split()[1])
+    except (OSError, ValueError, IndexError):
+        pass
+    return None
+
+
+def _mangoapp_cwd(uid=None):
+    try:
+        entries = os.scandir(_PROC)
     except OSError:
         return None
     with entries:
@@ -85,17 +134,19 @@ def _mangoapp_cwd():
             if not entry.name.isdigit():
                 continue
             try:
-                with open(f"/proc/{entry.name}/comm") as handle:
+                with open(f"{_PROC}/{entry.name}/comm") as handle:
                     if handle.read().strip() == "mangoapp":
-                        return os.readlink(f"/proc/{entry.name}/cwd")
+                        if uid is not None and _process_uid(entry.name) != uid:
+                            continue
+                        return os.readlink(f"{_PROC}/{entry.name}/cwd")
             except OSError:
                 continue
     return None
 
 
-def reload_mangoapp():
+def reload_mangoapp(uid=None):
     """Ask mangoapp to re-read Steam's config and the selected preset."""
-    cwd = _mangoapp_cwd()
+    cwd = _mangoapp_cwd() if uid is None else _mangoapp_cwd(uid)
     if cwd is None:
         return False
     search_path = os.pathsep.join(

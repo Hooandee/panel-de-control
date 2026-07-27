@@ -214,6 +214,7 @@ def test_unload_invalidates_a_queued_tdp_write_before_handoff(tmp_path, monkeypa
     p._restore_fans_safe = lambda: None
     p._restore_color_safe = lambda: None
     p._restore_audio_safe = lambda: None
+    p._restore_hud_safe = lambda: None
     p._restore_hhd_tdp = lambda: events.append("handoff")
 
     async def run():
@@ -271,6 +272,7 @@ def test_uninstall_stops_new_tdp_writes_before_handoff(tmp_path, monkeypatch):
     p._restore_fans_safe = lambda: None
     p._restore_color_safe = lambda: None
     p._restore_audio_safe = lambda: None
+    p._restore_hud_safe = lambda: None
     p._restore_hhd_tdp = handoff
     monkeypatch.setattr(
         importlib.import_module("main").fan_expose,

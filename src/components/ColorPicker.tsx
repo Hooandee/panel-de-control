@@ -4,6 +4,7 @@ import { Focusable, ModalRoot, SliderField, TextField, showModal } from "@decky/
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { Rgb, hexToRgb, normalizeHex, rgbToHex } from "../mangohud/model";
+import { FocusRoot } from "./FocusRoot";
 
 // The Steam CEF native <input type=color> does nothing (MangoPeel hit the same
 // wall), so colours are picked with RGB sliders + a hex field in a modal. Live:
@@ -66,7 +67,9 @@ const ColorModalBody: FC<{ label: string; initial: string; onChange: (hex: strin
 
 const ColorModal: FC<{ label: string; initial: string; onChange: (hex: string) => void; closeModal?: () => void }> = ({ label, initial, onChange, closeModal }) => (
   <ModalRoot closeModal={closeModal}>
-    <ColorModalBody label={label} initial={initial} onChange={onChange} />
+    <FocusRoot>
+      <ColorModalBody label={label} initial={initial} onChange={onChange} />
+    </FocusRoot>
   </ModalRoot>
 );
 

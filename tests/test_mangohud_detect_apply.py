@@ -134,6 +134,30 @@ def test_clear_presets_removes_our_file_and_is_idempotent(tmp_path):
     assert clear_presets(path) is True  # already gone — must not raise
 
 
+def test_apply_restores_a_preexisting_user_presets_file_on_disable(tmp_path):
+    path = str(tmp_path / "presets.conf")
+    original = "# personal MangoHud presets\n[preset 1]\nfps=1\n"
+    (tmp_path / "presets.conf").write_text(original)
+
+    apply_hud(coerce_model({"items": [{"kind": "metric", "id": "fps"}]}), path)
+    assert read_presets(path) != original
+
+    assert clear_presets(path) is True
+    assert read_presets(path) == original
+    assert not (tmp_path / "presets.conf.pdc-backup").exists()
+    assert clear_presets(path) is True
+    assert read_presets(path) == original
+
+
+def test_clear_presets_never_deletes_an_unmanaged_file(tmp_path):
+    path = str(tmp_path / "presets.conf")
+    original = "[preset 1]\ngpu_stats=1\n"
+    (tmp_path / "presets.conf").write_text(original)
+
+    assert clear_presets(path) is True
+    assert read_presets(path) == original
+
+
 def test_clear_presets_reports_failed_removal(tmp_path, monkeypatch):
     path = str(tmp_path / "presets.conf")
     apply_hud(coerce_model({"items": [{"kind": "metric", "id": "fps"}]}), path)
@@ -195,6 +219,19 @@ def test_reload_without_mangoapp_cwd_does_not_create_the_wrong_ipc_queue(monkeyp
 
     assert apply.reload_mangoapp() is False
     assert calls == []
+
+
+def test_reload_cwd_ignores_a_mangoapp_owned_by_another_user(tmp_path, monkeypatch):
+    proc = tmp_path / "proc"
+    process = proc / "10"
+    process.mkdir(parents=True)
+    (process / "comm").write_text("mangoapp\n")
+    (process / "status").write_text("Name:\tmangoapp\nUid:\t1001\t1001\t1001\t1001\n")
+    (process / "cwd").symlink_to(tmp_path)
+    monkeypatch.setattr(apply, "_PROC", str(proc))
+
+    assert apply._mangoapp_cwd(uid=1000) is None
+    assert apply._mangoapp_cwd(uid=1001) == str(tmp_path)
 
 
 def test_reload_searches_service_path(monkeypatch):

@@ -1,9 +1,10 @@
 import { FC, useState } from "react";
-import { PanelSectionRow, Focusable, ToggleField, TextField, Spinner } from "@decky/ui";
+import { PanelSectionRow, Focusable, ToggleField, TextField, Spinner, showModal } from "@decky/ui";
 import {
   LuArrowUpLeft, LuArrowUpRight, LuArrowDownLeft, LuArrowDownRight,
   LuChevronUp, LuChevronDown, LuChevronRight, LuX, LuRotateCcw, LuRefreshCw,
-  LuType, LuMinus, LuPlus, LuMoveVertical, LuCheck,
+  LuType, LuMinus, LuPlus, LuMoveVertical, LuCheck, LuPalette, LuSlidersHorizontal,
+  LuSettings2, LuTriangleAlert,
 } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
@@ -12,6 +13,9 @@ import { useHud } from "../mangohud/useHud";
 import { HudPreview } from "../components/HudPreview";
 import { ContainedSlider } from "../components/ContainedSlider";
 import { ColorPicker } from "../components/ColorPicker";
+import { Collapsible } from "../components/Collapsible";
+import { ConfirmDialog } from "../components/ConfirmDialog";
+import { IconAction } from "../components/IconAction";
 import { segmentGroupStyle, segmentItemStyle } from "../components/segmented";
 import {
   BLOCK_GROUPS, BlockGroup, COLOR_KEYS, ColorKey, GROUPS, HudItem, HudLayout, HudModel,
@@ -51,22 +55,6 @@ const Pill: FC<{ label: string; active: boolean; onClick: () => void }> = ({ lab
     }}
   >
     {label}
-  </Focusable>
-);
-
-const IconBtn: FC<{ label: string; onClick: () => void; children: React.ReactNode; muted?: boolean }> = ({ label, onClick, children, muted }) => (
-  <Focusable
-    onActivate={onClick}
-    onClick={onClick}
-    title={label}
-    style={{
-      display: "flex", alignItems: "center", justifyContent: "center", width: 26, height: 26,
-      borderRadius: theme.radius.sm, cursor: "pointer", flexShrink: 0,
-      color: muted ? theme.color.textMuted : theme.color.textPrimary,
-      boxShadow: `inset 0 0 0 1px ${theme.color.hairline}`,
-    }}
-  >
-    {children}
   </Focusable>
 );
 
@@ -129,10 +117,9 @@ const Note: FC<{ children: React.ReactNode }> = ({ children }) => (
 
 export const HudSection: FC = () => {
   const { t } = useI18n();
-  const { state, setModel, setEnabled, reload, reloadStatus, reset } = useHud();
+  const { state, setModel, setEnabled, reload, reloadStatus, saveStatus, reset } = useHud();
   const [selected, setSelected] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
-  const [advanced, setAdvanced] = useState(false);
 
   if (!state) {
     return (
@@ -143,20 +130,10 @@ export const HudSection: FC = () => {
   }
 
   const m = state.model;
+  const presets = Object.keys(state.presets).length ? state.presets : PRESETS;
   const patch = (p: Partial<HudModel>) => setModel({ ...m, ...p });
   const patchItems = (items: HudItem[]) => patch({ items });
   const setColor = (key: ColorKey, hex: string) => patch({ colors: { ...m.colors, [key]: hex } });
-
-  if (!state.supported) {
-    return (
-      <PanelSectionRow>
-        <div style={{ ...card }}>
-          <div style={{ fontSize: theme.font.body, color: theme.color.textPrimary, marginBottom: theme.space.xs }}>{t("hud.title")}</div>
-          <Note>{t("hud.unsupported")}</Note>
-        </div>
-      </PanelSectionRow>
-    );
-  }
 
   const rows = listRows(m.items);
 
@@ -165,13 +142,16 @@ export const HudSection: FC = () => {
       const g = groupKey as BlockGroup;
       return hasBlock(m.items, g) ? [] : [{ kind: "block", group: g }];
     }
-    return ids.filter((id) => !hasMetric(m.items, id)).map((id) => ({ kind: "metric", id }));
+    return ids
+      .filter((id) => state.catalog.includes(id) && !hasMetric(m.items, id))
+      .map((id) => ({ kind: "metric", id }));
   };
 
   const add = (entry: AddEntry) => {
     const id: MetricId = entry.kind === "block" ? entry.group : entry.id;
     patchItems(addMetricItem(m.items, id));
     setSelected(entry.kind === "block" ? `b:${entry.group}` : `m:${id}`);
+    setAdding(false);
   };
   const addText = () => {
     const id = `t${Date.now()}`;
@@ -194,7 +174,7 @@ export const HudSection: FC = () => {
 
   const applyPreset = (key: string) =>
     patchItems([
-      ...PRESETS[key].map((id) => ({ kind: "metric" as const, id })),
+      ...presets[key].map((id) => ({ kind: "metric" as const, id })),
       ...m.items.filter((it) => it.kind !== "metric"),
     ]);
 
@@ -295,7 +275,25 @@ export const HudSection: FC = () => {
       {/* Preview (hero) + master toggle + live reload */}
       <PanelSectionRow>
         <div style={{ ...card, display: "flex", flexDirection: "column", gap: theme.space.sm }}>
-          <HudPreview model={m} />
+          <HudPreview model={m} values={state.values} />
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: theme.space.sm }}>
+            <SectionLabel>{t("hud.title")}</SectionLabel>
+            <span
+              style={{
+                padding: "3px 7px",
+                borderRadius: 999,
+                fontSize: theme.font.caption,
+                color: state.applyStatus === "failed" || state.applyStatus === "unavailable"
+                  ? theme.color.danger
+                  : state.applyStatus === "applied"
+                    ? theme.color.accent
+                    : theme.color.textMuted,
+                boxShadow: `inset 0 0 0 1px ${theme.color.hairline}`,
+              }}
+            >
+              {t(`hud.status.${state.applyStatus}`)}
+            </span>
+          </div>
           <ToggleField label={t("hud.show")} checked={m.enabled} onChange={setEnabled} bottomSeparator="none" />
           <div style={{ display: "flex", gap: theme.space.sm }}>
             <OutlineBtn onClick={reload}>
@@ -303,19 +301,30 @@ export const HudSection: FC = () => {
                 <><Spinner style={{ width: 13, height: 13 }} /> {t("hud.reload.busy")}</>
               ) : reloadStatus === "ok" ? (
                 <><LuCheck size={13} /> {t("hud.reload.ok")}</>
+              ) : reloadStatus === "pending" ? (
+                <><LuRefreshCw size={13} /> {t("hud.reload.pending")}</>
+              ) : reloadStatus === "error" ? (
+                <><LuTriangleAlert size={13} /> {t("hud.reload.error")}</>
               ) : (
                 <><LuRefreshCw size={13} /> {t("hud.reload")}</>
               )}
             </OutlineBtn>
           </div>
-          <Note>{t("hud.show.hint")}</Note>
+          {state.capability === "inactive" ? (
+            <Note>{t("hud.inactive")}</Note>
+          ) : state.capability === "unsupported" ? (
+            <Note>{t("hud.unsupported")}</Note>
+          ) : (
+            <Note>{t("hud.show.hint")}</Note>
+          )}
+          {saveStatus === "error" && <Note>{t("hud.save.error")}</Note>}
         </div>
       </PanelSectionRow>
 
       {/* Presets */}
       <PanelSectionRow>
         <div style={{ display: "flex", gap: theme.space.sm }}>
-          {Object.keys(PRESETS).map((key) => (
+          {Object.keys(presets).map((key) => (
             <Focusable
               key={key}
               onActivate={() => applyPreset(key)}
@@ -374,9 +383,9 @@ export const HudSection: FC = () => {
                       <span style={{ flexShrink: 0, fontSize: theme.font.caption, color: theme.color.textMuted }}>{active}/{total}</span>
                     )}
                   </Focusable>
-                  <IconBtn label={t("hud.move.up")} onClick={() => patchItems(moveRow(m.items, i, -1))}><LuChevronUp size={14} /></IconBtn>
-                  <IconBtn label={t("hud.move.down")} onClick={() => patchItems(moveRow(m.items, i, 1))}><LuChevronDown size={14} /></IconBtn>
-                  <IconBtn label={t("hud.remove")} muted onClick={() => { patchItems(removeRow(m.items, i)); if (isSel) setSelected(null); }}><LuX size={13} /></IconBtn>
+                  <IconAction label={t("hud.move.up")} color={theme.color.textPrimary} disabled={i === 0} onTap={() => patchItems(moveRow(m.items, i, -1))}><LuChevronUp size={14} /></IconAction>
+                  <IconAction label={t("hud.move.down")} color={theme.color.textPrimary} disabled={i === rows.length - 1} onTap={() => patchItems(moveRow(m.items, i, 1))}><LuChevronDown size={14} /></IconAction>
+                  <IconAction label={t("hud.remove")} color={theme.color.textMuted} onTap={() => { patchItems(removeRow(m.items, i)); if (isSel) setSelected(null); }}><LuX size={13} /></IconAction>
                 </div>
                 {isSel && (
                   <div style={{ padding: theme.space.sm, borderRadius: theme.radius.sm, ...(isBlock ? {} : { boxShadow: `inset 0 0 0 1px ${theme.color.hairline}` }) }}>
@@ -421,12 +430,15 @@ export const HudSection: FC = () => {
         </div>
       </PanelSectionRow>
 
-      {/* Global style — whole HUD */}
-      <PanelSectionRow>
-        <div style={{ ...card, display: "flex", flexDirection: "column", gap: theme.space.md }}>
-          <SectionLabel>{t("hud.style")}</SectionLabel>
+      <Collapsible
+        id="hud-appearance"
+        icon={<LuSlidersHorizontal size={16} />}
+        title={t("hud.style")}
+        summary={`${t(`hud.layout.${m.layout}`)} · ${t(`hud.position.${m.position}`)}`}
+        defaultOpen={false}
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: theme.space.md }}>
           <Note>{t("hud.style.scope")}</Note>
-
           <StyleRow label={t("hud.layout")}>
             <div style={{ ...segmentGroupStyle, flex: 1 }}>
               {LAYOUTS.map((l) => (
@@ -444,6 +456,7 @@ export const HudSection: FC = () => {
                 return (
                   <Focusable
                     key={id}
+                    aria-label={t(`hud.position.${id}`)}
                     onActivate={() => patch({ position: id })}
                     onClick={() => patch({ position: id })}
                     style={{
@@ -492,51 +505,18 @@ export const HudSection: FC = () => {
           <ToggleField label={t("hud.noSmallFont")} checked={m.noSmallFont} onChange={(v) => patch({ noSmallFont: v })} bottomSeparator="none" />
           <ToggleField label={t("hud.textOutline")} checked={m.textOutline} onChange={(v) => patch({ textOutline: v })} bottomSeparator="none" />
           <ToggleField label={t("hud.roundCorners")} checked={m.background.roundCorners} onChange={(v) => patch({ background: { ...m.background, roundCorners: v } })} bottomSeparator="none" />
+          <Note>{t("hud.style.hint")}</Note>
+        </div>
+      </Collapsible>
 
-          {/* Advanced — extra global style knobs, collapsed by default */}
-          <Focusable
-            onActivate={() => setAdvanced((v) => !v)}
-            onClick={() => setAdvanced((v) => !v)}
-            style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}
-          >
-            {advanced ? <LuChevronDown size={14} color={theme.color.textMuted} /> : <LuChevronRight size={14} color={theme.color.textMuted} />}
-            <SectionLabel>{t("hud.advanced")}</SectionLabel>
-          </Focusable>
-          {advanced && (
-            <div style={{ display: "flex", flexDirection: "column", gap: theme.space.md }}>
-              <StyleRow label={t("hud.cellpaddingY")}>
-                <div style={{ flex: 1 }}>
-                  <ContainedSlider value={Math.round(m.cellpaddingY * 100)} min={-30} max={50} step={1} showValue onChange={(v) => patch({ cellpaddingY: v / 100 })} />
-                </div>
-              </StyleRow>
-              <StyleRow label={t("hud.fontScale")}>
-                <div style={{ flex: 1 }}>
-                  <ContainedSlider value={Math.round(m.fontScale * 100)} min={50} max={200} step={5} showValue onChange={(v) => patch({ fontScale: v / 100 })} />
-                </div>
-              </StyleRow>
-              <StyleRow label={t("hud.textAlpha")}>
-                <div style={{ flex: 1 }}>
-                  <ContainedSlider value={Math.round(m.alpha * 100)} min={0} max={100} step={5} showValue onChange={(v) => patch({ alpha: v / 100 })} />
-                </div>
-              </StyleRow>
-              <StyleRow label={t("hud.offsetX")}>
-                <div style={{ flex: 1 }}>
-                  <ContainedSlider value={m.offsetX} min={-200} max={200} step={2} showValue onChange={(v) => patch({ offsetX: v })} />
-                </div>
-              </StyleRow>
-              <StyleRow label={t("hud.offsetY")}>
-                <div style={{ flex: 1 }}>
-                  <ContainedSlider value={m.offsetY} min={-200} max={200} step={2} showValue onChange={(v) => patch({ offsetY: v })} />
-                </div>
-              </StyleRow>
-              <ToggleField label={t("hud.compact")} checked={m.compact} onChange={(v) => patch({ compact: v })} bottomSeparator="none" />
-              <ToggleField label={t("hud.noMargin")} checked={m.noMargin} onChange={(v) => patch({ noMargin: v })} bottomSeparator="none" />
-              <Note>{t("hud.advanced.hint")}</Note>
-            </div>
-          )}
-
-          {/* Colours — per category + global text/background/outline */}
-          <SectionLabel>{t("hud.colors")}</SectionLabel>
+      <Collapsible
+        id="hud-colors"
+        icon={<LuPalette size={16} />}
+        title={t("hud.colors")}
+        summary={t("hud.colors.summary")}
+        defaultOpen={false}
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: theme.space.md }}>
           <Note>{t("hud.colors.hint")}</Note>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: theme.space.sm }}>
             {COLOR_KEYS.map((key) => (
@@ -546,22 +526,79 @@ export const HudSection: FC = () => {
               </div>
             ))}
           </div>
+        </div>
+      </Collapsible>
 
-          {/* Separator colour applies only to the horizontal native divider. */}
+      <Collapsible
+        id="hud-advanced"
+        icon={<LuSettings2 size={16} />}
+        title={t("hud.advanced")}
+        summary={t("hud.advanced.summary")}
+        defaultOpen={false}
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: theme.space.md }}>
+          <StyleRow label={t("hud.cellpaddingY")}>
+            <div style={{ flex: 1 }}>
+              <ContainedSlider value={Math.round(m.cellpaddingY * 100)} min={-30} max={50} step={1} showValue onChange={(v) => patch({ cellpaddingY: v / 100 })} />
+            </div>
+          </StyleRow>
+          <StyleRow label={t("hud.fontScale")}>
+            <div style={{ flex: 1 }}>
+              <ContainedSlider value={Math.round(m.fontScale * 100)} min={50} max={200} step={5} showValue onChange={(v) => patch({ fontScale: v / 100 })} />
+            </div>
+          </StyleRow>
+          <StyleRow label={t("hud.textAlpha")}>
+            <div style={{ flex: 1 }}>
+              <ContainedSlider value={Math.round(m.alpha * 100)} min={0} max={100} step={5} showValue onChange={(v) => patch({ alpha: v / 100 })} />
+            </div>
+          </StyleRow>
+          <StyleRow label={t("hud.outlineThickness")}>
+            <div style={{ flex: 1 }}>
+              <ContainedSlider value={Math.round(m.textOutlineThickness * 10)} min={0} max={40} step={1} showValue onChange={(v) => patch({ textOutlineThickness: v / 10 })} />
+            </div>
+          </StyleRow>
+          <StyleRow label={t("hud.offsetX")}>
+            <div style={{ flex: 1 }}>
+              <ContainedSlider value={m.offsetX} min={-200} max={200} step={2} showValue onChange={(v) => patch({ offsetX: v })} />
+            </div>
+          </StyleRow>
+          <StyleRow label={t("hud.offsetY")}>
+            <div style={{ flex: 1 }}>
+              <ContainedSlider value={m.offsetY} min={-200} max={200} step={2} showValue onChange={(v) => patch({ offsetY: v })} />
+            </div>
+          </StyleRow>
+          <ToggleField label={t("hud.compact")} checked={m.compact} onChange={(v) => patch({ compact: v })} bottomSeparator="none" />
+          <ToggleField label={t("hud.noMargin")} checked={m.noMargin} onChange={(v) => patch({ noMargin: v })} bottomSeparator="none" />
           <StyleRow label={t("hud.separatorColor")}>
             <ColorPicker label={t("hud.separatorColor")} value={m.separatorColor ?? "ffffff"} onChange={(hex) => patch({ separatorColor: hex })} />
           </StyleRow>
           <Note>{t("hud.separatorColor.hint")}</Note>
-
-          <Note>{t("hud.style.hint")}</Note>
+          <Note>{t("hud.advanced.hint")}</Note>
         </div>
-      </PanelSectionRow>
+      </Collapsible>
 
-      {/* Reset */}
       <PanelSectionRow>
         <Focusable
-          onActivate={reset}
-          onClick={reset}
+          onActivate={() => showModal(
+            <ConfirmDialog
+              title={t("hud.reset.confirm.title")}
+              desc={t("hud.reset.confirm.desc")}
+              confirmLabel={t("hud.reset")}
+              cancelLabel={t("hud.reset.cancel")}
+              onConfirm={reset}
+              icon={<LuRotateCcw size={18} />}
+            />,
+          )}
+          onClick={() => showModal(
+            <ConfirmDialog
+              title={t("hud.reset.confirm.title")}
+              desc={t("hud.reset.confirm.desc")}
+              confirmLabel={t("hud.reset")}
+              cancelLabel={t("hud.reset.cancel")}
+              onConfirm={reset}
+              icon={<LuRotateCcw size={18} />}
+            />,
+          )}
           style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "8px 0", borderRadius: theme.radius.sm, cursor: "pointer", color: theme.color.textMuted, fontSize: theme.font.caption }}
         >
           <LuRotateCcw size={13} /> {t("hud.reset")}

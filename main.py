@@ -2887,7 +2887,7 @@ class Plugin:
                 self._pdc_written = {}
                 self._hud_apply_status = "failed"
                 return
-            if reload_mangoapp():
+            if reload_mangoapp(self._hud_owner[0] if self._hud_owner else None):
                 self._pdc_written = values
                 self._hud_apply_status = "applied"
             else:
@@ -2898,7 +2898,7 @@ class Plugin:
             self._pdc_preview_values = {}
             if not clear_presets(cap["presetsPath"]):
                 self._hud_apply_status = "failed"
-            elif reload_mangoapp():
+            elif reload_mangoapp(self._hud_owner[0] if self._hud_owner else None):
                 self._hud_apply_status = "disabled"
             else:
                 self._hud_apply_status = "pending"
@@ -3016,7 +3016,7 @@ class Plugin:
             if on_disk != expected:
                 self._hud_apply_status = "failed"
                 return
-            if reload_mangoapp():
+            if reload_mangoapp(self._hud_owner[0] if self._hud_owner else None):
                 self._pdc_written = values
                 self._hud_apply_status = "applied"
             else:
@@ -3836,9 +3836,18 @@ class Plugin:
 
     async def set_current_game(self, appid, name=None) -> dict:
         self._init()
-        self._current_appid = str(appid) if appid is not None else None
-        # Display name for the HUD's Perfil metric (optional; the watcher passes it).
-        self._current_game_name = str(name) if (appid is not None and name) else None
+        next_appid = str(appid) if appid is not None else None
+        next_name = str(name) if (appid is not None and name) else None
+        if (
+            next_appid is not None
+            and next_appid == self._current_appid
+            and next_name != self._current_game_name
+        ):
+            self._current_game_name = next_name
+            await self._refresh_pdc_metrics()
+            return await self.get_tdp_state()
+        self._current_appid = next_appid
+        self._current_game_name = next_name
         self._reset_auto_windows()  # don't let the previous game's signal gate the new one
         self._reapply_ticks = 0        # fresh ~30 min re-fit window for the new game
         self._adaptive_applied = False  # re-arm the mid-session adaptive drive for this game
@@ -3858,6 +3867,14 @@ class Plugin:
         try:
             if getattr(self, "_fan_ctrl", None) is not None:
                 self._fan_ctrl.restore_auto()
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _restore_hud_safe(self) -> None:
+        try:
+            cap = self._detect_hud()
+            if clear_presets(cap["presetsPath"]) and cap["running"]:
+                reload_mangoapp(self._hud_owner[0] if self._hud_owner else None)
         except Exception:  # noqa: BLE001
             pass
 
@@ -4273,6 +4290,7 @@ class Plugin:
         await self._stop_audio_loop()
         await self._offload_call(self._restore_audio_safe)
         await self._offload_call(self._restore_hhd_tdp)  # hand HHD's TDP back if we took it
+        await self._offload_call(self._restore_hud_safe)
         self._shutdown_apply_executor()
         fan_expose.remove_conf()  # drop the modprobe.d option we added (guarded)
         decky.logger.info("Panel de Control uninstalled")

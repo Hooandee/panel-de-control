@@ -80,6 +80,32 @@ def test_get_hud_state_shape(tmp_path, monkeypatch):
     assert st["values"] == {}
 
 
+def test_same_game_name_hydration_only_refreshes_hud(tmp_path, monkeypatch):
+    _main, p = _make_plugin(tmp_path, monkeypatch)
+    p._init()
+    p._current_appid = "42"
+    p._current_game_name = "42"
+    reapplies = []
+    refreshes = []
+    monkeypatch.setattr(p, "_reapply_all", lambda: reapplies.append(True))
+
+    async def refresh():
+        refreshes.append(True)
+
+    async def state():
+        return {"ok": True}
+
+    monkeypatch.setattr(p, "_refresh_pdc_metrics", refresh)
+    monkeypatch.setattr(p, "get_tdp_state", state)
+
+    result = asyncio.run(p.set_current_game("42", "Hydrated name"))
+
+    assert result == {"ok": True}
+    assert p._current_game_name == "Hydrated name"
+    assert refreshes == [True]
+    assert reapplies == []
+
+
 def test_offline_hud_stays_editable_and_pending_without_writing(tmp_path, monkeypatch):
     presets = str(tmp_path / "presets.conf")
     main, p = _make_plugin(tmp_path, monkeypatch)
@@ -131,7 +157,7 @@ def test_writing_enabled_hud_requests_mangoapp_reload(tmp_path, monkeypatch):
     main, p = _make_plugin(tmp_path, monkeypatch)
     _fake_overlay(main, monkeypatch, presets)
     calls = []
-    monkeypatch.setattr(main, "reload_mangoapp", lambda: calls.append(True) or True, raising=False)
+    monkeypatch.setattr(main, "reload_mangoapp", lambda *_args: calls.append(True) or True, raising=False)
 
     asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
 
@@ -142,7 +168,7 @@ def test_successful_write_and_reload_reports_applied(tmp_path, monkeypatch):
     presets = str(tmp_path / "presets.conf")
     main, p = _make_plugin(tmp_path, monkeypatch)
     _fake_overlay(main, monkeypatch, presets)
-    monkeypatch.setattr(main, "reload_mangoapp", lambda: True, raising=False)
+    monkeypatch.setattr(main, "reload_mangoapp", lambda *_args: True, raising=False)
 
     st = asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
 
@@ -153,7 +179,7 @@ def test_failed_reload_reports_pending_not_success(tmp_path, monkeypatch):
     presets = str(tmp_path / "presets.conf")
     main, p = _make_plugin(tmp_path, monkeypatch)
     _fake_overlay(main, monkeypatch, presets)
-    monkeypatch.setattr(main, "reload_mangoapp", lambda: False, raising=False)
+    monkeypatch.setattr(main, "reload_mangoapp", lambda *_args: False, raising=False)
 
     st = asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
 
@@ -175,7 +201,7 @@ def test_failed_clear_reports_failure(tmp_path, monkeypatch):
     presets = str(tmp_path / "presets.conf")
     main, p = _make_plugin(tmp_path, monkeypatch)
     _fake_overlay(main, monkeypatch, presets)
-    monkeypatch.setattr(main, "reload_mangoapp", lambda: True, raising=False)
+    monkeypatch.setattr(main, "reload_mangoapp", lambda *_args: True, raising=False)
     asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
     monkeypatch.setattr(main, "clear_presets", lambda _path: False, raising=False)
 
@@ -189,7 +215,7 @@ def test_disabling_hud_requests_mangoapp_reload(tmp_path, monkeypatch):
     main, p = _make_plugin(tmp_path, monkeypatch)
     _fake_overlay(main, monkeypatch, presets)
     calls = []
-    monkeypatch.setattr(main, "reload_mangoapp", lambda: calls.append(True) or True, raising=False)
+    monkeypatch.setattr(main, "reload_mangoapp", lambda *_args: calls.append(True) or True, raising=False)
     asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
     calls.clear()
 
@@ -286,7 +312,7 @@ def test_changed_pdc_value_reloads_running_mangoapp(tmp_path, monkeypatch):
     main, p = _make_plugin(tmp_path, monkeypatch)
     _fake_overlay(main, monkeypatch, presets)
     calls = []
-    monkeypatch.setattr(main, "reload_mangoapp", lambda: calls.append(True) or True, raising=False)
+    monkeypatch.setattr(main, "reload_mangoapp", lambda *_args: calls.append(True) or True, raising=False)
     asyncio.run(p.set_hud_config({"items": _items("pdc_eco"), "enabled": True}))
     calls.clear()
 
@@ -304,7 +330,7 @@ def test_failed_pdc_reload_is_retried_on_next_tick(tmp_path, monkeypatch):
     results = iter((False, True))
     calls = []
 
-    def reload():
+    def reload(*_args):
         calls.append(True)
         return next(results)
 
@@ -334,7 +360,7 @@ def test_pdc_refresh_uses_serial_apply_executor(tmp_path, monkeypatch):
     presets = str(tmp_path / "presets.conf")
     main, p = _make_plugin(tmp_path, monkeypatch)
     _fake_overlay(main, monkeypatch, presets)
-    monkeypatch.setattr(main, "reload_mangoapp", lambda: True, raising=False)
+    monkeypatch.setattr(main, "reload_mangoapp", lambda *_args: True, raising=False)
     asyncio.run(p.set_hud_config({"items": _items("pdc_eco"), "enabled": True}))
     executor = _RecordingExecutor()
     p._apply_executor = executor

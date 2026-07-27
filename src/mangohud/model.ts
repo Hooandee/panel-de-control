@@ -4,12 +4,16 @@
 // real overlay.
 
 export type MetricId =
-  | "fps" | "frametime" | "time"
-  | "gpu" | "gpu_temp" | "gpu_clock" | "gpu_power" | "vram" | "gpu_name"
-  | "cpu" | "cpu_temp" | "cpu_clock" | "cpu_power" | "cores"
-  | "ram" | "swap" | "io_read" | "io_write"
+  | "fps" | "fps_metrics" | "frametime" | "frame_count" | "show_fps_limit" | "time"
+  | "gpu" | "gpu_temp" | "gpu_junction_temp" | "gpu_clock" | "gpu_mem_clock"
+  | "gpu_mem_temp" | "gpu_power" | "gpu_voltage" | "gpu_fan" | "gpu_efficiency"
+  | "vram" | "proc_vram" | "gpu_name"
+  | "cpu" | "cpu_temp" | "cpu_clock" | "cpu_power" | "cpu_efficiency" | "cores"
+  | "ram" | "procmem" | "swap" | "io_read" | "io_write"
   | "battery" | "battery_watt" | "battery_time" | "device_battery"
-  | "resolution" | "arch" | "wine" | "engine_version" | "fan"
+  | "resolution" | "refresh_rate" | "arch" | "wine" | "winesync" | "engine_version"
+  | "vulkan_driver" | "present_mode" | "display_server" | "gamemode" | "vkbasalt"
+  | "fsr" | "hdr" | "fan" | "network" | "media_player" | "version"
   // Panel de Control plugin-state metrics (value baked into the custom_text row by
   // the backend at apply time; see py_modules/mangohud/pdc_metrics.py).
   | "pdc_tdp" | "pdc_tdp_learn" | "pdc_auto_tdp" | "pdc_fan" | "pdc_fan_rpm"
@@ -22,7 +26,7 @@ export type MetricId =
 // number; `frametime` the frametime number; `background`/`outline` the box + outline.
 export type ColorKey =
   | "text" | "fps" | "gpu" | "cpu" | "vram" | "ram" | "battery"
-  | "frametime" | "background" | "outline";
+  | "frametime" | "network" | "background" | "outline";
 export type HudPosition = "top-left" | "top-right" | "bottom-left" | "bottom-right";
 export type HudLayout = "vertical" | "horizontal";
 export type TempUnit = "c" | "f";
@@ -67,6 +71,7 @@ export interface HudModel {
   noSmallFont: boolean;
   tempUnit: TempUnit;
   textOutline: boolean;
+  textOutlineThickness: number;
   separatorColor: string | null;
   colors: Record<ColorKey, string>;
   background: { alpha: number; roundCorners: boolean };
@@ -86,10 +91,16 @@ export interface HudModel {
   fontScale: number;
 }
 
+export type HudCapability = "ready" | "unsupported" | "inactive";
+export type HudApplyStatus = "disabled" | "pending" | "unavailable" | "applied" | "failed";
+
 export interface HudState {
   supported: boolean;
   running: boolean;
+  capability: HudCapability;
+  applyStatus: HudApplyStatus;
   model: HudModel;
+  values: Partial<Record<MetricId, string>>;
   catalog: MetricId[];
   presets: Record<string, MetricId[]>;
 }
@@ -115,23 +126,35 @@ interface MetricMeta {
 export const METRICS: MetricMeta[] = [
   // FPS
   { id: "fps", category: "fps", group: "fps", label: "FPS", value: "60" },
+  { id: "fps_metrics", category: "fps", group: "fps", label: "FPS AVG", value: "58" },
   { id: "frametime", category: "frametime", group: "fps", label: "FRAME", value: "16.6ms" },
+  { id: "frame_count", category: "text", group: "fps", label: "FRAMES", value: "12042" },
+  { id: "show_fps_limit", category: "text", group: "fps", label: "LIMIT", value: "60" },
   { id: "time", category: "text", group: "fps", label: "TIME", value: "22:14" },
   // GPU
   { id: "gpu", category: "gpu", group: "gpu", label: "GPU", value: "74%" },
   { id: "gpu_temp", category: "gpu", group: "gpu", catalogGroup: "temps", label: "GPU°", value: "68°C" },
+  { id: "gpu_junction_temp", category: "gpu", group: "gpu", catalogGroup: "temps", label: "JUNC°", value: "78°C" },
   { id: "gpu_clock", category: "gpu", group: "gpu", label: "GCLK", value: "2200MHz" },
+  { id: "gpu_mem_clock", category: "gpu", group: "gpu", label: "MCLK", value: "1800MHz" },
+  { id: "gpu_mem_temp", category: "gpu", group: "gpu", catalogGroup: "temps", label: "VRAM°", value: "72°C" },
   { id: "gpu_power", category: "gpu", group: "gpu", label: "GPU W", value: "18W" },
+  { id: "gpu_voltage", category: "gpu", group: "gpu", label: "GPU V", value: "0.95V" },
+  { id: "gpu_fan", category: "gpu", group: "gpu", label: "GPU FAN", value: "1800rpm" },
+  { id: "gpu_efficiency", category: "gpu", group: "gpu", label: "GPU EFF", value: "3.2" },
   { id: "vram", category: "vram", group: "gpu", label: "VRAM", value: "4.1G" },
+  { id: "proc_vram", category: "vram", group: "gpu", label: "PROC VRAM", value: "3.4G" },
   { id: "gpu_name", category: "gpu", group: "gpu", label: "GPU", value: "Radeon" },
   // CPU
   { id: "cpu", category: "cpu", group: "cpu", label: "CPU", value: "41%" },
   { id: "cpu_temp", category: "cpu", group: "cpu", catalogGroup: "temps", label: "CPU°", value: "62°C" },
   { id: "cpu_clock", category: "cpu", group: "cpu", label: "CCLK", value: "3400MHz" },
   { id: "cpu_power", category: "cpu", group: "cpu", label: "CPU W", value: "12W" },
+  { id: "cpu_efficiency", category: "cpu", group: "cpu", label: "CPU EFF", value: "2.8" },
   { id: "cores", category: "cpu", group: "cpu", label: "CORE", value: "▂▄▆▅▃▆" },
   // Memory
   { id: "ram", category: "ram", group: "mem", label: "RAM", value: "9.2G" },
+  { id: "procmem", category: "ram", group: "mem", label: "PROC RAM", value: "5.4G" },
   { id: "swap", category: "ram", group: "mem", label: "SWAP", value: "0.2G" },
   { id: "io_read", category: "ram", group: "mem", label: "IO R", value: "1.2" },
   { id: "io_write", category: "ram", group: "mem", label: "IO W", value: "0.4" },
@@ -142,28 +165,39 @@ export const METRICS: MetricMeta[] = [
   { id: "device_battery", category: "battery", group: "battery", label: "GP", value: "70%" },
   // System
   { id: "resolution", category: "text", group: "system", label: "RES", value: "1920x1080" },
+  { id: "refresh_rate", category: "text", group: "system", label: "HZ", value: "120Hz" },
   { id: "arch", category: "text", group: "system", label: "ARCH", value: "x86_64" },
   { id: "wine", category: "text", group: "system", label: "WINE", value: "9.0" },
+  { id: "winesync", category: "text", group: "system", label: "SYNC", value: "esync" },
   { id: "engine_version", category: "text", group: "system", label: "ENG", value: "vk1.3" },
+  { id: "vulkan_driver", category: "text", group: "system", label: "VK", value: "RADV" },
+  { id: "present_mode", category: "text", group: "system", label: "PRESENT", value: "Mailbox" },
+  { id: "display_server", category: "text", group: "system", label: "DISPLAY", value: "Wayland" },
+  { id: "gamemode", category: "text", group: "system", label: "GAMEMODE", value: "On" },
+  { id: "vkbasalt", category: "text", group: "system", label: "VKBASALT", value: "Off" },
+  { id: "fsr", category: "text", group: "system", label: "FSR", value: "On" },
+  { id: "hdr", category: "text", group: "system", label: "HDR", value: "On" },
   { id: "fan", category: "text", group: "system", label: "FAN", value: "3200rpm" },
-  // Panel de Control plugin state. Category "text" (they're custom_text lines); the
-  // preview value is a representative sample of what the backend writes live. Labels
-  // mirror the defaults in config.py (_PDC_LABEL) so the preview is faithful.
-  { id: "pdc_tdp", category: "text", group: "pdc", label: "TDP", value: "Auto 18W" },
-  { id: "pdc_tdp_learn", category: "text", group: "pdc", label: "Banda", value: "13-19W" },
-  { id: "pdc_auto_tdp", category: "text", group: "pdc", label: "Auto", value: "On" },
-  { id: "pdc_fan", category: "text", group: "pdc", label: "Vent.", value: "Adaptativo" },
-  { id: "pdc_fan_rpm", category: "text", group: "pdc", label: "RPM", value: "3200" },
-  { id: "pdc_eco", category: "text", group: "pdc", label: "Descarga", value: "Inactivo" },
-  { id: "pdc_profile", category: "text", group: "pdc", label: "Perfil", value: "Global" },
-  { id: "pdc_power", category: "text", group: "pdc", label: "Consumo", value: "20W 92%" },
-  { id: "pdc_charge", category: "text", group: "pdc", label: "Limite", value: "80%" },
-  { id: "pdc_bat_health", category: "text", group: "pdc", label: "Salud", value: "96%" },
-  { id: "pdc_smt", category: "text", group: "pdc", label: "SMT", value: "On" },
-  { id: "pdc_boost", category: "text", group: "pdc", label: "Boost", value: "On" },
-  { id: "pdc_cores", category: "text", group: "pdc", label: "Nucleos", value: "6/8" },
-  { id: "pdc_gpu_clock", category: "text", group: "pdc", label: "GPU MHz", value: "800-2700" },
-  { id: "pdc_model", category: "text", group: "pdc", label: "Equipo", value: "Legion Go 2" },
+  { id: "network", category: "network", group: "system", label: "NET", value: "4.2M" },
+  { id: "media_player", category: "text", group: "system", label: "MEDIA", value: "Playing" },
+  { id: "version", category: "text", group: "system", label: "MANGOHUD", value: "0.8" },
+  // Panel de Control plugin state. Category "text" because these are custom_text
+  // lines. Their values come from the backend snapshot; "-" is the honest fallback.
+  { id: "pdc_tdp", category: "text", group: "pdc", label: "TDP", value: "-" },
+  { id: "pdc_tdp_learn", category: "text", group: "pdc", label: "Banda", value: "-" },
+  { id: "pdc_auto_tdp", category: "text", group: "pdc", label: "Auto", value: "-" },
+  { id: "pdc_fan", category: "text", group: "pdc", label: "Vent.", value: "-" },
+  { id: "pdc_fan_rpm", category: "text", group: "pdc", label: "RPM", value: "-" },
+  { id: "pdc_eco", category: "text", group: "pdc", label: "Descarga", value: "-" },
+  { id: "pdc_profile", category: "text", group: "pdc", label: "Perfil", value: "-" },
+  { id: "pdc_power", category: "text", group: "pdc", label: "Consumo", value: "-" },
+  { id: "pdc_charge", category: "text", group: "pdc", label: "Limite", value: "-" },
+  { id: "pdc_bat_health", category: "text", group: "pdc", label: "Salud", value: "-" },
+  { id: "pdc_smt", category: "text", group: "pdc", label: "SMT", value: "-" },
+  { id: "pdc_boost", category: "text", group: "pdc", label: "Boost", value: "-" },
+  { id: "pdc_cores", category: "text", group: "pdc", label: "Nucleos", value: "-" },
+  { id: "pdc_gpu_clock", category: "text", group: "pdc", label: "GPU MHz", value: "-" },
+  { id: "pdc_model", category: "text", group: "pdc", label: "Equipo", value: "-" },
 ];
 
 const META: Record<MetricId, MetricMeta> = METRICS.reduce(
@@ -188,6 +222,7 @@ export const DEFAULT_MODEL: HudModel = {
   noSmallFont: false,
   tempUnit: "c",
   textOutline: true,
+  textOutlineThickness: 1.0,
   separatorColor: null,
   colors: {
     text: "ffffff",
@@ -198,6 +233,7 @@ export const DEFAULT_MODEL: HudModel = {
     ram: "f0abfc",
     battery: "fca5a5",
     frametime: "ffd580",
+    network: "a5b4fc",
     background: "000000",
     outline: "000000",
   },
@@ -214,7 +250,7 @@ export const DEFAULT_MODEL: HudModel = {
 // The colour controls the "Estilo general" section shows, in display order.
 // (Each corresponds to a MangoHud colour directive — see config.py.)
 export const COLOR_KEYS: ColorKey[] = [
-  "text", "fps", "gpu", "cpu", "vram", "ram", "battery", "frametime", "background", "outline",
+  "text", "fps", "gpu", "cpu", "vram", "ram", "battery", "frametime", "network", "background", "outline",
 ];
 
 export const PRESETS: Record<string, MetricId[]> = {
@@ -275,11 +311,23 @@ function valueColorKey(id: MetricId): ColorKey {
   return "text";
 }
 
+function previewValue(id: MetricId, model: HudModel): string {
+  if (model.tempUnit !== "f") return META[id].value;
+  if (id === "gpu_temp") return "154°F";
+  if (id === "gpu_junction_temp") return "172°F";
+  if (id === "gpu_mem_temp") return "162°F";
+  if (id === "cpu_temp") return "144°F";
+  return META[id].value;
+}
+
 /** The rows the preview draws, faithful to MangoHud: consecutive GPU/CPU metrics
  *  collapse into ONE row (label tinted by category, a cell per value in text
  *  colour); other metrics and custom text are single lines; separators draw a
  *  divider. A labelled metric (fps/cpu/gpu) uses its custom label. */
-export function previewRows(model: HudModel): PreviewRow[] {
+export function previewRows(
+  model: HudModel,
+  values: Partial<Record<MetricId, string>> = {},
+): PreviewRow[] {
   const rows: PreviewRow[] = [];
   const c = (key: ColorKey) => `#${model.colors[key]}`;
   model.items.forEach((it, i) => {
@@ -296,11 +344,14 @@ export function previewRows(model: HudModel): PreviewRow[] {
       return;
     }
     const meta = META[it.id];
+    const value = PDC_IDS.includes(it.id)
+      ? values[it.id] ?? "-"
+      : previewValue(it.id, model);
     const group = blockGroupOf(it.id);
     if (group) {
       const last = rows[rows.length - 1];
       if (last && last.kind === "group" && last.group === group) {
-        last.cells.push(meta.value);
+        last.cells.push(value);
         if (canLabel(it.id) && it.label) last.label = it.label;
       } else {
         rows.push({
@@ -310,7 +361,7 @@ export function previewRows(model: HudModel): PreviewRow[] {
           label: canLabel(it.id) && it.label ? it.label : (GROUP_LABEL[group] as string),
           labelColor: c(GROUP_COLOR[group]),
           valueColor: c("text"),
-          cells: [meta.value],
+          cells: [value],
         });
       }
       return;
@@ -319,10 +370,10 @@ export function previewRows(model: HudModel): PreviewRow[] {
       kind: "line",
       key: `m:${it.id}`,
       label: canLabel(it.id) && it.label ? it.label : meta.label,
-      value: meta.value,
+      value,
       labelColor: c(meta.category),
       valueColor: c(valueColorKey(it.id)),
-      small: false,
+      small: PDC_IDS.includes(it.id) && !model.noSmallFont,
     });
   });
   return rows;

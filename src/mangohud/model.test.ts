@@ -249,10 +249,18 @@ describe("pdc (Panel de Control) metrics", () => {
       "pdc_cores", "pdc_gpu_clock", "pdc_model",
     ]);
   });
-  it("renders a pdc metric as a normal preview line (label + sample value)", () => {
-    const rows = previewRows({ ...DEFAULT_MODEL, items: [{ kind: "metric", id: "pdc_tdp" }] });
+  it("renders a pdc metric with the latest honest backend value", () => {
+    const rows = previewRows(
+      { ...DEFAULT_MODEL, items: [{ kind: "metric", id: "pdc_tdp" }] },
+      { pdc_tdp: "17W" },
+    );
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ kind: "line", label: "TDP", value: "Auto 18W" });
+    expect(rows[0]).toMatchObject({ kind: "line", label: "TDP", value: "17W", small: true });
+  });
+
+  it("renders a dash when a pdc value has not been observed", () => {
+    const rows = previewRows({ ...DEFAULT_MODEL, items: [{ kind: "metric", id: "pdc_model" }] });
+    expect(rows[0]).toMatchObject({ kind: "line", label: "Equipo", value: "-" });
   });
 });
 
