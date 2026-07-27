@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.31.4](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.31.3...panel-de-control-v0.31.4) (2026-07-27)
+
+
+### Bug Fixes / Correcciones
+
+* Make power, charge-limit, audio and controller settings recover reliably after sleep, charger changes or temporary firmware failures. Panel de Control now verifies the applied state before reporting success, preserves safe audio handoff, and adds device-scoped handling for the Legion Go S 83N6 plus live-capability controller mappings and expanded diagnostics. ([#335](https://github.com/Hooandee/panel-de-control/issues/335)) ([fffde83](https://github.com/Hooandee/panel-de-control/commit/fffde83126a91cf8655985c935ca9b9432758002))
+* **ES:** Corrige varios casos en los que los ajustes de potencia, límite de carga, sonido o mandos podían dejar de aplicarse después de suspender el equipo, conectar o desconectar el cargador o cuando el firmware rechazaba un cambio temporalmente. El plugin ahora comprueba que cada ajuste se haya aplicado de verdad antes de darlo por bueno, mantiene el volumen al desactivar el ecualizador y aplica correctamente los límites de potencia de la Legion Go S 83N6. El remapeo muestra solo los botones que detecta InputPlumber y los reportes incluyen más información para localizar futuros fallos. ([#335](https://github.com/Hooandee/panel-de-control/issues/335)) ([fffde83](https://github.com/Hooandee/panel-de-control/commit/fffde83126a91cf8655985c935ca9b9432758002))
+
 ## [0.31.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.31.2...panel-de-control-v0.31.3) (2026-07-25)
 
 
