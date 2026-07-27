@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.31.4](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.31.3...panel-de-control-v0.31.4) (2026-07-27)
+
+
+### Bug Fixes
+
+* harden hardware state recovery ([#335](https://github.com/Hooandee/panel-de-control/issues/335)) ([fffde83](https://github.com/Hooandee/panel-de-control/commit/fffde83126a91cf8655985c935ca9b9432758002))
+
 ## [0.31.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.31.2...panel-de-control-v0.31.3) (2026-07-25)
 
 
