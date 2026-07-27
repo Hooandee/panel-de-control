@@ -21,6 +21,13 @@ def _norm_mode(mode):
     return mode if mode in _MODES else _DEFAULT_MODE
 
 
+def _int0(v):
+    try:
+        return int(v)
+    except (TypeError, ValueError, OverflowError):
+        return 0
+
+
 class ProfileStore(ScopedProfileStore):
     """Global TDP profile + per-appid overrides. See ScopedProfileStore for the per-game
     scope contract (follow_global).
@@ -78,6 +85,36 @@ class ProfileStore(ScopedProfileStore):
         if "watts" in raw:  # oldest shape → flat
             return self._profile_dict(int(raw["watts"]))
         return self._profile_dict(self._default)
+
+    def sanitize(self, min_w, max_w):
+        """Correct any stored TDP value outside the device's real range and rewrite the
+        store once if anything changed (returns True when it did). An older version could
+        persist a bogus firmware-max (e.g. 150 W) — this self-heals it on load so a stale
+        value can never be applied, not merely clamped on read. Clamps PL1 into
+        [min_w, max_w] and the boost offsets into [0, max_w] across global + every game."""
+        min_w, max_w = int(min_w), int(max_w)
+
+        def fix(prof):
+            changed = False
+            pl1 = int(prof.get("pl1", min_w))
+            capped = max(min_w, min(pl1, max_w))
+            if capped != pl1:
+                prof["pl1"] = capped
+                changed = True
+            for k in ("off2", "off3"):
+                v = int(prof.get(k, 0) or 0)
+                cv = max(0, min(v, max_w))
+                if cv != v:
+                    prof[k] = cv
+                    changed = True
+            return changed
+
+        dirty = fix(self._data["global"])
+        for g in self._data["games"].values():
+            dirty = fix(g) or dirty
+        if dirty:
+            self._save()
+        return dirty
 
     # Auto-TDP and GPU-clock are part of the Potencia profile: per-scope, gated by the
     # same follow_global as the TDP value (one tab governs the whole section).
@@ -143,6 +180,25 @@ class ProfileStore(ScopedProfileStore):
         prof["mode"] = "custom"
         prof["off2"] = max(0, int(off2))
         prof["off3"] = max(0, int(off3))
+        self._save()
+
+    def apply_preset(self, scope, pl1, boost, appid=None):
+        """Apply a power preset: sustained pl1 plus optional boost, in a SINGLE save so a
+        crash between writes can't strand a half-applied preset (pl1 saved, boost not).
+        boost=None (or an unknown mode) leaves the boost mode/margins untouched. Keeps the
+        mode model here rather than leaking mode names into the RPC layer; margins coerced
+        so a malformed payload can't raise. Mirrors set_pl1's fresh-estable seed for a game
+        with no profile yet."""
+        if scope == "game" and appid is not None and str(appid) not in self._data["games"]:
+            prof = self._data["games"][str(appid)] = self._profile_dict(int(pl1))
+        else:
+            prof = self._target(scope, appid)
+            prof["pl1"] = int(pl1)
+        if isinstance(boost, dict) and boost.get("mode") in _MODES:
+            prof["mode"] = boost["mode"]
+            if boost["mode"] == "custom":
+                prof["off2"] = max(0, _int0(boost.get("off2")))
+                prof["off3"] = max(0, _int0(boost.get("off3")))
         self._save()
 
     def set_levels(self, scope, pl1, pl2, pl3, appid=None):

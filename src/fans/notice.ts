@@ -8,6 +8,7 @@ type Translate = (key: string, params?: Record<string, string | number>) => stri
  * otherwise the OS-named generic note.
  */
 export function fanCurveNotice(cs: FanCurveState, t: Translate): string {
+  if (cs.kernel_pending) return t("fans.curve.kernel_pending");
   if (cs.firmware_mode) return t("fans.curve.governed", { mode: t(`tdp.fwmode.${cs.firmware_mode}`) });
   if (cs.has_firmware_modes) return t("fans.curve.custom_mode");
   return t("fans.curve.unsupported", { os: cs.os_name || t("fans.curve.thisSystem") });

@@ -8,12 +8,14 @@ import {
   setFanAdaptive,
   setFanAdaptiveBias,
   setFanExperimental,
+  resetFanControl,
   FanCurveState,
   FanScope,
   FanPreset,
 } from "../api";
 import { useRunningGame } from "../tdp/useRunningGame";
 import { useScopeSync } from "../useScopeSync";
+import { useMountedRef } from "../hooks/useMountedRef";
 import { Point } from "./curve";
 
 export interface FanCurveControl {
@@ -29,6 +31,7 @@ export interface FanCurveControl {
   onAdaptiveBias: (bias: number) => void;
   onCurve: (points: Point[]) => void;
   onExperimental: (enabled: boolean) => void;
+  onReset: () => Promise<boolean>;
 }
 
 const BALANCED = "balanced";
@@ -54,9 +57,13 @@ export function useFanCurve(): FanCurveControl {
   const commit = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Don't apply a late RPC response after the section/modal unmounts.
+  const alive = useMountedRef();
+  const setStateSafe = useCallback((s: FanCurveState) => { if (alive.current) setState(s); }, [alive]);
+
   const refresh = useCallback(() => {
-    getFanCurveState().then(setState).catch(() => {});
-  }, []);
+    getFanCurveState().then(setStateSafe).catch(() => {});
+  }, [setStateSafe]);
 
   // Flash a transient "Guardado" confirmation after a successful custom commit.
   const flashSaved = useCallback(() => {
@@ -79,8 +86,8 @@ export function useFanCurve(): FanCurveControl {
   // wiring): picking Global makes the running game follow the global curve, the game
   // tab activates its own, neither deletes the other.
   const applyFollow = useCallback(
-    (f: boolean, a: string) => { setFanFollowGlobal(f, a).then(setState).catch(() => {}); },
-    [],
+    (f: boolean, a: string) => { setFanFollowGlobal(f, a).then(setStateSafe).catch(() => {}); },
+    [setStateSafe],
   );
   const { scope, onScope } = useScopeSync(appid, state?.follows_global, applyFollow);
 
@@ -99,23 +106,23 @@ export function useFanCurve(): FanCurveControl {
 
   const onAdaptive = useCallback(() => {
     const { appid: targetAppid, scope: targetScope } = resolveTarget();
-    setFanAdaptive(targetScope, targetAppid).then(setState).catch(() => {});
-  }, [resolveTarget]);
+    setFanAdaptive(targetScope, targetAppid).then(setStateSafe).catch(() => {});
+  }, [resolveTarget, setStateSafe]);
 
   const onPreset = useCallback(
     (preset: FanPreset) => {
       const { appid: targetAppid, scope: targetScope } = resolveTarget();
       if (preset === "auto") {
-        setFanCurveAuto(targetScope, targetAppid).then(setState).catch(() => {});
+        setFanCurveAuto(targetScope, targetAppid).then(setStateSafe).catch(() => {});
         return;
       }
       if (preset === "adaptive") {
         onAdaptive();
         return;
       }
-      setFanPreset(preset, targetScope, targetAppid).then(setState).catch(() => {});
+      setFanPreset(preset, targetScope, targetAppid).then(setStateSafe).catch(() => {});
     },
-    [resolveTarget, onAdaptive],
+    [resolveTarget, onAdaptive, setStateSafe],
   );
 
   // The silence↔cool dial in adaptive mode: optimistic local bias, debounced commit
@@ -126,10 +133,10 @@ export function useFanCurve(): FanCurveControl {
       setState((cur) => (cur ? { ...cur, preset: "adaptive", bias } : cur)); // optimistic
       if (commit.current) clearTimeout(commit.current);
       commit.current = setTimeout(() => {
-        setFanAdaptiveBias(bias, targetScope, targetAppid).then(setState).catch(() => {});
+        setFanAdaptiveBias(bias, targetScope, targetAppid).then(setStateSafe).catch(() => {});
       }, 200);
     },
-    [resolveTarget],
+    [resolveTarget, setStateSafe],
   );
 
   // Enter custom editing: seed from the curve currently shown (the active preset
@@ -143,6 +150,7 @@ export function useFanCurve(): FanCurveControl {
     setState((cur) => (cur ? { ...cur, preset: "custom", points: seed } : cur));
     setFanCurvePoints(seed, targetScope, targetAppid)
       .then((next) => {
+        if (!alive.current) return;
         setState(next);
         flashSaved();
       })
@@ -157,6 +165,7 @@ export function useFanCurve(): FanCurveControl {
       commit.current = setTimeout(() => {
         setFanCurvePoints(points, targetScope, targetAppid)
           .then((next) => {
+            if (!alive.current) return;
             setState(next);
             flashSaved();
           })
@@ -169,8 +178,19 @@ export function useFanCurve(): FanCurveControl {
   // Opt in/out of experimental EC fan control (Legion Go S). The returned state is
   // the source of truth (backend swaps the fan backend), so no optimism.
   const onExperimental = useCallback((enabled: boolean) => {
-    setFanExperimental(enabled).then(setState).catch(() => {});
-  }, []);
+    setFanExperimental(enabled).then(setStateSafe).catch(() => {});
+  }, [setStateSafe]);
 
-  return { state, scope, game, saved, refresh, onScope, onPreset, onCustomMode, onAdaptive, onAdaptiveBias, onCurve, onExperimental };
+  const onReset = useCallback(
+    () =>
+      resetFanControl()
+        .then((next) => {
+          setStateSafe(next);
+          return next.reset_ok ?? false;
+        })
+        .catch(() => false),
+    [setStateSafe],
+  );
+
+  return { state, scope, game, saved, refresh, onScope, onPreset, onCustomMode, onAdaptive, onAdaptiveBias, onCurve, onExperimental, onReset };
 }

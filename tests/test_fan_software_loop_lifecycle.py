@@ -35,6 +35,7 @@ class FakeEC:
     def write(self, addr, val):
         self.mem[addr] = val & 0xFF
         self.write_threads.append(threading.get_ident())
+        return True  # mirror _PortEC.write (True on success)
 
 
 def _dmi_gos(root, name="83N6", family="Legion Go S 8APU1"):
@@ -147,7 +148,7 @@ def test_release_overrides_an_in_flight_tick_write(tmp_path):
                 self.block_next = False
                 entered.set()
                 proceed.wait(2.0)  # hold the tick mid-write
-            super().write(addr, val)
+            return super().write(addr, val)
 
     ec = BlockingEC()
     b = LegionGoSFanBackend(root=str(tmp_path), ec=ec, temp_fn=lambda: 70.0)
@@ -163,6 +164,40 @@ def test_release_overrides_an_in_flight_tick_write(tmp_path):
     tick.join(2.0)
     releaser.join(2.0)
     assert _override(ec) == 0, "a stale tick write survived the release"
+
+
+def test_stop_off_loop_marshals_cancel_via_call_soon_threadsafe(tmp_path, fast_loop):
+    # set_auto runs in a worker thread; Task.cancel() from off-loop must be marshalled
+    # onto the loop (call_soon_threadsafe), never called directly (loop corruption).
+    ec = FakeEC()
+    b = _gos(tmp_path, ec, {"v": 70.0})
+
+    async def _run():
+        b.apply_curve_all(CURVE)
+        assert b._task is not None
+        loop = asyncio.get_running_loop()
+        calls = []
+        orig = loop.call_soon_threadsafe
+        loop.call_soon_threadsafe = lambda cb, *a: (calls.append(cb), orig(cb, *a))[1]
+        await asyncio.to_thread(b.stop)
+        await asyncio.sleep(0.03)
+        assert calls, "off-loop stop must use call_soon_threadsafe"
+
+    asyncio.run(_run())
+
+
+def test_stop_on_loop_cancels_directly(tmp_path, fast_loop):
+    ec = FakeEC()
+    b = _gos(tmp_path, ec, {"v": 70.0})
+
+    async def _run():
+        b.apply_curve_all(CURVE)
+        task = b._task
+        b.stop()  # on the loop thread
+        await asyncio.sleep(0.02)
+        assert task.cancelled() or task.done()
+
+    asyncio.run(_run())
 
 
 def test_set_auto_stops_the_loop_and_releases(tmp_path, fast_loop):

@@ -75,6 +75,16 @@ export function toggle(set: string[], id: string): string[] {
   return set.includes(id) ? set.filter((x) => x !== id) : [...set, id];
 }
 
+/** Idempotent add (never removes), as opposed to toggle. */
+export function ensure(set: string[], id: string): string[] {
+  return set.includes(id) ? set : [...set, id];
+}
+
+/** Keep the pinned id last even after new tabs append to a saved order. */
+export function pinnedLast(ids: string[], pinned: string): string[] {
+  return ids.includes(pinned) ? [...ids.filter((x) => x !== pinned), pinned] : ids;
+}
+
 /** Whether a fixed sub-item within a block is hidden by the user's prefs. */
 export function subitemHidden(
   subitems: Record<string, string[]>,
@@ -84,7 +94,7 @@ export function subitemHidden(
   return (subitems[group] ?? []).includes(id);
 }
 
-const strArray = (v: unknown): string[] =>
+export const strArray = (v: unknown): string[] =>
   Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
 
 const asPref = (v: unknown): ListPref => {

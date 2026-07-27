@@ -3,7 +3,9 @@ fan chip exposes the standard manual-PWM interface (pwmN + pwmN_enable) but no
 vendor curve-table. Synthetic sysfs; the asyncio loop isn't exercised (start() is
 a no-op without a running loop) — the seams are the immediate apply + release."""
 import os
+import re
 
+import fans.generic_pwm as generic_pwm
 from fans.generic_pwm import GenericPwmFanBackend
 from fans.control import NullFanBackend, select_fan_backend
 
@@ -34,6 +36,28 @@ CURVE = [(40, 0), (50, 30), (60, 60), (70, 95), (80, 135), (85, 175), (90, 215),
 
 def _backend(root, temp=70.0):
     return GenericPwmFanBackend(root=str(root), temp_fn=lambda: temp)
+
+
+def _install_strict_driver(monkeypatch):
+    """Model the hwmon contract of drivers like gpd_fan: a ``pwmN`` write is rejected
+    unless ``pwmN_enable`` currently reads manual (1). A plain temp file accepts any
+    write regardless of mode, so without this a spec-compliant enable-first order and a
+    broken pwm-first one are indistinguishable."""
+    real_write = generic_pwm._write
+
+    def strict_write(path, value):
+        m = re.match(r"pwm(\d+)$", os.path.basename(path))
+        if m:  # duty write: only honored while the fan is already in manual mode
+            enable_path = os.path.join(os.path.dirname(path), f"pwm{m.group(1)}_enable")
+            try:
+                with open(enable_path) as f:
+                    if f.read().strip() != "1":
+                        return False  # driver returns -EPERM outside manual mode
+            except OSError:
+                return False
+        return real_write(path, value)
+
+    monkeypatch.setattr(generic_pwm, "_write", strict_write)
 
 
 def test_unsupported_without_pwm(tmp_path):
@@ -69,6 +93,32 @@ def test_apply_switches_to_manual_and_writes_curve_pwm(tmp_path):
     assert res["ok"] is True
     assert _r(d, "pwm1_enable") == "1"
     assert int(_r(d, "pwm1")) == 95  # curve pwm at 70C
+
+
+def test_engages_manual_before_pwm_on_strict_driver(tmp_path, monkeypatch):
+    # A driver that rejects a pwm write while in auto (gpd_fan) is only driven if the
+    # backend switches to manual first; a pwm-first order leaves it on firmware auto.
+    d = _mk_pwm_chip(str(tmp_path), name="gpdfan", enable="2")
+    _install_strict_driver(monkeypatch)
+    b = _backend(tmp_path, temp=70.0)
+    res = b.apply_curve_all(CURVE)
+    assert res["ok"] is True
+    assert _r(d, "pwm1_enable") == "1"       # manual actually engaged
+    assert int(_r(d, "pwm1")) == 95          # curve duty landed (only possible in manual)
+
+
+def test_strict_driver_with_oxp_auto_sentinel_drives_and_releases(tmp_path, monkeypatch):
+    # Same strict pwm gate but the auto sentinel is 0 (oxp-sensors): manual is still 1,
+    # so the fan drives, and release restores the captured auto value (0) — the fix is
+    # not tied to the enable==2 sentinel.
+    d = _mk_pwm_chip(str(tmp_path), name="oxpec", enable="0")
+    _install_strict_driver(monkeypatch)
+    b = _backend(tmp_path, temp=80.0)
+    assert b.apply_curve_all(CURVE)["ok"] is True
+    assert _r(d, "pwm1_enable") == "1"
+    assert int(_r(d, "pwm1")) == 135
+    b.set_auto(None)
+    assert _r(d, "pwm1_enable") == "0"       # back to the real auto value, not 2
 
 
 def test_hot_point_keeps_safety_floor(tmp_path):
@@ -126,6 +176,50 @@ def test_oxp_style_release_restores_captured_auto_value(tmp_path):
     assert _r(d, "pwm1_enable") == "1"  # driven manual
     b.set_auto(None)
     assert _r(d, "pwm1_enable") == "0"  # restored to the captured auto value
+
+
+def test_read_state_reflects_the_manual_mode_readback(tmp_path):
+    # enable = the ACTUAL manual-mode readback, not our write and not the tach: a fan
+    # in manual mode reads manual even if it isn't (yet) spinning.
+    d = _mk_pwm_chip(str(tmp_path))
+    _w(d, "fan1_input", "0")            # not spinning
+    b = _backend(tmp_path, temp=70.0)
+    b.apply_curve_all(CURVE)
+    assert b.read_state()["fans"][0]["enable"] == 1  # manual mode is active
+
+
+def test_read_state_firmware_when_enable_reverted_even_if_spinning(tmp_path):
+    # The firmware owns the mode (enable=2) and the fan happens to spin — a positive
+    # RPM must NOT confirm manual on its own; the enable readback rules.
+    d = _mk_pwm_chip(str(tmp_path))
+    _w(d, "fan1_input", "1800")         # spinning (firmware's doing)
+    b = _backend(tmp_path, temp=70.0)
+    b.apply_curve_all(CURVE)
+    _w(d, "pwm1_enable", "2")           # firmware reclaimed the mode
+    assert b.read_state()["fans"][0]["enable"] == 2
+
+
+def test_read_state_firmware_when_not_driving(tmp_path):
+    _mk_pwm_chip(str(tmp_path), enable="2")
+    assert _backend(tmp_path).read_state()["fans"][0]["enable"] == 2  # never applied
+
+
+def test_partial_write_leaves_failed_fan_in_firmware(tmp_path):
+    # fan2's pwm write fails after manual engaged → fan2 is rolled back to firmware auto
+    # (never left stuck manual@max); fan1 (fully written) reads manual. One failure ≠
+    # all firmware.
+    import os as _os
+    d = _mk_pwm_chip(str(tmp_path), fans=(1, 2))
+    _w(d, "fan1_input", "1800")
+    _w(d, "fan2_input", "1800")
+    _os.chmod(_os.path.join(d, "pwm2"), 0o444)  # fan2 pwm write fails
+    b = _backend(tmp_path, temp=80.0)
+    res = b.apply_curve_all(CURVE)
+    assert res["ok"] is False
+    st = {f["key"]: f["enable"] for f in b.read_state()["fans"]}
+    assert st["fan1"] == 1                    # fully driven → manual
+    assert st["fan2"] == 2                    # duty refused → rolled back to firmware
+    assert _r(d, "pwm2_enable") == "2"        # stays auto, never stuck manual@max
 
 
 def test_factory_selects_generic_pwm_last(tmp_path):

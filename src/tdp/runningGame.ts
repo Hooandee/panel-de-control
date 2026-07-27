@@ -4,6 +4,7 @@ import { GameOverview, stableGameKey } from "./gameIdentity";
 export interface RunningGame {
   /** Stable identity used as the per-game profile key everywhere (see gameIdentity.ts). */
   appid: string;
+  liveAppid: number;
   name: string;
 }
 
@@ -26,6 +27,7 @@ export function readRunningGame(): RunningGame | null {
     if (app && app.appid) {
       return {
         appid: stableGameKey(app),
+        liveAppid: Number(app.appid),
         // `||` (not `??`) so a blank display_name falls back to the appid — an empty
         // name would hide the per-game scope tab (gated on a truthy game name).
         name: app.display_name || String(app.appid),

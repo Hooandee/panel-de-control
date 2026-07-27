@@ -71,3 +71,17 @@ class TestIntelRapl:
     def test_unsupported_set_tdp_never_raises(self, tmp_path):
         res = IntelRaplBackend(_FALLBACK, root=str(tmp_path)).set_tdp(20, True)
         assert res.ok is False
+
+    def test_observe_reports_available_power_constraints(self, tmp_path):
+        _mk_rapl(
+            str(tmp_path),
+            _MMIO,
+            pl1_uw=25_000_000,
+            pl2_uw=31_000_000,
+        )
+        b = IntelRaplBackend(_FALLBACK, root=str(tmp_path))
+        rails = b.observe().surfaces["intel-rapl"]
+        assert rails["pl1"].applied_w == 25
+        assert rails["pl2"].applied_w == 31
+        assert b.guard_interval_s == 2.0
+        assert b.read_tolerance_w == 1

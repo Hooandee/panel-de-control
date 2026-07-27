@@ -1,12 +1,41 @@
 import { callable } from "@decky/api";
+import type { LaunchTools } from "./launch/catalog";
 
 // callable<[arg types], ReturnType>("exact_backend_method_name")
 // Names must match the Python `async def` on the Plugin class exactly.
 export const getVersion = callable<[], string>("get_version");
 
+// Detected host tools (lsfg/mangohud/gamemode/…) + distro for the launch-options
+// pills. LaunchTools is defined in the pure catalog module (no @decky import).
+export type { LaunchTools };
+export const getLaunchTools = callable<[], LaunchTools>("get_launch_tools");
+// Which PROTON_* vars the game's Proton build actually supports (read from its
+// script) → gate version-specific pills honestly. `found` false = the build wasn't
+// located (native/non-Steam/missing), and then `envs` is empty — no unconfirmed options.
+export interface ProtonCaps {
+  envs: string[];
+  found: boolean;
+}
+export const getProtonCaps = callable<[compatName: string], ProtonCaps>("get_proton_caps");
+// Pill usage counts ({pill_id: times applied}) → the editor surfaces the most-used.
+export const getLaunchUsage = callable<[], Record<string, number>>("get_launch_usage");
+export const bumpLaunchUsage = callable<[ids: string[]], boolean>("bump_launch_usage");
+// User-defined launch-variable library (env / game args). set_* returns the stored
+// (shape-coerced) list.
+import type { CustomVarDef } from "./launch/customVars";
+export type { CustomVarDef };
+export const getCustomLaunchVars = callable<[], CustomVarDef[]>("get_custom_launch_vars");
+export const setCustomLaunchVars = callable<[vars: CustomVarDef[]], CustomVarDef[]>("set_custom_launch_vars");
+
 // Durable mirror of the frontend's localStorage prefs (a null value removes a key).
 export const getUiPrefs = callable<[], Record<string, string>>("get_ui_prefs");
 export const setUiPrefs = callable<[Record<string, string | null>], boolean>("set_ui_prefs");
+
+// Durable module enable/disable state. `disabled` = the user-disabled set (generic
+// ids + power/learning folded in). set_ui_module returns the fresh set after applying.
+export const getUiModules = callable<[], { disabled: string[] }>("get_ui_modules");
+export const setUiModule = callable<[string, boolean], { disabled: string[] }>("set_ui_module");
+export const resetUiModules = callable<[], { disabled: string[] }>("reset_modules");
 
 export interface DeviceInfo {
   key: string;
@@ -21,6 +50,13 @@ export interface DeviceInfo {
   // When true, the shell shows the experimental marker for this recognised model.
   experimental: boolean;
   cooler_max: number | null;
+  // GPU generation ("rdna2"|"rdna3"|"rdna35"|"rdna4"|"intel"|"unknown") for the
+  // launch-options upscaler gating (FSR4 = rdna3/rdna4).
+  gpu_gen: string;
+  // When true, the charger headroom (tdp_max_charger above tdp_max) is only reachable
+  // with the charger connected — the firmware caps the sustained limit on battery. Hide
+  // the "raise on battery" toggle; the arc shows the locked charger segment instead.
+  charger_only_extra: boolean;
 }
 
 export const getDevice = callable<[], DeviceInfo>("get_device");
@@ -45,6 +81,32 @@ export interface Levels {
   pl1: number;
   pl2: number;
   pl3: number;
+}
+
+export type TdpOwnershipStatus =
+  | "in_sync"
+  | "constrained"
+  | "settling"
+  | "drift"
+  | "rejected"
+  | "unverifiable"
+  | "unsupported";
+
+export interface TdpRailReading {
+  applied: number | null;
+  min: number | null;
+  max: number | null;
+}
+
+export interface TdpOwnership {
+  status: TdpOwnershipStatus;
+  reason: string;
+  requested: Partial<Levels>;
+  target: Partial<Levels>;
+  applied: Partial<Record<keyof Levels, number | null>>;
+  surfaces: Record<string, Partial<Record<keyof Levels, TdpRailReading>>>;
+  conflict_persistent: boolean;
+  failures: number;
 }
 
 // Boost behaviour: how the SPPT/FPPT rails relate to the sustained PL1.
@@ -82,8 +144,12 @@ export interface TdpState {
   // hides the selector. firmware_mode is the active one ("custom" = our TDP slider).
   firmware_modes: string[];
   firmware_mode: string;
-  // True when get_tdp_state adopted an external (HHD/Steam) TDP change on this read.
-  external_change: boolean;
+  ownership: TdpOwnership;
+  // Master switch: when false we stop writing rails → Potencia drops to monitor-only.
+  tdp_control_enabled: boolean;
+  // One-time full-screen notices already shown (durable across reboot).
+  seen_autotdp_notice: boolean;
+  seen_tdp_conflict_takeover: boolean;
 }
 
 export interface TdpPresets {
@@ -152,6 +218,27 @@ export const setTdpFirmwareMode = callable<[mode: string], TdpState>("set_tdp_fi
 // the game's stored values). Returns the full new state.
 export const setTdpFollowGlobal = callable<[follow: boolean, appid: string | null], TdpState>("set_tdp_follow_global");
 
+// User power-preset library: quick-apply chips beyond the 3 built-ins, plus a full-screen
+// manager. Stores order/hidden/custom; built-in watts come from TdpState.presets.
+export interface PowerPresetBoost { mode: BoostMode; off2: number; off3: number }
+export interface PowerPresetCustom { watts: number; icon: string; name: string; boost: PowerPresetBoost | null }
+export interface PowerPresetState {
+  order: string[];
+  hidden: string[];
+  custom: Record<string, PowerPresetCustom>;
+}
+
+export const getPowerPresets = callable<[], PowerPresetState>("get_power_presets");
+export const createPowerPreset =
+  callable<[watts: number, icon: string, boost: PowerPresetBoost | null, name: string], PowerPresetState>("create_power_preset");
+export const updatePowerPreset =
+  callable<[cid: string, watts: number, icon: string, boost: PowerPresetBoost | null, name: string], PowerPresetState>("update_power_preset");
+export const deletePowerPreset = callable<[cid: string], PowerPresetState>("delete_power_preset");
+export const movePowerPreset = callable<[cid: string, direction: number], PowerPresetState>("move_power_preset");
+export const setPowerPresetHidden = callable<[cid: string, hidden: boolean], PowerPresetState>("set_power_preset_hidden");
+export const applyPowerPreset =
+  callable<[watts: number, scope: TdpScope, appid: string | null, boost: PowerPresetBoost | null], TdpApplyResult>("apply_power_preset");
+
 export interface PowerDraw {
   watts: number | null;
   gpu_busy: number | null;
@@ -163,6 +250,10 @@ export interface PowerDraw {
   // True only while the QAM-open responsive floor is REALLY raising PL1 above where
   // the auto loop would park it → the arc shows a menu-temporary value, so say so.
   ui_floor_engaged: boolean;
+  // Live charger state, polled every second so the UI can refresh the slider ceiling
+  // (battery vs charger) the instant the charger is plugged or unplugged.
+  on_ac: boolean;
+  ownership: TdpOwnership;
 }
 
 export const getPowerDraw = callable<[], PowerDraw>("get_power_draw");
@@ -170,6 +261,26 @@ export const setAutoTdp = callable<[enabled: boolean, scope: TdpScope, appid: st
 // Signals the QAM panel opened/closed so the auto loop can raise its floor (and bump
 // PL1 immediately) to keep the CPU-bound menu render fluid.
 export const setUiActive = callable<[enabled: boolean], boolean>("set_ui_active");
+
+// ---- TDP control / conflict take-over -------------------------------------
+// System-daemon conflicts live in the backend; SDTDP is detected on the frontend
+// via Decky's plugin list (see tdp/deckyPlugins.ts).
+export const getTdpConflict =
+  callable<[], {
+    hhd_present: boolean;
+    hhd_managing: boolean;
+    powerstation_active: boolean;
+  }>("get_tdp_conflict");
+// Hand HHD's TDP module over to us (reversible; saves its previous value).
+export const takeTdpControl =
+  callable<[], { ok: boolean; hhd_managing: boolean }>("take_tdp_control");
+// The TDP master switch (get/set_tdp_control_enabled) is driven via the module
+// editor now (power module → set_ui_module), so it has no dedicated frontend binding.
+// One-time-notice flags (durable, backend-persisted).
+export const setSeenAutotdpNotice =
+  callable<[seen: boolean], boolean>("set_seen_autotdp_notice");
+export const setSeenTdpConflictTakeover =
+  callable<[seen: boolean], boolean>("set_seen_tdp_conflict_takeover");
 
 export type FanScope = Scope;
 // "adaptive" = the learned curve (computed live from telemetry). Choosing it IS
@@ -183,6 +294,8 @@ export interface FanPresetDef {
 
 export interface FanCurveState {
   supported: boolean;
+  // Software-loop backends can wedge → the UI offers a reset; hardware-curve can't.
+  resettable: boolean;
   source: string | null;
   pwm_max: number;
   // Read-only firmware curve (MSI Claw): the device can't be controlled but its
@@ -205,6 +318,8 @@ export interface FanCurveState {
   // control card shows the opt-in toggle instead of the editor.
   experimental_available: boolean;
   experimental_enabled: boolean;
+  // Set only by reset_fan_control: whether the release to firmware actually landed.
+  reset_ok?: boolean;
   // Host OS name (PRETTY_NAME) for the honest "curve not available on this OS"
   // message; null when unreadable.
   os_name: string | null;
@@ -214,10 +329,14 @@ export interface FanCurveState {
   // True when the device exposes firmware modes at all (even in custom) — the fan
   // can't be curve-controlled here; a TDP mode governs it.
   has_firmware_modes: boolean;
+  // OneXPlayer Apex on SteamOS: the running kernel lacks the fan driver (it ships in
+  // a newer kernel), so control will start working once SteamOS updates. Drives an
+  // honest note; meanwhile the experimental EC path is offered.
+  kernel_pending?: boolean;
 }
 
-export const getTelemetryEnabled = callable<[], boolean>("get_telemetry_enabled");
-export const setTelemetryEnabled = callable<[enabled: boolean], boolean>("set_telemetry_enabled");
+// Learning on/off (get/set_telemetry_enabled) is driven via the module editor now
+// (learning module → set_ui_module), so it has no dedicated frontend binding.
 // Wipe all learned usage data (start from scratch). Doesn't touch manual profiles.
 export const resetTelemetry = callable<[], boolean>("reset_telemetry");
 
@@ -245,6 +364,7 @@ export const getFanCurveState = callable<[], FanCurveState>("get_fan_curve_state
 // Opt in/out of experimental EC fan control (Legion Go S). Returns the fresh state.
 export const setFanExperimental =
   callable<[enabled: boolean], FanCurveState>("set_fan_experimental");
+export const resetFanControl = callable<[], FanCurveState>("reset_fan_control");
 export const setFanPreset =
   callable<[preset: FanPreset, scope: FanScope, appid: string | null], FanCurveState>("set_fan_preset");
 export const setFanFollowGlobal =
@@ -494,16 +614,6 @@ export const getHdrState = callable<[], HdrState>("get_hdr_state");
 export const setHdr = callable<[patch: HdrPatch, scope: Scope, appid: string | null], HdrState>("set_hdr");
 
 // ---- Mandos (controller manager) ------------------------------------------
-export interface ControllerConflict {
-  hhd_present: boolean;
-  hhd_managing_power: boolean;
-  // True when HHD manages power AND our TDP backend can too → they fight.
-  conflict: boolean;
-}
-
-export const getControllerConflict =
-  callable<[], ControllerConflict>("get_controller_conflict");
-
 export type ControllerTarget = { gamepad: string } | { key: string };
 
 export interface RemapButton {
@@ -553,8 +663,12 @@ export interface ReportResult {
   saved_path?: string | null;
 }
 
+// `context` carries frontend-only diagnostics the backend can't see (e.g. the
+// running game's launch-options string + Proton caps for a "launch" report).
 export const submitReport =
-  callable<[categories: string[], text: string], ReportResult>("submit_report");
+  callable<[categories: string[], text: string, context: Record<string, unknown>], ReportResult>(
+    "submit_report",
+  );
 
 export const getControllerConfig = callable<[], ControllerConfig>("get_controller_config");
 export const setControllerButton =
@@ -576,6 +690,7 @@ export interface GameProfileRow {
   color?: { saturation: number; calibrated: boolean; hdr: boolean; follows_global: boolean };
   cpu?: { smt: boolean; boost: boolean; cores: number | null; follows_global: boolean };
   mandos?: { count: number; follows_global: boolean };
+  audio?: { follows_global: boolean };
 }
 export const listGameProfiles = callable<[], GameProfileRow[]>("list_game_profiles");
 export const resetGameProfiles =
@@ -590,3 +705,66 @@ export const setHudConfig = callable<[model: HudModel], HudState>("set_hud_confi
 export const setHudEnabled = callable<[enabled: boolean], HudState>("set_hud_enabled");
 export const resetHud = callable<[], HudState>("reset_hud");
 export const reloadHud = callable<[], HudState>("reload_hud");
+
+// ---- Sonido: audio EQ ----------------------------------------------------
+export interface AudioPresetDef {
+  id: string;
+  tuned?: boolean;
+}
+export interface AudioProfile {
+  name: string;
+  gains: number[];
+  bass: number;
+}
+export interface AudioState {
+  supported: boolean;
+  enabled: boolean;
+  active: boolean;
+  last_apply: {
+    ok: boolean;
+    reason?: string;
+    error?: string;
+  } | null;
+  route: "speaker" | "headphone";
+  appid: string | null;
+  follows_global: boolean;
+  has_game_profile: boolean;
+  preset: string;
+  gains: number[];
+  bass: number;
+  loudness: boolean;
+  balance: number;
+  test_playing: boolean;
+  test_sample: string | null;
+  test_samples: string[];
+  presets: AudioPresetDef[];
+  profiles: AudioProfile[];
+  device_name: string;
+  guard: boolean;
+  safe_limits: { bands: number[]; bass: number };
+}
+export const getAudioState = callable<[], AudioState>("get_audio_state");
+export const setSpeakerGuard = callable<[enabled: boolean], AudioState>("set_speaker_guard");
+export const setAudioEnabled = callable<[enabled: boolean], AudioState>("set_audio_enabled");
+export const applyAudioPreset =
+  callable<[preset: string, scope: Scope, appid: string | null], AudioState>("apply_audio_preset");
+export const setAudioBand =
+  callable<[index: number, gain: number, scope: Scope, appid: string | null], AudioState>("set_audio_band");
+export const setAudioBands =
+  callable<[gains: number[], scope: Scope, appid: string | null], AudioState>("set_audio_bands");
+export const setAudioFollowGlobal =
+  callable<[follow: boolean, appid: string | null], AudioState>("set_audio_follow_global");
+export const resetAudio =
+  callable<[scope: Scope, appid: string | null], AudioState>("reset_audio");
+export const setAudioCurve =
+  callable<[gains: number[], bass: number, scope: Scope, appid: string | null], AudioState>("set_audio_curve");
+export const setAudioLoudness =
+  callable<[on: boolean, scope: Scope, appid: string | null], AudioState>("set_audio_loudness");
+export const setAudioBalance =
+  callable<[value: number, scope: Scope, appid: string | null], AudioState>("set_audio_balance");
+export const setAudioTest =
+  callable<[playing: boolean, sample: string], AudioState>("set_audio_test");
+export const saveAudioProfile = callable<[name: string], AudioState>("save_audio_profile");
+export const applyAudioProfile =
+  callable<[name: string, scope: Scope, appid: string | null], AudioState>("apply_audio_profile");
+export const deleteAudioProfile = callable<[name: string], AudioState>("delete_audio_profile");

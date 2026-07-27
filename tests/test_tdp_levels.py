@@ -27,27 +27,50 @@ def test_firmware_attr_supports_levels(tmp_path):
     assert b.supports_levels is True
 
 
-def test_level_limits_reads_each_pl(tmp_path):
+def test_generic_level_limits_reads_each_pl_from_firmware(tmp_path):
     _mk(str(tmp_path))
-    b = FirmwareAttrBackend("asus-armoury", FALLBACK, root=str(tmp_path))
+    b = FirmwareAttrBackend("asus-armoury", FALLBACK, root=str(tmp_path), is_generic=True)
     ll = b.level_limits()
     assert ll["pl1"] == {"min": 7, "max": 35}
-    assert ll["pl2"] == {"min": 13, "max": 45}
-    assert ll["pl3"] == {"min": 19, "max": 55}
+    assert ll["pl2"] == {"min": 13, "max": 42}
+    assert ll["pl3"] == {"min": 19, "max": 49}
+
+
+def test_pl1_only_firmware_attr_degrades_to_single_rail(tmp_path):
+    root = str(tmp_path)
+    base = os.path.join(
+        root,
+        "sys/class/firmware-attributes/asus-armoury/attributes/ppt_pl1_spl",
+    )
+    os.makedirs(base, exist_ok=True)
+    for leaf, value in (("current_value", 15), ("min_value", 7), ("max_value", 35)):
+        with open(os.path.join(base, leaf), "w") as fh:
+            fh.write(str(value))
+    b = FirmwareAttrBackend("asus-armoury", FALLBACK, root=root)
+    assert b.supports_levels is False
+    assert b.reconciliation_levels({"pl1": 20, "pl2": 30, "pl3": 35}) == {
+        "pl1": 20,
+    }
+    result = b.set_tdp(20, ac=True)
+    assert result.ok is True
+    assert result.applied_w == 20
 
 
 def test_set_levels_writes_each_clamped_pl1_last(tmp_path):
+    # On a recognised device the write clamps each rail to its PROFILE-derived ceiling
+    # (the same one level_limits advertises: PL1 charger max 35, SPPT ×1.2 = 42), not the
+    # firmware's reported max (45/55 here). pl2 over→42, pl3 under min→19.
     root = str(tmp_path)
     base = _mk(root)
     b = FirmwareAttrBackend("asus-armoury", FALLBACK, root=root)
-    res = b.set_levels(30, 99, 1, ac=True)  # pl2 over max→45, pl3 under min→19
+    res = b.set_levels(30, 99, 1, ac=True)
     assert res.ok is True and res.applied_w == 30
 
     def rd(a):
         return open(os.path.join(base, a, "current_value")).read().strip()
 
     assert rd("ppt_pl1_spl") == "30"
-    assert rd("ppt_pl2_sppt") == "45"
+    assert rd("ppt_pl2_sppt") == "42"
     assert rd("ppt_pl3_fppt") == "19"
 
 

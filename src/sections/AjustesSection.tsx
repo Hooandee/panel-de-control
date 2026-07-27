@@ -7,10 +7,11 @@ import { openCustomizeModal } from "../components/CustomizeModal";
 import { openGameProfilesModal } from "../components/GameProfilesModal";
 import { openGlossaryModal } from "../components/GlossaryModal";
 import { openReportModal } from "../components/ReportModal";
-import { getTelemetryEnabled, setTelemetryEnabled, getUnlockBatteryMax, setUnlockBatteryMax, getCoolerBoost, setCoolerBoost, getQamTdpBoost, setQamTdpBoost, resetTelemetry, getVersion, getControllerConflict, getDevice, DeviceInfo, isUnvalidated } from "../api";
+import { getUnlockBatteryMax, setUnlockBatteryMax, getCoolerBoost, setCoolerBoost, getQamTdpBoost, setQamTdpBoost, resetTelemetry, getVersion, getDevice, getLearningStatus, DeviceInfo, isUnvalidated } from "../api";
+import { useModules, setModuleDisabled } from "../customize/modules";
+import { effectiveEnabled } from "../customize/moduleLogic";
 import { isValueToastEnabled, setValueToastEnabled } from "../system/valueToast";
 import { UpdatePanel } from "../updater/UpdatePanel";
-import { ControllerConflictCard } from "../components/ControllerConflictCard";
 import { theme } from "../theme";
 
 const AUTHOR = "Hooandee";
@@ -37,10 +38,18 @@ function useToggleSetting(
 /** Plugin settings: language + usage-learning opt-out + battery-max unlock. */
 export const AjustesSection: FC = () => {
   const { t, lang } = useI18n();
-  const [learn, onToggle] = useToggleSetting(getTelemetryEnabled, setTelemetryEnabled, true);
   const [battMax, onToggleBattMax] = useToggleSetting(getUnlockBatteryMax, setUnlockBatteryMax, false);
   const [coolerBoost, onToggleCoolerBoost] = useToggleSetting(getCoolerBoost, setCoolerBoost, false);
   const [qamBoost, onToggleQamBoost] = useToggleSetting(getQamTdpBoost, setQamTdpBoost, false);
+
+  // Master TDP switch via the power module (shared with the layout editor): off hands
+  // control back. Shown only on TDP-capable devices.
+  const disabled = useModules();
+  const tdpControlOn = effectiveEnabled("power", disabled);
+  const [tdpSupported, setTdpSupported] = useState<boolean | null>(null);
+  useEffect(() => {
+    getLearningStatus().then((s) => setTdpSupported(!!s.tdp_supported)).catch(() => setTdpSupported(false));
+  }, []);
   const [valueToast, setValueToast] = useState(isValueToastEnabled());
   const onToggleValueToast = (next: boolean) => {
     setValueToast(next);
@@ -59,11 +68,6 @@ export const AjustesSection: FC = () => {
   }, []);
   const unvalidated = !!device && isUnvalidated(device);
 
-  // Power-management conflict with HHD (both driving TDP/fans). Warn only.
-  const [conflict, setConflict] = useState(false);
-  useEffect(() => {
-    getControllerConflict().then((c) => setConflict(c.conflict)).catch(() => {});
-  }, []);
 
   // Destructive reset: a two-tap confirm avoids accidental wipes on the QAM.
   const [confirming, setConfirming] = useState(false);
@@ -92,8 +96,6 @@ export const AjustesSection: FC = () => {
     // children (not-yet-loaded toggles) collapse their slot — no double gaps.
     <PanelSectionRow>
       <div style={{ display: "flex", flexDirection: "column", gap: theme.space.section, marginTop: theme.space.section }}>
-        {conflict && <ControllerConflictCard />}
-
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: theme.space.sm }}>
           <span style={{ fontSize: theme.font.body, color: theme.color.textPrimary }}>
             {t("settings.language")}
@@ -101,23 +103,18 @@ export const AjustesSection: FC = () => {
           <LanguageToggle />
         </div>
 
-        {learn !== null && (
+        {tdpSupported && (
           <ToggleField
-            label={t("settings.telemetry")}
-            description={t("settings.telemetry.desc")}
-            checked={learn}
-            onChange={onToggle}
+            label={t("settings.tdpcontrol")}
+            description={t("settings.tdpcontrol.desc")}
+            checked={tdpControlOn}
+            onChange={(next) => { void setModuleDisabled("power", !next); }}
             bottomSeparator="none"
           />
         )}
 
-        {learn === true && (
-          <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
-            {t("settings.telemetry.learning")}
-          </div>
-        )}
-
-        {battMax !== null && (
+        {battMax !== null && device &&
+          device.tdp_max_charger > device.tdp_max && !device.charger_only_extra && (
           <ToggleField
             label={t("settings.battmax")}
             description={t("settings.battmax.desc")}

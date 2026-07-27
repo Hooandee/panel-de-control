@@ -114,6 +114,36 @@ def test_offload_call_dispatches_through_executor(tmp_path, monkeypatch):
     assert rec.count == 1  # went THROUGH the executor, not the inline branch
 
 
+def test_gpd_fan_recovery_dispatches_through_executor(tmp_path, monkeypatch):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    rec = _RecordingExecutor()
+    calls = []
+    p._device = types.SimpleNamespace(key="gpd_win_mini_2025")
+    p._fan_ctrl = types.SimpleNamespace(supported=False)
+    p._apply_executor = rec
+    p._recover_gpd_fan_sync = lambda: calls.append("recover")
+
+    asyncio.run(p._recover_gpd_fan())
+
+    assert calls == ["recover"]
+    assert rec.count == 1
+
+
+def test_non_gpd_device_never_dispatches_fan_recovery(tmp_path, monkeypatch):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    rec = _RecordingExecutor()
+    calls = []
+    p._device = types.SimpleNamespace(key="generic")
+    p._fan_ctrl = types.SimpleNamespace(supported=False)
+    p._apply_executor = rec
+    p._recover_gpd_fan_sync = lambda: calls.append("recover")
+
+    asyncio.run(p._recover_gpd_fan())
+
+    assert calls == []
+    assert rec.count == 0
+
+
 def test_offload_runs_off_the_loop_thread(tmp_path, monkeypatch):
     p, _ = _make_plugin(tmp_path, monkeypatch)
     ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
@@ -165,6 +195,93 @@ def test_set_tdp_watts_keeps_result_contract_when_offloaded(tmp_path, monkeypatc
     assert rec.count >= 1  # the TDP write went through the executor
 
 
+def test_unload_invalidates_a_queued_tdp_write_before_handoff(tmp_path, monkeypatch):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    events = []
+    blocker_started = threading.Event()
+    release_blocker = threading.Event()
+
+    def block_executor():
+        blocker_started.set()
+        release_blocker.wait(timeout=2)
+
+    def write_levels(pl1, pl2, pl3, ac):
+        from tdp.types import TdpResult
+        events.append("write")
+        return TdpResult(pl1, pl1, True, "")
+
+    p._tdp_backend.set_levels = write_levels
+    p._restore_fans_safe = lambda: None
+    p._restore_color_safe = lambda: None
+    p._restore_audio_safe = lambda: None
+    p._restore_hhd_tdp = lambda: events.append("handoff")
+
+    async def run():
+        p._apply_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        p._offload(block_executor)
+        while not blocker_started.is_set():
+            await asyncio.sleep(0)
+        p._schedule_tdp_apply("queued-before-unload")
+        unload = asyncio.create_task(p._unload())
+        await asyncio.sleep(0)
+        release_blocker.set()
+        await unload
+
+    asyncio.run(run())
+    assert events == ["handoff"]
+
+
+def test_unload_stops_new_tdp_writes_before_handoff(tmp_path, monkeypatch):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    events = []
+
+    def write_levels(pl1, pl2, pl3, ac):
+        from tdp.types import TdpResult
+        events.append("write")
+        return TdpResult(pl1, pl1, True, "")
+
+    def handoff():
+        events.append("handoff")
+        p._schedule_tdp_apply("late-lifecycle")
+
+    p._tdp_backend.set_levels = write_levels
+    p._restore_fans_safe = lambda: None
+    p._restore_color_safe = lambda: None
+    p._restore_audio_safe = lambda: None
+    p._restore_hhd_tdp = handoff
+
+    asyncio.run(p._unload())
+    assert events == ["handoff"]
+
+
+def test_uninstall_stops_new_tdp_writes_before_handoff(tmp_path, monkeypatch):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    events = []
+
+    def write_levels(pl1, pl2, pl3, ac):
+        from tdp.types import TdpResult
+        events.append("write")
+        return TdpResult(pl1, pl1, True, "")
+
+    def handoff():
+        events.append("handoff")
+        p._schedule_tdp_apply("late-lifecycle")
+
+    p._tdp_backend.set_levels = write_levels
+    p._restore_fans_safe = lambda: None
+    p._restore_color_safe = lambda: None
+    p._restore_audio_safe = lambda: None
+    p._restore_hhd_tdp = handoff
+    monkeypatch.setattr(
+        importlib.import_module("main").fan_expose,
+        "remove_conf",
+        lambda: None,
+    )
+
+    asyncio.run(p._uninstall())
+    assert events == ["handoff"]
+
+
 class _SlowBackend:
     """TDP backend whose set_levels lags — so a readback that races an offloaded
     apply is deterministic (reads the stale value if not awaited)."""
@@ -214,6 +331,56 @@ class _FakeFan:
 
     def restore_auto(self):
         self.write_threads.append(threading.get_ident())
+
+
+class _RecordingReadFan(_FakeFan):
+    def __init__(self):
+        super().__init__()
+        self.supported = False
+        self.read_threads = []
+
+    def read_state(self):
+        self.read_threads.append(threading.get_ident())
+        return {"supported": False, "source": "fake", "pwm_max": 255, "fans": []}
+
+
+class _EmptyFanReader:
+    def read(self):
+        return {"supported": False, "fans": [], "temps": []}
+
+
+class _RecordingCurveReader:
+    def __init__(self):
+        self.read_threads = []
+
+    def read_curve(self):
+        self.read_threads.append(threading.get_ident())
+        return None
+
+
+def test_fan_state_rpcs_read_hardware_off_the_loop_thread(tmp_path, monkeypatch):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    fan = _RecordingReadFan()
+    curve = _RecordingCurveReader()
+    p._fan_ctrl = fan
+    p._fan_reader = _EmptyFanReader()
+    p._ec_curve = curve
+    ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    p._apply_executor = ex
+
+    async def read_states():
+        loop_tid = threading.get_ident()
+        await p.get_fan_state()
+        await p.get_fan_curve_state()
+        await p.set_fan_preset("balanced", "global", None)
+        return loop_tid
+
+    loop_tid = asyncio.run(read_states())
+    ex.shutdown()
+    assert fan.read_threads
+    assert curve.read_threads
+    assert loop_tid not in fan.read_threads
+    assert loop_tid not in curve.read_threads
 
 
 def test_apply_rpcs_keep_subprocess_backends_off_the_loop_thread(tmp_path, monkeypatch):
@@ -301,3 +468,51 @@ def test_set_current_game_state_reflects_the_offloaded_apply(tmp_path, monkeypat
     ex.shutdown()
     # The returned state must reflect the completed apply, not the stale 999.
     assert st["applied_w"] == 25
+
+
+def test_tdp_guard_observes_and_writes_off_the_loop_thread(tmp_path, monkeypatch):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    observe_threads = []
+    write_threads = []
+
+    class _RecordingBackend(_SlowBackend):
+        supports_levels = False
+
+        def observe(self):
+            from tdp.types import RailReading, TdpObservation
+
+            observe_threads.append(threading.get_ident())
+            return TdpObservation(
+                readable=True,
+                surfaces={
+                    self.name: {
+                        "pl1": RailReading(self._applied, 5, 40),
+                    },
+                },
+            )
+
+        def set_levels(self, pl1, pl2, pl3, ac):
+            from tdp.types import TdpResult
+
+            write_threads.append(threading.get_ident())
+            self._applied = pl1
+            return TdpResult(pl1, pl1, True, "")
+
+    backend = _RecordingBackend()
+    backend._applied = 30
+    p._tdp_backend = backend
+    ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    p._apply_executor = ex
+
+    async def drive():
+        loop_tid = threading.get_ident()
+        await p._offload_call(lambda: p._tdp_guard_tick(now=10.0))
+        await p._offload_call(lambda: p._tdp_guard_tick(now=10.75))
+        return loop_tid
+
+    loop_tid = asyncio.run(drive())
+    ex.shutdown()
+    assert observe_threads
+    assert write_threads
+    assert loop_tid not in observe_threads
+    assert loop_tid not in write_threads

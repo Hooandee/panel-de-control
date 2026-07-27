@@ -53,6 +53,72 @@ def test_buttons_msi_claw_two_grips():
     ]
 
 
+def test_buttons_msi_claw_a8_two_grips():
+    caps = ["Gamepad:Button:South", "Gamepad:Button:LeftPaddle1",
+            "Gamepad:Button:RightPaddle1", "Gamepad:Button:Guide"]
+    assert ip.buttons_for("msi_claw_a8", caps) == [
+        ("RightPaddle1", "M1"),
+        ("LeftPaddle1", "M2"),
+    ]
+
+
+def test_buttons_legion_go_s_two_grips():
+    caps = [
+        "Gamepad:Button:South",
+        "Gamepad:Button:LeftPaddle1",
+        "Gamepad:Button:RightPaddle1",
+        "Gamepad:Button:QuickAccess",
+    ]
+    assert ip.buttons_for("legion_go_s", caps) == [
+        ("LeftPaddle1", "Y1"),
+        ("RightPaddle1", "Y2"),
+    ]
+
+
+def test_buttons_rog_xbox_ally_family_two_macro_buttons():
+    caps = [
+        "Gamepad:Button:South",
+        "Gamepad:Button:LeftPaddle2",
+        "Gamepad:Button:RightPaddle2",
+        "Gamepad:Button:QuickAccess",
+    ]
+    expected = [
+        ("LeftPaddle2", "M2"),
+        ("RightPaddle2", "M1"),
+    ]
+    assert ip.buttons_for("rog_xbox_ally", caps) == expected
+    assert ip.buttons_for("rog_xbox_ally_x", caps) == expected
+
+
+def test_buttons_rog_xbox_ally_family_supports_legacy_paddle_capabilities():
+    caps = [
+        "Gamepad:Button:South",
+        "Gamepad:Button:LeftPaddle1",
+        "Gamepad:Button:RightPaddle1",
+        "Gamepad:Button:QuickAccess",
+    ]
+    expected = [
+        ("LeftPaddle1", "M2"),
+        ("RightPaddle1", "M1"),
+    ]
+    assert ip.buttons_for("rog_xbox_ally", caps) == expected
+    assert ip.buttons_for("rog_xbox_ally_x", caps) == expected
+
+
+def test_buttons_rog_xbox_ally_prefers_one_capability_generation():
+    caps = [
+        "Gamepad:Button:LeftPaddle1",
+        "Gamepad:Button:RightPaddle1",
+        "Gamepad:Button:LeftPaddle2",
+        "Gamepad:Button:RightPaddle2",
+    ]
+    expected = [
+        ("LeftPaddle2", "M2"),
+        ("RightPaddle2", "M1"),
+    ]
+    assert ip.buttons_for("rog_xbox_ally_x", caps) == expected
+
+
 def test_buttons_defensively_intersect_live_capabilities():
     # A known device that (for whatever reason) doesn't report a capability →
     # that button is omitted, never invented.
@@ -73,7 +139,10 @@ def test_buttons_unknown_device_is_empty():
 def test_is_known_device():
     assert ip.is_known_device("legion_go_2") is True
     assert ip.is_known_device("msi_claw_8_ai_plus") is True
-    assert ip.is_known_device("legion_go_s") is False  # no known button map
+    assert ip.is_known_device("msi_claw_a8") is True
+    assert ip.is_known_device("legion_go_s") is True
+    assert ip.is_known_device("rog_xbox_ally") is True
+    assert ip.is_known_device("rog_xbox_ally_x") is True
     assert ip.is_known_device(None) is False
 
 

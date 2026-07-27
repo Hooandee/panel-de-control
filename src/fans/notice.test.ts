@@ -25,4 +25,10 @@ describe("fanCurveNotice", () => {
   it("uses the generic system label when the OS is unknown", () => {
     expect(fanCurveNotice(base, t)).toBe("fans.curve.unsupported|os=fans.curve.thisSystem");
   });
+
+  it("shows the kernel-pending note first (OneXPlayer Apex on SteamOS)", () => {
+    // Even with an OS name present, the kernel-pending note wins — it's the actionable one.
+    expect(fanCurveNotice({ ...base, kernel_pending: true, os_name: "SteamOS" }, t))
+      .toBe("fans.curve.kernel_pending");
+  });
 });

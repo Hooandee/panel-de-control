@@ -188,6 +188,7 @@ class GamescopeColorBackend:
         # can't see, so the FIRST apply always runs (clearing any leftover); it settles
         # to False once native is applied.
         self._applied_non_native = True
+        self._last_apply = None
 
     def _discover(self, pattern):
         for sock in sorted(glob.glob(pattern)):
@@ -236,6 +237,14 @@ class GamescopeColorBackend:
         i.e. a look costs a bit of extra power on this device. The UI notes it."""
         return self._force_composite
 
+    def diagnostics(self):
+        return {
+            "supported": self.supported,
+            "probe_detail": self._probe_detail,
+            "wayland_display": self._wayland,
+            "last_apply": dict(self._last_apply) if self._last_apply else None,
+        }
+
     def apply(self, state):
         """Write the LUT for `state` and load it via set_look. A native state loads
         the identity LUT to clear a prior look — but is skipped entirely when nothing
@@ -254,8 +263,10 @@ class GamescopeColorBackend:
             with open(self._lut_path, "w") as f:
                 f.write(build_cube(state))
             rc, _ = self._ctl("set_look", self._lut_path)
+            self._last_apply = {"operation": "set_look", "ok": rc == 0, "rc": rc}
             if rc == 0:
                 self._applied_non_native = not native
             return rc == 0
         except OSError:
+            self._last_apply = {"operation": "set_look", "ok": False, "rc": None}
             return False

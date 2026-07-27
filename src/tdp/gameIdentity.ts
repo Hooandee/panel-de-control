@@ -31,6 +31,8 @@ export function nonSteamName(key: string): string {
 
 // EAppType.Shortcut — the reliable non-Steam flag when the overview carries it.
 const APP_TYPE_SHORTCUT = 1073741824;
+// EAppType.Tool — Proton builds, runtimes, redistributables (not games).
+export const APP_TYPE_TOOL = 4;
 // Non-Steam shortcut appids have the top bit set (>= 2^31); real Steam appids
 // stay far below it. Used as a detector when app_type is absent at runtime.
 const NONSTEAM_APPID_MIN = 2147483648;
@@ -53,4 +55,9 @@ export function stableGameKey(overview: GameOverview): string {
     // No usable name → keep the raw appid (never worse than before).
   }
   return rawAppid;
+}
+
+export function gameInstanceKey(overview: GameOverview): string {
+  const rawAppid = String(overview.appid);
+  return isNonSteam(overview) ? `nsid:${rawAppid}` : rawAppid;
 }

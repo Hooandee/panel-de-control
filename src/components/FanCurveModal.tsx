@@ -5,6 +5,7 @@ import { useI18n } from "../i18n";
 import { useFanCurve } from "../fans/useFanCurve";
 import { useFanSuggestion } from "../fans/useFanSuggestion";
 import { FanCurveEditor } from "./FanCurveEditor";
+import { FocusRoot } from "./FocusRoot";
 import { theme } from "./../theme";
 
 /**
@@ -21,12 +22,12 @@ const FanCurveModalBody: FC<{ liveTemp: number | null }> = ({ liveTemp }) => {
   const { suggestion } = useFanSuggestion(control.game?.appid ?? null);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: theme.space.md, padding: theme.space.sm }}>
+    <FocusRoot style={{ display: "flex", flexDirection: "column", gap: theme.space.md, padding: theme.space.sm }}>
       <div style={{ fontSize: theme.font.value, color: theme.color.textPrimary }}>{t("fans.curve.title")}</div>
       <div style={{ maxWidth: 760, width: "100%", margin: "0 auto" }}>
         <FanCurveEditor control={control} liveTemp={liveTemp} suggestion={suggestion} expanded />
       </div>
-    </div>
+    </FocusRoot>
   );
 };
 

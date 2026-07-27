@@ -4,7 +4,7 @@ import { LuChevronDown, LuChevronRight } from "react-icons/lu";
 
 import { Levels, LevelBound, BoostMode } from "../api";
 import { useI18n } from "../i18n";
-import { offsetOf, totalFor, maxOffset } from "../tdp/logic";
+import { offsetOf } from "../tdp/logic";
 import { segmentGroupStyle, segmentItemStyle } from "./segmented";
 import { theme } from "../theme";
 
@@ -44,23 +44,20 @@ export const AdvancedBoost: FC<AdvancedBoostProps> = ({
 
   const railRow = (
     label: string,
-    off: number,
-    base: number,
+    value: number,
+    floor: number,
     bound: LevelBound | undefined,
-    onChange: (o: number) => void,
+    onChange: (v: number) => void,
   ) => {
-    // Guard against a 0-width range (rail already at the active ceiling): a
-    // min==max SliderField divides by zero and fires onChange(NaN), which then
-    // poisons the levels. Keep max >= 1 and the value finite + in range.
-    const max = Math.max(1, maxOffset(base, bound));
-    const val = Math.min(Math.max(0, Number.isFinite(off) ? off : 0), max);
+    // Absolute rail watts. Guard a 0-width range (floor at the ceiling): a min==max
+    // SliderField divides by zero and fires onChange(NaN), poisoning the levels.
+    const max = Math.max(floor + 1, bound?.max ?? floor + 1);
+    const val = Math.min(Math.max(floor, Number.isFinite(value) ? value : floor), max);
     return (
     <div style={{ marginTop: theme.space.sm }}>
       <div style={{ display: "flex", justifyContent: "space-between", fontSize: theme.font.caption }}>
         <span>{label}</span>
-        <span style={{ color: theme.color.textMuted }}>
-          +{val} W → {totalFor(base, val, bound)} W
-        </span>
+        <span style={{ color: theme.color.textMuted }}>{val} W</span>
       </div>
       {/* Steam's SliderField has a fixed intrinsic width (~panel width) + a
           Field margin:-16px that bleeds. A uniform scale(0.86) toward the centre
@@ -70,7 +67,7 @@ export const AdvancedBoost: FC<AdvancedBoostProps> = ({
         <div style={{ transform: "scale(0.86)" }}>
           <SliderField
             value={val}
-            min={0}
+            min={floor}
             max={max}
             step={1}
             onChange={onChange}
@@ -123,8 +120,8 @@ export const AdvancedBoost: FC<AdvancedBoostProps> = ({
 
           {mode === "custom" && (
             <>
-              {bounds.pl2 && railRow(t("tdp.level.slow"), off2, levels.pl1, bounds.pl2, (o2) => onSetLevels(o2, off3))}
-              {bounds.pl3 && railRow(t("tdp.level.fast"), off3, levels.pl2, bounds.pl3, (o3) => onSetLevels(off2, o3))}
+              {bounds.pl2 && railRow(t("tdp.level.slow"), levels.pl2, levels.pl1, bounds.pl2, (v) => onSetLevels(Math.max(0, v - levels.pl1), off3))}
+              {bounds.pl3 && railRow(t("tdp.level.fast"), levels.pl3, levels.pl2, bounds.pl3, (v) => onSetLevels(off2, Math.max(0, v - levels.pl2)))}
             </>
           )}
         </>

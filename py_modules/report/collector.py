@@ -258,6 +258,32 @@ def _snap_platform_profile(root: str) -> dict:
     return out
 
 
+_LEGACY_PPT = ("ppt_pl1_spl", "ppt_pl2_sppt", "ppt_fppt")
+
+
+def _snap_asus_ppt(root: str) -> dict:
+    """Both ASUS PL1 interfaces WITH their live values: asus-armoury (firmware-attributes,
+    current/min/max triplet) and the legacy asus-nb-wmi (direct value files). Values, not
+    just names — a triager needs to see a bogus firmware ceiling (e.g. 150) and whether
+    the second interface exists and what it holds vs the first."""
+    out: dict = {"asus_armoury": {}, "asus_nb_wmi": {}}
+    fw = os.path.join(root, "sys/class/firmware-attributes/asus-armoury/attributes")
+    for a in ("ppt_pl1_spl", "ppt_pl2_sppt", "ppt_pl3_fppt"):
+        d = os.path.join(fw, a)
+        if os.path.isdir(d):
+            out["asus_armoury"][a] = {
+                "current": read_str(os.path.join(d, "current_value")),
+                "min": read_str(os.path.join(d, "min_value")),
+                "max": read_str(os.path.join(d, "max_value")),
+            }
+    legacy = os.path.join(root, "sys/devices/platform/asus-nb-wmi")
+    for a in _LEGACY_PPT:
+        v = read_str(os.path.join(legacy, a))
+        if v is not None:
+            out["asus_nb_wmi"][a] = v
+    return out
+
+
 def _snap_acpi(root: str) -> dict:
     path = os.path.join(root, "proc/acpi/call")
     try:
@@ -285,6 +311,81 @@ def _snap_modules(root: str) -> list[str]:
     return sorted(names)
 
 
+_DMI_FIELDS = ("sys_vendor", "board_vendor", "board_name",
+               "product_name", "product_version", "product_family")
+_LED_NODES = ("max_brightness", "multi_index", "multi_intensity", "brightness")
+_EC_IO = "sys/kernel/debug/ec/ec0/io"
+_EC_DUMP_BYTES = 256
+
+
+def _snap_dmi(root: str) -> dict:
+    """DMI identity (no serials — those fields aren't read). Tells detection apart
+    on models where product_name and board_name differ."""
+    d = os.path.join(root, "sys/class/dmi/id")
+    out: dict = {}
+    for k in _DMI_FIELDS:
+        v = read_str(os.path.join(d, k))
+        if v is not None:
+            out[k] = v
+    return out
+
+
+def _snap_leds(root: str) -> list[dict]:
+    """LED class nodes, with the multicolor channel map — the surface an RGB feature
+    (the Colores sibling plugin) needs to drive per-device lighting."""
+    out: list[dict] = []
+    for d in sorted(_glob(root, "sys/class/leds/*"))[:_SNAP_MAX_CHIPS]:
+        try:
+            entry = {"name": os.path.basename(d)}
+            for n in _LED_NODES:
+                v = read_str(os.path.join(d, n))
+                if v is not None:
+                    entry[n] = v
+            out.append(entry)
+        except Exception:  # noqa: BLE001
+            continue
+    return out
+
+
+def _module_available(root: str, rel: str, subpath: str) -> bool:
+    base = os.path.join(root, "lib/modules", rel, "kernel", subpath)
+    return any(os.path.exists(base + ext) for ext in (".ko", ".ko.xz", ".ko.zst", ".ko.gz"))
+
+
+def _snap_ec(root: str) -> dict:
+    """EC-access surface: whether ec_sys debugfs is present and write-capable, whether
+    the ec_sys / oxpec modules exist in the kernel tree, and a read-only 256-byte EC
+    dump when the node is readable. Decides the raw-EC fan path on models without an
+    hwmon fan node (OneXPlayer Apex on SteamOS)."""
+    out: dict = {"debugfs_present": False, "ec_sys_loaded": False,
+                 "ec_sys_write_support": None, "ec_sys_module_available": False,
+                 "oxpec_module_available": False, "dump": None}
+    io = os.path.join(root, _EC_IO)
+    try:
+        out["debugfs_present"] = os.path.exists(io)
+    except Exception:  # noqa: BLE001
+        pass
+    out["ec_sys_loaded"] = os.path.exists(os.path.join(root, "sys/module/ec_sys"))
+    ws = read_str(os.path.join(root, "sys/module/ec_sys/parameters/write_support"))
+    if ws is not None:
+        out["ec_sys_write_support"] = ws
+    rel = (read_str(os.path.join(root, "proc/sys/kernel/osrelease")) or "").strip()
+    if rel:
+        out["ec_sys_module_available"] = _module_available(root, rel, "drivers/acpi/ec_sys")
+        out["oxpec_module_available"] = (
+            _module_available(root, rel, "drivers/platform/x86/oxpec")
+            or _module_available(root, rel, "drivers/hwmon/oxp-sensors"))
+    if out["debugfs_present"]:
+        try:
+            with open(io, "rb") as f:
+                data = f.read(_EC_DUMP_BYTES)
+            if data:
+                out["dump"] = data.hex()
+        except OSError:
+            pass
+    return out
+
+
 def _within(obj, cap: int) -> bool:
     try:
         return len(json.dumps(obj, default=str)) <= cap
@@ -304,7 +405,9 @@ def sysfs_snapshot(
     bounded-depth globs, NEVER a recursive walk of /sys. Never raises: any missing
     or unreadable path records an absent/empty marker."""
     snap: dict = {"hwmon": [], "firmware_attributes": {}, "power_supply": {},
-                  "platform_profile": {"acpi": {}, "class": {}}, "acpi": {}, "modules": []}
+                  "platform_profile": {"acpi": {}, "class": {}}, "acpi": {}, "modules": [],
+                  "asus_ppt": {"asus_armoury": {}, "asus_nb_wmi": {}},
+                  "dmi": {}, "leds": [], "ec": {}}
     try:
         snap["hwmon"] = _snap_hwmon(root)
     except Exception:  # noqa: BLE001
@@ -324,6 +427,10 @@ def sysfs_snapshot(
     except Exception:  # noqa: BLE001
         pass
     try:
+        snap["asus_ppt"] = _snap_asus_ppt(root)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
         snap["acpi"] = _snap_acpi(root)
     except Exception:  # noqa: BLE001
         pass
@@ -331,15 +438,37 @@ def sysfs_snapshot(
         snap["modules"] = _snap_modules(root)
     except Exception:  # noqa: BLE001
         pass
+    try:
+        snap["dmi"] = _snap_dmi(root)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        snap["leds"] = _snap_leds(root)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        snap["ec"] = _snap_ec(root)
+    except Exception:  # noqa: BLE001
+        pass
     # Backstop the count caps: if the listing is still oversized, drop the heaviest
     # sections and flag it honestly rather than shipping an unbounded blob.
     if not _within(snap, cap):
         snap["truncated"] = True
-        for key in ("modules", "hwmon", "power_supply", "firmware_attributes"):
+        # Drop the EC dump first (it's the single largest field), then the heaviest
+        # listings, until the bundle fits.
+        if isinstance(snap.get("ec"), dict):
+            snap["ec"]["dump"] = None
+        for key in ("modules", "hwmon", "power_supply", "firmware_attributes", "leds"):
             if _within(snap, cap):
                 break
             snap[key] = [] if isinstance(snap[key], list) else {}
-    return redact_obj(snap, home=home, hostname=hostname)
+    # The EC dump is raw hardware register bytes as hex (no PII). Exempt it from the
+    # serial-run scrubber, which would otherwise shred a real 512-char hex string.
+    ec_dump = snap["ec"].pop("dump", None) if isinstance(snap.get("ec"), dict) else None
+    result = redact_obj(snap, home=home, hostname=hostname)
+    if isinstance(result.get("ec"), dict):
+        result["ec"]["dump"] = ec_dump
+    return result
 
 
 def capabilities_from(states: dict) -> dict:
@@ -352,6 +481,10 @@ def capabilities_from(states: dict) -> dict:
     gpu = states.get("gpu") or {}
     color = states.get("color") or {}
     ctl = states.get("controller") or {}
+    launch = states.get("launch") or {}
+    ltools = launch.get("tools") or {}
+    running = (launch.get("frontend") or {}).get("runningGame")
+    running = running if isinstance(running, dict) else {}
     return {
         "tdp_backend": tdp.get("backend"),
         "tdp_supported": bool(tdp.get("supported")),
@@ -368,6 +501,13 @@ def capabilities_from(states: dict) -> dict:
         "color_supported": bool(color.get("supported")),
         "controller_manager": ctl.get("manager"),
         "controller_kind": ctl.get("kind"),
+        # Launch options: tools detected + (running game) malformed string / Proton resolved.
+        "launch_lsfg": bool(ltools.get("lsfg")),
+        "launch_mangohud": bool(ltools.get("mangohud")),
+        "launch_distro": ltools.get("distro"),
+        "launch_running_compat": running.get("compatTool"),
+        "launch_running_proton_found": running.get("protonFound"),
+        "launch_running_malformed": running.get("malformed"),
     }
 
 

@@ -8,8 +8,11 @@ import {
   REPORT_CATEGORIES,
   ReportCategory,
   canSubmit,
+  displayReportContext,
   toggleCategory,
 } from "../report/logic";
+import { FocusRoot } from "./FocusRoot";
+import { launchReportContext } from "../launch/reportContext";
 
 type Phase = "form" | "sending" | "done" | "error";
 
@@ -22,6 +25,7 @@ const CategoryChip: FC<{ label: string; on: boolean; onClick: () => void }> = ({
   <Focusable
     onActivate={onClick}
     onClick={onClick}
+    noFocusRing
     style={{
       display: "flex",
       alignItems: "center",
@@ -29,7 +33,7 @@ const CategoryChip: FC<{ label: string; on: boolean; onClick: () => void }> = ({
       padding: `${theme.space.sm}px ${theme.space.md}px`,
       borderRadius: theme.radius.sm,
       boxShadow: `inset 0 0 0 1px ${on ? theme.color.accent : theme.color.hairline}`,
-      background: on ? "rgba(78,161,255,0.12)" : "transparent",
+      background: on ? `rgba(${theme.color.accentRgb},0.12)` : "transparent",
       fontSize: theme.font.body,
       color: theme.color.textPrimary,
       flex: "1 1 45%",
@@ -69,9 +73,19 @@ const ReportBody: FC<{ closeModal?: () => void }> = ({ closeModal }) => {
     getDevice().then(setDevice).catch(() => {});
   }, []);
 
-  const submit = () => {
+  const submit = async () => {
     setPhase("sending");
-    submitReport(selected, text)
+    // Collect category-specific signals that exist only in the frontend.
+    const launchContext = selected.includes("launch")
+      ? await launchReportContext().catch(() => ({}))
+      : {};
+    const steamDisplay =
+      typeof SteamClient === "undefined" ? undefined : SteamClient?.System?.Display;
+    const context = {
+      ...launchContext,
+      ...displayReportContext(selected, steamDisplay),
+    };
+    submitReport(selected, text, context)
       .then((r) => {
         setResult(r);
         setPhase(r.ok ? "done" : "error");
@@ -234,7 +248,9 @@ const ReportBody: FC<{ closeModal?: () => void }> = ({ closeModal }) => {
 
 const ReportModal: FC<{ closeModal?: () => void }> = ({ closeModal }) => (
   <ModalRoot closeModal={closeModal} bAllowFullSize>
-    <ReportBody closeModal={closeModal} />
+    <FocusRoot>
+      <ReportBody closeModal={closeModal} />
+    </FocusRoot>
   </ModalRoot>
 );
 

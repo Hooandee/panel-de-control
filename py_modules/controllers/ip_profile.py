@@ -42,8 +42,29 @@ DEVICE_BUTTONS = {
         ("LeftPaddle1", "Y1"), ("LeftPaddle2", "Y2"), ("RightPaddle1", "Y3"),
         ("LeftStickTouch", "M2"), ("RightPaddle2", "M3"),
     ],
+    "legion_go_s": [
+        ("LeftPaddle1", "Y1"), ("RightPaddle1", "Y2"),
+    ],
     "msi_claw_8_ai_plus": [
         ("RightPaddle1", "M1"), ("LeftPaddle1", "M2"),
+    ],
+    "msi_claw_a8": [
+        ("RightPaddle1", "M1"), ("LeftPaddle1", "M2"),
+    ],
+}
+
+# InputPlumber changed the normalized Xbox Ally paddle capabilities between shipped
+# versions. Pick the generation that best matches the live daemon; ties prefer the
+# current names. This keeps one physical M1/M2 pair in the UI instead of exposing
+# duplicate aliases when a transitional daemon advertises both generations.
+DEVICE_BUTTON_VARIANTS = {
+    "rog_xbox_ally": [
+        [("LeftPaddle2", "M2"), ("RightPaddle2", "M1")],
+        [("LeftPaddle1", "M2"), ("RightPaddle1", "M1")],
+    ],
+    "rog_xbox_ally_x": [
+        [("LeftPaddle2", "M2"), ("RightPaddle2", "M1")],
+        [("LeftPaddle1", "M2"), ("RightPaddle1", "M1")],
     ],
 }
 
@@ -83,17 +104,25 @@ def buttons_for(device_key, capabilities) -> list:
     and what to call them; it's intersected with the LIVE capability set so we only
     surface a button the daemon actually reports (defensive — never invent one). An
     unknown device (not in the table) yields an empty list."""
+    key = device_key or ""
     have = _capability_names(capabilities)
+    variants = DEVICE_BUTTON_VARIANTS.get(key)
+    entries = DEVICE_BUTTONS.get(key, [])
+    if variants:
+        entries = max(
+            variants,
+            key=lambda variant: sum(cap in have for cap, _label in variant),
+        )
     return [
         (cap, label)
-        for (cap, label) in DEVICE_BUTTONS.get(device_key or "", [])
+        for (cap, label) in entries
         if cap in have
     ]
 
 
 def is_known_device(device_key) -> bool:
     """Whether we have a known button map for this device."""
-    return device_key in DEVICE_BUTTONS
+    return device_key in DEVICE_BUTTONS or device_key in DEVICE_BUTTON_VARIANTS
 
 
 def sanitize_target(target: dict):

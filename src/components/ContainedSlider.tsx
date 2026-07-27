@@ -1,4 +1,4 @@
-import { FC } from "react";
+import { FC, ReactNode } from "react";
 import { SliderField } from "@decky/ui";
 
 interface Props {
@@ -7,6 +7,9 @@ interface Props {
   max: number;
   step?: number;
   showValue?: boolean;
+  /** Optional label rendered in SliderField's own compact label row (icon + text),
+   *  so callers don't add a separate heading that wastes vertical space. */
+  label?: ReactNode;
   /** Uniform shrink factor. Default 0.80; use a smaller value in tighter cards
    *  (e.g. the Pantalla cards) where 0.80 still bleeds past the right edge. */
   scale?: number;
@@ -19,10 +22,10 @@ interface Props {
  * uniform scale (keeps the knob round) inside an overflow:hidden box. This wraps
  * that containment so call sites don't re-hand-roll it.
  */
-export const ContainedSlider: FC<Props> = ({ value, min, max, step, showValue, scale = 0.8, onChange }) => (
+export const ContainedSlider: FC<Props> = ({ value, min, max, step, showValue, label, scale = 0.8, onChange }) => (
   <div style={{ overflow: "hidden", width: "100%" }}>
     <div style={{ transform: `scale(${scale})`, transformOrigin: "center" }}>
-      <SliderField value={value} min={min} max={max} step={step} showValue={showValue} onChange={onChange} />
+      <SliderField value={value} min={min} max={max} step={step} showValue={showValue} label={label} onChange={onChange} />
     </div>
   </div>
 );

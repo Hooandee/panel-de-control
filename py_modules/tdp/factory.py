@@ -1,3 +1,7 @@
+from device_quirks import (
+    is_gpd_win_mini_2025,
+    legion_go_s_83n6_rail_floors,
+)
 from tdp.alib import AlibBackend
 from tdp.backend import NullBackend, TDPBackend
 from tdp.firmware_attr import FirmwareAttrBackend
@@ -22,8 +26,14 @@ def _candidates(device, fallback, root, ryzenadj):
         return FirmwareAttrBackend("asus-armoury", fallback, root=root, is_generic=generic)
 
     def lenovo():
-        return FirmwareAttrBackend("lenovo-wmi-other", fallback, root=root,
-                                   profile_name="lenovo-wmi-gamezone", is_generic=generic)
+        return FirmwareAttrBackend(
+            "lenovo-wmi-other",
+            fallback,
+            root=root,
+            profile_name="lenovo-wmi-gamezone",
+            is_generic=generic,
+            rail_floors=legion_go_s_83n6_rail_floors(device, root),
+        )
 
     def msi():
         return FirmwareAttrBackend("msi-wmi-platform", fallback, root=root, is_generic=generic)
@@ -61,12 +71,35 @@ def select_backend(device, root="/", ryzenadj_resolve=None) -> TDPBackend:
     fallback = TdpLimits.from_profile(device)
 
     def ryzenadj():
-        if ryzenadj_resolve is not None:
-            return RyzenadjBackend(fallback, resolve=ryzenadj_resolve, write_max=device.cooler_max)
-        return RyzenadjBackend(fallback, write_max=device.cooler_max)
+        kwargs = {"resolve": ryzenadj_resolve} if ryzenadj_resolve is not None else {}
+        return RyzenadjBackend(
+            fallback,
+            write_max=device.cooler_max,
+            power_only_retry=is_gpd_win_mini_2025(device, root),
+            **kwargs,
+        )
 
+    trace = []
     for make in _candidates(device, fallback, root, ryzenadj):
-        backend = make()
+        candidate = make.__name__
+        try:
+            backend = make()
+        except Exception as exc:  # noqa: BLE001
+            trace.append({
+                "candidate": candidate,
+                "backend": None,
+                "supported": False,
+                "error": type(exc).__name__,
+            })
+            continue
+        trace.append({
+            "candidate": candidate,
+            "backend": backend.name,
+            "supported": bool(backend.supported),
+        })
         if backend.supported:
+            backend.probe_trace = tuple(trace)
             return backend
-    return NullBackend(f"no supported TDP interface for {device.key}")
+    backend = NullBackend(f"no supported TDP interface for {device.key}")
+    backend.probe_trace = tuple(trace)
+    return backend

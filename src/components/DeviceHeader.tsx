@@ -15,7 +15,7 @@ export const DeviceHeader: FC<{ device: DeviceInfo }> = ({ device }) => {
         padding: `${theme.space.md}px ${theme.space.lg}px`,
         borderRadius: theme.radius.md,
         background:
-          "radial-gradient(120% 90% at 0% 0%, rgba(78,161,255,0.10), rgba(0,0,0,0) 60%), " +
+          `radial-gradient(120% 90% at 0% 0%, rgba(${theme.color.accentRgb},0.10), rgba(0,0,0,0) 60%), ` +
           theme.color.surfaceRaised,
         boxShadow: `inset 0 0 0 1px ${theme.color.hairline}`,
       }}

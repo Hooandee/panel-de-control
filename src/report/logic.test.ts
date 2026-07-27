@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { REPORT_CATEGORIES, canSubmit, toggleCategory } from "./logic";
+import {
+  REPORT_CATEGORIES,
+  canSubmit,
+  displayReportContext,
+  toggleCategory,
+} from "./logic";
 
 describe("toggleCategory", () => {
   it("adds when absent", () => {
@@ -32,6 +37,40 @@ describe("canSubmit", () => {
 describe("REPORT_CATEGORIES", () => {
   it("includes the expected ids", () => {
     expect(REPORT_CATEGORIES).toContain("tdp");
+    expect(REPORT_CATEGORIES).toContain("audio");
     expect(REPORT_CATEGORIES).toContain("other");
+  });
+});
+
+describe("displayReportContext", () => {
+  it("reports the brightness methods available to a display report", () => {
+    const display = {
+      RegisterForBrightnessChanges() {},
+      SetBrightness() {},
+    };
+
+    expect(displayReportContext(["display"], display)).toEqual({
+      display: {
+        brightness: {
+          subscribe_available: true,
+          set_available: true,
+        },
+      },
+    });
+  });
+
+  it("reports missing Steam brightness methods without claiming support", () => {
+    expect(displayReportContext(["system"], {})).toEqual({
+      display: {
+        brightness: {
+          subscribe_available: false,
+          set_available: false,
+        },
+      },
+    });
+  });
+
+  it("does not collect display context for unrelated reports", () => {
+    expect(displayReportContext(["fans"], {})).toEqual({});
   });
 });

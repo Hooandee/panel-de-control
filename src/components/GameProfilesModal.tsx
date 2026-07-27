@@ -8,6 +8,7 @@ import { Loading } from "./Loading";
 import { GameProfileRow, listGameProfiles, resetGameProfiles } from "../api";
 import { configuredSections, SectionId } from "../system/gameProfiles";
 import { isNonSteamKey, nonSteamName } from "../tdp/gameIdentity";
+import { FocusRoot } from "./FocusRoot";
 
 type T = (key: string, params?: Record<string, string | number>) => string;
 type SectionLine = { label: string; text: string; dim: boolean };
@@ -50,6 +51,9 @@ function sectionLine(section: SectionId, row: GameProfileRow, t: T): SectionLine
   }
   if (section === "mandos" && row.mandos) {
     return { label: t("gameProfiles.sec.mandos"), text: t("gameProfiles.buttons", { n: row.mandos.count }), dim: row.mandos.follows_global };
+  }
+  if (section === "audio" && row.audio) {
+    return { label: t("gameProfiles.sec.audio"), text: t("gameProfiles.audioCustom"), dim: row.audio.follows_global };
   }
   return null;
 }
@@ -141,7 +145,9 @@ const GameProfilesBody: FC = () => {
 
 const GameProfilesModal: FC<{ closeModal?: () => void }> = ({ closeModal }) => (
   <ModalRoot closeModal={closeModal} bAllowFullSize>
-    <GameProfilesBody />
+    <FocusRoot>
+      <GameProfilesBody />
+    </FocusRoot>
   </ModalRoot>
 );
 

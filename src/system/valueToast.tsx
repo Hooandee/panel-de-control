@@ -21,13 +21,14 @@ interface Channel {
   kind: ScalarKind;
   ctrl: ScalarControl;
   labelKey: string;
-  color: string;
+  // A thunk: theme.color.accent is a getter and this array is built once at load.
+  color: () => string;
   Icon: IconType;
 }
 
 const CHANNELS: Channel[] = [
-  { kind: "volume", ctrl: systemVolume, labelKey: "valueToast.volume", color: theme.color.accent, Icon: LuVolume2 },
-  { kind: "brightness", ctrl: displayBrightness, labelKey: "valueToast.brightness", color: theme.color.brightness, Icon: LuSun },
+  { kind: "volume", ctrl: systemVolume, labelKey: "valueToast.volume", color: () => theme.color.accent, Icon: LuVolume2 },
+  { kind: "brightness", ctrl: displayBrightness, labelKey: "valueToast.brightness", color: () => theme.color.brightness, Icon: LuSun },
 ];
 
 let enabled = false;
@@ -54,7 +55,7 @@ function emitToast(ch: Channel, fraction: number): void {
         {toPercent(fraction)}%
       </span>
     ),
-    icon: <Icon size={22} color={ch.color} />,
+    icon: <Icon size={22} color={ch.color()} />,
     duration: 1500,
     eType: SILENT_ETYPE,
     playSound: false,

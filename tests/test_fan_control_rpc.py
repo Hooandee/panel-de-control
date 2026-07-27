@@ -10,13 +10,14 @@ Two scenarios are tested:
 """
 import asyncio
 import importlib
+import json
 import os
 import sys
 import types
 
 import pytest
 
-from fans.control import AsusFanCurveBackend
+from fans.control import AsusFanCurveBackend, NullFanBackend
 
 
 # ---------------------------------------------------------------------------
@@ -103,6 +104,150 @@ def _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=None):
         monkeypatch.setattr(main.Plugin, "_init", patched_init)
 
     return main.Plugin
+
+
+def _recovered_gpd_fan():
+    return types.SimpleNamespace(supported=True, name="generic-pwm")
+
+
+_COMPLETE_GPD_OUTCOME = {
+    "eligible": True,
+    "abi_before": False,
+    "attempted": True,
+    "exit": 0,
+    "error": None,
+    "abi_after": True,
+}
+
+
+def test_recovery_reselects_existing_fan_factory_after_complete_abi(tmp_path, monkeypatch):
+    Plugin = _make_plugin_fixture(tmp_path, monkeypatch)
+    main = importlib.import_module("main")
+    recovered = _recovered_gpd_fan()
+    monkeypatch.setattr(
+        main.gpd_recovery,
+        "ensure_gpd_fan",
+        lambda device: dict(_COMPLETE_GPD_OUTCOME),
+    )
+    monkeypatch.setattr(
+        main.fan_control,
+        "select_fan_backend",
+        lambda device, **kwargs: recovered,
+    )
+    plugin = Plugin()
+    plugin._init()
+    plugin._fan_ctrl = NullFanBackend()
+
+    outcome = plugin._recover_gpd_fan_sync()
+
+    assert plugin._fan_ctrl is recovered
+    assert outcome["backend"] == "generic-pwm"
+    assert outcome["supported"] is True
+
+
+def test_supported_fan_backend_skips_gpd_recovery(tmp_path, monkeypatch):
+    Plugin = _make_plugin_fixture(tmp_path, monkeypatch)
+    main = importlib.import_module("main")
+    called = []
+    monkeypatch.setattr(
+        main.gpd_recovery,
+        "ensure_gpd_fan",
+        lambda device: called.append(device),
+    )
+    plugin = Plugin()
+    plugin._init()
+    plugin._fan_ctrl = _recovered_gpd_fan()
+
+    assert plugin._recover_gpd_fan_sync() is None
+    assert called == []
+
+
+def test_gpd_fan_recovery_is_attempted_only_once_per_plugin_life(tmp_path, monkeypatch):
+    Plugin = _make_plugin_fixture(tmp_path, monkeypatch)
+    main = importlib.import_module("main")
+    outcomes = []
+
+    def incomplete(device):
+        outcomes.append(device)
+        return {
+            **_COMPLETE_GPD_OUTCOME,
+            "exit": 1,
+            "abi_after": False,
+        }
+
+    monkeypatch.setattr(main.gpd_recovery, "ensure_gpd_fan", incomplete)
+    plugin = Plugin()
+    plugin._init()
+    plugin._fan_ctrl = NullFanBackend()
+
+    assert plugin._recover_gpd_fan_sync()["supported"] is False
+    assert plugin._recover_gpd_fan_sync() is None
+    assert len(outcomes) == 1
+
+
+def test_incomplete_gpd_abi_keeps_null_backend(tmp_path, monkeypatch):
+    Plugin = _make_plugin_fixture(tmp_path, monkeypatch)
+    main = importlib.import_module("main")
+    incomplete = {**_COMPLETE_GPD_OUTCOME, "exit": 1, "abi_after": False}
+    monkeypatch.setattr(
+        main.gpd_recovery,
+        "ensure_gpd_fan",
+        lambda device: dict(incomplete),
+    )
+    selected = []
+    monkeypatch.setattr(
+        main.fan_control,
+        "select_fan_backend",
+        lambda device, **kwargs: selected.append(device),
+    )
+    plugin = Plugin()
+    plugin._init()
+    plugin._fan_ctrl = NullFanBackend()
+    selected.clear()
+
+    outcome = plugin._recover_gpd_fan_sync()
+
+    assert isinstance(plugin._fan_ctrl, NullFanBackend)
+    assert selected == []
+    assert outcome["backend"] == "null"
+    assert outcome["supported"] is False
+
+
+def test_gpd_recovery_log_is_compact_and_structured(tmp_path, monkeypatch):
+    Plugin = _make_plugin_fixture(tmp_path, monkeypatch)
+    main = importlib.import_module("main")
+    logs = []
+    main.decky.logger = types.SimpleNamespace(
+        info=lambda *args: logs.append(("info", args)),
+        warning=lambda *args: logs.append(("warning", args)),
+        error=lambda *args: logs.append(("error", args)),
+    )
+    monkeypatch.setattr(
+        main.gpd_recovery,
+        "ensure_gpd_fan",
+        lambda device: dict(_COMPLETE_GPD_OUTCOME),
+    )
+    monkeypatch.setattr(
+        main.fan_control,
+        "select_fan_backend",
+        lambda device, **kwargs: _recovered_gpd_fan(),
+    )
+    plugin = Plugin()
+    plugin._init()
+    plugin._device = types.SimpleNamespace(key="gpd_win_mini_2025")
+    plugin._fan_ctrl = NullFanBackend()
+
+    asyncio.run(plugin._recover_gpd_fan())
+
+    level, (fmt, encoded) = logs[-1]
+    assert level == "info"
+    assert fmt == "GPD fan recovery %s"
+    assert "\n" not in encoded
+    assert json.loads(encoded)["backend"] == "generic-pwm"
+    assert all(
+        token not in encoded.casefold()
+        for token in ("stdout", "stderr", "/home/", "serial", "hostname")
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -365,3 +510,151 @@ class TestFirmwareCurveReadOnly:
         Plugin = self._fixture(tmp_path, monkeypatch, None)
         st = asyncio.run(Plugin().get_fan_curve_state())
         assert st["firmware_points"] is None
+
+
+class _ResetBackend:
+    """Records calls; restore_auto returns a configurable ok so the RPC's honest
+    reset_ok can be asserted both ways."""
+    supported = True
+    name = "legion-go-s-ec"
+
+    def __init__(self, release_ok=True, apply_ok=True):
+        self.release_ok = release_ok
+        self.apply_ok = apply_ok
+        self.calls = []
+
+    def read_state(self):
+        return {"supported": True, "source": self.name, "pwm_max": 255,
+                "fans": [{"key": "fan", "enable": 2, "rpm": 1900, "points": []}]}
+
+    def apply_curve_all(self, points):
+        self.calls.append("apply")
+        return {"ok": self.apply_ok, "detail": ""}
+
+    def set_auto(self, fan_key=None):
+        self.calls.append("set_auto")
+        return {"ok": self.release_ok, "detail": ""}
+
+    def restore_auto(self):
+        self.calls.append("restore_auto")
+        return {"ok": self.release_ok, "detail": ""}
+
+
+def test_disabling_experimental_keeps_control_when_release_fails(tmp_path, monkeypatch):
+    backend = _ResetBackend(release_ok=False)
+    backend.supported = False
+    backend.experimental = True
+    Plugin = _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=backend)
+    p = Plugin()
+    p._init()
+    p._init = lambda: None
+    p._settings["fan_experimental"] = True
+    replacements = []
+    main = sys.modules["main"]
+    monkeypatch.setattr(
+        main.fan_control,
+        "select_fan_backend",
+        lambda *a, **k: replacements.append(True),
+    )
+
+    st = asyncio.run(p.set_fan_experimental(False))
+
+    assert replacements == []
+    assert p._fan_ctrl is backend
+    assert st["experimental_enabled"] is True
+
+
+def test_reset_fan_control_reports_release_success(tmp_path, monkeypatch):
+    backend = _ResetBackend(release_ok=True)
+    Plugin = _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=backend)
+    p = Plugin()
+    asyncio.run(p.set_fan_preset("performance", "global", None))
+    backend.calls.clear()
+    st = asyncio.run(p.reset_fan_control())
+    assert "restore_auto" in backend.calls
+    assert st["supported"] is True
+    assert st["reset_ok"] is True
+
+
+def test_reset_fan_control_reports_release_failure(tmp_path, monkeypatch):
+    # The release did not land — the RPC must say so, never a fake success.
+    backend = _ResetBackend(release_ok=False)
+    Plugin = _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=backend)
+    p = Plugin()
+    st = asyncio.run(p.reset_fan_control())
+    assert st["reset_ok"] is False
+
+
+class _MalformedResetBackend(_ResetBackend):
+    """restore_auto returns a malformed value (no/absent 'ok'). The RPC must not
+    read that as success."""
+
+    def __init__(self, ret):
+        super().__init__()
+        self._ret = ret
+
+    def restore_auto(self):
+        self.calls.append("restore_auto")
+        return self._ret
+
+
+@pytest.mark.parametrize("ret", [{}, None, {"detail": "x"}])
+def test_reset_fan_control_malformed_release_is_not_success(tmp_path, monkeypatch, ret):
+    backend = _MalformedResetBackend(ret)
+    Plugin = _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=backend)
+    st = asyncio.run(Plugin().reset_fan_control())
+    assert st["reset_ok"] is False
+
+
+def test_state_resettable_true_for_software_loop_backend(tmp_path, monkeypatch):
+    # A software-loop backend (Deck / EC / generic PWM) can wedge → expose a reset.
+    backend = _ResetBackend()
+    backend.resettable = True
+    Plugin = _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=backend)
+    assert asyncio.run(Plugin().get_fan_curve_state())["resettable"] is True
+
+
+def test_state_resettable_false_for_hardware_curve_backend(tmp_path, monkeypatch):
+    # A hardware-curve backend (ASUS/MSI) or Null doesn't wedge → no reset offered.
+    Plugin = _make_plugin_fixture(tmp_path, monkeypatch)  # NullFanBackend
+    assert asyncio.run(Plugin().get_fan_curve_state())["resettable"] is False
+
+
+def test_reset_fan_control_reestablishes_the_stored_curve(tmp_path, monkeypatch):
+    # After releasing, the reset must re-apply the stored curve (awaited), not just
+    # release — otherwise a manual curve would silently drop to firmware auto.
+    backend = _ResetBackend(release_ok=True)
+    Plugin = _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=backend)
+    p = Plugin()
+    asyncio.run(p.set_fan_preset("performance", "global", None))
+    backend.calls.clear()
+    asyncio.run(p.reset_fan_control())
+    assert "restore_auto" in backend.calls
+    assert "apply" in backend.calls  # stored curve re-established
+
+
+def test_reset_ok_false_when_reapply_refuses(tmp_path, monkeypatch):
+    # Released fine, but the stored curve couldn't be re-established → reset_ok must
+    # be False, so "Control reiniciado" never shows on a still-wedged fan.
+    backend = _ResetBackend(release_ok=True, apply_ok=False)
+    Plugin = _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=backend)
+    p = Plugin()
+    asyncio.run(p.set_fan_preset("performance", "global", None))  # a curve profile
+    st = asyncio.run(p.reset_fan_control())
+    assert st["reset_ok"] is False
+
+
+class _MalformedReapplyBackend(_ResetBackend):
+    def apply_curve_all(self, points):
+        self.calls.append("apply")
+        return {}  # malformed: no "ok" key
+
+
+def test_reset_ok_false_when_reapply_malformed(tmp_path, monkeypatch):
+    # A malformed re-apply response (no "ok") must not ride an optimistic default.
+    backend = _MalformedReapplyBackend(release_ok=True)
+    Plugin = _make_plugin_fixture(tmp_path, monkeypatch, fan_ctrl_override=backend)
+    p = Plugin()
+    asyncio.run(p.set_fan_preset("performance", "global", None))
+    st = asyncio.run(p.reset_fan_control())
+    assert st["reset_ok"] is False

@@ -1,16 +1,25 @@
 # Third-Party Notices
 
-Panel de Control is licensed under the [BSD-3-Clause License](LICENSE).
+Panel de Control is licensed under the [GNU General Public License v3.0](LICENSE)
+(`GPL-3.0-only`).
 
-This file lists the third-party work the project builds on. Two categories:
+This file lists the third-party work the project builds on. Three categories:
 
-1. **Referenced projects** — we studied their approach or use documented, public
+1. **Derived code** — source adapted from another project. This is why Panel de
+   Control is GPL-3.0: it incorporates code from a GPL-3.0 project.
+2. **Referenced projects** — we studied their approach or use documented, public
    hardware interfaces (kernel `sysfs` paths, daemon APIs). Interfaces and facts are
    not copyrightable; attribution here is given as courtesy and for transparency. No
    source code from these projects is copied into this repository.
-2. **Bundled dependencies** — code that is redistributed inside the built plugin.
+3. **Bundled dependencies** — code that is redistributed inside the built plugin.
 
 If you believe attribution is missing or incorrect, please open an issue.
+
+## Derived code
+
+| Project | License | What we adapt |
+| --- | --- | --- |
+| [decky-steamgriddb](https://github.com/SteamGridDB/decky-steamgriddb) | GPL-3.0 | The library context-menu patch technique (`src/launch/gameContextMenu.tsx` is adapted from its `contextMenuPatch`: locating Steam's `LibraryContextMenu` and inserting a menu item). This derivation is why the whole plugin is GPL-3.0. |
 
 ## Referenced projects (approach / hardware interfaces)
 

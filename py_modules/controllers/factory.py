@@ -11,6 +11,7 @@ from controllers import detect
 from controllers import hhd as hhd_api
 from controllers import hhd_config
 from controllers import inputplumber as ip
+from controllers import ip_profile
 
 
 class ControllerBackend:
@@ -72,6 +73,12 @@ class ControllerBackend:
     def apply_effective(self, appid) -> bool:
         return False
 
+    def diagnostics(self) -> dict:
+        return {
+            "manager": self.manager,
+            "manager_version": self._version,
+        }
+
 
 class IpBackend(ControllerBackend):
     """InputPlumber (SteamOS): per-button remap."""
@@ -123,6 +130,23 @@ class IpBackend(ControllerBackend):
 
     def apply_effective(self, appid) -> bool:
         return ip.apply_effective(self._store, self._dbus, appid)
+
+    def diagnostics(self) -> dict:
+        dbus_diagnostics = getattr(self._dbus, "diagnostics", None)
+        dbus_state = dbus_diagnostics() if callable(dbus_diagnostics) else {}
+        capabilities = dbus_state.get("capabilities") or []
+        return {
+            **super().diagnostics(),
+            "device_key": self._device_key,
+            "device_known": ip_profile.is_known_device(self._device_key),
+            "mapped_buttons": [
+                {"source": source, "label": label}
+                for source, label in ip_profile.buttons_for(
+                    self._device_key, capabilities
+                )
+            ],
+            "dbus": dbus_state,
+        }
 
 
 class HhdBackend(ControllerBackend):

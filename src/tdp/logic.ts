@@ -69,6 +69,14 @@ export function dialToWatts(floor: number, ceil: number, dial: number): number {
   return Math.max(lo, Math.min(hi, Math.round(lo + d * (hi - lo))));
 }
 
+/** Default watts clamped into [min, activeMax]; NaN in any argument degrades safely. */
+export function resetWatts(defaultW: number, min: number, activeMax: number): number {
+  const lo = Number.isFinite(min) ? min : 0;
+  const hi = Number.isFinite(activeMax) ? Math.max(lo, activeMax) : lo;
+  if (!Number.isFinite(defaultW)) return Math.round(lo);
+  return Math.round(clamp(defaultW, lo, hi));
+}
+
 /**
  * Extra watts the hardware is drawing ABOVE your set TDP (the "HW boost" the
  * SPPT/FPPT rails deliver on top of PL1). `drawWatts == null` → null (the

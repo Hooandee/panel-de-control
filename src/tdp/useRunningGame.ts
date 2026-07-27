@@ -36,7 +36,11 @@ export function useRunningGame(): RunningGame | null {
       // intermittent with the burst). Keep the SAME reference when unchanged so
       // React bails out and no storm can form.
       setGame((prev) =>
-        prev?.appid === next?.appid && prev?.name === next?.name ? prev : next,
+        prev?.appid === next?.appid &&
+        prev?.liveAppid === next?.liveAppid &&
+        prev?.name === next?.name
+          ? prev
+          : next,
       );
     };
 

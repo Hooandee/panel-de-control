@@ -2,6 +2,8 @@ import dataclasses
 import os
 
 from device_profiles import DEVICE_TABLE, GENERIC
+from tdp import factory
+from tdp.backend import NullBackend
 from tdp.factory import select_backend
 
 
@@ -28,6 +30,14 @@ def _mk_hwmon(root):
         f.write("15000000")
 
 
+def _mk_dmi(root, vendor, product):
+    base = os.path.join(root, "sys/class/dmi/id")
+    os.makedirs(base, exist_ok=True)
+    for name, value in (("sys_vendor", vendor), ("product_name", product)):
+        with open(os.path.join(base, name), "w") as f:
+            f.write(value)
+
+
 _NO_RYZENADJ = lambda: None  # noqa: E731
 
 
@@ -36,6 +46,11 @@ def test_rog_uses_asus_armoury_firmware_attr(tmp_path):
     _mk_fw(root, "asus-armoury")
     b = select_backend(_p("rog_xbox_ally_x"), root=root, ryzenadj_resolve=_NO_RYZENADJ)
     assert b.supported and "asus-armoury" in b.name
+    assert b.probe_trace == ({
+        "candidate": "asus",
+        "backend": "firmware-attr:asus-armoury",
+        "supported": True,
+    },)
 
 
 def test_legion_uses_lenovo_firmware_attr(tmp_path):
@@ -43,6 +58,43 @@ def test_legion_uses_lenovo_firmware_attr(tmp_path):
     _mk_fw(root, "lenovo-wmi-other-0")
     b = select_backend(_p("legion_go_2"), root=root, ryzenadj_resolve=_NO_RYZENADJ)
     assert b.supported and "lenovo-wmi-other" in b.name
+
+
+def test_only_exact_legion_go_s_83n6_gets_measured_rail_floors(tmp_path):
+    exact_root = str(tmp_path / "exact")
+    _mk_fw(exact_root, "lenovo-wmi-other-0")
+    _mk_dmi(exact_root, "LENOVO", "83N6")
+    exact = select_backend(
+        _p("legion_go_s"),
+        root=exact_root,
+        ryzenadj_resolve=_NO_RYZENADJ,
+    )
+
+    nearby_root = str(tmp_path / "nearby")
+    _mk_fw(nearby_root, "lenovo-wmi-other-0")
+    _mk_dmi(nearby_root, "LENOVO", "83L3")
+    nearby = select_backend(
+        _p("legion_go_s"),
+        root=nearby_root,
+        ryzenadj_resolve=_NO_RYZENADJ,
+    )
+
+    assert getattr(exact, "_rail_floors", None) == {"pl2": 15, "pl3": 20}
+    assert getattr(nearby, "_rail_floors", None) == {}
+
+
+def test_generic_device_does_not_get_83n6_rail_floors_from_dmi_alone(tmp_path):
+    root = str(tmp_path)
+    _mk_fw(root, "lenovo-wmi-other-0")
+    _mk_dmi(root, "LENOVO", "83N6")
+
+    backend = select_backend(
+        GENERIC,
+        root=root,
+        ryzenadj_resolve=_NO_RYZENADJ,
+    )
+
+    assert getattr(backend, "_rail_floors", None) == {}
 
 
 def test_msi_uses_msi_firmware_attr(tmp_path):
@@ -62,11 +114,106 @@ def test_steam_deck_uses_hwmon(tmp_path):
 def test_falls_back_to_null_when_nothing_present(tmp_path):
     b = select_backend(_p("rog_ally_x"), root=str(tmp_path), ryzenadj_resolve=_NO_RYZENADJ)
     assert b.supported is False and b.name == "unsupported"
+    assert [item["candidate"] for item in b.probe_trace] == [
+        "asus",
+        "lenovo",
+        "msi",
+        "ryzenadj",
+        "alib",
+    ]
+    assert all(item["supported"] is False for item in b.probe_trace)
 
 
 def test_generic_amd_uses_ryzenadj_when_present(tmp_path):
     b = select_backend(GENERIC, root=str(tmp_path), ryzenadj_resolve=lambda: "/usr/bin/ryzenadj")
     assert b.supported and b.name == "ryzenadj"
+    assert [item["candidate"] for item in b.probe_trace] == [
+        "asus",
+        "lenovo",
+        "msi",
+        "ryzenadj",
+    ]
+
+
+def test_only_exact_gpd_enables_ryzenadj_power_only_retry(tmp_path):
+    root = str(tmp_path)
+    _mk_dmi(root, "GPD", "G1617-02")
+
+    exact = select_backend(
+        _p("gpd_win_mini_2025"),
+        root=root,
+        ryzenadj_resolve=lambda: "/usr/bin/ryzenadj",
+    )
+    other = select_backend(
+        _p("onexplayer_f1pro"),
+        root=root,
+        ryzenadj_resolve=lambda: "/usr/bin/ryzenadj",
+    )
+
+    assert exact._power_only_retry is True
+    assert other._power_only_retry is False
+
+
+def test_gpd_profile_with_different_dmi_keeps_default_ryzenadj(tmp_path):
+    root = str(tmp_path)
+    _mk_dmi(root, "GPD", "G1617-02-L")
+
+    backend = select_backend(
+        _p("gpd_win_mini_2025"),
+        root=root,
+        ryzenadj_resolve=lambda: "/usr/bin/ryzenadj",
+    )
+
+    assert backend._power_only_retry is False
+
+
+def test_backend_probe_failure_is_recorded_and_falls_through(tmp_path, monkeypatch):
+    calls = []
+
+    def broken():
+        calls.append("broken")
+        raise OSError("probe failed")
+
+    def working():
+        calls.append("working")
+
+        class Working(NullBackend):
+            supported = True
+            name = "working"
+
+        return Working("x")
+
+    def unreachable():
+        calls.append("unreachable")
+        raise AssertionError("lazy selection continued after a match")
+
+    monkeypatch.setattr(
+        factory,
+        "_candidates",
+        lambda *args: [broken, working, unreachable],
+    )
+
+    backend = select_backend(
+        GENERIC,
+        root=str(tmp_path),
+        ryzenadj_resolve=_NO_RYZENADJ,
+    )
+
+    assert backend.name == "working"
+    assert calls == ["broken", "working"]
+    assert backend.probe_trace == (
+        {
+            "candidate": "broken",
+            "backend": None,
+            "supported": False,
+            "error": "OSError",
+        },
+        {
+            "candidate": "working",
+            "backend": "working",
+            "supported": True,
+        },
+    )
 
 
 def _mk_rapl(root):

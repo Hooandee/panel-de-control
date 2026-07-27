@@ -3,8 +3,24 @@ re-assert). Synthetic sysfs; the asyncio loop itself isn't exercised — the
 testable seams are target_for_temp (pure), the immediate apply, and release."""
 import os
 
-from fans.software_loop import SteamDeckFanBackend
+from fans.software_loop import SteamDeckFanBackend, drive_confirmed
 from fans.control import select_fan_backend, NullFanBackend
+
+
+class TestDriveConfirmed:
+    def test_rpm_near_target_confirms_control(self):
+        assert drive_confirmed(3000, 2900, tol=500) is True
+
+    def test_rpm_far_below_target_is_not_control(self):
+        # syscall said ok, but the fan stayed at idle far below what we asked for
+        assert drive_confirmed(3000, 1889, tol=500) is False
+
+    def test_release_or_no_target_is_indeterminate(self):
+        assert drive_confirmed(None, 1889) is None
+        assert drive_confirmed(0, 1889) is None  # 0 = release to firmware
+
+    def test_missing_rpm_is_indeterminate(self):
+        assert drive_confirmed(3000, None) is None
 
 
 def _w(d, name, val):
@@ -75,6 +91,29 @@ class TestSteamDeckBackend:
         assert b.target_for_temp(40.0) >= 1
         assert int(_r(d, "fan1_target")) >= 1
 
+    def test_failed_target_write_is_not_reported_as_manual(self, tmp_path):
+        # A failed target write must report ok=False, and read_state must report
+        # firmware (enable=2), not manual.
+        import os as _os
+        d = _make_deck_chip(str(tmp_path))
+        target = _os.path.join(d, "fan1_target")
+        _os.chmod(target, 0o444)  # read-only → write raises → _write returns False
+        b = _backend(tmp_path, temp=85.0)
+        res = b.apply_curve_all(CURVE)
+        assert res["ok"] is False
+        assert b.read_state()["fans"][0]["enable"] == 2  # firmware, not a fake manual
+
+    def test_manual_confirmed_only_once_rpm_tracks_target(self, tmp_path):
+        # fan1_input mirrors fan1_target on the Deck (the fan obeys), so a settled tick
+        # confirms control → manual. Right after apply it is not yet confirmed.
+        d = _make_deck_chip(str(tmp_path))
+        b = _backend(tmp_path, temp=85.0)
+        b.apply_curve_all(CURVE)
+        assert b.read_state()["fans"][0]["enable"] == 2  # not confirmed yet
+        _w(d, "fan1_input", _r(d, "fan1_target"))  # the fan reached the target
+        b._apply_once()  # settled tick confirms against the tachometer
+        assert b.read_state()["fans"][0]["enable"] == 1
+
     def test_set_auto_releases_to_firmware_with_zero(self, tmp_path):
         d = _make_deck_chip(str(tmp_path))
         b = _backend(tmp_path)
@@ -144,6 +183,22 @@ class TestJupiterHandoff:
         assert "start" in svc.calls or "restart" in svc.calls
         assert svc.active is True  # SteamOS resumes control
 
+    def test_set_auto_reports_failure_when_jupiter_restart_fails(self, tmp_path):
+        # Releasing but failing to restart jupiter is NOT "back to firmware" — the
+        # Deck's fan controller is down. set_auto must report ok=False, not success.
+        _make_deck_chip(str(tmp_path))
+        svc = _FakeSystemctl(fail={"start"})
+        b = _backend_svc(tmp_path, temp=85.0, svc=svc)
+        b.apply_curve_all(CURVE)
+        assert b.set_auto(None)["ok"] is False
+
+    def test_set_auto_reports_ok_when_jupiter_restarts(self, tmp_path):
+        _make_deck_chip(str(tmp_path))
+        svc = _FakeSystemctl()
+        b = _backend_svc(tmp_path, temp=85.0, svc=svc)
+        b.apply_curve_all(CURVE)
+        assert b.set_auto(None)["ok"] is True
+
     def test_release_keeps_stopped_flag_when_restart_fails(self, tmp_path):
         # if the jupiter restart FAILS on release, jupiter is still
         # down — don't clear _jupiter_stopped (that would claim it's back up).
@@ -209,6 +264,53 @@ class TestJupiterHandoff:
         b.set_auto(None)
         assert svc.calls.count("stop") == 1
         assert svc.calls.count("start") == 1
+
+
+class TestOwnershipTransitionLocking:
+    """The whole ownership transition (take control + set points + first apply) is
+    serialised against a release, so a concurrent set_auto can't interleave and
+    leave a torn state (points set with the fan released, or the daemon restarted
+    while we drive)."""
+
+    def test_set_auto_waits_for_an_in_progress_apply(self, tmp_path):
+        import threading
+        import time
+
+        _make_deck_chip(str(tmp_path))
+        events: list[str] = []
+        in_stop = threading.Event()
+        release_stop = threading.Event()
+
+        def svc(verb):
+            if verb == "stop":
+                in_stop.set()
+                release_stop.wait(2)  # hold apply inside _before_drive
+            events.append(f"svc:{verb}")
+            return True
+
+        b = SteamDeckFanBackend(root=str(tmp_path), temp_fn=lambda: 85.0, jupiter_ctl=svc)
+        real_release = b._release
+
+        def traced_release():
+            events.append("release")
+            return real_release()
+
+        b._release = traced_release
+
+        ta = threading.Thread(target=lambda: b.apply_curve_all(CURVE))
+        ta.start()
+        assert in_stop.wait(2)  # apply is inside _before_drive, holding the io lock
+
+        done = threading.Event()
+        threading.Thread(target=lambda: (b.set_auto(None), done.set())).start()
+
+        time.sleep(0.2)  # give set_auto a chance to (wrongly) interleave
+        assert "release" not in events, "set_auto released while apply held ownership"
+
+        release_stop.set()
+        ta.join(2)
+        assert done.wait(2)
+        assert "release" in events  # set_auto proceeds only after apply completes
 
 
 class TestJupiterStartLimit:

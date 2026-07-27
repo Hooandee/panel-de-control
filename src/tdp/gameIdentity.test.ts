@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { normalizeGameName, isNonSteam, stableGameKey, isNonSteamKey, nonSteamName } from "./gameIdentity";
+import {
+  normalizeGameName,
+  isNonSteam,
+  stableGameKey,
+  gameInstanceKey,
+  isNonSteamKey,
+  nonSteamName,
+} from "./gameIdentity";
 
 describe("normalizeGameName", () => {
   it("lowercases, trims and collapses whitespace", () => {
@@ -51,6 +58,19 @@ describe("stableGameKey", () => {
       "3400000000",
     );
     expect(stableGameKey({ appid: "3400000000", app_type: 1073741824 })).toBe("3400000000");
+  });
+});
+
+describe("gameInstanceKey", () => {
+  it("keeps same-name non-Steam shortcuts distinct by live appid", () => {
+    const a = { appid: "3400000000", display_name: "Cemu AppImage", app_type: 1073741824 };
+    const b = { appid: "2900000001", display_name: "Cemu AppImage", app_type: 1073741824 };
+    expect(stableGameKey(a)).toBe(stableGameKey(b));
+    expect(gameInstanceKey(a)).not.toBe(gameInstanceKey(b));
+  });
+
+  it("uses the normal appid for a Steam game", () => {
+    expect(gameInstanceKey({ appid: 570, display_name: "Dota 2" })).toBe("570");
   });
 });
 

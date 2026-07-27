@@ -26,7 +26,6 @@ export const GpuClockCard: FC<{ scope: TdpScope; appid: string | null }> = ({ sc
   const summary = state.manual ? `${lo}–${hi} MHz` : t("gpu.clock.auto");
 
   return (
-    <div style={{ marginTop: theme.space.section }}>
     <Collapsible
       id="gpu-clock"
       icon={<LuMemoryStick size={16} />}
@@ -67,6 +66,5 @@ export const GpuClockCard: FC<{ scope: TdpScope; appid: string | null }> = ({ sc
         </div>
       )}
     </Collapsible>
-    </div>
   );
 };

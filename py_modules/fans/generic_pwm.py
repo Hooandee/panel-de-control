@@ -59,20 +59,38 @@ class GenericPwmFanBackend(SoftwareLoopBackend):
                 m, prior if prior not in (None, _ENABLE_MANUAL) else _ENABLE_AUTO)
         return True
 
-    def _apply_once(self) -> None:
+    def _apply_once_locked(self) -> bool:
+        """Write the interpolated pwm to every fan (caller holds `_io_lock`). Engage
+        manual mode (`pwmN_enable` = 1) and confirm it by readback BEFORE writing the
+        duty: `pwmN` only takes effect in manual mode and some drivers (gpd_fan) reject
+        a `pwmN` write with -EPERM while still in auto. If manual engages but the duty
+        write is refused, hand that fan back to firmware auto rather than leave it stuck
+        in manual at a stale/max duty. Returns True only when every fan landed (manual
+        readback AND duty write, never a write alone). No temp → release."""
         if self._points is None:
-            return
+            self._drive_ok = False
+            return False
         temp = self._temp_fn() if self._temp_fn else None
         if temp is None:
             self._release()  # no safe reading → hand back rather than hold a stale duty
-            return
+            self._drive_ok = False
+            return False
         pwm = _interp(self._points, temp)
         if temp >= self._points[-1][0]:
             pwm = max(pwm, _SAFE_MAX_TEMP_FLOOR)  # never idle at/above the hottest point
         pwm = max(0, min(255, pwm))
+        all_ok = True
         for m in self._fans:
-            _write(self._enable(m), str(_ENABLE_MANUAL))
-            _write(self._pwm(m), str(pwm))
+            manual = (_write(self._enable(m), str(_ENABLE_MANUAL))
+                      and _read_int(self._enable(m)) == _ENABLE_MANUAL)
+            pwm_ok = _write(self._pwm(m), str(pwm)) if manual else False
+            if not (manual and pwm_ok):
+                # Couldn't take manual control or the duty was refused → return this
+                # fan to its firmware auto mode (never leave it stuck manual@max).
+                _write(self._enable(m), str(self._orig_enable.get(m, _ENABLE_AUTO)))
+                all_ok = False
+        self._drive_ok = all_ok
+        return all_ok
 
     def _release(self) -> bool:
         ok = True
@@ -80,10 +98,19 @@ class GenericPwmFanBackend(SoftwareLoopBackend):
             ok = _write(self._enable(m), str(self._orig_enable.get(m, _ENABLE_AUTO))) and ok
         return ok
 
+    def _fan_enable(self, m: int) -> int:
+        """Manual(1) iff the hardware is ACTUALLY in manual mode (enable node read
+        back) — never our write alone (it can be refused), and never a tachometer
+        reading (a spin can be the firmware's, and 0 rpm can't tell spin-up/dead from
+        ignored). The readback is the actual control state."""
+        return _ENABLE_MANUAL if _read_int(self._enable(m)) == _ENABLE_MANUAL else _ENABLE_AUTO
+
     def read_state(self) -> dict:
         if not self.supported:
             return {"supported": False, "source": self.name, "pwm_max": 255, "fans": []}
-        fans = [{"key": f"fan{m}", "enable": _read_int(self._enable(m)),
-                 "rpm": _read_int(os.path.join(self._dir, f"fan{m}_input")),
-                 "points": []} for m in self._fans]
+        fans = []
+        for m in self._fans:
+            rpm = _read_int(os.path.join(self._dir, f"fan{m}_input"))
+            fans.append({"key": f"fan{m}", "enable": self._fan_enable(m),
+                         "rpm": rpm, "points": []})
         return {"supported": True, "source": self.name, "pwm_max": 255, "fans": fans}

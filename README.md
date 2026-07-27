@@ -44,8 +44,9 @@ El panel se organiza en pestañas. Cada una cubre una parte del equipo.
 ### Potencia
 
 El corazón del plugin. Un arco visual que se llena con el TDP a lo largo del rango real de tu
-máquina (no valores inventados: los lee del firmware). Ajustas los vatios con un deslizador, tienes
-presets rápidos, y puedes guardar un perfil global o uno propio por juego.
+máquina (no valores inventados: los lee del firmware). Ajustas los vatios con un deslizador y tienes
+presets rápidos. Puedes crear los tuyos, con nombre e icono, y ordenarlos u ocultarlos desde un menú
+a pantalla completa, además de guardar un perfil global o uno propio por juego.
 
 - **Auto-TDP.** Un modo automático que observa la carga de la GPU y sube o baja la potencia sola
   para darte los fotogramas que necesitas gastando lo mínimo. Aprende de cómo juegas y se
@@ -91,16 +92,44 @@ y un preset "Aspecto OLED" para los paneles que no son OLED. Un temporizador de 
 los cambios solo si algo se ve mal, para que no te quedes con una pantalla ilegible. En los paneles
 con HDR (Steam Deck OLED y Legion Go 2) hay además un interruptor de HDR.
 
+### Sonido
+
+Ecualizador del sistema con presets curados y una curva de mejora por máquina como punto de partida,
+tres controles simples (graves, voces, agudos) y un ecualizador avanzado de 10 bandas a pantalla
+completa. Curva independiente para altavoz y auriculares, y por juego o global. Incluye realce de
+graves, nivelado de volumen, balance izquierda/derecha, muestras de prueba para escuchar el efecto
+y una guarda que limita cuánto se pueden realzar graves y agudos para no forzar los altavoces (se
+puede desactivar).
+
 ### Mandos
 
 Remapeo de botones cooperando con el demonio que ya controla el mando en tu sistema (Handheld Daemon
 en Bazzite, InputPlumber en SteamOS), en lugar de pelearse con él. Incluye un aviso en Ajustes si
 detecta un conflicto de configuración. Esta parte está todavía en fase temprana.
 
+### Parámetros
+
+Gestiona las opciones de lanzamiento de cada juego sin pelearte con la sintaxis de Steam. La lista
+muestra tus juegos con su portada (Steam y no‑Steam, incluido el arte que tú les hayas puesto), ordenada
+por uso reciente, con buscador y otros criterios de orden. Cada opción es una fila con su explicación en
+claro y un interruptor: activas variables de Proton (FSR4, sincronización, HDR, escalado…) y envoltorios
+como MangoHud, y solo te ofrece las que tu versión de Proton soporta de verdad, comprobándolo en el
+propio juego. Respeta lo que ya tuvieras puesto (EmuDeck, launchers, tus ajustes a mano). Puedes definir
+tus propias variables reutilizables entre juegos, ocultar los que no usas (las herramientas como las
+versiones de Proton se ocultan solas) y saltar directo al juego que tengas abierto. También añade una
+entrada en el menú del juego en tu biblioteca.
+
 ### Ajustes
 
 Idioma (con banderas, no un desplegable), el interruptor de "aprender de mi uso" (la telemetría es
-100% local y se puede apagar), y un botón para borrar lo aprendido.
+100% local y se puede apagar), y un botón para borrar lo aprendido. En "Personalizar interfaz"
+reordenas y ocultas pestañas y bloques, activas o desactivas módulos enteros (desactivar apaga esa
+función en todo el panel; ocultar solo deja de mostrarla), creas tus propias pestañas (vistas
+personalizadas) con los bloques que quieras de cualquier categoría y las colocas en el orden que
+prefieras entre las demás, y eliges el color de acento de una paleta.
+
+Todo el panel se maneja al 100% con el mando: el elemento en el que está el cursor se marca con un
+borde de acento claro, así que no hace falta la pantalla táctil.
 
 ## Compatibilidad por equipo
 
@@ -125,6 +154,7 @@ Leyenda: **✅** comprobado en ese equipo · **⚠️** limitado o solo por defe
 | CPU: multihilo (SMT) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [⁸](#notas) |
 | CPU: núcleos activos | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Brillo y volumen | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Ecualizador de sonido | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ [¹⁷](#notas) |
 | Modo Descarga | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Monitor de temperaturas | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ [⁹](#notas) |
 | Monitor de RPM de ventilador | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹⁰](#notas) | ✅ [⁹](#notas) |
@@ -206,6 +236,9 @@ tenemos en mano, los reportes desde Ajustes son los que confirman lo que respond
     fase temprana. En Steam Deck no aparece; en Legion Go S y ROG Xbox Ally X la app indica que
     todavía no hay remapeo para ese mando. En Legion algunos botones traseros aún no se detectan bien.
 16. La Steam Deck no lleva iluminación RGB, así que esta tarjeta no aparece.
+17. El ecualizador usa el filter-chain de PipeWire (disponible en SteamOS y Bazzite). El realce de
+    graves y el nivelado de volumen necesitan el plugin CAPS del sistema; si no está instalado, el
+    ecualizador funciona igual pero sin esos dos extras.
 
 > Las celdas marcadas **❔** son las que aún no he confirmado en ese equipo concreto. Si tienes el
 > hardware delante y ves que algo va (o no va), dímelo y lo corrijo: la idea es que esta tabla
@@ -263,6 +296,9 @@ código lo cito aquí. La lista completa con licencias está en [THIRD_PARTY_NOT
   Referencia para el monitor y el control de ventiladores y para la reaplicación periódica.
 - **[Decky Loader](https://decky.xyz/)** y su plantilla de plugins. La base sobre la que corre todo
   esto.
+- **[decky-steamgriddb](https://github.com/SteamGridDB/decky-steamgriddb)** (GPL-3.0). De aquí adapté la
+  técnica para añadir la entrada de Parámetros al menú contextual de un juego en la biblioteca. Esa
+  adaptación es la razón de que el plugin sea GPL-3.0.
 - **La documentación del kernel de Linux** (firmware-attributes, powercap, asus-wmi, hwmon,
   power_supply). De donde salen las rutas de sysfs que leo y escribo.
 
@@ -278,6 +314,8 @@ No abras un issue público.
 
 ## Licencia
 
-[BSD-3-Clause](LICENSE) © Hooandee. Las atribuciones de terceros y los detalles de licencia (incluido
-ryzenadj, que se invoca como proceso externo y no se empaqueta) están en
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+[GPL-3.0](LICENSE) © Hooandee. Software libre para la comunidad: cualquiera puede usarlo, estudiarlo y
+modificarlo, y quien lo distribuya (con o sin cambios) debe hacerlo también bajo GPL con el código
+disponible. Las atribuciones de terceros y los detalles de licencia (incluido decky-steamgriddb, del
+que adapto el menú contextual, y ryzenadj, que se invoca como proceso externo y no se empaqueta) están
+en [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

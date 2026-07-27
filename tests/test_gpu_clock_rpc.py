@@ -110,6 +110,7 @@ def test_set_gpu_clock_auto_releases(tmp_path, monkeypatch):
 def test_gpu_clock_not_reapplied_when_auto(tmp_path, monkeypatch):
     # Not manual → _apply_gpu_clock leaves the GPU alone (don't fight other tools).
     p, gpu = _make_plugin(tmp_path, monkeypatch)
+    p._init()  # load settings so the module gate in _apply_gpu_clock can read them
     gpu._cur = (300, 2000)
     p._apply_gpu_clock()
     assert gpu.get() == (300, 2000) and gpu._auto is True

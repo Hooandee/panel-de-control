@@ -252,6 +252,38 @@ def test_backend_apply_writes_cube_and_calls_set_look(tmp_path):
     assert "LUT_3D_SIZE" in open(path).read()
 
 
+def test_backend_diagnostics_report_successful_set_look(tmp_path):
+    b, _ = _backend(tmp_path)
+
+    assert b.apply({**NATIVE, "saturation": 150}) is True
+
+    diagnostics = getattr(b, "diagnostics", lambda: None)()
+    assert diagnostics is not None
+    assert diagnostics["supported"] is True
+    assert diagnostics["wayland_display"] == "gamescope-0"
+    assert diagnostics["last_apply"] == {
+        "operation": "set_look",
+        "ok": True,
+        "rc": 0,
+    }
+    assert "version rc=0" in diagnostics["probe_detail"]
+
+
+def test_backend_diagnostics_report_failed_set_look(tmp_path):
+    b, runner = _backend(tmp_path)
+    runner.ok = False
+
+    assert b.apply({**NATIVE, "saturation": 150}) is False
+
+    diagnostics = getattr(b, "diagnostics", lambda: None)()
+    assert diagnostics is not None
+    assert diagnostics["last_apply"] == {
+        "operation": "set_look",
+        "ok": False,
+        "rc": 1,
+    }
+
+
 def _setlooks(runner):
     return [c for c in runner.calls if c[0][:2] == ["gamescopectl", "set_look"]]
 

@@ -4,6 +4,7 @@ import { ModalRoot, showModal, Focusable } from "@decky/ui";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { CATEGORIES, pick } from "../glossary/data";
+import { FocusRoot } from "./FocusRoot";
 
 // Full-screen glossary. Content lives in ../glossary/data (bulky bilingual
 // prose); this component is pure presentation. useI18n degrades gracefully
@@ -24,11 +25,14 @@ const GlossaryBody: FC = () => {
             {pick(cat, lang)}
           </div>
           {cat.terms.map((term) => (
-            // Each card is Focusable so the gamepad has something to move focus
-            // through — in Steam's Gamepad UI that focus movement is what
-            // scrolls a long modal (a body of plain divs can't be scrolled with
-            // a controller). Mirrors the Focusable rows in CustomizeModal.
-            <Focusable key={term.id} style={{ ...theme.card, padding: theme.space.md, display: "flex", flexDirection: "column", gap: theme.space.xs }}>
+            // onActivate makes each card a focus target so the d-pad scrolls the list;
+            // noFocusRing drops Steam's default ring, leaving only ours.
+            <Focusable
+              key={term.id}
+              onActivate={() => {}}
+              noFocusRing
+              style={{ ...theme.card, padding: theme.space.md, display: "flex", flexDirection: "column", gap: theme.space.xs }}
+            >
               <div style={{ fontSize: theme.font.body, fontWeight: 600, color: theme.color.accent }}>{term.term}</div>
               <div style={{ fontSize: theme.font.body, color: theme.color.textPrimary, lineHeight: 1.45 }}>{pick(term, lang)}</div>
             </Focusable>
@@ -41,7 +45,9 @@ const GlossaryBody: FC = () => {
 
 const GlossaryModal: FC<{ closeModal?: () => void }> = ({ closeModal }) => (
   <ModalRoot closeModal={closeModal} bAllowFullSize>
-    <GlossaryBody />
+    <FocusRoot>
+      <GlossaryBody />
+    </FocusRoot>
   </ModalRoot>
 );
 

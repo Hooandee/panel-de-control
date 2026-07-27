@@ -399,6 +399,17 @@ def select_firmware_curve_reader(device, root: str = "/"):
 # Factory
 # ---------------------------------------------------------------------------
 
+def experimental_ec_backends(temp_fn=None, root: str = "/") -> list:
+    """The opt-in raw-EC fan backends (devices with no hardware curve table and an
+    unofficial EC interface). Single source of truth for both the factory and the
+    "is the experimental toggle available on this device" probe. DMI-gated, so
+    constructing them is cheap and touches no EC."""
+    from fans.legion_ec import LegionGoSFanBackend
+    from fans.oxp_ec import OxpEcFanBackend
+    return [LegionGoSFanBackend(temp_fn=temp_fn, root=root),
+            OxpEcFanBackend(temp_fn=temp_fn, root=root)]
+
+
 def select_fan_backend(device, root: str = "/", temp_fn=None, ec=None, experimental=False):
     """Return the best available fan-control backend for this device.
 
@@ -431,13 +442,13 @@ def select_fan_backend(device, root: str = "/", temp_fn=None, ec=None, experimen
                     LegionGo2FanBackend(temp_fn=temp_fn, root=root)):
         if backend.supported:
             return backend
-    # Legion Go S EC control is opt-in (unofficial interface). When the toggle is
-    # off it falls through to the read-only monitor below.
+    # Raw-EC control on devices with no hardware curve table is opt-in (unofficial
+    # interface). When the toggle is off these fall through to the read-only monitor
+    # below. Each is DMI-gated and mutually exclusive, so order is irrelevant.
     if experimental:
-        from fans.legion_ec import LegionGoSFanBackend
-        gos = LegionGoSFanBackend(temp_fn=temp_fn, root=root)
-        if gos.supported:
-            return gos
+        for backend in experimental_ec_backends(temp_fn=temp_fn, root=root):
+            if backend.eligible:
+                return backend
     # Last resort for unrecognised hardware: the standard hwmon manual-PWM interface.
     from fans.generic_pwm import GenericPwmFanBackend
     generic = GenericPwmFanBackend(temp_fn=temp_fn, root=root)

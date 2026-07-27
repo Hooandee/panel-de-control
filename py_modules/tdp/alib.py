@@ -3,7 +3,7 @@ import subprocess
 
 from sysfs import read_str, write_str
 from tdp.backend import TDPBackend
-from tdp.types import TdpLimits, TdpResult
+from tdp.types import TdpLimits, TdpObservation, TdpResult
 
 # AMD power path via the ALIB ACPI method, invoked through the acpi_call kernel
 # module (/proc/acpi/call). For platforms with no firmware-attributes ppt_* chip.
@@ -72,6 +72,9 @@ class AlibBackend(TDPBackend):
     """Generic AMD TDP via the ALIB ACPI method through acpi_call. Never raises."""
 
     name = "acpi-alib"
+    readback = False
+    guard_interval_s = 15.0
+    heartbeat_s = 15.0
 
     def __init__(self, fallback: TdpLimits, root: str = "/",
                  modprobe=_default_modprobe, caller=None, write_max: int | None = None) -> None:
@@ -149,3 +152,6 @@ class AlibBackend(TDPBackend):
     def read_applied(self) -> int | None:
         # Write-only path: the applied sustained limit is not exposed for reading.
         return None
+
+    def observe(self):
+        return TdpObservation(readable=False)

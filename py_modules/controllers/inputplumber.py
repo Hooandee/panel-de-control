@@ -74,9 +74,11 @@ def set_button(store, dbus, device_key, source: str, targets: list,
         prospective[source] = clean
     else:
         prospective.pop(source, None)
-    if _apply_overrides(dbus, prospective, merge=merge):
+    applied = _apply_overrides(dbus, prospective, merge=merge)
+    if applied:
         store.replace(scope, appid, prospective)
-    return get_config(store, dbus, device_key, appid, caps)
+        return get_config(store, dbus, device_key, appid, caps)
+    return get_config(store, dbus, device_key, appid)
 
 
 def apply_effective(store, dbus, appid, merge=merge_profile) -> bool:

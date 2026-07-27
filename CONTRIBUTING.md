@@ -85,4 +85,4 @@ GitHub release.
 ## License
 
 By contributing, you agree that your contributions are licensed under the
-[BSD-3-Clause License](LICENSE).
+[GNU General Public License v3.0](LICENSE) (`GPL-3.0-only`).
