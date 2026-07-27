@@ -1,5 +1,7 @@
 import os
 
+import pytest
+
 from mangohud import apply
 from mangohud import detect as detection
 from mangohud.apply import apply_hud, clear_presets, read_presets
@@ -156,6 +158,94 @@ def test_clear_presets_never_deletes_an_unmanaged_file(tmp_path):
 
     assert clear_presets(path) is True
     assert read_presets(path) == original
+
+
+def test_failed_restore_keeps_a_retryable_state(tmp_path, monkeypatch):
+    path = str(tmp_path / "presets.conf")
+    original = "[preset 1]\nfps=1\n"
+    (tmp_path / "presets.conf").write_text(original)
+    apply_hud(coerce_model({"items": [{"kind": "metric", "id": "fps"}]}), path)
+    real_replace = apply.os.replace
+
+    def fail_backup_restore(source, destination):
+        if source == f"{path}.pdc-backup":
+            raise PermissionError
+        return real_replace(source, destination)
+
+    monkeypatch.setattr(apply.os, "replace", fail_backup_restore)
+    assert clear_presets(path) is False
+    assert (tmp_path / "presets.conf.pdc-backup").exists()
+    assert read_presets(str(tmp_path / "presets.conf.pdc-managed")).strip() == "restoring"
+
+    monkeypatch.setattr(apply.os, "replace", real_replace)
+    assert clear_presets(path) is True
+    assert read_presets(path) == original
+    assert not (tmp_path / "presets.conf.pdc-managed").exists()
+
+
+def test_retry_after_restored_backup_only_removes_the_marker(tmp_path, monkeypatch):
+    path = str(tmp_path / "presets.conf")
+    original = "[preset 1]\nfps=1\n"
+    (tmp_path / "presets.conf").write_text(original)
+    apply_hud(coerce_model({"items": [{"kind": "metric", "id": "fps"}]}), path)
+    real_remove = apply.os.remove
+
+    def fail_marker_removal(candidate):
+        if candidate == f"{path}.pdc-managed":
+            raise PermissionError
+        return real_remove(candidate)
+
+    monkeypatch.setattr(apply.os, "remove", fail_marker_removal)
+    assert clear_presets(path) is False
+    assert read_presets(path) == original
+    assert not (tmp_path / "presets.conf.pdc-backup").exists()
+    assert read_presets(f"{path}.pdc-managed").strip() == "restoring"
+
+    monkeypatch.setattr(apply.os, "remove", real_remove)
+    assert clear_presets(path) is True
+    assert read_presets(path) == original
+    assert not (tmp_path / "presets.conf.pdc-managed").exists()
+
+
+def test_legacy_marker_remains_clearable(tmp_path):
+    path = str(tmp_path / "presets.conf")
+    (tmp_path / "presets.conf").write_text("[preset 1]\nfps=1\n")
+    (tmp_path / "presets.conf.pdc-managed").write_text("1\n")
+
+    assert clear_presets(path) is True
+    assert read_presets(path) is None
+
+
+def test_unknown_marker_never_authorizes_deletion(tmp_path):
+    path = str(tmp_path / "presets.conf")
+    original = "[preset 1]\nfps=1\n"
+    (tmp_path / "presets.conf").write_text(original)
+    (tmp_path / "presets.conf.pdc-managed").write_text("unexpected\n")
+
+    assert clear_presets(path) is False
+    assert read_presets(path) == original
+
+
+def test_failed_marker_write_leaves_the_original_without_an_orphan_backup(
+    tmp_path, monkeypatch
+):
+    path = str(tmp_path / "presets.conf")
+    original = "[preset 1]\nfps=1\n"
+    (tmp_path / "presets.conf").write_text(original)
+    real_write = apply._write_atomic
+
+    def fail_marker_write(candidate, text, owner=None):
+        if candidate == f"{path}.pdc-managed":
+            raise PermissionError
+        return real_write(candidate, text, owner)
+
+    monkeypatch.setattr(apply, "_write_atomic", fail_marker_write)
+
+    with pytest.raises(PermissionError):
+        apply_hud(coerce_model({"items": [{"kind": "metric", "id": "fps"}]}), path)
+    assert read_presets(path) == original
+    assert not (tmp_path / "presets.conf.pdc-backup").exists()
+    assert not (tmp_path / "presets.conf.pdc-managed").exists()
 
 
 def test_clear_presets_reports_failed_removal(tmp_path, monkeypatch):

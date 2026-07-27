@@ -49,7 +49,10 @@ def _mangoapp_environ(uid=None):
     """The environment of the running mangoapp process, or None if not running.
     Scans /proc, so it isn't unit-tested."""
     try:
-        pids = [p for p in os.listdir(_PROC) if p.isdigit()]
+        pids = sorted(
+            (p for p in os.listdir(_PROC) if p.isdigit()),
+            key=int,
+        )
     except OSError:
         return None
     for pid in pids:

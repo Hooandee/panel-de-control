@@ -190,6 +190,7 @@ DEFAULTS = {
     # User-defined launch variables (env NAME=VALUE / game args), reusable across
     # games. The library is global; the on/off is per-game (in Steam's string).
     "custom_launch_vars": [],
+    "hud_managed_path": None,
 }
 
 
@@ -343,6 +344,9 @@ class Plugin:
             self._hud_owner = (hud_home_stat.st_uid, hud_home_stat.st_gid)
         except OSError:
             self._hud_owner = None
+        self._hud_managed_path = self._trusted_hud_path(
+            self._settings.get("hud_managed_path")
+        )
         self._power_reader = PowerReader()
         self._battery = BatteryReader()
         self._charge_limit = select_charge_limit(self._device)
@@ -2818,7 +2822,41 @@ class Plugin:
     # ---- HUD (MangoHud overlay) --------------------------------------------
     def _detect_hud(self) -> dict:
         uid = self._hud_owner[0] if self._hud_owner is not None else None
-        return mangohud_detect.detect(home=self._hud_home, uid=uid)
+        cap = mangohud_detect.detect(home=self._hud_home, uid=uid)
+        presets_path = self._trusted_hud_path(cap.get("presetsPath"))
+        if presets_path is None:
+            cap["supported"] = False
+            presets_path = mangohud_detect.presets_path({}, self._hud_home)
+        cap["presetsPath"] = presets_path
+        return cap
+
+    def _trusted_hud_path(self, path):
+        if not isinstance(path, str) or not path:
+            return None
+        home = os.path.realpath(self._hud_home)
+        candidate = os.path.realpath(path)
+        try:
+            if os.path.commonpath((home, candidate)) != home or candidate == home:
+                return None
+        except ValueError:
+            return None
+        return candidate
+
+    def _remember_hud_path(self, path) -> None:
+        safe_path = self._trusted_hud_path(path)
+        if path is not None and safe_path is None:
+            raise OSError("MangoHud presets path is outside the trusted user home")
+        previous = self._settings.get("hud_managed_path")
+        if previous == safe_path:
+            self._hud_managed_path = safe_path
+            return
+        self._settings["hud_managed_path"] = safe_path
+        try:
+            self._save()
+        except Exception as exc:
+            self._settings["hud_managed_path"] = previous
+            raise OSError("Could not persist the managed MangoHud presets path") from exc
+        self._hud_managed_path = safe_path
 
     def _hud_state(self) -> dict:
         cap = self._detect_hud()
@@ -2828,8 +2866,12 @@ class Plugin:
             else "unsupported" if cap["running"]
             else "inactive"
         )
-        if not model["enabled"] and self._hud_apply_status != "failed":
-            apply_status = "disabled"
+        if not model["enabled"]:
+            apply_status = (
+                self._hud_apply_status
+                if self._hud_apply_status in ("failed", "pending")
+                else "disabled"
+            )
         elif capability == "inactive":
             apply_status = "pending"
         elif capability == "unsupported":
@@ -2856,52 +2898,82 @@ class Plugin:
         config. When off: clear presets.conf. No-op when the overlay isn't supported."""
         cap = self._detect_hud()
         model = self._hud.load()
+        if not model["enabled"]:
+            managed_path = self._hud_managed_path or cap["presetsPath"]
+            self._pdc_presets_path = None
+            self._pdc_active_ids = []
+            self._pdc_written = {}
+            self._pdc_preview_values = {}
+            if not clear_presets(managed_path):
+                self._hud_apply_status = "failed"
+                return
+            try:
+                self._remember_hud_path(None)
+            except OSError:
+                self._hud_apply_status = "failed"
+                return
+            if (
+                cap["supported"]
+                and cap["running"]
+                and not reload_mangoapp(self._hud_owner[0] if self._hud_owner else None)
+            ):
+                self._hud_apply_status = "pending"
+            else:
+                self._hud_apply_status = "disabled"
+            return
         if not cap["supported"]:
             self._pdc_active_ids = []
             self._pdc_preview_values = {}
             self._hud_apply_status = (
-                "pending" if model["enabled"] and not cap["running"]
-                else "unavailable" if model["enabled"]
-                else "disabled"
+                "pending" if not cap["running"] else "unavailable"
             )
             return
         # Cache the presets path + active ids for the auto loop's re-bake (no /proc rescan).
+        if (
+            self._hud_managed_path is not None
+            and self._hud_managed_path != cap["presetsPath"]
+        ):
+            if not clear_presets(self._hud_managed_path):
+                self._hud_apply_status = "failed"
+                return
+            try:
+                self._remember_hud_path(None)
+            except OSError:
+                self._hud_apply_status = "failed"
+                return
         self._pdc_presets_path = cap["presetsPath"]
         self._pdc_active_ids = mangohud_config.enabled_pdc_ids(model) if model["enabled"] else []
-        if model["enabled"]:
-            values = self._pdc_values()
-            self._pdc_preview_values = values
-            expected = mangohud_config.build_presets_conf(model, values)
-            try:
-                on_disk = apply_hud(
-                    model,
-                    cap["presetsPath"],
-                    values,
-                    owner=self._hud_owner,
-                )
-            except OSError:
-                self._pdc_written = {}
-                self._hud_apply_status = "failed"
-                return
-            if on_disk != expected:
-                self._pdc_written = {}
-                self._hud_apply_status = "failed"
-                return
-            if reload_mangoapp(self._hud_owner[0] if self._hud_owner else None):
-                self._pdc_written = values
-                self._hud_apply_status = "applied"
-            else:
-                self._pdc_written = {}
-                self._hud_apply_status = "pending"
+        values = self._pdc_values()
+        self._pdc_preview_values = values
+        expected = mangohud_config.build_presets_conf(model, values)
+        try:
+            on_disk = apply_hud(
+                model,
+                cap["presetsPath"],
+                values,
+                owner=self._hud_owner,
+            )
+        except OSError:
+            self._pdc_written = {}
+            self._hud_apply_status = "failed"
+            return
+        if on_disk != expected:
+            self._pdc_written = {}
+            self._hud_apply_status = "failed"
+            return
+        try:
+            self._remember_hud_path(cap["presetsPath"])
+        except OSError:
+            clear_presets(cap["presetsPath"])
+            self._pdc_written = {}
+            self._hud_apply_status = "failed"
+            return
+        if reload_mangoapp(self._hud_owner[0] if self._hud_owner else None):
+            self._pdc_written = values
+            self._hud_apply_status = "applied"
         else:
             self._pdc_written = {}
-            self._pdc_preview_values = {}
-            if not clear_presets(cap["presetsPath"]):
-                self._hud_apply_status = "failed"
-            elif reload_mangoapp(self._hud_owner[0] if self._hud_owner else None):
-                self._hud_apply_status = "disabled"
-            else:
-                self._hud_apply_status = "pending"
+            self._hud_apply_status = "pending"
 
     # ---- HUD plugin-state metrics (pdc_*, baked into custom_text) -----------
     def _read_pdc_sources(self) -> dict:
@@ -3873,8 +3945,11 @@ class Plugin:
     def _restore_hud_safe(self) -> None:
         try:
             cap = self._detect_hud()
-            if clear_presets(cap["presetsPath"]) and cap["running"]:
-                reload_mangoapp(self._hud_owner[0] if self._hud_owner else None)
+            managed_path = self._hud_managed_path or cap["presetsPath"]
+            if clear_presets(managed_path):
+                self._remember_hud_path(None)
+                if cap["supported"] and cap["running"]:
+                    reload_mangoapp(self._hud_owner[0] if self._hud_owner else None)
         except Exception:  # noqa: BLE001
             pass
 

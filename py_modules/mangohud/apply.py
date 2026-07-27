@@ -8,6 +8,7 @@ from mangohud.config import build_presets_conf
 _PROC = "/proc"
 _BACKUP_SUFFIX = ".pdc-backup"
 _MANAGED_SUFFIX = ".pdc-managed"
+_MANAGED_STATES = {"1", "managed"}
 
 
 def read_presets(path):
@@ -56,28 +57,56 @@ def _write_atomic(path, text, owner=None):
         raise
 
 
+def _owner(path):
+    try:
+        stat = os.stat(path)
+    except OSError:
+        return None
+    return stat.st_uid, stat.st_gid
+
+
 def clear_presets(path):
     """Restore a file that existed before Panel de Control, or remove only our own."""
     marker = f"{path}{_MANAGED_SUFFIX}"
     if not os.path.exists(marker):
         return True
+    state = read_presets(marker)
+    if state is None:
+        return False
+    state = state.strip()
+    backup = f"{path}{_BACKUP_SUFFIX}"
+    if os.path.exists(backup):
+        try:
+            _write_atomic(marker, "restoring\n", _owner(marker))
+            os.replace(backup, path)
+        except OSError:
+            return False
+        try:
+            os.remove(marker)
+        except OSError:
+            return False
+        return read_presets(path) is not None and not os.path.exists(backup)
+    if state == "restoring":
+        if read_presets(path) is None:
+            return False
+        try:
+            os.remove(marker)
+        except OSError:
+            return False
+        return True
+    if state not in _MANAGED_STATES:
+        return False
+    try:
+        os.remove(path)
+    except FileNotFoundError:
+        pass
+    except OSError:
+        if os.path.lexists(path):
+            return False
     try:
         os.remove(marker)
     except OSError:
         return False
-    backup = f"{path}{_BACKUP_SUFFIX}"
-    if os.path.exists(backup):
-        try:
-            os.replace(backup, path)
-        except OSError:
-            return False
-        return read_presets(path) is not None and not os.path.exists(backup)
-    try:
-        os.remove(path)
-    except FileNotFoundError:
-        return True
-    except OSError:
-        return not os.path.lexists(path)
     return not os.path.lexists(path)
 
 
@@ -89,26 +118,39 @@ def apply_hud(model, path, values=None, owner=None):
     current = read_presets(path)
     marker = f"{path}{_MANAGED_SUFFIX}"
     backup = f"{path}{_BACKUP_SUFFIX}"
-    managed = os.path.exists(marker)
+    marker_state = read_presets(marker)
+    if marker_state is not None:
+        marker_state = marker_state.strip()
+        if marker_state == "restoring":
+            if not clear_presets(path):
+                raise OSError("MangoHud presets restore is incomplete")
+            current = read_presets(path)
+            marker_state = None
+        elif marker_state not in _MANAGED_STATES:
+            raise OSError("Unknown MangoHud presets ownership marker")
+    managed = marker_state in _MANAGED_STATES
     if managed and current == desired:
         return desired
     if not managed:
+        if current is None and os.path.exists(backup):
+            os.replace(backup, path)
+            current = read_presets(path)
         if current is not None:
             _write_atomic(backup, current, owner)
-        _write_atomic(marker, "1\n", owner)
+        try:
+            _write_atomic(marker, "managed\n", owner)
+        except Exception:
+            if current is not None:
+                try:
+                    os.remove(backup)
+                except OSError:
+                    pass
+            raise
     try:
         _write_atomic(path, desired, owner)
     except Exception:
         if not managed:
-            try:
-                os.remove(marker)
-            except OSError:
-                pass
-            if os.path.exists(backup):
-                try:
-                    os.replace(backup, path)
-                except OSError:
-                    pass
+            clear_presets(path)
         raise
     return read_presets(path)
 
@@ -126,21 +168,21 @@ def _process_uid(pid):
 
 def _mangoapp_cwd(uid=None):
     try:
-        entries = os.scandir(_PROC)
+        entries = sorted(
+            (entry for entry in os.scandir(_PROC) if entry.name.isdigit()),
+            key=lambda entry: int(entry.name),
+        )
     except OSError:
         return None
-    with entries:
-        for entry in entries:
-            if not entry.name.isdigit():
-                continue
-            try:
-                with open(f"{_PROC}/{entry.name}/comm") as handle:
-                    if handle.read().strip() == "mangoapp":
-                        if uid is not None and _process_uid(entry.name) != uid:
-                            continue
-                        return os.readlink(f"{_PROC}/{entry.name}/cwd")
-            except OSError:
-                continue
+    for entry in entries:
+        try:
+            with open(f"{_PROC}/{entry.name}/comm") as handle:
+                if handle.read().strip() == "mangoapp":
+                    if uid is not None and _process_uid(entry.name) != uid:
+                        continue
+                    return os.readlink(f"{_PROC}/{entry.name}/cwd")
+        except OSError:
+            continue
     return None
 
 

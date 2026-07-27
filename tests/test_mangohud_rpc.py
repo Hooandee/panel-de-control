@@ -11,6 +11,7 @@ def _make_plugin(tmp_path, monkeypatch):
     fake_decky = types.ModuleType("decky")
     fake_decky.DECKY_PLUGIN_SETTINGS_DIR = str(tmp_path)
     fake_decky.DECKY_USER = "deck"
+    fake_decky.DECKY_USER_HOME = str(tmp_path)
     fake_decky.logger = types.SimpleNamespace(
         info=lambda *a, **k: None, warning=lambda *a, **k: None, error=lambda *a, **k: None
     )
@@ -117,6 +118,46 @@ def test_offline_hud_stays_editable_and_pending_without_writing(tmp_path, monkey
     assert st["applyStatus"] == "pending"
     assert st["model"]["enabled"] is True
     assert not os.path.exists(presets)
+
+
+def test_offline_disable_clears_the_remembered_custom_path(tmp_path, monkeypatch):
+    custom = str(tmp_path / "custom" / "presets.conf")
+    default = str(tmp_path / "default" / "presets.conf")
+    main, p = _make_plugin(tmp_path, monkeypatch)
+    _fake_overlay(main, monkeypatch, custom)
+    monkeypatch.setattr(main, "reload_mangoapp", lambda *_args: True)
+
+    asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
+    assert os.path.exists(custom)
+    assert p._settings["hud_managed_path"] == custom
+
+    _fake_overlay(main, monkeypatch, default, supported=False, running=False)
+    st = asyncio.run(p.set_hud_enabled(False))
+
+    assert st["applyStatus"] == "disabled"
+    assert not os.path.exists(custom)
+    assert not os.path.exists(f"{custom}.pdc-managed")
+    assert p._settings["hud_managed_path"] is None
+
+
+def test_supported_path_change_restores_the_previous_managed_file(tmp_path, monkeypatch):
+    previous = str(tmp_path / "previous" / "presets.conf")
+    current = str(tmp_path / "current" / "presets.conf")
+    main, p = _make_plugin(tmp_path, monkeypatch)
+    _fake_overlay(main, monkeypatch, previous)
+    monkeypatch.setattr(main, "reload_mangoapp", lambda *_args: True)
+
+    asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
+    assert os.path.exists(previous)
+
+    _fake_overlay(main, monkeypatch, current)
+    st = asyncio.run(p.reload_hud())
+
+    assert st["applyStatus"] == "applied"
+    assert not os.path.exists(previous)
+    assert not os.path.exists(f"{previous}.pdc-managed")
+    assert os.path.exists(current)
+    assert p._settings["hud_managed_path"] == current
 
 
 def test_running_without_preset_support_is_explicitly_unavailable(tmp_path, monkeypatch):
