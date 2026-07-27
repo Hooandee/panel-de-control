@@ -72,7 +72,7 @@ def _event_body(contents: str, event: str) -> str:
 def _filter_paths(contents: str, filter_name: str) -> list[str]:
     filter_match = re.search(
         rf"(?ms)^            {re.escape(filter_name)}:\n"
-        r"(?P<paths>(?:              - .*\n)+)",
+        r"(?P<paths>(?:              - [^\n]*\n)+)",
         contents,
     )
     if filter_match is None:
@@ -108,6 +108,15 @@ def _matches(path: str, patterns: list[str]) -> bool:
         if re.fullmatch(expression, path):
             return True
     return False
+
+
+def _matches_every(path: str, patterns: list[str]) -> bool:
+    return all(
+        not _matches(path, [pattern[1:]])
+        if pattern.startswith("!")
+        else _matches(path, [pattern])
+        for pattern in patterns
+    )
 
 
 class ConfigureExportTests(unittest.TestCase):
@@ -655,6 +664,16 @@ class WorkflowIsolationTests(unittest.TestCase):
         ogui = OGUI_WORKFLOW.read_text(encoding="utf-8")
         decky_paths = _filter_paths(decky, "decky")
 
+        self.assertEqual(
+            decky_paths,
+            [
+                "**",
+                "!opengamepadui/**",
+                "!.github/workflows/opengamepadui-ci.yml",
+            ],
+        )
+        self.assertIn("predicate-quantifier: every", decky)
+
         for event in ("push", "pull_request"):
             ogui_paths = _event_paths(ogui, event)
 
@@ -667,15 +686,23 @@ class WorkflowIsolationTests(unittest.TestCase):
 
         cases = (
             (["opengamepadui/plugin.gd"], False),
+            (["opengamepadui/plugin.json"], False),
+            ([".github/workflows/opengamepadui-ci.yml"], False),
             (["src/index.tsx"], True),
             (["opengamepadui/plugin.gd", "src/index.tsx"], True),
             (["conftest.py"], True),
+            (["plugin.json"], True),
+            (["release-please-config.json"], True),
+            ([".github/workflows/release-please.yml"], True),
+            ([".github/workflows/prerelease.yml"], True),
+            (["README.md"], True),
+            (["future-root-config.toml"], True),
             ([".github/workflows/ci.yml"], True),
         )
         for changed_paths, expected_decky in cases:
             with self.subTest(changed_paths=changed_paths):
                 self.assertEqual(
-                    any(_matches(path, decky_paths) for path in changed_paths),
+                    any(_matches_every(path, decky_paths) for path in changed_paths),
                     expected_decky,
                 )
 
@@ -691,14 +718,32 @@ class WorkflowIsolationTests(unittest.TestCase):
             job = _job_body(workflow, job_name)
             header = job.split("steps:", maxsplit=1)[0]
             self.assertIn("needs: changes", header)
-            self.assertNotIn("\n    if:", header)
+            self.assertIn("if: ${{ always() }}", header)
 
             steps = _job_steps(workflow, job_name)
+            guards = [
+                step
+                for step in steps
+                if "Require successful path classification" in step
+            ]
             skipped = [step for step in steps if "Decky paths unchanged" in step]
-            expensive = [step for step in steps if step not in skipped]
+            expensive = [
+                step for step in steps if step not in guards and step not in skipped
+            ]
+            self.assertEqual(len(guards), 1)
+            self.assertIn("needs.changes.result != 'success'", guards[0])
+            self.assertIn(
+                "needs.changes.outputs.decky != 'true'",
+                guards[0],
+            )
+            self.assertIn(
+                "needs.changes.outputs.decky != 'false'",
+                guards[0],
+            )
+            self.assertRegex(guards[0], r"(?m)^\s*exit 1$")
             self.assertEqual(len(skipped), 1)
             self.assertIn(
-                "if: needs.changes.outputs.decky != 'true'",
+                "if: needs.changes.outputs.decky == 'false'",
                 skipped[0],
             )
             self.assertGreater(len(expensive), 0)
@@ -711,9 +756,13 @@ class WorkflowIsolationTests(unittest.TestCase):
     def test_decky_classifier_is_pinned_and_read_only(self) -> None:
         workflow = DECKY_WORKFLOW.read_text(encoding="utf-8")
         changes = _job_body(workflow, "changes")
+        workflow_permissions = workflow.split("concurrency:", maxsplit=1)[0]
 
         self.assertIn("contents: read", workflow)
-        self.assertIn("pull-requests: read", workflow)
+        self.assertNotIn("pull-requests:", workflow_permissions)
+        self.assertIn("permissions:", changes)
+        self.assertIn("contents: read", changes)
+        self.assertIn("pull-requests: read", changes)
         self.assertNotRegex(workflow, r"(?m)^\s+[a-z-]+: write$")
         self.assertRegex(
             changes,

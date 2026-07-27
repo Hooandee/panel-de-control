@@ -10,7 +10,6 @@ on:
 # open PRs, or tamper with releases.
 permissions:
   contents: read
-  pull-requests: read
 
 # Cancel superseded runs on the same ref (e.g. rapid pushes to a PR branch).
 concurrency:
@@ -20,6 +19,9 @@ concurrency:
 jobs:
   changes:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       decky: ${{ steps.filter.outputs.decky }}
     steps:
@@ -30,30 +32,28 @@ jobs:
         id: filter
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
         with:
+          predicate-quantifier: every
           filters: |
             decky:
-              - ".github/workflows/ci.yml"
-              - "src/**"
-              - "py_modules/**"
-              - "tests/**"
-              - "conftest.py"
-              - "main.py"
-              - "package.json"
-              - "pnpm-lock.yaml"
-              - "tsconfig.json"
-              - "rollup.config.js"
-              - "requirements*.txt"
-              - "plugin.json"
-              - "assets/**"
-              - "bin/**"
-              - "scripts/**"
+              - "**"
+              - "!opengamepadui/**"
+              - "!.github/workflows/opengamepadui-ci.yml"
 
   backend-tests:
     needs: changes
+    if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
+      - name: Require successful path classification
+        if: >-
+          needs.changes.result != 'success' ||
+          (needs.changes.outputs.decky != 'true' &&
+          needs.changes.outputs.decky != 'false')
+        run: |
+          echo "::error::Decky path classification failed or returned an invalid output"
+          exit 1
       - name: Decky paths unchanged
-        if: needs.changes.outputs.decky != 'true'
+        if: needs.changes.outputs.decky == 'false'
         run: echo "Decky backend tests not required for these paths"
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         if: needs.changes.outputs.decky == 'true'
@@ -72,10 +72,19 @@ jobs:
 
   frontend-build:
     needs: changes
+    if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
+      - name: Require successful path classification
+        if: >-
+          needs.changes.result != 'success' ||
+          (needs.changes.outputs.decky != 'true' &&
+          needs.changes.outputs.decky != 'false')
+        run: |
+          echo "::error::Decky path classification failed or returned an invalid output"
+          exit 1
       - name: Decky paths unchanged
-        if: needs.changes.outputs.decky != 'true'
+        if: needs.changes.outputs.decky == 'false'
         run: echo "Decky frontend build not required for these paths"
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         if: needs.changes.outputs.decky == 'true'
