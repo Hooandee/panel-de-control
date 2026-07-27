@@ -12,6 +12,7 @@ PACKAGE := $(DIST_DIR)/$(PLUGIN_ID).zip
 OGUI_PLUGIN := $(OGUI_DIR)/plugins/$(PLUGIN_ID)
 GUT_SCRIPT := res://addons/gut/gut_cmdln.gd
 SMOKE_SCRIPT := $(PLUGIN_DIR)/tests/package_smoke.gd
+SMOKE_LOG := $(DIST_DIR)/package-smoke.log
 
 .PHONY: link test dist validate smoke install configure
 
@@ -63,6 +64,7 @@ smoke: link validate
 	trap restore_link EXIT; \
 	unlink "$(OGUI_PLUGIN)"; \
 	$(GODOT) --headless --path "$(OGUI_DIR)" \
+		--log-file "$(SMOKE_LOG)" \
 		--script "$(SMOKE_SCRIPT)" -- "$(PACKAGE)"
 
 install: dist

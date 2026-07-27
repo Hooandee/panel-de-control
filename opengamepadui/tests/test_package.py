@@ -606,6 +606,8 @@ class BuildContractTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("package_smoke.gd", result.stdout)
         self.assertIn("panel-de-control.zip", result.stdout)
+        self.assertIn("--log-file", result.stdout)
+        self.assertIn("dist/package-smoke.log", result.stdout)
         self.assertIn("unlink", result.stdout)
         self.assertIn("trap", result.stdout)
 
