@@ -25,6 +25,14 @@ class FakeDbus:
     def capabilities(self):
         return ["Gamepad:Button:LeftPaddle1"]
 
+    def diagnostics(self):
+        return {
+            "composite_path_available": True,
+            "capability_count": 1,
+            "capabilities": ["Gamepad:Button:LeftPaddle1"],
+            "last_operation": None,
+        }
+
 
 def test_select_none_backend():
     b = factory.select_controller_backend({"manager": detect.NONE, "version": None}, FakeStore(), FakeDbus(), _device("legion_go_2"))
@@ -49,6 +57,9 @@ def test_select_ip_backend_stamps_manager_and_version():
     assert cfg["supported"] is True
     # The device key drives the per-device silkscreen button table.
     assert [b["label"] for b in cfg["buttons"]] == ["M2"]  # only LeftPaddle1 is in caps
+    assert b.diagnostics()["mapped_buttons"] == [
+        {"source": "LeftPaddle1", "label": "M2"},
+    ]
     # HHD-only op is a no-op on the IP backend (returns current remap config).
     assert b.set_setting("mode", "x")["kind"] == "remap"
 

@@ -35,6 +35,63 @@ describe("ownershipView", () => {
     });
   });
 
+  it("hides a secondary-rail constraint when sustained power matches", () => {
+    expect(ownershipView({
+      ...base,
+      status: "constrained",
+      reason: "safe_min",
+      requested: { pl1: 15, pl2: 15, pl3: 15 },
+      target: { pl1: 15, pl2: 15, pl3: 20 },
+      applied: { pl1: 15, pl2: 15, pl3: 20 },
+    }).show).toBe(false);
+  });
+
+  it("shows a persistent conflict despite a secondary-rail constraint", () => {
+    const view = ownershipView({
+      ...base,
+      status: "constrained",
+      reason: "safe_min",
+      requested: { pl1: 15, pl2: 15, pl3: 15 },
+      target: { pl1: 15, pl2: 15, pl3: 20 },
+      applied: { pl1: 15, pl2: 15, pl3: 20 },
+      conflict_persistent: true,
+    });
+
+    expect(view.show).toBe(true);
+    expect(view.kind).toBe("conflict");
+  });
+
+  it.each(["safe_max", "live_max"])(
+    "shows a secondary-rail %s constraint",
+    (reason) => {
+      const view = ownershipView({
+        ...base,
+        status: "constrained",
+        reason,
+        requested: { pl1: 15, pl2: 30, pl3: 30 },
+        target: { pl1: 15, pl2: 20, pl3: 25 },
+        applied: { pl1: 15, pl2: 20, pl3: 25 },
+      });
+
+      expect(view.show).toBe(true);
+      expect(view.kind).toBe("constrained");
+    },
+  );
+
+  it("shows a mixed secondary floor and ceiling constraint", () => {
+    const view = ownershipView({
+      ...base,
+      status: "constrained",
+      reason: "safe_min",
+      requested: { pl1: 5, pl2: 5, pl3: 100 },
+      target: { pl1: 5, pl2: 15, pl3: 49 },
+      applied: { pl1: 5, pl2: 15, pl3: 49 },
+    });
+
+    expect(view.show).toBe(true);
+    expect(view.kind).toBe("constrained");
+  });
+
   it("shows a persistent conflict even while correcting", () => {
     const view = ownershipView({
       ...base,

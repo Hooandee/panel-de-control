@@ -249,7 +249,7 @@ class Plugin:
         self._controller_backend = controller_factory.select_controller_backend(
             self._controller,
             RemapStore(os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "controller_remap.json")),
-            IpDbus(),
+            IpDbus(event_cb=self._log_controller_event),
             self._device,
         )
         self._last_controller_overrides = None
@@ -328,6 +328,8 @@ class Plugin:
         self._power_reader = PowerReader()
         self._battery = BatteryReader()
         self._charge_limit = select_charge_limit(self._device)
+        self._charge_limit_last_apply = None
+        self._charge_limit_failures = 0
         self._smt = SmtControl()
         self._boost = select_boost()
         self._cores = CoreControl()
@@ -369,13 +371,16 @@ class Plugin:
         self._tdp_guard_task = None
         self._tdp_shutdown = False
         self._lifecycle = LifecycleManager(apply_cb=self._reapply_all,
-                                           reassert_cb=self._reassert_tdp_only)
+                                           reassert_cb=self._reassert_tdp_only,
+                                           event_cb=self._log_lifecycle_event)
         self._auto_task = None
         self._auto_setpoint = None
         # Audio EQ output-route watcher: last applied route + its loop task.
         self._audio_task = None
         self._audio_route_last = None
         self._audio_shutdown = False
+        self._audio_apply_failures = 0
+        self._audio_last_apply = None
         self._test_sample = None
         # Rolling GPU% window + slack counter for the GPU-driven auto-TDP control law.
         self._gpu_window = []      # recent GPU% samples
@@ -602,6 +607,7 @@ class Plugin:
             "device": await _safe(self.get_device()),
             "tdp": await _safe(self.get_tdp_state()),
             "tdp_diagnostics": self._tdp_diagnostics(),
+            "lifecycle_diagnostics": self._lifecycle.diagnostics(),
             "tdp_conflict": await _safe(self.get_tdp_conflict()),
             "fan_curve": await _safe(self.get_fan_curve_state()),
             "fan_monitor": await _safe(self.get_fan_state()),
@@ -615,6 +621,7 @@ class Plugin:
             # get_controller_config can block (HHD localhost HTTP / busctl spawn) →
             # run it off the event loop, unlike the cheap sysfs reads above.
             "controller": await loop.run_in_executor(None, self._safe_controller_config),
+            "controller_diagnostics": self._controller_backend.diagnostics(),
             "power": await _safe(self.get_power_draw()),
             "eco": await _safe(self.get_eco_state()),
             "audio": await _safe(self.get_audio_state()),
@@ -2579,6 +2586,54 @@ class Plugin:
         self._reapply_controller()  # diff-gated; no-op unless the effective remap changed
 
     # ---- Battery + charge limit --------------------------------------------
+    def _record_charge_limit_apply(self, action, requested, ok, attempts) -> None:
+        try:
+            readback = self._charge_limit.get()
+        except Exception:  # noqa: BLE001 - diagnostics cannot break the apply path
+            readback = None
+        event = {
+            "action": action,
+            "requested": requested,
+            "ok": bool(ok),
+            "readback": readback,
+            "attempts": attempts,
+        }
+        previous = getattr(self, "_charge_limit_last_apply", None)
+        self._charge_limit_last_apply = event
+        if ok:
+            self._charge_limit_failures = 0
+            if event != previous:
+                decky.logger.info(
+                    "Charge limit transition %s",
+                    json.dumps(event, sort_keys=True, separators=(",", ":")),
+                )
+            return
+        self._charge_limit_failures = (
+            getattr(self, "_charge_limit_failures", 0) + 1
+        )
+        if (
+            self._charge_limit_failures
+            & (self._charge_limit_failures - 1)
+            == 0
+        ):
+            decky.logger.warning(
+                "Charge limit transition %s",
+                json.dumps(event, sort_keys=True, separators=(",", ":")),
+            )
+
+    def _apply_charge_limit_operation(self, action, requested, operation) -> None:
+        attempts = 1
+        result = operation()
+        if result is False:
+            attempts = 2
+            result = operation()
+        self._record_charge_limit_apply(
+            action,
+            requested,
+            bool(result),
+            attempts,
+        )
+
     def _apply_charge_limit(self) -> None:
         """Write the persisted charge limit (or 100 = no cap when disabled). Safe to
         call on any device — a Null backend no-ops."""
@@ -2586,14 +2641,27 @@ class Plugin:
             return
         if not self._module_enabled("system"):
             # Module off = step aside: release any cap, don't keep limiting.
-            self._charge_limit.disable()
+            self._apply_charge_limit_operation(
+                "disable_module",
+                None,
+                self._charge_limit.disable,
+            )
             return
         enabled = bool(self._settings.get("charge_limit_enabled", False))
         if enabled:
-            self._charge_limit.set(int(self._settings.get("charge_limit_percent", 80)))
+            requested = int(self._settings.get("charge_limit_percent", 80))
+            self._apply_charge_limit_operation(
+                "set",
+                requested,
+                lambda: self._charge_limit.set(requested),
+            )
         else:
             # backend-specific "no cap" (ASUS 100, Deck 0)
-            self._charge_limit.disable()
+            self._apply_charge_limit_operation(
+                "disable",
+                None,
+                self._charge_limit.disable,
+            )
 
     def _charge_limit_state(self) -> dict:
         lo, hi = self._charge_limit.range()
@@ -2616,6 +2684,11 @@ class Plugin:
             "percent": percent,
             "min": lo,
             "max": hi,
+            "last_apply": (
+                dict(self._charge_limit_last_apply)
+                if getattr(self, "_charge_limit_last_apply", None) is not None
+                else None
+            ),
         }
 
     async def get_battery_state(self) -> dict:
@@ -3276,6 +3349,9 @@ class Plugin:
             "limits": limit_values,
             "limits_source": limits_source,
             "level_limits": level_limits,
+            "rail_floors": dict(
+                getattr(self._tdp_backend, "_rail_floors", {}) or {}
+            ),
             "probe_trace": [
                 dict(item)
                 for item in getattr(self._tdp_backend, "probe_trace", ())
@@ -3516,16 +3592,47 @@ class Plugin:
             return
         self._offload(self._reapply_audio_sync)
 
+    def _record_audio_apply_failure(self, detail) -> None:
+        self._audio_last_apply = dict(detail)
+        self._audio_apply_failures += 1
+        if (
+            self._audio_apply_failures
+            & (self._audio_apply_failures - 1)
+            == 0
+        ):
+            decky.logger.warning(
+                "audio EQ apply rejected: %s",
+                json.dumps(detail, sort_keys=True, separators=(",", ":")),
+            )
+
     def _reapply_audio_sync(self) -> None:
         try:
-            if not self._settings.get("audio_eq_enabled") or not self._audio.is_supported():
+            if not self._settings.get("audio_eq_enabled"):
                 return
             route = self._current_route()
             setting = self._effective_audio(route)
             gains, bass = self._guarded_gains(route, setting["gains"], setting["bass"])
-            self._audio.set_gains(gains, bass, setting["loudness"], setting["balance"])
+            applied = self._audio.set_gains(
+                gains, bass, setting["loudness"], setting["balance"]
+            )
+            if not applied:
+                diagnostics = getattr(self._audio, "apply_diagnostics", None)
+                detail = diagnostics() if callable(diagnostics) else {"ok": False}
+                self._record_audio_apply_failure(detail)
+            else:
+                self._audio_apply_failures = 0
+                diagnostics = getattr(self._audio, "apply_diagnostics", None)
+                self._audio_last_apply = (
+                    diagnostics()
+                    if callable(diagnostics)
+                    else {"ok": True}
+                )
         except Exception as e:  # noqa: BLE001
-            decky.logger.warning("audio EQ apply failed: %s", e)
+            self._record_audio_apply_failure({
+                "ok": False,
+                "reason": "exception",
+                "error": type(e).__name__,
+            })
 
     def _guarded_gains(self, route, gains, bass):
         if route == "speaker" and self._settings.get("speaker_guard_enabled", True):
@@ -3554,9 +3661,8 @@ class Plugin:
                 pass
 
     def _audio_check(self) -> dict:
-        """Off-loop probe for the watcher: the active route + whether our EQ sink is still
-        the default (WirePlumber can drop it on resume/hotplug)."""
-        return {"route": self._current_route(), "is_default": self._audio.is_default()}
+        """Off-loop probe for the watcher: active route + confirmed EQ ownership."""
+        return {"route": self._current_route(), "active": self._audio.is_active()}
 
     async def _audio_loop(self) -> None:
         """While the EQ is enabled, keep it live with the QAM closed: re-apply when the
@@ -3571,7 +3677,7 @@ class Plugin:
                     self._audio_route_last = None
                     continue
                 probe = await self._offload_call(self._audio_check)
-                if not probe["is_default"] or probe["route"] != self._audio_route_last:
+                if not probe["active"] or probe["route"] != self._audio_route_last:
                     self._audio_route_last = probe["route"]
                     self._reapply_audio()
             except asyncio.CancelledError:
@@ -3591,9 +3697,16 @@ class Plugin:
     def _audio_state(self) -> dict:
         route = self._current_route()
         eff = self._effective_audio(route)
+        apply_diagnostics = getattr(self._audio, "apply_diagnostics", None)
+        active = getattr(self._audio, "is_active", None)
+        last_apply = getattr(self, "_audio_last_apply", None)
+        if last_apply is None and callable(apply_diagnostics):
+            last_apply = apply_diagnostics()
         return {
             "supported": self._audio.is_supported(),
             "enabled": bool(self._settings.get("audio_eq_enabled", False)),
+            "active": bool(active()) if callable(active) else False,
+            "last_apply": dict(last_apply) if isinstance(last_apply, dict) else None,
             "route": route,
             "appid": self._current_appid,
             "follows_global": self._audio_eq.is_following_global(self._current_appid),
@@ -3777,6 +3890,20 @@ class Plugin:
         return await self._offload_call(self._audio_state)
 
     # ---- lifecycle ----------------------------------------------------------
+    def _log_controller_event(self, event) -> None:
+        encoded = json.dumps(event, sort_keys=True, separators=(",", ":"))
+        log = decky.logger.info if event.get("ok") else decky.logger.warning
+        log("Controller transition %s", encoded)
+
+    def _log_lifecycle_event(self, event) -> None:
+        encoded = json.dumps(event, sort_keys=True, separators=(",", ":"))
+        log = (
+            decky.logger.warning
+            if event.get("event") in ("apply_failed", "poll_failed")
+            else decky.logger.info
+        )
+        log("Lifecycle transition %s", encoded)
+
     async def _main(self) -> None:
         self._init()
         # Single-worker executor for subprocess-backed applies (gamescopectl /

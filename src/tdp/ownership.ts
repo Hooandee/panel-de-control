@@ -12,6 +12,24 @@ export interface OwnershipView {
 export function ownershipView(ownership: TdpOwnership): OwnershipView {
   const persistent = ownership.conflict_persistent;
   const inactive = ["control_disabled", "firmware_mode"].includes(ownership.reason);
+  const requested = ownership.requested.pl1 ?? null;
+  const target = ownership.target.pl1 ?? null;
+  const applied = ownership.applied.pl1 ?? null;
+  const secondaryChanges = (["pl2", "pl3"] as const).flatMap((rail) => {
+    const railRequested = ownership.requested[rail];
+    const railTarget = ownership.target[rail];
+    return typeof railRequested === "number" && typeof railTarget === "number"
+      ? [railTarget - railRequested]
+      : [];
+  });
+  const onlyRaisedSecondary = secondaryChanges.some((change) => change > 0)
+    && secondaryChanges.every((change) => change >= 0);
+  const secondaryOnlyConstraint = ownership.status === "constrained"
+    && ownership.reason === "safe_min"
+    && requested !== null
+    && requested === target
+    && target === applied
+    && onlyRaisedSecondary;
   let kind: OwnershipView["kind"];
   if (persistent) {
     kind = "conflict";
@@ -26,12 +44,15 @@ export function ownershipView(ownership: TdpOwnership): OwnershipView {
   }
   return {
     show: !inactive && (
-      persistent || !["in_sync", "unsupported"].includes(ownership.status)
+      persistent || (
+        !secondaryOnlyConstraint
+        && !["in_sync", "unsupported"].includes(ownership.status)
+      )
     ),
     kind,
-    requested: ownership.requested.pl1 ?? null,
-    target: ownership.target.pl1 ?? null,
-    applied: ownership.applied.pl1 ?? null,
+    requested,
+    target,
+    applied,
     persistent,
   };
 }

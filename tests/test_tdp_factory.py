@@ -60,6 +60,43 @@ def test_legion_uses_lenovo_firmware_attr(tmp_path):
     assert b.supported and "lenovo-wmi-other" in b.name
 
 
+def test_only_exact_legion_go_s_83n6_gets_measured_rail_floors(tmp_path):
+    exact_root = str(tmp_path / "exact")
+    _mk_fw(exact_root, "lenovo-wmi-other-0")
+    _mk_dmi(exact_root, "LENOVO", "83N6")
+    exact = select_backend(
+        _p("legion_go_s"),
+        root=exact_root,
+        ryzenadj_resolve=_NO_RYZENADJ,
+    )
+
+    nearby_root = str(tmp_path / "nearby")
+    _mk_fw(nearby_root, "lenovo-wmi-other-0")
+    _mk_dmi(nearby_root, "LENOVO", "83L3")
+    nearby = select_backend(
+        _p("legion_go_s"),
+        root=nearby_root,
+        ryzenadj_resolve=_NO_RYZENADJ,
+    )
+
+    assert getattr(exact, "_rail_floors", None) == {"pl2": 15, "pl3": 20}
+    assert getattr(nearby, "_rail_floors", None) == {}
+
+
+def test_generic_device_does_not_get_83n6_rail_floors_from_dmi_alone(tmp_path):
+    root = str(tmp_path)
+    _mk_fw(root, "lenovo-wmi-other-0")
+    _mk_dmi(root, "LENOVO", "83N6")
+
+    backend = select_backend(
+        GENERIC,
+        root=root,
+        ryzenadj_resolve=_NO_RYZENADJ,
+    )
+
+    assert getattr(backend, "_rail_floors", None) == {}
+
+
 def test_msi_uses_msi_firmware_attr(tmp_path):
     root = str(tmp_path)
     _mk_fw(root, "msi-wmi-platform")

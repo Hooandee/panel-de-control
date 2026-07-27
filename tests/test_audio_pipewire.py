@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from audio.pipewire import (
     PipeWireEq,
     _relevant_links,
@@ -78,12 +80,16 @@ class _FakeRunner:
     def __init__(self, downstream_vol="40%"):
         self.calls = []
         self._vol = downstream_vol
+        self._default = "alsa_speaker"
 
     def __call__(self, argv, timeout=8):
         self.calls.append(argv)
         s = " ".join(argv)
         if "get-default-sink" in s:
-            return "alsa_speaker"
+            return self._default
+        if argv[:2] == ["pactl", "set-default-sink"]:
+            self._default = argv[2]
+            return ""
         if "list" in s and "sinks" in s:
             return "1\talsa_speaker\tPipeWire\t...\tRUNNING\n"
         if "get-sink-volume" in s:
@@ -126,6 +132,145 @@ def test_ensure_sink_boot_reassert_preserves_user_volume(tmp_path):
     assert eq.ensure_sink([0] * 10) is True
     assert fake.volume_sets("X EQ") == []
     assert ["pactl", "set-sink-volume", "alsa_speaker", "100%"] in fake.calls
+
+
+def test_ensure_sink_refuses_to_enable_without_physical_downstream(tmp_path):
+    fake = _FakeRunner()
+    fake._default = "X EQ"
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    eq._downstream_sink = lambda: None
+
+    assert eq.ensure_sink([0] * 10) is False
+
+    assert ["systemctl", "--user", "restart", "filter-chain.service"] not in fake.calls
+    assert not any(call[:2] == ["pactl", "set-default-sink"] for call in fake.calls)
+    assert eq.apply_diagnostics() == {
+        "ok": False,
+        "reason": "downstream_missing",
+    }
+
+
+def test_ensure_sink_requires_default_sink_readback(tmp_path):
+    fake = _FakeRunner()
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+
+    def ignore_default_change(argv, timeout=8):
+        if argv[:2] == ["pactl", "set-default-sink"]:
+            fake.calls.append(argv)
+            return ""
+        return fake(argv, timeout)
+
+    eq._runner = ignore_default_change
+
+    assert eq.ensure_sink([0] * 10) is False
+
+    assert fake.volume_sets("alsa_speaker") == []
+    assert eq.apply_diagnostics() == {
+        "ok": False,
+        "reason": "default_sink_not_confirmed",
+        "downstream": "alsa_speaker",
+    }
+
+
+def test_failed_first_enable_rolls_back_and_retry_preserves_volume(tmp_path):
+    fake = _FakeRunner(downstream_vol="40%")
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    conf = eq._conf_path()
+    eq._write_conf = lambda *a, **k: Path(conf).write_text("x") > 0
+    failures = {"remaining": 1}
+    run = eq._runner
+
+    def fail_first_default_change(argv, timeout=8):
+        if argv[:3] == ["pactl", "set-default-sink", "X EQ"]:
+            if failures["remaining"]:
+                failures["remaining"] -= 1
+                fake.calls.append(argv)
+                return ""
+        return run(argv, timeout)
+
+    eq._runner = fail_first_default_change
+
+    assert eq.ensure_sink([0] * 10) is False
+    assert not Path(conf).exists()
+    assert eq.ensure_sink([0] * 10) is True
+
+    assert fake.volume_sets("X EQ") == [
+        ["pactl", "set-sink-volume", "X EQ", "40%"],
+    ]
+    assert fake.volume_sets("alsa_speaker") == [
+        ["pactl", "set-sink-volume", "alsa_speaker", "100%"],
+    ]
+
+
+def test_disable_after_failed_first_enable_does_not_change_physical_volume(tmp_path):
+    fake = _FakeRunner(downstream_vol="40%")
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    conf = eq._conf_path()
+    eq._write_conf = lambda *a, **k: Path(conf).write_text("x") > 0
+
+    def ignore_default_change(argv, timeout=8):
+        if argv[:2] == ["pactl", "set-default-sink"]:
+            fake.calls.append(argv)
+            return ""
+        return fake(argv, timeout)
+
+    eq._runner = ignore_default_change
+    assert eq.ensure_sink([0] * 10) is False
+
+    eq.teardown()
+
+    assert fake.volume_sets("alsa_speaker") == []
+    assert eq.is_active() is False
+
+
+def test_active_state_drops_when_downstream_disappears(tmp_path):
+    fake = _FakeRunner()
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    assert eq.ensure_sink([0] * 10) is True
+    assert eq.is_active() is True
+    eq._downstream_sink = lambda: None
+
+    assert eq.ensure_sink([0] * 10) is False
+
+    assert eq.is_active() is False
+    assert eq.apply_diagnostics() == {
+        "ok": False,
+        "reason": "downstream_missing",
+    }
+
+
+def test_failed_changed_curve_invalidates_previous_active_state(tmp_path):
+    fake = _FakeRunner()
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    assert eq.ensure_sink([0] * 10) is True
+    eq._write_conf = lambda *args, **kwargs: False
+
+    assert eq.ensure_sink([3] * 10) is False
+
+    assert eq.is_active() is False
+    assert eq.apply_diagnostics() == {
+        "ok": False,
+        "reason": "config_write_failed",
+        "downstream": "alsa_speaker",
+    }
+
+
+def test_disable_after_failed_reapply_restores_owned_eq_volume(tmp_path):
+    fake = _FakeRunner(downstream_vol="40%")
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    assert eq.ensure_sink([0] * 10) is True
+    eq._write_conf = lambda *args, **kwargs: False
+    assert eq.ensure_sink([3] * 10) is False
+
+    eq.teardown()
+
+    assert fake.volume_sets("alsa_speaker")[-1] == [
+        "pactl",
+        "set-sink-volume",
+        "alsa_speaker",
+        "40%",
+    ]
+    assert fake._default == "alsa_speaker"
 
 
 _PW_LINK = """effect_output.pdc_eq:output_FL

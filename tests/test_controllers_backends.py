@@ -38,6 +38,24 @@ class FakeDbus:
         return True
 
 
+class InvalidatingDbus(FakeDbus):
+    def __init__(self):
+        super().__init__(caps=["Gamepad:Button:LeftPaddle1"])
+        self.capability_reads = 0
+
+    def capabilities(self):
+        self.capability_reads += 1
+        return (
+            ["Gamepad:Button:LeftPaddle1"]
+            if self.capability_reads == 1
+            else []
+        )
+
+    def reset_default(self):
+        self.reset_called = True
+        return False
+
+
 # ---- InputPlumber backend --------------------------------------------------
 
 CLAW = "msi_claw_8_ai_plus"  # caps LeftPaddle1/RightPaddle1 → silkscreen M2/M1
@@ -62,10 +80,28 @@ def test_ip_get_config_lists_device_buttons_with_silkscreen_labels(tmp_path):
 
 
 def test_ip_get_config_unknown_device_has_no_buttons_but_stays_honest(tmp_path):
-    cfg = inputplumber.get_config(_store(tmp_path), FakeDbus(), "legion_go_s")
+    cfg = inputplumber.get_config(_store(tmp_path), FakeDbus(), "unknown_device")
     assert cfg["kind"] == "remap"
     assert cfg["device_known"] is False
     assert cfg["buttons"] == []
+
+
+def test_ip_get_config_lists_xbox_ally_macro_buttons(tmp_path):
+    dbus = FakeDbus(caps=[
+        "Gamepad:Button:LeftPaddle2",
+        "Gamepad:Button:RightPaddle2",
+    ])
+
+    cfg = inputplumber.get_config(
+        _store(tmp_path),
+        dbus,
+        "rog_xbox_ally",
+    )
+
+    assert [(button["source"], button["label"]) for button in cfg["buttons"]] == [
+        ("LeftPaddle2", "M2"),
+        ("RightPaddle2", "M1"),
+    ]
 
 
 def test_ip_set_button_stores_and_applies(tmp_path):
@@ -77,6 +113,24 @@ def test_ip_set_button_stores_and_applies(tmp_path):
     assert dbus.loaded == "merged-yaml"  # the merged profile was loaded
     by_src = {b["source"]: b["target"] for b in cfg["buttons"]}
     assert by_src["LeftPaddle1"] == [{"gamepad": "South"}]
+
+
+def test_ip_set_failure_does_not_return_stale_buttons(tmp_path):
+    store = _store(tmp_path)
+    dbus = InvalidatingDbus()
+
+    cfg = inputplumber.set_button(
+        store,
+        dbus,
+        CLAW,
+        "LeftPaddle1",
+        [{"gamepad": "South"}],
+        merge=_MERGE,
+    )
+
+    assert dbus.capability_reads == 2
+    assert cfg["buttons"] == []
+    assert store.overrides_for("global") == {}
 
 
 def test_ip_set_button_empty_reverts_to_default(tmp_path):

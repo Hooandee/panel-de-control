@@ -1,4 +1,7 @@
-from device_quirks import is_gpd_win_mini_2025
+from device_quirks import (
+    is_gpd_win_mini_2025,
+    legion_go_s_83n6_rail_floors,
+)
 from tdp.alib import AlibBackend
 from tdp.backend import NullBackend, TDPBackend
 from tdp.firmware_attr import FirmwareAttrBackend
@@ -23,8 +26,14 @@ def _candidates(device, fallback, root, ryzenadj):
         return FirmwareAttrBackend("asus-armoury", fallback, root=root, is_generic=generic)
 
     def lenovo():
-        return FirmwareAttrBackend("lenovo-wmi-other", fallback, root=root,
-                                   profile_name="lenovo-wmi-gamezone", is_generic=generic)
+        return FirmwareAttrBackend(
+            "lenovo-wmi-other",
+            fallback,
+            root=root,
+            profile_name="lenovo-wmi-gamezone",
+            is_generic=generic,
+            rail_floors=legion_go_s_83n6_rail_floors(device, root),
+        )
 
     def msi():
         return FirmwareAttrBackend("msi-wmi-platform", fallback, root=root, is_generic=generic)
