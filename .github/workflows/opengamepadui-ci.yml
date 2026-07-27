@@ -1,0 +1,72 @@
+name: OpenGamepadUI CI
+
+on:
+  push:
+    paths:
+      - ".github/workflows/opengamepadui-ci.yml"
+      - "opengamepadui/**"
+  pull_request:
+    paths:
+      - ".github/workflows/opengamepadui-ci.yml"
+      - "opengamepadui/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: opengamepadui-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-plugin:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/shadowblip/opengamepadui-builder:4.7.1
+    steps:
+      - name: Check out Panel de Control
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Check out OpenGamepadUI 0.46.0
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: ShadowBlip/OpenGamepadUI
+          ref: b149644f46b71e175a2ad223e84c18361596691e
+          path: OpenGamepadUI
+          persist-credentials: false
+
+      - name: Install Python test runtime
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends python3
+
+      - name: Link plugin into OpenGamepadUI
+        run: make -C opengamepadui link OGUI_DIR="$GITHUB_WORKSPACE/OpenGamepadUI"
+
+      - name: Build OpenGamepadUI GDExtension
+        run: make -C OpenGamepadUI extensions
+
+      - name: Validate manifest and packaging contracts
+        run: python3 -m unittest discover -v -s opengamepadui/tests -p "test_*.py"
+
+      - name: Run GUT
+        run: |
+          make -C opengamepadui test \
+            OGUI_DIR="$GITHUB_WORKSPACE/OpenGamepadUI" \
+            GODOT=godot
+
+      - name: Export installable plugin pack
+        run: |
+          make -C opengamepadui dist \
+            OGUI_DIR="$GITHUB_WORKSPACE/OpenGamepadUI" \
+            GODOT=godot
+
+      - name: Upload installable plugin
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: panel-de-control-opengamepadui
+          path: |
+            opengamepadui/dist/panel-de-control.zip
+            opengamepadui/dist/panel-de-control.zip.sha256
+          if-no-files-found: error
