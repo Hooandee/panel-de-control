@@ -8,15 +8,28 @@ import sys
 
 
 ALLOWED_FIELDS = {
-    "id",
-    "name",
-    "version",
-    "minimum_api_version",
-    "tags",
-    "description",
-    "license",
+    "plugin.id",
+    "plugin.name",
+    "plugin.version",
+    "plugin.min-api-version",
+    "plugin.link",
+    "plugin.source",
+    "plugin.summary",
+    "plugin.description",
+    "entrypoint",
+    "store.tags",
+    "store.images",
+    "author.name",
 }
 REQUIRED_FIELDS = ALLOWED_FIELDS
+BLOCKED_FIELDS = {
+    "publish",
+    "release",
+    "archive.url",
+    "archive.sha256",
+    "versions",
+}
+PROJECT_URL = "https://github.com/Hooandee/panel-de-control"
 
 
 def read_manifest(manifest_path: Path) -> tuple[dict | None, list[str]]:
@@ -42,7 +55,11 @@ def validate(manifest_path: Path, version_path: Path) -> list[str]:
     except FileNotFoundError:
         return ["VERSION is missing"]
 
-    unauthorized = sorted(set(manifest) - ALLOWED_FIELDS)
+    blocked = sorted(set(manifest) & BLOCKED_FIELDS)
+    for field in blocked:
+        errors.append(f"unauthorized manifest field: {field}")
+
+    unauthorized = sorted(set(manifest) - ALLOWED_FIELDS - BLOCKED_FIELDS)
     if unauthorized:
         errors.append(f"unauthorized manifest fields: {', '.join(unauthorized)}")
 
@@ -50,16 +67,30 @@ def validate(manifest_path: Path, version_path: Path) -> list[str]:
     if missing:
         errors.append(f"missing manifest fields: {', '.join(missing)}")
 
-    if manifest.get("id") != "panel-de-control":
-        errors.append("id must be 'panel-de-control'")
-    if manifest.get("version") != version:
-        errors.append("version must match VERSION")
-    if manifest.get("minimum_api_version") != "2.0.0":
-        errors.append("minimum_api_version must be '2.0.0'")
+    if manifest.get("plugin.id") != "panel-de-control":
+        errors.append("plugin.id must be 'panel-de-control'")
+    if manifest.get("plugin.version") != version:
+        errors.append("plugin.version must match VERSION")
+    if manifest.get("plugin.min-api-version") != "2.0.0":
+        errors.append("plugin.min-api-version must be '2.0.0'")
+    if manifest.get("entrypoint") != "plugin.gd":
+        errors.append("entrypoint must be 'plugin.gd'")
+    if manifest.get("author.name") != "Hooandee":
+        errors.append("author.name must be 'Hooandee'")
 
-    tags = manifest.get("tags")
+    for field in ("plugin.link", "plugin.source"):
+        if manifest.get(field) != PROJECT_URL:
+            errors.append(f"{field} must be '{PROJECT_URL}'")
+
+    for field in ("plugin.name", "plugin.summary", "plugin.description"):
+        if not isinstance(manifest.get(field), str) or not manifest[field].strip():
+            errors.append(f"{field} must be a non-empty string")
+
+    tags = manifest.get("store.tags")
     if not isinstance(tags, list) or "quick-bar" not in tags:
-        errors.append("tags must include 'quick-bar'")
+        errors.append("store.tags must include 'quick-bar'")
+    if manifest.get("store.images") != []:
+        errors.append("store.images must be an empty list")
 
     return errors
 

@@ -1,9 +1,14 @@
 {
-  "id": "panel-de-control",
-  "name": "Panel de Control",
-  "version": "0.1.0",
-  "minimum_api_version": "2.0.0",
-  "tags": ["quick-bar"],
-  "description": "Controles de rendimiento observables de Panel de Control para OpenGamepadUI.",
-  "license": "GPL-3.0-only"
+  "plugin.id": "panel-de-control",
+  "plugin.name": "Panel de Control",
+  "plugin.version": "0.1.0",
+  "plugin.min-api-version": "2.0.0",
+  "plugin.link": "https://github.com/Hooandee/panel-de-control",
+  "plugin.source": "https://github.com/Hooandee/panel-de-control",
+  "plugin.summary": "Panel de Control for OpenGamepadUI.",
+  "plugin.description": "Read-only performance controls for handheld PCs.",
+  "entrypoint": "plugin.gd",
+  "store.tags": ["quick-bar"],
+  "store.images": [],
+  "author.name": "Hooandee"
 }
