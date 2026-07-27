@@ -47,6 +47,7 @@ sudo() { command sudo -S "$@" <<<"$SUDO_PASS"; }
 sudo mkdir -p "$DEST"
 sudo rsync -a --exclude='__pycache__' "$STAGE"/ "$DEST"/
 sudo chown -R root:root "$DEST"
+sudo chmod 755 "$DEST"
 rm -rf "$STAGE" /tmp/pdc-plugin.tgz
 sudo systemctl restart plugin_loader
 echo "installed into $DEST"
