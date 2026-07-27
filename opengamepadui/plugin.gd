@@ -1,28 +1,32 @@
 extends Plugin
 
-const POWERSTATION_PATH := "res://core/systems/performance/power_station.tres"
 const MenuScene = preload(
 	"res://plugins/panel-de-control/core/ui/power_status_menu.tscn"
 )
 const MenuIcon = preload("res://plugins/panel-de-control/assets/icon.svg")
+const PowerSnapshotSampler = preload(
+	"res://plugins/panel-de-control/core/services/power_snapshot_sampler.gd"
+)
 
-var _powerstation: Variant
-var _source_configured := false
+var _sampler: Node
+var _sampler_configured := false
 var _ready_complete := false
 var _menus: Array[WeakRef] = []
 
 
-func configure_source(source: Variant) -> void:
+func configure_sampler(sampler: Node) -> void:
 	if _ready_complete:
-		push_error("PowerStation source must be configured before the plugin is ready")
+		push_error("Power sampler must be configured before the plugin is ready")
 		return
-	_powerstation = source
-	_source_configured = true
+	_sampler = sampler
+	_sampler_configured = true
 
 
 func _ready() -> void:
-	if not _source_configured:
-		_powerstation = load(POWERSTATION_PATH)
+	if not _sampler_configured:
+		_sampler = PowerSnapshotSampler.new()
+	if _sampler.get_parent() == null:
+		add_child(_sampler)
 	_ready_complete = true
 	var quick_menu := _create_menu()
 	add_to_quick_bar(quick_menu, MenuIcon)
@@ -43,13 +47,16 @@ func unload() -> void:
 		menu.call("shutdown")
 		menu.queue_free()
 	_menus.clear()
-	_powerstation = null
-	_source_configured = false
+	if is_instance_valid(_sampler):
+		_sampler.call("shutdown")
+		_sampler.queue_free()
+	_sampler = null
+	_sampler_configured = false
 	_ready_complete = false
 
 
 func _create_menu() -> Control:
 	var menu := MenuScene.instantiate() as Control
-	menu.call("configure_source", _powerstation)
+	menu.call("configure_sampler", _sampler)
 	_menus.append(weakref(menu))
 	return menu

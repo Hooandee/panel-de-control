@@ -18,8 +18,10 @@ VALID_MANIFEST = {
     "plugin.min-api-version": "2.0.0",
     "plugin.link": "https://github.com/Hooandee/panel-de-control",
     "plugin.source": "https://github.com/Hooandee/panel-de-control",
-    "plugin.summary": "Panel de Control for OpenGamepadUI.",
-    "plugin.description": "Read-only performance controls for handheld PCs.",
+    "plugin.summary": "Read-only PowerStation status for OpenGamepadUI.",
+    "plugin.description": (
+        "Observes GPU identity, TDP, and power profile without applying performance changes."
+    ),
     "entrypoint": "plugin.gd",
     "store.tags": ["quick-bar"],
     "store.images": [],
@@ -48,6 +50,9 @@ class ManifestContractTests(unittest.TestCase):
             self.assertEqual("https://github.com/Hooandee/panel-de-control", manifest[field])
         self.assertTrue(manifest["plugin.summary"])
         self.assertTrue(manifest["plugin.description"])
+        self.assertEqual(VALID_MANIFEST["plugin.summary"], manifest["plugin.summary"])
+        self.assertEqual(VALID_MANIFEST["plugin.description"], manifest["plugin.description"])
+        self.assertNotIn("controls", manifest["plugin.description"].lower())
         self.assertNotIn("release", manifest)
         self.assertNotIn("publish", manifest)
         self.assertNotIn("versions", manifest)

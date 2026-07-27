@@ -3,9 +3,6 @@ extends VBoxContainer
 const ObservedValue = preload(
 	"res://plugins/panel-de-control/core/domain/observed_value.gd"
 )
-const PowerStationAdapter = preload(
-	"res://plugins/panel-de-control/core/adapters/powerstation_adapter.gd"
-)
 
 @onready var _powerstation_status: Label = %PowerStationStatus
 @onready var _gpu_value: Label = %GpuValue
@@ -13,26 +10,38 @@ const PowerStationAdapter = preload(
 @onready var _power_profile_value: Label = %PowerProfileValue
 @onready var _refresh_timer: Timer = $RefreshTimer
 
-var _adapter: RefCounted
+var _sampler: Node
 var _shutting_down := false
 
 
-func configure_source(source: Variant) -> void:
-	_adapter = PowerStationAdapter.new(source)
+func configure_sampler(sampler: Node) -> void:
+	_sampler = sampler
 
 
 func _ready() -> void:
-	if _adapter == null:
-		_adapter = PowerStationAdapter.new(null)
+	if _sampler != null:
+		_sampler.connect("snapshot_updated", _on_snapshot_updated)
+		var latest_snapshot: RefCounted = _sampler.call("get_latest_snapshot")
+		if latest_snapshot != null:
+			_render_snapshot(latest_snapshot)
 	_refresh_timer.timeout.connect(refresh_now)
 	refresh_now()
 	_refresh_timer.start()
 
 
 func refresh_now() -> void:
-	if _shutting_down or _adapter == null:
+	if _shutting_down or _sampler == null:
 		return
-	var snapshot: RefCounted = _adapter.read_snapshot()
+	_sampler.call("request_snapshot")
+
+
+func _on_snapshot_updated(snapshot: RefCounted) -> void:
+	if _shutting_down:
+		return
+	_render_snapshot(snapshot)
+
+
+func _render_snapshot(snapshot: RefCounted) -> void:
 	_powerstation_status.text = "PowerStation: %s" % _format_status(snapshot.gpu_identity)
 	_gpu_value.text = "GPU: %s" % _format_gpu(snapshot.gpu_identity)
 	_tdp_value.text = "Observed TDP: %s" % _format_tdp(snapshot.tdp_w)
@@ -47,7 +56,12 @@ func shutdown() -> void:
 		_refresh_timer.stop()
 		if _refresh_timer.timeout.is_connected(refresh_now):
 			_refresh_timer.timeout.disconnect(refresh_now)
-	_adapter = null
+	if (
+		is_instance_valid(_sampler)
+		and _sampler.is_connected("snapshot_updated", _on_snapshot_updated)
+	):
+		_sampler.disconnect("snapshot_updated", _on_snapshot_updated)
+	_sampler = null
 
 
 func _format_status(observed: RefCounted) -> String:

@@ -1,27 +1,41 @@
 extends GutTest
 
 const MENU_PATH := "res://plugins/panel-de-control/core/ui/power_status_menu.tscn"
-const FakePowerStation = preload("res://plugins/panel-de-control/tests/support/fake_powerstation.gd")
+const PowerStationAdapter = preload(
+	"res://plugins/panel-de-control/core/adapters/powerstation_adapter.gd"
+)
+const ObservedValue = preload(
+	"res://plugins/panel-de-control/core/domain/observed_value.gd"
+)
 
 
-class InvalidGpu extends RefCounted:
-	func get_cards() -> Variant:
-		return {}
+class ManualSampler extends Node:
+	signal snapshot_updated(snapshot: RefCounted)
 
+	var latest_snapshot: RefCounted
+	var request_count := 0
 
-class InvalidPowerStation extends RefCounted:
-	func is_running() -> bool:
+	func _init(initial_snapshot: RefCounted) -> void:
+		latest_snapshot = initial_snapshot
+
+	func request_snapshot() -> bool:
+		request_count += 1
 		return true
 
-	func get_gpu() -> Variant:
-		return InvalidGpu.new()
+	func get_latest_snapshot() -> RefCounted:
+		return latest_snapshot
+
+	func publish(snapshot: RefCounted) -> void:
+		latest_snapshot = snapshot
+		snapshot_updated.emit(snapshot)
 
 
-func test_known_snapshot_is_rendered_as_observed_values() -> void:
-	var source = FakePowerStation.new([_card()])
-	var menu := _new_menu(source)
+func test_known_shared_snapshot_is_rendered_and_refresh_only_requests_sampling() -> void:
+	var fixture := _new_menu(_known_snapshot())
+	var menu: Control = fixture["menu"]
 	if menu == null:
 		return
+	var sampler: ManualSampler = fixture["sampler"]
 
 	var section_label := menu.find_child("SectionLabel") as Label
 	assert_not_null(section_label, "QuickBar API 2.0 requires a SectionLabel child")
@@ -32,101 +46,80 @@ func test_known_snapshot_is_rendered_as_observed_values() -> void:
 	assert_eq(_label(menu, "GpuValue").text, "GPU: AMD Radeon Graphics (1002:15bf)")
 	assert_eq(_label(menu, "TdpValue").text, "Observed TDP: 18.0 W")
 	assert_eq(_label(menu, "PowerProfileValue").text, "Power profile: balanced")
-	assert_eq(source.write_attempts(), 0)
+	assert_eq(sampler.request_count, 1)
+
+	menu.refresh_now()
+
+	assert_eq(sampler.request_count, 2)
+	assert_eq(_label(menu, "TdpValue").text, "Observed TDP: 18.0 W")
 
 
 func test_unavailable_snapshot_replaces_every_value_label() -> void:
-	var menu := _new_menu(null)
+	var fixture := _new_menu(_invalid_snapshot(
+		ObservedValue.UNAVAILABLE,
+		"powerstation_unavailable_or_unreachable",
+	))
+	var menu: Control = fixture["menu"]
 	if menu == null:
 		return
 
-	assert_eq(
-		_label(menu, "PowerStationStatus").text,
-		"PowerStation: Unavailable (powerstation_unavailable)"
-	)
-	assert_eq(_label(menu, "GpuValue").text, "GPU: Unavailable (powerstation_unavailable)")
-	assert_eq(
-		_label(menu, "TdpValue").text,
-		"Observed TDP: Unavailable (powerstation_unavailable)"
-	)
-	assert_eq(
-		_label(menu, "PowerProfileValue").text,
-		"Power profile: Unavailable (powerstation_unavailable)"
+	_assert_all_values(
+		menu,
+		"Unavailable (powerstation_unavailable_or_unreachable)",
 	)
 
 
 func test_unknown_snapshot_replaces_every_value_label() -> void:
-	var source = FakePowerStation.new([_card({"class": "discrete"})])
-	var menu := _new_menu(source)
+	var fixture := _new_menu(_invalid_snapshot(
+		ObservedValue.UNKNOWN,
+		"integrated_gpu_not_found",
+	))
+	var menu: Control = fixture["menu"]
 	if menu == null:
 		return
 
-	assert_eq(
-		_label(menu, "PowerStationStatus").text,
-		"PowerStation: Unknown (integrated_gpu_not_found)"
-	)
-	assert_eq(_label(menu, "GpuValue").text, "GPU: Unknown (integrated_gpu_not_found)")
-	assert_eq(
-		_label(menu, "TdpValue").text,
-		"Observed TDP: Unknown (integrated_gpu_not_found)"
-	)
-	assert_eq(
-		_label(menu, "PowerProfileValue").text,
-		"Power profile: Unknown (integrated_gpu_not_found)"
-	)
+	_assert_all_values(menu, "Unknown (integrated_gpu_not_found)")
 
 
 func test_error_snapshot_replaces_every_value_label() -> void:
-	var menu := _new_menu(InvalidPowerStation.new())
+	var fixture := _new_menu(_invalid_snapshot(
+		ObservedValue.ERROR,
+		"busctl_response_invalid",
+	))
+	var menu: Control = fixture["menu"]
 	if menu == null:
 		return
 
-	assert_eq(
-		_label(menu, "PowerStationStatus").text,
-		"PowerStation: Error (gpu_cards_invalid)"
-	)
-	assert_eq(_label(menu, "GpuValue").text, "GPU: Error (gpu_cards_invalid)")
-	assert_eq(_label(menu, "TdpValue").text, "Observed TDP: Error (gpu_cards_invalid)")
-	assert_eq(
-		_label(menu, "PowerProfileValue").text,
-		"Power profile: Error (gpu_cards_invalid)"
-	)
+	_assert_all_values(menu, "Error (busctl_response_invalid)")
 
 
-func test_refresh_clears_known_values_when_source_becomes_unavailable() -> void:
-	var source = FakePowerStation.new([_card()])
-	var menu := _new_menu(source)
+func test_sampler_signal_clears_stale_known_values() -> void:
+	var fixture := _new_menu(_known_snapshot())
+	var menu: Control = fixture["menu"]
 	if menu == null:
 		return
+	var sampler: ManualSampler = fixture["sampler"]
 	assert_string_contains(_label(menu, "TdpValue").text, "18.0 W")
 
-	source.running = false
-	menu.refresh_now()
+	sampler.publish(_invalid_snapshot(
+		ObservedValue.UNAVAILABLE,
+		"powerstation_unavailable_or_unreachable",
+	))
 
-	assert_eq(
-		_label(menu, "PowerStationStatus").text,
-		"PowerStation: Unavailable (powerstation_not_running)"
-	)
-	assert_eq(_label(menu, "GpuValue").text, "GPU: Unavailable (powerstation_not_running)")
-	assert_eq(
-		_label(menu, "TdpValue").text,
-		"Observed TDP: Unavailable (powerstation_not_running)"
-	)
-	assert_eq(
-		_label(menu, "PowerProfileValue").text,
-		"Power profile: Unavailable (powerstation_not_running)"
+	_assert_all_values(
+		menu,
+		"Unavailable (powerstation_unavailable_or_unreachable)",
 	)
 	assert_eq(_label(menu, "TdpValue").text.find("18.0"), -1)
 	assert_eq(_label(menu, "PowerProfileValue").text.find("balanced"), -1)
-	assert_eq(source.write_attempts(), 0)
 
 
-func test_menu_is_read_only_and_shutdown_stops_refresh_and_releases_source() -> void:
-	var source: Variant = FakePowerStation.new([_card()])
-	var source_ref: WeakRef = weakref(source)
-	var menu := _new_menu(source)
+func test_menu_is_read_only_and_shutdown_disconnects_shared_sampler() -> void:
+	var fixture := _new_menu(_known_snapshot())
+	var menu: Control = fixture["menu"]
 	if menu == null:
 		return
+	var sampler: ManualSampler = fixture["sampler"]
 	var timer := menu.get_node("RefreshTimer") as Timer
 
 	assert_false(timer.is_stopped())
@@ -135,37 +128,60 @@ func test_menu_is_read_only_and_shutdown_stops_refresh_and_releases_source() -> 
 	assert_true(menu.find_children("*", "LineEdit", true, false).is_empty())
 	assert_true(menu.find_children("*", "Range", true, false).is_empty())
 
-	source = null
 	menu.shutdown()
+	var requests_before_timeout := sampler.request_count
+	timer.timeout.emit()
+	sampler.publish(_invalid_snapshot(ObservedValue.ERROR, "late_snapshot"))
 
 	assert_true(timer.is_stopped())
-	assert_null(source_ref.get_ref())
+	assert_eq(sampler.request_count, requests_before_timeout)
+	assert_eq(_label(menu, "PowerStationStatus").text, "PowerStation: Connected")
 
 
-func _new_menu(source: Variant) -> Control:
+func _new_menu(snapshot: RefCounted) -> Dictionary:
 	var scene := load(MENU_PATH) as PackedScene
 	assert_not_null(scene, "the packaged power status scene must exist")
 	if scene == null:
-		return null
+		return {"menu": null}
+	var sampler := ManualSampler.new(snapshot)
+	add_child_autofree(sampler)
 	var menu := scene.instantiate() as Control
-	menu.configure_source(source)
+	menu.configure_sampler(sampler)
 	add_child_autofree(menu)
-	return menu
+	return {"menu": menu, "sampler": sampler}
 
 
 func _label(menu: Control, node_name: String) -> Label:
 	return menu.get_node("%" + node_name) as Label
 
 
-func _card(overrides: Dictionary = {}) -> Dictionary:
-	var data := {
-		"dbus_path": "/org/shadowblip/Performance/GPU/card1",
-		"class": "integrated",
-		"name": "AMD Radeon Graphics",
-		"device": "1002:15bf",
-		"supports_tdp": true,
-		"tdp": 18.0,
-		"power_profile": "balanced",
-	}
-	data.merge(overrides, true)
-	return data
+func _assert_all_values(menu: Control, formatted_value: String) -> void:
+	assert_eq(
+		_label(menu, "PowerStationStatus").text,
+		"PowerStation: %s" % formatted_value,
+	)
+	assert_eq(_label(menu, "GpuValue").text, "GPU: %s" % formatted_value)
+	assert_eq(
+		_label(menu, "TdpValue").text,
+		"Observed TDP: %s" % formatted_value,
+	)
+	assert_eq(
+		_label(menu, "PowerProfileValue").text,
+		"Power profile: %s" % formatted_value,
+	)
+
+
+func _known_snapshot() -> RefCounted:
+	return PowerStationAdapter.new().snapshot_from_properties(
+		{
+			"dbus_path": "/org/shadowblip/Performance/GPU/card1",
+			"class": "integrated",
+			"name": "AMD Radeon Graphics",
+			"device": "1002:15bf",
+		},
+		{"tdp": 18.0, "power_profile": "balanced"},
+	)
+
+
+func _invalid_snapshot(state: String, reason: String) -> RefCounted:
+	return PowerStationAdapter.new().invalid_snapshot(state, reason)
