@@ -47,11 +47,18 @@ def _make_plugin(tmp_path, monkeypatch):
     return main, main.Plugin()
 
 
-def _fake_overlay(main, monkeypatch, presets_path, supported=True, config_file=None):
+def _fake_overlay(
+    main,
+    monkeypatch,
+    presets_path,
+    supported=True,
+    config_file=None,
+    running=True,
+):
     """Point detection at a tmp presets.conf and control `supported`."""
     monkeypatch.setattr(
         main.mangohud_detect, "detect",
-        lambda: {"running": True, "supported": supported,
+        lambda **_kwargs: {"running": running, "supported": supported,
                  "presetsPath": presets_path, "configFile": config_file},
     )
 
@@ -68,6 +75,34 @@ def test_get_hud_state_shape(tmp_path, monkeypatch):
     assert st["model"]["enabled"] is False
     assert "fps" in st["catalog"]
     assert "balanced" in st["presets"]
+    assert st["capability"] == "ready"
+    assert st["applyStatus"] == "disabled"
+    assert st["values"] == {}
+
+
+def test_offline_hud_stays_editable_and_pending_without_writing(tmp_path, monkeypatch):
+    presets = str(tmp_path / "presets.conf")
+    main, p = _make_plugin(tmp_path, monkeypatch)
+    _fake_overlay(main, monkeypatch, presets, supported=False, running=False)
+
+    st = asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
+
+    assert st["capability"] == "inactive"
+    assert st["applyStatus"] == "pending"
+    assert st["model"]["enabled"] is True
+    assert not os.path.exists(presets)
+
+
+def test_running_without_preset_support_is_explicitly_unavailable(tmp_path, monkeypatch):
+    presets = str(tmp_path / "presets.conf")
+    main, p = _make_plugin(tmp_path, monkeypatch)
+    _fake_overlay(main, monkeypatch, presets, supported=False, running=True)
+
+    st = asyncio.run(p.set_hud_enabled(True))
+
+    assert st["capability"] == "unsupported"
+    assert st["applyStatus"] == "unavailable"
+    assert not os.path.exists(presets)
 
 
 def test_set_config_persists_but_does_not_write_while_disabled(tmp_path, monkeypatch):
@@ -101,6 +136,52 @@ def test_writing_enabled_hud_requests_mangoapp_reload(tmp_path, monkeypatch):
     asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
 
     assert calls == [True]
+
+
+def test_successful_write_and_reload_reports_applied(tmp_path, monkeypatch):
+    presets = str(tmp_path / "presets.conf")
+    main, p = _make_plugin(tmp_path, monkeypatch)
+    _fake_overlay(main, monkeypatch, presets)
+    monkeypatch.setattr(main, "reload_mangoapp", lambda: True, raising=False)
+
+    st = asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
+
+    assert st["applyStatus"] == "applied"
+
+
+def test_failed_reload_reports_pending_not_success(tmp_path, monkeypatch):
+    presets = str(tmp_path / "presets.conf")
+    main, p = _make_plugin(tmp_path, monkeypatch)
+    _fake_overlay(main, monkeypatch, presets)
+    monkeypatch.setattr(main, "reload_mangoapp", lambda: False, raising=False)
+
+    st = asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
+
+    assert st["applyStatus"] == "pending"
+
+
+def test_failed_write_readback_reports_failure(tmp_path, monkeypatch):
+    presets = str(tmp_path / "presets.conf")
+    main, p = _make_plugin(tmp_path, monkeypatch)
+    _fake_overlay(main, monkeypatch, presets)
+    monkeypatch.setattr(main, "apply_hud", lambda *a, **k: None, raising=False)
+
+    st = asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
+
+    assert st["applyStatus"] == "failed"
+
+
+def test_failed_clear_reports_failure(tmp_path, monkeypatch):
+    presets = str(tmp_path / "presets.conf")
+    main, p = _make_plugin(tmp_path, monkeypatch)
+    _fake_overlay(main, monkeypatch, presets)
+    monkeypatch.setattr(main, "reload_mangoapp", lambda: True, raising=False)
+    asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
+    monkeypatch.setattr(main, "clear_presets", lambda _path: False, raising=False)
+
+    st = asyncio.run(p.set_hud_enabled(False))
+
+    assert st["applyStatus"] == "failed"
 
 
 def test_disabling_hud_requests_mangoapp_reload(tmp_path, monkeypatch):
@@ -271,3 +352,43 @@ def test_zero_fan_rpm_is_a_real_reading(tmp_path, monkeypatch):
     monkeypatch.setattr(p, "_read_fans", lambda: {"fans": [{"rpm": 0}]})
 
     assert p._pdc_values() == {"pdc_fan_rpm": "0"}
+
+
+def test_unavailable_tdp_and_fan_capabilities_render_dashes(tmp_path, monkeypatch):
+    _main, p = _make_plugin(tmp_path, monkeypatch)
+    p._init()
+    p._tdp_backend.supported = False
+    p._fan_ctrl.supported = False
+    p._pdc_active_ids = ["pdc_tdp", "pdc_auto_tdp", "pdc_fan", "pdc_eco"]
+
+    assert p._pdc_values() == {
+        "pdc_tdp": "-",
+        "pdc_auto_tdp": "-",
+        "pdc_fan": "-",
+        "pdc_eco": "-",
+    }
+
+
+def test_hud_refresh_failure_does_not_skip_the_rest_of_auto_tick(tmp_path, monkeypatch):
+    main, p = _make_plugin(tmp_path, monkeypatch)
+    p._init()
+    p._current_appid = None
+    sleeps = 0
+    resets = []
+
+    async def sleep(_seconds):
+        nonlocal sleeps
+        sleeps += 1
+        if sleeps > 1:
+            raise asyncio.CancelledError
+
+    async def fail_refresh():
+        raise OSError("presets unavailable")
+
+    monkeypatch.setattr(main.asyncio, "sleep", sleep)
+    monkeypatch.setattr(p, "_refresh_pdc_metrics", fail_refresh)
+    monkeypatch.setattr(p, "_reset_auto_windows", lambda: resets.append(True))
+
+    asyncio.run(p._auto_loop())
+
+    assert resets == [True]

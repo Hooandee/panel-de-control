@@ -1,6 +1,7 @@
 import os
 import shutil
 import subprocess
+import tempfile
 
 from mangohud.config import build_presets_conf
 
@@ -14,14 +15,41 @@ def read_presets(path):
         return None
 
 
-def _write_atomic(path, text):
+def _ensure_directory(path, owner):
+    missing = []
+    current = path
+    while current and not os.path.exists(current):
+        missing.append(current)
+        parent = os.path.dirname(current)
+        if parent == current:
+            break
+        current = parent
+    os.makedirs(path, exist_ok=True)
+    if owner is not None:
+        for created in reversed(missing):
+            os.chown(created, *owner)
+
+
+def _write_atomic(path, text, owner=None):
     directory = os.path.dirname(path)
     if directory:
-        os.makedirs(directory, exist_ok=True)
-    tmp = path + ".tmp"
-    with open(tmp, "w") as handle:
-        handle.write(text)
-    os.replace(tmp, path)
+        _ensure_directory(directory, owner)
+    fd, tmp = tempfile.mkstemp(prefix=".presets.", dir=directory or None, text=True)
+    try:
+        with os.fdopen(fd, "w") as handle:
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+            os.fchmod(handle.fileno(), 0o644)
+            if owner is not None:
+                os.fchown(handle.fileno(), *owner)
+        os.replace(tmp, path)
+    except Exception:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise
 
 
 def clear_presets(path):
@@ -29,15 +57,21 @@ def clear_presets(path):
     honest "HUD off" (we stop hijacking Steam's overlay levels). Idempotent."""
     try:
         os.remove(path)
+    except FileNotFoundError:
+        return True
     except OSError:
-        pass
+        return not os.path.lexists(path)
+    return not os.path.lexists(path)
 
 
-def apply_hud(model, path, values=None):
+def apply_hud(model, path, values=None, owner=None):
     """Write the model to presets.conf atomically and return what actually landed
     on disk (readback — the UI reflects reality, never an assumed write). `values`
     (pdc id -> value string) bakes the live plugin-state values into the pdc rows."""
-    _write_atomic(path, build_presets_conf(model, values))
+    desired = build_presets_conf(model, values)
+    if read_presets(path) == desired:
+        return desired
+    _write_atomic(path, desired, owner)
     return read_presets(path)
 
 
@@ -61,6 +95,9 @@ def _mangoapp_cwd():
 
 def reload_mangoapp():
     """Ask mangoapp to re-read Steam's config and the selected preset."""
+    cwd = _mangoapp_cwd()
+    if cwd is None:
+        return False
     search_path = os.pathsep.join(
         part for part in (os.environ.get("PATH"), "/usr/local/bin:/usr/bin:/bin") if part
     )
@@ -74,7 +111,7 @@ def reload_mangoapp():
         result = subprocess.run(
             [binary, "set", "reload_config", "true"],
             check=False,
-            cwd=_mangoapp_cwd(),
+            cwd=cwd,
             env=env,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,

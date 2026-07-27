@@ -1,3 +1,6 @@
+import math
+
+
 # Metric id -> the MangoHud directive it enables. The item order (below) is the
 # on-screen order (MangoHud renders in config order); the pill catalog uses this
 # order too, grouped for the UI.
@@ -160,10 +163,18 @@ _DEFAULT_COLORS = {
 _COLOR_KEYS = frozenset(_DEFAULT_COLORS)
 
 _DEFAULT_METRICS = ["fps", "gpu", "cpu", "ram", "battery"]
+_MAX_TEXT_CHARS = 160
 
 
 def _metric_items(ids):
     return [{"kind": "metric", "id": mid} for mid in ids]
+
+
+def _single_line(value):
+    if not isinstance(value, str):
+        return ""
+    clean = " ".join(value.replace("\0", "").splitlines()).strip()
+    return clean[:_MAX_TEXT_CHARS]
 
 
 DEFAULT_MODEL = {
@@ -234,12 +245,16 @@ def _coerce_items(raw):
                 entry = {"kind": "metric", "id": mid}
                 # A label is meaningful for the three lines MangoHud can relabel and
                 # for the pdc metrics (they render via a custom_text label we emit).
-                label = item.get("label")
-                if (mid in _LABEL_DIRECTIVE or mid in PDC_IDS) and isinstance(label, str) and label.strip():
+                label = _single_line(item.get("label"))
+                if (mid in _LABEL_DIRECTIVE or mid in PDC_IDS) and label:
                     entry["label"] = label
                 out.append(entry)
         elif kind == "text" and isinstance(item.get("text"), str):
-            out.append({"kind": "text", "id": str(item.get("id", "")), "text": item["text"]})
+            out.append({
+                "kind": "text",
+                "id": str(item.get("id", "")),
+                "text": _single_line(item["text"]),
+            })
         elif kind == "separator":
             out.append({"kind": "separator", "id": str(item.get("id", ""))})
         elif kind == "spacer":
@@ -266,24 +281,30 @@ def _coerce_float(value, default, lo, hi):
         num = float(value)
     except (TypeError, ValueError):
         return default
+    if not math.isfinite(num):
+        return default
     return max(lo, min(hi, num))
 
 
 def _coerce_int(value, default, lo, hi):
     try:
-        num = int(round(float(value)))
-    except (TypeError, ValueError):
+        raw = float(value)
+        if not math.isfinite(raw):
+            return default
+        num = int(round(raw))
+    except (TypeError, ValueError, OverflowError):
         return default
     return max(lo, min(hi, num))
 
 
 def _coerce_background(raw):
     raw = raw if isinstance(raw, dict) else {}
-    try:
-        alpha = float(raw.get("alpha", DEFAULT_MODEL["background"]["alpha"]))
-    except (TypeError, ValueError):
-        alpha = DEFAULT_MODEL["background"]["alpha"]
-    alpha = max(0.0, min(1.0, alpha))
+    alpha = _coerce_float(
+        raw.get("alpha"),
+        DEFAULT_MODEL["background"]["alpha"],
+        0.0,
+        1.0,
+    )
     return {"alpha": alpha, "roundCorners": bool(raw.get("roundCorners", True))}
 
 
@@ -399,8 +420,8 @@ def _enable_lines(item, values):
     label = item.get("label")
     has_label = isinstance(label, str) and bool(label.strip())
     if mid in PDC_IDS:
-        text = label if has_label else _PDC_LABEL[mid]
-        value = (values or {}).get(mid)
+        text = _single_line(label if has_label else _PDC_LABEL[mid])
+        value = _single_line((values or {}).get(mid))
         return [f"custom_text={text} {value}" if value else f"custom_text={text}"]
     lines = []
     if mid in _LABEL_DIRECTIVE and has_label:

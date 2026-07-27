@@ -335,6 +335,14 @@ class Plugin:
         self._hud = HudStore(
             os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "hud.json")
         )
+        self._hud_home = (
+            getattr(decky, "DECKY_USER_HOME", None) or os.path.expanduser("~")
+        )
+        try:
+            hud_home_stat = os.stat(self._hud_home)
+            self._hud_owner = (hud_home_stat.st_uid, hud_home_stat.st_gid)
+        except OSError:
+            self._hud_owner = None
         self._power_reader = PowerReader()
         self._battery = BatteryReader()
         self._charge_limit = select_charge_limit(self._device)
@@ -374,6 +382,9 @@ class Plugin:
         self._pdc_presets_path = None
         self._pdc_active_ids = []
         self._pdc_written = {}
+        self._pdc_preview_values = {}
+        self._pdc_refresh_failed = False
+        self._hud_apply_status = None
         self._tdp_generation = 0
         self._tdp_targets = None
         self._tdp_observation = TdpObservation(
@@ -1724,7 +1735,15 @@ class Plugin:
                 # loop): re-bake presets.conf and reload mangoapp when a shown value
                 # changes. Runs regardless of the auto-TDP gating below (it must update
                 # on desktop / manual / eco too). No-op when no pdc metric is shown.
-                await self._refresh_pdc_metrics()
+                try:
+                    await self._refresh_pdc_metrics()
+                    if self._pdc_refresh_failed:
+                        decky.logger.info("HUD metric refresh recovered")
+                    self._pdc_refresh_failed = False
+                except Exception as exc:  # noqa: BLE001
+                    if not self._pdc_refresh_failed:
+                        decky.logger.warning("HUD metric refresh failed: %s", type(exc).__name__)
+                    self._pdc_refresh_failed = True
                 # Auto-TDP is a per-GAME dynamic control: don't adjust the global
                 # setpoint from desktop/loading activity. Idle → drop stale window
                 # so re-entry into a game starts homogeneous.
@@ -2797,13 +2816,33 @@ class Plugin:
         return self._eco_state()
 
     # ---- HUD (MangoHud overlay) --------------------------------------------
+    def _detect_hud(self) -> dict:
+        uid = self._hud_owner[0] if self._hud_owner is not None else None
+        return mangohud_detect.detect(home=self._hud_home, uid=uid)
+
     def _hud_state(self) -> dict:
-        cap = mangohud_detect.detect()
+        cap = self._detect_hud()
+        model = self._hud.load()
+        capability = (
+            "ready" if cap["supported"]
+            else "unsupported" if cap["running"]
+            else "inactive"
+        )
+        if not model["enabled"] and self._hud_apply_status != "failed":
+            apply_status = "disabled"
+        elif capability == "inactive":
+            apply_status = "pending"
+        elif capability == "unsupported":
+            apply_status = "unavailable"
+        else:
+            apply_status = self._hud_apply_status or "pending"
         return {
-            # supported only when mangoapp is running with native preset support
             "supported": cap["supported"],
             "running": cap["running"],
-            "model": self._hud.load(),
+            "capability": capability,
+            "applyStatus": apply_status,
+            "model": model,
+            "values": dict(self._pdc_preview_values),
             "catalog": list(mangohud_config.METRIC_CATALOG),
             "presets": {k: list(v) for k, v in mangohud_config.PRESETS.items()},
         }
@@ -2815,22 +2854,54 @@ class Plugin:
         would show), so we bake a value snapshot here (it refreshes on re-apply / the
         auto loop, then reloaded through mangohudctl). We never write Steam's own live
         config. When off: clear presets.conf. No-op when the overlay isn't supported."""
-        cap = mangohud_detect.detect()
+        cap = self._detect_hud()
+        model = self._hud.load()
         if not cap["supported"]:
             self._pdc_active_ids = []
+            self._pdc_preview_values = {}
+            self._hud_apply_status = (
+                "pending" if model["enabled"] and not cap["running"]
+                else "unavailable" if model["enabled"]
+                else "disabled"
+            )
             return
-        model = self._hud.load()
         # Cache the presets path + active ids for the auto loop's re-bake (no /proc rescan).
         self._pdc_presets_path = cap["presetsPath"]
         self._pdc_active_ids = mangohud_config.enabled_pdc_ids(model) if model["enabled"] else []
         if model["enabled"]:
             values = self._pdc_values()
-            apply_hud(model, cap["presetsPath"], values)
-            self._pdc_written = values if reload_mangoapp() else {}
+            self._pdc_preview_values = values
+            expected = mangohud_config.build_presets_conf(model, values)
+            try:
+                on_disk = apply_hud(
+                    model,
+                    cap["presetsPath"],
+                    values,
+                    owner=self._hud_owner,
+                )
+            except OSError:
+                self._pdc_written = {}
+                self._hud_apply_status = "failed"
+                return
+            if on_disk != expected:
+                self._pdc_written = {}
+                self._hud_apply_status = "failed"
+                return
+            if reload_mangoapp():
+                self._pdc_written = values
+                self._hud_apply_status = "applied"
+            else:
+                self._pdc_written = {}
+                self._hud_apply_status = "pending"
         else:
             self._pdc_written = {}
-            clear_presets(cap["presetsPath"])
-            reload_mangoapp()
+            self._pdc_preview_values = {}
+            if not clear_presets(cap["presetsPath"]):
+                self._hud_apply_status = "failed"
+            elif reload_mangoapp():
+                self._hud_apply_status = "disabled"
+            else:
+                self._hud_apply_status = "pending"
 
     # ---- HUD plugin-state metrics (pdc_*, baked into custom_text) -----------
     def _read_pdc_sources(self) -> dict:
@@ -2859,16 +2930,17 @@ class Plugin:
         extras = extras or {}
         appid = self._current_appid
         snap = {}
-        if "pdc_tdp" in active_ids or "pdc_eco" in active_ids:
-            snap["eco"] = bool(self._settings.get("eco_enabled"))
-        if "pdc_tdp" in active_ids:
-            snap["auto"] = self._tdp_profiles.auto_tdp(appid)
-            snap["setpoint"] = self._effective_levels(appid)[0]["pl1"]
-        if "pdc_auto_tdp" in active_ids:
-            snap["auto_tdp"] = self._tdp_profiles.auto_tdp(appid)
-        if "pdc_tdp_learn" in active_ids:
-            snap["learn"] = self._tdp_learned_info(appid)
-        if "pdc_fan" in active_ids:
+        if self._tdp_backend.supported:
+            if "pdc_tdp" in active_ids or "pdc_eco" in active_ids:
+                snap["eco"] = bool(self._settings.get("eco_enabled"))
+            if "pdc_tdp" in active_ids:
+                snap["auto"] = self._tdp_profiles.auto_tdp(appid)
+                snap["setpoint"] = self._effective_levels(appid)[0]["pl1"]
+            if "pdc_auto_tdp" in active_ids:
+                snap["auto_tdp"] = self._tdp_profiles.auto_tdp(appid)
+            if "pdc_tdp_learn" in active_ids:
+                snap["learn"] = self._tdp_learned_info(appid)
+        if self._fan_ctrl.supported and "pdc_fan" in active_ids:
             prof = self._fan_curves.effective(appid)
             snap["fan_mode"] = prof.get("preset")
             snap["fan_learning"] = (prof.get("preset") == "adaptive"
@@ -2933,9 +3005,22 @@ class Plugin:
             return
         model = self._hud.load()
         if model["enabled"]:
-            apply_hud(model, self._pdc_presets_path, values)
+            self._pdc_preview_values = values
+            on_disk = apply_hud(
+                model,
+                self._pdc_presets_path,
+                values,
+                owner=self._hud_owner,
+            )
+            expected = mangohud_config.build_presets_conf(model, values)
+            if on_disk != expected:
+                self._hud_apply_status = "failed"
+                return
             if reload_mangoapp():
                 self._pdc_written = values
+                self._hud_apply_status = "applied"
+            else:
+                self._hud_apply_status = "pending"
 
     async def _refresh_pdc_metrics(self) -> None:
         """Refresh changed pdc values through the serial apply executor."""
@@ -2943,33 +3028,41 @@ class Plugin:
 
     async def get_hud_state(self) -> dict:
         self._init()
-        return self._hud_state()
+        return await self._offload_call(self._hud_state)
 
     async def set_hud_config(self, model: dict) -> dict:
         self._init()
-        self._hud.save(model)
-        await self._offload_call(self._apply_hud)  # detect scans /proc + reads sysfs
-        return self._hud_state()
+        def save_apply_state():
+            self._hud.save(model)
+            self._apply_hud()
+            return self._hud_state()
+        return await self._offload_call(save_apply_state)
 
     async def set_hud_enabled(self, enabled: bool) -> dict:
         self._init()
-        model = self._hud.load()
-        model["enabled"] = bool(enabled)
-        self._hud.save(model)
-        await self._offload_call(self._apply_hud)
-        return self._hud_state()
+        def save_apply_state():
+            model = self._hud.load()
+            model["enabled"] = bool(enabled)
+            self._hud.save(model)
+            self._apply_hud()
+            return self._hud_state()
+        return await self._offload_call(save_apply_state)
 
     async def reset_hud(self) -> dict:
         self._init()
-        self._hud.save(dict(mangohud_config.DEFAULT_MODEL))
-        await self._offload_call(self._apply_hud)
-        return self._hud_state()
+        def reset_apply_state():
+            self._hud.save(dict(mangohud_config.DEFAULT_MODEL))
+            self._apply_hud()
+            return self._hud_state()
+        return await self._offload_call(reset_apply_state)
 
     async def reload_hud(self) -> dict:
         """Re-bake presets.conf now with fresh pdc values and reload mangoapp."""
         self._init()
-        await self._offload_call(self._apply_hud)
-        return self._hud_state()
+        def apply_state():
+            self._apply_hud()
+            return self._hud_state()
+        return await self._offload_call(apply_state)
 
     def _cpu_state(self) -> dict:
         info = self._cpu_info

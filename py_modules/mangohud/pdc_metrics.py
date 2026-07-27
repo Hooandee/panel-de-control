@@ -50,7 +50,10 @@ def fan(snap):
 
 
 def eco(snap):
-    return "Activo" if snap.get("eco") else "Inactivo"
+    value = snap.get("eco")
+    if value is None:
+        return DASH
+    return "Activo" if value else "Inactivo"
 
 
 def profile(snap):

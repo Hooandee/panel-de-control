@@ -68,6 +68,19 @@ def test_coerce_bad_position_size_layout_fall_back():
     assert m["layout"] == "vertical"
 
 
+def test_coerce_non_finite_numbers_fall_back_without_raising():
+    m = coerce_model({
+        "fontSize": float("inf"),
+        "offsetX": float("-inf"),
+        "fontScale": float("nan"),
+        "background": {"alpha": float("nan")},
+    })
+    assert m["fontSize"] == DEFAULT_MODEL["fontSize"]
+    assert m["offsetX"] == DEFAULT_MODEL["offsetX"]
+    assert m["fontScale"] == DEFAULT_MODEL["fontScale"]
+    assert m["background"]["alpha"] == DEFAULT_MODEL["background"]["alpha"]
+
+
 def test_coerce_clamps_background_alpha():
     assert coerce_model({"background": {"alpha": 5}})["background"]["alpha"] == 1.0
     assert coerce_model({"background": {"alpha": -2}})["background"]["alpha"] == 0.0
@@ -124,6 +137,26 @@ def test_colors_emitted_without_hash():
 def test_custom_text_pills_emitted():
     lines = to_directives(coerce_model({"items": [{"kind": "text", "id": "1", "text": "PdC"}]}))
     assert "custom_text=PdC" in lines
+
+
+def test_custom_text_and_labels_cannot_inject_directives():
+    lines = to_directives(coerce_model({"items": [
+        {"kind": "metric", "id": "fps", "label": "Frames\nno_display=1"},
+        {"kind": "text", "id": "1", "text": "hello\r\nposition=middle"},
+    ]}))
+    assert "fps_text=Frames no_display=1" in lines
+    assert "custom_text=hello position=middle" in lines
+    assert "no_display=1" not in lines
+    assert "position=middle" not in lines
+
+
+def test_baked_values_cannot_inject_directives():
+    lines = to_directives(
+        coerce_model({"items": [{"kind": "metric", "id": "pdc_profile"}]}),
+        {"pdc_profile": "Game\nno_display=1"},
+    )
+    assert "custom_text=Perfil Game no_display=1" in lines
+    assert "no_display=1" not in lines
 
 
 def test_background_alpha_and_round_corners():

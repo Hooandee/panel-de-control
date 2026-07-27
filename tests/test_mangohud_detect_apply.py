@@ -1,4 +1,7 @@
+import os
+
 from mangohud import apply
+from mangohud import detect as detection
 from mangohud.apply import apply_hud, clear_presets, read_presets
 from mangohud.config import build_presets_conf, coerce_model
 from mangohud.detect import presets_path, presets_supported
@@ -12,9 +15,17 @@ def test_presets_supported_flag():
     assert presets_supported({}) is False
 
 
-def test_presets_path_prefers_explicit_env():
-    p = presets_path({"MANGOHUD_PRESETSFILE": "/tmp/custom/presets.conf"}, home="/home/deck")
-    assert p == "/tmp/custom/presets.conf"
+def test_presets_path_prefers_safe_explicit_env():
+    p = presets_path(
+        {"MANGOHUD_PRESETSFILE": "/home/deck/.local/share/MangoHud/presets.conf"},
+        home="/home/deck",
+    )
+    assert p == "/home/deck/.local/share/MangoHud/presets.conf"
+
+
+def test_presets_path_rejects_explicit_path_outside_user_home():
+    p = presets_path({"MANGOHUD_PRESETSFILE": "/etc/presets.conf"}, home="/home/deck")
+    assert p == "/home/deck/.config/MangoHud/presets.conf"
 
 
 def test_presets_path_uses_xdg_config_home():
@@ -22,15 +33,58 @@ def test_presets_path_uses_xdg_config_home():
     assert p == "/home/deck/.cfg/MangoHud/presets.conf"
 
 
+def test_presets_path_rejects_xdg_config_home_outside_user_home():
+    p = presets_path({"XDG_CONFIG_HOME": "/etc"}, home="/home/deck")
+    assert p == "/home/deck/.config/MangoHud/presets.conf"
+
+
 def test_presets_path_defaults_to_home_config():
     p = presets_path({}, home="/home/deck")
     assert p == "/home/deck/.config/MangoHud/presets.conf"
 
 
-def test_presets_path_prefers_mangoapp_HOME_over_our_root_home():
-    # we run as root (home=/root) but the overlay reads the deck user's config
-    p = presets_path({"HOME": "/home/deck"}, home="/root")
+def test_presets_path_uses_trusted_decky_home_not_process_home():
+    p = presets_path({"HOME": "/root"}, home="/home/deck")
     assert p == "/home/deck/.config/MangoHud/presets.conf"
+
+
+def _fake_mangoapp(proc, pid, uid, environ):
+    process = proc / str(pid)
+    process.mkdir()
+    (process / "comm").write_text("mangoapp\n")
+    (process / "status").write_text(f"Name:\tmangoapp\nUid:\t{uid}\t{uid}\t{uid}\t{uid}\n")
+    raw = b"\0".join(f"{key}={value}".encode() for key, value in environ.items()) + b"\0"
+    (process / "environ").write_bytes(raw)
+
+
+def test_detect_ignores_mangoapp_owned_by_another_user(tmp_path, monkeypatch):
+    proc = tmp_path / "proc"
+    proc.mkdir()
+    _fake_mangoapp(
+        proc,
+        10,
+        1001,
+        {"STEAM_MANGOAPP_PRESETS_SUPPORTED": "1", "HOME": "/home/other"},
+    )
+    monkeypatch.setattr(detection, "_PROC", str(proc))
+
+    cap = detection.detect(home="/home/deck", uid=1000)
+
+    assert cap["running"] is False
+    assert cap["presetsPath"] == "/home/deck/.config/MangoHud/presets.conf"
+
+
+def test_detect_uses_matching_user_and_trusted_home_fallback(tmp_path, monkeypatch):
+    proc = tmp_path / "proc"
+    proc.mkdir()
+    _fake_mangoapp(proc, 10, 1000, {"STEAM_MANGOAPP_PRESETS_SUPPORTED": "1"})
+    monkeypatch.setattr(detection, "_PROC", str(proc))
+
+    cap = detection.detect(home="/home/deck", uid=1000)
+
+    assert cap["running"] is True
+    assert cap["supported"] is True
+    assert cap["presetsPath"] == "/home/deck/.config/MangoHud/presets.conf"
 
 
 # ---- apply: write presets.conf + honest readback ----
@@ -43,6 +97,30 @@ def test_apply_writes_presets_conf_and_reads_it_back(tmp_path):
     assert read_presets(path) == on_disk  # readback = what actually landed
 
 
+def test_apply_new_path_uses_requested_user_ownership(tmp_path):
+    path = str(tmp_path / "sub" / "presets.conf")
+    owner = (os.getuid(), os.getgid())
+    model = coerce_model({"items": [{"kind": "metric", "id": "fps"}]})
+
+    apply_hud(model, path, owner=owner)
+
+    assert (os.stat(path).st_uid, os.stat(path).st_gid) == owner
+    assert (os.stat(tmp_path / "sub").st_uid, os.stat(tmp_path / "sub").st_gid) == owner
+
+
+def test_apply_skips_atomic_replace_when_bytes_are_unchanged(tmp_path, monkeypatch):
+    path = str(tmp_path / "presets.conf")
+    model = coerce_model({"items": [{"kind": "metric", "id": "fps"}]})
+    apply_hud(model, path)
+    writes = []
+    monkeypatch.setattr(apply, "_write_atomic", lambda *args: writes.append(args))
+
+    on_disk = apply_hud(model, path)
+
+    assert on_disk == build_presets_conf(model)
+    assert writes == []
+
+
 def test_read_presets_missing_returns_none(tmp_path):
     assert read_presets(str(tmp_path / "nope.conf")) is None
 
@@ -51,9 +129,17 @@ def test_clear_presets_removes_our_file_and_is_idempotent(tmp_path):
     path = str(tmp_path / "presets.conf")
     apply_hud(coerce_model({"metrics": ["fps"]}), path)
     assert read_presets(path) is not None
-    clear_presets(path)  # hands the overlay back to MangoHud's stock defaults
+    assert clear_presets(path) is True  # hands the overlay back to MangoHud's stock defaults
     assert read_presets(path) is None
-    clear_presets(path)  # already gone — must not raise
+    assert clear_presets(path) is True  # already gone — must not raise
+
+
+def test_clear_presets_reports_failed_removal(tmp_path, monkeypatch):
+    path = str(tmp_path / "presets.conf")
+    apply_hud(coerce_model({"items": [{"kind": "metric", "id": "fps"}]}), path)
+    monkeypatch.setattr(apply.os, "remove", lambda _path: (_ for _ in ()).throw(PermissionError()))
+
+    assert clear_presets(path) is False
 
 
 def test_apply_bakes_pdc_values_into_presets(tmp_path):
@@ -101,6 +187,16 @@ def test_reload_without_control_tool_is_non_fatal(monkeypatch):
     assert apply.reload_mangoapp() is False
 
 
+def test_reload_without_mangoapp_cwd_does_not_create_the_wrong_ipc_queue(monkeypatch):
+    calls = []
+    monkeypatch.setattr(apply.shutil, "which", lambda *a, **k: "/usr/bin/mangohudctl")
+    monkeypatch.setattr(apply, "_mangoapp_cwd", lambda: None)
+    monkeypatch.setattr(apply.subprocess, "run", lambda *a, **k: calls.append((a, k)))
+
+    assert apply.reload_mangoapp() is False
+    assert calls == []
+
+
 def test_reload_searches_service_path(monkeypatch):
     monkeypatch.setenv("PATH", "/opt/mangohud/bin")
 
@@ -110,6 +206,7 @@ def test_reload_searches_service_path(monkeypatch):
         return f"/opt/mangohud/bin/{name}"
 
     monkeypatch.setattr(apply.shutil, "which", which)
+    monkeypatch.setattr(apply, "_mangoapp_cwd", lambda: "/home/deck")
     monkeypatch.setattr(
         apply.subprocess,
         "run",

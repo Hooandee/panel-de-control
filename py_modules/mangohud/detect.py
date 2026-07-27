@@ -1,6 +1,7 @@
 import os
 
 _PRESETS_FLAG = "STEAM_MANGOAPP_PRESETS_SUPPORTED"
+_PROC = "/proc"
 
 
 def presets_supported(environ):
@@ -9,32 +10,56 @@ def presets_supported(environ):
     return environ.get(_PRESETS_FLAG) == "1"
 
 
+def _inside_home(path, home):
+    try:
+        return os.path.commonpath((os.path.realpath(path), os.path.realpath(home))) == os.path.realpath(home)
+    except (TypeError, ValueError):
+        return False
+
+
 def presets_path(environ, home):
     """Where MangoHud reads presets.conf: an explicit MANGOHUD_PRESETSFILE, else
     $XDG_CONFIG_HOME/MangoHud/presets.conf, else <HOME>/.config/MangoHud/presets.conf.
-    Prefer the HOME from the mangoapp environ over `home`: we run as root, so our own
-    ~ is /root, but the overlay reads the real user's (deck's) config dir."""
+    `home` is the trusted Decky-user home. Process-provided paths are honoured only
+    inside it so an unprivileged process cannot steer the root backend elsewhere."""
+    default = os.path.join(home, ".config", "MangoHud", "presets.conf")
     explicit = environ.get("MANGOHUD_PRESETSFILE")
-    if explicit:
+    if explicit and _inside_home(explicit, home):
         return explicit
-    base = environ.get("XDG_CONFIG_HOME") or os.path.join(environ.get("HOME") or home, ".config")
-    return os.path.join(base, "MangoHud", "presets.conf")
+    xdg = environ.get("XDG_CONFIG_HOME")
+    base = xdg if xdg and _inside_home(xdg, home) else os.path.join(home, ".config")
+    candidate = os.path.join(base, "MangoHud", "presets.conf")
+    if not _inside_home(candidate, home):
+        return default
+    return candidate
 
 
-def _mangoapp_environ():
+def _process_uid(pid):
+    try:
+        with open(os.path.join(_PROC, pid, "status")) as handle:
+            for line in handle:
+                if line.startswith("Uid:"):
+                    return int(line.split()[1])
+    except (OSError, ValueError, IndexError):
+        return None
+    return None
+
+
+def _mangoapp_environ(uid=None):
     """The environment of the running mangoapp process, or None if not running.
     Scans /proc, so it isn't unit-tested."""
-    proc = "/proc"
     try:
-        pids = [p for p in os.listdir(proc) if p.isdigit()]
+        pids = [p for p in os.listdir(_PROC) if p.isdigit()]
     except OSError:
         return None
     for pid in pids:
         try:
-            with open(os.path.join(proc, pid, "comm")) as handle:
+            if uid is not None and _process_uid(pid) != uid:
+                continue
+            with open(os.path.join(_PROC, pid, "comm")) as handle:
                 if handle.read().strip() != "mangoapp":
                     continue
-            with open(os.path.join(proc, pid, "environ"), "rb") as handle:
+            with open(os.path.join(_PROC, pid, "environ"), "rb") as handle:
                 raw = handle.read()
         except OSError:
             continue
@@ -47,13 +72,13 @@ def _mangoapp_environ():
     return None
 
 
-def detect():
+def detect(home=None, uid=None):
     """Overlay capability for the HUD tab. `supported` is only True when mangoapp is
     actually running with native presets support. `configFile` is the live
     per-session config Steam feeds mangoapp; None when mangoapp isn't running or
     doesn't expose it."""
-    home = os.path.expanduser("~")
-    env = _mangoapp_environ()
+    home = home or os.path.expanduser("~")
+    env = _mangoapp_environ(uid)
     if env is None:
         return {"running": False, "supported": False,
                 "presetsPath": presets_path({}, home), "configFile": None}
