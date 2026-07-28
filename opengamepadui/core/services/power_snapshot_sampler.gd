@@ -143,7 +143,7 @@ func poll() -> void:
 		return
 	_drain_pipes()
 	if _output_is_too_large():
-		_abort_active_process()
+		_stop_active_process()
 		_finish_invalid(
 			ObservedValue.ERROR,
 			"busctl_output_too_large",
@@ -151,7 +151,7 @@ func poll() -> void:
 		)
 		return
 	if _now_msec() - _launched_msec >= _timeout_msec:
-		_abort_active_process()
+		_stop_active_process()
 		_finish_invalid(ObservedValue.ERROR, "busctl_timeout", true)
 		return
 	if _transport.is_process_running(_pid):
@@ -159,7 +159,7 @@ func poll() -> void:
 
 	_drain_pipes()
 	if _output_is_too_large():
-		_abort_active_process()
+		_stop_active_process()
 		_finish_invalid(
 			ObservedValue.ERROR,
 			"busctl_output_too_large",
@@ -170,7 +170,7 @@ func poll() -> void:
 	var completed_stdout := _stdout_bytes.get_string_from_utf8()
 	var exit_code: int = _transport.get_process_exit_code(_pid)
 	_close_active_pipes()
-	if exit_code > 0:
+	if exit_code != 0:
 		_finish_invalid(ObservedValue.ERROR, "busctl_command_failed", true)
 		return
 	_handle_response(completed_phase, completed_stdout)
@@ -314,15 +314,14 @@ func _launch_card_properties() -> void:
 	)
 
 
-func _launch_or_finish(arguments: PackedStringArray) -> bool:
+func _launch_or_finish(arguments: PackedStringArray) -> void:
 	if _launch(arguments):
-		return true
+		return
 	_finish_invalid(
 		ObservedValue.UNAVAILABLE,
 		"powerstation_unavailable_or_unreachable",
 		true,
 	)
-	return false
 
 
 func _launch(arguments: PackedStringArray) -> bool:
@@ -338,6 +337,7 @@ func _launch(arguments: PackedStringArray) -> bool:
 		or process["stderr"] == null
 		or int(process.get("pid", -1)) <= 0
 	):
+		_discard_process(process)
 		return false
 	_stdio = process["stdio"]
 	_stderr = process["stderr"]
@@ -411,28 +411,38 @@ func _output_is_too_large() -> bool:
 	)
 
 
-func _abort_active_process() -> void:
-	if has_active_process() and _transport.is_process_running(_pid):
-		_transport.kill(_pid)
-	_close_active_pipes()
-
-
 func _stop_active_process() -> void:
-	if has_active_process() and _transport.is_process_running(_pid):
-		_transport.kill(_pid)
+	_kill_process_if_running(_pid)
 	_close_active_pipes()
+
+
+func _discard_process(process: Dictionary) -> void:
+	_kill_process_if_running(int(process.get("pid", -1)))
+	_close_pipe(process.get("stdio"))
+	_close_pipe(process.get("stderr"))
+
+
+func _kill_process_if_running(pid: int) -> void:
+	if pid <= 0 or not _transport.is_process_running(pid):
+		return
+	var kill_error: Error = _transport.kill(pid)
+	if kill_error != OK:
+		push_warning("Unable to stop busctl process %d: error %d" % [pid, kill_error])
 
 
 func _close_active_pipes() -> void:
-	if _stdio != null:
-		_stdio.close()
-	if _stderr != null:
-		_stderr.close()
+	_close_pipe(_stdio)
+	_close_pipe(_stderr)
 	_stdio = null
 	_stderr = null
 	_pid = -1
 	_stdout_bytes.clear()
 	_stderr_bytes.clear()
+
+
+func _close_pipe(pipe: Variant) -> void:
+	if pipe is Object and pipe.has_method("close"):
+		pipe.call("close")
 
 
 func _finish_invalid(state: String, reason: String, apply_backoff: bool) -> void:

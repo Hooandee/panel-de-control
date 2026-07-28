@@ -3,30 +3,19 @@ extends Plugin
 const MenuScene = preload(
 	"res://plugins/panel-de-control/core/ui/power_status_menu.tscn"
 )
-const MenuIcon = preload("res://plugins/panel-de-control/assets/icon.svg")
 const PowerSnapshotSampler = preload(
 	"res://plugins/panel-de-control/core/services/power_snapshot_sampler.gd"
 )
 
 var _sampler: Node
-var _sampler_configured := false
-var _ready_complete := false
 var _menus: Array[WeakRef] = []
 
 
-func configure_sampler(sampler: Node) -> void:
-	if _ready_complete:
-		push_error("Power sampler must be configured before the plugin is ready")
-		return
+func configure_sampler(sampler: Node) -> bool:
+	if sampler == null or sampler.get_parent() != null or _sampler != null:
+		return false
 	_sampler = sampler
-	_sampler_configured = true
-
-
-func _ready() -> void:
-	_ensure_sampler()
-	_ready_complete = true
-	var quick_menu := _create_menu()
-	add_to_quick_bar(quick_menu, MenuIcon)
+	return true
 
 
 func get_settings_menu() -> Control:
@@ -46,8 +35,6 @@ func unload() -> void:
 		_sampler.call("shutdown")
 		_sampler.queue_free()
 	_sampler = null
-	_sampler_configured = false
-	_ready_complete = false
 
 
 func _create_menu() -> Control:

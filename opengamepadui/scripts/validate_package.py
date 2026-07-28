@@ -8,6 +8,9 @@ import re
 import sys
 import zipfile
 
+from validate_manifest import validate as validate_manifest
+from validate_manifest import validate_payload as validate_manifest_payload
+
 
 PLUGIN_ID = "panel-de-control"
 PACKAGE_NAME = f"{PLUGIN_ID}.zip"
@@ -138,15 +141,19 @@ def validate_package(package: Path, source: Path) -> str:
     if not package.is_file():
         raise ValueError(f"Package not found: {package}")
 
+    manifest_errors = validate_manifest(
+        source / "plugin.json",
+        source / "VERSION",
+    )
+    if manifest_errors:
+        raise ValueError("\n".join(manifest_errors))
+
     source_version = (source / "VERSION").read_text(encoding="utf-8").strip()
     source_manifest = _load_json(
         (source / "plugin.json").read_bytes(),
         "source plugin.json",
     )
-    if source_manifest.get("plugin.id") != PLUGIN_ID:
-        raise ValueError(f"Source plugin.id must be {PLUGIN_ID}")
-    if source_manifest.get("plugin.version") != source_version:
-        raise ValueError("Source plugin.json version does not match VERSION")
+    source_license = (source / "LICENSE").read_bytes()
     icon_sidecar = (source / "assets" / "icon.svg.import").read_bytes()
     imported_texture = _validate_icon_import(icon_sidecar)
 
@@ -161,6 +168,17 @@ def validate_package(package: Path, source: Path) -> str:
                 archive.read(manifest_name),
                 "package plugin.json",
             )
+            package_manifest_errors = validate_manifest_payload(
+                package_manifest,
+                source_version,
+            )
+            if package_manifest_errors:
+                raise ValueError("\n".join(package_manifest_errors))
+            license_name = (PLUGIN_ROOT / "LICENSE").as_posix()
+            if license_name not in names:
+                raise ValueError(f"Package license missing: {license_name}")
+            if archive.read(license_name) != source_license:
+                raise ValueError("Package license does not match source LICENSE")
             packaged_sidecar_name = (
                 PLUGIN_ROOT / "assets" / "icon.svg.import"
             ).as_posix()
@@ -175,13 +193,6 @@ def validate_package(package: Path, source: Path) -> str:
     except zipfile.BadZipFile as error:
         raise ValueError(f"Invalid ZIP package: {error}") from error
 
-    if package_manifest.get("plugin.id") != PLUGIN_ID:
-        raise ValueError(f"Package plugin.id must be {PLUGIN_ID}")
-    package_version = package_manifest.get("plugin.version")
-    if package_version != source_version:
-        raise ValueError(
-            f"Package version {package_version!r} does not match VERSION {source_version!r}"
-        )
     if package_manifest != source_manifest:
         raise ValueError("Package plugin.json does not match source plugin.json")
 

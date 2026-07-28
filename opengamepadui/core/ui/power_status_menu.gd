@@ -58,6 +58,7 @@ func _render_snapshot(snapshot: RefCounted) -> void:
 
 func shutdown() -> void:
 	_shutting_down = true
+	set_process(false)
 	if is_instance_valid(_refresh_timer):
 		_refresh_timer.stop()
 		if _refresh_timer.timeout.is_connected(refresh_now):

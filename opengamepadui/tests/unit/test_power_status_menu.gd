@@ -42,7 +42,7 @@ func test_known_shared_snapshot_is_rendered_and_refresh_only_requests_sampling()
 	var sampler: ManualSampler = fixture["sampler"]
 
 	var section_label := menu.find_child("SectionLabel") as Label
-	assert_not_null(section_label, "QuickBar API 2.0 requires a SectionLabel child")
+	assert_not_null(section_label, "Settings must display a visible section heading")
 	if section_label == null:
 		return
 	assert_eq(section_label.text, "Panel de Control")
@@ -150,11 +150,15 @@ func test_menu_is_read_only_and_shutdown_disconnects_shared_sampler() -> void:
 
 	menu.shutdown()
 	var requests_before_timeout := sampler.request_count
+	var polls_before_shutdown := sampler.poll_count
 	timer.timeout.emit()
+	menu.notification(Node.NOTIFICATION_PROCESS)
 	sampler.publish(_invalid_snapshot(ObservedValue.ERROR, "late_snapshot"))
 
 	assert_true(timer.is_stopped())
+	assert_false(menu.is_processing())
 	assert_eq(sampler.request_count, requests_before_timeout)
+	assert_eq(sampler.poll_count, polls_before_shutdown)
 	assert_eq(_label(menu, "PowerStationStatus").text, "PowerStation: Connected")
 
 

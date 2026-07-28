@@ -45,16 +45,8 @@ def read_manifest(manifest_path: Path) -> tuple[dict | None, list[str]]:
     return payload, []
 
 
-def validate(manifest_path: Path, version_path: Path) -> list[str]:
-    manifest, errors = read_manifest(manifest_path)
-    if manifest is None:
-        return errors
-
-    try:
-        version = version_path.read_text(encoding="utf-8").strip()
-    except FileNotFoundError:
-        return ["VERSION is missing"]
-
+def validate_payload(manifest: dict, version: str) -> list[str]:
+    errors: list[str] = []
     blocked = sorted(set(manifest) & BLOCKED_FIELDS)
     for field in blocked:
         errors.append(f"unauthorized manifest field: {field}")
@@ -87,12 +79,31 @@ def validate(manifest_path: Path, version_path: Path) -> list[str]:
             errors.append(f"{field} must be a non-empty string")
 
     tags = manifest.get("store.tags")
-    if not isinstance(tags, list) or "quick-bar" not in tags:
-        errors.append("store.tags must include 'quick-bar'")
+    if (
+        not isinstance(tags, list)
+        or not tags
+        or any(not isinstance(tag, str) or not tag.strip() for tag in tags)
+    ):
+        errors.append("store.tags must be a non-empty list of non-empty strings")
+    elif "quick-bar" not in tags:
+        errors.append("store.tags must include 'quick-bar' for OGUI overlay discovery")
     if manifest.get("store.images") != []:
         errors.append("store.images must be an empty list")
 
     return errors
+
+
+def validate(manifest_path: Path, version_path: Path) -> list[str]:
+    manifest, errors = read_manifest(manifest_path)
+    if manifest is None:
+        return errors
+
+    try:
+        version = version_path.read_text(encoding="utf-8").strip()
+    except FileNotFoundError:
+        return ["VERSION is missing"]
+
+    return validate_payload(manifest, version)
 
 
 def parse_arguments() -> argparse.Namespace:

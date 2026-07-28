@@ -23,7 +23,7 @@ VALID_MANIFEST = {
         "Observes GPU identity, TDP, and power profile without applying performance changes."
     ),
     "entrypoint": "plugin.gd",
-    "store.tags": ["quick-bar"],
+    "store.tags": ["quick-bar", "performance", "power"],
     "store.images": [],
     "author.name": "Hooandee",
 }
@@ -32,6 +32,12 @@ VALID_MANIFEST = {
 class ManifestContractTests(unittest.TestCase):
     def test_package_includes_a_manifest(self):
         self.assertTrue((PACKAGE_ROOT / "plugin.json").is_file())
+
+    def test_port_includes_the_complete_repository_license(self):
+        self.assertEqual(
+            (PACKAGE_ROOT.parent / "LICENSE").read_bytes(),
+            (PACKAGE_ROOT / "LICENSE").read_bytes(),
+        )
 
     def test_repository_manifest_has_the_stable_contract(self):
         manifest = json.loads((PACKAGE_ROOT / "plugin.json").read_text(encoding="utf-8"))
@@ -43,7 +49,10 @@ class ManifestContractTests(unittest.TestCase):
         )
         self.assertEqual("2.0.0", manifest["plugin.min-api-version"])
         self.assertEqual("plugin.gd", manifest["entrypoint"])
-        self.assertIn("quick-bar", manifest["store.tags"])
+        self.assertEqual(
+            ["quick-bar", "performance", "power"],
+            manifest["store.tags"],
+        )
         self.assertEqual([], manifest["store.images"])
         self.assertEqual("Hooandee", manifest["author.name"])
         for field in ("plugin.link", "plugin.source"):
@@ -120,9 +129,26 @@ class ManifestValidatorTests(unittest.TestCase):
         manifest = {**VALID_MANIFEST, "plugin.min-api-version": "1.0.0"}
         self.assert_invalid(manifest, "plugin.min-api-version must be '2.0.0'")
 
-    def test_rejects_a_manifest_without_quick_bar(self):
-        manifest = {**VALID_MANIFEST, "store.tags": ["performance"]}
-        self.assert_invalid(manifest, "store.tags must include 'quick-bar'")
+    def test_rejects_empty_tags(self):
+        manifest = {**VALID_MANIFEST, "store.tags": []}
+        self.assert_invalid(
+            manifest,
+            "store.tags must be a non-empty list of non-empty strings",
+        )
+
+    def test_rejects_blank_tags(self):
+        manifest = {**VALID_MANIFEST, "store.tags": ["performance", ""]}
+        self.assert_invalid(
+            manifest,
+            "store.tags must be a non-empty list of non-empty strings",
+        )
+
+    def test_rejects_missing_overlay_discovery_tag(self):
+        manifest = {**VALID_MANIFEST, "store.tags": ["performance", "power"]}
+        self.assert_invalid(
+            manifest,
+            "store.tags must include 'quick-bar' for OGUI overlay discovery",
+        )
 
     def test_rejects_release_fields(self):
         release_manifests = {

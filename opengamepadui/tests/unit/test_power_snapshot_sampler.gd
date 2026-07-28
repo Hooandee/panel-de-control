@@ -46,6 +46,7 @@ class FakePipe extends RefCounted:
 
 class FakeTransport extends RefCounted:
 	var responses: Array[Dictionary] = []
+	var raw_responses: Array[Dictionary] = []
 	var commands: Array[Dictionary] = []
 	var killed_pids: Array[int] = []
 	var _processes: Dictionary = {}
@@ -74,6 +75,8 @@ class FakeTransport extends RefCounted:
 			"arguments": arguments,
 			"blocking": blocking,
 		})
+		if not raw_responses.is_empty():
+			return raw_responses.pop_front()
 		if responses.is_empty():
 			return {}
 		var response: Dictionary = responses.pop_front()
@@ -136,7 +139,7 @@ func test_valid_partial_responses_select_integrated_card_and_publish_snapshot() 
 	transport.queue_response([
 		'{"type":"ao","data":[["/org/shadowblip/Performance/',
 		'GPU/card0","/org/shadowblip/Performance/GPU/card1"]]}',
-	], [], 2, -1)
+	], [], 2, 0)
 	transport.queue_response([_card_json("dedicated", "Discrete GPU", "1002:73df")])
 	transport.queue_response([_card_json("integrated", "AMD Radeon Graphics", "1002:15bf")])
 	transport.queue_response([_tdp_json(18.0, "balanced")])
@@ -165,6 +168,55 @@ func test_valid_partial_responses_select_integrated_card_and_publish_snapshot() 
 	assert_eq(
 		transport.commands[3]["arguments"][-1],
 		"org.shadowblip.GPU.Card.TDP"
+	)
+	sampler.shutdown()
+
+
+func test_negative_exit_code_is_never_accepted_as_success() -> void:
+	var fixture := _new_fixture()
+	var sampler: Node = fixture["sampler"]
+	if sampler == null:
+		return
+	var transport: FakeTransport = fixture["transport"]
+	transport.queue_response([_enumerate_json([
+		"/org/shadowblip/Performance/GPU/card1",
+	])], [], 0, -1)
+
+	assert_true(sampler.request_snapshot())
+	_pump_until_idle(sampler)
+
+	_assert_invalid(
+		sampler.get_latest_snapshot(),
+		ObservedValue.ERROR,
+		"busctl_command_failed",
+	)
+	sampler.shutdown()
+
+
+func test_partial_process_is_cleaned_up_before_launch_fails() -> void:
+	var fixture := _new_fixture()
+	var sampler: Node = fixture["sampler"]
+	if sampler == null:
+		return
+	var transport: FakeTransport = fixture["transport"]
+	var stdout := FakePipe.new([])
+	transport._processes[100] = {
+		"stdout": stdout,
+		"stderr": FakePipe.new([]),
+		"running_checks": 100,
+		"exit_code": 0,
+		"killed": false,
+	}
+	transport.raw_responses.append({"stdio": stdout, "pid": 100})
+
+	assert_true(sampler.request_snapshot())
+
+	assert_eq(transport.killed_pids, [100])
+	assert_true(stdout.closed)
+	_assert_invalid(
+		sampler.get_latest_snapshot(),
+		ObservedValue.UNAVAILABLE,
+		"powerstation_unavailable_or_unreachable",
 	)
 	sampler.shutdown()
 

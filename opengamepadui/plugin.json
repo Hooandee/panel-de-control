@@ -8,7 +8,7 @@
   "plugin.summary": "Read-only PowerStation status for OpenGamepadUI.",
   "plugin.description": "Observes GPU identity, TDP, and power profile without applying performance changes.",
   "entrypoint": "plugin.gd",
-  "store.tags": ["quick-bar"],
+  "store.tags": ["quick-bar", "performance", "power"],
   "store.images": [],
   "author.name": "Hooandee"
 }

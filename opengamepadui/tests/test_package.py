@@ -21,6 +21,26 @@ DECKY_WORKFLOW = REPOSITORY_ROOT / ".github" / "workflows" / "ci.yml"
 RELEASE_PLEASE_CONFIG = REPOSITORY_ROOT / "release-please-config.json"
 
 
+def _manifest(version: str) -> dict[str, object]:
+    return {
+        "plugin.id": "panel-de-control",
+        "plugin.name": "Panel de Control",
+        "plugin.version": version,
+        "plugin.min-api-version": "2.0.0",
+        "plugin.link": "https://github.com/Hooandee/panel-de-control",
+        "plugin.source": "https://github.com/Hooandee/panel-de-control",
+        "plugin.summary": "Read-only PowerStation status for OpenGamepadUI.",
+        "plugin.description": (
+            "Observes GPU identity, TDP, and power profile without applying "
+            "performance changes."
+        ),
+        "entrypoint": "plugin.gd",
+        "store.tags": ["quick-bar", "performance", "power"],
+        "store.images": [],
+        "author.name": "Hooandee",
+    }
+
+
 def _run(*args: str, **kwargs: object) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         args,
@@ -242,16 +262,10 @@ class PackageValidationTests(unittest.TestCase):
         source.mkdir()
         (source / "VERSION").write_text(f"{version}\n", encoding="utf-8")
         (source / "plugin.json").write_text(
-            json.dumps(
-                {
-                    "plugin.id": "panel-de-control",
-                    "plugin.version": version,
-                    "plugin.min-api-version": "2.0.0",
-                    "entrypoint": "plugin.gd",
-                }
-            ),
+            json.dumps(_manifest(version)),
             encoding="utf-8",
         )
+        (source / "LICENSE").write_bytes(b"complete test license\n")
         (source / "core").mkdir()
         (source / "core" / "feature.gd").write_text(
             "extends RefCounted\n",
@@ -287,19 +301,21 @@ class PackageValidationTests(unittest.TestCase):
         include_compiled_entrypoint: bool = True,
         include_compiled_dependency: bool = True,
         include_imported_texture: bool = True,
+        include_license: bool = True,
+        manifest: dict[str, object] | None = None,
     ) -> Path:
         package = directory / "panel-de-control.zip"
-        manifest = {
-            "plugin.id": "panel-de-control",
-            "plugin.version": version,
-            "plugin.min-api-version": "2.0.0",
-            "entrypoint": "plugin.gd",
-        }
+        package_manifest = _manifest(version) if manifest is None else manifest
         with zipfile.ZipFile(package, "w") as archive:
             archive.writestr(
                 "plugins/panel-de-control/plugin.json",
-                json.dumps(manifest),
+                json.dumps(package_manifest),
             )
+            if include_license:
+                archive.writestr(
+                    "plugins/panel-de-control/LICENSE",
+                    b"complete test license\n",
+                )
             if include_compiled_entrypoint:
                 archive.writestr("plugins/panel-de-control/plugin.gdc", b"compiled")
                 archive.writestr(
@@ -368,6 +384,50 @@ class PackageValidationTests(unittest.TestCase):
                 hashlib.sha256(package.read_bytes()).hexdigest(),
             )
 
+    def test_rejects_incomplete_manifest_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = self._source(root)
+            package = self._package(
+                root,
+                manifest={
+                    "plugin.id": "panel-de-control",
+                    "plugin.version": "0.1.0",
+                    "plugin.min-api-version": "2.0.0",
+                    "entrypoint": "plugin.gd",
+                },
+            )
+
+            result = _run(
+                "python3",
+                str(VALIDATE_PACKAGE),
+                "--package",
+                str(package),
+                "--source",
+                str(source),
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("missing manifest fields", result.stderr)
+
+    def test_rejects_package_without_license(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = self._source(root)
+            package = self._package(root, include_license=False)
+
+            result = _run(
+                "python3",
+                str(VALIDATE_PACKAGE),
+                "--package",
+                str(package),
+                "--source",
+                str(source),
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("license", result.stderr.lower())
+
     def test_rejects_package_with_tests_or_private_sources(self) -> None:
         forbidden_entries = (
             "plugins/panel-de-control/tests/unit/test_plugin.gdc",
@@ -415,7 +475,7 @@ class PackageValidationTests(unittest.TestCase):
             )
 
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn("package version", result.stderr.lower())
+            self.assertIn("plugin.version must match VERSION", result.stderr)
 
     def test_rejects_pack_without_compiled_entrypoint(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
