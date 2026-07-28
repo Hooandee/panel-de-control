@@ -3,6 +3,10 @@ import { HTMLAttributes, ReactNode } from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+const mocks = vi.hoisted(() => ({
+  setModel: vi.fn(),
+}));
+
 vi.mock("@decky/ui", () => ({
   Focusable: ({
     children,
@@ -54,15 +58,17 @@ vi.mock("../mangohud/useHud", async () => {
           items: [
             { kind: "metric", id: "fps" },
             { kind: "metric", id: "ram" },
+            { kind: "metric", id: "battery" },
+            { kind: "metric", id: "battery_watt" },
             { kind: "separator", id: "separator-test" },
             { kind: "spacer", id: "spacer-test", size: "small" },
           ],
         },
         values: {},
-        catalog: ["fps", "ram"],
+        catalog: ["fps", "ram", "battery", "battery_watt", "time"],
         presets: { essentials: ["fps"] },
       },
-      setModel: vi.fn(),
+      setModel: mocks.setModel,
       setEnabled: vi.fn(),
       reload: vi.fn(),
       reloadStatus: "idle",
@@ -92,7 +98,10 @@ vi.mock("../components/ConfirmDialog", () => ({
 import { HudSection } from "./HudSection";
 
 describe("HudSection QAM composition", () => {
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
 
   it("uses one bounded stack and only exposes editors on configurable rows", () => {
     render(<HudSection />);
@@ -118,5 +127,49 @@ describe("HudSection QAM composition", () => {
     fireEvent.click(trigger!);
 
     expect(screen.getByText("copy:hud.close").closest("[data-testid='focusable']")).toBe(trigger);
+  });
+
+  it("shows the required battery base as checked and non-focusable", () => {
+    render(<HudSection />);
+
+    fireEvent.click(
+      screen.getByText("copy:hud.group.battery").closest("[data-testid='focusable']")!,
+    );
+
+    const required = screen
+      .getByText("copy:hud.block.base.battery")
+      .closest("[data-hud-required-metric]");
+    expect(required?.getAttribute("aria-checked")).toBe("true");
+    expect(required?.getAttribute("aria-disabled")).toBe("true");
+    expect(screen.getByText("copy:hud.block.required")).toBeTruthy();
+    expect(required?.closest("[data-testid='focusable']")).toBeNull();
+    expect(
+      screen.getByText("copy:hud.metric.battery_watt").closest("[data-testid='focusable']"),
+    ).not.toBeNull();
+  });
+
+  it("presents one general size and optional refinements by text type", () => {
+    render(<HudSection />);
+
+    fireEvent.click(screen.getByText("copy:hud.style").closest("[data-testid='focusable']")!);
+    expect(screen.getByText("copy:hud.size.general")).toBeTruthy();
+
+    fireEvent.click(
+      screen.getByText("copy:hud.size.refine").closest("[data-testid='focusable']")!,
+    );
+    expect(screen.getByText("copy:hud.size.main")).toBeTruthy();
+    expect(screen.getByText("copy:hud.size.secondary")).toBeTruthy();
+    expect(screen.getByText("copy:hud.size.text")).toBeTruthy();
+  });
+
+  it("adds a metric with one complete model update", () => {
+    render(<HudSection />);
+
+    fireEvent.click(screen.getByText("copy:hud.add").closest("[data-testid='focusable']")!);
+    fireEvent.click(
+      screen.getByText("copy:hud.metric.time").closest("[data-testid='focusable']")!,
+    );
+
+    expect(mocks.setModel).toHaveBeenCalledTimes(1);
   });
 });

@@ -22,7 +22,8 @@ import {
   BLOCK_GROUPS, BlockGroup, COLOR_KEYS, ColorKey, GROUPS, HudItem, HudLayout, HudModel,
   HudPosition, ListRow, MetricId, SPACER_SIZES, TempUnit, PRESETS,
   addMetricItem, addSeparator, addSpacer, addTextItem, blockMetricIds, canLabel, hasBlock, hasMetric,
-  listRows, moveRow, removeRow, setMetricLabel, setSpacerSizeAt, setTextAt, toggleMetricItem,
+  isRequiredBlockMetric, listRows, moveRow, removeRow, setMetricLabel, setSpacerSizeAt, setTextAt,
+  toggleMetricItem,
 } from "../mangohud/model";
 
 const card = { ...theme.card, minWidth: 0, padding: theme.space.md, overflow: "hidden" } as const;
@@ -78,30 +79,71 @@ const OutlineBtn: FC<{
   </QamAction>
 );
 
-const SubItem: FC<{ label: string; on: boolean; onToggle: () => void }> = ({ label, on, onToggle }) => (
-  <QamAction
-    onPress={onToggle}
-    pressed={on}
-    style={{
-      display: "flex", alignItems: "center", gap: theme.space.sm, cursor: "pointer",
-      padding: "5px 8px", marginLeft: theme.space.md, borderRadius: theme.radius.sm,
-      borderLeft: `2px solid ${theme.color.hairline}`,
-    }}
-  >
-    <span
-      style={{
-        display: "flex", alignItems: "center", justifyContent: "center", width: 16, height: 16,
-        flexShrink: 0, borderRadius: 4,
-        background: on ? theme.color.accent : "transparent",
-        boxShadow: on ? "none" : `inset 0 0 0 1px ${theme.color.hairline}`,
-        color: theme.color.onAccent,
-      }}
+const SubItem: FC<{
+  label: string;
+  on: boolean;
+  onToggle: () => void;
+  required?: boolean;
+}> = ({ label, on, onToggle, required = false }) => {
+  const { t } = useI18n();
+  const content = (
+    <>
+      <span
+        style={{
+          display: "flex", alignItems: "center", justifyContent: "center", width: 16, height: 16,
+          flexShrink: 0, borderRadius: 4,
+          background: on ? theme.color.accent : "transparent",
+          boxShadow: on ? "none" : `inset 0 0 0 1px ${theme.color.hairline}`,
+          color: theme.color.onAccent,
+        }}
+      >
+        {on ? <LuCheck size={11} /> : null}
+      </span>
+      <span style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+        <span style={{ fontSize: theme.font.body, color: on ? theme.color.textPrimary : theme.color.textMuted }}>
+          {label}
+        </span>
+        {required && (
+          <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
+            {t("hud.block.required")}
+          </span>
+        )}
+      </span>
+    </>
+  );
+  const style = {
+    display: "flex",
+    alignItems: "center",
+    gap: theme.space.sm,
+    padding: "6px 8px",
+    marginLeft: theme.space.md,
+    borderRadius: theme.radius.sm,
+    borderLeft: `2px solid ${theme.color.hairline}`,
+  } as const;
+
+  if (required) {
+    return (
+      <div
+        data-hud-required-metric
+        role="checkbox"
+        aria-checked="true"
+        aria-disabled="true"
+        style={{ ...style, cursor: "default" }}
+      >
+        {content}
+      </div>
+    );
+  }
+  return (
+    <QamAction
+      onPress={onToggle}
+      pressed={on}
+      style={{ ...style, cursor: "pointer" }}
     >
-      {on ? <LuCheck size={11} /> : null}
-    </span>
-    <span style={{ fontSize: theme.font.body, color: on ? theme.color.textPrimary : theme.color.textMuted }}>{label}</span>
-  </QamAction>
-);
+      {content}
+    </QamAction>
+  );
+};
 
 const SectionLabel: FC<{ children: ReactNode }> = ({ children }) => (
   <span style={{ ...theme.sectionLabel }}>{children}</span>
@@ -250,9 +292,18 @@ export const HudSection: FC = () => {
         <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
           <Note>{t("hud.block.hint")}</Note>
           <div style={{ display: "flex", flexDirection: "column", gap: theme.space.xs }}>
-            {blockMetricIds(r.group).map((id) => (
-              <SubItem key={id} label={t(`hud.metric.${id}`)} on={hasMetric(m.items, id)} onToggle={() => patchItems(toggleMetricItem(m.items, id))} />
-            ))}
+            {blockMetricIds(r.group).map((id) => {
+              const required = isRequiredBlockMetric(id);
+              return (
+                <SubItem
+                  key={id}
+                  label={required ? t(`hud.block.base.${r.group}`) : t(`hud.metric.${id}`)}
+                  on={required || hasMetric(m.items, id)}
+                  required={required}
+                  onToggle={() => patchItems(toggleMetricItem(m.items, id))}
+                />
+              );
+            })}
           </div>
           {canLabel(r.group) ? (
             <TextField
@@ -564,8 +615,27 @@ export const HudSection: FC = () => {
             </div>
           </div>
 
-          <HudSliderRow label={t("hud.size")} value={m.fontSize} min={12} max={64} step={1} unit="px" onChange={(v) => patch({ fontSize: v })} />
-          <HudSliderRow label={t("hud.sizeText")} value={m.fontSizeText} min={12} max={64} step={1} unit="px" onChange={(v) => patch({ fontSizeText: v })} />
+          <HudSliderRow label={t("hud.size.general")} value={Math.round(m.fontScale * 100)} min={50} max={200} step={5} unit="multiplier" onChange={(v) => patch({ fontScale: v / 100 })} />
+          <Note>{t("hud.size.general.hint")}</Note>
+
+          <HudDisclosure
+            id="hud-font-refine"
+            icon={<LuType size={15} />}
+            title={t("hud.size.refine")}
+            summary={t("hud.size.refine.summary")}
+            defaultOpen={false}
+          >
+            <div style={{ display: "flex", flexDirection: "column", gap: theme.space.md }}>
+              <HudSliderRow label={t("hud.size.main")} value={m.fontSize} min={12} max={64} step={1} unit="px" onChange={(v) => patch({ fontSize: v })} />
+              <ToggleField label={t("hud.noSmallFont")} checked={m.noSmallFont} onChange={(v) => patch({ noSmallFont: v })} bottomSeparator="none" />
+              {m.noSmallFont ? (
+                <Note>{t("hud.size.sameAsMain")}</Note>
+              ) : (
+                <HudSliderRow label={t("hud.size.secondary")} value={m.fontSizeSecondary} min={6} max={64} step={1} unit="px" onChange={(v) => patch({ fontSizeSecondary: v })} />
+              )}
+              <HudSliderRow label={t("hud.size.text")} value={m.fontSizeText} min={12} max={64} step={1} unit="px" onChange={(v) => patch({ fontSizeText: v })} />
+            </div>
+          </HudDisclosure>
 
           <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm, minWidth: 0 }}>
             <span style={controlLabel}>{t("hud.tempUnit")}</span>
@@ -580,7 +650,6 @@ export const HudSection: FC = () => {
 
           <HudSliderRow label={t("hud.opacity")} value={Math.round(m.background.alpha * 100)} min={0} max={100} step={5} unit="percent" onChange={(v) => patch({ background: { ...m.background, alpha: v / 100 } })} />
 
-          <ToggleField label={t("hud.noSmallFont")} checked={m.noSmallFont} onChange={(v) => patch({ noSmallFont: v })} bottomSeparator="none" />
           <ToggleField label={t("hud.textOutline")} checked={m.textOutline} onChange={(v) => patch({ textOutline: v })} bottomSeparator="none" />
           <ToggleField label={t("hud.roundCorners")} checked={m.background.roundCorners} onChange={(v) => patch({ background: { ...m.background, roundCorners: v } })} bottomSeparator="none" />
           <Note>{t("hud.style.hint")}</Note>
@@ -616,7 +685,6 @@ export const HudSection: FC = () => {
       >
         <div style={{ display: "flex", flexDirection: "column", gap: theme.space.md }}>
           <HudSliderRow label={t("hud.cellpaddingY")} value={Math.round(m.cellpaddingY * 100)} min={-30} max={50} step={1} unit="signed-decimal" onChange={(v) => patch({ cellpaddingY: v / 100 })} />
-          <HudSliderRow label={t("hud.fontScale")} value={Math.round(m.fontScale * 100)} min={50} max={200} step={5} unit="multiplier" onChange={(v) => patch({ fontScale: v / 100 })} />
           <HudSliderRow label={t("hud.textAlpha")} value={Math.round(m.alpha * 100)} min={0} max={100} step={5} unit="percent" onChange={(v) => patch({ alpha: v / 100 })} />
           <HudSliderRow label={t("hud.outlineThickness")} value={Math.round(m.textOutlineThickness * 10)} min={0} max={40} step={1} unit="decimal" onChange={(v) => patch({ textOutlineThickness: v / 10 })} />
           <HudSliderRow label={t("hud.offsetX")} value={m.offsetX} min={-200} max={200} step={2} unit="px" onChange={(v) => patch({ offsetX: v })} />

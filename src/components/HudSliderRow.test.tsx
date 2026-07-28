@@ -30,6 +30,9 @@ describe("HudSliderRow", () => {
     const track = document.querySelector("[data-hud-slider-track]") as HTMLElement;
     expect(track.style.width).toBe("100%");
     expect(track.style.minWidth).toBe("0");
+    expect(track.style.paddingLeft).toBe("8px");
+    expect(track.style.paddingRight).toBe("8px");
+    expect(track.style.boxSizing).toBe("border-box");
     expect(track.style.transform).toBe("");
     expect(screen.getByTestId("slider").getAttribute("data-show-value")).toBe("false");
   });

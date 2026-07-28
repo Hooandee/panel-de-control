@@ -55,7 +55,14 @@ export const HudSliderRow: FC<Props> = ({
     </div>
     <div
       data-hud-slider-track
-      style={{ width: "100%", minWidth: 0, overflow: "hidden" }}
+      style={{
+        width: "100%",
+        minWidth: 0,
+        paddingLeft: 8,
+        paddingRight: 8,
+        boxSizing: "border-box",
+        overflow: "hidden",
+      }}
     >
       <SliderField
         value={value}
