@@ -664,15 +664,17 @@ class BuildContractTests(unittest.TestCase):
     def test_icon_import_sidecar_is_reproducible_and_versioned(self) -> None:
         sidecar = PLUGIN_DIR / "assets" / "icon.svg.import"
         contents = sidecar.read_text(encoding="utf-8")
-        ignored = _run(
+        tracked = _run(
             "git",
-            "check-ignore",
-            "--quiet",
-            str(sidecar),
+            "-c",
+            f"safe.directory={REPOSITORY_ROOT}",
+            "ls-files",
+            "--error-unmatch",
+            sidecar.relative_to(REPOSITORY_ROOT).as_posix(),
             cwd=REPOSITORY_ROOT,
         )
 
-        self.assertEqual(ignored.returncode, 1)
+        self.assertEqual(tracked.returncode, 0, tracked.stderr)
         self.assertIn('uid="uid://dch0ypnin4gvi"', contents)
         self.assertIn(
             'source_file="res://plugins/panel-de-control/assets/icon.svg"',
