@@ -18,6 +18,7 @@ INSTALL_TO_DEVICE = PLUGIN_DIR / "scripts" / "install_to_device.sh"
 EXPORT_PRESET = PLUGIN_DIR / "export_presets.cfg"
 OGUI_WORKFLOW = REPOSITORY_ROOT / ".github" / "workflows" / "opengamepadui-ci.yml"
 DECKY_WORKFLOW = REPOSITORY_ROOT / ".github" / "workflows" / "ci.yml"
+RELEASE_WORKFLOW = REPOSITORY_ROOT / ".github" / "workflows" / "release-please.yml"
 RELEASE_PLEASE_CONFIG = REPOSITORY_ROOT / "release-please-config.json"
 
 
@@ -68,7 +69,7 @@ def _named_preset(contents: str, name: str) -> str:
 def _event_paths(contents: str, event: str) -> list[str]:
     event_body = _event_body(contents, event)
     paths_match = re.search(
-        r"(?ms)^    paths:\n(?P<paths>(?:      - .*\n)+)",
+        r"(?m)^    paths:\n(?P<paths>(?:      - [^\n]*\n)+)",
         event_body,
     )
     if paths_match is None:
@@ -873,6 +874,56 @@ class WorkflowIsolationTests(unittest.TestCase):
             {"opengamepadui", ".github/workflows/opengamepadui-ci.yml"},
         )
         self.assertNotIn("opengamepadui", config["packages"])
+
+    def test_release_workflow_does_not_run_for_ogui_only_merges(self) -> None:
+        workflow = RELEASE_WORKFLOW.read_text(encoding="utf-8")
+        release_paths = _event_paths(workflow, "push")
+
+        self.assertIn("branches: [main]", _event_body(workflow, "push"))
+        self.assertEqual(
+            release_paths,
+            [
+                ".github/workflows/release-please.yml",
+                ".release-please-manifest.json",
+                "release-please-config.json",
+                "src/**",
+                "py_modules/**",
+                "main.py",
+                "package.json",
+                "pnpm-lock.yaml",
+                "tsconfig.json",
+                "rollup.config.js",
+                "plugin.json",
+                "README.md",
+                "README.en.md",
+                "LICENSE",
+                "assets/**",
+                "bin/**",
+                "scripts/**",
+            ],
+        )
+        for ogui_path in (
+            "opengamepadui/plugin.gd",
+            "opengamepadui/plugin.json",
+            ".github/workflows/opengamepadui-ci.yml",
+        ):
+            with self.subTest(ogui_path=ogui_path):
+                self.assertFalse(_matches(ogui_path, release_paths))
+
+        for decky_release_path in (
+            "src/index.tsx",
+            "py_modules/tdp/service.py",
+            "main.py",
+            "plugin.json",
+            "README.md",
+            "LICENSE",
+            "rollup.config.js",
+            "tsconfig.json",
+            "release-please-config.json",
+            ".github/workflows/release-please.yml",
+        ):
+            with self.subTest(decky_release_path=decky_release_path):
+                self.assertTrue(_matches(decky_release_path, release_paths))
 
 
 if __name__ == "__main__":
