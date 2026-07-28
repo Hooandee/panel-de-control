@@ -51,4 +51,28 @@ describe("HudDisclosure", () => {
     expect(screen.getByText("Controls")).toBeTruthy();
     expect(document.querySelector("[data-panel-section-row]")).toBeNull();
   });
+
+  it("keeps a narrow title on one line and truncates the summary first", () => {
+    render(
+      <HudDisclosure
+        id="hud-font-refine"
+        icon={<span>T</span>}
+        title="Refine by type"
+        summary="Main · details · text"
+      >
+        <span>Controls</span>
+      </HudDisclosure>,
+    );
+
+    const title = screen.getByText("Refine by type");
+    const summary = screen.getByText("Main · details · text");
+    expect(title.style.whiteSpace).toBe("nowrap");
+    expect(title.style.overflow).toBe("hidden");
+    expect(title.style.textOverflow).toBe("ellipsis");
+    expect(summary.style.flexGrow).toBe("1");
+    expect(summary.style.flexShrink).toBe("1");
+    expect(summary.style.flexBasis).toBe("0px");
+    expect(summary.style.maxWidth).toBe("46%");
+    expect(summary.style.textAlign).toBe("right");
+  });
 });

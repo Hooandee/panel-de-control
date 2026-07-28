@@ -56,8 +56,11 @@ export const HudDisclosure: FC<Props> = ({
         </span>
         <span
           style={{
-            flex: 1,
+            flex: "0 1 auto",
             minWidth: 0,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
             fontSize: theme.font.body,
             fontWeight: 700,
             color: theme.color.textPrimary,
@@ -68,10 +71,13 @@ export const HudDisclosure: FC<Props> = ({
         {!open && (
           <span
             style={{
+              flex: "1 1 0",
               minWidth: 0,
+              maxWidth: "46%",
               overflow: "hidden",
               textOverflow: "ellipsis",
               whiteSpace: "nowrap",
+              textAlign: "right",
               fontSize: theme.font.caption,
               color: theme.color.textMuted,
             }}
