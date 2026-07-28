@@ -59,13 +59,40 @@ describe("useHud coordination", () => {
     act(() => result.current.setModel(first));
     act(() => result.current.setModel(latest));
     await act(async () => {
-      vi.advanceTimersByTime(250);
+      vi.advanceTimersByTime(700);
       await Promise.resolve();
     });
 
     expect(setHudConfig).toHaveBeenCalledTimes(1);
     expect(setHudConfig).toHaveBeenCalledWith(latest);
     expect(result.current.state?.model).toEqual(latest);
+  });
+
+  it("keeps one request in flight and replaces the queued model with the latest edit", async () => {
+    const firstRequest = deferred<HudState>();
+    vi.mocked(setHudConfig).mockReturnValueOnce(firstRequest.promise);
+    const { result } = renderHook(() => useHud());
+    await settle();
+
+    const first = { ...DEFAULT_MODEL, fontSize: 30 };
+    act(() => result.current.setModel(first));
+    act(() => vi.advanceTimersByTime(700));
+    await settle();
+
+    const intermediate = { ...first, offsetX: 8 };
+    const latest = { ...intermediate, offsetX: 18 };
+    act(() => result.current.setModel(intermediate));
+    act(() => result.current.setModel(latest));
+    act(() => vi.advanceTimersByTime(700));
+    await settle();
+
+    expect(setHudConfig).toHaveBeenCalledTimes(1);
+
+    firstRequest.resolve(state(first));
+    await settle();
+
+    expect(setHudConfig).toHaveBeenCalledTimes(2);
+    expect(setHudConfig).toHaveBeenLastCalledWith(latest);
   });
 
   it("enables using the latest unsaved style instead of racing a stale debounce", async () => {
@@ -91,6 +118,27 @@ describe("useHud coordination", () => {
     await settle();
 
     expect(result.current.reloadStatus).toBe("error");
+  });
+
+  it("waits for the latest persistence before reloading MangoHud", async () => {
+    const saveRequest = deferred<HudState>();
+    vi.mocked(setHudConfig).mockReturnValueOnce(saveRequest.promise);
+    const { result } = renderHook(() => useHud());
+    await settle();
+
+    const latest = { ...DEFAULT_MODEL, offsetY: 16 };
+    act(() => result.current.setModel(latest));
+    act(() => vi.advanceTimersByTime(700));
+    await settle();
+    act(() => result.current.reload());
+    await settle();
+
+    expect(reloadHud).not.toHaveBeenCalled();
+
+    saveRequest.resolve(state(latest));
+    await settle();
+
+    expect(reloadHud).toHaveBeenCalledTimes(1);
   });
 
   it("does not let an older poll replace a newer local edit", async () => {
@@ -121,5 +169,28 @@ describe("useHud coordination", () => {
     act(() => unmount());
 
     expect(setHudConfig).toHaveBeenCalledWith(latest);
+  });
+
+  it("queues the latest unmounted model behind an in-flight request", async () => {
+    const firstRequest = deferred<HudState>();
+    vi.mocked(setHudConfig).mockReturnValueOnce(firstRequest.promise);
+    const { result, unmount } = renderHook(() => useHud());
+    await settle();
+
+    const first = { ...DEFAULT_MODEL, fontScale: 1.1 };
+    act(() => result.current.setModel(first));
+    act(() => vi.advanceTimersByTime(700));
+    await settle();
+
+    const latest = { ...first, fontScale: 1.4 };
+    act(() => result.current.setModel(latest));
+    act(() => unmount());
+    expect(setHudConfig).toHaveBeenCalledTimes(1);
+
+    firstRequest.resolve(state(first));
+    await settle();
+
+    expect(setHudConfig).toHaveBeenCalledTimes(2);
+    expect(setHudConfig).toHaveBeenLastCalledWith(latest);
   });
 });

@@ -4,7 +4,7 @@ import { HudModel, HudState, getHudState, reloadHud, resetHud, setHudConfig } fr
 import { useMountedRef } from "../hooks/useMountedRef";
 
 const POLL_MS = 4000;
-const DEBOUNCE_MS = 250;
+const DEBOUNCE_MS = 700;
 const FEEDBACK_MS = 1800;
 
 export type ReloadStatus = "idle" | "busy" | "ok" | "pending" | "error";
@@ -30,6 +30,9 @@ export function useHud(): HudController {
   const dirtyRef = useRef(false);
   const pendingRef = useRef(0);
   const revisionRef = useRef(0);
+  const persistingRef = useRef(false);
+  const queuedPersistRef = useRef<{ model: HudModel; revision: number } | null>(null);
+  const drainWaitersRef = useRef<Array<() => void>>([]);
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -54,7 +57,27 @@ export function useHud(): HudController {
     }, FEEDBACK_MS);
   };
 
+  const waitForPersistDrain = (): Promise<void> => {
+    if (!persistingRef.current && !queuedPersistRef.current) return Promise.resolve();
+    return new Promise((resolve) => {
+      drainWaitersRef.current.push(resolve);
+    });
+  };
+
+  const resolvePersistDrain = () => {
+    if (persistingRef.current || queuedPersistRef.current) return;
+    const waiters = drainWaitersRef.current.splice(0);
+    waiters.forEach((resolve) => resolve());
+  };
+
   const persist = (model: HudModel, revision: number) => {
+    if (persistingRef.current) {
+      queuedPersistRef.current = { model, revision };
+      if (mounted.current) setSaveStatus("saving");
+      return;
+    }
+
+    persistingRef.current = true;
     pendingRef.current += 1;
     if (mounted.current) setSaveStatus("saving");
     void setHudConfig(model)
@@ -70,6 +93,14 @@ export function useHud(): HudController {
       })
       .finally(() => {
         pendingRef.current = Math.max(0, pendingRef.current - 1);
+        persistingRef.current = false;
+        const queued = queuedPersistRef.current;
+        queuedPersistRef.current = null;
+        if (queued) {
+          persist(queued.model, queued.revision);
+        } else {
+          resolvePersistDrain();
+        }
       });
   };
 
@@ -101,7 +132,7 @@ export function useHud(): HudController {
         debounceTimer.current = null;
         dirtyRef.current = false;
         revisionRef.current += 1;
-        void setHudConfig(modelRef.current);
+        persist(modelRef.current, revisionRef.current);
       }
     };
   }, []);
@@ -148,12 +179,12 @@ export function useHud(): HudController {
     dirtyRef.current = false;
     const revision = revisionRef.current + 1;
     revisionRef.current = revision;
+    if (hadUnsavedModel) persist(latest, revision);
     pendingRef.current += 1;
     setReloadStatus("busy");
     if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
 
-    const flush = hadUnsavedModel ? setHudConfig(latest) : Promise.resolve(null);
-    void flush
+    void waitForPersistDrain()
       .then(() => reloadHud())
       .then((remote) => {
         if (!mounted.current || revision !== revisionRef.current) return;
@@ -181,9 +212,11 @@ export function useHud(): HudController {
     dirtyRef.current = false;
     const revision = revisionRef.current + 1;
     revisionRef.current = revision;
+    queuedPersistRef.current = null;
     pendingRef.current += 1;
     setSaveStatus("saving");
-    void resetHud()
+    void waitForPersistDrain()
+      .then(() => resetHud())
       .then((remote) => {
         if (!mounted.current || revision !== revisionRef.current) return;
         accept(remote);
