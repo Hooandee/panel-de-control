@@ -47,6 +47,11 @@ def test_coerce_drops_unknown_metrics_and_dedupes_keeping_order():
     assert m["items"] == _metrics("fps", "cpu")
 
 
+def test_coerce_inserts_required_block_parents():
+    m = coerce_model({"items": _metrics("battery_watt", "cpu_temp")})
+    assert m["items"] == _metrics("battery", "battery_watt", "cpu", "cpu_temp")
+
+
 def test_coerce_keeps_text_items_interleaved_in_order():
     m = coerce_model({"items": [
         {"kind": "metric", "id": "fps"},
@@ -374,7 +379,7 @@ def test_label_emits_text_directive_for_fps_cpu_gpu():
 
 def test_label_stripped_on_unsupported_metric():
     m = coerce_model({"items": [{"kind": "metric", "id": "vram", "label": "nope"}]})
-    assert m["items"] == [{"kind": "metric", "id": "vram"}]
+    assert m["items"] == _metrics("gpu", "vram")
     labels = ("fps_text=", "cpu_text=", "gpu_text=")
     assert not any(ln.startswith(labels) for ln in to_directives(m))
 

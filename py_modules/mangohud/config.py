@@ -164,6 +164,19 @@ _COLOR_KEYS = frozenset(_DEFAULT_COLORS)
 
 _DEFAULT_METRICS = ["fps", "gpu", "cpu", "ram", "battery"]
 _MAX_TEXT_CHARS = 160
+_BLOCK_MEMBERS = {
+    "gpu": frozenset((
+        "gpu", "gpu_temp", "gpu_junction_temp", "gpu_clock", "gpu_mem_clock",
+        "gpu_mem_temp", "gpu_power", "gpu_voltage", "gpu_fan", "gpu_efficiency",
+        "vram", "proc_vram", "gpu_name",
+    )),
+    "cpu": frozenset((
+        "cpu", "cpu_temp", "cpu_clock", "cpu_power", "cpu_efficiency", "cores",
+    )),
+    "battery": frozenset((
+        "battery", "battery_watt", "battery_time", "device_battery",
+    )),
+}
 
 
 def _metric_items(ids):
@@ -261,6 +274,17 @@ def _coerce_items(raw):
             size = item.get("size")
             out.append({"kind": "spacer", "id": str(item.get("id", "")),
                         "size": size if size in _SPACER_LINES else "small"})
+    for parent, members in _BLOCK_MEMBERS.items():
+        metric_ids = {
+            item["id"] for item in out
+            if item["kind"] == "metric" and item["id"] in members
+        }
+        if metric_ids and parent not in metric_ids:
+            first = next(
+                index for index, item in enumerate(out)
+                if item["kind"] == "metric" and item["id"] in members
+            )
+            out.insert(first, {"kind": "metric", "id": parent})
     return out
 
 

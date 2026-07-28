@@ -179,6 +179,11 @@ describe("blocks (GPU/CPU one expandable row each)", () => {
     expect(next).toEqual(metrics("gpu", "gpu_temp", "fps"));
   });
 
+  it("addMetricItem inserts the required parent before a new block child", () => {
+    expect(addMetricItem(metrics("fps"), "battery_watt"))
+      .toEqual(metrics("fps", "battery", "battery_watt"));
+  });
+
   it("addMetricItem appends a standalone metric and is a no-op if present", () => {
     expect(addMetricItem(metrics("fps"), "ram")).toEqual(metrics("fps", "ram"));
     expect(addMetricItem(metrics("fps"), "fps")).toEqual(metrics("fps"));
@@ -208,6 +213,11 @@ describe("item helpers", () => {
     const added = toggleMetricItem(metrics("fps"), "ram");
     expect(added).toEqual(metrics("fps", "ram"));
     expect(toggleMetricItem(added, "fps")).toEqual(metrics("ram"));
+  });
+
+  it("toggleMetricItem never removes a required block parent", () => {
+    expect(toggleMetricItem(metrics("battery", "battery_watt"), "battery"))
+      .toEqual(metrics("battery", "battery_watt"));
   });
 
   it("addTextItem / addSeparator append the right item", () => {

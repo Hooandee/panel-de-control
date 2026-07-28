@@ -393,6 +393,11 @@ export function blockGroupOf(id: MetricId): BlockGroup | null {
 export const blockMetricIds = (group: BlockGroup): MetricId[] =>
   METRICS.filter((m) => m.group === group).map((m) => m.id);
 
+export const requiredMetricForBlock = (group: BlockGroup): MetricId => group;
+
+export const isRequiredBlockMetric = (id: MetricId): boolean =>
+  BLOCK_GROUPS.includes(id as BlockGroup);
+
 export const hasBlock = (items: HudItem[], group: BlockGroup): boolean =>
   items.some((it) => it.kind === "metric" && blockGroupOf(it.id) === group);
 
@@ -403,10 +408,21 @@ export function addMetricItem(items: HudItem[], id: MetricId): HudItem[] {
   if (hasMetric(items, id)) return items;
   const group = blockGroupOf(id);
   if (group) {
+    const parent = requiredMetricForBlock(group);
+    const first = items.findIndex(
+      (it) => it.kind === "metric" && blockGroupOf(it.id) === group,
+    );
     let last = -1;
     items.forEach((it, i) => {
       if (it.kind === "metric" && blockGroupOf(it.id) === group) last = i;
     });
+    if (id !== parent && !hasMetric(items, parent)) {
+      const next = [...items];
+      const insertAt = first >= 0 ? first : items.length;
+      next.splice(insertAt, 0, { kind: "metric", id: parent });
+      next.splice(last >= 0 ? last + 2 : insertAt + 1, 0, { kind: "metric", id });
+      return next;
+    }
     if (last >= 0) {
       const next = [...items];
       next.splice(last + 1, 0, { kind: "metric", id });
@@ -418,6 +434,7 @@ export function addMetricItem(items: HudItem[], id: MetricId): HudItem[] {
 
 /** Add a metric if absent, remove it if present. */
 export function toggleMetricItem(items: HudItem[], id: MetricId): HudItem[] {
+  if (hasMetric(items, id) && isRequiredBlockMetric(id)) return items;
   return hasMetric(items, id)
     ? items.filter((it) => !(it.kind === "metric" && it.id === id))
     : addMetricItem(items, id);
