@@ -2,7 +2,6 @@
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
   "release-type": "node",
   "bootstrap-sha": "08df3d312ad3e260c587524ecc393b25a5847254",
-  "separate-pull-requests": true,
   "packages": {
     ".": {
       "exclude-paths": [
@@ -11,12 +10,6 @@
         "windows",
         ".github/workflows/windows-ci.yml"
       ]
-    },
-    "windows": {
-      "release-type": "simple",
-      "package-name": "panel-de-control-windows",
-      "component": "windows",
-      "include-component-in-tag": true
     }
   }
 }

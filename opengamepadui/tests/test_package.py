@@ -889,13 +889,12 @@ class WorkflowIsolationTests(unittest.TestCase):
         self.assertNotIn("contents: write", workflow)
         self.assertNotRegex(workflow, r"(?m)^\s*(release|tags):")
 
-    def test_release_please_excludes_ogui_from_root_package(self) -> None:
+    def test_release_please_excludes_unpublished_platforms(self) -> None:
         config = json.loads(RELEASE_PLEASE_CONFIG.read_text(encoding="utf-8"))
         root_package = config["packages"]["."]
-        windows_package = config["packages"]["windows"]
         manifest = json.loads(RELEASE_PLEASE_MANIFEST.read_text(encoding="utf-8"))
 
-        self.assertTrue(config["separate-pull-requests"])
+        self.assertNotIn("separate-pull-requests", config)
         self.assertEqual(
             set(root_package["exclude-paths"]),
             {
@@ -906,12 +905,10 @@ class WorkflowIsolationTests(unittest.TestCase):
             },
         )
         self.assertNotIn("opengamepadui", config["packages"])
-        self.assertEqual(windows_package["release-type"], "simple")
-        self.assertEqual(windows_package["component"], "windows")
-        self.assertTrue(windows_package["include-component-in-tag"])
-        self.assertEqual(set(manifest), {".", "windows"})
+        self.assertNotIn("windows", config["packages"])
+        self.assertEqual(set(manifest), {"."})
 
-    def test_release_workflow_routes_decky_and_windows_changes(self) -> None:
+    def test_release_workflow_ignores_unpublished_platform_changes(self) -> None:
         workflow = RELEASE_WORKFLOW.read_text(encoding="utf-8")
         release_paths = _event_paths(workflow, "push")
 
@@ -923,7 +920,6 @@ class WorkflowIsolationTests(unittest.TestCase):
                 ".release-please-manifest.json",
                 "release-please-config.json",
                 "shared/fixtures/**",
-                "windows/**",
                 "src/**",
                 "py_modules/**",
                 "main.py",
@@ -940,22 +936,18 @@ class WorkflowIsolationTests(unittest.TestCase):
                 "scripts/**",
             ],
         )
-        for ogui_path in (
+        for unpublished_platform_path in (
             "opengamepadui/plugin.gd",
             "opengamepadui/plugin.json",
             ".github/workflows/opengamepadui-ci.yml",
-        ):
-            with self.subTest(ogui_path=ogui_path):
-                self.assertFalse(_matches(ogui_path, release_paths))
-
-        for windows_release_path in (
             "windows/PanelDeControl.sln",
-            "shared/fixtures/auto_tdp.json",
+            ".github/workflows/windows-ci.yml",
         ):
-            with self.subTest(windows_release_path=windows_release_path):
-                self.assertTrue(_matches(windows_release_path, release_paths))
+            with self.subTest(unpublished_platform_path=unpublished_platform_path):
+                self.assertFalse(_matches(unpublished_platform_path, release_paths))
 
         for decky_release_path in (
+            "shared/fixtures/auto_tdp.json",
             "src/index.tsx",
             "py_modules/tdp/service.py",
             "main.py",
