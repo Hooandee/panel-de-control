@@ -36,6 +36,9 @@ export type MetricGroup = "fps" | "gpu" | "cpu" | "temps" | "mem" | "battery" | 
 // the elements list mirrors that with a single expandable container per group.
 export type BlockGroup = "gpu" | "cpu" | "battery";
 export const BLOCK_GROUPS: BlockGroup[] = ["gpu", "cpu", "battery"];
+const BLOCK_GROUP_SET = new Set<BlockGroup>(BLOCK_GROUPS);
+export const isBlockGroup = (group: string): group is BlockGroup =>
+  BLOCK_GROUP_SET.has(group as BlockGroup);
 
 // MangoHud can only relabel these three lines; a label on any other metric is
 // ignored (mirrors _LABEL_DIRECTIVE in config.py). The pdc metrics are ALSO
@@ -45,8 +48,10 @@ export const PDC_IDS: MetricId[] = [
   "pdc_profile", "pdc_power", "pdc_charge", "pdc_bat_health", "pdc_smt", "pdc_boost",
   "pdc_cores", "pdc_gpu_clock", "pdc_model",
 ];
+const PDC_ID_SET = new Set<MetricId>(PDC_IDS);
 export const LABELABLE: MetricId[] = ["fps", "cpu", "gpu", ...PDC_IDS];
-export const canLabel = (id: MetricId): boolean => LABELABLE.includes(id);
+const LABELABLE_SET = new Set<MetricId>(LABELABLE);
+export const canLabel = (id: MetricId): boolean => LABELABLE_SET.has(id);
 
 export type SpacerSize = "small" | "medium" | "large";
 export const SPACER_SIZES: SpacerSize[] = ["small", "medium", "large"];
@@ -265,6 +270,22 @@ export const PRESETS: Record<string, MetricId[]> = {
   ],
 };
 
+export function matchingPresetKey(
+  items: HudItem[],
+  presets: Readonly<Record<string, readonly MetricId[]>>,
+): string | null {
+  const selected = items.flatMap((item) => item.kind === "metric" ? [item.id] : []);
+  for (const [key, preset] of Object.entries(presets)) {
+    if (
+      selected.length === preset.length
+      && selected.every((id, index) => preset[index] === id)
+    ) {
+      return key;
+    }
+  }
+  return null;
+}
+
 // ---- Colour maths (pure, no @decky/ui → unit-testable) ----
 // The Steam CEF native <input type=color> is dead, so the ColorPicker uses RGB
 // sliders + a hex field built on these. Hex is always 6 chars, no leading '#'.
@@ -347,7 +368,7 @@ export function previewRows(
       return;
     }
     const meta = META[it.id];
-    const value = PDC_IDS.includes(it.id)
+    const value = PDC_ID_SET.has(it.id)
       ? values[it.id] ?? "-"
       : previewValue(it.id, model);
     const group = blockGroupOf(it.id);
@@ -376,7 +397,7 @@ export function previewRows(
       value,
       labelColor: c(meta.category),
       valueColor: c(valueColorKey(it.id)),
-      small: PDC_IDS.includes(it.id) && !model.noSmallFont,
+      small: PDC_ID_SET.has(it.id) && !model.noSmallFont,
     });
   });
   return rows;
@@ -389,7 +410,7 @@ export const hasMetric = (items: HudItem[], id: MetricId): boolean =>
  *  standalone metric. Based on the metric's group so vram/gpu_name join the GPU row. */
 export function blockGroupOf(id: MetricId): BlockGroup | null {
   const g = META[id].group;
-  return (BLOCK_GROUPS as MetricGroup[]).includes(g) ? (g as BlockGroup) : null;
+  return isBlockGroup(g) ? g : null;
 }
 
 /** All metric ids that belong to a block group (its expandable sub-metrics). */
@@ -399,7 +420,7 @@ export const blockMetricIds = (group: BlockGroup): MetricId[] =>
 export const requiredMetricForBlock = (group: BlockGroup): MetricId => group;
 
 export const isRequiredBlockMetric = (id: MetricId): boolean =>
-  BLOCK_GROUPS.includes(id as BlockGroup);
+  isBlockGroup(id);
 
 export const hasBlock = (items: HudItem[], group: BlockGroup): boolean =>
   items.some((it) => it.kind === "metric" && blockGroupOf(it.id) === group);

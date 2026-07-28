@@ -19,11 +19,11 @@ import { ConfirmDialog } from "../components/ConfirmDialog";
 import { segmentGroupStyle, segmentItemStyle } from "../components/segmented";
 import { hasLocalEditor } from "../mangohud/editorUi";
 import {
-  BLOCK_GROUPS, BlockGroup, COLOR_KEYS, ColorKey, GROUPS, HudItem, HudLayout, HudModel,
+  BlockGroup, COLOR_KEYS, ColorKey, GROUPS, HudItem, HudLayout, HudModel,
   HudPosition, ListRow, MetricId, SPACER_SIZES, TempUnit, PRESETS,
   addMetricItem, addSeparator, addSpacer, addTextItem, blockMetricIds, canLabel, hasBlock, hasMetric,
-  isRequiredBlockMetric, listRows, moveRow, removeRow, setMetricLabel, setSpacerSizeAt, setTextAt,
-  toggleMetricItem,
+  isBlockGroup, isRequiredBlockMetric, listRows, moveRow, removeRow, setMetricLabel, setSpacerSizeAt, setTextAt,
+  toggleMetricItem, matchingPresetKey,
 } from "../mangohud/model";
 
 const card = { ...theme.card, minWidth: 0, padding: theme.space.md, overflow: "hidden" } as const;
@@ -37,12 +37,15 @@ const TEMP_UNITS: TempUnit[] = ["c", "f"];
 
 type AddEntry = { kind: "metric"; id: MetricId } | { kind: "block"; group: BlockGroup };
 
-const rowKey = (r: ListRow): string =>
-  r.kind === "block" ? `b:${r.group}`
-    : r.kind === "text" ? `t:${r.id}`
-    : r.kind === "separator" ? `s:${r.id}`
-    : r.kind === "spacer" ? `sp:${r.id}`
-    : `m:${r.id}`;
+const rowKey = (row: ListRow): string => {
+  switch (row.kind) {
+    case "block": return `b:${row.group}`;
+    case "text": return `t:${row.id}`;
+    case "separator": return `s:${row.id}`;
+    case "spacer": return `sp:${row.id}`;
+    case "metric": return `m:${row.id}`;
+  }
+};
 
 const Pill: FC<{ label: string; active: boolean; onClick: () => void }> = ({ label, active, onClick }) => (
   <QamAction
@@ -206,40 +209,41 @@ export const HudSection: FC = () => {
   const setColor = (key: ColorKey, hex: string) => patch({ colors: { ...m.colors, [key]: hex } });
 
   const rows = listRows(m.items);
+  const activePreset = matchingPresetKey(m.items, presets);
 
   const addEntries = (groupKey: string, ids: MetricId[]): AddEntry[] => {
-    if ((BLOCK_GROUPS as string[]).includes(groupKey)) {
-      const g = groupKey as BlockGroup;
-      return hasBlock(m.items, g) ? [] : [{ kind: "block", group: g }];
+    if (isBlockGroup(groupKey)) {
+      return hasBlock(m.items, groupKey) ? [] : [{ kind: "block", group: groupKey }];
     }
     return ids
       .filter((id) => state.catalog.includes(id) && !hasMetric(m.items, id))
       .map((id) => ({ kind: "metric", id }));
   };
 
+  const finishAdding = (items: HudItem[], key: string) => {
+    patchItems(items);
+    setSelected(key);
+    setAdding(false);
+  };
+
   const add = (entry: AddEntry) => {
     const id: MetricId = entry.kind === "block" ? entry.group : entry.id;
-    patchItems(addMetricItem(m.items, id));
-    setSelected(entry.kind === "block" ? `b:${entry.group}` : `m:${id}`);
-    setAdding(false);
+    finishAdding(
+      addMetricItem(m.items, id),
+      entry.kind === "block" ? `b:${entry.group}` : `m:${id}`,
+    );
   };
   const addText = () => {
     const id = `t${Date.now()}`;
-    patchItems(addTextItem(m.items, id, ""));
-    setSelected(`t:${id}`);
-    setAdding(false);
+    finishAdding(addTextItem(m.items, id, ""), `t:${id}`);
   };
   const addSep = () => {
     const id = `s${Date.now()}`;
-    patchItems(addSeparator(m.items, id));
-    setSelected(`s:${id}`);
-    setAdding(false);
+    finishAdding(addSeparator(m.items, id), `s:${id}`);
   };
   const addSpace = () => {
     const id = `sp${Date.now()}`;
-    patchItems(addSpacer(m.items, id, "small"));
-    setSelected(`sp:${id}`);
-    setAdding(false);
+    finishAdding(addSpacer(m.items, id), `sp:${id}`);
   };
 
   const applyPreset = (key: string) =>
@@ -249,8 +253,10 @@ export const HudSection: FC = () => {
     ]);
 
   const labelOf = (id: MetricId): string => {
-    const it = m.items.find((x) => x.kind === "metric" && x.id === id);
-    return (it && it.kind === "metric" && it.label) || "";
+    const item = m.items.find((candidate) =>
+      candidate.kind === "metric" && candidate.id === id
+    );
+    return item?.kind === "metric" ? item.label ?? "" : "";
   };
 
   const renderEditor = (r: ListRow) => {
@@ -423,11 +429,7 @@ export const HudSection: FC = () => {
           {saveStatus === "error" && <Note>{t("hud.save.error")}</Note>}
           <div style={{ display: "flex", gap: theme.space.sm, minWidth: 0 }}>
             {Object.keys(presets).map((key) => {
-              const metricIds = m.items
-                .filter((item): item is Extract<HudItem, { kind: "metric" }> => item.kind === "metric")
-                .map((item) => item.id);
-              const active = metricIds.length === presets[key].length
-                && metricIds.every((id, index) => presets[key][index] === id);
+              const active = activePreset === key;
               return (
                 <QamAction
                   key={key}

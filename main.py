@@ -2858,9 +2858,9 @@ class Plugin:
             raise OSError("Could not persist the managed MangoHud presets path") from exc
         self._hud_managed_path = safe_path
 
-    def _hud_state(self) -> dict:
-        cap = self._detect_hud()
-        model = self._hud.load()
+    def _hud_state(self, *, cap=None, model=None) -> dict:
+        cap = self._detect_hud() if cap is None else cap
+        model = self._hud.load() if model is None else model
         capability = (
             "ready" if cap["supported"]
             else "unsupported" if cap["running"]
@@ -2889,15 +2889,19 @@ class Plugin:
             "presets": {k: list(v) for k, v in mangohud_config.PRESETS.items()},
         }
 
-    def _apply_hud(self) -> None:
+    def _reload_mangoapp(self) -> bool:
+        uid = self._hud_owner[0] if self._hud_owner else None
+        return reload_mangoapp(uid)
+
+    def _apply_hud(self, *, cap=None, model=None) -> None:
         """Reflect the saved model to presets.conf (Steam reads it per overlay level).
         pdc plugin-state metrics are baked into their `custom_text` line as
         "<label> <value>": Steam's mangoapp does not run `exec` commands (only the label
         would show), so we bake a value snapshot here (it refreshes on re-apply / the
         auto loop, then reloaded through mangohudctl). We never write Steam's own live
         config. When off: clear presets.conf. No-op when the overlay isn't supported."""
-        cap = self._detect_hud()
-        model = self._hud.load()
+        cap = self._detect_hud() if cap is None else cap
+        model = self._hud.load() if model is None else model
         if not model["enabled"]:
             managed_path = self._hud_managed_path or cap["presetsPath"]
             self._pdc_presets_path = None
@@ -2915,7 +2919,7 @@ class Plugin:
             if (
                 cap["supported"]
                 and cap["running"]
-                and not reload_mangoapp(self._hud_owner[0] if self._hud_owner else None)
+                and not self._reload_mangoapp()
             ):
                 self._hud_apply_status = "pending"
             else:
@@ -2942,7 +2946,7 @@ class Plugin:
                 self._hud_apply_status = "failed"
                 return
         self._pdc_presets_path = cap["presetsPath"]
-        self._pdc_active_ids = mangohud_config.enabled_pdc_ids(model) if model["enabled"] else []
+        self._pdc_active_ids = mangohud_config.enabled_pdc_ids(model)
         values = self._pdc_values()
         self._pdc_preview_values = values
         expected = mangohud_config.build_presets_conf(model, values)
@@ -2968,7 +2972,7 @@ class Plugin:
             self._pdc_written = {}
             self._hud_apply_status = "failed"
             return
-        if reload_mangoapp(self._hud_owner[0] if self._hud_owner else None):
+        if self._reload_mangoapp():
             self._pdc_written = values
             self._hud_apply_status = "applied"
         else:
@@ -3018,7 +3022,7 @@ class Plugin:
             snap["fan_learning"] = (prof.get("preset") == "adaptive"
                                     and not self._fan_suggestion(appid)["available"])
         if "pdc_fan_rpm" in active_ids:
-            fans = extras.get("fans") or self._read_fans()
+            fans = extras["fans"] if "fans" in extras else self._read_fans()
             snap["fan_rpms"] = [
                 f.get("rpm") for f in fans.get("fans", []) if f.get("rpm") is not None
             ]
@@ -3029,12 +3033,12 @@ class Plugin:
             snap["watts"] = extras.get("power", {}).get("watts")
             snap["gpu_busy"] = extras.get("power", {}).get("gpu_busy")
         if "pdc_charge" in active_ids:
-            cl = extras.get("charge") or self._charge_limit_state()
+            cl = extras["charge"] if "charge" in extras else self._charge_limit_state()
             snap["charge_supported"] = cl["supported"]
             snap["charge_enabled"] = cl["enabled"]
             snap["charge_percent"] = cl["percent"]
         if "pdc_bat_health" in active_ids:
-            bat = extras.get("battery") or self._battery.read()
+            bat = extras["battery"] if "battery" in extras else self._battery.read()
             snap["bat_health"] = bat.get("health_percent")
         if "pdc_smt" in active_ids:
             snap["smt_supported"] = self._smt.supported
@@ -3046,7 +3050,7 @@ class Plugin:
             snap["cores_active"] = self._cores.active() if self._cores.supported else None
             snap["cores_max"] = self._cores.max_cores
         if "pdc_gpu_clock" in active_ids:
-            gc = extras.get("gpu_clock") or self._gpu_clock_state()
+            gc = extras["gpu_clock"] if "gpu_clock" in extras else self._gpu_clock_state()
             snap["gpu_clock_supported"] = gc["supported"]
             snap["gpu_clock_manual"] = gc["manual"]
             snap["gpu_clock_min"] = gc["min"]
@@ -3078,17 +3082,21 @@ class Plugin:
         model = self._hud.load()
         if model["enabled"]:
             self._pdc_preview_values = values
-            on_disk = apply_hud(
-                model,
-                self._pdc_presets_path,
-                values,
-                owner=self._hud_owner,
-            )
+            try:
+                on_disk = apply_hud(
+                    model,
+                    self._pdc_presets_path,
+                    values,
+                    owner=self._hud_owner,
+                )
+            except OSError:
+                self._hud_apply_status = "failed"
+                raise
             expected = mangohud_config.build_presets_conf(model, values)
             if on_disk != expected:
                 self._hud_apply_status = "failed"
                 return
-            if reload_mangoapp(self._hud_owner[0] if self._hud_owner else None):
+            if self._reload_mangoapp():
                 self._pdc_written = values
                 self._hud_apply_status = "applied"
             else:
@@ -3104,39 +3112,38 @@ class Plugin:
         self._init()
         return await self._offload_call(self._hud_state)
 
+    def _apply_hud_state(self, model) -> dict:
+        cap = self._detect_hud()
+        self._apply_hud(cap=cap, model=model)
+        return self._hud_state(cap=cap, model=model)
+
+    def _save_apply_hud_state(self, model) -> dict:
+        return self._apply_hud_state(self._hud.save(model))
+
     async def set_hud_config(self, model: dict) -> dict:
         self._init()
-        def save_apply_state():
-            self._hud.save(model)
-            self._apply_hud()
-            return self._hud_state()
-        return await self._offload_call(save_apply_state)
+        return await self._offload_call(lambda: self._save_apply_hud_state(model))
 
     async def set_hud_enabled(self, enabled: bool) -> dict:
         self._init()
         def save_apply_state():
             model = self._hud.load()
             model["enabled"] = bool(enabled)
-            self._hud.save(model)
-            self._apply_hud()
-            return self._hud_state()
+            return self._save_apply_hud_state(model)
         return await self._offload_call(save_apply_state)
 
     async def reset_hud(self) -> dict:
         self._init()
-        def reset_apply_state():
-            self._hud.save(dict(mangohud_config.DEFAULT_MODEL))
-            self._apply_hud()
-            return self._hud_state()
-        return await self._offload_call(reset_apply_state)
+        return await self._offload_call(
+            lambda: self._save_apply_hud_state(mangohud_config.DEFAULT_MODEL)
+        )
 
     async def reload_hud(self) -> dict:
         """Re-bake presets.conf now with fresh pdc values and reload mangoapp."""
         self._init()
-        def apply_state():
-            self._apply_hud()
-            return self._hud_state()
-        return await self._offload_call(apply_state)
+        return await self._offload_call(
+            lambda: self._apply_hud_state(self._hud.load())
+        )
 
     def _cpu_state(self) -> dict:
         info = self._cpu_info
@@ -3951,7 +3958,7 @@ class Plugin:
             if clear_presets(managed_path):
                 self._remember_hud_path(None)
                 if cap["supported"] and cap["running"]:
-                    reload_mangoapp(self._hud_owner[0] if self._hud_owner else None)
+                    self._reload_mangoapp()
         except Exception:  # noqa: BLE001
             pass
 

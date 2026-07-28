@@ -12,7 +12,8 @@ def presets_supported(environ):
 
 def _inside_home(path, home):
     try:
-        return os.path.commonpath((os.path.realpath(path), os.path.realpath(home))) == os.path.realpath(home)
+        trusted_home = os.path.realpath(home)
+        return os.path.commonpath((os.path.realpath(path), trusted_home)) == trusted_home
     except (TypeError, ValueError):
         return False
 

@@ -15,6 +15,7 @@ import {
   hasBlock,
   hexToRgb,
   listRows,
+  matchingPresetKey,
   moveRow,
   normalizeHex,
   previewRows,
@@ -338,5 +339,20 @@ describe("catalog + presets + groups", () => {
   it("groups cover every catalog metric exactly once", () => {
     const grouped = GROUPS.flatMap((g) => g.ids).sort();
     expect(grouped).toEqual(METRICS.map((m) => m.id).sort());
+  });
+
+  it("matches a preset from metric order while ignoring custom rows", () => {
+    const items: HudItem[] = [
+      { kind: "text", id: "title", text: "Stats" },
+      ...metrics("fps", "gpu"),
+      { kind: "separator", id: "separator" },
+    ];
+    const presets = {
+      minimal: ["fps"],
+      balanced: ["fps", "gpu"],
+    } as const;
+
+    expect(matchingPresetKey(items, presets)).toBe("balanced");
+    expect(matchingPresetKey(metrics("gpu", "fps"), presets)).toBeNull();
   });
 });

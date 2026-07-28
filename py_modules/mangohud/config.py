@@ -323,19 +323,24 @@ def _coerce_int(value, default, lo, hi):
 
 def _coerce_background(raw):
     raw = raw if isinstance(raw, dict) else {}
+    default = DEFAULT_MODEL["background"]
     alpha = _coerce_float(
         raw.get("alpha"),
-        DEFAULT_MODEL["background"]["alpha"],
+        default["alpha"],
         0.0,
         1.0,
     )
-    return {"alpha": alpha, "roundCorners": bool(raw.get("roundCorners", True))}
+    return {
+        "alpha": alpha,
+        "roundCorners": bool(raw.get("roundCorners", default["roundCorners"])),
+    }
 
 
 def coerce_model(raw):
     """Normalise a possibly-corrupt persisted/incoming model to a known-good shape.
     Never raises — a wrong-typed save must not blow up in render."""
     raw = raw if isinstance(raw, dict) else {}
+    default = DEFAULT_MODEL
     position = raw.get("position")
     layout = raw.get("layout")
     temp_unit = raw.get("tempUnit")
@@ -345,28 +350,39 @@ def coerce_model(raw):
     if raw_font is None and isinstance(legacy_size, str) and legacy_size in _FONT:
         font_size = _FONT[legacy_size]
     else:
-        font_size = _coerce_int(raw_font, 24, 12, 64)
+        font_size = _coerce_int(raw_font, default["fontSize"], 12, 64)
     return {
-        "enabled": bool(raw.get("enabled", False)),
+        "enabled": bool(raw.get("enabled", default["enabled"])),
         "items": _coerce_items(raw.get("items")),
-        "position": position if position in _POSITIONS else "top-left",
+        "position": position if position in _POSITIONS else default["position"],
         "fontSize": font_size,
         "fontSizeSecondary": _coerce_int(
-            raw.get("fontSizeSecondary"), 13, 6, 64
+            raw.get("fontSizeSecondary"), default["fontSizeSecondary"], 6, 64
         ),
-        "fontSizeText": _coerce_int(raw.get("fontSizeText"), 24, 12, 64),
-        "layout": layout if layout in _LAYOUTS else "vertical",
-        "compact": bool(raw.get("compact", False)),
-        "noSmallFont": bool(raw.get("noSmallFont", False)),
-        "tempUnit": temp_unit if temp_unit in _TEMP_UNITS else "c",
-        "textOutline": bool(raw.get("textOutline", True)),
-        "textOutlineThickness": _coerce_float(raw.get("textOutlineThickness", 1.0), 1.0, 0.0, 4.0),
-        "alpha": _coerce_float(raw.get("alpha", 1.0), 1.0, 0.0, 1.0),
-        "cellpaddingY": _coerce_float(raw.get("cellpaddingY"), -0.085, -0.3, 0.5),
-        "noMargin": bool(raw.get("noMargin", False)),
-        "offsetX": _coerce_int(raw.get("offsetX"), 0, -2000, 2000),
-        "offsetY": _coerce_int(raw.get("offsetY"), 0, -2000, 2000),
-        "fontScale": _coerce_float(raw.get("fontScale"), 1.0, 0.5, 2.0),
+        "fontSizeText": _coerce_int(
+            raw.get("fontSizeText"), default["fontSizeText"], 12, 64
+        ),
+        "layout": layout if layout in _LAYOUTS else default["layout"],
+        "compact": bool(raw.get("compact", default["compact"])),
+        "noSmallFont": bool(raw.get("noSmallFont", default["noSmallFont"])),
+        "tempUnit": temp_unit if temp_unit in _TEMP_UNITS else default["tempUnit"],
+        "textOutline": bool(raw.get("textOutline", default["textOutline"])),
+        "textOutlineThickness": _coerce_float(
+            raw.get("textOutlineThickness"),
+            default["textOutlineThickness"],
+            0.0,
+            4.0,
+        ),
+        "alpha": _coerce_float(raw.get("alpha"), default["alpha"], 0.0, 1.0),
+        "cellpaddingY": _coerce_float(
+            raw.get("cellpaddingY"), default["cellpaddingY"], -0.3, 0.5
+        ),
+        "noMargin": bool(raw.get("noMargin", default["noMargin"])),
+        "offsetX": _coerce_int(raw.get("offsetX"), default["offsetX"], -2000, 2000),
+        "offsetY": _coerce_int(raw.get("offsetY"), default["offsetY"], -2000, 2000),
+        "fontScale": _coerce_float(
+            raw.get("fontScale"), default["fontScale"], 0.5, 2.0
+        ),
         "separatorColor": _clean_hex(raw.get("separatorColor")),
         "colors": _coerce_colors(raw.get("colors")),
         "background": _coerce_background(raw.get("background")),

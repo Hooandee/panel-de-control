@@ -6,6 +6,8 @@ import os
 import sys
 import types
 
+import pytest
+
 
 def _make_plugin(tmp_path, monkeypatch):
     fake_decky = types.ModuleType("decky")
@@ -216,6 +218,29 @@ def test_successful_write_and_reload_reports_applied(tmp_path, monkeypatch):
     assert st["applyStatus"] == "applied"
 
 
+def test_set_config_scans_mangoapp_once(tmp_path, monkeypatch):
+    presets = str(tmp_path / "presets.conf")
+    main, p = _make_plugin(tmp_path, monkeypatch)
+    scans = []
+
+    def detect(**_kwargs):
+        scans.append(True)
+        return {
+            "running": True,
+            "supported": True,
+            "presetsPath": presets,
+            "configFile": None,
+        }
+
+    monkeypatch.setattr(main.mangohud_detect, "detect", detect)
+    monkeypatch.setattr(main, "reload_mangoapp", lambda *_args: True, raising=False)
+
+    st = asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
+
+    assert st["applyStatus"] == "applied"
+    assert scans == [True]
+
+
 def test_failed_reload_reports_pending_not_success(tmp_path, monkeypatch):
     presets = str(tmp_path / "presets.conf")
     main, p = _make_plugin(tmp_path, monkeypatch)
@@ -383,6 +408,27 @@ def test_failed_pdc_reload_is_retried_on_next_tick(tmp_path, monkeypatch):
     assert calls == [True, True]
 
 
+def test_pdc_refresh_write_failure_reports_failed_and_stays_retryable(tmp_path, monkeypatch):
+    presets = str(tmp_path / "presets.conf")
+    main, p = _make_plugin(tmp_path, monkeypatch)
+    _fake_overlay(main, monkeypatch, presets)
+    monkeypatch.setattr(main, "reload_mangoapp", lambda *_args: True, raising=False)
+    asyncio.run(p.set_hud_config({"items": _items("pdc_eco"), "enabled": True}))
+    written = dict(p._pdc_written)
+    p._settings["eco_enabled"] = True
+
+    def fail_write(*_args, **_kwargs):
+        raise OSError("disk unavailable")
+
+    monkeypatch.setattr(main, "apply_hud", fail_write, raising=False)
+
+    with pytest.raises(OSError, match="disk unavailable"):
+        asyncio.run(p._refresh_pdc_metrics())
+
+    assert p._hud_apply_status == "failed"
+    assert p._pdc_written == written
+
+
 class _RecordingExecutor(concurrent.futures.Executor):
     def __init__(self):
         self.count = 0
@@ -467,6 +513,21 @@ def test_zero_fan_rpm_is_a_real_reading(tmp_path, monkeypatch):
     monkeypatch.setattr(p, "_read_fans", lambda: {"fans": [{"rpm": 0}]})
 
     assert p._pdc_values() == {"pdc_fan_rpm": "0"}
+
+
+def test_empty_preread_battery_result_is_not_read_twice(tmp_path, monkeypatch):
+    _main, p = _make_plugin(tmp_path, monkeypatch)
+    p._init()
+    p._pdc_active_ids = ["pdc_bat_health"]
+    reads = []
+    monkeypatch.setattr(
+        p._battery,
+        "read",
+        lambda: reads.append(True) or {"health_percent": 99},
+    )
+
+    assert p._pdc_values({"battery": {}}) == {"pdc_bat_health": "-"}
+    assert reads == []
 
 
 def test_unavailable_tdp_and_fan_capabilities_render_dashes(tmp_path, monkeypatch):
