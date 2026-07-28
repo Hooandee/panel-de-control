@@ -294,6 +294,16 @@ def test_font_size_text_default_clamp_and_emit():
     assert "font_size_text=16" in to_directives(coerce_model({"fontSizeText": 16}))
 
 
+def test_font_size_secondary_default_clamp_and_emit():
+    assert coerce_model({})["fontSizeSecondary"] == 13
+    assert coerce_model({"fontSizeSecondary": 18})["fontSizeSecondary"] == 18
+    assert coerce_model({"fontSizeSecondary": 4})["fontSizeSecondary"] == 6
+    assert coerce_model({"fontSizeSecondary": 999})["fontSizeSecondary"] == 64
+    assert "font_size_secondary=18" in to_directives(
+        coerce_model({"fontSizeSecondary": 18})
+    )
+
+
 # ---- Avanzado: cellpadding_y / offsets / text alpha / font_scale / no_margin ----
 
 def test_cellpadding_y_default_clamp_and_emit():

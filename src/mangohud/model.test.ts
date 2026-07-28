@@ -28,6 +28,12 @@ import {
 
 const metrics = (...ids: string[]): HudItem[] => ids.map((id) => ({ kind: "metric", id: id as never }));
 
+describe("default model", () => {
+  it("defines MangoHud's independent secondary font size", () => {
+    expect(DEFAULT_MODEL).toHaveProperty("fontSizeSecondary", 13);
+  });
+});
+
 describe("previewRows", () => {
   it("collapses consecutive same-group GPU/CPU metrics into ONE row with a cell each", () => {
     const rows = previewRows({ ...DEFAULT_MODEL, items: metrics("cpu", "cpu_temp", "cpu_power") });

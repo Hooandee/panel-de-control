@@ -63,9 +63,11 @@ export interface HudModel {
   enabled: boolean;
   items: HudItem[];
   position: HudPosition;
-  /** Global font size in px (MangoHud has no per-element size). */
+  /** Main metric font size in px. */
   fontSize: number;
-  /** Secondary/small text size in px (labels, custom_text, superscripts). */
+  /** Details and units font size in px. */
+  fontSizeSecondary: number;
+  /** Free and auxiliary text font size in px. */
   fontSizeText: number;
   layout: HudLayout;
   noSmallFont: boolean;
@@ -217,6 +219,7 @@ export const DEFAULT_MODEL: HudModel = {
   items: (["fps", "gpu", "cpu", "ram", "battery"] as MetricId[]).map((id) => ({ kind: "metric", id })),
   position: "top-left",
   fontSize: 24,
+  fontSizeSecondary: 13,
   fontSizeText: 24,
   layout: "vertical",
   noSmallFont: false,

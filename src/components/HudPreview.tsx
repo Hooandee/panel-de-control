@@ -6,6 +6,12 @@ import { HudModel, MetricId, SPACER_LINES, previewRows } from "../mangohud/model
 // proportional, so a bigger font_size visibly grows the preview.
 const PREVIEW_SCALE = 0.5;
 const clampPx = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
+const VALUE_UNIT = /^(.+?)(%|°[CF]|ms|MHz|GHz|kHz|Hz|rpm|[WVG])$/;
+
+function valueParts(value: string): { main: string; unit: string } {
+  const match = value.match(VALUE_UNIT);
+  return match ? { main: match[1], unit: match[2] } : { main: value, unit: "" };
+}
 
 /**
  * Faithful preview of the in-game overlay. Mirrors how MangoHud actually draws:
@@ -23,12 +29,13 @@ export const HudPreview: FC<{
   const top = model.position.startsWith("top");
   const left = model.position.endsWith("left");
   const horizontal = model.layout === "horizontal";
-  // font_scale multiplies font_size in MangoHud; reflect both. Secondary text uses
-  // font_size_text (unless no_small_font pins it to the main size).
   const base = clampPx(Math.round(model.fontSize * model.fontScale * PREVIEW_SCALE), 8, 22);
-  const smallBase = model.noSmallFont
+  const secondaryBase = model.noSmallFont
     ? base
-    : clampPx(Math.round(model.fontSizeText * model.fontScale * PREVIEW_SCALE), 6, base);
+    : clampPx(Math.round(model.fontSizeSecondary * model.fontScale * PREVIEW_SCALE), 6, 32);
+  const textBase = model.noSmallFont
+    ? base
+    : clampPx(Math.round(model.fontSizeText * model.fontScale * PREVIEW_SCALE), 6, 32);
   const lineH = Math.round(base * 1.35);
   const sepColor = `#${model.colors.text}`;
   const [br, bg, bb] = [model.colors.background.slice(0, 2), model.colors.background.slice(2, 4), model.colors.background.slice(4, 6)].map((h) => parseInt(h, 16));
@@ -98,24 +105,43 @@ export const HudPreview: FC<{
               return (
                 <div key={r.key} style={{ display: "flex", gap: 6, whiteSpace: "nowrap" }}>
                   <span style={{ color: textColor(r.labelColor), fontWeight: 600 }}>{r.label}</span>
-                  {r.cells.map((c, i) => (
-                    <span key={i} style={{ color: textColor(r.valueColor) }}>{c}</span>
-                  ))}
+                  {r.cells.map((cell, i) => {
+                    const { main, unit } = valueParts(cell);
+                    return (
+                      <span key={i} style={{ color: textColor(r.valueColor) }}>
+                        <span>{main}</span>
+                        {unit && (
+                          <span data-hud-value-unit style={{ fontSize: secondaryBase }}>
+                            {unit}
+                          </span>
+                        )}
+                      </span>
+                    );
+                  })}
                 </div>
               );
             }
+            const { main, unit } = valueParts(r.value);
             return (
               <div
                 key={r.key}
+                data-hud-free-text={r.small ? "" : undefined}
                 style={{
                   display: "flex",
                   gap: 5,
                   whiteSpace: "nowrap",
-                  fontSize: r.small ? smallBase : base,
+                  fontSize: r.small ? textBase : base,
                 }}
               >
                 {r.label && <span style={{ color: textColor(r.labelColor), fontWeight: 600 }}>{r.label}</span>}
-                <span style={{ color: textColor(r.valueColor) }}>{r.value}</span>
+                <span style={{ color: textColor(r.valueColor) }}>
+                  <span>{main}</span>
+                  {!r.small && unit && (
+                    <span data-hud-value-unit style={{ fontSize: secondaryBase }}>
+                      {unit}
+                    </span>
+                  )}
+                </span>
               </div>
             );
         })}

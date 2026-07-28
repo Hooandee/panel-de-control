@@ -196,9 +196,9 @@ DEFAULT_MODEL = {
     # text pill, or a separator — so text/dividers can be interleaved and reordered.
     "items": _metric_items(_DEFAULT_METRICS),
     "position": "top-left",
-    # Font size in px (global — MangoHud has no per-element size). fontSizeText is the
-    # secondary/small text size (labels, custom_text, superscripts).
+    # MangoHud exposes global font categories, not per-element sizes.
     "fontSize": 24,
+    "fontSizeSecondary": 13,
     "fontSizeText": 24,
     "layout": "vertical",
     "compact": False,
@@ -351,6 +351,9 @@ def coerce_model(raw):
         "items": _coerce_items(raw.get("items")),
         "position": position if position in _POSITIONS else "top-left",
         "fontSize": font_size,
+        "fontSizeSecondary": _coerce_int(
+            raw.get("fontSizeSecondary"), 13, 6, 64
+        ),
         "fontSizeText": _coerce_int(raw.get("fontSizeText"), 24, 12, 64),
         "layout": layout if layout in _LAYOUTS else "vertical",
         "compact": bool(raw.get("compact", False)),
@@ -386,6 +389,7 @@ def _style_lines(model):
     lines += [
         f"position={model['position']}",
         f"font_size={model['fontSize']}",
+        f"font_size_secondary={model['fontSizeSecondary']}",
         f"font_size_text={model['fontSizeText']}",
         f"font_scale={model['fontScale']}",
         f"cellpadding_y={model['cellpaddingY']}",
