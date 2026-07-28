@@ -7,6 +7,7 @@ on:
       - ".github/workflows/release-please.yml"
       - ".release-please-manifest.json"
       - "release-please-config.json"
+      - "shared/fixtures/**"
       - "src/**"
       - "py_modules/**"
       - "main.py"

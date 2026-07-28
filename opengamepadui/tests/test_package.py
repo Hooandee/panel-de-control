@@ -18,8 +18,10 @@ INSTALL_TO_DEVICE = PLUGIN_DIR / "scripts" / "install_to_device.sh"
 EXPORT_PRESET = PLUGIN_DIR / "export_presets.cfg"
 OGUI_WORKFLOW = REPOSITORY_ROOT / ".github" / "workflows" / "opengamepadui-ci.yml"
 DECKY_WORKFLOW = REPOSITORY_ROOT / ".github" / "workflows" / "ci.yml"
+WINDOWS_WORKFLOW = REPOSITORY_ROOT / ".github" / "workflows" / "windows-ci.yml"
 RELEASE_WORKFLOW = REPOSITORY_ROOT / ".github" / "workflows" / "release-please.yml"
 RELEASE_PLEASE_CONFIG = REPOSITORY_ROOT / "release-please-config.json"
+RELEASE_PLEASE_MANIFEST = REPOSITORY_ROOT / ".release-please-manifest.json"
 
 
 def _manifest(version: str) -> dict[str, object]:
@@ -722,9 +724,10 @@ class BuildContractTests(unittest.TestCase):
 
 
 class WorkflowIsolationTests(unittest.TestCase):
-    def test_decky_classifier_routes_ogui_decky_and_mixed_changes(self) -> None:
+    def test_decky_classifier_routes_platform_and_mixed_changes(self) -> None:
         decky = DECKY_WORKFLOW.read_text(encoding="utf-8")
         ogui = OGUI_WORKFLOW.read_text(encoding="utf-8")
+        windows = WINDOWS_WORKFLOW.read_text(encoding="utf-8")
         decky_paths = _filter_paths(decky, "decky")
 
         self.assertEqual(
@@ -733,12 +736,15 @@ class WorkflowIsolationTests(unittest.TestCase):
                 "**",
                 "!opengamepadui/**",
                 "!.github/workflows/opengamepadui-ci.yml",
+                "!windows/**",
+                "!.github/workflows/windows-ci.yml",
             ],
         )
         self.assertIn("predicate-quantifier: every", decky)
 
         for event in ("push", "pull_request"):
             ogui_paths = _event_paths(ogui, event)
+            windows_paths = _event_paths(windows, event)
 
             self.assertNotIn("paths:", _event_body(decky, event))
             self.assertTrue(_matches("opengamepadui/plugin.gd", ogui_paths))
@@ -746,13 +752,29 @@ class WorkflowIsolationTests(unittest.TestCase):
             self.assertTrue(
                 _matches(".github/workflows/opengamepadui-ci.yml", ogui_paths)
             )
+            self.assertTrue(_matches("windows/PanelDeControl.sln", windows_paths))
+            self.assertTrue(_matches("shared/fixtures/auto_tdp.json", windows_paths))
+            self.assertFalse(_matches("src/index.tsx", windows_paths))
+            self.assertTrue(
+                _matches(".github/workflows/windows-ci.yml", windows_paths)
+            )
+
+        self.assertRegex(
+            windows,
+            r"python -m unittest\s+"
+            r"opengamepadui\.tests\.test_package\.WorkflowIsolationTests",
+        )
 
         cases = (
             (["opengamepadui/plugin.gd"], False),
             (["opengamepadui/plugin.json"], False),
             ([".github/workflows/opengamepadui-ci.yml"], False),
+            (["windows/PanelDeControl.sln"], False),
+            ([".github/workflows/windows-ci.yml"], False),
             (["src/index.tsx"], True),
             (["opengamepadui/plugin.gd", "src/index.tsx"], True),
+            (["windows/PanelDeControl.sln", "src/index.tsx"], True),
+            (["shared/fixtures/auto_tdp.json"], True),
             (["conftest.py"], True),
             (["plugin.json"], True),
             (["release-please-config.json"], True),
@@ -867,17 +889,26 @@ class WorkflowIsolationTests(unittest.TestCase):
         self.assertNotIn("contents: write", workflow)
         self.assertNotRegex(workflow, r"(?m)^\s*(release|tags):")
 
-    def test_release_please_excludes_ogui_from_root_package(self) -> None:
+    def test_release_please_excludes_unpublished_platforms(self) -> None:
         config = json.loads(RELEASE_PLEASE_CONFIG.read_text(encoding="utf-8"))
         root_package = config["packages"]["."]
+        manifest = json.loads(RELEASE_PLEASE_MANIFEST.read_text(encoding="utf-8"))
 
+        self.assertNotIn("separate-pull-requests", config)
         self.assertEqual(
             set(root_package["exclude-paths"]),
-            {"opengamepadui", ".github/workflows/opengamepadui-ci.yml"},
+            {
+                "opengamepadui",
+                ".github/workflows/opengamepadui-ci.yml",
+                "windows",
+                ".github/workflows/windows-ci.yml",
+            },
         )
         self.assertNotIn("opengamepadui", config["packages"])
+        self.assertNotIn("windows", config["packages"])
+        self.assertEqual(set(manifest), {"."})
 
-    def test_release_workflow_does_not_run_for_ogui_only_merges(self) -> None:
+    def test_release_workflow_ignores_unpublished_platform_changes(self) -> None:
         workflow = RELEASE_WORKFLOW.read_text(encoding="utf-8")
         release_paths = _event_paths(workflow, "push")
 
@@ -888,6 +919,7 @@ class WorkflowIsolationTests(unittest.TestCase):
                 ".github/workflows/release-please.yml",
                 ".release-please-manifest.json",
                 "release-please-config.json",
+                "shared/fixtures/**",
                 "src/**",
                 "py_modules/**",
                 "main.py",
@@ -904,15 +936,18 @@ class WorkflowIsolationTests(unittest.TestCase):
                 "scripts/**",
             ],
         )
-        for ogui_path in (
+        for unpublished_platform_path in (
             "opengamepadui/plugin.gd",
             "opengamepadui/plugin.json",
             ".github/workflows/opengamepadui-ci.yml",
+            "windows/PanelDeControl.sln",
+            ".github/workflows/windows-ci.yml",
         ):
-            with self.subTest(ogui_path=ogui_path):
-                self.assertFalse(_matches(ogui_path, release_paths))
+            with self.subTest(unpublished_platform_path=unpublished_platform_path):
+                self.assertFalse(_matches(unpublished_platform_path, release_paths))
 
         for decky_release_path in (
+            "shared/fixtures/auto_tdp.json",
             "src/index.tsx",
             "py_modules/tdp/service.py",
             "main.py",

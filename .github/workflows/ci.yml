@@ -38,6 +38,8 @@ jobs:
               - "**"
               - "!opengamepadui/**"
               - "!.github/workflows/opengamepadui-ci.yml"
+              - "!windows/**"
+              - "!.github/workflows/windows-ci.yml"
 
   backend-tests:
     needs: changes

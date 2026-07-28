@@ -6,7 +6,9 @@
     ".": {
       "exclude-paths": [
         "opengamepadui",
-        ".github/workflows/opengamepadui-ci.yml"
+        ".github/workflows/opengamepadui-ci.yml",
+        "windows",
+        ".github/workflows/windows-ci.yml"
       ]
     }
   }

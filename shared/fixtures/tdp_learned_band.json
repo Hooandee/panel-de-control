@@ -1,0 +1,92 @@
+{
+  "schema_version": 1,
+  "algorithm": "tdp.suggest.learned_band",
+  "cases": [
+    {
+      "id": "empty_input_is_unavailable",
+      "input": {"by_pl1": {}},
+      "expected": {
+        "floor": null,
+        "ceil": null,
+        "seed": null,
+        "observed_lo": null,
+        "observed_hi": null,
+        "enough": false,
+        "reason": "no_data"
+      }
+    },
+    {
+      "id": "short_observation_keeps_observed_range",
+      "input": {
+        "by_pl1": {
+          "12": {"seconds": 400.0, "gpu_avg": 99.0, "watts_avg": 11.8},
+          "15": {"seconds": 400.0, "gpu_avg": 90.0, "watts_avg": 13.0}
+        }
+      },
+      "expected": {
+        "floor": null,
+        "ceil": null,
+        "seed": null,
+        "observed_lo": 12,
+        "observed_hi": 15,
+        "enough": false,
+        "reason": "too_few"
+      }
+    },
+    {
+      "id": "single_observed_level_is_not_a_band",
+      "input": {
+        "by_pl1": {
+          "18": {"seconds": 2000.0, "gpu_avg": 80.0, "watts_avg": 15.0}
+        }
+      },
+      "expected": {
+        "floor": null,
+        "ceil": null,
+        "seed": null,
+        "observed_lo": 18,
+        "observed_hi": 18,
+        "enough": false,
+        "reason": "one_level"
+      }
+    },
+    {
+      "id": "gpu_headroom_defines_floor",
+      "input": {
+        "by_pl1": {
+          "12": {"seconds": 700.0, "gpu_avg": 99.0, "watts_avg": 11.8},
+          "18": {"seconds": 800.0, "gpu_avg": 88.0, "watts_avg": 15.0},
+          "24": {"seconds": 700.0, "gpu_avg": 70.0, "watts_avg": 17.0}
+        }
+      },
+      "expected": {
+        "floor": 18,
+        "ceil": 24,
+        "seed": 18,
+        "observed_lo": 12,
+        "observed_hi": 24,
+        "enough": true,
+        "reason": "ok"
+      }
+    },
+    {
+      "id": "watts_are_used_when_gpu_is_missing",
+      "input": {
+        "by_pl1": {
+          "12": {"seconds": 700.0, "gpu_avg": null, "watts_avg": 11.8},
+          "18": {"seconds": 800.0, "gpu_avg": null, "watts_avg": 15.0},
+          "24": {"seconds": 400.0, "gpu_avg": null, "watts_avg": 17.0}
+        }
+      },
+      "expected": {
+        "floor": 18,
+        "ceil": 24,
+        "seed": 18,
+        "observed_lo": 12,
+        "observed_hi": 24,
+        "enough": true,
+        "reason": "ok"
+      }
+    }
+  ]
+}
