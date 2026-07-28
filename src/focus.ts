@@ -23,6 +23,15 @@ export function buildFocusCss(): string {
   position: relative;
   z-index: 1;
 }
+.${PDC_ROOT} .pdc-hud-slider {
+  margin-inline: 0 !important;
+  padding-block: 6px !important;
+}
+/* Steam fixes this inner slider row at 270px, wider than nested QAM cards. */
+.${PDC_ROOT} .pdc-hud-slider > div > div {
+  min-width: 0 !important;
+  width: 100% !important;
+}
 .${PDC_TABSTRIP} { scrollbar-width: none; -ms-overflow-style: none; }
 .${PDC_TABSTRIP}::-webkit-scrollbar { display: none; width: 0; height: 0; }`.trim();
 }

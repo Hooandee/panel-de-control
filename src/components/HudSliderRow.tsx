@@ -28,7 +28,7 @@ export const HudSliderRow: FC<Props> = ({
     style={{
       display: "flex",
       flexDirection: "column",
-      gap: theme.space.sm,
+      gap: theme.space.xs,
       minWidth: 0,
     }}
   >
@@ -58,8 +58,6 @@ export const HudSliderRow: FC<Props> = ({
       style={{
         width: "100%",
         minWidth: 0,
-        paddingLeft: 8,
-        paddingRight: 8,
         boxSizing: "border-box",
         overflow: "hidden",
       }}
@@ -70,6 +68,7 @@ export const HudSliderRow: FC<Props> = ({
         max={max}
         step={step}
         showValue={false}
+        className="pdc-hud-slider"
         onChange={onChange}
       />
     </div>
