@@ -23,19 +23,14 @@ func configure_sampler(sampler: Node) -> void:
 
 
 func _ready() -> void:
-	if not _sampler_configured:
-		_sampler = PowerSnapshotSampler.new()
-	if _sampler.get_parent() == null:
-		add_child(_sampler)
+	_ensure_sampler()
 	_ready_complete = true
 	var quick_menu := _create_menu()
 	add_to_quick_bar(quick_menu, MenuIcon)
 
 
 func get_settings_menu() -> Control:
-	if not _ready_complete:
-		push_error("Settings menu requested before the plugin is ready")
-		return null
+	_ensure_sampler()
 	return _create_menu()
 
 
@@ -60,3 +55,10 @@ func _create_menu() -> Control:
 	menu.call("configure_sampler", _sampler)
 	_menus.append(weakref(menu))
 	return menu
+
+
+func _ensure_sampler() -> void:
+	if _sampler == null:
+		_sampler = PowerSnapshotSampler.new()
+	if _sampler.get_parent() == null:
+		add_child(_sampler)

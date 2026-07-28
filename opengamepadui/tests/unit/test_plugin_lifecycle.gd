@@ -34,6 +34,26 @@ class FakeSampler extends Node:
 		shutdown_called = true
 
 
+func test_settings_menu_is_available_before_plugin_enters_scene_tree() -> void:
+	var sampler := FakeSampler.new(_known_snapshot())
+	var plugin_script := load(PLUGIN_PATH) as GDScript
+	assert_not_null(plugin_script, "the packaged plugin entry point must exist")
+	if plugin_script == null:
+		return
+	var plugin := plugin_script.new() as Node
+	plugin.configure_sampler(sampler)
+
+	var settings_menu := plugin.get_settings_menu() as Control
+
+	assert_not_null(
+		settings_menu,
+		"OGUI requests settings while the PluginManager is still outside the tree",
+	)
+	if settings_menu != null:
+		settings_menu.free()
+	plugin.free()
+
+
 func test_plugin_owns_one_sampler_shared_by_quick_bar_and_settings() -> void:
 	var sampler := FakeSampler.new(_known_snapshot())
 	var plugin := _new_plugin(sampler)

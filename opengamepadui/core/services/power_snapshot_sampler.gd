@@ -387,7 +387,7 @@ func _drain_pipes() -> void:
 
 func _drain_pipe(pipe: Variant, destination: PackedByteArray) -> void:
 	while pipe != null:
-		var available: int = pipe.get_available_bytes()
+		var available: int = pipe.get_length()
 		if available <= 0:
 			return
 		var remaining := _maximum_output_bytes - destination.size()

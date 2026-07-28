@@ -23,13 +23,13 @@ class FakePipe extends RefCounted:
 		for chunk in text_chunks:
 			chunks.append(chunk.to_utf8_buffer())
 
-	func get_available_bytes() -> int:
+	func get_length() -> int:
 		if closed or chunks.is_empty() or available_chunks <= 0:
 			return 0
 		return chunks[0].size()
 
 	func get_buffer(_length: int) -> PackedByteArray:
-		if get_available_bytes() == 0:
+		if get_length() == 0:
 			return PackedByteArray()
 		available_chunks -= 1
 		return chunks.pop_front()
