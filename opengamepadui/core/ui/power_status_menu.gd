@@ -29,6 +29,12 @@ func _ready() -> void:
 	_refresh_timer.start()
 
 
+func _process(_delta: float) -> void:
+	if _shutting_down or _sampler == null:
+		return
+	_sampler.call("poll")
+
+
 func refresh_now() -> void:
 	if _shutting_down or _sampler == null:
 		return

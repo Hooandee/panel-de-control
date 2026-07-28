@@ -14,6 +14,7 @@ class ManualSampler extends Node:
 
 	var latest_snapshot: RefCounted
 	var request_count := 0
+	var poll_count := 0
 
 	func _init(initial_snapshot: RefCounted) -> void:
 		latest_snapshot = initial_snapshot
@@ -24,6 +25,9 @@ class ManualSampler extends Node:
 
 	func get_latest_snapshot() -> RefCounted:
 		return latest_snapshot
+
+	func poll() -> void:
+		poll_count += 1
 
 	func publish(snapshot: RefCounted) -> void:
 		latest_snapshot = snapshot
@@ -52,6 +56,22 @@ func test_known_shared_snapshot_is_rendered_and_refresh_only_requests_sampling()
 
 	assert_eq(sampler.request_count, 2)
 	assert_eq(_label(menu, "TdpValue").text, "Observed TDP: 18.0 W")
+
+
+func test_menu_drives_sampler_processing_from_its_live_scene_tree() -> void:
+	var fixture := _new_menu(_known_snapshot())
+	var menu: Control = fixture["menu"]
+	if menu == null:
+		return
+	var sampler: ManualSampler = fixture["sampler"]
+
+	menu.notification(Node.NOTIFICATION_PROCESS)
+
+	assert_gt(
+		sampler.poll_count,
+		0,
+		"OGUI can keep the plugin owner outside the live scene tree",
+	)
 
 
 func test_unavailable_snapshot_replaces_every_value_label() -> void:

@@ -23,6 +23,9 @@ class FakeSampler extends Node:
 		request_count += 1
 		return true
 
+	func poll() -> void:
+		pass
+
 	func get_latest_snapshot() -> RefCounted:
 		return latest_snapshot
 

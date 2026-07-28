@@ -135,6 +135,10 @@ func shutdown() -> void:
 
 
 func _process(_delta: float) -> void:
+	poll()
+
+
+func poll() -> void:
 	if _closed or not has_active_process():
 		return
 	_drain_pipes()
