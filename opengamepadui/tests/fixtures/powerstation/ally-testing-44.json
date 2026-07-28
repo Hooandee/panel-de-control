@@ -1,0 +1,35 @@
+{
+  "machine": {
+    "dmi": "ROG Ally RC71L_RC71L",
+    "image": "Bazzite testing-44"
+  },
+  "source": {
+    "name": "PowerStation",
+    "mode": "read-only"
+  },
+  "tdp": {
+    "observed_limit_w": 15,
+    "minimum_w": {
+      "value": null,
+      "status": "ambiguous_zero"
+    },
+    "maximum_w": {
+      "value": null,
+      "status": "ambiguous_zero"
+    }
+  },
+  "thermal": {
+    "value_c": null,
+    "status": "unavailable"
+  },
+  "gpu_clock": {
+    "allowed_range_mhz": {
+      "minimum": 800,
+      "maximum": 2700
+    },
+    "manual": {
+      "value": null,
+      "status": "ambiguous"
+    }
+  }
+}

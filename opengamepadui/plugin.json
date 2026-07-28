@@ -1,0 +1,14 @@
+{
+  "plugin.id": "panel-de-control",
+  "plugin.name": "Panel de Control",
+  "plugin.version": "0.1.0",
+  "plugin.min-api-version": "2.0.0",
+  "plugin.link": "https://github.com/Hooandee/panel-de-control",
+  "plugin.source": "https://github.com/Hooandee/panel-de-control",
+  "plugin.summary": "Read-only PowerStation status for OpenGamepadUI.",
+  "plugin.description": "Observes GPU identity, TDP, and power profile without applying performance changes.",
+  "entrypoint": "plugin.gd",
+  "store.tags": ["quick-bar", "performance", "power"],
+  "store.images": [],
+  "author.name": "Hooandee"
+}
