@@ -3096,6 +3096,8 @@ class Plugin:
 
     async def _refresh_pdc_metrics(self) -> None:
         """Refresh changed pdc values through the serial apply executor."""
+        if not self._pdc_active_ids or not self._pdc_presets_path:
+            return
         await self._offload_call(self._refresh_pdc_metrics_sync)
 
     async def get_hud_state(self) -> dict:

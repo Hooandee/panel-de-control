@@ -397,6 +397,19 @@ class _RecordingExecutor(concurrent.futures.Executor):
         return future
 
 
+def test_inactive_pdc_refresh_skips_executor(tmp_path, monkeypatch):
+    _main, p = _make_plugin(tmp_path, monkeypatch)
+    p._init()
+    executor = _RecordingExecutor()
+    p._apply_executor = executor
+    p._pdc_active_ids = []
+    p._pdc_presets_path = None
+
+    asyncio.run(p._refresh_pdc_metrics())
+
+    assert executor.count == 0
+
+
 def test_pdc_refresh_uses_serial_apply_executor(tmp_path, monkeypatch):
     presets = str(tmp_path / "presets.conf")
     main, p = _make_plugin(tmp_path, monkeypatch)
@@ -410,6 +423,41 @@ def test_pdc_refresh_uses_serial_apply_executor(tmp_path, monkeypatch):
     asyncio.run(p._refresh_pdc_metrics())
 
     assert executor.count == 1
+
+
+def test_pdc_refresh_applies_multiple_changed_values_once(tmp_path, monkeypatch):
+    presets = str(tmp_path / "presets.conf")
+    main, p = _make_plugin(tmp_path, monkeypatch)
+    _fake_overlay(main, monkeypatch, presets)
+    monkeypatch.setattr(main, "reload_mangoapp", lambda *_args: True, raising=False)
+    asyncio.run(p.set_hud_config({
+        "items": _items("pdc_eco", "pdc_profile"),
+        "enabled": True,
+    }))
+
+    apply_calls = []
+    reload_calls = []
+    original_apply_hud = main.apply_hud
+
+    def apply_once(*args, **kwargs):
+        apply_calls.append(True)
+        return original_apply_hud(*args, **kwargs)
+
+    monkeypatch.setattr(main, "apply_hud", apply_once, raising=False)
+    monkeypatch.setattr(
+        main,
+        "reload_mangoapp",
+        lambda *_args: reload_calls.append(True) or True,
+        raising=False,
+    )
+    p._settings["eco_enabled"] = True
+    p._current_appid = "42"
+    p._current_game_name = "Game"
+
+    asyncio.run(p._refresh_pdc_metrics())
+
+    assert apply_calls == [True]
+    assert reload_calls == [True]
 
 
 def test_zero_fan_rpm_is_a_real_reading(tmp_path, monkeypatch):
