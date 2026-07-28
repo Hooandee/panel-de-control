@@ -1,12 +1,13 @@
 # Panel de Control for OpenGamepadUI
 
-The OpenGamepadUI package foundation for Panel de Control. This phase defines only the
-metadata contract and read-only fixtures; it neither controls hardware nor publishes releases.
+Panel de Control API 2.0 plugin for OpenGamepadUI. Phase zero provides a read-only Settings view
+of the GPU, observed TDP, and power profile reported by PowerStation. It neither controls
+hardware nor publishes releases.
 
-Validate the contract with:
+Run the manifest and packaging contract tests with:
 
 ```sh
-python3 scripts/validate_manifest.py
+python3 -m unittest discover -v -s tests -p "test_*.py"
 ```
 
 The package is GPL-3.0-only. See [README.md](README.md) for Spanish.
