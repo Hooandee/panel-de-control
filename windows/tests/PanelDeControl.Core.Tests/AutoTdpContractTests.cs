@@ -14,6 +14,7 @@ public sealed class AutoTdpContractTests
         var fixture = JsonSerializer.Deserialize<AutoTdpFixture>(File.ReadAllText(path));
 
         Assert.NotNull(fixture);
+        Assert.NotEmpty(fixture.Cases);
         foreach (var item in fixture.Cases)
         {
             var actual = AutoTdpController.Decide(

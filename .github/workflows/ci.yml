@@ -3,39 +3,7 @@ name: CI
 on:
   push:
     branches: ["**"]
-    paths:
-      - ".github/workflows/ci.yml"
-      - "shared/fixtures/**"
-      - "src/**"
-      - "py_modules/**"
-      - "tests/**"
-      - "main.py"
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - "tsconfig.json"
-      - "rollup.config.js"
-      - "requirements*.txt"
-      - "plugin.json"
-      - "assets/**"
-      - "bin/**"
-      - "scripts/**"
   pull_request:
-    paths:
-      - ".github/workflows/ci.yml"
-      - "shared/fixtures/**"
-      - "src/**"
-      - "py_modules/**"
-      - "tests/**"
-      - "main.py"
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - "tsconfig.json"
-      - "rollup.config.js"
-      - "requirements*.txt"
-      - "plugin.json"
-      - "assets/**"
-      - "bin/**"
-      - "scripts/**"
 
 # Least privilege: CI only reads the repo. No job here writes anything, and a
 # read-only token means a compromised dependency in a build step cannot push,
@@ -70,6 +38,8 @@ jobs:
               - "**"
               - "!opengamepadui/**"
               - "!.github/workflows/opengamepadui-ci.yml"
+              - "!windows/**"
+              - "!.github/workflows/windows-ci.yml"
 
   backend-tests:
     needs: changes
