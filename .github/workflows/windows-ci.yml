@@ -78,6 +78,20 @@ jobs:
         run: >-
           msbuild
           windows/src/PanelDeControl.GameBar/PanelDeControl.GameBar.csproj
+          /target:Restore
+          /property:RestorePackagesWithLockFile=true
+          /property:RestoreForceEvaluate=true
+          /property:RestoreConfigFile=${{ github.workspace }}\windows\NuGet.ci.config
+          /property:Configuration=Release
+          /property:Platform=x64
+      - run: >-
+          git diff --exit-code --
+          windows/src/PanelDeControl.GameBar/packages.lock.json
+          windows/src/PanelDeControl.Core/packages.lock.json
+      - shell: pwsh
+        run: >-
+          msbuild
+          windows/src/PanelDeControl.GameBar/PanelDeControl.GameBar.csproj
           /restore
           /target:Build
           /property:RestoreLockedMode=true

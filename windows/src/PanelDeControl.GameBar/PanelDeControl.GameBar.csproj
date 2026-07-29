@@ -21,7 +21,6 @@
     <AppxBundle>Never</AppxBundle>
     <GenerateAppInstallerFile>false</GenerateAppInstallerFile>
     <RestoreProjectStyle>PackageReference</RestoreProjectStyle>
-    <DisableImplicitNuGetFallbackFolder>true</DisableImplicitNuGetFallbackFolder>
     <HardwareBrokerPublishDir>$(BaseIntermediateOutputPath)HardwareBroker\</HardwareBrokerPublishDir>
   </PropertyGroup>
 

@@ -36,13 +36,6 @@ class GameBarProjectTests(unittest.TestCase):
             root.findtext(".//msbuild:TargetPlatformIdentifier", namespaces=namespace),
         )
         self.assertEqual(
-            "true",
-            root.findtext(
-                ".//msbuild:DisableImplicitNuGetFallbackFolder",
-                namespaces=namespace,
-            ),
-        )
-        self.assertEqual(
             {"x64"},
             {
                 node.text
@@ -137,7 +130,15 @@ class GameBarProjectTests(unittest.TestCase):
             },
         )
         workflow = WORKFLOW.read_text(encoding="utf-8")
+        normalized_workflow = " ".join(workflow.split())
         self.assertIn("/property:RestoreLockedMode=true", workflow)
+        self.assertIn("/property:RestoreForceEvaluate=true", workflow)
+        self.assertIn(
+            "git diff --exit-code -- "
+            "windows/src/PanelDeControl.GameBar/packages.lock.json "
+            "windows/src/PanelDeControl.Core/packages.lock.json",
+            normalized_workflow,
+        )
         isolated_packages = (
             r"NUGET_PACKAGES: ${{ github.workspace }}\.nuget\packages"
         )
