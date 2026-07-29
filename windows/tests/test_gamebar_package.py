@@ -36,6 +36,13 @@ class GameBarProjectTests(unittest.TestCase):
             root.findtext(".//msbuild:TargetPlatformIdentifier", namespaces=namespace),
         )
         self.assertEqual(
+            "true",
+            root.findtext(
+                ".//msbuild:DisableImplicitNuGetFallbackFolder",
+                namespaces=namespace,
+            ),
+        )
+        self.assertEqual(
             {"x64"},
             {
                 node.text
