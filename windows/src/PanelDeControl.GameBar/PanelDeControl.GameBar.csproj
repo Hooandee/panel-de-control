@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+
+  <PropertyGroup>
+    <Configuration Condition="'$(Configuration)' == ''">Debug</Configuration>
+    <Platform Condition="'$(Platform)' == ''">x64</Platform>
+    <ProjectGuid>{67BEB927-C377-40B6-AAFE-43BFE60624E5}</ProjectGuid>
+    <OutputType>AppContainerExe</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>PanelDeControl.GameBar</RootNamespace>
+    <AssemblyName>PanelDeControl.GameBar</AssemblyName>
+    <DefaultLanguage>es-ES</DefaultLanguage>
+    <TargetPlatformIdentifier>UAP</TargetPlatformIdentifier>
+    <TargetPlatformVersion>10.0.22621.0</TargetPlatformVersion>
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
+    <MinimumVisualStudioVersion>17.0</MinimumVisualStudioVersion>
+    <FileAlignment>512</FileAlignment>
+    <ProjectTypeGuids>{A5A43C5B-DE2A-4C0C-9213-0A381AF9435A};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
+    <AppxPackageSigningEnabled>false</AppxPackageSigningEnabled>
+    <AppxBundle>Never</AppxBundle>
+    <GenerateAppInstallerFile>false</GenerateAppInstallerFile>
+    <RestoreProjectStyle>PackageReference</RestoreProjectStyle>
+    <HardwareBrokerPublishDir>$(BaseIntermediateOutputPath)HardwareBroker\</HardwareBrokerPublishDir>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'">
+    <DebugSymbols>true</DebugSymbols>
+    <OutputPath>bin\x64\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE;NETFX_CORE;WINDOWS_UWP</DefineConstants>
+    <DebugType>full</DebugType>
+    <PlatformTarget>x64</PlatformTarget>
+    <UseVSHostingProcess>false</UseVSHostingProcess>
+    <Prefer32Bit>false</Prefer32Bit>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'">
+    <OutputPath>bin\x64\Release\</OutputPath>
+    <DefineConstants>TRACE;NETFX_CORE;WINDOWS_UWP</DefineConstants>
+    <Optimize>true</Optimize>
+    <DebugType>pdbonly</DebugType>
+    <PlatformTarget>x64</PlatformTarget>
+    <UseVSHostingProcess>false</UseVSHostingProcess>
+    <Prefer32Bit>false</Prefer32Bit>
+    <UseDotNetNativeToolchain>true</UseDotNetNativeToolchain>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="App.xaml.cs">
+      <DependentUpon>App.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="ControlPanelWidget.xaml.cs">
+      <DependentUpon>ControlPanelWidget.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="TelemetryClient.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AppxManifest Include="Package.appxmanifest">
+      <SubType>Designer</SubType>
+    </AppxManifest>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ApplicationDefinition Include="App.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </ApplicationDefinition>
+    <Page Include="ControlPanelWidget.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Assets\Square44x44Logo.png" />
+    <Content Include="Assets\Square150x150Logo.png" />
+    <Content Include="Assets\StoreLogo.png" />
+    <Content Include="Assets\SplashScreen.png" />
+    <Content Include="Assets\WidgetIcon.png" />
+    <Content Include="Properties\Default.rd.xml" />
+    <Content Include="Assets\WidgetIcon.png">
+      <Link>GameBar\PanelDeControl\WidgetIcon.png</Link>
+    </Content>
+    <Content Include="..\..\..\LICENSE">
+      <Link>LICENSE.txt</Link>
+    </Content>
+    <Content Include="..\..\..\THIRD_PARTY_NOTICES.md">
+      <Link>THIRD_PARTY_NOTICES.md</Link>
+    </Content>
+    <Content Include="$(NuGetPackageRoot)microsoft.gaming.xboxgamebar\7.3.2607010\license.txt">
+      <Link>ThirdPartyLicenses\Microsoft.Gaming.XboxGameBar-LICENSE.txt</Link>
+    </Content>
+    <Content Include="$(NuGetPackageRoot)microsoft.netcore.universalwindowsplatform\6.2.14\LICENSE.TXT">
+      <Link>ThirdPartyLicenses\Microsoft.NETCore.UWP-LICENSE.txt</Link>
+    </Content>
+    <Content Include="$(NuGetPackageRoot)microsoft.netcore.universalwindowsplatform\6.2.14\THIRD-PARTY-NOTICES.TXT">
+      <Link>ThirdPartyLicenses\Microsoft.NETCore.UWP-NOTICES.txt</Link>
+    </Content>
+    <Content Include="$(NuGetPackageRoot)system.io.pipes\4.3.0\dotnet_library_license.txt">
+      <Link>ThirdPartyLicenses\System.IO.Pipes-LICENSE.txt</Link>
+    </Content>
+    <Content Include="$(NuGetPackageRoot)system.io.pipes\4.3.0\ThirdPartyNotices.txt">
+      <Link>ThirdPartyLicenses\System.IO.Pipes-NOTICES.txt</Link>
+    </Content>
+    <Content Include="$(NuGetPackageRoot)system.io.pipes.accesscontrol\5.0.0\LICENSE.TXT">
+      <Link>ThirdPartyLicenses\System.IO.Pipes.AccessControl-LICENSE.txt</Link>
+    </Content>
+    <Content Include="$(NuGetPackageRoot)system.io.pipes.accesscontrol\5.0.0\THIRD-PARTY-NOTICES.TXT">
+      <Link>ThirdPartyLicenses\System.IO.Pipes.AccessControl-NOTICES.txt</Link>
+    </Content>
+    <Content Include="$(NuGetPackageRoot)hidsharp\2.6.4\LICENSE.txt">
+      <Link>ThirdPartyLicenses\HidSharp-LICENSE.txt</Link>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Gaming.XboxGameBar">
+      <Version>7.3.2607010</Version>
+    </PackageReference>
+    <PackageReference Include="Microsoft.NETCore.UniversalWindowsPlatform">
+      <Version>6.2.14</Version>
+    </PackageReference>
+    <PackageReference Include="System.IO.Pipes">
+      <Version>4.3.0</Version>
+    </PackageReference>
+    <ProjectReference Include="../PanelDeControl.Core/PanelDeControl.Core.csproj" />
+  </ItemGroup>
+
+  <Target Name="PublishHardwareBroker" BeforeTargets="PrepareForBuild">
+    <MSBuild
+      Projects="../PanelDeControl.Hardware/PanelDeControl.Hardware.csproj"
+      Targets="Publish"
+      BuildInParallel="false"
+      Properties="Configuration=$(Configuration);RuntimeIdentifier=win-x64;SelfContained=true;PublishDir=$(MSBuildProjectDirectory)\$(HardwareBrokerPublishDir)" />
+    <ItemGroup>
+      <Content Include="$(HardwareBrokerPublishDir)**\*">
+        <Link>HardwareBroker\%(RecursiveDir)%(Filename)%(Extension)</Link>
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </Content>
+    </ItemGroup>
+  </Target>
+
+  <PropertyGroup Condition="'$(VisualStudioVersion)' == '' or '$(VisualStudioVersion)' &lt; '17.0'">
+    <VisualStudioVersion>17.0</VisualStudioVersion>
+  </PropertyGroup>
+  <Import Project="$(MSBuildExtensionsPath)\Microsoft\WindowsXaml\v$(VisualStudioVersion)\Microsoft.Windows.UI.Xaml.CSharp.targets" />
+</Project>

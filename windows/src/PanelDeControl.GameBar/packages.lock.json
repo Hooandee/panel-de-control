@@ -1,0 +1,132 @@
+{
+  "version": 1,
+  "dependencies": {
+    "UAP,Version=v10.0.22621": {
+      "Microsoft.Gaming.XboxGameBar": {
+        "type": "Direct",
+        "requested": "[7.3.2607010, )",
+        "resolved": "7.3.2607010",
+        "contentHash": "cZfLSHk5MuqpLtc7uacy/83avBhU/VYbcFucD8OkmcC8bWiQGa0UWmBr2pigBpRhY6xlQNZPcJN0J1VCd4nIYA=="
+      },
+      "Microsoft.NETCore.UniversalWindowsPlatform": {
+        "type": "Direct",
+        "requested": "[6.2.14, )",
+        "resolved": "6.2.14",
+        "contentHash": "7Mi4cS8JQ7gqm+W+SRCq13c2Rr0yZTuczC9EbV6gRigE2ZhQalnLHyat0ZshT5HDMSkFDxTyjwZymUgFuv3+eg==",
+        "dependencies": {
+          "Microsoft.NETCore.Platforms": "2.1.0",
+          "Microsoft.Net.Native.Compiler": "2.2.12-rel-31116-00",
+          "Microsoft.Net.UWPCoreRuntimeSdk": "2.2.14",
+          "NETStandard.Library": "2.0.3"
+        }
+      },
+      "System.IO.Pipes": {
+        "type": "Direct",
+        "requested": "[4.3.0, )",
+        "resolved": "4.3.0",
+        "contentHash": "wpGJuACA6r8+KRckXoI6ghGTwgPRiICI6T7kgHI/m7S5eMqV/8jH37fzAUhTwIe9RwlH/j1sWwm2Q2zyXwZGHw=="
+      },
+      "Microsoft.Net.Native.Compiler": {
+        "type": "Transitive",
+        "resolved": "2.2.12-rel-31116-00",
+        "contentHash": "DuANSYEBO7qcIeqzI1mShJMweuQVBycbCRUW6mIb1QxorSiWLSWEJZNv/X7TdW3dcjfZdZFVsEWDCnJUolIPrQ==",
+        "dependencies": {
+          "runtime.win10-arm.Microsoft.Net.Native.Compiler": "2.2.12-rel-31116-00",
+          "runtime.win10-arm64.Microsoft.Net.Native.Compiler": "2.2.12-rel-31116-00",
+          "runtime.win10-x64.Microsoft.Net.Native.Compiler": "2.2.12-rel-31116-00",
+          "runtime.win10-x86.Microsoft.Net.Native.Compiler": "2.2.12-rel-31116-00"
+        }
+      },
+      "Microsoft.Net.UWPCoreRuntimeSdk": {
+        "type": "Transitive",
+        "resolved": "2.2.14",
+        "contentHash": "THMsLyB29wqd9ZI9c05hoMb788QQ5ClsXwLjpt7omTk/OvtUERWgwD6q85s5aSMdze50uhPZDRF/+uju8Lqhgw==",
+        "dependencies": {
+          "runtime.win10-arm.Microsoft.Net.UWPCoreRuntimeSdk": "2.2.14",
+          "runtime.win10-x64.Microsoft.Net.UWPCoreRuntimeSdk": "2.2.14",
+          "runtime.win10-x86.Microsoft.Net.UWPCoreRuntimeSdk": "2.2.14"
+        }
+      },
+      "Microsoft.NETCore.Platforms": {
+        "type": "Transitive",
+        "resolved": "2.1.0",
+        "contentHash": "ok+RPAtESz/9MUXeIEz6Lv5XAGQsaNmEYXMsgVALj4D7kqC8gveKWXWXbufLySR2fWrwZf8smyN5RmHu0e4BHA=="
+      },
+      "NETStandard.Library": {
+        "type": "Transitive",
+        "resolved": "2.0.3",
+        "contentHash": "st47PosZSHrjECdjeIzZQbzivYBJFv6P2nv4cj2ypdI204DO+vZ7l5raGMiX4eXMJ53RfOIg+/s4DHVZ54Nu2A==",
+        "dependencies": {
+          "Microsoft.NETCore.Platforms": "1.1.0"
+        }
+      },
+      "runtime.win10-arm.Microsoft.Net.Native.Compiler": {
+        "type": "Transitive",
+        "resolved": "2.2.12-rel-31116-00",
+        "contentHash": "JAieAWjpAsAKq2OLgJpKHafrk1gxHTq0nSie1sEKAYjnlBhVIx17ypAX1NLhjMJZ3TkqhktOGm/2r0qTXBAqWg==",
+        "dependencies": {
+          "runtime.win10-arm.Microsoft.Net.Native.SharedLibrary": "2.2.8-rel-31116-00"
+        }
+      },
+      "runtime.win10-arm.Microsoft.Net.Native.SharedLibrary": {
+        "type": "Transitive",
+        "resolved": "2.2.8-rel-31116-00",
+        "contentHash": "bdNrkqMK7TUyqJjMJj9sXFpTtJg5+cKmGTPERymWldQ7/OxzoA1VGV4nFFRS4ciycxIqoA9amP0sr5SdTaSjDg=="
+      },
+      "runtime.win10-arm.Microsoft.Net.UWPCoreRuntimeSdk": {
+        "type": "Transitive",
+        "resolved": "2.2.14",
+        "contentHash": "eEtdvL57LKF3/AKuSqk9bJeUaPm0rPMCs36halkQwyTsaykEwzaV634jxpsg9Oneru4DvFW1vlRISdiW2929jA=="
+      },
+      "runtime.win10-arm64.Microsoft.Net.Native.Compiler": {
+        "type": "Transitive",
+        "resolved": "2.2.12-rel-31116-00",
+        "contentHash": "Rs9fywhVdnJTqegZnSXJ2v0w7oX3xyZ5P1+v9wNlm7mkSb+dEcxgXwrkqTJe9shmLUOOFz8Dm37LbtIPHNzR1A==",
+        "dependencies": {
+          "runtime.win10-arm64.Microsoft.Net.Native.SharedLibrary": "2.2.8-rel-31116-00"
+        }
+      },
+      "runtime.win10-arm64.Microsoft.Net.Native.SharedLibrary": {
+        "type": "Transitive",
+        "resolved": "2.2.8-rel-31116-00",
+        "contentHash": "mNZPhhxOKUQSgYuBDezHPYFMwP9LYDmVEEHl7bTVAPbfcnxPHdSv6WwJglYlwQRQh+3NSgYRW4WcTxpETkD0AA=="
+      },
+      "runtime.win10-x64.Microsoft.Net.Native.Compiler": {
+        "type": "Transitive",
+        "resolved": "2.2.12-rel-31116-00",
+        "contentHash": "dAJj40m9Tm6AQ/P7iQxuEN8sVvj6v9TDyulcP7ayvp+FkpR8VyGZWJMSxaMEjr1qVeMRuMCv1JV5DLMCWZvisg==",
+        "dependencies": {
+          "runtime.win10-x64.Microsoft.Net.Native.SharedLibrary": "2.2.8-rel-31116-00"
+        }
+      },
+      "runtime.win10-x64.Microsoft.Net.Native.SharedLibrary": {
+        "type": "Transitive",
+        "resolved": "2.2.8-rel-31116-00",
+        "contentHash": "kXqhwE+XmgRn9Z1QWkGfIcDKg/pCLJcbRL5w8NWT6jliAx81sjHzquDut3ljPwOC856AUI2WMnBopu0Bf/m4BQ=="
+      },
+      "runtime.win10-x64.Microsoft.Net.UWPCoreRuntimeSdk": {
+        "type": "Transitive",
+        "resolved": "2.2.14",
+        "contentHash": "a/ONxs2DxZcBnlDo7LDtH4t6imrEuSbf9KxWWBUCP+yCquVFyqtWAt2Z4hiT++yOIz2OMZT9Hmv1VzrgecpQkQ=="
+      },
+      "runtime.win10-x86.Microsoft.Net.Native.Compiler": {
+        "type": "Transitive",
+        "resolved": "2.2.12-rel-31116-00",
+        "contentHash": "9T8n/l5Ny4rOlL4yGs81wy4AzypMhUgrrtPBqlv46QbKWhHf44EpFKfI6JU+MkJbSh7mZYywBEfmivT0v6gnNA==",
+        "dependencies": {
+          "runtime.win10-x86.Microsoft.Net.Native.SharedLibrary": "2.2.8-rel-31116-00"
+        }
+      },
+      "runtime.win10-x86.Microsoft.Net.Native.SharedLibrary": {
+        "type": "Transitive",
+        "resolved": "2.2.8-rel-31116-00",
+        "contentHash": "5RGA27cl3z0lf9zsctLBjW2GQoGYeBrg8pesqWLQnb1Ch8q8IZ6pyOwWFUsnXGuYW59OyCfoQGzHFq5Q/73EiQ=="
+      },
+      "runtime.win10-x86.Microsoft.Net.UWPCoreRuntimeSdk": {
+        "type": "Transitive",
+        "resolved": "2.2.14",
+        "contentHash": "V/hZioMMAwoKZFmfq/SuMA/mfoNFu4+Aedwdld/tpL8ZheehFab0RlAR3pgsPgOWOU+GjyePNIgyUXM5J/Y3Ig=="
+      }
+    }
+  }
+}
