@@ -87,7 +87,26 @@ class GameBarProjectTests(unittest.TestCase):
         gamebar_lock = json.loads(
             (PROJECT_DIR / "packages.lock.json").read_text(encoding="utf-8")
         )
-        locked_packages = gamebar_lock["dependencies"]["UAP,Version=v10.0.22621"]
+        locked_targets = gamebar_lock["dependencies"]
+        expected_framework = "UAP,Version=v10.0.19041"
+        expected_runtime_ids = {
+            "win10-arm",
+            "win10-arm64-aot",
+            "win10-arm-aot",
+            "win10-x64",
+            "win10-x64-aot",
+            "win10-x86",
+            "win10-x86-aot",
+        }
+        expected_targets = {expected_framework} | {
+            f"{expected_framework}/{runtime_id}"
+            for runtime_id in expected_runtime_ids
+        }
+        self.assertEqual(
+            expected_targets,
+            set(locked_targets),
+        )
+        locked_packages = locked_targets[expected_framework]
         self.assertEqual(
             {
                 "Microsoft.Gaming.XboxGameBar",
