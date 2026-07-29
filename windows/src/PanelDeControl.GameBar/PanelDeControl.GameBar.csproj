@@ -116,6 +116,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <SDKReference Include="WindowsDesktop, Version=$(TargetPlatformVersion)">
+      <Name>Microsoft Desktop Extension SDK for Universal App Platform</Name>
+    </SDKReference>
     <PackageReference Include="Microsoft.Gaming.XboxGameBar">
       <Version>7.3.2607010</Version>
     </PackageReference>

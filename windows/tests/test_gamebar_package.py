@@ -57,6 +57,14 @@ class GameBarProjectTests(unittest.TestCase):
             "6.2.14",
             package_versions["Microsoft.NETCore.UniversalWindowsPlatform"],
         )
+        sdk_references = {
+            item.attrib["Include"]
+            for item in root.findall(".//msbuild:SDKReference", namespace)
+        }
+        self.assertIn(
+            "WindowsDesktop, Version=$(TargetPlatformVersion)",
+            sdk_references,
+        )
         content_links = {
             item.findtext("msbuild:Link", namespaces=namespace)
             for item in root.findall(".//msbuild:Content", namespace)
