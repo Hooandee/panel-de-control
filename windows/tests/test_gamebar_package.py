@@ -108,6 +108,15 @@ class GameBarProjectTests(unittest.TestCase):
         )
         locked_packages = locked_targets[expected_framework]
         self.assertEqual(
+            {"type": "Project"},
+            locked_packages["paneldecontrol.core"],
+        )
+        for runtime_id in expected_runtime_ids:
+            self.assertNotIn(
+                "paneldecontrol.core",
+                locked_targets[f"{expected_framework}/{runtime_id}"],
+            )
+        self.assertEqual(
             {
                 "Microsoft.Gaming.XboxGameBar",
                 "Microsoft.NETCore.UniversalWindowsPlatform",

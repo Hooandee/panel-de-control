@@ -126,6 +126,9 @@
         "type": "Transitive",
         "resolved": "2.2.14",
         "contentHash": "V/hZioMMAwoKZFmfq/SuMA/mfoNFu4+Aedwdld/tpL8ZheehFab0RlAR3pgsPgOWOU+GjyePNIgyUXM5J/Y3Ig=="
+      },
+      "paneldecontrol.core": {
+        "type": "Project"
       }
     },
     "UAP,Version=v10.0.19041/win10-arm": {
