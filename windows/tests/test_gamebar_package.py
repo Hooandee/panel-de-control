@@ -19,6 +19,7 @@ PIPE_FACTORY = HARDWARE_DIR / "PackageNamedPipeServerFactory.cs"
 ROOT_LICENSE = ROOT / "LICENSE"
 ROOT_NOTICES = ROOT / "THIRD_PARTY_NOTICES.md"
 WORKFLOW = ROOT / ".github" / "workflows" / "windows-ci.yml"
+NUGET_CI_CONFIG = ROOT / "windows" / "NuGet.ci.config"
 
 
 class GameBarProjectTests(unittest.TestCase):
@@ -128,9 +129,31 @@ class GameBarProjectTests(unittest.TestCase):
                 if dependency["type"] == "Direct"
             },
         )
+        workflow = WORKFLOW.read_text(encoding="utf-8")
+        self.assertIn("/property:RestoreLockedMode=true", workflow)
+        isolated_packages = (
+            r"NUGET_PACKAGES: ${{ github.workspace }}\.nuget\packages"
+        )
+        self.assertIn(isolated_packages, workflow)
+        self.assertIn("--configfile windows/NuGet.ci.config", workflow)
+        isolated_config = (
+            r"/property:RestoreConfigFile="
+            r"${{ github.workspace }}\windows\NuGet.ci.config"
+        )
         self.assertIn(
-            "/property:RestoreLockedMode=true",
-            WORKFLOW.read_text(encoding="utf-8"),
+            isolated_config,
+            workflow,
+        )
+        nuget_config = ElementTree.parse(NUGET_CI_CONFIG).getroot()
+        self.assertIsNotNone(
+            nuget_config.find("./packageSources/clear"),
+        )
+        self.assertEqual(
+            "https://api.nuget.org/v3/index.json",
+            nuget_config.find("./packageSources/add").attrib["value"],
+        )
+        self.assertIsNotNone(
+            nuget_config.find("./fallbackPackageFolders/clear"),
         )
 
     def test_manifest_registers_widget_and_read_only_full_trust_broker(self):
