@@ -22,16 +22,19 @@ public sealed class CoreAudioVolumeControllerTests
     }
 
     [Fact]
-    public void GetReturnsTheObservedDefaultEndpointLevel()
+    public void GetReturnsTheObservedDefaultEndpointLevelAndMuteState()
     {
-        var controller = new CoreAudioVolumeController(
-            new FixedEndpointProvider(0.30));
+        var provider = new FixedEndpointProvider(0.30, muted: true);
+        var controller = new CoreAudioVolumeController(provider);
 
         var response = controller.Get();
 
         Assert.Equal(ControlStatus.Available, response.Status);
         Assert.Equal(0.30, response.ObservedLevel);
+        Assert.True(response.ObservedMuted);
         Assert.Null(response.RequestedLevel);
+        Assert.Null(response.RequestedMuted);
+        Assert.Equal(1, provider.OpenCount);
     }
 
     [Fact]
@@ -59,6 +62,101 @@ public sealed class CoreAudioVolumeControllerTests
         Assert.Equal(0.55, response.RequestedLevel);
         Assert.Equal(0.42, response.ObservedLevel);
         Assert.Equal("volume_readback_mismatch", response.ErrorCode);
+    }
+
+    [Fact]
+    public void SetMuteReportsAppliedOnlyAfterReadingTheExactRequestedMuteStateBack()
+    {
+        var provider = new FixedEndpointProvider(0.30, muted: false);
+        var controller = new CoreAudioVolumeController(provider);
+
+        var response = controller.SetMute(true);
+
+        Assert.Equal(ControlStatus.Applied, response.Status);
+        Assert.True(response.RequestedMuted);
+        Assert.True(response.ObservedMuted);
+        Assert.Null(response.RequestedLevel);
+        Assert.Null(response.ObservedLevel);
+        Assert.Equal(1, provider.OpenCount);
+    }
+
+    [Fact]
+    public void SetMuteReportsUnverifiableWhenTheEndpointReadbackDoesNotMatch()
+    {
+        var controller = new CoreAudioVolumeController(
+            new FixedEndpointProvider(
+                0.30,
+                muted: false,
+                forcedMuteReadback: false));
+
+        var response = controller.SetMute(true);
+
+        Assert.Equal(ControlStatus.Unverifiable, response.Status);
+        Assert.True(response.RequestedMuted);
+        Assert.False(response.ObservedMuted);
+        Assert.Equal("mute_readback_mismatch", response.ErrorCode);
+    }
+
+    [Fact]
+    public void SetMuteReportsUnverifiableWhenReadbackFailsAfterTheWrite()
+    {
+        var controller = new CoreAudioVolumeController(
+            new FixedEndpointProvider(
+                0.30,
+                readMuteExceptionAfterSet:
+                    new InvalidOperationException("private endpoint identifier")));
+
+        var response = controller.SetMute(true);
+
+        Assert.Equal(ControlStatus.Unverifiable, response.Status);
+        Assert.True(response.RequestedMuted);
+        Assert.Null(response.ObservedMuted);
+        Assert.Equal("mute_readback_failed", response.ErrorCode);
+    }
+
+    [Fact]
+    public void SetMuteMapsAccessDenialToPermissionRequired()
+    {
+        var controller = new CoreAudioVolumeController(
+            new FixedEndpointProvider(
+                0.30,
+                setMuteException: new UnauthorizedAccessException("private account")));
+
+        var response = controller.SetMute(true);
+
+        Assert.Equal(ControlStatus.PermissionRequired, response.Status);
+        Assert.Equal("audio_permission_required", response.ErrorCode);
+    }
+
+    [Fact]
+    public void SetMuteMapsAMissingDefaultEndpointToUnavailable()
+    {
+        var controller = new CoreAudioVolumeController(
+            new ThrowingEndpointProvider(
+                new COMException(
+                    "private endpoint identifier",
+                    unchecked((int)0x80070490))));
+
+        var response = controller.SetMute(true);
+
+        Assert.Equal(ControlStatus.Unavailable, response.Status);
+        Assert.Equal("audio_endpoint_unavailable", response.ErrorCode);
+    }
+
+    [Fact]
+    public void SetMuteMapsUnexpectedProviderFailureWithoutLeakingItsMessage()
+    {
+        var controller = new CoreAudioVolumeController(
+            new ThrowingEndpointProvider(
+                new InvalidOperationException("private endpoint identifier")));
+
+        var response = controller.SetMute(true);
+
+        Assert.Equal(ControlStatus.Fault, response.Status);
+        Assert.Equal("volume_provider_failed", response.ErrorCode);
+        Assert.DoesNotContain(
+            "private endpoint identifier",
+            VolumeControlWireCodec.SerializeResponse(response));
     }
 
     [Fact]
@@ -188,50 +286,82 @@ public sealed class CoreAudioVolumeControllerTests
     private sealed class FixedEndpointProvider : IAudioEndpointVolumeProvider
     {
         private readonly double level;
+        private readonly bool muted;
         private readonly double? forcedReadback;
         private readonly Exception? readExceptionAfterSet;
         private readonly Exception? setException;
+        private readonly bool? forcedMuteReadback;
+        private readonly Exception? readMuteExceptionAfterSet;
+        private readonly Exception? setMuteException;
+
+        public int OpenCount { get; private set; }
 
         public FixedEndpointProvider(
             double level,
+            bool muted = false,
             double? forcedReadback = null,
             Exception? readExceptionAfterSet = null,
-            Exception? setException = null)
+            Exception? setException = null,
+            bool? forcedMuteReadback = null,
+            Exception? readMuteExceptionAfterSet = null,
+            Exception? setMuteException = null)
         {
             this.level = level;
+            this.muted = muted;
             this.forcedReadback = forcedReadback;
             this.readExceptionAfterSet = readExceptionAfterSet;
             this.setException = setException;
+            this.forcedMuteReadback = forcedMuteReadback;
+            this.readMuteExceptionAfterSet = readMuteExceptionAfterSet;
+            this.setMuteException = setMuteException;
         }
 
         public IAudioEndpointVolumeSession OpenDefaultRenderEndpoint()
         {
+            OpenCount++;
             return new FixedEndpointSession(
                 level,
+                muted,
                 forcedReadback,
                 readExceptionAfterSet,
-                setException);
+                setException,
+                forcedMuteReadback,
+                readMuteExceptionAfterSet,
+                setMuteException);
         }
     }
 
     private sealed class FixedEndpointSession : IAudioEndpointVolumeSession
     {
         private double level;
+        private bool muted;
         private readonly double? forcedReadback;
         private readonly Exception? readExceptionAfterSet;
         private readonly Exception? setException;
+        private readonly bool? forcedMuteReadback;
+        private readonly Exception? readMuteExceptionAfterSet;
+        private readonly Exception? setMuteException;
         private bool setCalled;
+        private bool setMuteCalled;
 
         public FixedEndpointSession(
             double level,
+            bool muted,
             double? forcedReadback,
             Exception? readExceptionAfterSet,
-            Exception? setException)
+            Exception? setException,
+            bool? forcedMuteReadback,
+            Exception? readMuteExceptionAfterSet,
+            Exception? setMuteException)
         {
             this.level = level;
+            this.muted = muted;
             this.forcedReadback = forcedReadback;
             this.readExceptionAfterSet = readExceptionAfterSet;
             this.setException = setException;
+            this.forcedMuteReadback = forcedMuteReadback;
+            this.readMuteExceptionAfterSet = readMuteExceptionAfterSet;
+            this.setMuteException = setMuteException;
         }
 
         public double GetMasterVolumeLevel()
@@ -253,6 +383,27 @@ public sealed class CoreAudioVolumeControllerTests
 
             setCalled = true;
             level = forcedReadback ?? requestedLevel;
+        }
+
+        public bool GetMute()
+        {
+            if (setMuteCalled && readMuteExceptionAfterSet is not null)
+            {
+                throw readMuteExceptionAfterSet;
+            }
+
+            return muted;
+        }
+
+        public void SetMute(bool requestedMuted)
+        {
+            if (setMuteException is not null)
+            {
+                throw setMuteException;
+            }
+
+            setMuteCalled = true;
+            muted = forcedMuteReadback ?? requestedMuted;
         }
 
         public void Dispose()

@@ -90,6 +90,21 @@ public sealed class CoreAudioEndpointVolumeProvider : IAudioEndpointVolumeProvid
                     IntPtr.Zero));
         }
 
+        public bool GetMute()
+        {
+            var volume = endpointVolume ?? throw new ObjectDisposedException(
+                nameof(CoreAudioEndpointVolumeSession));
+            Marshal.ThrowExceptionForHR(volume.GetMute(out var muted));
+            return muted;
+        }
+
+        public void SetMute(bool requestedMuted)
+        {
+            var volume = endpointVolume ?? throw new ObjectDisposedException(
+                nameof(CoreAudioEndpointVolumeSession));
+            Marshal.ThrowExceptionForHR(volume.SetMute(requestedMuted, IntPtr.Zero));
+        }
+
         public void Dispose()
         {
             ReleaseComObject(endpointVolume);

@@ -301,6 +301,7 @@ public sealed class VolumeControlPipeServerTests
     private sealed class FixedVolumeController : ISystemVolumeController
     {
         private double level;
+        private bool muted;
 
         public FixedVolumeController(double level)
         {
@@ -309,13 +310,19 @@ public sealed class VolumeControlPipeServerTests
 
         public VolumeControlResponse Get()
         {
-            return VolumeControlResponse.Available(level);
+            return VolumeControlResponse.Available(level, muted);
         }
 
         public VolumeControlResponse Set(double requestedLevel)
         {
             level = requestedLevel;
             return VolumeControlResponse.Applied(requestedLevel, level);
+        }
+
+        public VolumeControlResponse SetMute(bool requestedMuted)
+        {
+            muted = requestedMuted;
+            return VolumeControlResponse.MuteApplied(requestedMuted, muted);
         }
     }
 
@@ -328,13 +335,18 @@ public sealed class VolumeControlPipeServerTests
         public VolumeControlResponse Get()
         {
             GetCount++;
-            return VolumeControlResponse.Available(0.50);
+            return VolumeControlResponse.Available(0.50, false);
         }
 
         public VolumeControlResponse Set(double requestedLevel)
         {
             SetCount++;
             return VolumeControlResponse.Applied(requestedLevel, requestedLevel);
+        }
+
+        public VolumeControlResponse SetMute(bool requestedMuted)
+        {
+            return VolumeControlResponse.MuteApplied(requestedMuted, requestedMuted);
         }
     }
 
@@ -346,6 +358,11 @@ public sealed class VolumeControlPipeServerTests
         }
 
         public VolumeControlResponse Set(double requestedLevel)
+        {
+            throw new InvalidOperationException("private endpoint identifier");
+        }
+
+        public VolumeControlResponse SetMute(bool requestedMuted)
         {
             throw new InvalidOperationException("private endpoint identifier");
         }
@@ -367,7 +384,7 @@ public sealed class VolumeControlPipeServerTests
             GetCount++;
             entered.Set();
             release.Wait();
-            return VolumeControlResponse.Available(0.50);
+            return VolumeControlResponse.Available(0.50, false);
         }
 
         public VolumeControlResponse Set(double requestedLevel)
@@ -376,6 +393,13 @@ public sealed class VolumeControlPipeServerTests
             entered.Set();
             release.Wait();
             return VolumeControlResponse.Applied(requestedLevel, requestedLevel);
+        }
+
+        public VolumeControlResponse SetMute(bool requestedMuted)
+        {
+            entered.Set();
+            release.Wait();
+            return VolumeControlResponse.MuteApplied(requestedMuted, requestedMuted);
         }
 
         public void Release()

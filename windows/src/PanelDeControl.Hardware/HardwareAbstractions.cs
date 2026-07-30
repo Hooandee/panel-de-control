@@ -38,6 +38,10 @@ public interface IAudioEndpointVolumeSession : IDisposable
     double GetMasterVolumeLevel();
 
     void SetMasterVolumeLevel(double requestedLevel);
+
+    bool GetMute();
+
+    void SetMute(bool requestedMuted);
 }
 
 public interface ISystemVolumeController
@@ -45,6 +49,8 @@ public interface ISystemVolumeController
     VolumeControlResponse Get();
 
     VolumeControlResponse Set(double requestedLevel);
+
+    VolumeControlResponse SetMute(bool requestedMuted);
 }
 
 public sealed class SystemClock : IClock
