@@ -36,6 +36,75 @@ jobs:
       - run: >-
           python -m unittest
           opengamepadui.tests.test_package.WorkflowIsolationTests
-      - run: dotnet restore windows/PanelDeControl.sln --locked-mode
-      - run: dotnet build windows/PanelDeControl.sln --configuration Release --no-restore
-      - run: dotnet test windows/PanelDeControl.sln --configuration Release --no-build
+      - run: python -m unittest windows.tests.test_gamebar_package
+      - run: >-
+          dotnet restore
+          windows/tests/PanelDeControl.Core.Tests/PanelDeControl.Core.Tests.csproj
+          --locked-mode
+      - run: >-
+          dotnet restore
+          windows/tests/PanelDeControl.Hardware.Tests/PanelDeControl.Hardware.Tests.csproj
+          --locked-mode
+      - run: >-
+          dotnet test
+          windows/tests/PanelDeControl.Core.Tests/PanelDeControl.Core.Tests.csproj
+          --configuration Release
+          --no-restore
+      - run: >-
+          dotnet test
+          windows/tests/PanelDeControl.Hardware.Tests/PanelDeControl.Hardware.Tests.csproj
+          --configuration Release
+          --no-restore
+
+  gamebar-package:
+    runs-on: windows-2022
+    env:
+      NUGET_PACKAGES: ${{ github.workspace }}\.nuget\packages\
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@baa11fbfe1d6520db94683bd5c7a3818018e4309 # v5.1.0
+        with:
+          dotnet-version: "8.0.x"
+      - uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57 # v3
+      - shell: pwsh
+        run: >-
+          dotnet restore
+          windows/src/PanelDeControl.Hardware/PanelDeControl.Hardware.csproj
+          --locked-mode
+          --configfile windows/NuGet.ci.config
+      - shell: pwsh
+        run: >-
+          msbuild
+          windows/src/PanelDeControl.GameBar/PanelDeControl.GameBar.csproj
+          /target:Restore
+          /property:RestorePackagesWithLockFile=true
+          /property:RestoreForceEvaluate=true
+          /property:RestoreConfigFile=${{ github.workspace }}\windows\NuGet.ci.config
+          /property:Configuration=Release
+          /property:Platform=x64
+      - run: >-
+          git diff --exit-code --
+          windows/src/PanelDeControl.GameBar/packages.lock.json
+          windows/src/PanelDeControl.Core/packages.lock.json
+      - shell: pwsh
+        run: >-
+          msbuild
+          windows/src/PanelDeControl.GameBar/PanelDeControl.GameBar.csproj
+          /restore
+          /target:Build
+          /property:RestoreLockedMode=true
+          /property:RestoreConfigFile=${{ github.workspace }}\windows\NuGet.ci.config
+          /property:Configuration=Release
+          /property:Platform=x64
+          /property:AppxPackageSigningEnabled=false
+          /property:GenerateAppxPackageOnBuild=true
+          /property:AppxBundle=Never
+          /property:UapAppxPackageBuildMode=CI
+          /property:AppxPackageDir=${{ github.workspace }}\artifacts\gamebar\
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: panel-de-control-gamebar-x64
+          path: artifacts/gamebar/**
+          if-no-files-found: error

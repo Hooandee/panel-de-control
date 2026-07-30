@@ -58,6 +58,26 @@ text ships alongside the binary as `bin/ryzenadj-LICENSE.txt`. RyzenAdj's
 corresponding source is available at its upstream repository at the pinned tag. Dev
 and prerelease builds omit the binary; the fallback simply reports as unsupported.
 
+### Windows Xbox Game Bar package
+
+The experimental Windows package redistributes these runtime dependencies:
+
+| Package | License |
+| --- | --- |
+| [Microsoft.Gaming.XboxGameBar](https://www.nuget.org/packages/Microsoft.Gaming.XboxGameBar) | Microsoft Software License Terms |
+| [Microsoft.NETCore.UniversalWindowsPlatform](https://www.nuget.org/packages/Microsoft.NETCore.UniversalWindowsPlatform) | Microsoft Software License Terms |
+| [LibreHardwareMonitorLib](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) | MPL-2.0 |
+| [.NET runtime, System.Management and System.IO.Pipes.AccessControl](https://github.com/dotnet/runtime) | MIT |
+| [System.IO.Pipes](https://www.nuget.org/packages/System.IO.Pipes) | MIT |
+| [DiskInfoToolkit](https://github.com/Blacktempel/DiskInfoToolkit), [BlackSharp.Core](https://github.com/Blacktempel/BlackSharp), and [RAMSPDToolkit-NDD](https://github.com/Blacktempel/RAMSPDToolkit) | MPL-2.0 |
+| [HidSharp](https://www.nuget.org/packages/HidSharp) | Apache-2.0 |
+| [Mono.Posix.NETStandard](https://www.nuget.org/packages/Mono.Posix.NETStandard) | See package license terms |
+
+The package includes this notice plus the license files supplied by dependencies
+that require redistribution. Source for MPL-covered components is available from
+the linked upstream projects. Exact resolved versions are recorded in
+`windows/src/PanelDeControl.Hardware/packages.lock.json`.
+
 Development-only tooling (TypeScript, Rollup, Vitest, Ruff, pytest, `@decky/ui`,
 `@decky/rollup`, type stubs) is not redistributed and is listed in `package.json`
 and `requirements-dev.txt`.
