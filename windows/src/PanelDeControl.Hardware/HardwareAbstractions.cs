@@ -27,6 +27,18 @@ public interface IHardwareSnapshotProvider
     HardwareSnapshot Capture();
 }
 
+public interface IAudioEndpointVolumeProvider
+{
+    IAudioEndpointVolumeSession OpenDefaultRenderEndpoint();
+}
+
+public interface IAudioEndpointVolumeSession : IDisposable
+{
+    double GetMasterVolumeLevel();
+
+    void SetMasterVolumeLevel(double requestedLevel);
+}
+
 public sealed class SystemClock : IClock
 {
     public DateTimeOffset UtcNow => DateTimeOffset.UtcNow;
