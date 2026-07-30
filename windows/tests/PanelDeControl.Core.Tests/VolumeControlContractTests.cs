@@ -112,16 +112,28 @@ public sealed class VolumeControlContractTests
     }
 
     [Fact]
-    public void AvailableResponseRoundTripsOnlyTheObservedLevel()
+    public void AvailableResponseRoundTripsBothEndpointObservations()
     {
-        var response = VolumeControlResponse.Available(0.72);
+        var response = VolumeControlResponse.Available(0.72, true);
 
         var roundTrip = RoundTrip(response);
 
         Assert.Equal(ControlStatus.Available, roundTrip.Status);
         Assert.Null(roundTrip.RequestedLevel);
         Assert.Equal(0.72, roundTrip.ObservedLevel);
+        Assert.Null(roundTrip.RequestedMuted);
+        Assert.True(roundTrip.ObservedMuted);
         Assert.Null(roundTrip.ErrorCode);
+    }
+
+    [Theory]
+    [InlineData("{\"status\":0,\"observed_level\":0.72}")]
+    [InlineData("{\"status\":0,\"observed_muted\":true}")]
+    public void DeserializationRejectsAvailableResponsesMissingAnObservation(
+        string payload)
+    {
+        Assert.Throws<InvalidDataException>(
+            () => VolumeControlWireCodec.DeserializeResponse(payload));
     }
 
     [Theory]

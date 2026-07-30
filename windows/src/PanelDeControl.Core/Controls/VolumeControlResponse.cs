@@ -56,14 +56,16 @@ public sealed class VolumeControlResponse
             null);
     }
 
-    public static VolumeControlResponse Available(double observedLevel)
+    public static VolumeControlResponse Available(
+        double observedLevel,
+        bool observedMuted)
     {
         return new VolumeControlResponse(
             ControlStatus.Available,
             null,
             RequireLevel(observedLevel, nameof(observedLevel)),
             null,
-            null,
+            observedMuted,
             null);
     }
 
@@ -142,7 +144,8 @@ public sealed class VolumeControlResponse
             case ControlStatus.Available:
                 RequireNoRequestedLevel();
                 RequireObservedLevel();
-                RequireNoMuted();
+                RequireNoRequestedMuted();
+                RequireObservedMuted();
                 RequireNoError();
                 break;
             case ControlStatus.Applied:
@@ -266,6 +269,14 @@ public sealed class VolumeControlResponse
         if (!ObservedMuted.HasValue)
         {
             throw new InvalidDataException("Observed mute state is missing.");
+        }
+    }
+
+    private void RequireNoRequestedMuted()
+    {
+        if (RequestedMuted.HasValue)
+        {
+            throw new InvalidDataException("Unexpected requested mute state.");
         }
     }
 
