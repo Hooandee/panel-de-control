@@ -12,16 +12,27 @@ del volumen del sistema.
   compatible.
 - Lectura y ajuste del volumen principal del dispositivo de audio predeterminado
   mediante Windows Core Audio.
+- Lectura y ajuste del silencio principal del mismo dispositivo mediante la
+  capacidad estándar de Windows Core Audio.
 - Estados explícitos para dato disponible, no disponible, permiso requerido y
   fallo de lectura o control.
 - Canal de control independiente, limitado al paquete y al usuario actual, para
   que una lectura lenta de hardware no bloquee el volumen.
 
-El volumen se confirma leyendo de nuevo el mismo endpoint después de cada
-escritura. Si no puede verificarse, el widget lo indica y no informa el cambio
-como aplicado. No hay reintento de una escritura cuyo resultado sea incierto.
-Tampoco hay control de mute, persistencia ni intervención sobre sesiones que
-usen audio en modo exclusivo.
+Cada operación abre el endpoint de reproducción predeterminado actual
+(`eRender`/`eConsole`). El volumen y el silencio principal se leen con Core
+Audio y el silencio se cambia con `GetMute`/`SetMute`. Después de una escritura,
+el companion vuelve a leer el valor en esa misma sesión: el volumen solo se da
+por aplicado dentro de una tolerancia de 0,01 y el silencio solo cuando el valor
+observado coincide exactamente con el solicitado. Si el readback falla o no
+coincide, el widget conserva el estado observado cuando existe y muestra el
+cambio como no verificable, nunca como aplicado.
+
+No hay reintento después de una escritura, incluida una cuyo resultado sea
+incierto. Tampoco se persiste ni reaplica la intención de volumen o silencio,
+ni se controla el audio o el silencio por aplicación. El control corresponde al
+endpoint principal de Windows; una aplicación en modo exclusivo puede impedir
+la verificación y se informa como tal.
 
 No se escriben valores de TDP, ventiladores, GPU, batería ni firmware. Un campo
 sin lectura verificable aparece como `Sin datos`; nunca se sustituye por un
@@ -66,16 +77,18 @@ declaración de compatibilidad física. En una ROG Xbox Ally X RC73XA:
 4. Comparar fabricante y producto con `Win32_ComputerSystem`.
 5. Registrar qué lecturas aparecen, su proveedor y sus rangos durante batería,
    corriente, reposo y reanudación.
-6. Ajustar el volumen con teclado y mando, y comparar el valor mostrado con el
-   mezclador de Windows.
+6. Ajustar el volumen y activar/desactivar el silencio principal con teclado y
+   mando; comparar ambos estados con el mezclador de Windows.
 7. Cambiar el dispositivo de audio predeterminado y confirmar que la siguiente
    lectura usa el endpoint nuevo sin reaplicar valores anteriores.
-8. Comprobar que una aplicación en modo exclusivo no produce un falso estado de
-   éxito.
-9. Confirmar que cerrar el widget hace terminar el proceso auxiliar tras su
-   periodo de inactividad.
+8. Comprobar con una aplicación en modo exclusivo que un readback bloqueado o
+   discordante no produce un falso estado de éxito.
+9. Ocultar y volver a mostrar el widget durante una operación de silencio y
+   confirmar que no reaplica la intención anterior; confirmar además que al
+   cerrar el widget el proceso auxiliar termina tras su periodo de inactividad.
 10. Confirmar que un sensor ausente aparece como `Sin datos` y que un valor real
-   de cero se conserva.
+    de cero se conserva.
 
 Hasta completar esta prueba, las lecturas de CPU y GPU son candidatas
-experimentales, no soporte de hardware confirmado.
+experimentales y el control de volumen/silencio no tiene compatibilidad física
+confirmada.
