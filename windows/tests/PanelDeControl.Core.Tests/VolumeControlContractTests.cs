@@ -29,6 +29,29 @@ public sealed class VolumeControlContractTests
         Assert.Equal(0.45, roundTrip.RequestedLevel);
     }
 
+    [Fact]
+    public void SetMuteRequestRoundTripsWithoutInventingALevel()
+    {
+        var request = VolumeControlRequest.SetMute(true);
+
+        var payload = VolumeControlWireCodec.SerializeRequest(request);
+        var roundTrip = VolumeControlWireCodec.DeserializeRequest(payload);
+
+        Assert.Equal(VolumeControlOperation.SetMute, roundTrip.Operation);
+        Assert.True(roundTrip.RequestedMuted);
+        Assert.Null(roundTrip.RequestedLevel);
+    }
+
+    [Theory]
+    [InlineData("{\"operation\":2}")]
+    [InlineData("{\"operation\":2,\"requested_level\":0.5,\"requested_muted\":true}")]
+    [InlineData("{\"operation\":1,\"requested_muted\":true,\"requested_level\":0.5}")]
+    public void DeserializationRejectsMuteRequestsWithAnInvalidShape(string payload)
+    {
+        Assert.Throws<InvalidDataException>(
+            () => VolumeControlWireCodec.DeserializeRequest(payload));
+    }
+
     [Theory]
     [InlineData(-0.01)]
     [InlineData(1.01)]
@@ -142,6 +165,49 @@ public sealed class VolumeControlContractTests
         Assert.Equal(0.50, roundTrip.RequestedLevel);
         Assert.Equal(0.42, roundTrip.ObservedLevel);
         Assert.Equal("volume_readback_mismatch", roundTrip.ErrorCode);
+    }
+
+    [Fact]
+    public void MuteAppliedResponseRoundTripsRequestedAndObservedMuteState()
+    {
+        var response = VolumeControlResponse.MuteApplied(true, true);
+
+        var roundTrip = RoundTrip(response);
+
+        Assert.Equal(ControlStatus.Applied, roundTrip.Status);
+        Assert.True(roundTrip.RequestedMuted);
+        Assert.True(roundTrip.ObservedMuted);
+        Assert.Null(roundTrip.RequestedLevel);
+        Assert.Null(roundTrip.ObservedLevel);
+        Assert.Null(roundTrip.ErrorCode);
+    }
+
+    [Fact]
+    public void MuteUnverifiableResponseKeepsTheAvailableReadbackVisible()
+    {
+        var response = VolumeControlResponse.MuteUnverifiable(
+            false,
+            true,
+            "mute_readback_mismatch");
+
+        var roundTrip = RoundTrip(response);
+
+        Assert.Equal(ControlStatus.Unverifiable, roundTrip.Status);
+        Assert.False(roundTrip.RequestedMuted);
+        Assert.True(roundTrip.ObservedMuted);
+        Assert.Null(roundTrip.RequestedLevel);
+        Assert.Null(roundTrip.ObservedLevel);
+        Assert.Equal("mute_readback_mismatch", roundTrip.ErrorCode);
+    }
+
+    [Theory]
+    [InlineData("{\"status\":1,\"requested_level\":0.5,\"observed_level\":0.5,\"requested_muted\":true,\"observed_muted\":true}")]
+    [InlineData("{\"status\":1,\"requested_muted\":true}")]
+    [InlineData("{\"status\":5,\"requested_muted\":false,\"observed_level\":0.5,\"error_code\":\"mute_readback_mismatch\"}")]
+    public void DeserializationRejectsResponsesThatMixOrOmitControlValues(string payload)
+    {
+        Assert.Throws<InvalidDataException>(
+            () => VolumeControlWireCodec.DeserializeResponse(payload));
     }
 
     private static VolumeControlResponse RoundTrip(VolumeControlResponse response)

@@ -10,6 +10,9 @@ public enum VolumeControlOperation
 
     [EnumMember]
     Set = 1,
+
+    [EnumMember]
+    SetMute = 2,
 }
 
 [DataContract]
@@ -21,10 +24,12 @@ public sealed class VolumeControlRequest
 
     private VolumeControlRequest(
         VolumeControlOperation operation,
-        double? requestedLevel)
+        double? requestedLevel,
+        bool? requestedMuted)
     {
         Operation = operation;
         RequestedLevel = requestedLevel;
+        RequestedMuted = requestedMuted;
     }
 
     [DataMember(Name = "operation", Order = 1)]
@@ -33,9 +38,12 @@ public sealed class VolumeControlRequest
     [DataMember(Name = "requested_level", Order = 2, EmitDefaultValue = false)]
     public double? RequestedLevel { get; private set; }
 
+    [DataMember(Name = "requested_muted", Order = 3, EmitDefaultValue = false)]
+    public bool? RequestedMuted { get; private set; }
+
     public static VolumeControlRequest Get()
     {
-        return new VolumeControlRequest(VolumeControlOperation.Get, null);
+        return new VolumeControlRequest(VolumeControlOperation.Get, null, null);
     }
 
     public static VolumeControlRequest Set(double requestedLevel)
@@ -45,7 +53,15 @@ public sealed class VolumeControlRequest
             throw new ArgumentOutOfRangeException(nameof(requestedLevel));
         }
 
-        return new VolumeControlRequest(VolumeControlOperation.Set, requestedLevel);
+        return new VolumeControlRequest(VolumeControlOperation.Set, requestedLevel, null);
+    }
+
+    public static VolumeControlRequest SetMute(bool requestedMuted)
+    {
+        return new VolumeControlRequest(
+            VolumeControlOperation.SetMute,
+            null,
+            requestedMuted);
     }
 
     internal void Validate()
@@ -55,15 +71,24 @@ public sealed class VolumeControlRequest
             throw new InvalidDataException("Volume operation is invalid.");
         }
 
-        if (Operation == VolumeControlOperation.Get && RequestedLevel.HasValue)
+        if (Operation == VolumeControlOperation.Get &&
+            (RequestedLevel.HasValue || RequestedMuted.HasValue))
         {
-            throw new InvalidDataException("A get request cannot include a requested level.");
+            throw new InvalidDataException("A get request cannot include a requested value.");
         }
 
         if (Operation == VolumeControlOperation.Set &&
-            (!RequestedLevel.HasValue || !IsValidLevel(RequestedLevel.Value)))
+            (!RequestedLevel.HasValue ||
+            !IsValidLevel(RequestedLevel.Value) ||
+            RequestedMuted.HasValue))
         {
             throw new InvalidDataException("A set request requires a level from zero to one.");
+        }
+
+        if (Operation == VolumeControlOperation.SetMute &&
+            (!RequestedMuted.HasValue || RequestedLevel.HasValue))
+        {
+            throw new InvalidDataException("A mute request requires only a requested mute state.");
         }
     }
 
