@@ -148,7 +148,7 @@ class GameBarProjectTests(unittest.TestCase):
             normalized_workflow,
         )
         isolated_packages = (
-            r"NUGET_PACKAGES: ${{ github.workspace }}\.nuget\packages"
+            "NUGET_PACKAGES: ${{ github.workspace }}\\.nuget\\packages\\"
         )
         self.assertIn(isolated_packages, workflow)
         self.assertIn("--configfile windows/NuGet.ci.config", workflow)
