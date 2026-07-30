@@ -25,7 +25,7 @@ public sealed class VolumeControlResponse
         ErrorCode = errorCode;
     }
 
-    [DataMember(Name = "status", Order = 1)]
+    [DataMember(Name = "status", Order = 1, IsRequired = true)]
     public ControlStatus Status { get; private set; }
 
     [DataMember(Name = "requested_level", Order = 2, EmitDefaultValue = false)]

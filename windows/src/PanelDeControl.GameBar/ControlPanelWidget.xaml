@@ -192,6 +192,7 @@
                                     Text="Comprobando estado de silencio…"
                                     FontSize="12"
                                     Foreground="#FF8591A3"
+                                    AutomationProperties.LiveSetting="Polite"
                                     TextWrapping="Wrap" />
                             </StackPanel>
                             <ToggleSwitch

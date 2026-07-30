@@ -32,7 +32,7 @@ public sealed class VolumeControlRequest
         RequestedMuted = requestedMuted;
     }
 
-    [DataMember(Name = "operation", Order = 1)]
+    [DataMember(Name = "operation", Order = 1, IsRequired = true)]
     public VolumeControlOperation Operation { get; private set; }
 
     [DataMember(Name = "requested_level", Order = 2, EmitDefaultValue = false)]

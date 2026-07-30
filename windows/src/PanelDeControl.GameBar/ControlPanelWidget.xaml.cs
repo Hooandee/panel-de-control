@@ -147,6 +147,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         {
             var volumeRefreshGeneration = volumeGeneration;
             var muteRefreshGeneration = muteGeneration;
+            var volumeWriteWasPendingAtRefreshStart = volumeWritePending;
             var muteWriteWasPendingAtRefreshStart = muteWritePending;
             var snapshotTask = telemetryClient.GetSnapshotAsync();
             var volumeTask = volumeClient.GetAsync();
@@ -156,7 +157,8 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
                 currentRefreshGeneration == refreshGeneration)
             {
                 ApplySnapshot(snapshot);
-                if (!volumeWritePending &&
+                if (!volumeWriteWasPendingAtRefreshStart &&
+                    !volumeWritePending &&
                     volumeRefreshGeneration == volumeGeneration)
                 {
                     ApplyVolumeResponse(volume);

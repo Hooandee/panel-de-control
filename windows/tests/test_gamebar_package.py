@@ -339,12 +339,27 @@ class GameBarProjectTests(unittest.TestCase):
 
     def test_widget_debounces_volume_writes_and_ignores_stale_responses(self):
         code = WIDGET_CODE.read_text(encoding="utf-8")
+        refresh = code[
+            code.index("private async Task RefreshAsync()"):
+            code.index("private void ApplySnapshot")
+        ]
+        normalized_refresh = " ".join(refresh.split())
 
         self.assertIn("VolumeSlider_ValueChanged", code)
         self.assertIn("volumeGeneration", code)
         self.assertIn("TimeSpan.FromMilliseconds(150)", code)
         self.assertIn("ControlStatus.Unverifiable", code)
         self.assertIn("ApplyVolumeResponse(volume)", code)
+        self.assertIn(
+            "var volumeWriteWasPendingAtRefreshStart = volumeWritePending;",
+            normalized_refresh,
+        )
+        self.assertIn(
+            "if (!volumeWriteWasPendingAtRefreshStart && "
+            "!volumeWritePending && "
+            "volumeRefreshGeneration == volumeGeneration)",
+            normalized_refresh,
+        )
 
     def test_widget_has_accessible_focusable_system_mute_control(self):
         root = ElementTree.parse(WIDGET).getroot()
@@ -366,9 +381,18 @@ class GameBarProjectTests(unittest.TestCase):
             node.attrib.get(xaml_name)
             for node in volume_card.iter()
         }
+        mute_status = next(
+            node
+            for node in volume_card.iter()
+            if node.attrib.get(xaml_name) == "MuteStatus"
+        )
 
         self.assertIsNotNone(mute_toggle)
         self.assertIn("MuteStatus", names)
+        self.assertEqual(
+            "Polite",
+            mute_status.attrib.get("AutomationProperties.LiveSetting"),
+        )
         self.assertEqual("False", mute_toggle.attrib["IsEnabled"])
         self.assertEqual("True", mute_toggle.attrib["IsTabStop"])
         self.assertEqual(

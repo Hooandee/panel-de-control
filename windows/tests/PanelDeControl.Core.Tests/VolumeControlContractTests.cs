@@ -1,3 +1,4 @@
+using System.Runtime.Serialization;
 using PanelDeControl.Core.Controls;
 using Xunit;
 
@@ -98,6 +99,13 @@ public sealed class VolumeControlContractTests
     }
 
     [Fact]
+    public void DeserializationRejectsARequestMissingItsOperation()
+    {
+        Assert.Throws<SerializationException>(
+            () => VolumeControlWireCodec.DeserializeRequest("{}"));
+    }
+
+    [Fact]
     public void AppliedResponseRoundTripsRequestedAndObservedLevels()
     {
         var response = VolumeControlResponse.Applied(0.50, 0.498);
@@ -133,6 +141,17 @@ public sealed class VolumeControlContractTests
         string payload)
     {
         Assert.Throws<InvalidDataException>(
+            () => VolumeControlWireCodec.DeserializeResponse(payload));
+    }
+
+    [Fact]
+    public void DeserializationRejectsAResponseMissingItsStatus()
+    {
+        const string payload = """
+            {"observed_level":0.72,"observed_muted":true}
+            """;
+
+        Assert.Throws<SerializationException>(
             () => VolumeControlWireCodec.DeserializeResponse(payload));
     }
 

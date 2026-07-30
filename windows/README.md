@@ -41,8 +41,8 @@ valor inventado.
 LibreHardwareMonitor solo se inicializa cuando el DMI coincide con la ROG Xbox
 Ally X. En cualquier otro equipo, el companion conserva únicamente la lectura
 estándar de batería/AC y marca el resto como dispositivo no compatible.
-El volumen no depende de esa identificación: se habilita por la capacidad
-estándar de Windows y por la disponibilidad de un endpoint de audio
+El volumen y el silencio no dependen de esa identificación: se habilitan por la
+capacidad estándar de Windows y por la disponibilidad de un endpoint de audio
 predeterminado.
 
 ## Compilar
