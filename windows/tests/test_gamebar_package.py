@@ -380,6 +380,11 @@ class GameBarProjectTests(unittest.TestCase):
 
     def test_widget_verifies_mute_independently_and_ignores_stale_responses(self):
         code = WIDGET_CODE.read_text(encoding="utf-8")
+        refresh = code[
+            code.index("private async Task RefreshAsync()"):
+            code.index("private void ApplySnapshot")
+        ]
+        normalized_refresh = " ".join(refresh.split())
 
         self.assertIn("MuteToggle_Toggled", code)
         self.assertIn("volumeRefreshGeneration", code)
@@ -392,6 +397,16 @@ class GameBarProjectTests(unittest.TestCase):
         self.assertIn("response.ObservedMuted.HasValue", code)
         self.assertIn("ApplyObservedMute(lastObservedMuted.Value)", code)
         self.assertIn("CancelPendingMuteWrite", code)
+        self.assertIn(
+            "var muteWriteWasPendingAtRefreshStart = muteWritePending;",
+            normalized_refresh,
+        )
+        self.assertIn(
+            "if (!muteWriteWasPendingAtRefreshStart && "
+            "!muteWritePending && "
+            "muteRefreshGeneration == muteGeneration)",
+            normalized_refresh,
+        )
 
     def test_project_compiles_shared_broker_launcher_and_volume_client(self):
         root = ElementTree.parse(PROJECT).getroot()
