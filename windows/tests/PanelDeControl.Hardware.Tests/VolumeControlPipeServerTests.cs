@@ -219,6 +219,39 @@ public sealed class VolumeControlPipeServerTests
         await serverTask;
     }
 
+    [Fact]
+    public async Task ClientDisconnectAfterSendingDoesNotCrashTheBrokerLoop()
+    {
+        var pipeName = $"pvc-{Guid.NewGuid():N}";
+        using var controller = new BlockingVolumeController();
+        var server = new VolumeControlPipeServer(
+            pipeName,
+            controller,
+            CreateTestPipe);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        var serverTask = server.RunOnceAsync(timeout.Token);
+        await using (var client = new NamedPipeClientStream(
+            ".",
+            pipeName,
+            PipeDirection.InOut,
+            PipeOptions.Asynchronous))
+        {
+            await client.ConnectAsync(timeout.Token);
+            await using var writer = new StreamWriter(client, leaveOpen: true)
+            {
+                AutoFlush = true,
+            };
+            await writer.WriteLineAsync(
+                VolumeControlWireCodec.SerializeRequest(
+                    VolumeControlRequest.Set(0.80)));
+            Assert.True(controller.WaitUntilEntered(TimeSpan.FromSeconds(1)));
+        }
+
+        controller.Release();
+        await serverTask;
+    }
+
     private static NamedPipeServerStream CreateTestPipe(string pipeName)
     {
         return new NamedPipeServerStream(
@@ -321,6 +354,7 @@ public sealed class VolumeControlPipeServerTests
         IDisposable
     {
         private readonly ManualResetEventSlim release = new();
+        private readonly ManualResetEventSlim entered = new();
 
         public int GetCount { get; private set; }
 
@@ -329,6 +363,7 @@ public sealed class VolumeControlPipeServerTests
         public VolumeControlResponse Get()
         {
             GetCount++;
+            entered.Set();
             release.Wait();
             return VolumeControlResponse.Available(0.50);
         }
@@ -336,6 +371,7 @@ public sealed class VolumeControlPipeServerTests
         public VolumeControlResponse Set(double requestedLevel)
         {
             SetCount++;
+            entered.Set();
             release.Wait();
             return VolumeControlResponse.Applied(requestedLevel, requestedLevel);
         }
@@ -345,9 +381,15 @@ public sealed class VolumeControlPipeServerTests
             release.Set();
         }
 
+        public bool WaitUntilEntered(TimeSpan timeout)
+        {
+            return entered.Wait(timeout);
+        }
+
         public void Dispose()
         {
             release.Set();
+            entered.Dispose();
             release.Dispose();
         }
     }

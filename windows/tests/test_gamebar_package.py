@@ -13,9 +13,13 @@ WIDGET = PROJECT_DIR / "ControlPanelWidget.xaml"
 WIDGET_CODE = PROJECT_DIR / "ControlPanelWidget.xaml.cs"
 APP_CODE = PROJECT_DIR / "App.xaml.cs"
 TELEMETRY_CLIENT = PROJECT_DIR / "TelemetryClient.cs"
+VOLUME_CLIENT = PROJECT_DIR / "VolumeControlClient.cs"
+BROKER_LAUNCHER = PROJECT_DIR / "HardwareBrokerLauncher.cs"
 HARDWARE_DIR = ROOT / "windows" / "src" / "PanelDeControl.Hardware"
 PIPE_SERVER = HARDWARE_DIR / "SnapshotPipeServer.cs"
+CONTROL_PIPE_SERVER = HARDWARE_DIR / "VolumeControlPipeServer.cs"
 PIPE_FACTORY = HARDWARE_DIR / "PackageNamedPipeServerFactory.cs"
+BROKER_PROGRAM = HARDWARE_DIR / "Program.cs"
 ROOT_LICENSE = ROOT / "LICENSE"
 ROOT_NOTICES = ROOT / "THIRD_PARTY_NOTICES.md"
 WORKFLOW = ROOT / ".github" / "workflows" / "windows-ci.yml"
@@ -305,6 +309,62 @@ class GameBarProjectTests(unittest.TestCase):
             ),
         )
 
+    def test_widget_has_accessible_system_volume_control(self):
+        root = ElementTree.parse(WIDGET).getroot()
+        xaml_name = "{http://schemas.microsoft.com/winfx/2006/xaml}Name"
+        slider = next(
+            node
+            for node in root.iter()
+            if node.attrib.get(xaml_name) == "VolumeSlider"
+        )
+        names = {
+            node.attrib.get(xaml_name)
+            for node in root.iter()
+        }
+
+        self.assertTrue({"VolumeCard", "VolumeValue", "VolumeStatus"}.issubset(names))
+        self.assertEqual("0", slider.attrib["Minimum"])
+        self.assertEqual("100", slider.attrib["Maximum"])
+        self.assertEqual("5", slider.attrib["StepFrequency"])
+        self.assertEqual("True", slider.attrib["IsTabStop"])
+        self.assertEqual(
+            "Volumen del sistema",
+            slider.attrib["AutomationProperties.Name"],
+        )
+
+    def test_widget_debounces_volume_writes_and_ignores_stale_responses(self):
+        code = WIDGET_CODE.read_text(encoding="utf-8")
+
+        self.assertIn("VolumeSlider_ValueChanged", code)
+        self.assertIn("volumeGeneration", code)
+        self.assertIn("TimeSpan.FromMilliseconds(150)", code)
+        self.assertIn("ControlStatus.Unverifiable", code)
+        self.assertNotIn(
+            'unsupported ? "Dispositivo no compatible"',
+            code,
+        )
+
+    def test_project_compiles_shared_broker_launcher_and_volume_client(self):
+        root = ElementTree.parse(PROJECT).getroot()
+        namespace = {"msbuild": "http://schemas.microsoft.com/developer/msbuild/2003"}
+        sources = {
+            node.attrib["Include"]
+            for node in root.findall(".//msbuild:Compile", namespace)
+        }
+
+        self.assertIn("HardwareBrokerLauncher.cs", sources)
+        self.assertIn("VolumeControlClient.cs", sources)
+        self.assertTrue(BROKER_LAUNCHER.is_file())
+        self.assertTrue(VOLUME_CLIENT.is_file())
+
+    def test_volume_client_never_retries_an_indeterminate_write(self):
+        code = VOLUME_CLIENT.read_text(encoding="utf-8")
+
+        self.assertIn("RequestSent", code)
+        self.assertIn("control_response_unavailable", code)
+        self.assertIn("VolumeControlResponse.Unverifiable", code)
+        self.assertNotIn("Task.Run", code)
+
     def test_required_package_images_are_real_png_files(self):
         expected_sizes = {
             "Square44x44Logo.png": (44, 44),
@@ -376,6 +436,21 @@ class GameBarProjectTests(unittest.TestCase):
         self.assertEqual(3, factory.count("ExactSpelling = true"))
         self.assertNotIn("new NamedPipeServerStream(", server)
         self.assertIn("catch (IOException)", server)
+
+    def test_broker_hosts_volume_on_a_dedicated_strict_pipe(self):
+        factory = PIPE_FACTORY.read_text(encoding="utf-8")
+        control_server = CONTROL_PIPE_SERVER.read_text(encoding="utf-8")
+        program = BROKER_PROGRAM.read_text(encoding="utf-8")
+
+        self.assertIn(
+            "return Create(pipeName, includeWorldAccess: false);",
+            factory,
+        )
+        self.assertIn("if (includeWorldAccess)", factory)
+        self.assertIn(r'@"LOCAL\PanelDeControl.Control"', control_server)
+        self.assertIn("new VolumeControlPipeServer(", program)
+        self.assertIn("PackageNamedPipeServerFactory.CreateControl", program)
+        self.assertIn("new CoreAudioEndpointVolumeProvider()", program)
 
 
 if __name__ == "__main__":

@@ -1,7 +1,9 @@
 using System;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Gaming.XboxGameBar;
+using PanelDeControl.Core.Controls;
 using PanelDeControl.Core.Telemetry;
 using Windows.UI;
 using Windows.UI.Core;
@@ -24,8 +26,14 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         Interval = TimeSpan.FromSeconds(2),
     };
     private readonly TelemetryClient telemetryClient = new();
+    private readonly VolumeControlClient volumeClient = new();
     private XboxGameBarWidget? gameBarWidget;
+    private CancellationTokenSource? volumeDebounce;
+    private long volumeGeneration;
     private bool refreshInProgress;
+    private bool applyingVolumeReadback;
+    private bool volumeReady;
+    private bool volumeWritePending;
     private bool disposed;
 
     public ControlPanelWidget()
@@ -56,6 +64,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
 
         disposed = true;
         refreshTimer.Stop();
+        CancelPendingVolumeWrite();
         refreshTimer.Tick -= OnRefreshTimerTick;
         if (gameBarWidget is not null)
         {
@@ -79,6 +88,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     private void OnUnloaded(object sender, RoutedEventArgs args)
     {
         refreshTimer.Stop();
+        CancelPendingVolumeWrite();
     }
 
     private async void OnRefreshTimerTick(object sender, object args)
@@ -109,6 +119,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         else
         {
             refreshTimer.Stop();
+            CancelPendingVolumeWrite();
         }
     }
 
@@ -127,10 +138,18 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         refreshInProgress = true;
         try
         {
-            var snapshot = await telemetryClient.GetSnapshotAsync();
+            var volumeRefreshGeneration = volumeGeneration;
+            var snapshotTask = telemetryClient.GetSnapshotAsync();
+            var volumeTask = volumeClient.GetAsync();
+            await Task.WhenAll(snapshotTask, volumeTask);
             if (!disposed)
             {
-                ApplySnapshot(snapshot);
+                ApplySnapshot(snapshotTask.Result);
+                if (!volumeWritePending &&
+                    volumeRefreshGeneration == volumeGeneration)
+                {
+                    ApplyVolumeResponse(volumeTask.Result);
+                }
             }
         }
         finally
@@ -152,16 +171,125 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
 
         var available = snapshot.Readings.Any(
             reading => reading.Status == ReadingStatus.Available);
-        var unsupported = snapshot.Readings.Any(
-            reading => reading.ErrorCode == "device_not_supported");
-        ConnectionStatus.Text = unsupported
-            ? "Dispositivo no compatible"
-            : available
-                ? "Telemetría Windows conectada"
-                : StatusText(snapshot.Readings.FirstOrDefault());
-        ConnectionDot.Fill = available && !unsupported
+        ConnectionStatus.Text = available
+            ? "Telemetría Windows conectada"
+            : StatusText(snapshot.Readings.FirstOrDefault());
+        ConnectionDot.Fill = available
             ? ConnectedBrush
             : DisconnectedBrush;
+    }
+
+    private async void VolumeSlider_ValueChanged(
+        object sender,
+        Windows.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs args)
+    {
+        if (disposed || applyingVolumeReadback || !volumeReady)
+        {
+            return;
+        }
+
+        VolumeValue.Text = $"{Math.Round(args.NewValue):0} %";
+        VolumeStatus.Text = "Aplicando y verificando…";
+
+        volumeDebounce?.Cancel();
+        volumeDebounce?.Dispose();
+        var debounce = new CancellationTokenSource();
+        volumeDebounce = debounce;
+        var generation = ++volumeGeneration;
+        volumeWritePending = true;
+
+        try
+        {
+            await Task.Delay(
+                TimeSpan.FromMilliseconds(150),
+                debounce.Token);
+            var response = await volumeClient.SetAsync(args.NewValue / 100);
+            if (!disposed && generation == volumeGeneration)
+            {
+                ApplyVolumeResponse(response);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            if (generation == volumeGeneration)
+            {
+                volumeWritePending = false;
+                volumeDebounce = null;
+                debounce.Dispose();
+            }
+        }
+    }
+
+    private void ApplyVolumeResponse(VolumeControlResponse response)
+    {
+        switch (response.Status)
+        {
+            case ControlStatus.Available:
+            case ControlStatus.Applied:
+                ApplyObservedVolume(response.ObservedLevel!.Value);
+                VolumeSlider.IsEnabled = true;
+                volumeReady = true;
+                VolumeStatus.Text = response.Status == ControlStatus.Applied
+                    ? "Cambio aplicado y verificado"
+                    : "Audio predeterminado disponible";
+                break;
+            case ControlStatus.Unverifiable:
+                if (response.ObservedLevel.HasValue)
+                {
+                    ApplyObservedVolume(response.ObservedLevel.Value);
+                }
+
+                VolumeSlider.IsEnabled = true;
+                volumeReady = true;
+                VolumeStatus.Text = "No se pudo verificar el cambio";
+                break;
+            case ControlStatus.PermissionRequired:
+                DisableVolumeControl("Windows requiere permiso para controlar el audio");
+                break;
+            case ControlStatus.Unavailable:
+                DisableVolumeControl("No hay un dispositivo de audio predeterminado");
+                break;
+            case ControlStatus.Rejected:
+                VolumeStatus.Text = "Windows rechazó el cambio";
+                break;
+            default:
+                DisableVolumeControl("No se pudo conectar con el control de audio");
+                break;
+        }
+    }
+
+    private void ApplyObservedVolume(double level)
+    {
+        applyingVolumeReadback = true;
+        try
+        {
+            var percentage = Math.Round(level * 100);
+            VolumeSlider.Value = percentage;
+            VolumeValue.Text = $"{percentage:0} %";
+        }
+        finally
+        {
+            applyingVolumeReadback = false;
+        }
+    }
+
+    private void DisableVolumeControl(string status)
+    {
+        volumeReady = false;
+        VolumeSlider.IsEnabled = false;
+        VolumeStatus.Text = status;
+    }
+
+    private void CancelPendingVolumeWrite()
+    {
+        volumeGeneration++;
+        volumeWritePending = false;
+        volumeDebounce?.Cancel();
+        volumeDebounce?.Dispose();
+        volumeDebounce = null;
     }
 
     private static string Format(

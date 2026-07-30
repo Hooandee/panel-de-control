@@ -41,6 +41,21 @@ public sealed class VolumeControlPipeServer
             .ConfigureAwait(false);
     }
 
+    public async Task RunUntilCancelledAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                await RunOnceAsync(cancellationToken).ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
+        {
+        }
+    }
+
     public async Task RunAsync(
         TimeSpan idleTimeout,
         CancellationToken cancellationToken)
@@ -78,7 +93,7 @@ public sealed class VolumeControlPipeServer
             false,
             256,
             leaveOpen: true);
-        await using var writer = new StreamWriter(
+        var writer = new StreamWriter(
             server,
             new UTF8Encoding(false),
             256,
@@ -87,27 +102,66 @@ public sealed class VolumeControlPipeServer
             AutoFlush = true,
         };
 
-        var payload = await ReadRequestAsync(reader, cancellationToken).ConfigureAwait(false);
-        if (payload.Disconnected)
+        try
         {
-            return;
-        }
+            var payload = await ReadRequestAsync(reader, cancellationToken)
+                .ConfigureAwait(false);
+            if (payload.Disconnected)
+            {
+                return;
+            }
 
-        VolumeControlResponse response;
-        if (payload.TooLong)
-        {
-            response = VolumeControlResponse.Rejected("control_request_too_long");
-        }
-        else
-        {
-            response = await HandleRequestAsync(
-                payload.Value ?? string.Empty,
-                cancellationToken).ConfigureAwait(false);
-        }
+            VolumeControlResponse response;
+            if (payload.TooLong)
+            {
+                response = VolumeControlResponse.Rejected(
+                    "control_request_too_long");
+            }
+            else
+            {
+                response = await HandleRequestAsync(
+                    payload.Value ?? string.Empty,
+                    cancellationToken).ConfigureAwait(false);
+            }
 
-        await writer
-            .WriteLineAsync(VolumeControlWireCodec.SerializeResponse(response))
-            .ConfigureAwait(false);
+            await TryWriteResponseAsync(writer, response).ConfigureAwait(false);
+        }
+        finally
+        {
+            await TryDisposeWriterAsync(writer).ConfigureAwait(false);
+        }
+    }
+
+    private static async Task TryWriteResponseAsync(
+        StreamWriter writer,
+        VolumeControlResponse response)
+    {
+        try
+        {
+            await writer
+                .WriteLineAsync(VolumeControlWireCodec.SerializeResponse(response))
+                .ConfigureAwait(false);
+        }
+        catch (IOException)
+        {
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+    }
+
+    private static async Task TryDisposeWriterAsync(StreamWriter writer)
+    {
+        try
+        {
+            await writer.DisposeAsync().ConfigureAwait(false);
+        }
+        catch (IOException)
+        {
+        }
+        catch (ObjectDisposedException)
+        {
+        }
     }
 
     private async Task<VolumeControlResponse> HandleRequestAsync(
