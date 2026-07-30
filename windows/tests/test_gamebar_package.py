@@ -346,6 +346,53 @@ class GameBarProjectTests(unittest.TestCase):
         self.assertIn("ControlStatus.Unverifiable", code)
         self.assertIn("ApplyVolumeResponse(volume)", code)
 
+    def test_widget_has_accessible_focusable_system_mute_control(self):
+        root = ElementTree.parse(WIDGET).getroot()
+        xaml_name = "{http://schemas.microsoft.com/winfx/2006/xaml}Name"
+        volume_card = next(
+            node
+            for node in root.iter()
+            if node.attrib.get(xaml_name) == "VolumeCard"
+        )
+        mute_toggle = next(
+            (
+                node
+                for node in volume_card.iter()
+                if node.attrib.get(xaml_name) == "MuteToggle"
+            ),
+            None,
+        )
+        names = {
+            node.attrib.get(xaml_name)
+            for node in volume_card.iter()
+        }
+
+        self.assertIsNotNone(mute_toggle)
+        self.assertIn("MuteStatus", names)
+        self.assertEqual("False", mute_toggle.attrib["IsEnabled"])
+        self.assertEqual("True", mute_toggle.attrib["IsTabStop"])
+        self.assertEqual(
+            "Silenciar audio del sistema",
+            mute_toggle.attrib["AutomationProperties.Name"],
+        )
+        self.assertTrue(mute_toggle.attrib["AutomationProperties.HelpText"])
+        self.assertEqual("MuteToggle_Toggled", mute_toggle.attrib["Toggled"])
+
+    def test_widget_verifies_mute_independently_and_ignores_stale_responses(self):
+        code = WIDGET_CODE.read_text(encoding="utf-8")
+
+        self.assertIn("MuteToggle_Toggled", code)
+        self.assertIn("volumeRefreshGeneration", code)
+        self.assertIn("muteRefreshGeneration", code)
+        self.assertIn("muteGeneration", code)
+        self.assertIn("muteWritePending", code)
+        self.assertIn("lastObservedMuted", code)
+        self.assertIn("volumeClient.SetMuteAsync", code)
+        self.assertIn("ApplyMuteResponse(volume)", code)
+        self.assertIn("response.ObservedMuted.HasValue", code)
+        self.assertIn("ApplyObservedMute(lastObservedMuted.Value)", code)
+        self.assertIn("CancelPendingMuteWrite", code)
+
     def test_project_compiles_shared_broker_launcher_and_volume_client(self):
         root = ElementTree.parse(PROJECT).getroot()
         namespace = {"msbuild": "http://schemas.microsoft.com/developer/msbuild/2003"}

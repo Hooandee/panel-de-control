@@ -29,11 +29,17 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     private readonly VolumeControlClient volumeClient = new();
     private XboxGameBarWidget? gameBarWidget;
     private CancellationTokenSource? volumeDebounce;
+    private long refreshGeneration;
     private long volumeGeneration;
+    private long muteGeneration;
     private bool refreshInProgress;
     private bool applyingVolumeReadback;
+    private bool applyingMuteReadback;
     private bool volumeReady;
+    private bool muteReady;
     private bool volumeWritePending;
+    private bool muteWritePending;
+    private bool? lastObservedMuted;
     private bool disposed;
 
     public ControlPanelWidget()
@@ -64,7 +70,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
 
         disposed = true;
         refreshTimer.Stop();
-        CancelPendingVolumeWrite();
+        InvalidatePendingOperations();
         refreshTimer.Tick -= OnRefreshTimerTick;
         if (gameBarWidget is not null)
         {
@@ -88,7 +94,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     private void OnUnloaded(object sender, RoutedEventArgs args)
     {
         refreshTimer.Stop();
-        CancelPendingVolumeWrite();
+        InvalidatePendingOperations();
     }
 
     private async void OnRefreshTimerTick(object sender, object args)
@@ -119,7 +125,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         else
         {
             refreshTimer.Stop();
-            CancelPendingVolumeWrite();
+            InvalidatePendingOperations();
         }
     }
 
@@ -135,15 +141,18 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             return;
         }
 
+        var currentRefreshGeneration = refreshGeneration;
         refreshInProgress = true;
         try
         {
             var volumeRefreshGeneration = volumeGeneration;
+            var muteRefreshGeneration = muteGeneration;
             var snapshotTask = telemetryClient.GetSnapshotAsync();
             var volumeTask = volumeClient.GetAsync();
             var snapshot = await snapshotTask;
             var volume = await volumeTask;
-            if (!disposed)
+            if (!disposed &&
+                currentRefreshGeneration == refreshGeneration)
             {
                 ApplySnapshot(snapshot);
                 if (!volumeWritePending &&
@@ -151,11 +160,20 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
                 {
                     ApplyVolumeResponse(volume);
                 }
+
+                if (!muteWritePending &&
+                    muteRefreshGeneration == muteGeneration)
+                {
+                    ApplyMuteResponse(volume);
+                }
             }
         }
         finally
         {
-            refreshInProgress = false;
+            if (currentRefreshGeneration == refreshGeneration)
+            {
+                refreshInProgress = false;
+            }
         }
     }
 
@@ -228,6 +246,42 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         }
     }
 
+    private async void MuteToggle_Toggled(
+        object sender,
+        RoutedEventArgs args)
+    {
+        if (disposed ||
+            applyingMuteReadback ||
+            !muteReady ||
+            muteWritePending)
+        {
+            return;
+        }
+
+        var requestedMuted = MuteToggle.IsOn;
+        MuteStatus.Text = "Aplicando y verificando…";
+        MuteToggle.IsEnabled = false;
+        var generation = ++muteGeneration;
+        muteWritePending = true;
+
+        try
+        {
+            var response = await volumeClient.SetMuteAsync(requestedMuted);
+            if (!disposed && generation == muteGeneration)
+            {
+                ApplyMuteResponse(response);
+            }
+        }
+        finally
+        {
+            if (generation == muteGeneration)
+            {
+                muteWritePending = false;
+                MuteToggle.IsEnabled = muteReady;
+            }
+        }
+    }
+
     private void ApplyVolumeResponse(VolumeControlResponse response)
     {
         switch (response.Status)
@@ -266,6 +320,61 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         }
     }
 
+    private void ApplyMuteResponse(VolumeControlResponse response)
+    {
+        switch (response.Status)
+        {
+            case ControlStatus.Available:
+            case ControlStatus.Applied:
+                if (!response.ObservedMuted.HasValue)
+                {
+                    DisableMuteControl("No se pudo leer el estado de silencio");
+                    break;
+                }
+
+                ApplyObservedMute(response.ObservedMuted.Value);
+                muteReady = true;
+                MuteToggle.IsEnabled = !muteWritePending;
+                MuteStatus.Text = response.Status == ControlStatus.Applied
+                    ? "Cambio aplicado y verificado"
+                    : "Estado de silencio disponible";
+                break;
+            case ControlStatus.Unverifiable:
+                if (response.ObservedMuted.HasValue)
+                {
+                    ApplyObservedMute(response.ObservedMuted.Value);
+                }
+                else if (lastObservedMuted.HasValue)
+                {
+                    ApplyObservedMute(lastObservedMuted.Value);
+                }
+
+                muteReady = lastObservedMuted.HasValue;
+                MuteToggle.IsEnabled = muteReady && !muteWritePending;
+                MuteStatus.Text = "No se pudo verificar el cambio";
+                break;
+            case ControlStatus.PermissionRequired:
+                DisableMuteControl("Windows requiere permiso para silenciar el audio");
+                break;
+            case ControlStatus.Unavailable:
+                DisableMuteControl("No hay un dispositivo de audio predeterminado");
+                break;
+            case ControlStatus.Rejected:
+                if (lastObservedMuted.HasValue)
+                {
+                    ApplyObservedMute(lastObservedMuted.Value);
+                }
+
+                muteReady = lastObservedMuted.HasValue;
+                MuteToggle.IsEnabled = muteReady && !muteWritePending;
+                MuteStatus.Text = "Windows rechazó el cambio";
+                break;
+            default:
+                DisableMuteControl("No se pudo conectar con el control de audio");
+                break;
+        }
+    }
+
     private void ApplyObservedVolume(double level)
     {
         applyingVolumeReadback = true;
@@ -281,11 +390,45 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         }
     }
 
+    private void ApplyObservedMute(bool muted)
+    {
+        lastObservedMuted = muted;
+        applyingMuteReadback = true;
+        try
+        {
+            MuteToggle.IsOn = muted;
+        }
+        finally
+        {
+            applyingMuteReadback = false;
+        }
+    }
+
     private void DisableVolumeControl(string status)
     {
         volumeReady = false;
         VolumeSlider.IsEnabled = false;
         VolumeStatus.Text = status;
+    }
+
+    private void DisableMuteControl(string status)
+    {
+        if (lastObservedMuted.HasValue)
+        {
+            ApplyObservedMute(lastObservedMuted.Value);
+        }
+
+        muteReady = false;
+        MuteToggle.IsEnabled = false;
+        MuteStatus.Text = status;
+    }
+
+    private void InvalidatePendingOperations()
+    {
+        refreshGeneration++;
+        refreshInProgress = false;
+        CancelPendingVolumeWrite();
+        CancelPendingMuteWrite();
     }
 
     private void CancelPendingVolumeWrite()
@@ -295,6 +438,15 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         volumeDebounce?.Cancel();
         volumeDebounce?.Dispose();
         volumeDebounce = null;
+    }
+
+    private void CancelPendingMuteWrite()
+    {
+        muteGeneration++;
+        muteWritePending = false;
+        muteReady = false;
+        MuteToggle.IsEnabled = false;
+        MuteStatus.Text = "Comprobando estado de silencio…";
     }
 
     private static string Format(
