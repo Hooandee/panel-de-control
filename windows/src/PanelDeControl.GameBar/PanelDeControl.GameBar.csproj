@@ -139,7 +139,7 @@
       Properties="Configuration=$(Configuration);RuntimeIdentifier=win-x64;SelfContained=true;PublishDir=$(MSBuildProjectDirectory)\$(HardwareBrokerPublishDir)" />
     <ItemGroup>
       <HardwareBrokerPayload Include="$(HardwareBrokerPublishDir)**\*">
-        <Link>HardwareBroker\%(HardwareBrokerPayload.RecursiveDir)%(HardwareBrokerPayload.Filename)%(HardwareBrokerPayload.Extension)</Link>
+        <Link>HardwareBroker\%(RecursiveDir)%(Filename)%(Extension)</Link>
         <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       </HardwareBrokerPayload>
       <Content Include="@(HardwareBrokerPayload)" />

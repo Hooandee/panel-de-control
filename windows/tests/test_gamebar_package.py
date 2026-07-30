@@ -237,9 +237,7 @@ class GameBarProjectTests(unittest.TestCase):
             payload.attrib["Include"],
         )
         self.assertEqual(
-            "HardwareBroker\\%(HardwareBrokerPayload.RecursiveDir)"
-            "%(HardwareBrokerPayload.Filename)"
-            "%(HardwareBrokerPayload.Extension)",
+            "HardwareBroker\\%(RecursiveDir)%(Filename)%(Extension)",
             payload.findtext("msbuild:Link", namespaces=namespace),
         )
         packaged_content = target.find(
