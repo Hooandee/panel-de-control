@@ -92,12 +92,6 @@
     <Content Include="$(NuGetPackageRoot)microsoft.gaming.xboxgamebar\7.3.2607010\license.txt">
       <Link>ThirdPartyLicenses\Microsoft.Gaming.XboxGameBar-LICENSE.txt</Link>
     </Content>
-    <Content Include="$(NuGetPackageRoot)microsoft.netcore.universalwindowsplatform\6.2.14\LICENSE.TXT">
-      <Link>ThirdPartyLicenses\Microsoft.NETCore.UWP-LICENSE.txt</Link>
-    </Content>
-    <Content Include="$(NuGetPackageRoot)microsoft.netcore.universalwindowsplatform\6.2.14\THIRD-PARTY-NOTICES.TXT">
-      <Link>ThirdPartyLicenses\Microsoft.NETCore.UWP-NOTICES.txt</Link>
-    </Content>
     <Content Include="$(NuGetPackageRoot)system.io.pipes\4.3.0\dotnet_library_license.txt">
       <Link>ThirdPartyLicenses\System.IO.Pipes-LICENSE.txt</Link>
     </Content>

@@ -75,8 +75,12 @@ class GameBarProjectTests(unittest.TestCase):
             r"ThirdPartyLicenses\Microsoft.Gaming.XboxGameBar-LICENSE.txt",
             content_links,
         )
-        self.assertIn(
+        self.assertNotIn(
             r"ThirdPartyLicenses\Microsoft.NETCore.UWP-LICENSE.txt",
+            content_links,
+        )
+        self.assertNotIn(
+            r"ThirdPartyLicenses\Microsoft.NETCore.UWP-NOTICES.txt",
             content_links,
         )
         self.assertIn(
