@@ -171,10 +171,14 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
 
         var available = snapshot.Readings.Any(
             reading => reading.Status == ReadingStatus.Available);
-        ConnectionStatus.Text = available
-            ? "Telemetría Windows conectada"
-            : StatusText(snapshot.Readings.FirstOrDefault());
-        ConnectionDot.Fill = available
+        var unsupported = snapshot.Readings.Any(
+            reading => reading.ErrorCode == "device_not_supported");
+        ConnectionStatus.Text = unsupported
+            ? "Dispositivo no compatible"
+            : available
+                ? "Telemetría Windows conectada"
+                : StatusText(snapshot.Readings.FirstOrDefault());
+        ConnectionDot.Fill = available && !unsupported
             ? ConnectedBrush
             : DisconnectedBrush;
     }

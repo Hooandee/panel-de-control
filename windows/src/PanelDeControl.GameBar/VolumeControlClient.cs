@@ -32,7 +32,7 @@ public sealed class VolumeControlClient
             return attempt.Response;
         }
 
-        if (!attempt.RequestSent)
+        if (!attempt.RequestWriteStarted)
         {
             try
             {
@@ -52,7 +52,7 @@ public sealed class VolumeControlClient
 
         return TransportFailure(
             request,
-            attempt.RequestSent
+            attempt.RequestWriteStarted
                 ? "control_response_unavailable"
                 : "broker_unreachable");
     }
@@ -60,7 +60,7 @@ public sealed class VolumeControlClient
     private static async Task<TransportAttempt> TrySendAsync(
         VolumeControlRequest request)
     {
-        var requestSent = false;
+        var requestWriteStarted = false;
         try
         {
             using var pipe = new NamedPipeClientStream(
@@ -84,29 +84,29 @@ public sealed class VolumeControlClient
                 AutoFlush = true,
             };
 
+            requestWriteStarted = true;
             await writer.WriteLineAsync(
                 VolumeControlWireCodec.SerializeRequest(request));
-            requestSent = true;
 
             var readTask = reader.ReadLineAsync();
             if (await Task.WhenAny(readTask, Task.Delay(ResponseTimeout)) != readTask)
             {
-                return new TransportAttempt(null, requestSent);
+                return new TransportAttempt(null, requestWriteStarted);
             }
 
             var payload = await readTask;
             if (string.IsNullOrWhiteSpace(payload))
             {
-                return new TransportAttempt(null, requestSent);
+                return new TransportAttempt(null, requestWriteStarted);
             }
 
             return new TransportAttempt(
                 VolumeControlWireCodec.DeserializeResponse(payload),
-                requestSent);
+                requestWriteStarted);
         }
         catch
         {
-            return new TransportAttempt(null, requestSent);
+            return new TransportAttempt(null, requestWriteStarted);
         }
     }
 
@@ -126,14 +126,14 @@ public sealed class VolumeControlClient
     {
         public TransportAttempt(
             VolumeControlResponse? response,
-            bool requestSent)
+            bool requestWriteStarted)
         {
             Response = response;
-            RequestSent = requestSent;
+            RequestWriteStarted = requestWriteStarted;
         }
 
         public VolumeControlResponse? Response { get; }
 
-        public bool RequestSent { get; }
+        public bool RequestWriteStarted { get; }
     }
 }

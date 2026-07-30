@@ -344,10 +344,7 @@ class GameBarProjectTests(unittest.TestCase):
         self.assertIn("volumeGeneration", code)
         self.assertIn("TimeSpan.FromMilliseconds(150)", code)
         self.assertIn("ControlStatus.Unverifiable", code)
-        self.assertNotIn(
-            'unsupported ? "Dispositivo no compatible"',
-            code,
-        )
+        self.assertIn("ApplyVolumeResponse(volumeTask.Result)", code)
 
     def test_project_compiles_shared_broker_launcher_and_volume_client(self):
         root = ElementTree.parse(PROJECT).getroot()
@@ -365,7 +362,10 @@ class GameBarProjectTests(unittest.TestCase):
     def test_volume_client_never_retries_an_indeterminate_write(self):
         code = VOLUME_CLIENT.read_text(encoding="utf-8")
 
-        self.assertIn("RequestSent", code)
+        write_started = code.index("requestWriteStarted = true;")
+        write_call = code.index("await writer.WriteLineAsync(")
+        self.assertLess(write_started, write_call)
+        self.assertIn("if (!attempt.RequestWriteStarted)", code)
         self.assertIn("control_response_unavailable", code)
         self.assertIn("VolumeControlResponse.Unverifiable", code)
         self.assertNotIn("Task.Run", code)
@@ -424,6 +424,8 @@ class GameBarProjectTests(unittest.TestCase):
 
         self.assertIn('"device_not_supported"', code)
         self.assertIn('"Dispositivo no compatible"', code)
+        self.assertIn("var unsupported = snapshot.Readings.Any(", code)
+        self.assertIn("available && !unsupported", code)
 
     def test_broker_uses_package_scoped_pipe_acl(self):
         factory = PIPE_FACTORY.read_text(encoding="utf-8")
