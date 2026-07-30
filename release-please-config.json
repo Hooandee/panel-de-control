@@ -3,6 +3,13 @@
   "release-type": "node",
   "bootstrap-sha": "08df3d312ad3e260c587524ecc393b25a5847254",
   "packages": {
-    ".": {}
+    ".": {
+      "exclude-paths": [
+        "opengamepadui",
+        ".github/workflows/opengamepadui-ci.yml",
+        "windows",
+        ".github/workflows/windows-ci.yml"
+      ]
+    }
   }
 }

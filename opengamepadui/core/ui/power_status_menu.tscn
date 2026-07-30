@@ -1,0 +1,42 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://plugins/panel-de-control/core/ui/power_status_menu.gd" id="1_menu"]
+
+[node name="PowerStatusMenu" type="VBoxContainer"]
+custom_minimum_size = Vector2(480, 0)
+offset_right = 480.0
+offset_bottom = 216.0
+theme_override_constants/separation = 12
+script = ExtResource("1_menu")
+
+[node name="SectionLabel" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "Panel de Control"
+
+[node name="Separator" type="HSeparator" parent="."]
+layout_mode = 2
+
+[node name="PowerStationStatus" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+text = "PowerStation: Unknown"
+
+[node name="GpuValue" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+text = "GPU: Unknown"
+
+[node name="TdpValue" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Observed TDP: Unknown"
+
+[node name="PowerProfileValue" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Power profile: Unknown"
+
+[node name="RefreshTimer" type="Timer" parent="."]
+wait_time = 1.0

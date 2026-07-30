@@ -1,0 +1,25 @@
+<Application
+    x:Class="PanelDeControl.GameBar.App"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Application.Resources>
+        <ResourceDictionary>
+            <Color x:Key="PanelBackgroundColor">#F213171D</Color>
+            <Color x:Key="CardBackgroundColor">#F2252B35</Color>
+            <Color x:Key="AccentColor">#FF67D4FF</Color>
+            <SolidColorBrush x:Key="PanelBackgroundBrush" Color="{StaticResource PanelBackgroundColor}" />
+            <SolidColorBrush x:Key="CardBackgroundBrush" Color="{StaticResource CardBackgroundColor}" />
+            <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}" />
+            <Style x:Key="TelemetryValueStyle" TargetType="TextBlock">
+                <Setter Property="FontFamily" Value="Segoe UI Variable Display" />
+                <Setter Property="FontSize" Value="28" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="Foreground" Value="White" />
+            </Style>
+            <Style x:Key="TelemetryLabelStyle" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="13" />
+                <Setter Property="Foreground" Value="#FFAAB4C3" />
+            </Style>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>
