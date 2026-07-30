@@ -35,12 +35,6 @@ public sealed class VolumeControlPipeServer
         this.operationTimeout = effectiveOperationTimeout;
     }
 
-    public async Task RunAsync(CancellationToken cancellationToken)
-    {
-        await RunAsync(TimeSpan.FromSeconds(30), cancellationToken)
-            .ConfigureAwait(false);
-    }
-
     public async Task RunUntilCancelledAsync(CancellationToken cancellationToken)
     {
         try
@@ -53,32 +47,6 @@ public sealed class VolumeControlPipeServer
         catch (OperationCanceledException)
             when (cancellationToken.IsCancellationRequested)
         {
-        }
-    }
-
-    public async Task RunAsync(
-        TimeSpan idleTimeout,
-        CancellationToken cancellationToken)
-    {
-        if (idleTimeout <= TimeSpan.Zero)
-        {
-            throw new ArgumentOutOfRangeException(nameof(idleTimeout));
-        }
-
-        while (!cancellationToken.IsCancellationRequested)
-        {
-            using var idleCancellation =
-                CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            idleCancellation.CancelAfter(idleTimeout);
-            try
-            {
-                await RunOnceAsync(idleCancellation.Token).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-                when (!cancellationToken.IsCancellationRequested)
-            {
-                return;
-            }
         }
     }
 

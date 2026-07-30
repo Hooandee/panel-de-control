@@ -344,7 +344,7 @@ class GameBarProjectTests(unittest.TestCase):
         self.assertIn("volumeGeneration", code)
         self.assertIn("TimeSpan.FromMilliseconds(150)", code)
         self.assertIn("ControlStatus.Unverifiable", code)
-        self.assertIn("ApplyVolumeResponse(volumeTask.Result)", code)
+        self.assertIn("ApplyVolumeResponse(volume)", code)
 
     def test_project_compiles_shared_broker_launcher_and_volume_client(self):
         root = ElementTree.parse(PROJECT).getroot()

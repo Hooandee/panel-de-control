@@ -123,14 +123,16 @@ public sealed class VolumeControlPipeServerTests
     }
 
     [Fact]
-    public async Task ServerStopsAfterAnIdlePeriod()
+    public async Task RunLoopStopsWhenCancelled()
     {
         var server = new VolumeControlPipeServer(
             $"pvc-{Guid.NewGuid():N}",
             new CountingVolumeController(),
             CreateTestPipe);
+        using var cancellation = new CancellationTokenSource(
+            TimeSpan.FromMilliseconds(30));
 
-        await server.RunAsync(TimeSpan.FromMilliseconds(30), CancellationToken.None);
+        await server.RunUntilCancelledAsync(cancellation.Token);
     }
 
     [Fact]

@@ -141,14 +141,15 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             var volumeRefreshGeneration = volumeGeneration;
             var snapshotTask = telemetryClient.GetSnapshotAsync();
             var volumeTask = volumeClient.GetAsync();
-            await Task.WhenAll(snapshotTask, volumeTask);
+            var snapshot = await snapshotTask;
+            var volume = await volumeTask;
             if (!disposed)
             {
-                ApplySnapshot(snapshotTask.Result);
+                ApplySnapshot(snapshot);
                 if (!volumeWritePending &&
                     volumeRefreshGeneration == volumeGeneration)
                 {
-                    ApplyVolumeResponse(volumeTask.Result);
+                    ApplyVolumeResponse(volume);
                 }
             }
         }
