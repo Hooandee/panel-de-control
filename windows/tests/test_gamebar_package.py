@@ -219,6 +219,39 @@ class GameBarProjectTests(unittest.TestCase):
         )
         self.assertNotIn("control", widget.attrib["Description"].casefold())
 
+    def test_broker_payload_metadata_is_bound_to_published_files(self):
+        root = ElementTree.parse(PROJECT).getroot()
+        namespace = {"msbuild": "http://schemas.microsoft.com/developer/msbuild/2003"}
+        target = root.find(
+            ".//msbuild:Target[@Name='PublishHardwareBroker']",
+            namespace,
+        )
+
+        payload = target.find(
+            ".//msbuild:HardwareBrokerPayload",
+            namespace,
+        )
+        self.assertIsNotNone(payload)
+        self.assertEqual(
+            "$(HardwareBrokerPublishDir)**\\*",
+            payload.attrib["Include"],
+        )
+        self.assertEqual(
+            "HardwareBroker\\%(HardwareBrokerPayload.RecursiveDir)"
+            "%(HardwareBrokerPayload.Filename)"
+            "%(HardwareBrokerPayload.Extension)",
+            payload.findtext("msbuild:Link", namespaces=namespace),
+        )
+        packaged_content = target.find(
+            ".//msbuild:Content",
+            namespace,
+        )
+        self.assertIsNotNone(packaged_content)
+        self.assertEqual(
+            "@(HardwareBrokerPayload)",
+            packaged_content.attrib["Include"],
+        )
+
     def test_manifest_contains_current_game_bar_marshalling_contract(self):
         root = ElementTree.parse(MANIFEST).getroot()
         interfaces = {
