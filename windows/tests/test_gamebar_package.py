@@ -180,7 +180,7 @@ class GameBarProjectTests(unittest.TestCase):
             nuget_config.find("./fallbackPackageFolders/clear"),
         )
 
-    def test_manifest_registers_widget_and_read_only_full_trust_broker(self):
+    def test_manifest_registers_widget_and_scoped_full_trust_broker(self):
         root = ElementTree.parse(MANIFEST).getroot()
         namespaces = {
             "foundation": "http://schemas.microsoft.com/appx/manifest/foundation/windows10",
@@ -219,13 +219,18 @@ class GameBarProjectTests(unittest.TestCase):
             for node in root.findall(".//rescap:Capability", namespaces)
         }
         self.assertEqual({"runFullTrust"}, capabilities)
-        self.assertNotIn(
-            "control",
-            root.find(".//uap:VisualElements", {
-                "uap": "http://schemas.microsoft.com/appx/manifest/uap/windows10",
-            }).attrib["Description"].casefold(),
-        )
-        self.assertNotIn("control", widget.attrib["Description"].casefold())
+        app_description = root.find(
+            ".//uap:VisualElements",
+            {
+                "uap": (
+                    "http://schemas.microsoft.com/appx/manifest/"
+                    "uap/windows10"
+                ),
+            },
+        ).attrib["Description"].casefold()
+        self.assertIn("volumen", app_description)
+        self.assertIn("telemetría", app_description)
+        self.assertIn("volumen", widget.attrib["Description"].casefold())
 
     def test_broker_payload_metadata_is_bound_to_published_files(self):
         root = ElementTree.parse(PROJECT).getroot()
