@@ -17,11 +17,36 @@ public static class Program
                 new DeviceIdentityReader(),
                 new LibreHardwareReader(),
                 new PowerStatusReader());
-            var server = new SnapshotPipeServer(
+            var snapshotServer = new SnapshotPipeServer(
                 SnapshotPipeServer.PackagedPipeName,
                 collector,
                 PackageNamedPipeServerFactory.Create);
-            await server.RunAsync(CancellationToken.None).ConfigureAwait(false);
+            var volumeController = new CoreAudioVolumeController(
+                new CoreAudioEndpointVolumeProvider());
+            var volumeServer = new VolumeControlPipeServer(
+                VolumeControlPipeServer.PackagedPipeName,
+                volumeController,
+                PackageNamedPipeServerFactory.CreateControl);
+
+            using var brokerLifetime = new CancellationTokenSource();
+            var snapshotTask = snapshotServer.RunAsync(brokerLifetime.Token);
+            var volumeTask = volumeServer.RunUntilCancelledAsync(
+                brokerLifetime.Token);
+            try
+            {
+                var completedTask = await Task
+                    .WhenAny(snapshotTask, volumeTask)
+                    .ConfigureAwait(false);
+                await completedTask.ConfigureAwait(false);
+            }
+            finally
+            {
+                brokerLifetime.Cancel();
+                await Task
+                    .WhenAll(snapshotTask, volumeTask)
+                    .ConfigureAwait(false);
+            }
+
             return 0;
         }
         catch

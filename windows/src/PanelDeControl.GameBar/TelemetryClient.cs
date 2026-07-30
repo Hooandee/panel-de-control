@@ -4,7 +4,6 @@ using System.IO.Pipes;
 using System.Text;
 using System.Threading.Tasks;
 using PanelDeControl.Core.Telemetry;
-using Windows.ApplicationModel;
 
 namespace PanelDeControl.GameBar;
 
@@ -24,9 +23,7 @@ public sealed class TelemetryClient
 
         try
         {
-            await FullTrustProcessLauncher.LaunchFullTrustProcessForCurrentAppAsync(
-                "HardwareBroker");
-            await Task.Delay(250);
+            await HardwareBrokerLauncher.EnsureStartedAsync();
         }
         catch
         {
