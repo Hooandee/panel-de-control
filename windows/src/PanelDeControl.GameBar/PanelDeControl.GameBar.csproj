@@ -138,11 +138,13 @@
       BuildInParallel="false"
       Properties="Configuration=$(Configuration);RuntimeIdentifier=win-x64;SelfContained=true;PublishDir=$(MSBuildProjectDirectory)\$(HardwareBrokerPublishDir)" />
     <ItemGroup>
-      <HardwareBrokerPayload Include="$(HardwareBrokerPublishDir)**\*">
-        <Link>HardwareBroker\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <HardwareBrokerPayload Include="$(HardwareBrokerPublishDir)**\*" />
+    </ItemGroup>
+    <ItemGroup>
+      <Content Include="@(HardwareBrokerPayload)">
+        <Link>HardwareBroker\%(HardwareBrokerPayload.RecursiveDir)%(HardwareBrokerPayload.Filename)%(HardwareBrokerPayload.Extension)</Link>
         <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      </HardwareBrokerPayload>
-      <Content Include="@(HardwareBrokerPayload)" />
+      </Content>
     </ItemGroup>
   </Target>
 

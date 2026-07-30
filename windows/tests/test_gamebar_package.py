@@ -236,10 +236,6 @@ class GameBarProjectTests(unittest.TestCase):
             "$(HardwareBrokerPublishDir)**\\*",
             payload.attrib["Include"],
         )
-        self.assertEqual(
-            "HardwareBroker\\%(RecursiveDir)%(Filename)%(Extension)",
-            payload.findtext("msbuild:Link", namespaces=namespace),
-        )
         packaged_content = target.find(
             ".//msbuild:Content",
             namespace,
@@ -248,6 +244,12 @@ class GameBarProjectTests(unittest.TestCase):
         self.assertEqual(
             "@(HardwareBrokerPayload)",
             packaged_content.attrib["Include"],
+        )
+        self.assertEqual(
+            "HardwareBroker\\%(HardwareBrokerPayload.RecursiveDir)"
+            "%(HardwareBrokerPayload.Filename)"
+            "%(HardwareBrokerPayload.Extension)",
+            packaged_content.findtext("msbuild:Link", namespaces=namespace),
         )
 
     def test_manifest_contains_current_game_bar_marshalling_contract(self):
