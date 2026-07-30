@@ -23,6 +23,11 @@ public sealed class VolumeControlClient
         return SendAsync(VolumeControlRequest.Set(requestedLevel));
     }
 
+    public Task<VolumeControlResponse> SetMuteAsync(bool requestedMuted)
+    {
+        return SendAsync(VolumeControlRequest.SetMute(requestedMuted));
+    }
+
     private static async Task<VolumeControlResponse> SendAsync(
         VolumeControlRequest request)
     {
@@ -114,12 +119,19 @@ public sealed class VolumeControlClient
         VolumeControlRequest request,
         string errorCode)
     {
-        return request.Operation == VolumeControlOperation.Set
-            ? VolumeControlResponse.Unverifiable(
+        return request.Operation switch
+        {
+            VolumeControlOperation.Set => VolumeControlResponse.Unverifiable(
                 request.RequestedLevel!.Value,
                 null,
-                errorCode)
-            : VolumeControlResponse.Fault(errorCode);
+                errorCode),
+            VolumeControlOperation.SetMute =>
+                VolumeControlResponse.MuteUnverifiable(
+                    request.RequestedMuted!.Value,
+                    null,
+                    errorCode),
+            _ => VolumeControlResponse.Fault(errorCode),
+        };
     }
 
     private sealed class TransportAttempt

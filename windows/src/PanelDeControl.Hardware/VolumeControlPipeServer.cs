@@ -174,6 +174,8 @@ public sealed class VolumeControlPipeServer
                 VolumeControlOperation.Get => volumeController.Get(),
                 VolumeControlOperation.Set => volumeController.Set(
                     request.RequestedLevel!.Value),
+                VolumeControlOperation.SetMute => volumeController.SetMute(
+                    request.RequestedMuted!.Value),
                 _ => VolumeControlResponse.Rejected(
                     "unsupported_control_operation"),
             };
@@ -188,12 +190,19 @@ public sealed class VolumeControlPipeServer
         VolumeControlRequest request,
         string errorCode)
     {
-        return request.Operation == VolumeControlOperation.Set
-            ? VolumeControlResponse.Unverifiable(
+        return request.Operation switch
+        {
+            VolumeControlOperation.Set => VolumeControlResponse.Unverifiable(
                 request.RequestedLevel!.Value,
                 null,
-                errorCode)
-            : VolumeControlResponse.Fault(errorCode);
+                errorCode),
+            VolumeControlOperation.SetMute =>
+                VolumeControlResponse.MuteUnverifiable(
+                    request.RequestedMuted!.Value,
+                    null,
+                    errorCode),
+            _ => VolumeControlResponse.Fault(errorCode),
+        };
     }
 
     private static async Task<PipeRequest> ReadRequestAsync(

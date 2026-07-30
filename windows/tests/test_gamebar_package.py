@@ -362,12 +362,21 @@ class GameBarProjectTests(unittest.TestCase):
     def test_volume_client_never_retries_an_indeterminate_write(self):
         code = VOLUME_CLIENT.read_text(encoding="utf-8")
 
+        self.assertIn(
+            "public Task<VolumeControlResponse> SetMuteAsync(bool requestedMuted)",
+            code,
+        )
+        self.assertIn(
+            "SendAsync(VolumeControlRequest.SetMute(requestedMuted))",
+            code,
+        )
         write_started = code.index("requestWriteStarted = true;")
         write_call = code.index("await writer.WriteLineAsync(")
         self.assertLess(write_started, write_call)
         self.assertIn("if (!attempt.RequestWriteStarted)", code)
         self.assertIn("control_response_unavailable", code)
         self.assertIn("VolumeControlResponse.Unverifiable", code)
+        self.assertIn("VolumeControlResponse.MuteUnverifiable", code)
         self.assertNotIn("Task.Run", code)
 
     def test_required_package_images_are_real_png_files(self):
