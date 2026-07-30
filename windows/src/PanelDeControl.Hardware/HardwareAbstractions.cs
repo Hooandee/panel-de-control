@@ -1,3 +1,4 @@
+using PanelDeControl.Core.Controls;
 using PanelDeControl.Core.Telemetry;
 
 namespace PanelDeControl.Hardware;
@@ -37,6 +38,13 @@ public interface IAudioEndpointVolumeSession : IDisposable
     double GetMasterVolumeLevel();
 
     void SetMasterVolumeLevel(double requestedLevel);
+}
+
+public interface ISystemVolumeController
+{
+    VolumeControlResponse Get();
+
+    VolumeControlResponse Set(double requestedLevel);
 }
 
 public sealed class SystemClock : IClock

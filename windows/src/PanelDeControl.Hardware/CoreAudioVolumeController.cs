@@ -3,7 +3,7 @@ using PanelDeControl.Core.Controls;
 
 namespace PanelDeControl.Hardware;
 
-public sealed class CoreAudioVolumeController
+public sealed class CoreAudioVolumeController : ISystemVolumeController
 {
     private const int HResultEndpointNotFound = unchecked((int)0x80070490);
 
