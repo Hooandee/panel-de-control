@@ -59,6 +59,25 @@ public sealed class BrightnessWriteFence
             .GetResult();
     }
 
+    public T ExecuteRead<T>(Func<T> read, TimeSpan timeout)
+    {
+        if (read is null)
+        {
+            throw new ArgumentNullException(nameof(read));
+        }
+
+        if (timeout <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(timeout));
+        }
+
+        return Task
+            .Run(read)
+            .WaitAsync(timeout)
+            .GetAwaiter()
+            .GetResult();
+    }
+
     private void Complete(Task<uint> completedWrite)
     {
         if (completedWrite.IsFaulted)

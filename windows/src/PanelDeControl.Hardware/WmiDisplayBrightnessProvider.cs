@@ -49,7 +49,6 @@ public sealed class WmiDisplayBrightnessProvider : IDisplayBrightnessProvider
         }
 
         return SetBrightnessBoundedWindows(
-            writeFence,
             instanceName,
             percentage,
             timeoutSeconds);
@@ -73,49 +72,46 @@ public sealed class WmiDisplayBrightnessProvider : IDisplayBrightnessProvider
     }
 
     [SupportedOSPlatform("windows")]
-    private static uint SetBrightnessBoundedWindows(
-        BrightnessWriteFence writeFence,
+    private uint SetBrightnessBoundedWindows(
         string instanceName,
         int percentage,
         uint timeoutSeconds)
     {
-        return writeFence.Execute(
-            () => SetBrightnessWindows(
-                instanceName,
-                percentage,
-                timeoutSeconds),
-            OperationTimeout);
+        return TranslateManagementFailures(
+            () => writeFence.Execute(
+                () => SetBrightnessWindows(
+                    instanceName,
+                    percentage,
+                    timeoutSeconds),
+                OperationTimeout));
     }
 
     [SupportedOSPlatform("windows")]
-    private static int ReadBrightnessBoundedWindows(string instanceName)
+    private int ReadBrightnessBoundedWindows(string instanceName)
     {
         return RunBounded(() => ReadBrightnessWindows(instanceName));
     }
 
     [SupportedOSPlatform("windows")]
-    private static T RunBounded<T>(Func<T> operation)
+    private T RunBounded<T>(Func<T> operation)
+    {
+        return TranslateManagementFailures(
+            () => writeFence.ExecuteRead(operation, OperationTimeout));
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static T TranslateManagementFailures<T>(Func<T> operation)
     {
         try
         {
-            return Task
-                .Run(operation)
-                .WaitAsync(OperationTimeout)
-                .GetAwaiter()
-                .GetResult();
+            return operation();
         }
         catch (ManagementException exception)
-            when (exception.ErrorCode == ManagementStatus.AccessDenied)
+            when (exception.ErrorCode == ManagementStatus.AccessDenied ||
+                exception.ErrorCode == ManagementStatus.Timedout)
         {
-            throw new UnauthorizedAccessException(
-                "Windows denied access to display brightness WMI.",
-                exception);
-        }
-        catch (ManagementException exception)
-            when (exception.ErrorCode == ManagementStatus.Timedout)
-        {
-            throw new TimeoutException(
-                "Display brightness WMI timed out.",
+            throw WmiManagementExceptionMapper.Translate(
+                exception.ErrorCode,
                 exception);
         }
     }
@@ -316,5 +312,27 @@ public sealed class WmiDisplayBrightnessProvider : IDisplayBrightnessProvider
     {
         return new PlatformNotSupportedException(
             "Display brightness WMI is only available on Windows.");
+    }
+}
+
+[SupportedOSPlatform("windows")]
+internal static class WmiManagementExceptionMapper
+{
+    public static Exception Translate(
+        ManagementStatus status,
+        ManagementException source)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+
+        return status switch
+        {
+            ManagementStatus.AccessDenied => new UnauthorizedAccessException(
+                "Windows denied access to display brightness WMI.",
+                source),
+            ManagementStatus.Timedout => new TimeoutException(
+                "Display brightness WMI timed out.",
+                source),
+            _ => source,
+        };
     }
 }
