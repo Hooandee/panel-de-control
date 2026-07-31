@@ -222,6 +222,26 @@ public sealed class IntegratedDisplayBrightnessControllerTests
     }
 
     [Fact]
+    public void SetReportsAConcurrentReadWithoutClaimingSuccess()
+    {
+        var provider = new FakeBrightnessProvider(
+            Capability("DISPLAY\\INTERNAL_0", 11, currentBrightness: 40))
+        {
+            ReadException = new BrightnessReadInProgressException(),
+        };
+        var controller = new IntegratedDisplayBrightnessController(provider);
+
+        var response = controller.Set(50);
+
+        Assert.Equal(ControlStatus.Unverifiable, response.Status);
+        Assert.Equal(50, response.RequestedPercentage);
+        Assert.Null(response.ObservedPercentage);
+        Assert.Equal("brightness_read_busy", response.ErrorCode);
+        Assert.Equal(1, provider.SetCount);
+        Assert.Equal(1, provider.ReadCount);
+    }
+
+    [Fact]
     public void SetMapsAccessDenialWithoutRetrying()
     {
         var provider = new FakeBrightnessProvider(
@@ -276,6 +296,23 @@ public sealed class IntegratedDisplayBrightnessControllerTests
         Assert.Equal(2, provider.DiscoverCount);
     }
 
+    [Fact]
+    public void ActiveDiscoveryIsReportedWithoutStartingAnotherRead()
+    {
+        var provider = new FakeBrightnessProvider(
+            Capability("DISPLAY\\INTERNAL_0", 11, currentBrightness: 42))
+        {
+            DiscoveryException = new BrightnessReadInProgressException(),
+        };
+        var controller = new IntegratedDisplayBrightnessController(provider);
+
+        var response = controller.Get();
+
+        Assert.Equal(ControlStatus.Fault, response.Status);
+        Assert.Equal("brightness_read_busy", response.ErrorCode);
+        Assert.Equal(1, provider.DiscoverCount);
+    }
+
     private static DisplayBrightnessCapability Capability(
         string instanceName,
         uint videoOutputTechnology,
@@ -310,6 +347,8 @@ public sealed class IntegratedDisplayBrightnessControllerTests
 
         public int DiscoveryFailuresRemaining { get; set; }
 
+        public Exception? DiscoveryException { get; set; }
+
         public Exception? SetException { get; set; }
 
         public Exception? ReadException { get; set; }
@@ -329,6 +368,11 @@ public sealed class IntegratedDisplayBrightnessControllerTests
         public IReadOnlyList<DisplayBrightnessCapability> Discover()
         {
             DiscoverCount++;
+            if (DiscoveryException is not null)
+            {
+                throw DiscoveryException;
+            }
+
             if (DiscoveryFailuresRemaining > 0)
             {
                 DiscoveryFailuresRemaining--;

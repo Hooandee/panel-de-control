@@ -103,6 +103,40 @@ public sealed class BrightnessControlPipeServerTests
     }
 
     [Fact]
+    public async Task TimedOutSetDoesNotBlockFollowingGet()
+    {
+        var pipeName = $"pbc-{Guid.NewGuid():N}";
+        using var controller = new BlockingSetBrightnessController(42);
+        var server = new BrightnessControlPipeServer(
+            pipeName,
+            controller,
+            CreateTestPipe,
+            TimeSpan.FromMilliseconds(30));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        var setServerTask = server.RunOnceAsync(timeout.Token);
+        var setResponse = await RequestAsync(
+            pipeName,
+            BrightnessControlRequest.Set(75),
+            timeout.Token);
+        await setServerTask;
+
+        var getServerTask = server.RunOnceAsync(timeout.Token);
+        var getResponse = await RequestAsync(
+            pipeName,
+            BrightnessControlRequest.Get(),
+            timeout.Token);
+        await getServerTask;
+
+        Assert.Equal(ControlStatus.Unverifiable, setResponse.Status);
+        Assert.Equal(ControlStatus.Available, getResponse.Status);
+        Assert.Equal(42, getResponse.ObservedPercentage);
+        Assert.Equal(1, controller.SetCount);
+        Assert.Equal(1, controller.GetCount);
+        controller.Release();
+    }
+
+    [Fact]
     public async Task BusySetIsUnverifiableWithoutStartingAnotherWrite()
     {
         var pipeName = $"pbc-{Guid.NewGuid():N}";
@@ -280,6 +314,48 @@ public sealed class BrightnessControlPipeServerTests
         {
             release.Wait();
             return BrightnessControlResponse.Available(50);
+        }
+
+        public BrightnessControlResponse Set(int requestedPercentage)
+        {
+            SetCount++;
+            release.Wait();
+            return BrightnessControlResponse.Applied(
+                requestedPercentage,
+                requestedPercentage);
+        }
+
+        public void Release()
+        {
+            release.Set();
+        }
+
+        public void Dispose()
+        {
+            release.Set();
+            release.Dispose();
+        }
+    }
+
+    private sealed class BlockingSetBrightnessController
+        : IDisplayBrightnessController, IDisposable
+    {
+        private readonly ManualResetEventSlim release = new();
+        private readonly int percentage;
+
+        public BlockingSetBrightnessController(int percentage)
+        {
+            this.percentage = percentage;
+        }
+
+        public int GetCount { get; private set; }
+
+        public int SetCount { get; private set; }
+
+        public BrightnessControlResponse Get()
+        {
+            GetCount++;
+            return BrightnessControlResponse.Available(percentage);
         }
 
         public BrightnessControlResponse Set(int requestedPercentage)
