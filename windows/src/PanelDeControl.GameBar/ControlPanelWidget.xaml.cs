@@ -186,7 +186,9 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
                     !brightnessWritePending &&
                     brightnessRefreshGeneration == brightnessGeneration)
                 {
-                    ApplyBrightnessResponse(brightness);
+                    ApplyBrightnessResponse(
+                        brightness,
+                        writeAttempted: false);
                 }
             }
         }
@@ -330,7 +332,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             var response = await brightnessClient.SetAsync(requestedPercentage);
             if (!disposed && generation == brightnessGeneration)
             {
-                ApplyBrightnessResponse(response);
+                ApplyBrightnessResponse(response, writeAttempted: true);
             }
         }
         catch (OperationCanceledException)
@@ -424,7 +426,9 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         }
     }
 
-    private void ApplyBrightnessResponse(BrightnessControlResponse response)
+    private void ApplyBrightnessResponse(
+        BrightnessControlResponse response,
+        bool writeAttempted)
     {
         switch (response.Status)
         {
@@ -464,7 +468,9 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
                 break;
             default:
                 DisableBrightnessControl(
-                    "No se pudo leer el brillo del panel integrado");
+                    writeAttempted
+                        ? "No se pudo controlar el brillo del panel integrado"
+                        : "No se pudo leer el brillo del panel integrado");
                 break;
         }
     }

@@ -165,6 +165,25 @@ public sealed class IntegratedDisplayBrightnessControllerTests
     }
 
     [Fact]
+    public void SetDoesNotStartAWriteWhileAnIndeterminateWriteIsStillActive()
+    {
+        var provider = new FakeBrightnessProvider(
+            Capability("DISPLAY\\INTERNAL_0", 11, currentBrightness: 40))
+        {
+            SetException = new BrightnessWriteInProgressException(),
+        };
+        var controller = new IntegratedDisplayBrightnessController(provider);
+
+        var response = controller.Set(50);
+
+        Assert.Equal(ControlStatus.Unverifiable, response.Status);
+        Assert.Equal(50, response.RequestedPercentage);
+        Assert.Equal("brightness_write_busy", response.ErrorCode);
+        Assert.Equal(1, provider.SetCount);
+        Assert.Equal(0, provider.ReadCount);
+    }
+
+    [Fact]
     public void SetTreatsANonzeroWmiReturnCodeAsFailure()
     {
         var provider = new FakeBrightnessProvider(

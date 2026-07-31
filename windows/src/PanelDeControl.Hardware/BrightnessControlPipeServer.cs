@@ -14,25 +14,35 @@ public sealed class BrightnessControlPipeServer
     private readonly IDisplayBrightnessController brightnessController;
     private readonly Func<string, NamedPipeServerStream> pipeFactory;
     private readonly TimeSpan operationTimeout;
+    private readonly TimeSpan requestTimeout;
     private Task<BrightnessControlResponse>? activeOperation;
 
     public BrightnessControlPipeServer(
         string pipeName,
         IDisplayBrightnessController brightnessController,
         Func<string, NamedPipeServerStream> pipeFactory,
-        TimeSpan? operationTimeout = null)
+        TimeSpan? operationTimeout = null,
+        TimeSpan? requestTimeout = null)
     {
         var effectiveOperationTimeout =
             operationTimeout ?? TimeSpan.FromSeconds(2);
+        var effectiveRequestTimeout =
+            requestTimeout ?? TimeSpan.FromSeconds(2);
         if (effectiveOperationTimeout <= TimeSpan.Zero)
         {
             throw new ArgumentOutOfRangeException(nameof(operationTimeout));
+        }
+
+        if (effectiveRequestTimeout <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(requestTimeout));
         }
 
         this.pipeName = pipeName;
         this.brightnessController = brightnessController;
         this.pipeFactory = pipeFactory;
         this.operationTimeout = effectiveOperationTimeout;
+        this.requestTimeout = effectiveRequestTimeout;
     }
 
     public async Task RunUntilCancelledAsync(CancellationToken cancellationToken)
@@ -72,8 +82,25 @@ public sealed class BrightnessControlPipeServer
 
         try
         {
-            var payload = await ReadRequestAsync(reader, cancellationToken)
-                .ConfigureAwait(false);
+            PipeRequest payload;
+            using (var requestLifetime =
+                CancellationTokenSource.CreateLinkedTokenSource(
+                    cancellationToken))
+            {
+                requestLifetime.CancelAfter(requestTimeout);
+                try
+                {
+                    payload = await ReadRequestAsync(
+                        reader,
+                        requestLifetime.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                    when (!cancellationToken.IsCancellationRequested)
+                {
+                    return;
+                }
+            }
+
             if (payload.Disconnected)
             {
                 return;

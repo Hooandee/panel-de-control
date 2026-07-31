@@ -148,6 +148,53 @@ public sealed class BrightnessControlPipeServerTests
         await server.RunUntilCancelledAsync(cancellation.Token);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task IdleOrPartialClientCannotBlockTheNextRequest(
+        bool sendPartialPayload)
+    {
+        var pipeName = $"pbc-{Guid.NewGuid():N}";
+        var controller = new CountingBrightnessController(64);
+        var server = new BrightnessControlPipeServer(
+            pipeName,
+            controller,
+            CreateTestPipe,
+            operationTimeout: TimeSpan.FromSeconds(1),
+            requestTimeout: TimeSpan.FromMilliseconds(30));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        var blockedServerTask = server.RunOnceAsync(timeout.Token);
+        await using (var blockedClient = new NamedPipeClientStream(
+            ".",
+            pipeName,
+            PipeDirection.InOut,
+            PipeOptions.Asynchronous))
+        {
+            await blockedClient.ConnectAsync(timeout.Token);
+            if (sendPartialPayload)
+            {
+                await blockedClient.WriteAsync(
+                    "{\"operation\":"u8.ToArray(),
+                    timeout.Token);
+                await blockedClient.FlushAsync(timeout.Token);
+            }
+
+            await blockedServerTask.WaitAsync(TimeSpan.FromSeconds(1));
+        }
+
+        var recoveredServerTask = server.RunOnceAsync(timeout.Token);
+        var response = await RequestAsync(
+            pipeName,
+            BrightnessControlRequest.Get(),
+            timeout.Token);
+        await recoveredServerTask;
+
+        Assert.Equal(ControlStatus.Available, response.Status);
+        Assert.Equal(64, response.ObservedPercentage);
+        Assert.Equal(1, controller.GetCount);
+    }
+
     private static NamedPipeServerStream CreateTestPipe(string pipeName)
     {
         return new NamedPipeServerStream(
