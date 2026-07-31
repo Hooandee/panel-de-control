@@ -179,6 +179,34 @@
                             FontSize="12"
                             Foreground="#FF8591A3"
                             TextWrapping="Wrap" />
+                        <Grid Margin="0,16,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="SILENCIAR" Style="{StaticResource TelemetryLabelStyle}" />
+                                <TextBlock
+                                    x:Name="MuteStatus"
+                                    Margin="0,5,16,0"
+                                    Text="Comprobando estado de silencio…"
+                                    FontSize="12"
+                                    Foreground="#FF8591A3"
+                                    AutomationProperties.LiveSetting="Polite"
+                                    TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ToggleSwitch
+                                x:Name="MuteToggle"
+                                Grid.Column="1"
+                                VerticalAlignment="Center"
+                                IsEnabled="False"
+                                IsTabStop="True"
+                                OffContent="Con sonido"
+                                OnContent="Silenciado"
+                                AutomationProperties.Name="Silenciar audio del sistema"
+                                AutomationProperties.HelpText="Activa o desactiva el silencio del dispositivo de audio predeterminado y verifica el estado leído"
+                                Toggled="MuteToggle_Toggled" />
+                        </Grid>
                     </StackPanel>
                 </Border>
 

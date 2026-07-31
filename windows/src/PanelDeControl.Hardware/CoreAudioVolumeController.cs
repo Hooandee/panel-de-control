@@ -19,7 +19,9 @@ public sealed class CoreAudioVolumeController : ISystemVolumeController
         try
         {
             using var endpoint = endpointProvider.OpenDefaultRenderEndpoint();
-            return VolumeControlResponse.Available(endpoint.GetMasterVolumeLevel());
+            return VolumeControlResponse.Available(
+                endpoint.GetMasterVolumeLevel(),
+                endpoint.GetMute());
         }
         catch (COMException exception) when (exception.HResult == HResultEndpointNotFound)
         {
@@ -82,6 +84,45 @@ public sealed class CoreAudioVolumeController : ISystemVolumeController
         }
     }
 
+    public VolumeControlResponse SetMute(bool requestedMuted)
+    {
+        IAudioEndpointVolumeSession endpoint;
+        try
+        {
+            endpoint = endpointProvider.OpenDefaultRenderEndpoint();
+        }
+        catch (COMException exception) when (exception.HResult == HResultEndpointNotFound)
+        {
+            return VolumeControlResponse.Unavailable("audio_endpoint_unavailable");
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return VolumeControlResponse.PermissionRequired("audio_permission_required");
+        }
+        catch
+        {
+            return VolumeControlResponse.Fault("volume_provider_failed");
+        }
+
+        using (endpoint)
+        {
+            try
+            {
+                endpoint.SetMute(requestedMuted);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return VolumeControlResponse.PermissionRequired("audio_permission_required");
+            }
+            catch
+            {
+                return VolumeControlResponse.Fault("volume_provider_failed");
+            }
+
+            return ReadMuteBack(endpoint, requestedMuted);
+        }
+    }
+
     private static VolumeControlResponse ReadBack(
         IAudioEndpointVolumeSession endpoint,
         double requestedLevel)
@@ -105,5 +146,30 @@ public sealed class CoreAudioVolumeController : ISystemVolumeController
                 requestedLevel,
                 observedLevel,
                 "volume_readback_mismatch");
+    }
+
+    private static VolumeControlResponse ReadMuteBack(
+        IAudioEndpointVolumeSession endpoint,
+        bool requestedMuted)
+    {
+        bool observedMuted;
+        try
+        {
+            observedMuted = endpoint.GetMute();
+        }
+        catch
+        {
+            return VolumeControlResponse.MuteUnverifiable(
+                requestedMuted,
+                null,
+                "mute_readback_failed");
+        }
+
+        return observedMuted == requestedMuted
+            ? VolumeControlResponse.MuteApplied(requestedMuted, observedMuted)
+            : VolumeControlResponse.MuteUnverifiable(
+                requestedMuted,
+                observedMuted,
+                "mute_readback_mismatch");
     }
 }

@@ -13,15 +13,19 @@ public sealed class VolumeControlResponse
         ControlStatus status,
         double? requestedLevel,
         double? observedLevel,
+        bool? requestedMuted,
+        bool? observedMuted,
         string? errorCode)
     {
         Status = status;
         RequestedLevel = requestedLevel;
         ObservedLevel = observedLevel;
+        RequestedMuted = requestedMuted;
+        ObservedMuted = observedMuted;
         ErrorCode = errorCode;
     }
 
-    [DataMember(Name = "status", Order = 1)]
+    [DataMember(Name = "status", Order = 1, IsRequired = true)]
     public ControlStatus Status { get; private set; }
 
     [DataMember(Name = "requested_level", Order = 2, EmitDefaultValue = false)]
@@ -30,7 +34,13 @@ public sealed class VolumeControlResponse
     [DataMember(Name = "observed_level", Order = 3, EmitDefaultValue = false)]
     public double? ObservedLevel { get; private set; }
 
-    [DataMember(Name = "error_code", Order = 4, EmitDefaultValue = false)]
+    [DataMember(Name = "requested_muted", Order = 4, EmitDefaultValue = false)]
+    public bool? RequestedMuted { get; private set; }
+
+    [DataMember(Name = "observed_muted", Order = 5, EmitDefaultValue = false)]
+    public bool? ObservedMuted { get; private set; }
+
+    [DataMember(Name = "error_code", Order = 6, EmitDefaultValue = false)]
     public string? ErrorCode { get; private set; }
 
     public static VolumeControlResponse Applied(
@@ -41,15 +51,21 @@ public sealed class VolumeControlResponse
             ControlStatus.Applied,
             RequireLevel(requestedLevel, nameof(requestedLevel)),
             RequireLevel(observedLevel, nameof(observedLevel)),
+            null,
+            null,
             null);
     }
 
-    public static VolumeControlResponse Available(double observedLevel)
+    public static VolumeControlResponse Available(
+        double observedLevel,
+        bool observedMuted)
     {
         return new VolumeControlResponse(
             ControlStatus.Available,
             null,
             RequireLevel(observedLevel, nameof(observedLevel)),
+            null,
+            observedMuted,
             null);
     }
 
@@ -79,6 +95,35 @@ public sealed class VolumeControlResponse
             observedLevel.HasValue
                 ? RequireLevel(observedLevel.Value, nameof(observedLevel))
                 : null,
+            null,
+            null,
+            RequireText(errorCode, nameof(errorCode)));
+    }
+
+    public static VolumeControlResponse MuteApplied(
+        bool requestedMuted,
+        bool observedMuted)
+    {
+        return new VolumeControlResponse(
+            ControlStatus.Applied,
+            null,
+            null,
+            requestedMuted,
+            observedMuted,
+            null);
+    }
+
+    public static VolumeControlResponse MuteUnverifiable(
+        bool requestedMuted,
+        bool? observedMuted,
+        string errorCode)
+    {
+        return new VolumeControlResponse(
+            ControlStatus.Unverifiable,
+            null,
+            null,
+            requestedMuted,
+            observedMuted,
             RequireText(errorCode, nameof(errorCode)));
     }
 
@@ -99,11 +144,12 @@ public sealed class VolumeControlResponse
             case ControlStatus.Available:
                 RequireNoRequestedLevel();
                 RequireObservedLevel();
+                RequireNoRequestedMuted();
+                RequireObservedMuted();
                 RequireNoError();
                 break;
             case ControlStatus.Applied:
-                RequireRequestedLevel();
-                RequireObservedLevel();
+                RequireAppliedValues();
                 RequireNoError();
                 break;
             case ControlStatus.Unavailable:
@@ -112,15 +158,11 @@ public sealed class VolumeControlResponse
             case ControlStatus.Fault:
                 RequireNoRequestedLevel();
                 RequireNoObservedLevel();
+                RequireNoMuted();
                 RequireError();
                 break;
             case ControlStatus.Unverifiable:
-                RequireRequestedLevel();
-                if (ObservedLevel.HasValue)
-                {
-                    RequireLevel(ObservedLevel.Value, nameof(ObservedLevel));
-                }
-
+                RequireUnverifiableValues();
                 RequireError();
                 break;
         }
@@ -134,7 +176,42 @@ public sealed class VolumeControlResponse
             status,
             null,
             null,
+            null,
+            null,
             RequireText(errorCode, nameof(errorCode)));
+    }
+
+    private void RequireAppliedValues()
+    {
+        if (RequestedLevel.HasValue)
+        {
+            RequireRequestedLevel();
+            RequireObservedLevel();
+            RequireNoMuted();
+            return;
+        }
+
+        RequireNoLevels();
+        RequireRequestedMuted();
+        RequireObservedMuted();
+    }
+
+    private void RequireUnverifiableValues()
+    {
+        if (RequestedLevel.HasValue)
+        {
+            RequireRequestedLevel();
+            if (ObservedLevel.HasValue)
+            {
+                RequireLevel(ObservedLevel.Value, nameof(ObservedLevel));
+            }
+
+            RequireNoMuted();
+            return;
+        }
+
+        RequireNoLevels();
+        RequireRequestedMuted();
     }
 
     private void RequireRequestedLevel()
@@ -170,6 +247,44 @@ public sealed class VolumeControlResponse
         if (ObservedLevel.HasValue)
         {
             throw new InvalidDataException("Unexpected observed volume level.");
+        }
+    }
+
+    private void RequireNoLevels()
+    {
+        RequireNoRequestedLevel();
+        RequireNoObservedLevel();
+    }
+
+    private void RequireRequestedMuted()
+    {
+        if (!RequestedMuted.HasValue)
+        {
+            throw new InvalidDataException("Requested mute state is missing.");
+        }
+    }
+
+    private void RequireObservedMuted()
+    {
+        if (!ObservedMuted.HasValue)
+        {
+            throw new InvalidDataException("Observed mute state is missing.");
+        }
+    }
+
+    private void RequireNoRequestedMuted()
+    {
+        if (RequestedMuted.HasValue)
+        {
+            throw new InvalidDataException("Unexpected requested mute state.");
+        }
+    }
+
+    private void RequireNoMuted()
+    {
+        if (RequestedMuted.HasValue || ObservedMuted.HasValue)
+        {
+            throw new InvalidDataException("Unexpected mute state.");
         }
     }
 

@@ -339,12 +339,98 @@ class GameBarProjectTests(unittest.TestCase):
 
     def test_widget_debounces_volume_writes_and_ignores_stale_responses(self):
         code = WIDGET_CODE.read_text(encoding="utf-8")
+        refresh = code[
+            code.index("private async Task RefreshAsync()"):
+            code.index("private void ApplySnapshot")
+        ]
+        normalized_refresh = " ".join(refresh.split())
 
         self.assertIn("VolumeSlider_ValueChanged", code)
         self.assertIn("volumeGeneration", code)
         self.assertIn("TimeSpan.FromMilliseconds(150)", code)
         self.assertIn("ControlStatus.Unverifiable", code)
         self.assertIn("ApplyVolumeResponse(volume)", code)
+        self.assertIn(
+            "var volumeWriteWasPendingAtRefreshStart = volumeWritePending;",
+            normalized_refresh,
+        )
+        self.assertIn(
+            "if (!volumeWriteWasPendingAtRefreshStart && "
+            "!volumeWritePending && "
+            "volumeRefreshGeneration == volumeGeneration)",
+            normalized_refresh,
+        )
+
+    def test_widget_has_accessible_focusable_system_mute_control(self):
+        root = ElementTree.parse(WIDGET).getroot()
+        xaml_name = "{http://schemas.microsoft.com/winfx/2006/xaml}Name"
+        volume_card = next(
+            node
+            for node in root.iter()
+            if node.attrib.get(xaml_name) == "VolumeCard"
+        )
+        mute_toggle = next(
+            (
+                node
+                for node in volume_card.iter()
+                if node.attrib.get(xaml_name) == "MuteToggle"
+            ),
+            None,
+        )
+        names = {
+            node.attrib.get(xaml_name)
+            for node in volume_card.iter()
+        }
+        mute_status = next(
+            node
+            for node in volume_card.iter()
+            if node.attrib.get(xaml_name) == "MuteStatus"
+        )
+
+        self.assertIsNotNone(mute_toggle)
+        self.assertIn("MuteStatus", names)
+        self.assertEqual(
+            "Polite",
+            mute_status.attrib.get("AutomationProperties.LiveSetting"),
+        )
+        self.assertEqual("False", mute_toggle.attrib["IsEnabled"])
+        self.assertEqual("True", mute_toggle.attrib["IsTabStop"])
+        self.assertEqual(
+            "Silenciar audio del sistema",
+            mute_toggle.attrib["AutomationProperties.Name"],
+        )
+        self.assertTrue(mute_toggle.attrib["AutomationProperties.HelpText"])
+        self.assertEqual("MuteToggle_Toggled", mute_toggle.attrib["Toggled"])
+
+    def test_widget_verifies_mute_independently_and_ignores_stale_responses(self):
+        code = WIDGET_CODE.read_text(encoding="utf-8")
+        refresh = code[
+            code.index("private async Task RefreshAsync()"):
+            code.index("private void ApplySnapshot")
+        ]
+        normalized_refresh = " ".join(refresh.split())
+
+        self.assertIn("MuteToggle_Toggled", code)
+        self.assertIn("volumeRefreshGeneration", code)
+        self.assertIn("muteRefreshGeneration", code)
+        self.assertIn("muteGeneration", code)
+        self.assertIn("muteWritePending", code)
+        self.assertIn("lastObservedMuted", code)
+        self.assertIn("volumeClient.SetMuteAsync", code)
+        self.assertIn("ApplyMuteResponse(volume)", code)
+        self.assertIn("response.ObservedMuted.HasValue", code)
+        self.assertIn("ApplyObservedMute(lastObservedMuted.Value)", code)
+        self.assertIn("CancelPendingMuteWrite", code)
+        self.assertIn(
+            "var muteWriteWasPendingAtRefreshStart = muteWritePending;",
+            normalized_refresh,
+        )
+        self.assertIn(
+            "if (!muteWriteWasPendingAtRefreshStart && "
+            "!muteWritePending && "
+            "muteRefreshGeneration == muteGeneration)",
+            normalized_refresh,
+        )
 
     def test_project_compiles_shared_broker_launcher_and_volume_client(self):
         root = ElementTree.parse(PROJECT).getroot()
@@ -362,12 +448,21 @@ class GameBarProjectTests(unittest.TestCase):
     def test_volume_client_never_retries_an_indeterminate_write(self):
         code = VOLUME_CLIENT.read_text(encoding="utf-8")
 
+        self.assertIn(
+            "public Task<VolumeControlResponse> SetMuteAsync(bool requestedMuted)",
+            code,
+        )
+        self.assertIn(
+            "SendAsync(VolumeControlRequest.SetMute(requestedMuted))",
+            code,
+        )
         write_started = code.index("requestWriteStarted = true;")
         write_call = code.index("await writer.WriteLineAsync(")
         self.assertLess(write_started, write_call)
         self.assertIn("if (!attempt.RequestWriteStarted)", code)
         self.assertIn("control_response_unavailable", code)
         self.assertIn("VolumeControlResponse.Unverifiable", code)
+        self.assertIn("VolumeControlResponse.MuteUnverifiable", code)
         self.assertNotIn("Task.Run", code)
 
     def test_required_package_images_are_real_png_files(self):

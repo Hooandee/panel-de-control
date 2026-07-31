@@ -51,6 +51,31 @@ public sealed class VolumeControlPipeServerTests
     }
 
     [Fact]
+    public async Task SetMuteRequestReturnsTheControllerReadback()
+    {
+        var pipeName = $"pvc-{Guid.NewGuid():N}";
+        var controller = new CountingVolumeController();
+        var server = new VolumeControlPipeServer(
+            pipeName,
+            controller,
+            CreateTestPipe);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        var serverTask = server.RunOnceAsync(timeout.Token);
+        var response = await RequestAsync(
+            pipeName,
+            VolumeControlRequest.SetMute(true),
+            timeout.Token);
+        await serverTask;
+
+        Assert.Equal(ControlStatus.Applied, response.Status);
+        Assert.True(response.RequestedMuted);
+        Assert.True(response.ObservedMuted);
+        Assert.Equal(1, controller.SetMuteCount);
+        Assert.True(controller.Muted);
+    }
+
+    [Fact]
     public async Task MalformedRequestFailsClosedWithoutCallingTheController()
     {
         var pipeName = $"pvc-{Guid.NewGuid():N}";
@@ -199,6 +224,70 @@ public sealed class VolumeControlPipeServerTests
     }
 
     [Fact]
+    public async Task TimedOutSetMuteIsUnverifiableAndKeepsTheRequestedState()
+    {
+        var pipeName = $"pvc-{Guid.NewGuid():N}";
+        using var controller = new BlockingVolumeController();
+        var server = new VolumeControlPipeServer(
+            pipeName,
+            controller,
+            CreateTestPipe,
+            TimeSpan.FromMilliseconds(30));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        var serverTask = server.RunOnceAsync(timeout.Token);
+        var response = await RequestAsync(
+            pipeName,
+            VolumeControlRequest.SetMute(true),
+            timeout.Token);
+        await serverTask;
+
+        Assert.Equal(ControlStatus.Unverifiable, response.Status);
+        Assert.True(response.RequestedMuted);
+        Assert.Null(response.ObservedMuted);
+        Assert.Equal("volume_control_timeout", response.ErrorCode);
+        Assert.Equal(1, controller.SetMuteCount);
+        controller.Release();
+    }
+
+    [Fact]
+    public async Task BusySetMuteIsUnverifiableAndKeepsTheRequestedState()
+    {
+        var pipeName = $"pvc-{Guid.NewGuid():N}";
+        using var controller = new BlockingVolumeController();
+        var server = new VolumeControlPipeServer(
+            pipeName,
+            controller,
+            CreateTestPipe,
+            TimeSpan.FromMilliseconds(30));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        var firstServerTask = server.RunOnceAsync(timeout.Token);
+        var firstResponse = await RequestAsync(
+            pipeName,
+            VolumeControlRequest.SetMute(true),
+            timeout.Token);
+        await firstServerTask;
+
+        var secondServerTask = server.RunOnceAsync(timeout.Token);
+        var secondResponse = await RequestAsync(
+            pipeName,
+            VolumeControlRequest.SetMute(false),
+            timeout.Token);
+        await secondServerTask;
+
+        Assert.Equal(ControlStatus.Unverifiable, firstResponse.Status);
+        Assert.True(firstResponse.RequestedMuted);
+        Assert.Equal("volume_control_timeout", firstResponse.ErrorCode);
+        Assert.Equal(ControlStatus.Unverifiable, secondResponse.Status);
+        Assert.False(secondResponse.RequestedMuted);
+        Assert.Null(secondResponse.ObservedMuted);
+        Assert.Equal("volume_control_busy", secondResponse.ErrorCode);
+        Assert.Equal(1, controller.SetMuteCount);
+        controller.Release();
+    }
+
+    [Fact]
     public async Task ClientDisconnectDoesNotCrashTheBrokerLoop()
     {
         var pipeName = $"pvc-{Guid.NewGuid():N}";
@@ -301,6 +390,7 @@ public sealed class VolumeControlPipeServerTests
     private sealed class FixedVolumeController : ISystemVolumeController
     {
         private double level;
+        private bool muted;
 
         public FixedVolumeController(double level)
         {
@@ -309,13 +399,19 @@ public sealed class VolumeControlPipeServerTests
 
         public VolumeControlResponse Get()
         {
-            return VolumeControlResponse.Available(level);
+            return VolumeControlResponse.Available(level, muted);
         }
 
         public VolumeControlResponse Set(double requestedLevel)
         {
             level = requestedLevel;
             return VolumeControlResponse.Applied(requestedLevel, level);
+        }
+
+        public VolumeControlResponse SetMute(bool requestedMuted)
+        {
+            muted = requestedMuted;
+            return VolumeControlResponse.MuteApplied(requestedMuted, muted);
         }
     }
 
@@ -325,16 +421,27 @@ public sealed class VolumeControlPipeServerTests
 
         public int SetCount { get; private set; }
 
+        public int SetMuteCount { get; private set; }
+
+        public bool Muted { get; private set; }
+
         public VolumeControlResponse Get()
         {
             GetCount++;
-            return VolumeControlResponse.Available(0.50);
+            return VolumeControlResponse.Available(0.50, false);
         }
 
         public VolumeControlResponse Set(double requestedLevel)
         {
             SetCount++;
             return VolumeControlResponse.Applied(requestedLevel, requestedLevel);
+        }
+
+        public VolumeControlResponse SetMute(bool requestedMuted)
+        {
+            SetMuteCount++;
+            Muted = requestedMuted;
+            return VolumeControlResponse.MuteApplied(requestedMuted, Muted);
         }
     }
 
@@ -346,6 +453,11 @@ public sealed class VolumeControlPipeServerTests
         }
 
         public VolumeControlResponse Set(double requestedLevel)
+        {
+            throw new InvalidOperationException("private endpoint identifier");
+        }
+
+        public VolumeControlResponse SetMute(bool requestedMuted)
         {
             throw new InvalidOperationException("private endpoint identifier");
         }
@@ -362,12 +474,14 @@ public sealed class VolumeControlPipeServerTests
 
         public int SetCount { get; private set; }
 
+        public int SetMuteCount { get; private set; }
+
         public VolumeControlResponse Get()
         {
             GetCount++;
             entered.Set();
             release.Wait();
-            return VolumeControlResponse.Available(0.50);
+            return VolumeControlResponse.Available(0.50, false);
         }
 
         public VolumeControlResponse Set(double requestedLevel)
@@ -376,6 +490,14 @@ public sealed class VolumeControlPipeServerTests
             entered.Set();
             release.Wait();
             return VolumeControlResponse.Applied(requestedLevel, requestedLevel);
+        }
+
+        public VolumeControlResponse SetMute(bool requestedMuted)
+        {
+            SetMuteCount++;
+            entered.Set();
+            release.Wait();
+            return VolumeControlResponse.MuteApplied(requestedMuted, requestedMuted);
         }
 
         public void Release()
