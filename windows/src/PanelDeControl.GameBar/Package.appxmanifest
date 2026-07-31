@@ -43,7 +43,7 @@
         DisplayName="Panel de Control"
         Square150x150Logo="Assets\Square150x150Logo.png"
         Square44x44Logo="Assets\Square44x44Logo.png"
-        Description="Volumen del sistema y telemetría experimental desde Xbox Game Bar"
+        Description="Brillo del panel, volumen del sistema y telemetría experimental desde Xbox Game Bar"
         BackgroundColor="#171b22">
         <uap:SplashScreen Image="Assets\SplashScreen.png" BackgroundColor="#171b22" />
       </uap:VisualElements>
@@ -53,7 +53,7 @@
             Name="microsoft.gameBarUIExtension"
             Id="PanelDeControl"
             DisplayName="Panel de Control"
-            Description="Volumen del sistema y telemetría experimental"
+            Description="Brillo del panel, volumen del sistema y telemetría experimental"
             PublicFolder="GameBar\PanelDeControl">
             <uap3:Properties>
               <GameBarWidget Type="Standard">

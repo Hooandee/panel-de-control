@@ -2,7 +2,7 @@
 
 La versión de Windows es experimental. Ofrece un widget x64 para Xbox Game Bar
 y un proceso auxiliar empaquetado con telemetría de lectura y ajuste verificado
-del volumen del sistema.
+del brillo del panel integrado y del volumen del sistema.
 
 ## Alcance inicial
 
@@ -14,10 +14,15 @@ del volumen del sistema.
   mediante Windows Core Audio.
 - Lectura y ajuste del silencio principal del mismo dispositivo mediante la
   capacidad estándar de Windows Core Audio.
+- Lectura y ajuste del brillo real del panel integrado mediante
+  `WmiMonitorBrightness`, `WmiMonitorConnectionParams` y
+  `WmiMonitorBrightnessMethods.WmiSetBrightness` en `root\wmi`.
 - Estados explícitos para dato disponible, no disponible, permiso requerido y
   fallo de lectura o control.
 - Canal de control independiente, limitado al paquete y al usuario actual, para
   que una lectura lenta de hardware no bloquee el volumen.
+- Canal de brillo independiente con timeout acotado, para que WMI no bloquee
+  telemetría ni audio.
 
 Cada operación abre el endpoint de reproducción predeterminado actual
 (`eRender`/`eConsole`). El volumen y el silencio principal se leen con Core
@@ -38,12 +43,34 @@ No se escriben valores de TDP, ventiladores, GPU, batería ni firmware. Un campo
 sin lectura verificable aparece como `Sin datos`; nunca se sustituye por un
 valor inventado.
 
+El brillo se habilita por capacidad, sin usar fabricante ni DMI. El companion
+exige exactamente una instancia activa cuyo `InstanceName` coincida entre la
+conexión, la lectura y el método WMI. La conexión debe estar documentada por
+Windows como LVDS, DisplayPort/UDI embebido o interna, y debe publicar niveles,
+readback y `WmiSetBrightness`. La intención se ajusta al nivel anunciado más
+cercano, se escribe una vez y se relee la misma instancia. Solo se informa como
+aplicada cuando el valor observado queda a un punto porcentual o menos del nivel
+solicitado.
+
+Un timeout o una respuesta perdida después de empezar la escritura se considera
+indeterminado y no provoca otro envío. El siguiente refresco solo lee el estado;
+nunca persiste ni reaplica una intención anterior. Mostrar el widget, iniciar el
+companion, reanudar Windows o cambiar la configuración de pantallas tampoco
+escribe brillo.
+
+Esta vertical controla únicamente el panel interno que Windows expone mediante
+esas clases. No implementa DDC/CI, monitores externos, HDR ni selección entre
+varias pantallas. Si falta una capacidad, hay más de una candidata o Windows
+deniega acceso, el slider queda deshabilitado con un estado explícito sin afectar
+al resto del widget.
+
 LibreHardwareMonitor solo se inicializa cuando el DMI coincide con la ROG Xbox
 Ally X. En cualquier otro equipo, el companion conserva únicamente la lectura
 estándar de batería/AC y marca el resto como dispositivo no compatible.
-El volumen y el silencio no dependen de esa identificación: se habilitan por la
-capacidad estándar de Windows y por la disponibilidad de un endpoint de audio
-predeterminado.
+El volumen, el silencio y el brillo no dependen de esa identificación: se
+habilitan por capacidades estándar de Windows. El audio requiere un endpoint
+predeterminado y el brillo la coincidencia verificable del panel integrado
+descrita arriba.
 
 ## Compilar
 
@@ -86,9 +113,17 @@ declaración de compatibilidad física. En una ROG Xbox Ally X RC73XA:
 9. Ocultar y volver a mostrar el widget durante una operación de silencio y
    confirmar que no reaplica la intención anterior; confirmar además que al
    cerrar el widget el proceso auxiliar termina tras su periodo de inactividad.
-10. Confirmar que un sensor ausente aparece como `Sin datos` y que un valor real
+10. Comparar el porcentaje de brillo mostrado con el slider de Windows, cambiarlo
+    con teclado y mando y confirmar que el valor visible procede del readback.
+11. Desconectar o deshabilitar el panel integrado, denegar WMI cuando sea posible
+    y confirmar los estados no disponible, permiso denegado y fallo sin escrituras
+    repetidas.
+12. Ocultar/mostrar el widget, suspender/reanudar y conectar una pantalla externa;
+    confirmar que esos eventos no cambian ni reaplican el brillo.
+13. Confirmar que un sensor ausente aparece como `Sin datos` y que un valor real
     de cero se conserva.
 
 Hasta completar esta prueba, las lecturas de CPU y GPU son candidatas
 experimentales y el control de volumen/silencio no tiene compatibilidad física
-confirmada.
+confirmada. El control de brillo tampoco tiene compatibilidad física confirmada
+y su alcance permanece limitado al panel integrado.
