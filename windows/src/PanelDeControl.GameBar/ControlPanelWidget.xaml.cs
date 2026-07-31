@@ -27,18 +27,24 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     };
     private readonly TelemetryClient telemetryClient = new();
     private readonly VolumeControlClient volumeClient = new();
+    private readonly BrightnessControlClient brightnessClient = new();
     private XboxGameBarWidget? gameBarWidget;
     private CancellationTokenSource? volumeDebounce;
+    private CancellationTokenSource? brightnessDebounce;
     private long refreshGeneration;
     private long volumeGeneration;
     private long muteGeneration;
+    private long brightnessGeneration;
     private bool refreshInProgress;
     private bool applyingVolumeReadback;
     private bool applyingMuteReadback;
+    private bool applyingBrightnessReadback;
     private bool volumeReady;
     private bool muteReady;
+    private bool brightnessReady;
     private bool volumeWritePending;
     private bool muteWritePending;
+    private bool brightnessWritePending;
     private bool? lastObservedMuted;
     private bool disposed;
 
@@ -147,12 +153,17 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         {
             var volumeRefreshGeneration = volumeGeneration;
             var muteRefreshGeneration = muteGeneration;
+            var brightnessRefreshGeneration = brightnessGeneration;
             var volumeWriteWasPendingAtRefreshStart = volumeWritePending;
             var muteWriteWasPendingAtRefreshStart = muteWritePending;
+            var brightnessWriteWasPendingAtRefreshStart =
+                brightnessWritePending;
             var snapshotTask = telemetryClient.GetSnapshotAsync();
             var volumeTask = volumeClient.GetAsync();
+            var brightnessTask = brightnessClient.GetAsync();
             var snapshot = await snapshotTask;
             var volume = await volumeTask;
+            var brightness = await brightnessTask;
             if (!disposed &&
                 currentRefreshGeneration == refreshGeneration)
             {
@@ -169,6 +180,13 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
                     muteRefreshGeneration == muteGeneration)
                 {
                     ApplyMuteResponse(volume);
+                }
+
+                if (!brightnessWriteWasPendingAtRefreshStart &&
+                    !brightnessWritePending &&
+                    brightnessRefreshGeneration == brightnessGeneration)
+                {
+                    ApplyBrightnessResponse(brightness);
                 }
             }
         }
@@ -286,6 +304,49 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         }
     }
 
+    private async void BrightnessSlider_ValueChanged(
+        object sender,
+        Windows.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs args)
+    {
+        if (disposed || applyingBrightnessReadback || !brightnessReady)
+        {
+            return;
+        }
+
+        BrightnessStatus.Text = "Aplicando y verificando…";
+        brightnessDebounce?.Cancel();
+        brightnessDebounce?.Dispose();
+        var debounce = new CancellationTokenSource();
+        brightnessDebounce = debounce;
+        var generation = ++brightnessGeneration;
+        brightnessWritePending = true;
+
+        try
+        {
+            await Task.Delay(
+                TimeSpan.FromMilliseconds(150),
+                debounce.Token);
+            var requestedPercentage = (int)Math.Round(args.NewValue);
+            var response = await brightnessClient.SetAsync(requestedPercentage);
+            if (!disposed && generation == brightnessGeneration)
+            {
+                ApplyBrightnessResponse(response);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            if (generation == brightnessGeneration)
+            {
+                brightnessWritePending = false;
+                brightnessDebounce = null;
+                debounce.Dispose();
+            }
+        }
+    }
+
     private void ApplyVolumeResponse(VolumeControlResponse response)
     {
         switch (response.Status)
@@ -363,6 +424,51 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         }
     }
 
+    private void ApplyBrightnessResponse(BrightnessControlResponse response)
+    {
+        switch (response.Status)
+        {
+            case ControlStatus.Available:
+            case ControlStatus.Applied:
+                ApplyObservedBrightness(response.ObservedPercentage!.Value);
+                BrightnessSlider.IsEnabled = true;
+                brightnessReady = true;
+                BrightnessStatus.Text = response.Status == ControlStatus.Applied
+                    ? "Cambio aplicado y verificado"
+                    : "Panel integrado disponible";
+                break;
+            case ControlStatus.Unverifiable:
+                if (response.ObservedPercentage.HasValue)
+                {
+                    ApplyObservedBrightness(response.ObservedPercentage.Value);
+                    BrightnessSlider.IsEnabled = true;
+                    brightnessReady = true;
+                    BrightnessStatus.Text = "El cambio no coincide con el valor leído";
+                }
+                else
+                {
+                    DisableBrightnessControl("No se pudo verificar el cambio");
+                }
+
+                break;
+            case ControlStatus.PermissionRequired:
+                DisableBrightnessControl(
+                    "Windows denegó el permiso para controlar el brillo");
+                break;
+            case ControlStatus.Unavailable:
+                DisableBrightnessControl(
+                    "Brillo del panel integrado no disponible");
+                break;
+            case ControlStatus.Rejected:
+                BrightnessStatus.Text = "Windows rechazó el cambio";
+                break;
+            default:
+                DisableBrightnessControl(
+                    "No se pudo leer el brillo del panel integrado");
+                break;
+        }
+    }
+
     private void ApplyObservedVolume(double level)
     {
         applyingVolumeReadback = true;
@@ -389,6 +495,20 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         finally
         {
             applyingMuteReadback = false;
+        }
+    }
+
+    private void ApplyObservedBrightness(int percentage)
+    {
+        applyingBrightnessReadback = true;
+        try
+        {
+            BrightnessSlider.Value = percentage;
+            BrightnessValue.Text = $"{percentage} %";
+        }
+        finally
+        {
+            applyingBrightnessReadback = false;
         }
     }
 
@@ -426,12 +546,21 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         MuteStatus.Text = status;
     }
 
+    private void DisableBrightnessControl(string status)
+    {
+        brightnessReady = false;
+        BrightnessSlider.IsEnabled = false;
+        BrightnessValue.Text = "—";
+        BrightnessStatus.Text = status;
+    }
+
     private void InvalidatePendingOperations()
     {
         refreshGeneration++;
         refreshInProgress = false;
         CancelPendingVolumeWrite();
         CancelPendingMuteWrite();
+        CancelPendingBrightnessWrite();
     }
 
     private void CancelPendingVolumeWrite()
@@ -450,6 +579,19 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         muteReady = false;
         MuteToggle.IsEnabled = false;
         MuteStatus.Text = "Comprobando estado de silencio…";
+    }
+
+    private void CancelPendingBrightnessWrite()
+    {
+        brightnessGeneration++;
+        brightnessWritePending = false;
+        brightnessReady = false;
+        brightnessDebounce?.Cancel();
+        brightnessDebounce?.Dispose();
+        brightnessDebounce = null;
+        BrightnessSlider.IsEnabled = false;
+        BrightnessValue.Text = "—";
+        BrightnessStatus.Text = "Comprobando panel integrado…";
     }
 
     private static string Format(
