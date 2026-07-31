@@ -344,17 +344,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
                     : "Estado de silencio disponible";
                 break;
             case ControlStatus.Unverifiable:
-                if (response.ObservedMuted.HasValue)
-                {
-                    ApplyObservedMute(response.ObservedMuted.Value);
-                }
-                else if (lastObservedMuted.HasValue)
-                {
-                    ApplyObservedMute(lastObservedMuted.Value);
-                }
-
-                muteReady = lastObservedMuted.HasValue;
-                MuteToggle.IsEnabled = muteReady && !muteWritePending;
+                RestoreKnownMuteState(response.ObservedMuted);
                 MuteStatus.Text = "No se pudo verificar el cambio";
                 break;
             case ControlStatus.PermissionRequired:
@@ -364,13 +354,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
                 DisableMuteControl("No hay un dispositivo de audio predeterminado");
                 break;
             case ControlStatus.Rejected:
-                if (lastObservedMuted.HasValue)
-                {
-                    ApplyObservedMute(lastObservedMuted.Value);
-                }
-
-                muteReady = lastObservedMuted.HasValue;
-                MuteToggle.IsEnabled = muteReady && !muteWritePending;
+                RestoreKnownMuteState(null);
                 MuteStatus.Text = "Windows rechazó el cambio";
                 break;
             default:
@@ -406,6 +390,21 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         {
             applyingMuteReadback = false;
         }
+    }
+
+    private void RestoreKnownMuteState(bool? observedMuted)
+    {
+        if (observedMuted.HasValue)
+        {
+            ApplyObservedMute(observedMuted.Value);
+        }
+        else if (lastObservedMuted.HasValue)
+        {
+            ApplyObservedMute(lastObservedMuted.Value);
+        }
+
+        muteReady = lastObservedMuted.HasValue;
+        MuteToggle.IsEnabled = muteReady && !muteWritePending;
     }
 
     private void DisableVolumeControl(string status)
