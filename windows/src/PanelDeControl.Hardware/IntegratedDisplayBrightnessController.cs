@@ -62,6 +62,13 @@ public sealed class IntegratedDisplayBrightnessController
             return BrightnessControlResponse.PermissionRequired(
                 "brightness_permission_required");
         }
+        catch (BrightnessWriteInProgressException)
+        {
+            return BrightnessControlResponse.Unverifiable(
+                targetPercentage,
+                null,
+                "brightness_write_busy");
+        }
         catch (TimeoutException)
         {
             return BrightnessControlResponse.Unverifiable(

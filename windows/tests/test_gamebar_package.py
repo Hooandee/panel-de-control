@@ -410,7 +410,11 @@ class GameBarProjectTests(unittest.TestCase):
         self.assertIn("brightnessGeneration", code)
         self.assertIn("brightnessDebounce", code)
         self.assertIn("brightnessClient.SetAsync", code)
-        self.assertIn("ApplyBrightnessResponse(brightness)", code)
+        self.assertRegex(
+            code,
+            r"ApplyBrightnessResponse\(\s*brightness,\s*"
+            r"writeAttempted: false\)",
+        )
         self.assertIn("ApplyObservedBrightness", code)
         self.assertIn("CancelPendingBrightnessWrite", code)
         self.assertIn(
@@ -426,6 +430,10 @@ class GameBarProjectTests(unittest.TestCase):
         )
         self.assertIn("brightnessClient.GetAsync()", refresh)
         self.assertNotIn("brightnessClient.SetAsync", refresh)
+        self.assertIn(
+            'writeAttempted ? "No se pudo controlar el brillo',
+            " ".join(code.split()),
+        )
 
     def test_widget_has_accessible_focusable_system_mute_control(self):
         root = ElementTree.parse(WIDGET).getroot()

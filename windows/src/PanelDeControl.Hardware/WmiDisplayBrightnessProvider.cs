@@ -9,6 +9,7 @@ public sealed class WmiDisplayBrightnessProvider : IDisplayBrightnessProvider
     private static readonly TimeSpan WmiTimeout = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan OperationTimeout =
         TimeSpan.FromMilliseconds(1500);
+    private readonly BrightnessWriteFence writeFence = new();
 
     public IReadOnlyList<DisplayBrightnessCapability> Discover()
     {
@@ -48,6 +49,7 @@ public sealed class WmiDisplayBrightnessProvider : IDisplayBrightnessProvider
         }
 
         return SetBrightnessBoundedWindows(
+            writeFence,
             instanceName,
             percentage,
             timeoutSeconds);
@@ -72,15 +74,17 @@ public sealed class WmiDisplayBrightnessProvider : IDisplayBrightnessProvider
 
     [SupportedOSPlatform("windows")]
     private static uint SetBrightnessBoundedWindows(
+        BrightnessWriteFence writeFence,
         string instanceName,
         int percentage,
         uint timeoutSeconds)
     {
-        return RunBounded(
+        return writeFence.Execute(
             () => SetBrightnessWindows(
                 instanceName,
                 percentage,
-                timeoutSeconds));
+                timeoutSeconds),
+            OperationTimeout);
     }
 
     [SupportedOSPlatform("windows")]
