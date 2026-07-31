@@ -53,6 +53,33 @@ public interface ISystemVolumeController
     VolumeControlResponse SetMute(bool requestedMuted);
 }
 
+public sealed record DisplayBrightnessCapability(
+    string InstanceName,
+    bool Active,
+    uint VideoOutputTechnology,
+    int CurrentBrightness,
+    IReadOnlyList<int> Levels,
+    bool CanSet);
+
+public interface IDisplayBrightnessProvider
+{
+    IReadOnlyList<DisplayBrightnessCapability> Discover();
+
+    uint SetBrightness(
+        string instanceName,
+        int percentage,
+        uint timeoutSeconds);
+
+    int ReadBrightness(string instanceName);
+}
+
+public interface IDisplayBrightnessController
+{
+    BrightnessControlResponse Get();
+
+    BrightnessControlResponse Set(int requestedPercentage);
+}
+
 public sealed class SystemClock : IClock
 {
     public DateTimeOffset UtcNow => DateTimeOffset.UtcNow;
