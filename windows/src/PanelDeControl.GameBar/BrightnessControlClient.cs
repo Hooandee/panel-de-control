@@ -11,7 +11,7 @@ public sealed class BrightnessControlClient
 {
     private const string PipeName = @"LOCAL\PanelDeControl.Display";
     private static readonly TimeSpan ConnectTimeout = TimeSpan.FromSeconds(2);
-    private static readonly TimeSpan ResponseTimeout = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan ResponseTimeout = TimeSpan.FromSeconds(6);
 
     public Task<BrightnessControlResponse> GetAsync()
     {

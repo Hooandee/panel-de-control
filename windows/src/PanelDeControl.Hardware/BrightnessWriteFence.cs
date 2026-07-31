@@ -8,10 +8,30 @@ public sealed class BrightnessWriteInProgressException : InvalidOperationExcepti
     }
 }
 
+public sealed class BrightnessReadInProgressException : InvalidOperationException
+{
+    public BrightnessReadInProgressException()
+        : base("A physical display brightness read is still active.")
+    {
+    }
+}
+
 public sealed class BrightnessWriteFence
 {
     private readonly object syncRoot = new();
+    private Task? activeRead;
     private Task<uint>? activeWrite;
+
+    public bool HasActiveRead
+    {
+        get
+        {
+            lock (syncRoot)
+            {
+                return activeRead is not null;
+            }
+        }
+    }
 
     public bool HasActiveWrite
     {
@@ -71,11 +91,43 @@ public sealed class BrightnessWriteFence
             throw new ArgumentOutOfRangeException(nameof(timeout));
         }
 
-        return Task
-            .Run(read)
+        Task<T> readTask;
+        lock (syncRoot)
+        {
+            if (activeRead is not null)
+            {
+                throw new BrightnessReadInProgressException();
+            }
+
+            readTask = Task.Run(read);
+            activeRead = readTask;
+            _ = readTask.ContinueWith(
+                CompleteRead,
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+        }
+
+        return readTask
             .WaitAsync(timeout)
             .GetAwaiter()
             .GetResult();
+    }
+
+    private void CompleteRead(Task completedRead)
+    {
+        if (completedRead.IsFaulted)
+        {
+            _ = completedRead.Exception;
+        }
+
+        lock (syncRoot)
+        {
+            if (ReferenceEquals(activeRead, completedRead))
+            {
+                activeRead = null;
+            }
+        }
     }
 
     private void Complete(Task<uint> completedWrite)

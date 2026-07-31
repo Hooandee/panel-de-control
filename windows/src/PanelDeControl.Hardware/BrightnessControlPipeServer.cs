@@ -7,6 +7,8 @@ namespace PanelDeControl.Hardware;
 public sealed class BrightnessControlPipeServer
 {
     private const int MaximumRequestLength = 192;
+    private static readonly TimeSpan DefaultOperationTimeout =
+        TimeSpan.FromSeconds(5);
 
     public const string PackagedPipeName = @"LOCAL\PanelDeControl.Display";
 
@@ -15,7 +17,7 @@ public sealed class BrightnessControlPipeServer
     private readonly Func<string, NamedPipeServerStream> pipeFactory;
     private readonly TimeSpan operationTimeout;
     private readonly TimeSpan requestTimeout;
-    private Task<BrightnessControlResponse>? activeOperation;
+    private Task<BrightnessControlResponse>? activeWriteOperation;
 
     public BrightnessControlPipeServer(
         string pipeName,
@@ -25,7 +27,7 @@ public sealed class BrightnessControlPipeServer
         TimeSpan? requestTimeout = null)
     {
         var effectiveOperationTimeout =
-            operationTimeout ?? TimeSpan.FromSeconds(2);
+            operationTimeout ?? DefaultOperationTimeout;
         var effectiveRequestTimeout =
             requestTimeout ?? TimeSpan.FromSeconds(2);
         if (effectiveOperationTimeout <= TimeSpan.Zero)
@@ -136,13 +138,18 @@ public sealed class BrightnessControlPipeServer
                 "invalid_brightness_request");
         }
 
-        if (activeOperation is { IsCompleted: false })
+        if (request.Operation == BrightnessControlOperation.Set &&
+            activeWriteOperation is { IsCompleted: false })
         {
             return PendingOperation(request, "brightness_control_busy");
         }
 
-        activeOperation = Task.Run(() => Dispatch(request));
-        var currentOperation = activeOperation;
+        var currentOperation = Task.Run(() => Dispatch(request));
+        if (request.Operation == BrightnessControlOperation.Set)
+        {
+            activeWriteOperation = currentOperation;
+        }
+
         var timeout = Task.Delay(operationTimeout, cancellationToken);
         if (await Task.WhenAny(currentOperation, timeout).ConfigureAwait(false) !=
             currentOperation)
@@ -151,7 +158,11 @@ public sealed class BrightnessControlPipeServer
             return PendingOperation(request, "brightness_control_timeout");
         }
 
-        activeOperation = null;
+        if (ReferenceEquals(activeWriteOperation, currentOperation))
+        {
+            activeWriteOperation = null;
+        }
+
         return await currentOperation.ConfigureAwait(false);
     }
 

@@ -1,4 +1,5 @@
 import json
+import re
 import struct
 import unittest
 from pathlib import Path
@@ -423,9 +424,9 @@ class GameBarProjectTests(unittest.TestCase):
             normalized_refresh,
         )
         self.assertIn(
-            "if (!brightnessWriteWasPendingAtRefreshStart && "
+            "!brightnessWriteWasPendingAtRefreshStart && "
             "!brightnessWritePending && "
-            "brightnessRefreshGeneration == brightnessGeneration)",
+            "brightnessRefreshGeneration == brightnessGeneration",
             normalized_refresh,
         )
         self.assertIn("brightnessClient.GetAsync()", refresh)
@@ -433,6 +434,41 @@ class GameBarProjectTests(unittest.TestCase):
         self.assertIn(
             'writeAttempted ? "No se pudo controlar el brillo',
             " ".join(code.split()),
+        )
+
+    def test_widget_applies_refresh_streams_independently(self):
+        code = WIDGET_CODE.read_text(encoding="utf-8")
+        normalized_code = " ".join(code.split())
+        refresh = code[
+            code.index("private async Task RefreshAsync()"):
+            code.index("private void ApplySnapshot")
+        ]
+
+        self.assertIn("ApplySnapshotWhenReadyAsync", refresh)
+        self.assertIn("ApplyVolumeWhenReadyAsync", refresh)
+        self.assertIn("ApplyBrightnessWhenReadyAsync", refresh)
+        self.assertIn("await Task.WhenAll(", refresh)
+        self.assertIn("private bool snapshotRefreshInProgress;", code)
+        self.assertIn("private bool volumeRefreshInProgress;", code)
+        self.assertIn("private bool brightnessRefreshInProgress;", code)
+        self.assertNotIn("private bool refreshInProgress;", code)
+        self.assertIn(
+            "if (snapshotRefreshInProgress || disposed)",
+            normalized_code,
+        )
+        self.assertIn(
+            "if (volumeRefreshInProgress || disposed)",
+            normalized_code,
+        )
+        self.assertIn(
+            "if (brightnessRefreshInProgress || disposed)",
+            normalized_code,
+        )
+        self.assertNotRegex(
+            refresh,
+            r"var snapshot = await snapshotTask;\s*"
+            r"var volume = await volumeTask;\s*"
+            r"var brightness = await brightnessTask;",
         )
 
     def test_widget_has_accessible_focusable_system_mute_control(self):
@@ -672,6 +708,33 @@ class GameBarProjectTests(unittest.TestCase):
         self.assertIn("ReadbackTolerancePercentagePoints = 1", controller)
         self.assertNotIn("DeviceIdentity", provider)
         self.assertNotIn("DeviceIdentity", controller)
+
+    def test_brightness_timeouts_cover_full_verified_set(self):
+        provider = BRIGHTNESS_PROVIDER.read_text(encoding="utf-8")
+        server = BRIGHTNESS_PIPE_SERVER.read_text(encoding="utf-8")
+        client = BRIGHTNESS_CLIENT.read_text(encoding="utf-8")
+
+        provider_timeout = re.search(
+            r"OperationTimeout\s*=\s*TimeSpan\.FromMilliseconds\((\d+)\)",
+            provider,
+        )
+        server_timeout = re.search(
+            r"DefaultOperationTimeout\s*=\s*TimeSpan\.FromSeconds\((\d+)\)",
+            server,
+        )
+        client_timeout = re.search(
+            r"ResponseTimeout\s*=\s*TimeSpan\.FromSeconds\((\d+)\)",
+            client,
+        )
+
+        self.assertIsNotNone(provider_timeout)
+        self.assertIsNotNone(server_timeout)
+        self.assertIsNotNone(client_timeout)
+        provider_budget_ms = int(provider_timeout.group(1))
+        server_budget_ms = int(server_timeout.group(1)) * 1000
+        client_budget_ms = int(client_timeout.group(1)) * 1000
+        self.assertGreater(server_budget_ms, provider_budget_ms * 3)
+        self.assertGreater(client_budget_ms, server_budget_ms)
 
 
 if __name__ == "__main__":
