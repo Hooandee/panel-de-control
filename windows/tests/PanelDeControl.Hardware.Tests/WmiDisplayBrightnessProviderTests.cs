@@ -1,3 +1,5 @@
+using System.Management;
+using System.Runtime.Versioning;
 using PanelDeControl.Hardware;
 using Xunit;
 
@@ -112,5 +114,34 @@ public sealed class WmiDisplayBrightnessProviderTests
             () => provider.SetBrightness("DISPLAY\\INTERNAL_0", 50, 1));
         Assert.Throws<PlatformNotSupportedException>(
             () => provider.ReadBrightness("DISPLAY\\INTERNAL_0"));
+    }
+
+    [Fact]
+    public void NativeWmiFailuresMapToHonestControlStates()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        AssertMapping(
+            ManagementStatus.AccessDenied,
+            typeof(UnauthorizedAccessException));
+        AssertMapping(
+            ManagementStatus.Timedout,
+            typeof(TimeoutException));
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static void AssertMapping(
+        ManagementStatus status,
+        Type expectedType)
+    {
+        var source = new ManagementException("private WMI details");
+
+        var mapped = WmiManagementExceptionMapper.Translate(status, source);
+
+        Assert.IsType(expectedType, mapped);
+        Assert.Same(source, mapped.InnerException);
     }
 }
