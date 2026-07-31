@@ -24,6 +24,11 @@ public sealed class BrightnessWriteFenceTests
                     TimeSpan.FromMilliseconds(30))));
 
         Assert.True(fence.HasActiveWrite);
+        var observed = fence.ExecuteRead(
+            () => 42,
+            TimeSpan.FromSeconds(1));
+        Assert.Equal(42, observed);
+        Assert.True(fence.HasActiveWrite);
         Assert.Throws<BrightnessWriteInProgressException>(
             () => fence.Execute(
                 () =>
