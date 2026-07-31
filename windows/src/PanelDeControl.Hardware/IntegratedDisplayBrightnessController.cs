@@ -95,6 +95,13 @@ public sealed class IntegratedDisplayBrightnessController
             observedPercentage = provider.ReadBrightness(
                 capability.InstanceName);
         }
+        catch (BrightnessReadInProgressException)
+        {
+            return BrightnessControlResponse.Unverifiable(
+                targetPercentage,
+                null,
+                "brightness_read_busy");
+        }
         catch
         {
             return BrightnessControlResponse.Unverifiable(
@@ -134,6 +141,12 @@ public sealed class IntegratedDisplayBrightnessController
             return Selection.Failed(
                 BrightnessControlResponse.PermissionRequired(
                     "brightness_permission_required"));
+        }
+        catch (BrightnessReadInProgressException)
+        {
+            return Selection.Failed(
+                BrightnessControlResponse.Fault(
+                    "brightness_read_busy"));
         }
         catch
         {

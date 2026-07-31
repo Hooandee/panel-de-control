@@ -35,7 +35,9 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     private long volumeGeneration;
     private long muteGeneration;
     private long brightnessGeneration;
-    private bool refreshInProgress;
+    private bool snapshotRefreshInProgress;
+    private bool volumeRefreshInProgress;
+    private bool brightnessRefreshInProgress;
     private bool applyingVolumeReadback;
     private bool applyingMuteReadback;
     private bool applyingBrightnessReadback;
@@ -142,61 +144,117 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
 
     private async Task RefreshAsync()
     {
-        if (refreshInProgress || disposed)
+        if (disposed)
         {
             return;
         }
 
         var currentRefreshGeneration = refreshGeneration;
-        refreshInProgress = true;
+        await Task.WhenAll(
+            ApplySnapshotWhenReadyAsync(currentRefreshGeneration),
+            ApplyVolumeWhenReadyAsync(currentRefreshGeneration),
+            ApplyBrightnessWhenReadyAsync(currentRefreshGeneration));
+    }
+
+    private async Task ApplySnapshotWhenReadyAsync(
+        long currentRefreshGeneration)
+    {
+        if (snapshotRefreshInProgress || disposed)
+        {
+            return;
+        }
+
+        snapshotRefreshInProgress = true;
         try
         {
-            var volumeRefreshGeneration = volumeGeneration;
-            var muteRefreshGeneration = muteGeneration;
-            var brightnessRefreshGeneration = brightnessGeneration;
-            var volumeWriteWasPendingAtRefreshStart = volumeWritePending;
-            var muteWriteWasPendingAtRefreshStart = muteWritePending;
-            var brightnessWriteWasPendingAtRefreshStart =
-                brightnessWritePending;
-            var snapshotTask = telemetryClient.GetSnapshotAsync();
-            var volumeTask = volumeClient.GetAsync();
-            var brightnessTask = brightnessClient.GetAsync();
-            var snapshot = await snapshotTask;
-            var volume = await volumeTask;
-            var brightness = await brightnessTask;
-            if (!disposed &&
-                currentRefreshGeneration == refreshGeneration)
+            var snapshot = await telemetryClient.GetSnapshotAsync();
+            if (!disposed && currentRefreshGeneration == refreshGeneration)
             {
                 ApplySnapshot(snapshot);
-                if (!volumeWriteWasPendingAtRefreshStart &&
-                    !volumeWritePending &&
-                    volumeRefreshGeneration == volumeGeneration)
-                {
-                    ApplyVolumeResponse(volume);
-                }
-
-                if (!muteWriteWasPendingAtRefreshStart &&
-                    !muteWritePending &&
-                    muteRefreshGeneration == muteGeneration)
-                {
-                    ApplyMuteResponse(volume);
-                }
-
-                if (!brightnessWriteWasPendingAtRefreshStart &&
-                    !brightnessWritePending &&
-                    brightnessRefreshGeneration == brightnessGeneration)
-                {
-                    ApplyBrightnessResponse(
-                        brightness,
-                        writeAttempted: false);
-                }
             }
         }
         finally
         {
             if (currentRefreshGeneration == refreshGeneration)
             {
-                refreshInProgress = false;
+                snapshotRefreshInProgress = false;
+            }
+        }
+    }
+
+    private async Task ApplyVolumeWhenReadyAsync(
+        long currentRefreshGeneration)
+    {
+        if (volumeRefreshInProgress || disposed)
+        {
+            return;
+        }
+
+        volumeRefreshInProgress = true;
+        var volumeRefreshGeneration = volumeGeneration;
+        var muteRefreshGeneration = muteGeneration;
+        var volumeWriteWasPendingAtRefreshStart = volumeWritePending;
+        var muteWriteWasPendingAtRefreshStart = muteWritePending;
+        try
+        {
+            var volume = await volumeClient.GetAsync();
+            if (disposed || currentRefreshGeneration != refreshGeneration)
+            {
+                return;
+            }
+
+            if (!volumeWriteWasPendingAtRefreshStart &&
+                !volumeWritePending &&
+                volumeRefreshGeneration == volumeGeneration)
+            {
+                ApplyVolumeResponse(volume);
+            }
+
+            if (!muteWriteWasPendingAtRefreshStart &&
+                !muteWritePending &&
+                muteRefreshGeneration == muteGeneration)
+            {
+                ApplyMuteResponse(volume);
+            }
+        }
+        finally
+        {
+            if (currentRefreshGeneration == refreshGeneration)
+            {
+                volumeRefreshInProgress = false;
+            }
+        }
+    }
+
+    private async Task ApplyBrightnessWhenReadyAsync(
+        long currentRefreshGeneration)
+    {
+        if (brightnessRefreshInProgress || disposed)
+        {
+            return;
+        }
+
+        brightnessRefreshInProgress = true;
+        var brightnessRefreshGeneration = brightnessGeneration;
+        var brightnessWriteWasPendingAtRefreshStart =
+            brightnessWritePending;
+        try
+        {
+            var brightness = await brightnessClient.GetAsync();
+            if (!disposed &&
+                currentRefreshGeneration == refreshGeneration &&
+                !brightnessWriteWasPendingAtRefreshStart &&
+                !brightnessWritePending &&
+                brightnessRefreshGeneration == brightnessGeneration)
+            {
+                ApplyBrightnessResponse(brightness, writeAttempted: false);
+            }
+        }
+        finally
+        {
+            if (currentRefreshGeneration == refreshGeneration)
+            {
+                brightnessRefreshInProgress = false;
             }
         }
     }
@@ -563,7 +621,9 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     private void InvalidatePendingOperations()
     {
         refreshGeneration++;
-        refreshInProgress = false;
+        snapshotRefreshInProgress = false;
+        volumeRefreshInProgress = false;
+        brightnessRefreshInProgress = false;
         CancelPendingVolumeWrite();
         CancelPendingMuteWrite();
         CancelPendingBrightnessWrite();
