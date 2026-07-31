@@ -50,7 +50,7 @@
                 Height="44"
                 Padding="0"
                 IsTabStop="True"
-                AutomationProperties.Name="Actualizar telemetría y volumen"
+                AutomationProperties.Name="Actualizar telemetría, brillo y volumen"
                 Click="RefreshButton_Click"
                 CornerRadius="12"
                 Background="#FF313A48"
@@ -102,6 +102,7 @@
         <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
             <Grid>
                 <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
@@ -211,8 +212,54 @@
                 </Border>
 
                 <Border
-                    x:Name="CpuCard"
+                    x:Name="BrightnessCard"
                     Grid.Row="2"
+                    Grid.ColumnSpan="2"
+                    Margin="0,12,0,0"
+                    Padding="18"
+                    Background="{StaticResource CardBackgroundBrush}"
+                    CornerRadius="16">
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="BRILLO DEL PANEL INTEGRADO" Style="{StaticResource TelemetryLabelStyle}" />
+                            <TextBlock
+                                x:Name="BrightnessValue"
+                                Grid.Column="1"
+                                Text="—"
+                                FontSize="18"
+                                FontWeight="SemiBold"
+                                Foreground="White"
+                                AutomationProperties.LiveSetting="Polite" />
+                        </Grid>
+                        <Slider
+                            x:Name="BrightnessSlider"
+                            Margin="0,12,0,0"
+                            Minimum="0"
+                            Maximum="100"
+                            StepFrequency="5"
+                            SmallChange="5"
+                            IsEnabled="False"
+                            IsTabStop="True"
+                            AutomationProperties.Name="Brillo de la pantalla integrada"
+                            AutomationProperties.HelpText="Ajusta el brillo real del panel integrado y confirma el porcentaje leído por Windows"
+                            ValueChanged="BrightnessSlider_ValueChanged" />
+                        <TextBlock
+                            x:Name="BrightnessStatus"
+                            Margin="0,6,0,0"
+                            Text="Comprobando panel integrado…"
+                            FontSize="12"
+                            Foreground="#FF8591A3"
+                            TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+
+                <Border
+                    x:Name="CpuCard"
+                    Grid.Row="3"
                     Grid.Column="0"
                     Margin="0,12,6,0"
                     Padding="18"
@@ -227,7 +274,7 @@
 
                 <Border
                     x:Name="GpuCard"
-                    Grid.Row="2"
+                    Grid.Row="3"
                     Grid.Column="1"
                     Margin="6,12,0,0"
                     Padding="18"
@@ -245,7 +292,7 @@
         <TextBlock
             Grid.Row="3"
             Margin="0,16,0,0"
-            Text="Volumen del sistema con verificación · Telemetría experimental de solo lectura · Sin control de potencia ni ventiladores."
+            Text="Brillo del panel interno y volumen con verificación · Telemetría experimental de solo lectura · Sin control de pantallas externas, potencia ni ventiladores."
             FontSize="11"
             Foreground="#FF6F7B8C"
             TextWrapping="Wrap" />

@@ -52,6 +52,7 @@
     <Compile Include="ControlPanelWidget.xaml.cs">
       <DependentUpon>ControlPanelWidget.xaml</DependentUpon>
     </Compile>
+    <Compile Include="BrightnessControlClient.cs" />
     <Compile Include="HardwareBrokerLauncher.cs" />
     <Compile Include="TelemetryClient.cs" />
     <Compile Include="VolumeControlClient.cs" />
