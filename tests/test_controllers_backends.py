@@ -650,6 +650,75 @@ def test_hhd_get_config_none_without_controllers():
     assert hhd_config.get_config({})["kind"] == "none"
 
 
+def test_hhd_capabilities_use_only_options_present_in_live_state():
+    state = {
+        "controllers": {
+            "rog_ally": {
+                "controller_mode": {
+                    "mode": "uinput",
+                    "uinput": {"paddles_as": "steam_input"},
+                    "dualsense": {"paddles_as": "disabled"},
+                    "invented_mode": {"paddles_as": "invented"},
+                },
+                "limits": {
+                    "mode": "manual",
+                    "manual": {"vibration": 40},
+                },
+            }
+        }
+    }
+
+    capabilities = hhd_config.capabilities_report(
+        state, "rog_ally"
+    )
+
+    assert capabilities["surfaces"]["settings"] == {
+        "owner": "hhd",
+        "availability": "supported",
+        "fields": {
+            "mode": "uinput",
+            "mode_options": ["uinput", "dualsense"],
+            "paddles_as": "steam_input",
+            "paddles_options": ["steam_input", "disabled"],
+        },
+        "scope": ["global"],
+        "apply": "recreate",
+        "readback": "accepted",
+        "evidence": "upstream",
+    }
+    assert capabilities["surfaces"]["vibration"] == {
+        "owner": "hhd",
+        "availability": "supported",
+        "fields": {
+            "mode": "gain",
+            "persistent": True,
+            "value": 40,
+            "min": 0,
+            "max": 100,
+            "step": 20,
+        },
+        "scope": ["global", "game"],
+        "apply": "hot",
+        "readback": "accepted",
+        "evidence": "upstream",
+    }
+
+
+def test_hhd_capabilities_omit_absent_or_ambiguous_routes():
+    state = {
+        "controllers": {
+            "rog_ally": {
+                "controller_mode": {"mode": "invented_mode"},
+                "limits": {"mode": "default"},
+            }
+        }
+    }
+
+    assert hhd_config.capabilities_report(
+        state, "rog_ally"
+    )["surfaces"] == {}
+
+
 def test_hhd_build_payload_paths():
     assert hhd_config.build_payload("rog_ally", "uinput", "mode", "dualsense") == {
         "controllers": {"rog_ally": {"controller_mode": {"mode": "dualsense"}}}

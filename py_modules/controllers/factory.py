@@ -12,6 +12,7 @@ from controllers import hhd as hhd_api
 from controllers import hhd_config
 from controllers import inputplumber as ip
 from controllers import ip_profile
+from controllers.capabilities import clean_report, report
 from controllers.vibration import VibrationController
 
 
@@ -24,10 +25,15 @@ class ControllerBackend:
         self._version = version
 
     def _stamp(self, cfg: dict) -> dict:
+        if "capabilities" not in cfg:
+            cfg["capabilities"] = self.get_capabilities()
         cfg["manager"] = self.manager
         cfg["manager_version"] = self._version
         cfg["supported"] = cfg.get("kind", "none") != "none"
         return cfg
+
+    def get_capabilities(self, appid=None) -> dict:
+        return clean_report(report(None, self.manager, {}))
 
     def get_config(self, appid=None) -> dict:
         return self._stamp({"kind": "none"})
@@ -132,6 +138,11 @@ class IpBackend(ControllerBackend):
                 self._vibration_last_apply
             )
         return self._stamp(config)
+
+    def get_capabilities(self, appid=None) -> dict:
+        return ip.capabilities_report(
+            self._dbus, self._device_key, self._vibration
+        )
 
     def set_button(self, source: str, targets: list, scope="global", appid=None) -> dict:
         return self._stamp(
@@ -299,7 +310,15 @@ class HhdBackend(ControllerBackend):
         )
         config["follows_global"] = self._store.is_following_global(appid)
         config["has_game_profile"] = self._store.has_game(appid)
+        config["capabilities"] = hhd_config.capabilities_report(
+            state, self._device_key
+        )
         return self._stamp(config)
+
+    def get_capabilities(self, appid=None) -> dict:
+        return hhd_config.capabilities_report(
+            hhd_api.read_state(), self._device_key
+        )
 
     def get_config(self, appid=None) -> dict:
         return self._config_from_state(hhd_api.read_state(), appid)

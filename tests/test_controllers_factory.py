@@ -62,6 +62,86 @@ def test_select_none_backend():
     assert b.reset()["kind"] == "none"
 
 
+def test_no_backend_reports_no_mutable_surfaces():
+    backend = factory.ControllerBackend()
+
+    assert backend.get_capabilities() == {
+        "device_key": None,
+        "manager": detect.NONE,
+        "surfaces": {},
+    }
+    assert backend.get_config()["capabilities"] == backend.get_capabilities()
+
+
+def test_ip_report_composes_only_live_buttons_and_persistent_vibration(
+    tmp_path, monkeypatch
+):
+    store = RemapStore(str(tmp_path / "controllers.json"))
+    dbus = FakeDbus()
+    monkeypatch.setattr(
+        factory,
+        "VibrationController",
+        lambda *args: FakeVibration(),
+    )
+    backend = factory.IpBackend(
+        store, dbus, device_key="rog_ally"
+    )
+
+    capabilities = backend.get_capabilities("42")
+
+    assert capabilities["device_key"] == "rog_ally"
+    assert capabilities["manager"] == detect.INPUTPLUMBER
+    assert capabilities["surfaces"]["buttons"] == {
+        "owner": "inputplumber",
+        "availability": "supported",
+        "fields": {
+            "buttons": [
+                {"source": "LeftPaddle1", "label": "M2"},
+            ],
+            "gamepad_targets": list(factory.ip_profile.GAMEPAD_TARGETS),
+            "key_targets": list(factory.ip_profile.KEY_TARGETS),
+        },
+        "scope": ["global", "game"],
+        "apply": "hot",
+        "readback": "exact",
+        "evidence": "upstream",
+    }
+    assert capabilities["surfaces"]["vibration"] == {
+        "owner": "native",
+        "availability": "supported",
+        "fields": {
+            "mode": "dual",
+            "persistent": True,
+            "left": 90,
+            "right": 80,
+            "min": 0,
+            "max": 100,
+            "step": 5,
+            "readback": True,
+        },
+        "scope": ["global", "game"],
+        "apply": "hot",
+        "readback": "exact",
+        "evidence": "upstream",
+    }
+
+
+def test_ip_report_omits_unproven_surfaces(tmp_path, monkeypatch):
+    store = RemapStore(str(tmp_path / "controllers.json"))
+    dbus = FakeDbus()
+    dbus.capabilities = lambda: []
+    monkeypatch.setattr(
+        factory,
+        "VibrationController",
+        lambda *args: SimpleNamespace(state=lambda: None),
+    )
+    backend = factory.IpBackend(
+        store, dbus, device_key="rog_ally"
+    )
+
+    assert backend.get_capabilities()["surfaces"] == {}
+
+
 def test_select_ip_backend_stamps_manager_and_version():
     b = factory.select_controller_backend(
         {"manager": detect.INPUTPLUMBER, "version": "0.77.4"}, FakeStore(), FakeDbus(), _device("msi_claw_8_ai_plus")
@@ -119,6 +199,40 @@ def test_select_hhd_backend_is_hhd():
     assert b.manager == detect.HHD
     # IP-only op is a no-op on the HHD backend.
     assert isinstance(b.set_button("LeftPaddle1", []), dict)
+
+
+def test_hhd_config_and_capabilities_share_one_live_state(
+    tmp_path, monkeypatch
+):
+    state = {
+        "controllers": {
+            "rog_ally": {
+                "controller_mode": {
+                    "mode": "uinput",
+                    "uinput": {"paddles_as": "steam_input"},
+                }
+            }
+        }
+    }
+    reads = []
+
+    def read_state():
+        reads.append(True)
+        return state
+
+    monkeypatch.setattr(factory.hhd_api, "read_state", read_state)
+    backend = factory.HhdBackend(
+        store=RemapStore(str(tmp_path / "controllers.json")),
+        device_key="rog_ally",
+    )
+
+    config = backend.get_config()
+
+    assert reads == [True]
+    assert config["mode"] == "uinput"
+    assert config["capabilities"]["surfaces"]["settings"]["fields"][
+        "mode"
+    ] == "uinput"
 
 
 def _hhd_ally_owner(monkeypatch, value=80):

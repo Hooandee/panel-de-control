@@ -9,6 +9,8 @@ The device key under `controllers` (e.g. "rog_ally") is read from the live state
 never hardcoded, so an ASUS variant with a different key still works.
 """
 
+from controllers.capabilities import clean_report, report, surface
+
 # Emulated controller modes HHD offers, in display order.
 MODES = ("uinput", "hori_steam", "dualsense", "hidden")
 # Paddle behavior options (only the uinput/dualsense modes expose paddles_as).
@@ -40,6 +42,63 @@ def get_config(state) -> dict:
         "paddles_as": paddles,
         "paddles_options": list(PADDLES_AS),
     }
+
+
+def capabilities_report(state, device_profile_key) -> dict:
+    key = device_key(state)
+    if key is None:
+        return clean_report(report(device_profile_key, "hhd", {}))
+    controller = state["controllers"].get(key)
+    if not isinstance(controller, dict):
+        return clean_report(report(device_profile_key, "hhd", {}))
+
+    surfaces = {}
+    controller_mode = controller.get("controller_mode")
+    if isinstance(controller_mode, dict):
+        mode = controller_mode.get("mode")
+        mode_options = [
+            candidate
+            for candidate in MODES
+            if isinstance(controller_mode.get(candidate), dict)
+        ]
+        if isinstance(mode, str) and mode in mode_options:
+            paddles = controller_mode[mode].get("paddles_as")
+            paddles_options = []
+            for candidate in mode_options:
+                value = controller_mode[candidate].get("paddles_as")
+                if value in PADDLES_AS and value not in paddles_options:
+                    paddles_options.append(value)
+            surfaces["settings"] = surface(
+                "hhd",
+                "supported",
+                fields={
+                    "mode": mode,
+                    "mode_options": mode_options,
+                    "paddles_as": paddles if paddles in PADDLES_AS else None,
+                    "paddles_options": paddles_options,
+                },
+                scope=("global",),
+                apply="recreate",
+                readback="accepted",
+                evidence="upstream",
+            )
+
+    vibration = vibration_state(state, device_profile_key)
+    if vibration is not None:
+        surfaces["vibration"] = surface(
+            "hhd",
+            "supported",
+            fields={
+                field: value
+                for field, value in vibration.items()
+                if field not in {"device_key", "readback"}
+            },
+            scope=("global", "game"),
+            apply="hot",
+            readback="accepted",
+            evidence="upstream",
+        )
+    return clean_report(report(device_profile_key, "hhd", surfaces))
 
 
 def build_payload(device_key: str, mode: str, field: str, value: str) -> dict:

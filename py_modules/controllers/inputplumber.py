@@ -9,6 +9,7 @@ Global (IP profiles are global) — per-game remap is Steam Input's job.
 import time
 
 from controllers import ip_profile
+from controllers.capabilities import clean_report, report, surface
 from controllers.ip_merge import merge_profile
 from controllers.ip_merge import profiles_equal as ip_profile_profiles_equal
 
@@ -23,6 +24,45 @@ def live_buttons(dbus, device_key, capabilities):
             device_key, source_paths
         )
     return ip_profile.buttons_for(device_key, capabilities, proven)
+
+
+def capabilities_report(dbus, device_key, vibration=None) -> dict:
+    buttons = live_buttons(dbus, device_key, dbus.capabilities())
+    surfaces = {}
+    if buttons:
+        surfaces["buttons"] = surface(
+            "inputplumber",
+            "supported",
+            fields={
+                "buttons": [
+                    {"source": source, "label": label}
+                    for source, label in buttons
+                ],
+                "gamepad_targets": list(ip_profile.GAMEPAD_TARGETS),
+                "key_targets": list(ip_profile.KEY_TARGETS),
+            },
+            scope=("global", "game"),
+            apply="hot",
+            readback="exact",
+            evidence="upstream",
+        )
+
+    vibration_state = vibration.state() if vibration is not None else None
+    if (
+        isinstance(vibration_state, dict)
+        and vibration_state.get("mode") in {"dual", "gain"}
+    ):
+        exact = vibration_state.get("readback") is True
+        surfaces["vibration"] = surface(
+            "native" if vibration_state["mode"] == "dual" else "evdev",
+            "supported",
+            fields=dict(vibration_state),
+            scope=("global", "game"),
+            apply="hot",
+            readback="exact" if exact else "accepted",
+            evidence="upstream",
+        )
+    return clean_report(report(device_key, "inputplumber", surfaces))
 
 
 def get_config(store, dbus, device_key, appid=None, caps=None, vibration=None,
