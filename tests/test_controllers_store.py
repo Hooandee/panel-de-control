@@ -64,6 +64,7 @@ def test_vibration_is_scoped_with_buttons_and_persists(tmp_path):
     assert s.effective_profile("42") == {
         "buttons": {},
         "vibration": {"enabled": True},
+        "virtual_controller": {},
     }
 
     s2 = RemapStore(str(p))
@@ -215,3 +216,105 @@ def test_game_profile_and_forget(tmp_path):
     s.forget_game("7")
     assert s.has_game("7") is False
     assert s.game_profile("7") is None
+
+
+def test_v2_migrates_without_losing_buttons_or_vibration(tmp_path):
+    store = _store(tmp_path, {
+        "global": {
+            "LeftPaddle1": [{"gamepad": "South"}],
+        },
+        "vibration": {"left": 35, "right": 45},
+        "games": {
+            "42": {
+                "overrides": {"RightPaddle1": [{"key": "KeyTab"}]},
+                "vibration": {"left": 20},
+                "follow_global": False,
+            },
+        },
+    })
+
+    assert store.effective_profile(None) == {
+        "buttons": {"LeftPaddle1": [{"gamepad": "South"}]},
+        "vibration": {"left": 35, "right": 45},
+        "virtual_controller": {},
+    }
+    assert store.effective_profile("42") == {
+        "buttons": {"RightPaddle1": [{"key": "KeyTab"}]},
+        "vibration": {"left": 20},
+        "virtual_controller": {},
+    }
+
+
+def test_version_three_deeply_cleans_button_actions(tmp_path):
+    store = _store(tmp_path, {
+        "version": 3,
+        "global": {
+            "buttons": {
+                "valid_gamepad": [{"gamepad": "South"}],
+                "valid_chord": [{"key": "KeyLeftCtrl"}, {"key": "KeyTab"}],
+                "mixed": [{"gamepad": "South"}, {"key": "KeyTab"}],
+                "duplicate": [{"key": "KeyTab"}, {"key": "KeyTab"}],
+                "nested": [{"key": ["KeyTab"]}],
+                "too_long": [
+                    {"key": "KeyLeftCtrl"}, {"key": "KeyLeftShift"},
+                    {"key": "KeyLeftAlt"}, {"key": "KeyTab"},
+                    {"key": "KeyEnter"},
+                ],
+            },
+            "vibration": {},
+            "virtual_controller": {},
+        },
+    })
+
+    assert store.effective_overrides(None) == {
+        "valid_gamepad": [{"gamepad": "South"}],
+        "valid_chord": [{"key": "KeyLeftCtrl"}, {"key": "KeyTab"}],
+    }
+
+
+def test_component_profiles_are_independent_and_resettable(tmp_path):
+    store = _store(tmp_path)
+    store.patch_component(
+        "virtual_controller", {"mode": "xbox_elite"}, "global", None
+    )
+    store.create_game_from_global("42")
+    store.patch_component(
+        "virtual_controller", {"mode": "dualsense"}, "game", "42"
+    )
+    store.patch_component("vibration", {"left": 20}, "game", "42")
+
+    assert store.effective_profile("42")["virtual_controller"] == {
+        "mode": "dualsense",
+    }
+    assert store.differs_from_global("42", "virtual_controller") is True
+    assert store.differs_from_global("42", "buttons") is False
+
+    store.reset_component("virtual_controller", "game", "42")
+    assert store.effective_profile("42")["virtual_controller"] == {}
+    assert store.effective_profile("42")["vibration"] == {"left": 20}
+
+
+def test_virtual_mode_rejects_unknown_shape(tmp_path):
+    store = _store(tmp_path, {
+        "version": 3,
+        "global": {
+            "buttons": {},
+            "vibration": {},
+            "virtual_controller": {"mode": "Bad mode!", "extra": True},
+        },
+    })
+
+    assert store.effective_profile(None)["virtual_controller"] == {}
+
+
+def test_invalid_native_baseline_pair_is_discarded_not_clamped(tmp_path):
+    path = tmp_path / "remap.json"
+    store = RemapStore(str(path))
+    store.remember_vibration_baseline(
+        "inputplumber:rog_ally",
+        {"native_left": 65, "native_right": 10},
+    )
+
+    assert RemapStore(str(path)).vibration_baseline(
+        "inputplumber:rog_ally"
+    ) == {}

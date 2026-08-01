@@ -1,19 +1,43 @@
-"""Persisted controller-remap overrides, per scope (global + per-game).
-
-Holds ``{global: {source: targets}, games: {appid: {overrides, follow_global}}}``.
-A game applies the global overrides until it has its own profile with
-follow_global=False (mirrors tdp_profiles.ProfileStore). Switching scope never
-deletes either side. JSON, atomic write, robust load (never raises). Migrates the
-old flat ``{source: targets}`` shape into ``global``.
-"""
+"""Versioned, component-scoped controller profiles."""
+import copy
 import json
 import math
+import re
 
+from controllers import ip_profile
 from json_store import atomic_json_save
 
 
-def _clean_overrides(raw) -> dict:
-    return {k: v for k, v in raw.items() if isinstance(v, list)} if isinstance(raw, dict) else {}
+_VERSION = 3
+_COMPONENTS = {"buttons", "vibration", "virtual_controller"}
+_MODE = re.compile(r"[a-z0-9][a-z0-9_-]{0,31}")
+
+
+def _clean_button_action(raw) -> list:
+    if not isinstance(raw, list) or not 1 <= len(raw) <= 4:
+        return []
+    clean = ip_profile.sanitize_targets(raw)
+    if len(clean) != len(raw):
+        return []
+    if len(clean) == 1 and "gamepad" in clean[0]:
+        return clean
+    if not all("key" in target for target in clean):
+        return []
+    codes = [target["key"] for target in clean]
+    return clean if len(codes) == len(set(codes)) else []
+
+
+def _clean_buttons(raw) -> dict:
+    if not isinstance(raw, dict):
+        return {}
+    clean = {}
+    for source, action in raw.items():
+        if not isinstance(source, str) or not source:
+            continue
+        target = _clean_button_action(action)
+        if target:
+            clean[source] = target
+    return clean
 
 
 def _clean_vibration(raw) -> dict:
@@ -48,15 +72,45 @@ def _clean_vibration_baseline(raw) -> dict:
     clean = _clean_vibration(raw)
     if not isinstance(raw, dict):
         return clean
-    for field in ("native_left", "native_right"):
-        value = raw.get(field)
-        if (
-            isinstance(value, int)
-            and not isinstance(value, bool)
-            and 0 <= value <= 255
-        ):
-            clean[field] = value
+    native_left = raw.get("native_left")
+    native_right = raw.get("native_right")
+    if all(
+        isinstance(value, int)
+        and not isinstance(value, bool)
+        and 0 <= value <= 64
+        for value in (native_left, native_right)
+    ):
+        clean["native_left"] = native_left
+        clean["native_right"] = native_right
     return clean
+
+
+def _clean_virtual_controller(raw) -> dict:
+    if not isinstance(raw, dict):
+        return {}
+    mode = raw.get("mode")
+    return {"mode": mode} if isinstance(mode, str) and _MODE.fullmatch(mode) else {}
+
+
+def _clean_profile(raw) -> dict:
+    raw = raw if isinstance(raw, dict) else {}
+    return {
+        "buttons": _clean_buttons(raw.get("buttons")),
+        "vibration": _clean_vibration(raw.get("vibration")),
+        "virtual_controller": _clean_virtual_controller(
+            raw.get("virtual_controller")
+        ),
+    }
+
+
+def _empty_data() -> dict:
+    return {
+        "version": _VERSION,
+        "global": _clean_profile({}),
+        "games": {},
+        "profile_states": {},
+        "vibration_baselines": {},
+    }
 
 
 def _clean_profile_states(raw) -> dict:
@@ -101,27 +155,62 @@ class RemapStore:
 
     def _coerce(self, raw) -> dict:
         if not isinstance(raw, dict):
+            return _empty_data()
+        if raw.get("version") == _VERSION:
+            global_profile = _clean_profile(raw.get("global"))
+            games = {}
+            raw_games = raw.get("games")
+            for appid, game in (
+                raw_games.items() if isinstance(raw_games, dict) else []
+            ):
+                if not isinstance(game, dict):
+                    continue
+                games[str(appid)] = {
+                    **_clean_profile(game),
+                    "follow_global": bool(game.get("follow_global")),
+                }
             return {
-                "global": {}, "vibration": {}, "games": {},
-                "profile_states": {}, "vibration_baselines": {},
+                "version": _VERSION,
+                "global": global_profile,
+                "games": games,
+                "profile_states": _clean_profile_states(
+                    raw.get("profile_states")
+                ),
+                "vibration_baselines": _clean_vibration_baselines(
+                    raw.get("vibration_baselines")
+                ),
             }
         # Old flat shape {source: targets} → migrate into the global scope.
         if "global" not in raw and "games" not in raw:
             return {
-                "global": _clean_overrides(raw), "vibration": {}, "games": {},
+                "version": _VERSION,
+                "global": {
+                    "buttons": _clean_buttons(raw),
+                    "vibration": {},
+                    "virtual_controller": {},
+                },
+                "games": {},
                 "profile_states": {}, "vibration_baselines": {},
             }
         games = {}
-        for appid, g in (raw.get("games") or {}).items():
+        raw_games = raw.get("games")
+        for appid, g in (
+            raw_games.items() if isinstance(raw_games, dict) else []
+        ):
             if isinstance(g, dict):
                 games[str(appid)] = {
-                    "overrides": _clean_overrides(g.get("overrides")),
+                    "buttons": _clean_buttons(g.get("overrides")),
                     "vibration": _clean_vibration(g.get("vibration")),
+                    "virtual_controller": {},
                     "follow_global": bool(g.get("follow_global")),
                 }
         return {
-            "global": _clean_overrides(raw.get("global")),
-            "vibration": _clean_vibration(raw.get("vibration")),
+            "version": _VERSION,
+            "global": {
+                "buttons": _clean_buttons(raw.get("global")),
+                "vibration": _clean_vibration(raw.get("vibration")),
+                "virtual_controller": {},
+            },
             "games": games,
             "profile_states": _clean_profile_states(raw.get("profile_states")),
             "vibration_baselines": _clean_vibration_baselines(
@@ -146,18 +235,24 @@ class RemapStore:
         """The overrides that actually apply for the running game (global when it
         follows global, else its own). A copy — callers must not mutate the store."""
         if self.is_following_global(appid):
-            return dict(self._data["global"])
-        return dict(self._game(appid)["overrides"])
+            return copy.deepcopy(self._data["global"]["buttons"])
+        return copy.deepcopy(self._game(appid)["buttons"])
 
     def effective_vibration(self, appid) -> dict:
         if self.is_following_global(appid):
-            return dict(self._data["vibration"])
+            return dict(self._data["global"]["vibration"])
         return dict(self._game(appid)["vibration"])
+
+    def effective_virtual_controller(self, appid) -> dict:
+        if self.is_following_global(appid):
+            return dict(self._data["global"]["virtual_controller"])
+        return dict(self._game(appid)["virtual_controller"])
 
     def effective_profile(self, appid) -> dict:
         return {
             "buttons": self.effective_overrides(appid),
             "vibration": self.effective_vibration(appid),
+            "virtual_controller": self.effective_virtual_controller(appid),
         }
 
     def vibration_baseline(self, owner: str) -> dict:
@@ -221,14 +316,20 @@ class RemapStore:
         profile yet shows the global set (the seed it would copy)."""
         if scope == "game" and appid is not None:
             g = self._game(appid)
-            return dict(g["overrides"]) if g else dict(self._data["global"])
-        return dict(self._data["global"])
+            return (
+                copy.deepcopy(g["buttons"])
+                if g else copy.deepcopy(self._data["global"]["buttons"])
+            )
+        return copy.deepcopy(self._data["global"]["buttons"])
 
     def vibration_for(self, scope: str, appid=None) -> dict:
         if scope == "game" and appid is not None:
             g = self._game(appid)
-            return dict(g["vibration"]) if g else dict(self._data["vibration"])
-        return dict(self._data["vibration"])
+            return (
+                dict(g["vibration"])
+                if g else dict(self._data["global"]["vibration"])
+            )
+        return dict(self._data["global"]["vibration"])
 
     def has_game(self, appid) -> bool:
         return str(appid) in self._data["games"]
@@ -238,8 +339,7 @@ class RemapStore:
 
     def create_game_from_global(self, appid) -> None:
         self._data["games"][str(appid)] = {
-            "overrides": dict(self._data["global"]),
-            "vibration": dict(self._data["vibration"]),
+            **copy.deepcopy(self._data["global"]),
             "follow_global": False,
         }
         self._save()
@@ -247,22 +347,28 @@ class RemapStore:
     def game_profile(self, appid):
         """The game's own stored button overrides, or None if no entry."""
         g = self._game(appid)
-        return dict(g["overrides"]) if g is not None else None
+        return copy.deepcopy(g["buttons"]) if g is not None else None
 
-    def differs_from_global(self, appid) -> bool:
+    def differs_from_global(self, appid, component=None) -> bool:
         """Whether the game's own overrides actually differ from global (a bare
         scope-toggle copies global → not 'configured')."""
         g = self._game(appid)
-        return g is not None and (
-            g["overrides"] != self._data["global"]
-            or g["vibration"] != self._data["vibration"]
+        if g is None:
+            return False
+        if component is not None:
+            if component not in _COMPONENTS:
+                raise ValueError(f"unknown component: {component}")
+            return g[component] != self._data["global"][component]
+        return any(
+            g[name] != self._data["global"][name]
+            for name in _COMPONENTS
         )
 
     def game_vibration_differs(self, appid) -> bool:
         game = self._game(appid)
         return (
             game is not None
-            and game["vibration"] != self._data["vibration"]
+            and game["vibration"] != self._data["global"]["vibration"]
         )
 
     def forget_game(self, appid) -> None:
@@ -271,7 +377,7 @@ class RemapStore:
             del self._data["games"][str(appid)]
             self._save()
 
-    def _target(self, scope: str, appid=None) -> dict:
+    def _profile_target(self, scope: str, appid=None) -> dict:
         """The overrides dict to mutate for a scope. Editing a game value activates
         its own profile (follow_global=False), seeded from global on first touch."""
         if scope == "global":
@@ -281,18 +387,17 @@ class RemapStore:
                 raise ValueError("appid required for game scope")
             g = self._data["games"].setdefault(
                 str(appid), {
-                    "overrides": dict(self._data["global"]),
-                    "vibration": dict(self._data["vibration"]),
+                    **copy.deepcopy(self._data["global"]),
                     "follow_global": False,
                 })
             g["follow_global"] = False
-            return g["overrides"]
+            return g
         raise ValueError(f"unknown scope: {scope}")
 
     def replace(self, scope: str, appid, data: dict) -> None:
-        tgt = self._target(scope, appid)
+        tgt = self._profile_target(scope, appid)["buttons"]
         tgt.clear()
-        tgt.update(data)
+        tgt.update(_clean_buttons(data))
         self._save()
 
     def patch_vibration(self, scope: str, appid, patch: dict) -> None:
@@ -300,14 +405,13 @@ class RemapStore:
         if not clean:
             return
         if scope == "global":
-            target = self._data["vibration"]
+            target = self._data["global"]["vibration"]
         elif scope == "game":
             if appid is None:
                 raise ValueError("appid required for game scope")
             game = self._data["games"].setdefault(
                 str(appid), {
-                    "overrides": dict(self._data["global"]),
-                    "vibration": dict(self._data["vibration"]),
+                    **copy.deepcopy(self._data["global"]),
                     "follow_global": False,
                 })
             game["follow_global"] = False
@@ -317,9 +421,33 @@ class RemapStore:
         target.update(clean)
         self._save()
 
-    def reset(self, scope: str, appid=None) -> None:
-        self._target(scope, appid).clear()
+    def patch_component(
+        self, component: str, patch: dict, scope: str, appid=None
+    ) -> None:
+        if component not in _COMPONENTS:
+            raise ValueError(f"unknown component: {component}")
+        if component == "vibration":
+            self.patch_vibration(scope, appid, patch)
+            return
+        target = self._profile_target(scope, appid)[component]
+        clean = (
+            _clean_buttons(patch)
+            if component == "buttons"
+            else _clean_virtual_controller(patch)
+        )
+        if not clean:
+            return
+        target.update(clean)
         self._save()
+
+    def reset_component(self, component: str, scope: str, appid=None) -> None:
+        if component not in _COMPONENTS:
+            raise ValueError(f"unknown component: {component}")
+        self._profile_target(scope, appid)[component].clear()
+        self._save()
+
+    def reset(self, scope: str, appid=None) -> None:
+        self.reset_component("buttons", scope, appid)
 
     def _save(self) -> None:
         atomic_json_save(self._path, self._data)
