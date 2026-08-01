@@ -46,7 +46,12 @@ from launch import custom_vars as launch_custom_vars
 from display.color_store import ColorStore, sanitize_calibration
 from display.gamescope import GamescopeColorBackend, run_gamescopectl
 from display.oled_look import oled_look_for
-from display.const import NATIVE as COLOR_NATIVE, FIELDS as COLOR_FIELDS, CALIBRATION as COLOR_CALIBRATION
+from display.const import (
+    NATIVE as COLOR_NATIVE,
+    FIELDS as COLOR_FIELDS,
+    CALIBRATION as COLOR_CALIBRATION,
+    LOOK_FIELDS as COLOR_LOOK_FIELDS,
+)
 from display.night_store import NightStore
 from display.night import is_night_active
 from display import presets as color_presets
@@ -265,6 +270,14 @@ class Plugin:
             self._controller_backend
         )
         self._controller_shutdown = False
+        self._controller_endpoint_last = None
+        self._display_endpoint_last = None
+        self._controller_endpoint_pending = None
+        self._display_endpoint_pending = None
+        self._controller_endpoint_attempts = 0
+        self._display_endpoint_attempts = 0
+        self._hardware_retry_limit = 6
+        self._hardware_watch_task = None
         self._fan_reader = FanReader()
         # temp_fn feeds the software-loop backends (Steam Deck / Legion Go 2) the
         # live driving temp; hardware-curve backends (ASUS/MSI) ignore it.
@@ -304,7 +317,8 @@ class Plugin:
         # Intel/Xe needs gamescope composition forced for a color look to show in-game
         # (the LUT isn't carried by the HW color pipeline as it is on AMD).
         self._color_backend = GamescopeColorBackend(
-            force_composite=(self._device.vendor == "intel")
+            force_composite=(self._device.vendor == "intel"),
+            hdr_look=(self._device.key == "legion_go_2"),
         )
         decky.logger.info(
             "color: supported=%s (%s)",
@@ -337,6 +351,8 @@ class Plugin:
         # HDR output on/off (gamescope). State lives in settings (hdr_enabled); gated to
         # HDR-capable panels with gamescope.
         self._hdr_backend = HdrBackend(run_gamescopectl)
+        self._hdr_managed = False
+        self._hdr_managed_session = None
         self._power_reader = PowerReader()
         self._battery = BatteryReader()
         self._charge_limit = select_charge_limit(self._device)
@@ -1060,12 +1076,17 @@ class Plugin:
             self._current_appid, profile, force=force
         )
 
-    async def _reconcile_controller_now(self, force=False) -> None:
+    async def _reconcile_controller_now(self, force=False) -> bool:
         request = self._prepare_controller_reconcile(force)
-        if request is not None:
-            await self._offload_call(
-                lambda: self._controller_coordinator.execute(request)
-            )
+        if request is None:
+            return True
+        snapshot = await self._offload_call(
+            lambda: self._controller_coordinator.execute(request)
+        )
+        vibration = snapshot.get("components", {}).get("vibration", {})
+        return vibration.get("status") in {
+            "applied", "accepted_unverifiable",
+        }
 
     def _reapply_controller(self, force=False) -> None:
         request = self._prepare_controller_reconcile(force)
@@ -1077,6 +1098,12 @@ class Plugin:
     def _reapply_after_resume(self, on_ac=None) -> None:
         def prepare():
             self._controller_coordinator.cancel_transients("resume")
+            self._controller_endpoint_last = None
+            self._display_endpoint_last = None
+            self._controller_endpoint_pending = None
+            self._display_endpoint_pending = None
+            self._controller_endpoint_attempts = 0
+            self._display_endpoint_attempts = 0
             self._refresh_controller_backend()
 
         self._offload(
@@ -1085,6 +1112,155 @@ class Plugin:
                 on_ac, force_controller=True
             ),
         )
+
+    def _controller_endpoint_fingerprint(self):
+        if (
+            self._controller_backend.manager
+            != controller_detect.INPUTPLUMBER
+            or getattr(self._device, "key", None) != "legion_go_2"
+        ):
+            return None
+        config = self._controller_backend.get_config(self._current_appid)
+        vibration = config.get("vibration", {})
+        mode = vibration.get("mode")
+        connected = vibration.get("connected")
+        if connected is None:
+            connected = mode not in (None, "unavailable")
+        native_fields = (
+            "intensity", "left_pattern", "right_pattern",
+            "touchpad_enabled", "touchpad_intensity",
+        )
+        desired = tuple(vibration.get(field) for field in native_fields)
+        actual = tuple(
+            vibration.get(f"actual_{field}") for field in native_fields
+        )
+        return (
+            self._controller_backend.manager,
+            mode,
+            bool(connected),
+            desired,
+            actual,
+        )
+
+    async def _poll_controller_endpoint_once(self) -> None:
+        current = await self._offload_call(
+            self._controller_endpoint_fingerprint
+        )
+        if current is None:
+            return
+        previous = self._controller_endpoint_last
+        changed_to_connected = current[2] and (
+            previous is None
+            or (
+                current != previous
+                and (
+                    not previous[2]
+                    or current[1] != previous[1]
+                    or current[3:] != previous[3:]
+                )
+            )
+        )
+        if changed_to_connected:
+            if getattr(self, "_controller_endpoint_pending", None) != current:
+                self._controller_endpoint_pending = current
+                self._controller_endpoint_attempts = 0
+            attempts = getattr(self, "_controller_endpoint_attempts", 0)
+            limit = getattr(self, "_hardware_retry_limit", 6)
+            if attempts >= limit:
+                return
+            try:
+                applied = await self._reconcile_controller_now(force=True)
+            except Exception as error:  # noqa: BLE001
+                applied = False
+                decky.logger.warning(
+                    "Controller endpoint reapply failed: %s", error
+                )
+            if not applied:
+                self._controller_endpoint_attempts = attempts + 1
+                if self._controller_endpoint_attempts == limit:
+                    decky.logger.warning(
+                        "Controller endpoint retry budget exhausted: %s",
+                        current,
+                    )
+                return
+            current = await self._offload_call(
+                self._controller_endpoint_fingerprint
+            )
+        self._controller_endpoint_last = current
+        self._controller_endpoint_pending = None
+        self._controller_endpoint_attempts = 0
+
+    async def _reapply_display_endpoint_now(self) -> bool:
+        return await self._offload_call(
+            self._reapply_display_endpoint_sync
+        )
+
+    def _reapply_display_endpoint_sync(self) -> bool:
+        hdr_applied = self._reapply_hdr_sync()
+        color_applied = self._reapply_color_sync()
+        return hdr_applied and color_applied
+
+    async def _poll_display_endpoint_once(self) -> None:
+        fingerprint = getattr(
+            self._color_backend, "display_fingerprint", None
+        )
+        if not callable(fingerprint):
+            return
+        current = await self._offload_call(fingerprint)
+        previous = self._display_endpoint_last
+        if previous is None or current != previous:
+            if getattr(self, "_display_endpoint_pending", None) != current:
+                self._display_endpoint_pending = current
+                self._display_endpoint_attempts = 0
+            attempts = getattr(self, "_display_endpoint_attempts", 0)
+            limit = getattr(self, "_hardware_retry_limit", 6)
+            if attempts >= limit:
+                return
+            try:
+                applied = await self._reapply_display_endpoint_now()
+            except Exception as error:  # noqa: BLE001
+                applied = False
+                decky.logger.warning(
+                    "Display endpoint reapply failed: %s", error
+                )
+            if not applied:
+                self._display_endpoint_attempts = attempts + 1
+                if self._display_endpoint_attempts == limit:
+                    decky.logger.warning(
+                        "Display endpoint retry budget exhausted: %s",
+                        current,
+                    )
+                return
+        self._display_endpoint_last = current
+        self._display_endpoint_pending = None
+        self._display_endpoint_attempts = 0
+
+    async def _hardware_watch_loop(self, interval=5.0) -> None:
+        try:
+            while not self._controller_shutdown:
+                try:
+                    await self._poll_controller_endpoint_once()
+                    await self._poll_display_endpoint_once()
+                except Exception as error:  # noqa: BLE001
+                    decky.logger.warning(
+                        "Hardware endpoint poll failed: %s", error
+                    )
+                await asyncio.sleep(interval)
+        except asyncio.CancelledError:
+            pass
+
+    def _start_hardware_watch_loop(self) -> None:
+        task = self._hardware_watch_task
+        if task is None or task.done():
+            self._hardware_watch_task = asyncio.create_task(
+                self._hardware_watch_loop()
+            )
+
+    def _stop_hardware_watch_loop(self) -> None:
+        task = getattr(self, "_hardware_watch_task", None)
+        if task is not None:
+            task.cancel()
+            self._hardware_watch_task = None
 
     def _refresh_controller_backend(self) -> None:
         detected = controller_detect.detect()
@@ -1135,6 +1311,7 @@ class Plugin:
 
     def _begin_controller_shutdown(self) -> None:
         self._controller_shutdown = True
+        self._stop_hardware_watch_loop()
         self._controller_coordinator.invalidate("shutdown")
 
     # ---- Ajustes: per-game profile overview --------------------------------
@@ -3171,17 +3348,18 @@ class Plugin:
         compositor). No executor / no loop → inline."""
         self._offload(self._reapply_color_sync)
 
-    def _reapply_color_sync(self) -> None:
+    def _reapply_color_sync(self) -> bool:
         """Push the effective color to gamescope. No-op when unsupported. Guarded.
         Applied in HDR mode too — it colors all composited/SDR content; a native-HDR
         game (direct scanout) is simply out of the LUT's reach, no handling needed."""
         if not self._module_enabled("display"):
-            return
+            return True
         try:
             if self._color_backend.supported:
-                self._color_backend.apply(self._effective_color())
+                return self._color_backend.apply(self._effective_color())
         except Exception:  # noqa: BLE001
-            pass
+            return False
+        return True
 
     async def _await_display_backend(self, attempts=30, interval=5.0,
                                      reasserts=40, reassert_interval=3.0) -> None:
@@ -3200,8 +3378,8 @@ class Plugin:
             else:
                 return  # gamescope never came up (desktop) — nothing to apply
             for i in range(reasserts):
-                self._reapply_color()
                 self._reapply_hdr()
+                self._reapply_color()
                 if i < reasserts - 1:
                     await asyncio.sleep(reassert_interval)
             self._start_night_loop()
@@ -3233,10 +3411,21 @@ class Plugin:
     def _color_state(self) -> dict:
         eff = self._display_color()
         preset_keys = color_presets.preset_keys(self._device)
+        hdr_saturation_supported = bool(
+            self._device.key == "legion_go_2"
+            and getattr(
+                self._color_backend, "hdr_look_supported", False
+            )
+        )
         return {
             "supported": self._color_backend.supported,
             **{f: eff[f] for f in COLOR_FIELDS},
             "global_saturation": self._color.effective(None)["saturation"],
+            "global_hdr_saturation": self._color.effective(None)[
+                "hdr_saturation"
+            ],
+            "hdr_saturation_supported": hdr_saturation_supported,
+            "hdr_saturation_experimental": hdr_saturation_supported,
             "has_game_profile": (self._current_appid is not None
                                  and self._color.has_game(self._current_appid)),
             "follows_global": self._color.is_following_global(self._current_appid),
@@ -3263,7 +3452,7 @@ class Plugin:
         for key in keys:
             preset = color_presets.resolve_preset(self._device, key)
             full = self._color._clean_global(preset or {})  # same merge+clamp apply uses
-            if all(cur[f] == full[f] for f in COLOR_FIELDS):
+            if all(cur[f] == full[f] for f in COLOR_LOOK_FIELDS):
                 return key
         return None
 
@@ -3290,6 +3479,15 @@ class Plugin:
         self._init()
         self._color.set_saturation(scope, int(value), appid=appid)
         self._reapply_color()
+        return await self._offload_call(self._color_state)
+
+    async def set_hdr_saturation(
+        self, value: int, scope: str, appid=None
+    ) -> dict:
+        self._init()
+        if self._device.key == "legion_go_2":
+            self._color.set_hdr_saturation(scope, int(value), appid=appid)
+            self._reapply_color()
         return await self._offload_call(self._color_state)
 
     async def set_color_follow_global(self, follow: bool, appid) -> dict:
@@ -3444,19 +3642,72 @@ class Plugin:
         }
 
     def _reapply_hdr(self) -> None:
-        # Gate on the effective per-game HDR (skips a no-op executor hop on the common
-        # path); the supported probe (may spawn gamescopectl) runs off-loop below.
-        if self._color.hdr(self._current_appid):
+        # A transition to OFF is needed only after this process successfully enabled
+        # HDR. That keeps per-game profiles reversible without disabling a mode owned
+        # by Steam or another tool.
+        if self._color.hdr(self._current_appid) or self._hdr_managed:
             self._offload(self._reapply_hdr_sync)
 
-    def _reapply_hdr_sync(self) -> None:
-        """Re-assert HDR ON (never force a supported panel OUT of an HDR mode set
-        elsewhere, e.g. Steam's own toggle)."""
+    def _reapply_hdr_sync(self) -> bool:
+        """Reconcile effective per-game HDR while respecting external ownership."""
         try:
-            if self._hdr_supported() and self._color.hdr(self._current_appid):
-                self._hdr_backend.set_enabled(True)
+            session = getattr(
+                self._color_backend, "session_identity", None
+            )
+            if (
+                self._hdr_managed
+                and getattr(self, "_hdr_managed_session", None) != session
+            ):
+                self._hdr_managed = False
+                self._hdr_managed_session = None
+            if not self._hdr_supported():
+                return True
+            desired = self._color.hdr(self._current_appid)
+            if desired:
+                if self._hdr_backend.set_enabled(True):
+                    self._hdr_managed = True
+                    self._hdr_managed_session = session
+                    return True
+                return False
+            elif self._hdr_managed and self._hdr_backend.set_enabled(False):
+                self._hdr_managed = False
+                self._hdr_managed_session = None
+                return True
+            return not self._hdr_managed
         except Exception:  # noqa: BLE001
-            pass
+            return False
+
+    def _set_hdr_explicit_sync(self, enabled: bool) -> bool:
+        try:
+            if self._hdr_backend.set_enabled(enabled):
+                self._hdr_managed = enabled
+                self._hdr_managed_session = (
+                    getattr(self._color_backend, "session_identity", None)
+                    if enabled
+                    else None
+                )
+                return True
+        except Exception:  # noqa: BLE001
+            return False
+        return False
+
+    def _restore_hdr_safe(self) -> bool:
+        if not getattr(self, "_hdr_managed", False):
+            return True
+        session = getattr(self._color_backend, "session_identity", None)
+        if getattr(self, "_hdr_managed_session", None) != session:
+            self._hdr_managed = False
+            self._hdr_managed_session = None
+            return True
+        if self._set_hdr_explicit_sync(False):
+            return True
+        diagnostics = getattr(
+            self._hdr_backend, "diagnostics", lambda: None
+        )() or {"enabled": False, "ok": False, "rc": None}
+        decky.logger.warning(
+            "HDR ownership release failed: %s", diagnostics
+        )
+        return False
 
     async def get_hdr_state(self) -> dict:
         self._init()
@@ -3471,7 +3722,7 @@ class Plugin:
             self._color.set_hdr(scope, bool(p["enabled"]), appid=appid)
         enabled = self._color.hdr(self._current_appid)
         # Off-loop: set_enabled spawns gamescopectl (a no-op when gamescope is absent).
-        self._offload(lambda: self._hdr_backend.set_enabled(enabled))
+        self._offload(lambda: self._set_hdr_explicit_sync(enabled))
         # Then re-assert the color look — gamescope can drop the loaded LUT on a mode switch.
         self._reapply_color()
         return await self._offload_call(self._hdr_state)
@@ -3843,15 +4094,24 @@ class Plugin:
         except Exception:  # noqa: BLE001
             pass
 
-    def _restore_color_safe(self) -> None:
-        """Clear any applied color LUT (back to the panel's native look) so a
-        disabled/uninstalled plugin leaves no lingering color. Guarded."""
+    def _restore_color_safe(self) -> bool:
+        """Release only a look owned by this plugin instance. Guarded."""
         try:
             cb = getattr(self, "_color_backend", None)
-            if cb is not None and cb.supported:
-                cb.apply(dict(COLOR_NATIVE))
-        except Exception:  # noqa: BLE001
-            pass
+            release = getattr(cb, "release", None)
+            if not callable(release):
+                return True
+            if release():
+                return True
+            diagnostics = getattr(cb, "diagnostics", lambda: None)()
+            decky.logger.warning(
+                "Color ownership release failed: %s", diagnostics
+            )
+        except Exception as error:  # noqa: BLE001
+            decky.logger.warning(
+                "Color ownership release failed: %s", error
+            )
+        return False
 
     # ---- Sonido: audio EQ ---------------------------------------------------
     def _current_route(self) -> str:
@@ -4201,6 +4461,7 @@ class Plugin:
         try:
             self._reapply_all(force_controller=True)
             self._lifecycle.start()
+            self._start_hardware_watch_loop()
             self._start_tdp_guard_loop()
             self._start_night_loop()
             # Re-assert the look across gamescope's session bringup, when a single apply
@@ -4231,6 +4492,7 @@ class Plugin:
             wait_task.cancel()
             self._display_wait_task = None
         self._stop_night_loop()
+        await self._offload_call(self._restore_hdr_safe)
         await self._offload_call(self._restore_color_safe)
         self._audio_shutdown = True
         await self._stop_audio_loop()
@@ -4253,6 +4515,7 @@ class Plugin:
         self._begin_controller_shutdown()
         await self._drain_offloaded()
         await self._offload_call(self._restore_fans_safe)
+        await self._offload_call(self._restore_hdr_safe)
         await self._offload_call(self._restore_color_safe)
         self._audio_shutdown = True
         await self._stop_audio_loop()

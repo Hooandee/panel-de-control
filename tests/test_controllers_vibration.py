@@ -36,6 +36,149 @@ def _controller(*args, **kwargs):
     return VibrationController(*args, **kwargs)
 
 
+class FakeLenovoAdapter:
+    def __init__(self, state=None):
+        self.current = state
+        self.applied = []
+        self.last = None
+
+    def state(self):
+        return dict(self.current) if self.current is not None else None
+
+    def capabilities(self):
+        if self.current is None:
+            return None
+        return {
+            "intensity_options": ["off", "low", "medium", "high"],
+            "left_pattern_options": ["fps", "racing", "standard", "spg", "rpg"],
+            "right_pattern_options": ["fps", "racing", "standard", "spg", "rpg"],
+            "touchpad_enabled_options": [True, False],
+            "touchpad_intensity_options": ["off", "low", "medium", "high"],
+            "readback": "driver",
+        }
+
+    def apply(self, patch):
+        self.applied.append(dict(patch))
+        if self.current is None:
+            self.last = {
+                "mode": "lenovo_hd", "ok": False,
+                "reason": "unsupported",
+            }
+            return False
+        self.current.update(patch)
+        self.last = {"mode": "lenovo_hd", "ok": True, "readback": True}
+        return True
+
+    def diagnostics(self):
+        return self.last
+
+
+def _lenovo_state():
+    return {
+        "intensity": "medium",
+        "left_pattern": "standard",
+        "right_pattern": "standard",
+        "touchpad_enabled": True,
+        "touchpad_intensity": "low",
+    }
+
+
+def test_legion_go_2_native_surface_takes_priority_over_gain(tmp_path):
+    capabilities = tmp_path / "sys/class/input/event2/device/capabilities/ff"
+    _write(capabilities, "107030000 0\n")
+    _write(tmp_path / "dev/input/event2")
+    native = FakeLenovoAdapter(_lenovo_state())
+    controller = _controller(
+        "legion_go_2",
+        FakeDbus(("/dev/input/event2",)),
+        root=str(tmp_path),
+        lenovo_adapter=native,
+    )
+
+    assert controller.state() == {
+        "mode": "lenovo_hd",
+        "persistent": True,
+        **_lenovo_state(),
+        "readback": True,
+        "connected": True,
+    }
+    patch = {
+        "intensity": "high",
+        "left_pattern": "fps",
+        "right_pattern": "rpg",
+        "touchpad_enabled": False,
+        "touchpad_intensity": "medium",
+    }
+    assert controller.apply(patch) is True
+    assert native.applied == [patch]
+
+
+def test_legion_go_2_without_native_surface_keeps_gain_fallback(tmp_path):
+    capabilities = tmp_path / "sys/class/input/event2/device/capabilities/ff"
+    _write(capabilities, "107030000 0\n")
+    _write(tmp_path / "dev/input/event2")
+    controller = _controller(
+        "legion_go_2",
+        FakeDbus(("/dev/input/event2",)),
+        root=str(tmp_path),
+        lenovo_adapter=FakeLenovoAdapter(),
+    )
+
+    assert controller.state()["mode"] == "gain"
+
+
+def test_native_route_does_not_reinterpret_intent_as_gain_after_disconnect(
+    tmp_path,
+):
+    capabilities = tmp_path / "sys/class/input/event2/device/capabilities/ff"
+    _write(capabilities, "107030000 0\n")
+    _write(tmp_path / "dev/input/event2")
+    native = FakeLenovoAdapter(_lenovo_state())
+    controller = _controller(
+        "legion_go_2",
+        FakeDbus(("/dev/input/event2",)),
+        root=str(tmp_path),
+        lenovo_adapter=native,
+    )
+    assert controller.state()["mode"] == "lenovo_hd"
+
+    native.current = None
+
+    disconnected = controller.state()
+    assert disconnected["mode"] == "lenovo_hd"
+    assert disconnected["connected"] is False
+    assert controller.capabilities()["readback"] == "none"
+    assert controller.apply({"intensity": "high"}) is False
+    assert controller.diagnostics()["reason"] == "unsupported"
+
+
+def test_confirmed_native_route_survives_plugin_restart_while_disconnected(
+    tmp_path,
+):
+    capabilities = tmp_path / "sys/class/input/event2/device/capabilities/ff"
+    _write(capabilities, "107030000 0\n")
+    _write(tmp_path / "dev/input/event2")
+    baseline = _lenovo_state()
+    native = FakeLenovoAdapter()
+    controller = _controller(
+        "legion_go_2",
+        FakeDbus(("/dev/input/event2",)),
+        root=str(tmp_path),
+        lenovo_adapter=native,
+        lenovo_baseline=baseline,
+    )
+
+    assert controller.state() == {
+        "mode": "lenovo_hd",
+        "persistent": True,
+        **baseline,
+        "readback": False,
+        "connected": False,
+    }
+    assert controller.apply({**baseline, "intensity": "high"}) is False
+    assert native.applied[-1]["intensity"] == "high"
+
+
 def test_asus_dual_motor_intensity_writes_and_reads_both_motors(tmp_path):
     intensity = (
         tmp_path / "sys/bus/hid/drivers/asus_rog_ally"

@@ -1,14 +1,15 @@
 import type { ColorPreset, Calibration } from "../api";
 
 export const NEUTRAL: ColorPreset = {
-  saturation: 100, temperature: 0, contrast: 0, gamma: 0, hue: 0, black: 0,
+  saturation: 100, hdr_saturation: 100,
+  temperature: 0, contrast: 0, gamma: 0, hue: 0, black: 0,
   gain_r: 100, gain_g: 100, gain_b: 100, vibrance: 0,
 };
 
 // Every field but saturation, derived from NEUTRAL so it can't drift. Kept out of
 // api.ts so this pure module avoids the @decky/api runtime import.
 export const CALIBRATION_KEYS = (Object.keys(NEUTRAL) as (keyof ColorPreset)[])
-  .filter((k) => k !== "saturation") as (keyof Calibration)[];
+  .filter((k) => k !== "saturation" && k !== "hdr_saturation") as (keyof Calibration)[];
 
 /** True when the whole color state is the panel's untouched look. */
 export function isNativeColor(p: ColorPreset): boolean {
@@ -26,4 +27,8 @@ export function pickCalibration(p: ColorPreset): Calibration {
   const out = {} as Calibration;
   for (const k of CALIBRATION_KEYS) out[k] = p[k];
   return out;
+}
+
+export function shouldWarnHdrSaturation(value: number): boolean {
+  return value > 130;
 }

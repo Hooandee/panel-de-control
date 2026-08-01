@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   getColorState,
   setSaturation,
+  setHdrSaturation,
   setColorFollowGlobal,
   previewCalibration,
   setCalibration,
@@ -24,6 +25,7 @@ export interface ColorControl {
   revertIn: number | null;
   onScope: (s: Scope) => void;
   onSaturation: (value: number) => void;
+  onHdrSaturation: (value: number) => void;
   onCalibration: (patch: Partial<ColorPreset>) => void;
   confirmCalibration: () => void;
   onOledLook: () => void;
@@ -41,7 +43,9 @@ export function useColor(): ColorControl {
   const game = useRunningGame();
   const [state, setState] = useState<ColorState | null>(null);
   const [revertIn, setRevertIn] = useState<number | null>(null);
-  const commit = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saturationCommit = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hdrSaturationCommit = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const calibrationCommit = useRef<ReturnType<typeof setTimeout> | null>(null);
   const countdown = useRef<ReturnType<typeof setInterval> | null>(null);
   const remaining = useRef(0);
   const stateRef = useRef<ColorState | null>(null);
@@ -63,7 +67,9 @@ export function useColor(): ColorControl {
   // sync — otherwise the confirm bar keeps ticking against a preview that's gone.
   const appid = game?.appid;
   useEffect(() => {
-    if (commit.current) clearTimeout(commit.current);
+    if (saturationCommit.current) clearTimeout(saturationCommit.current);
+    if (hdrSaturationCommit.current) clearTimeout(hdrSaturationCommit.current);
+    if (calibrationCommit.current) clearTimeout(calibrationCommit.current);
     stopCountdown();
     refresh();
   }, [appid, refresh, stopCountdown]);
@@ -76,7 +82,9 @@ export function useColor(): ColorControl {
   const { scope, onScope } = useScopeSync(appid, state?.follows_global, applyFollow);
 
   useEffect(() => () => {
-    if (commit.current) clearTimeout(commit.current);
+    if (saturationCommit.current) clearTimeout(saturationCommit.current);
+    if (hdrSaturationCommit.current) clearTimeout(hdrSaturationCommit.current);
+    if (calibrationCommit.current) clearTimeout(calibrationCommit.current);
     if (countdown.current) clearInterval(countdown.current);
   }, []);
 
@@ -85,9 +93,26 @@ export function useColor(): ColorControl {
       const targetAppid = scope === "game" && game ? game.appid : null;
       const targetScope: Scope = targetAppid ? "game" : "global";
       setState((cur) => (cur ? { ...cur, saturation: value } : cur)); // optimistic
-      if (commit.current) clearTimeout(commit.current);
-      commit.current = setTimeout(() => {
+      if (saturationCommit.current) clearTimeout(saturationCommit.current);
+      saturationCommit.current = setTimeout(() => {
         setSaturation(value, targetScope, targetAppid).then(setState).catch(() => {});
+      }, 200);
+    },
+    [scope, game],
+  );
+
+  const onHdrSaturation = useCallback(
+    (value: number) => {
+      const targetAppid = scope === "game" && game ? game.appid : null;
+      const targetScope: Scope = targetAppid ? "game" : "global";
+      setState((current) => (
+        current ? { ...current, hdr_saturation: value } : current
+      ));
+      if (hdrSaturationCommit.current) clearTimeout(hdrSaturationCommit.current);
+      hdrSaturationCommit.current = setTimeout(() => {
+        setHdrSaturation(value, targetScope, targetAppid)
+          .then(setState)
+          .catch(() => {});
       }, 200);
     },
     [scope, game],
@@ -116,8 +141,8 @@ export function useColor(): ColorControl {
     const next = { ...base, ...patch, preview: true };
     setState(next); // optimistic
     startCountdown(base.revert_seconds || 15);
-    if (commit.current) clearTimeout(commit.current);
-    commit.current = setTimeout(() => {
+    if (calibrationCommit.current) clearTimeout(calibrationCommit.current);
+    calibrationCommit.current = setTimeout(() => {
       previewCalibration(pickCalibration(next)).then(setState).catch(() => {});
     }, 200);
   }, [startCountdown]);
@@ -130,7 +155,7 @@ export function useColor(): ColorControl {
     const cur = stateRef.current;
     if (!cur) return;
     stopCountdown();
-    if (commit.current) clearTimeout(commit.current);
+    if (calibrationCommit.current) clearTimeout(calibrationCommit.current);
     setCalibration(pickCalibration(cur), wScope, wTarget).then(setState).catch(() => {});
   }, [stopCountdown, wScope, wTarget]);
 
@@ -151,6 +176,7 @@ export function useColor(): ColorControl {
 
   return {
     state, scope, game, revertIn, onScope,
-    onSaturation, onCalibration, confirmCalibration, onOledLook, onPreset, onReset,
+    onSaturation, onHdrSaturation, onCalibration, confirmCalibration,
+    onOledLook, onPreset, onReset,
   };
 }

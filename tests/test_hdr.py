@@ -21,4 +21,9 @@ def test_backend_toggles_hdr():
 
 
 def test_backend_reports_failure():
-    assert HdrBackend(_Runner(ok=False)).set_enabled(True) is False
+    backend = HdrBackend(_Runner(ok=False))
+
+    assert backend.set_enabled(True) is False
+    assert backend.diagnostics() == {
+        "enabled": True, "ok": False, "rc": 1,
+    }

@@ -503,6 +503,7 @@ export const restartLoader = callable<[], void>("restart_loader");
 // calibration → GLOBAL. See ColorPreset for ranges.
 export interface ColorPreset {
   saturation: number;   // 0..200, 100 neutral (per-game)
+  hdr_saturation: number; // 100..150, 100 neutral (per-game, PQ look)
   temperature: number;  // -100 cool .. +100 warm, 0 neutral (global)
   contrast: number;     // -100 flat .. +100 punchy, 0 neutral (global)
   gamma: number;        // -100 dark .. +100 bright midtones, 0 neutral (global)
@@ -516,12 +517,15 @@ export interface ColorPreset {
 
 // Calibration = a ColorPreset minus the per-game saturation. The key list lives in
 // display/color.ts (kept free of this module's @decky/api import).
-export type Calibration = Omit<ColorPreset, "saturation">;
+export type Calibration = Omit<ColorPreset, "saturation" | "hdr_saturation">;
 
 export interface ColorState extends ColorPreset {
   // False when the host has no gamescope color control → UI shows an honest note.
   supported: boolean;
   global_saturation: number;
+  global_hdr_saturation: number;
+  hdr_saturation_supported: boolean;
+  hdr_saturation_experimental: boolean;
   has_game_profile: boolean;
   // True when this game applies the global saturation (no own, or toggled to follow).
   follows_global: boolean;
@@ -561,6 +565,8 @@ export const setGpuClockAuto = callable<[scope: TdpScope, appid: string | null],
 export const getColorState = callable<[], ColorState>("get_color_state");
 export const setSaturation =
   callable<[value: number, scope: Scope, appid: string | null], ColorState>("set_saturation");
+export const setHdrSaturation =
+  callable<[value: number, scope: Scope, appid: string | null], ColorState>("set_hdr_saturation");
 export const setColorFollowGlobal =
   callable<[follow: boolean, appid: string | null], ColorState>("set_color_follow_global");
 // Preview calibration live (arms the backend auto-revert); confirm with setCalibration.
@@ -669,7 +675,7 @@ export interface ControllerConfig {
     supported: boolean;
     enabled: boolean | null;
     test_supported: boolean;
-    mode?: "dual" | "gain";
+    mode?: "dual" | "gain" | "lenovo_hd";
     persistent?: boolean;
     value?: number;
     left?: number;
@@ -677,6 +683,22 @@ export interface ControllerConfig {
     actual_value?: number | null;
     actual_left?: number;
     actual_right?: number;
+    intensity?: "off" | "low" | "medium" | "high";
+    left_pattern?: "fps" | "racing" | "standard" | "spg" | "rpg";
+    right_pattern?: "fps" | "racing" | "standard" | "spg" | "rpg";
+    touchpad_enabled?: boolean;
+    touchpad_intensity?: "off" | "low" | "medium" | "high";
+    actual_intensity?: "off" | "low" | "medium" | "high";
+    actual_left_pattern?: "fps" | "racing" | "standard" | "spg" | "rpg";
+    actual_right_pattern?: "fps" | "racing" | "standard" | "spg" | "rpg";
+    actual_touchpad_enabled?: boolean;
+    actual_touchpad_intensity?: "off" | "low" | "medium" | "high";
+    intensity_options?: ("off" | "low" | "medium" | "high")[];
+    left_pattern_options?: ("fps" | "racing" | "standard" | "spg" | "rpg")[];
+    right_pattern_options?: ("fps" | "racing" | "standard" | "spg" | "rpg")[];
+    touchpad_enabled_options?: boolean[];
+    touchpad_intensity_options?: ("off" | "low" | "medium" | "high")[];
+    connected?: boolean;
     min?: number;
     max?: number;
     step?: number;
@@ -697,6 +719,18 @@ export interface ControllerConfig {
       actual?: Record<string, unknown>;
     }>;
   };
+}
+
+export interface ControllerVibrationPatch {
+  enabled?: boolean;
+  value?: number;
+  left?: number;
+  right?: number;
+  intensity?: "off" | "low" | "medium" | "high";
+  left_pattern?: "fps" | "racing" | "standard" | "spg" | "rpg";
+  right_pattern?: "fps" | "racing" | "standard" | "spg" | "rpg";
+  touchpad_enabled?: boolean;
+  touchpad_intensity?: "off" | "low" | "medium" | "high";
 }
 
 // ---- Bug reporter ---------------------------------------------------------
@@ -740,7 +774,7 @@ export const resetController =
   callable<[scope: Scope, appid: string | null], ControllerConfig>("reset_controller");
 export const setControllerVibration =
   callable<[
-    patch: { enabled?: boolean; value?: number; left?: number; right?: number },
+    patch: ControllerVibrationPatch,
     scope: Scope,
     appid: string | null,
   ], ControllerConfig>(

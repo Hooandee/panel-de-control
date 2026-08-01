@@ -11,6 +11,7 @@ import {
   testControllerVibration,
   type ControllerConfig,
   type ControllerButtonAction,
+  type ControllerVibrationPatch,
   type VibrationTestResult,
   type Scope,
 } from "../api";
@@ -29,12 +30,7 @@ export interface ControllerControl {
   onSetButtonAction: (source: string, action: ControllerButtonAction) => void;
   onSetSetting: (field: string, value: string) => void;
   onSetVirtualMode: (mode: string) => void;
-  onSetVibration: (patch: {
-    enabled?: boolean;
-    value?: number;
-    left?: number;
-    right?: number;
-  }) => void;
+  onSetVibration: (patch: ControllerVibrationPatch) => void;
   vibrationTestResult: VibrationTestResult | null;
   onTestVibration: (
     pattern: "pulse",
@@ -53,7 +49,7 @@ export function useController(): ControllerControl {
   const appidRef = useRef<string | undefined>(game?.appid);
   const vibrationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingVibration = useRef<{
-    patch: { enabled?: boolean; value?: number; left?: number; right?: number };
+    patch: ControllerVibrationPatch;
     scope: Scope;
     appid: string | null;
     viewAppid: string | undefined;
@@ -157,7 +153,7 @@ export function useController(): ControllerControl {
     [targetScope, targetAppid, accept],
   );
   const onSetVibration = useCallback(
-    (patch: { enabled?: boolean; value?: number; left?: number; right?: number }) => {
+    (patch: ControllerVibrationPatch) => {
       const next = {
         patch,
         scope: targetScope,
@@ -181,7 +177,14 @@ export function useController(): ControllerControl {
         && current.appid === next.appid
       ) next.patch = { ...current.patch, ...patch };
       pendingVibration.current = next;
-      if (typeof patch.enabled === "boolean") {
+      if (
+        typeof patch.enabled === "boolean"
+        || typeof patch.left_pattern === "string"
+        || typeof patch.right_pattern === "string"
+        || typeof patch.intensity === "string"
+        || typeof patch.touchpad_enabled === "boolean"
+        || typeof patch.touchpad_intensity === "string"
+      ) {
         sendPendingVibration();
         return;
       }

@@ -109,11 +109,12 @@ def capabilities_report(dbus, device_key, vibration=None,
         exact = vibration_capabilities.get("readback") == "driver"
         owner = {
             "dual": "native",
+            "lenovo_hd": "native",
             "gain": "evdev",
         }.get(mode, "inputplumber")
         surfaces["vibration"] = surface(
             owner,
-            "supported",
+            "experimental" if mode == "lenovo_hd" else "supported",
             fields=dict(vibration_capabilities),
             scope=("global", "game"),
             apply="hot",
@@ -186,6 +187,15 @@ def get_config(store, dbus, device_key, appid=None, caps=None, vibration=None,
         elif persistent_state["mode"] == "gain":
             vibration_config["actual_value"] = persistent_state.get("value")
             vibration_config["value"] = desired.get("value", 100)
+        elif persistent_state["mode"] == "lenovo_hd":
+            for field in (
+                "intensity", "left_pattern", "right_pattern", "touchpad_enabled",
+                "touchpad_intensity",
+            ):
+                vibration_config[f"actual_{field}"] = persistent_state[field]
+                vibration_config[field] = desired.get(
+                    field, persistent_state[field]
+                )
     if apply_status is not None:
         vibration_config["last_apply"] = bool(apply_status)
     config = {
@@ -356,6 +366,14 @@ def _persistent_values(controller, desired):
         }
     if state["mode"] == "gain" and "value" in desired:
         return {"value": desired["value"]}
+    if state["mode"] == "lenovo_hd":
+        return {
+            field: desired.get(field, state[field])
+            for field in (
+                "intensity", "left_pattern", "right_pattern", "touchpad_enabled",
+                "touchpad_intensity",
+            )
+        }
     return None
 
 
@@ -364,6 +382,7 @@ def _vibration_owner(device_key):
 
 
 def _ensure_vibration_baseline(store, dbus, device_key, state, vibration=None):
+    owner = _vibration_owner(device_key)
     current = store.vibration_for("global")
     observed = {}
     enabled = dbus.force_feedback_enabled()
@@ -384,8 +403,34 @@ def _ensure_vibration_baseline(store, dbus, device_key, state, vibration=None):
         # EV_FF exposes no gain readback. Use an explicit plugin-owned, unattenuated
         # baseline; the UI reports this as desired/accepted, never as actual state.
         observed["value"] = 100
+    elif state is not None and state["mode"] == "lenovo_hd":
+        capture = getattr(vibration, "capture_baseline", None)
+        native = capture() if callable(capture) else {}
+        if isinstance(native, dict):
+            observed.update(native)
+        native_fields = (
+            "intensity", "left_pattern", "right_pattern",
+            "touchpad_enabled", "touchpad_intensity",
+        )
+        if all(field in observed for field in native_fields):
+            route = getattr(
+                store, "vibration_route", lambda _owner: None
+            )(owner)
+            legacy_baseline = store.vibration_baseline(owner)
+            if route != "lenovo_hd" and "value" in legacy_baseline:
+                apply_gain = getattr(vibration, "apply_gain", None)
+                if not callable(apply_gain) or not apply_gain(100):
+                    return False
+            remember_route = getattr(
+                store, "remember_vibration_route", None
+            )
+            if callable(remember_route):
+                remember_route(
+                    owner, "lenovo_hd",
+                    baseline=observed,
+                )
     store.remember_vibration_baseline(
-        _vibration_owner(device_key), observed
+        owner, observed
     )
     baseline = {
         field: value
@@ -394,6 +439,7 @@ def _ensure_vibration_baseline(store, dbus, device_key, state, vibration=None):
     }
     if baseline:
         store.patch_vibration("global", None, baseline)
+    return True
 
 
 def _apply_vibration(dbus, vibration, desired) -> bool:
@@ -424,13 +470,14 @@ def apply_effective_components(store, dbus, device_key, appid,
         )
     )
     desired = store.effective_vibration(appid)
+    baseline_ready = True
     if desired:
         state = vibration.state() if vibration is not None else None
-        _ensure_vibration_baseline(
+        baseline_ready = _ensure_vibration_baseline(
             store, dbus, device_key, state, vibration
         )
         desired = store.effective_vibration(appid)
-    vibration_applied = _apply_vibration(
+    vibration_applied = baseline_ready and _apply_vibration(
         dbus, vibration, desired
     )
     return {
@@ -457,17 +504,35 @@ def restore_external(store, dbus, device_key, vibration=None) -> bool:
         else True
     )
     baseline = store.vibration_baseline(_vibration_owner(device_key))
+    route = getattr(store, "vibration_route", lambda _owner: None)(
+        _vibration_owner(device_key)
+    )
+    route_baseline = (
+        getattr(store, "vibration_route_baseline", lambda _owner: {})(
+            _vibration_owner(device_key)
+        )
+        if route == "lenovo_hd"
+        else {}
+    )
     enabled_applied = (
         dbus.set_force_feedback_enabled(baseline["enabled"])
         if "enabled" in baseline
         else True
     )
     restore = getattr(vibration, "restore_baseline", None)
+    restore_baseline = route_baseline or baseline
     native_baseline = (
-        "native_left" in baseline and "native_right" in baseline
+        "native_left" in restore_baseline
+        and "native_right" in restore_baseline
+    ) or all(
+        field in restore_baseline
+        for field in (
+            "intensity", "left_pattern", "right_pattern", "touchpad_enabled",
+            "touchpad_intensity",
+        )
     )
     if native_baseline and callable(restore):
-        intensity_applied = restore(baseline)
+        intensity_applied = restore(restore_baseline)
     else:
         persistent = _persistent_values(vibration, baseline)
         intensity_applied = (
@@ -475,7 +540,17 @@ def restore_external(store, dbus, device_key, vibration=None) -> bool:
             if persistent is not None
             else True
         )
-    vibration_applied = enabled_applied and intensity_applied
+    gain_applied = True
+    if route_baseline and "value" in baseline:
+        apply_gain = getattr(vibration, "apply_gain", None)
+        gain_applied = (
+            apply_gain(baseline["value"])
+            if callable(apply_gain)
+            else False
+        )
+    vibration_applied = (
+        enabled_applied and intensity_applied and gain_applied
+    )
     return buttons_applied and vibration_applied
 
 
@@ -509,10 +584,39 @@ def set_vibration(store, dbus, device_key, patch: dict, scope="global",
         allowed["enabled"] = patch["enabled"]
     state = vibration.state() if vibration is not None else None
     if state is not None:
-        fields = ("left", "right") if state["mode"] == "dual" else ("value",)
+        fields = {
+            "dual": ("left", "right"),
+            "gain": ("value",),
+            "lenovo_hd": (
+                "intensity", "left_pattern", "right_pattern", "touchpad_enabled",
+                "touchpad_intensity",
+            ),
+        }.get(state["mode"], ())
+        native_capabilities = (
+            vibration.capabilities()
+            if state["mode"] == "lenovo_hd" else {}
+        )
+        option_fields = {
+            "intensity": "intensity_options",
+            "left_pattern": "left_pattern_options",
+            "right_pattern": "right_pattern_options",
+            "touchpad_enabled": "touchpad_enabled_options",
+            "touchpad_intensity": "touchpad_intensity_options",
+        }
         for field in fields:
             value = patch.get(field)
             if (
+                state["mode"] == "lenovo_hd"
+                and value in native_capabilities.get(
+                    option_fields[field], []
+                )
+                and (
+                    isinstance(value, str)
+                    or isinstance(value, bool)
+                )
+            ):
+                allowed[field] = value
+            elif (
                 isinstance(value, (int, float))
                 and not isinstance(value, bool)
             ):
@@ -523,15 +627,22 @@ def set_vibration(store, dbus, device_key, patch: dict, scope="global",
             virtual_mode=virtual_mode,
         )
 
-    _ensure_vibration_baseline(
+    if not _ensure_vibration_baseline(
         store, dbus, device_key, state, vibration
-    )
+    ):
+        return get_config(
+            store, dbus, device_key, appid, vibration=vibration,
+            apply_status=False, virtual_mode=virtual_mode,
+        )
     store.patch_vibration(scope, appid, allowed)
     desired = store.effective_vibration(appid)
     results = []
     if "enabled" in allowed:
         results.append(dbus.set_force_feedback_enabled(desired["enabled"]))
-    if any(field in allowed for field in ("value", "left", "right")):
+    if any(field in allowed for field in (
+        "value", "left", "right", "intensity", "left_pattern", "right_pattern",
+        "touchpad_enabled", "touchpad_intensity",
+    )):
         persistent = _persistent_values(vibration, desired)
         results.append(
             vibration.apply(persistent) if persistent is not None else False

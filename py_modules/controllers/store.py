@@ -8,9 +8,16 @@ from controllers import ip_profile
 from json_store import atomic_json_save
 
 
-_VERSION = 4
+_VERSION = 5
 _COMPONENTS = {"buttons", "vibration", "virtual_controller"}
 _MODE = re.compile(r"[a-z0-9][a-z0-9_-]{0,31}")
+_VIBRATION_INTENSITIES = {"off", "low", "medium", "high"}
+_VIBRATION_PATTERNS = {"fps", "racing", "standard", "spg", "rpg"}
+_VIBRATION_ROUTES = {"lenovo_hd"}
+_LENOVO_NATIVE_FIELDS = (
+    "intensity", "left_pattern", "right_pattern",
+    "touchpad_enabled", "touchpad_intensity",
+)
 
 
 def _clean_button_action(raw) -> list:
@@ -36,6 +43,17 @@ def _clean_vibration(raw) -> dict:
     clean = {}
     if isinstance(raw.get("enabled"), bool):
         clean["enabled"] = raw["enabled"]
+    if raw.get("intensity") in _VIBRATION_INTENSITIES:
+        clean["intensity"] = raw["intensity"]
+    legacy_pattern = raw.get("pattern")
+    for field in ("left_pattern", "right_pattern"):
+        value = raw.get(field, legacy_pattern)
+        if value in _VIBRATION_PATTERNS:
+            clean[field] = value
+    if isinstance(raw.get("touchpad_enabled"), bool):
+        clean["touchpad_enabled"] = raw["touchpad_enabled"]
+    if raw.get("touchpad_intensity") in _VIBRATION_INTENSITIES:
+        clean["touchpad_intensity"] = raw["touchpad_intensity"]
     for field in ("value", "left", "right"):
         value = raw.get(field)
         if (
@@ -55,6 +73,34 @@ def _clean_vibration_baselines(raw) -> dict:
         for owner, value in raw.items()
         if isinstance(owner, str) and owner
         if (clean := _clean_vibration_baseline(value))
+    }
+
+
+def _clean_vibration_routes(raw) -> dict:
+    if not isinstance(raw, dict):
+        return {}
+    return {
+        owner: route
+        for owner, route in raw.items()
+        if isinstance(owner, str) and owner and route in _VIBRATION_ROUTES
+    }
+
+
+def _clean_vibration_route_baseline(raw) -> dict:
+    clean = _clean_vibration_baseline(raw)
+    if not all(field in clean for field in _LENOVO_NATIVE_FIELDS):
+        return {}
+    return {field: clean[field] for field in _LENOVO_NATIVE_FIELDS}
+
+
+def _clean_vibration_route_baselines(raw) -> dict:
+    if not isinstance(raw, dict):
+        return {}
+    return {
+        owner: clean
+        for owner, value in raw.items()
+        if isinstance(owner, str) and owner
+        if (clean := _clean_vibration_route_baseline(value))
     }
 
 
@@ -140,6 +186,8 @@ def _empty_data() -> dict:
         "games": {},
         "profile_states": {},
         "vibration_baselines": {},
+        "vibration_routes": {},
+        "vibration_route_baselines": {},
         "virtual_mode_baselines": {},
     }
 
@@ -187,7 +235,7 @@ class RemapStore:
     def _coerce(self, raw) -> dict:
         if not isinstance(raw, dict):
             return _empty_data()
-        if raw.get("version") in {3, _VERSION}:
+        if raw.get("version") in {3, 4, _VERSION}:
             global_profile = _clean_profile(raw.get("global"))
             games = {}
             raw_games = raw.get("games")
@@ -210,6 +258,14 @@ class RemapStore:
                 "vibration_baselines": _clean_vibration_baselines(
                     raw.get("vibration_baselines")
                 ),
+                "vibration_routes": _clean_vibration_routes(
+                    raw.get("vibration_routes")
+                ),
+                "vibration_route_baselines": (
+                    _clean_vibration_route_baselines(
+                        raw.get("vibration_route_baselines")
+                    )
+                ),
                 "virtual_mode_baselines": _clean_virtual_mode_baselines(
                     raw.get("virtual_mode_baselines")
                 ),
@@ -225,6 +281,8 @@ class RemapStore:
                 },
                 "games": {},
                 "profile_states": {}, "vibration_baselines": {},
+                "vibration_routes": {},
+                "vibration_route_baselines": {},
                 "virtual_mode_baselines": {},
             }
         games = {}
@@ -250,6 +308,12 @@ class RemapStore:
             "profile_states": _clean_profile_states(raw.get("profile_states")),
             "vibration_baselines": _clean_vibration_baselines(
                 raw.get("vibration_baselines")
+            ),
+            "vibration_routes": _clean_vibration_routes(
+                raw.get("vibration_routes")
+            ),
+            "vibration_route_baselines": _clean_vibration_route_baselines(
+                raw.get("vibration_route_baselines")
             ),
             "virtual_mode_baselines": _clean_virtual_mode_baselines(
                 raw.get("virtual_mode_baselines")
@@ -279,7 +343,10 @@ class RemapStore:
     def effective_vibration(self, appid) -> dict:
         if self.is_following_global(appid):
             return dict(self._data["global"]["vibration"])
-        return dict(self._game(appid)["vibration"])
+        return {
+            **self._data["global"]["vibration"],
+            **self._game(appid)["vibration"],
+        }
 
     def effective_virtual_controller(self, appid) -> dict:
         if self.is_following_global(appid):
@@ -296,16 +363,51 @@ class RemapStore:
     def vibration_baseline(self, owner: str) -> dict:
         return dict(self._data["vibration_baselines"].get(owner, {}))
 
+    def vibration_route(self, owner: str) -> str | None:
+        return self._data["vibration_routes"].get(owner)
+
+    def vibration_route_baseline(self, owner: str) -> dict:
+        return dict(
+            self._data["vibration_route_baselines"].get(owner, {})
+        )
+
+    def remember_vibration_route(
+        self, owner: str, route: str, baseline=None
+    ) -> None:
+        if (
+            not isinstance(owner, str)
+            or not owner
+            or route not in _VIBRATION_ROUTES
+        ):
+            return
+        changed = False
+        if self._data["vibration_routes"].get(owner) != route:
+            self._data["vibration_routes"][owner] = route
+            changed = True
+        clean = _clean_vibration_route_baseline(baseline)
+        if clean and owner not in self._data["vibration_route_baselines"]:
+            self._data["vibration_route_baselines"][owner] = clean
+            changed = True
+        if changed:
+            self._save()
+
     def remember_vibration_baseline(self, owner: str, patch: dict) -> None:
         if not isinstance(owner, str) or not owner:
             return
         baseline = self._data["vibration_baselines"].setdefault(owner, {})
         clean = _clean_vibration_baseline(patch)
-        if baseline and not all(
-            field in baseline for field in ("native_left", "native_right")
-        ):
-            clean.pop("native_left", None)
-            clean.pop("native_right", None)
+        exact_groups = (
+            ("native_left", "native_right"),
+            (
+                "intensity", "left_pattern", "right_pattern",
+                "touchpad_enabled", "touchpad_intensity",
+            ),
+        )
+        if baseline:
+            for group in exact_groups:
+                if not all(field in baseline for field in group):
+                    for field in group:
+                        clean.pop(field, None)
         missing = {
             field: value
             for field, value in clean.items()

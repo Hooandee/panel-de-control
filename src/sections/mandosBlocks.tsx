@@ -356,6 +356,82 @@ const VibrationBlock: FC = () => {
           )}
         </>
       )}
+      {vibration.persistent && vibration.mode === "lenovo_hd" && (
+        <>
+          {vibration.connected !== false && (
+            <>
+              {vibration.intensity && (
+                <Row label={t("mandos.vibration.handlesIntensity")}>
+                  <Dropdown
+                    rgOptions={(vibration.intensity_options ?? []).map((value) => ({
+                      data: value,
+                      label: t(`mandos.vibration.intensity.${value}`),
+                    }))}
+                    selectedOption={vibration.intensity}
+                    onChange={(option) => onSetVibration({
+                      intensity: option.data as NonNullable<typeof vibration.intensity>,
+                    })}
+                  />
+                </Row>
+              )}
+              {vibration.left_pattern && (
+                <Row label={t("mandos.vibration.pattern.left")}>
+                  <Dropdown
+                    rgOptions={(vibration.left_pattern_options ?? []).map((value) => ({
+                      data: value,
+                      label: t(`mandos.vibration.pattern.${value}`),
+                    }))}
+                    selectedOption={vibration.left_pattern}
+                    onChange={(option) => onSetVibration({
+                      left_pattern: option.data as NonNullable<typeof vibration.left_pattern>,
+                    })}
+                  />
+                </Row>
+              )}
+              {vibration.right_pattern && (
+                <Row label={t("mandos.vibration.pattern.right")}>
+                  <Dropdown
+                    rgOptions={(vibration.right_pattern_options ?? []).map((value) => ({
+                      data: value,
+                      label: t(`mandos.vibration.pattern.${value}`),
+                    }))}
+                    selectedOption={vibration.right_pattern}
+                    onChange={(option) => onSetVibration({
+                      right_pattern: option.data as NonNullable<typeof vibration.right_pattern>,
+                    })}
+                  />
+                </Row>
+              )}
+              <ToggleField
+                label={t("mandos.vibration.touchpad")}
+                description={t("mandos.vibration.touchpad.desc")}
+                checked={vibration.touchpad_enabled === true}
+                onChange={(touchpad_enabled) => onSetVibration({ touchpad_enabled })}
+                bottomSeparator="none"
+              />
+              {vibration.touchpad_intensity && (
+                <Row label={t("mandos.vibration.touchpadIntensity")}>
+                  <Dropdown
+                    rgOptions={(vibration.touchpad_intensity_options ?? []).map((value) => ({
+                      data: value,
+                      label: t(`mandos.vibration.intensity.${value}`),
+                    }))}
+                    selectedOption={vibration.touchpad_intensity}
+                    onChange={(option) => onSetVibration({
+                      touchpad_intensity: option.data as NonNullable<typeof vibration.touchpad_intensity>,
+                    })}
+                  />
+                </Row>
+              )}
+            </>
+          )}
+          {vibration.connected === false && (
+            <div style={{ fontSize: theme.font.caption, color: theme.color.warn, marginTop: theme.space.sm, lineHeight: 1.4 }}>
+              {t("mandos.vibration.lenovoDisconnected")}
+            </div>
+          )}
+        </>
+      )}
       {vibration.test_supported && (
         testChannels.length > 1 ? (
           <div style={{ display: "flex", gap: theme.space.xs }}>
@@ -387,9 +463,11 @@ const VibrationBlock: FC = () => {
       )}
       {vibration.persistent && (
         <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, marginTop: theme.space.sm, lineHeight: 1.4 }}>
-          {t(vibration.confirmation === "driver" || vibration.readback
-            ? "mandos.vibration.note.readback"
-            : "mandos.vibration.note.accepted")}
+          {t(vibration.mode === "lenovo_hd"
+            ? "mandos.vibration.note.lenovoHd"
+            : vibration.confirmation === "driver" || vibration.readback
+              ? "mandos.vibration.note.readback"
+              : "mandos.vibration.note.accepted")}
         </div>
       )}
       {vibration.last_apply === false && (

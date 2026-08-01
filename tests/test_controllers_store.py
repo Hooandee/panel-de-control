@@ -86,6 +86,86 @@ def test_vibration_preserves_persistent_intensity_fields(tmp_path):
     }
 
 
+def test_vibration_preserves_lenovo_hd_fields_per_game(tmp_path):
+    path = tmp_path / "remap.json"
+    store = RemapStore(str(path))
+    store.patch_vibration("global", None, {
+        "intensity": "medium",
+        "left_pattern": "standard",
+        "right_pattern": "rpg",
+        "touchpad_enabled": True,
+        "touchpad_intensity": "low",
+    })
+    store.create_game_from_global("42")
+    store.patch_vibration("game", "42", {
+        "intensity": "high",
+        "left_pattern": "fps",
+        "right_pattern": "racing",
+        "touchpad_enabled": False,
+        "touchpad_intensity": "medium",
+    })
+
+    assert RemapStore(str(path)).effective_vibration("42") == {
+        "intensity": "high",
+        "left_pattern": "fps",
+        "right_pattern": "racing",
+        "touchpad_enabled": False,
+        "touchpad_intensity": "medium",
+    }
+
+
+def test_vibration_rejects_unknown_lenovo_hd_enums(tmp_path):
+    store = _store(tmp_path)
+    store.patch_vibration("global", None, {
+        "intensity": "maximum",
+        "left_pattern": "cinema",
+        "right_pattern": "cinema",
+        "touchpad_enabled": "yes",
+        "touchpad_intensity": "minimum",
+    })
+
+    assert store.effective_vibration(None) == {}
+
+
+def test_partial_legacy_game_vibration_inherits_missing_global_hd_fields(
+    tmp_path,
+):
+    store = _store(tmp_path)
+    store.patch_vibration("global", None, {
+        "intensity": "medium",
+        "left_pattern": "standard",
+        "right_pattern": "rpg",
+        "touchpad_enabled": True,
+        "touchpad_intensity": "low",
+    })
+    store.create_game_from_global("42")
+    store._data["games"]["42"]["vibration"] = {"enabled": True}
+
+    assert store.effective_vibration("42") == {
+        "enabled": True,
+        "intensity": "medium",
+        "left_pattern": "standard",
+        "right_pattern": "rpg",
+        "touchpad_enabled": True,
+        "touchpad_intensity": "low",
+    }
+
+
+def test_single_legacy_pattern_migrates_to_both_handles(tmp_path):
+    store = _store(tmp_path, {
+        "version": 5,
+        "global": {
+            "vibration": {"pattern": "rpg"},
+        },
+        "games": {},
+    })
+
+    assert store.effective_vibration(None) == {
+        "left_pattern": "rpg",
+        "right_pattern": "rpg",
+    }
+
+
 def test_game_difference_includes_vibration(tmp_path):
     s = _store(tmp_path)
     s.patch_vibration("global", None, {"enabled": True})
@@ -179,6 +259,62 @@ def test_vibration_baseline_preserves_exact_native_motor_values(tmp_path):
     }
 
 
+def test_vibration_baseline_preserves_exact_lenovo_hd_state(tmp_path):
+    path = tmp_path / "remap.json"
+    store = RemapStore(str(path))
+    baseline = {
+        "intensity": "medium",
+        "left_pattern": "fps",
+        "right_pattern": "rpg",
+        "touchpad_enabled": True,
+        "touchpad_intensity": "low",
+    }
+    store.remember_vibration_baseline(
+        "inputplumber:legion_go_2", baseline
+    )
+
+    assert RemapStore(str(path)).vibration_baseline(
+        "inputplumber:legion_go_2"
+    ) == baseline
+
+
+def test_confirmed_vibration_route_is_persisted_separately_from_baseline(
+    tmp_path,
+):
+    path = tmp_path / "remap.json"
+    store = RemapStore(str(path))
+    owner = "inputplumber:legion_go_2"
+    store.remember_vibration_baseline(
+        owner, {"enabled": True, "value": 100}
+    )
+
+    route_baseline = {
+        "intensity": "medium",
+        "left_pattern": "standard",
+        "right_pattern": "rpg",
+        "touchpad_enabled": True,
+        "touchpad_intensity": "low",
+    }
+    store.remember_vibration_route(
+        owner, "lenovo_hd", baseline=route_baseline
+    )
+
+    reloaded = RemapStore(str(path))
+    assert reloaded.vibration_route(owner) == "lenovo_hd"
+    assert reloaded.vibration_baseline(owner) == {
+        "enabled": True, "value": 100,
+    }
+    assert reloaded.vibration_route_baseline(owner) == route_baseline
+
+
+def test_unknown_vibration_route_is_not_persisted(tmp_path):
+    store = RemapStore(str(tmp_path / "remap.json"))
+
+    store.remember_vibration_route("inputplumber:legion_go_2", "gain")
+
+    assert store.vibration_route("inputplumber:legion_go_2") is None
+
+
 def test_existing_percentage_baseline_is_not_enriched_from_live_native_state(
     tmp_path,
 ):
@@ -240,7 +376,7 @@ def test_v2_migrates_without_losing_buttons_or_vibration(tmp_path):
     }
     assert store.effective_profile("42") == {
         "buttons": {"RightPaddle1": [{"key": "KeyTab"}]},
-        "vibration": {"left": 20},
+        "vibration": {"left": 20, "right": 45},
         "virtual_controller": {},
     }
 

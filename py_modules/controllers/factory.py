@@ -183,7 +183,19 @@ class IpBackend(ControllerBackend):
         self._store = store
         self._dbus = dbus
         self._device_key = device_key
-        self._vibration = VibrationController(device_key, dbus)
+        vibration_owner = f"inputplumber:{device_key or ''}"
+        vibration_baseline = store.vibration_baseline(vibration_owner)
+        vibration_route = getattr(
+            store, "vibration_route", lambda _owner: None
+        )(vibration_owner)
+        if vibration_route == "lenovo_hd":
+            vibration_baseline = store.effective_vibration(None)
+        self._vibration = VibrationController(
+            device_key,
+            dbus,
+            lenovo_baseline=vibration_baseline,
+            lenovo_route=vibration_route == "lenovo_hd",
+        )
         self._virtual_mode = InputPlumberVirtualModeAdapter(
             store, dbus, device_key
         )
@@ -387,12 +399,13 @@ class IpBackend(ControllerBackend):
             )
         if component == "vibration":
             state = self._vibration.state()
+            baseline_ready = True
             if desired:
-                ip._ensure_vibration_baseline(
+                baseline_ready = ip._ensure_vibration_baseline(
                     self._store, self._dbus, self._device_key,
                     state, self._vibration,
                 )
-            applied = ip._apply_vibration(
+            applied = baseline_ready and ip._apply_vibration(
                 self._dbus, self._vibration, desired
             )
             exact = bool(state and state.get("readback"))

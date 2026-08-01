@@ -9,6 +9,9 @@ def _device(key):
 
 
 class FakeStore:
+    def vibration_baseline(self, owner):
+        return {}
+
     def effective_overrides(self, appid):
         return {}
 
@@ -108,7 +111,9 @@ def test_component_adapter_is_honest_without_an_owner():
 def test_inputplumber_button_component_uses_exact_profile_readback(
     monkeypatch,
 ):
-    monkeypatch.setattr(factory, "VibrationController", lambda *args: FakeVibration())
+    monkeypatch.setattr(
+        factory, "VibrationController", lambda *args, **kwargs: FakeVibration()
+    )
     monkeypatch.setattr(
         factory.ip, "_apply_overrides", lambda *args, **kwargs: True
     )
@@ -124,6 +129,133 @@ def test_inputplumber_button_component_uses_exact_profile_readback(
     assert result.actual == desired
 
 
+def test_ip_backend_restores_confirmed_lenovo_route_hint_after_restart(
+    tmp_path, monkeypatch,
+):
+    store = RemapStore(str(tmp_path / "controllers.json"))
+    baseline = {
+        "intensity": "medium",
+        "left_pattern": "standard",
+        "right_pattern": "rpg",
+        "touchpad_enabled": True,
+        "touchpad_intensity": "low",
+    }
+    store.remember_vibration_baseline(
+        "inputplumber:legion_go_2", baseline
+    )
+    captured = {}
+
+    def vibration(*args, **kwargs):
+        captured.update(kwargs)
+        return FakeVibration()
+
+    monkeypatch.setattr(factory, "VibrationController", vibration)
+    factory.IpBackend(store, FakeDbus(), device_key="legion_go_2")
+
+    assert captured["lenovo_baseline"] == baseline
+
+
+def test_ip_backend_preserves_lenovo_route_after_legacy_gain_upgrade(
+    tmp_path, monkeypatch,
+):
+    store = RemapStore(str(tmp_path / "controllers.json"))
+    owner = "inputplumber:legion_go_2"
+    native_state = {
+        "intensity": "medium",
+        "left_pattern": "standard",
+        "right_pattern": "rpg",
+        "touchpad_enabled": True,
+        "touchpad_intensity": "low",
+    }
+    store.remember_vibration_baseline(
+        owner, {"enabled": True, "value": 100}
+    )
+    store.patch_vibration("global", None, native_state)
+    store.remember_vibration_route(owner, "lenovo_hd")
+    captured = {}
+
+    def vibration(*args, **kwargs):
+        captured.update(kwargs)
+        return FakeVibration()
+
+    monkeypatch.setattr(factory, "VibrationController", vibration)
+    factory.IpBackend(store, FakeDbus(), device_key="legion_go_2")
+
+    assert captured["lenovo_baseline"] == native_state
+    assert captured["lenovo_route"] is True
+
+
+def test_ip_vibration_component_blocks_hd_when_legacy_gain_neutralize_fails(
+    tmp_path, monkeypatch,
+):
+    store = RemapStore(str(tmp_path / "controllers.json"))
+    owner = "inputplumber:legion_go_2"
+    store.remember_vibration_baseline(
+        owner, {"enabled": True, "value": 100}
+    )
+    store.patch_vibration("global", None, {"value": 35})
+
+    class NativeVibration:
+        def __init__(self):
+            self.applied = None
+
+        def state(self):
+            return {
+                "mode": "lenovo_hd",
+                "persistent": True,
+                "intensity": "medium",
+                "left_pattern": "standard",
+                "right_pattern": "rpg",
+                "touchpad_enabled": True,
+                "touchpad_intensity": "low",
+                "readback": True,
+                "connected": True,
+            }
+
+        def capture_baseline(self):
+            state = self.state()
+            return {
+                field: state[field]
+                for field in (
+                    "intensity", "left_pattern", "right_pattern",
+                    "touchpad_enabled", "touchpad_intensity",
+                )
+            }
+
+        def apply_gain(self, value):
+            return False
+
+        def apply(self, desired):
+            self.applied = dict(desired)
+            return True
+
+    class VibrationDbus(FakeDbus):
+        def force_feedback_enabled(self):
+            return True
+
+    vibration = NativeVibration()
+    monkeypatch.setattr(
+        factory, "VibrationController", lambda *args, **kwargs: vibration
+    )
+    backend = factory.IpBackend(
+        store, VibrationDbus(), device_key="legion_go_2"
+    )
+    desired = {
+        "intensity": "high",
+        "left_pattern": "fps",
+        "right_pattern": "racing",
+        "touchpad_enabled": False,
+        "touchpad_intensity": "medium",
+    }
+
+    result = backend.apply_component("vibration", desired, "42", 1)
+
+    assert result.status == "failed"
+    assert result.reason == "apply_failed"
+    assert vibration.applied is None
+    assert store.vibration_route(owner) is None
+
+
 def test_ip_report_composes_only_live_buttons_and_persistent_vibration(
     tmp_path, monkeypatch
 ):
@@ -132,7 +264,7 @@ def test_ip_report_composes_only_live_buttons_and_persistent_vibration(
     monkeypatch.setattr(
         factory,
         "VibrationController",
-        lambda *args: FakeVibration(),
+        lambda *args, **kwargs: FakeVibration(),
     )
     backend = factory.IpBackend(
         store, dbus, device_key="rog_ally"
@@ -186,7 +318,7 @@ def test_ip_report_omits_unproven_surfaces(tmp_path, monkeypatch):
     monkeypatch.setattr(
         factory,
         "VibrationController",
-        lambda *args: SimpleNamespace(state=lambda: None),
+        lambda *args, **kwargs: SimpleNamespace(state=lambda: None),
     )
     backend = factory.IpBackend(
         store, dbus, device_key="rog_ally"
@@ -219,7 +351,7 @@ def test_ip_config_is_backward_compatible_except_capabilities(
     store = RemapStore(str(tmp_path / "controllers.json"))
     monkeypatch.setattr(
         factory, "VibrationController",
-        lambda *args: SimpleNamespace(state=lambda: None),
+        lambda *args, **kwargs: SimpleNamespace(state=lambda: None),
     )
     backend = factory.IpBackend(
         store, FakeDbus(), version="0.77.4",

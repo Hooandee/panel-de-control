@@ -116,6 +116,19 @@ describe("useController request coordination", () => {
     );
   });
 
+  it("applies Lenovo HD enum changes immediately in the active scope", async () => {
+    mocks.getControllerConfig.mockResolvedValue(config("current"));
+    mocks.setControllerVibration.mockResolvedValue(config("applied"));
+    const { result } = renderHook(() => useController());
+    await act(async () => { await Promise.resolve(); });
+
+    act(() => result.current.onSetVibration({ right_pattern: "rpg" }));
+
+    expect(mocks.setControllerVibration).toHaveBeenCalledWith(
+      { right_pattern: "rpg" }, "global", null,
+    );
+  });
+
   it("sends a keyboard chord as one ordered action", async () => {
     mocks.getControllerConfig.mockResolvedValue(config("current"));
     mocks.setControllerButtonAction.mockResolvedValue(config("applied"));

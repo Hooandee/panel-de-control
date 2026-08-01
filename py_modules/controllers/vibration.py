@@ -12,6 +12,8 @@ import re
 import struct
 import time
 
+from controllers.lenovo_go_vibration import LenovoGoVibrationAdapter
+
 try:
     import fcntl
 except ImportError:  # Windows imports the shared backend but has no evdev/ioctl.
@@ -86,7 +88,8 @@ def _ff_bits(raw):
 class VibrationController:
     def __init__(self, device_key, dbus, root="/", write_text=None,
                  open_device=None, write_event=None, ioctl=None,
-                 close_device=None, sleep=None):
+                 close_device=None, sleep=None, lenovo_adapter=None,
+                 lenovo_baseline=None, lenovo_route=False):
         self._device_key = device_key or ""
         self._dbus = dbus
         self._root = root
@@ -97,13 +100,41 @@ class VibrationController:
         self._close_device = close_device or os.close
         self._sleep = sleep or time.sleep
         self._last_operation = None
+        self._lenovo = lenovo_adapter or LenovoGoVibrationAdapter(
+            self._device_key,
+            getattr(self._dbus, "source_device_paths", lambda: []),
+            root=self._root,
+            write_text=self._write_text,
+        )
+        native_fields = (
+            "intensity", "left_pattern", "right_pattern",
+            "touchpad_enabled", "touchpad_intensity",
+        )
+        baseline = lenovo_baseline if isinstance(lenovo_baseline, dict) else {}
+        self._lenovo_owned = (
+            self._device_key == "legion_go_2"
+            and (bool(lenovo_route) or bool(baseline))
+            and all(field in baseline for field in native_fields)
+        )
+        self._lenovo_last_state = (
+            {field: baseline[field] for field in native_fields}
+            if self._lenovo_owned else None
+        )
+        self._lenovo_last_capabilities = None
 
     def diagnostics(self):
-        return (
+        result = (
             dict(self._last_operation)
             if self._last_operation is not None
-            else None
+            else {}
         )
+        if self._device_key == "legion_go_2":
+            native_diagnostics = getattr(
+                self._lenovo, "diagnostics", lambda: None
+            )()
+            if native_diagnostics is not None:
+                result["lenovo_hd"] = native_diagnostics
+        return result or None
 
     def _path(self, absolute):
         return os.path.join(self._root, absolute.lstrip("/"))
@@ -115,6 +146,29 @@ class VibrationController:
             "/sys/bus/hid/drivers/asus_rog_ally/*/vibration_intensity"
         ))
         return matches[0] if len(matches) == 1 else None
+
+    def _lenovo_state(self):
+        if self._device_key != "legion_go_2":
+            return None
+        current = self._lenovo.state()
+        if current is not None:
+            self._lenovo_owned = True
+            self._lenovo_last_state = dict(current)
+            capabilities = self._lenovo.capabilities()
+            if capabilities is not None:
+                self._lenovo_last_capabilities = dict(capabilities)
+            return {
+                **current,
+                "readback": True,
+                "connected": True,
+            }
+        if self._lenovo_owned and self._lenovo_last_state is not None:
+            return {
+                **self._lenovo_last_state,
+                "readback": False,
+                "connected": False,
+            }
+        return None
 
     @staticmethod
     def _read_dual_native(path):
@@ -160,6 +214,13 @@ class VibrationController:
         return matches[0] if len(matches) == 1 else None
 
     def state(self):
+        lenovo = self._lenovo_state()
+        if lenovo is not None:
+            return {
+                "mode": "lenovo_hd",
+                "persistent": True,
+                **lenovo,
+            }
         asus_path = self._asus_path()
         if asus_path is not None:
             values = self._read_dual_native(asus_path)
@@ -192,6 +253,24 @@ class VibrationController:
 
     def capabilities(self):
         state = self.state()
+        if state is not None and state["mode"] == "lenovo_hd":
+            native = (
+                self._lenovo.capabilities()
+                if state["connected"] else self._lenovo_last_capabilities
+            )
+            native = native or {}
+            return {
+                "mode": "lenovo_hd",
+                "channels": ["handles", "touchpad"],
+                **native,
+                "readback": (
+                    "driver" if state["connected"] else "none"
+                ),
+                "test": {
+                    "patterns": ["pulse"],
+                    "channels": ["strong", "weak", "both"],
+                },
+            }
         if state is not None and state["mode"] == "dual":
             return {
                 "mode": "dual",
@@ -240,6 +319,15 @@ class VibrationController:
         }
 
     def capture_baseline(self):
+        lenovo = self._lenovo_state()
+        if lenovo is not None and lenovo["connected"]:
+            return {
+                field: lenovo[field]
+                for field in (
+                    "intensity", "left_pattern", "right_pattern", "touchpad_enabled",
+                    "touchpad_intensity",
+                )
+            }
         asus_path = self._asus_path()
         if asus_path is None:
             return {}
@@ -315,6 +403,16 @@ class VibrationController:
     def restore_baseline(self, baseline):
         if not isinstance(baseline, dict):
             return False
+        if self._lenovo_owned and all(
+            field in baseline
+            for field in (
+                "intensity", "left_pattern", "right_pattern", "touchpad_enabled",
+                "touchpad_intensity",
+            )
+        ):
+            restored = self._lenovo.apply(baseline)
+            self._last_operation = self._lenovo.diagnostics()
+            return restored
         asus_path = self._asus_path()
         native = (
             baseline.get("native_left"), baseline.get("native_right")
@@ -437,7 +535,7 @@ class VibrationController:
                 False, False, True, "unsupported_channel"
             )
 
-        if capabilities["mode"] == "gain":
+        if capabilities["mode"] in {"gain", "lenovo_hd"}:
             path = self._gain_path()
             if path is None:
                 return self._test_result(
@@ -540,9 +638,27 @@ class VibrationController:
             if fd is not None:
                 os.close(fd)
 
+    def apply_gain(self, value):
+        path = self._gain_path()
+        if path is None:
+            self._last_operation = {
+                "mode": "gain", "ok": False, "reason": "unsupported",
+            }
+            return False
+        return self._apply_gain(path, value)
+
     def apply(self, patch):
         if not isinstance(patch, dict):
             return False
+        lenovo = self._lenovo_state()
+        if lenovo is not None:
+            applied = self._lenovo.apply(patch)
+            self._last_operation = self._lenovo.diagnostics()
+            if applied:
+                current = self._lenovo.state()
+                if current is not None:
+                    self._lenovo_last_state = dict(current)
+            return applied
         asus_path = self._asus_path()
         if asus_path is not None:
             return self._apply_dual(asus_path, patch)

@@ -32,9 +32,9 @@ segunda arquitectura dentro del plugin.
 
 ### Pantalla
 
-- Lenovo especifica para la Legion Go 8ASP2 un panel OLED de 1920×1200, hasta 144 Hz,
+- Lenovo especifica para la Legion Go 8AHP2 un panel OLED de 1920×1200, hasta 144 Hz,
   1100 nits de pico HDR, 100% DCI-P3 y DisplayHDR True Black 1000:
-  https://psref.lenovo.com/syspool/Sys/PDF/Legion/Legion_Go_8ASP2/Legion_Go_8ASP2_Spec.html
+  https://psref.lenovo.com/syspool/Sys/PDF/Legion/Legion_Go_8AHP2/Legion_Go_8AHP2_Spec.pdf
 - Gamescope mantiene looks separados por EOTF gamma 2.2 y PQ. Su protocolo Wayland
   `set_look` recibe ambos LUT de forma coordinada:
   https://github.com/ValveSoftware/gamescope/blob/master/protocol/gamescope-control.xml
@@ -74,9 +74,9 @@ gamescope.
 | Legion Go 2 + gamescope con look PQ | Sí | Si existe `hid-lenovo-go` | Capacidades completas y perfiles por juego |
 | Legion Go 2 sin look PQ | No | Si existe `hid-lenovo-go` | Ocultar HDR, mantener vibración |
 | Legion Go 2 sin `hid-lenovo-go` | Según gamescope | No | Mantener fallback de vibración existente, sin modos inventados |
-| Legion Go original | Según EDID/gamescope | Solo superficies realmente descubiertas | No asumir paridad con Go 2 |
-| Legion Go S | Según EDID/gamescope | No mientras el driver no publique los atributos | Mantener `FF_GAIN` si está disponible |
-| ROG Ally | Según EDID/gamescope | Backend ASUS actual | Sin cambios de comportamiento |
+| Legion Go original | Sin cambios | `FF_GAIN` existente | No asumir paridad con Go 2 |
+| Legion Go S | Sin cambios | `FF_GAIN` existente | No asumir paridad con Go 2 |
+| ROG Ally | Sin cambios | Backend ASUS actual | Sin cambios de comportamiento |
 | Pantalla externa | No | Sin cambios | Retirar temporalmente el look HDR del panel interno |
 | Plataforma Windows experimental | Fuera de esta entrega | Fuera de esta entrega | Sin falsa paridad con Linux |
 
@@ -110,15 +110,23 @@ Se ampliará `GamescopeColorBackend`; no se añadirá un backend paralelo.
    - multiplicación exclusiva de Ct y Cp por `hdr_saturation / 100`;
    - conversión inversa y codificación PQ;
    - clamp únicamente al terminar el viaje de ida y vuelta.
-3. El backend publicará ambos looks juntos con
+3. El backend publicará ambos looks juntos con el debug command oficial
    `gamescopectl set_look <g22.cube> <pq.cube>` para que una actualización no borre la
-   otra mitad.
+   otra mitad. `gamescopectl` transmite todos sus argumentos y el `cc_set_look` oficial
+   carga ambos ficheros antes de publicar el par. La invocación exportará tanto
+   `GAMESCOPE_WAYLAND_DISPLAY`, que consume el cliente oficial, como `WAYLAND_DISPLAY`,
+   además del runtime correspondiente al socket descubierto.
 4. Los archivos se escribirán en dos slots alternos mediante temporal, `fsync` y rename.
 5. La generación costosa tendrá debounce; no se generará en cada tick del slider.
 
 El LUT PQ identidad también se enviará cuando sea necesario conservar simultáneamente el
-look SDR. No se ejecutará `unset_look` de manera que pueda borrar accidentalmente el otro
-EOTF.
+look SDR. El backend no toca un look al arrancar con valores nativos. Solo ejecuta
+`unset_look` después de haber aplicado un look propio en esta instancia, al volver a nativo,
+salir del panel interno o descargar el plugin.
+
+En Intel/Xe, `composite_force` tiene ownership independiente. Si activarlo funciona pero
+`set_look` falla, se revierte; si su desactivación falla después de liberar el look, queda
+pendiente para retry sin repetir `unset_look` ni declarar una liberación completa.
 
 ### Detección y ciclo de vida
 
@@ -128,7 +136,8 @@ La capacidad HDR de saturación exige simultáneamente:
 - EDID legible que anuncie SMPTE ST 2084/PQ;
 - gamescope accesible;
 - soporte de look en el gamescope instalado;
-- aplicación satisfactoria de una pareja de LUT de prueba/identidad.
+- primera aplicación satisfactoria de la pareja solicitada; no se hace una escritura de
+  prueba destructiva durante el sondeo.
 
 El panel deja de afirmar soporte si falla cualquiera de esas condiciones. Al conectar una
 pantalla externa se carga una pareja que no aplique la personalización del panel interno y
@@ -136,9 +145,14 @@ se conserva el deseo del usuario. Al volver al panel interno se reaplica.
 
 Se reutilizarán los mecanismos actuales de cambio de juego, cambio HDR, arranque y
 reaplicación. Se añadirá detección de reinicialización de gamescope tras suspensión y un
-reintento acotado. Los diagnósticos registrarán socket, versión/capacidad, EOTF, rutas de LUT,
-último comando, código de salida y valor deseado, sin presentar esos datos como readback
-visual del panel.
+reintento acotado. La identidad incluye el socket y su inode para reconocer una nueva sesión
+aunque conserve conector; al cambiar descarta los ownership de look, composición y HDR sin tocar
+la sesión nueva.
+El primer fingerprint y los cambios posteriores solo se publican después de completar HDR y
+color; si una aplicación falla, la transición queda pendiente hasta seis sondeos de cinco
+segundos y después registra el agotamiento sin seguir escribiendo. Los
+diagnósticos registrarán socket, versión/capacidad, EOTF, rutas de LUT, último comando,
+código de salida y valor deseado, sin presentar esos datos como readback visual del panel.
 
 ### Interfaz
 
@@ -176,16 +190,17 @@ no para fabricar capacidades ausentes.
 El bloque de vibración admitirá, además de los campos existentes:
 
 - `intensity`: `off | low | medium | high`;
-- `pattern`: `fps | racing | standard | spg | rpg`;
+- `left_pattern` y `right_pattern`: `fps | racing | standard | spg | rpg`;
 - `touchpad_enabled`: booleano;
 - `touchpad_intensity`: `off | low | medium | high`;
 - listas de opciones leídas del driver;
 - `confirmation`: `driver_readback | accepted | unavailable`;
 - resultado independiente de la última escritura de cada atributo.
 
-El patrón visible es único y se escribe en ambas asas dentro de una operación coordinada.
-Si una escritura funciona y la otra falla, el estado será parcial/fallido y se mostrará en
-diagnósticos; no se afirmará que ambos mandos quedaron configurados.
+Los patrones izquierdo y derecho se representan y persisten por separado, como permite el
+ABI. Las cinco escrituras físicas siguen formando una operación coordinada. Si una escritura
+funciona y otra falla, se revierte en orden inverso con readback; no se afirmará que ambos
+mandos quedaron configurados.
 
 ### Persistencia por juego
 
@@ -203,6 +218,15 @@ La configuración efectiva se reescribirá:
 
 No se añadirá un segundo observador de juego ni otro store.
 
+La ruta `lenovo_hd`, una vez confirmada por una superficie completa del driver, se guarda
+como hint independiente del baseline físico inmutable. El primer readback HD se conserva
+además como baseline separado por ABI. Así una instalación que se actualice desde el antiguo
+fallback `FF_GAIN` no mezcla ni pierde ninguno: clasifica la ruta durante una reconexión y
+neutraliza `FF_GAIN` antes de adoptar HD, o bloquea el cambio si no puede confirmarlo. Al
+ceder ownership restaura independientemente los cinco valores HD y el gain heredado. El watcher queda acotado a
+Legion Go 2 + InputPlumber y compara deseo con readback, por lo que detecta un reset rápido
+aunque no llegue a observar el estado desconectado; nunca sondea HHD ni otras máquinas.
+
 ### Prueba y readback
 
 La prueba seguirá usando el nodo evdev con `FF_RUMBLE` y VID:PID asociado al dispositivo
@@ -219,7 +243,7 @@ inventado.
 En Mandos, cuando `hid-lenovo-go` publique las capacidades:
 
 - selector de intensidad con los cuatro niveles disponibles;
-- selector de patrón con los modos disponibles;
+- selector de patrón independiente para cada asa, con sus opciones vivas;
 - interruptor de vibración del touchpad;
 - selector de intensidad del touchpad;
 - prueba de vibración;
@@ -256,6 +280,10 @@ recogida en la máquina y ser específica, reversible y compatible con la distri
 - Un atributo desaparece entre detección y escritura: la operación falla de forma parcial,
   se invalida la caché y se redescubre.
 - Reconexión o suspensión: reintento acotado, sin bucles infinitos.
+- Fallo transitorio al reaplicar tras una transición: no se confirma el nuevo fingerprint y
+  el siguiente sondeo vuelve a intentarlo.
+- Fallo al liberar HDR o un look propio durante unload: se conserva el ownership interno y
+  se registra un warning con el código de salida, respuesta acotada y diagnóstico disponible.
 - Otro componente sobrescribe una superficie: se informa del conflicto; el plugin no entra
   en una pelea de escrituras continua.
 - Perfil corrupto o con opción ya no publicada por el driver: se sanea a una opción segura
