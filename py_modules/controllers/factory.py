@@ -14,6 +14,7 @@ from controllers import inputplumber as ip
 from controllers import ip_profile
 from controllers.capabilities import clean_report, report
 from controllers.diagnostics import IntegratedDiagnostics
+from controllers.operations import OperationResult
 from controllers.vibration import VibrationController
 
 
@@ -100,6 +101,42 @@ class ControllerBackend:
     def apply_effective_components(self, appid, apply_buttons=True) -> dict:
         applied = self.apply_effective(appid, apply_buttons)
         return {"buttons": applied, "vibration": applied}
+
+    def _operation_result(
+        self, component, status, desired, appid, generation,
+        *, reason=None, actual=None, owner=None,
+    ) -> OperationResult:
+        return OperationResult(
+            component, status, reason, owner or self.manager,
+            generation, appid, desired, actual,
+        )
+
+    def apply_component(self, component, desired, appid, generation):
+        if component not in {
+            "virtual_controller", "buttons", "vibration",
+        }:
+            return self._operation_result(
+                component, "unsupported", {}, appid, generation,
+                reason="unsupported", owner="none",
+            )
+        if not desired:
+            return self._operation_result(
+                component, "applied", {}, appid, generation,
+                actual={}, owner="none",
+            )
+        return self._operation_result(
+            component, "unsupported", desired, appid, generation,
+            reason="unsupported", owner="none",
+        )
+
+    def wait_ready(self, appid, generation) -> bool:
+        return True
+
+    def cancel_transients(self, reason) -> None:
+        pass
+
+    def clear_translated_state(self) -> bool:
+        return True
 
     def restore_external(self) -> bool:
         return True
@@ -238,6 +275,73 @@ class IpBackend(ControllerBackend):
         )
         self._vibration_last_apply = status["vibration"]
         return status
+
+    def apply_component(self, component, desired, appid, generation):
+        if component == "virtual_controller":
+            if not desired:
+                return self._operation_result(
+                    component, "applied", {}, appid, generation,
+                    actual={},
+                )
+            return self._operation_result(
+                component, "unsupported", desired, appid, generation,
+                reason="unsupported",
+            )
+        if not self._identified:
+            return self._operation_result(
+                component, "unsupported", desired, appid, generation,
+                reason="unsupported",
+            )
+        if component == "buttons":
+            applied = ip._apply_overrides(
+                self._store, self._dbus, self._device_key, desired
+            )
+            return self._operation_result(
+                component, "applied" if applied else "failed",
+                desired, appid, generation,
+                reason=None if applied else "apply_failed",
+                actual=desired if applied else None,
+            )
+        if component == "vibration":
+            state = self._vibration.state()
+            if desired:
+                ip._ensure_vibration_baseline(
+                    self._store, self._dbus, self._device_key,
+                    state, self._vibration,
+                )
+            applied = ip._apply_vibration(
+                self._dbus, self._vibration, desired
+            )
+            exact = bool(state and state.get("readback"))
+            status = (
+                "applied" if applied and exact
+                else "accepted_unverifiable" if applied
+                else "failed"
+            )
+            self._vibration_last_apply = applied
+            return self._operation_result(
+                component, status, desired, appid, generation,
+                reason=None if applied else "apply_failed",
+                actual=desired if applied and exact else None,
+            )
+        return super().apply_component(
+            component, desired, appid, generation
+        )
+
+    def wait_ready(self, appid, generation) -> bool:
+        source_paths = getattr(self._dbus, "source_device_paths", None)
+        if callable(source_paths):
+            return bool(source_paths())
+        return bool(self._dbus.capabilities())
+
+    def cancel_transients(self, reason) -> None:
+        stop = getattr(self._dbus, "stop_rumble", None)
+        if callable(stop):
+            stop()
+
+    def clear_translated_state(self) -> bool:
+        self.cancel_transients("clear_translated_state")
+        return True
 
     def restore_external(self) -> bool:
         if not self._identified:
@@ -488,6 +592,43 @@ class HhdBackend(ControllerBackend):
                                    apply_buttons=True) -> dict:
         applied = self.apply_effective(appid, apply_buttons)
         return {"buttons": True, "vibration": applied}
+
+    def apply_component(self, component, desired, appid, generation):
+        if component == "virtual_controller":
+            if not desired:
+                return self._operation_result(
+                    component, "applied", {}, appid, generation,
+                    actual={},
+                )
+            return self._operation_result(
+                component, "unsupported", desired, appid, generation,
+                reason="unsupported",
+            )
+        if component == "buttons":
+            if not desired:
+                return self._operation_result(
+                    component, "applied", {}, appid, generation,
+                    actual={},
+                )
+            return self._operation_result(
+                component, "unsupported", desired, appid, generation,
+                reason="unsupported",
+            )
+        if component == "vibration":
+            applied = self._apply_vibration(desired)
+            self._vibration_last_apply = applied
+            return self._operation_result(
+                component,
+                "accepted_unverifiable" if applied else "failed",
+                desired, appid, generation,
+                reason=None if applied else "apply_failed",
+            )
+        return super().apply_component(
+            component, desired, appid, generation
+        )
+
+    def wait_ready(self, appid, generation) -> bool:
+        return isinstance(hhd_api.read_state(), dict)
 
     def restore_external(self) -> bool:
         baseline = self._store.vibration_baseline(

@@ -136,6 +136,25 @@ class OperationState:
             self._components[result.component] = clean
             return True
 
+    def is_current(self, generation: int, appid) -> bool:
+        normalized_appid = str(appid) if appid is not None else None
+        with self._lock:
+            return (
+                generation == self._generation
+                and normalized_appid == self._appid
+            )
+
+    def cancel_current(self, reason="cancelled") -> int:
+        if reason not in REASONS:
+            reason = "cancelled"
+        with self._lock:
+            self._generation += 1
+            for value in self._components.values():
+                if value.get("status") == "pending":
+                    value["status"] = "cancelled"
+                    value["reason"] = reason
+            return self._generation
+
     def snapshot(self) -> dict:
         with self._lock:
             return copy.deepcopy({

@@ -87,6 +87,37 @@ def test_no_backend_integrated_diagnostics_has_stable_empty_shape():
     }
 
 
+def test_component_adapter_is_honest_without_an_owner():
+    backend = factory.ControllerBackend()
+
+    empty = backend.apply_component("buttons", {}, "42", 1)
+    requested = backend.apply_component(
+        "vibration", {"value": 40}, "42", 1
+    )
+
+    assert empty.status == "applied"
+    assert empty.actual == {}
+    assert requested.status == "unsupported"
+    assert requested.reason == "unsupported"
+
+
+def test_inputplumber_button_component_uses_exact_profile_readback(
+    monkeypatch,
+):
+    monkeypatch.setattr(factory, "VibrationController", lambda *args: FakeVibration())
+    monkeypatch.setattr(factory.ip, "_apply_overrides", lambda *args: True)
+    backend = factory.IpBackend(
+        FakeStore(), FakeDbus(), device_key="rog_ally"
+    )
+    desired = {"LeftPaddle1": [{"key": "KeyTab"}]}
+
+    result = backend.apply_component("buttons", desired, "42", 7)
+
+    assert result.status == "applied"
+    assert result.owner == "inputplumber"
+    assert result.actual == desired
+
+
 def test_ip_report_composes_only_live_buttons_and_persistent_vibration(
     tmp_path, monkeypatch
 ):
