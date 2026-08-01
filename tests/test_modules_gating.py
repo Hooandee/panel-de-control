@@ -1,5 +1,6 @@
 import sys
 import types
+import asyncio
 
 if "decky" not in sys.modules:
     _decky = types.ModuleType("decky")
@@ -177,8 +178,6 @@ def test_disabling_controller_module_restores_global_profile():
 
 
 def test_reenabling_controller_module_forces_profile_retry():
-    import asyncio
-
     p = main.Plugin.__new__(main.Plugin)
     p._settings = {
         "disabled_modules": ["mandos"],
@@ -194,6 +193,49 @@ def test_reenabling_controller_module_forces_profile_retry():
     asyncio.run(p.set_ui_module("mandos", False))
 
     assert reapplies == [{"force_controller": True}]
+
+
+def test_controller_diagnostics_disabled_returns_empty_without_backend():
+    p = _plugin(disabled=["mandos"])
+    p._init = lambda: None
+    p._device = types.SimpleNamespace(key="legion_go")
+    calls = []
+    p._controller_backend = types.SimpleNamespace(
+        get_integrated_diagnostics=lambda: calls.append(True)
+    )
+
+    state = asyncio.run(p.get_controller_diagnostics())
+
+    assert state == {
+        "device_key": "legion_go",
+        "sources": [],
+        "batteries": [],
+        "inputs": {},
+        "motion": None,
+        "vibration": None,
+        "last_operations": {},
+    }
+    assert calls == []
+
+
+def test_controller_diagnostics_is_offloaded_when_enabled():
+    p = _plugin()
+    p._init = lambda: None
+    p._device = types.SimpleNamespace(key="rog_ally")
+    state = main.IntegratedDiagnostics.empty("rog_ally")
+    p._controller_backend = types.SimpleNamespace(
+        get_integrated_diagnostics=lambda: state
+    )
+    offloaded = []
+
+    async def offload(fn):
+        offloaded.append(fn)
+        return fn()
+
+    p._offload_call = offload
+
+    assert asyncio.run(p.get_controller_diagnostics()) == state
+    assert len(offloaded) == 1
 
 
 def test_hhd_restore_keeps_marker_when_hhd_unreachable():

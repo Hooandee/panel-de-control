@@ -72,6 +72,7 @@ from controllers import conflict as controller_conflict
 from controllers import factory as controller_factory
 from controllers.store import RemapStore
 from controllers.dbus import IpDbus
+from controllers.diagnostics import IntegratedDiagnostics
 from sysfs import read_str
 from report import collector as report_collector
 from report import client as report_client
@@ -799,6 +800,15 @@ class Plugin:
         self._init()
         return await self._offload_call(
             lambda: self._controller_backend.get_config(self._current_appid))
+
+    async def get_controller_diagnostics(self) -> dict:
+        self._init()
+        device_key = getattr(self._device, "key", None)
+        if not self._module_enabled("mandos"):
+            return IntegratedDiagnostics.empty(device_key)
+        return await self._offload_call(
+            self._controller_backend.get_integrated_diagnostics
+        )
 
     def _remember_controller_component(self, component, value) -> None:
         previous = self._last_controller_overrides

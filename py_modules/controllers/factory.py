@@ -13,6 +13,7 @@ from controllers import hhd_config
 from controllers import inputplumber as ip
 from controllers import ip_profile
 from controllers.capabilities import clean_report, report
+from controllers.diagnostics import IntegratedDiagnostics
 from controllers.vibration import VibrationController
 
 
@@ -23,6 +24,7 @@ class ControllerBackend:
 
     def __init__(self, version=None):
         self._version = version
+        self._integrated_diagnostics = IntegratedDiagnostics()
 
     def _stamp(self, cfg: dict) -> dict:
         if "capabilities" not in cfg:
@@ -107,6 +109,16 @@ class ControllerBackend:
             "manager": self.manager,
             "manager_version": self._version,
         }
+
+    def get_integrated_diagnostics(self) -> dict:
+        manager_state = self.diagnostics()
+        try:
+            manager_state["capabilities"] = self.get_capabilities()
+        except Exception:  # diagnostics must remain available on manager failure
+            pass
+        return self._integrated_diagnostics.snapshot(
+            getattr(self, "_device_key", None), manager_state
+        )
 
 
 class IpBackend(ControllerBackend):

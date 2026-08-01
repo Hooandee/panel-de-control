@@ -73,6 +73,20 @@ def test_no_backend_reports_no_mutable_surfaces():
     assert backend.get_config()["capabilities"] == backend.get_capabilities()
 
 
+def test_no_backend_integrated_diagnostics_has_stable_empty_shape():
+    backend = factory.ControllerBackend()
+
+    assert backend.get_integrated_diagnostics() == {
+        "device_key": None,
+        "sources": [],
+        "batteries": [],
+        "inputs": {},
+        "motion": None,
+        "vibration": None,
+        "last_operations": {},
+    }
+
+
 def test_ip_report_composes_only_live_buttons_and_persistent_vibration(
     tmp_path, monkeypatch
 ):
