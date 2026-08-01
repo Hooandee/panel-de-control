@@ -81,6 +81,7 @@ export const SECTION_BLOCKS: Record<string, BlockDef[]> = {
     { id: "remap", labelKey: "mandos.remap.title", icon: <LuReplace size={ICON} /> },
     { id: "settings", labelKey: "mandos.settings.title", icon: <LuSlidersVertical size={ICON} /> },
     { id: "vibration", labelKey: "mandos.vibration.title", icon: <LuVibrate size={ICON} /> },
+    { id: "diagnostics", labelKey: "mandos.diagnostics.title", icon: <LuActivity size={ICON} /> },
   ],
 };
 

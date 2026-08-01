@@ -710,6 +710,10 @@ export const setControllerVibration =
   );
 export const testControllerVibration =
   callable<[strength: number], boolean>("test_controller_vibration");
+// Kept unknown at the RPC boundary: the diagnostics panel validates every
+// capability enum before presenting manager-provided data.
+export const getControllerDiagnostics =
+  callable<[], unknown>("get_controller_diagnostics");
 
 // ---- Ajustes: per-game profile overview -----------------------------------
 // One row per game that has a stored per-game profile in any section (raw own values).

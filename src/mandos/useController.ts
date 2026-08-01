@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   getControllerConfig,
+  getControllerDiagnostics,
   resetController,
   setControllerButton,
   setControllerFollowGlobal,
@@ -10,6 +11,10 @@ import {
   type ControllerConfig,
   type Scope,
 } from "../api";
+import {
+  normalizeControllerDiagnostics,
+  type ControllerDiagnostics,
+} from "./diagnostics";
 import { valueToTarget } from "./logic";
 import { useRunningGame } from "../tdp/useRunningGame";
 import { useScopeSync } from "../useScopeSync";
@@ -82,4 +87,22 @@ export function useController(): ControllerControl {
     config, scope, game, onScope, onSetButton, onSetSetting,
     onSetVibration, onTestVibration, onReset,
   };
+}
+
+export function useControllerDiagnostics(): ControllerDiagnostics | null {
+  const [diagnostics, setDiagnostics] = useState<ControllerDiagnostics | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    getControllerDiagnostics()
+      .then((value) => {
+        if (mounted) setDiagnostics(normalizeControllerDiagnostics(value));
+      })
+      .catch(() => {
+        if (mounted) setDiagnostics(normalizeControllerDiagnostics(null));
+      });
+    return () => { mounted = false; };
+  }, []);
+
+  return diagnostics;
 }
