@@ -627,7 +627,7 @@ def _hhd_state(mode="uinput", paddles="noob"):
     return {"controllers": {"rog_ally": {"controller_mode": cm}}}
 
 
-def _hhd_settings(*modes, version=None):
+def _hhd_settings(*modes, version="test"):
     mode_nodes = {}
     for mode in modes:
         node = {"type": "container", "children": {}}
@@ -683,6 +683,7 @@ def test_hhd_get_config_none_without_controllers():
 
 def test_hhd_capabilities_use_only_options_present_in_live_state():
     state = {
+        "version": "test",
         "controllers": {
             "rog_ally": {
                 "controller_mode": {
@@ -774,6 +775,33 @@ def test_hhd_capabilities_reject_stale_settings_schema():
     )
 
     assert capabilities["surfaces"] == {}
+
+
+def test_hhd_capabilities_require_versions_on_state_and_schema():
+    controller = {
+        "controllers": {
+            "rog_ally": {
+                "controller_mode": {
+                    "mode": "uinput",
+                    "uinput": {"paddles_as": "steam_input"},
+                }
+            }
+        }
+    }
+
+    without_state_version = hhd_config.capabilities_report(
+        controller,
+        "rog_ally",
+        _hhd_settings("uinput", version="test"),
+    )
+    without_schema_version = hhd_config.capabilities_report(
+        {"version": "test", **controller},
+        "rog_ally",
+        _hhd_settings("uinput", version=None),
+    )
+
+    assert without_state_version["surfaces"] == {}
+    assert without_schema_version["surfaces"] == {}
 
 
 def test_hhd_build_payload_paths():

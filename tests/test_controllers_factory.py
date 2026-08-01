@@ -245,6 +245,7 @@ def test_hhd_config_and_capabilities_share_one_live_state(
     tmp_path, monkeypatch
 ):
     state = {
+        "version": "test",
         "controllers": {
             "rog_ally": {
                 "controller_mode": {
@@ -261,6 +262,7 @@ def test_hhd_config_and_capabilities_share_one_live_state(
         return state
 
     settings = {
+        "version": "test",
         "controllers": {
             "rog_ally": {
                 "type": "container",

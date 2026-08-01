@@ -71,9 +71,13 @@ def _mode_schema(settings, key):
 def _schema_matches_state(settings, state):
     settings_version = (settings or {}).get("version")
     state_version = (state or {}).get("version")
-    if settings_version is None or state_version is None:
-        return True
-    return settings_version == state_version
+    return (
+        isinstance(settings_version, str)
+        and bool(settings_version)
+        and isinstance(state_version, str)
+        and bool(state_version)
+        and settings_version == state_version
+    )
 
 
 def capabilities_report(state, device_profile_key, settings=None) -> dict:
