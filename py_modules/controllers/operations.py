@@ -17,7 +17,7 @@ STATUSES = {
 REASONS = {
     "apply_failed", "cancelled", "device_not_ready", "identity_changed",
     "invalid_state", "mode_failed", "owner_changed", "profile_conflict",
-    "readback_mismatch", "restore_failed", "shutdown", "superseded",
+    "readback_mismatch", "restore_failed", "resume", "shutdown", "superseded",
     "unsupported",
 }
 OWNERS = {"hhd", "inputplumber", "native", "evdev", "none"}

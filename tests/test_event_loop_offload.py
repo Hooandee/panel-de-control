@@ -13,6 +13,9 @@ import sys
 import threading
 import types
 
+from controllers.coordinator import ControllerCoordinator
+from controllers.operations import OperationResult
+
 
 class _RecordingExecutor(concurrent.futures.Executor):
     """Real Executor that records submissions and runs them inline (deterministic)."""
@@ -254,213 +257,152 @@ def test_unload_stops_new_tdp_writes_before_handoff(tmp_path, monkeypatch):
     assert events == ["handoff"]
 
 
+class _LifecycleController:
+    manager = "inputplumber"
+
+    def __init__(self, profile, statuses=None, write_ok=True):
+        self.profile = profile
+        self.statuses = statuses or {}
+        self.write_ok = write_ok
+        self.events = []
+
+    def set_button(self, source, targets, scope, appid):
+        return {"last_apply": self.write_ok}
+
+    def set_vibration(self, patch, scope, appid):
+        return {"vibration": {"last_apply": self.write_ok}}
+
+    def effective_profile(self, appid):
+        return self.profile
+
+    def owns_loaded_profile(self):
+        return True
+
+    def apply_component(self, component, desired, appid, generation):
+        self.events.append((component, appid))
+        status = self.statuses.get(component, "applied")
+        return OperationResult(
+            component, status,
+            "apply_failed" if status == "failed" else None,
+            self.manager, generation, appid, desired,
+            desired if status == "applied" else None,
+        )
+
+    def wait_ready(self, appid, generation):
+        self.events.append(("wait_ready", appid))
+        return True
+
+    def cancel_transients(self, reason):
+        self.events.append(("cancel", reason))
+
+    def clear_translated_state(self):
+        self.events.append(("clear", None))
+        return True
+
+    def restore_external(self):
+        self.events.append(("restore_external", None))
+        return True
+
+
+def _controller_for(p, profile, statuses=None, write_ok=True):
+    backend = _LifecycleController(profile, statuses, write_ok)
+    p._controller_backend = backend
+    p._controller_coordinator = ControllerCoordinator(backend)
+    return backend
+
+
 def test_failed_controller_write_remains_pending_for_lifecycle_retry(
     tmp_path, monkeypatch
 ):
     p, _ = _make_plugin(tmp_path, monkeypatch)
-
-    class Controller:
-        def set_vibration(self, patch, scope, appid):
-            return {"vibration": {"last_apply": False}}
-
-        def effective_profile(self, appid):
-            return {"buttons": {}, "vibration": {"value": 40}}
-
-    p._controller_backend = Controller()
-    p._current_appid = "42"
-    p._last_controller_overrides = {
-        "buttons": {}, "vibration": {"value": 100},
-    }
-
-    asyncio.run(
-        p.set_controller_vibration(
-            {"value": 40}, scope="game", appid="42"
-        )
+    _controller_for(
+        p,
+        {"virtual_controller": {}, "buttons": {}, "vibration": {"value": 40}},
+        write_ok=False,
     )
+    p._current_appid = "42"
 
-    assert p._last_controller_overrides == {
-        "buttons": {}, "vibration": {"value": 100},
-    }
+    asyncio.run(p.set_controller_vibration(
+        {"value": 40}, scope="game", appid="42"
+    ))
+
+    assert p._controller_coordinator.snapshot()["components"] == {}
 
 
-def test_button_write_does_not_mark_pending_vibration_as_applied(
+def test_component_results_remain_independent_after_button_write(
     tmp_path, monkeypatch
 ):
     p, _ = _make_plugin(tmp_path, monkeypatch)
-
-    class Controller:
-        def set_button(self, source, targets, scope, appid):
-            return {"last_apply": True}
-
-        def effective_profile(self, appid):
-            return {
-                "buttons": {"LeftPaddle1": [{"gamepad": "South"}]},
-                "vibration": {"value": 40},
-            }
-
-    p._controller_backend = Controller()
-    p._current_appid = "42"
-    p._last_controller_overrides = {
-        "buttons": {}, "vibration": {"value": 100},
-    }
-
-    asyncio.run(
-        p.set_controller_button(
-            "LeftPaddle1", [{"gamepad": "South"}],
-            scope="game", appid="42",
-        )
+    backend = _controller_for(
+        p,
+        {
+            "virtual_controller": {},
+            "buttons": {"LeftPaddle1": [{"gamepad": "South"}]},
+            "vibration": {"value": 40},
+        },
+        statuses={"vibration": "failed"},
     )
+    p._current_appid = "42"
 
-    assert p._last_controller_overrides == {
-        "buttons": {"LeftPaddle1": [{"gamepad": "South"}]},
+    asyncio.run(p.set_controller_button(
+        "LeftPaddle1", [{"gamepad": "South"}],
+        scope="game", appid="42",
+    ))
+
+    components = p._controller_coordinator.snapshot()["components"]
+    assert components["buttons"]["status"] == "applied"
+    assert components["vibration"]["status"] == "failed"
+    assert ("vibration", "42") in backend.events
+
+
+def test_unload_reconciles_global_controller_before_handoff(
+    tmp_path, monkeypatch
+):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    backend = _controller_for(p, {
+        "virtual_controller": {}, "buttons": {},
         "vibration": {"value": 100},
-    }
-
-
-def test_vibration_write_does_not_mark_pending_buttons_as_applied(
-    tmp_path, monkeypatch
-):
-    p, _ = _make_plugin(tmp_path, monkeypatch)
-
-    class Controller:
-        def set_vibration(self, patch, scope, appid):
-            return {"vibration": {"last_apply": True}}
-
-        def effective_profile(self, appid):
-            return {
-                "buttons": {"LeftPaddle1": [{"gamepad": "South"}]},
-                "vibration": {"value": 40},
-            }
-
-    p._controller_backend = Controller()
-    p._current_appid = "42"
-    p._last_controller_overrides = {
-        "buttons": {}, "vibration": {"value": 100},
-    }
-
-    asyncio.run(
-        p.set_controller_vibration(
-            {"value": 40}, scope="game", appid="42"
-        )
-    )
-
-    assert p._last_controller_overrides == {
-        "buttons": {}, "vibration": {"value": 40},
-    }
-
-
-def test_unload_restores_global_controller_profile(tmp_path, monkeypatch):
-    p, _ = _make_plugin(tmp_path, monkeypatch)
-    events = []
-
-    class Controller:
-        def effective_profile(self, appid):
-            assert appid is None
-            return {"buttons": {}, "vibration": {"value": 100}}
-
-        def apply_effective(self, appid, apply_buttons=True):
-            events.append(("controller", appid, apply_buttons))
-            return True
-
-    p._controller_backend = Controller()
-    p._last_controller_overrides = {
-        "buttons": {}, "vibration": {"value": 40},
-    }
+    })
     p._restore_fans_safe = lambda: None
     p._restore_color_safe = lambda: None
     p._restore_audio_safe = lambda: None
-    p._restore_hhd_tdp = lambda: events.append("handoff")
+    p._restore_hhd_tdp = lambda: backend.events.append(("handoff", None))
 
     asyncio.run(p._unload())
 
-    assert events == [("controller", None, True), "handoff"]
+    assert ("virtual_controller", None) in backend.events
+    assert backend.events[-1] == ("handoff", None)
 
 
-def test_forced_controller_reapply_runs_with_same_desired_profile(
+def test_forced_controller_reapply_runs_same_desired_profile(
     tmp_path, monkeypatch
 ):
     p, _ = _make_plugin(tmp_path, monkeypatch)
-    profile = {"buttons": {}, "vibration": {"value": 40}}
-    calls = []
-
-    class Controller:
-        def effective_profile(self, appid):
-            return profile
-
-        def apply_effective(self, appid, apply_buttons=True):
-            calls.append((appid, apply_buttons))
-            return True
-
-        def owns_loaded_profile(self):
-            return False
-
-    p._controller_backend = Controller()
-    p._last_controller_overrides = profile
+    profile = {
+        "virtual_controller": {}, "buttons": {},
+        "vibration": {"value": 40},
+    }
+    backend = _controller_for(p, profile)
     p._current_appid = "42"
 
     p._reapply_controller(force=True)
+    p._reapply_controller(force=True)
 
-    assert calls == [("42", True)]
-
-
-def test_controller_reapply_caches_only_confirmed_components(
-    tmp_path, monkeypatch
-):
-    p, _ = _make_plugin(tmp_path, monkeypatch)
-    desired = {
-        "buttons": {"LeftPaddle1": [{"gamepad": "South"}]},
-        "vibration": {"value": 40},
-    }
-
-    class Controller:
-        def effective_profile(self, appid):
-            return desired
-
-        def apply_effective_components(
-            self, appid, apply_buttons=True
-        ):
-            return {"buttons": False, "vibration": True}
-
-        def owns_loaded_profile(self):
-            return False
-
-    p._controller_backend = Controller()
-    p._last_controller_overrides = {
-        "buttons": {}, "vibration": {"value": 100},
-    }
-    p._current_appid = "42"
-
-    p._reapply_controller()
-
-    assert p._last_controller_overrides == {
-        "buttons": {}, "vibration": {"value": 40},
-    }
+    assert backend.events.count(("vibration", "42")) == 2
 
 
 def test_forced_startup_restores_owned_profile_with_empty_global(
     tmp_path, monkeypatch
 ):
     p, _ = _make_plugin(tmp_path, monkeypatch)
-    calls = []
-
-    class Controller:
-        def effective_profile(self, appid):
-            return {"buttons": {}, "vibration": {}}
-
-        def apply_effective(self, appid, apply_buttons=True):
-            calls.append((appid, apply_buttons))
-            return True
-
-        def owns_loaded_profile(self):
-            return True
-
-    p._controller_backend = Controller()
-    p._last_controller_overrides = None
+    backend = _controller_for(p, {
+        "virtual_controller": {}, "buttons": {}, "vibration": {},
+    })
     p._current_appid = None
 
     p._reapply_controller(force=True)
 
-    assert calls == [(None, True)]
+    assert ("buttons", None) in backend.events
 
 
 def test_uninstall_stops_new_tdp_writes_before_handoff(tmp_path, monkeypatch):

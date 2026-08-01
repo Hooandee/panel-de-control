@@ -2,10 +2,20 @@
 import copy
 import threading
 
+from dataclasses import dataclass
+
 from controllers.operations import OperationResult, OperationState
 
 
 _MODE_OK = {"applied", "accepted_unverifiable"}
+
+
+@dataclass(frozen=True)
+class ReconcileRequest:
+    appid: str | None
+    profile: dict
+    generation: int
+    key: tuple
 
 
 class ControllerCoordinator:
@@ -34,19 +44,28 @@ class ControllerCoordinator:
             return None
         return result if self._operations.publish(result) else None
 
-    def reconcile(self, appid, profile) -> dict:
+    def prepare(self, appid, profile, force=False):
         normalized_appid = str(appid) if appid is not None else None
         key = self._key(normalized_appid, profile)
         with self._meta_lock:
-            if self._last_completed == key:
-                return self.snapshot()
+            if not force and self._last_completed == key:
+                return None
         desired_profile = copy.deepcopy(
             profile if isinstance(profile, dict) else {}
         )
         generation = self._operations.start(
             normalized_appid, desired_profile
         )
+        return ReconcileRequest(
+            normalized_appid, desired_profile, generation, key
+        )
 
+    def execute(self, request: ReconcileRequest) -> dict:
+        if not isinstance(request, ReconcileRequest):
+            return self.snapshot()
+        normalized_appid = request.appid
+        desired_profile = request.profile
+        generation = request.generation
         with self._apply_lock:
             if not self._current(generation, normalized_appid):
                 return self.snapshot()
@@ -81,12 +100,19 @@ class ControllerCoordinator:
 
             if self._current(generation, normalized_appid):
                 with self._meta_lock:
-                    self._last_completed = key
+                    self._last_completed = request.key
             return self.snapshot()
 
+    def reconcile(self, appid, profile, force=False) -> dict:
+        request = self.prepare(appid, profile, force=force)
+        return self.snapshot() if request is None else self.execute(request)
+
     def cancel_transients(self, reason="cancelled") -> None:
-        self._operations.cancel_current(reason)
+        self.invalidate(reason)
         self._backend.cancel_transients(reason)
+
+    def invalidate(self, reason="cancelled") -> None:
+        self._operations.cancel_current(reason)
         with self._meta_lock:
             self._last_completed = None
 

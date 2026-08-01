@@ -70,6 +70,7 @@ from controllers import detect as controller_detect
 from controllers import hhd as controller_hhd
 from controllers import conflict as controller_conflict
 from controllers import factory as controller_factory
+from controllers.coordinator import ControllerCoordinator
 from controllers.store import RemapStore
 from controllers.dbus import IpDbus
 from controllers.diagnostics import IntegratedDiagnostics
@@ -247,13 +248,22 @@ class Plugin:
         # the InputPlumber backend. The factory picks ONE backend (HHD REST / IP dbus /
         # none). `_last_controller_overrides` gates the game-change re-apply so we only
         # touch the daemon when the effective profile actually changes.
+        self._controller_store = RemapStore(
+            os.path.join(
+                decky.DECKY_PLUGIN_SETTINGS_DIR, "controller_remap.json"
+            )
+        )
+        self._controller_dbus = IpDbus(event_cb=self._log_controller_event)
         self._controller_backend = controller_factory.select_controller_backend(
             self._controller,
-            RemapStore(os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "controller_remap.json")),
-            IpDbus(event_cb=self._log_controller_event),
+            self._controller_store,
+            self._controller_dbus,
             self._device,
         )
-        self._last_controller_overrides = None
+        self._controller_coordinator = ControllerCoordinator(
+            self._controller_backend
+        )
+        self._controller_shutdown = False
         self._fan_reader = FanReader()
         # temp_fn feeds the software-loop backends (Steam Deck / Legion Go 2) the
         # live driving temp; hardware-curve backends (ASUS/MSI) ignore it.
@@ -810,16 +820,6 @@ class Plugin:
             self._controller_backend.get_integrated_diagnostics
         )
 
-    def _remember_controller_component(self, component, value) -> None:
-        previous = self._last_controller_overrides
-        applied = (
-            dict(previous)
-            if isinstance(previous, dict)
-            else {"buttons": None, "vibration": None}
-        )
-        applied[component] = value
-        self._last_controller_overrides = applied
-
     async def set_controller_button(self, source: str, targets: list,
                                     scope: str = "global", appid=None) -> dict:
         """Remap one extra button in a scope (global / a game; InputPlumber only,
@@ -833,12 +833,7 @@ class Plugin:
         cfg = await self._offload_call(
             lambda: self._controller_backend.set_button(source, targets, scope, appid))
         if cfg.get("last_apply") is not False:
-            effective = self._controller_backend.effective_profile(
-                self._current_appid
-            )
-            self._remember_controller_component(
-                "buttons", effective["buttons"]
-            )
+            await self._reconcile_controller_now(force=True)
         return cfg
 
     async def set_controller_vibration(self, patch: dict,
@@ -859,20 +854,17 @@ class Plugin:
             isinstance(vibration, dict)
             and vibration.get("last_apply") is False
         ):
-            effective = self._controller_backend.effective_profile(
-                self._current_appid
-            )
-            self._remember_controller_component(
-                "vibration", effective["vibration"]
-            )
+            await self._reconcile_controller_now(force=True)
         return cfg
 
     async def test_controller_vibration(self, strength: float = 0.5) -> bool:
         """Send a short bounded test pulse and always stop it in the worker."""
         self._init()
-        return await self._offload_call(
-            lambda: self._controller_backend.test_vibration(strength)
-        )
+        def test():
+            self._controller_coordinator.cancel_transients("superseded")
+            return self._controller_backend.test_vibration(strength)
+
+        return await self._offload_call(test)
 
     async def set_controller_follow_global(self, follow: bool, appid) -> dict:
         """Toggle a game between its own remap and following the global one, keeping
@@ -886,7 +878,7 @@ class Plugin:
                 self._controller_backend.create_game_from_global(appid)  # already sets follow_global=False
             else:
                 self._controller_backend.set_follow_global(appid, bool(follow))
-            self._reapply_controller()
+            await self._reconcile_controller_now()
         return await self._offload_call(
             lambda: self._controller_backend.get_config(self._current_appid))
 
@@ -908,114 +900,93 @@ class Plugin:
         cfg = await self._offload_call(
             lambda: self._controller_backend.reset(scope, appid))
         if cfg.get("last_apply") is not False:
-            effective = self._controller_backend.effective_profile(
-                self._current_appid
-            )
-            self._remember_controller_component(
-                "buttons", effective["buttons"]
-            )
+            await self._reconcile_controller_now(force=True)
         return cfg
 
-    def _reapply_controller(self, force=False) -> None:
-        """On a game change, load the effective InputPlumber profile for the running
-        game — but only when it DIFFERS from what's already loaded, so the common case
-        (following global, or the same profile) never touches the daemon and can't
-        race its own re-grab on game launch. Offloaded (dbus + YAML subprocess). No-op
-        on HHD/none (effective_overrides returns None)."""
-        if not self._module_enabled("mandos"):
-            return
-        ov = self._controller_backend.effective_profile(self._current_appid)
-        if ov is None or (
-            not force and ov == self._last_controller_overrides
+    def _prepare_controller_reconcile(self, force=False):
+        if (
+            self._controller_shutdown
+            or not self._module_enabled("mandos")
         ):
-            return
-        previous = self._last_controller_overrides
-        has_values = bool(ov.get("buttons") or ov.get("vibration"))
-        # No controller values configured and none applied this session → leave the
-        # daemon and physical device untouched just because a game launched.
+            return None
+        profile = self._controller_backend.effective_profile(
+            self._current_appid
+        )
+        if profile is None:
+            return None
+        has_values = any(
+            profile.get(component)
+            for component in (
+                "virtual_controller", "buttons", "vibration",
+            )
+        )
         owns_loaded_profile = getattr(
             self._controller_backend, "owns_loaded_profile", lambda: False
         )()
-        if (
-            not has_values
-            and previous is None
-            and not (force and owns_loaded_profile)
-        ):
-            return
-        appid = self._current_appid
-        apply_buttons = force or (
-            bool(ov.get("buttons"))
-            if previous is None
-            else ov.get("buttons") != previous.get("buttons")
+        if not has_values and not (force and owns_loaded_profile):
+            return None
+        return self._controller_coordinator.prepare(
+            self._current_appid, profile, force=force
         )
 
-        def apply():
-            apply_components = getattr(
-                self._controller_backend,
-                "apply_effective_components",
-                None,
+    async def _reconcile_controller_now(self, force=False) -> None:
+        request = self._prepare_controller_reconcile(force)
+        if request is not None:
+            await self._offload_call(
+                lambda: self._controller_coordinator.execute(request)
             )
-            if callable(apply_components):
-                status = apply_components(
-                    appid, apply_buttons=apply_buttons
-                )
-            else:
-                applied = self._controller_backend.apply_effective(
-                    appid, apply_buttons=apply_buttons
-                )
-                status = {
-                    "buttons": applied,
-                    "vibration": applied,
-                }
-            if status.get("buttons"):
-                self._remember_controller_component(
-                    "buttons", ov["buttons"]
-                )
-            if status.get("vibration"):
-                self._remember_controller_component(
-                    "vibration", ov["vibration"]
-                )
-            if (
-                status.get("buttons")
-                and status.get("vibration")
-            ):
-                self._last_controller_overrides = ov
 
-        self._offload(apply)
+    def _reapply_controller(self, force=False) -> None:
+        request = self._prepare_controller_reconcile(force)
+        if request is not None:
+            self._offload(
+                lambda: self._controller_coordinator.execute(request)
+            )
 
     def _reapply_after_resume(self, on_ac=None) -> None:
-        self._reapply_all(on_ac, force_controller=True)
+        def prepare():
+            self._controller_coordinator.cancel_transients("resume")
+            self._refresh_controller_backend()
+
+        self._offload(
+            prepare,
+            done=lambda: self._reapply_all(
+                on_ac, force_controller=True
+            ),
+        )
+
+    def _refresh_controller_backend(self) -> None:
+        detected = controller_detect.detect()
+        if (
+            detected.get("manager") == controller_detect.NONE
+            and self._controller_backend.manager != controller_detect.NONE
+        ):
+            return
+        if detected == self._controller:
+            return
+        self._controller_coordinator.invalidate("owner_changed")
+        self._controller = detected
+        self._controller_backend = (
+            controller_factory.select_controller_backend(
+                detected,
+                self._controller_store,
+                self._controller_dbus,
+                self._device,
+            )
+        )
+        self._controller_coordinator = ControllerCoordinator(
+            self._controller_backend
+        )
 
     def _restore_controller_global(self) -> bool:
-        """Leave hardware on the global controller profile, never a game profile."""
-        global_profile = self._controller_backend.effective_profile(None)
-        if global_profile is None:
-            return True
-        current = self._last_controller_overrides
-        global_has_values = bool(
-            global_profile.get("buttons")
-            or global_profile.get("vibration")
+        snapshot = self._controller_coordinator.shutdown(False)
+        ok = all(
+            value.get("status") in {
+                "applied", "accepted_unverifiable",
+            }
+            for value in snapshot.get("components", {}).values()
         )
-        current_has_values = bool(
-            isinstance(current, dict)
-            and (current.get("buttons") or current.get("vibration"))
-        )
-        if (
-            not global_has_values
-            and not current_has_values
-            and not getattr(
-                self._controller_backend,
-                "owns_loaded_profile",
-                lambda: False,
-            )()
-        ):
-            return True
-        ok = self._controller_backend.apply_effective(
-            None, apply_buttons=True
-        )
-        if ok:
-            self._last_controller_overrides = global_profile
-        else:
+        if not ok:
             decky.logger.warning(
                 "Controller global handoff was not confirmed"
             )
@@ -1023,12 +994,17 @@ class Plugin:
 
     def _restore_controller_external(self) -> bool:
         """Return controller state to the immutable pre-plugin baseline."""
-        ok = self._controller_backend.restore_external()
+        snapshot = self._controller_coordinator.shutdown(True)
+        ok = snapshot.get("restore_external") == "applied"
         if not ok:
             decky.logger.warning(
                 "Controller external handoff was not confirmed"
             )
         return ok
+
+    def _begin_controller_shutdown(self) -> None:
+        self._controller_shutdown = True
+        self._controller_coordinator.invalidate("shutdown")
 
     # ---- Ajustes: per-game profile overview --------------------------------
     def _scoped_stores(self):
@@ -4114,6 +4090,7 @@ class Plugin:
         # spawn subprocesses (systemctl / gamescopectl) → run them off the loop and
         # await, then shut the executor down.
         self._begin_tdp_shutdown()
+        self._begin_controller_shutdown()
         await self._drain_offloaded()
         await self._offload_call(self._restore_fans_safe)
         self._cancel_color_revert()
@@ -4141,6 +4118,7 @@ class Plugin:
 
     async def _uninstall(self) -> None:
         self._begin_tdp_shutdown()
+        self._begin_controller_shutdown()
         await self._drain_offloaded()
         await self._offload_call(self._restore_fans_safe)
         await self._offload_call(self._restore_color_safe)
