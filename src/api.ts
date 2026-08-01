@@ -670,6 +670,17 @@ export interface ControllerConfig {
     readback?: boolean;
     last_apply?: boolean;
   };
+  operation_state?: {
+    generation: number;
+    appid: string | null;
+    components: Record<string, {
+      status: "applied" | "accepted_unverifiable" | "pending" | "unsupported" | "conflict" | "failed" | "recovery_required" | "cancelled";
+      owner?: "hhd" | "inputplumber" | "native" | "evdev" | "none";
+      reason?: string;
+      desired: Record<string, unknown>;
+      actual?: Record<string, unknown>;
+    }>;
+  };
 }
 
 // ---- Bug reporter ---------------------------------------------------------

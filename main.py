@@ -808,8 +808,10 @@ class Plugin:
     # daemon re-grabs the pad would freeze the QAM). All offloaded via _offload_call.
     async def get_controller_config(self) -> dict:
         self._init()
-        return await self._offload_call(
-            lambda: self._controller_backend.get_config(self._current_appid))
+        config = await self._offload_call(
+            lambda: self._controller_backend.get_config(self._current_appid)
+        )
+        return self._controller_config_with_operations(config)
 
     async def get_controller_diagnostics(self) -> dict:
         self._init()
@@ -820,6 +822,11 @@ class Plugin:
             self._controller_backend.get_integrated_diagnostics
         )
 
+    def _controller_config_with_operations(self, config) -> dict:
+        value = dict(config) if isinstance(config, dict) else {}
+        value["operation_state"] = self._controller_coordinator.snapshot()
+        return value
+
     async def set_controller_button(self, source: str, targets: list,
                                     scope: str = "global", appid=None) -> dict:
         """Remap one extra button in a scope (global / a game; InputPlumber only,
@@ -828,13 +835,17 @@ class Plugin:
         self._init()
         scope = self._resolve_scope(scope, appid)  # game+no-appid → global; pins _current_appid
         if scope is None:
-            return await self._offload_call(
-                lambda: self._controller_backend.get_config(self._current_appid))
+            config = await self._offload_call(
+                lambda: self._controller_backend.get_config(
+                    self._current_appid
+                )
+            )
+            return self._controller_config_with_operations(config)
         cfg = await self._offload_call(
             lambda: self._controller_backend.set_button(source, targets, scope, appid))
         if cfg.get("last_apply") is not False:
             await self._reconcile_controller_now(force=True)
-        return cfg
+        return self._controller_config_with_operations(cfg)
 
     async def set_controller_vibration(self, patch: dict,
                                        scope: str = "global", appid=None) -> dict:
@@ -842,8 +853,12 @@ class Plugin:
         self._init()
         scope = self._resolve_scope(scope, appid)
         if scope is None:
-            return await self._offload_call(
-                lambda: self._controller_backend.get_config(self._current_appid))
+            config = await self._offload_call(
+                lambda: self._controller_backend.get_config(
+                    self._current_appid
+                )
+            )
+            return self._controller_config_with_operations(config)
         cfg = await self._offload_call(
             lambda: self._controller_backend.set_vibration(
                 patch, scope, appid
@@ -855,7 +870,7 @@ class Plugin:
             and vibration.get("last_apply") is False
         ):
             await self._reconcile_controller_now(force=True)
-        return cfg
+        return self._controller_config_with_operations(cfg)
 
     async def test_controller_vibration(self, strength: float = 0.5) -> bool:
         """Send a short bounded test pulse and always stop it in the worker."""
@@ -879,29 +894,36 @@ class Plugin:
             else:
                 self._controller_backend.set_follow_global(appid, bool(follow))
             await self._reconcile_controller_now()
-        return await self._offload_call(
-            lambda: self._controller_backend.get_config(self._current_appid))
+        config = await self._offload_call(
+            lambda: self._controller_backend.get_config(self._current_appid)
+        )
+        return self._controller_config_with_operations(config)
 
     async def set_controller_setting(self, field: str, value: str) -> dict:
         """Change a controller setting on HHD (mode / paddles_as; no-op on others)."""
         self._init()
-        return await self._offload_call(
+        config = await self._offload_call(
             lambda: self._controller_backend.set_setting(
                 field, value, self._current_appid
             ))
+        return self._controller_config_with_operations(config)
 
     async def reset_controller(self, scope: str = "global", appid=None) -> dict:
         """Reset a scope's remap to the device default (InputPlumber; no-op on others)."""
         self._init()
         scope = self._resolve_scope(scope, appid)
         if scope is None:
-            return await self._offload_call(
-                lambda: self._controller_backend.get_config(self._current_appid))
+            config = await self._offload_call(
+                lambda: self._controller_backend.get_config(
+                    self._current_appid
+                )
+            )
+            return self._controller_config_with_operations(config)
         cfg = await self._offload_call(
             lambda: self._controller_backend.reset(scope, appid))
         if cfg.get("last_apply") is not False:
             await self._reconcile_controller_now(force=True)
-        return cfg
+        return self._controller_config_with_operations(cfg)
 
     def _prepare_controller_reconcile(self, force=False):
         if (

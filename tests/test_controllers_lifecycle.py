@@ -1,4 +1,5 @@
 import importlib
+import asyncio
 import sys
 import types
 
@@ -31,6 +32,14 @@ class LifecycleBackend:
             "virtual_controller": {},
             "buttons": {},
             "vibration": {"value": value},
+        }
+
+    def get_config(self, appid):
+        return {
+            "manager": self.manager,
+            "manager_version": "test",
+            "supported": True,
+            "kind": "remap",
         }
 
     def owns_loaded_profile(self):
@@ -127,3 +136,31 @@ def test_shutdown_invalidates_already_prepared_reconcile(
 
     assert plugin._controller_shutdown is True
     assert backend.calls == []
+
+
+def test_controller_config_exposes_component_operation_state(
+    tmp_path, monkeypatch
+):
+    main = _main(monkeypatch, tmp_path)
+    plugin = main.Plugin.__new__(main.Plugin)
+    backend = LifecycleBackend()
+    coordinator = ControllerCoordinator(backend)
+    coordinator.reconcile("20", backend.effective_profile("20"))
+    plugin._controller_backend = backend
+    plugin._controller_coordinator = coordinator
+    plugin._current_appid = "20"
+    plugin._init = lambda: None
+
+    async def offload(fn):
+        return fn()
+
+    plugin._offload_call = offload
+    config = asyncio.run(plugin.get_controller_config())
+
+    assert config["operation_state"]["appid"] == "20"
+    assert config["operation_state"]["components"]["vibration"] == {
+        "status": "applied",
+        "owner": "inputplumber",
+        "desired": {"value": 80},
+        "actual": {"value": 80},
+    }
