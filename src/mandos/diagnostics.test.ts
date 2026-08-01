@@ -14,6 +14,7 @@ const emptyDiagnostics: ControllerDiagnostics = {
   batteries: [],
   inputs: {},
   motion: null,
+  virtual_controller: null,
   vibration: null,
   last_operations: {},
 };
@@ -62,6 +63,15 @@ describe("controller diagnostics presentation", () => {
       ...emptyDiagnostics,
       sources: [{ manager: "inputplumber", version: "0.78", source_count: 3 }],
       inputs: { buttons: [{ source: "LeftPaddle1", label: "M2" }] },
+      virtual_controller: {
+        owner: "inputplumber",
+        availability: "supported",
+        fields: { actual_mode: "xbox-elite", readiness: "dbus_target_type" },
+        scope: ["global", "game"],
+        apply: "recreate",
+        readback: "exact",
+        evidence: "upstream",
+      },
       vibration: {
         owner: "native",
         availability: "supported",
@@ -77,7 +87,7 @@ describe("controller diagnostics presentation", () => {
       { manager: "inputplumber", version: "0.78", source_count: 3 },
     ]);
     expect(visibleDiagnosticGroups(normalized)).toEqual([
-      "sources", "inputs", "vibration",
+      "sources", "inputs", "virtual_controller", "vibration",
     ]);
   });
 

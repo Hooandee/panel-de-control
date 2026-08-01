@@ -351,3 +351,51 @@ def test_v3_migrates_virtual_profiles_and_adds_empty_mode_baselines(tmp_path):
         "mode": "xbox_elite",
     }
     assert store.virtual_mode_baseline("hhd:rog_ally") == {}
+
+
+def test_v4_migrates_hhd_virtual_baseline_without_loss(tmp_path):
+    store = _store(tmp_path, {
+        "version": 4,
+        "global": {},
+        "games": {},
+        "virtual_mode_baselines": {
+            "hhd:rog_ally": {
+                "mode": "uinput",
+                "paddles_as": "steam_input",
+            },
+        },
+    })
+
+    assert store.virtual_mode_baseline("hhd:rog_ally") == {
+        "mode": "uinput",
+        "paddles_as": "steam_input",
+    }
+
+
+def test_inputplumber_virtual_targets_are_exact_immutable_and_persisted(
+    tmp_path,
+):
+    path = tmp_path / "remap.json"
+    owner = "inputplumber:legion_go"
+    baseline = ["xbox-elite", "mouse", "keyboard", "touchpad"]
+    applied = ["ds5-edge", "mouse", "keyboard", "touchpad"]
+    store = RemapStore(str(path))
+
+    store.remember_virtual_mode_baseline(owner, {
+        "mode": "xbox-elite", "target_devices": baseline,
+    })
+    store.remember_virtual_mode_baseline(owner, {
+        "mode": "xb360", "target_devices": ["xb360", "keyboard"],
+    })
+    store.remember_applied_virtual_targets(owner, applied)
+    store.remember_virtual_target_recovery(owner, [baseline, applied])
+
+    assert RemapStore(str(path)).virtual_mode_baseline(owner) == {
+        "mode": "xbox-elite",
+        "target_devices": baseline,
+        "last_applied_target_devices": applied,
+        "recovery_target_devices": [baseline, applied],
+    }
+
+    store.forget_virtual_mode_baseline(owner)
+    assert RemapStore(str(path)).virtual_mode_baseline(owner) == {}

@@ -38,7 +38,7 @@ export interface ControllerControl {
   vibrationTestResult: VibrationTestResult | null;
   onTestVibration: (
     pattern: "pulse",
-    channel: "left" | "right" | "both" | null,
+    channel: "left" | "right" | "strong" | "weak" | "both" | null,
     strength: number,
   ) => void;
   onReset: () => void;
@@ -193,7 +193,7 @@ export function useController(): ControllerControl {
   const onTestVibration = useCallback(
     (
       pattern: "pulse",
-      channel: "left" | "right" | "both" | null,
+      channel: "left" | "right" | "strong" | "weak" | "both" | null,
       strength: number,
     ) => {
       const sequence = ++vibrationTestSequence.current;

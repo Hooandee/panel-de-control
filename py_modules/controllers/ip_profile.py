@@ -139,6 +139,67 @@ KEY_TARGETS = (
     "KeyBrightnessUp", "KeyBrightnessDown",
 )
 
+# Curated from InputPlumber's official TargetDeviceTypeId catalog. Auxiliary
+# targets are deliberately excluded: changing gamepad emulation must preserve the
+# profile's keyboard, mouse, touchpad and touchscreen devices.
+VIRTUAL_GAMEPAD_TARGETS = (
+    "xb360", "xbox-elite", "xbox-series",
+    "ds5", "ds5-edge", "hori-steam",
+)
+OFFICIAL_GAMEPAD_TARGETS = (
+    *VIRTUAL_GAMEPAD_TARGETS,
+    "deck", "deck-uhid", "8bitdo-u2", "gamepad", "unified-gamepad",
+)
+OFFICIAL_TARGETS = (
+    *OFFICIAL_GAMEPAD_TARGETS,
+    "keyboard", "mouse", "touchpad", "touchscreen",
+    "null", "dbus", "debug",
+)
+
+
+def virtual_mode_options(supported_ids) -> list:
+    supported = {
+        value for value in (supported_ids or [])
+        if isinstance(value, str)
+    }
+    return [
+        "auto",
+        *(mode for mode in VIRTUAL_GAMEPAD_TARGETS if mode in supported),
+    ]
+
+
+def gamepad_target(target_devices) -> str | None:
+    if not isinstance(target_devices, list):
+        return None
+    gamepads = [
+        target for target in target_devices
+        if target in OFFICIAL_GAMEPAD_TARGETS
+    ]
+    return gamepads[0] if len(gamepads) == 1 else None
+
+
+def clean_target_devices(target_devices) -> list:
+    if (
+        not isinstance(target_devices, list)
+        or not 1 <= len(target_devices) <= 16
+        or len(target_devices) != len(set(target_devices))
+        or any(target not in OFFICIAL_TARGETS for target in target_devices)
+        or gamepad_target(target_devices) is None
+    ):
+        return []
+    return list(target_devices)
+
+
+def replace_gamepad_target(target_devices, target_mode) -> list:
+    clean = clean_target_devices(target_devices)
+    current = gamepad_target(clean)
+    if not clean or target_mode not in VIRTUAL_GAMEPAD_TARGETS:
+        return []
+    return [
+        target_mode if target == current else target
+        for target in clean
+    ]
+
 
 def _capability_names(capabilities) -> set:
     """Short names ('RightPaddle1') of the live capability strings

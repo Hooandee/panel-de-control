@@ -662,7 +662,7 @@ export interface ControllerConfig {
     actual_mode: string | null;
     options: string[];
     scope: Scope[];
-    readiness?: "evdev_identity";
+    readiness?: "evdev_identity" | "dbus_target_type";
     last_apply?: boolean;
   };
   vibration?: {
@@ -749,7 +749,7 @@ export const setControllerVibration =
 export const testControllerVibration =
   callable<[
     pattern: "pulse",
-    channel: "left" | "right" | "both" | null,
+    channel: "left" | "right" | "strong" | "weak" | "both" | null,
     strength: number,
   ], VibrationTestResult>("test_controller_vibration");
 

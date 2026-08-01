@@ -89,6 +89,25 @@ def _clean_virtual_mode_baseline(raw) -> dict:
     paddles = raw.get("paddles_as")
     if isinstance(paddles, str) and _MODE.fullmatch(paddles):
         clean["paddles_as"] = paddles
+    targets = ip_profile.clean_target_devices(raw.get("target_devices"))
+    if targets:
+        clean["target_devices"] = targets
+    applied = ip_profile.clean_target_devices(
+        raw.get("last_applied_target_devices")
+    )
+    if applied:
+        clean["last_applied_target_devices"] = applied
+    recovery = [
+        targets
+        for value in (
+            raw.get("recovery_target_devices")
+            if isinstance(raw.get("recovery_target_devices"), list)
+            else []
+        )
+        if (targets := ip_profile.clean_target_devices(value))
+    ][:4]
+    if recovery:
+        clean["recovery_target_devices"] = recovery
     return clean
 
 
@@ -297,7 +316,9 @@ class RemapStore:
             self._save()
 
     def virtual_mode_baseline(self, owner: str) -> dict:
-        return dict(self._data["virtual_mode_baselines"].get(owner, {}))
+        return copy.deepcopy(
+            self._data["virtual_mode_baselines"].get(owner, {})
+        )
 
     def remember_virtual_mode_baseline(self, owner: str, value: dict) -> None:
         if not isinstance(owner, str) or not owner:
@@ -307,6 +328,33 @@ class RemapStore:
         clean = _clean_virtual_mode_baseline(value)
         if clean:
             self._data["virtual_mode_baselines"][owner] = clean
+            self._save()
+
+    def remember_applied_virtual_targets(self, owner: str, targets) -> None:
+        baseline = self._data["virtual_mode_baselines"].get(owner)
+        clean = ip_profile.clean_target_devices(targets)
+        if baseline is None or not clean:
+            return
+        baseline["last_applied_target_devices"] = clean
+        baseline.pop("recovery_target_devices", None)
+        self._save()
+
+    def remember_virtual_target_recovery(self, owner: str, candidates) -> None:
+        baseline = self._data["virtual_mode_baselines"].get(owner)
+        if baseline is None:
+            return
+        clean = []
+        for candidate in candidates if isinstance(candidates, list) else []:
+            targets = ip_profile.clean_target_devices(candidate)
+            if targets and targets not in clean:
+                clean.append(targets)
+        if clean:
+            baseline["recovery_target_devices"] = clean[:4]
+            self._save()
+
+    def forget_virtual_mode_baseline(self, owner: str) -> None:
+        if owner in self._data["virtual_mode_baselines"]:
+            del self._data["virtual_mode_baselines"][owner]
             self._save()
 
     def profile_state(self, device_key) -> dict | None:

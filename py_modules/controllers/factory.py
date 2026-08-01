@@ -16,7 +16,10 @@ from controllers.capabilities import clean_report, report
 from controllers.diagnostics import IntegratedDiagnostics
 from controllers.operations import OperationResult
 from controllers.vibration import VibrationController
-from controllers.virtual_mode import HhdVirtualModeAdapter
+from controllers.virtual_mode import (
+    HhdVirtualModeAdapter,
+    InputPlumberVirtualModeAdapter,
+)
 
 
 class ControllerBackend:
@@ -181,10 +184,15 @@ class IpBackend(ControllerBackend):
         self._dbus = dbus
         self._device_key = device_key
         self._vibration = VibrationController(device_key, dbus)
+        self._virtual_mode = InputPlumberVirtualModeAdapter(
+            store, dbus, device_key
+        )
         self._identified = bool(
             ip_profile.composite_names_for(device_key)
         )
         self._vibration_last_apply = None
+        self._virtual_mode_last_apply = None
+        self._pending_virtual_mode = None
         configure = getattr(self._dbus, "set_expected_names", None)
         if callable(configure):
             configure(ip_profile.composite_names_for(device_key))
@@ -193,23 +201,32 @@ class IpBackend(ControllerBackend):
         config = ip.get_config(
             self._store, self._dbus, self._device_key, appid=appid,
             vibration=self._vibration,
+            virtual_mode=(self._virtual_mode if self._identified else None),
         )
         if self._vibration_last_apply is not None:
             config["vibration"]["last_apply"] = (
                 self._vibration_last_apply
             )
+        if self._virtual_mode_last_apply is not None:
+            config["virtual_controller"]["last_apply"] = (
+                self._virtual_mode_last_apply
+            )
         return self._stamp(config)
 
     def get_capabilities(self, appid=None) -> dict:
         return ip.capabilities_report(
-            self._dbus, self._device_key, self._vibration
+            self._dbus, self._device_key, self._vibration,
+            self._virtual_mode if self._identified else None,
         )
 
     def set_button(self, source: str, targets: list, scope="global", appid=None) -> dict:
+        if not self._identified:
+            return self.get_config(appid)
         return self._stamp(
             ip.set_button(
                 self._store, self._dbus, self._device_key, source, targets,
                 scope, appid, vibration=self._vibration,
+                virtual_mode=self._virtual_mode,
             ))
 
     def reset(self, scope="global", appid=None) -> dict:
@@ -218,6 +235,7 @@ class IpBackend(ControllerBackend):
         return self._stamp(ip.reset(
             self._store, self._dbus, self._device_key, scope, appid,
             vibration=self._vibration,
+            virtual_mode=self._virtual_mode,
         ))
 
     def set_vibration(self, patch: dict, scope="global", appid=None) -> dict:
@@ -226,10 +244,22 @@ class IpBackend(ControllerBackend):
         config = ip.set_vibration(
             self._store, self._dbus, self._device_key, patch, scope, appid,
             vibration=self._vibration,
+            virtual_mode=self._virtual_mode,
         )
         if "last_apply" in config.get("vibration", {}):
             self._vibration_last_apply = config["vibration"]["last_apply"]
         return self._stamp(config)
+
+    def set_virtual_mode(self, mode: str, scope="global", appid=None) -> dict:
+        if not self._identified:
+            return self.get_config(appid)
+        config = self._virtual_mode.config(appid)
+        if not config["supported"] or mode not in config["options"]:
+            return self.get_config(appid)
+        self._store.patch_component(
+            "virtual_controller", {"mode": mode}, scope, appid
+        )
+        return self.get_config(appid)
 
     def test_vibration(self, pattern="pulse", channel=None, strength=100):
         if not self._identified:
@@ -275,7 +305,12 @@ class IpBackend(ControllerBackend):
         return self._store.effective_profile(appid)
 
     def owns_loaded_profile(self) -> bool:
-        return self._store.profile_state(self._device_key) is not None
+        return self._identified and (
+            self._store.profile_state(self._device_key) is not None
+            or bool(self._store.virtual_mode_baseline(
+                f"inputplumber:{self._device_key or ''}"
+            ))
+        )
 
     def apply_effective(self, appid, apply_buttons=True) -> bool:
         status = self.apply_effective_components(appid, apply_buttons)
@@ -293,24 +328,56 @@ class IpBackend(ControllerBackend):
         return status
 
     def apply_component(self, component, desired, appid, generation):
+        if not self._identified:
+            return super().apply_component(
+                component, desired, appid, generation
+            )
         if component == "virtual_controller":
-            if not desired:
+            baseline = self._store.virtual_mode_baseline(
+                f"inputplumber:{self._device_key or ''}"
+            )
+            mode = desired.get("mode") if desired else (
+                "auto" if baseline else None
+            )
+            if mode is None:
+                self._pending_virtual_mode = None
                 return self._operation_result(
                     component, "applied", {}, appid, generation,
                     actual={},
                 )
-            return self._operation_result(
-                component, "unsupported", desired, appid, generation,
-                reason="unsupported",
+            result = self._virtual_mode.apply(mode)
+            applied = result["accepted"]
+            ready = result["ready"]
+            rollback = result["rollback_confirmed"]
+            self._virtual_mode_last_apply = applied and ready
+            self._pending_virtual_mode = bool(applied and not ready)
+            status = (
+                "applied" if ready
+                else "accepted_unverifiable" if applied
+                else "failed" if rollback
+                else "recovery_required"
             )
-        if not self._identified:
             return self._operation_result(
-                component, "unsupported", desired, appid, generation,
-                reason="unsupported",
+                component, status,
+                desired, appid, generation,
+                reason=(
+                    None if applied
+                    else "profile_conflict"
+                    if result.get("reason") == "profile_conflict"
+                    else "unsupported"
+                    if result.get("reason") in {
+                        "capability_unavailable", "unsupported_mode"
+                    }
+                    else "apply_failed"
+                ),
+                actual=(
+                    {"mode": result["actual"]}
+                    if result.get("actual") else None
+                ),
             )
         if component == "buttons":
             applied = ip._apply_overrides(
-                self._store, self._dbus, self._device_key, desired
+                self._store, self._dbus, self._device_key, desired,
             )
             return self._operation_result(
                 component, "applied" if applied else "failed",
@@ -345,12 +412,41 @@ class IpBackend(ControllerBackend):
         )
 
     def wait_ready(self, appid, generation) -> bool:
+        if self._pending_virtual_mode:
+            self._pending_virtual_mode = False
+            outcome = self._virtual_mode.wait_ready()
+            actual = outcome.get("actual")
+            if outcome["ready"]:
+                self._virtual_mode_last_apply = True
+                return self._operation_result(
+                    "virtual_controller", "applied",
+                    self._store.effective_virtual_controller(appid),
+                    appid, generation,
+                    actual={"mode": actual},
+                )
+            self._virtual_mode_last_apply = False
+            return self._operation_result(
+                "virtual_controller",
+                (
+                    "failed" if outcome["rollback_confirmed"]
+                    else "recovery_required"
+                ),
+                self._store.effective_virtual_controller(appid),
+                appid, generation,
+                reason=(
+                    "device_not_ready"
+                    if outcome["rollback_confirmed"] else "restore_failed"
+                ),
+                actual={"mode": actual} if actual is not None else None,
+            )
         source_paths = getattr(self._dbus, "source_device_paths", None)
         if callable(source_paths):
             return bool(source_paths())
         return bool(self._dbus.capabilities())
 
     def cancel_transients(self, reason) -> None:
+        self._virtual_mode.cancel()
+        self._pending_virtual_mode = False
         stop = getattr(self._dbus, "stop_rumble", None)
         if callable(stop):
             stop()
@@ -362,12 +458,14 @@ class IpBackend(ControllerBackend):
     def restore_external(self) -> bool:
         if not self._identified:
             return False
+        virtual_applied = self._virtual_mode.restore_external()
         applied = ip.restore_external(
             self._store, self._dbus, self._device_key,
             vibration=self._vibration,
         )
         self._vibration_last_apply = applied
-        return applied
+        self._virtual_mode_last_apply = virtual_applied
+        return virtual_applied and applied
 
     def diagnostics(self) -> dict:
         dbus_diagnostics = getattr(self._dbus, "diagnostics", None)
@@ -393,6 +491,10 @@ class IpBackend(ControllerBackend):
             ],
             "dbus": dbus_state,
         }
+        if self._identified:
+            virtual = self._virtual_mode.config()
+            if virtual["supported"]:
+                result["virtual_controller"] = virtual
         if vibration_state is not None:
             result["vibration"] = vibration_state
         return result
@@ -641,6 +743,11 @@ class HhdBackend(ControllerBackend):
     def effective_profile(self, appid):
         return self._store.effective_profile(appid)
 
+    def owns_loaded_profile(self) -> bool:
+        return bool(self._store.virtual_mode_baseline(
+            f"hhd:{self._device_key or ''}"
+        ))
+
     def apply_effective(self, appid, apply_buttons=True) -> bool:
         desired = self._store.effective_vibration(appid)
         if desired:
@@ -662,18 +769,24 @@ class HhdBackend(ControllerBackend):
 
     def apply_component(self, component, desired, appid, generation):
         if component == "virtual_controller":
-            if not desired:
+            baseline = self._store.virtual_mode_baseline(
+                f"hhd:{self._device_key or ''}"
+            )
+            mode = desired.get("mode") if desired else (
+                "auto" if baseline else None
+            )
+            if mode is None:
                 self._pending_virtual_mode = None
                 return self._operation_result(
                     component, "applied", {}, appid, generation,
                     actual={},
                 )
-            result = self._virtual_mode.apply(desired.get("mode"))
+            result = self._virtual_mode.apply(mode)
             confirmed = result["config_confirmed"]
             rollback = result["rollback_confirmed"]
             self._last_virtual_mode_apply = confirmed
             self._pending_virtual_mode = (
-                desired.get("mode") if confirmed else None
+                mode if confirmed else None
             )
             status = (
                 "accepted_unverifiable" if confirmed
@@ -688,7 +801,7 @@ class HhdBackend(ControllerBackend):
                     else "restore_failed"
                 ),
                 actual=(
-                    {"mode": desired.get("mode")}
+                    {"mode": result["actual"].get("mode")}
                     if confirmed else None
                 ),
             )

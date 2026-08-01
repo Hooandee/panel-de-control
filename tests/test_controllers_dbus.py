@@ -217,6 +217,73 @@ def test_source_device_paths_returns_only_nonempty_paths():
     ]
 
 
+def test_supported_target_ids_come_from_manager_property():
+    calls = []
+
+    def run(args):
+        calls.append(args)
+        return _result('as 4 "xb360" "xbox-elite" "keyboard" "mouse"\n')
+
+    dbus = IpDbus(run=run)
+
+    assert dbus.supported_target_device_ids() == [
+        "xb360", "xbox-elite", "keyboard", "mouse",
+    ]
+    assert calls == [[
+        "busctl", "get-property", "org.shadowblip.InputPlumber",
+        "/org/shadowblip/InputPlumber/Manager",
+        "org.shadowblip.InputManager", "SupportedTargetDeviceIds",
+    ]]
+
+
+def test_target_device_types_require_every_exact_target_property():
+    def run(args):
+        if args[1] == "tree":
+            return _result(
+                "└─/org/shadowblip/InputPlumber/CompositeDevice0\n"
+            )
+        if args[-1] == "TargetDevices":
+            return _result(
+                'as 3 "/org/shadowblip/InputPlumber/target/gamepad0" '
+                '"/org/shadowblip/InputPlumber/target/keyboard0" ""\n'
+            )
+        if args[-1] == "DeviceType":
+            return _result(
+                's "xbox-elite"\n'
+                if args[3].endswith("gamepad0")
+                else 's "keyboard"\n'
+            )
+        raise AssertionError(args)
+
+    dbus = IpDbus(run=run)
+
+    assert dbus.target_device_types() == ["xbox-elite", "keyboard"]
+
+
+def test_set_target_devices_calls_exact_composite_dbus_signature():
+    calls = []
+
+    def run(args):
+        calls.append(args)
+        if args[1] == "tree":
+            return _result(
+                "└─/org/shadowblip/InputPlumber/CompositeDevice3\n"
+            )
+        return _result()
+
+    dbus = IpDbus(run=run)
+
+    assert dbus.set_target_devices([
+        "ds5-edge", "mouse", "keyboard", "touchpad",
+    ]) is True
+    assert calls[-1] == [
+        "busctl", "call", "org.shadowblip.InputPlumber",
+        "/org/shadowblip/InputPlumber/CompositeDevice3",
+        "org.shadowblip.Input.CompositeDevice", "SetTargetDevices", "as",
+        "4", "ds5-edge", "mouse", "keyboard", "touchpad",
+    ]
+
+
 def test_write_revalidates_cached_composite_identity():
     changed = False
 

@@ -246,6 +246,32 @@ def test_sanitize_targets():
     assert ip.sanitize_targets([{"gamepad": "South"}, {"key": "bad"}]) == [{"gamepad": "South"}]
 
 
+def test_virtual_mode_replaces_only_the_gamepad_target():
+    original = ["xbox-elite", "mouse", "keyboard", "touchpad"]
+
+    out = ip.replace_gamepad_target(
+        original, "ds5-edge",
+    )
+
+    assert out == [
+        "ds5-edge", "mouse", "keyboard", "touchpad",
+    ]
+    assert original[0] == "xbox-elite"
+
+
+def test_virtual_mode_refuses_an_ambiguous_gamepad_profile():
+    assert ip.replace_gamepad_target(
+        ["xb360", "ds5", "keyboard"], "xbox-series"
+    ) == []
+
+
+def test_virtual_mode_catalog_is_curated_from_official_gamepad_ids():
+    assert ip.virtual_mode_options([
+        "debug", "keyboard", "xbox-series", "ds5-edge", "xb360",
+        "made-up",
+    ]) == ["auto", "xb360", "xbox-series", "ds5-edge"]
+
+
 def test_ctrl_tab_is_a_valid_chord():
     assert ip.sanitize_button_action([
         {"key": "KeyLeftCtrl"}, {"key": "KeyTab"},

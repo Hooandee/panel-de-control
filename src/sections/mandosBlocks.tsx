@@ -96,12 +96,20 @@ const ManagerBlock: FC = () => {
 
 const RemapBlock: FC = () => {
   const { t } = useI18n();
-  const { config, scope, game, onScope, onSetButtonAction, onReset } = useMandos();
+  const {
+    config, scope, game, onScope, onSetButtonAction, onSetVirtualMode, onReset,
+  } = useMandos();
   if (config?.kind !== "remap") return null;
   const buttons = config.buttons ?? [];
+  const virtual = config.virtual_controller;
+  const hasControls = buttons.length > 0 || virtual?.supported === true;
+  const modeLabel = (mode: string) => {
+    const value = t(`mandos.mode.${mode}`);
+    return value === `mandos.mode.${mode}` ? mode : value;
+  };
   return (
     <Card title={t("mandos.remap.title")}>
-      {buttons.length === 0 ? (
+      {!hasControls ? (
         <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, lineHeight: 1.4 }}>
           {t(config.device_known === false ? "mandos.remap.uncalibrated" : "mandos.remap.nobuttons")}
         </div>
@@ -117,6 +125,33 @@ const RemapBlock: FC = () => {
               onScope={onScope}
             />
           </div>
+          {virtual?.supported && (
+            <Row label={t("mandos.mode.label")}>
+              <Dropdown
+                rgOptions={virtual.options.map((mode) => ({
+                  data: mode,
+                  label: modeLabel(mode),
+                }))}
+                selectedOption={virtual.mode}
+                onChange={(option) => onSetVirtualMode(option.data as string)}
+              />
+            </Row>
+          )}
+          {virtual?.actual_mode && virtual.mode !== "auto" && virtual.actual_mode !== virtual.mode && (
+            <div style={{ fontSize: theme.font.caption, color: theme.color.accent, marginBottom: theme.space.sm, lineHeight: 1.4 }}>
+              {t("mandos.mode.recreating")}
+            </div>
+          )}
+          {virtual?.last_apply === false && (
+            <div style={{ fontSize: theme.font.caption, color: theme.color.danger, marginBottom: theme.space.sm, lineHeight: 1.4 }}>
+              {t("mandos.mode.applyFailed")}
+            </div>
+          )}
+          {buttons.length === 0 && (
+            <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, lineHeight: 1.4 }}>
+              {t(config.device_known === false ? "mandos.remap.uncalibrated" : "mandos.remap.nobuttons")}
+            </div>
+          )}
           {buttons.map((b) => {
             const action = targetsToAction(b.target ?? []);
             const selected = action.kind === "gamepad" ? `gp:${action.target}` : action.kind === "keyboard_chord" ? "shortcut" : "";
@@ -155,22 +190,26 @@ const RemapBlock: FC = () => {
               </RemapRow>
             );
           })}
-          <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, margin: `${theme.space.sm}px 0`, lineHeight: 1.4 }}>
-            {t("mandos.remap.note")}
-          </div>
-          {config.last_apply === false && (
-            <div style={{ fontSize: theme.font.caption, color: theme.color.danger, marginBottom: theme.space.sm, lineHeight: 1.4 }}>
-              {t(config.apply_error === "profile_conflict"
-                ? "mandos.remap.conflict"
-                : "mandos.remap.applyFailed")}
-            </div>
+          {buttons.length > 0 && (
+            <>
+              <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, margin: `${theme.space.sm}px 0`, lineHeight: 1.4 }}>
+                {t("mandos.remap.note")}
+              </div>
+              {config.last_apply === false && (
+                <div style={{ fontSize: theme.font.caption, color: theme.color.danger, marginBottom: theme.space.sm, lineHeight: 1.4 }}>
+                  {t(config.apply_error === "profile_conflict"
+                    ? "mandos.remap.conflict"
+                    : "mandos.remap.applyFailed")}
+                </div>
+              )}
+              <DialogButton
+                style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: theme.space.xs }}
+                onClick={onReset}
+              >
+                <LuRotateCcw size={14} /> {t("mandos.remap.reset")}
+              </DialogButton>
+            </>
           )}
-          <DialogButton
-            style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: theme.space.xs }}
-            onClick={onReset}
-          >
-            <LuRotateCcw size={14} /> {t("mandos.remap.reset")}
-          </DialogButton>
         </>
       )}
     </Card>
@@ -253,8 +292,9 @@ const VibrationBlock: FC = () => {
   const sliderMax = vibration.max ?? 100;
   const sliderStep = vibration.step ?? 5;
   const testChannels = (vibration.test_channels ?? []).filter(
-    (channel): channel is "left" | "right" | "both" => (
-      channel === "left" || channel === "right" || channel === "both"
+    (channel): channel is "left" | "right" | "strong" | "weak" | "both" => (
+      channel === "left" || channel === "right" || channel === "strong"
+      || channel === "weak" || channel === "both"
     ),
   );
   const testBlocked = vibrationTestResult != null && (
@@ -433,6 +473,12 @@ const DiagnosticsBlock: FC = () => {
         <>
           <DiagnosticHeading>{t("mandos.diagnostics.motion")}</DiagnosticHeading>
           {capability(diagnostics.motion)}
+        </>
+      )}
+      {diagnostics.virtual_controller && (
+        <>
+          <DiagnosticHeading>{t("mandos.diagnostics.virtualController")}</DiagnosticHeading>
+          {capability(diagnostics.virtual_controller)}
         </>
       )}
       {diagnostics.vibration && (

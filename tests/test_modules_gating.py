@@ -212,6 +212,7 @@ def test_controller_diagnostics_disabled_returns_empty_without_backend():
         "batteries": [],
         "inputs": {},
         "motion": None,
+        "virtual_controller": None,
         "vibration": None,
         "last_operations": {},
     }

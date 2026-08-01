@@ -1054,7 +1054,7 @@ class Plugin:
         owns_loaded_profile = getattr(
             self._controller_backend, "owns_loaded_profile", lambda: False
         )()
-        if not has_values and not (force and owns_loaded_profile):
+        if not has_values and not owns_loaded_profile:
             return None
         return self._controller_coordinator.prepare(
             self._current_appid, profile, force=force

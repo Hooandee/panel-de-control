@@ -10,7 +10,8 @@ _OPERATIONS = {
     "discover_composite", "validate_composite", "read_capabilities",
     "read_source_device_paths", "read_profile", "load_profile",
     "reset_default", "read_force_feedback", "set_force_feedback", "rumble",
-    "stop_rumble", "apply_profile",
+    "stop_rumble", "apply_profile", "read_supported_target_device_ids",
+    "read_target_devices", "read_target_device_types", "set_target_devices",
 }
 _OWNERS = {"hhd", "inputplumber", "native", "evdev"}
 _MODES = {"dual", "gain"}
@@ -20,7 +21,8 @@ _REASONS = {
     "initial_readback_unavailable", "invalid_response", "invalid_value",
     "load_failed", "merge_failed", "process_unavailable", "profile_conflict",
     "profile_unavailable", "readback_mismatch", "short_write", "unsupported",
-    "write_failed",
+    "write_failed", "target_devices_empty", "target_identity_invalid",
+    "target_identity_unavailable",
 }
 _LABEL = re.compile(r"[A-Za-z0-9][A-Za-z0-9 ._+()'-]{0,63}")
 
@@ -78,6 +80,7 @@ class IntegratedDiagnostics:
             "batteries": [],
             "inputs": {},
             "motion": None,
+            "virtual_controller": None,
             "vibration": None,
             "last_operations": {},
         }
@@ -126,6 +129,9 @@ class IntegratedDiagnostics:
         vibration = surfaces.get("vibration")
         if isinstance(vibration, dict):
             result["vibration"] = vibration
+        virtual = surfaces.get("virtual_controller")
+        if isinstance(virtual, dict):
+            result["virtual_controller"] = virtual
 
         dbus = manager_state.get("dbus")
         if isinstance(dbus, dict):

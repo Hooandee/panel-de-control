@@ -11,6 +11,9 @@ from controllers.detect import clean_env, resolve_bin
 SVC = "org.shadowblip.InputPlumber"
 IFACE = "org.shadowblip.Input.CompositeDevice"
 FF_IFACE = "org.shadowblip.Output.ForceFeedback"
+MANAGER_PATH = "/org/shadowblip/InputPlumber/Manager"
+MANAGER_IFACE = "org.shadowblip.InputManager"
+TARGET_IFACE = "org.shadowblip.Input.Target"
 DEFAULT_PROFILE_PATH = "/usr/share/inputplumber/profiles/default.yaml"
 _CAPABILITY_LIMIT = 64
 
@@ -279,6 +282,83 @@ class IpDbus:
             "read_source_device_paths", True, source_device_count=len(paths)
         )
         return paths
+
+    def supported_target_device_ids(self) -> list:
+        r = self._read_property(
+            MANAGER_PATH, MANAGER_IFACE, "SupportedTargetDeviceIds"
+        )
+        if not r or r.returncode != 0:
+            self._record(
+                "read_supported_target_device_ids", False,
+                reason=(
+                    "process_unavailable" if r is None else "busctl_exit"
+                ),
+            )
+            return []
+        ids = re.findall(r'"([^"]+)"', r.stdout)
+        self._record(
+            "read_supported_target_device_ids", True,
+            target_type_count=len(ids),
+        )
+        return list(dict.fromkeys(ids))
+
+    def target_device_types(self) -> list:
+        path = self._path(revalidate=True)
+        if not path:
+            return []
+        result = self._read_property(path, IFACE, "TargetDevices")
+        if self._failed(result, "read_target_devices"):
+            return []
+        paths = [
+            value for value in re.findall(r'"([^"]*)"', result.stdout)
+            if value
+        ]
+        if not paths:
+            self._record(
+                "read_target_device_types", False,
+                reason="target_devices_empty",
+            )
+            return []
+        types = []
+        for target_path in paths:
+            target = self._read_property(
+                target_path, TARGET_IFACE, "DeviceType"
+            )
+            if not target or target.returncode != 0:
+                self._record(
+                    "read_target_device_types", False,
+                    reason="target_identity_unavailable",
+                )
+                return []
+            values = re.findall(r'"([^"]+)"', target.stdout)
+            if len(values) != 1:
+                self._record(
+                    "read_target_device_types", False,
+                    reason="target_identity_invalid",
+                )
+                return []
+            types.append(values[0])
+        self._record(
+            "read_target_device_types", True,
+            target_type_count=len(types),
+        )
+        return types
+
+    def set_target_devices(self, target_types) -> bool:
+        path = self._path(revalidate=True)
+        if not path or not isinstance(target_types, list):
+            return False
+        r = self._run([
+            "busctl", "call", SVC, path, IFACE, "SetTargetDevices", "as",
+            str(len(target_types)), *target_types,
+        ])
+        if self._failed(r, "set_target_devices"):
+            return False
+        self._record(
+            "set_target_devices", True,
+            target_type_count=len(target_types),
+        )
+        return True
 
     def get_profile_yaml(self) -> str | None:
         path = self._path(revalidate=True)

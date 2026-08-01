@@ -5,20 +5,66 @@ the narrowest device interface available: ASUS' two-motor sysfs control with
 readback, otherwise the selected physical evdev source's FF_GAIN. The desired
 value is stored by RemapStore and re-applied on game changes.
 """
+import ctypes
 import glob
 import os
 import re
 import struct
 import time
 
+try:
+    import fcntl
+except ImportError:  # Windows imports the shared backend but has no evdev/ioctl.
+    fcntl = None
+
 _EV_FF = 0x15
 _FF_RUMBLE = 0x50
 _FF_GAIN = 0x60
-_ASUS_KEYS = {
-    "rog_ally", "rog_ally_x", "rog_xbox_ally", "rog_xbox_ally_x",
-}
+_ASUS_KEYS = {"rog_ally"}
 _GAIN_KEYS = {"legion_go", "legion_go_s", "legion_go_2"}
 _ASUS_NATIVE_MAX = 64
+
+
+class _FFTrigger(ctypes.Structure):
+    _fields_ = [("button", ctypes.c_uint16), ("interval", ctypes.c_uint16)]
+
+
+class _FFReplay(ctypes.Structure):
+    _fields_ = [("length", ctypes.c_uint16), ("delay", ctypes.c_uint16)]
+
+
+class _FFRumble(ctypes.Structure):
+    _fields_ = [
+        ("strong_magnitude", ctypes.c_uint16),
+        ("weak_magnitude", ctypes.c_uint16),
+    ]
+
+
+class _FFEffectUnion(ctypes.Union):
+    _fields_ = [
+        ("rumble", _FFRumble),
+        ("_storage", ctypes.c_uint8 * 32),
+        ("_alignment", ctypes.c_void_p),
+    ]
+
+
+class _FFEffect(ctypes.Structure):
+    _fields_ = [
+        ("type", ctypes.c_uint16),
+        ("id", ctypes.c_int16),
+        ("direction", ctypes.c_uint16),
+        ("trigger", _FFTrigger),
+        ("replay", _FFReplay),
+        ("u", _FFEffectUnion),
+    ]
+
+
+def _iow(event_type, number, size):
+    return (1 << 30) | (size << 16) | (event_type << 8) | number
+
+
+_EVIOCSFF = _iow(ord("E"), 0x80, ctypes.sizeof(_FFEffect))
+_EVIOCRMFF = _iow(ord("E"), 0x81, ctypes.sizeof(ctypes.c_int))
 
 
 def _default_write_text(path, value):
@@ -38,11 +84,18 @@ def _ff_bits(raw):
 
 
 class VibrationController:
-    def __init__(self, device_key, dbus, root="/", write_text=None):
+    def __init__(self, device_key, dbus, root="/", write_text=None,
+                 open_device=None, write_event=None, ioctl=None,
+                 close_device=None, sleep=None):
         self._device_key = device_key or ""
         self._dbus = dbus
         self._root = root
         self._write_text = write_text or _default_write_text
+        self._open_device = open_device or os.open
+        self._write_event = write_event or os.write
+        self._ioctl = ioctl or getattr(fcntl, "ioctl", None)
+        self._close_device = close_device or os.close
+        self._sleep = sleep or time.sleep
         self._last_operation = None
 
     def diagnostics(self):
@@ -162,7 +215,7 @@ class VibrationController:
                 "step": 5,
                 "test": {
                     "patterns": ["pulse"],
-                    "channels": ["both"],
+                    "channels": ["strong", "weak", "both"],
                 },
             }
         try:
@@ -291,6 +344,77 @@ class VibrationController:
             "reason": reason,
         }
 
+    def _test_gain_channel(self, path, channel, strength):
+        if self._ioctl is None:
+            return self._test_result(
+                False, False, True, "start_failed"
+            )
+        magnitude = round(strength * 0xFFFF / 100)
+        effect = _FFEffect(
+            type=_FF_RUMBLE,
+            id=-1,
+            replay=_FFReplay(length=180, delay=0),
+        )
+        effect.u.rumble = _FFRumble(
+            strong_magnitude=(
+                magnitude if channel in {"strong", "both"} else 0
+            ),
+            weak_magnitude=(
+                magnitude if channel in {"weak", "both"} else 0
+            ),
+        )
+        buffer = bytearray(bytes(effect))
+        fd = None
+        effect_id = None
+        sent = False
+        stopped = False
+        restored = True
+        try:
+            fd = self._open_device(
+                path, os.O_RDWR | os.O_NONBLOCK
+            )
+            self._ioctl(fd, _EVIOCSFF, buffer, True)
+            effect_id = _FFEffect.from_buffer(buffer).id
+            if effect_id < 0:
+                raise OSError("force-feedback upload returned no id")
+            play = struct.pack(
+                "llHHi", 0, 0, _EV_FF, effect_id, 1
+            )
+            sent = self._write_event(fd, play) == len(play)
+            if sent:
+                self._sleep(0.18)
+        except (OSError, TypeError, ValueError):
+            sent = False
+        finally:
+            if fd is not None and effect_id is not None:
+                stop = struct.pack(
+                    "llHHi", 0, 0, _EV_FF, effect_id, 0
+                )
+                try:
+                    stopped = self._write_event(fd, stop) == len(stop)
+                except OSError:
+                    stopped = False
+                try:
+                    self._ioctl(fd, _EVIOCRMFF, effect_id)
+                except OSError:
+                    restored = False
+            if fd is not None:
+                self._close_device(fd)
+
+        if not restored:
+            reason = "restore_failed"
+        elif not stopped:
+            reason = "stop_failed" if sent else "start_failed"
+        elif not sent:
+            reason = "start_failed"
+        else:
+            reason = None
+        result = self._test_result(sent, stopped, restored, reason)
+        self._last_operation = {
+            "mode": "gain", "ok": reason is None, "test": result,
+        }
+        return result
+
     def test(self, pattern, channel, strength):
         if pattern != "pulse":
             return self._test_result(
@@ -311,6 +435,16 @@ class VibrationController:
         if selected_channel not in channels:
             return self._test_result(
                 False, False, True, "unsupported_channel"
+            )
+
+        if capabilities["mode"] == "gain":
+            path = self._gain_path()
+            if path is None:
+                return self._test_result(
+                    False, False, True, "start_failed"
+                )
+            return self._test_gain_channel(
+                path, selected_channel, strength
             )
 
         native_path = self._asus_path()
@@ -346,7 +480,7 @@ class VibrationController:
                 try:
                     sent = bool(self._dbus.rumble(rumble_strength))
                     if sent:
-                        time.sleep(0.18)
+                        self._sleep(0.18)
                 except (AttributeError, OSError, TypeError, ValueError):
                     sent = False
         finally:

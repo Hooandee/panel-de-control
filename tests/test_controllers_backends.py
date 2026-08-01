@@ -566,7 +566,18 @@ def test_ip_reset_clears_and_loads_default(tmp_path):
     inputplumber.reset(store, dbus, CLAW, merge=_MERGE)
     assert store.overrides_for("global") == {}
     assert dbus.reset_called is False
-    assert dbus.loaded == dbus._profile
+    assert dbus.loaded is None
+
+
+def test_ip_identical_managed_profile_does_not_recreate_targets(tmp_path):
+    store, dbus = _store(tmp_path), FakeDbus()
+    store.remember_profile_baseline(CLAW, dbus._profile)
+
+    assert inputplumber._apply_overrides(
+        store, dbus, CLAW, {}, merge=lambda baseline, _overrides: baseline
+    ) is True
+    assert dbus.loaded is None
+    assert store.profile_state(CLAW) is None
 
 
 def test_ip_per_game_scope_is_independent_from_global(tmp_path):

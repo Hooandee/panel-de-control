@@ -52,6 +52,7 @@ export interface ControllerDiagnostics {
   batteries: ControllerDiagnosticBattery[];
   inputs: { buttons?: ControllerDiagnosticButton[] };
   motion: ControllerCapabilitySurface | null;
+  virtual_controller: ControllerCapabilitySurface | null;
   vibration: ControllerCapabilitySurface | null;
   last_operations: Record<string, ControllerDiagnosticOperation>;
 }
@@ -87,7 +88,7 @@ export function diagnosticOperationLabel(
   return "unavailable";
 }
 
-export type DiagnosticGroup = "sources" | "batteries" | "inputs" | "motion" | "vibration" | "operations";
+export type DiagnosticGroup = "sources" | "batteries" | "inputs" | "motion" | "virtual_controller" | "vibration" | "operations";
 
 export function visibleDiagnosticGroups(value: ControllerDiagnostics): DiagnosticGroup[] {
   const groups: DiagnosticGroup[] = [];
@@ -95,6 +96,7 @@ export function visibleDiagnosticGroups(value: ControllerDiagnostics): Diagnosti
   if (value.batteries.length > 0) groups.push("batteries");
   if ((value.inputs.buttons?.length ?? 0) > 0) groups.push("inputs");
   if (value.motion) groups.push("motion");
+  if (value.virtual_controller) groups.push("virtual_controller");
   if (value.vibration) groups.push("vibration");
   if (Object.keys(value.last_operations).length > 0) groups.push("operations");
   return groups;
@@ -185,6 +187,7 @@ function cleanOperations(value: unknown): Record<string, ControllerDiagnosticOpe
     "discover_composite", "validate_composite", "read_capabilities",
     "read_source_device_paths", "read_profile", "load_profile", "reset_default",
     "read_force_feedback", "set_force_feedback", "rumble", "stop_rumble", "apply_profile",
+    "read_supported_target_device_ids", "read_target_devices", "read_target_device_types", "set_target_devices",
   ]);
   const owners = new Set(["hhd", "inputplumber", "native", "evdev"]);
   const modes = new Set(["dual", "gain"]);
@@ -193,6 +196,7 @@ function cleanOperations(value: unknown): Record<string, ControllerDiagnosticOpe
     "identity_changed", "identity_unavailable", "initial_readback_unavailable", "invalid_response",
     "invalid_value", "load_failed", "merge_failed", "process_unavailable", "profile_conflict",
     "profile_unavailable", "readback_mismatch", "short_write", "unsupported", "write_failed",
+    "target_devices_empty", "target_identity_invalid", "target_identity_unavailable",
   ]);
   const result: Record<string, ControllerDiagnosticOperation> = {};
   for (const [key, item] of Object.entries(value)) {
@@ -224,6 +228,7 @@ export function normalizeControllerDiagnostics(value: unknown): ControllerDiagno
       batteries: [],
       inputs: {},
       motion: null,
+      virtual_controller: null,
       vibration: null,
       last_operations: {},
     };
@@ -234,6 +239,7 @@ export function normalizeControllerDiagnostics(value: unknown): ControllerDiagno
     batteries: cleanBatteries(value.batteries),
     inputs: cleanInputs(value.inputs),
     motion: cleanSurface(value.motion),
+    virtual_controller: cleanSurface(value.virtual_controller),
     vibration: cleanSurface(value.vibration),
     last_operations: cleanOperations(value.last_operations),
   };

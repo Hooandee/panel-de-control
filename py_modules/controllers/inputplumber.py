@@ -3,8 +3,9 @@
 Real per-button remap by cooperatively driving the daemon. The remappable buttons
 are read DYNAMICALLY from the device's live capabilities (correct per model — the
 Legion, Claw, Ally each expose a different set), and an override is applied by
-merging it into the device's current profile (preserving defaults) and loading it.
-Global (IP profiles are global) — per-game remap is Steam Input's job.
+merging it into the device's captured profile (preserving defaults) and loading it.
+The plugin re-applies its own global/per-game intent on game transitions while
+retaining foreign mappings and auxiliary virtual devices.
 """
 from controllers import ip_profile
 from controllers.capabilities import clean_report, report, surface
@@ -52,7 +53,8 @@ def live_buttons(dbus, device_key, capabilities):
     return ip_profile.buttons_for(device_key, capabilities, proven)
 
 
-def capabilities_report(dbus, device_key, vibration=None) -> dict:
+def capabilities_report(dbus, device_key, vibration=None,
+                        virtual_mode=None) -> dict:
     buttons = live_buttons(dbus, device_key, dbus.capabilities())
     surfaces = {}
     if buttons:
@@ -69,6 +71,25 @@ def capabilities_report(dbus, device_key, vibration=None) -> dict:
             },
             scope=("global", "game"),
             apply="hot",
+            readback="exact",
+            evidence="upstream",
+        )
+
+    virtual_capabilities = (
+        virtual_mode.capabilities()
+        if virtual_mode is not None else None
+    )
+    if virtual_capabilities is not None:
+        surfaces["virtual_controller"] = surface(
+            "inputplumber",
+            "supported",
+            fields={
+                "options": list(virtual_capabilities["options"]),
+                "actual_mode": virtual_capabilities["current"],
+                "readiness": virtual_capabilities["readiness"],
+            },
+            scope=("global", "game"),
+            apply="recreate",
             readback="exact",
             evidence="upstream",
         )
@@ -103,7 +124,7 @@ def capabilities_report(dbus, device_key, vibration=None) -> dict:
 
 
 def get_config(store, dbus, device_key, appid=None, caps=None, vibration=None,
-               apply_status=None) -> dict:
+               apply_status=None, virtual_mode=None) -> dict:
     """The device's remappable physical buttons (per-device silkscreen table, gated
     by the live capabilities) + each one's EFFECTIVE override for the running game
     (its own when it has one, else global; None = still at the device default) + the
@@ -178,6 +199,14 @@ def get_config(store, dbus, device_key, appid=None, caps=None, vibration=None,
         "key_targets": list(ip_profile.KEY_TARGETS),
         "follows_global": store.is_following_global(appid),
         "has_game_profile": store.has_game(appid),
+        "virtual_controller": (
+            virtual_mode.config(appid)
+            if virtual_mode is not None
+            else {
+                "supported": False, "mode": "auto",
+                "actual_mode": None, "options": [], "scope": [],
+            }
+        ),
         "vibration": vibration_config,
     }
     profile_status = getattr(
@@ -234,11 +263,19 @@ def _apply_overrides(store, dbus, device_key, overrides: dict,
             store.forget_profile_state(device_key)
         record(False, "merge_failed")
         return False
+    managed = bool(overrides)
+    if equivalent(current, merged):
+        if managed:
+            store.remember_applied_profile(device_key, current)
+        else:
+            store.forget_profile_state(device_key)
+        record(True, changed=False)
+        return True
     loaded = dbus.load_profile_yaml(merged)
     if loaded:
         applied = dbus.get_profile_yaml()
         if applied is not None and equivalent(applied, merged):
-            if overrides:
+            if managed:
                 store.remember_applied_profile(device_key, applied)
             else:
                 store.forget_profile_state(device_key)
@@ -266,7 +303,7 @@ def _apply_overrides(store, dbus, device_key, overrides: dict,
 
 def set_button(store, dbus, device_key, source: str, targets: list,
                scope="global", appid=None, vibration=None,
-               merge=merge_profile) -> dict:
+               merge=merge_profile, virtual_mode=None) -> dict:
     """Remap one physical button in a scope (global / a game). Ignores a source that
     isn't one of THIS device's remappable buttons; empty/invalid targets revert the
     button to its device default. The store is only updated if the daemon ACTUALLY
@@ -279,12 +316,14 @@ def set_button(store, dbus, device_key, source: str, targets: list,
     }
     if source not in valid:
         return get_config(
-            store, dbus, device_key, appid, caps, vibration=vibration
+            store, dbus, device_key, appid, caps, vibration=vibration,
+            virtual_mode=virtual_mode,
         )
     clean = ip_profile.sanitize_button_action(targets)
     if targets and not clean:
         return get_config(
-            store, dbus, device_key, appid, caps, vibration=vibration
+            store, dbus, device_key, appid, caps, vibration=vibration,
+            virtual_mode=virtual_mode,
         )
     prospective = store.overrides_for(scope, appid)
     if clean:
@@ -292,15 +331,17 @@ def set_button(store, dbus, device_key, source: str, targets: list,
     else:
         prospective.pop(source, None)
     applied = _apply_overrides(
-        store, dbus, device_key, prospective, merge=merge
+        store, dbus, device_key, prospective, merge=merge,
     )
     if applied:
         store.replace(scope, appid, prospective)
         return get_config(
-            store, dbus, device_key, appid, caps, vibration=vibration
+            store, dbus, device_key, appid, caps, vibration=vibration,
+            virtual_mode=virtual_mode,
         )
     return get_config(
-        store, dbus, device_key, appid, vibration=vibration
+        store, dbus, device_key, appid, vibration=vibration,
+        virtual_mode=virtual_mode,
     )
 
 
@@ -439,27 +480,29 @@ def restore_external(store, dbus, device_key, vibration=None) -> bool:
 
 
 def reset(store, dbus, device_key=None, scope="global", appid=None,
-          vibration=None, merge=merge_profile) -> dict:
+          vibration=None, merge=merge_profile, virtual_mode=None) -> dict:
     """Restore the plugin-captured profile without touching foreign mappings."""
     prospective = store.overrides_for(scope, appid)
     prospective.clear()
     if _apply_overrides(
-        store, dbus, device_key, prospective, merge=merge
+        store, dbus, device_key, prospective, merge=merge,
     ):
         store.reset(scope, appid)
     return get_config(
-        store, dbus, device_key, appid, vibration=vibration
+        store, dbus, device_key, appid, vibration=vibration,
+        virtual_mode=virtual_mode,
     )
 
 
 def set_vibration(store, dbus, device_key, patch: dict, scope="global",
-                  appid=None, vibration=None) -> dict:
+                  appid=None, vibration=None, virtual_mode=None) -> dict:
     if (
         not ip_profile.composite_names_for(device_key)
         or not isinstance(patch, dict)
     ):
         return get_config(
-            store, dbus, device_key, appid, vibration=vibration
+            store, dbus, device_key, appid, vibration=vibration,
+            virtual_mode=virtual_mode,
         )
     allowed = {}
     if isinstance(patch.get("enabled"), bool):
@@ -476,7 +519,8 @@ def set_vibration(store, dbus, device_key, patch: dict, scope="global",
                 allowed[field] = value
     if not allowed:
         return get_config(
-            store, dbus, device_key, appid, vibration=vibration
+            store, dbus, device_key, appid, vibration=vibration,
+            virtual_mode=virtual_mode,
         )
 
     _ensure_vibration_baseline(
@@ -495,7 +539,7 @@ def set_vibration(store, dbus, device_key, patch: dict, scope="global",
     applied = all(results)
     return get_config(
         store, dbus, device_key, appid, vibration=vibration,
-        apply_status=applied,
+        apply_status=applied, virtual_mode=virtual_mode,
     )
 
 

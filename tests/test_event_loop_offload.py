@@ -414,6 +414,23 @@ def test_forced_startup_restores_owned_profile_with_empty_global(
     assert ("buttons", None) in backend.events
 
 
+def test_game_switch_restores_owned_empty_global_without_force(
+    tmp_path, monkeypatch,
+):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    backend = _controller_for(p, {
+        "virtual_controller": {}, "buttons": {}, "vibration": {},
+    })
+    p._current_appid = None
+
+    p._reapply_controller()
+
+    assert backend.events[:2] == [
+        ("virtual_controller", None), ("wait_ready", None),
+    ]
+    assert ("buttons", None) in backend.events
+
+
 def test_button_action_rejects_invalid_shapes_without_mutating_backend(
     tmp_path, monkeypatch
 ):

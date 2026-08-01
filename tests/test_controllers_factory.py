@@ -21,6 +21,9 @@ class FakeStore:
     def has_game(self, appid):
         return False
 
+    def effective_virtual_controller(self, appid):
+        return {}
+
 
 class FakeDbus:
     def capabilities(self):
@@ -82,6 +85,7 @@ def test_no_backend_integrated_diagnostics_has_stable_empty_shape():
         "batteries": [],
         "inputs": {},
         "motion": None,
+        "virtual_controller": None,
         "vibration": None,
         "last_operations": {},
     }
@@ -105,7 +109,9 @@ def test_inputplumber_button_component_uses_exact_profile_readback(
     monkeypatch,
 ):
     monkeypatch.setattr(factory, "VibrationController", lambda *args: FakeVibration())
-    monkeypatch.setattr(factory.ip, "_apply_overrides", lambda *args: True)
+    monkeypatch.setattr(
+        factory.ip, "_apply_overrides", lambda *args, **kwargs: True
+    )
     backend = factory.IpBackend(
         FakeStore(), FakeDbus(), device_key="rog_ally"
     )
@@ -236,6 +242,13 @@ def test_ip_config_is_backward_compatible_except_capabilities(
         "key_targets": list(factory.ip_profile.KEY_TARGETS),
         "follows_global": True,
         "has_game_profile": False,
+        "virtual_controller": {
+            "supported": False,
+            "mode": "auto",
+            "actual_mode": None,
+            "options": [],
+            "scope": [],
+        },
             "vibration": {
                 "supported": False,
                 "enabled": None,
@@ -247,6 +260,172 @@ def test_ip_config_is_backward_compatible_except_capabilities(
         "manager_version": "0.77.4",
         "supported": True,
     }
+
+
+def test_ip_virtual_mode_is_live_gated_and_persisted_per_game(
+    tmp_path, monkeypatch,
+):
+    store = RemapStore(str(tmp_path / "controllers.json"))
+    dbus = FakeDbus()
+    dbus.supported_target_device_ids = lambda: [
+        "keyboard", "xb360", "xbox-elite", "ds5-edge",
+    ]
+    dbus.target_device_types = lambda: ["xbox-elite", "keyboard"]
+    backend = factory.IpBackend(
+        store, dbus, device_key="legion_go"
+    )
+
+    config = backend.set_virtual_mode("ds5-edge", "game", "42")
+
+    assert store.effective_virtual_controller("42") == {
+        "mode": "ds5-edge",
+    }
+    assert config["virtual_controller"] == {
+        "supported": True,
+        "mode": "ds5-edge",
+        "actual_mode": "xbox-elite",
+        "options": ["auto", "xb360", "xbox-elite", "ds5-edge"],
+        "scope": ["global", "game"],
+        "readiness": "dbus_target_type",
+    }
+
+
+def test_ip_virtual_mode_transaction_is_separate_from_button_profile(
+    tmp_path, monkeypatch,
+):
+    store = RemapStore(str(tmp_path / "controllers.json"))
+    store.patch_component(
+        "virtual_controller", {"mode": "ds5-edge"}, "game", "42"
+    )
+    store.replace(
+        "game", "42",
+        {"LeftPaddle1": [{"key": "KeyLeftCtrl"}, {"key": "KeyTab"}]},
+    )
+    dbus = FakeDbus()
+    dbus.supported_target_device_ids = lambda: [
+        "xbox-elite", "ds5-edge", "keyboard",
+    ]
+    dbus.targets = ["xbox-elite", "keyboard"]
+    dbus.target_device_types = lambda: list(dbus.targets)
+    target_writes = []
+
+    def set_targets(targets):
+        target_writes.append(list(targets))
+        dbus.targets = list(targets)
+        return True
+
+    dbus.set_target_devices = set_targets
+    button_writes = []
+
+    def apply_profile(_store, _dbus, _key, overrides, **_):
+        button_writes.append(overrides)
+        return True
+
+    monkeypatch.setattr(factory.ip, "_apply_overrides", apply_profile)
+    backend = factory.IpBackend(
+        store, dbus, device_key="legion_go"
+    )
+
+    result = backend.apply_component(
+        "virtual_controller", {"mode": "ds5-edge"}, "42", 9
+    )
+    ready = backend.wait_ready("42", 9)
+
+    assert result.status == "accepted_unverifiable"
+    assert ready.status == "applied"
+    assert target_writes == [["ds5-edge", "keyboard"]]
+    assert button_writes == []
+
+    backend.apply_component(
+        "buttons", store.effective_overrides("42"), "42", 9
+    )
+    assert button_writes == [{"LeftPaddle1": [
+            {"key": "KeyLeftCtrl"}, {"key": "KeyTab"},
+        ]}]
+
+
+def test_ip_virtual_mode_readiness_failure_restores_previous_targets(
+    tmp_path, monkeypatch,
+):
+    store = RemapStore(str(tmp_path / "controllers.json"))
+    store.patch_component(
+        "virtual_controller", {"mode": "ds5-edge"}, "global"
+    )
+    dbus = FakeDbus()
+    dbus.supported_target_device_ids = lambda: [
+        "xbox-elite", "ds5-edge", "keyboard",
+    ]
+    dbus.targets = ["xbox-elite", "keyboard"]
+    dbus.target_device_types = lambda: list(dbus.targets)
+    writes = []
+
+    def set_targets(targets):
+        writes.append(list(targets))
+        if targets[0] == "xbox-elite":
+            dbus.targets = list(targets)
+        return True
+
+    dbus.set_target_devices = set_targets
+    backend = factory.IpBackend(
+        store, dbus, device_key="legion_go"
+    )
+    ticks = iter([0.0, 5.0, 5.0])
+    backend._virtual_mode = factory.InputPlumberVirtualModeAdapter(
+        store, dbus, "legion_go",
+        sleep=lambda _seconds: None,
+        monotonic=lambda: next(ticks),
+    )
+
+    applied = backend.apply_component(
+        "virtual_controller", {"mode": "ds5-edge"}, None, 10
+    )
+    ready = backend.wait_ready(None, 10)
+
+    assert applied.status == "accepted_unverifiable"
+    assert ready.status == "failed"
+    assert ready.reason == "device_not_ready"
+    assert writes == [
+        ["ds5-edge", "keyboard"],
+        ["xbox-elite", "keyboard"],
+    ]
+
+
+def test_ip_empty_global_restores_external_virtual_target(tmp_path):
+    store = RemapStore(str(tmp_path / "controllers.json"))
+    owner = "inputplumber:legion_go"
+    store.remember_virtual_mode_baseline(owner, {
+        "mode": "xbox-elite",
+        "target_devices": ["xbox-elite", "keyboard"],
+    })
+    store.remember_applied_virtual_targets(
+        owner, ["ds5-edge", "keyboard"]
+    )
+    dbus = FakeDbus()
+    dbus.targets = ["ds5-edge", "keyboard"]
+    dbus.supported_target_device_ids = lambda: [
+        "xbox-elite", "ds5-edge", "keyboard",
+    ]
+    dbus.target_device_types = lambda: list(dbus.targets)
+    writes = []
+
+    def set_targets(targets):
+        writes.append(list(targets))
+        dbus.targets = list(targets)
+        return True
+
+    dbus.set_target_devices = set_targets
+    backend = factory.IpBackend(
+        store, dbus, device_key="legion_go"
+    )
+
+    accepted = backend.apply_component(
+        "virtual_controller", {}, None, 11
+    )
+    ready = backend.wait_ready(None, 11)
+
+    assert accepted.status == "accepted_unverifiable"
+    assert ready.status == "applied"
+    assert writes == [["xbox-elite", "keyboard"]]
 
 
 def test_ip_backend_reports_persisted_profile_ownership(tmp_path):
@@ -483,6 +662,33 @@ def test_hhd_virtual_mode_is_persisted_per_game_and_readiness_confirmed(
     }
 
 
+def test_hhd_empty_global_restores_immutable_virtual_baseline(tmp_path):
+    store = RemapStore(str(tmp_path / "controllers.json"))
+    store.remember_virtual_mode_baseline(
+        "hhd:rog_ally", {"mode": "uinput"}
+    )
+    backend = factory.HhdBackend(
+        "4.1.8", store, FakeDbus(), "rog_ally"
+    )
+    modes = []
+    backend._virtual_mode = SimpleNamespace(
+        apply=lambda mode: modes.append(mode) or {
+            "config_confirmed": True,
+            "rollback_confirmed": True,
+            "actual": {"mode": "uinput"},
+            "reason": None,
+        },
+    )
+
+    result = backend.apply_component(
+        "virtual_controller", {}, None, 12
+    )
+
+    assert result.status == "accepted_unverifiable"
+    assert modes == ["auto"]
+    assert backend.owns_loaded_profile() is True
+
+
 def _hhd_ally_owner(monkeypatch, value=80):
     state = {
         "controllers": {
@@ -682,3 +888,26 @@ def test_unknown_inputplumber_device_cannot_write_vibration(tmp_path):
     assert backend.test_vibration(
         "pulse", "both", 100
     )["reason"] == "unsupported"
+
+
+def test_unknown_inputplumber_device_cannot_recreate_virtual_targets(
+    tmp_path,
+):
+    store = RemapStore(str(tmp_path / "controllers.json"))
+    dbus = FakeDbus()
+    dbus.supported_target_device_ids = lambda: ["xbox-elite", "ds5"]
+    dbus.target_device_types = lambda: ["xbox-elite", "keyboard"]
+    dbus.set_target_devices = lambda _targets: (_ for _ in ()).throw(
+        AssertionError("unknown composite must not be written")
+    )
+    backend = factory.IpBackend(
+        store, dbus, device_key="unknown_device"
+    )
+
+    config = backend.get_config()
+    result = backend.apply_component(
+        "virtual_controller", {"mode": "ds5"}, None, 13
+    )
+
+    assert config["virtual_controller"]["supported"] is False
+    assert result.status == "unsupported"

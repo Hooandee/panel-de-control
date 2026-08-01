@@ -1,5 +1,8 @@
 from controllers.store import RemapStore
-from controllers.virtual_mode import HhdVirtualModeAdapter
+from controllers.virtual_mode import (
+    HhdVirtualModeAdapter,
+    InputPlumberVirtualModeAdapter,
+)
 
 
 def _settings(*modes):
@@ -157,3 +160,104 @@ def test_readiness_failure_can_restore_the_exact_previous_profile(tmp_path):
     assert api.state["controllers"]["rog_ally"]["controller_mode"]["mode"] == (
         "uinput"
     )
+
+
+class InputPlumberApi:
+    def __init__(self, reads, supported=None):
+        self.reads = iter(reads)
+        self.supported = supported or [
+            "xb360", "xbox-elite", "ds5-edge", "keyboard", "mouse",
+        ]
+        self.writes = []
+
+    def target_device_types(self):
+        return next(self.reads)
+
+    def supported_target_device_ids(self):
+        return list(self.supported)
+
+    def set_target_devices(self, targets):
+        self.writes.append(list(targets))
+        return True
+
+
+def _ip_adapter(tmp_path, api):
+    return InputPlumberVirtualModeAdapter(
+        RemapStore(str(tmp_path / "controllers.json")),
+        api,
+        "legion_go",
+        sleep=lambda _seconds: None,
+        monotonic=lambda: 0.0,
+    )
+
+
+def test_inputplumber_mode_replaces_only_gamepad_and_waits_for_exact_set(
+    tmp_path,
+):
+    baseline = ["xbox-elite", "mouse", "keyboard", "touchpad"]
+    desired = ["ds5-edge", "mouse", "keyboard", "touchpad"]
+    api = InputPlumberApi([baseline, baseline, desired])
+    adapter = _ip_adapter(tmp_path, api)
+
+    applied = adapter.apply("ds5-edge")
+    ready = adapter.wait_ready(timeout=1)
+
+    assert applied == {
+        "accepted": True,
+        "ready": False,
+        "rollback_confirmed": True,
+        "actual": "xbox-elite",
+        "reason": None,
+    }
+    assert ready == {
+        "ready": True,
+        "rollback_confirmed": True,
+        "actual": "ds5-edge",
+    }
+    assert api.writes == [desired]
+
+
+def test_inputplumber_readiness_failure_restores_all_previous_targets(
+    tmp_path,
+):
+    baseline = ["xbox-elite", "mouse", "keyboard", "touchpad"]
+    desired = ["ds5-edge", "mouse", "keyboard", "touchpad"]
+    api = InputPlumberApi([baseline, ["keyboard"], baseline])
+    adapter = _ip_adapter(tmp_path, api)
+
+    assert adapter.apply("ds5-edge")["accepted"] is True
+    outcome = adapter.wait_ready(timeout=0)
+
+    assert outcome == {
+        "ready": False,
+        "rollback_confirmed": True,
+        "actual": None,
+    }
+    assert api.writes == [desired, baseline]
+
+
+def test_inputplumber_auto_restores_immutable_external_baseline(tmp_path):
+    baseline = ["xbox-elite", "keyboard"]
+    custom = ["ds5-edge", "keyboard"]
+    api = InputPlumberApi([baseline, custom, custom, baseline])
+    adapter = _ip_adapter(tmp_path, api)
+
+    assert adapter.apply("ds5-edge")["accepted"] is True
+    assert adapter.wait_ready(timeout=0)["ready"] is True
+    assert adapter.apply("auto")["accepted"] is True
+    assert adapter.wait_ready(timeout=0)["ready"] is True
+    assert api.writes == [custom, baseline]
+
+
+def test_inputplumber_cancel_rolls_back_a_pending_target_transition(
+    tmp_path,
+):
+    baseline = ["xbox-elite", "keyboard"]
+    desired = ["ds5-edge", "keyboard"]
+    api = InputPlumberApi([baseline, baseline])
+    adapter = _ip_adapter(tmp_path, api)
+
+    assert adapter.apply("ds5-edge")["accepted"] is True
+    assert adapter.cancel() is True
+
+    assert api.writes == [desired, baseline]

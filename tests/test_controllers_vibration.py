@@ -96,6 +96,23 @@ def test_asus_rejects_values_outside_the_official_native_range(tmp_path):
     assert controller.capture_baseline() == {}
 
 
+def test_asus_native_motor_range_is_not_inherited_by_other_skus(tmp_path):
+    intensity = (
+        tmp_path / "sys/bus/hid/drivers/asus_rog_ally"
+        / "0003:0B05:1ABE.0003/vibration_intensity"
+    )
+    _write(intensity, "64 51\n")
+
+    for device_key in (
+        "rog_ally_x", "rog_xbox_ally", "rog_xbox_ally_x",
+    ):
+        controller = _controller(
+            device_key, FakeDbus(), root=str(tmp_path)
+        )
+        assert controller.state() is None
+        assert controller.capabilities()["mode"] == "enabled_only"
+
+
 def test_asus_external_baseline_round_trips_exact_native_values(tmp_path):
     intensity = (
         tmp_path / "sys/bus/hid/drivers/asus_rog_ally"
@@ -171,7 +188,125 @@ def test_legion_gain_uses_the_single_force_feedback_source(tmp_path):
         "min": 0,
         "max": 100,
         "step": 5,
-        "test": {"patterns": ["pulse"], "channels": ["both"]},
+        "test": {
+            "patterns": ["pulse"],
+            "channels": ["strong", "weak", "both"],
+        },
+    }
+
+
+def test_legion_direct_channel_test_uses_exact_strong_and_weak_magnitudes(
+    tmp_path,
+):
+    from controllers import vibration as vib
+
+    capabilities = (
+        tmp_path / "sys/class/input/event2/device/capabilities/ff"
+    )
+    _write(capabilities, "107030000 0\n")
+    device = tmp_path / "dev/input/event2"
+    _write(device)
+    ioctls = []
+    writes = []
+    uploaded = []
+
+    def ioctl(_fd, request, argument, mutate=False):
+        ioctls.append((request, mutate))
+        if request == vib._EVIOCSFF:
+            effect = vib._FFEffect.from_buffer(argument)
+            uploaded.append((
+                effect.u.rumble.strong_magnitude,
+                effect.u.rumble.weak_magnitude,
+            ))
+            effect.id = 7
+        return 0
+
+    controller = _controller(
+        "legion_go",
+        FakeDbus(("/dev/input/event2",)),
+        root=str(tmp_path),
+        open_device=lambda _path, _flags: 12,
+        write_event=lambda _fd, event: writes.append(event) or len(event),
+        ioctl=ioctl,
+        close_device=lambda _fd: None,
+        sleep=lambda _seconds: None,
+    )
+
+    results = [
+        controller.test("pulse", channel, 50)
+        for channel in ("strong", "weak", "both")
+    ]
+
+    magnitude = round(0xFFFF * 0.5)
+    assert uploaded == [
+        (magnitude, 0), (0, magnitude), (magnitude, magnitude),
+    ]
+    assert len(writes) == 6
+    assert [struct.unpack("llHHi", event)[-1] for event in writes] == [
+        1, 0, 1, 0, 1, 0,
+    ]
+    assert ioctls == [
+        (request, mutate)
+        for _ in range(3)
+        for request, mutate in (
+            (vib._EVIOCSFF, True), (vib._EVIOCRMFF, False),
+        )
+    ]
+    assert results == [{
+        "sent": True,
+        "stopped": True,
+        "restored": True,
+        "reason": None,
+    }] * 3
+
+
+def test_legion_direct_test_reports_stop_and_erase_failures(tmp_path):
+    from controllers import vibration as vib
+
+    capabilities = (
+        tmp_path / "sys/class/input/event2/device/capabilities/ff"
+    )
+    _write(capabilities, "107030000 0\n")
+    _write(tmp_path / "dev/input/event2")
+
+    def run(*, short_stop=False, erase_fails=False):
+        write_count = 0
+
+        def ioctl(_fd, request, argument, mutate=False):
+            if request == vib._EVIOCSFF:
+                vib._FFEffect.from_buffer(argument).id = 3
+            elif erase_fails:
+                raise OSError("erase failed")
+            return 0
+
+        def write_event(_fd, event):
+            nonlocal write_count
+            write_count += 1
+            return len(event) - (1 if short_stop and write_count == 2 else 0)
+
+        controller = _controller(
+            "legion_go",
+            FakeDbus(("/dev/input/event2",)),
+            root=str(tmp_path),
+            open_device=lambda _path, _flags: 12,
+            write_event=write_event,
+            ioctl=ioctl,
+            close_device=lambda _fd: None,
+            sleep=lambda _seconds: None,
+        )
+        return controller.test("pulse", "strong", 50)
+
+    assert run(short_stop=True) == {
+        "sent": True,
+        "stopped": False,
+        "restored": True,
+        "reason": "stop_failed",
+    }
+    assert run(erase_fails=True) == {
+        "sent": True,
+        "stopped": True,
+        "restored": False,
+        "reason": "restore_failed",
     }
 
 

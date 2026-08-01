@@ -38,6 +38,7 @@ def test_empty_snapshot_has_stable_shape():
         "batteries": [],
         "inputs": {},
         "motion": None,
+        "virtual_controller": None,
         "vibration": None,
         "last_operations": {},
     }
@@ -62,12 +63,25 @@ def test_snapshot_uses_only_redacted_manager_metadata_and_capabilities():
         readback="exact",
         evidence="upstream",
     )
+    virtual = surface(
+        "inputplumber",
+        "supported",
+        fields={"actual_mode": "xbox-elite", "readiness": "dbus_target_type"},
+        scope=("global", "game"),
+        apply="recreate",
+        readback="exact",
+        evidence="upstream",
+    )
     manager_state = {
         "manager": "inputplumber",
         "manager_version": "0.78",
         "capabilities": report(
             "rog_ally", "inputplumber",
-            {"buttons": buttons, "vibration": vibration},
+            {
+                "buttons": buttons,
+                "virtual_controller": virtual,
+                "vibration": vibration,
+            },
         ),
         "dbus": {
             "composite_name": "ASUS ROG Ally",
@@ -93,6 +107,7 @@ def test_snapshot_uses_only_redacted_manager_metadata_and_capabilities():
         "buttons": [{"source": "LeftPaddle1", "label": "M2"}],
     }
     assert state["vibration"] == vibration
+    assert state["virtual_controller"] == virtual
     assert state["last_operations"] == {
         "manager": {"operation": "load_profile", "ok": True},
     }
