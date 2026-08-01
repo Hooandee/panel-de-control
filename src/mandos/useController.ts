@@ -3,19 +3,19 @@ import {
   getControllerConfig,
   getControllerDiagnostics,
   resetController,
-  setControllerButton,
+  setControllerButtonAction,
   setControllerFollowGlobal,
   setControllerSetting,
   setControllerVibration,
   testControllerVibration,
   type ControllerConfig,
+  type ControllerButtonAction,
   type Scope,
 } from "../api";
 import {
   normalizeControllerDiagnostics,
   type ControllerDiagnostics,
 } from "./diagnostics";
-import { valueToTarget } from "./logic";
 import { useRunningGame } from "../tdp/useRunningGame";
 import { useScopeSync } from "../useScopeSync";
 
@@ -24,8 +24,7 @@ export interface ControllerControl {
   scope: Scope;
   game: ReturnType<typeof useRunningGame>;
   onScope: (s: Scope) => void;
-  /** Empty value → revert this one button to the device default. */
-  onSetButton: (source: string, value: string) => void;
+  onSetButtonAction: (source: string, action: ControllerButtonAction) => void;
   onSetSetting: (field: string, value: string) => void;
   onSetVibration: (patch: {
     enabled?: boolean;
@@ -120,15 +119,10 @@ export function useController(): ControllerControl {
   const targetAppid = scope === "game" && game ? game.appid : null;
   const targetScope: Scope = targetAppid ? "game" : "global";
 
-  const onSetButton = useCallback(
-    (source: string, value: string) => {
+  const onSetButtonAction = useCallback(
+    (source: string, action: ControllerButtonAction) => {
       accept(
-        setControllerButton(
-          source,
-          value ? [valueToTarget(value)] : [],
-          targetScope,
-          targetAppid,
-        ),
+        setControllerButtonAction(source, action, targetScope, targetAppid),
         appid,
       );
     },
@@ -186,7 +180,7 @@ export function useController(): ControllerControl {
   );
 
   return {
-    config, scope, game, onScope, onSetButton, onSetSetting,
+    config, scope, game, onScope, onSetButtonAction, onSetSetting,
     onSetVibration, onTestVibration, onReset,
   };
 }

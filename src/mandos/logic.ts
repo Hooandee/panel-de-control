@@ -1,4 +1,4 @@
-import type { ControllerTarget } from "../api";
+import type { ControllerButtonAction, ControllerTarget } from "../api";
 
 const MANAGER_LABEL: Record<string, string> = {
   hhd: "mandos.manager.hhd",
@@ -36,6 +36,51 @@ export function currentTargetValue(targets: ControllerTarget[]): string {
   return targets.length ? targetToValue(targets[0]) : "";
 }
 
+export function targetsToAction(targets: ControllerTarget[]): ControllerButtonAction {
+  if (targets.length === 1 && "gamepad" in targets[0]) {
+    return { kind: "gamepad", target: targets[0].gamepad };
+  }
+  if (targets.length > 0 && targets.every((target) => "key" in target)) {
+    return {
+      kind: "keyboard_chord",
+      keys: targets.map((target) => (target as { key: string }).key),
+    };
+  }
+  return { kind: "default" };
+}
+
+export function actionToTargets(action: ControllerButtonAction): ControllerTarget[] {
+  if (action.kind === "gamepad") return [{ gamepad: action.target }];
+  if (action.kind === "keyboard_chord") {
+    return action.keys.map((key) => ({ key }));
+  }
+  return [];
+}
+
+const KEY_LABELS: Record<string, string> = {
+  KeyLeftCtrl: "Ctrl", KeyRightCtrl: "Right Ctrl",
+  KeyLeftShift: "Shift", KeyRightShift: "Right Shift",
+  KeyLeftAlt: "Alt", KeyRightAlt: "Alt Gr",
+  KeyLeftMeta: "Meta", KeyRightMeta: "Right Meta",
+  KeyEsc: "Esc", KeyEnter: "Enter", KeySpace: "Space", KeyTab: "Tab",
+  KeyBackspace: "Backspace", KeyPageUp: "Page Up", KeyPageDown: "Page Down",
+  KeyVolumeUp: "Volume +", KeyVolumeDown: "Volume −", KeyMute: "Mute",
+  KeyBrightnessUp: "Brightness +", KeyBrightnessDown: "Brightness −",
+  KeyUp: "↑", KeyDown: "↓", KeyLeft: "←", KeyRight: "→",
+};
+
+export function prettyKey(key: string): string {
+  return KEY_LABELS[key] ?? key.replace(/^Key/, "");
+}
+
+export function prettyAction(action: ControllerButtonAction): string {
+  if (action.kind === "gamepad") return prettyTarget(`gp:${action.target}`);
+  if (action.kind === "keyboard_chord") {
+    return action.keys.map(prettyKey).join(" + ");
+  }
+  return "";
+}
+
 // Friendly labels: Xbox face-button letters + short paddle/shoulder names. Anything
 // unmapped falls through to the raw name (don't invent a label we don't know).
 const GP_LABEL: Record<string, string> = {
@@ -46,6 +91,6 @@ const GP_LABEL: Record<string, string> = {
 
 export function prettyTarget(value: string): string {
   const t = valueToTarget(value);
-  if ("key" in t) return t.key.replace(/^Key/, "");
+  if ("key" in t) return prettyKey(t.key);
   return GP_LABEL[t.gamepad] ?? t.gamepad;
 }

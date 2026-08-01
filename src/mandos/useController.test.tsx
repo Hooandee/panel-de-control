@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   getControllerConfig: vi.fn(),
   setControllerVibration: vi.fn(),
   setControllerSetting: vi.fn(),
+  setControllerButtonAction: vi.fn(),
 }));
 
 vi.mock("../tdp/useRunningGame", () => ({
@@ -16,7 +17,7 @@ vi.mock("../api", () => ({
   getControllerConfig: mocks.getControllerConfig,
   getControllerDiagnostics: vi.fn(),
   resetController: vi.fn(),
-  setControllerButton: vi.fn(),
+  setControllerButtonAction: mocks.setControllerButtonAction,
   setControllerFollowGlobal: vi.fn(),
   setControllerSetting: mocks.setControllerSetting,
   setControllerVibration: mocks.setControllerVibration,
@@ -109,6 +110,25 @@ describe("useController request coordination", () => {
 
     expect(mocks.setControllerVibration).toHaveBeenCalledWith(
       { enabled: false }, "global", null,
+    );
+  });
+
+  it("sends a keyboard chord as one ordered action", async () => {
+    mocks.getControllerConfig.mockResolvedValue(config("current"));
+    mocks.setControllerButtonAction.mockResolvedValue(config("applied"));
+    const { result } = renderHook(() => useController());
+    await act(async () => { await Promise.resolve(); });
+
+    act(() => result.current.onSetButtonAction("extra_l1", {
+      kind: "keyboard_chord",
+      keys: ["KeyLeftCtrl", "KeyTab"],
+    }));
+
+    expect(mocks.setControllerButtonAction).toHaveBeenCalledWith(
+      "extra_l1",
+      { kind: "keyboard_chord", keys: ["KeyLeftCtrl", "KeyTab"] },
+      "global",
+      null,
     );
   });
 

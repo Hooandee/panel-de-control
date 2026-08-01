@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  actionToTargets,
   currentTargetValue,
   managerDescKey,
   managerLabelKey,
   prettyTarget,
   targetToValue,
+  targetsToAction,
   valueToTarget,
 } from "./logic";
 
@@ -36,5 +38,24 @@ describe("target encoding", () => {
     expect(prettyTarget("gp:South")).toBe("A");
     expect(prettyTarget("gp:LeftPaddle1")).toBe("LeftPaddle1");
     expect(prettyTarget("key:KeyEsc")).toBe("Esc");
+  });
+});
+
+describe("controller button actions", () => {
+  it("keeps a chord instead of only its first key", () => {
+    expect(targetsToAction([
+      { key: "KeyLeftCtrl" }, { key: "KeyTab" },
+    ])).toEqual({
+      kind: "keyboard_chord", keys: ["KeyLeftCtrl", "KeyTab"],
+    });
+  });
+
+  it("round-trips default, gamepad and keyboard chord actions", () => {
+    expect(actionToTargets({ kind: "default" })).toEqual([]);
+    expect(actionToTargets({ kind: "gamepad", target: "South" }))
+      .toEqual([{ gamepad: "South" }]);
+    expect(actionToTargets({
+      kind: "keyboard_chord", keys: ["KeyLeftAlt", "KeyEnter"],
+    })).toEqual([{ key: "KeyLeftAlt" }, { key: "KeyEnter" }]);
   });
 });

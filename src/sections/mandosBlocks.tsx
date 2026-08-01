@@ -5,11 +5,13 @@ import { LuActivity, LuGamepad2, LuRotateCcw, LuVibrate } from "react-icons/lu";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import {
-  currentTargetValue,
   managerDescKey,
   managerLabelKey,
+  prettyAction,
   prettyTarget,
+  targetsToAction,
 } from "../mandos/logic";
+import { openKeyboardChordEditor } from "../mandos/KeyboardChordEditor";
 import { useMandos } from "../mandos/mandosContext";
 import {
   diagnosticOperationLabel,
@@ -94,14 +96,9 @@ const ManagerBlock: FC = () => {
 
 const RemapBlock: FC = () => {
   const { t } = useI18n();
-  const { config, scope, game, onScope, onSetButton, onReset } = useMandos();
+  const { config, scope, game, onScope, onSetButtonAction, onReset } = useMandos();
   if (config?.kind !== "remap") return null;
   const buttons = config.buttons ?? [];
-  const targetGroups = [
-    { data: "", label: t("mandos.remap.default") },
-    { label: t("mandos.targets.buttons"), options: (config.gamepad_targets ?? []).map((g) => ({ data: `gp:${g}`, label: prettyTarget(`gp:${g}`) })) },
-    { label: t("mandos.targets.keys"), options: (config.key_targets ?? []).map((k) => ({ data: `key:${k}`, label: prettyTarget(`key:${k}`) })) },
-  ];
   return (
     <Card title={t("mandos.remap.title")}>
       {buttons.length === 0 ? (
@@ -120,16 +117,44 @@ const RemapBlock: FC = () => {
               onScope={onScope}
             />
           </div>
-          {buttons.map((b) => (
-            <RemapRow key={b.source} label={b.label}>
-              <Dropdown
-                rgOptions={targetGroups}
-                selectedOption={currentTargetValue(b.target ?? [])}
-                strDefaultLabel={t("mandos.remap.default")}
-                onChange={(o) => onSetButton(b.source, o.data as string)}
-              />
-            </RemapRow>
-          ))}
+          {buttons.map((b) => {
+            const action = targetsToAction(b.target ?? []);
+            const selected = action.kind === "gamepad" ? `gp:${action.target}` : action.kind === "keyboard_chord" ? "shortcut" : "";
+            const shortcutLabel = action.kind === "keyboard_chord"
+              ? prettyAction(action)
+              : t("mandos.remap.shortcut");
+            const targetGroups = [
+              { data: "", label: t("mandos.remap.default") },
+              { label: t("mandos.targets.buttons"), options: (config.gamepad_targets ?? []).map((target) => ({ data: `gp:${target}`, label: prettyTarget(`gp:${target}`) })) },
+              { label: t("mandos.targets.keys"), options: [{ data: "shortcut", label: shortcutLabel }] },
+            ];
+            return (
+              <RemapRow key={b.source} label={b.label}>
+                <Dropdown
+                  rgOptions={targetGroups}
+                  selectedOption={selected}
+                  strDefaultLabel={t("mandos.remap.default")}
+                  onChange={(option) => {
+                    const value = option.data as string;
+                    if (value === "shortcut") {
+                      openKeyboardChordEditor({
+                        initialKeys: action.kind === "keyboard_chord" ? action.keys : [],
+                        keyTargets: config.key_targets ?? [],
+                        onSave: (keys) => onSetButtonAction(b.source, { kind: "keyboard_chord", keys }),
+                      });
+                      return;
+                    }
+                    onSetButtonAction(
+                      b.source,
+                      value.startsWith("gp:")
+                        ? { kind: "gamepad", target: value.slice(3) }
+                        : { kind: "default" },
+                    );
+                  }}
+                />
+              </RemapRow>
+            );
+          })}
           <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, margin: `${theme.space.sm}px 0`, lineHeight: 1.4 }}>
             {t("mandos.remap.note")}
           </div>
