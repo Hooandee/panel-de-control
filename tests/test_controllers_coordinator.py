@@ -130,3 +130,14 @@ def test_identical_completed_profile_is_coalesced():
 
     assert second == first
     assert len(backend.calls) == call_count
+
+
+def test_failed_external_restore_is_recovery_required_after_cleanup():
+    backend = OrderedBackend(mode_status="failed")
+    backend.restore_external = lambda: False
+    coordinator = ControllerCoordinator(backend)
+
+    snapshot = coordinator.shutdown(restore_external=True)
+
+    assert backend.calls[0] == ("clear_translated_state", None)
+    assert snapshot["restore_external"] == "recovery_required"
