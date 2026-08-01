@@ -1,6 +1,6 @@
 import { FC, ReactNode } from "react";
-import { DialogButton, Dropdown } from "@decky/ui";
-import { LuGamepad2, LuRotateCcw } from "react-icons/lu";
+import { DialogButton, Dropdown, ToggleField } from "@decky/ui";
+import { LuGamepad2, LuRotateCcw, LuVibrate } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
@@ -12,6 +12,7 @@ import {
 } from "../mandos/logic";
 import { useMandos } from "../mandos/mandosContext";
 import { ProfileSelector } from "../components/ProfileSelector";
+import { ContainedSlider } from "../components/ContainedSlider";
 import { registerBlock } from "../customize/blocks";
 
 const Card: FC<{ title: string; children: ReactNode }> = ({ title, children }) => (
@@ -100,6 +101,13 @@ const RemapBlock: FC = () => {
           <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, margin: `${theme.space.sm}px 0`, lineHeight: 1.4 }}>
             {t("mandos.remap.note")}
           </div>
+          {config.last_apply === false && (
+            <div style={{ fontSize: theme.font.caption, color: theme.color.danger, marginBottom: theme.space.sm, lineHeight: 1.4 }}>
+              {t(config.apply_error === "profile_conflict"
+                ? "mandos.remap.conflict"
+                : "mandos.remap.applyFailed")}
+            </div>
+          )}
           <DialogButton
             style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: theme.space.xs }}
             onClick={onReset}
@@ -145,6 +153,97 @@ const SettingsBlock: FC = () => {
   );
 };
 
+const VibrationBlock: FC = () => {
+  const { t } = useI18n();
+  const {
+    config, scope, game, onScope, onSetVibration, onTestVibration,
+  } = useMandos();
+  const vibration = config?.vibration;
+  if (!vibration?.supported) return null;
+  const sliderMin = vibration.min ?? 0;
+  const sliderMax = vibration.max ?? 100;
+  const sliderStep = vibration.step ?? 5;
+  return (
+    <Card title={t("mandos.vibration.title")}>
+      <div style={{ marginBottom: theme.space.sm }}>
+        <ProfileSelector
+          scope={scope}
+          gameName={game?.name ?? null}
+          hasGameProfile={config?.has_game_profile ?? false}
+          globalLabel={t("tdp.scope.global")}
+          inheritHint={t("mandos.vibration.inherit")}
+          onScope={onScope}
+        />
+      </div>
+      <ToggleField
+        label={t("mandos.vibration.enabled")}
+        description={t("mandos.vibration.enabled.desc")}
+        checked={vibration.enabled === true}
+        onChange={(enabled) => onSetVibration({ enabled })}
+        bottomSeparator="none"
+      />
+      {vibration.persistent && vibration.mode === "gain" && vibration.value != null && (
+        <ContainedSlider
+          label={t("mandos.vibration.intensity")}
+          value={vibration.value}
+          min={sliderMin}
+          max={sliderMax}
+          step={sliderStep}
+          showValue
+          onChange={(value) => onSetVibration({ value })}
+        />
+      )}
+      {vibration.persistent && vibration.mode === "dual" && (
+        <>
+          {vibration.left != null && (
+            <ContainedSlider
+              label={t("mandos.vibration.left")}
+              value={vibration.left}
+              min={sliderMin}
+              max={sliderMax}
+              step={sliderStep}
+              showValue
+              onChange={(left) => onSetVibration({ left })}
+            />
+          )}
+          {vibration.right != null && (
+            <ContainedSlider
+              label={t("mandos.vibration.right")}
+              value={vibration.right}
+              min={sliderMin}
+              max={sliderMax}
+              step={sliderStep}
+              showValue
+              onChange={(right) => onSetVibration({ right })}
+            />
+          )}
+        </>
+      )}
+      {vibration.test_supported && (
+        <DialogButton
+          disabled={vibration.enabled !== true}
+          style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: theme.space.xs }}
+          onClick={() => onTestVibration(1)}
+        >
+          <LuVibrate size={15} /> {t("mandos.vibration.test")}
+        </DialogButton>
+      )}
+      {vibration.persistent && (
+        <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, marginTop: theme.space.sm, lineHeight: 1.4 }}>
+          {t(vibration.readback
+            ? "mandos.vibration.note.readback"
+            : "mandos.vibration.note.accepted")}
+        </div>
+      )}
+      {vibration.last_apply === false && (
+        <div style={{ fontSize: theme.font.caption, color: theme.color.danger, marginTop: theme.space.sm, lineHeight: 1.4 }}>
+          {t("mandos.vibration.applyFailed")}
+        </div>
+      )}
+    </Card>
+  );
+};
+
 export function registerMandosBlocks(): void {
   registerBlock("manager", { sectionId: "mandos", Component: ManagerBlock });
   registerBlock("remap", {
@@ -156,5 +255,10 @@ export function registerMandosBlocks(): void {
     sectionId: "mandos",
     Component: SettingsBlock,
     useAvailable: () => useMandos().config?.kind === "settings",
+  });
+  registerBlock("vibration", {
+    sectionId: "mandos",
+    Component: VibrationBlock,
+    useAvailable: () => useMandos().config?.vibration?.supported === true,
   });
 }

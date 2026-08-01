@@ -50,7 +50,11 @@ function sectionLine(section: SectionId, row: GameProfileRow, t: T): SectionLine
     return { label: t("gameProfiles.sec.cpu"), text: parts.join(" · "), dim: row.cpu.follows_global };
   }
   if (section === "mandos" && row.mandos) {
-    return { label: t("gameProfiles.sec.mandos"), text: t("gameProfiles.buttons", { n: row.mandos.count }), dim: row.mandos.follows_global };
+    const parts = [
+      row.mandos.count > 0 ? t("gameProfiles.buttons", { n: row.mandos.count }) : "",
+      row.mandos.vibration ? t("gameProfiles.vibration") : "",
+    ].filter(Boolean);
+    return { label: t("gameProfiles.sec.mandos"), text: parts.join(" · "), dim: row.mandos.follows_global };
   }
   if (section === "audio" && row.audio) {
     return { label: t("gameProfiles.sec.audio"), text: t("gameProfiles.audioCustom"), dim: row.audio.follows_global };

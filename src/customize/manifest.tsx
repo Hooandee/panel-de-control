@@ -3,7 +3,7 @@ import {
   LuGauge, LuSlidersHorizontal, LuFan, LuSettings,
   LuLeaf, LuBatteryFull, LuCpu, LuSun, LuVolume2, LuWind, LuThermometer, LuChartSpline,
   LuLightbulb, LuPalette, LuGamepad2, LuMemoryStick, LuActivity, LuHeartPulse, LuAudioLines,
-  LuSparkles, LuMoon, LuReplace, LuSlidersVertical, LuRocket,
+  LuSparkles, LuMoon, LuReplace, LuSlidersVertical, LuRocket, LuVibrate,
 } from "react-icons/lu";
 
 /** Presentation metadata shared by a tab and a configurable block. */
@@ -80,6 +80,7 @@ export const SECTION_BLOCKS: Record<string, BlockDef[]> = {
     { id: "manager", labelKey: "customize.block.manager", icon: <LuGamepad2 size={ICON} /> },
     { id: "remap", labelKey: "mandos.remap.title", icon: <LuReplace size={ICON} /> },
     { id: "settings", labelKey: "mandos.settings.title", icon: <LuSlidersVertical size={ICON} /> },
+    { id: "vibration", labelKey: "mandos.vibration.title", icon: <LuVibrate size={ICON} /> },
   ],
 };
 

@@ -135,3 +135,113 @@ def test_missing_composite_discovery_is_logarithmically_sampled():
         if event["operation"] == "discover_composite"
     ]
     assert [event["failure_count"] for event in failures] == [1, 2, 4, 8]
+
+
+def test_selects_composite_by_exact_expected_name():
+    calls = []
+
+    def run(args):
+        calls.append(args)
+        if args[1] == "tree":
+            return _result(
+                "├─/org/shadowblip/InputPlumber/CompositeDevice0\n"
+                "└─/org/shadowblip/InputPlumber/CompositeDevice1\n"
+            )
+        if args[-1] == "Name":
+            path = args[3]
+            return _result(
+                's "ASUS ROG Ally"\n'
+                if path.endswith("1")
+                else 's "Bluetooth Controller"\n'
+            )
+        if args[-1] == "SourceDevicePaths":
+            return _result('as 1 "/sys/devices/virtual/input/input0"\n')
+        if args[-1] == "Capabilities":
+            return _result('as 1 "Gamepad:Button:LeftPaddle1"\n')
+        raise AssertionError(args)
+
+    dbus = IpDbus(run=run, expected_names=("ASUS ROG Ally",))
+    assert dbus.capabilities() == ["Gamepad:Button:LeftPaddle1"]
+    assert dbus.diagnostics()["composite_name"] == "ASUS ROG Ally"
+
+
+def test_refuses_ambiguous_composite_without_expected_name():
+    dbus = IpDbus(
+        run=lambda _args: _result(
+            "├─/org/shadowblip/InputPlumber/CompositeDevice0\n"
+            "└─/org/shadowblip/InputPlumber/CompositeDevice1\n"
+        )
+    )
+    assert dbus.capabilities() == []
+    assert dbus.diagnostics()["last_operation"]["reason"] == "composite_ambiguous"
+
+
+def test_force_feedback_enabled_has_exact_readback():
+    responses = iter([
+        _result("└─/org/shadowblip/InputPlumber/CompositeDevice0\n"),
+        _result("b true\n"),
+        _result(),
+        _result("b false\n"),
+    ])
+    dbus = IpDbus(run=lambda _args: next(responses))
+    assert dbus.force_feedback_enabled() is True
+    assert dbus.set_force_feedback_enabled(False) is True
+
+
+def test_force_feedback_test_calls_rumble_and_stop():
+    calls = []
+
+    def run(args):
+        calls.append(args)
+        if args[1] == "tree":
+            return _result("└─/org/shadowblip/InputPlumber/CompositeDevice0\n")
+        return _result()
+
+    dbus = IpDbus(run=run)
+    assert dbus.rumble(0.7) is True
+    assert dbus.stop_rumble() is True
+    assert any(args[-2:] == ["d", "0.7"] for args in calls)
+    assert any("Stop" in args for args in calls)
+
+
+def test_source_device_paths_returns_only_nonempty_paths():
+    responses = iter([
+        _result("└─/org/shadowblip/InputPlumber/CompositeDevice0\n"),
+        _result('as 3 "/dev/input/event2" "" "/dev/hidraw1"\n'),
+    ])
+    dbus = IpDbus(run=lambda _args: next(responses))
+
+    assert dbus.source_device_paths() == [
+        "/dev/input/event2",
+        "/dev/hidraw1",
+    ]
+
+
+def test_write_revalidates_cached_composite_identity():
+    changed = False
+
+    def run(args):
+        nonlocal changed
+        if args[1] == "tree":
+            return _result(
+                "└─/org/shadowblip/InputPlumber/CompositeDevice0\n"
+            )
+        if args[-1] == "Name":
+            return _result(
+                's "Bluetooth Controller"\n'
+                if changed else 's "Lenovo Legion Go"\n'
+            )
+        if args[-1] == "SourceDevicePaths":
+            return _result('as 1 "/dev/input/event2"\n')
+        if args[-1] == "Capabilities":
+            return _result('as 1 "Gamepad:Button:LeftPaddle1"\n')
+        if "Rumble" in args:
+            raise AssertionError("must not write to a changed composite")
+        return _result()
+
+    dbus = IpDbus(run=run, expected_names=("Lenovo Legion Go",))
+    assert dbus.capabilities() == ["Gamepad:Button:LeftPaddle1"]
+    changed = True
+
+    assert dbus.rumble(1.0) is False
+    assert dbus.diagnostics()["composite_path_available"] is False

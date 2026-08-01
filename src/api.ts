@@ -644,12 +644,32 @@ export interface ControllerConfig {
   // remap, and whether it has its own saved profile — drive the scope tab.
   follows_global?: boolean;
   has_game_profile?: boolean;
+  last_apply?: boolean;
+  apply_error?: string;
   // settings (HHD)
   device_key?: string;
   mode?: string | null;
   mode_options?: string[];
   paddles_as?: string | null;
   paddles_options?: string[];
+  vibration?: {
+    supported: boolean;
+    enabled: boolean | null;
+    test_supported: boolean;
+    mode?: "dual" | "gain";
+    persistent?: boolean;
+    value?: number;
+    left?: number;
+    right?: number;
+    actual_value?: number | null;
+    actual_left?: number;
+    actual_right?: number;
+    min?: number;
+    max?: number;
+    step?: number;
+    readback?: boolean;
+    last_apply?: boolean;
+  };
 }
 
 // ---- Bug reporter ---------------------------------------------------------
@@ -680,6 +700,16 @@ export const setControllerSetting =
   callable<[field: string, value: string], ControllerConfig>("set_controller_setting");
 export const resetController =
   callable<[scope: Scope, appid: string | null], ControllerConfig>("reset_controller");
+export const setControllerVibration =
+  callable<[
+    patch: { enabled?: boolean; value?: number; left?: number; right?: number },
+    scope: Scope,
+    appid: string | null,
+  ], ControllerConfig>(
+    "set_controller_vibration",
+  );
+export const testControllerVibration =
+  callable<[strength: number], boolean>("test_controller_vibration");
 
 // ---- Ajustes: per-game profile overview -----------------------------------
 // One row per game that has a stored per-game profile in any section (raw own values).
@@ -689,7 +719,7 @@ export interface GameProfileRow {
   fan?: { preset: string; follows_global: boolean };
   color?: { saturation: number; calibrated: boolean; hdr: boolean; follows_global: boolean };
   cpu?: { smt: boolean; boost: boolean; cores: number | null; follows_global: boolean };
-  mandos?: { count: number; follows_global: boolean };
+  mandos?: { count: number; vibration: boolean; follows_global: boolean };
   audio?: { follows_global: boolean };
 }
 export const listGameProfiles = callable<[], GameProfileRow[]>("list_game_profiles");

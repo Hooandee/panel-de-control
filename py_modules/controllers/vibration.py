@@ -1,0 +1,275 @@
+"""Persistent per-game vibration controls exposed by the active kernel stack.
+
+InputPlumber owns routing and transient test effects. Persistent intensity uses
+the narrowest device interface available: ASUS' two-motor sysfs control with
+readback, otherwise the selected physical evdev source's FF_GAIN. The desired
+value is stored by RemapStore and re-applied on game changes.
+"""
+import glob
+import os
+import re
+import struct
+
+_EV_FF = 0x15
+_FF_RUMBLE = 0x50
+_FF_GAIN = 0x60
+_ASUS_KEYS = {
+    "rog_ally", "rog_ally_x", "rog_xbox_ally", "rog_xbox_ally_x",
+}
+_GAIN_KEYS = {"legion_go", "legion_go_s", "legion_go_2"}
+_ASUS_NATIVE_MAX = 64
+
+
+def _default_write_text(path, value):
+    with open(path, "w") as f:
+        f.write(value)
+
+
+def _ff_bits(raw):
+    try:
+        words = [int(word, 16) for word in raw.split()]
+    except (TypeError, ValueError):
+        return 0
+    bits = 0
+    for index, word in enumerate(reversed(words)):
+        bits |= word << (index * 64)
+    return bits
+
+
+class VibrationController:
+    def __init__(self, device_key, dbus, root="/", write_text=None):
+        self._device_key = device_key or ""
+        self._dbus = dbus
+        self._root = root
+        self._write_text = write_text or _default_write_text
+        self._last_operation = None
+
+    def diagnostics(self):
+        return (
+            dict(self._last_operation)
+            if self._last_operation is not None
+            else None
+        )
+
+    def _path(self, absolute):
+        return os.path.join(self._root, absolute.lstrip("/"))
+
+    def _asus_path(self):
+        if self._device_key not in _ASUS_KEYS:
+            return None
+        matches = glob.glob(self._path(
+            "/sys/bus/hid/drivers/asus_rog_ally/*/vibration_intensity"
+        ))
+        return matches[0] if len(matches) == 1 else None
+
+    @staticmethod
+    def _read_dual_native(path):
+        try:
+            with open(path) as f:
+                values = [int(value) for value in f.read().split()]
+        except (OSError, ValueError):
+            return None
+        if len(values) != 2 or any(value < 0 or value > 255 for value in values):
+            return None
+        return values[0], values[1]
+
+    @staticmethod
+    def _native_percent(value):
+        bounded = min(_ASUS_NATIVE_MAX, max(0, value))
+        return min(100, round((bounded * 100 / _ASUS_NATIVE_MAX) / 5) * 5)
+
+    @staticmethod
+    def _native_value(percent):
+        return round(percent * _ASUS_NATIVE_MAX / 100)
+
+    def _gain_path(self):
+        if self._device_key not in _GAIN_KEYS:
+            return None
+        source_paths = getattr(self._dbus, "source_device_paths", lambda: [])()
+        matches = []
+        for source in source_paths:
+            name = os.path.basename(source)
+            if not re.fullmatch(r"event\d+", name):
+                continue
+            capability_path = self._path(
+                f"/sys/class/input/{name}/device/capabilities/ff"
+            )
+            try:
+                with open(capability_path) as f:
+                    bits = _ff_bits(f.read())
+            except OSError:
+                continue
+            if bits & (1 << _FF_GAIN) and bits & (1 << _FF_RUMBLE):
+                matches.append(self._path(source))
+        return matches[0] if len(matches) == 1 else None
+
+    def state(self):
+        asus_path = self._asus_path()
+        if asus_path is not None:
+            values = self._read_dual_native(asus_path)
+            if values is None:
+                return None
+            left, right = (
+                self._native_percent(value) for value in values
+            )
+            return {
+                "mode": "dual",
+                "persistent": True,
+                "left": left,
+                "right": right,
+                "min": 0,
+                "max": 100,
+                "step": 5,
+                "readback": True,
+            }
+        if self._gain_path() is not None:
+            return {
+                "mode": "gain",
+                "persistent": True,
+                "value": None,
+                "min": 0,
+                "max": 100,
+                "step": 5,
+                "readback": False,
+            }
+        return None
+
+    def capture_baseline(self):
+        asus_path = self._asus_path()
+        if asus_path is None:
+            return {}
+        values = self._read_dual_native(asus_path)
+        if values is None:
+            return {}
+        return {
+            "native_left": values[0],
+            "native_right": values[1],
+        }
+
+    @staticmethod
+    def _percent(value):
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            return None
+        return min(100, max(0, round(float(value) / 5) * 5))
+
+    def _apply_dual_native(self, path, desired_native):
+        current = self._read_dual_native(path)
+        if current is None:
+            self._last_operation = {
+                "mode": "dual", "ok": False,
+                "reason": "initial_readback_unavailable",
+            }
+            return False
+        desired = f"{desired_native[0]} {desired_native[1]}\n"
+        try:
+            self._write_text(path, desired)
+        except OSError:
+            self._last_operation = {
+                "mode": "dual", "ok": False, "reason": "write_failed",
+            }
+            return False
+        if self._read_dual_native(path) == desired_native:
+            self._last_operation = {
+                "mode": "dual", "ok": True, "readback": True,
+            }
+            return True
+        rollback_confirmed = False
+        rollback = tuple(
+            min(_ASUS_NATIVE_MAX, value) for value in current
+        )
+        try:
+            self._write_text(path, f"{rollback[0]} {rollback[1]}\n")
+            rollback_confirmed = self._read_dual_native(path) == rollback
+        except OSError:
+            pass
+        self._last_operation = {
+            "mode": "dual",
+            "ok": False,
+            "reason": "readback_mismatch",
+            "rollback_confirmed": rollback_confirmed,
+        }
+        return False
+
+    def _apply_dual(self, path, patch):
+        if self._read_dual_native(path) is None:
+            self._last_operation = {
+                "mode": "dual", "ok": False,
+                "reason": "initial_readback_unavailable",
+            }
+            return False
+        left = self._percent(patch.get("left"))
+        right = self._percent(patch.get("right"))
+        if left is None or right is None:
+            self._last_operation = {
+                "mode": "dual", "ok": False, "reason": "invalid_value",
+            }
+            return False
+        desired_native = (
+            self._native_value(left), self._native_value(right)
+        )
+        return self._apply_dual_native(path, desired_native)
+
+    def restore_baseline(self, baseline):
+        if not isinstance(baseline, dict):
+            return False
+        asus_path = self._asus_path()
+        native = (
+            baseline.get("native_left"), baseline.get("native_right")
+        )
+        if asus_path is not None and all(
+            isinstance(value, int)
+            and not isinstance(value, bool)
+            and 0 <= value <= 255
+            for value in native
+        ):
+            desired = tuple(
+                min(_ASUS_NATIVE_MAX, value) for value in native
+            )
+            return self._apply_dual_native(asus_path, desired)
+        return self.apply(baseline)
+
+    def _apply_gain(self, path, value):
+        amount = VibrationController._percent(value)
+        if amount is None:
+            self._last_operation = {
+                "mode": "gain", "ok": False, "reason": "invalid_value",
+            }
+            return False
+        event = struct.pack(
+            "llHHi", 0, 0, _EV_FF, _FF_GAIN,
+            round(amount * 0xFFFF / 100),
+        )
+        fd = None
+        try:
+            fd = os.open(path, os.O_RDWR | os.O_NONBLOCK)
+            accepted = os.write(fd, event) == len(event)
+            self._last_operation = {
+                "mode": "gain",
+                "ok": accepted,
+                "readback": False,
+                **({} if accepted else {"reason": "short_write"}),
+            }
+            return accepted
+        except OSError:
+            self._last_operation = {
+                "mode": "gain", "ok": False, "reason": "write_failed",
+                "readback": False,
+            }
+            return False
+        finally:
+            if fd is not None:
+                os.close(fd)
+
+    def apply(self, patch):
+        if not isinstance(patch, dict):
+            return False
+        asus_path = self._asus_path()
+        if asus_path is not None:
+            return self._apply_dual(asus_path, patch)
+        gain_path = self._gain_path()
+        if gain_path is not None:
+            return self._apply_gain(gain_path, patch.get("value"))
+        self._last_operation = {
+            "mode": None, "ok": False, "reason": "unsupported",
+        }
+        return False

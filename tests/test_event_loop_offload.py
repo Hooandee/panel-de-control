@@ -254,6 +254,215 @@ def test_unload_stops_new_tdp_writes_before_handoff(tmp_path, monkeypatch):
     assert events == ["handoff"]
 
 
+def test_failed_controller_write_remains_pending_for_lifecycle_retry(
+    tmp_path, monkeypatch
+):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+
+    class Controller:
+        def set_vibration(self, patch, scope, appid):
+            return {"vibration": {"last_apply": False}}
+
+        def effective_profile(self, appid):
+            return {"buttons": {}, "vibration": {"value": 40}}
+
+    p._controller_backend = Controller()
+    p._current_appid = "42"
+    p._last_controller_overrides = {
+        "buttons": {}, "vibration": {"value": 100},
+    }
+
+    asyncio.run(
+        p.set_controller_vibration(
+            {"value": 40}, scope="game", appid="42"
+        )
+    )
+
+    assert p._last_controller_overrides == {
+        "buttons": {}, "vibration": {"value": 100},
+    }
+
+
+def test_button_write_does_not_mark_pending_vibration_as_applied(
+    tmp_path, monkeypatch
+):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+
+    class Controller:
+        def set_button(self, source, targets, scope, appid):
+            return {"last_apply": True}
+
+        def effective_profile(self, appid):
+            return {
+                "buttons": {"LeftPaddle1": [{"gamepad": "South"}]},
+                "vibration": {"value": 40},
+            }
+
+    p._controller_backend = Controller()
+    p._current_appid = "42"
+    p._last_controller_overrides = {
+        "buttons": {}, "vibration": {"value": 100},
+    }
+
+    asyncio.run(
+        p.set_controller_button(
+            "LeftPaddle1", [{"gamepad": "South"}],
+            scope="game", appid="42",
+        )
+    )
+
+    assert p._last_controller_overrides == {
+        "buttons": {"LeftPaddle1": [{"gamepad": "South"}]},
+        "vibration": {"value": 100},
+    }
+
+
+def test_vibration_write_does_not_mark_pending_buttons_as_applied(
+    tmp_path, monkeypatch
+):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+
+    class Controller:
+        def set_vibration(self, patch, scope, appid):
+            return {"vibration": {"last_apply": True}}
+
+        def effective_profile(self, appid):
+            return {
+                "buttons": {"LeftPaddle1": [{"gamepad": "South"}]},
+                "vibration": {"value": 40},
+            }
+
+    p._controller_backend = Controller()
+    p._current_appid = "42"
+    p._last_controller_overrides = {
+        "buttons": {}, "vibration": {"value": 100},
+    }
+
+    asyncio.run(
+        p.set_controller_vibration(
+            {"value": 40}, scope="game", appid="42"
+        )
+    )
+
+    assert p._last_controller_overrides == {
+        "buttons": {}, "vibration": {"value": 40},
+    }
+
+
+def test_unload_restores_global_controller_profile(tmp_path, monkeypatch):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    events = []
+
+    class Controller:
+        def effective_profile(self, appid):
+            assert appid is None
+            return {"buttons": {}, "vibration": {"value": 100}}
+
+        def apply_effective(self, appid, apply_buttons=True):
+            events.append(("controller", appid, apply_buttons))
+            return True
+
+    p._controller_backend = Controller()
+    p._last_controller_overrides = {
+        "buttons": {}, "vibration": {"value": 40},
+    }
+    p._restore_fans_safe = lambda: None
+    p._restore_color_safe = lambda: None
+    p._restore_audio_safe = lambda: None
+    p._restore_hhd_tdp = lambda: events.append("handoff")
+
+    asyncio.run(p._unload())
+
+    assert events == [("controller", None, True), "handoff"]
+
+
+def test_forced_controller_reapply_runs_with_same_desired_profile(
+    tmp_path, monkeypatch
+):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    profile = {"buttons": {}, "vibration": {"value": 40}}
+    calls = []
+
+    class Controller:
+        def effective_profile(self, appid):
+            return profile
+
+        def apply_effective(self, appid, apply_buttons=True):
+            calls.append((appid, apply_buttons))
+            return True
+
+        def owns_loaded_profile(self):
+            return False
+
+    p._controller_backend = Controller()
+    p._last_controller_overrides = profile
+    p._current_appid = "42"
+
+    p._reapply_controller(force=True)
+
+    assert calls == [("42", True)]
+
+
+def test_controller_reapply_caches_only_confirmed_components(
+    tmp_path, monkeypatch
+):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    desired = {
+        "buttons": {"LeftPaddle1": [{"gamepad": "South"}]},
+        "vibration": {"value": 40},
+    }
+
+    class Controller:
+        def effective_profile(self, appid):
+            return desired
+
+        def apply_effective_components(
+            self, appid, apply_buttons=True
+        ):
+            return {"buttons": False, "vibration": True}
+
+        def owns_loaded_profile(self):
+            return False
+
+    p._controller_backend = Controller()
+    p._last_controller_overrides = {
+        "buttons": {}, "vibration": {"value": 100},
+    }
+    p._current_appid = "42"
+
+    p._reapply_controller()
+
+    assert p._last_controller_overrides == {
+        "buttons": {}, "vibration": {"value": 40},
+    }
+
+
+def test_forced_startup_restores_owned_profile_with_empty_global(
+    tmp_path, monkeypatch
+):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    calls = []
+
+    class Controller:
+        def effective_profile(self, appid):
+            return {"buttons": {}, "vibration": {}}
+
+        def apply_effective(self, appid, apply_buttons=True):
+            calls.append((appid, apply_buttons))
+            return True
+
+        def owns_loaded_profile(self):
+            return True
+
+    p._controller_backend = Controller()
+    p._last_controller_overrides = None
+    p._current_appid = None
+
+    p._reapply_controller(force=True)
+
+    assert calls == [(None, True)]
+
+
 def test_uninstall_stops_new_tdp_writes_before_handoff(tmp_path, monkeypatch):
     p, _ = _make_plugin(tmp_path, monkeypatch)
     events = []

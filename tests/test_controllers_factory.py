@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 from controllers import detect, factory
+from controllers.store import RemapStore
 
 
 def _device(key):
@@ -34,6 +35,21 @@ class FakeDbus:
         }
 
 
+class FakeVibration:
+    def __init__(self):
+        self.applied = None
+
+    def state(self):
+        return {
+            "mode": "dual", "persistent": True, "left": 90, "right": 80,
+            "min": 0, "max": 100, "step": 5, "readback": True,
+        }
+
+    def apply(self, patch):
+        self.applied = dict(patch)
+        return True
+
+
 def test_select_none_backend():
     b = factory.select_controller_backend({"manager": detect.NONE, "version": None}, FakeStore(), FakeDbus(), _device("legion_go_2"))
     cfg = b.get_config()
@@ -64,6 +80,38 @@ def test_select_ip_backend_stamps_manager_and_version():
     assert b.set_setting("mode", "x")["kind"] == "remap"
 
 
+def test_ip_backend_reports_persisted_profile_ownership(tmp_path):
+    store = RemapStore(str(tmp_path / "controllers.json"))
+    store.remember_profile_baseline(
+        "legion_go", "version: 1\nkind: DeviceProfile\n"
+    )
+    backend = factory.IpBackend(
+        store, FakeDbus(), device_key="legion_go"
+    )
+
+    assert backend.owns_loaded_profile() is True
+
+
+def test_ip_backend_reports_vibration_apply_independently(
+    tmp_path, monkeypatch
+):
+    store = RemapStore(str(tmp_path / "controllers.json"))
+    backend = factory.IpBackend(
+        store, FakeDbus(), device_key="legion_go"
+    )
+    monkeypatch.setattr(
+        factory.ip,
+        "apply_effective_components",
+        lambda *args, **kwargs: {
+            "buttons": False,
+            "vibration": True,
+        },
+    )
+
+    assert backend.apply_effective("42") is False
+    assert backend.get_config("42")["vibration"]["last_apply"] is True
+
+
 def test_select_hhd_backend_is_hhd():
     b = factory.select_controller_backend(
         {"manager": detect.HHD, "version": "3.19.23"}, FakeStore(), FakeDbus(), _device("rog_ally")
@@ -71,3 +119,202 @@ def test_select_hhd_backend_is_hhd():
     assert b.manager == detect.HHD
     # IP-only op is a no-op on the HHD backend.
     assert isinstance(b.set_button("LeftPaddle1", []), dict)
+
+
+def _hhd_ally_owner(monkeypatch, value=80):
+    state = {
+        "controllers": {
+            "rog_ally": {
+                "controller_mode": {"mode": "uinput"},
+                "limits": {
+                    "mode": "manual",
+                    "manual": {"vibration": value},
+                },
+            }
+        }
+    }
+    posts = []
+
+    def post(payload):
+        posts.append(payload)
+        limits = (
+            payload.get("controllers", {})
+            .get("rog_ally", {})
+            .get("limits")
+        )
+        if limits:
+            current = state["controllers"]["rog_ally"]["limits"]
+            if "mode" in limits:
+                current["mode"] = limits["mode"]
+            if "manual" in limits:
+                current.setdefault("manual", {}).update(limits["manual"])
+        return state
+
+    monkeypatch.setattr(factory.hhd_api, "read_state", lambda: state)
+    monkeypatch.setattr(factory.hhd_api, "post_state", post)
+    return state, posts
+
+
+def test_hhd_asus_vibration_is_saved_and_reapplied_per_game(
+    tmp_path, monkeypatch
+):
+    _state, posts = _hhd_ally_owner(monkeypatch)
+    store = RemapStore(str(tmp_path / "controllers.json"))
+    backend = factory.HhdBackend(
+        "3.19.23", store, FakeDbus(), "rog_ally"
+    )
+
+    cfg = backend.set_vibration(
+        {"value": 40}, scope="game", appid="42"
+    )
+
+    assert cfg["vibration"]["value"] == 40
+    assert cfg["follows_global"] is False
+    assert posts[-1]["controllers"]["rog_ally"]["limits"] == {
+        "manual": {"vibration": 40},
+    }
+    assert backend.apply_effective("42") is True
+    assert posts[-1]["controllers"]["rog_ally"]["limits"]["manual"] == {
+        "vibration": 40,
+    }
+
+
+def test_hhd_asus_disable_preserves_motor_levels_for_reenable(
+    tmp_path, monkeypatch
+):
+    _state, posts = _hhd_ally_owner(monkeypatch)
+    store = RemapStore(str(tmp_path / "controllers.json"))
+    backend = factory.HhdBackend(
+        "3.19.23", store, FakeDbus(), "rog_ally"
+    )
+
+    backend.set_vibration({"enabled": False}, scope="global")
+    assert store.effective_vibration(None) == {
+        "enabled": False, "value": 80,
+    }
+    assert posts[-1]["controllers"]["rog_ally"]["limits"]["manual"] == {
+        "vibration": 0,
+    }
+
+    backend.set_vibration({"enabled": True}, scope="global")
+    assert posts[-1]["controllers"]["rog_ally"]["limits"]["manual"] == {
+        "vibration": 80,
+    }
+
+
+def test_hhd_game_vibration_captures_global_baseline_for_handoff(
+    tmp_path, monkeypatch
+):
+    _state, posts = _hhd_ally_owner(monkeypatch)
+    store = RemapStore(str(tmp_path / "controllers.json"))
+    backend = factory.HhdBackend(
+        "3.19.23", store, FakeDbus(), "rog_ally"
+    )
+
+    backend.set_vibration({"value": 40}, scope="game", appid="42")
+
+    assert store.vibration_for("global") == {
+        "enabled": True, "value": 80,
+    }
+    assert backend.apply_effective(None) is True
+    assert posts[-1]["controllers"]["rog_ally"]["limits"]["manual"] == {
+        "vibration": 80,
+    }
+
+
+def test_hhd_startup_captures_owner_baseline_before_reapply(
+    tmp_path, monkeypatch
+):
+    _state, posts = _hhd_ally_owner(monkeypatch)
+    store = RemapStore(str(tmp_path / "controllers.json"))
+    store.patch_vibration("global", None, {"value": 40})
+    backend = factory.HhdBackend(
+        "3.19.23", store, FakeDbus(), "rog_ally"
+    )
+
+    assert backend.apply_effective(None) is True
+    assert store.vibration_baseline("hhd:rog_ally") == {
+        "enabled": True, "value": 80,
+    }
+    assert backend.restore_external() is True
+    assert posts[-1]["controllers"]["rog_ally"]["limits"]["manual"] == {
+        "vibration": 80,
+    }
+
+
+def test_hhd_set_setting_keeps_vibration_and_scope_contract(
+    tmp_path, monkeypatch
+):
+    _hhd_ally_owner(monkeypatch)
+    store = RemapStore(str(tmp_path / "controllers.json"))
+    backend = factory.HhdBackend(
+        "3.19.23", store, FakeDbus(), "rog_ally",
+    )
+
+    cfg = backend.set_setting("mode", "uinput")
+
+    assert cfg["vibration"]["supported"] is True
+    assert cfg["follows_global"] is True
+    assert cfg["has_game_profile"] is False
+
+
+def test_hhd_vibration_is_hidden_until_limits_are_already_manual(
+    tmp_path, monkeypatch
+):
+    state, posts = _hhd_ally_owner(monkeypatch)
+    state["controllers"]["rog_ally"]["limits"]["mode"] = "default"
+    store = RemapStore(str(tmp_path / "controllers.json"))
+    backend = factory.HhdBackend(
+        "3.19.23", store, FakeDbus(), "rog_ally"
+    )
+
+    cfg = backend.set_vibration({"value": 40}, scope="global")
+
+    assert cfg["vibration"]["supported"] is False
+    assert posts == []
+
+
+def test_hhd_vibration_echo_mismatch_rolls_back_config(
+    tmp_path, monkeypatch
+):
+    state, _posts = _hhd_ally_owner(monkeypatch)
+    calls = []
+
+    def ignore_first_then_echo(payload):
+        calls.append(payload)
+        if len(calls) == 2:
+            value = payload["controllers"]["rog_ally"]["limits"][
+                "manual"
+            ]["vibration"]
+            state["controllers"]["rog_ally"]["limits"]["manual"][
+                "vibration"
+            ] = value
+        return state
+
+    monkeypatch.setattr(factory.hhd_api, "post_state", ignore_first_then_echo)
+    store = RemapStore(str(tmp_path / "controllers.json"))
+    backend = factory.HhdBackend(
+        "3.19.23", store, FakeDbus(), "rog_ally"
+    )
+
+    cfg = backend.set_vibration({"value": 40}, scope="global")
+
+    assert cfg["vibration"]["last_apply"] is False
+    assert backend.diagnostics()["vibration"]["rollback_confirmed"] is True
+    assert state["controllers"]["rog_ally"]["limits"]["manual"][
+        "vibration"
+    ] == 80
+    assert backend.get_config()["vibration"]["last_apply"] is False
+
+
+def test_unknown_inputplumber_device_cannot_write_vibration(tmp_path):
+    store = RemapStore(str(tmp_path / "controllers.json"))
+    dbus = FakeDbus()
+    backend = factory.IpBackend(
+        store, dbus, device_key="unknown_device"
+    )
+
+    cfg = backend.get_config()
+
+    assert cfg["vibration"]["supported"] is False
+    assert backend.test_vibration(1.0) is False

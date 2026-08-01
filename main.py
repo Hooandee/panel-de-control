@@ -371,6 +371,7 @@ class Plugin:
         self._tdp_guard_task = None
         self._tdp_shutdown = False
         self._lifecycle = LifecycleManager(apply_cb=self._reapply_all,
+                                           resume_apply_cb=self._reapply_after_resume,
                                            reassert_cb=self._reassert_tdp_only,
                                            event_cb=self._log_lifecycle_event)
         self._auto_task = None
@@ -502,7 +503,12 @@ class Plugin:
         else:
             return {"disabled": self._user_disabled_all()}  # unknown id → no-op
         self._save()
-        self._reapply_all()   # already dispatches its subprocess work off-loop
+        if module_id == "mandos" and disabled:
+            await self._offload_call(self._restore_controller_global)
+        if module_id == "mandos" and not disabled:
+            self._reapply_all(force_controller=True)
+        else:
+            self._reapply_all()
         # Turning the power module off = stepping aside; hand HHD's TDP back, same
         # as set_tdp_control_enabled(False). Otherwise no manager drives the TDP.
         if module_id == "power" and disabled:
@@ -764,13 +770,21 @@ class Plugin:
             except Exception:  # noqa: BLE001
                 return None
 
+        controller_remap = _rj("controller_remap.json")
+        if isinstance(controller_remap, dict):
+            controller_remap = dict(controller_remap)
+            states = controller_remap.pop("profile_states", {})
+            controller_remap["profile_state_devices"] = (
+                sorted(states) if isinstance(states, dict) else []
+            )
+
         return {
             "settings": self._settings,
             "tdp_profiles": _rj("tdp_profiles.json"),
             "fan_curves": _rj("fan_curves.json"),
             "color": _rj("color.json"),
             "audio": _rj("audio.json"),
-            "controller_remap": _rj("controller_remap.json"),
+            "controller_remap": controller_remap,
             "telemetry": _rj("telemetry.json"),
         }
 
@@ -786,6 +800,16 @@ class Plugin:
         return await self._offload_call(
             lambda: self._controller_backend.get_config(self._current_appid))
 
+    def _remember_controller_component(self, component, value) -> None:
+        previous = self._last_controller_overrides
+        applied = (
+            dict(previous)
+            if isinstance(previous, dict)
+            else {"buttons": None, "vibration": None}
+        )
+        applied[component] = value
+        self._last_controller_overrides = applied
+
     async def set_controller_button(self, source: str, targets: list,
                                     scope: str = "global", appid=None) -> dict:
         """Remap one extra button in a scope (global / a game; InputPlumber only,
@@ -798,9 +822,47 @@ class Plugin:
                 lambda: self._controller_backend.get_config(self._current_appid))
         cfg = await self._offload_call(
             lambda: self._controller_backend.set_button(source, targets, scope, appid))
-        self._last_controller_overrides = self._controller_backend.effective_overrides(
-            self._current_appid)
+        if cfg.get("last_apply") is not False:
+            effective = self._controller_backend.effective_profile(
+                self._current_appid
+            )
+            self._remember_controller_component(
+                "buttons", effective["buttons"]
+            )
         return cfg
+
+    async def set_controller_vibration(self, patch: dict,
+                                       scope: str = "global", appid=None) -> dict:
+        """Set a persistent vibration option in the selected controller scope."""
+        self._init()
+        scope = self._resolve_scope(scope, appid)
+        if scope is None:
+            return await self._offload_call(
+                lambda: self._controller_backend.get_config(self._current_appid))
+        cfg = await self._offload_call(
+            lambda: self._controller_backend.set_vibration(
+                patch, scope, appid
+            )
+        )
+        vibration = cfg.get("vibration") if isinstance(cfg, dict) else None
+        if not (
+            isinstance(vibration, dict)
+            and vibration.get("last_apply") is False
+        ):
+            effective = self._controller_backend.effective_profile(
+                self._current_appid
+            )
+            self._remember_controller_component(
+                "vibration", effective["vibration"]
+            )
+        return cfg
+
+    async def test_controller_vibration(self, strength: float = 0.5) -> bool:
+        """Send a short bounded test pulse and always stop it in the worker."""
+        self._init()
+        return await self._offload_call(
+            lambda: self._controller_backend.test_vibration(strength)
+        )
 
     async def set_controller_follow_global(self, follow: bool, appid) -> dict:
         """Toggle a game between its own remap and following the global one, keeping
@@ -822,7 +884,9 @@ class Plugin:
         """Change a controller setting on HHD (mode / paddles_as; no-op on others)."""
         self._init()
         return await self._offload_call(
-            lambda: self._controller_backend.set_setting(field, value))
+            lambda: self._controller_backend.set_setting(
+                field, value, self._current_appid
+            ))
 
     async def reset_controller(self, scope: str = "global", appid=None) -> dict:
         """Reset a scope's remap to the device default (InputPlumber; no-op on others)."""
@@ -833,11 +897,16 @@ class Plugin:
                 lambda: self._controller_backend.get_config(self._current_appid))
         cfg = await self._offload_call(
             lambda: self._controller_backend.reset(scope, appid))
-        self._last_controller_overrides = self._controller_backend.effective_overrides(
-            self._current_appid)
+        if cfg.get("last_apply") is not False:
+            effective = self._controller_backend.effective_profile(
+                self._current_appid
+            )
+            self._remember_controller_component(
+                "buttons", effective["buttons"]
+            )
         return cfg
 
-    def _reapply_controller(self) -> None:
+    def _reapply_controller(self, force=False) -> None:
         """On a game change, load the effective InputPlumber profile for the running
         game — but only when it DIFFERS from what's already loaded, so the common case
         (following global, or the same profile) never touches the daemon and can't
@@ -845,20 +914,111 @@ class Plugin:
         on HHD/none (effective_overrides returns None)."""
         if not self._module_enabled("mandos"):
             return
-        ov = self._controller_backend.effective_overrides(self._current_appid)
-        if ov is None or ov == self._last_controller_overrides:
+        ov = self._controller_backend.effective_profile(self._current_appid)
+        if ov is None or (
+            not force and ov == self._last_controller_overrides
+        ):
             return
-        # No remaps configured and none ever applied this session → leave the daemon
-        # untouched (don't reset it to default just because a game launched).
-        if not ov and self._last_controller_overrides is None:
+        previous = self._last_controller_overrides
+        has_values = bool(ov.get("buttons") or ov.get("vibration"))
+        # No controller values configured and none applied this session → leave the
+        # daemon and physical device untouched just because a game launched.
+        owns_loaded_profile = getattr(
+            self._controller_backend, "owns_loaded_profile", lambda: False
+        )()
+        if (
+            not has_values
+            and previous is None
+            and not (force and owns_loaded_profile)
+        ):
             return
         appid = self._current_appid
+        apply_buttons = force or (
+            bool(ov.get("buttons"))
+            if previous is None
+            else ov.get("buttons") != previous.get("buttons")
+        )
 
         def apply():
-            if self._controller_backend.apply_effective(appid):
+            apply_components = getattr(
+                self._controller_backend,
+                "apply_effective_components",
+                None,
+            )
+            if callable(apply_components):
+                status = apply_components(
+                    appid, apply_buttons=apply_buttons
+                )
+            else:
+                applied = self._controller_backend.apply_effective(
+                    appid, apply_buttons=apply_buttons
+                )
+                status = {
+                    "buttons": applied,
+                    "vibration": applied,
+                }
+            if status.get("buttons"):
+                self._remember_controller_component(
+                    "buttons", ov["buttons"]
+                )
+            if status.get("vibration"):
+                self._remember_controller_component(
+                    "vibration", ov["vibration"]
+                )
+            if (
+                status.get("buttons")
+                and status.get("vibration")
+            ):
                 self._last_controller_overrides = ov
 
         self._offload(apply)
+
+    def _reapply_after_resume(self, on_ac=None) -> None:
+        self._reapply_all(on_ac, force_controller=True)
+
+    def _restore_controller_global(self) -> bool:
+        """Leave hardware on the global controller profile, never a game profile."""
+        global_profile = self._controller_backend.effective_profile(None)
+        if global_profile is None:
+            return True
+        current = self._last_controller_overrides
+        global_has_values = bool(
+            global_profile.get("buttons")
+            or global_profile.get("vibration")
+        )
+        current_has_values = bool(
+            isinstance(current, dict)
+            and (current.get("buttons") or current.get("vibration"))
+        )
+        if (
+            not global_has_values
+            and not current_has_values
+            and not getattr(
+                self._controller_backend,
+                "owns_loaded_profile",
+                lambda: False,
+            )()
+        ):
+            return True
+        ok = self._controller_backend.apply_effective(
+            None, apply_buttons=True
+        )
+        if ok:
+            self._last_controller_overrides = global_profile
+        else:
+            decky.logger.warning(
+                "Controller global handoff was not confirmed"
+            )
+        return ok
+
+    def _restore_controller_external(self) -> bool:
+        """Return controller state to the immutable pre-plugin baseline."""
+        ok = self._controller_backend.restore_external()
+        if not ok:
+            decky.logger.warning(
+                "Controller external handoff was not confirmed"
+            )
+        return ok
 
     # ---- Ajustes: per-game profile overview --------------------------------
     def _scoped_stores(self):
@@ -897,6 +1057,7 @@ class Plugin:
                           "follows_global": self._cpu_profiles.is_following_global(appid)}
         if self._controller_backend.differs_from_global(appid):
             row["mandos"] = {"count": len(self._controller_backend.game_profile(appid)),
+                             "vibration": self._controller_backend.game_vibration_differs(appid),
                              "follows_global": self._controller_backend.is_following_global(appid)}
         if self._audio_eq.differs_from_global(appid):
             row["audio"] = {"follows_global": self._audio_eq.is_following_global(appid)}
@@ -920,7 +1081,7 @@ class Plugin:
         for store in self._scoped_stores():
             store.forget_game(appid)
         if appid == self._current_appid:
-            self._reapply_all()
+            self._reapply_all(force_controller=True)
         return await self.list_game_profiles()
 
     async def get_controller_conflict(self) -> dict:
@@ -2561,7 +2722,7 @@ class Plugin:
         firmware's post-transition reset without re-running the full re-apply each time."""
         self._schedule_tdp_apply("settle-retry", on_ac)
 
-    def _reapply_all(self, on_ac=None) -> None:
+    def _reapply_all(self, on_ac=None, force_controller=False) -> None:
         """Lifecycle callback: re-assert TDP, the fan curve, the charge limit and the
         CPU controls (resume/AC — firmware may drop these across a suspend)."""
         # A context change (resume, AC/DC, game change, eco) invalidates any
@@ -2583,7 +2744,7 @@ class Plugin:
         self._reapply_hdr()
         self._reapply_color()
         self._reapply_audio()  # self-offloading; no-op when the EQ is disabled
-        self._reapply_controller()  # diff-gated; no-op unless the effective remap changed
+        self._reapply_controller(force=force_controller)
 
     # ---- Battery + charge limit --------------------------------------------
     def _record_charge_limit_apply(self, action, requested, ok, attempts) -> None:
@@ -3920,7 +4081,7 @@ class Plugin:
             decky.logger.info("Legion fan sensor exposed (lenovo_wmi_other)")
         await self._recover_gpd_fan()
         try:
-            self._reapply_all()
+            self._reapply_all(force_controller=True)
             self._lifecycle.start()
             self._start_tdp_guard_loop()
             self._start_night_loop()
@@ -3955,6 +4116,7 @@ class Plugin:
         self._audio_shutdown = True
         await self._stop_audio_loop()
         await self._offload_call(self._restore_audio_safe)
+        await self._offload_call(self._restore_controller_global)
         await self._offload_call(self._restore_hhd_tdp)  # hand HHD's TDP back if we took it
         if getattr(self, "_sampler", None) is not None:
             self._sampler.stop()
@@ -3975,6 +4137,7 @@ class Plugin:
         self._audio_shutdown = True
         await self._stop_audio_loop()
         await self._offload_call(self._restore_audio_safe)
+        await self._offload_call(self._restore_controller_external)
         await self._offload_call(self._restore_hhd_tdp)  # hand HHD's TDP back if we took it
         self._shutdown_apply_executor()
         fan_expose.remove_conf()  # drop the modprobe.d option we added (guarded)

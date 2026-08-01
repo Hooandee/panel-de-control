@@ -14,6 +14,7 @@ MODES = ("uinput", "hori_steam", "dualsense", "hidden")
 # Paddle behavior options (only the uinput/dualsense modes expose paddles_as).
 PADDLES_AS = ("steam_input", "noob", "disabled")
 _PADDLE_MODES = ("uinput", "dualsense")
+_VIBRATION_KEYS = {"rog_ally", "rog_ally_x"}
 
 
 def device_key(state) -> str | None:
@@ -60,3 +61,55 @@ def apply_setting(state, field: str, value: str) -> dict:
         return {}
     mode = state["controllers"][key].get("controller_mode", {}).get("mode")
     return build_payload(key, mode, field, value)
+
+
+def vibration_state(state, device_profile_key):
+    """Read HHD's owned Ally vibration control from its live config tree."""
+    if device_profile_key not in _VIBRATION_KEYS:
+        return None
+    key = device_key(state)
+    if key is None:
+        return None
+    limits = state["controllers"][key].get("limits")
+    if not isinstance(limits, dict):
+        return None
+    # `limits` is one HHD mode containing vibration and every stick/trigger
+    # deadzone. Never switch it to manual behind HHD's back: that could change
+    # unrelated limits. We cooperate only when the user already selected manual.
+    if limits.get("mode") != "manual":
+        return None
+    value = (limits.get("manual") or {}).get("vibration")
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return None
+    value = min(100, max(0, round(float(value))))
+    return {
+        "device_key": key,
+        "mode": "gain",
+        "persistent": True,
+        "value": value,
+        "min": 0,
+        "max": 100,
+        "step": 20,
+        "readback": False,
+    }
+
+
+def vibration_payload(state, value) -> dict:
+    key = device_key(state)
+    if key is None:
+        return {}
+    limits = state["controllers"][key].get("limits")
+    if not isinstance(limits, dict) or limits.get("mode") != "manual":
+        return {}
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return {}
+    clean = min(100, max(0, round(float(value))))
+    return {
+        "controllers": {
+            key: {
+                "limits": {
+                    "manual": {"vibration": clean},
+                }
+            }
+        }
+    }

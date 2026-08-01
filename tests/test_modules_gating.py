@@ -149,6 +149,53 @@ def test_disabling_power_module_hands_hhd_back():
     assert "power" in res["disabled"]
 
 
+def test_disabling_controller_module_restores_global_profile():
+    import asyncio
+
+    p = main.Plugin.__new__(main.Plugin)
+    p._settings = {
+        "disabled_modules": [],
+        "tdp_control_enabled": True,
+        "telemetry_enabled": True,
+    }
+    p._init = lambda: None
+    p._save = lambda: None
+    p._reapply_all = lambda *a, **k: None
+    p._sync_sampler = lambda: None
+    calls = []
+    p._restore_controller_global = lambda: calls.append("controller")
+
+    async def _offload(fn):
+        return fn()
+
+    p._offload_call = _offload
+
+    res = asyncio.run(p.set_ui_module("mandos", True))
+
+    assert calls == ["controller"]
+    assert "mandos" in res["disabled"]
+
+
+def test_reenabling_controller_module_forces_profile_retry():
+    import asyncio
+
+    p = main.Plugin.__new__(main.Plugin)
+    p._settings = {
+        "disabled_modules": ["mandos"],
+        "tdp_control_enabled": True,
+        "telemetry_enabled": True,
+    }
+    p._init = lambda: None
+    p._save = lambda: None
+    reapplies = []
+    p._reapply_all = lambda *a, **k: reapplies.append(k)
+    p._sync_sampler = lambda: None
+
+    asyncio.run(p.set_ui_module("mandos", False))
+
+    assert reapplies == [{"force_controller": True}]
+
+
 def test_hhd_restore_keeps_marker_when_hhd_unreachable():
     # HHD down → set_tdp_enable returns None. We must NOT clear hhd_tdp_prev, or we'd
     # lose how to hand control back once HHD returns.

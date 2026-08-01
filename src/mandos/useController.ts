@@ -5,6 +5,8 @@ import {
   setControllerButton,
   setControllerFollowGlobal,
   setControllerSetting,
+  setControllerVibration,
+  testControllerVibration,
   type ControllerConfig,
   type Scope,
 } from "../api";
@@ -20,6 +22,13 @@ export interface ControllerControl {
   /** Empty value → revert this one button to the device default. */
   onSetButton: (source: string, value: string) => void;
   onSetSetting: (field: string, value: string) => void;
+  onSetVibration: (patch: {
+    enabled?: boolean;
+    value?: number;
+    left?: number;
+    right?: number;
+  }) => void;
+  onTestVibration: (strength: number) => void;
   onReset: () => void;
 }
 
@@ -53,10 +62,24 @@ export function useController(): ControllerControl {
     (field: string, value: string) => { setControllerSetting(field, value).then(setConfig).catch(() => {}); },
     [],
   );
+  const onSetVibration = useCallback(
+    (patch: { enabled?: boolean; value?: number; left?: number; right?: number }) => {
+      setControllerVibration(patch, targetScope, targetAppid)
+        .then(setConfig).catch(() => {});
+    },
+    [targetScope, targetAppid],
+  );
+  const onTestVibration = useCallback(
+    (strength: number) => { testControllerVibration(strength).catch(() => {}); },
+    [],
+  );
   const onReset = useCallback(
     () => { resetController(targetScope, targetAppid).then(setConfig).catch(() => {}); },
     [targetScope, targetAppid],
   );
 
-  return { config, scope, game, onScope, onSetButton, onSetSetting, onReset };
+  return {
+    config, scope, game, onScope, onSetButton, onSetSetting,
+    onSetVibration, onTestVibration, onReset,
+  };
 }

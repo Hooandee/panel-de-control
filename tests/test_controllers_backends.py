@@ -22,6 +22,9 @@ class FakeDbus:
         self.loaded = None
         self.reset_called = False
         self._profile = "version: 1\nkind: DeviceProfile\nname: Default\nmapping: []\n"
+        self.ff_enabled = True
+        self.rumbled = None
+        self.profile_apply = None
 
     def capabilities(self):
         return list(self._caps)
@@ -31,11 +34,54 @@ class FakeDbus:
 
     def load_profile_yaml(self, yaml):
         self.loaded = yaml
+        self._profile = yaml
         return True
 
     def reset_default(self):
         self.reset_called = True
         return True
+
+    def force_feedback_enabled(self):
+        return self.ff_enabled
+
+    def set_force_feedback_enabled(self, enabled):
+        self.ff_enabled = bool(enabled)
+        return True
+
+    def rumble(self, strength):
+        self.rumbled = strength
+        return True
+
+    def stop_rumble(self):
+        self.rumbled = 0
+        return True
+
+    def source_device_paths(self):
+        return []
+
+    def record_profile_apply(self, ok, reason=None, **details):
+        self.profile_apply = {
+            "ok": bool(ok),
+            **({} if reason is None else {"reason": reason}),
+            **details,
+        }
+
+    def profile_apply_status(self):
+        return self.profile_apply
+
+
+class FakeVibration:
+    def __init__(self, state=None, applies=True):
+        self._state = state
+        self.applies = applies
+        self.applied = None
+
+    def state(self):
+        return dict(self._state) if self._state is not None else None
+
+    def apply(self, patch):
+        self.applied = dict(patch)
+        return self.applies
 
 
 class InvalidatingDbus(FakeDbus):
@@ -55,13 +101,37 @@ class InvalidatingDbus(FakeDbus):
         self.reset_called = True
         return False
 
+    def load_profile_yaml(self, yaml):
+        self.loaded = yaml
+        return False
+
+
+class IgnoringProfileLoadDbus(FakeDbus):
+    def load_profile_yaml(self, yaml):
+        self.loaded = yaml
+        return True
+
+
+class UnrecoverableProfileLoadDbus(FakeDbus):
+    def __init__(self):
+        super().__init__()
+        self.load_count = 0
+
+    def load_profile_yaml(self, yaml):
+        self.load_count += 1
+        self.loaded = yaml
+        if self.load_count == 1:
+            self._profile = "unexpected-yaml"
+            return True
+        return False
+
 
 # ---- InputPlumber backend --------------------------------------------------
 
 CLAW = "msi_claw_8_ai_plus"  # caps LeftPaddle1/RightPaddle1 → silkscreen M2/M1
 
 
-_MERGE = lambda baseline, overrides: "merged-yaml"  # noqa: E731 — the real one shells to system python
+_MERGE = lambda baseline, overrides: ("merged-yaml" if overrides else baseline)  # noqa: E731
 
 
 def test_ip_get_config_lists_device_buttons_with_silkscreen_labels(tmp_path):
@@ -104,15 +174,311 @@ def test_ip_get_config_lists_xbox_ally_macro_buttons(tmp_path):
     ]
 
 
+def test_ip_config_exposes_force_feedback_without_fake_strength(tmp_path):
+    cfg = inputplumber.get_config(_store(tmp_path), FakeDbus(), CLAW)
+    assert cfg["vibration"] == {
+        "supported": True,
+        "enabled": True,
+        "test_supported": True,
+    }
+
+
+def test_ip_config_exposes_persistent_dual_motor_profile(tmp_path):
+    store = _store(tmp_path)
+    store.patch_vibration(
+        "game", "1234", {"left": 35, "right": 45}
+    )
+    vibration = FakeVibration({
+        "mode": "dual", "persistent": True, "left": 100, "right": 80,
+        "min": 0, "max": 100, "step": 5, "readback": True,
+    })
+
+    cfg = inputplumber.get_config(
+        store, FakeDbus(), CLAW, appid="1234", vibration=vibration
+    )
+
+    assert cfg["vibration"]["mode"] == "dual"
+    assert cfg["vibration"]["left"] == 35
+    assert cfg["vibration"]["right"] == 45
+    assert cfg["vibration"]["actual_left"] == 100
+    assert cfg["vibration"]["actual_right"] == 80
+    assert cfg["vibration"]["persistent"] is True
+
+
+def test_ip_vibration_enabled_is_per_game(tmp_path):
+    store, dbus = _store(tmp_path), FakeDbus()
+    cfg = inputplumber.set_vibration(
+        store, dbus, CLAW, {"enabled": False}, scope="game", appid="1234"
+    )
+    assert store.effective_vibration("1234") == {"enabled": False}
+    assert dbus.ff_enabled is False
+    assert cfg["vibration"]["enabled"] is False
+
+
+def test_ip_vibration_failure_keeps_per_game_intent_for_retry(tmp_path):
+    store, dbus = _store(tmp_path), FakeDbus()
+    vibration = FakeVibration(
+        {
+            "mode": "gain", "persistent": True, "value": None,
+            "min": 0, "max": 100, "step": 5, "readback": False,
+        },
+        applies=False,
+    )
+    cfg = inputplumber.set_vibration(
+        store, dbus, CLAW, {"value": 40}, scope="game", appid="42",
+        vibration=vibration,
+    )
+    assert store.effective_vibration("42") == {
+        "enabled": True, "value": 40,
+    }
+    assert cfg["vibration"]["value"] == 40
+    assert cfg["vibration"]["last_apply"] is False
+
+
+def test_ip_apply_effective_reapplies_persistent_gain(tmp_path):
+    store, dbus = _store(tmp_path), FakeDbus()
+    store.patch_vibration("game", "42", {"value": 65})
+    vibration = FakeVibration({
+        "mode": "gain", "persistent": True, "value": None,
+        "min": 0, "max": 100, "step": 5, "readback": False,
+    })
+
+    assert inputplumber.apply_effective(
+        store, dbus, CLAW, "42", vibration=vibration, merge=_MERGE
+    ) is True
+    assert vibration.applied == {"value": 65}
+
+
+def test_ip_vibration_only_game_change_does_not_reload_button_profile(tmp_path):
+    store, dbus = _store(tmp_path), FakeDbus()
+    store.patch_vibration("game", "42", {"value": 65})
+    vibration = FakeVibration({
+        "mode": "gain", "persistent": True, "value": None,
+        "min": 0, "max": 100, "step": 5, "readback": False,
+    })
+
+    assert inputplumber.apply_effective(
+        store, dbus, CLAW, "42", vibration=vibration,
+        apply_buttons=False, merge=_MERGE
+    ) is True
+    assert dbus.loaded is None
+    assert vibration.applied == {"value": 65}
+
+
+def test_ip_game_vibration_captures_global_baseline_for_handoff(tmp_path):
+    store, dbus = _store(tmp_path), FakeDbus()
+    vibration = FakeVibration({
+        "mode": "gain", "persistent": True, "value": None,
+        "min": 0, "max": 100, "step": 5, "readback": False,
+    })
+
+    inputplumber.set_vibration(
+        store, dbus, CLAW, {"value": 40}, scope="game", appid="42",
+        vibration=vibration,
+    )
+
+    assert store.vibration_for("global") == {
+        "enabled": True, "value": 100,
+    }
+    assert inputplumber.apply_effective(
+        store, dbus, CLAW, None, vibration=vibration,
+        apply_buttons=False,
+    ) is True
+    assert vibration.applied == {"value": 100}
+
+
+def test_ip_profile_conflict_does_not_block_vibration_handoff(tmp_path):
+    store, dbus = _store(tmp_path), FakeDbus()
+    store.remember_profile_baseline(CLAW, "known-baseline")
+    dbus._profile = "external-profile"
+    store.patch_vibration("global", None, {"value": 100})
+    store.patch_vibration("game", "42", {"value": 40})
+    vibration = FakeVibration({
+        "mode": "gain", "persistent": True, "value": None,
+        "min": 0, "max": 100, "step": 5, "readback": False,
+    })
+
+    assert inputplumber.apply_effective(
+        store, dbus, CLAW, "42", vibration=vibration,
+        apply_buttons=True, merge=_MERGE,
+    ) is False
+    assert vibration.applied == {"value": 40}
+
+
+def test_ip_external_restore_uses_immutable_vibration_baseline(tmp_path):
+    store, dbus = _store(tmp_path), FakeDbus()
+    store.remember_vibration_baseline(
+        f"inputplumber:{CLAW}",
+        {"enabled": True, "value": 100},
+    )
+    store.patch_vibration(
+        "global", None, {"enabled": False, "value": 35}
+    )
+    vibration = FakeVibration({
+        "mode": "gain", "persistent": True, "value": None,
+        "min": 0, "max": 100, "step": 5, "readback": False,
+    })
+
+    assert inputplumber.restore_external(
+        store, dbus, CLAW, vibration=vibration
+    ) is True
+    assert dbus.ff_enabled is True
+    assert vibration.applied == {"value": 100}
+
+
+def test_ip_external_restore_uses_exact_native_asus_baseline(tmp_path):
+    class NativeVibration(FakeVibration):
+        def __init__(self):
+            super().__init__({
+                "mode": "dual", "persistent": True,
+                "left": 0, "right": 100,
+                "min": 0, "max": 100, "step": 5, "readback": True,
+            })
+            self.restored = None
+
+        def capture_baseline(self):
+            return {"native_left": 1, "native_right": 63}
+
+        def restore_baseline(self, baseline):
+            self.restored = dict(baseline)
+            return True
+
+    store, dbus = _store(tmp_path), FakeDbus()
+    vibration = NativeVibration()
+
+    inputplumber.set_vibration(
+        store, dbus, "rog_ally", {"left": 35, "right": 45},
+        vibration=vibration,
+    )
+    assert store.vibration_baseline("inputplumber:rog_ally") == {
+        "enabled": True,
+        "left": 0,
+        "right": 100,
+        "native_left": 1,
+        "native_right": 63,
+    }
+    assert store.vibration_for("global") == {
+        "enabled": True,
+        "left": 35,
+        "right": 45,
+    }
+    assert inputplumber.restore_external(
+        store, dbus, "rog_ally", vibration=vibration
+    ) is True
+    assert vibration.restored == {
+        "enabled": True,
+        "left": 0,
+        "right": 100,
+        "native_left": 1,
+        "native_right": 63,
+    }
+
+
+def test_ip_upgrade_does_not_infer_native_baseline_from_plugin_state(tmp_path):
+    class MigratedVibration(FakeVibration):
+        def capture_baseline(self):
+            return {"native_left": 22, "native_right": 29}
+
+        def restore_baseline(self, baseline):
+            raise AssertionError("legacy baseline must use percentage fallback")
+
+    store, dbus = _store(tmp_path), FakeDbus()
+    store.remember_vibration_baseline(
+        "inputplumber:rog_ally",
+        {"enabled": True, "left": 20, "right": 80},
+    )
+    store.patch_vibration(
+        "global", None, {"enabled": True, "left": 35, "right": 45}
+    )
+    vibration = MigratedVibration({
+        "mode": "dual", "persistent": True,
+        "left": 35, "right": 45,
+        "min": 0, "max": 100, "step": 5, "readback": True,
+    })
+
+    assert inputplumber.apply_effective(
+        store, dbus, "rog_ally", None, vibration=vibration,
+        apply_buttons=False,
+    ) is True
+    assert store.vibration_baseline("inputplumber:rog_ally") == {
+        "enabled": True,
+        "left": 20,
+        "right": 80,
+    }
+    assert inputplumber.restore_external(
+        store, dbus, "rog_ally", vibration=vibration
+    ) is True
+    assert vibration.applied == {"left": 20, "right": 80}
+
+
+def test_ip_startup_captures_owner_baseline_before_reapply(tmp_path):
+    store, dbus = _store(tmp_path), FakeDbus()
+    store.patch_vibration("global", None, {"value": 40})
+    vibration = FakeVibration({
+        "mode": "gain", "persistent": True, "value": None,
+        "min": 0, "max": 100, "step": 5, "readback": False,
+    })
+
+    assert inputplumber.apply_effective(
+        store, dbus, CLAW, None, vibration=vibration,
+        apply_buttons=False,
+    ) is True
+    assert store.vibration_baseline(f"inputplumber:{CLAW}") == {
+        "enabled": True, "value": 100,
+    }
+    assert inputplumber.restore_external(
+        store, dbus, CLAW, vibration=vibration
+    ) is True
+    assert vibration.applied == {"value": 100}
+
+
 def test_ip_set_button_stores_and_applies(tmp_path):
     store, dbus = _store(tmp_path), FakeDbus()
     cfg = inputplumber.set_button(store, dbus, CLAW, "LeftPaddle1", [{"gamepad": "South"}],
                                   merge=_MERGE)
     assert store.overrides_for("global")["LeftPaddle1"] == [{"gamepad": "South"}]
-    assert dbus.reset_called is True   # rebuilt from the pristine default
+    assert dbus.reset_called is False
     assert dbus.loaded == "merged-yaml"  # the merged profile was loaded
     by_src = {b["source"]: b["target"] for b in cfg["buttons"]}
     assert by_src["LeftPaddle1"] == [{"gamepad": "South"}]
+
+
+def test_ip_set_button_accepts_profile_proven_ally_paddle(
+    tmp_path, monkeypatch
+):
+    store = _store(tmp_path)
+    dbus = FakeDbus(caps=["Gamepad:Button:South"])
+    monkeypatch.setattr(
+        inputplumber.ip_profile,
+        "proven_mapped_capabilities",
+        lambda *args, **kwargs: {"LeftPaddle1", "RightPaddle1"},
+    )
+
+    config = inputplumber.set_button(
+        store, dbus, "rog_ally", "LeftPaddle1",
+        [{"gamepad": "South"}], merge=_MERGE,
+    )
+
+    assert config["last_apply"] is True
+    assert store.overrides_for("global")["LeftPaddle1"] == [
+        {"gamepad": "South"}
+    ]
+
+
+def test_live_buttons_does_not_probe_sources_for_non_ally():
+    dbus = FakeDbus(caps=["Gamepad:Button:LeftPaddle1"])
+    calls = []
+
+    def source_paths():
+        calls.append(True)
+        return ["/dev/input/event2"]
+
+    dbus.source_device_paths = source_paths
+
+    assert inputplumber.live_buttons(
+        dbus, CLAW, dbus.capabilities()
+    ) == [("LeftPaddle1", "M2")]
+    assert calls == []
 
 
 def test_ip_set_failure_does_not_return_stale_buttons(tmp_path):
@@ -150,9 +516,10 @@ def test_ip_set_button_ignores_source_not_on_this_device(tmp_path):
 def test_ip_reset_clears_and_loads_default(tmp_path):
     store = _store(tmp_path, {"LeftPaddle1": [{"gamepad": "South"}]})
     dbus = FakeDbus()
-    inputplumber.reset(store, dbus)
+    inputplumber.reset(store, dbus, CLAW, merge=_MERGE)
     assert store.overrides_for("global") == {}
-    assert dbus.reset_called is True
+    assert dbus.reset_called is False
+    assert dbus.loaded == dbus._profile
 
 
 def test_ip_per_game_scope_is_independent_from_global(tmp_path):
@@ -174,8 +541,83 @@ def test_ip_per_game_scope_is_independent_from_global(tmp_path):
 def test_ip_apply_effective_uses_global_when_following(tmp_path):
     store, dbus = _store(tmp_path, {"LeftPaddle1": [{"gamepad": "South"}]}), FakeDbus()
     # A game with no own profile follows global → applies the global overrides.
-    assert inputplumber.apply_effective(store, dbus, "999", merge=_MERGE) is True
+    assert inputplumber.apply_effective(
+        store, dbus, CLAW, "999", merge=_MERGE
+    ) is True
     assert dbus.loaded == "merged-yaml"
+
+
+def test_ip_refuses_to_clobber_profile_changed_by_another_editor(tmp_path):
+    store, dbus = _store(tmp_path), FakeDbus()
+    inputplumber.set_button(
+        store, dbus, CLAW, "LeftPaddle1", [{"gamepad": "South"}],
+        merge=_MERGE,
+    )
+    dbus._profile = "externally-edited-yaml"
+    dbus.loaded = None
+
+    cfg = inputplumber.set_button(
+        store, dbus, CLAW, "RightPaddle1", [{"gamepad": "North"}],
+        merge=_MERGE,
+    )
+
+    assert dbus.loaded is None
+    assert "RightPaddle1" not in store.overrides_for("global")
+    assert cfg["last_apply"] is False
+    assert cfg["apply_error"] == "profile_conflict"
+
+
+def test_ip_rejects_successful_load_without_matching_readback(tmp_path):
+    store, dbus = _store(tmp_path), IgnoringProfileLoadDbus()
+
+    inputplumber.set_button(
+        store, dbus, CLAW, "LeftPaddle1", [{"gamepad": "South"}],
+        merge=_MERGE,
+    )
+
+    assert store.overrides_for("global") == {}
+    assert store.profile_state(CLAW) is None
+
+
+def test_ip_reapplies_after_daemon_restart_restores_known_baseline(tmp_path):
+    store, dbus = _store(tmp_path), FakeDbus()
+    baseline = dbus._profile
+    inputplumber.set_button(
+        store, dbus, CLAW, "LeftPaddle1", [{"gamepad": "South"}],
+        merge=_MERGE,
+    )
+    dbus._profile = baseline
+    dbus.loaded = None
+
+    inputplumber.set_button(
+        store, dbus, CLAW, "RightPaddle1", [{"gamepad": "North"}],
+        merge=_MERGE,
+    )
+
+    assert dbus.loaded == "merged-yaml"
+    assert "RightPaddle1" in store.overrides_for("global")
+
+
+def test_vibration_test_requires_stop_confirmation():
+    dbus = FakeDbus()
+    dbus.stop_rumble = lambda: False
+
+    assert inputplumber.test_vibration(dbus, 0.5) is False
+
+
+def test_ip_keeps_recovery_ownership_when_rollback_is_unconfirmed(tmp_path):
+    store, dbus = _store(tmp_path), UnrecoverableProfileLoadDbus()
+    baseline = dbus._profile
+
+    cfg = inputplumber.set_button(
+        store, dbus, CLAW, "LeftPaddle1", [{"gamepad": "South"}],
+        merge=_MERGE,
+    )
+
+    state = store.profile_state(CLAW)
+    assert cfg["last_apply"] is False
+    assert state["baseline_yaml"] == baseline
+    assert state["recovery_yamls"] == [baseline, "merged-yaml"]
 
 
 # ---- HHD config ------------------------------------------------------------
