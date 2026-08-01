@@ -20,7 +20,8 @@ _SCRIPT = (
     "from controllers.ip_profile import apply_overrides_to_profile;"
     "prof=yaml.safe_load(sys.stdin.read()) or {};"
     "ov=json.loads(sys.argv[2]);"
-    "sys.stdout.write(yaml.safe_dump(apply_overrides_to_profile(prof, ov),"
+    "out=apply_overrides_to_profile(prof, ov);"
+    "sys.exit(2) if out is None else sys.stdout.write(yaml.safe_dump(out,"
     " sort_keys=False, default_flow_style=False))"
 )
 

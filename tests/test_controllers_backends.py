@@ -443,6 +443,50 @@ def test_ip_set_button_stores_and_applies(tmp_path):
     assert by_src["LeftPaddle1"] == [{"gamepad": "South"}]
 
 
+def test_ip_set_button_stores_and_applies_keyboard_chord(tmp_path):
+    store, dbus = _store(tmp_path), FakeDbus()
+    chord = [{"key": "KeyLeftCtrl"}, {"key": "KeyTab"}]
+
+    cfg = inputplumber.set_button(
+        store, dbus, CLAW, "LeftPaddle1", chord, merge=_MERGE,
+    )
+
+    assert store.overrides_for("global")["LeftPaddle1"] == chord
+    assert dbus.loaded == "merged-yaml"
+    by_source = {button["source"]: button["target"] for button in cfg["buttons"]}
+    assert by_source["LeftPaddle1"] == chord
+
+
+def test_ip_rejects_mixed_chord_without_profile_or_store_write(tmp_path):
+    store, dbus = _store(tmp_path), FakeDbus()
+
+    inputplumber.set_button(
+        store, dbus, CLAW, "LeftPaddle1",
+        [{"gamepad": "South"}, {"key": "KeyTab"}], merge=_MERGE,
+    )
+
+    assert store.overrides_for("global") == {}
+    assert dbus.loaded is None
+
+
+def test_ip_rejects_reserved_sources_even_when_advertised(tmp_path):
+    store = _store(tmp_path)
+    dbus = FakeDbus(caps=[
+        "Gamepad:Button:LeftPaddle1",
+        "Gamepad:Button:Guide",
+        "Gamepad:Button:QuickAccess",
+    ])
+
+    for source in ("Guide", "QuickAccess"):
+        inputplumber.set_button(
+            store, dbus, CLAW, source,
+            [{"key": "KeyLeftCtrl"}, {"key": "KeyTab"}], merge=_MERGE,
+        )
+
+    assert store.overrides_for("global") == {}
+    assert dbus.loaded is None
+
+
 def test_ip_set_button_accepts_profile_proven_ally_paddle(
     tmp_path, monkeypatch
 ):
@@ -501,7 +545,7 @@ def test_ip_set_failure_does_not_return_stale_buttons(tmp_path):
 
 def test_ip_set_button_empty_reverts_to_default(tmp_path):
     store = _store(tmp_path, {"LeftPaddle1": [{"gamepad": "South"}]})
-    inputplumber.set_button(store, FakeDbus(), CLAW, "LeftPaddle1", [{"key": "bad"}], merge=_MERGE)
+    inputplumber.set_button(store, FakeDbus(), CLAW, "LeftPaddle1", [], merge=_MERGE)
     assert "LeftPaddle1" not in store.overrides_for("global")  # cleared → device default
 
 

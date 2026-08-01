@@ -322,6 +322,37 @@ def test_apply_override_to_keyboard_key():
     }]
 
 
+def test_chord_becomes_ordered_target_events():
+    output = ip.apply_overrides_to_profile({"mapping": []}, {
+        "LeftPaddle1": [
+            {"key": "KeyLeftCtrl"}, {"key": "KeyTab"},
+        ],
+    })
+
+    assert output["mapping"][0]["target_events"] == [
+        {"keyboard": "KeyLeftCtrl"}, {"keyboard": "KeyTab"},
+    ]
+
+
+def test_ambiguous_duplicate_source_mapping_is_a_merge_conflict():
+    profile = {"mapping": [
+        {
+            "name": "first",
+            "source_event": {"gamepad": {"button": "LeftPaddle1"}},
+            "target_events": [{"keyboard": "KeyF14"}],
+        },
+        {
+            "name": "foreign duplicate",
+            "source_event": {"gamepad": {"button": "LeftPaddle1"}},
+            "target_events": [{"keyboard": "KeyF15"}],
+        },
+    ]}
+
+    assert ip.apply_overrides_to_profile(profile, {
+        "LeftPaddle1": [{"key": "KeyTab"}],
+    }) is None
+
+
 def test_apply_empty_override_reverts_button_to_default():
     profile = {"mapping": [
         {"name": "LeftPaddle1", "source_event": {"gamepad": {"button": "LeftPaddle1"}},

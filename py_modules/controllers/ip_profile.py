@@ -322,7 +322,7 @@ def _mapping_entry(button: str, targets: list) -> dict:
     }
 
 
-def apply_overrides_to_profile(profile: dict, overrides: dict) -> dict:
+def apply_overrides_to_profile(profile: dict, overrides: dict) -> dict | None:
     """Return a copy of `profile` with each override applied to its button's entry.
 
     Pure: preserves every existing mapping (dials, untouched buttons) and only
@@ -337,7 +337,10 @@ def apply_overrides_to_profile(profile: dict, overrides: dict) -> dict:
         return se.get("gamepad", {}).get("button")
 
     for button, targets in overrides.items():
-        clean = sanitize_targets(targets)
+        matches = [entry for entry in mapping if source_button(entry) == button]
+        if len(matches) > 1:
+            return None
+        clean = sanitize_button_action(targets)
         mapping = [e for e in mapping if source_button(e) != button]  # drop old
         if clean:
             mapping.append(_mapping_entry(button, clean))

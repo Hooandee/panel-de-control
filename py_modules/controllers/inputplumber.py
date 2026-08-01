@@ -229,7 +229,11 @@ def set_button(store, dbus, device_key, source: str, targets: list,
         return get_config(
             store, dbus, device_key, appid, caps, vibration=vibration
         )
-    clean = ip_profile.sanitize_targets(targets)
+    clean = ip_profile.sanitize_button_action(targets)
+    if targets and not clean:
+        return get_config(
+            store, dbus, device_key, appid, caps, vibration=vibration
+        )
     prospective = store.overrides_for(scope, appid)
     if clean:
         prospective[source] = clean
