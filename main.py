@@ -945,12 +945,16 @@ class Plugin:
             await self._reconcile_controller_now(force=True)
         return self._controller_config_with_operations(cfg)
 
-    async def test_controller_vibration(self, strength: float = 0.5) -> bool:
-        """Send a short bounded test pulse and always stop it in the worker."""
+    async def test_controller_vibration(self, pattern: str = "pulse",
+                                        channel=None,
+                                        strength: int = 100) -> dict:
+        """Send a bounded test and return its stop/restore confirmation."""
         self._init()
         def test():
             self._controller_coordinator.cancel_transients("superseded")
-            return self._controller_backend.test_vibration(strength)
+            return self._controller_backend.test_vibration(
+                pattern, channel, strength
+            )
 
         return await self._offload_call(test)
 

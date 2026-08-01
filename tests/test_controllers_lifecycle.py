@@ -65,6 +65,15 @@ class LifecycleBackend:
     def restore_external(self):
         return True
 
+    def test_vibration(self, pattern, channel, strength):
+        self.calls.append(("test", pattern, channel, strength))
+        return {
+            "sent": True,
+            "stopped": True,
+            "restored": True,
+            "reason": None,
+        }
+
 
 def test_game_switch_generation_is_captured_before_worker_runs(
     tmp_path, monkeypatch
@@ -163,4 +172,34 @@ def test_controller_config_exposes_component_operation_state(
         "owner": "inputplumber",
         "desired": {"value": 80},
         "actual": {"value": 80},
+    }
+
+
+def test_vibration_rpc_cancels_previous_transient_and_returns_result(
+    tmp_path, monkeypatch
+):
+    main = _main(monkeypatch, tmp_path)
+    plugin = main.Plugin.__new__(main.Plugin)
+    backend = LifecycleBackend()
+    plugin._controller_backend = backend
+    plugin._controller_coordinator = ControllerCoordinator(backend)
+    plugin._init = lambda: None
+
+    async def offload(fn):
+        return fn()
+
+    plugin._offload_call = offload
+    result = asyncio.run(plugin.test_controller_vibration(
+        "pulse", "left", 50
+    ))
+
+    assert backend.calls == [
+        ("cancel", "superseded"),
+        ("test", "pulse", "left", 50),
+    ]
+    assert result == {
+        "sent": True,
+        "stopped": True,
+        "restored": True,
+        "reason": None,
     }

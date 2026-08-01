@@ -180,6 +180,9 @@ def test_ip_config_exposes_force_feedback_without_fake_strength(tmp_path):
         "supported": True,
         "enabled": True,
         "test_supported": True,
+        "test_patterns": ["pulse"],
+        "test_channels": ["both"],
+        "confirmation": "none",
     }
 
 
@@ -643,10 +646,17 @@ def test_ip_reapplies_after_daemon_restart_restores_known_baseline(tmp_path):
 
 
 def test_vibration_test_requires_stop_confirmation():
-    dbus = FakeDbus()
-    dbus.stop_rumble = lambda: False
+    class FailedStop:
+        def test(self, pattern, channel, strength):
+            assert (pattern, channel, strength) == ("pulse", "both", 50)
+            return {
+                "sent": True, "stopped": False, "restored": True,
+                "reason": "stop_failed",
+            }
 
-    assert inputplumber.test_vibration(dbus, 0.5) is False
+    assert inputplumber.test_vibration(
+        FailedStop(), "pulse", "both", 50
+    )["reason"] == "stop_failed"
 
 
 def test_ip_keeps_recovery_ownership_when_rollback_is_unconfirmed(tmp_path):

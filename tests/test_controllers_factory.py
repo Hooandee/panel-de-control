@@ -156,13 +156,15 @@ def test_ip_report_composes_only_live_buttons_and_persistent_vibration(
         "availability": "supported",
         "fields": {
             "mode": "dual",
-            "persistent": True,
-            "left": 90,
-            "right": 80,
+            "channels": ["left", "right"],
+            "readback": "driver",
             "min": 0,
             "max": 100,
             "step": 5,
-            "readback": True,
+            "test": {
+                "patterns": ["pulse"],
+                "channels": ["left", "right", "both"],
+            },
         },
         "scope": ["global", "game"],
         "apply": "hot",
@@ -234,11 +236,13 @@ def test_ip_config_is_backward_compatible_except_capabilities(
         "key_targets": list(factory.ip_profile.KEY_TARGETS),
         "follows_global": True,
         "has_game_profile": False,
-        "vibration": {
-            "supported": False,
-            "enabled": None,
-            "test_supported": False,
-        },
+            "vibration": {
+                "supported": False,
+                "enabled": None,
+                "test_supported": False,
+                "test_patterns": [],
+                "test_channels": [],
+            },
         "manager": detect.INPUTPLUMBER,
         "manager_version": "0.77.4",
         "supported": True,
@@ -593,4 +597,6 @@ def test_unknown_inputplumber_device_cannot_write_vibration(tmp_path):
     cfg = backend.get_config()
 
     assert cfg["vibration"]["supported"] is False
-    assert backend.test_vibration(1.0) is False
+    assert backend.test_vibration(
+        "pulse", "both", 100
+    )["reason"] == "unsupported"

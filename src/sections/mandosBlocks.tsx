@@ -214,12 +214,21 @@ const VibrationBlock: FC = () => {
   const { t } = useI18n();
   const {
     config, scope, game, onScope, onSetVibration, onTestVibration,
+    vibrationTestResult,
   } = useMandos();
   const vibration = config?.vibration;
   if (!vibration?.supported) return null;
   const sliderMin = vibration.min ?? 0;
   const sliderMax = vibration.max ?? 100;
   const sliderStep = vibration.step ?? 5;
+  const testChannels = (vibration.test_channels ?? []).filter(
+    (channel): channel is "left" | "right" | "both" => (
+      channel === "left" || channel === "right" || channel === "both"
+    ),
+  );
+  const testBlocked = vibrationTestResult != null && (
+    !vibrationTestResult.stopped || !vibrationTestResult.restored
+  );
   return (
     <Card title={t("mandos.vibration.title")}>
       <div style={{ marginBottom: theme.space.sm }}>
@@ -277,17 +286,37 @@ const VibrationBlock: FC = () => {
         </>
       )}
       {vibration.test_supported && (
-        <DialogButton
-          disabled={vibration.enabled !== true}
-          style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: theme.space.xs }}
-          onClick={() => onTestVibration(1)}
-        >
-          <LuVibrate size={15} /> {t("mandos.vibration.test")}
-        </DialogButton>
+        testChannels.length > 1 ? (
+          <div style={{ display: "flex", gap: theme.space.xs }}>
+            {testChannels.map((channel) => (
+              <DialogButton
+                key={channel}
+                disabled={vibration.enabled !== true || testBlocked}
+                style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", justifyContent: "center", gap: theme.space.xs }}
+                onClick={() => onTestVibration("pulse", channel, 50)}
+              >
+                <LuVibrate size={15} /> {t(`mandos.vibration.test.${channel}`)}
+              </DialogButton>
+            ))}
+          </div>
+        ) : (
+          <DialogButton
+            disabled={vibration.enabled !== true || testBlocked}
+            style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: theme.space.xs }}
+            onClick={() => onTestVibration("pulse", testChannels[0] ?? null, 50)}
+          >
+            <LuVibrate size={15} /> {t("mandos.vibration.test")}
+          </DialogButton>
+        )
+      )}
+      {vibrationTestResult?.reason && (
+        <div style={{ fontSize: theme.font.caption, color: theme.color.danger, marginTop: theme.space.sm, lineHeight: 1.4 }}>
+          {t(`mandos.vibration.test.error.${vibrationTestResult.reason}`)}
+        </div>
       )}
       {vibration.persistent && (
         <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, marginTop: theme.space.sm, lineHeight: 1.4 }}>
-          {t(vibration.readback
+          {t(vibration.confirmation === "driver" || vibration.readback
             ? "mandos.vibration.note.readback"
             : "mandos.vibration.note.accepted")}
         </div>

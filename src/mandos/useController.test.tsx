@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   setControllerVibration: vi.fn(),
   setControllerSetting: vi.fn(),
   setControllerButtonAction: vi.fn(),
+  testControllerVibration: vi.fn(),
 }));
 
 vi.mock("../tdp/useRunningGame", () => ({
@@ -21,7 +22,7 @@ vi.mock("../api", () => ({
   setControllerFollowGlobal: vi.fn(),
   setControllerSetting: mocks.setControllerSetting,
   setControllerVibration: mocks.setControllerVibration,
-  testControllerVibration: vi.fn(),
+  testControllerVibration: mocks.testControllerVibration,
 }));
 
 import { useController } from "./useController";
@@ -130,6 +131,28 @@ describe("useController request coordination", () => {
       "global",
       null,
     );
+  });
+
+  it("keeps the structured stop failure from a motor test", async () => {
+    mocks.getControllerConfig.mockResolvedValue(config("current"));
+    mocks.testControllerVibration.mockResolvedValue({
+      sent: true,
+      stopped: false,
+      restored: true,
+      reason: "stop_failed",
+    });
+    const { result } = renderHook(() => useController());
+    await act(async () => { await Promise.resolve(); });
+
+    await act(async () => {
+      result.current.onTestVibration("pulse", "left", 50);
+      await Promise.resolve();
+    });
+
+    expect(mocks.testControllerVibration).toHaveBeenCalledWith(
+      "pulse", "left", 50,
+    );
+    expect(result.current.vibrationTestResult?.reason).toBe("stop_failed");
   });
 
   it("ignores an older mutation response from the same game", async () => {

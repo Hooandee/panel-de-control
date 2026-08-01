@@ -50,8 +50,13 @@ class ControllerBackend:
     def set_vibration(self, patch: dict, scope="global", appid=None) -> dict:
         return self.get_config(appid)
 
-    def test_vibration(self, strength=0.5) -> bool:
-        return False
+    def test_vibration(self, pattern="pulse", channel=None, strength=100):
+        return {
+            "sent": False,
+            "stopped": False,
+            "restored": True,
+            "reason": "unsupported",
+        }
 
     def reset(self, scope="global", appid=None) -> dict:
         return self.get_config()
@@ -219,10 +224,11 @@ class IpBackend(ControllerBackend):
             self._vibration_last_apply = config["vibration"]["last_apply"]
         return self._stamp(config)
 
-    def test_vibration(self, strength=0.5) -> bool:
-        return (
-            self._identified
-            and ip.test_vibration(self._dbus, strength)
+    def test_vibration(self, pattern="pulse", channel=None, strength=100):
+        if not self._identified:
+            return super().test_vibration(pattern, channel, strength)
+        return ip.test_vibration(
+            self._vibration, pattern, channel, strength
         )
 
     def has_game(self, appid) -> bool:

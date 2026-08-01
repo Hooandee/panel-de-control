@@ -6,12 +6,38 @@ Legion, Claw, Ally each expose a different set), and an override is applied by
 merging it into the device's current profile (preserving defaults) and loading it.
 Global (IP profiles are global) — per-game remap is Steam Input's job.
 """
-import time
-
 from controllers import ip_profile
 from controllers.capabilities import clean_report, report, surface
 from controllers.ip_merge import merge_profile
 from controllers.ip_merge import profiles_equal as ip_profile_profiles_equal
+
+
+def _vibration_capabilities(vibration, ff_enabled=None):
+    describe = getattr(vibration, "capabilities", None)
+    if callable(describe):
+        return describe()
+    state = vibration.state() if vibration is not None else None
+    if isinstance(state, dict) and state.get("mode") == "dual":
+        return {
+            "mode": "dual", "channels": ["left", "right"],
+            "readback": "driver", "min": 0, "max": 100, "step": 5,
+            "test": {
+                "patterns": ["pulse"],
+                "channels": ["left", "right", "both"],
+            },
+        }
+    if isinstance(state, dict) and state.get("mode") == "gain":
+        return {
+            "mode": "gain", "channels": [], "readback": "none",
+            "min": 0, "max": 100, "step": 5,
+            "test": {"patterns": ["pulse"], "channels": ["both"]},
+        }
+    if isinstance(ff_enabled, bool):
+        return {
+            "mode": "enabled_only", "channels": [], "readback": "none",
+            "test": {"patterns": ["pulse"], "channels": ["both"]},
+        }
+    return None
 
 
 def live_buttons(dbus, device_key, capabilities):
@@ -47,16 +73,27 @@ def capabilities_report(dbus, device_key, vibration=None) -> dict:
             evidence="upstream",
         )
 
-    vibration_state = vibration.state() if vibration is not None else None
+    read_force_feedback = getattr(dbus, "force_feedback_enabled", None)
+    ff_enabled = (
+        read_force_feedback() if callable(read_force_feedback) else None
+    )
+    vibration_capabilities = _vibration_capabilities(
+        vibration, ff_enabled
+    )
     if (
-        isinstance(vibration_state, dict)
-        and vibration_state.get("mode") in {"dual", "gain"}
+        isinstance(vibration_capabilities, dict)
+        and vibration_capabilities.get("mode") != "unavailable"
     ):
-        exact = vibration_state.get("readback") is True
+        mode = vibration_capabilities["mode"]
+        exact = vibration_capabilities.get("readback") == "driver"
+        owner = {
+            "dual": "native",
+            "gain": "evdev",
+        }.get(mode, "inputplumber")
         surfaces["vibration"] = surface(
-            "native" if vibration_state["mode"] == "dual" else "evdev",
+            owner,
             "supported",
-            fields=dict(vibration_state),
+            fields=dict(vibration_capabilities),
             scope=("global", "game"),
             apply="hot",
             readback="exact" if exact else "accepted",
@@ -87,11 +124,26 @@ def get_config(store, dbus, device_key, appid=None, caps=None, vibration=None,
         if identified and callable(read_force_feedback)
         else None
     )
+    vibration_capabilities = (
+        _vibration_capabilities(vibration, ff_enabled)
+        if identified else None
+    )
+    test = (
+        vibration_capabilities.get("test", {})
+        if isinstance(vibration_capabilities, dict)
+        else {}
+    )
     vibration_config = {
         "supported": ff_enabled is not None,
         "enabled": ff_enabled,
-        "test_supported": ff_enabled is not None,
+        "test_supported": bool(test.get("patterns") and test.get("channels")),
+        "test_patterns": list(test.get("patterns", [])),
+        "test_channels": list(test.get("channels", [])),
     }
+    if isinstance(vibration_capabilities, dict):
+        vibration_config["confirmation"] = vibration_capabilities.get(
+            "readback", "none"
+        )
     persistent_state = (
         vibration.state()
         if identified and vibration is not None
@@ -447,18 +499,5 @@ def set_vibration(store, dbus, device_key, patch: dict, scope="global",
     )
 
 
-def test_vibration(dbus, strength=0.5) -> bool:
-    """Send a bounded transient test. Success means the daemon accepted the command;
-    it never claims that physical movement was sensed."""
-    sent = False
-    try:
-        sent = dbus.rumble(min(1.0, max(0.0, float(strength))))
-        if sent:
-            time.sleep(0.18)
-    except (AttributeError, OSError, TypeError, ValueError):
-        pass
-    try:
-        stopped = dbus.stop_rumble()
-    except (AttributeError, OSError, TypeError, ValueError):
-        stopped = False
-    return sent and stopped
+def test_vibration(vibration, pattern="pulse", channel=None, strength=100):
+    return vibration.test(pattern, channel, strength)

@@ -10,6 +10,7 @@ import {
   testControllerVibration,
   type ControllerConfig,
   type ControllerButtonAction,
+  type VibrationTestResult,
   type Scope,
 } from "../api";
 import {
@@ -32,13 +33,19 @@ export interface ControllerControl {
     left?: number;
     right?: number;
   }) => void;
-  onTestVibration: (strength: number) => void;
+  vibrationTestResult: VibrationTestResult | null;
+  onTestVibration: (
+    pattern: "pulse",
+    channel: "left" | "right" | "both" | null,
+    strength: number,
+  ) => void;
   onReset: () => void;
 }
 
 export function useController(): ControllerControl {
   const game = useRunningGame();
   const [config, setConfig] = useState<ControllerConfig | null>(null);
+  const [vibrationTestResult, setVibrationTestResult] = useState<VibrationTestResult | null>(null);
   const requestSequence = useRef(0);
   const mounted = useRef(true);
   const appidRef = useRef<string | undefined>(game?.appid);
@@ -49,6 +56,7 @@ export function useController(): ControllerControl {
     appid: string | null;
     viewAppid: string | undefined;
   } | null>(null);
+  const vibrationTestSequence = useRef(0);
 
   const appid = game?.appid;
   appidRef.current = appid;
@@ -58,6 +66,8 @@ export function useController(): ControllerControl {
     viewAppid: string | undefined,
   ) => {
     const sequence = ++requestSequence.current;
+    vibrationTestSequence.current += 1;
+    setVibrationTestResult(null);
     promise.then((value) => {
       if (
         mounted.current
@@ -98,6 +108,7 @@ export function useController(): ControllerControl {
     return () => {
       mounted.current = false;
       requestSequence.current += 1;
+      vibrationTestSequence.current += 1;
       if (vibrationTimer.current !== null) clearTimeout(vibrationTimer.current);
       const pending = pendingVibration.current;
       pendingVibration.current = null;
@@ -169,7 +180,19 @@ export function useController(): ControllerControl {
     [targetScope, targetAppid, sendPendingVibration],
   );
   const onTestVibration = useCallback(
-    (strength: number) => { testControllerVibration(strength).catch(() => {}); },
+    (
+      pattern: "pulse",
+      channel: "left" | "right" | "both" | null,
+      strength: number,
+    ) => {
+      const sequence = ++vibrationTestSequence.current;
+      setVibrationTestResult(null);
+      testControllerVibration(pattern, channel, strength).then((result) => {
+        if (mounted.current && sequence === vibrationTestSequence.current) {
+          setVibrationTestResult(result);
+        }
+      }).catch(() => {});
+    },
     [],
   );
   const onReset = useCallback(
@@ -181,7 +204,7 @@ export function useController(): ControllerControl {
 
   return {
     config, scope, game, onScope, onSetButtonAction, onSetSetting,
-    onSetVibration, onTestVibration, onReset,
+    onSetVibration, vibrationTestResult, onTestVibration, onReset,
   };
 }
 

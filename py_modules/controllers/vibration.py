@@ -9,6 +9,7 @@ import glob
 import os
 import re
 import struct
+import time
 
 _EV_FF = 0x15
 _FF_RUMBLE = 0x50
@@ -69,7 +70,9 @@ class VibrationController:
                 values = [int(value) for value in f.read().split()]
         except (OSError, ValueError):
             return None
-        if len(values) != 2 or any(value < 0 or value > 255 for value in values):
+        if len(values) != 2 or any(
+            value < 0 or value > _ASUS_NATIVE_MAX for value in values
+        ):
             return None
         return values[0], values[1]
 
@@ -134,6 +137,55 @@ class VibrationController:
             }
         return None
 
+    def capabilities(self):
+        state = self.state()
+        if state is not None and state["mode"] == "dual":
+            return {
+                "mode": "dual",
+                "channels": ["left", "right"],
+                "readback": "driver",
+                "min": 0,
+                "max": 100,
+                "step": 5,
+                "test": {
+                    "patterns": ["pulse"],
+                    "channels": ["left", "right", "both"],
+                },
+            }
+        if state is not None and state["mode"] == "gain":
+            return {
+                "mode": "gain",
+                "channels": [],
+                "readback": "none",
+                "min": 0,
+                "max": 100,
+                "step": 5,
+                "test": {
+                    "patterns": ["pulse"],
+                    "channels": ["both"],
+                },
+            }
+        try:
+            enabled = self._dbus.force_feedback_enabled()
+        except (AttributeError, OSError, TypeError, ValueError):
+            enabled = None
+        if isinstance(enabled, bool):
+            return {
+                "mode": "enabled_only",
+                "channels": [],
+                "readback": "none",
+                "test": {
+                    "patterns": ["pulse"],
+                    "channels": ["both"],
+                },
+            }
+        return {
+            "mode": "unavailable",
+            "channels": [],
+            "readback": "none",
+            "test": {"patterns": [], "channels": []},
+        }
+
     def capture_baseline(self):
         asus_path = self._asus_path()
         if asus_path is None:
@@ -174,9 +226,7 @@ class VibrationController:
             }
             return True
         rollback_confirmed = False
-        rollback = tuple(
-            min(_ASUS_NATIVE_MAX, value) for value in current
-        )
+        rollback = current
         try:
             self._write_text(path, f"{rollback[0]} {rollback[1]}\n")
             rollback_confirmed = self._read_dual_native(path) == rollback
@@ -219,14 +269,110 @@ class VibrationController:
         if asus_path is not None and all(
             isinstance(value, int)
             and not isinstance(value, bool)
-            and 0 <= value <= 255
+            and 0 <= value <= _ASUS_NATIVE_MAX
             for value in native
         ):
-            desired = tuple(
-                min(_ASUS_NATIVE_MAX, value) for value in native
-            )
-            return self._apply_dual_native(asus_path, desired)
+            return self._apply_dual_native(asus_path, native)
         return self.apply(baseline)
+
+    def _write_native_exact(self, path, values):
+        try:
+            self._write_text(path, f"{values[0]} {values[1]}\n")
+        except OSError:
+            return False
+        return self._read_dual_native(path) == values
+
+    @staticmethod
+    def _test_result(sent, stopped, restored, reason):
+        return {
+            "sent": sent,
+            "stopped": stopped,
+            "restored": restored,
+            "reason": reason,
+        }
+
+    def test(self, pattern, channel, strength):
+        if pattern != "pulse":
+            return self._test_result(
+                False, False, True, "unsupported_pattern"
+            )
+        if (
+            not isinstance(strength, int)
+            or isinstance(strength, bool)
+            or not 0 <= strength <= 100
+        ):
+            return self._test_result(
+                False, False, True, "invalid_strength"
+            )
+
+        capabilities = self.capabilities()
+        channels = capabilities["test"]["channels"]
+        selected_channel = "both" if channel is None else channel
+        if selected_channel not in channels:
+            return self._test_result(
+                False, False, True, "unsupported_channel"
+            )
+
+        native_path = self._asus_path()
+        native_baseline = None
+        prepared = True
+        if capabilities["mode"] == "dual":
+            native_baseline = (
+                self._read_dual_native(native_path)
+                if native_path is not None else None
+            )
+            native_strength = self._native_value(strength)
+            requested = {
+                "left": (native_strength, 0),
+                "right": (0, native_strength),
+                "both": (native_strength, native_strength),
+            }[selected_channel]
+            prepared = (
+                native_baseline is not None
+                and native_path is not None
+                and self._write_native_exact(native_path, requested)
+            )
+
+        sent = False
+        stopped = False
+        restored = True
+        try:
+            if prepared:
+                rumble_strength = (
+                    1.0
+                    if capabilities["mode"] == "dual"
+                    else strength / 100
+                )
+                try:
+                    sent = bool(self._dbus.rumble(rumble_strength))
+                    if sent:
+                        time.sleep(0.18)
+                except (AttributeError, OSError, TypeError, ValueError):
+                    sent = False
+        finally:
+            try:
+                stopped = bool(self._dbus.stop_rumble())
+            except (AttributeError, OSError, TypeError, ValueError):
+                stopped = False
+            if native_baseline is not None and native_path is not None:
+                restored = self._write_native_exact(
+                    native_path, native_baseline
+                )
+
+        if not restored:
+            reason = "restore_failed"
+        elif not stopped:
+            reason = "stop_failed"
+        elif not prepared or not sent:
+            reason = "start_failed"
+        else:
+            reason = None
+        self._last_operation = {
+            "mode": capabilities["mode"],
+            "ok": reason is None,
+            "test": self._test_result(sent, stopped, restored, reason),
+        }
+        return self._test_result(sent, stopped, restored, reason)
 
     def _apply_gain(self, path, value):
         amount = VibrationController._percent(value)

@@ -2,11 +2,27 @@ import struct
 
 
 class FakeDbus:
-    def __init__(self, paths=()):
+    def __init__(self, paths=(), enabled=True, rumble=True, stop=True):
         self._paths = list(paths)
+        self._enabled = enabled
+        self._rumble = rumble
+        self._stop = stop
+        self.rumbles = []
+        self.stop_calls = 0
 
     def source_device_paths(self):
         return list(self._paths)
+
+    def force_feedback_enabled(self):
+        return self._enabled
+
+    def rumble(self, strength):
+        self.rumbles.append(strength)
+        return self._rumble
+
+    def stop_rumble(self):
+        self.stop_calls += 1
+        return self._stop
 
 
 def _write(path, value=""):
@@ -44,7 +60,31 @@ def test_asus_dual_motor_intensity_writes_and_reads_both_motors(tmp_path):
     assert controller.state()["right"] == 45
 
 
-def test_asus_legacy_full_scale_readback_is_normalized_before_writing(tmp_path):
+def test_asus_capabilities_distinguish_driver_readback_and_test_channels(
+    tmp_path,
+):
+    intensity = (
+        tmp_path / "sys/bus/hid/drivers/asus_rog_ally"
+        / "0003:0B05:1ABE.0003/vibration_intensity"
+    )
+    _write(intensity, "64 51\n")
+    controller = _controller("rog_ally", FakeDbus(), root=str(tmp_path))
+
+    assert controller.capabilities() == {
+        "mode": "dual",
+        "channels": ["left", "right"],
+        "readback": "driver",
+        "min": 0,
+        "max": 100,
+        "step": 5,
+        "test": {
+            "patterns": ["pulse"],
+            "channels": ["left", "right", "both"],
+        },
+    }
+
+
+def test_asus_rejects_values_outside_the_official_native_range(tmp_path):
     intensity = (
         tmp_path / "sys/bus/hid/drivers/asus_rog_ally"
         / "0003:0B05:1ABE.0003/vibration_intensity"
@@ -52,8 +92,8 @@ def test_asus_legacy_full_scale_readback_is_normalized_before_writing(tmp_path):
     _write(intensity, "100 100\n")
     controller = _controller("rog_ally", FakeDbus(), root=str(tmp_path))
 
-    assert controller.state()["left"] == 100
-    assert controller.state()["right"] == 100
+    assert controller.state() is None
+    assert controller.capture_baseline() == {}
 
 
 def test_asus_external_baseline_round_trips_exact_native_values(tmp_path):
@@ -123,6 +163,135 @@ def test_legion_gain_uses_the_single_force_feedback_source(tmp_path):
     )
     assert (event_type, event_code) == (0x15, 0x60)
     assert value == round(65 * 0xFFFF / 100)
+
+    assert controller.capabilities() == {
+        "mode": "gain",
+        "channels": [],
+        "readback": "none",
+        "min": 0,
+        "max": 100,
+        "step": 5,
+        "test": {"patterns": ["pulse"], "channels": ["both"]},
+    }
+
+
+def test_failed_transient_start_still_attempts_stop(tmp_path):
+    dbus = FakeDbus(rumble=False)
+    controller = _controller(
+        "msi_claw_8_ai_plus", dbus, root=str(tmp_path)
+    )
+
+    assert controller.test("pulse", "both", 40) == {
+        "sent": False,
+        "stopped": True,
+        "restored": True,
+        "reason": "start_failed",
+    }
+    assert dbus.stop_calls == 1
+
+
+def test_asus_left_test_restores_exact_raw_pair(tmp_path, monkeypatch):
+    intensity = (
+        tmp_path / "sys/bus/hid/drivers/asus_rog_ally"
+        / "0003:0B05:1ABE.0003/vibration_intensity"
+    )
+    _write(intensity, "13 51\n")
+    writes = []
+
+    def write(_path, value):
+        writes.append(value)
+        intensity.write_text(value)
+
+    monkeypatch.setattr("controllers.vibration.time.sleep", lambda _: None)
+    dbus = FakeDbus()
+    controller = _controller(
+        "rog_ally", dbus, root=str(tmp_path), write_text=write
+    )
+
+    assert controller.test("pulse", "left", 50) == {
+        "sent": True,
+        "stopped": True,
+        "restored": True,
+        "reason": None,
+    }
+    assert writes == ["32 0\n", "13 51\n"]
+    assert dbus.rumbles == [1.0]
+    assert intensity.read_text() == "13 51\n"
+
+
+def test_asus_test_restores_even_when_stop_is_not_confirmed(
+    tmp_path, monkeypatch,
+):
+    intensity = (
+        tmp_path / "sys/bus/hid/drivers/asus_rog_ally"
+        / "0003:0B05:1ABE.0003/vibration_intensity"
+    )
+    _write(intensity, "7 43\n")
+    monkeypatch.setattr("controllers.vibration.time.sleep", lambda _: None)
+    dbus = FakeDbus(stop=False)
+    controller = _controller("rog_ally", dbus, root=str(tmp_path))
+
+    assert controller.test("pulse", "right", 25) == {
+        "sent": True,
+        "stopped": False,
+        "restored": True,
+        "reason": "stop_failed",
+    }
+    assert intensity.read_text() == "7 43\n"
+
+
+def test_asus_test_reports_unconfirmed_restore(tmp_path, monkeypatch):
+    intensity = (
+        tmp_path / "sys/bus/hid/drivers/asus_rog_ally"
+        / "0003:0B05:1ABE.0003/vibration_intensity"
+    )
+    _write(intensity, "13 51\n")
+
+    def ignore_restore(_path, value):
+        if value != "13 51\n":
+            intensity.write_text(value)
+
+    monkeypatch.setattr("controllers.vibration.time.sleep", lambda _: None)
+    controller = _controller(
+        "rog_ally", FakeDbus(), root=str(tmp_path),
+        write_text=ignore_restore,
+    )
+
+    assert controller.test("pulse", "left", 50) == {
+        "sent": True,
+        "stopped": True,
+        "restored": False,
+        "reason": "restore_failed",
+    }
+
+
+def test_asus_refuses_ambiguous_native_nodes(tmp_path):
+    for device in ("0003:0B05:1ABE.0003", "0003:0B05:1ABE.0004"):
+        _write(
+            tmp_path / "sys/bus/hid/drivers/asus_rog_ally"
+            / device / "vibration_intensity",
+            "32 32\n",
+        )
+    controller = _controller("rog_ally", FakeDbus(), root=str(tmp_path))
+
+    assert controller.state() is None
+    assert controller.capabilities()["mode"] == "enabled_only"
+    assert controller.test("pulse", "left", 50)["reason"] == (
+        "unsupported_channel"
+    )
+
+
+def test_vibration_test_rejects_unbounded_inputs(tmp_path):
+    controller = _controller(
+        "msi_claw_8_ai_plus", FakeDbus(), root=str(tmp_path)
+    )
+
+    assert controller.test("loop", "both", 50)["reason"] == (
+        "unsupported_pattern"
+    )
+    assert controller.test("pulse", "both", 101)["reason"] == (
+        "invalid_strength"
+    )
 
 
 def test_gain_refuses_ambiguous_force_feedback_sources(tmp_path):

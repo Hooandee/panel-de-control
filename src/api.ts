@@ -672,6 +672,9 @@ export interface ControllerConfig {
     max?: number;
     step?: number;
     readback?: boolean;
+    confirmation?: "driver" | "none";
+    test_patterns?: string[];
+    test_channels?: string[];
     last_apply?: boolean;
   };
   operation_state?: {
@@ -731,7 +734,18 @@ export const setControllerVibration =
     "set_controller_vibration",
   );
 export const testControllerVibration =
-  callable<[strength: number], boolean>("test_controller_vibration");
+  callable<[
+    pattern: "pulse",
+    channel: "left" | "right" | "both" | null,
+    strength: number,
+  ], VibrationTestResult>("test_controller_vibration");
+
+export interface VibrationTestResult {
+  sent: boolean;
+  stopped: boolean;
+  restored: boolean;
+  reason: string | null;
+}
 // Kept unknown at the RPC boundary: the diagnostics panel validates every
 // capability enum before presenting manager-provided data.
 export const getControllerDiagnostics =
