@@ -37,17 +37,7 @@ class OperationResult:
 
 
 def _button_action(value) -> list:
-    if not isinstance(value, list) or not 1 <= len(value) <= 4:
-        return []
-    clean = ip_profile.sanitize_targets(value)
-    if len(clean) != len(value):
-        return []
-    if len(clean) == 1 and "gamepad" in clean[0]:
-        return clean
-    if not all("key" in target for target in clean):
-        return []
-    codes = [target["key"] for target in clean]
-    return clean if len(codes) == len(set(codes)) else []
+    return ip_profile.sanitize_button_action(value)
 
 
 def _component_state(component: str, value) -> dict:

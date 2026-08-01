@@ -246,6 +246,48 @@ def test_sanitize_targets():
     assert ip.sanitize_targets([{"gamepad": "South"}, {"key": "bad"}]) == [{"gamepad": "South"}]
 
 
+def test_ctrl_tab_is_a_valid_chord():
+    assert ip.sanitize_button_action([
+        {"key": "KeyLeftCtrl"}, {"key": "KeyTab"},
+    ]) == [
+        {"key": "KeyLeftCtrl"}, {"key": "KeyTab"},
+    ]
+    assert ip.is_keyboard_chord([
+        {"key": "KeyLeftCtrl"}, {"key": "KeyTab"},
+    ]) is True
+
+
+def test_chord_canonicalizes_modifiers_before_main_keys():
+    assert ip.sanitize_button_action([
+        {"key": "KeyTab"}, {"key": "KeyLeftShift"},
+        {"key": "KeyLeftCtrl"},
+    ]) == [
+        {"key": "KeyLeftCtrl"}, {"key": "KeyLeftShift"},
+        {"key": "KeyTab"},
+    ]
+
+
+def test_mixed_duplicate_unsafe_and_oversized_actions_are_rejected():
+    assert ip.sanitize_button_action([
+        {"gamepad": "South"}, {"key": "KeyTab"},
+    ]) == []
+    assert ip.sanitize_button_action([
+        {"key": "KeyTab"}, {"key": "KeyTab"},
+    ]) == []
+    assert ip.sanitize_button_action([{"key": "KeyPower"}]) == []
+    assert ip.sanitize_button_action([{"key": "KeySysrq"}]) == []
+    assert ip.sanitize_button_action([
+        {"key": "KeyLeftCtrl"}, {"key": "KeyLeftShift"},
+        {"key": "KeyLeftAlt"}, {"key": "KeyLeftMeta"},
+        {"key": "KeyTab"},
+    ]) == []
+
+
+def test_curated_chord_catalog_includes_letters_digits_navigation_and_f_keys():
+    for key in ("KeyA", "Key7", "KeyHome", "KeyPageDown", "KeyF24"):
+        assert ip.sanitize_button_action([{"key": key}]) == [{"key": key}]
+
+
 def test_apply_override_replaces_only_that_button_and_preserves_the_rest():
     profile = {
         "version": 1,

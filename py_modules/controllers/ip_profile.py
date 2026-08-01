@@ -123,12 +123,20 @@ GAMEPAD_TARGETS = (
     "Screenshot",
 )
 
-# Keyboard keys offered as remap targets (common shortcuts).
+MODIFIER_KEYS = (
+    "KeyLeftCtrl", "KeyRightCtrl", "KeyLeftShift", "KeyRightShift",
+    "KeyLeftAlt", "KeyRightAlt", "KeyLeftMeta", "KeyRightMeta",
+)
 KEY_TARGETS = (
-    "KeyEsc", "KeyEnter", "KeySpace", "KeyTab",
+    *MODIFIER_KEYS,
+    "KeyEsc", "KeyEnter", "KeySpace", "KeyTab", "KeyBackspace",
+    "KeyHome", "KeyEnd", "KeyPageUp", "KeyPageDown",
+    "KeyUp", "KeyDown", "KeyLeft", "KeyRight", "KeyInsert", "KeyDelete",
+    *(f"Key{letter}" for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ"),
+    *(f"Key{digit}" for digit in "1234567890"),
+    *(f"KeyF{number}" for number in range(1, 25)),
     "KeyVolumeUp", "KeyVolumeDown", "KeyMute",
     "KeyBrightnessUp", "KeyBrightnessDown",
-    "KeyLeftCtrl", "KeyLeftShift", "KeyLeftAlt",
 )
 
 
@@ -268,6 +276,35 @@ def sanitize_targets(targets) -> list:
     if not isinstance(targets, (list, tuple)):
         return []
     return [s for t in targets if (s := sanitize_target(t)) is not None]
+
+
+def sanitize_button_action(targets) -> list:
+    if not isinstance(targets, (list, tuple)) or not 1 <= len(targets) <= 4:
+        return []
+    clean = sanitize_targets(targets)
+    if len(clean) != len(targets):
+        return []
+    if len(clean) == 1 and "gamepad" in clean[0]:
+        return clean
+    if not all("key" in target for target in clean):
+        return []
+    keys = [target["key"] for target in clean]
+    if len(keys) != len(set(keys)):
+        return []
+    modifier_order = {
+        key: index for index, key in enumerate(MODIFIER_KEYS)
+    }
+    modifiers = sorted(
+        (key for key in keys if key in modifier_order),
+        key=modifier_order.__getitem__,
+    )
+    main = [key for key in keys if key not in modifier_order]
+    return [{"key": key} for key in (*modifiers, *main)]
+
+
+def is_keyboard_chord(targets) -> bool:
+    clean = sanitize_button_action(targets)
+    return bool(clean) and all("key" in target for target in clean)
 
 
 def _target_event(target: dict) -> dict:

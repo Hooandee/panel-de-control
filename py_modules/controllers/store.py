@@ -14,17 +14,7 @@ _MODE = re.compile(r"[a-z0-9][a-z0-9_-]{0,31}")
 
 
 def _clean_button_action(raw) -> list:
-    if not isinstance(raw, list) or not 1 <= len(raw) <= 4:
-        return []
-    clean = ip_profile.sanitize_targets(raw)
-    if len(clean) != len(raw):
-        return []
-    if len(clean) == 1 and "gamepad" in clean[0]:
-        return clean
-    if not all("key" in target for target in clean):
-        return []
-    codes = [target["key"] for target in clean]
-    return clean if len(codes) == len(set(codes)) else []
+    return ip_profile.sanitize_button_action(raw)
 
 
 def _clean_buttons(raw) -> dict:
