@@ -6,6 +6,7 @@ import {
   setControllerButtonAction,
   setControllerFollowGlobal,
   setControllerSetting,
+  setControllerVirtualMode,
   setControllerVibration,
   testControllerVibration,
   type ControllerConfig,
@@ -27,6 +28,7 @@ export interface ControllerControl {
   onScope: (s: Scope) => void;
   onSetButtonAction: (source: string, action: ControllerButtonAction) => void;
   onSetSetting: (field: string, value: string) => void;
+  onSetVirtualMode: (mode: string) => void;
   onSetVibration: (patch: {
     enabled?: boolean;
     value?: number;
@@ -145,6 +147,15 @@ export function useController(): ControllerControl {
     },
     [accept],
   );
+  const onSetVirtualMode = useCallback(
+    (mode: string) => {
+      accept(
+        setControllerVirtualMode(mode, targetScope, targetAppid),
+        appidRef.current,
+      );
+    },
+    [targetScope, targetAppid, accept],
+  );
   const onSetVibration = useCallback(
     (patch: { enabled?: boolean; value?: number; left?: number; right?: number }) => {
       const next = {
@@ -204,6 +215,7 @@ export function useController(): ControllerControl {
 
   return {
     config, scope, game, onScope, onSetButtonAction, onSetSetting,
+    onSetVirtualMode,
     onSetVibration, vibrationTestResult, onTestVibration, onReset,
   };
 }

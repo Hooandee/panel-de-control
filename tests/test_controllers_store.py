@@ -318,3 +318,36 @@ def test_invalid_native_baseline_pair_is_discarded_not_clamped(tmp_path):
     assert RemapStore(str(path)).vibration_baseline(
         "inputplumber:rog_ally"
     ) == {}
+
+
+def test_virtual_mode_baseline_is_immutable_per_owner(tmp_path):
+    path = tmp_path / "remap.json"
+    store = RemapStore(str(path))
+
+    store.remember_virtual_mode_baseline(
+        "hhd:rog_ally", {"mode": "uinput", "paddles_as": "steam_input"}
+    )
+    store.remember_virtual_mode_baseline(
+        "hhd:rog_ally", {"mode": "dualsense", "paddles_as": "disabled"}
+    )
+
+    assert RemapStore(str(path)).virtual_mode_baseline(
+        "hhd:rog_ally"
+    ) == {"mode": "uinput", "paddles_as": "steam_input"}
+
+
+def test_v3_migrates_virtual_profiles_and_adds_empty_mode_baselines(tmp_path):
+    store = _store(tmp_path, {
+        "version": 3,
+        "global": {
+            "buttons": {},
+            "vibration": {},
+            "virtual_controller": {"mode": "xbox_elite"},
+        },
+        "games": {},
+    })
+
+    assert store.effective_virtual_controller(None) == {
+        "mode": "xbox_elite",
+    }
+    assert store.virtual_mode_baseline("hhd:rog_ally") == {}

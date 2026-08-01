@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   setControllerVibration: vi.fn(),
   setControllerSetting: vi.fn(),
   setControllerButtonAction: vi.fn(),
+  setControllerVirtualMode: vi.fn(),
   testControllerVibration: vi.fn(),
 }));
 
@@ -19,6 +20,7 @@ vi.mock("../api", () => ({
   getControllerDiagnostics: vi.fn(),
   resetController: vi.fn(),
   setControllerButtonAction: mocks.setControllerButtonAction,
+  setControllerVirtualMode: mocks.setControllerVirtualMode,
   setControllerFollowGlobal: vi.fn(),
   setControllerSetting: mocks.setControllerSetting,
   setControllerVibration: mocks.setControllerVibration,
@@ -153,6 +155,19 @@ describe("useController request coordination", () => {
       "pulse", "left", 50,
     );
     expect(result.current.vibrationTestResult?.reason).toBe("stop_failed");
+  });
+
+  it("persists the selected virtual mode in the active game scope", async () => {
+    mocks.getControllerConfig.mockResolvedValue(config("current"));
+    mocks.setControllerVirtualMode.mockResolvedValue(config("applied"));
+    const { result } = renderHook(() => useController());
+    await act(async () => { await Promise.resolve(); });
+
+    act(() => result.current.onSetVirtualMode("dualsense"));
+
+    expect(mocks.setControllerVirtualMode).toHaveBeenCalledWith(
+      "dualsense", "global", null,
+    );
   });
 
   it("ignores an older mutation response from the same game", async () => {

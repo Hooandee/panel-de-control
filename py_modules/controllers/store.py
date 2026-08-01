@@ -8,7 +8,7 @@ from controllers import ip_profile
 from json_store import atomic_json_save
 
 
-_VERSION = 3
+_VERSION = 4
 _COMPONENTS = {"buttons", "vibration", "virtual_controller"}
 _MODE = re.compile(r"[a-z0-9][a-z0-9_-]{0,31}")
 
@@ -82,6 +82,27 @@ def _clean_virtual_controller(raw) -> dict:
     return {"mode": mode} if isinstance(mode, str) and _MODE.fullmatch(mode) else {}
 
 
+def _clean_virtual_mode_baseline(raw) -> dict:
+    clean = _clean_virtual_controller(raw)
+    if not clean or not isinstance(raw, dict):
+        return {}
+    paddles = raw.get("paddles_as")
+    if isinstance(paddles, str) and _MODE.fullmatch(paddles):
+        clean["paddles_as"] = paddles
+    return clean
+
+
+def _clean_virtual_mode_baselines(raw) -> dict:
+    if not isinstance(raw, dict):
+        return {}
+    return {
+        owner: clean
+        for owner, value in raw.items()
+        if isinstance(owner, str) and owner
+        if (clean := _clean_virtual_mode_baseline(value))
+    }
+
+
 def _clean_profile(raw) -> dict:
     raw = raw if isinstance(raw, dict) else {}
     return {
@@ -100,6 +121,7 @@ def _empty_data() -> dict:
         "games": {},
         "profile_states": {},
         "vibration_baselines": {},
+        "virtual_mode_baselines": {},
     }
 
 
@@ -146,7 +168,7 @@ class RemapStore:
     def _coerce(self, raw) -> dict:
         if not isinstance(raw, dict):
             return _empty_data()
-        if raw.get("version") == _VERSION:
+        if raw.get("version") in {3, _VERSION}:
             global_profile = _clean_profile(raw.get("global"))
             games = {}
             raw_games = raw.get("games")
@@ -169,6 +191,9 @@ class RemapStore:
                 "vibration_baselines": _clean_vibration_baselines(
                     raw.get("vibration_baselines")
                 ),
+                "virtual_mode_baselines": _clean_virtual_mode_baselines(
+                    raw.get("virtual_mode_baselines")
+                ),
             }
         # Old flat shape {source: targets} → migrate into the global scope.
         if "global" not in raw and "games" not in raw:
@@ -181,6 +206,7 @@ class RemapStore:
                 },
                 "games": {},
                 "profile_states": {}, "vibration_baselines": {},
+                "virtual_mode_baselines": {},
             }
         games = {}
         raw_games = raw.get("games")
@@ -205,6 +231,9 @@ class RemapStore:
             "profile_states": _clean_profile_states(raw.get("profile_states")),
             "vibration_baselines": _clean_vibration_baselines(
                 raw.get("vibration_baselines")
+            ),
+            "virtual_mode_baselines": _clean_virtual_mode_baselines(
+                raw.get("virtual_mode_baselines")
             ),
         }
 
@@ -267,6 +296,19 @@ class RemapStore:
             baseline.update(missing)
             self._save()
 
+    def virtual_mode_baseline(self, owner: str) -> dict:
+        return dict(self._data["virtual_mode_baselines"].get(owner, {}))
+
+    def remember_virtual_mode_baseline(self, owner: str, value: dict) -> None:
+        if not isinstance(owner, str) or not owner:
+            return
+        if owner in self._data["virtual_mode_baselines"]:
+            return
+        clean = _clean_virtual_mode_baseline(value)
+        if clean:
+            self._data["virtual_mode_baselines"][owner] = clean
+            self._save()
+
     def profile_state(self, device_key) -> dict | None:
         state = self._data["profile_states"].get(str(device_key or ""))
         return dict(state) if state is not None else None
@@ -320,6 +362,16 @@ class RemapStore:
                 if g else dict(self._data["global"]["vibration"])
             )
         return dict(self._data["global"]["vibration"])
+
+    def virtual_controller_for(self, scope: str, appid=None) -> dict:
+        if scope == "game" and appid is not None:
+            game = self._game(appid)
+            return (
+                dict(game["virtual_controller"])
+                if game
+                else dict(self._data["global"]["virtual_controller"])
+            )
+        return dict(self._data["global"]["virtual_controller"])
 
     def has_game(self, appid) -> bool:
         return str(appid) in self._data["games"]

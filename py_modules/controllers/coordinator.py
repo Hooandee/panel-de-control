@@ -79,7 +79,16 @@ class ControllerCoordinator:
                 return self.snapshot()
             if not self._current(generation, normalized_appid):
                 return self.snapshot()
-            if not self._backend.wait_ready(normalized_appid, generation):
+            readiness = self._backend.wait_ready(
+                normalized_appid, generation
+            )
+            if isinstance(readiness, OperationResult):
+                if not self._operations.publish(readiness):
+                    return self.snapshot()
+                if readiness.status not in _MODE_OK:
+                    return self.snapshot()
+                readiness = True
+            if not readiness:
                 self._operations.publish(OperationResult(
                     "virtual_controller", "failed", "device_not_ready",
                     getattr(self._backend, "manager", "none"), generation,

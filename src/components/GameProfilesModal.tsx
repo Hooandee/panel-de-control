@@ -53,6 +53,7 @@ function sectionLine(section: SectionId, row: GameProfileRow, t: T): SectionLine
     const parts = [
       row.mandos.count > 0 ? t("gameProfiles.buttons", { n: row.mandos.count }) : "",
       row.mandos.vibration ? t("gameProfiles.vibration") : "",
+      row.mandos.mode ? t(`mandos.mode.${row.mandos.mode}`) : "",
     ].filter(Boolean);
     return { label: t("gameProfiles.sec.mandos"), text: parts.join(" · "), dim: row.mandos.follows_global };
   }

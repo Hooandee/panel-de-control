@@ -25,11 +25,12 @@ class LifecycleBackend:
 
     def __init__(self):
         self.calls = []
+        self.virtual_mode = {}
 
     def effective_profile(self, appid):
         value = 20 if appid == "10" else 80
         return {
-            "virtual_controller": {},
+            "virtual_controller": dict(self.virtual_mode),
             "buttons": {},
             "vibration": {"value": value},
         }
@@ -40,6 +41,13 @@ class LifecycleBackend:
             "manager_version": "test",
             "supported": True,
             "kind": "remap",
+            "virtual_controller": {
+                "supported": True,
+                "mode": self.virtual_mode.get("mode", "auto"),
+                "actual_mode": "uinput",
+                "options": ["auto", "uinput", "dualsense"],
+                "scope": ["global", "game"],
+            },
         }
 
     def owns_loaded_profile(self):
@@ -73,6 +81,10 @@ class LifecycleBackend:
             "restored": True,
             "reason": None,
         }
+
+    def set_virtual_mode(self, mode, scope, appid):
+        self.virtual_mode = {"mode": mode}
+        return self.get_config(appid)
 
 
 def test_game_switch_generation_is_captured_before_worker_runs(
@@ -203,3 +215,33 @@ def test_vibration_rpc_cancels_previous_transient_and_returns_result(
         "restored": True,
         "reason": None,
     }
+
+
+def test_virtual_mode_rpc_persists_then_reconciles_dependents(
+    tmp_path, monkeypatch
+):
+    main = _main(monkeypatch, tmp_path)
+    plugin = main.Plugin.__new__(main.Plugin)
+    backend = LifecycleBackend()
+    plugin._controller_backend = backend
+    plugin._controller_coordinator = ControllerCoordinator(backend)
+    plugin._controller_shutdown = False
+    plugin._current_appid = "42"
+    plugin._module_enabled = lambda module: module == "mandos"
+    plugin._init = lambda: None
+
+    async def offload(fn):
+        return fn()
+
+    plugin._offload_call = offload
+    config = asyncio.run(plugin.set_controller_virtual_mode(
+        "dualsense", "game", "42"
+    ))
+
+    assert config["virtual_controller"]["mode"] == "dualsense"
+    assert backend.calls == [
+        ("virtual_controller", "42"),
+        ("wait_ready", "42"),
+        ("buttons", "42"),
+        ("vibration", "42"),
+    ]

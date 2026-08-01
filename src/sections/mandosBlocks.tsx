@@ -179,22 +179,51 @@ const RemapBlock: FC = () => {
 
 const SettingsBlock: FC = () => {
   const { t } = useI18n();
-  const { config, onSetSetting } = useMandos();
+  const {
+    config, scope, game, onScope, onSetSetting, onSetVirtualMode,
+  } = useMandos();
   if (config?.kind !== "settings") return null;
+  const virtual = config.virtual_controller;
   const label = (key: string, fallback: string) => {
     const v = t(key);
     return v === key ? fallback : v;
   };
   return (
     <Card title={t("mandos.settings.title")}>
-      <Row label={t("mandos.mode.label")}>
-        <Dropdown
-          rgOptions={(config.mode_options ?? []).map((m) => ({ data: m, label: label(`mandos.mode.${m}`, m) }))}
-          selectedOption={config.mode ?? undefined}
-          onChange={(o) => onSetSetting("mode", o.data as string)}
-        />
-      </Row>
-      {config.paddles_as != null && (
+      {virtual?.supported && virtual.scope.includes("game") && (
+        <div style={{ marginBottom: theme.space.sm }}>
+          <ProfileSelector
+            scope={scope}
+            gameName={game?.name ?? null}
+            hasGameProfile={config.has_game_profile ?? false}
+            globalLabel={t("tdp.scope.global")}
+            inheritHint={t("mandos.mode.inherit")}
+            onScope={onScope}
+          />
+        </div>
+      )}
+      {virtual?.supported ? (
+        <Row label={t("mandos.mode.label")}>
+          <Dropdown
+            rgOptions={virtual.options.map((mode) => ({
+              data: mode,
+              label: label(`mandos.mode.${mode}`, mode),
+            }))}
+            selectedOption={virtual.mode}
+            onChange={(option) => onSetVirtualMode(option.data as string)}
+          />
+        </Row>
+      ) : (
+        <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, marginBottom: theme.space.sm, lineHeight: 1.4 }}>
+          {t("mandos.mode.unavailable")}
+        </div>
+      )}
+      {virtual?.actual_mode && virtual.mode !== "auto" && virtual.actual_mode !== virtual.mode && (
+        <div style={{ fontSize: theme.font.caption, color: theme.color.accent, marginBottom: theme.space.sm, lineHeight: 1.4 }}>
+          {t("mandos.mode.recreating")}
+        </div>
+      )}
+      {virtual?.supported && scope === "global" && config.paddles_as != null && (
         <Row label={t("mandos.paddles.label")}>
           <Dropdown
             rgOptions={(config.paddles_options ?? []).map((p) => ({ data: p, label: label(`mandos.paddles.${p}`, p) }))}
@@ -204,7 +233,9 @@ const SettingsBlock: FC = () => {
         </Row>
       )}
       <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, marginTop: theme.space.sm, lineHeight: 1.4 }}>
-        {t("mandos.settings.note")}
+        {t(virtual?.mode === "dualsense"
+          ? "mandos.mode.dualsense.warning"
+          : "mandos.settings.note")}
       </div>
     </Card>
   );

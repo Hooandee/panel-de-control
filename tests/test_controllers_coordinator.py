@@ -71,6 +71,28 @@ def test_mode_failure_blocks_dependent_writes():
     assert snapshot["components"]["vibration"]["status"] == "pending"
 
 
+def test_structured_readiness_recovery_failure_is_not_overwritten():
+    class RecoveryBackend(OrderedBackend):
+        def wait_ready(self, appid, generation):
+            return OperationResult(
+                "virtual_controller", "recovery_required",
+                "restore_failed", self.manager, generation, appid,
+                {"mode": "xbox_elite"},
+            )
+
+    backend = RecoveryBackend()
+    snapshot = ControllerCoordinator(backend).reconcile("42", _profile())
+
+    assert snapshot["components"]["virtual_controller"] == {
+        "status": "recovery_required",
+        "owner": "inputplumber",
+        "reason": "restore_failed",
+        "desired": {"mode": "xbox_elite"},
+    }
+    assert ("buttons", "42") not in backend.calls
+    assert ("vibration", "42") not in backend.calls
+
+
 def test_new_generation_makes_slow_completion_stale():
     entered = threading.Event()
     release = threading.Event()

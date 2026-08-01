@@ -985,6 +985,38 @@ class Plugin:
             ))
         return self._controller_config_with_operations(config)
 
+    async def set_controller_virtual_mode(
+        self, mode: str, scope: str = "global", appid=None,
+    ) -> dict:
+        """Persist a live-supported virtual controller mode in one scope."""
+        self._init()
+        resolved = self._resolve_scope(scope, appid)
+        if (
+            not self._module_enabled("mandos")
+            or resolved is None
+            or not isinstance(mode, str)
+        ):
+            config = await self._offload_call(
+                lambda: self._controller_backend.get_config(
+                    self._current_appid
+                )
+            )
+            return self._controller_config_with_operations(config)
+        config = await self._offload_call(
+            lambda: self._controller_backend.set_virtual_mode(
+                mode, resolved, appid
+            )
+        )
+        virtual = config.get("virtual_controller", {})
+        if virtual.get("supported") and virtual.get("mode") == mode:
+            await self._reconcile_controller_now(force=True)
+            config = await self._offload_call(
+                lambda: self._controller_backend.get_config(
+                    self._current_appid
+                )
+            )
+        return self._controller_config_with_operations(config)
+
     async def reset_controller(self, scope: str = "global", appid=None) -> dict:
         """Reset a scope's remap to the device default (InputPlumber; no-op on others)."""
         self._init()
@@ -1143,6 +1175,7 @@ class Plugin:
         if self._controller_backend.differs_from_global(appid):
             row["mandos"] = {"count": len(self._controller_backend.game_profile(appid)),
                              "vibration": self._controller_backend.game_vibration_differs(appid),
+                             "mode": self._controller_backend.game_virtual_mode(appid),
                              "follows_global": self._controller_backend.is_following_global(appid)}
         if self._audio_eq.differs_from_global(appid):
             row["audio"] = {"follows_global": self._audio_eq.is_following_global(appid)}

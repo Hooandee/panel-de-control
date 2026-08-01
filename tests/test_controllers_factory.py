@@ -388,6 +388,13 @@ def test_hhd_config_is_backward_compatible_except_capabilities(
         "mode_options": list(factory.hhd_config.MODES),
         "paddles_as": "steam_input",
         "paddles_options": list(factory.hhd_config.PADDLES_AS),
+        "virtual_controller": {
+            "supported": False,
+            "mode": "auto",
+            "actual_mode": "uinput",
+            "options": [],
+            "scope": [],
+        },
         "vibration": {
             "supported": False,
             "enabled": None,
@@ -398,6 +405,81 @@ def test_hhd_config_is_backward_compatible_except_capabilities(
         "manager": detect.HHD,
         "manager_version": "3.19.23",
         "supported": True,
+    }
+
+
+def test_hhd_virtual_mode_is_persisted_per_game_and_readiness_confirmed(
+    tmp_path, monkeypatch
+):
+    state = {
+        "version": "test",
+        "controllers": {
+            "rog_ally": {
+                "controller_mode": {
+                    "mode": "uinput",
+                    "uinput": {"paddles_as": "steam_input"},
+                    "dualsense": {"paddles_as": "steam_input"},
+                },
+            },
+        },
+    }
+    settings = {
+        "version": "test",
+        "controllers": {
+            "rog_ally": {
+                "children": {
+                    "controller_mode": {
+                        "type": "mode",
+                        "modes": {
+                            "uinput": {"children": {}},
+                            "dualsense": {"children": {}},
+                            "hidden": {"children": {}},
+                        },
+                    },
+                },
+            },
+        },
+    }
+    posts = []
+
+    def post(payload):
+        posts.append(payload)
+        node = payload["controllers"]["rog_ally"]["controller_mode"]
+        current = state["controllers"]["rog_ally"]["controller_mode"]
+        if "mode" in node:
+            current["mode"] = node["mode"]
+        return state
+
+    monkeypatch.setattr(factory.hhd_api, "read_state", lambda: state)
+    monkeypatch.setattr(factory.hhd_api, "read_settings", lambda: settings)
+    monkeypatch.setattr(factory.hhd_api, "post_state", post)
+    store = RemapStore(str(tmp_path / "controllers.json"))
+    backend = factory.HhdBackend(
+        "4.1.8", store, FakeDbus(), "rog_ally"
+    )
+    backend._virtual_mode.wait_ready = lambda mode: mode == "dualsense"
+
+    config = backend.set_virtual_mode(
+        "dualsense", "game", "42"
+    )
+    desired = store.effective_virtual_controller("42")
+    applied = backend.apply_component(
+        "virtual_controller", desired, "42", 8
+    )
+    ready = backend.wait_ready("42", 8)
+
+    assert config["virtual_controller"]["mode"] == "dualsense"
+    assert applied.status == "accepted_unverifiable"
+    assert ready.status == "applied"
+    assert posts[0] == {
+        "controllers": {
+            "rog_ally": {
+                "controller_mode": {"mode": "dualsense"},
+            },
+        },
+    }
+    assert store.virtual_mode_baseline("hhd:rog_ally") == {
+        "mode": "uinput", "paddles_as": "steam_input",
     }
 
 

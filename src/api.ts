@@ -656,6 +656,15 @@ export interface ControllerConfig {
   mode_options?: string[];
   paddles_as?: string | null;
   paddles_options?: string[];
+  virtual_controller?: {
+    supported: boolean;
+    mode: string;
+    actual_mode: string | null;
+    options: string[];
+    scope: Scope[];
+    readiness?: "evdev_identity";
+    last_apply?: boolean;
+  };
   vibration?: {
     supported: boolean;
     enabled: boolean | null;
@@ -723,6 +732,10 @@ export const setControllerFollowGlobal =
   callable<[follow: boolean, appid: string], ControllerConfig>("set_controller_follow_global");
 export const setControllerSetting =
   callable<[field: string, value: string], ControllerConfig>("set_controller_setting");
+export const setControllerVirtualMode =
+  callable<[mode: string, scope: Scope, appid: string | null], ControllerConfig>(
+    "set_controller_virtual_mode",
+  );
 export const resetController =
   callable<[scope: Scope, appid: string | null], ControllerConfig>("reset_controller");
 export const setControllerVibration =
@@ -759,7 +772,7 @@ export interface GameProfileRow {
   fan?: { preset: string; follows_global: boolean };
   color?: { saturation: number; calibrated: boolean; hdr: boolean; follows_global: boolean };
   cpu?: { smt: boolean; boost: boolean; cores: number | null; follows_global: boolean };
-  mandos?: { count: number; vibration: boolean; follows_global: boolean };
+  mandos?: { count: number; vibration: boolean; mode: string | null; follows_global: boolean };
   audio?: { follows_global: boolean };
 }
 export const listGameProfiles = callable<[], GameProfileRow[]>("list_game_profiles");

@@ -16,6 +16,7 @@ from controllers.capabilities import clean_report, report
 from controllers.diagnostics import IntegratedDiagnostics
 from controllers.operations import OperationResult
 from controllers.vibration import VibrationController
+from controllers.virtual_mode import HhdVirtualModeAdapter
 
 
 class ControllerBackend:
@@ -50,6 +51,9 @@ class ControllerBackend:
     def set_vibration(self, patch: dict, scope="global", appid=None) -> dict:
         return self.get_config(appid)
 
+    def set_virtual_mode(self, mode: str, scope="global", appid=None) -> dict:
+        return self.get_config(appid)
+
     def test_vibration(self, pattern="pulse", channel=None, strength=100):
         return {
             "sent": False,
@@ -81,6 +85,9 @@ class ControllerBackend:
 
     def game_vibration_differs(self, appid) -> bool:
         return False
+
+    def game_virtual_mode(self, appid):
+        return None
 
     def forget_game(self, appid) -> None:
         pass
@@ -249,6 +256,9 @@ class IpBackend(ControllerBackend):
     def game_vibration_differs(self, appid) -> bool:
         return self._store.game_vibration_differs(appid)
 
+    def game_virtual_mode(self, appid):
+        return self._store.virtual_controller_for("game", appid).get("mode")
+
     def forget_game(self, appid) -> None:
         self._store.forget_game(appid)
 
@@ -399,6 +409,38 @@ class HhdBackend(ControllerBackend):
         self._device_key = device_key
         self._last_vibration_operation = None
         self._vibration_last_apply = None
+        self._virtual_mode = HhdVirtualModeAdapter(
+            store,
+            device_key,
+            hhd_api.read_state,
+            hhd_api.read_settings,
+            hhd_api.post_state,
+        )
+        self._pending_virtual_mode = None
+        self._last_virtual_mode_apply = None
+
+    def _virtual_mode_config(self, state, settings, appid=None) -> dict:
+        capabilities = self._virtual_mode.capabilities(state, settings)
+        if capabilities is None:
+            return {
+                "supported": False,
+                "mode": "auto",
+                "actual_mode": hhd_config.get_config(state).get("mode"),
+                "options": [],
+                "scope": [],
+            }
+        desired = self._store.effective_virtual_controller(appid)
+        config = {
+            "supported": True,
+            "mode": desired.get("mode", "auto"),
+            "actual_mode": capabilities["current"],
+            "options": capabilities["options"],
+            "scope": capabilities["scope"],
+            "readiness": capabilities["readiness"],
+        }
+        if self._last_virtual_mode_apply is not None:
+            config["last_apply"] = self._last_virtual_mode_apply
+        return config
 
     def _vibration_config(self, state, appid=None, apply_status=None) -> dict:
         vibration = hhd_config.vibration_state(state, self._device_key)
@@ -426,14 +468,18 @@ class HhdBackend(ControllerBackend):
         return config
 
     def _config_from_state(self, state, appid=None, apply_status=None):
+        settings = hhd_api.read_settings()
         config = hhd_config.get_config(state)
+        config["virtual_controller"] = self._virtual_mode_config(
+            state, settings, appid
+        )
         config["vibration"] = self._vibration_config(
             state, appid, apply_status
         )
         config["follows_global"] = self._store.is_following_global(appid)
         config["has_game_profile"] = self._store.has_game(appid)
         config["capabilities"] = hhd_config.capabilities_report(
-            state, self._device_key, hhd_api.read_settings()
+            state, self._device_key, settings
         )
         return self._stamp(config)
 
@@ -452,6 +498,18 @@ class HhdBackend(ControllerBackend):
             echoed = hhd_api.post_state(payload)  # POST echoes the full merged state
             if echoed is not None:
                 return self._config_from_state(echoed, appid)
+        return self.get_config(appid)
+
+    def set_virtual_mode(self, mode: str, scope="global", appid=None) -> dict:
+        capabilities = self._virtual_mode.capabilities()
+        if (
+            capabilities is None
+            or mode not in capabilities["options"]
+        ):
+            return self.get_config(appid)
+        self._store.patch_component(
+            "virtual_controller", {"mode": mode}, scope, appid
+        )
         return self.get_config(appid)
 
     def _apply_vibration(self, desired: dict) -> bool:
@@ -565,6 +623,9 @@ class HhdBackend(ControllerBackend):
     def game_vibration_differs(self, appid) -> bool:
         return self._store.game_vibration_differs(appid)
 
+    def game_virtual_mode(self, appid):
+        return self._store.virtual_controller_for("game", appid).get("mode")
+
     def forget_game(self, appid) -> None:
         self._store.forget_game(appid)
 
@@ -602,13 +663,34 @@ class HhdBackend(ControllerBackend):
     def apply_component(self, component, desired, appid, generation):
         if component == "virtual_controller":
             if not desired:
+                self._pending_virtual_mode = None
                 return self._operation_result(
                     component, "applied", {}, appid, generation,
                     actual={},
                 )
+            result = self._virtual_mode.apply(desired.get("mode"))
+            confirmed = result["config_confirmed"]
+            rollback = result["rollback_confirmed"]
+            self._last_virtual_mode_apply = confirmed
+            self._pending_virtual_mode = (
+                desired.get("mode") if confirmed else None
+            )
+            status = (
+                "accepted_unverifiable" if confirmed
+                else "failed" if rollback
+                else "recovery_required"
+            )
             return self._operation_result(
-                component, "unsupported", desired, appid, generation,
-                reason="unsupported",
+                component, status, desired, appid, generation,
+                reason=(
+                    None if confirmed
+                    else "readback_mismatch" if rollback
+                    else "restore_failed"
+                ),
+                actual=(
+                    {"mode": desired.get("mode")}
+                    if confirmed else None
+                ),
             )
         if component == "buttons":
             if not desired:
@@ -634,17 +716,41 @@ class HhdBackend(ControllerBackend):
         )
 
     def wait_ready(self, appid, generation) -> bool:
-        return isinstance(hhd_api.read_state(), dict)
+        if self._pending_virtual_mode is None:
+            return isinstance(hhd_api.read_state(), dict)
+        mode = self._pending_virtual_mode
+        ready = self._virtual_mode.wait_ready(mode)
+        self._pending_virtual_mode = None
+        if ready:
+            return self._operation_result(
+                "virtual_controller", "applied", {"mode": mode},
+                appid, generation, actual={"mode": mode},
+            )
+        restored = self._virtual_mode.rollback_last()
+        return self._operation_result(
+            "virtual_controller",
+            "failed" if restored else "recovery_required",
+            {"mode": mode}, appid, generation,
+            reason="device_not_ready" if restored else "restore_failed",
+        )
 
     def restore_external(self) -> bool:
+        mode_baseline = self._store.virtual_mode_baseline(
+            f"hhd:{self._device_key or ''}"
+        )
+        mode_applied = True
+        if mode_baseline:
+            mode_applied = self._virtual_mode.apply("auto")[
+                "config_confirmed"
+            ]
         baseline = self._store.vibration_baseline(
             f"hhd:{self._device_key or ''}"
         )
         if not baseline:
-            return True
+            return mode_applied
         applied = self._apply_vibration(baseline)
         self._vibration_last_apply = applied
-        return applied
+        return mode_applied and applied
 
     def diagnostics(self) -> dict:
         result = {
