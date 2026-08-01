@@ -267,6 +267,7 @@ class _LifecycleController:
         self.events = []
 
     def set_button(self, source, targets, scope, appid):
+        self.events.append(("set_button", source, targets, scope, appid))
         return {"last_apply": self.write_ok}
 
     def set_vibration(self, patch, scope, appid):
@@ -274,6 +275,14 @@ class _LifecycleController:
 
     def effective_profile(self, appid):
         return self.profile
+
+    def get_config(self, appid):
+        return {
+            "kind": "remap",
+            "buttons": [
+                {"source": "LeftPaddle1", "label": "M2", "target": None},
+            ],
+        }
 
     def owns_loaded_profile(self):
         return True
@@ -403,6 +412,60 @@ def test_forced_startup_restores_owned_profile_with_empty_global(
     p._reapply_controller(force=True)
 
     assert ("buttons", None) in backend.events
+
+
+def test_button_action_rejects_invalid_shapes_without_mutating_backend(
+    tmp_path, monkeypatch
+):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    backend = _controller_for(p, {
+        "virtual_controller": {}, "buttons": {}, "vibration": {},
+    })
+    p._current_appid = "42"
+    invalid = [
+        ("LeftPaddle1", {"kind": "keyboard_chord", "keys": [
+            "KeyLeftCtrl", "KeyLeftShift", "KeyLeftAlt", "KeyLeftMeta", "KeyTab",
+        ]}, "game", "42"),
+        ("LeftPaddle1", {"kind": "keyboard_chord", "keys": ["KeyTab", "KeyTab"]}, "game", "42"),
+        ("LeftPaddle1", {"kind": "gamepad", "target": "South"}, "game", None),
+        ("LeftPaddle1", {"kind": "gamepad", "target": "South"}, "invalid", None),
+        ("Guide", {"kind": "keyboard_chord", "keys": ["KeyTab"]}, "global", None),
+    ]
+
+    for source, action, scope, appid in invalid:
+        asyncio.run(p.set_controller_button_action(
+            source, action, scope=scope, appid=appid
+        ))
+
+    assert not any(event[0] == "set_button" for event in backend.events)
+
+
+def test_valid_button_action_enters_coordinator_generation(
+    tmp_path, monkeypatch
+):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    profile = {
+        "virtual_controller": {},
+        "buttons": {"LeftPaddle1": [
+            {"key": "KeyLeftCtrl"}, {"key": "KeyTab"},
+        ]},
+        "vibration": {},
+    }
+    backend = _controller_for(p, profile)
+    p._current_appid = "42"
+
+    config = asyncio.run(p.set_controller_button_action(
+        "LeftPaddle1",
+        {"kind": "keyboard_chord", "keys": ["KeyLeftCtrl", "KeyTab"]},
+        scope="game", appid="42",
+    ))
+
+    set_event = next(event for event in backend.events if event[0] == "set_button")
+    assert set_event[2] == [
+        {"key": "KeyLeftCtrl"}, {"key": "KeyTab"},
+    ]
+    assert config["operation_state"]["appid"] == "42"
+    assert config["operation_state"]["components"]["buttons"]["status"] == "applied"
 
 
 def test_uninstall_stops_new_tdp_writes_before_handoff(tmp_path, monkeypatch):

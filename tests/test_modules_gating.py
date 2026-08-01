@@ -218,6 +218,32 @@ def test_controller_diagnostics_disabled_returns_empty_without_backend():
     assert calls == []
 
 
+def test_controller_button_action_disabled_never_mutates_backend():
+    p = _plugin(disabled=["mandos"])
+    p._init = lambda: None
+    p._current_appid = None
+    mutations = []
+    p._controller_backend = types.SimpleNamespace(
+        get_config=lambda appid: {"kind": "remap", "buttons": []},
+        set_button=lambda *args: mutations.append(args),
+    )
+    p._controller_coordinator = types.SimpleNamespace(
+        snapshot=lambda: {"generation": 0, "appid": None, "components": {}}
+    )
+
+    async def offload(fn):
+        return fn()
+
+    p._offload_call = offload
+    result = asyncio.run(p.set_controller_button_action(
+        "LeftPaddle1",
+        {"kind": "keyboard_chord", "keys": ["KeyLeftCtrl", "KeyTab"]},
+    ))
+
+    assert mutations == []
+    assert result["operation_state"]["generation"] == 0
+
+
 def test_controller_diagnostics_is_offloaded_when_enabled():
     p = _plugin()
     p._init = lambda: None

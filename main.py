@@ -68,6 +68,7 @@ from telemetry.store import TelemetryStore
 from telemetry.sampler import TelemetrySampler
 from controllers import detect as controller_detect
 from controllers import hhd as controller_hhd
+from controllers import ip_profile as controller_ip_profile
 from controllers import conflict as controller_conflict
 from controllers import factory as controller_factory
 from controllers.coordinator import ControllerCoordinator
@@ -827,25 +828,97 @@ class Plugin:
         value["operation_state"] = self._controller_coordinator.snapshot()
         return value
 
-    async def set_controller_button(self, source: str, targets: list,
-                                    scope: str = "global", appid=None) -> dict:
-        """Remap one extra button in a scope (global / a game; InputPlumber only,
-        no-op on others). Editing tracks the applied set so the game-change re-apply
-        can tell whether anything changed."""
+    @staticmethod
+    def _controller_action_targets(action) -> list | None:
+        if not isinstance(action, dict):
+            return None
+        kind = action.get("kind")
+        if kind == "default" and set(action) == {"kind"}:
+            return []
+        if kind == "gamepad" and set(action) == {"kind", "target"}:
+            targets = [{"gamepad": action.get("target")}]
+        elif (
+            kind == "keyboard_chord"
+            and set(action) == {"kind", "keys"}
+            and isinstance(action.get("keys"), list)
+        ):
+            targets = [{"key": key} for key in action["keys"]]
+        else:
+            return None
+        clean = controller_ip_profile.sanitize_button_action(targets)
+        return clean or None
+
+    async def set_controller_button_action(
+        self, source: str, action: dict,
+        scope: str = "global", appid=None,
+    ) -> dict:
         self._init()
-        scope = self._resolve_scope(scope, appid)  # game+no-appid → global; pins _current_appid
-        if scope is None:
+
+        async def unchanged():
             config = await self._offload_call(
                 lambda: self._controller_backend.get_config(
                     self._current_appid
                 )
             )
             return self._controller_config_with_operations(config)
-        cfg = await self._offload_call(
-            lambda: self._controller_backend.set_button(source, targets, scope, appid))
-        if cfg.get("last_apply") is not False:
+
+        targets = self._controller_action_targets(action)
+        if (
+            not self._module_enabled("mandos")
+            or not isinstance(source, str)
+            or not source
+            or targets is None
+            or scope not in {"global", "game"}
+            or (scope == "game" and appid is None)
+        ):
+            return await unchanged()
+        resolved = self._resolve_scope(scope, appid)
+        if resolved is None:
+            return await unchanged()
+
+        def apply():
+            config = self._controller_backend.get_config(
+                self._current_appid
+            )
+            valid_sources = {
+                button.get("source")
+                for button in config.get("buttons", [])
+                if isinstance(button, dict)
+            }
+            if source not in valid_sources:
+                return config, False
+            return (
+                self._controller_backend.set_button(
+                    source, targets, resolved, appid
+                ),
+                True,
+            )
+
+        config, mutated = await self._offload_call(apply)
+        if mutated and config.get("last_apply") is not False:
             await self._reconcile_controller_now(force=True)
-        return self._controller_config_with_operations(cfg)
+        return self._controller_config_with_operations(config)
+
+    async def set_controller_button(self, source: str, targets: list,
+                                    scope: str = "global", appid=None) -> dict:
+        """Remap one extra button in a scope (global / a game; InputPlumber only,
+        no-op on others). Editing tracks the applied set so the game-change re-apply
+        can tell whether anything changed."""
+        clean = controller_ip_profile.sanitize_button_action(targets)
+        if not targets:
+            action = {"kind": "default"}
+        elif len(clean) == 1 and "gamepad" in clean[0]:
+            action = {"kind": "gamepad", "target": clean[0]["gamepad"]}
+        elif clean and all("key" in target for target in clean):
+            action = {
+                "kind": "keyboard_chord",
+                "keys": [target["key"] for target in clean],
+            }
+        else:
+            action = {"kind": "invalid"}
+        return await self.set_controller_button_action(
+            source, action, scope, appid
+        )
 
     async def set_controller_vibration(self, patch: dict,
                                        scope: str = "global", appid=None) -> dict:

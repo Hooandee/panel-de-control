@@ -615,6 +615,10 @@ export const setHdr = callable<[patch: HdrPatch, scope: Scope, appid: string | n
 
 // ---- Mandos (controller manager) ------------------------------------------
 export type ControllerTarget = { gamepad: string } | { key: string };
+export type ControllerButtonAction =
+  | { kind: "default" }
+  | { kind: "gamepad"; target: string }
+  | { kind: "keyboard_chord"; keys: string[] };
 
 export interface RemapButton {
   // The InputPlumber source capability (e.g. "LeftPaddle1") — used when remapping.
@@ -705,6 +709,13 @@ export const getControllerConfig = callable<[], ControllerConfig>("get_controlle
 export const setControllerButton =
   callable<[source: string, targets: ControllerTarget[], scope: Scope, appid: string | null], ControllerConfig>(
     "set_controller_button");
+export const setControllerButtonAction =
+  callable<[
+    source: string,
+    action: ControllerButtonAction,
+    scope: Scope,
+    appid: string | null,
+  ], ControllerConfig>("set_controller_button_action");
 export const setControllerFollowGlobal =
   callable<[follow: boolean, appid: string], ControllerConfig>("set_controller_follow_global");
 export const setControllerSetting =
