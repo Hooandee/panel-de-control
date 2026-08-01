@@ -46,3 +46,18 @@ def test_set_tdp_enable_true(monkeypatch):
 def test_set_tdp_enable_unreachable(monkeypatch):
     monkeypatch.setattr(hhd, "post_state", lambda payload, root="/": None)
     assert hhd.set_tdp_enable(False) is None            # unreachable → unknown
+
+
+def test_read_settings_uses_live_schema_endpoint(monkeypatch):
+    calls = []
+    schema = {"version": "abc", "controllers": {}}
+    monkeypatch.setattr(hhd, "_token", lambda root="/": "token")
+
+    def get(path, token):
+        calls.append((path, token))
+        return schema
+
+    monkeypatch.setattr(hhd, "_get", get)
+
+    assert hhd.read_settings() == schema
+    assert calls == [("/settings", "token")]

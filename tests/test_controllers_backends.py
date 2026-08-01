@@ -627,6 +627,37 @@ def _hhd_state(mode="uinput", paddles="noob"):
     return {"controllers": {"rog_ally": {"controller_mode": cm}}}
 
 
+def _hhd_settings(*modes, version=None):
+    mode_nodes = {}
+    for mode in modes:
+        node = {"type": "container", "children": {}}
+        if mode in {"uinput", "dualsense"}:
+            node["children"]["paddles_as"] = {
+                "type": "multiple",
+                "options": {
+                    "steam_input": "Steam Input",
+                    "disabled": "Disabled",
+                },
+            }
+        mode_nodes[mode] = node
+    settings = {
+        "controllers": {
+            "rog_ally": {
+                "type": "container",
+                "children": {
+                    "controller_mode": {
+                        "type": "mode",
+                        "modes": mode_nodes,
+                    }
+                },
+            }
+        }
+    }
+    if version is not None:
+        settings["version"] = version
+    return settings
+
+
 def test_hhd_device_key_from_state():
     assert hhd_config.device_key(_hhd_state()) == "rog_ally"
     assert hhd_config.device_key({}) is None
@@ -669,7 +700,9 @@ def test_hhd_capabilities_use_only_options_present_in_live_state():
     }
 
     capabilities = hhd_config.capabilities_report(
-        state, "rog_ally"
+        state,
+        "rog_ally",
+        _hhd_settings("uinput", "xbox_elite", "dualsense", "disabled"),
     )
 
     assert capabilities["surfaces"]["settings"] == {
@@ -677,7 +710,9 @@ def test_hhd_capabilities_use_only_options_present_in_live_state():
         "availability": "supported",
         "fields": {
             "mode": "uinput",
-            "mode_options": ["uinput", "dualsense"],
+            "mode_options": [
+                "uinput", "xbox_elite", "dualsense", "disabled",
+            ],
             "paddles_as": "steam_input",
             "paddles_options": ["steam_input", "disabled"],
         },
@@ -715,8 +750,30 @@ def test_hhd_capabilities_omit_absent_or_ambiguous_routes():
     }
 
     assert hhd_config.capabilities_report(
-        state, "rog_ally"
+        state, "rog_ally", _hhd_settings("uinput", "dualsense")
     )["surfaces"] == {}
+
+
+def test_hhd_capabilities_reject_stale_settings_schema():
+    state = {
+        "version": "new",
+        "controllers": {
+            "rog_ally": {
+                "controller_mode": {
+                    "mode": "uinput",
+                    "uinput": {"paddles_as": "steam_input"},
+                }
+            }
+        },
+    }
+
+    capabilities = hhd_config.capabilities_report(
+        state,
+        "rog_ally",
+        _hhd_settings("uinput", version="old"),
+    )
+
+    assert capabilities["surfaces"] == {}
 
 
 def test_hhd_build_payload_paths():

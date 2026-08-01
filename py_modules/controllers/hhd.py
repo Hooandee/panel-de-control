@@ -55,6 +55,17 @@ def read_state(root: str = "/"):
         return None
 
 
+def read_settings(root: str = "/"):
+    """Device-filtered HHD settings schema, or None if unavailable."""
+    token = _token(root)
+    if not token:
+        return None
+    try:
+        return _get("/settings", token)
+    except Exception:
+        return None
+
+
 def post_state(payload: dict, root: str = "/"):
     """POST a partial state (HHD merges it) and return the full state it echoes
     back — the honest read-back of what actually stuck. None on failure."""

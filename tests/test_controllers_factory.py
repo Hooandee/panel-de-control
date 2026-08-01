@@ -160,6 +160,46 @@ def test_select_ip_backend_stamps_manager_and_version():
     assert b.set_setting("mode", "x")["kind"] == "remap"
 
 
+def test_ip_config_is_backward_compatible_except_capabilities(
+    tmp_path, monkeypatch
+):
+    store = RemapStore(str(tmp_path / "controllers.json"))
+    monkeypatch.setattr(
+        factory, "VibrationController",
+        lambda *args: SimpleNamespace(state=lambda: None),
+    )
+    backend = factory.IpBackend(
+        store, FakeDbus(), version="0.77.4",
+        device_key="msi_claw_8_ai_plus",
+    )
+
+    config = backend.get_config()
+    legacy = {
+        key: value for key, value in config.items()
+        if key != "capabilities"
+    }
+
+    assert legacy == {
+        "kind": "remap",
+        "device_known": True,
+        "buttons": [
+            {"source": "LeftPaddle1", "label": "M2", "target": None},
+        ],
+        "gamepad_targets": list(factory.ip_profile.GAMEPAD_TARGETS),
+        "key_targets": list(factory.ip_profile.KEY_TARGETS),
+        "follows_global": True,
+        "has_game_profile": False,
+        "vibration": {
+            "supported": False,
+            "enabled": None,
+            "test_supported": False,
+        },
+        "manager": detect.INPUTPLUMBER,
+        "manager_version": "0.77.4",
+        "supported": True,
+    }
+
+
 def test_ip_backend_reports_persisted_profile_ownership(tmp_path):
     store = RemapStore(str(tmp_path / "controllers.json"))
     store.remember_profile_baseline(
@@ -220,7 +260,35 @@ def test_hhd_config_and_capabilities_share_one_live_state(
         reads.append(True)
         return state
 
+    settings = {
+        "controllers": {
+            "rog_ally": {
+                "type": "container",
+                "children": {
+                    "controller_mode": {
+                        "type": "mode",
+                        "modes": {
+                            "uinput": {
+                                "type": "container",
+                                "children": {
+                                    "paddles_as": {
+                                        "type": "multiple",
+                                        "options": {
+                                            "steam_input": "Steam Input",
+                                        },
+                                    }
+                                },
+                            }
+                        },
+                    }
+                },
+            }
+        }
+    }
     monkeypatch.setattr(factory.hhd_api, "read_state", read_state)
+    monkeypatch.setattr(
+        factory.hhd_api, "read_settings", lambda: settings
+    )
     backend = factory.HhdBackend(
         store=RemapStore(str(tmp_path / "controllers.json")),
         device_key="rog_ally",
@@ -233,6 +301,53 @@ def test_hhd_config_and_capabilities_share_one_live_state(
     assert config["capabilities"]["surfaces"]["settings"]["fields"][
         "mode"
     ] == "uinput"
+
+
+def test_hhd_config_is_backward_compatible_except_capabilities(
+    tmp_path, monkeypatch
+):
+    state = {
+        "controllers": {
+            "rog_ally": {
+                "controller_mode": {
+                    "mode": "uinput",
+                    "uinput": {"paddles_as": "steam_input"},
+                }
+            }
+        }
+    }
+    monkeypatch.setattr(factory.hhd_api, "read_state", lambda: state)
+    monkeypatch.setattr(factory.hhd_api, "read_settings", lambda: None)
+    backend = factory.HhdBackend(
+        version="3.19.23",
+        store=RemapStore(str(tmp_path / "controllers.json")),
+        device_key="rog_ally",
+    )
+
+    config = backend.get_config()
+    legacy = {
+        key: value for key, value in config.items()
+        if key != "capabilities"
+    }
+
+    assert legacy == {
+        "kind": "settings",
+        "device_key": "rog_ally",
+        "mode": "uinput",
+        "mode_options": list(factory.hhd_config.MODES),
+        "paddles_as": "steam_input",
+        "paddles_options": list(factory.hhd_config.PADDLES_AS),
+        "vibration": {
+            "supported": False,
+            "enabled": None,
+            "test_supported": False,
+        },
+        "follows_global": True,
+        "has_game_profile": False,
+        "manager": detect.HHD,
+        "manager_version": "3.19.23",
+        "supported": True,
+    }
 
 
 def _hhd_ally_owner(monkeypatch, value=80):

@@ -311,13 +311,14 @@ class HhdBackend(ControllerBackend):
         config["follows_global"] = self._store.is_following_global(appid)
         config["has_game_profile"] = self._store.has_game(appid)
         config["capabilities"] = hhd_config.capabilities_report(
-            state, self._device_key
+            state, self._device_key, hhd_api.read_settings()
         )
         return self._stamp(config)
 
     def get_capabilities(self, appid=None) -> dict:
+        state = hhd_api.read_state()
         return hhd_config.capabilities_report(
-            hhd_api.read_state(), self._device_key
+            state, self._device_key, hhd_api.read_settings()
         )
 
     def get_config(self, appid=None) -> dict:

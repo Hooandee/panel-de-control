@@ -17,6 +17,13 @@ MODES = ("uinput", "hori_steam", "dualsense", "hidden")
 PADDLES_AS = ("steam_input", "noob", "disabled")
 _PADDLE_MODES = ("uinput", "dualsense")
 _VIBRATION_KEYS = {"rog_ally", "rog_ally_x"}
+_CAPABILITY_MODES = (
+    "uinput", "xbox_elite", "hori_steam", "dualsense", "hidden",
+    "disabled",
+)
+_CAPABILITY_PADDLES = (
+    "steam_input", "noob", "touchpad", "both", "disabled",
+)
 
 
 def device_key(state) -> str | None:
@@ -44,7 +51,32 @@ def get_config(state) -> dict:
     }
 
 
-def capabilities_report(state, device_profile_key) -> dict:
+def _mode_schema(settings, key):
+    controllers = (settings or {}).get("controllers")
+    if not isinstance(controllers, dict):
+        return None
+    controller = controllers.get(key)
+    if not isinstance(controller, dict):
+        return None
+    children = controller.get("children")
+    if not isinstance(children, dict):
+        return None
+    mode = children.get("controller_mode")
+    if not isinstance(mode, dict) or mode.get("type") != "mode":
+        return None
+    modes = mode.get("modes")
+    return modes if isinstance(modes, dict) else None
+
+
+def _schema_matches_state(settings, state):
+    settings_version = (settings or {}).get("version")
+    state_version = (state or {}).get("version")
+    if settings_version is None or state_version is None:
+        return True
+    return settings_version == state_version
+
+
+def capabilities_report(state, device_profile_key, settings=None) -> dict:
     key = device_key(state)
     if key is None:
         return clean_report(report(device_profile_key, "hhd", {}))
@@ -54,27 +86,47 @@ def capabilities_report(state, device_profile_key) -> dict:
 
     surfaces = {}
     controller_mode = controller.get("controller_mode")
-    if isinstance(controller_mode, dict):
+    modes_schema = (
+        _mode_schema(settings, key)
+        if _schema_matches_state(settings, state)
+        else None
+    )
+    if isinstance(controller_mode, dict) and isinstance(modes_schema, dict):
         mode = controller_mode.get("mode")
         mode_options = [
             candidate
-            for candidate in MODES
-            if isinstance(controller_mode.get(candidate), dict)
+            for candidate in _CAPABILITY_MODES
+            if isinstance(modes_schema.get(candidate), dict)
         ]
         if isinstance(mode, str) and mode in mode_options:
-            paddles = controller_mode[mode].get("paddles_as")
-            paddles_options = []
-            for candidate in mode_options:
-                value = controller_mode[candidate].get("paddles_as")
-                if value in PADDLES_AS and value not in paddles_options:
-                    paddles_options.append(value)
+            mode_state = controller_mode.get(mode)
+            mode_state = mode_state if isinstance(mode_state, dict) else {}
+            paddles = mode_state.get("paddles_as")
+            mode_children = modes_schema[mode].get("children")
+            mode_children = (
+                mode_children if isinstance(mode_children, dict) else {}
+            )
+            paddles_schema = mode_children.get("paddles_as")
+            schema_options = (
+                paddles_schema.get("options")
+                if isinstance(paddles_schema, dict)
+                else None
+            )
+            paddles_options = [
+                candidate
+                for candidate in _CAPABILITY_PADDLES
+                if isinstance(schema_options, dict)
+                and candidate in schema_options
+            ]
             surfaces["settings"] = surface(
                 "hhd",
                 "supported",
                 fields={
                     "mode": mode,
                     "mode_options": mode_options,
-                    "paddles_as": paddles if paddles in PADDLES_AS else None,
+                    "paddles_as": (
+                        paddles if paddles in paddles_options else None
+                    ),
                     "paddles_options": paddles_options,
                 },
                 scope=("global",),
