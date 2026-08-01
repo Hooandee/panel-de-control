@@ -1,0 +1,145 @@
+"""Generation-safe, redacted state for controller component operations."""
+import copy
+import math
+import re
+import threading
+
+from dataclasses import dataclass
+
+from controllers import ip_profile
+
+
+COMPONENTS = {"virtual_controller", "buttons", "vibration"}
+STATUSES = {
+    "applied", "accepted_unverifiable", "pending", "unsupported",
+    "conflict", "failed", "recovery_required", "cancelled",
+}
+REASONS = {
+    "apply_failed", "cancelled", "device_not_ready", "identity_changed",
+    "invalid_state", "mode_failed", "owner_changed", "profile_conflict",
+    "readback_mismatch", "restore_failed", "shutdown", "superseded",
+    "unsupported",
+}
+OWNERS = {"hhd", "inputplumber", "native", "evdev", "none"}
+_MODE = re.compile(r"[a-z0-9][a-z0-9_-]{0,31}")
+
+
+@dataclass(frozen=True)
+class OperationResult:
+    component: str
+    status: str
+    reason: str | None
+    owner: str
+    generation: int
+    appid: str | None
+    desired: dict
+    actual: dict | None = None
+
+
+def _button_action(value) -> list:
+    if not isinstance(value, list) or not 1 <= len(value) <= 4:
+        return []
+    clean = ip_profile.sanitize_targets(value)
+    if len(clean) != len(value):
+        return []
+    if len(clean) == 1 and "gamepad" in clean[0]:
+        return clean
+    if not all("key" in target for target in clean):
+        return []
+    codes = [target["key"] for target in clean]
+    return clean if len(codes) == len(set(codes)) else []
+
+
+def _component_state(component: str, value) -> dict:
+    if not isinstance(value, dict):
+        return {}
+    if component == "buttons":
+        clean = {}
+        for source, action in value.items():
+            target = _button_action(action)
+            if isinstance(source, str) and source and target:
+                clean[source] = target
+        return clean
+    if component == "vibration":
+        clean = {}
+        if isinstance(value.get("enabled"), bool):
+            clean["enabled"] = value["enabled"]
+        for field in ("value", "left", "right"):
+            number = value.get(field)
+            if (
+                isinstance(number, (int, float))
+                and not isinstance(number, bool)
+                and math.isfinite(number)
+                and 0 <= number <= 100
+            ):
+                clean[field] = number
+        return clean
+    if component == "virtual_controller":
+        mode = value.get("mode")
+        if isinstance(mode, str) and _MODE.fullmatch(mode):
+            return {"mode": mode}
+    return {}
+
+
+class OperationState:
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._generation = 0
+        self._appid = None
+        self._components = {}
+
+    def start(self, appid, profile) -> int:
+        with self._lock:
+            self._generation += 1
+            self._appid = str(appid) if appid is not None else None
+            self._components = {}
+            if isinstance(profile, dict):
+                for component in COMPONENTS:
+                    if component not in profile:
+                        continue
+                    self._components[component] = {
+                        "status": "pending",
+                        "desired": _component_state(
+                            component, profile.get(component)
+                        ),
+                    }
+            return self._generation
+
+    def publish(self, result: OperationResult) -> bool:
+        with self._lock:
+            if (
+                not isinstance(result, OperationResult)
+                or result.generation != self._generation
+                or result.appid != self._appid
+                or result.component not in COMPONENTS
+                or result.status not in STATUSES
+                or result.owner not in OWNERS
+                or (
+                    result.reason is not None
+                    and result.reason not in REASONS
+                )
+            ):
+                return False
+            clean = {
+                "status": result.status,
+                "owner": result.owner,
+                "desired": _component_state(
+                    result.component, result.desired
+                ),
+            }
+            if result.reason is not None:
+                clean["reason"] = result.reason
+            if result.actual is not None:
+                clean["actual"] = _component_state(
+                    result.component, result.actual
+                )
+            self._components[result.component] = clean
+            return True
+
+    def snapshot(self) -> dict:
+        with self._lock:
+            return copy.deepcopy({
+                "generation": self._generation,
+                "appid": self._appid,
+                "components": self._components,
+            })
