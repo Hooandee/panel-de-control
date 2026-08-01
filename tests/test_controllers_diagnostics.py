@@ -70,7 +70,7 @@ def test_snapshot_uses_only_redacted_manager_metadata_and_capabilities():
             {"buttons": buttons, "vibration": vibration},
         ),
         "dbus": {
-            "composite_name": "ROG Ally",
+            "composite_name": "ASUS ROG Ally",
             "source_device_count": 3,
             "raw_path": "/dev/input/event4",
             "last_operation": {
@@ -86,7 +86,7 @@ def test_snapshot_uses_only_redacted_manager_metadata_and_capabilities():
     assert state["sources"] == [{
         "manager": "inputplumber",
         "version": "0.78",
-        "name": "ROG Ally",
+        "name": "ASUS ROG Ally",
         "source_count": 3,
     }]
     assert state["inputs"] == {
@@ -97,3 +97,26 @@ def test_snapshot_uses_only_redacted_manager_metadata_and_capabilities():
         "manager": {"operation": "load_profile", "ok": True},
     }
     assert "/dev/input" not in repr(state)
+
+
+def test_snapshot_rejects_token_strings_and_unproven_composite_identity():
+    state = IntegratedDiagnostics().snapshot(
+        "rog_ally",
+        {
+            "manager": "inputplumber",
+            "dbus": {
+                "composite_name": "serialABC123",
+                "source_device_count": 1,
+                "last_operation": {
+                    "operation": "load_profile",
+                    "reason": "tokenABC123",
+                    "ok": False,
+                },
+            },
+        },
+    )
+
+    assert state["sources"] == [{"manager": "inputplumber"}]
+    assert state["last_operations"] == {}
+    assert "serialABC123" not in repr(state)
+    assert "tokenABC123" not in repr(state)

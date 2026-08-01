@@ -3,11 +3,24 @@
 import re
 
 from controllers.capabilities import clean_report
+from controllers import ip_profile
 
 
-_OPERATION_FIELDS = {
-    "operation", "owner", "mode", "ok", "reason", "enabled", "strength",
-    "profile_bytes", "rollback_confirmed", "readback", "echoed_value",
+_OPERATIONS = {
+    "discover_composite", "validate_composite", "read_capabilities",
+    "read_source_device_paths", "read_profile", "load_profile",
+    "reset_default", "read_force_feedback", "set_force_feedback", "rumble",
+    "stop_rumble", "apply_profile",
+}
+_OWNERS = {"hhd", "inputplumber", "native", "evdev"}
+_MODES = {"dual", "gain"}
+_REASONS = {
+    "busctl_exit", "composite_ambiguous", "composite_not_found",
+    "config_echo_mismatch", "identity_changed", "identity_unavailable",
+    "initial_readback_unavailable", "invalid_response", "invalid_value",
+    "load_failed", "merge_failed", "process_unavailable", "profile_conflict",
+    "profile_unavailable", "readback_mismatch", "short_write", "unsupported",
+    "write_failed",
 }
 _LABEL = re.compile(r"[A-Za-z0-9][A-Za-z0-9 ._+()'-]{0,63}")
 
@@ -16,26 +29,40 @@ def _label(value):
     return value if isinstance(value, str) and _LABEL.fullmatch(value) else None
 
 
-def _scalar(value):
-    if value is None or isinstance(value, (bool, int)):
-        return True
-    if isinstance(value, str):
-        return _label(value) is not None
+def _number(value):
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
     return (
-        isinstance(value, float)
+        value
+        if isinstance(value, float)
         and value == value
         and value not in (float("inf"), float("-inf"))
+        else None
     )
 
 
 def _operation(value):
     if not isinstance(value, dict):
         return None
-    clean = {
-        key: item
-        for key, item in value.items()
-        if key in _OPERATION_FIELDS and _scalar(item)
+    clean = {}
+    enums = {
+        "operation": _OPERATIONS,
+        "owner": _OWNERS,
+        "mode": _MODES,
+        "reason": _REASONS,
     }
+    for key, allowed in enums.items():
+        if key in value:
+            if not isinstance(value[key], str) or value[key] not in allowed:
+                return None
+            clean[key] = value[key]
+    for key in ("ok", "enabled", "rollback_confirmed", "readback"):
+        if isinstance(value.get(key), bool):
+            clean[key] = value[key]
+    for key in ("strength", "profile_bytes", "echoed_value"):
+        number = _number(value.get(key))
+        if number is not None:
+            clean[key] = number
     return clean or None
 
 
@@ -70,14 +97,15 @@ class IntegratedDiagnostics:
             if isinstance(dbus, dict):
                 name = dbus.get("composite_name")
                 count = dbus.get("source_device_count")
-                if _label(name) is not None:
+                expected_names = ip_profile.composite_names_for(device_key)
+                if name in expected_names:
                     source["name"] = name
-                if (
-                    isinstance(count, int)
-                    and not isinstance(count, bool)
-                    and 0 <= count <= 64
-                ):
-                    source["source_count"] = count
+                    if (
+                        isinstance(count, int)
+                        and not isinstance(count, bool)
+                        and 0 <= count <= 64
+                    ):
+                        source["source_count"] = count
             result["sources"].append(source)
 
         capabilities = clean_report(manager_state.get("capabilities"))
