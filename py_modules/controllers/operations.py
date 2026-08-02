@@ -22,6 +22,8 @@ REASONS = {
 }
 OWNERS = {"hhd", "inputplumber", "native", "evdev", "none"}
 _MODE = re.compile(r"[a-z0-9][a-z0-9_-]{0,31}")
+_LENOVO_INTENSITIES = {"off", "low", "medium", "high"}
+_LENOVO_PATTERNS = {"fps", "racing", "standard", "spg", "rpg"}
 
 
 @dataclass(frozen=True)
@@ -63,6 +65,16 @@ def _component_state(component: str, value) -> dict:
                 and 0 <= number <= 100
             ):
                 clean[field] = number
+        for field in ("intensity", "touchpad_intensity"):
+            intensity = value.get(field)
+            if intensity in _LENOVO_INTENSITIES:
+                clean[field] = intensity
+        for field in ("left_pattern", "right_pattern"):
+            pattern = value.get(field)
+            if pattern in _LENOVO_PATTERNS:
+                clean[field] = pattern
+        if isinstance(value.get("touchpad_enabled"), bool):
+            clean["touchpad_enabled"] = value["touchpad_enabled"]
         return clean
     if component == "virtual_controller":
         mode = value.get("mode")

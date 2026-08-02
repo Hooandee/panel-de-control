@@ -399,25 +399,50 @@ class IpBackend(ControllerBackend):
             )
         if component == "vibration":
             state = self._vibration.state()
+            native_requested = ip._native_vibration_requested(desired)
             baseline_ready = True
             if desired:
                 baseline_ready = ip._ensure_vibration_baseline(
                     self._store, self._dbus, self._device_key,
                     state, self._vibration,
+                    prepare_native=native_requested,
                 )
-            applied = baseline_ready and ip._apply_vibration(
-                self._dbus, self._vibration, desired
+            enabled_applied, native_applied = (
+                ip._apply_vibration_parts(
+                    self._dbus, self._vibration, desired,
+                    apply_native=native_requested,
+                )
+                if baseline_ready else (False, False)
             )
-            exact = bool(state and state.get("readback"))
+            native_diagnostics = getattr(
+                self._vibration, "diagnostics", lambda: {}
+            )() or {}
+            route_recovered = ip._finish_vibration_route(
+                self._store, self._device_key,
+                state if baseline_ready and native_requested else None,
+                self._vibration, native_applied, appid,
+            )
+            applied = enabled_applied and native_applied and route_recovered
+            post_state = self._vibration.state() if applied else None
+            exact = bool(post_state and post_state.get("readback"))
+            recovery_required = not applied and (
+                native_diagnostics.get("rollback_confirmed") is False
+                or not route_recovered
+            )
             status = (
                 "applied" if applied and exact
                 else "accepted_unverifiable" if applied
+                else "recovery_required" if recovery_required
                 else "failed"
             )
             self._vibration_last_apply = applied
             return self._operation_result(
                 component, status, desired, appid, generation,
-                reason=None if applied else "apply_failed",
+                reason=(
+                    None if applied
+                    else "restore_failed" if recovery_required
+                    else "apply_failed"
+                ),
                 actual=desired if applied and exact else None,
             )
         return super().apply_component(

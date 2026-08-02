@@ -9,6 +9,7 @@ import {
   targetToValue,
   targetsToAction,
   valueToTarget,
+  vibrationNoteKey,
 } from "./logic";
 
 describe("managerLabelKey / managerDescKey", () => {
@@ -57,5 +58,14 @@ describe("controller button actions", () => {
     expect(actionToTargets({
       kind: "keyboard_chord", keys: ["KeyLeftAlt", "KeyEnter"],
     })).toEqual([{ key: "KeyLeftAlt" }, { key: "KeyEnter" }]);
+  });
+});
+
+describe("vibrationNoteKey", () => {
+  it("does not claim Lenovo readback when the driver only accepted writes", () => {
+    expect(vibrationNoteKey({ mode: "lenovo_hd", confirmation: "none" }))
+      .toBe("mandos.vibration.note.lenovoAccepted");
+    expect(vibrationNoteKey({ mode: "lenovo_hd", confirmation: "driver" }))
+      .toBe("mandos.vibration.note.lenovoHd");
   });
 });

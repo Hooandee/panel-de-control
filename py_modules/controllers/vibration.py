@@ -14,6 +14,15 @@ import time
 
 from controllers.lenovo_go_vibration import LenovoGoVibrationAdapter
 
+
+_LENOVO_DEFAULT_STATE = {
+    "intensity": "medium",
+    "left_pattern": "fps",
+    "right_pattern": "fps",
+    "touchpad_enabled": True,
+    "touchpad_intensity": "medium",
+}
+
 try:
     import fcntl
 except ImportError:  # Windows imports the shared backend but has no evdev/ioctl.
@@ -111,13 +120,19 @@ class VibrationController:
             "touchpad_enabled", "touchpad_intensity",
         )
         baseline = lenovo_baseline if isinstance(lenovo_baseline, dict) else {}
+        complete_baseline = all(field in baseline for field in native_fields)
         self._lenovo_owned = (
             self._device_key == "legion_go_2"
-            and (bool(lenovo_route) or bool(baseline))
-            and all(field in baseline for field in native_fields)
+            and (bool(lenovo_route) or complete_baseline)
         )
         self._lenovo_last_state = (
-            {field: baseline[field] for field in native_fields}
+            {
+                **_LENOVO_DEFAULT_STATE,
+                **{
+                    field: baseline[field]
+                    for field in native_fields if field in baseline
+                },
+            }
             if self._lenovo_owned else None
         )
         self._lenovo_last_capabilities = None
@@ -160,6 +175,17 @@ class VibrationController:
             return {
                 **current,
                 "readback": True,
+                "connected": True,
+            }
+        capabilities = self._lenovo.capabilities()
+        if capabilities is not None:
+            self._lenovo_owned = True
+            self._lenovo_last_capabilities = dict(capabilities)
+            if self._lenovo_last_state is None:
+                self._lenovo_last_state = dict(_LENOVO_DEFAULT_STATE)
+            return {
+                **self._lenovo_last_state,
+                "readback": False,
                 "connected": True,
             }
         if self._lenovo_owned and self._lenovo_last_state is not None:
@@ -264,7 +290,8 @@ class VibrationController:
                 "channels": ["handles", "touchpad"],
                 **native,
                 "readback": (
-                    "driver" if state["connected"] else "none"
+                    native.get("readback", "none")
+                    if state["connected"] else "none"
                 ),
                 "test": {
                     "patterns": ["pulse"],
@@ -320,7 +347,11 @@ class VibrationController:
 
     def capture_baseline(self):
         lenovo = self._lenovo_state()
-        if lenovo is not None and lenovo["connected"]:
+        if (
+            lenovo is not None
+            and lenovo["connected"]
+            and lenovo["readback"]
+        ):
             return {
                 field: lenovo[field]
                 for field in (
@@ -646,6 +677,16 @@ class VibrationController:
             }
             return False
         return self._apply_gain(path, value)
+
+    def gain_available(self):
+        return self._gain_path() is not None
+
+    def restore_gain(self, value):
+        operation = self._last_operation
+        applied = self.apply_gain(value)
+        if operation is not None:
+            self._last_operation = operation
+        return applied
 
     def apply(self, patch):
         if not isinstance(patch, dict):

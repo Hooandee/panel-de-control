@@ -256,6 +256,111 @@ def test_ip_vibration_component_blocks_hd_when_legacy_gain_neutralize_fails(
     assert store.vibration_route(owner) is None
 
 
+def test_ip_vibration_component_uses_post_apply_lenovo_confirmation(
+    tmp_path, monkeypatch,
+):
+    store = RemapStore(str(tmp_path / "controllers.json"))
+
+    class AcceptedVibration:
+        def __init__(self):
+            self.applied = False
+
+        def state(self):
+            return {
+                "mode": "lenovo_hd",
+                "persistent": True,
+                "intensity": "medium",
+                "left_pattern": "fps",
+                "right_pattern": "fps",
+                "touchpad_enabled": True,
+                "touchpad_intensity": "medium",
+                "readback": not self.applied,
+                "connected": True,
+            }
+
+        def capture_baseline(self):
+            return {}
+
+        def apply(self, _desired):
+            self.applied = True
+            return True
+
+        def diagnostics(self):
+            return {
+                "mode": "lenovo_hd", "ok": True,
+                "readback": False, "confirmation": "accepted",
+            }
+
+    class VibrationDbus(FakeDbus):
+        def force_feedback_enabled(self):
+            return True
+
+    vibration = AcceptedVibration()
+    monkeypatch.setattr(
+        factory, "VibrationController", lambda *args, **kwargs: vibration
+    )
+    backend = factory.IpBackend(
+        store, VibrationDbus(), device_key="legion_go_2"
+    )
+
+    result = backend.apply_component(
+        "vibration", {"intensity": "high"}, "42", 1
+    )
+
+    assert result.status == "accepted_unverifiable"
+    assert result.actual is None
+
+
+def test_ip_vibration_component_reports_unrecoverable_partial_native_write(
+    tmp_path, monkeypatch,
+):
+    store = RemapStore(str(tmp_path / "controllers.json"))
+
+    class PartialVibration:
+        def state(self):
+            return {
+                "mode": "lenovo_hd",
+                "persistent": True,
+                "intensity": "medium",
+                "left_pattern": "fps",
+                "right_pattern": "fps",
+                "touchpad_enabled": True,
+                "touchpad_intensity": "medium",
+                "readback": False,
+                "connected": True,
+            }
+
+        def capture_baseline(self):
+            return {}
+
+        def apply(self, _desired):
+            return False
+
+        def diagnostics(self):
+            return {
+                "mode": "lenovo_hd", "ok": False,
+                "reason": "write_failed", "rollback_confirmed": False,
+            }
+
+    class VibrationDbus(FakeDbus):
+        def force_feedback_enabled(self):
+            return True
+
+    monkeypatch.setattr(
+        factory, "VibrationController", lambda *args, **kwargs: PartialVibration()
+    )
+    backend = factory.IpBackend(
+        store, VibrationDbus(), device_key="legion_go_2"
+    )
+
+    result = backend.apply_component(
+        "vibration", {"intensity": "high"}, "42", 1
+    )
+
+    assert result.status == "recovery_required"
+    assert result.reason == "restore_failed"
+
+
 def test_ip_report_composes_only_live_buttons_and_persistent_vibration(
     tmp_path, monkeypatch
 ):

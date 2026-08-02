@@ -190,7 +190,7 @@ function cleanOperations(value: unknown): Record<string, ControllerDiagnosticOpe
     "read_supported_target_device_ids", "read_target_devices", "read_target_device_types", "set_target_devices",
   ]);
   const owners = new Set(["hhd", "inputplumber", "native", "evdev"]);
-  const modes = new Set(["dual", "gain"]);
+  const modes = new Set(["dual", "gain", "lenovo_hd"]);
   const reasons = new Set([
     "busctl_exit", "composite_ambiguous", "composite_not_found", "config_echo_mismatch",
     "identity_changed", "identity_unavailable", "initial_readback_unavailable", "invalid_response",

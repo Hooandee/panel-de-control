@@ -135,3 +135,27 @@ def test_snapshot_rejects_token_strings_and_unproven_composite_identity():
     assert state["last_operations"] == {}
     assert "serialABC123" not in repr(state)
     assert "tokenABC123" not in repr(state)
+
+
+def test_snapshot_keeps_lenovo_hd_vibration_operations():
+    state = IntegratedDiagnostics().snapshot(
+        "legion_go_2",
+        {
+            "manager": "inputplumber",
+            "vibration": {
+                "mode": "lenovo_hd",
+                "ok": False,
+                "reason": "write_failed",
+                "rollback_confirmed": False,
+                "readback": False,
+            },
+        },
+    )
+
+    assert state["last_operations"]["vibration"] == {
+        "mode": "lenovo_hd",
+        "ok": False,
+        "reason": "write_failed",
+        "rollback_confirmed": False,
+        "readback": False,
+    }

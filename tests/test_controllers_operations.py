@@ -83,3 +83,21 @@ def test_unknown_component_or_status_is_never_published():
     assert state.publish(_result("lighting", "applied", generation)) is False
     assert state.publish(_result("buttons", "invented", generation)) is False
     assert state.snapshot()["components"] == {}
+
+
+def test_lenovo_hd_vibration_fields_survive_operation_sanitizing():
+    state = OperationState()
+    desired = {
+        "intensity": "high",
+        "left_pattern": "fps",
+        "right_pattern": "racing",
+        "touchpad_enabled": False,
+        "touchpad_intensity": "medium",
+    }
+    generation = state.start("42", {"vibration": desired})
+
+    assert state.publish(_result(
+        "vibration", "accepted_unverifiable", generation,
+        desired=desired,
+    )) is True
+    assert state.snapshot()["components"]["vibration"]["desired"] == desired

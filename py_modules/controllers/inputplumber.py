@@ -192,7 +192,8 @@ def get_config(store, dbus, device_key, appid=None, caps=None, vibration=None,
                 "intensity", "left_pattern", "right_pattern", "touchpad_enabled",
                 "touchpad_intensity",
             ):
-                vibration_config[f"actual_{field}"] = persistent_state[field]
+                if persistent_state.get("readback"):
+                    vibration_config[f"actual_{field}"] = persistent_state[field]
                 vibration_config[field] = desired.get(
                     field, persistent_state[field]
                 )
@@ -381,7 +382,26 @@ def _vibration_owner(device_key):
     return f"inputplumber:{device_key or ''}"
 
 
-def _ensure_vibration_baseline(store, dbus, device_key, state, vibration=None):
+_LENOVO_HD_FIELDS = (
+    "intensity", "left_pattern", "right_pattern",
+    "touchpad_enabled", "touchpad_intensity",
+)
+
+
+def _lenovo_route_baseline(state):
+    if (
+        not isinstance(state, dict)
+        or state.get("mode") != "lenovo_hd"
+        or state.get("readback") is not True
+        or not all(field in state for field in _LENOVO_HD_FIELDS)
+    ):
+        return {}
+    return {field: state[field] for field in _LENOVO_HD_FIELDS}
+
+
+def _ensure_vibration_baseline(
+    store, dbus, device_key, state, vibration=None, prepare_native=True,
+):
     owner = _vibration_owner(device_key)
     current = store.vibration_for("global")
     observed = {}
@@ -404,37 +424,39 @@ def _ensure_vibration_baseline(store, dbus, device_key, state, vibration=None):
         # baseline; the UI reports this as desired/accepted, never as actual state.
         observed["value"] = 100
     elif state is not None and state["mode"] == "lenovo_hd":
-        capture = getattr(vibration, "capture_baseline", None)
-        native = capture() if callable(capture) else {}
-        if isinstance(native, dict):
-            observed.update(native)
-        native_fields = (
-            "intensity", "left_pattern", "right_pattern",
-            "touchpad_enabled", "touchpad_intensity",
-        )
-        if all(field in observed for field in native_fields):
+        if prepare_native:
+            capture = getattr(vibration, "capture_baseline", None)
+            native = capture() if callable(capture) else {}
+            if isinstance(native, dict):
+                observed.update(native)
             route = getattr(
                 store, "vibration_route", lambda _owner: None
             )(owner)
             legacy_baseline = store.vibration_baseline(owner)
-            if route != "lenovo_hd" and "value" in legacy_baseline:
+            gain_available = getattr(vibration, "gain_available", None)
+            has_gain = (
+                bool(gain_available())
+                if callable(gain_available)
+                else "value" in legacy_baseline
+            )
+            if route != "lenovo_hd" and has_gain:
                 apply_gain = getattr(vibration, "apply_gain", None)
                 if not callable(apply_gain) or not apply_gain(100):
                     return False
-            remember_route = getattr(
-                store, "remember_vibration_route", None
-            )
-            if callable(remember_route):
-                remember_route(
-                    owner, "lenovo_hd",
-                    baseline=observed,
+                observed.setdefault(
+                    "value", legacy_baseline.get("value", 100)
                 )
     store.remember_vibration_baseline(
         owner, observed
     )
+    profile_observed = (
+        {field: value for field, value in observed.items() if field != "value"}
+        if isinstance(state, dict) and state.get("mode") == "lenovo_hd"
+        else observed
+    )
     baseline = {
         field: value
-        for field, value in observed.items()
+        for field, value in profile_observed.items()
         if field not in current
     }
     if baseline:
@@ -442,17 +464,53 @@ def _ensure_vibration_baseline(store, dbus, device_key, state, vibration=None):
     return True
 
 
-def _apply_vibration(dbus, vibration, desired) -> bool:
+def _finish_vibration_route(
+    store, device_key, state, vibration, native_applied, appid=None,
+):
+    if not isinstance(state, dict) or state.get("mode") != "lenovo_hd":
+        return True
+    owner = _vibration_owner(device_key)
+    route = getattr(store, "vibration_route", lambda _owner: None)(owner)
+    if native_applied:
+        remember_route = getattr(store, "remember_vibration_route", None)
+        if callable(remember_route):
+            remember_route(
+                owner, "lenovo_hd", baseline=_lenovo_route_baseline(state)
+            )
+        return True
+    if route == "lenovo_hd":
+        return True
+    baseline = store.vibration_baseline(owner)
+    active = store.effective_vibration(appid)
+    gain = active.get("value", baseline.get("value"))
+    if gain is None:
+        return True
+    apply_gain = getattr(vibration, "restore_gain", None)
+    if not callable(apply_gain):
+        apply_gain = getattr(vibration, "apply_gain", None)
+    return bool(
+        callable(apply_gain) and apply_gain(gain)
+    )
+
+
+def _native_vibration_requested(desired):
+    return any(field in desired for field in (
+        "value", "left", "right", "intensity", "left_pattern",
+        "right_pattern", "touchpad_enabled", "touchpad_intensity",
+    ))
+
+
+def _apply_vibration_parts(dbus, vibration, desired, apply_native=True):
     enabled_applied = (
         dbus.set_force_feedback_enabled(desired["enabled"])
         if "enabled" in desired
         else True
     )
-    persistent = _persistent_values(vibration, desired)
+    persistent = _persistent_values(vibration, desired) if apply_native else None
     intensity_applied = (
         vibration.apply(persistent) if persistent is not None else True
     )
-    return enabled_applied and intensity_applied
+    return enabled_applied, intensity_applied
 
 
 def apply_effective_components(store, dbus, device_key, appid,
@@ -470,15 +528,28 @@ def apply_effective_components(store, dbus, device_key, appid,
         )
     )
     desired = store.effective_vibration(appid)
+    native_requested = _native_vibration_requested(desired)
     baseline_ready = True
     if desired:
         state = vibration.state() if vibration is not None else None
         baseline_ready = _ensure_vibration_baseline(
-            store, dbus, device_key, state, vibration
+            store, dbus, device_key, state, vibration,
+            prepare_native=native_requested,
         )
         desired = store.effective_vibration(appid)
-    vibration_applied = baseline_ready and _apply_vibration(
-        dbus, vibration, desired
+    enabled_applied, native_applied = (
+        _apply_vibration_parts(
+            dbus, vibration, desired, apply_native=native_requested,
+        )
+        if baseline_ready else (False, False)
+    )
+    route_recovered = _finish_vibration_route(
+        store, device_key,
+        state if desired and baseline_ready and native_requested else None,
+        vibration, native_applied, appid,
+    )
+    vibration_applied = (
+        enabled_applied and native_applied and route_recovered
     )
     return {
         "buttons": buttons_applied,
@@ -520,28 +591,27 @@ def restore_external(store, dbus, device_key, vibration=None) -> bool:
         else True
     )
     restore = getattr(vibration, "restore_baseline", None)
-    restore_baseline = route_baseline or baseline
-    native_baseline = (
-        "native_left" in restore_baseline
-        and "native_right" in restore_baseline
-    ) or all(
-        field in restore_baseline
-        for field in (
-            "intensity", "left_pattern", "right_pattern", "touchpad_enabled",
-            "touchpad_intensity",
-        )
-    )
-    if native_baseline and callable(restore):
-        intensity_applied = restore(restore_baseline)
-    else:
-        persistent = _persistent_values(vibration, baseline)
+    if route == "lenovo_hd":
         intensity_applied = (
-            vibration.apply(persistent)
-            if persistent is not None
-            else True
+            restore(route_baseline)
+            if route_baseline and callable(restore)
+            else False
         )
+    else:
+        native_baseline = (
+            "native_left" in baseline and "native_right" in baseline
+        )
+        if native_baseline and callable(restore):
+            intensity_applied = restore(baseline)
+        else:
+            persistent = _persistent_values(vibration, baseline)
+            intensity_applied = (
+                vibration.apply(persistent)
+                if persistent is not None
+                else True
+            )
     gain_applied = True
-    if route_baseline and "value" in baseline:
+    if route == "lenovo_hd" and "value" in baseline:
         apply_gain = getattr(vibration, "apply_gain", None)
         gain_applied = (
             apply_gain(baseline["value"])
@@ -627,8 +697,10 @@ def set_vibration(store, dbus, device_key, patch: dict, scope="global",
             virtual_mode=virtual_mode,
         )
 
+    native_requested = _native_vibration_requested(allowed)
     if not _ensure_vibration_baseline(
-        store, dbus, device_key, state, vibration
+        store, dbus, device_key, state, vibration,
+        prepare_native=native_requested,
     ):
         return get_config(
             store, dbus, device_key, appid, vibration=vibration,
@@ -636,18 +708,29 @@ def set_vibration(store, dbus, device_key, patch: dict, scope="global",
         )
     store.patch_vibration(scope, appid, allowed)
     desired = store.effective_vibration(appid)
-    results = []
-    if "enabled" in allowed:
-        results.append(dbus.set_force_feedback_enabled(desired["enabled"]))
-    if any(field in allowed for field in (
-        "value", "left", "right", "intensity", "left_pattern", "right_pattern",
-        "touchpad_enabled", "touchpad_intensity",
-    )):
+    enabled_applied = (
+        dbus.set_force_feedback_enabled(desired["enabled"])
+        if "enabled" in allowed else True
+    )
+    native_applied = True
+    persistent = None
+    if native_requested:
         persistent = _persistent_values(vibration, desired)
-        results.append(
+        native_applied = (
             vibration.apply(persistent) if persistent is not None else False
         )
-    applied = all(results)
+    route_recovered = _finish_vibration_route(
+        store, device_key, state if native_requested else None,
+        vibration, native_applied, appid,
+    )
+    if (
+        native_applied
+        and state is not None
+        and state.get("mode") == "lenovo_hd"
+        and persistent is not None
+    ):
+        store.patch_vibration(scope, appid, persistent)
+    applied = enabled_applied and native_applied and route_recovered
     return get_config(
         store, dbus, device_key, appid, vibration=vibration,
         apply_status=applied, virtual_mode=virtual_mode,

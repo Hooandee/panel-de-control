@@ -101,4 +101,27 @@ describe("controller diagnostics presentation", () => {
 
     expect(normalized.last_operations).toEqual({});
   });
+
+  it("keeps Lenovo HD vibration operations", () => {
+    const normalized = normalizeControllerDiagnostics({
+      ...emptyDiagnostics,
+      last_operations: {
+        vibration: {
+          mode: "lenovo_hd",
+          ok: false,
+          reason: "write_failed",
+          rollback_confirmed: false,
+          readback: false,
+        },
+      },
+    });
+
+    expect(normalized.last_operations.vibration).toEqual({
+      mode: "lenovo_hd",
+      ok: false,
+      reason: "write_failed",
+      rollback_confirmed: false,
+      readback: false,
+    });
+  });
 });

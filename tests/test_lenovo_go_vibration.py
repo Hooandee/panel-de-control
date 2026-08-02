@@ -25,6 +25,16 @@ def _surface(tmp_path, name="controller0"):
     return root
 
 
+def _unknown_surface(tmp_path, name="controller0"):
+    root = _surface(tmp_path, name)
+    _write(root / "rumble_intensity", "unknown\n")
+    _write(root / "left_handle/rumble_mode", "unknown\n")
+    _write(root / "right_handle/rumble_mode", "unknown\n")
+    _write(root / "touchpad/vibration_enabled", "unknown\n")
+    _write(root / "touchpad/vibration_intensity", "unknown\n")
+    return root
+
+
 def _adapter(tmp_path, roots, **kwargs):
     return LenovoGoVibrationAdapter(
         "legion_go_2",
@@ -54,6 +64,128 @@ def test_complete_surface_reports_actual_state_and_live_legal_options(tmp_path):
         "touchpad_intensity_options": ["off", "low", "medium", "high"],
         "readback": "driver",
     }
+
+
+def test_unknown_readback_keeps_surface_available_without_inventing_state(
+    tmp_path,
+):
+    adapter = _adapter(tmp_path, [_unknown_surface(tmp_path)])
+
+    assert adapter.state() is None
+    assert adapter.capabilities() == {
+        "intensity_options": ["off", "low", "medium", "high"],
+        "left_pattern_options": ["fps", "racing", "standard", "spg", "rpg"],
+        "right_pattern_options": ["fps", "racing", "standard", "spg", "rpg"],
+        "touchpad_enabled_options": [True, False],
+        "touchpad_intensity_options": ["off", "low", "medium", "high"],
+        "readback": "none",
+    }
+
+
+def test_unrecognized_readback_is_not_treated_as_driver_unknown(tmp_path):
+    surface = _unknown_surface(tmp_path)
+    _write(surface / "rumble_intensity", "corrupt\n")
+    adapter = _adapter(tmp_path, [surface])
+
+    assert adapter.capabilities() is None
+    assert adapter.diagnostics()["probe"]["reason"] == "invalid_readback"
+
+
+def test_mixed_known_and_unknown_readback_is_not_safe_to_write(tmp_path):
+    surface = _unknown_surface(tmp_path)
+    _write(surface / "rumble_intensity", "medium\n")
+    adapter = _adapter(tmp_path, [surface])
+
+    assert adapter.capabilities() is None
+    assert adapter.diagnostics()["probe"]["reason"] == "mixed_readback"
+
+
+def test_unknown_readback_accepts_a_complete_profile_without_fake_confirmation(
+    tmp_path,
+):
+    surface = _unknown_surface(tmp_path)
+    writes = []
+
+    def accept_without_readback(path, value):
+        writes.append((path, value))
+
+    adapter = _adapter(
+        tmp_path, [surface], write_text=accept_without_readback
+    )
+    desired = {
+        "intensity": "high",
+        "left_pattern": "fps",
+        "right_pattern": "rpg",
+        "touchpad_enabled": False,
+        "touchpad_intensity": "medium",
+    }
+
+    assert adapter.apply(desired) is True
+    assert [value for _, value in writes] == [
+        "high", "fps", "rpg", "false", "medium",
+    ]
+    assert adapter.diagnostics() == {
+        "probe": {
+            "available": True,
+            "reason": "available_without_readback",
+            "candidate_count": 1,
+            "candidates": [surface.name],
+        },
+        "mode": "lenovo_hd",
+        "ok": True,
+        "readback": False,
+        "confirmation": "accepted",
+    }
+
+
+def test_unknown_readback_partial_failure_cannot_claim_rollback(tmp_path):
+    surface = _unknown_surface(tmp_path)
+
+    def fail_right(path, _value):
+        if path == surface / "right_handle/rumble_mode":
+            raise OSError("right handle unavailable")
+
+    adapter = _adapter(tmp_path, [surface], write_text=fail_right)
+
+    assert adapter.apply({
+        "intensity": "high",
+        "left_pattern": "fps",
+        "right_pattern": "rpg",
+        "touchpad_enabled": False,
+        "touchpad_intensity": "medium",
+    }) is False
+    assert adapter.diagnostics()["rollback_confirmed"] is False
+
+
+def test_known_readback_mismatch_fails_and_restores_the_surface(
+    tmp_path,
+):
+    surface = _surface(tmp_path)
+
+    def accept_without_changing_readback(_path, _value):
+        pass
+
+    adapter = _adapter(
+        tmp_path, [surface], write_text=accept_without_changing_readback
+    )
+
+    assert adapter.apply({
+        "intensity": "high",
+        "left_pattern": "fps",
+        "right_pattern": "rpg",
+        "touchpad_enabled": False,
+        "touchpad_intensity": "medium",
+    }) is False
+    assert adapter.state() == {
+        "intensity": "medium",
+        "left_pattern": "standard",
+        "right_pattern": "standard",
+        "touchpad_enabled": True,
+        "touchpad_intensity": "low",
+    }
+    assert adapter.capabilities()["readback"] == "driver"
+    assert adapter.diagnostics()["reason"] == "readback_mismatch"
+    assert adapter.diagnostics()["rollback_confirmed"] is True
 
 
 def test_surface_is_never_selected_for_other_legion_models(tmp_path):

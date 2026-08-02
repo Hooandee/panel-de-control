@@ -10,6 +10,7 @@ import {
   prettyAction,
   prettyTarget,
   targetsToAction,
+  vibrationNoteKey,
 } from "../mandos/logic";
 import { openKeyboardChordEditor } from "../mandos/KeyboardChordEditor";
 import { useMandos } from "../mandos/mandosContext";
@@ -463,11 +464,7 @@ const VibrationBlock: FC = () => {
       )}
       {vibration.persistent && (
         <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, marginTop: theme.space.sm, lineHeight: 1.4 }}>
-          {t(vibration.mode === "lenovo_hd"
-            ? "mandos.vibration.note.lenovoHd"
-            : vibration.confirmation === "driver" || vibration.readback
-              ? "mandos.vibration.note.readback"
-              : "mandos.vibration.note.accepted")}
+          {t(vibrationNoteKey(vibration))}
         </div>
       )}
       {vibration.last_apply === false && (

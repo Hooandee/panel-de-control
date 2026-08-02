@@ -94,3 +94,18 @@ export function prettyTarget(value: string): string {
   if ("key" in t) return prettyKey(t.key);
   return GP_LABEL[t.gamepad] ?? t.gamepad;
 }
+
+export function vibrationNoteKey(vibration: {
+  mode?: string;
+  confirmation?: string;
+  readback?: boolean;
+}): string {
+  if (vibration.mode === "lenovo_hd") {
+    return vibration.confirmation === "driver"
+      ? "mandos.vibration.note.lenovoHd"
+      : "mandos.vibration.note.lenovoAccepted";
+  }
+  return vibration.confirmation === "driver" || vibration.readback
+    ? "mandos.vibration.note.readback"
+    : "mandos.vibration.note.accepted";
+}

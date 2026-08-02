@@ -249,6 +249,9 @@ class FakeLenovoHdVibration(FakeVibration):
             "touchpad_intensity": "low",
         }
 
+    def gain_available(self):
+        return True
+
     def restore_baseline(self, baseline):
         self.restored = dict(baseline)
         return True
@@ -256,6 +259,25 @@ class FakeLenovoHdVibration(FakeVibration):
     def apply_gain(self, value):
         self.gain_applied.append(value)
         return True
+
+
+class FakeUnreadableLenovoHdVibration(FakeLenovoHdVibration):
+    def __init__(self, applies=True):
+        super().__init__(applies)
+        self._state["readback"] = False
+        self.apply_calls = []
+
+    def capabilities(self):
+        capabilities = super().capabilities()
+        capabilities["readback"] = "none"
+        return capabilities
+
+    def capture_baseline(self):
+        return {}
+
+    def apply(self, patch):
+        self.apply_calls.append(dict(patch))
+        return super().apply(patch)
 
 
 def test_ip_lenovo_hd_surface_is_experimental_until_hardware_gate():
@@ -294,6 +316,20 @@ def test_ip_config_exposes_lenovo_hd_desired_and_actual_state(tmp_path):
     assert cfg["actual_right_pattern"] == "rpg"
     assert cfg["actual_touchpad_enabled"] is True
     assert cfg["actual_touchpad_intensity"] == "low"
+
+
+def test_ip_config_never_labels_unreliable_lenovo_state_as_actual(tmp_path):
+    store = _store(tmp_path)
+    vibration = FakeUnreadableLenovoHdVibration()
+
+    cfg = inputplumber.get_config(
+        store, FakeDbus(), "legion_go_2", vibration=vibration,
+    )["vibration"]
+
+    assert cfg["mode"] == "lenovo_hd"
+    assert cfg["confirmation"] == "none"
+    assert cfg["intensity"] == "medium"
+    assert not any(key.startswith("actual_") for key in cfg)
 
 
 def test_ip_lenovo_hd_profile_is_saved_reapplied_and_restored(tmp_path):
@@ -374,6 +410,107 @@ def test_ip_lenovo_hd_discovery_records_route_without_mutating_legacy_baseline(
     ) is True
     assert vibration.restored == store.vibration_route_baseline(owner)
     assert vibration.gain_applied == [100, 100]
+
+
+def test_ip_failed_unreadable_hd_adoption_restores_gain_and_does_not_own_route(
+    tmp_path,
+):
+    store, dbus = _store(tmp_path), FakeDbus()
+    owner = "inputplumber:legion_go_2"
+    store.remember_vibration_baseline(
+        owner, {"enabled": True, "value": 100}
+    )
+    store.patch_vibration("global", None, {"value": 35})
+    vibration = FakeUnreadableLenovoHdVibration(applies=False)
+
+    config = inputplumber.set_vibration(
+        store, dbus, "legion_go_2", {"intensity": "high"},
+        vibration=vibration,
+    )
+
+    assert config["vibration"]["last_apply"] is False
+    assert vibration.gain_applied == [100, 35]
+    assert store.vibration_route(owner) is None
+
+
+def test_ip_enabled_only_does_not_adopt_hd_or_change_gain(tmp_path):
+    store, dbus = _store(tmp_path), FakeDbus()
+    owner = "inputplumber:legion_go_2"
+    vibration = FakeUnreadableLenovoHdVibration()
+
+    config = inputplumber.set_vibration(
+        store, dbus, "legion_go_2", {"enabled": False},
+        vibration=vibration,
+    )
+
+    assert config["vibration"]["last_apply"] is True
+    assert vibration.gain_applied == []
+    assert vibration.apply_calls == []
+    assert store.vibration_route(owner) is None
+    assert store.vibration_baseline(owner) == {"enabled": True}
+
+    result = inputplumber.apply_effective_components(
+        store, dbus, "legion_go_2", None,
+        vibration=vibration, apply_buttons=False,
+    )
+
+    assert result["vibration"] is True
+    assert vibration.gain_applied == []
+    assert vibration.apply_calls == []
+    assert store.vibration_route(owner) is None
+
+
+def test_ip_unreadable_lenovo_hd_neutralizes_legacy_gain_without_fake_baseline(
+    tmp_path,
+):
+    store, dbus = _store(tmp_path), FakeDbus()
+    owner = "inputplumber:legion_go_2"
+    store.remember_vibration_baseline(
+        owner, {"enabled": True, "value": 100}
+    )
+    store.patch_vibration("global", None, {"value": 35})
+    vibration = FakeUnreadableLenovoHdVibration()
+
+    config = inputplumber.set_vibration(
+        store, dbus, "legion_go_2", {"intensity": "high"},
+        vibration=vibration,
+    )
+
+    assert config["vibration"]["last_apply"] is True
+    assert vibration.gain_applied == [100]
+    assert store.vibration_route(owner) == "lenovo_hd"
+    assert store.vibration_route_baseline(owner) == {}
+    assert inputplumber.restore_external(
+        store, dbus, "legion_go_2", vibration=vibration,
+    ) is False
+    assert len(vibration.apply_calls) == 1
+    assert vibration.gain_applied == [100, 100]
+
+
+def test_ip_first_hd_edit_neutralizes_gain_and_persists_a_complete_profile(
+    tmp_path,
+):
+    store, dbus = _store(tmp_path), FakeDbus()
+    owner = "inputplumber:legion_go_2"
+    vibration = FakeUnreadableLenovoHdVibration()
+
+    config = inputplumber.set_vibration(
+        store, dbus, "legion_go_2", {"intensity": "high"},
+        scope="game", appid="42", vibration=vibration,
+    )
+
+    assert config["vibration"]["last_apply"] is True
+    assert vibration.gain_applied == [100]
+    assert store.vibration_baseline(owner)["value"] == 100
+    assert "value" not in store.vibration_for("global")
+    assert store.vibration_for("game", "42") == {
+        "enabled": True,
+        "intensity": "high",
+        "left_pattern": "standard",
+        "right_pattern": "rpg",
+        "touchpad_enabled": True,
+        "touchpad_intensity": "low",
+    }
 
 
 def test_ip_lenovo_hd_upgrade_blocks_if_legacy_gain_cannot_be_neutralized(

@@ -14,7 +14,7 @@ _OPERATIONS = {
     "read_target_devices", "read_target_device_types", "set_target_devices",
 }
 _OWNERS = {"hhd", "inputplumber", "native", "evdev"}
-_MODES = {"dual", "gain"}
+_MODES = {"dual", "gain", "lenovo_hd"}
 _REASONS = {
     "busctl_exit", "composite_ambiguous", "composite_not_found",
     "config_echo_mismatch", "identity_changed", "identity_unavailable",
