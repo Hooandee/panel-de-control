@@ -284,7 +284,9 @@ class GamescopeColorBackend:
     def _probe_hdr_look(self):
         rc, output = self._ctl()
         feature = re.search(
-            r"Look \(6\) - Version: (\d+)", output or ""
+            r"^\s*-\s+[^\r\n]*\(6\)\s+-\s+Version:\s+(\d+)",
+            output or "",
+            re.MULTILINE,
         )
         flags_match = re.search(
             r"Display Flags: 0x([0-9a-fA-F]+)", output or ""

@@ -3,6 +3,7 @@
 import glob
 import os
 import re
+import time
 from pathlib import Path
 
 
@@ -10,6 +11,8 @@ _INTENSITIES = ("off", "low", "medium", "high")
 _PATTERNS = ("fps", "racing", "standard", "spg", "rpg")
 _BOOLEANS = ("true", "false")
 _GO2_PRODUCTS = {"61eb", "61ec", "61ed", "61ee"}
+_READBACK_ATTEMPTS = 26
+_READBACK_INTERVAL_S = 0.02
 
 
 def _default_write_text(path, value):
@@ -25,12 +28,14 @@ class LenovoGoVibrationAdapter:
         root="/",
         candidate_roots=None,
         write_text=None,
+        sleep=None,
     ):
         self._device_key = device_key or ""
         self._source_paths = source_paths
         self._root = root
         self._candidate_roots = candidate_roots
         self._write_text = write_text or _default_write_text
+        self._sleep = sleep or time.sleep
         self._last_operation = None
         self._last_probe = {"available": False, "reason": "not_probed"}
 
@@ -146,6 +151,14 @@ class LenovoGoVibrationAdapter:
             return path.read_text().strip()
         except OSError:
             return None
+
+    def _wait_for(self, path, expected):
+        for attempt in range(_READBACK_ATTEMPTS):
+            if self._read(path) == expected:
+                return True
+            if attempt + 1 < _READBACK_ATTEMPTS:
+                self._sleep(_READBACK_INTERVAL_S)
+        return False
 
     def _read_options(self, path, expected):
         values = (self._read(path) or "").split()
@@ -341,7 +354,7 @@ class LenovoGoVibrationAdapter:
             for path, value, baseline in writes:
                 self._write_text(path, value)
                 changed.append((path, baseline))
-                if readable and self._read(path) != value:
+                if readable and not self._wait_for(path, value):
                     reason = "readback_mismatch"
                     raise OSError("driver readback mismatch")
         except OSError:
@@ -352,7 +365,7 @@ class LenovoGoVibrationAdapter:
                     continue
                 try:
                     self._write_text(path, baseline)
-                    rollback_confirmed &= self._read(path) == baseline
+                    rollback_confirmed &= self._wait_for(path, baseline)
                 except OSError:
                     rollback_confirmed = False
             self._last_operation = {

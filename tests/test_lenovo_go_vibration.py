@@ -36,6 +36,7 @@ def _unknown_surface(tmp_path, name="controller0"):
 
 
 def _adapter(tmp_path, roots, **kwargs):
+    kwargs.setdefault("sleep", lambda _seconds: None)
     return LenovoGoVibrationAdapter(
         "legion_go_2",
         source_paths=lambda: ["/dev/input/event2"],
@@ -245,6 +246,36 @@ def test_apply_writes_each_handle_pattern_and_confirms_readback(
         surface / "touchpad/vibration_enabled",
         surface / "touchpad/vibration_intensity",
     ]
+
+
+def test_apply_waits_for_delayed_driver_readback(tmp_path):
+    surface = _surface(tmp_path)
+    pending = {}
+
+    def delayed_write(path, value):
+        pending[path] = [value, 2]
+
+    def advance(_seconds):
+        for path, item in list(pending.items()):
+            item[1] -= 1
+            if item[1] == 0:
+                path.write_text(item[0])
+                pending.pop(path)
+
+    adapter = _adapter(
+        tmp_path, [surface], write_text=delayed_write, sleep=advance,
+    )
+    desired = {
+        "intensity": "high",
+        "left_pattern": "fps",
+        "right_pattern": "rpg",
+        "touchpad_enabled": False,
+        "touchpad_intensity": "medium",
+    }
+
+    assert adapter.apply(desired) is True
+    assert adapter.state() == desired
+    assert adapter.diagnostics()["confirmation"] == "driver"
 
 
 def test_partial_write_rolls_back_every_changed_attribute(tmp_path):

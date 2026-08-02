@@ -338,6 +338,20 @@ def test_backend_falls_back_to_g22_when_look_feature_is_missing(tmp_path):
     assert len(_setlooks(r)[0][0]) == 3
 
 
+def test_backend_recognizes_look_feature_when_client_label_is_stale(tmp_path):
+    info = (
+        "gamescope_control info:\n"
+        "  - Connector Name: eDP-1\n"
+        "  - Display Flags: 0x7\n"
+        "  Features:\n"
+        "  - Unknown (6) - Version: 1 - Flags: 0x0\n"
+    )
+    b, _ = _backend(tmp_path, hdr_look=True, info=info)
+
+    assert b.hdr_look_supported is True
+    assert "look=1" in b.diagnostics()["hdr_look_detail"]
+
+
 def test_backend_falls_back_to_g22_when_active_panel_edid_has_no_pq(tmp_path):
     b, r = _backend(tmp_path, hdr_look=True, edid_pq=False)
     r.calls.clear()
