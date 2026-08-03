@@ -6,9 +6,9 @@ import pytest
 from mangohud import apply
 from mangohud import detect as detection
 from mangohud import ownership
-from mangohud.apply import apply_hud, clear_presets, read_presets
+from mangohud.apply import apply_hud, clear_presets, read_presets, reload_sessions
 from mangohud.config import build_presets_conf, coerce_model
-from mangohud.detect import presets_path, presets_supported
+from mangohud.detect import detect_sessions, presets_path, presets_supported, session_alive
 
 
 # ---- detect: pure decision from a process environ ----
@@ -52,13 +52,102 @@ def test_presets_path_uses_trusted_decky_home_not_process_home():
     assert p == "/home/deck/.config/MangoHud/presets.conf"
 
 
-def _fake_mangoapp(proc, pid, uid, environ):
+def _fake_mangoapp(
+    proc,
+    pid,
+    uid,
+    environ,
+    *,
+    starttime=None,
+    cwd=None,
+    stat_name="mangoapp",
+):
     process = proc / str(pid)
     process.mkdir()
     (process / "comm").write_text("mangoapp\n")
     (process / "status").write_text(f"Name:\tmangoapp\nUid:\t{uid}\t{uid}\t{uid}\t{uid}\n")
     raw = b"\0".join(f"{key}={value}".encode() for key, value in environ.items()) + b"\0"
     (process / "environ").write_bytes(raw)
+    if starttime is not None:
+        fields_before_starttime = " ".join(["0"] * 18)
+        (process / "stat").write_text(
+            f"{pid} ({stat_name}) S {fields_before_starttime} {starttime} 0\n"
+        )
+    if cwd is not None:
+        (process / "cwd").symlink_to(cwd)
+
+
+def test_detect_sessions_returns_complete_ordered_process_identities(tmp_path):
+    proc = tmp_path / "proc"
+    home = tmp_path / "home"
+    cwd = tmp_path / "cwd"
+    proc.mkdir()
+    home.mkdir()
+    cwd.mkdir()
+    environ = {
+        "STEAM_MANGOAPP_PRESETS_SUPPORTED": "1",
+        "MANGOHUD_CONFIGFILE": str(home / "live.conf"),
+    }
+    _fake_mangoapp(
+        proc,
+        21,
+        1000,
+        environ,
+        starttime=9002,
+        cwd=cwd,
+    )
+    _fake_mangoapp(
+        proc,
+        20,
+        1000,
+        environ,
+        starttime=9001,
+        cwd=cwd,
+        stat_name="mango (worker)",
+    )
+
+    sessions = detect_sessions(home=str(home), uid=1000, proc_root=str(proc))
+
+    expected_path = str(home / ".config/MangoHud/presets.conf")
+    assert [
+        (
+            session.pid,
+            session.starttime,
+            session.uid,
+            session.cwd,
+            session.presets_path,
+            session.config_file,
+            session.presets_supported,
+        )
+        for session in sessions
+    ] == [
+        (20, 9001, 1000, str(cwd), expected_path, str(home / "live.conf"), True),
+        (21, 9002, 1000, str(cwd), expected_path, str(home / "live.conf"), True),
+    ]
+
+
+def test_session_identity_rejects_pid_reuse(tmp_path):
+    proc = tmp_path / "proc"
+    home = tmp_path / "home"
+    cwd = tmp_path / "cwd"
+    proc.mkdir()
+    home.mkdir()
+    cwd.mkdir()
+    _fake_mangoapp(
+        proc,
+        20,
+        1000,
+        {"STEAM_MANGOAPP_PRESETS_SUPPORTED": "1"},
+        starttime=9001,
+        cwd=cwd,
+    )
+    session = detect_sessions(home=str(home), uid=1000, proc_root=str(proc))[0]
+    fields_before_starttime = " ".join(["0"] * 18)
+    (proc / "20" / "stat").write_text(
+        f"20 (mangoapp) S {fields_before_starttime} 9999 0\n"
+    )
+
+    assert session_alive(session, proc_root=str(proc)) is False
 
 
 def test_detect_ignores_mangoapp_owned_by_another_user(tmp_path, monkeypatch):
@@ -304,6 +393,94 @@ def test_reload_uses_discovered_mangohud_control_tool(monkeypatch):
     assert calls[0][0] == ["/usr/local/bin/mangohudctl", "set", "reload_config", "true"]
     assert calls[0][1]["timeout"] == 2
     assert calls[0][1]["cwd"] == "/home/deck"
+
+
+def test_reload_requests_every_live_session_from_the_same_snapshot(tmp_path, monkeypatch):
+    proc = tmp_path / "proc"
+    home = tmp_path / "home"
+    cwd_a = tmp_path / "cwd-a"
+    cwd_b = tmp_path / "cwd-b"
+    proc.mkdir()
+    home.mkdir()
+    cwd_a.mkdir()
+    cwd_b.mkdir()
+    environ = {"STEAM_MANGOAPP_PRESETS_SUPPORTED": "1"}
+    _fake_mangoapp(proc, 20, 1000, environ, starttime=9001, cwd=cwd_a)
+    _fake_mangoapp(proc, 21, 1000, environ, starttime=9002, cwd=cwd_b)
+    sessions = detect_sessions(home=str(home), uid=1000, proc_root=str(proc))
+    calls = []
+    monkeypatch.setattr(apply.shutil, "which", lambda *_args, **_kwargs: "/usr/bin/mangohudctl")
+
+    def run(command, **kwargs):
+        calls.append((command, kwargs["cwd"]))
+        return type("Result", (), {"returncode": 0})()
+
+    monkeypatch.setattr(apply.subprocess, "run", run)
+
+    result = reload_sessions(sessions, proc_root=str(proc))
+
+    assert result.requested == ((20, 9001), (21, 9002))
+    assert result.pending == ()
+    assert calls == [
+        (["/usr/bin/mangohudctl", "set", "reload_config", "true"], str(cwd_a)),
+        (["/usr/bin/mangohudctl", "set", "reload_config", "true"], str(cwd_b)),
+    ]
+
+
+def test_reload_does_not_invoke_a_reused_pid(tmp_path, monkeypatch):
+    proc = tmp_path / "proc"
+    home = tmp_path / "home"
+    cwd = tmp_path / "cwd"
+    proc.mkdir()
+    home.mkdir()
+    cwd.mkdir()
+    _fake_mangoapp(
+        proc,
+        20,
+        1000,
+        {"STEAM_MANGOAPP_PRESETS_SUPPORTED": "1"},
+        starttime=9001,
+        cwd=cwd,
+    )
+    session = detect_sessions(home=str(home), uid=1000, proc_root=str(proc))[0]
+    fields_before_starttime = " ".join(["0"] * 18)
+    (proc / "20" / "stat").write_text(
+        f"20 (mangoapp) S {fields_before_starttime} 9999 0\n"
+    )
+    calls = []
+    monkeypatch.setattr(apply.shutil, "which", lambda *_args, **_kwargs: "/usr/bin/mangohudctl")
+    monkeypatch.setattr(apply.subprocess, "run", lambda *args, **kwargs: calls.append((args, kwargs)))
+
+    result = reload_sessions((session,), proc_root=str(proc))
+
+    assert result.requested == ()
+    assert result.pending == ((20, 9001),)
+    assert calls == []
+
+
+def test_partial_reload_returns_only_failed_identity_as_pending(tmp_path, monkeypatch):
+    proc = tmp_path / "proc"
+    home = tmp_path / "home"
+    cwd = tmp_path / "cwd"
+    proc.mkdir()
+    home.mkdir()
+    cwd.mkdir()
+    environ = {"STEAM_MANGOAPP_PRESETS_SUPPORTED": "1"}
+    _fake_mangoapp(proc, 20, 1000, environ, starttime=9001, cwd=cwd)
+    _fake_mangoapp(proc, 21, 1000, environ, starttime=9002, cwd=cwd)
+    sessions = detect_sessions(home=str(home), uid=1000, proc_root=str(proc))
+    monkeypatch.setattr(apply.shutil, "which", lambda *_args, **_kwargs: "/usr/bin/mangohudctl")
+    exits = iter((0, 1))
+    monkeypatch.setattr(
+        apply.subprocess,
+        "run",
+        lambda *_args, **_kwargs: type("Result", (), {"returncode": next(exits)})(),
+    )
+
+    result = reload_sessions(sessions, proc_root=str(proc))
+
+    assert result.requested == ((20, 9001),)
+    assert result.pending == ((21, 9002),)
 
 
 def test_reload_failure_is_non_fatal(monkeypatch):
