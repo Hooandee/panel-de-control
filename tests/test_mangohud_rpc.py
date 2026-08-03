@@ -337,17 +337,75 @@ def test_disabling_never_touches_steam_live_config(tmp_path, monkeypatch):
     assert not os.path.exists(presets)
 
 
-def test_pdc_metric_bakes_value_into_presets_no_state_file(tmp_path, monkeypatch):
+def test_pdc_metric_bakes_applied_readback_not_profile_target(tmp_path, monkeypatch):
     presets = str(tmp_path / "presets.conf")
     main, p = _make_plugin(tmp_path, monkeypatch)
+    p._init()
+    target = p._effective_levels(p._current_appid)[0]["pl1"]
+    assert target != 11
+    monkeypatch.setattr(p._tdp_backend, "read_applied", lambda: 11)
     _fake_overlay(main, monkeypatch, presets)
     asyncio.run(p.set_hud_config({"items": _items("fps", "pdc_tdp"), "enabled": True}))
     # The row is a single baked custom_text=<label> <value> line — no exec, no state file.
-    setpoint = asyncio.run(p.get_power_draw())["setpoint"]
     conf = open(presets).read()
-    assert f"custom_text=TDP {setpoint}W" in conf
+    assert "custom_text=TDP 11W" in conf
+    assert f"custom_text=TDP {target}W" not in conf
     assert "exec=" not in conf
     assert not os.path.exists(str(tmp_path / "pdc_tdp.txt"))
+
+
+def test_changed_applied_tdp_refreshes_hud_without_profile_change(tmp_path, monkeypatch):
+    presets = str(tmp_path / "presets.conf")
+    main, p = _make_plugin(tmp_path, monkeypatch)
+    p._init()
+    applied = {"watts": 11}
+    monkeypatch.setattr(p._tdp_backend, "read_applied", lambda: applied["watts"])
+    _fake_overlay(main, monkeypatch, presets)
+    reloads = []
+    monkeypatch.setattr(
+        main,
+        "reload_mangoapp",
+        lambda *_args: reloads.append(True) or True,
+        raising=False,
+    )
+
+    asyncio.run(p.set_hud_config({"items": _items("pdc_tdp"), "enabled": True}))
+    reloads.clear()
+    applied["watts"] = 13
+
+    asyncio.run(p._refresh_pdc_metrics())
+
+    assert "custom_text=TDP 13W" in open(presets).read()
+    assert reloads == [True]
+
+
+def test_tdp_without_readback_does_not_masquerade_as_profile_target(tmp_path, monkeypatch):
+    _main, p = _make_plugin(tmp_path, monkeypatch)
+    p._init()
+    monkeypatch.setattr(p._tdp_backend, "read_applied", lambda: None)
+    p._pdc_active_ids = ["pdc_tdp"]
+
+    assert p._pdc_values() == {"pdc_tdp": "-"}
+
+
+def test_blocking_tdp_backend_reuses_reconciler_observation(tmp_path, monkeypatch):
+    main, p = _make_plugin(tmp_path, monkeypatch)
+    p._init()
+    p._tdp_backend.blocking = True
+    p._tdp_observation = main.TdpObservation(
+        readable=True,
+        surfaces={p._tdp_backend.name: {"pl1": main.RailReading(9)}},
+    )
+    reads = []
+    monkeypatch.setattr(
+        p._tdp_backend,
+        "read_applied",
+        lambda: reads.append(True) or 12,
+    )
+    p._pdc_active_ids = ["pdc_tdp"]
+
+    assert p._pdc_values() == {"pdc_tdp": "9W"}
+    assert reads == []
 
 
 def test_pdc_custom_label_baked_with_value(tmp_path, monkeypatch):

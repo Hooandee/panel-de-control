@@ -3,25 +3,25 @@ from mangohud import pdc_metrics as pdc
 
 # ---- pdc_tdp ----
 
-def test_tdp_auto_with_setpoint():
-    assert pdc.render("pdc_tdp", {"auto": True, "setpoint": 18}) == "Auto 18W"
+def test_tdp_auto_with_applied_readback():
+    assert pdc.render("pdc_tdp", {"auto": True, "applied": 18}) == "Auto 18W"
 
 
-def test_tdp_manual_with_setpoint():
-    assert pdc.render("pdc_tdp", {"auto": False, "setpoint": 20}) == "20W"
+def test_tdp_manual_with_applied_readback():
+    assert pdc.render("pdc_tdp", {"auto": False, "applied": 20}) == "20W"
 
 
-def test_tdp_eco_wins_over_auto():
-    assert pdc.render("pdc_tdp", {"auto": True, "setpoint": 18, "eco": True}) == "Descarga"
+def test_tdp_applied_readback_is_not_replaced_by_eco_state():
+    assert pdc.render("pdc_tdp", {"auto": True, "applied": 18, "eco": True}) == "Auto 18W"
 
 
-def test_tdp_none_setpoint_is_dash():
-    assert pdc.render("pdc_tdp", {"auto": False, "setpoint": None}) == "-"
-    assert pdc.render("pdc_tdp", {"auto": True, "setpoint": None}) == "Auto -"
+def test_tdp_without_applied_readback_is_dash():
+    assert pdc.render("pdc_tdp", {"auto": False, "applied": None}) == "-"
+    assert pdc.render("pdc_tdp", {"auto": True, "applied": None}) == "Auto -"
 
 
-def test_tdp_rounds_float_setpoint():
-    assert pdc.render("pdc_tdp", {"auto": False, "setpoint": 19.6}) == "20W"
+def test_tdp_rounds_float_applied_readback():
+    assert pdc.render("pdc_tdp", {"auto": False, "applied": 19.6}) == "20W"
 
 
 # ---- pdc_tdp_learn ----

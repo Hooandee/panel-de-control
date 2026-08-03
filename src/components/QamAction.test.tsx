@@ -51,6 +51,19 @@ describe("QamAction", () => {
     expect(screen.getByTestId("focusable").getAttribute("aria-expanded")).toBe("true");
   });
 
+  it("uses checkbox semantics when checked state is provided", () => {
+    render(
+      <QamAction onPress={() => {}} checked>
+        Metric
+      </QamAction>,
+    );
+
+    const action = screen.getByTestId("focusable");
+    expect(action.getAttribute("role")).toBe("checkbox");
+    expect(action.getAttribute("aria-checked")).toBe("true");
+    expect(action.getAttribute("aria-pressed")).toBeNull();
+  });
+
   it("renders disabled actions outside the focus tree", () => {
     render(
       <QamAction

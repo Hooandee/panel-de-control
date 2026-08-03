@@ -26,9 +26,7 @@ def _watts(value):
 
 
 def tdp(snap):
-    if snap.get("eco"):
-        return "Descarga"
-    watts = _watts(snap.get("setpoint")) or DASH
+    watts = _watts(snap.get("applied")) or DASH
     return f"Auto {watts}" if snap.get("auto") else watts
 
 

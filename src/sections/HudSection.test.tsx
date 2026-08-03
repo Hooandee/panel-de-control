@@ -118,6 +118,16 @@ describe("HudSection QAM composition", () => {
     ).not.toBeNull();
   });
 
+  it("labels the HUD as experimental before the preview", () => {
+    render(<HudSection />);
+
+    const badge = screen.getByText("copy:hud.experimental.badge");
+    const preview = screen.getByText("preview");
+    const position = badge.compareDocumentPosition(preview);
+
+    expect(position & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+  });
+
   it("keeps the add trigger mounted while the picker opens", () => {
     render(<HudSection />);
 
@@ -129,7 +139,7 @@ describe("HudSection QAM composition", () => {
     expect(screen.getByText("copy:hud.close").closest("[data-testid='focusable']")).toBe(trigger);
   });
 
-  it("shows the required battery base as checked and non-focusable", () => {
+  it("renders battery metrics as one bounded checkbox group", () => {
     render(<HudSection />);
 
     fireEvent.click(
@@ -139,13 +149,25 @@ describe("HudSection QAM composition", () => {
     const required = screen
       .getByText("copy:hud.block.base.battery")
       .closest("[data-hud-required-metric]");
+    const metrics = screen.getByRole("group", { name: "copy:hud.block.metrics" });
+    const optional = screen
+      .getByText("copy:hud.metric.battery_watt")
+      .closest("[data-testid='focusable']");
     expect(required?.getAttribute("aria-checked")).toBe("true");
     expect(required?.getAttribute("aria-disabled")).toBe("true");
     expect(screen.getByText("copy:hud.block.required")).toBeTruthy();
     expect(required?.closest("[data-testid='focusable']")).toBeNull();
-    expect(
-      screen.getByText("copy:hud.metric.battery_watt").closest("[data-testid='focusable']"),
-    ).not.toBeNull();
+    expect(optional).not.toBeNull();
+    expect(optional?.getAttribute("role")).toBe("checkbox");
+    expect(optional?.getAttribute("aria-checked")).toBe("true");
+    expect(metrics.contains(required)).toBe(true);
+    expect(metrics.contains(optional)).toBe(true);
+    expect(metrics.style.width).toBe("100%");
+    expect(metrics.style.minWidth).toBe("0");
+    expect(metrics.style.boxSizing).toBe("border-box");
+
+    fireEvent.click(optional!);
+    expect(mocks.setModel).toHaveBeenCalledTimes(1);
   });
 
   it("presents one general size and optional refinements by text type", () => {

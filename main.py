@@ -3486,6 +3486,12 @@ class Plugin:
             src["charge"] = self._charge_limit_state()
         if "pdc_gpu_clock" in active:
             src["gpu_clock"] = self._gpu_clock_state()
+        if "pdc_tdp" in active and self._tdp_backend.supported:
+            src["tdp"] = (
+                self._tdp_observation
+                if getattr(self._tdp_backend, "blocking", False)
+                else self._observe_tdp_sync()
+            )
         return src
 
     def _pdc_snapshot(self, active_ids, extras=None) -> dict:
@@ -3497,11 +3503,18 @@ class Plugin:
         appid = self._current_appid
         snap = {}
         if self._tdp_backend.supported:
-            if "pdc_tdp" in active_ids or "pdc_eco" in active_ids:
+            if "pdc_eco" in active_ids:
                 snap["eco"] = bool(self._settings.get("eco_enabled"))
             if "pdc_tdp" in active_ids:
                 snap["auto"] = self._tdp_profiles.auto_tdp(appid)
-                snap["setpoint"] = self._effective_levels(appid)[0]["pl1"]
+                observation = extras.get("tdp")
+                primary = (
+                    observation.surfaces.get(self._tdp_backend.name, {})
+                    if observation is not None and observation.readable
+                    else {}
+                )
+                reading = primary.get("pl1")
+                snap["applied"] = reading.applied_w if reading is not None else None
             if "pdc_auto_tdp" in active_ids:
                 snap["auto_tdp"] = self._tdp_profiles.auto_tdp(appid)
             if "pdc_tdp_learn" in active_ids:

@@ -5,6 +5,7 @@ interface Props {
   onPress: () => void | Promise<void>;
   disabled?: boolean;
   pressed?: boolean;
+  checked?: boolean;
   expanded?: boolean;
   label?: string;
   style?: CSSProperties;
@@ -15,12 +16,14 @@ export const QamAction: FC<Props> = ({
   onPress,
   disabled = false,
   pressed,
+  checked,
   expanded,
   label,
   style,
   children,
 }) => {
   const locked = useRef(false);
+  const isCheckbox = checked !== undefined;
   const press = () => {
     if (disabled || locked.current) return;
     locked.current = true;
@@ -47,8 +50,10 @@ export const QamAction: FC<Props> = ({
   return (
     <Focusable
       aria-label={label}
-      aria-pressed={pressed}
+      aria-pressed={isCheckbox ? undefined : pressed}
+      aria-checked={checked}
       aria-expanded={expanded}
+      role={isCheckbox ? "checkbox" : undefined}
       onActivate={press}
       onClick={press}
       style={style}

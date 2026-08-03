@@ -82,12 +82,12 @@ const OutlineBtn: FC<{
   </QamAction>
 );
 
-const SubItem: FC<{
+const BlockMetricOption: FC<{
   label: string;
-  on: boolean;
+  checked: boolean;
   onToggle: () => void;
   required?: boolean;
-}> = ({ label, on, onToggle, required = false }) => {
+}> = ({ label, checked, onToggle, required = false }) => {
   const { t } = useI18n();
   const content = (
     <>
@@ -95,33 +95,52 @@ const SubItem: FC<{
         style={{
           display: "flex", alignItems: "center", justifyContent: "center", width: 16, height: 16,
           flexShrink: 0, borderRadius: 4,
-          background: on ? theme.color.accent : "transparent",
-          boxShadow: on ? "none" : `inset 0 0 0 1px ${theme.color.hairline}`,
+          background: checked ? theme.color.accent : "transparent",
+          boxShadow: checked ? "none" : `inset 0 0 0 1px ${theme.color.hairline}`,
           color: theme.color.onAccent,
         }}
       >
-        {on ? <LuCheck size={11} /> : null}
+        {checked ? <LuCheck size={11} /> : null}
       </span>
-      <span style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
-        <span style={{ fontSize: theme.font.body, color: on ? theme.color.textPrimary : theme.color.textMuted }}>
-          {label}
+      <span
+        style={{
+          flex: 1,
+          minWidth: 0,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+          fontSize: theme.font.body,
+          color: checked ? theme.color.textPrimary : theme.color.textMuted,
+        }}
+      >
+        {label}
+      </span>
+      {required && (
+        <span
+          style={{
+            flexShrink: 0,
+            padding: "2px 6px",
+            borderRadius: 999,
+            background: `rgba(${theme.color.accentRgb},0.12)`,
+            color: theme.color.accent,
+            fontSize: theme.font.caption,
+            whiteSpace: "nowrap",
+          }}
+        >
+          {t("hud.block.required")}
         </span>
-        {required && (
-          <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
-            {t("hud.block.required")}
-          </span>
-        )}
-      </span>
+      )}
     </>
   );
   const style = {
     display: "flex",
     alignItems: "center",
     gap: theme.space.sm,
+    width: "100%",
+    minWidth: 0,
+    boxSizing: "border-box",
     padding: "6px 8px",
-    marginLeft: theme.space.md,
     borderRadius: theme.radius.sm,
-    borderLeft: `2px solid ${theme.color.hairline}`,
   } as const;
 
   if (required) {
@@ -131,6 +150,7 @@ const SubItem: FC<{
         role="checkbox"
         aria-checked="true"
         aria-disabled="true"
+        aria-label={t("hud.block.requiredAccessible", { metric: label })}
         style={{ ...style, cursor: "default" }}
       >
         {content}
@@ -140,7 +160,7 @@ const SubItem: FC<{
   return (
     <QamAction
       onPress={onToggle}
-      pressed={on}
+      checked={checked}
       style={{ ...style, cursor: "pointer" }}
     >
       {content}
@@ -294,17 +314,32 @@ export const HudSection: FC = () => {
     }
     if (r.kind === "block") {
       const groupName = t(`hud.color.${r.group}`);
+      const metricsLabel = t("hud.block.metrics");
       return (
         <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
           <Note>{t("hud.block.hint")}</Note>
-          <div style={{ display: "flex", flexDirection: "column", gap: theme.space.xs }}>
+          <SectionLabel>{metricsLabel}</SectionLabel>
+          <div
+            role="group"
+            aria-label={metricsLabel}
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: theme.space.xs,
+              width: "100%",
+              minWidth: 0,
+              boxSizing: "border-box",
+              padding: `${theme.space.xs}px ${theme.space.xs}px ${theme.space.xs}px ${theme.space.sm}px`,
+              borderLeft: `2px solid rgba(${theme.color.accentRgb},0.35)`,
+            }}
+          >
             {blockMetricIds(r.group).map((id) => {
               const required = isRequiredBlockMetric(id);
               return (
-                <SubItem
+                <BlockMetricOption
                   key={id}
                   label={required ? t(`hud.block.base.${r.group}`) : t(`hud.metric.${id}`)}
-                  on={required || hasMetric(m.items, id)}
+                  checked={required || hasMetric(m.items, id)}
                   required={required}
                   onToggle={() => patchItems(toggleMetricItem(m.items, id))}
                 />
@@ -383,6 +418,22 @@ export const HudSection: FC = () => {
         }}
       >
         <div style={{ ...card, display: "flex", flexDirection: "column", gap: theme.space.sm }}>
+          <div style={{ display: "flex", justifyContent: "flex-end", minWidth: 0 }}>
+            <span
+              style={{
+                flexShrink: 0,
+                padding: "2px 8px",
+                borderRadius: theme.radius.sm,
+                background: "rgba(255,180,84,0.12)",
+                color: theme.color.warn,
+                fontSize: theme.font.caption,
+                letterSpacing: "0.06em",
+                textTransform: "uppercase",
+              }}
+            >
+              {t("hud.experimental.badge")}
+            </span>
+          </div>
           <HudPreview model={m} values={state.values} />
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: theme.space.sm }}>
             <SectionLabel>{t("hud.title")}</SectionLabel>
