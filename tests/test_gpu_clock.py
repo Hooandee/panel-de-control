@@ -1,5 +1,7 @@
 import os
 
+import gpu.clock as clock_module
+
 from gpu.clock import (
     AmdGpuClock,
     IntelGpuClock,
@@ -173,6 +175,38 @@ def test_xe_set_auto_restores_full_range(tmp_path):
     assert g.get() == (300, 2000)
 
 
+def test_xe_partial_write_failure_restores_original_window(
+    tmp_path, monkeypatch
+):
+    root = _xe_tree(
+        str(tmp_path),
+        cur_min=300,
+        cur_max=500,
+        rpn=300,
+        rp0=2_000,
+    )
+    backend = XeGpuClock(root=root)
+    real_write = clock_module.write_str
+
+    def fail_second_write(path, value):
+        if path.endswith("/min_freq") and int(value) == 600:
+            return False
+        return real_write(path, value)
+
+    monkeypatch.setattr(clock_module, "write_str", fail_second_write)
+
+    result = backend.set(600, 1_500)
+
+    assert result is False
+    assert backend.get() == (300, 500)
+    operation = backend.diagnostics()["last_operation"]
+    assert operation["ok"] is False
+    assert operation["applied"] == {
+        "min_mhz": 300,
+        "max_mhz": 500,
+    }
+
+
 def test_xe_absent_unsupported(tmp_path):
     assert XeGpuClock(root=str(tmp_path)).supported is False
 
@@ -186,6 +220,59 @@ def test_select_xe_for_intel_device(tmp_path):
         vendor = "intel"
 
     assert isinstance(select_gpu_clock(Dev(), root=root), XeGpuClock)
+
+
+def test_incomplete_xe_surface_falls_back_to_complete_i915(tmp_path):
+    root = str(tmp_path)
+    xe = "sys/class/drm/card0/device/tile0/gt0/freq0"
+    _write(root, f"{xe}/max_freq", 2_000)
+    i915 = "sys/class/drm/card1"
+    _write(root, f"{i915}/gt_min_freq_mhz", 300)
+    _write(root, f"{i915}/gt_max_freq_mhz", 2_000)
+    _write(root, f"{i915}/gt_RPn_freq_mhz", 300)
+    _write(root, f"{i915}/gt_RP0_freq_mhz", 2_000)
+
+    class IntelDevice:
+        vendor = "intel"
+
+    backend = select_gpu_clock(IntelDevice(), root=root)
+
+    assert isinstance(backend, IntelGpuClock)
+    assert backend.supported is True
+    assert backend.get_range() == (300, 2_000)
+    assert backend.get() == (300, 2_000)
+    assert backend.diagnostics()["selection"] == [
+        {
+            "backend": "xe",
+            "supported": False,
+            "range_available": False,
+            "applied_available": False,
+            "reason": "incomplete_or_unwritable",
+        },
+        {
+            "backend": "i915",
+            "supported": True,
+            "range_available": True,
+            "applied_available": True,
+            "reason": "selected",
+        },
+    ]
+
+
+def test_intel_device_never_selects_amdgpu_fallback(tmp_path):
+    root = _amd_tree(str(tmp_path))
+
+    class IntelDevice:
+        vendor = "intel"
+
+    backend = select_gpu_clock(IntelDevice(), root=root)
+
+    assert isinstance(backend, NullGpuClock)
+    assert backend.supported is False
+    assert [row["backend"] for row in backend.diagnostics()["selection"]] == [
+        "xe",
+        "i915",
+    ]
 
 
 def test_select_amd_for_amd_device(tmp_path):
@@ -212,4 +299,5 @@ def test_null_diagnostics_are_honest():
         "range": None,
         "applied": None,
         "last_operation": None,
+        "selection": [],
     }

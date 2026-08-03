@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import json
 import os
 import time
@@ -63,7 +64,7 @@ from audio import safe as audio_safe
 from audio import tone as audio_tone
 from cpu.info import read_cpu_info, read_cpu_model
 from cpu.controls import CoreControl, SmtControl, select_boost
-from cpu.coordinator import CpuCoordinator
+from cpu.coordinator import CpuCoordinator, CpuCoordinatorResult
 from cpu.frequency import NullCpuFrequency, select_cpu_frequency
 from cpu.profiles import CpuProfileStore
 from telemetry.store import TelemetryStore
@@ -356,6 +357,8 @@ class Plugin:
         self._cpu_generation = 0
         self._cpu_last_result = None
         self._cpu_history = deque(maxlen=32)
+        self._cpu_mutation_lock = asyncio.Lock()
+        self._cpu_shutdown = False
         self._cpu_profiles = CpuProfileStore(
             os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "cpu_profiles.json"))
         # One-time migration: SMT / boost / active cores used to be flat global settings.
@@ -373,6 +376,11 @@ class Plugin:
         self._gpu_last_result = None
         self._gpu_last_failure = None
         self._gpu_history = deque(maxlen=16)
+        self._gpu_rpc_pending = 0
+        self._gpu_rpc_profile_snapshot = None
+        self._gpu_reapply_pending = False
+        self._gpu_mutation_lock = asyncio.Lock()
+        self._gpu_shutdown = False
         self._reapply_generation = 0
         self._last_reapply_trigger = None
         # Topology + freq range are static — read once (only SMT/boost state is live).
@@ -536,6 +544,7 @@ class Plugin:
         # Turning the power module off = stepping aside; hand HHD's TDP back, same
         # as set_tdp_control_enabled(False). Otherwise no manager drives the TDP.
         if module_id == "power" and disabled:
+            await self._release_gpu_clock("module-disabled")
             await self._offload_call(self._restore_power_handoff)
         self._sync_sampler()  # learning may have (un)gained a consumer
         return {"disabled": self._user_disabled_all()}
@@ -2103,6 +2112,11 @@ class Plugin:
             return
         await asyncio.get_running_loop().run_in_executor(ex, lambda: None)
 
+    def _drain_offloaded_sync(self) -> None:
+        ex = getattr(self, "_apply_executor", None)
+        if ex is not None:
+            ex.submit(lambda: None).result()
+
     def _firmware_choices(self) -> list:
         """Firmware performance modes the device exposes, or [] when it has none."""
         return self._tdp_backend.profile_choices() if self._device.firmware_modes else []
@@ -2918,7 +2932,45 @@ class Plugin:
             self._record_cpu_result(result, trigger)
         return result
 
+    async def _release_cpu_controls(self, trigger) -> bool:
+        self._init()
+        result = None
+        async with self._cpu_mutation_lock:
+            for attempt in range(1, 4):
+                result = await self._apply_cpu_awaited(
+                    enabled=False,
+                    trigger=f"{trigger}-{attempt}",
+                )
+                if result.ok:
+                    return True
+        decky.logger.error(
+            "CPU handoff failed after retries trigger=%s error=%s",
+            trigger,
+            getattr(result, "error_code", None),
+        )
+        return False
+
+    def _release_cpu_controls_sync(self, trigger) -> bool:
+        self._init()
+        result = None
+        for attempt in range(1, 4):
+            generation = self._next_cpu_generation()
+            result = self._run_cpu_apply(
+                self._cpu_intent(), generation, enabled=False
+            )
+            self._record_cpu_result(result, f"{trigger}-{attempt}")
+            if result.ok:
+                return True
+        decky.logger.error(
+            "CPU handoff failed after retries trigger=%s error=%s",
+            trigger,
+            getattr(result, "error_code", None),
+        )
+        return False
+
     def _apply_cpu(self) -> None:
+        if getattr(self, "_cpu_shutdown", False):
+            return
         generation = self._next_cpu_generation()
         intent = self._cpu_intent()
         holder = {}
@@ -3059,68 +3111,131 @@ class Plugin:
         if self._settings.get("eco_enabled"):
             self._settings["eco_enabled"] = False
             self._save()
+            self._schedule_tdp_apply("eco-exit-cpu")
+
+    async def _rollback_cpu_store_failure(
+        self, previous_intent, previous_data, error, trigger
+    ) -> None:
+        self._cpu_profiles._data = previous_data
+        rollback = await self._apply_cpu_awaited(
+            previous_intent,
+            trigger=f"{trigger}_rollback",
+        )
+        failure = CpuCoordinatorResult(
+            False,
+            "failed" if rollback.ok else "partial",
+            rollback.generation,
+            {"attempted": True, "ok": rollback.ok},
+            "store_write_failed" if rollback.ok else "store_write_failed_rollback_failed",
+            type(error).__name__,
+            rollback.frequency_status,
+        )
+        self._record_cpu_result(failure, trigger)
 
     async def set_active_cores(self, count: int, scope: str = "global", appid=None) -> dict:
         self._init()
-        intent = self._cpu_profile_candidate(scope, appid)
-        intent["cores"] = int(count)
-        self._exit_eco_for_cpu()
-        result = await self._apply_cpu_awaited(intent, trigger="set_cores")
-        if result.ok and result.generation == self._cpu_generation:
+        if self._cpu_shutdown:
+            return self._cpu_state()
+        async with self._cpu_mutation_lock:
             self._cpu_profiles.set_cores(scope, int(count), appid=appid)
+            intent = self._cpu_profile_candidate(scope, appid)
+            self._exit_eco_for_cpu()
+            await self._apply_cpu_awaited(intent, trigger="set_cores")
         return self._cpu_state()
 
     async def set_cpu_follow_global(self, follow: bool, appid) -> dict:
         """Toggle a game between its own CPU controls and following the
         global ones, keeping its stored values (never deletes). Seeds from global on use-own."""
         self._init()
-        if appid is not None:
-            appid = str(appid)
-            self._current_appid = appid
-            candidate = (
-                self._cpu_profiles.effective(None)
-                if follow
-                else self._cpu_profiles.game_profile(appid) or self._cpu_profiles.effective(None)
-            )
-            result = await self._apply_cpu_awaited(candidate, trigger="scope_change")
-            if result.ok and result.generation == self._cpu_generation:
-                if not follow and not self._cpu_profiles.has_game(appid):
-                    self._cpu_profiles.create_game_from_global(appid)
-                self._cpu_profiles.set_follow_global(appid, bool(follow))
+        if self._cpu_shutdown:
+            return self._cpu_state()
+        async with self._cpu_mutation_lock:
+            if appid is not None:
+                appid = str(appid)
+                self._current_appid = appid
+                previous_intent = copy.deepcopy(
+                    self._cpu_profiles.effective(appid)
+                )
+                previous_data = copy.deepcopy(self._cpu_profiles._data)
+                candidate = (
+                    self._cpu_profiles.effective(None)
+                    if follow
+                    else self._cpu_profiles.game_profile(appid) or self._cpu_profiles.effective(None)
+                )
+                result = await self._apply_cpu_awaited(candidate, trigger="scope_change")
+                if result.ok and result.generation == self._cpu_generation:
+                    try:
+                        if not follow and not self._cpu_profiles.has_game(appid):
+                            self._cpu_profiles.create_game_from_global(appid)
+                        else:
+                            self._cpu_profiles.set_follow_global(appid, bool(follow))
+                    except Exception as error:  # noqa: BLE001 - store boundary
+                        await self._rollback_cpu_store_failure(
+                            previous_intent,
+                            previous_data,
+                            error,
+                            "scope_change_store",
+                        )
         return self._cpu_state()
 
     async def set_cpu_frequency(
         self, min_khz: int, max_khz: int, scope: str = "global", appid=None
     ) -> dict:
         self._init()
-        intent = self._cpu_profile_candidate(scope, appid)
-        frequency = {
-            "manual": True,
-            "min_khz": int(min_khz),
-            "max_khz": int(max_khz),
-        }
-        intent["frequency"] = frequency
-        self._exit_eco_for_cpu()
-        result = await self._apply_cpu_awaited(intent, trigger="set_frequency")
-        if result.ok and result.generation == self._cpu_generation:
-            self._cpu_profiles.set_frequency(
-                scope, frequency["min_khz"], frequency["max_khz"], appid=appid
-            )
+        if self._cpu_shutdown:
+            return self._cpu_state()
+        async with self._cpu_mutation_lock:
+            intent = self._cpu_profile_candidate(scope, appid)
+            previous_intent = copy.deepcopy(intent)
+            previous_data = copy.deepcopy(self._cpu_profiles._data)
+            frequency = {
+                "manual": True,
+                "min_khz": int(min_khz),
+                "max_khz": int(max_khz),
+            }
+            intent["frequency"] = frequency
+            self._exit_eco_for_cpu()
+            result = await self._apply_cpu_awaited(intent, trigger="set_frequency")
+            if result.ok and result.generation == self._cpu_generation:
+                try:
+                    self._cpu_profiles.set_frequency(
+                        scope, frequency["min_khz"], frequency["max_khz"], appid=appid
+                    )
+                except Exception as error:  # noqa: BLE001 - store boundary
+                    await self._rollback_cpu_store_failure(
+                        previous_intent,
+                        previous_data,
+                        error,
+                        "set_frequency_store",
+                    )
         return self._cpu_state()
 
     async def set_cpu_frequency_auto(
         self, scope: str = "global", appid=None
     ) -> dict:
         self._init()
-        intent = self._cpu_profile_candidate(scope, appid)
-        intent["frequency"] = {
-            "manual": False,
-            "min_khz": None,
-            "max_khz": None,
-        }
-        result = await self._apply_cpu_awaited(intent, trigger="set_frequency_auto")
-        if result.ok and result.generation == self._cpu_generation:
-            self._cpu_profiles.set_frequency_auto(scope, appid=appid)
+        if self._cpu_shutdown:
+            return self._cpu_state()
+        async with self._cpu_mutation_lock:
+            intent = self._cpu_profile_candidate(scope, appid)
+            previous_intent = copy.deepcopy(intent)
+            previous_data = copy.deepcopy(self._cpu_profiles._data)
+            intent["frequency"] = {
+                "manual": False,
+                "min_khz": None,
+                "max_khz": None,
+            }
+            result = await self._apply_cpu_awaited(intent, trigger="set_frequency_auto")
+            if result.ok and result.generation == self._cpu_generation:
+                try:
+                    self._cpu_profiles.set_frequency_auto(scope, appid=appid)
+                except Exception as error:  # noqa: BLE001 - store boundary
+                    await self._rollback_cpu_store_failure(
+                        previous_intent,
+                        previous_data,
+                        error,
+                        "set_frequency_auto_store",
+                    )
         return self._cpu_state()
 
     # ---- GPU clock (Potencia) ----------------------------------------------
@@ -3207,6 +3322,14 @@ class Plugin:
     def _apply_gpu_clock(self) -> None:
         """Re-assert the GPU clock window when manual (cleared to auto after suspend).
         When not manual we leave the GPU alone (don't fight other tools). Guarded."""
+        if getattr(self, "_gpu_shutdown", False):
+            return
+        if getattr(self, "_gpu_rpc_pending", 0) > 0:
+            current = self._tdp_profiles.gpu_clock(self._current_appid)
+            if current != getattr(self, "_gpu_rpc_profile_snapshot", None):
+                self._next_gpu_generation()
+            self._gpu_reapply_pending = True
+            return
         if not self._module_enabled("power"):
             return
         try:
@@ -3217,8 +3340,17 @@ class Plugin:
             if lo is not None and hi is not None:
                 requested = {"mode": "manual", "min_mhz": int(lo), "max_mhz": int(hi)}
                 self._gpu_requested = requested
-                result = self._run_gpu_clock(requested)
-                self._record_gpu_clock_transition(result, "reapply")
+                holder = {}
+
+                def apply():
+                    holder["result"] = self._run_gpu_clock(requested)
+
+                def record():
+                    result = holder.get("result")
+                    if result is not None:
+                        self._record_gpu_clock_transition(result, "reapply")
+
+                self._offload(apply, done=record)
         except Exception as exc:  # noqa: BLE001
             generation = self._next_gpu_generation()
             result = {
@@ -3231,6 +3363,100 @@ class Plugin:
                 "error_type": type(exc).__name__,
             }
             self._record_gpu_clock_transition(result, "reapply")
+
+    async def _release_gpu_clock(self, trigger) -> bool:
+        self._init()
+        lock = getattr(self, "_gpu_mutation_lock", None)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._gpu_mutation_lock = lock
+        async with lock:
+            return await self._release_gpu_clock_unlocked(trigger)
+
+    async def _release_gpu_clock_unlocked(self, trigger) -> bool:
+        gpu_clock = getattr(self, "_gpu_clock", None)
+        if gpu_clock is None or not gpu_clock.supported:
+            return True
+        requested = {"mode": "auto", "min_mhz": None, "max_mhz": None}
+        self._gpu_requested = requested
+        result = None
+        for attempt in range(1, 4):
+            result = await self._offload_call(
+                lambda: self._run_gpu_clock(requested, auto=True)
+            )
+            self._record_gpu_clock_transition(result, f"{trigger}-{attempt}")
+            if result["ok"]:
+                return True
+        decky.logger.error(
+            "GPU handoff failed after retries trigger=%s error=%s",
+            trigger,
+            result.get("error_code") if result else None,
+        )
+        return False
+
+    def _release_gpu_clock_sync(self, trigger) -> bool:
+        self._init()
+        gpu_clock = getattr(self, "_gpu_clock", None)
+        if gpu_clock is None or not gpu_clock.supported:
+            return True
+        requested = {"mode": "auto", "min_mhz": None, "max_mhz": None}
+        self._gpu_requested = requested
+        result = None
+        for attempt in range(1, 4):
+            result = self._run_gpu_clock(requested, auto=True)
+            self._record_gpu_clock_transition(result, f"{trigger}-{attempt}")
+            if result["ok"]:
+                return True
+        decky.logger.error(
+            "GPU handoff failed after retries trigger=%s error=%s",
+            trigger,
+            result.get("error_code") if result else None,
+        )
+        return False
+
+    async def _rollback_gpu_store_failure(
+        self, requested, previous_profile, previous_data, error, trigger, scope
+    ) -> None:
+        self._tdp_profiles._data = previous_data
+        previous_manual = (
+            bool(previous_profile.get("manual"))
+            and previous_profile.get("min") is not None
+            and previous_profile.get("max") is not None
+        )
+        rollback_requested = (
+            {
+                "mode": "manual",
+                "min_mhz": int(previous_profile["min"]),
+                "max_mhz": int(previous_profile["max"]),
+            }
+            if previous_manual
+            else {"mode": "auto", "min_mhz": None, "max_mhz": None}
+        )
+        rollback = await self._offload_call(
+            lambda: self._run_gpu_clock(
+                rollback_requested,
+                auto=not previous_manual,
+            )
+        )
+        failure = {
+            "generation": rollback["generation"],
+            "requested": requested,
+            "applied": rollback["applied"],
+            "ok": False,
+            "status": "rejected",
+            "error_code": (
+                "store_write_failed" if rollback["ok"]
+                else "store_write_failed_rollback_failed"
+            ),
+            "error_type": type(error).__name__,
+            "rollback": {
+                "ok": rollback["ok"],
+                "status": rollback["status"],
+                "error_code": rollback["error_code"],
+            },
+        }
+        self._gpu_requested = requested
+        self._record_gpu_clock_transition(failure, trigger, scope)
 
     def _gpu_clock_state(self) -> dict:
         g = self._tdp_profiles.gpu_clock(self._current_appid)
@@ -3321,6 +3547,15 @@ class Plugin:
             diagnostics = getattr(self._gpu_clock, "diagnostics", None)
             raw_gpu = diagnostics() if callable(diagnostics) else {}
             operation = raw_gpu.get("last_operation") or None
+            selection = []
+            for candidate in raw_gpu.get("selection") or ():
+                selection.append({
+                    "backend": candidate.get("backend"),
+                    "supported": bool(candidate.get("supported")),
+                    "range_available": bool(candidate.get("range_available")),
+                    "applied_available": bool(candidate.get("applied_available")),
+                    "reason": candidate.get("reason"),
+                })
             gpu = {
                 "backend": raw_gpu.get("backend", getattr(self._gpu_clock, "backend", None)),
                 "supported": bool(raw_gpu.get("supported", self._gpu_clock.supported)),
@@ -3333,6 +3568,7 @@ class Plugin:
                     "ok": bool(operation.get("ok")),
                     "reason": operation.get("reason"),
                 } if operation else None),
+                "selection": selection,
                 "last_result": getattr(self, "_gpu_last_result", None),
                 "last_failure": getattr(self, "_gpu_last_failure", None),
                 "history": list(getattr(self, "_gpu_history", ())),
@@ -3392,50 +3628,126 @@ class Plugin:
 
     async def set_gpu_clock(self, min_mhz: int, max_mhz: int, scope: str = "global", appid=None) -> dict:
         self._init()
+        if self._gpu_shutdown or not self._module_enabled("power"):
+            return self._gpu_clock_state()
+        async with self._gpu_mutation_lock:
+            if self._gpu_shutdown or not self._module_enabled("power"):
+                return self._gpu_clock_state()
+            return await self._set_gpu_clock_unlocked(min_mhz, max_mhz, scope, appid)
+
+    async def _set_gpu_clock_unlocked(
+        self, min_mhz: int, max_mhz: int, scope: str = "global", appid=None
+    ) -> dict:
+        self._init()
+        previous_profile = self._tdp_profiles.gpu_clock(self._current_appid)
+        previous_data = copy.deepcopy(self._tdp_profiles._data)
         requested = {"mode": "manual", "min_mhz": int(min_mhz), "max_mhz": int(max_mhz)}
         self._gpu_requested = requested
-        result = await self._offload_call(lambda: self._run_gpu_clock(requested))
-        self._record_gpu_clock_transition(
-            result, "set_manual", "global" if scope == "global" else "game_own"
-        )
-        if result["ok"] and result["generation"] == self._gpu_generation:
-            self._tdp_profiles.set_gpu_clock(
-                scope, True, int(min_mhz), int(max_mhz), appid=appid
+        if self._gpu_rpc_pending == 0:
+            self._gpu_rpc_profile_snapshot = dict(
+                self._tdp_profiles.gpu_clock(self._current_appid)
             )
+        self._gpu_rpc_pending += 1
+        try:
+            result = await self._offload_call(lambda: self._run_gpu_clock(requested))
+            if result["ok"] and result["generation"] == self._gpu_generation:
+                try:
+                    self._tdp_profiles.set_gpu_clock(
+                        scope, True, int(min_mhz), int(max_mhz), appid=appid
+                    )
+                except Exception as error:  # noqa: BLE001 - store boundary
+                    await self._rollback_gpu_store_failure(
+                        requested,
+                        previous_profile,
+                        previous_data,
+                        error,
+                        "set_manual_store",
+                        "global" if scope == "global" else "game_own",
+                    )
+                    return self._gpu_clock_state()
+            self._record_gpu_clock_transition(
+                result, "set_manual", "global" if scope == "global" else "game_own"
+            )
+        finally:
+            self._gpu_rpc_pending -= 1
+            if self._gpu_rpc_pending == 0:
+                self._gpu_rpc_profile_snapshot = None
+                if self._gpu_reapply_pending:
+                    self._gpu_reapply_pending = False
+                    self._apply_gpu_clock()
         return self._gpu_clock_state()
 
     async def set_gpu_clock_auto(self, scope: str = "global", appid=None) -> dict:
         self._init()
+        if self._gpu_shutdown or not self._module_enabled("power"):
+            return self._gpu_clock_state()
+        async with self._gpu_mutation_lock:
+            if self._gpu_shutdown or not self._module_enabled("power"):
+                return self._gpu_clock_state()
+            return await self._set_gpu_clock_auto_unlocked(scope, appid)
+
+    async def _set_gpu_clock_auto_unlocked(
+        self, scope: str = "global", appid=None
+    ) -> dict:
+        self._init()
+        previous_profile = self._tdp_profiles.gpu_clock(self._current_appid)
+        previous_data = copy.deepcopy(self._tdp_profiles._data)
         requested = {"mode": "auto", "min_mhz": None, "max_mhz": None}
         self._gpu_requested = requested
-        result = await self._offload_call(
-            lambda: self._run_gpu_clock(requested, auto=True)
-        )
-        self._record_gpu_clock_transition(
-            result, "set_auto", "global" if scope == "global" else "game_own"
-        )
-        if result["ok"] and result["generation"] == self._gpu_generation:
-            self._tdp_profiles.set_gpu_clock(scope, False, 0, 0, appid=appid)
+        if self._gpu_rpc_pending == 0:
+            self._gpu_rpc_profile_snapshot = dict(
+                self._tdp_profiles.gpu_clock(self._current_appid)
+            )
+        self._gpu_rpc_pending += 1
+        try:
+            result = await self._offload_call(
+                lambda: self._run_gpu_clock(requested, auto=True)
+            )
+            if result["ok"] and result["generation"] == self._gpu_generation:
+                try:
+                    self._tdp_profiles.set_gpu_clock(scope, False, 0, 0, appid=appid)
+                except Exception as error:  # noqa: BLE001 - store boundary
+                    await self._rollback_gpu_store_failure(
+                        requested,
+                        previous_profile,
+                        previous_data,
+                        error,
+                        "set_auto_store",
+                        "global" if scope == "global" else "game_own",
+                    )
+                    return self._gpu_clock_state()
+            self._record_gpu_clock_transition(
+                result, "set_auto", "global" if scope == "global" else "game_own"
+            )
+        finally:
+            self._gpu_rpc_pending -= 1
+            if self._gpu_rpc_pending == 0:
+                self._gpu_rpc_profile_snapshot = None
+                if self._gpu_reapply_pending:
+                    self._gpu_reapply_pending = False
+                    self._apply_gpu_clock()
         return self._gpu_clock_state()
 
     async def set_smt(self, enabled: bool, scope: str = "global", appid=None) -> dict:
         self._init()
-        intent = self._cpu_profile_candidate(scope, appid)
-        intent["smt"] = bool(enabled)
-        self._exit_eco_for_cpu()
-        result = await self._apply_cpu_awaited(intent, trigger="set_smt")
-        if result.ok and result.generation == self._cpu_generation:
+        if self._cpu_shutdown:
+            return self._cpu_state()
+        async with self._cpu_mutation_lock:
             self._cpu_profiles.set_smt(scope, bool(enabled), appid=appid)
+            intent = self._cpu_profile_candidate(scope, appid)
+            self._exit_eco_for_cpu()
+            await self._apply_cpu_awaited(intent, trigger="set_smt")
         return self._cpu_state()
 
     async def set_cpu_boost(self, enabled: bool, scope: str = "global", appid=None) -> dict:
         self._init()
-        intent = self._cpu_profile_candidate(scope, appid)
-        intent["boost"] = bool(enabled)
-        self._exit_eco_for_cpu()
-        result = await self._apply_cpu_awaited(intent, trigger="set_boost")
-        if result.ok and result.generation == self._cpu_generation:
+        if self._cpu_shutdown:
+            return self._cpu_state()
+        async with self._cpu_mutation_lock:
             self._cpu_profiles.set_boost(scope, bool(enabled), appid=appid)
+            intent = self._cpu_profile_candidate(scope, appid)
+            self._exit_eco_for_cpu()
+            await self._apply_cpu_awaited(intent, trigger="set_boost")
         return self._cpu_state()
 
     async def set_charge_limit(self, enabled: bool, percent: int) -> dict:
@@ -4538,21 +4850,33 @@ class Plugin:
         # so the hardware is never left with a stale manual curve. The restores
         # spawn subprocesses (systemctl / gamescopectl) → run them off the loop and
         # await, then shut the executor down.
+        self._cpu_shutdown = True
+        self._gpu_shutdown = True
+        decky.logger.info("Shutdown stage unload:begin")
         self._begin_tdp_shutdown()
-        await self._drain_offloaded()
-        await self._offload_call(self._restore_fans_safe)
+        self._drain_offloaded_sync()
+        decky.logger.info("Shutdown stage unload:drained")
+        self._restore_fans_safe()
         self._cancel_color_revert()
         wait_task = getattr(self, "_display_wait_task", None)
         if wait_task is not None:
             wait_task.cancel()
             self._display_wait_task = None
         self._stop_night_loop()
-        await self._offload_call(self._restore_color_safe)
+        self._restore_color_safe()
         self._audio_shutdown = True
-        await self._stop_audio_loop()
-        await self._offload_call(self._restore_audio_safe)
-        await self._apply_cpu_awaited(enabled=False, trigger="unload")
-        await self._offload_call(self._restore_power_handoff)
+        audio_task = getattr(self, "_audio_task", None)
+        self._audio_task = None
+        if audio_task is not None:
+            audio_task.cancel()
+        self._restore_audio_safe()
+        decky.logger.info("Shutdown stage unload:peripheral-handoff-attempted")
+        cpu_released = self._release_cpu_controls_sync("unload")
+        decky.logger.info("Shutdown stage unload:cpu-handoff ok=%s", cpu_released)
+        gpu_released = self._release_gpu_clock_sync("unload")
+        decky.logger.info("Shutdown stage unload:gpu-handoff ok=%s", gpu_released)
+        power_released = self._restore_power_handoff()
+        decky.logger.info("Shutdown stage unload:power-handoff ok=%s", power_released)
         if getattr(self, "_sampler", None) is not None:
             self._sampler.stop()
         self._shutdown_apply_executor()
@@ -4565,15 +4889,27 @@ class Plugin:
             self._apply_executor = None
 
     async def _uninstall(self) -> None:
+        self._cpu_shutdown = True
+        self._gpu_shutdown = True
+        decky.logger.info("Shutdown stage uninstall:begin")
         self._begin_tdp_shutdown()
-        await self._drain_offloaded()
-        await self._offload_call(self._restore_fans_safe)
-        await self._offload_call(self._restore_color_safe)
+        self._drain_offloaded_sync()
+        decky.logger.info("Shutdown stage uninstall:drained")
+        self._restore_fans_safe()
+        self._restore_color_safe()
         self._audio_shutdown = True
-        await self._stop_audio_loop()
-        await self._offload_call(self._restore_audio_safe)
-        await self._apply_cpu_awaited(enabled=False, trigger="uninstall")
-        await self._offload_call(self._restore_power_handoff)
+        audio_task = getattr(self, "_audio_task", None)
+        self._audio_task = None
+        if audio_task is not None:
+            audio_task.cancel()
+        self._restore_audio_safe()
+        decky.logger.info("Shutdown stage uninstall:peripheral-handoff-attempted")
+        cpu_released = self._release_cpu_controls_sync("uninstall")
+        decky.logger.info("Shutdown stage uninstall:cpu-handoff ok=%s", cpu_released)
+        gpu_released = self._release_gpu_clock_sync("uninstall")
+        decky.logger.info("Shutdown stage uninstall:gpu-handoff ok=%s", gpu_released)
+        power_released = self._restore_power_handoff()
+        decky.logger.info("Shutdown stage uninstall:power-handoff ok=%s", power_released)
         self._shutdown_apply_executor()
         fan_expose.remove_conf()  # drop the modprobe.d option we added (guarded)
         decky.logger.info("Panel de Control uninstalled")

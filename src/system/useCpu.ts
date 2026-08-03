@@ -36,15 +36,24 @@ export function useCpu(): CpuController {
   const game = useRunningGame();
   const [state, setState] = useState<CpuState | null>(null);
   const pending = useRef(false);
+  const frequencyQueued = useRef(false);
   const frequencyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const appid = game?.appid;
+
+  const cancelQueuedFrequency = useCallback(() => {
+    if (frequencyTimer.current !== null) {
+      clearTimeout(frequencyTimer.current);
+      frequencyTimer.current = null;
+    }
+    frequencyQueued.current = false;
+  }, []);
 
   useEffect(() => {
     let alive = true;
     const tick = () => {
       getCpuState()
         .then((s) => {
-          if (alive && !pending.current) setState(s);
+          if (alive && !pending.current && !frequencyQueued.current) setState(s);
         })
         .catch(() => {
           /* keep last values */
@@ -55,9 +64,9 @@ export function useCpu(): CpuController {
     return () => {
       alive = false;
       clearInterval(poll);
-      if (frequencyTimer.current !== null) clearTimeout(frequencyTimer.current);
+      cancelQueuedFrequency();
     };
-  }, [appid]);
+  }, [appid, cancelQueuedFrequency]);
 
   // The card's tab reflects the game's active profile and IS the control (shared wiring).
   // The pending guard stops a poll landing mid-write from clobbering the optimistic state.
@@ -65,7 +74,13 @@ export function useCpu(): CpuController {
     pending.current = true;
     setCpuFollowGlobal(f, a).then(setState).catch(() => {}).finally(() => { pending.current = false; });
   }, []);
-  const { scope, onScope } = useScopeSync(appid, state?.follows_global, applyFollow);
+  const { scope, onScope: syncScope } = useScopeSync(
+    appid, state?.follows_global, applyFollow,
+  );
+  const onScope = useCallback((next: TdpScope) => {
+    cancelQueuedFrequency();
+    syncScope(next);
+  }, [cancelQueuedFrequency, syncScope]);
 
   const target = scope === "game" ? (appid ?? null) : null;
 
@@ -111,21 +126,24 @@ export function useCpu(): CpuController {
           status: "configured",
         },
       } : previous);
-      pending.current = true;
-      if (frequencyTimer.current !== null) clearTimeout(frequencyTimer.current);
+      cancelQueuedFrequency();
+      frequencyQueued.current = true;
       frequencyTimer.current = setTimeout(() => {
         frequencyTimer.current = null;
+        frequencyQueued.current = false;
+        pending.current = true;
         setCpuFrequency(minimumKhz, maximumKhz, scope, target)
           .then(setState)
           .catch(() => getCpuState().then(setState).catch(() => {}))
           .finally(() => { pending.current = false; });
       }, 200);
     },
-    [scope, target],
+    [cancelQueuedFrequency, scope, target],
   );
 
   const doFrequencyManual = useCallback(
     (manual: boolean) => {
+      cancelQueuedFrequency();
       if (!manual) {
         apply(
           (s) => ({ ...s, frequency: { ...s.frequency, manual: false, status: "automatic" } }),
@@ -143,7 +161,7 @@ export function useCpu(): CpuController {
         );
       }
     },
-    [apply, scope, state?.frequency, target],
+    [apply, cancelQueuedFrequency, scope, state?.frequency, target],
   );
 
   return {

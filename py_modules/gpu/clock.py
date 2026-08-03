@@ -76,6 +76,9 @@ class _GpuDiagnostics:
             "range": _window(hardware_range),
             "applied": _window(applied),
             "last_operation": getattr(self, "_last_operation", None),
+            "selection": [
+                dict(row) for row in getattr(self, "_selection", ())
+            ],
         }
 
 
@@ -157,7 +160,15 @@ class _FreqPairClock(_GpuDiagnostics):
 
     @property
     def supported(self):
-        return self._max is not None and read_int(self._max) is not None
+        readable = all(
+            path is not None and read_int(path) is not None
+            for path in (self._min, self._max, self._rpn, self._rp0)
+        )
+        writable = all(
+            path is not None and os.access(path, os.W_OK)
+            for path in (self._min, self._max)
+        )
+        return readable and writable
 
     def get_range(self):
         if not self.supported:
@@ -176,25 +187,39 @@ class _FreqPairClock(_GpuDiagnostics):
             self._record("manual", (min_mhz, max_mhz), False, "unsupported")
             return False
         lo, hi = int(min_mhz), int(max_mhz)
-        # The driver enforces min <= max at write time. Writing the two nodes in the
-        # wrong order transiently violates that (new min > current max, or new max <
-        # current min) and the kernel rejects one write. Raising the window → set max
-        # first; lowering (or unknown) → set min first.
         try:
-            cur = self.get()
-            if cur and lo > cur[1]:
-                write_str(self._max, hi)
-                write_str(self._min, lo)
-            else:
-                write_str(self._min, lo)
-                write_str(self._max, hi)
-            ok = self.get() == (lo, hi)
+            snapshot = self.get()
+            if snapshot is None:
+                self._record("manual", (lo, hi), False, "baseline_unavailable")
+                return False
+            wrote = self._write_window(lo, hi, snapshot)
+            ok = wrote and self.get() == (lo, hi)
+            if not ok:
+                current = self.get()
+                restored = current is not None and self._write_window(
+                    snapshot[0], snapshot[1], current
+                ) and self.get() == snapshot
+                reason = "write_failed" if not wrote else "readback_mismatch"
+                if not restored:
+                    reason = f"{reason}_rollback_failed"
+                self._record("manual", (lo, hi), False, reason)
+                return False
             self._record("manual", (lo, hi), ok,
                          "" if ok else "readback_mismatch")
             return ok
         except Exception as exc:  # noqa: BLE001
             self._record("manual", (lo, hi), False, type(exc).__name__)
             return False
+
+    def _write_window(self, lo, hi, current):
+        # The driver enforces min <= max at each write. Raise max first when the new
+        # minimum is above the current ceiling; otherwise lower min first.
+        writes = (
+            ((self._max, hi), (self._min, lo))
+            if lo > current[1]
+            else ((self._min, lo), (self._max, hi))
+        )
+        return all(write_str(path, value) for path, value in writes)
 
     def set_auto(self):
         rng = self.get_range()
@@ -244,10 +269,27 @@ class XeGpuClock(_FreqPairClock):
 
 def select_gpu_clock(device, root="/"):
     """AMD → amdgpu OverDrive; Intel → xe (newer) then i915; else Null."""
-    order = (XeGpuClock, IntelGpuClock, AmdGpuClock) if getattr(device, "vendor", "amd") == "intel" \
-        else (AmdGpuClock, XeGpuClock, IntelGpuClock)
+    order = (
+        (XeGpuClock, IntelGpuClock)
+        if getattr(device, "vendor", "amd") == "intel"
+        else (AmdGpuClock,)
+    )
+    selection = []
     for cls in order:
         backend = cls(root)
-        if backend.supported:
+        supported = bool(backend.supported)
+        hardware_range = backend.get_range() if supported else None
+        applied = backend.get() if supported else None
+        selection.append({
+            "backend": backend.backend,
+            "supported": supported,
+            "range_available": hardware_range is not None,
+            "applied_available": applied is not None,
+            "reason": "selected" if supported else "incomplete_or_unwritable",
+        })
+        if supported:
+            backend._selection = selection
             return backend
-    return NullGpuClock()
+    backend = NullGpuClock()
+    backend._selection = selection
+    return backend

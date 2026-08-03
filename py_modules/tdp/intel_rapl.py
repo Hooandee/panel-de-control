@@ -7,13 +7,10 @@ _POWERCAP = "sys/devices/virtual/powercap"
 # Prefer the MMIO interface (current on recent kernels), fall back to the legacy one.
 _RAPL_DIRS = ("intel-rapl-mmio/intel-rapl-mmio:0", "intel-rapl/intel-rapl:0")
 
-# PL2 (constraint_1) boost above the sustained PL1 when a single TDP value is set.
-_PL2_BOOST_RATIO = 1.25
-
-
 class IntelRaplBackend(TDPBackend):
     """TDP for Intel handhelds (MSI Claw) via the powercap RAPL interface:
-    ``constraint_0_power_limit_uw`` = sustained PL1, ``constraint_1`` = PL2 (µW).
+    ``constraint_0_power_limit_uw`` = sustained PL1. PL2 is observed for reports but
+    remains firmware-owned.
 
     Used when the kernel exposes no MSI firmware-attributes ppt_* (the case on
     current Bazzite/Neptune kernels). Limits come from the device profile — RAPL's
@@ -22,7 +19,7 @@ class IntelRaplBackend(TDPBackend):
     """
 
     name = "intel-rapl"
-    supports_levels = False  # PL1 (+ derived PL2 boost); no manual per-rail UI for now
+    supports_levels = False  # PL1 only; PL2 remains firmware-owned and observed.
     read_tolerance_w = 1
 
     def __init__(self, fallback: TdpLimits, root: str = "/") -> None:
@@ -63,9 +60,6 @@ class IntelRaplBackend(TDPBackend):
         if not self.supported:
             return TdpResult(watts, None, False, "intel-rapl powercap not present")
         target = self._fallback.clamp(watts, ac)
-        pl2 = max(target, round(target * _PL2_BOOST_RATIO))
-        # Raise PL2 first so PL1 is never transiently above PL2.
-        self._write(self._constraint(1), pl2 * 1_000_000)
         ok = self._write(self._constraint(0), target * 1_000_000)
         applied = self.read_applied()
         # RAPL quantizes the limit to the package power-unit granularity, so the

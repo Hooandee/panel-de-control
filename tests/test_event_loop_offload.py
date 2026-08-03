@@ -13,6 +13,8 @@ import sys
 import threading
 import types
 
+import pytest
+
 
 class _RecordingExecutor(concurrent.futures.Executor):
     """Real Executor that records submissions and runs them inline (deterministic)."""
@@ -222,10 +224,10 @@ def test_unload_invalidates_a_queued_tdp_write_before_handoff(tmp_path, monkeypa
         while not blocker_started.is_set():
             await asyncio.sleep(0)
         p._schedule_tdp_apply("queued-before-unload")
-        unload = asyncio.create_task(p._unload())
-        await asyncio.sleep(0)
-        release_blocker.set()
-        await unload
+        release = threading.Timer(0.05, release_blocker.set)
+        release.start()
+        await p._unload()
+        release.join()
 
     asyncio.run(run())
     assert events == ["handoff"]
@@ -254,6 +256,46 @@ def test_unload_stops_new_tdp_writes_before_handoff(tmp_path, monkeypatch):
     assert events == ["handoff"]
 
 
+def test_unload_completes_without_yielding_to_the_stopping_event_loop(
+    tmp_path, monkeypatch
+):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    p._apply_executor = _RecordingExecutor()
+    p._restore_fans_safe = lambda: None
+    p._restore_color_safe = lambda: None
+    p._restore_audio_safe = lambda: None
+    p._restore_power_handoff = lambda: True
+    p._release_cpu_controls_sync = lambda _trigger: True
+    p._release_gpu_clock_sync = lambda _trigger: True
+
+    unload = p._unload()
+    with pytest.raises(StopIteration):
+        unload.send(None)
+
+
+def test_unload_handoff_logs_report_actual_results(tmp_path, monkeypatch):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    main = importlib.import_module("main")
+    messages = []
+    monkeypatch.setattr(
+        main.decky.logger,
+        "info",
+        lambda message, *args: messages.append((message, args)),
+    )
+    p._restore_fans_safe = lambda: None
+    p._restore_color_safe = lambda: None
+    p._restore_audio_safe = lambda: None
+    p._release_cpu_controls_sync = lambda _trigger: False
+    p._release_gpu_clock_sync = lambda _trigger: True
+    p._restore_power_handoff = lambda: False
+
+    asyncio.run(p._unload())
+
+    assert ("Shutdown stage unload:cpu-handoff ok=%s", (False,)) in messages
+    assert ("Shutdown stage unload:gpu-handoff ok=%s", (True,)) in messages
+    assert ("Shutdown stage unload:power-handoff ok=%s", (False,)) in messages
+
+
 def test_uninstall_stops_new_tdp_writes_before_handoff(tmp_path, monkeypatch):
     p, _ = _make_plugin(tmp_path, monkeypatch)
     events = []
@@ -280,6 +322,28 @@ def test_uninstall_stops_new_tdp_writes_before_handoff(tmp_path, monkeypatch):
 
     asyncio.run(p._uninstall())
     assert events == ["handoff"]
+
+
+def test_uninstall_completes_without_yielding_to_the_stopping_event_loop(
+    tmp_path, monkeypatch
+):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    p._apply_executor = _RecordingExecutor()
+    p._restore_fans_safe = lambda: None
+    p._restore_color_safe = lambda: None
+    p._restore_audio_safe = lambda: None
+    p._restore_power_handoff = lambda: True
+    p._release_cpu_controls_sync = lambda _trigger: True
+    p._release_gpu_clock_sync = lambda _trigger: True
+    monkeypatch.setattr(
+        importlib.import_module("main").fan_expose,
+        "remove_conf",
+        lambda: None,
+    )
+
+    uninstall = p._uninstall()
+    with pytest.raises(StopIteration):
+        uninstall.send(None)
 
 
 class _SlowBackend:

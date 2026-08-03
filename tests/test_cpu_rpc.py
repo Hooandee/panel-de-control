@@ -26,6 +26,11 @@ class _FakeToggle:
         return True
 
 
+class _FailingToggle(_FakeToggle):
+    def set(self, enabled):
+        return False
+
+
 class _FakeCores:
     def __init__(self, supported=True, max_cores=8, active=8):
         self.supported = supported
@@ -289,3 +294,213 @@ def test_cpu_frequency_apply_uses_offload_chokepoint(tmp_path, monkeypatch):
     asyncio.run(p.set_cpu_frequency(1_200_000, 2_400_000))
 
     assert calls == ["offload"]
+
+
+def test_concurrent_cpu_setters_merge_intent_instead_of_dropping_first(
+    tmp_path, monkeypatch
+):
+    smt = _FakeToggle(on=True)
+    boost = _FakeToggle(on=True)
+    p = _make_plugin(
+        tmp_path, monkeypatch, smt=smt, boost=boost, cores=_FakeCores()
+    )
+
+    async def yielding_offload(fn):
+        await asyncio.sleep(0)
+        return fn()
+
+    p._offload_call = yielding_offload
+
+    async def drive():
+        await asyncio.gather(
+            p.set_smt(False),
+            p.set_cpu_boost(False),
+        )
+
+    asyncio.run(drive())
+
+    effective = p._cpu_profiles.effective(None)
+    assert effective["smt"] is False
+    assert effective["boost"] is False
+    assert smt.enabled() is False
+    assert boost.enabled() is False
+
+
+def test_transient_cpu_failure_keeps_requested_intent_for_reapply(
+    tmp_path, monkeypatch
+):
+    smt = _FailingToggle(on=True)
+    p = _make_plugin(
+        tmp_path, monkeypatch, smt=smt,
+        boost=_FakeToggle(), cores=_FakeCores(),
+    )
+
+    state = asyncio.run(p.set_smt(False))
+
+    assert p._cpu_profiles.effective(None)["smt"] is False
+    assert smt.enabled() is True
+    assert state["smt"]["enabled"] is True
+
+
+def test_concurrent_frequency_and_legacy_toggle_keep_both_intents(
+    tmp_path, monkeypatch
+):
+    frequency = _FakeFrequency()
+    boost = _FakeToggle(on=True)
+    p = _make_plugin(
+        tmp_path, monkeypatch, smt=_FakeToggle(), boost=boost,
+        cores=_FakeCores(), frequency=frequency,
+    )
+
+    async def yielding_offload(fn):
+        await asyncio.sleep(0)
+        return fn()
+
+    p._offload_call = yielding_offload
+
+    async def drive():
+        await asyncio.gather(
+            p.set_cpu_frequency(1_200_000, 2_400_000),
+            p.set_cpu_boost(False),
+        )
+
+    asyncio.run(drive())
+
+    effective = p._cpu_profiles.effective(None)
+    assert effective["frequency"] == {
+        "manual": True,
+        "min_khz": 1_200_000,
+        "max_khz": 2_400_000,
+    }
+    assert effective["boost"] is False
+    assert frequency.requested == (1_200_000, 2_400_000)
+    assert boost.enabled() is False
+
+
+def test_cpu_handoff_retries_transient_release_failure(tmp_path, monkeypatch):
+    p = _make_plugin(
+        tmp_path, monkeypatch, smt=_FakeToggle(), boost=_FakeToggle(),
+        cores=_FakeCores(), frequency=_FakeFrequency(),
+    )
+    outcomes = iter((False, False, True))
+    calls = []
+
+    async def release(**kwargs):
+        calls.append(kwargs)
+        return types.SimpleNamespace(ok=next(outcomes))
+
+    p._apply_cpu_awaited = release
+
+    released = asyncio.run(p._release_cpu_controls("unload"))
+
+    assert released is True
+    assert calls == [
+        {"enabled": False, "trigger": "unload-1"},
+        {"enabled": False, "trigger": "unload-2"},
+        {"enabled": False, "trigger": "unload-3"},
+    ]
+
+
+def test_cpu_shutdown_handoff_cannot_be_overwritten_by_late_rpc(
+    tmp_path, monkeypatch
+):
+    smt = _FakeToggle(on=False)
+    p = _make_plugin(
+        tmp_path, monkeypatch, smt=smt, boost=_FakeToggle(),
+        cores=_FakeCores(), frequency=_FakeFrequency(),
+    )
+    p._init()
+    p._cpu_profiles.set_smt("global", False)
+    p._cpu_shutdown = True
+
+    async def yielding_offload(fn):
+        await asyncio.sleep(0)
+        return fn()
+
+    p._offload_call = yielding_offload
+
+    async def drive():
+        released, _state = await asyncio.gather(
+            p._release_cpu_controls("unload"),
+            p.set_smt(False),
+        )
+        return released
+
+    assert asyncio.run(drive()) is True
+    assert smt.enabled() is True
+
+
+def test_manual_cpu_frequency_store_failure_restores_auto_hardware_and_memory(
+    tmp_path, monkeypatch
+):
+    frequency = _FakeFrequency()
+    p = _make_plugin(
+        tmp_path, monkeypatch, smt=_FakeToggle(), boost=_FakeToggle(),
+        cores=_FakeCores(), frequency=frequency,
+    )
+    p._init()
+
+    def fail_save():
+        raise OSError("disk full")
+
+    monkeypatch.setattr(p._cpu_profiles, "_save", fail_save)
+
+    state = asyncio.run(p.set_cpu_frequency(1_200_000, 2_400_000))
+
+    assert frequency.requested is None
+    assert p._cpu_profiles.effective(None)["frequency"]["manual"] is False
+    assert state["frequency"]["status"] == "failed"
+    assert state["frequency"]["reason"] == "store_write_failed"
+
+
+def test_auto_cpu_frequency_store_failure_restores_previous_manual_window(
+    tmp_path, monkeypatch
+):
+    frequency = _FakeFrequency()
+    p = _make_plugin(
+        tmp_path, monkeypatch, smt=_FakeToggle(), boost=_FakeToggle(),
+        cores=_FakeCores(), frequency=frequency,
+    )
+    asyncio.run(p.set_cpu_frequency(1_200_000, 2_400_000))
+
+    def fail_save():
+        raise OSError("disk full")
+
+    monkeypatch.setattr(p._cpu_profiles, "_save", fail_save)
+
+    state = asyncio.run(p.set_cpu_frequency_auto())
+
+    assert frequency.requested == (1_200_000, 2_400_000)
+    assert p._cpu_profiles.effective(None)["frequency"] == {
+        "manual": True,
+        "min_khz": 1_200_000,
+        "max_khz": 2_400_000,
+    }
+    assert state["frequency"]["status"] == "failed"
+    assert state["frequency"]["reason"] == "store_write_failed"
+
+
+def test_cpu_scope_store_failure_restores_previous_game_hardware_and_memory(
+    tmp_path, monkeypatch
+):
+    smt = _FakeToggle(on=True)
+    p = _make_plugin(
+        tmp_path, monkeypatch, smt=smt, boost=_FakeToggle(),
+        cores=_FakeCores(), frequency=_FakeFrequency(),
+    )
+    asyncio.run(p.set_smt(False, "game", "42"))
+    assert smt.enabled() is False
+    assert p._cpu_profiles.is_following_global("42") is False
+
+    def fail_save():
+        raise OSError("disk full")
+
+    monkeypatch.setattr(p._cpu_profiles, "_save", fail_save)
+
+    state = asyncio.run(p.set_cpu_follow_global(True, "42"))
+
+    assert smt.enabled() is False
+    assert p._cpu_profiles.is_following_global("42") is False
+    assert state["follows_global"] is False
+    assert state["frequency"]["status"] == "failed"
+    assert state["frequency"]["reason"] == "store_write_failed"

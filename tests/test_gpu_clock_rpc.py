@@ -4,7 +4,9 @@ clock backend so no real amdgpu/i915 node is needed."""
 import asyncio
 import importlib
 import sys
+import threading
 import types
+from concurrent.futures import ThreadPoolExecutor
 
 
 class _FakeGpuClock:
@@ -47,6 +49,37 @@ class _FakeGpuClock:
 class _RejectingGpuClock(_FakeGpuClock):
     def set(self, lo, hi):
         return False
+
+
+class _BlockingFirstGpuClock(_FakeGpuClock):
+    def __init__(self):
+        super().__init__()
+        self.first_started = threading.Event()
+        self.release_first = threading.Event()
+        self._calls = 0
+        self._calls_lock = threading.Lock()
+
+    def set(self, lo, hi):
+        with self._calls_lock:
+            self._calls += 1
+            call = self._calls
+        if call == 1:
+            self.first_started.set()
+            assert self.release_first.wait(timeout=2)
+        return super().set(lo, hi)
+
+
+class _TransientAutoFailureGpuClock(_FakeGpuClock):
+    def __init__(self, failures):
+        super().__init__()
+        self.failures = failures
+        self.auto_calls = 0
+
+    def set_auto(self):
+        self.auto_calls += 1
+        if self.auto_calls <= self.failures:
+            return False
+        return super().set_auto()
 
 
 def _make_plugin(tmp_path, monkeypatch, gpu=None):
@@ -146,3 +179,137 @@ def test_gpu_clock_not_reapplied_when_auto(tmp_path, monkeypatch):
     gpu._cur = (300, 2000)
     p._apply_gpu_clock()
     assert gpu.get() == (300, 2000) and gpu._auto is True
+
+
+def test_lifecycle_gpu_reapply_cannot_be_overwritten_by_older_rpc(
+    tmp_path, monkeypatch
+):
+    gpu = _BlockingFirstGpuClock()
+    p, _ = _make_plugin(tmp_path, monkeypatch, gpu)
+    p._apply_executor = ThreadPoolExecutor(max_workers=1)
+
+    async def scenario():
+        older_rpc = asyncio.create_task(p.set_gpu_clock(600, 1200))
+        await asyncio.sleep(0)
+        assert gpu.first_started.wait(timeout=1)
+
+        p._tdp_profiles.set_gpu_clock("global", True, 1400, 2200)
+        p._apply_gpu_clock()
+
+        gpu.release_first.set()
+        await older_rpc
+        await p._drain_offloaded()
+
+    try:
+        asyncio.run(scenario())
+    finally:
+        gpu.release_first.set()
+        p._apply_executor.shutdown(wait=True)
+
+    assert gpu.get() == (1400, 2200)
+
+
+def test_disabling_power_module_releases_manual_gpu_clock(
+    tmp_path, monkeypatch
+):
+    plugin, gpu = _make_plugin(tmp_path, monkeypatch)
+    asyncio.run(plugin.set_gpu_clock(1_200, 2_400))
+
+    assert gpu._auto is False
+    result = asyncio.run(plugin.set_ui_module("power", True))
+
+    assert "power" in result["disabled"]
+    assert gpu._auto is True
+    assert gpu.get() == gpu.get_range()
+
+
+def test_unload_releases_manual_gpu_clock(tmp_path, monkeypatch):
+    plugin, gpu = _make_plugin(tmp_path, monkeypatch)
+    asyncio.run(plugin.set_gpu_clock(1_200, 2_400))
+
+    asyncio.run(plugin._unload())
+
+    assert gpu._auto is True
+    assert gpu.get() == gpu.get_range()
+
+
+def test_gpu_handoff_retries_transient_auto_failure(tmp_path, monkeypatch):
+    gpu = _TransientAutoFailureGpuClock(failures=2)
+    plugin, _ = _make_plugin(tmp_path, monkeypatch, gpu)
+    asyncio.run(plugin.set_gpu_clock(1_200, 2_400))
+
+    released = asyncio.run(plugin._release_gpu_clock("unload"))
+
+    assert released is True
+    assert gpu.auto_calls == 3
+    assert gpu._auto is True
+    assert gpu.get() == gpu.get_range()
+
+
+def test_gpu_shutdown_handoff_cannot_be_overwritten_by_late_rpc(
+    tmp_path, monkeypatch
+):
+    plugin, gpu = _make_plugin(tmp_path, monkeypatch)
+    asyncio.run(plugin.set_gpu_clock(1_200, 2_400))
+    plugin._gpu_shutdown = True
+
+    async def yielding_offload(fn):
+        await asyncio.sleep(0)
+        return fn()
+
+    plugin._offload_call = yielding_offload
+
+    async def drive():
+        released, _state = await asyncio.gather(
+            plugin._release_gpu_clock("unload"),
+            plugin.set_gpu_clock(1_400, 2_200),
+        )
+        return released
+
+    assert asyncio.run(drive()) is True
+    assert gpu._auto is True
+    assert gpu.get() == gpu.get_range()
+
+
+def test_manual_gpu_store_failure_restores_auto_hardware_and_memory(
+    tmp_path, monkeypatch
+):
+    plugin, gpu = _make_plugin(tmp_path, monkeypatch)
+    plugin._init()
+
+    def fail_save():
+        raise OSError("disk full")
+
+    monkeypatch.setattr(plugin._tdp_profiles, "_save", fail_save)
+
+    state = asyncio.run(plugin.set_gpu_clock(900, 1_800))
+
+    assert gpu._auto is True
+    assert gpu.get() == gpu.get_range()
+    assert plugin._tdp_profiles.gpu_clock(None)["manual"] is False
+    assert state["status"] == "rejected"
+    assert state["reason"] == "store_write_failed"
+
+
+def test_auto_gpu_store_failure_restores_previous_manual_window(
+    tmp_path, monkeypatch
+):
+    plugin, gpu = _make_plugin(tmp_path, monkeypatch)
+    asyncio.run(plugin.set_gpu_clock(1_200, 2_400))
+
+    def fail_save():
+        raise OSError("disk full")
+
+    monkeypatch.setattr(plugin._tdp_profiles, "_save", fail_save)
+
+    state = asyncio.run(plugin.set_gpu_clock_auto())
+
+    assert gpu._auto is False
+    assert gpu.get() == (1_200, 2_400)
+    assert plugin._tdp_profiles.gpu_clock(None) == {
+        "manual": True,
+        "min": 1_200,
+        "max": 2_400,
+    }
+    assert state["status"] == "rejected"
+    assert state["reason"] == "store_write_failed"

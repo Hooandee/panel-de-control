@@ -311,6 +311,79 @@ def _snap_modules(root: str) -> list[str]:
     return sorted(names)
 
 
+def _snap_cpu_gpu_power(root: str) -> dict:
+    out = {"cpufreq": [], "gpu": [], "rapl": []}
+    for policy in sorted(
+        _glob(root, "sys/devices/system/cpu/cpufreq/policy*")
+    )[:_SNAP_MAX_CHIPS]:
+        out["cpufreq"].append({
+            "policy": os.path.basename(policy),
+            "affected_cpus": read_str(os.path.join(policy, "affected_cpus")),
+            "driver": read_str(os.path.join(policy, "scaling_driver")),
+            "hardware_min_khz": read_str(os.path.join(policy, "cpuinfo_min_freq")),
+            "hardware_max_khz": read_str(os.path.join(policy, "cpuinfo_max_freq")),
+            "applied_min_khz": read_str(os.path.join(policy, "scaling_min_freq")),
+            "applied_max_khz": read_str(os.path.join(policy, "scaling_max_freq")),
+        })
+
+    for maximum in sorted(
+        _glob(root, "sys/class/drm/card*/device/tile*/gt*/freq0/max_freq")
+    )[:_SNAP_MAX_CHIPS]:
+        directory = os.path.dirname(maximum)
+        parts = os.path.relpath(
+            directory, os.path.join(root, "sys/class/drm")
+        ).split(os.sep)
+        out["gpu"].append({
+            "backend": "xe",
+            "card": parts[0] if parts else None,
+            "tile": parts[2] if len(parts) > 2 else None,
+            "gt": parts[3] if len(parts) > 3 else None,
+            "min_mhz": read_str(os.path.join(directory, "min_freq")),
+            "max_mhz": read_str(maximum),
+            "hardware_min_mhz": read_str(os.path.join(directory, "rpn_freq")),
+            "hardware_max_mhz": read_str(os.path.join(directory, "rp0_freq")),
+        })
+    for maximum in sorted(
+        _glob(root, "sys/class/drm/card*/gt_max_freq_mhz")
+    )[:_SNAP_MAX_CHIPS]:
+        directory = os.path.dirname(maximum)
+        out["gpu"].append({
+            "backend": "i915",
+            "card": os.path.basename(directory),
+            "min_mhz": read_str(os.path.join(directory, "gt_min_freq_mhz")),
+            "max_mhz": read_str(maximum),
+            "hardware_min_mhz": read_str(os.path.join(directory, "gt_RPn_freq_mhz")),
+            "hardware_max_mhz": read_str(os.path.join(directory, "gt_RP0_freq_mhz")),
+        })
+    for overdrive in sorted(
+        _glob(root, "sys/class/drm/card*/device/pp_od_clk_voltage")
+    )[:_SNAP_MAX_CHIPS]:
+        card = os.path.basename(os.path.dirname(os.path.dirname(overdrive)))
+        out["gpu"].append({
+            "backend": "amdgpu",
+            "card": card,
+            "overdrive_present": True,
+            "performance_level": read_str(os.path.join(
+                os.path.dirname(overdrive), "power_dpm_force_performance_level"
+            )),
+        })
+
+    for surface in sorted(
+        _glob(root, "sys/devices/virtual/powercap/intel-rapl*/*")
+    )[:_SNAP_MAX_CHIPS]:
+        pl1 = read_str(os.path.join(surface, "constraint_0_power_limit_uw"))
+        pl2 = read_str(os.path.join(surface, "constraint_1_power_limit_uw"))
+        if pl1 is None and pl2 is None:
+            continue
+        out["rapl"].append({
+            "surface": os.path.basename(surface),
+            "name": read_str(os.path.join(surface, "name")),
+            "pl1_uw": pl1,
+            "pl2_uw": pl2,
+        })
+    return out
+
+
 _DMI_FIELDS = ("sys_vendor", "board_vendor", "board_name",
                "product_name", "product_version", "product_family")
 _LED_NODES = ("max_brightness", "multi_index", "multi_intensity", "brightness")
@@ -407,7 +480,9 @@ def sysfs_snapshot(
     snap: dict = {"hwmon": [], "firmware_attributes": {}, "power_supply": {},
                   "platform_profile": {"acpi": {}, "class": {}}, "acpi": {}, "modules": [],
                   "asus_ppt": {"asus_armoury": {}, "asus_nb_wmi": {}},
-                  "dmi": {}, "leds": [], "ec": {}}
+                  "dmi": {}, "leds": [],
+                  "cpu_gpu_power": {"cpufreq": [], "gpu": [], "rapl": []},
+                  "ec": {}}
     try:
         snap["hwmon"] = _snap_hwmon(root)
     except Exception:  # noqa: BLE001
@@ -444,6 +519,10 @@ def sysfs_snapshot(
         pass
     try:
         snap["leds"] = _snap_leds(root)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        snap["cpu_gpu_power"] = _snap_cpu_gpu_power(root)
     except Exception:  # noqa: BLE001
         pass
     try:

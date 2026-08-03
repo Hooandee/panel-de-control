@@ -362,6 +362,60 @@ def test_sysfs_snapshot_modules_without_acpi_call(tmp_path):
     assert "acpi_call" not in snap["modules"]
 
 
+def test_sysfs_snapshot_captures_cpu_gpu_and_rapl_selection_surfaces(tmp_path):
+    root = str(tmp_path)
+    policy = os.path.join(root, "sys/devices/system/cpu/cpufreq/policy0")
+    _mk(os.path.join(policy, "scaling_driver"), "intel_pstate\n")
+    _mk(os.path.join(policy, "affected_cpus"), "0 1 2 3\n")
+    _mk(os.path.join(policy, "cpuinfo_min_freq"), "400000\n")
+    _mk(os.path.join(policy, "cpuinfo_max_freq"), "4800000\n")
+    _mk(os.path.join(policy, "scaling_min_freq"), "1200000\n")
+    _mk(os.path.join(policy, "scaling_max_freq"), "3000000\n")
+    xe = os.path.join(root, "sys/class/drm/card0/device/tile0/gt0/freq0")
+    for name, value in {
+        "min_freq": "300\n",
+        "max_freq": "2000\n",
+        "rpn_freq": "300\n",
+        "rp0_freq": "2000\n",
+    }.items():
+        _mk(os.path.join(xe, name), value)
+    rapl = os.path.join(
+        root,
+        "sys/devices/virtual/powercap/intel-rapl-mmio/intel-rapl-mmio:0",
+    )
+    _mk(os.path.join(rapl, "name"), "package-0\n")
+    _mk(os.path.join(rapl, "constraint_0_power_limit_uw"), "20000000\n")
+    _mk(os.path.join(rapl, "constraint_1_power_limit_uw"), "31000000\n")
+
+    surfaces = sysfs_snapshot(root=root)["cpu_gpu_power"]
+
+    assert surfaces["cpufreq"] == [{
+        "policy": "policy0",
+        "affected_cpus": "0 1 2 3",
+        "driver": "intel_pstate",
+        "hardware_min_khz": "400000",
+        "hardware_max_khz": "4800000",
+        "applied_min_khz": "1200000",
+        "applied_max_khz": "3000000",
+    }]
+    assert surfaces["gpu"] == [{
+        "backend": "xe",
+        "card": "card0",
+        "tile": "tile0",
+        "gt": "gt0",
+        "min_mhz": "300",
+        "max_mhz": "2000",
+        "hardware_min_mhz": "300",
+        "hardware_max_mhz": "2000",
+    }]
+    assert surfaces["rapl"] == [{
+        "surface": "intel-rapl-mmio:0",
+        "name": "package-0",
+        "pl1_uw": "20000000",
+        "pl2_uw": "31000000",
+    }]
+
+
 def test_sysfs_snapshot_empty_root_never_raises(tmp_path):
     snap = sysfs_snapshot(root=str(tmp_path))
     assert snap == {
@@ -374,6 +428,7 @@ def test_sysfs_snapshot_empty_root_never_raises(tmp_path):
         "asus_ppt": {"asus_armoury": {}, "asus_nb_wmi": {}},
         "dmi": {},
         "leds": [],
+        "cpu_gpu_power": {"cpufreq": [], "gpu": [], "rapl": []},
         "ec": {
             "debugfs_present": False,
             "ec_sys_loaded": False,
