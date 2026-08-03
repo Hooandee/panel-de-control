@@ -110,6 +110,10 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
   const inFwMode = hasFwModes && tdp.firmware_mode !== "custom";
   const shownWatts = inFwMode ? (tdp.applied_w ?? view.watts) : view.watts;
   const ownership = ownershipView(tdp.ownership);
+  const deckPptActive = Boolean(tdp.ppt?.supported && view.mode !== "estable");
+  const arcApplied = deckPptActive
+    ? (tdp.ppt?.applied.slow ?? tdp.ppt?.requested.slow ?? shownWatts)
+    : (power?.applied ?? null);
 
   // Master switch off: keep the live arc, drop every write control.
   if (monitorOnly) {
@@ -127,7 +131,10 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
             gpuBusy={power?.gpu_busy ?? null}
             auto={isAutoOn}
             setpoint={power?.setpoint ?? null}
-            appliedWatts={power?.applied ?? null}
+            appliedWatts={arcApplied}
+            visualMax={deckPptActive ? tdp.ppt?.visual_max : null}
+            baseMarkerWatts={deckPptActive ? view.watts : null}
+            fastMarkerWatts={deckPptActive ? (tdp.ppt?.applied.fast ?? tdp.ppt?.requested.fast ?? null) : null}
           />
         </PanelSectionRow>
       </>
@@ -159,7 +166,10 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
           gpuBusy={power?.gpu_busy ?? null}
           auto={isAutoOn}
           setpoint={power?.setpoint ?? null}
-          appliedWatts={power?.applied ?? null}
+          appliedWatts={arcApplied}
+          visualMax={deckPptActive ? tdp.ppt?.visual_max : null}
+          baseMarkerWatts={deckPptActive ? view.watts : null}
+          fastMarkerWatts={deckPptActive ? (tdp.ppt?.applied.fast ?? tdp.ppt?.requested.fast ?? null) : null}
         />
       </PanelSectionRow>
       {ownership.show && (
@@ -277,6 +287,7 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
                 levels={view.levels}
                 mode={view.mode}
                 bounds={{ pl2: tdp.level_limits.pl2, pl3: tdp.level_limits.pl3 }}
+                ppt={tdp.ppt}
                 onSetLevels={onSetLevels}
                 onSetMode={onSetMode}
               />

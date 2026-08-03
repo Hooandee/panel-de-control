@@ -1,5 +1,5 @@
 from tdp.backend import NullBackend, TDPBackend
-from tdp.types import TdpLimits
+from tdp.types import TdpLimits, TdpResult
 
 
 def test_null_backend_unsupported():
@@ -55,3 +55,30 @@ def test_multi_rail_backend_reconciles_all_levels():
     assert b.reconciliation_levels(
         {"pl1": 15, "pl2": 20, "pl3": 25}
     ) == {"pl1": 15, "pl2": 20, "pl3": 25}
+
+
+def test_legacy_backend_physical_contract_preserves_all_existing_rails():
+    class Multi(TDPBackend):
+        supports_levels = True
+
+        def get_limits(self):
+            return TdpLimits(5, 15, 20, 30)
+
+        def set_tdp(self, watts, ac):
+            return TdpResult(watts, watts, True, "")
+
+        def read_applied(self):
+            return 15
+
+        def set_levels(self, pl1, pl2, pl3, ac):
+            self.applied = (pl1, pl2, pl3, ac)
+            return TdpResult(pl1, pl1, True, "")
+
+    backend = Multi()
+    levels = {"pl1": 15, "pl2": 20, "pl3": 25}
+
+    assert backend.primary_rail == "pl1"
+    assert backend.physical_levels(levels) == levels
+    result = backend.apply_targets(levels, True)
+    assert result.ok is True
+    assert backend.applied == (15, 20, 25, True)

@@ -26,7 +26,27 @@ class _FakeGpuClock:
 
     def set_auto(self):
         self._auto = True
+        self._cur = (200, 2700)
         return True
+
+    backend = "fake"
+
+    def diagnostics(self):
+        return {
+            "backend": self.backend,
+            "supported": self.supported,
+            "range": {"min_mhz": 200, "max_mhz": 2700} if self.supported else None,
+            "applied": (
+                {"min_mhz": self._cur[0], "max_mhz": self._cur[1]}
+                if self.supported else None
+            ),
+            "last_operation": None,
+        }
+
+
+class _RejectingGpuClock(_FakeGpuClock):
+    def set(self, lo, hi):
+        return False
 
 
 def _make_plugin(tmp_path, monkeypatch, gpu=None):
@@ -98,6 +118,18 @@ def test_set_gpu_clock_pins_and_persists(tmp_path, monkeypatch):
     p2._init()
     p2._apply_gpu_clock()
     assert gpu2.get() == (1200, 2400)
+
+
+def test_rejected_gpu_clock_does_not_persist(tmp_path, monkeypatch):
+    p, gpu = _make_plugin(tmp_path, monkeypatch, _RejectingGpuClock())
+    st = asyncio.run(p.set_gpu_clock(1200, 2400))
+    assert st["manual"] is False
+    assert st["status"] == "rejected"
+    assert st["requested_min"] == 1200
+    assert st["applied_min"] == 300
+
+    p2, _ = _make_plugin(tmp_path, monkeypatch)
+    assert asyncio.run(p2.get_gpu_clock())["manual"] is False
 
 
 def test_set_gpu_clock_auto_releases(tmp_path, monkeypatch):

@@ -13,6 +13,7 @@ class TDPBackend(ABC):
     heartbeat_s: float | None = None
     read_tolerance_w: int = 0
     probe_trace: tuple[dict, ...] = ()
+    primary_rail: str = "pl1"
 
     @abstractmethod
     def get_limits(self) -> TdpLimits:
@@ -44,6 +45,18 @@ class TDPBackend(ABC):
     def reconciliation_levels(self, levels: dict) -> dict[str, int]:
         rails = ("pl1", "pl2", "pl3") if self.supports_levels else ("pl1",)
         return {rail: int(levels[rail]) for rail in rails}
+
+    def physical_levels(self, levels: dict) -> dict[str, int]:
+        return self.reconciliation_levels(levels)
+
+    def apply_targets(self, targets: dict[str, int], ac: bool) -> TdpResult:
+        primary = int(targets[self.primary_rail])
+        return self.set_levels(
+            int(targets.get("pl1", primary)),
+            int(targets.get("pl2", primary)),
+            int(targets.get("pl3", targets.get("pl2", primary))),
+            ac,
+        )
 
     def profile_choices(self) -> list:
         return []

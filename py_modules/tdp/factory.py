@@ -42,7 +42,7 @@ def _candidates(device, fallback, root, ryzenadj):
         return IntelRaplBackend(fallback, root=root)
 
     def deck():
-        return SteamDeckHwmonBackend(fallback, root=root)
+        return SteamDeckHwmonBackend(fallback, device.key, root=root)
 
     def alib():
         return AlibBackend(fallback, root=root, write_max=device.cooler_max)
@@ -55,7 +55,7 @@ def _candidates(device, fallback, root, ryzenadj):
     if device.vendor == "intel":
         return [msi, intel]  # no AMD fallbacks on Intel
     if key.startswith("steam_deck"):
-        return [deck, asus, lenovo, msi, *amd_tail]
+        return [deck]
     if key.startswith("rog_"):
         return [asus, lenovo, msi, *amd_tail]
     if key.startswith("legion_"):

@@ -174,6 +174,17 @@ class ProfileStore(ScopedProfileStore):
         prof["mode"] = mode
         self._save()
 
+    def migrate_deck_ppt_stable(self):
+        changed = False
+        profiles = [self._data["global"], *self._data["games"].values()]
+        for profile in profiles:
+            if profile.get("mode") != "estable":
+                profile["mode"] = "estable"
+                changed = True
+        if changed:
+            self._save()
+        return changed
+
     def set_offsets(self, scope, off2, off3, appid=None):
         """Switch to custom mode with explicit boost margins."""
         prof = self._target(scope, appid)

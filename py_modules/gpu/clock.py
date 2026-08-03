@@ -39,8 +39,49 @@ def sclk_commands(min_mhz, max_mhz):
     return [f"s 0 {int(min_mhz)}", f"s 1 {int(max_mhz)}", "c"]
 
 
-class NullGpuClock:
+def _window(value):
+    if not value:
+        return None
+    return {"min_mhz": int(value[0]), "max_mhz": int(value[1])}
+
+
+class _GpuDiagnostics:
+    backend = "unknown"
+
+    def _record(self, action, requested, ok, reason=""):
+        try:
+            applied = self.get()
+        except Exception:  # noqa: BLE001 - diagnostics must not mask the operation
+            applied = None
+        self._last_operation = {
+            "action": action,
+            "requested": _window(requested),
+            "applied": _window(applied),
+            "ok": bool(ok),
+            "reason": reason,
+        }
+
+    def diagnostics(self):
+        try:
+            hardware_range = self.get_range()
+        except Exception:  # noqa: BLE001
+            hardware_range = None
+        try:
+            applied = self.get()
+        except Exception:  # noqa: BLE001
+            applied = None
+        return {
+            "backend": self.backend,
+            "supported": bool(self.supported),
+            "range": _window(hardware_range),
+            "applied": _window(applied),
+            "last_operation": getattr(self, "_last_operation", None),
+        }
+
+
+class NullGpuClock(_GpuDiagnostics):
     supported = False
+    backend = "none"
 
     def get_range(self):
         return None
@@ -55,8 +96,11 @@ class NullGpuClock:
         return False
 
 
-class AmdGpuClock:
+class AmdGpuClock(_GpuDiagnostics):
+    backend = "amdgpu"
+
     def __init__(self, root="/"):
+        self._last_operation = None
         self._od = None
         self._level = None
         for od in glob.glob(os.path.join(root, _DRM, "card[0-9]*", "device", "pp_od_clk_voltage")):
@@ -74,20 +118,36 @@ class AmdGpuClock:
 
     def set(self, min_mhz, max_mhz):
         if not self.supported:
+            self._record("manual", (min_mhz, max_mhz), False, "unsupported")
             return False
-        write_str(self._level, "manual")
-        for cmd in sclk_commands(min_mhz, max_mhz):
-            write_str(self._od, cmd)
-        return read_str(self._level) == "manual"  # readback
+        try:
+            write_str(self._level, "manual")
+            for cmd in sclk_commands(min_mhz, max_mhz):
+                write_str(self._od, cmd)
+            ok = read_str(self._level) == "manual"
+            self._record("manual", (min_mhz, max_mhz), ok,
+                         "" if ok else "readback_mismatch")
+            return ok
+        except Exception as exc:  # noqa: BLE001
+            self._record("manual", (min_mhz, max_mhz), False, type(exc).__name__)
+            return False
 
     def set_auto(self):
         if not self.supported:
+            self._record("auto", None, False, "unsupported")
             return False
-        write_str(self._level, "auto")
-        return read_str(self._level) == "auto"
+        try:
+            write_str(self._level, "auto")
+            ok = read_str(self._level) == "auto"
+            self._record("auto", self.get_range(), ok,
+                         "" if ok else "readback_mismatch")
+            return ok
+        except Exception as exc:  # noqa: BLE001
+            self._record("auto", None, False, type(exc).__name__)
+            return False
 
 
-class _FreqPairClock:
+class _FreqPairClock(_GpuDiagnostics):
     """Shared min/max GPU-frequency backend for the Intel drivers, which both expose
     a writable min/max pair + hardware RPn/RP0 bounds — only the node names/location
     differ (i915 vs xe). A subclass sets `self._min/_max/_rpn/_rp0` to the four full
@@ -113,30 +173,48 @@ class _FreqPairClock:
 
     def set(self, min_mhz, max_mhz):
         if not self.supported:
+            self._record("manual", (min_mhz, max_mhz), False, "unsupported")
             return False
         lo, hi = int(min_mhz), int(max_mhz)
         # The driver enforces min <= max at write time. Writing the two nodes in the
         # wrong order transiently violates that (new min > current max, or new max <
         # current min) and the kernel rejects one write. Raising the window → set max
         # first; lowering (or unknown) → set min first.
-        cur = self.get()
-        if cur and lo > cur[1]:
-            write_str(self._max, hi)
-            write_str(self._min, lo)
-        else:
-            write_str(self._min, lo)
-            write_str(self._max, hi)
-        return self.get() == (lo, hi)
+        try:
+            cur = self.get()
+            if cur and lo > cur[1]:
+                write_str(self._max, hi)
+                write_str(self._min, lo)
+            else:
+                write_str(self._min, lo)
+                write_str(self._max, hi)
+            ok = self.get() == (lo, hi)
+            self._record("manual", (lo, hi), ok,
+                         "" if ok else "readback_mismatch")
+            return ok
+        except Exception as exc:  # noqa: BLE001
+            self._record("manual", (lo, hi), False, type(exc).__name__)
+            return False
 
     def set_auto(self):
         rng = self.get_range()
-        return self.set(*rng) if rng else False
+        if not rng:
+            self._record("auto", None, False, "range_unavailable")
+            return False
+        ok = self.set(*rng)
+        operation = getattr(self, "_last_operation", None)
+        if operation is not None:
+            operation["action"] = "auto"
+        return ok
 
 
 class IntelGpuClock(_FreqPairClock):
     """i915: /sys/class/drm/card*/gt_{min,max,RPn,RP0}_freq_mhz."""
 
+    backend = "i915"
+
     def __init__(self, root="/"):
+        self._last_operation = None
         for maxp in sorted(glob.glob(os.path.join(root, _DRM, "card[0-9]*", "gt_max_freq_mhz"))):
             d = os.path.dirname(maxp)
             self._min = os.path.join(d, "gt_min_freq_mhz")
@@ -150,7 +228,10 @@ class XeGpuClock(_FreqPairClock):
     """xe (Lunar Lake / MSI Claw): card*/device/tile*/gt*/freq0/{min,max,rpn,rp0}_freq.
     Targets gt0 (the render GT) — the sorted glob puts gt0 before gt1."""
 
+    backend = "xe"
+
     def __init__(self, root="/"):
+        self._last_operation = None
         pattern = os.path.join(root, _DRM, "card[0-9]*", "device", "tile*", "gt*", "freq0", "max_freq")
         for maxp in sorted(glob.glob(pattern)):
             d = os.path.dirname(maxp)

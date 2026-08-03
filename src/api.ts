@@ -115,6 +115,16 @@ export interface TdpOwnership {
 //   custom  — explicit additive margins (the offset sliders).
 export type BoostMode = "estable" | "auto" | "custom";
 
+export interface SteamDeckPptState {
+  supported: boolean;
+  source: "sysfs" | "compatibility_override" | null;
+  slow: LevelBound | null;
+  fast: LevelBound | null;
+  visual_max: number;
+  requested: { slow: number; fast: number };
+  applied: { slow: number | null; fast: number | null };
+}
+
 export interface TdpState {
   supported: boolean;
   backend: string;
@@ -128,6 +138,8 @@ export interface TdpState {
   watts: number;
   global_watts: number;
   applied_w: number | null;
+  primary_rail?: "pl1" | "pl2" | "pl3";
+  ppt?: SteamDeckPptState | null;
   supports_advanced: boolean;
   level_limits: { pl1?: LevelBound; pl2?: LevelBound; pl3?: LevelBound };
   levels: Levels;
@@ -589,6 +601,15 @@ export interface GpuClockState {
   range_max: number | null;
   min: number | null;
   max: number | null;
+  configured_min: number | null;
+  configured_max: number | null;
+  requested_min: number | null;
+  requested_max: number | null;
+  applied_min: number | null;
+  applied_max: number | null;
+  generation: number;
+  status: "auto" | "applied" | "rejected" | "unsupported";
+  reason: string | null;
 }
 
 export const getGpuClock = callable<[], GpuClockState>("get_gpu_clock");

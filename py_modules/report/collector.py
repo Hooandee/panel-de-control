@@ -485,6 +485,10 @@ def capabilities_from(states: dict) -> dict:
     ltools = launch.get("tools") or {}
     running = (launch.get("frontend") or {}).get("runningGame")
     running = running if isinstance(running, dict) else {}
+    cpu_gpu = states.get("cpu_gpu_diagnostics") or {}
+    cpu_frequency = cpu_gpu.get("cpu") or {}
+    gpu_frequency = cpu_gpu.get("gpu") or {}
+    deck_ppt = cpu_gpu.get("steamdeck_ppt") or {}
     return {
         "tdp_backend": tdp.get("backend"),
         "tdp_supported": bool(tdp.get("supported")),
@@ -498,6 +502,10 @@ def capabilities_from(states: dict) -> dict:
         "charge_limit_supported": bool(batt.get("supported")),
         "charge_limit_adjustable": bool(batt.get("adjustable")),
         "gpu_clock_supported": bool(gpu.get("supported")),
+        "cpu_frequency_backend": cpu_frequency.get("backend"),
+        "cpu_frequency_supported": bool(cpu_frequency.get("supported")),
+        "gpu_clock_backend": gpu_frequency.get("backend"),
+        "steamdeck_ppt_supported": bool(deck_ppt.get("supported")),
         "color_supported": bool(color.get("supported")),
         "controller_manager": ctl.get("manager"),
         "controller_kind": ctl.get("kind"),

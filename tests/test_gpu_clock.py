@@ -109,6 +109,17 @@ def test_intel_set_writes_min_max(tmp_path):
     g = IntelGpuClock(root=root)
     assert g.set(600, 1500) is True
     assert g.get() == (600, 1500)
+    diag = g.diagnostics()
+    assert diag["backend"] == "i915"
+    assert diag["last_operation"]["requested"] == {
+        "min_mhz": 600,
+        "max_mhz": 1500,
+    }
+    assert diag["last_operation"]["applied"] == {
+        "min_mhz": 600,
+        "max_mhz": 1500,
+    }
+    assert diag["last_operation"]["ok"] is True
 
 
 def test_intel_set_auto_restores_full_range(tmp_path):
@@ -191,3 +202,14 @@ def test_select_null_when_nothing(tmp_path):
         vendor = "amd"
 
     assert isinstance(select_gpu_clock(Dev(), root=str(tmp_path)), NullGpuClock)
+
+
+def test_null_diagnostics_are_honest():
+    diag = NullGpuClock().diagnostics()
+    assert diag == {
+        "backend": "none",
+        "supported": False,
+        "range": None,
+        "applied": None,
+        "last_operation": None,
+    }

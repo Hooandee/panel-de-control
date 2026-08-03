@@ -104,8 +104,10 @@ _CUSTOM_MODE = "custom"
 class _TdpCommand:
     generation: int
     reason: str
+    logical_requested: dict
     requested: dict
     safe_bounds: dict
+    primary_rail: str
     on_ac: bool
 
 
@@ -119,6 +121,7 @@ DEFAULTS = {
     # One-time-migration flags: SettingsStore drops keys not in DEFAULTS, so these MUST
     # be declared here or the migration re-runs every load and clobbers the new stores.
     "_potencia_scope_migrated": False,
+    "_deck_ppt_scope_migrated": False,
     "_cpu_scope_migrated": False,
     "_hdr_scope_migrated": False,
     "auto_tdp": False,
@@ -146,6 +149,7 @@ DEFAULTS = {
     "seen_autotdp_notice": False,
     # HHD's tdp_enable saved when we take control, to restore later. None = never took it.
     "hhd_tdp_prev": None,
+    "steamdeck_ppt_previous": None,
     # HDR output on/off (only meaningful on HDR-capable panels — see device.hdr).
     "hdr_enabled": False,
     # Battery charge limit: when enabled, cap charging at `charge_limit_percent`
@@ -233,6 +237,16 @@ class Plugin:
             self._settings["_potencia_scope_migrated"] = True
             self._store.save(self._settings)
         self._tdp_backend = tdp_factory.select_backend(self._device)
+        self._steamdeck_ppt_history = deque(maxlen=32)
+        self._steamdeck_ppt_last_failure = None
+        self._steamdeck_ppt_recovery_blocked = False
+        if (
+            self._device.key in ("steam_deck_lcd", "steam_deck_oled")
+            and not self._settings.get("_deck_ppt_scope_migrated")
+        ):
+            self._tdp_profiles.migrate_deck_ppt_stable()
+            self._settings["_deck_ppt_scope_migrated"] = True
+            self._store.save(self._settings)
         self._powerstation_detector = powerstation_conflict.Detector()
         # Safety self-heal: correct any stored TDP value an older version persisted
         # outside the device's real range (a bogus firmware max could leak in) so it can
@@ -354,6 +368,13 @@ class Plugin:
             self._settings["_cpu_scope_migrated"] = True
             self._store.save(self._settings)
         self._gpu_clock = select_gpu_clock(self._device)
+        self._gpu_generation = 0
+        self._gpu_requested = None
+        self._gpu_last_result = None
+        self._gpu_last_failure = None
+        self._gpu_history = deque(maxlen=16)
+        self._reapply_generation = 0
+        self._last_reapply_trigger = None
         # Topology + freq range are static — read once (only SMT/boost state is live).
         # ORDER-CRITICAL: read AFTER CoreControl() above, which onlines all CPUs. The
         # kernel drops an offline CPU's topology/core_id, so counting cores here before
@@ -515,7 +536,7 @@ class Plugin:
         # Turning the power module off = stepping aside; hand HHD's TDP back, same
         # as set_tdp_control_enabled(False). Otherwise no manager drives the TDP.
         if module_id == "power" and disabled:
-            await self._offload_call(self._restore_hhd_tdp)
+            await self._offload_call(self._restore_power_handoff)
         self._sync_sampler()  # learning may have (un)gained a consumer
         return {"disabled": self._user_disabled_all()}
 
@@ -627,6 +648,7 @@ class Plugin:
                 self._offload_call(lambda: self._display_diagnostics(context))
             ),
             "gpu": await _safe(self.get_gpu_clock()),
+            "cpu_gpu_diagnostics": self._cpu_gpu_diagnostics(),
             # get_controller_config can block (HHD localhost HTTP / busctl spawn) →
             # run it off the event loop, unlike the cheap sysfs reads above.
             "controller": await loop.run_in_executor(None, self._safe_controller_config),
@@ -942,6 +964,90 @@ class Plugin:
         out["hhd_present"] = hhd_present
         return out
 
+    # ---- Steam Deck PPT ownership ------------------------------------------
+    def _steamdeck_ppt_supported(self) -> bool:
+        capability = getattr(self._tdp_backend, "ppt_capability", None)
+        if not callable(capability):
+            return False
+        try:
+            return bool(capability().get("supported"))
+        except Exception:  # noqa: BLE001
+            return False
+
+    def _record_steamdeck_ppt(self, action, ok, reason=None) -> None:
+        history = getattr(self, "_steamdeck_ppt_history", None)
+        if history is None:
+            history = deque(maxlen=32)
+            self._steamdeck_ppt_history = history
+        event = {
+            "at": round(time.monotonic(), 3),
+            "action": action,
+            "ok": bool(ok),
+            "reason": reason,
+        }
+        history.append(event)
+        if not ok:
+            self._steamdeck_ppt_last_failure = event
+        decky.logger.info(
+            "Steam Deck PPT transition %s",
+            json.dumps(event, sort_keys=True, separators=(",", ":")),
+        )
+
+    def _restore_steamdeck_ppt(self) -> bool:
+        marker = self._settings.get("steamdeck_ppt_previous")
+        if marker is None:
+            return True
+        restore = getattr(self._tdp_backend, "restore_ppt", None)
+        if not callable(restore):
+            self._steamdeck_ppt_recovery_blocked = True
+            self._record_steamdeck_ppt("restore", False, "backend_unavailable")
+            return False
+        try:
+            result = restore(marker)
+        except Exception as error:  # noqa: BLE001
+            self._steamdeck_ppt_recovery_blocked = True
+            self._record_steamdeck_ppt("restore", False, type(error).__name__)
+            return False
+        if not result.ok:
+            self._steamdeck_ppt_recovery_blocked = True
+            self._record_steamdeck_ppt("restore", False, result.reason or "restore_failed")
+            return False
+        self._settings["steamdeck_ppt_previous"] = None
+        self._save()
+        self._steamdeck_ppt_recovery_blocked = False
+        self._steamdeck_ppt_last_failure = None
+        self._record_steamdeck_ppt("restore", True)
+        return True
+
+    def _prepare_steamdeck_ppt(self, command):
+        if not self._steamdeck_ppt_supported():
+            return None
+        advanced = "pl3" in command.requested
+        if advanced:
+            if getattr(self, "_steamdeck_ppt_recovery_blocked", False):
+                failure = getattr(self, "_steamdeck_ppt_last_failure", None) or {}
+                return failure.get("reason", "recovery_blocked")
+            if self._settings.get("steamdeck_ppt_previous") is None:
+                snapshot = self._tdp_backend.capture_ppt()
+                if not isinstance(snapshot, dict):
+                    self._record_steamdeck_ppt("capture", False, "snapshot_unavailable")
+                    return "snapshot_unavailable"
+                self._settings["steamdeck_ppt_previous"] = dict(snapshot)
+                self._save()
+                self._record_steamdeck_ppt("capture", True)
+            return None
+        if self._settings.get("steamdeck_ppt_previous") is not None:
+            if not self._restore_steamdeck_ppt():
+                failure = getattr(self, "_steamdeck_ppt_last_failure", None) or {}
+                return failure.get("reason", "restore_failed")
+        return None
+
+    def _restore_power_handoff(self) -> bool:
+        if not self._restore_steamdeck_ppt():
+            return False
+        self._restore_hhd_tdp()
+        return True
+
     # ---- TDP conflict + master switch --------------------------------------
     async def get_tdp_conflict(self) -> dict:
         """Which external managers can currently write the power rails."""
@@ -1010,7 +1116,7 @@ class Plugin:
                 else {}
             )
             self._advance_tdp_generation()
-            await self._offload_call(self._restore_hhd_tdp)
+            await self._offload_call(self._restore_power_handoff)
             self._tdp_observation = await self._offload_call(
                 self._observe_tdp_sync
             )
@@ -2069,28 +2175,29 @@ class Plugin:
         ac = read_on_ac() if on_ac is None else bool(on_ac)
         limits = self._limits()
         active = self._active_max(limits, ac)
-        requested = self._tdp_profiles.effective(self._current_appid)
+        logical_requested = self._tdp_profiles.effective(self._current_appid)
         if self._settings.get("eco_enabled"):
             minimum = limits.min_w
-            requested = {
+            logical_requested = {
                 "pl1": minimum,
                 "pl2": minimum,
                 "pl3": minimum,
+                "mode": "estable",
             }
         select_levels = getattr(
             self._tdp_backend,
-            "reconciliation_levels",
+            "physical_levels",
             None,
         )
         if callable(select_levels):
-            requested = select_levels(requested)
+            requested = select_levels(logical_requested)
         elif getattr(self._tdp_backend, "supports_levels", False):
             requested = {
-                rail: int(requested[rail])
+                rail: int(logical_requested[rail])
                 for rail in ("pl1", "pl2", "pl3")
             }
         else:
-            requested = {"pl1": int(requested["pl1"])}
+            requested = {"pl1": int(logical_requested["pl1"])}
         safe = self._cap_level_limits(
             self._tdp_backend.level_limits(),
             active,
@@ -2105,11 +2212,16 @@ class Plugin:
         return _TdpCommand(
             generation=self._tdp_generation,
             reason=str(reason),
+            logical_requested={
+                rail: int(logical_requested[rail])
+                for rail in ("pl1", "pl2", "pl3")
+            },
             requested={
                 rail: int(requested[rail])
                 for rail in requested
             },
             safe_bounds=safe,
+            primary_rail=getattr(self._tdp_backend, "primary_rail", "pl1"),
             on_ac=ac,
         )
 
@@ -2131,17 +2243,31 @@ class Plugin:
             }
         return TdpObservation(readable=True, surfaces=surfaces)
 
+    def _apply_tdp_targets(self, target, on_ac):
+        apply_targets = getattr(self._tdp_backend, "apply_targets", None)
+        if callable(apply_targets):
+            return apply_targets(target, on_ac)
+        primary_rail = getattr(self._tdp_backend, "primary_rail", "pl1")
+        primary = target[primary_rail]
+        return self._tdp_backend.set_levels(
+            target.get("pl1", primary),
+            target.get("pl2", primary),
+            target.get("pl3", target.get("pl2", primary)),
+            on_ac,
+        )
+
     def _execute_tdp_command(self, command):
+        logical_watts = command.logical_requested["pl1"]
         if self._tdp_shutdown:
             return TdpResult(
-                command.requested["pl1"],
+                logical_watts,
                 None,
                 False,
                 "tdp-shutdown",
             )
         if command.generation != self._tdp_generation:
             return TdpResult(
-                command.requested["pl1"],
+                logical_watts,
                 None,
                 False,
                 "stale-generation",
@@ -2149,7 +2275,7 @@ class Plugin:
         if not self._tdp_backend.supported:
             self._tdp_status, self._tdp_reason = "unsupported", ""
             result = TdpResult(
-                command.requested["pl1"],
+                logical_watts,
                 None,
                 False,
                 "tdp-unsupported",
@@ -2166,7 +2292,7 @@ class Plugin:
             self._tdp_status = "unverifiable"
             self._tdp_reason = "control_disabled"
             return TdpResult(
-                command.requested["pl1"],
+                logical_watts,
                 None,
                 True,
                 "tdp-control-disabled",
@@ -2179,7 +2305,7 @@ class Plugin:
                 self._tdp_targets = None
                 self._tdp_observation = self._observe_tdp_sync()
                 result = TdpResult(
-                    command.requested["pl1"],
+                    logical_watts,
                     self._tdp_backend.read_applied(),
                     False,
                     f"firmware-mode-rejected:{mode}",
@@ -2197,7 +2323,7 @@ class Plugin:
             self._tdp_targets = None
             self._tdp_observation = self._observe_tdp_sync()
             result = TdpResult(
-                command.requested["pl1"],
+                logical_watts,
                 self._tdp_backend.read_applied(),
                 True,
                 f"firmware-mode:{mode}",
@@ -2210,10 +2336,28 @@ class Plugin:
                 requested=command.requested,
             )
             return result
+        ppt_failure = self._prepare_steamdeck_ppt(command)
+        if ppt_failure is not None:
+            self._tdp_status = "rejected"
+            self._tdp_reason = "steamdeck_ppt_restore"
+            result = TdpResult(
+                logical_watts,
+                self._tdp_backend.read_applied(),
+                False,
+                f"steamdeck-ppt:{ppt_failure}",
+            )
+            self._record_tdp_transition(
+                command.reason,
+                action="ppt-prepare",
+                result=result,
+                on_ac=command.on_ac,
+                requested=command.requested,
+            )
+            return result
         before = self._observe_tdp_sync()
         if command.generation != self._tdp_generation:
             return TdpResult(
-                command.requested["pl1"],
+                logical_watts,
                 None,
                 False,
                 "stale-generation",
@@ -2223,19 +2367,11 @@ class Plugin:
             command.safe_bounds,
             before,
         )
-        result = self._tdp_backend.set_levels(
-            targets.target["pl1"],
-            targets.target.get("pl2", targets.target["pl1"]),
-            targets.target.get(
-                "pl3",
-                targets.target.get("pl2", targets.target["pl1"]),
-            ),
-            command.on_ac,
-        )
+        result = self._apply_tdp_targets(targets.target, command.on_ac)
         after = self._observe_tdp_sync()
         if command.generation != self._tdp_generation:
             return TdpResult(
-                command.requested["pl1"],
+                logical_watts,
                 result.applied_w,
                 False,
                 "stale-generation",
@@ -2272,7 +2408,7 @@ class Plugin:
             requested=command.requested,
         )
         return TdpResult(
-            command.requested["pl1"],
+            logical_watts,
             result.applied_w,
             result.ok,
             result.detail,
@@ -2349,15 +2485,7 @@ class Plugin:
         if command.generation != self._tdp_generation:
             return
         if outcome.action == "apply":
-            result = self._tdp_backend.set_levels(
-                targets.target["pl1"],
-                targets.target.get("pl2", targets.target["pl1"]),
-                targets.target.get(
-                    "pl3",
-                    targets.target.get("pl2", targets.target["pl1"]),
-                ),
-                command.on_ac,
-            )
+            result = self._apply_tdp_targets(targets.target, command.on_ac)
             after = self._observe_tdp_sync()
             if command.generation != self._tdp_generation:
                 return
@@ -2577,6 +2705,8 @@ class Plugin:
         # A context change (resume, AC/DC, game change, eco) invalidates any
         # unconfirmed calibration preview — drop it and cancel its revert timer so a
         # stale preview can't leak onto the new context (nor a dangling timer fire).
+        self._reapply_generation = int(getattr(self, "_reapply_generation", 0)) + 1
+        self._last_reapply_trigger = "lifecycle_or_context"
         self._cancel_color_revert()
         self._color_preview = None
         # sysfs (fast) → inline; subprocess-backed (tdp-ryzenadj/fans/color) → off-loop.
@@ -2586,7 +2716,7 @@ class Plugin:
         self._schedule_tdp_apply("lifecycle", on_ac)
         # Stepped aside: retry a pending HHD hand-back (no-op while we control / no marker).
         if not self._tdp_control_on():
-            self._offload(self._restore_hhd_tdp)
+            self._offload(self._restore_power_handoff)
         self._reapply_fans()   # self-offloading
         # HDR before color: switching the HDR mode can drop the loaded LUT, so re-assert
         # HDR first and load the color look after (both self-offloading, FIFO executor).
@@ -2994,6 +3124,86 @@ class Plugin:
         return self._cpu_state()
 
     # ---- GPU clock (Potencia) ----------------------------------------------
+    def _gpu_scope_label(self, appid=None) -> str:
+        current = self._current_appid if appid is None else appid
+        if current is None:
+            return "global"
+        if self._tdp_profiles.is_following_global(current):
+            return "game_follow_global"
+        return "game_own"
+
+    def _next_gpu_generation(self) -> int:
+        self._gpu_generation = int(getattr(self, "_gpu_generation", 0)) + 1
+        return self._gpu_generation
+
+    def _run_gpu_clock(self, requested, *, auto=False) -> dict:
+        generation = self._next_gpu_generation()
+        error_code = None
+        error_type = None
+        try:
+            if not self._gpu_clock.supported:
+                ok = False
+                error_code = "unsupported"
+            elif auto:
+                ok = bool(self._gpu_clock.set_auto())
+                if not ok:
+                    error_code = "write_rejected"
+            else:
+                lo, hi = int(requested["min_mhz"]), int(requested["max_mhz"])
+                wrote = bool(self._gpu_clock.set(lo, hi))
+                applied = self._gpu_clock.get()
+                ok = wrote and applied == (lo, hi)
+                if not wrote:
+                    error_code = "write_rejected"
+                elif applied != (lo, hi):
+                    error_code = "readback_mismatch"
+        except Exception as exc:  # noqa: BLE001 - hardware failure becomes state
+            ok = False
+            error_code = "exception"
+            error_type = type(exc).__name__
+        try:
+            applied = self._gpu_clock.get()
+        except Exception:  # noqa: BLE001 - diagnostics cannot mask the result
+            applied = None
+        return {
+            "generation": generation,
+            "requested": requested,
+            "applied": (
+                {"min_mhz": int(applied[0]), "max_mhz": int(applied[1])}
+                if applied else None
+            ),
+            "ok": ok,
+            "status": "applied" if ok else ("unsupported" if error_code == "unsupported" else "rejected"),
+            "error_code": error_code,
+            "error_type": error_type,
+        }
+
+    def _record_gpu_clock_transition(self, result, trigger, scope=None) -> None:
+        if result["generation"] != getattr(self, "_gpu_generation", 0):
+            return
+        self._gpu_last_result = dict(result)
+        if not result["ok"]:
+            self._gpu_last_failure = dict(result)
+        event = {
+            "at": round(time.monotonic(), 3),
+            "trigger": trigger,
+            "generation": result["generation"],
+            "scope": scope or self._gpu_scope_label(),
+            "requested": result["requested"],
+            "applied": result["applied"],
+            "ok": result["ok"],
+            "status": result["status"],
+            "error_code": result["error_code"],
+            "error_type": result["error_type"],
+        }
+        history = getattr(self, "_gpu_history", None)
+        if history is None:
+            history = deque(maxlen=16)
+            self._gpu_history = history
+        history.append(event)
+        log = decky.logger.info if result["ok"] else decky.logger.warning
+        log("GPU frequency transition %s", json.dumps(event, sort_keys=True, separators=(",", ":")))
+
     def _apply_gpu_clock(self) -> None:
         """Re-assert the GPU clock window when manual (cleared to auto after suspend).
         When not manual we leave the GPU alone (don't fight other tools). Guarded."""
@@ -3005,24 +3215,176 @@ class Plugin:
                 return
             lo, hi = g.get("min"), g.get("max")
             if lo is not None and hi is not None:
-                self._gpu_clock.set(int(lo), int(hi))
-        except Exception:  # noqa: BLE001
-            pass
+                requested = {"mode": "manual", "min_mhz": int(lo), "max_mhz": int(hi)}
+                self._gpu_requested = requested
+                result = self._run_gpu_clock(requested)
+                self._record_gpu_clock_transition(result, "reapply")
+        except Exception as exc:  # noqa: BLE001
+            generation = self._next_gpu_generation()
+            result = {
+                "generation": generation,
+                "requested": getattr(self, "_gpu_requested", None),
+                "applied": None,
+                "ok": False,
+                "status": "rejected",
+                "error_code": "exception",
+                "error_type": type(exc).__name__,
+            }
+            self._record_gpu_clock_transition(result, "reapply")
 
     def _gpu_clock_state(self) -> dict:
         g = self._tdp_profiles.gpu_clock(self._current_appid)
         rng = self._gpu_clock.get_range()
         cur = self._gpu_clock.get()
         gmin, gmax = g.get("min"), g.get("max")
+        requested = getattr(self, "_gpu_requested", None)
+        last = getattr(self, "_gpu_last_result", None)
+        applied_min, applied_max = cur if cur else (None, None)
         return {
             "supported": self._gpu_clock.supported,
             "manual": bool(g.get("manual")),
             "range_min": rng[0] if rng else None,
             "range_max": rng[1] if rng else None,
             # Stored per-scope window when set; else the live/full range for the sliders.
-            "min": gmin if gmin else (cur[0] if cur else (rng[0] if rng else None)),
-            "max": gmax if gmax else (cur[1] if cur else (rng[1] if rng else None)),
+            "min": gmin if gmin is not None else (applied_min if cur else (rng[0] if rng else None)),
+            "max": gmax if gmax is not None else (applied_max if cur else (rng[1] if rng else None)),
+            "configured_min": gmin if g.get("manual") else None,
+            "configured_max": gmax if g.get("manual") else None,
+            "requested_min": requested.get("min_mhz") if requested else None,
+            "requested_max": requested.get("max_mhz") if requested else None,
+            "applied_min": applied_min,
+            "applied_max": applied_max,
+            "generation": last.get("generation") if last else 0,
+            "status": last.get("status") if last else (
+                "auto" if self._gpu_clock.supported else "unsupported"
+            ),
+            "reason": last.get("error_code") if last else None,
         }
+
+    @staticmethod
+    def _diagnostic_window(value):
+        if not isinstance(value, dict):
+            return None
+        return {
+            "min_mhz": value.get("min_mhz"),
+            "max_mhz": value.get("max_mhz"),
+        }
+
+    def _cpu_gpu_diagnostics(self) -> dict:
+        """Allowlisted CPU/GPU/PPT diagnostics for private reports.
+
+        Deliberately excludes application identifiers, titles and raw sysfs/command
+        output. Each producer is isolated so one broken backend cannot block reports.
+        """
+        try:
+            raw_cpu = self._cpu_frequency.diagnostics()
+            policies = []
+            for policy in raw_cpu.get("policy_state", ()):
+                policies.append({
+                    "name": policy.get("name"),
+                    "cpus": list(policy.get("cpus") or ()),
+                    "driver": policy.get("driver"),
+                    "hardware_min_khz": policy.get("hardware_min_khz"),
+                    "hardware_max_khz": policy.get("hardware_max_khz"),
+                    "applied_min_khz": policy.get("applied_min_khz"),
+                    "applied_max_khz": policy.get("applied_max_khz"),
+                })
+            last_cpu = getattr(self, "_cpu_last_result", None)
+            cpu = {
+                "backend": raw_cpu.get("backend"),
+                "supported": bool(raw_cpu.get("supported")),
+                "reason": raw_cpu.get("reason"),
+                "epoch": raw_cpu.get("epoch"),
+                "requested": raw_cpu.get("requested"),
+                "owned": bool(raw_cpu.get("owned")),
+                "drivers": list(raw_cpu.get("drivers") or ()),
+                "policies": policies,
+                "last_result": ({
+                    "generation": last_cpu.generation,
+                    "ok": last_cpu.ok,
+                    "status": last_cpu.status,
+                    "error_code": last_cpu.error_code,
+                    "error_type": last_cpu.error_type,
+                    "frequency_status": last_cpu.frequency_status,
+                    "rollback": last_cpu.rollback,
+                } if last_cpu is not None else None),
+                "history": list(getattr(self, "_cpu_history", ())),
+            }
+        except Exception as exc:  # noqa: BLE001
+            cpu = {
+                "backend": None,
+                "supported": False,
+                "error_type": type(exc).__name__,
+            }
+
+        try:
+            diagnostics = getattr(self._gpu_clock, "diagnostics", None)
+            raw_gpu = diagnostics() if callable(diagnostics) else {}
+            operation = raw_gpu.get("last_operation") or None
+            gpu = {
+                "backend": raw_gpu.get("backend", getattr(self._gpu_clock, "backend", None)),
+                "supported": bool(raw_gpu.get("supported", self._gpu_clock.supported)),
+                "range": self._diagnostic_window(raw_gpu.get("range")),
+                "applied": self._diagnostic_window(raw_gpu.get("applied")),
+                "last_operation": ({
+                    "action": operation.get("action"),
+                    "requested": self._diagnostic_window(operation.get("requested")),
+                    "applied": self._diagnostic_window(operation.get("applied")),
+                    "ok": bool(operation.get("ok")),
+                    "reason": operation.get("reason"),
+                } if operation else None),
+                "last_result": getattr(self, "_gpu_last_result", None),
+                "last_failure": getattr(self, "_gpu_last_failure", None),
+                "history": list(getattr(self, "_gpu_history", ())),
+            }
+        except Exception as exc:  # noqa: BLE001
+            gpu = {"backend": None, "supported": False, "error_type": type(exc).__name__}
+
+        try:
+            backend_diagnostics = getattr(self._tdp_backend, "diagnostics", None)
+            raw_ppt = backend_diagnostics() if callable(backend_diagnostics) else {}
+            capability = raw_ppt.get("ppt") or {}
+            tdp_state = self._tdp_ownership_state(self._tdp_observation)
+            deck_ppt = {
+                "supported": bool(capability.get("supported")),
+                "source": capability.get("source"),
+                "slow": capability.get("slow"),
+                "fast": capability.get("fast"),
+                "visual_max": capability.get("visual_max"),
+                "requested": tdp_state.get("requested"),
+                "applied": tdp_state.get("applied"),
+                "status": tdp_state.get("status"),
+                "reason": tdp_state.get("reason"),
+                "recovery_blocked": bool(getattr(self, "_steamdeck_ppt_recovery_blocked", False)),
+                "previous": self._settings.get("steamdeck_ppt_previous"),
+                "last_failure": getattr(self, "_steamdeck_ppt_last_failure", None),
+                "history": list(getattr(self, "_steamdeck_ppt_history", ())),
+            }
+        except Exception as exc:  # noqa: BLE001
+            deck_ppt = {"supported": False, "error_type": type(exc).__name__}
+
+        cpu_last = getattr(self, "_cpu_last_result", None)
+        gpu_last = getattr(self, "_gpu_last_result", None)
+        reapply = {
+            "generation": int(getattr(self, "_reapply_generation", 0)),
+            "trigger": getattr(self, "_last_reapply_trigger", None),
+            "cpu": ({
+                "generation": cpu_last.generation,
+                "status": cpu_last.status,
+                "ok": cpu_last.ok,
+            } if cpu_last is not None else None),
+            "gpu": ({
+                "generation": gpu_last.get("generation"),
+                "status": gpu_last.get("status"),
+                "ok": gpu_last.get("ok"),
+            } if gpu_last else None),
+            "tdp": {
+                "generation": int(getattr(self, "_tdp_generation", 0)),
+                "status": getattr(self, "_tdp_status", None),
+                "pending": getattr(self._tdp_reconcile_memory, "pending_since", None) is not None,
+            },
+        }
+        return {"cpu": cpu, "gpu": gpu, "steamdeck_ppt": deck_ppt, "reapply": reapply}
 
     async def get_gpu_clock(self) -> dict:
         self._init()
@@ -3030,15 +3392,30 @@ class Plugin:
 
     async def set_gpu_clock(self, min_mhz: int, max_mhz: int, scope: str = "global", appid=None) -> dict:
         self._init()
-        self._tdp_profiles.set_gpu_clock(scope, True, int(min_mhz), int(max_mhz), appid=appid)
-        self._apply_gpu_clock()
+        requested = {"mode": "manual", "min_mhz": int(min_mhz), "max_mhz": int(max_mhz)}
+        self._gpu_requested = requested
+        result = await self._offload_call(lambda: self._run_gpu_clock(requested))
+        self._record_gpu_clock_transition(
+            result, "set_manual", "global" if scope == "global" else "game_own"
+        )
+        if result["ok"] and result["generation"] == self._gpu_generation:
+            self._tdp_profiles.set_gpu_clock(
+                scope, True, int(min_mhz), int(max_mhz), appid=appid
+            )
         return self._gpu_clock_state()
 
     async def set_gpu_clock_auto(self, scope: str = "global", appid=None) -> dict:
         self._init()
-        self._tdp_profiles.set_gpu_clock(scope, False, 0, 0, appid=appid)
-        if self._gpu_clock.supported:
-            self._gpu_clock.set_auto()
+        requested = {"mode": "auto", "min_mhz": None, "max_mhz": None}
+        self._gpu_requested = requested
+        result = await self._offload_call(
+            lambda: self._run_gpu_clock(requested, auto=True)
+        )
+        self._record_gpu_clock_transition(
+            result, "set_auto", "global" if scope == "global" else "game_own"
+        )
+        if result["ok"] and result["generation"] == self._gpu_generation:
+            self._tdp_profiles.set_gpu_clock(scope, False, 0, 0, appid=appid)
         return self._gpu_clock_state()
 
     async def set_smt(self, enabled: bool, scope: str = "global", appid=None) -> dict:
@@ -3406,8 +3783,22 @@ class Plugin:
         eff = self._tdp_profiles.effective(self._current_appid)
         geff = self._tdp_profiles.effective(None)
         primary = observation.surfaces.get(self._tdp_backend.name, {})
-        pl1 = primary.get("pl1")
-        applied_w = pl1.applied_w if pl1 is not None else None
+        primary_rail = getattr(self._tdp_backend, "primary_rail", "pl1")
+        primary_reading = primary.get(primary_rail)
+        applied_w = primary_reading.applied_w if primary_reading is not None else None
+        ppt_capability = getattr(self._tdp_backend, "ppt_capability", None)
+        ppt = ppt_capability() if callable(ppt_capability) else None
+        if ppt is not None:
+            slow = primary.get("pl2")
+            fast = primary.get("pl3")
+            ppt = {
+                **ppt,
+                "requested": {"slow": levels["pl2"], "fast": levels["pl3"]},
+                "applied": {
+                    "slow": slow.applied_w if slow is not None else None,
+                    "fast": fast.applied_w if fast is not None else None,
+                },
+            }
         return {
             "supported": self._tdp_backend.supported,
             "backend": self._tdp_backend.name,
@@ -3423,6 +3814,8 @@ class Plugin:
             "watts": limits.clamp(eff["watts"], ac),
             "global_watts": limits.clamp(geff["watts"], ac),
             "applied_w": applied_w,
+            "primary_rail": primary_rail,
+            "ppt": ppt,
             "supports_advanced": ("pl2" in ll or "pl3" in ll),
             "level_limits": ll,
             "levels": levels,
@@ -3481,6 +3874,14 @@ class Plugin:
             "backend": self._tdp_backend.name,
             "backend_descriptor": self._tdp_backend_diagnostics(),
             "history": list(self._tdp_history),
+            "steamdeck_ppt": {
+                "previous": self._settings.get("steamdeck_ppt_previous"),
+                "recovery_blocked": bool(
+                    getattr(self, "_steamdeck_ppt_recovery_blocked", False)
+                ),
+                "last_failure": getattr(self, "_steamdeck_ppt_last_failure", None),
+                "history": list(getattr(self, "_steamdeck_ppt_history", ())),
+            },
         }
 
     def _tdp_backend_diagnostics(self):
@@ -3508,8 +3909,14 @@ class Plugin:
         except Exception as exc:  # noqa: BLE001
             errors["level_limits"] = type(exc).__name__
             level_limits = {}
+        backend_diagnostics = getattr(self._tdp_backend, "diagnostics", None)
         try:
-            levels = self._tdp_backend.reconciliation_levels(
+            backend_detail = backend_diagnostics() if callable(backend_diagnostics) else {}
+        except Exception as exc:  # noqa: BLE001
+            errors["backend_diagnostics"] = type(exc).__name__
+            backend_detail = {}
+        try:
+            levels = self._tdp_backend.physical_levels(
                 self._tdp_profiles.effective(None)
             )
             rails = sorted(levels)
@@ -3523,6 +3930,7 @@ class Plugin:
             "backend": self._tdp_backend.name,
             "supported": bool(self._tdp_backend.supported),
             "readback": bool(getattr(self._tdp_backend, "readback", True)),
+            "primary_rail": getattr(self._tdp_backend, "primary_rail", "pl1"),
             "rails": rails,
             "guard_interval_s": float(
                 getattr(self._tdp_backend, "guard_interval_s", 0.0)
@@ -3534,6 +3942,7 @@ class Plugin:
             "limits": limit_values,
             "limits_source": limits_source,
             "level_limits": level_limits,
+            "backend_detail": backend_detail,
             "rail_floors": dict(
                 getattr(self._tdp_backend, "_rail_floors", {}) or {}
             ),
@@ -4105,6 +4514,8 @@ class Plugin:
             decky.logger.info("Legion fan sensor exposed (lenovo_wmi_other)")
         await self._recover_gpd_fan()
         try:
+            if self._settings.get("steamdeck_ppt_previous") is not None:
+                await self._offload_call(self._restore_steamdeck_ppt)
             self._reapply_all()
             self._lifecycle.start()
             self._start_tdp_guard_loop()
@@ -4141,7 +4552,7 @@ class Plugin:
         await self._stop_audio_loop()
         await self._offload_call(self._restore_audio_safe)
         await self._apply_cpu_awaited(enabled=False, trigger="unload")
-        await self._offload_call(self._restore_hhd_tdp)  # hand HHD's TDP back if we took it
+        await self._offload_call(self._restore_power_handoff)
         if getattr(self, "_sampler", None) is not None:
             self._sampler.stop()
         self._shutdown_apply_executor()
@@ -4162,7 +4573,7 @@ class Plugin:
         await self._stop_audio_loop()
         await self._offload_call(self._restore_audio_safe)
         await self._apply_cpu_awaited(enabled=False, trigger="uninstall")
-        await self._offload_call(self._restore_hhd_tdp)  # hand HHD's TDP back if we took it
+        await self._offload_call(self._restore_power_handoff)
         self._shutdown_apply_executor()
         fan_expose.remove_conf()  # drop the modprobe.d option we added (guarded)
         decky.logger.info("Panel de Control uninstalled")

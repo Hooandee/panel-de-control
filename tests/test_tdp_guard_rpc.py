@@ -488,6 +488,10 @@ def test_report_contains_tdp_transition_history(plugin, monkeypatch):
     } <= last.keys()
     diagnostics = bundle["state"]["tdp_diagnostics"]
     assert diagnostics["backend_descriptor"] == plugin._tdp_backend_diagnostics()
+    cpu_gpu = bundle["state"]["cpu_gpu_diagnostics"]
+    assert set(cpu_gpu) == {"cpu", "gpu", "steamdeck_ppt", "reapply"}
+    assert cpu_gpu["cpu"]["supported"] is False
+    assert cpu_gpu["gpu"]["supported"] is False
     assert bundle["state"]["lifecycle_diagnostics"] == plugin._lifecycle.diagnostics()
     assert bundle["state"]["controller_diagnostics"] == (
         plugin._controller_backend.diagnostics()
@@ -503,6 +507,29 @@ def test_report_contains_tdp_transition_history(plugin, monkeypatch):
     assert {"supported", "probe_detail", "wayland_display", "last_apply"} <= (
         display["backend"].keys()
     )
+
+
+def test_cpu_gpu_diagnostics_allowlist_drops_app_identity(plugin):
+    class _MaliciousGpu:
+        supported = True
+        backend = "fake"
+
+        def diagnostics(self):
+            return {
+                "backend": "fake",
+                "supported": True,
+                "range": {"min_mhz": 200, "max_mhz": 2000},
+                "applied": {"min_mhz": 300, "max_mhz": 1800},
+                "appid": "APPID-SECRET",
+                "title": "GAME-TITLE-SECRET",
+                "raw_sysfs": "/home/alice/secret",
+            }
+
+    plugin._gpu_clock = _MaliciousGpu()
+    encoded = json.dumps(plugin._cpu_gpu_diagnostics(), sort_keys=True)
+    assert "APPID-SECRET" not in encoded
+    assert "GAME-TITLE-SECRET" not in encoded
+    assert "/home/alice" not in encoded
 
 
 def test_confirmed_resume_is_written_to_plugin_log(plugin):

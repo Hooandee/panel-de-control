@@ -81,6 +81,20 @@ def test_capabilities_from_tolerates_missing():
     assert caps["tdp_supported"] is False
 
 
+def test_capabilities_from_includes_cpu_gpu_backends():
+    caps = capabilities_from({
+        "cpu_gpu_diagnostics": {
+            "cpu": {"backend": "cpufreq", "supported": True},
+            "gpu": {"backend": "amdgpu", "supported": True},
+            "steamdeck_ppt": {"supported": True},
+        }
+    })
+    assert caps["cpu_frequency_backend"] == "cpufreq"
+    assert caps["cpu_frequency_supported"] is True
+    assert caps["gpu_clock_backend"] == "amdgpu"
+    assert caps["steamdeck_ppt_supported"] is True
+
+
 # ---- redact_text ----------------------------------------------------------
 def test_redact_text_home_paths():
     assert redact_text("/home/deck/homebrew/x.log") == "~/homebrew/x.log"
