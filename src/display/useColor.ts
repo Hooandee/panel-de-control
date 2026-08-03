@@ -70,7 +70,12 @@ export function useColor(): ColorControl {
 
   // The scope tab reflects the game's active profile and IS the control (shared wiring).
   const applyFollow = useCallback(
-    (f: boolean, a: string) => { setColorFollowGlobal(f, a).then(setState).catch(() => {}); },
+    (f: boolean, a: string) => setColorFollowGlobal(f, a)
+      .then((next) => {
+        setState(next);
+        return next.follows_global === f;
+      })
+      .catch(() => false),
     [],
   );
   const { scope, onScope } = useScopeSync(appid, state?.follows_global, applyFollow);

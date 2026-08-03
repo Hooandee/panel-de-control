@@ -43,6 +43,25 @@ describe("coerceLayout", () => {
     expect(coerceLayout(old)).toEqual({ ...old, subitems: {} });
   });
 
+  it("moves the saved GPU block preference from Power to System", () => {
+    const old = {
+      tabs: { order: [], hidden: [] },
+      blocks: {
+        power: { order: ["gpu", "autoTdp"], hidden: ["gpu"] },
+        system: { order: ["eco", "battery", "cpu", "brightness"], hidden: [] },
+      },
+      subitems: {},
+    };
+
+    expect(coerceLayout(old).blocks).toEqual({
+      power: { order: ["autoTdp"], hidden: [] },
+      system: {
+        order: ["eco", "battery", "cpu", "gpu", "brightness"],
+        hidden: ["gpu"],
+      },
+    });
+  });
+
   it("coerces wrong-typed fields to safe arrays (never throws downstream)", () => {
     // valid JSON, wrong types — the bug that bricked the panel (for..of on a number)
     expect(coerceLayout({ tabs: { order: 5, hidden: {} } })).toEqual(EMPTY);

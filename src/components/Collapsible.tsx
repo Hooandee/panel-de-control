@@ -4,6 +4,7 @@ import { LuChevronDown, LuChevronRight } from "react-icons/lu";
 
 import { theme } from "../theme";
 import { isCollapsed, setCollapsed } from "../system/collapseState";
+import { MarqueeText } from "./MarqueeText";
 
 interface Props {
   /** Stable key for persisting this section's collapse state across QAM reopens. */
@@ -54,9 +55,9 @@ export const Collapsible: FC<Props> = ({
             onClick={toggle}
           >
             <span style={{ display: "inline-flex", color: theme.color.accent }}>{icon}</span>
-            <span style={{ flex: 1, fontSize: theme.font.body, fontWeight: 700, color: theme.color.textPrimary }}>
-              {title}
-            </span>
+            <div style={{ flex: 1, minWidth: 0, fontSize: theme.font.body, fontWeight: 700, color: theme.color.textPrimary }}>
+              <MarqueeText key={open ? "open" : "closed"} text={title} />
+            </div>
             {!open && (
               <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted, whiteSpace: "nowrap" }}>
                 {summary}

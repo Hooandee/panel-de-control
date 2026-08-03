@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.32.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.31.4...panel-de-control-v0.32.0) (2026-08-03)
+
+
+### Novedades / Features
+
+* **ES:** Añade controles de frecuencia mínima y máxima de CPU y gestión avanzada de Slow/Fast PPT para Steam Deck, con restauración segura y valores confirmados por hardware. ([#373](https://github.com/Hooandee/panel-de-control/issues/373)) ([9d245eb](https://github.com/Hooandee/panel-de-control/commit/9d245eb032bb80fc36fa7772b01871226b9e98cf))
+* **EN:** Add minimum and maximum CPU frequency controls and advanced Steam Deck Slow/Fast PPT management, with safe restoration and hardware-confirmed values. ([#373](https://github.com/Hooandee/panel-de-control/issues/373)) ([9d245eb](https://github.com/Hooandee/panel-de-control/commit/9d245eb032bb80fc36fa7772b01871226b9e98cf))
+
 ## [0.31.4](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.31.3...panel-de-control-v0.31.4) (2026-07-27)
 
 

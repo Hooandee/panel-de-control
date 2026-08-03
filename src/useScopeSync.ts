@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Scope } from "./api";
 import { scopeFor } from "./scope";
 
@@ -14,9 +14,17 @@ import { scopeFor } from "./scope";
 export function useScopeSync(
   appid: string | null | undefined,
   followsGlobal: boolean | undefined,
-  applyFollowGlobal: (follow: boolean, appid: string) => void,
+  applyFollowGlobal: (
+    follow: boolean,
+    appid: string,
+  ) => boolean | void | Promise<boolean | void>,
 ): { scope: Scope; onScope: (next: Scope) => void } {
   const [scope, setScope] = useState<Scope>("global");
+  const actionEpoch = useRef(0);
+
+  useEffect(() => {
+    ++actionEpoch.current;
+  }, [appid]);
 
   useEffect(() => {
     if (followsGlobal === undefined) return; // state not loaded yet
@@ -25,10 +33,27 @@ export function useScopeSync(
 
   const onScope = useCallback(
     (next: Scope) => {
+      const previous = scope;
+      const epoch = ++actionEpoch.current;
       setScope(next);
-      if (appid) applyFollowGlobal(next === "global", appid);
+      if (!appid) return;
+      const rollback = () => {
+        if (epoch === actionEpoch.current) setScope(previous);
+      };
+      try {
+        const result = applyFollowGlobal(next === "global", appid);
+        if (result instanceof Promise) {
+          result.then((ok) => {
+            if (ok === false) rollback();
+          }).catch(rollback);
+        } else if (result === false) {
+          rollback();
+        }
+      } catch {
+        rollback();
+      }
     },
-    [appid, applyFollowGlobal],
+    [appid, applyFollowGlobal, scope],
   );
 
   return { scope, onScope };
