@@ -1,0 +1,110 @@
+{
+  "schema_version": 1,
+  "algorithm": "telemetry.store",
+  "cases": [
+    {
+      "id": "unknown_game_is_empty",
+      "input": {"appid": "fixture", "samples": []},
+      "expected": {
+        "aggregate": {"samples_n": 0, "by_pl1": {}, "recent": []},
+        "temp_histogram": {}
+      }
+    },
+    {
+      "id": "sample_is_aggregated_without_fake_values",
+      "input": {
+        "appid": "fixture",
+        "samples": [
+          {
+            "dt": 5.0,
+            "ts": 1000.0,
+            "sample": {
+              "pl1": 15,
+              "watts": 12.5,
+              "gpu_busy": 80,
+              "temp_cpu": 55.0,
+              "temp_gpu": 50.0,
+              "fan_rpm": 2000,
+              "boost": null
+            }
+          }
+        ]
+      },
+      "expected": {
+        "aggregate": {
+          "samples_n": 1,
+          "by_pl1": {
+            "15": {
+              "seconds": 5.0,
+              "watts_avg": 12.5,
+              "gpu_avg": 80.0,
+              "boost_avg": null,
+              "temp_cpu_avg": 55.0,
+              "temp_gpu_avg": 50.0,
+              "rpm_avg": 2000.0
+            }
+          },
+          "recent": [
+            {"ts": 1000.0, "pl1": 15, "watts": 12.5, "gpu": 80, "t_cpu": 55.0, "t_gpu": 50.0, "rpm": 2000}
+          ]
+        },
+        "temp_histogram": {"54": 5.0}
+      }
+    },
+    {
+      "id": "older_samples_decay_with_play_time",
+      "input": {
+        "appid": "fixture",
+        "samples": [
+          {
+            "dt": 900.0,
+            "ts": 1000.0,
+            "sample": {
+              "pl1": 15,
+              "watts": 12.0,
+              "gpu_busy": 90,
+              "temp_cpu": 60.0,
+              "temp_gpu": 58.0,
+              "fan_rpm": 2200,
+              "boost": 0.0
+            }
+          },
+          {
+            "dt": 900.0,
+            "ts": 1900.0,
+            "sample": {
+              "pl1": 15,
+              "watts": 14.0,
+              "gpu_busy": 80,
+              "temp_cpu": 70.0,
+              "temp_gpu": 68.0,
+              "fan_rpm": 2600,
+              "boost": 1.0
+            }
+          }
+        ]
+      },
+      "expected": {
+        "aggregate": {
+          "samples_n": 2,
+          "by_pl1": {
+            "15": {
+              "seconds": 1536.396103,
+              "watts_avg": 13.171573,
+              "gpu_avg": 84.142136,
+              "boost_avg": 0.585786,
+              "temp_cpu_avg": 65.857864,
+              "temp_gpu_avg": 63.857864,
+              "rpm_avg": 2434.314575
+            }
+          },
+          "recent": [
+            {"ts": 1000.0, "pl1": 15, "watts": 12.0, "gpu": 90, "t_cpu": 60.0, "t_gpu": 58.0, "rpm": 2200},
+            {"ts": 1900.0, "pl1": 15, "watts": 14.0, "gpu": 80, "t_cpu": 70.0, "t_gpu": 68.0, "rpm": 2600}
+          ]
+        },
+        "temp_histogram": {"60": 636.396103, "70": 900.0}
+      }
+    }
+  ]
+}

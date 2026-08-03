@@ -1,0 +1,253 @@
+<Page
+    x:Class="PanelDeControl.GameBar.ControlPanelWidget"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    Background="{StaticResource PanelBackgroundBrush}"
+    NavigationCacheMode="Disabled"
+    mc:Ignorable="d">
+
+    <Grid Padding="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel>
+                <TextBlock
+                    Text="PANEL DE CONTROL"
+                    FontSize="12"
+                    FontWeight="SemiBold"
+                    Foreground="{StaticResource AccentBrush}"
+                    CharacterSpacing="180" />
+                <TextBlock
+                    x:Name="DeviceName"
+                    Margin="0,5,0,0"
+                    Text="Buscando dispositivo…"
+                    FontFamily="Segoe UI Variable Display"
+                    FontSize="22"
+                    FontWeight="SemiBold"
+                    Foreground="White"
+                    TextTrimming="CharacterEllipsis" />
+                <TextBlock
+                    Text="Windows · Xbox Game Bar · Experimental"
+                    Margin="0,3,0,0"
+                    FontSize="12"
+                    Foreground="#FF8591A3" />
+            </StackPanel>
+            <Button
+                x:Name="RefreshButton"
+                Grid.Column="1"
+                Width="44"
+                Height="44"
+                Padding="0"
+                IsTabStop="True"
+                AutomationProperties.Name="Actualizar telemetría y volumen"
+                Click="RefreshButton_Click"
+                CornerRadius="12"
+                Background="#FF313A48"
+                BorderBrush="#FF506174"
+                BorderThickness="1"
+                Content="↻"
+                FontSize="22"
+                Foreground="White" />
+        </Grid>
+
+        <Border
+            x:Name="ConnectionCard"
+            Grid.Row="1"
+            Margin="0,20,0,16"
+            Padding="14,10"
+            Background="#FF1D3340"
+            BorderBrush="#FF315A6D"
+            BorderThickness="1"
+            CornerRadius="12">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Ellipse
+                    x:Name="ConnectionDot"
+                    Width="8"
+                    Height="8"
+                    Margin="0,0,10,0"
+                    Fill="{StaticResource AccentBrush}" />
+                <TextBlock
+                    x:Name="ConnectionStatus"
+                    Grid.Column="1"
+                    Text="Conectando con el hardware…"
+                    VerticalAlignment="Center"
+                    FontSize="13"
+                    Foreground="White" />
+                <TextBlock
+                    x:Name="LastUpdated"
+                    Grid.Column="2"
+                    Text="—"
+                    VerticalAlignment="Center"
+                    FontSize="12"
+                    Foreground="#FF8591A3" />
+            </Grid>
+        </Border>
+
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <Border
+                    x:Name="BatteryCard"
+                    Grid.Row="0"
+                    Grid.ColumnSpan="2"
+                    Padding="18"
+                    Background="{StaticResource CardBackgroundBrush}"
+                    CornerRadius="16">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="BATERÍA" Style="{StaticResource TelemetryLabelStyle}" />
+                            <TextBlock x:Name="BatteryValue" Margin="0,5,0,0" Text="—" Style="{StaticResource TelemetryValueStyle}" />
+                        </StackPanel>
+                        <TextBlock
+                            x:Name="PowerSourceValue"
+                            Grid.Column="1"
+                            Text="—"
+                            VerticalAlignment="Center"
+                            FontSize="14"
+                            Foreground="#FFC5CFDC" />
+                    </Grid>
+                </Border>
+
+                <Border
+                    x:Name="VolumeCard"
+                    Grid.Row="1"
+                    Grid.ColumnSpan="2"
+                    Margin="0,12,0,0"
+                    Padding="18"
+                    Background="{StaticResource CardBackgroundBrush}"
+                    CornerRadius="16">
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="VOLUMEN DEL SISTEMA" Style="{StaticResource TelemetryLabelStyle}" />
+                            <TextBlock
+                                x:Name="VolumeValue"
+                                Grid.Column="1"
+                                Text="—"
+                                FontSize="18"
+                                FontWeight="SemiBold"
+                                Foreground="White" />
+                        </Grid>
+                        <Slider
+                            x:Name="VolumeSlider"
+                            Margin="0,12,0,0"
+                            Minimum="0"
+                            Maximum="100"
+                            StepFrequency="5"
+                            SmallChange="5"
+                            IsEnabled="False"
+                            IsTabStop="True"
+                            AutomationProperties.Name="Volumen del sistema"
+                            AutomationProperties.HelpText="Ajusta el volumen del dispositivo de audio predeterminado"
+                            ValueChanged="VolumeSlider_ValueChanged" />
+                        <TextBlock
+                            x:Name="VolumeStatus"
+                            Margin="0,6,0,0"
+                            Text="Comprobando audio predeterminado…"
+                            FontSize="12"
+                            Foreground="#FF8591A3"
+                            TextWrapping="Wrap" />
+                        <Grid Margin="0,16,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="SILENCIAR" Style="{StaticResource TelemetryLabelStyle}" />
+                                <TextBlock
+                                    x:Name="MuteStatus"
+                                    Margin="0,5,16,0"
+                                    Text="Comprobando estado de silencio…"
+                                    FontSize="12"
+                                    Foreground="#FF8591A3"
+                                    AutomationProperties.LiveSetting="Polite"
+                                    TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ToggleSwitch
+                                x:Name="MuteToggle"
+                                Grid.Column="1"
+                                VerticalAlignment="Center"
+                                IsEnabled="False"
+                                IsTabStop="True"
+                                OffContent="Con sonido"
+                                OnContent="Silenciado"
+                                AutomationProperties.Name="Silenciar audio del sistema"
+                                AutomationProperties.HelpText="Activa o desactiva el silencio del dispositivo de audio predeterminado y verifica el estado leído"
+                                Toggled="MuteToggle_Toggled" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <Border
+                    x:Name="CpuCard"
+                    Grid.Row="2"
+                    Grid.Column="0"
+                    Margin="0,12,6,0"
+                    Padding="18"
+                    Background="{StaticResource CardBackgroundBrush}"
+                    CornerRadius="16">
+                    <StackPanel>
+                        <TextBlock Text="CPU" Style="{StaticResource TelemetryLabelStyle}" />
+                        <TextBlock x:Name="CpuTemperatureValue" Margin="0,5,0,0" Text="—" Style="{StaticResource TelemetryValueStyle}" />
+                        <TextBlock x:Name="CpuLoadValue" Margin="0,8,0,0" Text="Carga —" FontSize="13" Foreground="#FFC5CFDC" />
+                    </StackPanel>
+                </Border>
+
+                <Border
+                    x:Name="GpuCard"
+                    Grid.Row="2"
+                    Grid.Column="1"
+                    Margin="6,12,0,0"
+                    Padding="18"
+                    Background="{StaticResource CardBackgroundBrush}"
+                    CornerRadius="16">
+                    <StackPanel>
+                        <TextBlock Text="GPU" Style="{StaticResource TelemetryLabelStyle}" />
+                        <TextBlock x:Name="GpuTemperatureValue" Margin="0,5,0,0" Text="—" Style="{StaticResource TelemetryValueStyle}" />
+                        <TextBlock x:Name="GpuLoadValue" Margin="0,8,0,0" Text="Carga —" FontSize="13" Foreground="#FFC5CFDC" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </ScrollViewer>
+
+        <TextBlock
+            Grid.Row="3"
+            Margin="0,16,0,0"
+            Text="Volumen del sistema con verificación · Telemetría experimental de solo lectura · Sin control de potencia ni ventiladores."
+            FontSize="11"
+            Foreground="#FF6F7B8C"
+            TextWrapping="Wrap" />
+    </Grid>
+</Page>

@@ -3,6 +3,25 @@ name: release-please
 on:
   push:
     branches: [main]
+    paths:
+      - ".github/workflows/release-please.yml"
+      - ".release-please-manifest.json"
+      - "release-please-config.json"
+      - "shared/fixtures/**"
+      - "src/**"
+      - "py_modules/**"
+      - "main.py"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "tsconfig.json"
+      - "rollup.config.js"
+      - "plugin.json"
+      - "README.md"
+      - "README.en.md"
+      - "LICENSE"
+      - "assets/**"
+      - "bin/**"
+      - "scripts/**"
 
 # No token permissions by default; the job grants only what it needs.
 permissions: {}

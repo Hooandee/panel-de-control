@@ -1,0 +1,84 @@
+{
+  "schema_version": 1,
+  "algorithm": "auto_tdp.decide",
+  "cases": [
+    {
+      "id": "recent_peak_steps_up",
+      "input": {
+        "current_pl1": 20,
+        "gpu_window": [95, 96, 97, 96, 97],
+        "slack_ticks": 0,
+        "min_w": 5,
+        "max_w": 35
+      },
+      "expected": {"next_pl1": 22, "slack_ticks": 0}
+    },
+    {
+      "id": "deadband_holds",
+      "input": {
+        "current_pl1": 25,
+        "gpu_window": [91, 92, 93, 92, 91],
+        "slack_ticks": 3,
+        "min_w": 5,
+        "max_w": 35
+      },
+      "expected": {"next_pl1": 25, "slack_ticks": 0}
+    },
+    {
+      "id": "sustained_headroom_steps_down",
+      "input": {
+        "current_pl1": 25,
+        "gpu_window": [55, 55, 55],
+        "slack_ticks": 5,
+        "min_w": 5,
+        "max_w": 35
+      },
+      "expected": {"next_pl1": 20, "slack_ticks": 0}
+    },
+    {
+      "id": "missing_signal_holds_clamped_value",
+      "input": {
+        "current_pl1": 50,
+        "gpu_window": [],
+        "slack_ticks": 4,
+        "min_w": 5,
+        "max_w": 35
+      },
+      "expected": {"next_pl1": 35, "slack_ticks": 4}
+    },
+    {
+      "id": "custom_down_limit_is_respected",
+      "input": {
+        "current_pl1": 30,
+        "gpu_window": [50, 50, 50],
+        "slack_ticks": 5,
+        "min_w": 5,
+        "max_w": 35,
+        "max_down_step": 3
+      },
+      "expected": {"next_pl1": 27, "slack_ticks": 0}
+    },
+    {
+      "id": "missing_samples_are_ignored",
+      "input": {
+        "current_pl1": 20,
+        "gpu_window": [null, 97],
+        "slack_ticks": 2,
+        "min_w": 5,
+        "max_w": 35
+      },
+      "expected": {"next_pl1": 22, "slack_ticks": 0}
+    },
+    {
+      "id": "old_peak_does_not_trigger_recent_guard",
+      "input": {
+        "current_pl1": 20,
+        "gpu_window": [99, 70, 70],
+        "slack_ticks": 0,
+        "min_w": 5,
+        "max_w": 35
+      },
+      "expected": {"next_pl1": 20, "slack_ticks": 1}
+    }
+  ]
+}

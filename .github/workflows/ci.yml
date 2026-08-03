@@ -17,35 +17,98 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  backend-tests:
+  changes:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      decky: ${{ steps.filter.outputs.decky }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Classify changed paths
+        id: filter
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
+        with:
+          predicate-quantifier: every
+          filters: |
+            decky:
+              - "**"
+              - "!opengamepadui/**"
+              - "!.github/workflows/opengamepadui-ci.yml"
+              - "!windows/**"
+              - "!.github/workflows/windows-ci.yml"
+
+  backend-tests:
+    needs: changes
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require successful path classification
+        if: >-
+          needs.changes.result != 'success' ||
+          (needs.changes.outputs.decky != 'true' &&
+          needs.changes.outputs.decky != 'false')
+        run: |
+          echo "::error::Decky path classification failed or returned an invalid output"
+          exit 1
+      - name: Decky paths unchanged
+        if: needs.changes.outputs.decky == 'false'
+        run: echo "Decky backend tests not required for these paths"
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        if: needs.changes.outputs.decky == 'true'
         with:
           persist-credentials: false
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        if: needs.changes.outputs.decky == 'true'
         with:
           python-version: "3.11"
-      - run: pip install -r requirements-dev.txt
-      - run: ruff check py_modules main.py tests
-      - run: python -m pytest -v
+      - if: needs.changes.outputs.decky == 'true'
+        run: pip install -r requirements-dev.txt
+      - if: needs.changes.outputs.decky == 'true'
+        run: ruff check py_modules main.py tests
+      - if: needs.changes.outputs.decky == 'true'
+        run: python -m pytest -v
 
   frontend-build:
+    needs: changes
+    if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
+      - name: Require successful path classification
+        if: >-
+          needs.changes.result != 'success' ||
+          (needs.changes.outputs.decky != 'true' &&
+          needs.changes.outputs.decky != 'false')
+        run: |
+          echo "::error::Decky path classification failed or returned an invalid output"
+          exit 1
+      - name: Decky paths unchanged
+        if: needs.changes.outputs.decky == 'false'
+        run: echo "Decky frontend build not required for these paths"
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        if: needs.changes.outputs.decky == 'true'
         with:
           persist-credentials: false
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        if: needs.changes.outputs.decky == 'true'
         with:
           version: 10
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        if: needs.changes.outputs.decky == 'true'
         with:
           node-version: 20
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm typecheck
-      - run: pnpm test:fe
-      - run: pnpm build
+      - if: needs.changes.outputs.decky == 'true'
+        run: pnpm install --frozen-lockfile
+      - if: needs.changes.outputs.decky == 'true'
+        run: pnpm typecheck
+      - if: needs.changes.outputs.decky == 'true'
+        run: pnpm test:fe
+      - if: needs.changes.outputs.decky == 'true'
+        run: pnpm build
       - name: Verify build output exists
+        if: needs.changes.outputs.decky == 'true'
         run: test -f dist/index.js
