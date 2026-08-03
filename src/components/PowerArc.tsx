@@ -39,6 +39,7 @@ interface PowerArcProps {
   appliedWatts?: number | null;
   visualMax?: number | null;
   baseMarkerWatts?: number | null;
+  slowMarkerWatts?: number | null;
   fastMarkerWatts?: number | null;
 }
 
@@ -53,6 +54,7 @@ export const PowerArc: FC<PowerArcProps> = ({
   appliedWatts = null,
   visualMax = null,
   baseMarkerWatts = null,
+  slowMarkerWatts = null,
   fastMarkerWatts = null,
 }) => {
   const { t } = useI18n();
@@ -97,6 +99,11 @@ export const PowerArc: FC<PowerArcProps> = ({
   const [tx2, ty2] = polarAt(tickDeg, R + SW / 2 + 1);
   const targetDiverged = Math.round(markerWatts) !== Math.round(heroWatts);
   const [lx, ly] = polarAt(tickDeg, R + SW / 2 + 10);
+  const slowFraction = slowMarkerWatts === null ? null : fraction(slowMarkerWatts, limits.min, scaleMax);
+  const slowDeg = slowFraction === null ? null : START + slowFraction * SWEEP;
+  const [slx1, sly1] = slowDeg === null ? [0, 0] : polarAt(slowDeg, R - SW / 2 - 1);
+  const [slx2, sly2] = slowDeg === null ? [0, 0] : polarAt(slowDeg, R + SW / 2 + 1);
+  const [sllx, slly] = slowDeg === null ? [0, 0] : polarAt(slowDeg, R + SW / 2 + 12);
   const fastFraction = fastMarkerWatts === null ? null : fraction(fastMarkerWatts, limits.min, scaleMax);
   const fastDeg = fastFraction === null ? null : START + fastFraction * SWEEP;
   const [fx1, fy1] = fastDeg === null ? [0, 0] : polarAt(fastDeg, R - SW / 2 - 1);
@@ -159,6 +166,14 @@ export const PowerArc: FC<PowerArcProps> = ({
           <text x={lx} y={ly + 3} fill="rgba(255,255,255,0.90)" fontSize="9" fontWeight={700} textAnchor="middle">
             {Math.round(markerWatts)}W
           </text>
+        )}
+        {slowMarkerWatts !== null && (
+          <>
+            <line x1={slx1} y1={sly1} x2={slx2} y2={sly2} stroke={theme.color.accent} strokeWidth={2.5} strokeLinecap="round" />
+            <text x={sllx} y={slly + 3} fill={theme.color.accent} fontSize="9" fontWeight={700} textAnchor="middle">
+              Slow {Math.round(slowMarkerWatts)} W
+            </text>
+          </>
         )}
         {fastMarkerWatts !== null && (
           <>

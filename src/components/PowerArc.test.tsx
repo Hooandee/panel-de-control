@@ -12,21 +12,20 @@ import { PowerArc } from "./PowerArc";
 describe("PowerArc Steam Deck PPT scale", () => {
   afterEach(cleanup);
 
-  it("shows Slow as the hero while keeping base and Fast markers distinct", () => {
+  it("keeps the sustained TDP as the hero and labels the Slow and Fast rails", () => {
     render(
       <PowerArc
         watts={15}
         limits={{ min: 3, default: 12, max: 15, max_ac: 15 }}
         onAc
-        appliedWatts={29}
         visualMax={30}
-        baseMarkerWatts={15}
+        slowMarkerWatts={29}
         fastMarkerWatts={30}
       />,
     );
 
-    expect(screen.getByText("29")).toBeTruthy();
-    expect(screen.getAllByText("15W").length).toBeGreaterThan(0);
+    expect(screen.getByText("15")).toBeTruthy();
+    expect(screen.getByText("Slow 29 W")).toBeTruthy();
     expect(screen.getByText("Fast 30 W")).toBeTruthy();
     expect(screen.getByText("30W")).toBeTruthy();
   });

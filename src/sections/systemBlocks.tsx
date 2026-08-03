@@ -6,6 +6,7 @@ import { useI18n } from "../i18n";
 import { ValueBar } from "../components/ValueBar";
 import { BatteryCard } from "../components/BatteryCard";
 import { CpuCard } from "../components/CpuCard";
+import { GpuClockCard } from "../components/GpuClockCard";
 import { EcoCard } from "../components/EcoCard";
 import { ColoresCard } from "../components/ColoresCard";
 import { Collapsible } from "../components/Collapsible";
@@ -95,6 +96,8 @@ const BrightnessBlock: FC = () => {
   );
 };
 
+const GpuBlock: FC = () => <GpuClockCard />;
+
 const VolumeBlock: FC = () => {
   const { t } = useI18n();
   const volume = useVolume();
@@ -130,6 +133,7 @@ export function registerSystemBlocks(): void {
   registerBlock("eco", { sectionId: "system", Component: EcoBlock });
   registerBlock("battery", { sectionId: "system", Component: BatteryBlock });
   registerBlock("cpu", { sectionId: "system", Component: CpuBlock });
+  registerBlock("gpu", { sectionId: "system", Component: GpuBlock });
   registerBlock("brightness", { sectionId: "system", Component: BrightnessBlock });
   registerBlock("volume", { sectionId: "system", Component: VolumeBlock });
   registerBlock("colores", {

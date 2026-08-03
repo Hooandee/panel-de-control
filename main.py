@@ -53,6 +53,7 @@ from display.night import is_night_active
 from display import presets as color_presets
 from display.hdr import HdrBackend
 from gpu.clock import select_gpu_clock
+from gpu.profiles import GpuProfileStore
 from power.reader import PowerReader
 from battery.reader import BatteryReader
 from battery.charge_limit import select_charge_limit
@@ -124,6 +125,7 @@ DEFAULTS = {
     "_potencia_scope_migrated": False,
     "_deck_ppt_scope_migrated": False,
     "_cpu_scope_migrated": False,
+    "_gpu_scope_migrated": False,
     "_hdr_scope_migrated": False,
     "auto_tdp": False,
     # Learn from usage (local-only telemetry powering fan-curve suggestions). Opt-out:
@@ -236,6 +238,42 @@ class Plugin:
                     self._settings.get("gpu_clock_min") or 0,
                     self._settings.get("gpu_clock_max") or 0)
             self._settings["_potencia_scope_migrated"] = True
+            self._store.save(self._settings)
+        self._gpu_profiles = GpuProfileStore(
+            os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "gpu_profiles.json")
+        )
+        # GPU frequency now belongs to Sistema. Preserve an explicit manual window
+        # even when the old Potencia master was off; that switch owns only TDP after
+        # this migration, while Sistema provides the visible control and handoff.
+        if not self._settings.get("_gpu_scope_migrated"):
+            legacy_global = self._tdp_profiles.gpu_clock(None)
+            if legacy_global.get("manual"):
+                self._gpu_profiles.set_clock(
+                    "global", True, legacy_global.get("min"), legacy_global.get("max")
+                )
+            for appid in self._tdp_profiles.list_games():
+                legacy_profile = self._tdp_profiles.game_profile(appid) or {}
+                legacy_gpu = legacy_profile.get("gpu")
+                if not isinstance(legacy_gpu, dict):
+                    if (
+                        not self._tdp_profiles.is_following_global(appid)
+                        and not self._gpu_profiles.has_game(appid)
+                    ):
+                        self._gpu_profiles.set_clock(
+                            "game", False, 0, 0, appid=appid
+                        )
+                    continue
+                self._gpu_profiles.set_clock(
+                    "game",
+                    bool(legacy_gpu.get("manual")),
+                    legacy_gpu.get("min") or 0,
+                    legacy_gpu.get("max") or 0,
+                    appid=appid,
+                )
+                if self._tdp_profiles.is_following_global(appid):
+                    self._gpu_profiles.set_follow_global(appid, True)
+            self._tdp_profiles.drop_legacy_gpu_clocks()
+            self._settings["_gpu_scope_migrated"] = True
             self._store.save(self._settings)
         self._tdp_backend = tdp_factory.select_backend(self._device)
         self._steamdeck_ppt_history = deque(maxlen=32)
@@ -381,6 +419,9 @@ class Plugin:
         self._gpu_reapply_pending = False
         self._gpu_mutation_lock = asyncio.Lock()
         self._gpu_shutdown = False
+        self._gpu_owned = False
+        self._gpu_releasing = False
+        self._gpu_manual_inflight = 0
         self._reapply_generation = 0
         self._last_reapply_trigger = None
         # Topology + freq range are static — read once (only SMT/boost state is live).
@@ -543,8 +584,9 @@ class Plugin:
         self._reapply_all()   # already dispatches its subprocess work off-loop
         # Turning the power module off = stepping aside; hand HHD's TDP back, same
         # as set_tdp_control_enabled(False). Otherwise no manager drives the TDP.
-        if module_id == "power" and disabled:
+        if module_id == "system" and disabled:
             await self._release_gpu_clock("module-disabled")
+        if module_id == "power" and disabled:
             await self._offload_call(self._restore_power_handoff)
         self._sync_sampler()  # learning may have (un)gained a consumer
         return {"disabled": self._user_disabled_all()}
@@ -807,6 +849,7 @@ class Plugin:
         return {
             "settings": self._settings,
             "tdp_profiles": _rj("tdp_profiles.json"),
+            "gpu_profiles": _rj("gpu_profiles.json"),
             "fan_curves": _rj("fan_curves.json"),
             "color": _rj("color.json"),
             "audio": _rj("audio.json"),
@@ -905,6 +948,7 @@ class Plugin:
         """Every store that keeps per-game profiles, all sharing list_games/forget_game
         (the controller backend no-ops when it's not InputPlumber)."""
         return (self._tdp_profiles, self._fan_curves, self._color, self._cpu_profiles,
+                self._gpu_profiles,
                 self._audio_eq, self._controller_backend)
 
     def _game_profile_row(self, appid: str) -> dict:
@@ -918,8 +962,15 @@ class Plugin:
             tp = self._tdp_profiles.game_profile(appid)
             row["tdp"] = {"pl1": int(tp.get("pl1", 0)),
                           "auto": bool(tp.get("auto_tdp")),
-                          "gpu": bool((tp.get("gpu") or {}).get("manual")),
                           "follows_global": self._tdp_profiles.is_following_global(appid)}
+        if self._gpu_profiles.differs_from_global(appid):
+            gp = self._gpu_profiles.game_profile(appid)
+            row["gpu"] = {
+                "manual": bool(gp.get("manual")),
+                "min": gp.get("min"),
+                "max": gp.get("max"),
+                "follows_global": self._gpu_profiles.is_following_global(appid),
+            }
         if self._fan_curves.differs_from_global(appid):
             row["fan"] = {"preset": self._fan_curves.game_profile(appid).get("preset", "auto"),
                           "follows_global": self._fan_curves.is_following_global(appid)}
@@ -3238,12 +3289,12 @@ class Plugin:
                     )
         return self._cpu_state()
 
-    # ---- GPU clock (Potencia) ----------------------------------------------
+    # ---- GPU clock (Sistema) -----------------------------------------------
     def _gpu_scope_label(self, appid=None) -> str:
         current = self._current_appid if appid is None else appid
         if current is None:
             return "global"
-        if self._tdp_profiles.is_following_global(current):
+        if self._gpu_profiles.is_following_global(current):
             return "game_follow_global"
         return "game_own"
 
@@ -3297,6 +3348,8 @@ class Plugin:
         if result["generation"] != getattr(self, "_gpu_generation", 0):
             return
         self._gpu_last_result = dict(result)
+        if result["ok"]:
+            self._gpu_owned = result["requested"].get("mode") == "manual"
         if not result["ok"]:
             self._gpu_last_failure = dict(result)
         event = {
@@ -3325,27 +3378,53 @@ class Plugin:
         if getattr(self, "_gpu_shutdown", False):
             return
         if getattr(self, "_gpu_rpc_pending", 0) > 0:
-            current = self._tdp_profiles.gpu_clock(self._current_appid)
+            current = self._gpu_profiles.clock(self._current_appid)
             if current != getattr(self, "_gpu_rpc_profile_snapshot", None):
                 self._next_gpu_generation()
             self._gpu_reapply_pending = True
             return
-        if not self._module_enabled("power"):
+        if not self._module_enabled("system"):
             return
         try:
-            g = self._tdp_profiles.gpu_clock(self._current_appid)  # effective per game
-            if not self._gpu_clock.supported or not g.get("manual"):
+            g = self._gpu_profiles.clock(self._current_appid)
+            if not self._gpu_clock.supported:
+                return
+            if not g.get("manual"):
+                if (
+                    (not self._gpu_owned and self._gpu_manual_inflight == 0)
+                    or self._gpu_releasing
+                ):
+                    return
+                requested = {"mode": "auto", "min_mhz": None, "max_mhz": None}
+                self._gpu_requested = requested
+                self._gpu_releasing = True
+                holder = {}
+
+                def release():
+                    holder["result"] = self._run_gpu_clock(requested, auto=True)
+
+                def record_release():
+                    self._gpu_releasing = False
+                    result = holder.get("result")
+                    if result is not None:
+                        self._record_gpu_clock_transition(result, "context_auto")
+
+                self._offload(release, done=record_release)
                 return
             lo, hi = g.get("min"), g.get("max")
             if lo is not None and hi is not None:
                 requested = {"mode": "manual", "min_mhz": int(lo), "max_mhz": int(hi)}
                 self._gpu_requested = requested
                 holder = {}
+                self._gpu_manual_inflight += 1
 
                 def apply():
                     holder["result"] = self._run_gpu_clock(requested)
 
                 def record():
+                    self._gpu_manual_inflight = max(
+                        0, self._gpu_manual_inflight - 1
+                    )
                     result = holder.get("result")
                     if result is not None:
                         self._record_gpu_clock_transition(result, "reapply")
@@ -3417,7 +3496,7 @@ class Plugin:
     async def _rollback_gpu_store_failure(
         self, requested, previous_profile, previous_data, error, trigger, scope
     ) -> None:
-        self._tdp_profiles._data = previous_data
+        self._gpu_profiles._data = previous_data
         previous_manual = (
             bool(previous_profile.get("manual"))
             and previous_profile.get("min") is not None
@@ -3459,7 +3538,7 @@ class Plugin:
         self._record_gpu_clock_transition(failure, trigger, scope)
 
     def _gpu_clock_state(self) -> dict:
-        g = self._tdp_profiles.gpu_clock(self._current_appid)
+        g = self._gpu_profiles.clock(self._current_appid)
         rng = self._gpu_clock.get_range()
         cur = self._gpu_clock.get()
         gmin, gmax = g.get("min"), g.get("max")
@@ -3485,6 +3564,11 @@ class Plugin:
                 "auto" if self._gpu_clock.supported else "unsupported"
             ),
             "reason": last.get("error_code") if last else None,
+            "follows_global": self._gpu_profiles.is_following_global(self._current_appid),
+            "has_game_profile": (
+                self._current_appid is not None
+                and self._gpu_profiles.has_game(self._current_appid)
+            ),
         }
 
     @staticmethod
@@ -3626,12 +3710,82 @@ class Plugin:
         self._init()
         return self._gpu_clock_state()
 
-    async def set_gpu_clock(self, min_mhz: int, max_mhz: int, scope: str = "global", appid=None) -> dict:
+    async def set_gpu_follow_global(self, follow: bool, appid) -> dict:
         self._init()
-        if self._gpu_shutdown or not self._module_enabled("power"):
+        if self._gpu_shutdown or not self._module_enabled("system"):
             return self._gpu_clock_state()
         async with self._gpu_mutation_lock:
-            if self._gpu_shutdown or not self._module_enabled("power"):
+            if appid is None:
+                return self._gpu_clock_state()
+            appid = str(appid)
+            self._current_appid = appid
+            previous_profile = copy.deepcopy(self._gpu_profiles.clock(appid))
+            previous_data = copy.deepcopy(self._gpu_profiles._data)
+            candidate = (
+                self._gpu_profiles.clock(None)
+                if follow
+                else self._gpu_profiles.game_profile(appid) or self._gpu_profiles.clock(None)
+            )
+            manual = (
+                bool(candidate.get("manual"))
+                and candidate.get("min") is not None
+                and candidate.get("max") is not None
+            )
+            requested = (
+                {
+                    "mode": "manual",
+                    "min_mhz": int(candidate["min"]),
+                    "max_mhz": int(candidate["max"]),
+                }
+                if manual
+                else {"mode": "auto", "min_mhz": None, "max_mhz": None}
+            )
+            self._gpu_requested = requested
+            if self._gpu_rpc_pending == 0:
+                self._gpu_rpc_profile_snapshot = dict(
+                    self._gpu_profiles.clock(self._current_appid)
+                )
+            self._gpu_rpc_pending += 1
+            try:
+                result = await self._offload_call(
+                    lambda: self._run_gpu_clock(requested, auto=not manual)
+                )
+                if result["ok"] and result["generation"] == self._gpu_generation:
+                    try:
+                        if not follow and not self._gpu_profiles.has_game(appid):
+                            self._gpu_profiles.create_game_from_global(appid)
+                        else:
+                            self._gpu_profiles.set_follow_global(appid, bool(follow))
+                    except Exception as error:  # noqa: BLE001 - store boundary
+                        await self._rollback_gpu_store_failure(
+                            requested,
+                            previous_profile,
+                            previous_data,
+                            error,
+                            "scope_change_store",
+                            "game_follow_global" if follow else "game_own",
+                        )
+                        return self._gpu_clock_state()
+                self._record_gpu_clock_transition(
+                    result,
+                    "scope_change",
+                    "game_follow_global" if follow else "game_own",
+                )
+            finally:
+                self._gpu_rpc_pending -= 1
+                if self._gpu_rpc_pending == 0:
+                    self._gpu_rpc_profile_snapshot = None
+                    if self._gpu_reapply_pending:
+                        self._gpu_reapply_pending = False
+                        self._apply_gpu_clock()
+        return self._gpu_clock_state()
+
+    async def set_gpu_clock(self, min_mhz: int, max_mhz: int, scope: str = "global", appid=None) -> dict:
+        self._init()
+        if self._gpu_shutdown or not self._module_enabled("system"):
+            return self._gpu_clock_state()
+        async with self._gpu_mutation_lock:
+            if self._gpu_shutdown or not self._module_enabled("system"):
                 return self._gpu_clock_state()
             return await self._set_gpu_clock_unlocked(min_mhz, max_mhz, scope, appid)
 
@@ -3639,20 +3793,22 @@ class Plugin:
         self, min_mhz: int, max_mhz: int, scope: str = "global", appid=None
     ) -> dict:
         self._init()
-        previous_profile = self._tdp_profiles.gpu_clock(self._current_appid)
-        previous_data = copy.deepcopy(self._tdp_profiles._data)
+        if scope == "game" and appid is not None:
+            self._current_appid = str(appid)
+        previous_profile = self._gpu_profiles.clock(self._current_appid)
+        previous_data = copy.deepcopy(self._gpu_profiles._data)
         requested = {"mode": "manual", "min_mhz": int(min_mhz), "max_mhz": int(max_mhz)}
         self._gpu_requested = requested
         if self._gpu_rpc_pending == 0:
             self._gpu_rpc_profile_snapshot = dict(
-                self._tdp_profiles.gpu_clock(self._current_appid)
+                self._gpu_profiles.clock(self._current_appid)
             )
         self._gpu_rpc_pending += 1
         try:
             result = await self._offload_call(lambda: self._run_gpu_clock(requested))
             if result["ok"] and result["generation"] == self._gpu_generation:
                 try:
-                    self._tdp_profiles.set_gpu_clock(
+                    self._gpu_profiles.set_clock(
                         scope, True, int(min_mhz), int(max_mhz), appid=appid
                     )
                 except Exception as error:  # noqa: BLE001 - store boundary
@@ -3679,10 +3835,10 @@ class Plugin:
 
     async def set_gpu_clock_auto(self, scope: str = "global", appid=None) -> dict:
         self._init()
-        if self._gpu_shutdown or not self._module_enabled("power"):
+        if self._gpu_shutdown or not self._module_enabled("system"):
             return self._gpu_clock_state()
         async with self._gpu_mutation_lock:
-            if self._gpu_shutdown or not self._module_enabled("power"):
+            if self._gpu_shutdown or not self._module_enabled("system"):
                 return self._gpu_clock_state()
             return await self._set_gpu_clock_auto_unlocked(scope, appid)
 
@@ -3690,13 +3846,15 @@ class Plugin:
         self, scope: str = "global", appid=None
     ) -> dict:
         self._init()
-        previous_profile = self._tdp_profiles.gpu_clock(self._current_appid)
-        previous_data = copy.deepcopy(self._tdp_profiles._data)
+        if scope == "game" and appid is not None:
+            self._current_appid = str(appid)
+        previous_profile = self._gpu_profiles.clock(self._current_appid)
+        previous_data = copy.deepcopy(self._gpu_profiles._data)
         requested = {"mode": "auto", "min_mhz": None, "max_mhz": None}
         self._gpu_requested = requested
         if self._gpu_rpc_pending == 0:
             self._gpu_rpc_profile_snapshot = dict(
-                self._tdp_profiles.gpu_clock(self._current_appid)
+                self._gpu_profiles.clock(self._current_appid)
             )
         self._gpu_rpc_pending += 1
         try:
@@ -3705,7 +3863,7 @@ class Plugin:
             )
             if result["ok"] and result["generation"] == self._gpu_generation:
                 try:
-                    self._tdp_profiles.set_gpu_clock(scope, False, 0, 0, appid=appid)
+                    self._gpu_profiles.set_clock(scope, False, 0, 0, appid=appid)
                 except Exception as error:  # noqa: BLE001 - store boundary
                     await self._rollback_gpu_store_failure(
                         requested,

@@ -2,20 +2,19 @@ import { FC } from "react";
 import { ToggleField } from "@decky/ui";
 import { LuMemoryStick } from "react-icons/lu";
 
-import { TdpScope } from "../api";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { clamp } from "../system/logic";
 import { ContainedSlider } from "./ContainedSlider";
 import { Collapsible } from "./Collapsible";
 import { useGpuClock } from "../gpu/useGpuClock";
+import { ProfileSelector } from "./ProfileSelector";
 
-/** GPU clock window (min/max MHz) in Potencia. Auto by default; manual pins/limits
- *  the clock — complements the TDP for fine control. Hidden where unsupported.
- *  Per-game/global: follows the same scope tab as the rest of Potencia. */
-export const GpuClockCard: FC<{ scope: TdpScope; appid: string | null }> = ({ scope, appid }) => {
+/** GPU clock window (min/max MHz) in Sistema. Auto by default; manual pins/limits
+ *  the clock. Hidden where unsupported and independently scoped per game. */
+export const GpuClockCard: FC = () => {
   const { t } = useI18n();
-  const { state, setManual, setWindow } = useGpuClock(scope, appid);
+  const { state, scope, game, onScope, setManual, setWindow } = useGpuClock();
 
   if (!state || !state.supported || state.range_min === null || state.range_max === null) {
     return null;
@@ -32,6 +31,16 @@ export const GpuClockCard: FC<{ scope: TdpScope; appid: string | null }> = ({ sc
       title={t("gpu.clock.title")}
       summary={summary}
     >
+      {game && (
+        <ProfileSelector
+          scope={scope}
+          gameName={game.name}
+          hasGameProfile={state.has_game_profile}
+          globalLabel={t("tdp.scope.global")}
+          inheritHint={t("tdp.inherit")}
+          onScope={onScope}
+        />
+      )}
       <ToggleField
         label={t("gpu.clock.manual")}
         description={t("gpu.clock.manual.desc")}

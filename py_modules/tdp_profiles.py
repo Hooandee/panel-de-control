@@ -134,6 +134,13 @@ class ProfileStore(ScopedProfileStore):
                                               "min": int(gmin), "max": int(gmax)}
         self._save()
 
+    def drop_legacy_gpu_clocks(self):
+        changed = self._data["global"].pop("gpu", None) is not None
+        for profile in self._data["games"].values():
+            changed = (profile.pop("gpu", None) is not None) or changed
+        if changed:
+            self._save()
+
     def effective(self, appid):
         prof = self._effective_prof(appid)
         pl1 = prof["pl1"]

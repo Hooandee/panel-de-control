@@ -593,7 +593,7 @@ export interface ColorState extends ColorPreset {
   active_preset: string | null;
 }
 
-// ---- GPU clock (Potencia) -------------------------------------------------
+// ---- GPU clock (Sistema) --------------------------------------------------
 export interface GpuClockState {
   supported: boolean;
   manual: boolean;
@@ -610,12 +610,16 @@ export interface GpuClockState {
   generation: number;
   status: "auto" | "applied" | "rejected" | "unsupported";
   reason: string | null;
+  follows_global: boolean;
+  has_game_profile: boolean;
 }
 
 export const getGpuClock = callable<[], GpuClockState>("get_gpu_clock");
 export const setGpuClock =
   callable<[min_mhz: number, max_mhz: number, scope: TdpScope, appid: string | null], GpuClockState>("set_gpu_clock");
 export const setGpuClockAuto = callable<[scope: TdpScope, appid: string | null], GpuClockState>("set_gpu_clock_auto");
+export const setGpuFollowGlobal =
+  callable<[follow: boolean, appid: string | null], GpuClockState>("set_gpu_follow_global");
 
 export const getColorState = callable<[], ColorState>("get_color_state");
 export const setSaturation =
@@ -744,7 +748,7 @@ export const resetController =
 // One row per game that has a stored per-game profile in any section (raw own values).
 export interface GameProfileRow {
   appid: string;
-  tdp?: { pl1: number; auto: boolean; gpu: boolean; follows_global: boolean };
+  tdp?: { pl1: number; auto: boolean; follows_global: boolean };
   fan?: { preset: string; follows_global: boolean };
   color?: { saturation: number; calibrated: boolean; hdr: boolean; follows_global: boolean };
   cpu?: {
@@ -754,6 +758,7 @@ export interface GameProfileRow {
     frequency?: { manual?: boolean; min_khz?: number | null; max_khz?: number | null };
     follows_global: boolean;
   };
+  gpu?: { manual: boolean; min: number | null; max: number | null; follows_global: boolean };
   mandos?: { count: number; follows_global: boolean };
   audio?: { follows_global: boolean };
 }

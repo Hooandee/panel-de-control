@@ -102,6 +102,33 @@ const asPref = (v: unknown): ListPref => {
   return { order: strArray(o.order), hidden: strArray(o.hidden) };
 };
 
+function migrateMovedGpuBlock(blocks: Record<string, ListPref>): Record<string, ListPref> {
+  const power = blocks.power;
+  if (!power || (!power.order.includes("gpu") && !power.hidden.includes("gpu"))) {
+    return blocks;
+  }
+
+  const migrated = { ...blocks };
+  migrated.power = {
+    order: power.order.filter((id) => id !== "gpu"),
+    hidden: power.hidden.filter((id) => id !== "gpu"),
+  };
+
+  const systemExists = Boolean(blocks.system);
+  const system = blocks.system ?? { order: [], hidden: [] };
+  const systemAlreadyOwnsGpu = system.order.includes("gpu") || system.hidden.includes("gpu");
+  if (!systemAlreadyOwnsGpu) {
+    const order = [...system.order];
+    if (order.length > 0) {
+      const cpuIndex = order.indexOf("cpu");
+      order.splice(cpuIndex >= 0 ? cpuIndex + 1 : order.length, 0, "gpu");
+    }
+    const hidden = power.hidden.includes("gpu") ? [...system.hidden, "gpu"] : system.hidden;
+    if (systemExists || hidden.includes("gpu")) migrated.system = { order, hidden };
+  }
+  return migrated;
+}
+
 /**
  * Coerce arbitrary parsed JSON into a valid Layout. localStorage can hold a
  * corrupt or old-shape value (valid JSON but wrong types, e.g. `order: 5`);
@@ -121,9 +148,10 @@ export function coerceLayout(parsed: unknown): Layout {
     }
     return out;
   };
+  const blocks = asRecordOf(p.blocks, asPref);
   return {
     tabs: asPref(p.tabs),
-    blocks: asRecordOf(p.blocks, asPref),
+    blocks: migrateMovedGpuBlock(blocks),
     subitems: asRecordOf(p.subitems, strArray),
   };
 }

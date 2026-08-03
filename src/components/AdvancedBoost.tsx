@@ -84,14 +84,18 @@ export const AdvancedBoost: FC<AdvancedBoostProps> = ({
   return (
     <div style={{ ...theme.card, padding: theme.space.md, marginTop: theme.space.sm, overflow: "hidden" }}>
       <Focusable
-        style={{ display: "flex", alignItems: "center", gap: theme.space.sm, cursor: "pointer" }}
+        style={{ display: "flex", flexDirection: "column", alignItems: "stretch", gap: theme.space.xs, cursor: "pointer" }}
         onActivate={() => setOpen((o) => !o)}
         onClick={() => setOpen((o) => !o)}
       >
-        <Chevron size={16} color={theme.color.textMuted} />
-        <span style={{ flex: 1 }}>{t(isDeckPpt ? "tdp.deckPpt.title" : "tdp.boost.title")}</span>
-        {isDeckPpt && <span style={{ ...badge, color: theme.color.warn, boxShadow: `inset 0 0 0 1px ${theme.color.warn}` }}>{t("tdp.deckPpt.experimental")}</span>}
-        <span style={badge}>{t(`tdp.boost.mode.${mode}`)}</span>
+        <span style={{ display: "flex", alignItems: "center", gap: theme.space.sm, minWidth: 0 }}>
+          <Chevron size={16} color={theme.color.textMuted} />
+          <span>{t(isDeckPpt ? "tdp.deckPpt.title" : "tdp.boost.title")}</span>
+        </span>
+        <span style={{ display: "flex", flexWrap: "wrap", gap: theme.space.xs, paddingLeft: 16 + theme.space.sm }}>
+          {isDeckPpt && <span style={{ ...badge, color: theme.color.warn, boxShadow: `inset 0 0 0 1px ${theme.color.warn}` }}>{t("tdp.deckPpt.experimental")}</span>}
+          <span style={badge}>{t(`tdp.boost.mode.${mode}`)}</span>
+        </span>
       </Focusable>
 
       {open && (
@@ -104,7 +108,16 @@ export const AdvancedBoost: FC<AdvancedBoostProps> = ({
             {MODES.map((m) => (
               <Focusable
                 key={m}
-                style={{ ...segmentItemStyle(m === mode), flex: 1, padding: "4px 6px" }}
+                style={{
+                  ...segmentItemStyle(m === mode),
+                  flex: 1,
+                  minWidth: 0,
+                  padding: "4px 3px",
+                  fontSize: theme.font.caption,
+                  lineHeight: 1.15,
+                  whiteSpace: "normal",
+                  overflowWrap: "anywhere",
+                }}
                 onActivate={() => onSetMode(m)}
                 onClick={() => onSetMode(m)}
               >

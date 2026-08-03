@@ -21,7 +21,11 @@ function read(): Layout {
     if (!raw) return EMPTY;
     // Coerce shapes: valid JSON with wrong types (e.g. order:5) must NOT throw
     // downstream — that would brick the panel with no in-UI recovery path.
-    return coerceLayout(JSON.parse(raw));
+    const parsed = JSON.parse(raw);
+    const layout = coerceLayout(parsed);
+    const migrated = JSON.stringify(layout);
+    if (migrated !== JSON.stringify(parsed)) writeString(KEY, migrated);
+    return layout;
   } catch {
     return EMPTY;
   }
