@@ -62,7 +62,17 @@ const CpuBlock: FC = () => {
   const summary = `${cs.cores ?? "—"} ${t("system.cpu.coresWord")} · ${t("system.cpu.turbo")} ${cs.boost.enabled ? t("system.on") : t("system.off")}`;
   return (
     <Collapsible id="cpu" icon={<LuCpu size={16} />} title={t("system.cpu.title")} summary={summary}>
-      <CpuCard state={cs} scope={cpu.scope} game={cpu.game} onScope={cpu.onScope} onSetSmt={cpu.setSmt} onSetBoost={cpu.setBoost} onSetCores={cpu.setCores} />
+      <CpuCard
+        state={cs}
+        scope={cpu.scope}
+        game={cpu.game}
+        onScope={cpu.onScope}
+        onSetSmt={cpu.setSmt}
+        onSetBoost={cpu.setBoost}
+        onSetCores={cpu.setCores}
+        onSetFrequencyManual={cpu.setFrequencyManual}
+        onSetFrequency={cpu.setFrequency}
+      />
     </Collapsible>
   );
 };

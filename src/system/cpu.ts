@@ -7,6 +7,23 @@ export function formatGhz(khz: number | null): string {
   return `${(khz / 1_000_000).toFixed(1)} GHz`;
 }
 
+export function formatCpuFrequency(khz: number | null, locale: "es" | "en"): string {
+  if (khz === null || !isFinite(khz) || khz <= 0) return "—";
+  const value = (khz / 1_000_000).toFixed(2);
+  return `${locale === "es" ? value.replace(".", ",") : value} GHz`;
+}
+
+export function clampCpuWindow(
+  minimumKhz: number,
+  maximumKhz: number,
+  envelopeMinKhz: number,
+  envelopeMaxKhz: number,
+): [number, number] {
+  const minimum = clamp(minimumKhz, envelopeMinKhz, envelopeMaxKhz);
+  const maximum = clamp(maximumKhz, envelopeMinKhz, envelopeMaxKhz);
+  return minimum > maximum ? [maximum, maximum] : [minimum, maximum];
+}
+
 /** Fraction (0..1) of the frequency bar that is the turbo tail above base.
  *  0 when either value is missing or max <= base (no visible turbo). */
 export function turboFraction(baseKhz: number | null, maxKhz: number | null): number {

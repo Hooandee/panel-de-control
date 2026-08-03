@@ -169,9 +169,9 @@ def test_reapply_all_offloads_tdp_fans_and_color(tmp_path, monkeypatch):
         p._reapply_all()  # sync, but under a running loop
 
     asyncio.run(_run())
-    # tdp + fans + color offloaded; charge/cpu/gpu-clock stay inline (sysfs); hdr only
-    # offloads when it's enabled+supported (off by default here).
-    assert rec.count == 3
+    # CPU joins the serialized off-loop apply path because a complete multi-policy
+    # transaction may touch many sysfs nodes and must not stall the QAM event loop.
+    assert rec.count == 4
 
 
 def test_set_saturation_applies_color_off_loop(tmp_path, monkeypatch):

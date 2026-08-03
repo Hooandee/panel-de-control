@@ -1,5 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CpuState, TdpScope, getCpuState, setActiveCores, setCpuBoost, setCpuFollowGlobal, setSmt } from "../api";
+import {
+  CpuState,
+  TdpScope,
+  getCpuState,
+  setActiveCores,
+  setCpuBoost,
+  setCpuFollowGlobal,
+  setCpuFrequency,
+  setCpuFrequencyAuto,
+  setSmt,
+} from "../api";
 import { useRunningGame } from "../tdp/useRunningGame";
 import { useScopeSync } from "../useScopeSync";
 
@@ -13,6 +23,8 @@ export interface CpuController {
   setSmt: (enabled: boolean) => void;
   setBoost: (enabled: boolean) => void;
   setCores: (count: number) => void;
+  setFrequencyManual: (manual: boolean) => void;
+  setFrequency: (minimumKhz: number, maximumKhz: number) => void;
 }
 
 /**
@@ -24,6 +36,7 @@ export function useCpu(): CpuController {
   const game = useRunningGame();
   const [state, setState] = useState<CpuState | null>(null);
   const pending = useRef(false);
+  const frequencyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const appid = game?.appid;
 
   useEffect(() => {
@@ -42,6 +55,7 @@ export function useCpu(): CpuController {
     return () => {
       alive = false;
       clearInterval(poll);
+      if (frequencyTimer.current !== null) clearTimeout(frequencyTimer.current);
     };
   }, [appid]);
 
@@ -61,9 +75,7 @@ export function useCpu(): CpuController {
       pending.current = true;
       rpc()
         .then((s) => setState(s))
-        .catch(() => {
-          /* next poll corrects */
-        })
+        .catch(() => getCpuState().then(setState).catch(() => {}))
         .finally(() => {
           pending.current = false;
         });
@@ -87,5 +99,62 @@ export function useCpu(): CpuController {
     [apply, scope, target],
   );
 
-  return { state, scope, game, onScope, setSmt: doSmt, setBoost: doBoost, setCores: doCores };
+  const doFrequency = useCallback(
+    (minimumKhz: number, maximumKhz: number) => {
+      setState((previous) => previous ? {
+        ...previous,
+        frequency: {
+          ...previous.frequency,
+          manual: true,
+          requested_min_khz: minimumKhz,
+          requested_max_khz: maximumKhz,
+          status: "configured",
+        },
+      } : previous);
+      pending.current = true;
+      if (frequencyTimer.current !== null) clearTimeout(frequencyTimer.current);
+      frequencyTimer.current = setTimeout(() => {
+        frequencyTimer.current = null;
+        setCpuFrequency(minimumKhz, maximumKhz, scope, target)
+          .then(setState)
+          .catch(() => getCpuState().then(setState).catch(() => {}))
+          .finally(() => { pending.current = false; });
+      }, 200);
+    },
+    [scope, target],
+  );
+
+  const doFrequencyManual = useCallback(
+    (manual: boolean) => {
+      if (!manual) {
+        apply(
+          (s) => ({ ...s, frequency: { ...s.frequency, manual: false, status: "automatic" } }),
+          () => setCpuFrequencyAuto(scope, target),
+        );
+        return;
+      }
+      const frequency = state?.frequency;
+      const minimum = frequency?.requested_min_khz ?? frequency?.applied_min_khz ?? frequency?.range_min_khz;
+      const maximum = frequency?.requested_max_khz ?? frequency?.applied_max_khz ?? frequency?.range_max_khz;
+      if (minimum !== null && minimum !== undefined && maximum !== null && maximum !== undefined) {
+        apply(
+          (s) => ({ ...s, frequency: { ...s.frequency, manual: true, status: "configured" } }),
+          () => setCpuFrequency(minimum, maximum, scope, target),
+        );
+      }
+    },
+    [apply, scope, state?.frequency, target],
+  );
+
+  return {
+    state,
+    scope,
+    game,
+    onScope,
+    setSmt: doSmt,
+    setBoost: doBoost,
+    setCores: doCores,
+    setFrequencyManual: doFrequencyManual,
+    setFrequency: doFrequency,
+  };
 }

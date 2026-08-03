@@ -47,6 +47,10 @@ function sectionLine(section: SectionId, row: GameProfileRow, t: T): SectionLine
       `${t("gameProfiles.boost")} ${row.cpu.boost ? "on" : "off"}`,
     ];
     if (row.cpu.cores != null) parts.push(t("gameProfiles.cores", { n: row.cpu.cores }));
+    const frequency = row.cpu.frequency;
+    if (frequency?.manual && frequency.min_khz != null && frequency.max_khz != null) {
+      parts.push(`${(frequency.min_khz / 1_000_000).toFixed(2)}–${(frequency.max_khz / 1_000_000).toFixed(2)} GHz`);
+    }
     return { label: t("gameProfiles.sec.cpu"), text: parts.join(" · "), dim: row.cpu.follows_global };
   }
   if (section === "mandos" && row.mandos) {

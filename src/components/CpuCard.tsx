@@ -4,7 +4,7 @@ import { ToggleField } from "@decky/ui";
 import { CpuState, TdpScope } from "../api";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
-import { activeThreads, formatGhz, threadsPerCore, turboFraction } from "../system/cpu";
+import { activeThreads, clampCpuWindow, formatCpuFrequency, formatGhz, threadsPerCore, turboFraction } from "../system/cpu";
 import { ContainedSlider } from "./ContainedSlider";
 import { ProfileSelector } from "./ProfileSelector";
 
@@ -16,6 +16,8 @@ interface Props {
   onSetSmt: (enabled: boolean) => void;
   onSetBoost: (enabled: boolean) => void;
   onSetCores: (count: number) => void;
+  onSetFrequencyManual: (manual: boolean) => void;
+  onSetFrequency: (minimumKhz: number, maximumKhz: number) => void;
 }
 
 // Boost-off turbo tail: dim but visible, so "boost off" reads differently from
@@ -31,8 +33,18 @@ const Core: FC<{ pips: number; lit: number }> = ({ pips, lit }) => (
   </div>
 );
 
-export const CpuCard: FC<Props> = ({ state, scope, game, onScope, onSetSmt, onSetBoost, onSetCores }) => {
-  const { t } = useI18n();
+export const CpuCard: FC<Props> = ({
+  state,
+  scope,
+  game,
+  onScope,
+  onSetSmt,
+  onSetBoost,
+  onSetCores,
+  onSetFrequencyManual,
+  onSetFrequency,
+}) => {
+  const { t, lang } = useI18n();
   const smtOn = state.smt.enabled;
   const boostOn = state.boost.enabled;
   const cores = state.cores;
@@ -41,6 +53,12 @@ export const CpuCard: FC<Props> = ({ state, scope, game, onScope, onSetSmt, onSe
   const peak = boostOn ? state.max_khz : state.base_khz;
   // How many physical cores are active (for both the pip viz and the slider).
   const activeCores = state.active_cores ?? cores ?? 0;
+  const frequency = state.frequency;
+  const frequencyMin = frequency.requested_min_khz ?? frequency.applied_min_khz ?? frequency.range_min_khz;
+  const frequencyMax = frequency.requested_max_khz ?? frequency.applied_max_khz ?? frequency.range_max_khz;
+  const frequencyAdapted = frequency.status === "clamped" || frequency.policy_state.some(
+    (policy) => policy.applied_min_khz !== frequency.applied_min_khz || policy.applied_max_khz !== frequency.applied_max_khz,
+  );
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm, overflow: "hidden" }}>
@@ -102,6 +120,61 @@ export const CpuCard: FC<Props> = ({ state, scope, game, onScope, onSetSmt, onSe
             step={1}
             onChange={onSetCores}
           />
+        </div>
+      )}
+
+      {frequency.supported
+        && frequency.range_min_khz !== null
+        && frequency.range_max_khz !== null
+        && frequencyMin !== null
+        && frequencyMax !== null && (
+        <div style={{ display: "flex", flexDirection: "column", gap: theme.space.xs }}>
+          <ToggleField
+            label={t("system.cpu.frequency.manual")}
+            description={t("system.cpu.frequency.manual.desc")}
+            checked={frequency.manual}
+            onChange={onSetFrequencyManual}
+            bottomSeparator="none"
+          />
+          {frequency.manual && (
+            <div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: theme.font.caption, color: theme.color.textMuted }}>
+                <span>{t("system.cpu.frequency.min")}</span>
+                <span style={{ color: theme.color.textPrimary, fontWeight: 700 }}>{formatCpuFrequency(frequencyMin, lang)}</span>
+              </div>
+              <ContainedSlider
+                value={frequencyMin}
+                min={frequency.range_min_khz}
+                max={frequency.range_max_khz}
+                step={100_000}
+                onChange={(value) => {
+                  const [minimum, maximum] = clampCpuWindow(value, frequencyMax, frequency.range_min_khz!, frequency.range_max_khz!);
+                  onSetFrequency(minimum, maximum);
+                }}
+              />
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: theme.font.caption, color: theme.color.textMuted }}>
+                <span>{t("system.cpu.frequency.max")}</span>
+                <span style={{ color: theme.color.textPrimary, fontWeight: 700 }}>{formatCpuFrequency(frequencyMax, lang)}</span>
+              </div>
+              <ContainedSlider
+                value={frequencyMax}
+                min={frequency.range_min_khz}
+                max={frequency.range_max_khz}
+                step={100_000}
+                onChange={(value) => onSetFrequency(frequencyMin, Math.max(value, frequencyMin))}
+              />
+              {frequencyAdapted && (
+                <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
+                  {t("system.cpu.frequency.adapted")}
+                </div>
+              )}
+              {(frequency.status === "failed" || frequency.status === "partial") && (
+                <div style={{ fontSize: theme.font.caption, color: theme.color.danger }}>
+                  {t("system.cpu.frequency.rejected")}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 

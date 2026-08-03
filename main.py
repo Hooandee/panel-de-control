@@ -63,6 +63,8 @@ from audio import safe as audio_safe
 from audio import tone as audio_tone
 from cpu.info import read_cpu_info, read_cpu_model
 from cpu.controls import CoreControl, SmtControl, select_boost
+from cpu.coordinator import CpuCoordinator
+from cpu.frequency import NullCpuFrequency, select_cpu_frequency
 from cpu.profiles import CpuProfileStore
 from telemetry.store import TelemetryStore
 from telemetry.sampler import TelemetrySampler
@@ -333,6 +335,13 @@ class Plugin:
         self._smt = SmtControl()
         self._boost = select_boost()
         self._cores = CoreControl()
+        self._cpu_frequency = select_cpu_frequency()
+        self._cpu_coordinator = CpuCoordinator(
+            self._cores, self._smt, self._boost, self._cpu_frequency
+        )
+        self._cpu_generation = 0
+        self._cpu_last_result = None
+        self._cpu_history = deque(maxlen=32)
         self._cpu_profiles = CpuProfileStore(
             os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "cpu_profiles.json"))
         # One-time migration: SMT / boost / active cores used to be flat global settings.
@@ -894,6 +903,7 @@ class Plugin:
             row["cpu"] = {"smt": bool(up.get("smt", True)),
                           "boost": bool(up.get("boost", True)),
                           "cores": up.get("cores"),
+                          "frequency": dict(up.get("frequency") or {}),
                           "follows_global": self._cpu_profiles.is_following_global(appid)}
         if self._controller_backend.differs_from_global(appid):
             row["mandos"] = {"count": len(self._controller_backend.game_profile(appid)),
@@ -2698,39 +2708,100 @@ class Plugin:
         battery["ac_online"] = read_on_ac()
         return {"battery": battery, "charge_limit": self._charge_limit_state()}
 
-    # ---- CPU (SMT + boost) --------------------------------------------------
-    def _apply_cpu(self) -> None:
-        """Re-assert the persisted core count, SMT + boost state (safe no-op where
-        unsupported). In download mode, boost is forced off regardless of the saved
-        setting.
+    # ---- CPU ---------------------------------------------------------------
+    def _cpu_intent(self) -> dict:
+        profiles = getattr(self, "_cpu_profiles", None)
+        if profiles is not None:
+            return profiles.effective(getattr(self, "_current_appid", None))
+        return {
+            "smt": True,
+            "boost": True,
+            "cores": None,
+            "frequency": {"manual": False, "min_khz": None, "max_khz": None},
+        }
 
-        ORDER MATTERS: cores FIRST (onlining the kept cores brings their SMT siblings
-        online too), then SMT — so SMT-off re-offlines those siblings and the two
-        controls, which write the same cpuN/online nodes, end up consistent."""
-        if not self._module_enabled("system"):
-            # Module off = step aside: hand the CPU back to its defaults (all cores
-            # online, SMT on, boost on) instead of leaving it as we last set it.
-            if self._cores.supported and self._cores.max_cores is not None:
-                self._cores.set(int(self._cores.max_cores))
-            if self._smt.supported:
-                self._smt.set(True)
-            if self._boost.supported:
-                self._boost.set(True)
+    def _ensure_cpu_coordinator(self):
+        if not hasattr(self, "_cpu_frequency"):
+            self._cpu_frequency = NullCpuFrequency()
+        coordinator = getattr(self, "_cpu_coordinator", None)
+        controls = (self._cores, self._smt, self._boost, self._cpu_frequency)
+        if coordinator is None or getattr(coordinator, "_controls_identity", None) != tuple(
+            id(control) for control in controls
+        ):
+            coordinator = CpuCoordinator(*controls)
+            coordinator._controls_identity = tuple(id(control) for control in controls)
+            self._cpu_coordinator = coordinator
+        return coordinator
+
+    def _next_cpu_generation(self) -> int:
+        self._cpu_generation = int(getattr(self, "_cpu_generation", 0)) + 1
+        return self._cpu_generation
+
+    def _cpu_scope_label(self) -> str:
+        appid = getattr(self, "_current_appid", None)
+        if appid is None:
+            return "global"
+        if self._cpu_profiles.is_following_global(appid):
+            return "game_follow_global"
+        return "game_own"
+
+    def _record_cpu_result(self, result, trigger) -> None:
+        if result.generation != getattr(self, "_cpu_generation", 0):
             return
-        # Effective per-game CPU controls (own when the game has them, else global).
-        eff = self._cpu_profiles.effective(self._current_appid)
-        # Re-assert the active-core count. None = "all cores" → actively restore the full
-        # count (so switching FROM a core-limited game/global back to an unlimited scope
-        # brings the offlined cores back, instead of leaving them off).
-        if self._cores.supported:
-            n = eff["cores"] if eff["cores"] is not None else self._cores.max_cores
-            if n is not None:
-                self._cores.set(int(n))
-        if self._smt.supported:
-            self._smt.set(bool(eff["smt"]))
-        if self._boost.supported:
-            eco = self._settings.get("eco_enabled", False)
-            self._boost.set(False if eco else bool(eff["boost"]))
+        self._cpu_last_result = result
+        history = getattr(self, "_cpu_history", None)
+        if history is None:
+            history = deque(maxlen=32)
+            self._cpu_history = history
+        event = {
+            "at": round(time.monotonic(), 3),
+            "trigger": trigger,
+            "generation": result.generation,
+            "scope": self._cpu_scope_label(),
+            "ok": result.ok,
+            "status": result.status,
+            "error_code": result.error_code,
+            "error_type": result.error_type,
+            "rollback": result.rollback,
+        }
+        history.append(event)
+        log = decky.logger.info if result.ok else decky.logger.warning
+        log("CPU transition %s", json.dumps(event, sort_keys=True, separators=(",", ":")))
+
+    def _run_cpu_apply(self, intent, generation, enabled=None):
+        if enabled is None:
+            enabled = self._module_enabled("system")
+        return self._ensure_cpu_coordinator().apply(
+            intent,
+            generation,
+            enabled=bool(enabled),
+            eco=bool(self._settings.get("eco_enabled", False)),
+        )
+
+    async def _apply_cpu_awaited(self, intent=None, enabled=None, trigger="rpc"):
+        generation = self._next_cpu_generation()
+        selected = intent if intent is not None else self._cpu_intent()
+        result = await self._offload_call(
+            lambda: self._run_cpu_apply(selected, generation, enabled)
+        )
+        if generation == self._cpu_generation:
+            self._record_cpu_result(result, trigger)
+        return result
+
+    def _apply_cpu(self) -> None:
+        generation = self._next_cpu_generation()
+        intent = self._cpu_intent()
+        holder = {}
+
+        def apply():
+            holder["result"] = self._run_cpu_apply(intent, generation)
+
+        def record():
+            result = holder.get("result")
+            if result is not None:
+                self._record_cpu_result(result, "reapply")
+
+        self._offload(apply, done=record)
 
     def _clear_eco(self) -> None:
         """Manual control taken → exit download mode and restore the normal TDP/boost
@@ -2771,6 +2842,33 @@ class Plugin:
 
     def _cpu_state(self) -> dict:
         info = self._cpu_info
+        frequency_profile = self._cpu_profiles.effective(self._current_appid)["frequency"]
+        try:
+            frequency_diagnostics = self._cpu_frequency.diagnostics()
+        except Exception:  # noqa: BLE001 - diagnostics must not break the CPU card
+            frequency_diagnostics = {
+                "supported": False,
+                "reason": "diagnostics_failed",
+                "policy_state": [],
+            }
+        frequency_range = self._cpu_frequency.get_range()
+        policy_state = frequency_diagnostics.get("policy_state") or []
+        applied_minimum = min(
+            (row["applied_min_khz"] for row in policy_state if row.get("applied_min_khz") is not None),
+            default=None,
+        )
+        applied_maximum = max(
+            (row["applied_max_khz"] for row in policy_state if row.get("applied_max_khz") is not None),
+            default=None,
+        )
+        last_result = getattr(self, "_cpu_last_result", None)
+        frequency_status = (
+            "unsupported"
+            if not self._cpu_frequency.supported
+            else last_result.status if last_result is not None
+            else "configured" if frequency_profile["manual"]
+            else "automatic"
+        )
         return {
             # Real silicon name (same source as get_device) so the CpuCard and the
             # DeviceHeader never show two different CPU names on the same screen.
@@ -2785,6 +2883,25 @@ class Plugin:
             "cores_supported": self._cores.supported,
             "max_cores": self._cores.max_cores,
             "active_cores": self._cores.active() if self._cores.supported else None,
+            "frequency": {
+                "supported": self._cpu_frequency.supported,
+                "backend": frequency_diagnostics.get("backend", "unsupported"),
+                "manual": bool(frequency_profile["manual"]),
+                "range_min_khz": frequency_range[0] if frequency_range else None,
+                "range_max_khz": frequency_range[1] if frequency_range else None,
+                "requested_min_khz": frequency_profile.get("min_khz"),
+                "requested_max_khz": frequency_profile.get("max_khz"),
+                "applied_min_khz": applied_minimum,
+                "applied_max_khz": applied_maximum,
+                "status": frequency_status,
+                "reason": (
+                    last_result.error_code
+                    if last_result is not None and not last_result.ok
+                    else frequency_diagnostics.get("reason")
+                ),
+                "epoch": frequency_diagnostics.get("epoch", 0),
+                "policy_state": policy_state,
+            },
             "follows_global": self._cpu_profiles.is_following_global(self._current_appid),
             "has_game_profile": (self._current_appid is not None
                                  and self._cpu_profiles.has_game(self._current_appid)),
@@ -2794,24 +2911,86 @@ class Plugin:
         self._init()
         return self._cpu_state()
 
+    def _cpu_profile_candidate(self, scope, appid) -> dict:
+        if scope == "global":
+            source = self._cpu_profiles.effective(None)
+        elif scope == "game" and appid is not None:
+            appid = str(appid)
+            self._current_appid = appid
+            source = self._cpu_profiles.game_profile(appid) or self._cpu_profiles.effective(None)
+        else:
+            raise ValueError("invalid CPU profile scope")
+        return {
+            **source,
+            "frequency": dict(source["frequency"]),
+        }
+
+    def _exit_eco_for_cpu(self) -> None:
+        if self._settings.get("eco_enabled"):
+            self._settings["eco_enabled"] = False
+            self._save()
+
     async def set_active_cores(self, count: int, scope: str = "global", appid=None) -> dict:
         self._init()
-        self._clear_eco()
-        self._cpu_profiles.set_cores(scope, int(count), appid=appid)
-        self._apply_cpu()  # orders cores→SMT so kept cores' SMT siblings don't re-online
+        intent = self._cpu_profile_candidate(scope, appid)
+        intent["cores"] = int(count)
+        self._exit_eco_for_cpu()
+        result = await self._apply_cpu_awaited(intent, trigger="set_cores")
+        if result.ok and result.generation == self._cpu_generation:
+            self._cpu_profiles.set_cores(scope, int(count), appid=appid)
         return self._cpu_state()
 
     async def set_cpu_follow_global(self, follow: bool, appid) -> dict:
-        """Toggle a game between its own CPU controls (SMT/boost/cores) and following the
+        """Toggle a game between its own CPU controls and following the
         global ones, keeping its stored values (never deletes). Seeds from global on use-own."""
         self._init()
         if appid is not None:
             appid = str(appid)
-            self._current_appid = appid  # pin so the re-apply/state use the toggled game
-            if not follow and not self._cpu_profiles.has_game(appid):
-                self._cpu_profiles.create_game_from_global(appid)
-            self._cpu_profiles.set_follow_global(appid, bool(follow))
-            self._apply_cpu()
+            self._current_appid = appid
+            candidate = (
+                self._cpu_profiles.effective(None)
+                if follow
+                else self._cpu_profiles.game_profile(appid) or self._cpu_profiles.effective(None)
+            )
+            result = await self._apply_cpu_awaited(candidate, trigger="scope_change")
+            if result.ok and result.generation == self._cpu_generation:
+                if not follow and not self._cpu_profiles.has_game(appid):
+                    self._cpu_profiles.create_game_from_global(appid)
+                self._cpu_profiles.set_follow_global(appid, bool(follow))
+        return self._cpu_state()
+
+    async def set_cpu_frequency(
+        self, min_khz: int, max_khz: int, scope: str = "global", appid=None
+    ) -> dict:
+        self._init()
+        intent = self._cpu_profile_candidate(scope, appid)
+        frequency = {
+            "manual": True,
+            "min_khz": int(min_khz),
+            "max_khz": int(max_khz),
+        }
+        intent["frequency"] = frequency
+        self._exit_eco_for_cpu()
+        result = await self._apply_cpu_awaited(intent, trigger="set_frequency")
+        if result.ok and result.generation == self._cpu_generation:
+            self._cpu_profiles.set_frequency(
+                scope, frequency["min_khz"], frequency["max_khz"], appid=appid
+            )
+        return self._cpu_state()
+
+    async def set_cpu_frequency_auto(
+        self, scope: str = "global", appid=None
+    ) -> dict:
+        self._init()
+        intent = self._cpu_profile_candidate(scope, appid)
+        intent["frequency"] = {
+            "manual": False,
+            "min_khz": None,
+            "max_khz": None,
+        }
+        result = await self._apply_cpu_awaited(intent, trigger="set_frequency_auto")
+        if result.ok and result.generation == self._cpu_generation:
+            self._cpu_profiles.set_frequency_auto(scope, appid=appid)
         return self._cpu_state()
 
     # ---- GPU clock (Potencia) ----------------------------------------------
@@ -2864,16 +3043,22 @@ class Plugin:
 
     async def set_smt(self, enabled: bool, scope: str = "global", appid=None) -> dict:
         self._init()
-        self._clear_eco()
-        self._cpu_profiles.set_smt(scope, bool(enabled), appid=appid)
-        self._apply_cpu()
+        intent = self._cpu_profile_candidate(scope, appid)
+        intent["smt"] = bool(enabled)
+        self._exit_eco_for_cpu()
+        result = await self._apply_cpu_awaited(intent, trigger="set_smt")
+        if result.ok and result.generation == self._cpu_generation:
+            self._cpu_profiles.set_smt(scope, bool(enabled), appid=appid)
         return self._cpu_state()
 
     async def set_cpu_boost(self, enabled: bool, scope: str = "global", appid=None) -> dict:
         self._init()
-        self._clear_eco()
-        self._cpu_profiles.set_boost(scope, bool(enabled), appid=appid)
-        self._apply_cpu()
+        intent = self._cpu_profile_candidate(scope, appid)
+        intent["boost"] = bool(enabled)
+        self._exit_eco_for_cpu()
+        result = await self._apply_cpu_awaited(intent, trigger="set_boost")
+        if result.ok and result.generation == self._cpu_generation:
+            self._cpu_profiles.set_boost(scope, bool(enabled), appid=appid)
         return self._cpu_state()
 
     async def set_charge_limit(self, enabled: bool, percent: int) -> dict:
@@ -3955,6 +4140,7 @@ class Plugin:
         self._audio_shutdown = True
         await self._stop_audio_loop()
         await self._offload_call(self._restore_audio_safe)
+        await self._apply_cpu_awaited(enabled=False, trigger="unload")
         await self._offload_call(self._restore_hhd_tdp)  # hand HHD's TDP back if we took it
         if getattr(self, "_sampler", None) is not None:
             self._sampler.stop()
@@ -3975,6 +4161,7 @@ class Plugin:
         self._audio_shutdown = True
         await self._stop_audio_loop()
         await self._offload_call(self._restore_audio_safe)
+        await self._apply_cpu_awaited(enabled=False, trigger="uninstall")
         await self._offload_call(self._restore_hhd_tdp)  # hand HHD's TDP back if we took it
         self._shutdown_apply_executor()
         fan_expose.remove_conf()  # drop the modprobe.d option we added (guarded)

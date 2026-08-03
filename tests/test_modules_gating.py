@@ -80,9 +80,18 @@ class _FakeToggle:
         self.supported = supported
         self.max_cores = max_cores
         self.calls = []
+        self.value = max_cores
 
     def set(self, v):
         self.calls.append(v)
+        self.value = v
+        return True
+
+    def active(self):
+        return self.value
+
+    def enabled(self):
+        return bool(self.value)
 
 
 def _plugin_cpu(disabled=None):

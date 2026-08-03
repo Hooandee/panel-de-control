@@ -441,6 +441,41 @@ export interface CpuToggle {
   enabled: boolean;
 }
 
+export type CpuFrequencyStatus =
+  | "automatic"
+  | "configured"
+  | "applied"
+  | "clamped"
+  | "failed"
+  | "partial"
+  | "unsupported";
+
+export interface CpuFrequencyPolicyState {
+  name: string;
+  cpus: number[];
+  driver: string | null;
+  hardware_min_khz: number;
+  hardware_max_khz: number;
+  applied_min_khz: number | null;
+  applied_max_khz: number | null;
+}
+
+export interface CpuFrequencyState {
+  supported: boolean;
+  backend: string;
+  manual: boolean;
+  range_min_khz: number | null;
+  range_max_khz: number | null;
+  requested_min_khz: number | null;
+  requested_max_khz: number | null;
+  applied_min_khz: number | null;
+  applied_max_khz: number | null;
+  status: CpuFrequencyStatus;
+  reason: string | null;
+  epoch: number;
+  policy_state: CpuFrequencyPolicyState[];
+}
+
 export interface CpuState {
   chip: string;
   cores: number | null;
@@ -453,7 +488,8 @@ export interface CpuState {
   cores_supported: boolean;
   max_cores: number | null;
   active_cores: number | null;
-  // Per-game scope for the CPU controls (SMT/boost/cores): true when this game applies
+  frequency: CpuFrequencyState;
+  // Per-game scope for all CPU controls: true when this game applies
   // the global CPU profile (no own, or toggled to follow). Own values never deleted.
   follows_global: boolean;
   has_game_profile: boolean;
@@ -463,6 +499,8 @@ export const getCpuState = callable<[], CpuState>("get_cpu_state");
 export const setSmt = callable<[enabled: boolean, scope: TdpScope, appid: string | null], CpuState>("set_smt");
 export const setCpuBoost = callable<[enabled: boolean, scope: TdpScope, appid: string | null], CpuState>("set_cpu_boost");
 export const setActiveCores = callable<[count: number, scope: TdpScope, appid: string | null], CpuState>("set_active_cores");
+export const setCpuFrequency = callable<[minKhz: number, maxKhz: number, scope: TdpScope, appid: string | null], CpuState>("set_cpu_frequency");
+export const setCpuFrequencyAuto = callable<[scope: TdpScope, appid: string | null], CpuState>("set_cpu_frequency_auto");
 export const setCpuFollowGlobal = callable<[follow: boolean, appid: string | null], CpuState>("set_cpu_follow_global");
 
 // ---- Download mode (low power) --------------------------------------------
@@ -688,7 +726,13 @@ export interface GameProfileRow {
   tdp?: { pl1: number; auto: boolean; gpu: boolean; follows_global: boolean };
   fan?: { preset: string; follows_global: boolean };
   color?: { saturation: number; calibrated: boolean; hdr: boolean; follows_global: boolean };
-  cpu?: { smt: boolean; boost: boolean; cores: number | null; follows_global: boolean };
+  cpu?: {
+    smt: boolean;
+    boost: boolean;
+    cores: number | null;
+    frequency?: { manual?: boolean; min_khz?: number | null; max_khz?: number | null };
+    follows_global: boolean;
+  };
   mandos?: { count: number; follows_global: boolean };
   audio?: { follows_global: boolean };
 }
