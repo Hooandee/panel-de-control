@@ -1,5 +1,5 @@
 import { FC, ReactNode } from "react";
-import { DialogButton, Dropdown, ToggleField } from "@decky/ui";
+import { DialogButton, Dropdown, SliderField, ToggleField } from "@decky/ui";
 import { LuActivity, LuGamepad2, LuRotateCcw, LuVibrate } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
@@ -7,6 +7,8 @@ import { theme } from "../theme";
 import {
   managerDescKey,
   managerLabelKey,
+  choiceAt,
+  choiceIndex,
   prettyAction,
   prettyTarget,
   targetsToAction,
@@ -51,6 +53,42 @@ const statusColor = (status: DiagnosticOperationLabel): string => {
   if (status === "confirmed") return theme.color.ok;
   if (status === "failed") return theme.color.danger;
   return status === "unavailable" ? theme.color.textMuted : theme.color.accent;
+};
+
+const DiscreteChoiceSlider: FC<{
+  label: string;
+  options: readonly string[];
+  value: string;
+  optionLabel: (value: string) => string;
+  notchLabel?: (value: string) => string;
+  disabled?: boolean;
+  onChange: (value: string) => void;
+}> = ({ label, options, value, optionLabel, notchLabel, disabled, onChange }) => {
+  const selected = choiceIndex(options, value);
+  if (options.length < 2 || selected < 0) return null;
+  return (
+    <SliderField
+      label={label}
+      description={optionLabel(value)}
+      value={selected}
+      min={0}
+      max={options.length - 1}
+      step={1}
+      notchCount={options.length}
+      notchTicksVisible
+      minimumDpadGranularity={1}
+      showValue={false}
+      disabled={disabled}
+      notchLabels={options.map((option, notchIndex) => ({
+        notchIndex,
+        label: notchLabel?.(option) ?? optionLabel(option),
+      }))}
+      onChange={(index) => {
+        const next = choiceAt(options, index);
+        if (next !== undefined) onChange(next);
+      }}
+    />
+  );
 };
 
 const primitiveFieldSummary = (surface: ControllerCapabilitySurface): string => Object.entries(surface.fields)
@@ -362,46 +400,40 @@ const VibrationBlock: FC = () => {
           {vibration.connected !== false && (
             <>
               {vibration.intensity && (
-                <Row label={t("mandos.vibration.handlesIntensity")}>
-                  <Dropdown
-                    rgOptions={(vibration.intensity_options ?? []).map((value) => ({
-                      data: value,
-                      label: t(`mandos.vibration.intensity.${value}`),
-                    }))}
-                    selectedOption={vibration.intensity}
-                    onChange={(option) => onSetVibration({
-                      intensity: option.data as NonNullable<typeof vibration.intensity>,
-                    })}
-                  />
-                </Row>
+                <DiscreteChoiceSlider
+                  label={t("mandos.vibration.handlesIntensity")}
+                  options={vibration.intensity_options ?? []}
+                  value={vibration.intensity}
+                  optionLabel={(value) => t(`mandos.vibration.intensity.${value}`)}
+                  notchLabel={(value) => t(`mandos.vibration.intensityShort.${value}`)}
+                  onChange={(intensity) => onSetVibration({
+                    intensity: intensity as NonNullable<typeof vibration.intensity>,
+                  })}
+                />
               )}
               {vibration.left_pattern && (
-                <Row label={t("mandos.vibration.pattern.left")}>
-                  <Dropdown
-                    rgOptions={(vibration.left_pattern_options ?? []).map((value) => ({
-                      data: value,
-                      label: t(`mandos.vibration.pattern.${value}`),
-                    }))}
-                    selectedOption={vibration.left_pattern}
-                    onChange={(option) => onSetVibration({
-                      left_pattern: option.data as NonNullable<typeof vibration.left_pattern>,
-                    })}
-                  />
-                </Row>
+                <DiscreteChoiceSlider
+                  label={t("mandos.vibration.pattern.left")}
+                  options={vibration.left_pattern_options ?? []}
+                  value={vibration.left_pattern}
+                  optionLabel={(value) => t(`mandos.vibration.pattern.${value}`)}
+                  notchLabel={(value) => t(`mandos.vibration.patternShort.${value}`)}
+                  onChange={(left_pattern) => onSetVibration({
+                    left_pattern: left_pattern as NonNullable<typeof vibration.left_pattern>,
+                  })}
+                />
               )}
               {vibration.right_pattern && (
-                <Row label={t("mandos.vibration.pattern.right")}>
-                  <Dropdown
-                    rgOptions={(vibration.right_pattern_options ?? []).map((value) => ({
-                      data: value,
-                      label: t(`mandos.vibration.pattern.${value}`),
-                    }))}
-                    selectedOption={vibration.right_pattern}
-                    onChange={(option) => onSetVibration({
-                      right_pattern: option.data as NonNullable<typeof vibration.right_pattern>,
-                    })}
-                  />
-                </Row>
+                <DiscreteChoiceSlider
+                  label={t("mandos.vibration.pattern.right")}
+                  options={vibration.right_pattern_options ?? []}
+                  value={vibration.right_pattern}
+                  optionLabel={(value) => t(`mandos.vibration.pattern.${value}`)}
+                  notchLabel={(value) => t(`mandos.vibration.patternShort.${value}`)}
+                  onChange={(right_pattern) => onSetVibration({
+                    right_pattern: right_pattern as NonNullable<typeof vibration.right_pattern>,
+                  })}
+                />
               )}
               <ToggleField
                 label={t("mandos.vibration.touchpad")}
@@ -411,18 +443,17 @@ const VibrationBlock: FC = () => {
                 bottomSeparator="none"
               />
               {vibration.touchpad_intensity && (
-                <Row label={t("mandos.vibration.touchpadIntensity")}>
-                  <Dropdown
-                    rgOptions={(vibration.touchpad_intensity_options ?? []).map((value) => ({
-                      data: value,
-                      label: t(`mandos.vibration.intensity.${value}`),
-                    }))}
-                    selectedOption={vibration.touchpad_intensity}
-                    onChange={(option) => onSetVibration({
-                      touchpad_intensity: option.data as NonNullable<typeof vibration.touchpad_intensity>,
-                    })}
-                  />
-                </Row>
+                <DiscreteChoiceSlider
+                  label={t("mandos.vibration.touchpadIntensity")}
+                  options={vibration.touchpad_intensity_options ?? []}
+                  value={vibration.touchpad_intensity}
+                  optionLabel={(value) => t(`mandos.vibration.intensity.${value}`)}
+                  notchLabel={(value) => t(`mandos.vibration.intensityShort.${value}`)}
+                  disabled={vibration.touchpad_enabled !== true}
+                  onChange={(touchpad_intensity) => onSetVibration({
+                    touchpad_intensity: touchpad_intensity as NonNullable<typeof vibration.touchpad_intensity>,
+                  })}
+                />
               )}
             </>
           )}

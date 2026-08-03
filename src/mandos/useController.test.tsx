@@ -116,16 +116,49 @@ describe("useController request coordination", () => {
     );
   });
 
-  it("applies Lenovo HD enum changes immediately in the active scope", async () => {
+  it("debounces and merges Lenovo HD enum changes in the active scope", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     mocks.getControllerConfig.mockResolvedValue(config("current"));
     mocks.setControllerVibration.mockResolvedValue(config("applied"));
     const { result } = renderHook(() => useController());
     await act(async () => { await Promise.resolve(); });
 
-    act(() => result.current.onSetVibration({ right_pattern: "rpg" }));
+    act(() => {
+      result.current.onSetVibration({ intensity: "high" });
+      result.current.onSetVibration({ left_pattern: "racing" });
+      result.current.onSetVibration({ right_pattern: "rpg" });
+      vi.advanceTimersByTime(149);
+    });
+    expect(mocks.setControllerVibration).not.toHaveBeenCalled();
 
+    await act(async () => {
+      vi.advanceTimersByTime(1);
+      await Promise.resolve();
+    });
     expect(mocks.setControllerVibration).toHaveBeenCalledWith(
-      { right_pattern: "rpg" }, "global", null,
+      { intensity: "high", left_pattern: "racing", right_pattern: "rpg" },
+      "global",
+      null,
+    );
+  });
+
+  it("flushes a pending Lenovo enum together with a touchpad toggle", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    mocks.getControllerConfig.mockResolvedValue(config("current"));
+    mocks.setControllerVibration.mockResolvedValue(config("applied"));
+    const { result } = renderHook(() => useController());
+    await act(async () => { await Promise.resolve(); });
+
+    act(() => {
+      result.current.onSetVibration({ touchpad_intensity: "off" });
+      result.current.onSetVibration({ touchpad_enabled: false });
+    });
+
+    expect(mocks.setControllerVibration).toHaveBeenCalledTimes(1);
+    expect(mocks.setControllerVibration).toHaveBeenCalledWith(
+      { touchpad_intensity: "off", touchpad_enabled: false },
+      "global",
+      null,
     );
   });
 

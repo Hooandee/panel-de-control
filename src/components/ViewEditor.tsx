@@ -7,7 +7,7 @@ import { theme } from "../theme";
 import { FocusRoot } from "./FocusRoot";
 import { IconAction } from "./IconAction";
 import { IconPickerGrid } from "./IconPickerGrid";
-import { TABS, PICKABLE_BLOCKS, blockOrder, CATEGORY_IDS } from "../customize/manifest";
+import { TABS, PICKABLE_BLOCKS, pickableBlockIds, CATEGORY_IDS } from "../customize/manifest";
 import { move } from "../customize/layout";
 import { getPresent } from "../customize/present";
 import { useViews, renameView, setViewIcon, setViewBlocks, deleteView } from "../customize/viewStore";
@@ -19,11 +19,7 @@ const META = new Map(
 );
 
 function pickableIds(cat: string): string[] {
-  const base = getPresent(cat) ?? blockOrder(cat);
-  const extras = (PICKABLE_BLOCKS[cat] ?? [])
-    .map((b) => b.id)
-    .filter((id) => !blockOrder(cat).includes(id));
-  return [...extras, ...base];
+  return pickableBlockIds(cat, getPresent(cat));
 }
 
 const ViewEditorBody: FC<{ viewId: string; closeModal?: () => void }> = ({ viewId, closeModal }) => {

@@ -179,11 +179,7 @@ export function useController(): ControllerControl {
       pendingVibration.current = next;
       if (
         typeof patch.enabled === "boolean"
-        || typeof patch.left_pattern === "string"
-        || typeof patch.right_pattern === "string"
-        || typeof patch.intensity === "string"
         || typeof patch.touchpad_enabled === "boolean"
-        || typeof patch.touchpad_intensity === "string"
       ) {
         sendPendingVibration();
         return;

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import * as controllerLogic from "./logic";
 
 import {
   actionToTargets,
@@ -68,4 +69,27 @@ describe("vibrationNoteKey", () => {
     expect(vibrationNoteKey({ mode: "lenovo_hd", confirmation: "driver" }))
       .toBe("mandos.vibration.note.lenovoHd");
   });
+});
+
+describe("discrete vibration controls", () => {
+  const choiceIndex = (
+    controllerLogic as unknown as {
+      choiceIndex?: (options: readonly string[], value: string) => number;
+    }
+  ).choiceIndex ?? (() => -1);
+  const choiceAt = (
+    controllerLogic as unknown as {
+      choiceAt?: (options: readonly string[], index: number) => string | undefined;
+    }
+  ).choiceAt ?? (() => undefined);
+
+  it("maps the live driver enums to slider indices and back", () => {
+    const options = ["off", "low", "medium", "high"];
+    expect(choiceIndex(options, "medium")).toBe(2);
+    expect(choiceIndex(options, "unknown")).toBe(-1);
+    expect(choiceAt(options, 3)).toBe("high");
+    expect(choiceAt(options, 99)).toBe("high");
+    expect(choiceAt([], 0)).toBeUndefined();
+  });
+
 });

@@ -29,4 +29,18 @@ describe("Spanish controller labels", () => {
     expect(translate("mandos.diagnostics.desc"))
       .toContain("qué sistema controla el mando");
   });
+
+  it("provides compact labels for the discrete vibration rails", () => {
+    expect(translate("mandos.vibration.intensityShort.off")).toBe("Sin");
+    expect(translate("mandos.vibration.intensityShort.medium")).toBe("Media");
+    expect(translate("mandos.vibration.patternShort.racing")).toBe("Carr.");
+    expect(translate("mandos.vibration.patternShort.standard")).toBe("Est.");
+    expect(translate("mandos.vibration.patternShort.spg")).toBe("Dep.");
+  });
+
+  it("warns that the HDR curve clips instead of claiming compression", () => {
+    localStorage.setItem("panel-de-control-lang", "en");
+    expect(translate("display.hdrSaturation.warning"))
+      .toContain("clip");
+  });
 });

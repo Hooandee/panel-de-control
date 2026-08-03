@@ -30,19 +30,11 @@ def test_hdr_transform_clamps_only_the_final_encoded_output():
     assert all(0.0 <= channel <= 1.0 for channel in output)
 
 
-def test_hdr_out_of_gamut_boost_compresses_chroma_without_shifting_intensity():
+def test_hdr_out_of_gamut_boost_clips_at_the_final_encoded_output():
     source = (0.7, 0.4, 0.2)
-    base = pq_to_ictcp(*source)
-    medium = pq_to_ictcp(*hdr_transform(*source, saturation=120))
-    high = pq_to_ictcp(*hdr_transform(*source, saturation=150))
+    output = hdr_transform(*source, saturation=150)
 
-    assert medium[0] == pytest.approx(base[0], abs=2e-5)
-    assert high[0] == pytest.approx(base[0], abs=2e-5)
-    base_chroma = math.hypot(base[1], base[2])
-    medium_chroma = math.hypot(medium[1], medium[2])
-    high_chroma = math.hypot(high[1], high[2])
-    assert medium_chroma + 1e-6 >= base_chroma
-    assert high_chroma + 1e-6 >= medium_chroma
+    assert output == pytest.approx((0.7366, 0.0, 0.0), abs=2e-5)
 
 
 @pytest.mark.parametrize("source", [
@@ -52,9 +44,9 @@ def test_hdr_out_of_gamut_boost_compresses_chroma_without_shifting_intensity():
     (0.0, 1.0, 1.0),
     (1.0, 0.0, 1.0),
 ])
-def test_boundary_colors_fall_back_to_valid_scale_one(source):
+def test_boundary_colors_stay_in_the_cube_after_clipping(source):
     output = hdr_transform(*source, saturation=150)
-    assert output == pytest.approx(source, abs=3e-5)
+    assert all(0.0 <= channel <= 1.0 for channel in output)
 
 
 def test_hdr_cube_has_33_nodes_per_axis_and_red_changes_fastest():

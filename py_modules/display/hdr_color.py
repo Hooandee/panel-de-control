@@ -84,13 +84,6 @@ def _linear_rgb_to_pq(linear_rgb):
     return tuple(_clamp01(value) for value in encoded_rgb)
 
 
-def _in_gamut(linear_rgb):
-    return all(
-        math.isfinite(value) and -1e-12 <= value <= 1.0 + 1e-12
-        for value in linear_rgb
-    )
-
-
 def hdr_transform(red, green, blue, saturation=100):
     if saturation == 100:
         return red, green, blue
@@ -99,22 +92,6 @@ def hdr_transform(red, green, blue, saturation=100):
     linear_rgb = _ictcp_to_linear_rgb(
         intensity, chroma_t * scale, chroma_p * scale
     )
-    if scale > 1.0 and not _in_gamut(linear_rgb):
-        linear_rgb = _ictcp_to_linear_rgb(
-            intensity, chroma_t, chroma_p
-        )
-        lower, upper = 1.0, scale
-        for _ in range(18):
-            candidate = (lower + upper) / 2
-            candidate_rgb = _ictcp_to_linear_rgb(
-                intensity,
-                chroma_t * candidate,
-                chroma_p * candidate,
-            )
-            if _in_gamut(candidate_rgb):
-                lower, linear_rgb = candidate, candidate_rgb
-            else:
-                upper = candidate
     return _linear_rgb_to_pq(linear_rgb)
 
 

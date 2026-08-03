@@ -109,3 +109,17 @@ export function vibrationNoteKey(vibration: {
     ? "mandos.vibration.note.readback"
     : "mandos.vibration.note.accepted";
 }
+
+export function choiceIndex(
+  options: readonly string[], value: string,
+): number {
+  return options.indexOf(value);
+}
+
+export function choiceAt<T extends string>(
+  options: readonly T[], index: number,
+): T | undefined {
+  if (options.length === 0) return undefined;
+  const bounded = Math.max(0, Math.min(options.length - 1, Math.round(index)));
+  return options[bounded];
+}
