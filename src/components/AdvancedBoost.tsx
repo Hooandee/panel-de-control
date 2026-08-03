@@ -5,6 +5,7 @@ import { LuChevronDown, LuChevronRight } from "react-icons/lu";
 import { Levels, LevelBound, BoostMode, SteamDeckPptState } from "../api";
 import { useI18n } from "../i18n";
 import { offsetOf } from "../tdp/logic";
+import { MarqueeText } from "./MarqueeText";
 import { segmentGroupStyle, segmentItemStyle } from "./segmented";
 import { theme } from "../theme";
 
@@ -100,11 +101,11 @@ export const AdvancedBoost: FC<AdvancedBoostProps> = ({
 
       {open && (
         <>
-          <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, marginTop: theme.space.xs }}>
+          <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, marginTop: theme.space.sm }}>
             {isDeckPpt ? t("tdp.deckPpt.hint") : t(`tdp.boost.hint.${mode}`)}
           </div>
 
-          <div style={{ ...segmentGroupStyle, marginTop: theme.space.sm }}>
+          <div style={{ ...segmentGroupStyle, gap: theme.space.sm, marginTop: theme.space.sm }}>
             {MODES.map((m) => (
               <Focusable
                 key={m}
@@ -115,13 +116,14 @@ export const AdvancedBoost: FC<AdvancedBoostProps> = ({
                   padding: "4px 3px",
                   fontSize: theme.font.caption,
                   lineHeight: 1.15,
-                  whiteSpace: "normal",
-                  overflowWrap: "anywhere",
                 }}
                 onActivate={() => onSetMode(m)}
                 onClick={() => onSetMode(m)}
               >
-                {t(isDeckPpt && m === "estable" ? "tdp.deckPpt.off" : `tdp.boost.mode.${m}`)}
+                <MarqueeText
+                  text={t(isDeckPpt && m === "estable" ? "tdp.deckPpt.off" : `tdp.boost.mode.${m}`)}
+                  alignWhenFits="center"
+                />
               </Focusable>
             ))}
           </div>
@@ -129,7 +131,7 @@ export const AdvancedBoost: FC<AdvancedBoostProps> = ({
           {/* Resulting rails: the watts the firmware actually holds, for any mode. */}
           <div style={{
             display: "flex", justifyContent: "space-between",
-            fontSize: theme.font.caption, color: theme.color.textMuted, marginTop: theme.space.sm,
+            fontSize: theme.font.caption, color: theme.color.textMuted, marginTop: theme.space.md,
           }}>
             <span>{isDeckPpt ? "SlowPPT" : "SPPT"} {levels.pl2} W</span>
             <span>{isDeckPpt ? "FastPPT" : "FPPT"} {levels.pl3} W</span>

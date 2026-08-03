@@ -15,6 +15,7 @@ vi.mock("../i18n", () => ({
       "tdp.deckPpt.title": "Impulso de potencia",
       "tdp.deckPpt.experimental": "Experimental",
       "tdp.deckPpt.off": "Desactivado",
+      "tdp.deckPpt.hint": "La Steam Deck utiliza estos límites de impulso cuando la carga lo necesita.",
       "tdp.boost.mode.auto": "Auto",
       "tdp.boost.mode.custom": "Personalizado",
     } as Record<string, string>)[key] ?? key,
@@ -26,7 +27,7 @@ import { AdvancedBoost } from "./AdvancedBoost";
 describe("AdvancedBoost narrow QAM layout", () => {
   afterEach(cleanup);
 
-  it("keeps the title separate from both badges and allows mode labels to wrap", () => {
+  it("spaces the Deck hint, mode pills, and content while marqueeing long mode labels", () => {
     render(
       <div style={{ width: 260 }}>
         <AdvancedBoost
@@ -55,11 +56,22 @@ describe("AdvancedBoost narrow QAM layout", () => {
     expect(title.parentElement).not.toBe(currentMode.parentElement);
 
     fireEvent.click(title.closest("button")!);
+    const hint = screen.getByText("La Steam Deck utiliza estos límites de impulso cuando la carga lo necesita.");
+    expect(hint.style.marginTop).toBe("8px");
+
+    let modeGroup: HTMLElement | null = null;
     for (const label of ["Desactivado", "Auto", "Personalizado"]) {
       const matches = screen.getAllByText(label);
       const option = matches[matches.length - 1] as HTMLElement;
-      expect(option.style.whiteSpace).toBe("normal");
-      expect(option.style.overflowWrap).toBe("anywhere");
+      expect(option.style.whiteSpace).toBe("nowrap");
+      expect(option.parentElement?.style.overflow).toBe("hidden");
+      expect(option.parentElement?.style.textAlign).toBe("center");
+      const pill = option.closest("button");
+      modeGroup ??= pill?.parentElement ?? null;
     }
+    expect(modeGroup?.style.gap).toBe("8px");
+
+    const rails = screen.getByText(/SlowPPT 22 W/).parentElement as HTMLElement;
+    expect(rails.style.marginTop).toBe("12px");
   });
 });
