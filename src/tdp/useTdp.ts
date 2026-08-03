@@ -71,27 +71,46 @@ export function useTdp(): TdpControl {
   useEffect(() => {
     refresh();
   }, [appid, refresh]);
+  useEffect(() => () => {
+    if (commitTimerWatts.current) clearTimeout(commitTimerWatts.current);
+    if (commitTimerLevels.current) clearTimeout(commitTimerLevels.current);
+    commitTimerWatts.current = null;
+    commitTimerLevels.current = null;
+  }, [appid]);
 
   const applyFollow = useCallback(
-    (f: boolean, a: string) => { setTdpFollowGlobal(f, a).then(setTdp).catch(() => {}); },
+    (f: boolean, a: string) => setTdpFollowGlobal(f, a, a)
+      .then((next) => {
+        setTdp(next);
+        return next.follows_global === f;
+      })
+      .catch(() => false),
     [],
   );
   const { scope, onScope } = useScopeSync(appid, tdp?.follows_global, applyFollow);
 
-  const resolveTarget = useCallback((): { target: string | null; sc: TdpScope } => {
+  const resolveTarget = useCallback((): {
+    target: string | null;
+    sc: TdpScope;
+    context: string | null;
+  } => {
     const target = scope === "game" && game ? game.appid : null;
-    return { target, sc: target ? "game" : "global" };
+    return {
+      target,
+      sc: target ? "game" : "global",
+      context: game?.appid ?? null,
+    };
   }, [scope, game]);
 
   const onWatts = useCallback(
     (w: number) => {
-      const { target, sc } = resolveTarget();
+      const { target, sc, context } = resolveTarget();
       setTdp((cur) =>
         cur ? { ...cur, watts: sc === "game" ? w : cur.watts, global_watts: sc === "global" ? w : cur.global_watts } : cur,
       );
       if (commitTimerWatts.current) clearTimeout(commitTimerWatts.current);
       commitTimerWatts.current = setTimeout(() => {
-        setTdpWatts(w, sc, target).then(() => refresh()).catch(() => {});
+        setTdpWatts(w, sc, target, context).then(() => refresh()).catch(() => {});
       }, 200);
     },
     [resolveTarget, refresh],
@@ -99,7 +118,7 @@ export function useTdp(): TdpControl {
 
   const onSetLevels = useCallback(
     (off2: number, off3: number) => {
-      const { target, sc } = resolveTarget();
+      const { target, sc, context } = resolveTarget();
       setTdp((cur) => {
         if (!cur) return cur;
         const base = sc === "global" ? cur.global_levels : cur.levels;
@@ -110,21 +129,21 @@ export function useTdp(): TdpControl {
       });
       if (commitTimerLevels.current) clearTimeout(commitTimerLevels.current);
       commitTimerLevels.current = setTimeout(() => {
-        setTdpLevels(off2, off3, sc, target).then(() => refresh()).catch(() => {});
+        setTdpLevels(off2, off3, sc, target, context).then(() => refresh()).catch(() => {});
       }, 200);
     },
     [resolveTarget, refresh],
   );
 
   const onSetMode = useCallback((mode: BoostMode) => {
-    const { target, sc } = resolveTarget();
-    setTdpBoostMode(mode, sc, target).then(setTdp).catch(() => {});
+    const { target, sc, context } = resolveTarget();
+    setTdpBoostMode(mode, sc, target, context).then(setTdp).catch(() => {});
   }, [resolveTarget]);
 
   const onAutoTdp = useCallback(
     (enabled: boolean) => {
-      const { target, sc } = resolveTarget();
-      setAutoTdp(enabled, sc, target).then(() => refresh()).catch(() => {});
+      const { target, sc, context } = resolveTarget();
+      setAutoTdp(enabled, sc, target, context).then(() => refresh()).catch(() => {});
     },
     [resolveTarget, refresh],
   );
@@ -158,8 +177,8 @@ export function useTdp(): TdpControl {
     (item: PresetItem) => {
       if (commitTimerWatts.current) clearTimeout(commitTimerWatts.current);
       if (commitTimerLevels.current) clearTimeout(commitTimerLevels.current);
-      const { target, sc } = resolveTarget();
-      applyPowerPreset(item.watts, sc, target, item.boost).then(() => refresh()).catch(() => {});
+      const { target, sc, context } = resolveTarget();
+      applyPowerPreset(item.watts, sc, target, item.boost, context).then(() => refresh()).catch(() => {});
     },
     [resolveTarget, refresh],
   );
@@ -167,8 +186,11 @@ export function useTdp(): TdpControl {
   // A fixed PL1 is a distinct mode from dynamic auto-TDP → turn auto off first.
   const onApplySuggestion = useCallback(
     (w: number) => {
-      const { target, sc } = resolveTarget();
-      setAutoTdp(false, sc, target).then(() => setTdpWatts(w, sc, target)).then(() => refresh()).catch(() => {});
+      const { target, sc, context } = resolveTarget();
+      setAutoTdp(false, sc, target, context)
+        .then(() => setTdpWatts(w, sc, target, context))
+        .then(() => refresh())
+        .catch(() => {});
     },
     [resolveTarget, refresh],
   );

@@ -532,6 +532,17 @@ def test_cpu_gpu_diagnostics_allowlist_drops_app_identity(plugin):
     assert "/home/alice" not in encoded
 
 
+def test_cpu_gpu_diagnostics_keeps_deck_ppt_probe_failure_reason(plugin):
+    plugin._tdp_backend.diagnostics = lambda: {
+        "ppt": {"supported": False, "source": None},
+        "ppt_reason": "contradictory_labels",
+    }
+
+    deck = plugin._cpu_gpu_diagnostics()["steamdeck_ppt"]
+
+    assert deck["probe_reason"] == "contradictory_labels"
+
+
 def test_confirmed_resume_is_written_to_plugin_log(plugin):
     wakeup = {"value": 10}
     suspended = {"value": 0.0}
@@ -705,6 +716,7 @@ def test_disabling_control_records_handoff_without_writing(plugin, monkeypatch):
 
     def handoff():
         plugin._tdp_backend._levels["pl1"] = 20
+        return True
 
     monkeypatch.setattr(plugin, "_restore_hhd_tdp", handoff)
     asyncio.run(plugin.set_tdp_control_enabled(False))
@@ -716,6 +728,35 @@ def test_disabling_control_records_handoff_without_writing(plugin, monkeypatch):
     assert event["write"] is None
     assert event["observation"]["surfaces"]["fake"]["pl1"]["applied"] == 20
     assert plugin._tdp_backend.set_levels_calls == 0
+
+
+def test_disabling_control_reports_pending_release_when_handoff_fails(
+    plugin, monkeypatch
+):
+    monkeypatch.setattr(plugin, "_restore_power_handoff", lambda: False)
+
+    asyncio.run(plugin.set_tdp_control_enabled(False))
+
+    assert plugin._settings["tdp_control_enabled"] is False
+    assert plugin._tdp_status == "rejected"
+    assert plugin._tdp_reason == "release_failed"
+    event = plugin._tdp_history[-1]
+    assert event["reason"] == "control-disable-release-failed"
+    assert event["status"] == "rejected"
+
+
+def test_disabling_power_module_reports_pending_release_when_handoff_fails(
+    plugin, monkeypatch
+):
+    monkeypatch.setattr(plugin, "_restore_power_handoff", lambda: False)
+
+    asyncio.run(plugin.set_ui_module("power", True))
+
+    assert plugin._tdp_status == "rejected"
+    assert plugin._tdp_reason == "release_failed"
+    event = plugin._tdp_history[-1]
+    assert event["reason"] == "module-disable-release-failed"
+    assert event["status"] == "rejected"
 
 
 def test_stable_guard_does_not_add_history_or_logs(plugin):

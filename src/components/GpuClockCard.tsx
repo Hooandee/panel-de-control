@@ -9,9 +9,8 @@ import { ContainedSlider } from "./ContainedSlider";
 import { Collapsible } from "./Collapsible";
 import { useGpuClock } from "../gpu/useGpuClock";
 import { ProfileSelector } from "./ProfileSelector";
+import { gpuClockPresentation } from "../gpu/logic";
 
-/** GPU clock window (min/max MHz) in Sistema. Auto by default; manual pins/limits
- *  the clock. Hidden where unsupported and independently scoped per game. */
 export const GpuClockCard: FC = () => {
   const { t } = useI18n();
   const { state, scope, game, onScope, setManual, setWindow } = useGpuClock();
@@ -22,7 +21,10 @@ export const GpuClockCard: FC = () => {
 
   const lo = state.min ?? state.range_min;
   const hi = state.max ?? state.range_max;
-  const summary = state.manual ? `${lo}–${hi} MHz` : t("gpu.clock.auto");
+  const shown = gpuClockPresentation(state);
+  const summary = state.manual
+    ? `${shown.minimum}–${shown.maximum} MHz`
+    : t("gpu.clock.auto");
 
   return (
     <Collapsible
@@ -48,6 +50,11 @@ export const GpuClockCard: FC = () => {
         onChange={setManual}
         bottomSeparator="none"
       />
+      {shown.rejected && (
+        <div style={{ color: theme.color.danger, fontSize: theme.font.caption }}>
+          {t("gpu.clock.rejected")}
+        </div>
+      )}
       {state.manual && (
         <div style={{ marginTop: theme.space.sm }}>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: theme.font.caption, color: theme.color.textMuted }}>

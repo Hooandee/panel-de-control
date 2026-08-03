@@ -94,7 +94,62 @@ class CpuCoordinator:
             ok = False
         return {"attempted": bool(completed), "ok": ok if completed else None}
 
-    def apply(self, intent, generation, enabled=True, eco=False):
+    def _release_all(self, generation, preserve_frequency_ownership=False):
+        failures = []
+        error_type = None
+        completed = []
+        for name, control, target in (
+            ("smt", self._smt, True),
+            ("cores", self._cores, getattr(self._cores, "max_cores", None)),
+            ("boost", self._boost, True),
+        ):
+            try:
+                if not self._set_changed(name, control, target, completed):
+                    failures.append(f"{name}_write_failed")
+            except Exception as error:  # noqa: BLE001
+                failures.append(f"{name}_write_failed")
+                error_type = error_type or type(error).__name__
+
+        frequency_status = None
+        if self._supported(self._frequency):
+            try:
+                result = (
+                    self._frequency.set_auto(preserve_ownership=True)
+                    if preserve_frequency_ownership
+                    else self._frequency.set_auto()
+                )
+                frequency_status = result.status
+                safe_auto_noop = (
+                    result.status == "unverifiable"
+                    and result.reason == "baseline_unavailable"
+                )
+                if not result.ok and not safe_auto_noop:
+                    failures.append(
+                        f"frequency_{result.reason or 'apply_failed'}"
+                    )
+            except Exception as error:  # noqa: BLE001
+                failures.append("frequency_exception")
+                error_type = error_type or type(error).__name__
+
+        return CpuCoordinatorResult(
+            not failures,
+            "partial" if failures else "applied",
+            generation,
+            {"attempted": False, "ok": None},
+            failures[0] if failures else None,
+            error_type,
+            frequency_status,
+        )
+
+    def apply(
+        self, intent, generation, enabled=True, eco=False,
+        preserve_frequency_ownership=False,
+    ):
+        if not enabled:
+            return self._release_all(
+                generation,
+                preserve_frequency_ownership=preserve_frequency_ownership,
+            )
         snapshot = self._snapshot()
         completed = []
         frequency_status = None
@@ -108,13 +163,6 @@ class CpuCoordinator:
                 "smt": bool(intent.get("smt", True)),
                 "boost": False if eco else bool(intent.get("boost", True)),
             }
-            if not enabled:
-                targets = {
-                    "cores": getattr(self._cores, "max_cores", None),
-                    "smt": True,
-                    "boost": True,
-                }
-
             frequency = intent.get("frequency") or {}
             frequency_supported = self._supported(self._frequency)
 
@@ -154,7 +202,7 @@ class CpuCoordinator:
                         "boost_write_failed",
                     )
 
-                if enabled and frequency.get("manual"):
+                if frequency.get("manual"):
                     freq_result = self._frequency.set_window(
                         frequency.get("min_khz"), frequency.get("max_khz")
                     )
@@ -162,7 +210,7 @@ class CpuCoordinator:
                     freq_result = self._frequency.set_auto()
                 frequency_status = freq_result.status
                 safe_auto_noop = (
-                    not (enabled and frequency.get("manual"))
+                    not frequency.get("manual")
                     and freq_result.status == "unverifiable"
                     and freq_result.reason == "baseline_unavailable"
                 )
@@ -220,7 +268,7 @@ class CpuCoordinator:
                 {"attempted": False, "ok": None},
                 frequency_status=frequency_status,
             )
-        except Exception as error:  # noqa: BLE001 - boundary around hardware backends
+        except Exception as error:  # noqa: BLE001
             rollback = self._rollback(completed, snapshot)
             return CpuCoordinatorResult(
                 False,

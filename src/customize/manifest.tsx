@@ -43,15 +43,6 @@ export const TABS: ItemMeta[] = [
 /** Category (section) ids the editor lists: the tabs minus the pinned Settings. */
 export const CATEGORY_IDS = TABS.map((t) => t.id).filter((id) => id !== PINNED_TAB);
 
-/**
- * The configurable blocks per section, in DEFAULT order. Single source of truth
- * for BOTH the customization editor (labels/icons) and each section's default
- * block order. Potencia's core (arc + slider + presets) is a fixed conditional
- * flow, while Auto‑TDP remains its reorderable extra. GPU frequency is a System
- * block next to CPU controls.
- *
- * Section render code must key its block nodes by exactly these ids.
- */
 export const SECTION_BLOCKS: Record<string, BlockDef[]> = {
   power: [
     { id: "autoTdp", labelKey: "tdp.auto.title", icon: <LuActivity size={ICON} /> },

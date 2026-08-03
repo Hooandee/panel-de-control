@@ -64,6 +64,9 @@ export const PowerArc: FC<PowerArcProps> = ({
   // The live applied PL1 — the hero number + fill. Falls back to the target so it
   // never shows "—".
   const heroWatts = appliedWatts ?? targetWatts;
+  const targetOnly = appliedWatts === null && (
+    baseMarkerWatts !== null || slowMarkerWatts !== null || fastMarkerWatts !== null
+  );
   const scaleMax = Math.max(limits.max_ac, visualMax ?? limits.max_ac);
 
   const f = fraction(heroWatts, limits.min, scaleMax);
@@ -171,7 +174,7 @@ export const PowerArc: FC<PowerArcProps> = ({
           <>
             <line x1={slx1} y1={sly1} x2={slx2} y2={sly2} stroke={theme.color.accent} strokeWidth={2.5} strokeLinecap="round" />
             <text x={sllx} y={slly + 3} fill={theme.color.accent} fontSize="9" fontWeight={700} textAnchor="middle">
-              Slow {Math.round(slowMarkerWatts)} W
+              Slow ≤ {Math.round(slowMarkerWatts)} W
             </text>
           </>
         )}
@@ -179,7 +182,7 @@ export const PowerArc: FC<PowerArcProps> = ({
           <>
             <line x1={fx1} y1={fy1} x2={fx2} y2={fy2} stroke={theme.color.boost} strokeWidth={2.5} strokeLinecap="round" />
             <text x={flx} y={fly + 3} fill={theme.color.boost} fontSize="9" fontWeight={700} textAnchor="middle">
-              Fast {Math.round(fastMarkerWatts)} W
+              Fast ≤ {Math.round(fastMarkerWatts)} W
             </text>
           </>
         )}
@@ -198,6 +201,11 @@ export const PowerArc: FC<PowerArcProps> = ({
           )}
           <span style={{ fontSize: 16, color: theme.color.textMuted }}> W</span>
         </div>
+        {targetOnly && (
+          <div style={{ fontSize: 9, color: theme.color.textMuted, marginTop: 1, letterSpacing: "0.08em" }}>
+            {t("tdp.arc.target")}
+          </div>
+        )}
         {hasBoost && (
           <div style={{ fontSize: 9, color: theme.color.boost, marginTop: 1, letterSpacing: "0.04em" }}>
             ⚡ {t("tdp.arc.boostHw")}

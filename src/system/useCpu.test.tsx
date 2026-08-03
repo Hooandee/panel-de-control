@@ -39,6 +39,7 @@ const CPU_STATE: CpuState = {
 
 const mocks = vi.hoisted(() => ({
   getCpuState: vi.fn(),
+  setCpuFollowGlobal: vi.fn(),
   setCpuFrequency: vi.fn(),
   setCpuFrequencyAuto: vi.fn(),
 }));
@@ -47,7 +48,7 @@ vi.mock("../api", () => ({
   getCpuState: mocks.getCpuState,
   setActiveCores: vi.fn(async () => CPU_STATE),
   setCpuBoost: vi.fn(async () => CPU_STATE),
-  setCpuFollowGlobal: vi.fn(async () => CPU_STATE),
+  setCpuFollowGlobal: mocks.setCpuFollowGlobal,
   setCpuFrequency: mocks.setCpuFrequency,
   setCpuFrequencyAuto: mocks.setCpuFrequencyAuto,
   setSmt: vi.fn(async () => CPU_STATE),
@@ -66,6 +67,14 @@ async function settlePromises(): Promise<void> {
   });
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((onResolve) => {
+    resolve = onResolve;
+  });
+  return { promise, resolve };
+}
+
 describe("useCpu polling", () => {
   beforeEach(() => {
     runningGame = { appid: "100", liveAppid: 100, name: "First" };
@@ -75,6 +84,7 @@ describe("useCpu polling", () => {
     }));
     mocks.setCpuFrequency.mockResolvedValue(CPU_STATE);
     mocks.setCpuFrequencyAuto.mockResolvedValue(CPU_STATE);
+    mocks.setCpuFollowGlobal.mockResolvedValue(CPU_STATE);
     vi.useFakeTimers();
   });
 
@@ -134,5 +144,62 @@ describe("useCpu polling", () => {
 
     expect(mocks.setCpuFrequencyAuto).toHaveBeenCalledTimes(1);
     expect(mocks.setCpuFrequency).not.toHaveBeenCalled();
+  });
+
+  it("tags a global frequency write with the game context that created it", async () => {
+    const { result } = renderHook(() => useCpu());
+    await settlePromises();
+
+    act(() => result.current.setFrequency(1_500_000, 3_000_000));
+    await act(async () => vi.advanceTimersByTimeAsync(200));
+
+    expect(mocks.setCpuFrequency).toHaveBeenCalledWith(
+      1_500_000, 3_000_000, "global", null, "100",
+    );
+  });
+
+  it("ignores a CPU mutation response from the previous game", async () => {
+    const stale = deferred<CpuState>();
+    mocks.setCpuFrequencyAuto.mockImplementationOnce(() => stale.promise);
+    mocks.getCpuState.mockImplementation(async () => ({
+      ...CPU_STATE,
+      chip: runningGame?.appid ?? "none",
+      frequency: { ...CPU_STATE.frequency, manual: true },
+    }));
+    const { result, rerender } = renderHook(() => useCpu());
+    await settlePromises();
+
+    act(() => result.current.setFrequencyManual(false));
+    runningGame = { appid: "200", liveAppid: 200, name: "Second" };
+    rerender();
+    await settlePromises();
+    stale.resolve({ ...CPU_STATE, chip: "100" });
+    await settlePromises();
+
+    expect(result.current.state?.chip).toBe("200");
+  });
+
+  it("resumes polling after a mutation settles in the current game", async () => {
+    const { result } = renderHook(() => useCpu());
+    await settlePromises();
+
+    act(() => result.current.setFrequencyManual(false));
+    await settlePromises();
+    await act(async () => vi.advanceTimersByTimeAsync(3_000));
+
+    expect(mocks.getCpuState).toHaveBeenCalledTimes(2);
+    expect(result.current.state?.chip).toBe("100");
+  });
+
+  it("restores the confirmed scope when its mutation is rejected", async () => {
+    mocks.setCpuFollowGlobal.mockRejectedValueOnce(new Error("transport"));
+    const { result } = renderHook(() => useCpu());
+    await settlePromises();
+
+    act(() => result.current.onScope("game"));
+    await settlePromises();
+
+    expect(result.current.scope).toBe("global");
+    expect(result.current.state?.follows_global).toBe(true);
   });
 });

@@ -139,7 +139,9 @@ def _make_plugin(tmp_path, monkeypatch, smt=None, boost=None, cores=None, freque
     main = importlib.reload(importlib.import_module("main"))
     monkeypatch.setattr(main, "read_on_ac", lambda root="/": True, raising=False)
     if frequency is not None:
-        monkeypatch.setattr(main, "select_cpu_frequency", lambda: frequency)
+        monkeypatch.setattr(
+            main, "select_cpu_frequency", lambda **_kwargs: frequency
+        )
 
     if smt is not None or boost is not None or cores is not None:
         original_init = main.Plugin._init
@@ -245,6 +247,28 @@ def test_set_cpu_frequency_applies_before_persisting_profile(tmp_path, monkeypat
     assert state["frequency"]["applied_min_khz"] == 1_200_000
 
 
+def test_stale_game_frequency_rpc_cannot_retarget_the_active_game(
+    tmp_path, monkeypatch
+):
+    frequency = _FakeFrequency()
+    p = _make_plugin(
+        tmp_path, monkeypatch, smt=_FakeToggle(), boost=_FakeToggle(),
+        frequency=frequency,
+    )
+    p._init()
+    p._current_appid = "200"
+
+    asyncio.run(
+        p.set_cpu_frequency(
+            1_200_000, 2_400_000, scope="game", appid="100"
+        )
+    )
+
+    assert p._current_appid == "200"
+    assert frequency.calls == []
+    assert p._cpu_profiles.has_game("100") is False
+
+
 def test_rejected_cpu_frequency_does_not_replace_profile(tmp_path, monkeypatch):
     frequency = _FakeFrequency(ok=False, status="failed")
     p = _make_plugin(
@@ -276,6 +300,27 @@ def test_set_cpu_frequency_auto_restores_then_persists_auto(tmp_path, monkeypatc
         "manual": False, "min_khz": None, "max_khz": None,
     }
     assert state["frequency"]["manual"] is False
+
+
+def test_stale_global_frequency_rpc_cannot_apply_after_game_context_changes(
+    tmp_path, monkeypatch
+):
+    frequency = _FakeFrequency()
+    p = _make_plugin(
+        tmp_path, monkeypatch, smt=_FakeToggle(), boost=_FakeToggle(),
+        frequency=frequency,
+    )
+    p._init()
+    p._current_appid = "200"
+
+    state = asyncio.run(
+        p.set_cpu_frequency(1_200_000, 2_400_000, "global", None, "100")
+    )
+
+    assert frequency.calls == []
+    assert p._cpu_profiles.effective(None)["frequency"]["manual"] is False
+    assert p._current_appid == "200"
+    assert state["follows_global"] is True
 
 
 def test_cpu_frequency_apply_uses_offload_chokepoint(tmp_path, monkeypatch):
@@ -401,6 +446,57 @@ def test_cpu_handoff_retries_transient_release_failure(tmp_path, monkeypatch):
     ]
 
 
+def test_cpu_frequency_reprobes_after_transient_incomplete_startup(
+    tmp_path, monkeypatch
+):
+    import main
+    from cpu.frequency import NullCpuFrequency
+
+    recovered = _FakeFrequency()
+    p = _make_plugin(
+        tmp_path,
+        monkeypatch,
+        smt=_FakeToggle(),
+        boost=_FakeToggle(),
+        frequency=NullCpuFrequency("incomplete_policy"),
+    )
+    p._init()
+    p._settings["cpu_frequency_handoff"] = {"version": 1}
+    p._cpu_profiles.set_frequency("global", 1_200_000, 2_400_000)
+    monkeypatch.setattr(
+        main,
+        "select_cpu_frequency",
+        lambda **_kwargs: recovered,
+    )
+    p._offload = lambda fn, done=None: (fn(), done() if done else None)
+
+    state = p._cpu_state()
+
+    assert p._cpu_frequency is recovered
+    assert recovered.calls == [("manual", 1_200_000, 2_400_000)]
+    assert state["frequency"]["manual"] is True
+
+
+def test_cpu_handoff_is_not_success_while_durable_frequency_needs_reprobe(
+    tmp_path, monkeypatch
+):
+    from cpu.frequency import NullCpuFrequency
+
+    p = _make_plugin(
+        tmp_path,
+        monkeypatch,
+        smt=_FakeToggle(),
+        boost=_FakeToggle(),
+        frequency=NullCpuFrequency("incomplete_policy"),
+    )
+    p._init()
+    p._settings["cpu_frequency_handoff"] = {"version": 1}
+
+    released = asyncio.run(p._release_cpu_controls("unload"))
+
+    assert released is False
+
+
 def test_cpu_shutdown_handoff_cannot_be_overwritten_by_late_rpc(
     tmp_path, monkeypatch
 ):
@@ -428,6 +524,28 @@ def test_cpu_shutdown_handoff_cannot_be_overwritten_by_late_rpc(
 
     assert asyncio.run(drive()) is True
     assert smt.enabled() is True
+
+
+def test_queued_cpu_apply_is_rejected_after_shutdown_generation_advances(
+    tmp_path, monkeypatch
+):
+    p = _make_plugin(
+        tmp_path, monkeypatch, smt=_FakeToggle(), boost=_FakeToggle(),
+        cores=_FakeCores(), frequency=_FakeFrequency(),
+    )
+    p._init()
+    calls = []
+    coordinator = types.SimpleNamespace(
+        apply=lambda *args, **kwargs: calls.append((args, kwargs))
+    )
+    p._ensure_cpu_coordinator = lambda: coordinator
+    p._cpu_generation = 9
+
+    result = p._run_cpu_apply(p._cpu_intent(), generation=8)
+
+    assert result.ok is False
+    assert result.error_code == "stale_generation"
+    assert calls == []
 
 
 def test_manual_cpu_frequency_store_failure_restores_auto_hardware_and_memory(
@@ -488,6 +606,8 @@ def test_cpu_scope_store_failure_restores_previous_game_hardware_and_memory(
         tmp_path, monkeypatch, smt=smt, boost=_FakeToggle(),
         cores=_FakeCores(), frequency=_FakeFrequency(),
     )
+    p._init()
+    p._current_appid = "42"
     asyncio.run(p.set_smt(False, "game", "42"))
     assert smt.enabled() is False
     assert p._cpu_profiles.is_following_global("42") is False

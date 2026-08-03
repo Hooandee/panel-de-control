@@ -22,7 +22,7 @@ import re
 from sysfs import read_str
 
 # Bump when the bundle shape changes so consumers can adapt.
-SCHEMA = 1
+SCHEMA = 2
 
 _MAX_TEXT = 4000  # user free-text cap (defensive; the UI also limits it)
 
@@ -187,7 +187,14 @@ _SNAP_MAX_CHIPS = 32
 _SNAP_MAX_NAMES = 128
 _SNAP_MAX_MODULES = 512
 _SNAP_CAP = 60_000
-_HWMON_PATTERNS = ("pwm*", "fan*_input", "temp*_label")
+_HWMON_PATTERNS = (
+    "pwm*", "fan*_input", "temp*_label", "power[12]_label", "power[12]_cap*",
+)
+_DECK_PPT_NODES = tuple(
+    f"power{rail}_{suffix}"
+    for rail in (1, 2)
+    for suffix in ("label", "cap", "cap_min", "cap_max")
+)
 
 
 def _glob(root: str, pattern: str) -> list[str]:
@@ -212,11 +219,37 @@ def _hwmon_nodes(chip_dir: str) -> list[str]:
     return sorted(names)[:_SNAP_MAX_NAMES]
 
 
+def _mode_writable(path: str) -> bool:
+    try:
+        return bool(os.stat(path).st_mode & 0o222)
+    except OSError:
+        return False
+
+
+def _hwmon_ppt_nodes(chip_dir: str) -> dict:
+    values = {}
+    for name in _DECK_PPT_NODES:
+        path = os.path.join(chip_dir, name)
+        if os.path.exists(path):
+            values[name] = {
+                "value": read_str(path),
+                "writable": _mode_writable(path),
+            }
+    return values
+
+
 def _snap_hwmon(root: str) -> list[dict]:
     out: list[dict] = []
     for chip in sorted(_glob(root, "sys/class/hwmon/hwmon*"))[:_SNAP_MAX_CHIPS]:
         try:
-            out.append({"name": read_str(os.path.join(chip, "name")), "nodes": _hwmon_nodes(chip)})
+            entry = {
+                "name": read_str(os.path.join(chip, "name")),
+                "nodes": _hwmon_nodes(chip),
+            }
+            ppt_nodes = _hwmon_ppt_nodes(chip)
+            if ppt_nodes:
+                entry["ppt_nodes"] = ppt_nodes
+            out.append(entry)
         except Exception:  # noqa: BLE001
             continue
     return out
@@ -359,13 +392,26 @@ def _snap_cpu_gpu_power(root: str) -> dict:
         _glob(root, "sys/class/drm/card*/device/pp_od_clk_voltage")
     )[:_SNAP_MAX_CHIPS]:
         card = os.path.basename(os.path.dirname(os.path.dirname(overdrive)))
+        contents = read_str(overdrive)
+        match = re.search(
+            r"SCLK:\s*(\d+)\s*Mhz\s+(\d+)\s*Mhz",
+            contents or "",
+            re.IGNORECASE,
+        )
+        level = os.path.join(
+            os.path.dirname(overdrive), "power_dpm_force_performance_level"
+        )
         out["gpu"].append({
             "backend": "amdgpu",
             "card": card,
             "overdrive_present": True,
-            "performance_level": read_str(os.path.join(
-                os.path.dirname(overdrive), "power_dpm_force_performance_level"
-            )),
+            "overdrive_writable": _mode_writable(overdrive),
+            "performance_level": read_str(level),
+            "performance_level_writable": _mode_writable(level),
+            "od_range": (
+                {"min_mhz": match.group(1), "max_mhz": match.group(2)}
+                if match else None
+            ),
         })
 
     for surface in sorted(
@@ -583,7 +629,16 @@ def capabilities_from(states: dict) -> dict:
         "gpu_clock_supported": bool(gpu.get("supported")),
         "cpu_frequency_backend": cpu_frequency.get("backend"),
         "cpu_frequency_supported": bool(cpu_frequency.get("supported")),
+        "cpu_frequency_handoff_pending": bool(
+            cpu_frequency.get("handoff_pending")
+        ),
+        "cpu_frequency_durable_state_reason": cpu_frequency.get(
+            "durable_state_reason"
+        ),
         "gpu_clock_backend": gpu_frequency.get("backend"),
+        "gpu_clock_handoff_pending": bool(
+            gpu_frequency.get("handoff_pending")
+        ),
         "steamdeck_ppt_supported": bool(deck_ppt.get("supported")),
         "color_supported": bool(color.get("supported")),
         "controller_manager": ctl.get("manager"),

@@ -85,9 +85,33 @@ def test_power1_only_keeps_safe_base_control_without_advanced_ppt(tmp_path):
     assert open(cap).read().strip() == "12000000"
 
 
-def test_non_deck_and_non_amdgpu_surfaces_are_unsupported(tmp_path):
-    _mk_hwmon(str(tmp_path), name="steamdeck_hwmon")
-    assert _backend(tmp_path).supported is False
+def test_complete_ppt_surface_wins_over_earlier_base_only_surface(tmp_path):
+    partial = _mk_hwmon(str(tmp_path), idx=0, include_fast=False, slow=11)
+    complete = _mk_hwmon(str(tmp_path), idx=7, slow=14, fast=16)
+
+    backend = _backend(tmp_path)
+
+    assert backend.ppt_capability()["supported"] is True
+    assert backend.capture_ppt() == {"slow": 14, "fast": 16}
+    assert open(os.path.join(partial, "power1_cap")).read().strip() == "11000000"
+    assert open(os.path.join(complete, "power1_cap")).read().strip() == "14000000"
+
+
+def test_legacy_steamdeck_hwmon_keeps_base_control_without_advanced_ppt(tmp_path):
+    cap = os.path.join(
+        _mk_hwmon(str(tmp_path), name="steamdeck_hwmon", include_fast=False),
+        "power1_cap",
+    )
+    backend = _backend(tmp_path)
+
+    assert backend.supported is True
+    assert backend.ppt_capability()["supported"] is False
+    assert backend.set_tdp(12, ac=False).ok is True
+    assert open(cap).read().strip() == "12000000"
+
+
+def test_non_deck_surface_is_unsupported(tmp_path):
+    _mk_hwmon(str(tmp_path), name="amdgpu")
 
     other = tmp_path / "other"
     _mk_hwmon(str(other), name="amdgpu")
@@ -113,14 +137,14 @@ def test_observe_reports_only_physical_slow_and_fast_rails(tmp_path):
     assert rails["pl3"].applied_w == 15
 
 
-def test_deck_physical_contract_uses_slow_as_primary_and_stable_omits_fast(tmp_path):
+def test_deck_physical_contract_flattens_both_ppt_rails_in_stable_mode(tmp_path):
     _mk_hwmon(str(tmp_path))
     backend = _backend(tmp_path)
 
     assert backend.primary_rail == "pl2"
     assert backend.physical_levels({
         "pl1": 15, "pl2": 15, "pl3": 15, "mode": "estable",
-    }) == {"pl2": 15}
+    }) == {"pl2": 15, "pl3": 15}
     assert backend.physical_levels({
         "pl1": 15, "pl2": 29, "pl3": 30, "mode": "custom",
     }) == {"pl2": 29, "pl3": 30}
@@ -204,3 +228,38 @@ def test_capture_and_restore_rediscover_after_hwmon_renumber(tmp_path):
     assert restored.ok is True
     assert open(os.path.join(moved, "power1_cap")).read().strip() == "14000000"
     assert open(os.path.join(moved, "power2_cap")).read().strip() == "16000000"
+
+
+def test_sysfs_bounds_are_intersected_with_the_known_safe_envelope(tmp_path):
+    directory = _mk_hwmon(str(tmp_path), maxima=True)
+    _write(os.path.join(directory, "power1_cap_min"), 1_000_000)
+    _write(os.path.join(directory, "power1_cap_max"), 150_000_000)
+    _write(os.path.join(directory, "power2_cap_min"), 1_000_000)
+    _write(os.path.join(directory, "power2_cap_max"), 150_000_000)
+    backend = _backend(tmp_path)
+
+    capability = backend.ppt_capability()
+    rejected = backend.apply_ppt(100, 100)
+
+    assert capability["slow"] == {"min": 3, "max": 29}
+    assert capability["fast"] == {"min": 3, "max": 30}
+    assert rejected.ok is False
+    assert rejected.reason == "invalid_range"
+
+
+def test_restore_accepts_zero_snapshot_after_capability_metadata_disappears(tmp_path):
+    directory = _mk_hwmon(str(tmp_path), slow=0, fast=0, maxima=True)
+    backend = _backend(tmp_path)
+    snapshot = backend.capture_ppt()
+    assert backend.apply_ppt(29, 30).ok is True
+    for name in (
+        "power1_label", "power2_label", "power1_cap_min", "power1_cap_max",
+        "power2_cap_min", "power2_cap_max",
+    ):
+        os.unlink(os.path.join(directory, name))
+
+    restored = backend.restore_ppt(snapshot)
+
+    assert restored.ok is True
+    assert open(os.path.join(directory, "power1_cap")).read().strip() == "0"
+    assert open(os.path.join(directory, "power2_cap")).read().strip() == "0"

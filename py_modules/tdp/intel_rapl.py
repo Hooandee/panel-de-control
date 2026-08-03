@@ -19,7 +19,7 @@ class IntelRaplBackend(TDPBackend):
     """
 
     name = "intel-rapl"
-    supports_levels = False  # PL1 only; PL2 remains firmware-owned and observed.
+    supports_levels = False
     read_tolerance_w = 1
 
     def __init__(self, fallback: TdpLimits, root: str = "/") -> None:

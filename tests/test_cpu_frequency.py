@@ -23,6 +23,7 @@ def _policy(
     current_max=None,
     driver="amd-pstate-epp",
     cpus="0-3",
+    affected_cpus=None,
 ):
     base = f"sys/devices/system/cpu/cpufreq/policy{number}"
     _write(root, f"{base}/cpuinfo_min_freq", hw_min)
@@ -31,6 +32,7 @@ def _policy(
     _write(root, f"{base}/scaling_max_freq", current_max if current_max is not None else hw_max)
     _write(root, f"{base}/scaling_driver", driver)
     _write(root, f"{base}/related_cpus", cpus)
+    _write(root, f"{base}/affected_cpus", affected_cpus or cpus)
     return base
 
 
@@ -49,6 +51,8 @@ def test_discovers_non_contiguous_policies_with_heterogeneous_bounds(tmp_path):
         {
             "name": "policy0",
             "cpus": [0, 1, 2, 3],
+            "related_cpus": [0, 1, 2, 3],
+            "affected_cpus": [0, 1, 2, 3],
             "driver": "amd-pstate-epp",
             "hardware_min_khz": 400_000,
             "hardware_max_khz": 3_500_000,
@@ -58,6 +62,8 @@ def test_discovers_non_contiguous_policies_with_heterogeneous_bounds(tmp_path):
         {
             "name": "policy4",
             "cpus": [4, 5, 6, 7],
+            "related_cpus": [4, 5, 6, 7],
+            "affected_cpus": [4, 5, 6, 7],
             "driver": "intel_pstate",
             "hardware_min_khz": 800_000,
             "hardware_max_khz": 2_800_000,
@@ -151,6 +157,8 @@ def test_heterogeneous_policies_clamp_independently(tmp_path):
         {
             "name": "policy0",
             "cpus": [0, 1, 2, 3],
+            "related_cpus": [0, 1, 2, 3],
+            "affected_cpus": [0, 1, 2, 3],
             "driver": "amd-pstate-epp",
             "hardware_min_khz": 400_000,
             "hardware_max_khz": 3_500_000,
@@ -160,6 +168,8 @@ def test_heterogeneous_policies_clamp_independently(tmp_path):
         {
             "name": "policy4",
             "cpus": [4, 5, 6, 7],
+            "related_cpus": [4, 5, 6, 7],
+            "affected_cpus": [4, 5, 6, 7],
             "driver": "amd-pstate-epp",
             "hardware_min_khz": 800_000,
             "hardware_max_khz": 2_800_000,
@@ -350,6 +360,155 @@ def test_auto_restores_session_baseline_once_then_becomes_unverifiable(tmp_path,
     assert writes == []
 
 
+def test_emergency_auto_keeps_baseline_for_a_late_manual_write(tmp_path):
+    base = _policy(
+        str(tmp_path), 0, current_min=600_000, current_max=3_000_000
+    )
+    durable = {"value": None}
+    control = select_cpu_frequency(
+        root=str(tmp_path),
+        persist_state=lambda state: durable.__setitem__("value", state),
+        boot_id="boot-1",
+    )
+    assert control.set_window(1_200_000, 2_400_000).ok is True
+
+    emergency = control.set_auto(preserve_ownership=True)
+
+    assert emergency.ok is True
+    assert control.get_window() == (600_000, 3_000_000)
+    assert durable["value"] is not None
+    _write(str(tmp_path), f"{base}/scaling_min_freq", 1_200_000)
+    _write(str(tmp_path), f"{base}/scaling_max_freq", 2_400_000)
+
+    final = control.set_auto()
+
+    assert final.ok is True
+    assert control.get_window() == (600_000, 3_000_000)
+    assert durable["value"] is None
+
+
+def test_restart_recovers_durable_baseline_before_manual_reapply(tmp_path):
+    _policy(
+        str(tmp_path), 0,
+        current_min=600_000,
+        current_max=3_000_000,
+    )
+    durable = {"value": None}
+
+    def persist(state):
+        durable["value"] = state
+
+    first = select_cpu_frequency(
+        root=str(tmp_path),
+        persist_state=persist,
+        boot_id="boot-1",
+    )
+    assert first.set_window(1_200_000, 2_400_000).ok is True
+    assert durable["value"] is not None
+
+    restarted = select_cpu_frequency(
+        root=str(tmp_path),
+        persisted_state=durable["value"],
+        persist_state=persist,
+        boot_id="boot-1",
+    )
+    assert restarted.diagnostics()["owned"] is True
+    assert restarted.set_window(1_200_000, 2_400_000).ok is True
+
+    restored = restarted.set_auto()
+
+    assert restored.ok is True
+    assert restarted.get_window() == (600_000, 3_000_000)
+    assert durable["value"] is None
+
+
+def test_manual_takeover_never_writes_without_durable_baseline(tmp_path, monkeypatch):
+    _policy(str(tmp_path), 0)
+    writes = []
+    monkeypatch.setattr(
+        frequency_module,
+        "write_str",
+        lambda path, value: writes.append((path, value)) or True,
+    )
+
+    def fail_persist(_state):
+        raise OSError("disk full")
+
+    control = select_cpu_frequency(
+        root=str(tmp_path),
+        persist_state=fail_persist,
+        boot_id="boot-1",
+    )
+
+    result = control.set_window(1_200_000, 2_400_000)
+
+    assert result.ok is False
+    assert result.reason == "ownership_persist_failed"
+    assert writes == []
+    assert control.diagnostics()["owned"] is False
+
+
+def test_manual_takeover_fails_closed_when_boot_id_is_unreadable(
+    tmp_path, monkeypatch
+):
+    _policy(str(tmp_path), 0)
+    writes = []
+    persisted = []
+    monkeypatch.setattr(
+        frequency_module,
+        "write_str",
+        lambda path, value: writes.append((path, value)) or True,
+    )
+    control = select_cpu_frequency(
+        root=str(tmp_path),
+        persist_state=persisted.append,
+    )
+
+    result = control.set_window(1_200_000, 2_400_000)
+
+    assert result.ok is False
+    assert result.reason == "boot_id_unavailable"
+    assert persisted == []
+    assert writes == []
+
+
+def test_identity_change_with_manual_target_keeps_handoff_pending(
+    tmp_path, monkeypatch
+):
+    base = _policy(
+        str(tmp_path), 0,
+        driver="intel_pstate",
+        current_min=600_000,
+        current_max=3_000_000,
+    )
+    control = select_cpu_frequency(root=str(tmp_path))
+    real_read_window = frequency_module.Policy.read_window
+    changed = False
+
+    def replace_driver_after_target_read(policy):
+        nonlocal changed
+        window = real_read_window(policy)
+        if not changed and window == (1_200_000, 2_400_000):
+            changed = True
+            _write(str(tmp_path), f"{base}/scaling_driver", "intel_cpufreq")
+        return window
+
+    monkeypatch.setattr(
+        frequency_module.Policy,
+        "read_window",
+        replace_driver_after_target_read,
+    )
+
+    result = control.set_window(1_200_000, 2_400_000)
+
+    assert result.ok is False
+    assert result.reason == "policy_topology_changed"
+    assert control.diagnostics()["owned"] is True
+    assert control.set_auto().reason == "baseline_stale"
+    assert _read(str(tmp_path), f"{base}/scaling_min_freq") == 1_200_000
+    assert _read(str(tmp_path), f"{base}/scaling_max_freq") == 2_400_000
+
+
 def test_auto_retries_transient_restore_readback_once(tmp_path, monkeypatch):
     base = _policy(str(tmp_path), 0, current_min=600_000, current_max=3_000_000)
     control = select_cpu_frequency(root=str(tmp_path))
@@ -448,6 +607,363 @@ def test_policy_topology_change_starts_new_epoch_and_applies_current_request(tmp
     assert control.get_window() == (1_200_000, 2_400_000)
 
 
+def test_policy_created_during_apply_prevents_success_and_rolls_back(
+    tmp_path, monkeypatch
+):
+    first = _policy(str(tmp_path), 0)
+    control = select_cpu_frequency(root=str(tmp_path))
+    real_write = frequency_module.write_str
+    created = False
+
+    def create_policy_during_first_write(path, value):
+        nonlocal created
+        written = real_write(path, value)
+        if not created:
+            created = True
+            _policy(
+                str(tmp_path), 4, hw_min=800_000, hw_max=2_800_000,
+                cpus="4-7", driver="intel_pstate",
+            )
+        return written
+
+    monkeypatch.setattr(
+        frequency_module, "write_str", create_policy_during_first_write
+    )
+
+    result = control.set_window(1_200_000, 2_400_000)
+
+    assert result.ok is False
+    assert result.reason == "policy_topology_changed"
+    assert _read(str(tmp_path), f"{first}/scaling_min_freq") == 400_000
+    assert _read(str(tmp_path), f"{first}/scaling_max_freq") == 3_500_000
+    assert control.diagnostics()["owned"] is False
+
+
+def test_affected_cpu_change_during_apply_prevents_success_and_rolls_back(
+    tmp_path, monkeypatch
+):
+    base = _policy(str(tmp_path), 0, cpus="0-3", affected_cpus="0-3")
+    control = select_cpu_frequency(root=str(tmp_path))
+    real_write = frequency_module.write_str
+    changed = False
+
+    def offline_cpu_during_first_write(path, value):
+        nonlocal changed
+        written = real_write(path, value)
+        if not changed:
+            changed = True
+            _write(str(tmp_path), f"{base}/affected_cpus", "0-2")
+        return written
+
+    monkeypatch.setattr(
+        frequency_module, "write_str", offline_cpu_during_first_write
+    )
+
+    result = control.set_window(1_200_000, 2_400_000)
+
+    assert result.ok is False
+    assert result.reason == "policy_topology_changed"
+    assert _read(str(tmp_path), f"{base}/scaling_min_freq") == 400_000
+    assert _read(str(tmp_path), f"{base}/scaling_max_freq") == 3_500_000
+
+
+def test_policy_driver_change_rejects_manual_reapply_before_write(
+    tmp_path, monkeypatch
+):
+    base = _policy(str(tmp_path), 0, driver="amd-pstate-epp")
+    control = select_cpu_frequency(root=str(tmp_path))
+    assert control.set_window(1_200_000, 2_400_000).ok is True
+    _write(str(tmp_path), f"{base}/scaling_driver", "intel_pstate")
+    writes = []
+    monkeypatch.setattr(
+        frequency_module, "write_str",
+        lambda path, value: writes.append((path, value)),
+    )
+
+    result = control.set_window(1_500_000, 3_000_000)
+
+    assert result.ok is False
+    assert result.reason == "policy_identity_changed"
+    assert writes == []
+
+
+def test_replaced_policy_is_not_overwritten_by_topology_rollback(
+    tmp_path, monkeypatch
+):
+    base = _policy(str(tmp_path), 0, driver="amd-pstate-epp")
+    control = select_cpu_frequency(root=str(tmp_path))
+    original_read = frequency_module.Policy.read_window
+    reads = 0
+
+    def replace_after_apply_readback(policy):
+        nonlocal reads
+        reads += 1
+        value = original_read(policy)
+        if reads == 2:
+            _write(str(tmp_path), f"{base}/scaling_driver", "amd-pstate")
+            _write(str(tmp_path), f"{base}/scaling_min_freq", 700_000)
+            _write(str(tmp_path), f"{base}/scaling_max_freq", 3_000_000)
+        return value
+
+    monkeypatch.setattr(
+        frequency_module.Policy, "read_window", replace_after_apply_readback
+    )
+
+    result = control.set_window(1_200_000, 2_400_000)
+
+    assert result.ok is False
+    assert result.reason == "policy_topology_changed"
+    assert result.rollback == {"attempted": True, "ok": False}
+    assert _read(str(tmp_path), f"{base}/scaling_min_freq") == 700_000
+    assert _read(str(tmp_path), f"{base}/scaling_max_freq") == 3_000_000
+
+
+def test_final_external_window_drift_is_never_reported_as_applied(
+    tmp_path, monkeypatch
+):
+    base = _policy(str(tmp_path), 0)
+    control = select_cpu_frequency(root=str(tmp_path))
+    original_read = frequency_module.Policy.read_window
+    reads = 0
+
+    def drift_on_final_read(policy):
+        nonlocal reads
+        reads += 1
+        if reads == 3:
+            _write(str(tmp_path), f"{base}/scaling_min_freq", 700_000)
+            _write(str(tmp_path), f"{base}/scaling_max_freq", 3_000_000)
+        return original_read(policy)
+
+    monkeypatch.setattr(
+        frequency_module.Policy, "read_window", drift_on_final_read
+    )
+
+    result = control.set_window(1_200_000, 2_400_000)
+
+    assert result.ok is False
+    assert result.reason == "readback_mismatch"
+    assert _read(str(tmp_path), f"{base}/scaling_min_freq") == 700_000
+    assert _read(str(tmp_path), f"{base}/scaling_max_freq") == 3_000_000
+
+
+def test_policy_created_during_final_readback_is_never_omitted_from_success(
+    tmp_path, monkeypatch
+):
+    first = _policy(str(tmp_path), 0)
+    control = select_cpu_frequency(root=str(tmp_path))
+    original_read = frequency_module.Policy.read_window
+    reads = 0
+
+    def add_policy_during_final_read(policy):
+        nonlocal reads
+        reads += 1
+        value = original_read(policy)
+        if reads == 3:
+            _policy(
+                str(tmp_path), 4, hw_min=800_000, hw_max=2_800_000,
+                cpus="4-7", driver="intel_pstate",
+            )
+        return value
+
+    monkeypatch.setattr(
+        frequency_module.Policy, "read_window", add_policy_during_final_read
+    )
+
+    result = control.set_window(1_200_000, 2_400_000)
+
+    assert result.ok is False
+    assert result.reason == "policy_topology_changed"
+    assert _read(str(tmp_path), f"{first}/scaling_min_freq") == 400_000
+    assert _read(str(tmp_path), f"{first}/scaling_max_freq") == 3_500_000
+
+
+def test_auto_does_not_restore_baseline_through_a_replaced_driver(
+    tmp_path, monkeypatch
+):
+    base = _policy(
+        str(tmp_path), 0, driver="intel_pstate",
+        current_min=600_000, current_max=3_000_000,
+    )
+    control = select_cpu_frequency(root=str(tmp_path))
+    assert control.set_window(1_200_000, 2_400_000).ok is True
+    original_read = frequency_module.Policy.read_window
+    replaced = False
+
+    def replace_during_restore_read(policy):
+        nonlocal replaced
+        value = original_read(policy)
+        if not replaced:
+            replaced = True
+            _write(str(tmp_path), f"{base}/scaling_driver", "intel_cpufreq")
+            _write(str(tmp_path), f"{base}/scaling_min_freq", 700_000)
+            _write(str(tmp_path), f"{base}/scaling_max_freq", 2_900_000)
+        return value
+
+    monkeypatch.setattr(
+        frequency_module.Policy, "read_window", replace_during_restore_read
+    )
+
+    result = control.set_auto()
+
+    assert result.ok is False
+    assert control.diagnostics()["owned"] is True
+    assert _read(str(tmp_path), f"{base}/scaling_min_freq") == 700_000
+    assert _read(str(tmp_path), f"{base}/scaling_max_freq") == 2_900_000
+
+
+def test_driver_replacement_during_apply_is_never_rolled_back_through_old_policy(
+    tmp_path, monkeypatch
+):
+    base = _policy(str(tmp_path), 0, driver="amd-pstate-epp")
+    control = select_cpu_frequency(root=str(tmp_path))
+    real_read_window = frequency_module.Policy.read_window
+    reads = 0
+
+    def replace_after_apply_readback(policy):
+        nonlocal reads
+        reads += 1
+        value = real_read_window(policy)
+        if reads == 2:
+            _write(str(tmp_path), f"{base}/scaling_driver", "amd-pstate")
+            _write(str(tmp_path), f"{base}/scaling_min_freq", 700_000)
+            _write(str(tmp_path), f"{base}/scaling_max_freq", 3_000_000)
+        return value
+
+    monkeypatch.setattr(
+        frequency_module.Policy, "read_window", replace_after_apply_readback
+    )
+
+    result = control.set_window(1_200_000, 2_400_000)
+
+    assert result.ok is False
+    assert result.reason == "policy_topology_changed"
+    assert _read(str(tmp_path), f"{base}/scaling_min_freq") == 700_000
+    assert _read(str(tmp_path), f"{base}/scaling_max_freq") == 3_000_000
+
+
+def test_final_window_drift_cannot_be_reported_as_applied(tmp_path, monkeypatch):
+    base = _policy(str(tmp_path), 0)
+    control = select_cpu_frequency(root=str(tmp_path))
+    real_read_window = frequency_module.Policy.read_window
+    reads = 0
+
+    def drift_at_final_readback(policy):
+        nonlocal reads
+        reads += 1
+        if reads == 3:
+            _write(str(tmp_path), f"{base}/scaling_min_freq", 700_000)
+            _write(str(tmp_path), f"{base}/scaling_max_freq", 3_000_000)
+        return real_read_window(policy)
+
+    monkeypatch.setattr(
+        frequency_module.Policy, "read_window", drift_at_final_readback
+    )
+
+    result = control.set_window(1_200_000, 2_400_000)
+
+    assert result.ok is False
+    assert result.reason == "readback_mismatch"
+    assert _read(str(tmp_path), f"{base}/scaling_min_freq") == 700_000
+    assert _read(str(tmp_path), f"{base}/scaling_max_freq") == 3_000_000
+
+
+def test_final_drift_restores_only_policies_that_still_hold_plugin_target(
+    tmp_path, monkeypatch
+):
+    first = _policy(str(tmp_path), 0)
+    second = _policy(str(tmp_path), 4, cpus="4-7")
+    control = select_cpu_frequency(root=str(tmp_path))
+    real_read_window = frequency_module.Policy.read_window
+    reads = {"policy0": 0, "policy4": 0}
+
+    def drift_second_policy_at_final_readback(policy):
+        reads[policy.name] += 1
+        if policy.name == "policy4" and reads[policy.name] == 3:
+            _write(str(tmp_path), f"{second}/scaling_min_freq", 900_000)
+            _write(str(tmp_path), f"{second}/scaling_max_freq", 2_700_000)
+        return real_read_window(policy)
+
+    monkeypatch.setattr(
+        frequency_module.Policy,
+        "read_window",
+        drift_second_policy_at_final_readback,
+    )
+
+    result = control.set_window(1_200_000, 2_400_000)
+
+    assert result.ok is False
+    assert result.reason == "readback_mismatch"
+    assert _read(str(tmp_path), f"{first}/scaling_min_freq") == 400_000
+    assert _read(str(tmp_path), f"{first}/scaling_max_freq") == 3_500_000
+    assert _read(str(tmp_path), f"{second}/scaling_min_freq") == 900_000
+    assert _read(str(tmp_path), f"{second}/scaling_max_freq") == 2_700_000
+    assert control.diagnostics()["owned"] is False
+
+
+def test_policy_created_during_final_readback_cannot_be_omitted_from_success(
+    tmp_path, monkeypatch
+):
+    _policy(str(tmp_path), 0)
+    control = select_cpu_frequency(root=str(tmp_path))
+    real_read_window = frequency_module.Policy.read_window
+    reads = 0
+
+    def create_policy_at_final_readback(policy):
+        nonlocal reads
+        reads += 1
+        value = real_read_window(policy)
+        if reads == 3:
+            _policy(
+                str(tmp_path), 4, hw_min=800_000, hw_max=2_800_000,
+                cpus="4-7", driver="intel_pstate",
+            )
+        return value
+
+    monkeypatch.setattr(
+        frequency_module.Policy, "read_window", create_policy_at_final_readback
+    )
+
+    result = control.set_window(1_200_000, 2_400_000)
+
+    assert result.ok is False
+    assert result.reason == "policy_topology_changed"
+
+
+def test_auto_never_restores_baseline_through_a_replaced_driver(
+    tmp_path, monkeypatch
+):
+    base = _policy(
+        str(tmp_path), 0, driver="intel_pstate",
+        current_min=600_000, current_max=3_000_000,
+    )
+    control = select_cpu_frequency(root=str(tmp_path))
+    assert control.set_window(1_200_000, 2_400_000).ok is True
+    real_read_window = frequency_module.Policy.read_window
+    replaced = False
+
+    def replace_at_restore_read(policy):
+        nonlocal replaced
+        value = real_read_window(policy)
+        if not replaced:
+            replaced = True
+            _write(str(tmp_path), f"{base}/scaling_driver", "intel_cpufreq")
+            _write(str(tmp_path), f"{base}/scaling_min_freq", 700_000)
+            _write(str(tmp_path), f"{base}/scaling_max_freq", 2_900_000)
+        return value
+
+    monkeypatch.setattr(
+        frequency_module.Policy, "read_window", replace_at_restore_read
+    )
+
+    result = control.set_auto()
+
+    assert result.ok is False
+    assert result.status == "partial"
+    assert control.diagnostics()["owned"] is True
+    assert _read(str(tmp_path), f"{base}/scaling_min_freq") == 700_000
+    assert _read(str(tmp_path), f"{base}/scaling_max_freq") == 2_900_000
+
+
 def test_auto_keeps_baseline_across_temporary_policy_topology_change(tmp_path):
     first = _policy(
         str(tmp_path), 0, current_min=600_000, current_max=3_000_000
@@ -476,6 +992,64 @@ def test_auto_keeps_baseline_across_temporary_policy_topology_change(tmp_path):
     assert _read(str(tmp_path), f"{first}/scaling_max_freq") == 3_000_000
     assert _read(str(tmp_path), f"{second}/scaling_min_freq") == 800_000
     assert _read(str(tmp_path), f"{second}/scaling_max_freq") == 2_800_000
+
+
+def test_auto_restores_matching_policies_when_one_policy_stays_offline(tmp_path):
+    first = _policy(
+        str(tmp_path), 0, current_min=600_000, current_max=3_000_000
+    )
+    second = _policy(
+        str(tmp_path), 4, current_min=800_000, current_max=2_800_000,
+        cpus="4-7",
+    )
+    control = select_cpu_frequency(root=str(tmp_path))
+    assert control.set_window(1_200_000, 2_400_000).ok is True
+
+    shutil.rmtree(os.path.join(str(tmp_path), second))
+    restored = control.set_auto()
+
+    assert restored.ok is False
+    assert restored.status == "partial"
+    assert restored.reason == "baseline_stale"
+    assert _read(str(tmp_path), f"{first}/scaling_min_freq") == 600_000
+    assert _read(str(tmp_path), f"{first}/scaling_max_freq") == 3_000_000
+    assert control.diagnostics()["owned"] is True
+
+
+def test_partial_auto_attempts_every_matching_policy_after_restore_failure(
+    tmp_path, monkeypatch
+):
+    first = _policy(
+        str(tmp_path), 0, current_min=600_000, current_max=3_000_000
+    )
+    missing = _policy(
+        str(tmp_path), 4, current_min=800_000, current_max=2_800_000,
+        cpus="4-7",
+    )
+    last = _policy(
+        str(tmp_path), 8, current_min=700_000, current_max=2_900_000,
+        cpus="8-11",
+    )
+    control = select_cpu_frequency(root=str(tmp_path))
+    assert control.set_window(1_200_000, 2_400_000).ok is True
+    shutil.rmtree(os.path.join(str(tmp_path), missing))
+    real_write = frequency_module.write_str
+
+    def fail_first_policy_restore(path, value):
+        if "policy0" in path and int(value) == 600_000:
+            return False
+        return real_write(path, value)
+
+    monkeypatch.setattr(frequency_module, "write_str", fail_first_policy_restore)
+
+    restored = control.set_auto()
+
+    assert restored.ok is False
+    assert restored.status == "partial"
+    assert restored.reason == "restore_failed"
+    assert _read(str(tmp_path), f"{first}/scaling_min_freq") == 1_200_000
+    assert _read(str(tmp_path), f"{last}/scaling_min_freq") == 700_000
+    assert _read(str(tmp_path), f"{last}/scaling_max_freq") == 2_900_000
 
 
 def test_auto_rejects_replacement_policy_that_reuses_previous_name(tmp_path):

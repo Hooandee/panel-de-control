@@ -11,6 +11,7 @@ import concurrent.futures
 import importlib
 import sys
 import threading
+import time
 import types
 
 import pytest
@@ -30,6 +31,66 @@ class _RecordingExecutor(concurrent.futures.Executor):
         except Exception as e:  # noqa: BLE001
             f.set_exception(e)
         return f
+
+
+class _NeverCompletingExecutor(concurrent.futures.Executor):
+    def __init__(self):
+        self.submissions = 0
+        self.shutdown_calls = []
+
+    def submit(self, fn, *args, **kwargs):
+        self.submissions += 1
+        return concurrent.futures.Future()
+
+    def shutdown(self, wait=True, *, cancel_futures=False):
+        self.shutdown_calls.append((wait, cancel_futures))
+
+
+class _BlockingCpuFrequency:
+    supported = True
+    backend = "blocking-cpufreq"
+
+    def __init__(self, plugin):
+        self.plugin = plugin
+        self.started = threading.Event()
+        self.release = threading.Event()
+        self.window = (600_000, 3_000_000)
+        self.requested = None
+        self.auto_preserve_calls = []
+
+    def set_window(self, minimum, maximum):
+        from cpu.frequency import CpuFrequencyResult
+
+        self.plugin._settings["cpu_frequency_handoff"] = {"baseline": "stock"}
+        self.started.set()
+        assert self.release.wait(timeout=2)
+        self.window = (minimum, maximum)
+        self.requested = (minimum, maximum)
+        return CpuFrequencyResult(
+            True, "applied", self.requested, self.window,
+            {"attempted": False, "ok": None}, None, 0,
+        )
+
+    def set_auto(self, preserve_ownership=False):
+        from cpu.frequency import CpuFrequencyResult
+
+        self.auto_preserve_calls.append(bool(preserve_ownership))
+        self.window = (600_000, 3_000_000)
+        if not preserve_ownership:
+            self.requested = None
+            self.plugin._settings["cpu_frequency_handoff"] = None
+        return CpuFrequencyResult(
+            True, "restored", None, self.window,
+            {"attempted": True, "ok": True}, None, 0,
+        )
+
+    def diagnostics(self):
+        return {
+            "requested": list(self.requested) if self.requested else None,
+            "owned": self.plugin._settings.get("cpu_frequency_handoff") is not None,
+            "policies": ["policy0"],
+            "policy_state": [],
+        }
 
 
 class _FakeColorBackend:
@@ -104,6 +165,23 @@ def test_offload_runs_inline_without_executor(tmp_path, monkeypatch):
     assert seen == [1]
 
 
+def test_offload_without_serial_executor_does_not_block_a_running_loop(
+    tmp_path, monkeypatch
+):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    release = threading.Event()
+    results = []
+
+    async def _run():
+        asyncio.get_running_loop().call_later(0.02, release.set)
+        p._offload(lambda: results.append(release.wait(0.3)))
+        await asyncio.sleep(0.05)
+
+    asyncio.run(_run())
+
+    assert results == [True]
+
+
 def test_offload_call_dispatches_through_executor(tmp_path, monkeypatch):
     p, _ = _make_plugin(tmp_path, monkeypatch)
     rec = _RecordingExecutor()
@@ -171,8 +249,6 @@ def test_reapply_all_offloads_tdp_fans_and_color(tmp_path, monkeypatch):
         p._reapply_all()  # sync, but under a running loop
 
     asyncio.run(_run())
-    # CPU joins the serialized off-loop apply path because a complete multi-policy
-    # transaction may touch many sysfs nodes and must not stall the QAM event loop.
     assert rec.count == 4
 
 
@@ -271,6 +347,203 @@ def test_unload_completes_without_yielding_to_the_stopping_event_loop(
     unload = p._unload()
     with pytest.raises(StopIteration):
         unload.send(None)
+
+
+def test_unload_deadline_handoffs_now_and_again_behind_a_blocked_worker(
+    tmp_path, monkeypatch
+):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    main = importlib.import_module("main")
+    monkeypatch.setattr(main, "_SHUTDOWN_DRAIN_TIMEOUT_S", 0.03)
+    started = threading.Event()
+    release = threading.Event()
+    events = []
+
+    def blocked_write():
+        started.set()
+        release.wait(timeout=1)
+        events.append("late-write")
+
+    p._apply_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    executor = p._apply_executor
+    executor.submit(blocked_write)
+    assert started.wait(timeout=1)
+    p._restore_fans_safe = lambda: events.append("fans-handoff")
+    p._restore_color_safe = lambda: events.append("color-handoff")
+    p._restore_audio_safe = lambda: events.append("audio-handoff")
+    p._release_cpu_controls_sync = lambda _trigger, **_kwargs: events.append("cpu-handoff") or True
+    p._release_gpu_clock_sync = lambda _trigger, **_kwargs: events.append("gpu-handoff") or True
+    p._restore_power_handoff = lambda **_kwargs: events.append("power-handoff") or True
+
+    before = time.monotonic()
+    asyncio.run(p._unload())
+    elapsed = time.monotonic() - before
+
+    assert elapsed < 0.15
+    assert events == [
+        "fans-handoff",
+        "color-handoff",
+        "audio-handoff",
+        "cpu-handoff",
+        "gpu-handoff",
+        "power-handoff",
+    ]
+    release.set()
+    executor.shutdown(wait=True)
+    assert events == [
+        "fans-handoff",
+        "color-handoff",
+        "audio-handoff",
+        "cpu-handoff",
+        "gpu-handoff",
+        "power-handoff",
+        "late-write",
+        "fans-handoff",
+        "color-handoff",
+        "audio-handoff",
+        "cpu-handoff",
+        "gpu-handoff",
+        "power-handoff",
+    ]
+    p._offload(lambda: events.append("post-unload-write"))
+    assert "post-unload-write" not in events
+
+
+def test_unload_attempts_emergency_handoff_when_worker_never_completes(
+    tmp_path, monkeypatch
+):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    main = importlib.import_module("main")
+    monkeypatch.setattr(main, "_SHUTDOWN_DRAIN_TIMEOUT_S", 0.001)
+    executor = _NeverCompletingExecutor()
+    p._apply_executor = executor
+    events = []
+    p._restore_fans_safe = lambda: events.append("fans")
+    p._restore_color_safe = lambda: events.append("color")
+    p._restore_audio_safe = lambda: events.append("audio")
+    p._release_cpu_controls_sync = lambda _trigger, **_kwargs: events.append("cpu") or True
+    p._release_gpu_clock_sync = lambda _trigger, **_kwargs: events.append("gpu") or True
+    p._restore_power_handoff = lambda **_kwargs: events.append("power") or True
+
+    asyncio.run(p._unload())
+
+    assert events == ["fans", "color", "audio", "cpu", "gpu", "power"]
+    assert executor.submissions == 2
+    assert executor.shutdown_calls == [(False, False)]
+
+
+def test_unload_final_cpu_handoff_restores_after_late_manual_write(
+    tmp_path, monkeypatch
+):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    p._apply_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    executor = p._apply_executor
+    frequency = _BlockingCpuFrequency(p)
+    p._cpu_frequency = frequency
+    p._cpu_coordinator = None
+    p._restore_fans_safe = lambda: None
+    p._restore_color_safe = lambda: None
+    p._restore_audio_safe = lambda: None
+    p._release_gpu_clock_sync = lambda _trigger, **_kwargs: True
+    p._restore_power_handoff = lambda **_kwargs: True
+    p._drain_offloaded_sync = lambda _timeout: False
+    generation = p._next_cpu_generation()
+    intent = p._cpu_intent()
+    intent["frequency"] = {
+        "manual": True,
+        "min_khz": 1_200_000,
+        "max_khz": 2_400_000,
+    }
+    p._submit_offloaded(
+        executor, lambda: p._run_cpu_apply(intent, generation)
+    )
+    assert frequency.started.wait(timeout=1)
+
+    asyncio.run(p._unload())
+
+    assert frequency.window == (600_000, 3_000_000)
+    assert p._settings["cpu_frequency_handoff"] is not None, frequency.auto_preserve_calls
+    frequency.release.set()
+    executor.shutdown(wait=True)
+
+    assert frequency.window == (600_000, 3_000_000)
+    assert p._settings["cpu_frequency_handoff"] is None
+    assert frequency.auto_preserve_calls == [True, False]
+
+
+def test_unload_suppresses_done_callbacks_from_the_last_active_worker(
+    tmp_path, monkeypatch
+):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    started = threading.Event()
+    release = threading.Event()
+    events = []
+    p._restore_fans_safe = lambda: events.append("handoff")
+    p._restore_color_safe = lambda: None
+    p._restore_audio_safe = lambda: None
+    p._release_cpu_controls_sync = lambda _trigger: True
+    p._release_gpu_clock_sync = lambda _trigger: True
+    p._restore_power_handoff = lambda: True
+
+    def active_write():
+        started.set()
+        release.wait(timeout=1)
+        events.append("write")
+
+    async def run():
+        p._apply_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        p._offload(active_write, done=lambda: events.append("done-callback"))
+        while not started.is_set():
+            await asyncio.sleep(0)
+        release.set()
+        await p._unload()
+        await asyncio.sleep(0)
+
+    asyncio.run(run())
+
+    assert events == ["write", "handoff"]
+
+
+def test_unload_cancels_queued_mutation_and_handoffs_before_return(
+    tmp_path, monkeypatch
+):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    events = []
+    started = threading.Event()
+    release = threading.Event()
+    p._apply_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    executor = p._apply_executor
+
+    def bounded_active_job():
+        started.set()
+        release.wait(timeout=0.04)
+
+    p._restore_fans_safe = lambda: events.append("fans-handoff")
+    p._restore_color_safe = lambda: events.append("color-handoff")
+    p._restore_audio_safe = lambda: events.append("audio-handoff")
+    p._release_cpu_controls_sync = lambda _trigger: events.append("cpu-handoff") or True
+    p._release_gpu_clock_sync = lambda _trigger: events.append("gpu-handoff") or True
+    p._restore_power_handoff = lambda: events.append("power-handoff") or True
+
+    async def drive():
+        p._offload(bounded_active_job)
+        while not started.is_set():
+            await asyncio.sleep(0)
+        p._offload(lambda: events.append("stale-write"))
+        threading.Timer(0.01, release.set).start()
+        await p._unload()
+
+    asyncio.run(drive())
+    executor.shutdown(wait=True)
+
+    assert events == [
+        "fans-handoff",
+        "color-handoff",
+        "audio-handoff",
+        "cpu-handoff",
+        "gpu-handoff",
+        "power-handoff",
+    ]
 
 
 def test_unload_handoff_logs_report_actual_results(tmp_path, monkeypatch):

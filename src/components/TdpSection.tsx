@@ -111,10 +111,11 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
   const shownWatts = inFwMode ? (tdp.applied_w ?? view.watts) : view.watts;
   const ownership = ownershipView(tdp.ownership);
   const deckPptActive = Boolean(tdp.ppt?.supported && view.mode !== "estable");
-  const arcApplied = deckPptActive ? shownWatts : (power?.applied ?? null);
-  const slowPpt = deckPptActive
-    ? (tdp.ppt?.applied.slow ?? tdp.ppt?.requested.slow ?? null)
-    : null;
+  const arcTarget = deckPptActive ? (tdp.ppt?.requested.slow ?? shownWatts) : shownWatts;
+  const arcApplied = deckPptActive ? (tdp.ppt?.applied.slow ?? null) : (power?.applied ?? null);
+  const basePpt = deckPptActive ? shownWatts : null;
+  const slowPpt = deckPptActive ? (tdp.ppt?.requested.slow ?? null) : null;
+  const fastPpt = deckPptActive ? (tdp.ppt?.requested.fast ?? null) : null;
 
   // Master switch off: keep the live arc, drop every write control.
   if (monitorOnly) {
@@ -125,7 +126,7 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
         </PanelSectionRow>
         <PanelSectionRow>
           <PowerArc
-            watts={shownWatts}
+            watts={arcTarget}
             limits={tdp.limits}
             onAc={tdp.on_ac}
             actualWatts={power?.watts ?? null}
@@ -134,8 +135,9 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
             setpoint={power?.setpoint ?? null}
             appliedWatts={arcApplied}
             visualMax={deckPptActive ? tdp.ppt?.visual_max : null}
+            baseMarkerWatts={basePpt}
             slowMarkerWatts={slowPpt}
-            fastMarkerWatts={deckPptActive ? (tdp.ppt?.applied.fast ?? tdp.ppt?.requested.fast ?? null) : null}
+            fastMarkerWatts={fastPpt}
           />
         </PanelSectionRow>
       </>
@@ -160,7 +162,7 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
       )}
       <PanelSectionRow>
         <PowerArc
-          watts={shownWatts}
+          watts={arcTarget}
           limits={tdp.limits}
           onAc={tdp.on_ac}
           actualWatts={power?.watts ?? null}
@@ -169,8 +171,9 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
           setpoint={power?.setpoint ?? null}
           appliedWatts={arcApplied}
           visualMax={deckPptActive ? tdp.ppt?.visual_max : null}
+          baseMarkerWatts={basePpt}
           slowMarkerWatts={slowPpt}
-          fastMarkerWatts={deckPptActive ? (tdp.ppt?.applied.fast ?? tdp.ppt?.requested.fast ?? null) : null}
+          fastMarkerWatts={fastPpt}
         />
       </PanelSectionRow>
       {ownership.show && (

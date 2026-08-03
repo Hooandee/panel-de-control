@@ -62,7 +62,6 @@ export const CpuCard: FC<Props> = ({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm, overflow: "hidden" }}>
-      {/* Per-game scope: only shown in-game (one tab governs SMT/boost/cores together). */}
       {game && (
         <ProfileSelector
           scope={scope}

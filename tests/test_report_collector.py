@@ -1,7 +1,6 @@
 import os
 
 from report.collector import (
-    SCHEMA,
     build_bundle,
     capabilities_from,
     controller_daemon_cmds,
@@ -84,14 +83,26 @@ def test_capabilities_from_tolerates_missing():
 def test_capabilities_from_includes_cpu_gpu_backends():
     caps = capabilities_from({
         "cpu_gpu_diagnostics": {
-            "cpu": {"backend": "cpufreq", "supported": True},
-            "gpu": {"backend": "amdgpu", "supported": True},
+            "cpu": {
+                "backend": "cpufreq",
+                "supported": True,
+                "handoff_pending": True,
+                "durable_state_reason": "ownership_state_invalid",
+            },
+            "gpu": {
+                "backend": "amdgpu",
+                "supported": True,
+                "handoff_pending": True,
+            },
             "steamdeck_ppt": {"supported": True},
         }
     })
     assert caps["cpu_frequency_backend"] == "cpufreq"
     assert caps["cpu_frequency_supported"] is True
+    assert caps["cpu_frequency_handoff_pending"] is True
+    assert caps["cpu_frequency_durable_state_reason"] == "ownership_state_invalid"
     assert caps["gpu_clock_backend"] == "amdgpu"
+    assert caps["gpu_clock_handoff_pending"] is True
     assert caps["steamdeck_ppt_supported"] is True
 
 
@@ -198,7 +209,7 @@ def test_build_bundle_shape_and_redaction():
         stores={"profiles": {}},
         logs=[{"name": "x.log", "text": "boom"}],
     )
-    assert b["schema"] == SCHEMA
+    assert b["schema"] == 2
     assert b["app"] == "panel-de-control"
     assert b["categories"] == ["tdp", "fans"]
     assert b["text"] == "falla ~/thing"  # path redacted in free text too
@@ -283,6 +294,30 @@ def test_sysfs_snapshot_hwmon(tmp_path):
     chips = {c["name"]: c["nodes"] for c in snap["hwmon"]}
     assert set(chips["asus"]) == {"pwm1", "pwm1_enable", "fan1_input", "temp1_label"}
     assert chips["k10temp"] == ["temp1_label"]
+
+
+def test_sysfs_snapshot_captures_deck_ppt_values_and_permissions(tmp_path):
+    root = str(tmp_path)
+    chip = os.path.join(root, "sys/class/hwmon/hwmon7")
+    _mk(os.path.join(chip, "name"), "amdgpu\n")
+    for name, value in {
+        "power1_label": "slowPPT\n",
+        "power1_cap": "15000000\n",
+        "power1_cap_min": "3000000\n",
+        "power1_cap_max": "29000000\n",
+        "power2_label": "fastPPT\n",
+        "power2_cap": "16000000\n",
+        "power2_cap_min": "3000000\n",
+        "power2_cap_max": "30000000\n",
+    }.items():
+        _mk(os.path.join(chip, name), value)
+    os.chmod(os.path.join(chip, "power2_cap"), 0o444)
+
+    deck = sysfs_snapshot(root=root)["hwmon"][0]["ppt_nodes"]
+
+    assert deck["power1_label"] == {"value": "slowPPT", "writable": True}
+    assert deck["power1_cap_max"] == {"value": "29000000", "writable": True}
+    assert deck["power2_cap"] == {"value": "16000000", "writable": False}
 
 
 def test_sysfs_snapshot_firmware_attributes(tmp_path):
@@ -413,6 +448,28 @@ def test_sysfs_snapshot_captures_cpu_gpu_and_rapl_selection_surfaces(tmp_path):
         "name": "package-0",
         "pl1_uw": "20000000",
         "pl2_uw": "31000000",
+    }]
+
+
+def test_sysfs_snapshot_captures_amdgpu_od_range_and_write_permissions(tmp_path):
+    root = str(tmp_path)
+    device = os.path.join(root, "sys/class/drm/card0/device")
+    od = os.path.join(device, "pp_od_clk_voltage")
+    level = os.path.join(device, "power_dpm_force_performance_level")
+    _mk(od, "OD_SCLK:\n0: 800Mhz\n1: 2000Mhz\nOD_RANGE:\nSCLK: 200Mhz 2700Mhz\n")
+    _mk(level, "auto\n")
+    os.chmod(level, 0o444)
+
+    gpu = sysfs_snapshot(root=root)["cpu_gpu_power"]["gpu"]
+
+    assert gpu == [{
+        "backend": "amdgpu",
+        "card": "card0",
+        "overdrive_present": True,
+        "overdrive_writable": True,
+        "performance_level": "auto",
+        "performance_level_writable": False,
+        "od_range": {"min_mhz": "200", "max_mhz": "2700"},
     }]
 
 

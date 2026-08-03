@@ -51,7 +51,7 @@ class _GpuDiagnostics:
     def _record(self, action, requested, ok, reason=""):
         try:
             applied = self.get()
-        except Exception:  # noqa: BLE001 - diagnostics must not mask the operation
+        except Exception:  # noqa: BLE001
             applied = None
         self._last_operation = {
             "action": action,
@@ -98,6 +98,12 @@ class NullGpuClock(_GpuDiagnostics):
     def set_auto(self):
         return False
 
+    def capture_state(self):
+        return None
+
+    def restore_state(self, state):
+        return False
+
 
 class AmdGpuClock(_GpuDiagnostics):
     backend = "amdgpu"
@@ -106,12 +112,24 @@ class AmdGpuClock(_GpuDiagnostics):
         self._last_operation = None
         self._od = None
         self._level = None
-        for od in glob.glob(os.path.join(root, _DRM, "card[0-9]*", "device", "pp_od_clk_voltage")):
-            if parse_od_range(read_str(od)) is not None:
+        for od in sorted(glob.glob(
+            os.path.join(root, _DRM, "card[0-9]*", "device", "pp_od_clk_voltage")
+        )):
+            level = os.path.join(
+                os.path.dirname(od), "power_dpm_force_performance_level"
+            )
+            contents = read_str(od)
+            if (
+                parse_od_range(contents) is not None
+                and parse_od_sclk(contents) is not None
+                and read_str(level) is not None
+                and os.access(od, os.W_OK)
+                and os.access(level, os.W_OK)
+            ):
                 self._od = od
-                self._level = os.path.join(os.path.dirname(od), "power_dpm_force_performance_level")
+                self._level = level
                 break
-        self.supported = self._od is not None and read_str(self._level) is not None
+        self.supported = self._od is not None
 
     def get_range(self):
         return parse_od_range(read_str(self._od)) if self.supported else None
@@ -119,31 +137,108 @@ class AmdGpuClock(_GpuDiagnostics):
     def get(self):
         return parse_od_sclk(read_str(self._od)) if self.supported else None
 
+    def capture_state(self):
+        if not self.supported:
+            return None
+        level = read_str(self._level)
+        window = self.get()
+        if level is None or window is None:
+            return None
+        return {"level": level, "window": window}
+
+    def restore_state(self, state):
+        if not isinstance(state, dict):
+            return False
+        window = state.get("window")
+        if (
+            state.get("level") is None
+            or not isinstance(window, (list, tuple))
+            or len(window) != 2
+        ):
+            return False
+        return self._restore(state["level"], tuple(window))
+
     def set(self, min_mhz, max_mhz):
         if not self.supported:
             self._record("manual", (min_mhz, max_mhz), False, "unsupported")
             return False
+        previous_level = read_str(self._level)
+        previous_window = self.get()
         try:
-            write_str(self._level, "manual")
-            for cmd in sclk_commands(min_mhz, max_mhz):
+            requested = (int(min_mhz), int(max_mhz))
+            wrote = write_str(self._level, "manual") and all(
                 write_str(self._od, cmd)
-            ok = read_str(self._level) == "manual"
-            self._record("manual", (min_mhz, max_mhz), ok,
-                         "" if ok else "readback_mismatch")
-            return ok
+                for cmd in sclk_commands(*requested)
+            )
+            if wrote and read_str(self._level) == "manual" and self.get() == requested:
+                self._record("manual", requested, True)
+                return True
+            reason = "write_failed" if not wrote else "readback_mismatch"
         except Exception as exc:  # noqa: BLE001
-            self._record("manual", (min_mhz, max_mhz), False, type(exc).__name__)
-            return False
+            requested = (min_mhz, max_mhz)
+            reason = type(exc).__name__
+        if not self._restore(previous_level, previous_window):
+            reason = f"{reason}_rollback_failed"
+        self._record("manual", requested, False, reason)
+        return False
+
+    def _restore(self, level, window):
+        if level == "manual" and window is not None:
+            restored = write_str(self._level, "manual") and all(
+                write_str(self._od, cmd) for cmd in sclk_commands(*window)
+            )
+            if restored and read_str(self._level) == "manual" and self.get() == window:
+                return True
+        elif level is not None:
+            reset = write_str(self._od, "r")
+            restored_window = reset
+            if reset and window is not None and self.get() != window:
+                restored_window = write_str(self._level, "manual") and all(
+                    write_str(self._od, cmd) for cmd in sclk_commands(*window)
+                ) and self.get() == window
+            restored_level = write_str(self._level, level)
+            if (
+                restored_window
+                and restored_level
+                and read_str(self._level) == level
+                and (window is None or self.get() == window)
+            ):
+                return True
+        reset = write_str(self._od, "r")
+        released = write_str(self._level, "auto")
+        return (
+            reset
+            and released
+            and read_str(self._level) == "auto"
+            and self.get() == self.get_range()
+        )
 
     def set_auto(self):
         if not self.supported:
             self._record("auto", None, False, "unsupported")
             return False
         try:
-            write_str(self._level, "auto")
-            ok = read_str(self._level) == "auto"
-            self._record("auto", self.get_range(), ok,
-                         "" if ok else "readback_mismatch")
+            target = self.get_range()
+            reset = write_str(self._od, "r")
+            released = write_str(self._level, "auto")
+            applied = self.get()
+            ok = (
+                target is not None
+                and reset
+                and released
+                and read_str(self._level) == "auto"
+                and applied == target
+            )
+            self._record("auto", target, ok,
+                         "" if ok else (
+                             "reset_failed" if not reset else (
+                                 "write_failed" if not released else (
+                                     "readback_mismatch"
+                                     if read_str(self._level) != "auto"
+                                     else "reset_mismatch"
+                                 )
+                             )
+                         ))
             return ok
         except Exception as exc:  # noqa: BLE001
             self._record("auto", None, False, type(exc).__name__)
@@ -182,6 +277,18 @@ class _FreqPairClock(_GpuDiagnostics):
         lo, hi = read_int(self._min), read_int(self._max)
         return (lo, hi) if lo is not None and hi is not None else None
 
+    def capture_state(self):
+        window = self.get()
+        return {"window": window} if window is not None else None
+
+    def restore_state(self, state):
+        if not isinstance(state, dict):
+            return False
+        window = state.get("window")
+        if not isinstance(window, (list, tuple)) or len(window) != 2:
+            return False
+        return self.set(int(window[0]), int(window[1])) and self.get() == tuple(window)
+
     def set(self, min_mhz, max_mhz):
         if not self.supported:
             self._record("manual", (min_mhz, max_mhz), False, "unsupported")
@@ -212,8 +319,6 @@ class _FreqPairClock(_GpuDiagnostics):
             return False
 
     def _write_window(self, lo, hi, current):
-        # The driver enforces min <= max at each write. Raise max first when the new
-        # minimum is above the current ceiling; otherwise lower min first.
         writes = (
             ((self._max, hi), (self._min, lo))
             if lo > current[1]
@@ -240,31 +345,39 @@ class IntelGpuClock(_FreqPairClock):
 
     def __init__(self, root="/"):
         self._last_operation = None
+        self._min = self._max = self._rpn = self._rp0 = None
         for maxp in sorted(glob.glob(os.path.join(root, _DRM, "card[0-9]*", "gt_max_freq_mhz"))):
             d = os.path.dirname(maxp)
             self._min = os.path.join(d, "gt_min_freq_mhz")
             self._max = maxp
             self._rpn = os.path.join(d, "gt_RPn_freq_mhz")
             self._rp0 = os.path.join(d, "gt_RP0_freq_mhz")
-            break
+            if self.supported:
+                break
 
 
 class XeGpuClock(_FreqPairClock):
-    """xe (Lunar Lake / MSI Claw): card*/device/tile*/gt*/freq0/{min,max,rpn,rp0}_freq.
-    Targets gt0 (the render GT) — the sorted glob puts gt0 before gt1."""
+    """xe (Lunar Lake / MSI Claw): card*/device/tile*/gt0/freq0 frequency nodes.
+
+    Only gt0 is eligible because gt1 may be a media GT rather than the render GPU.
+    """
 
     backend = "xe"
 
     def __init__(self, root="/"):
         self._last_operation = None
-        pattern = os.path.join(root, _DRM, "card[0-9]*", "device", "tile*", "gt*", "freq0", "max_freq")
+        self._min = self._max = self._rpn = self._rp0 = None
+        pattern = os.path.join(
+            root, _DRM, "card[0-9]*", "device", "tile*", "gt0", "freq0", "max_freq"
+        )
         for maxp in sorted(glob.glob(pattern)):
             d = os.path.dirname(maxp)
             self._min = os.path.join(d, "min_freq")
             self._max = maxp
             self._rpn = os.path.join(d, "rpn_freq")
             self._rp0 = os.path.join(d, "rp0_freq")
-            break
+            if self.supported:
+                break
 
 
 def select_gpu_clock(device, root="/"):

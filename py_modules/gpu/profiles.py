@@ -9,7 +9,7 @@ def _clean_clock(raw):
         maximum = int(raw.get("max"))
     except (TypeError, ValueError, OverflowError):
         return {"manual": False, "min": None, "max": None}
-    if minimum < 0 or maximum < minimum:
+    if minimum <= 0 or maximum < minimum:
         return {"manual": False, "min": None, "max": None}
     return {"manual": True, "min": minimum, "max": maximum}
 

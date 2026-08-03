@@ -10,6 +10,11 @@ from tdp.types import RailReading, TdpLimits, TdpObservation, TdpResult
 
 _HWMON = "sys/class/hwmon"
 _DECK_KEYS = {"steam_deck_lcd", "steam_deck_oled"}
+_DECK_HWMON_NAMES = {"amdgpu", "steamdeck_hwmon", "jupiter"}
+_SLOW_COMMAND_RANGE = (3, 29)
+_FAST_COMMAND_RANGE = (3, 30)
+_SLOW_RESTORE_RANGE = (0, 29)
+_FAST_RESTORE_RANGE = (0, 30)
 
 
 @dataclass(frozen=True)
@@ -43,27 +48,33 @@ class SteamDeckHwmonBackend(TDPBackend):
         self.supported = surface is not None
         self.supports_levels = bool(self.ppt_capability()["supported"])
 
-    def _discover(self):
+    def _surfaces(self):
         if self._device_key not in _DECK_KEYS:
-            return None
+            return []
+        surfaces = []
         for directory in sorted(glob.glob(os.path.join(self._root, _HWMON, "hwmon*"))):
-            if read_str(os.path.join(directory, "name")) != "amdgpu":
+            if read_str(os.path.join(directory, "name")) not in _DECK_HWMON_NAMES:
                 continue
             slow = os.path.join(directory, "power1_cap")
             if read_int(slow) is None or not os.access(slow, os.W_OK):
                 continue
             fast = os.path.join(directory, "power2_cap")
-            return {
+            surfaces.append({
                 "directory": directory,
                 "slow": slow,
                 "fast": fast if read_int(fast) is not None and os.access(fast, os.W_OK) else None,
-            }
-        return None
+            })
+        return surfaces
 
-    def _capability(self):
-        surface = self._discover()
-        if surface is None:
-            return None, "surface_missing"
+    def _discover(self):
+        surfaces = self._surfaces()
+        for surface in surfaces:
+            capability, _ = self._surface_capability(surface)
+            if capability is not None:
+                return surface
+        return surfaces[0] if surfaces else None
+
+    def _surface_capability(self, surface):
         if surface["fast"] is None:
             return None, "fast_missing"
         directory = surface["directory"]
@@ -87,6 +98,12 @@ class SteamDeckHwmonBackend(TDPBackend):
             and 0 < slow_min <= slow_max
             and 0 < fast_min <= fast_max
         ):
+            slow_min = max(slow_min, _SLOW_COMMAND_RANGE[0])
+            slow_max = min(slow_max, _SLOW_COMMAND_RANGE[1])
+            fast_min = max(fast_min, _FAST_COMMAND_RANGE[0])
+            fast_max = min(fast_max, _FAST_COMMAND_RANGE[1])
+            if slow_min > slow_max or fast_min > fast_max:
+                return None, "bounds_outside_safe_envelope"
             return {
                 "surface": surface,
                 "source": "sysfs",
@@ -101,6 +118,18 @@ class SteamDeckHwmonBackend(TDPBackend):
                 "fast": {"min": self._fallback.min_w, "max": 30},
             }, None
         return None, "bounds_missing"
+
+    def _capability(self):
+        surfaces = self._surfaces()
+        if not surfaces:
+            return None, "surface_missing"
+        reason = "fast_missing"
+        for surface in surfaces:
+            capability, candidate_reason = self._surface_capability(surface)
+            if capability is not None:
+                return capability, None
+            reason = candidate_reason or reason
+        return None, reason
 
     def ppt_capability(self):
         capability, _ = self._capability()
@@ -141,7 +170,10 @@ class SteamDeckHwmonBackend(TDPBackend):
 
     def physical_levels(self, levels: dict) -> dict[str, int]:
         if levels.get("mode") == "estable":
-            return {"pl2": int(levels["pl1"])}
+            stable = {"pl2": int(levels["pl1"])}
+            if self.ppt_capability()["supported"]:
+                stable["pl3"] = int(levels["pl1"])
+            return stable
         return {"pl2": int(levels["pl2"]), "pl3": int(levels["pl3"])}
 
     def reconciliation_levels(self, levels: dict) -> dict[str, int]:
@@ -170,6 +202,22 @@ class SteamDeckHwmonBackend(TDPBackend):
     def capture_ppt(self):
         pair = self._read_pair()
         return dict(pair) if pair is not None else None
+
+    @staticmethod
+    def validate_ppt_snapshot(snapshot):
+        if not isinstance(snapshot, dict):
+            return False
+        slow = snapshot.get("slow")
+        fast = snapshot.get("fast")
+        return (
+            not isinstance(slow, bool)
+            and not isinstance(fast, bool)
+            and isinstance(slow, int)
+            and isinstance(fast, int)
+            and slow <= fast
+            and _SLOW_RESTORE_RANGE[0] <= slow <= _SLOW_RESTORE_RANGE[1]
+            and _FAST_RESTORE_RANGE[0] <= fast <= _FAST_RESTORE_RANGE[1]
+        )
 
     @staticmethod
     def _order(current, target):
@@ -236,7 +284,41 @@ class SteamDeckHwmonBackend(TDPBackend):
     def restore_ppt(self, snapshot) -> PptApplyResult:
         if not isinstance(snapshot, dict):
             return PptApplyResult(False, {}, {}, {"attempted": False, "ok": None}, "snapshot_invalid")
-        return self.apply_ppt(snapshot.get("slow"), snapshot.get("fast"))
+        requested = {"slow": snapshot.get("slow"), "fast": snapshot.get("fast")}
+        if not self.validate_ppt_snapshot(snapshot):
+            return PptApplyResult(
+                False, requested, {}, {"attempted": False, "ok": None},
+                "snapshot_invalid",
+            )
+        surface = self._discover()
+        if surface is None or surface["fast"] is None:
+            return PptApplyResult(
+                False, requested, {}, {"attempted": False, "ok": None},
+                "surface_missing",
+            )
+        current = self._read_pair(surface)
+        if current is None:
+            return PptApplyResult(
+                False, requested, {}, {"attempted": False, "ok": None},
+                "read_failed",
+            )
+        failures = self._write_pair(surface, current, requested)
+        applied = self._read_pair(surface) or {}
+        failure = f"write_{failures[0]}" if failures else None
+        if failure is None and applied != requested:
+            failure = "readback_mismatch"
+        if failure is not None:
+            rollback_ok = self._rollback(surface, applied or current, current)
+            return PptApplyResult(
+                False,
+                requested,
+                self._read_pair(surface) or {},
+                {"attempted": True, "ok": rollback_ok},
+                failure if rollback_ok else "rollback_failed",
+            )
+        return PptApplyResult(
+            True, requested, applied, {"attempted": False, "ok": None}, None
+        )
 
     def set_tdp(self, watts: int, ac: bool) -> TdpResult:
         surface = self._discover()

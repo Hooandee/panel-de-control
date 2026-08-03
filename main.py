@@ -4,7 +4,7 @@ import json
 import os
 import time
 from collections import deque
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from dataclasses import asdict, dataclass
 from datetime import datetime
 
@@ -97,6 +97,8 @@ _AUTO_WINDOW = 10
 # to re-apply the per-route curve with the QAM closed.
 _AUDIO_POLL_S = 4
 _NIGHT_TICK_S = 30  # how often the night-mode clock checks for a schedule-edge crossing
+_SHUTDOWN_DRAIN_TIMEOUT_S = 12.0
+_RPC_CONTEXT_UNSET = object()
 
 # "custom" = our TDP owns the rails, vs a named platform_profile mode.
 _CUSTOM_MODE = "custom"
@@ -169,6 +171,8 @@ DEFAULTS = {
     "gpu_clock_manual": False,
     "gpu_clock_min": None,
     "gpu_clock_max": None,
+    "gpu_handoff_pending": False,
+    "cpu_frequency_handoff": None,
     # Download mode (low power while a game downloads unattended): TDP→min, boost
     # off, ambient screen dim. `eco_brightness` = the pre-eco brightness % to wake
     # back to. Both restored/derived on exit; eco_enabled is a pure override.
@@ -242,9 +246,6 @@ class Plugin:
         self._gpu_profiles = GpuProfileStore(
             os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "gpu_profiles.json")
         )
-        # GPU frequency now belongs to Sistema. Preserve an explicit manual window
-        # even when the old Potencia master was off; that switch owns only TDP after
-        # this migration, while Sistema provides the visible control and handoff.
         if not self._settings.get("_gpu_scope_migrated"):
             legacy_global = self._tdp_profiles.gpu_clock(None)
             if legacy_global.get("manual"):
@@ -388,7 +389,7 @@ class Plugin:
         self._smt = SmtControl()
         self._boost = select_boost()
         self._cores = CoreControl()
-        self._cpu_frequency = select_cpu_frequency()
+        self._cpu_frequency = self._build_cpu_frequency_control()
         self._cpu_coordinator = CpuCoordinator(
             self._cores, self._smt, self._boost, self._cpu_frequency
         )
@@ -419,7 +420,7 @@ class Plugin:
         self._gpu_reapply_pending = False
         self._gpu_mutation_lock = asyncio.Lock()
         self._gpu_shutdown = False
-        self._gpu_owned = False
+        self._gpu_owned = bool(self._settings.get("gpu_handoff_pending"))
         self._gpu_releasing = False
         self._gpu_manual_inflight = 0
         self._reapply_generation = 0
@@ -458,6 +459,8 @@ class Plugin:
         self._audio_task = None
         self._audio_route_last = None
         self._audio_shutdown = False
+        self._shutting_down = False
+        self._offload_futures = set()
         self._audio_apply_failures = 0
         self._audio_last_apply = None
         self._test_sample = None
@@ -580,6 +583,13 @@ class Plugin:
             self._settings["disabled_modules"] = sorted(cur)
         else:
             return {"disabled": self._user_disabled_all()}  # unknown id → no-op
+        release_requested = (
+            dict(targets.requested)
+            if module_id == "power"
+            and disabled
+            and (targets := getattr(self, "_tdp_targets", None)) is not None
+            else {}
+        )
         self._save()
         self._reapply_all()   # already dispatches its subprocess work off-loop
         # Turning the power module off = stepping aside; hand HHD's TDP back, same
@@ -587,7 +597,25 @@ class Plugin:
         if module_id == "system" and disabled:
             await self._release_gpu_clock("module-disabled")
         if module_id == "power" and disabled:
-            await self._offload_call(self._restore_power_handoff)
+            released = bool(
+                await self._offload_call(self._restore_power_handoff)
+            )
+            if hasattr(self, "_tdp_backend"):
+                self._tdp_observation = await self._offload_call(
+                    self._observe_tdp_sync
+                )
+                self._tdp_targets = None
+                self._tdp_status = "unverifiable" if released else "rejected"
+                self._tdp_reason = "module_disabled" if released else "release_failed"
+                self._record_tdp_transition(
+                    (
+                        "module-disabled"
+                        if released
+                        else "module-disable-release-failed"
+                    ),
+                    action="release",
+                    requested=release_requested,
+                )
         self._sync_sampler()  # learning may have (un)gained a consumer
         return {"disabled": self._user_disabled_all()}
 
@@ -836,7 +864,8 @@ class Plugin:
 
     def _report_stores(self) -> dict:
         """The persisted JSON stores (settings + per-game profiles/curves + learned
-        telemetry). All bounded in size; telemetry self-caps at 50 games."""
+        telemetry). Private hardware recovery snapshots are excluded. All stores
+        are bounded in size; telemetry self-caps at 50 games."""
         base = decky.DECKY_PLUGIN_SETTINGS_DIR
 
         def _rj(name):
@@ -846,8 +875,10 @@ class Plugin:
             except Exception:  # noqa: BLE001
                 return None
 
+        report_settings = dict(self._settings)
+        report_settings.pop("cpu_frequency_handoff", None)
         return {
-            "settings": self._settings,
+            "settings": report_settings,
             "tdp_profiles": _rj("tdp_profiles.json"),
             "gpu_profiles": _rj("gpu_profiles.json"),
             "fan_curves": _rj("fan_curves.json"),
@@ -892,7 +923,7 @@ class Plugin:
         self._init()
         if appid is not None:
             appid = str(appid)
-            self._current_appid = appid  # pin so the re-apply/state use the toggled game
+            self._set_current_appid(appid)
             if not follow and not self._controller_backend.has_game(appid):
                 self._controller_backend.create_game_from_global(appid)  # already sets follow_global=False
             else:
@@ -1024,7 +1055,6 @@ class Plugin:
         out["hhd_present"] = hhd_present
         return out
 
-    # ---- Steam Deck PPT ownership ------------------------------------------
     def _steamdeck_ppt_supported(self) -> bool:
         capability = getattr(self._tdp_backend, "ppt_capability", None)
         if not callable(capability):
@@ -1053,7 +1083,7 @@ class Plugin:
             json.dumps(event, sort_keys=True, separators=(",", ":")),
         )
 
-    def _restore_steamdeck_ppt(self) -> bool:
+    def _restore_steamdeck_ppt(self, preserve_ownership=False) -> bool:
         marker = self._settings.get("steamdeck_ppt_previous")
         if marker is None:
             return True
@@ -1072,8 +1102,22 @@ class Plugin:
             self._steamdeck_ppt_recovery_blocked = True
             self._record_steamdeck_ppt("restore", False, result.reason or "restore_failed")
             return False
+        if preserve_ownership:
+            self._steamdeck_ppt_recovery_blocked = False
+            self._steamdeck_ppt_last_failure = None
+            self._record_steamdeck_ppt("restore", True)
+            return True
+        marker = dict(marker)
         self._settings["steamdeck_ppt_previous"] = None
-        self._save()
+        try:
+            self._save()
+        except Exception as error:  # noqa: BLE001
+            self._settings["steamdeck_ppt_previous"] = marker
+            self._steamdeck_ppt_recovery_blocked = True
+            self._record_steamdeck_ppt(
+                "restore", False, f"persist_{type(error).__name__}"
+            )
+            return False
         self._steamdeck_ppt_recovery_blocked = False
         self._steamdeck_ppt_last_failure = None
         self._record_steamdeck_ppt("restore", True)
@@ -1092,8 +1136,19 @@ class Plugin:
                 if not isinstance(snapshot, dict):
                     self._record_steamdeck_ppt("capture", False, "snapshot_unavailable")
                     return "snapshot_unavailable"
+                validate = getattr(self._tdp_backend, "validate_ppt_snapshot", None)
+                if not callable(validate) or not validate(snapshot):
+                    self._record_steamdeck_ppt("capture", False, "snapshot_invalid")
+                    return "snapshot_invalid"
                 self._settings["steamdeck_ppt_previous"] = dict(snapshot)
-                self._save()
+                try:
+                    self._save()
+                except Exception as error:  # noqa: BLE001
+                    self._settings["steamdeck_ppt_previous"] = None
+                    self._steamdeck_ppt_recovery_blocked = True
+                    reason = f"snapshot_persist_{type(error).__name__}"
+                    self._record_steamdeck_ppt("capture", False, reason)
+                    return reason
                 self._record_steamdeck_ppt("capture", True)
             return None
         if self._settings.get("steamdeck_ppt_previous") is not None:
@@ -1102,11 +1157,19 @@ class Plugin:
                 return failure.get("reason", "restore_failed")
         return None
 
-    def _restore_power_handoff(self) -> bool:
-        if not self._restore_steamdeck_ppt():
+    def _restore_power_handoff(self, preserve_ownership=False) -> bool:
+        ppt_released = (
+            self._restore_steamdeck_ppt(preserve_ownership=True)
+            if preserve_ownership
+            else self._restore_steamdeck_ppt()
+        )
+        if not ppt_released:
             return False
-        self._restore_hhd_tdp()
-        return True
+        return (
+            self._restore_hhd_tdp(preserve_ownership=True)
+            if preserve_ownership
+            else self._restore_hhd_tdp()
+        )
 
     # ---- TDP conflict + master switch --------------------------------------
     async def get_tdp_conflict(self) -> dict:
@@ -1138,25 +1201,34 @@ class Plugin:
             return {"ok": False, "hhd_managing": False}
         if prev and self._settings.get("hhd_tdp_prev") is None:
             self._settings["hhd_tdp_prev"] = True
+            try:
+                self._save()
+            except Exception:  # noqa: BLE001
+                self._settings["hhd_tdp_prev"] = None
+                return {"ok": False, "hhd_managing": True}
         applied = await self._offload_call(lambda: controller_hhd.set_tdp_enable(False))
-        self._save()
+        if applied is not False:
+            return {"ok": False, "hhd_managing": bool(applied)}
         await self._apply_tdp_now("take-control")
-        return {"ok": applied is False, "hhd_managing": bool(applied)}
+        return {"ok": True, "hhd_managing": False}
 
-    def _restore_hhd_tdp(self) -> None:
+    def _restore_hhd_tdp(self, preserve_ownership=False) -> bool:
         """Return HHD to its previous tdp_enable if we took it. Idempotent. Clears the
         marker only once the write confirms, so a failed hand-back is retried later."""
         try:
             prev = self._settings.get("hhd_tdp_prev")
             if prev is None:
-                return
+                return True
             echoed = controller_hhd.set_tdp_enable(bool(prev))
             if echoed != bool(prev):
-                return  # unreachable/mismatch → keep the marker to retry
+                return False
+            if preserve_ownership:
+                return True
             self._settings["hhd_tdp_prev"] = None
             self._save()
+            return True
         except Exception:  # noqa: BLE001
-            pass
+            return False
 
     async def get_tdp_control_enabled(self) -> bool:
         self._init()
@@ -1176,15 +1248,21 @@ class Plugin:
                 else {}
             )
             self._advance_tdp_generation()
-            await self._offload_call(self._restore_power_handoff)
+            released = bool(
+                await self._offload_call(self._restore_power_handoff)
+            )
             self._tdp_observation = await self._offload_call(
                 self._observe_tdp_sync
             )
             self._tdp_targets = None
-            self._tdp_status = "unverifiable"
-            self._tdp_reason = "control_disabled"
+            self._tdp_status = "unverifiable" if released else "rejected"
+            self._tdp_reason = "control_disabled" if released else "release_failed"
             self._record_tdp_transition(
-                "control-disabled",
+                (
+                    "control-disabled"
+                    if released
+                    else "control-disable-release-failed"
+                ),
                 action="release",
                 requested=requested,
             )
@@ -1452,7 +1530,7 @@ class Plugin:
         self._init()
         if appid is not None:
             appid = str(appid)
-            self._current_appid = appid  # pin so the re-apply/state use the toggled game
+            self._set_current_appid(appid)
             if not follow and not self._fan_curves.has_game(appid):
                 self._fan_curves.create_game_from_global(appid)
             self._fan_curves.set_follow_global(appid, bool(follow))
@@ -1975,8 +2053,16 @@ class Plugin:
             "ownership": self._tdp_ownership_state(observation),
         }
 
-    async def set_auto_tdp(self, enabled: bool, scope: str = "global", appid=None) -> dict:
+    async def set_auto_tdp(
+        self, enabled: bool, scope: str = "global", appid=None,
+        context_appid=_RPC_CONTEXT_UNSET,
+    ) -> dict:
         self._init()
+        if (
+            context_appid is not _RPC_CONTEXT_UNSET
+            and not self._scope_context_is_current(scope, appid, context_appid)
+        ):
+            return {"auto_tdp": self._tdp_profiles.auto_tdp(self._current_appid)}
         if not self._tdp_control_on():
             return {"auto_tdp": self._tdp_profiles.auto_tdp(self._current_appid)}
         self._clear_eco()
@@ -2110,6 +2196,23 @@ class Plugin:
     # drives the auto-TDP loop + every QAM RPC. The single-worker executor (created
     # in _main) serialises applies → no race on shared state (e.g. the color LUT
     # file). No executor / no loop (unit tests) → run inline (behaviour preserved).
+    def _ensure_apply_executor(self):
+        executor = getattr(self, "_apply_executor", None)
+        if executor is None:
+            if getattr(self, "_shutting_down", False):
+                raise RuntimeError("plugin_shutting_down")
+            executor = ThreadPoolExecutor(max_workers=1)
+            self._apply_executor = executor
+        return executor
+
+    def _submit_offloaded(self, executor, fn):
+        future = executor.submit(fn)
+        tracked = getattr(self, "_offload_futures", None)
+        if tracked is not None:
+            tracked.add(future)
+            future.add_done_callback(tracked.discard)
+        return future
+
     def _offload(self, fn, done=None):
         """Fire-and-forget a blocking apply off the event loop. Guards fn on both
         paths so a raise can't kill the caller nor leak an unretrieved-future log.
@@ -2118,13 +2221,20 @@ class Plugin:
         work that depends on state fn just set (e.g. a re-assert loop that needs the
         apply to have taken fan ownership first), race-free. It must be safe to run
         on the loop; it is guarded like fn."""
+        if getattr(self, "_shutting_down", False):
+            return
+
         def guarded():
+            if getattr(self, "_shutting_down", False):
+                return
             try:
                 fn()
             except Exception:  # noqa: BLE001
                 pass
 
         def run_done(*_):
+            if getattr(self, "_shutting_down", False):
+                return
             try:
                 done()
             except Exception:  # noqa: BLE001
@@ -2135,12 +2245,15 @@ class Plugin:
             loop = asyncio.get_running_loop()
         except RuntimeError:
             loop = None
-        if ex is None or loop is None:
+        if loop is None:
             guarded()
             if done is not None:
                 run_done()
         else:
-            fut = loop.run_in_executor(ex, guarded)
+            ex = self._ensure_apply_executor()
+            fut = asyncio.wrap_future(
+                self._submit_offloaded(ex, guarded), loop=loop
+            )
             if done is not None:
                 fut.add_done_callback(run_done)
 
@@ -2149,10 +2262,21 @@ class Plugin:
         Falls back to a default worker thread when the serial executor isn't up yet
         (before _main / after shutdown) so blocking work — systemctl, EC writes — never
         lands on the loop."""
+        if getattr(self, "_shutting_down", False):
+            raise RuntimeError("plugin_shutting_down")
         ex = getattr(self, "_apply_executor", None)
         if ex is None:
-            return await asyncio.to_thread(fn)
-        return await asyncio.get_running_loop().run_in_executor(ex, fn)
+            ex = self._ensure_apply_executor()
+        loop = asyncio.get_running_loop()
+
+        def guarded_call():
+            if getattr(self, "_shutting_down", False):
+                raise RuntimeError("plugin_shutting_down")
+            return fn()
+
+        return await asyncio.wrap_future(
+            self._submit_offloaded(ex, guarded_call), loop=loop
+        )
 
     async def _drain_offloaded(self):
         """Wait for the queued off-loop applies to finish (a no-op runs after them on
@@ -2161,12 +2285,27 @@ class Plugin:
         ex = getattr(self, "_apply_executor", None)
         if ex is None:
             return
-        await asyncio.get_running_loop().run_in_executor(ex, lambda: None)
+        loop = asyncio.get_running_loop()
+        await asyncio.wrap_future(
+            self._submit_offloaded(ex, lambda: None), loop=loop
+        )
 
-    def _drain_offloaded_sync(self) -> None:
+    def _cancel_queued_offloads(self) -> None:
+        for future in tuple(getattr(self, "_offload_futures", ())):
+            if not future.running():
+                future.cancel()
+
+    def _drain_offloaded_sync(self, timeout_s=None) -> bool:
         ex = getattr(self, "_apply_executor", None)
-        if ex is not None:
-            ex.submit(lambda: None).result()
+        if ex is None:
+            return True
+        try:
+            ex.submit(lambda: None).result(timeout=timeout_s)
+            return True
+        except FutureTimeoutError:
+            return False
+        except Exception:  # noqa: BLE001
+            return False
 
     def _firmware_choices(self) -> list:
         """Firmware performance modes the device exposes, or [] when it has none."""
@@ -2794,7 +2933,7 @@ class Plugin:
     def _record_charge_limit_apply(self, action, requested, ok, attempts) -> None:
         try:
             readback = self._charge_limit.get()
-        except Exception:  # noqa: BLE001 - diagnostics cannot break the apply path
+        except Exception:  # noqa: BLE001
             readback = None
         event = {
             "action": action,
@@ -2903,7 +3042,21 @@ class Plugin:
         battery["ac_online"] = read_on_ac()
         return {"battery": battery, "charge_limit": self._charge_limit_state()}
 
-    # ---- CPU ---------------------------------------------------------------
+    def _build_cpu_frequency_control(self):
+        return select_cpu_frequency(
+            persisted_state=self._settings.get("cpu_frequency_handoff"),
+            persist_state=self._persist_cpu_frequency_state,
+        )
+
+    def _persist_cpu_frequency_state(self, state) -> None:
+        previous = copy.deepcopy(self._settings.get("cpu_frequency_handoff"))
+        self._settings["cpu_frequency_handoff"] = copy.deepcopy(state)
+        try:
+            self._save()
+        except Exception:
+            self._settings["cpu_frequency_handoff"] = previous
+            raise
+
     def _cpu_intent(self) -> dict:
         profiles = getattr(self, "_cpu_profiles", None)
         if profiles is not None:
@@ -2918,6 +3071,14 @@ class Plugin:
     def _ensure_cpu_coordinator(self):
         if not hasattr(self, "_cpu_frequency"):
             self._cpu_frequency = NullCpuFrequency()
+        if not getattr(self._cpu_frequency, "supported", False):
+            try:
+                recovered = self._build_cpu_frequency_control()
+            except Exception:  # noqa: BLE001
+                recovered = None
+            if recovered is not None and recovered.supported:
+                self._cpu_frequency = recovered
+                self._cpu_recovery_reapply_pending = True
         coordinator = getattr(self, "_cpu_coordinator", None)
         controls = (self._cores, self._smt, self._boost, self._cpu_frequency)
         if coordinator is None or getattr(coordinator, "_controls_identity", None) != tuple(
@@ -2963,14 +3124,28 @@ class Plugin:
         log = decky.logger.info if result.ok else decky.logger.warning
         log("CPU transition %s", json.dumps(event, sort_keys=True, separators=(",", ":")))
 
-    def _run_cpu_apply(self, intent, generation, enabled=None):
+    def _run_cpu_apply(
+        self, intent, generation, enabled=None,
+        preserve_frequency_ownership=False,
+    ):
+        if generation != getattr(self, "_cpu_generation", 0):
+            return CpuCoordinatorResult(
+                False,
+                "rejected",
+                generation,
+                {"attempted": False, "ok": None},
+                "stale_generation",
+            )
         if enabled is None:
             enabled = self._module_enabled("system")
-        return self._ensure_cpu_coordinator().apply(
+        coordinator = self._ensure_cpu_coordinator()
+        self._cpu_recovery_reapply_pending = False
+        return coordinator.apply(
             intent,
             generation,
             enabled=bool(enabled),
             eco=bool(self._settings.get("eco_enabled", False)),
+            preserve_frequency_ownership=preserve_frequency_ownership,
         )
 
     async def _apply_cpu_awaited(self, intent=None, enabled=None, trigger="rpc"):
@@ -2992,7 +3167,11 @@ class Plugin:
                     enabled=False,
                     trigger=f"{trigger}-{attempt}",
                 )
-                if result.ok:
+                recovery_pending = (
+                    self._settings.get("cpu_frequency_handoff") is not None
+                    and not self._cpu_frequency.supported
+                )
+                if result.ok and not recovery_pending:
                     return True
         decky.logger.error(
             "CPU handoff failed after retries trigger=%s error=%s",
@@ -3001,16 +3180,23 @@ class Plugin:
         )
         return False
 
-    def _release_cpu_controls_sync(self, trigger) -> bool:
+    def _release_cpu_controls_sync(
+        self, trigger, preserve_frequency_ownership=False
+    ) -> bool:
         self._init()
         result = None
         for attempt in range(1, 4):
             generation = self._next_cpu_generation()
             result = self._run_cpu_apply(
-                self._cpu_intent(), generation, enabled=False
+                self._cpu_intent(), generation, enabled=False,
+                preserve_frequency_ownership=preserve_frequency_ownership,
             )
             self._record_cpu_result(result, f"{trigger}-{attempt}")
-            if result.ok:
+            recovery_pending = (
+                self._settings.get("cpu_frequency_handoff") is not None
+                and not self._cpu_frequency.supported
+            )
+            if result.ok and not recovery_pending:
                 return True
         decky.logger.error(
             "CPU handoff failed after retries trigger=%s error=%s",
@@ -3074,11 +3260,18 @@ class Plugin:
         return self._eco_state()
 
     def _cpu_state(self) -> dict:
+        self._ensure_cpu_coordinator()
+        if (
+            getattr(self, "_cpu_recovery_reapply_pending", False)
+            and not getattr(self, "_cpu_shutdown", False)
+        ):
+            self._cpu_recovery_reapply_pending = False
+            self._apply_cpu()
         info = self._cpu_info
         frequency_profile = self._cpu_profiles.effective(self._current_appid)["frequency"]
         try:
             frequency_diagnostics = self._cpu_frequency.diagnostics()
-        except Exception:  # noqa: BLE001 - diagnostics must not break the CPU card
+        except Exception:  # noqa: BLE001
             frequency_diagnostics = {
                 "supported": False,
                 "reason": "diagnostics_failed",
@@ -3149,7 +3342,6 @@ class Plugin:
             source = self._cpu_profiles.effective(None)
         elif scope == "game" and appid is not None:
             appid = str(appid)
-            self._current_appid = appid
             source = self._cpu_profiles.game_profile(appid) or self._cpu_profiles.effective(None)
         else:
             raise ValueError("invalid CPU profile scope")
@@ -3157,6 +3349,29 @@ class Plugin:
             **source,
             "frequency": dict(source["frequency"]),
         }
+
+    def _scope_context_is_current(self, scope, appid, context_appid) -> bool:
+        if context_appid is not _RPC_CONTEXT_UNSET:
+            context = str(context_appid) if context_appid is not None else None
+            if context != self._current_appid:
+                return False
+        return scope == "global" or (
+            scope == "game"
+            and appid is not None
+            and str(appid) == self._current_appid
+        )
+
+    def _set_current_appid(self, appid) -> None:
+        current = str(appid) if appid is not None else None
+        if current == getattr(self, "_current_appid", None):
+            return
+        self._current_appid = current
+        self._next_gpu_generation()
+
+    def _cpu_scope_is_current(
+        self, scope, appid, context_appid=_RPC_CONTEXT_UNSET
+    ) -> bool:
+        return self._scope_context_is_current(scope, appid, context_appid)
 
     def _exit_eco_for_cpu(self) -> None:
         if self._settings.get("eco_enabled"):
@@ -3183,11 +3398,16 @@ class Plugin:
         )
         self._record_cpu_result(failure, trigger)
 
-    async def set_active_cores(self, count: int, scope: str = "global", appid=None) -> dict:
+    async def set_active_cores(
+        self, count: int, scope: str = "global", appid=None,
+        context_appid=_RPC_CONTEXT_UNSET,
+    ) -> dict:
         self._init()
         if self._cpu_shutdown:
             return self._cpu_state()
         async with self._cpu_mutation_lock:
+            if not self._cpu_scope_is_current(scope, appid, context_appid):
+                return self._cpu_state()
             self._cpu_profiles.set_cores(scope, int(count), appid=appid)
             intent = self._cpu_profile_candidate(scope, appid)
             self._exit_eco_for_cpu()
@@ -3203,7 +3423,8 @@ class Plugin:
         async with self._cpu_mutation_lock:
             if appid is not None:
                 appid = str(appid)
-                self._current_appid = appid
+                if not self._cpu_scope_is_current("game", appid):
+                    return self._cpu_state()
                 previous_intent = copy.deepcopy(
                     self._cpu_profiles.effective(appid)
                 )
@@ -3220,7 +3441,7 @@ class Plugin:
                             self._cpu_profiles.create_game_from_global(appid)
                         else:
                             self._cpu_profiles.set_follow_global(appid, bool(follow))
-                    except Exception as error:  # noqa: BLE001 - store boundary
+                    except Exception as error:  # noqa: BLE001
                         await self._rollback_cpu_store_failure(
                             previous_intent,
                             previous_data,
@@ -3230,12 +3451,15 @@ class Plugin:
         return self._cpu_state()
 
     async def set_cpu_frequency(
-        self, min_khz: int, max_khz: int, scope: str = "global", appid=None
+        self, min_khz: int, max_khz: int, scope: str = "global", appid=None,
+        context_appid=_RPC_CONTEXT_UNSET,
     ) -> dict:
         self._init()
         if self._cpu_shutdown:
             return self._cpu_state()
         async with self._cpu_mutation_lock:
+            if not self._cpu_scope_is_current(scope, appid, context_appid):
+                return self._cpu_state()
             intent = self._cpu_profile_candidate(scope, appid)
             previous_intent = copy.deepcopy(intent)
             previous_data = copy.deepcopy(self._cpu_profiles._data)
@@ -3252,7 +3476,7 @@ class Plugin:
                     self._cpu_profiles.set_frequency(
                         scope, frequency["min_khz"], frequency["max_khz"], appid=appid
                     )
-                except Exception as error:  # noqa: BLE001 - store boundary
+                except Exception as error:  # noqa: BLE001
                     await self._rollback_cpu_store_failure(
                         previous_intent,
                         previous_data,
@@ -3262,12 +3486,15 @@ class Plugin:
         return self._cpu_state()
 
     async def set_cpu_frequency_auto(
-        self, scope: str = "global", appid=None
+        self, scope: str = "global", appid=None,
+        context_appid=_RPC_CONTEXT_UNSET,
     ) -> dict:
         self._init()
         if self._cpu_shutdown:
             return self._cpu_state()
         async with self._cpu_mutation_lock:
+            if not self._cpu_scope_is_current(scope, appid, context_appid):
+                return self._cpu_state()
             intent = self._cpu_profile_candidate(scope, appid)
             previous_intent = copy.deepcopy(intent)
             previous_data = copy.deepcopy(self._cpu_profiles._data)
@@ -3280,7 +3507,7 @@ class Plugin:
             if result.ok and result.generation == self._cpu_generation:
                 try:
                     self._cpu_profiles.set_frequency_auto(scope, appid=appid)
-                except Exception as error:  # noqa: BLE001 - store boundary
+                except Exception as error:  # noqa: BLE001
                     await self._rollback_cpu_store_failure(
                         previous_intent,
                         previous_data,
@@ -3289,7 +3516,6 @@ class Plugin:
                     )
         return self._cpu_state()
 
-    # ---- GPU clock (Sistema) -----------------------------------------------
     def _gpu_scope_label(self, appid=None) -> str:
         current = self._current_appid if appid is None else appid
         if current is None:
@@ -3302,35 +3528,76 @@ class Plugin:
         self._gpu_generation = int(getattr(self, "_gpu_generation", 0)) + 1
         return self._gpu_generation
 
-    def _run_gpu_clock(self, requested, *, auto=False) -> dict:
-        generation = self._next_gpu_generation()
+    def _run_gpu_clock(
+        self, requested, *, auto=False, generation=None,
+        preserve_ownership=False,
+    ) -> dict:
+        generation = (
+            self._next_gpu_generation()
+            if generation is None
+            else int(generation)
+        )
         error_code = None
         error_type = None
+        marker_acquired = False
+        previous_applied = None
         try:
-            if not self._gpu_clock.supported:
+            if generation != self._gpu_generation:
+                ok = False
+                error_code = "stale_context"
+            elif not self._gpu_clock.supported:
                 ok = False
                 error_code = "unsupported"
             elif auto:
                 ok = bool(self._gpu_clock.set_auto())
                 if not ok:
                     error_code = "write_rejected"
+                elif not preserve_ownership:
+                    self._settings["gpu_handoff_pending"] = False
+                    try:
+                        self._save()
+                    except Exception as exc:  # noqa: BLE001
+                        self._settings["gpu_handoff_pending"] = True
+                        ok = False
+                        error_code = "handoff_marker_clear_failed"
+                        error_type = type(exc).__name__
             else:
                 lo, hi = int(requested["min_mhz"]), int(requested["max_mhz"])
-                wrote = bool(self._gpu_clock.set(lo, hi))
-                applied = self._gpu_clock.get()
-                ok = wrote and applied == (lo, hi)
-                if not wrote:
-                    error_code = "write_rejected"
-                elif applied != (lo, hi):
-                    error_code = "readback_mismatch"
-        except Exception as exc:  # noqa: BLE001 - hardware failure becomes state
+                previous_applied = self._gpu_clock.get()
+                if not self._settings.get("gpu_handoff_pending"):
+                    self._settings["gpu_handoff_pending"] = True
+                    try:
+                        self._save()
+                        marker_acquired = True
+                    except Exception as exc:  # noqa: BLE001
+                        self._settings["gpu_handoff_pending"] = False
+                        ok = False
+                        error_code = "handoff_marker_persist_failed"
+                        error_type = type(exc).__name__
+                if error_code is None:
+                    wrote = bool(self._gpu_clock.set(lo, hi))
+                    applied = self._gpu_clock.get()
+                    ok = wrote and applied == (lo, hi)
+                    if not wrote:
+                        error_code = "write_rejected"
+                    elif applied != (lo, hi):
+                        error_code = "readback_mismatch"
+        except Exception as exc:  # noqa: BLE001
             ok = False
             error_code = "exception"
             error_type = type(exc).__name__
         try:
             applied = self._gpu_clock.get()
-        except Exception:  # noqa: BLE001 - diagnostics cannot mask the result
+        except Exception:  # noqa: BLE001
             applied = None
+        if not auto and not ok and marker_acquired and applied == previous_applied:
+            self._settings["gpu_handoff_pending"] = False
+            try:
+                self._save()
+            except Exception as exc:  # noqa: BLE001
+                self._settings["gpu_handoff_pending"] = True
+                error_code = "handoff_marker_clear_failed"
+                error_type = type(exc).__name__
         return {
             "generation": generation,
             "requested": requested,
@@ -3342,14 +3609,19 @@ class Plugin:
             "status": "applied" if ok else ("unsupported" if error_code == "unsupported" else "rejected"),
             "error_code": error_code,
             "error_type": error_type,
+            "preserve_ownership": bool(preserve_ownership),
         }
 
     def _record_gpu_clock_transition(self, result, trigger, scope=None) -> None:
         if result["generation"] != getattr(self, "_gpu_generation", 0):
             return
         self._gpu_last_result = dict(result)
-        if result["ok"]:
+        if result["ok"] and result.get("preserve_ownership"):
+            self._gpu_owned = True
+        elif result["ok"]:
             self._gpu_owned = result["requested"].get("mode") == "manual"
+        elif self._settings.get("gpu_handoff_pending"):
+            self._gpu_owned = True
         if not result["ok"]:
             self._gpu_last_failure = dict(result)
         event = {
@@ -3383,15 +3655,18 @@ class Plugin:
                 self._next_gpu_generation()
             self._gpu_reapply_pending = True
             return
-        if not self._module_enabled("system"):
-            return
         try:
-            g = self._gpu_profiles.clock(self._current_appid)
+            system_enabled = self._module_enabled("system")
+            g = (
+                self._gpu_profiles.clock(self._current_appid)
+                if system_enabled
+                else {"manual": False, "min": None, "max": None}
+            )
             if not self._gpu_clock.supported:
                 return
             if not g.get("manual"):
                 if (
-                    (not self._gpu_owned and self._gpu_manual_inflight == 0)
+                    (not self._gpu_release_required() and self._gpu_manual_inflight == 0)
                     or self._gpu_releasing
                 ):
                     return
@@ -3452,10 +3727,18 @@ class Plugin:
         async with lock:
             return await self._release_gpu_clock_unlocked(trigger)
 
+    def _gpu_release_required(self) -> bool:
+        return bool(
+            getattr(self, "_gpu_owned", False)
+            or self._settings.get("gpu_handoff_pending", False)
+        )
+
     async def _release_gpu_clock_unlocked(self, trigger) -> bool:
+        if not self._gpu_release_required():
+            return True
         gpu_clock = getattr(self, "_gpu_clock", None)
         if gpu_clock is None or not gpu_clock.supported:
-            return True
+            return False
         requested = {"mode": "auto", "min_mhz": None, "max_mhz": None}
         self._gpu_requested = requested
         result = None
@@ -3473,16 +3756,22 @@ class Plugin:
         )
         return False
 
-    def _release_gpu_clock_sync(self, trigger) -> bool:
+    def _release_gpu_clock_sync(self, trigger, preserve_ownership=False) -> bool:
         self._init()
+        if not self._gpu_release_required():
+            return True
         gpu_clock = getattr(self, "_gpu_clock", None)
         if gpu_clock is None or not gpu_clock.supported:
-            return True
+            return False
         requested = {"mode": "auto", "min_mhz": None, "max_mhz": None}
         self._gpu_requested = requested
         result = None
         for attempt in range(1, 4):
-            result = self._run_gpu_clock(requested, auto=True)
+            result = self._run_gpu_clock(
+                requested,
+                auto=True,
+                preserve_ownership=preserve_ownership,
+            )
             self._record_gpu_clock_transition(result, f"{trigger}-{attempt}")
             if result["ok"]:
                 return True
@@ -3493,45 +3782,70 @@ class Plugin:
         )
         return False
 
+    def _capture_gpu_hardware_state(self):
+        capture = getattr(self._gpu_clock, "capture_state", None)
+        if not callable(capture):
+            return None
+        try:
+            return capture()
+        except Exception:  # noqa: BLE001
+            return None
+
     async def _rollback_gpu_store_failure(
-        self, requested, previous_profile, previous_data, error, trigger, scope
+        self, requested, previous_data, previous_hardware,
+        previous_marker, previous_owned, error, trigger, scope
     ) -> None:
         self._gpu_profiles._data = previous_data
-        previous_manual = (
-            bool(previous_profile.get("manual"))
-            and previous_profile.get("min") is not None
-            and previous_profile.get("max") is not None
-        )
-        rollback_requested = (
-            {
-                "mode": "manual",
-                "min_mhz": int(previous_profile["min"]),
-                "max_mhz": int(previous_profile["max"]),
-            }
-            if previous_manual
-            else {"mode": "auto", "min_mhz": None, "max_mhz": None}
-        )
-        rollback = await self._offload_call(
-            lambda: self._run_gpu_clock(
-                rollback_requested,
-                auto=not previous_manual,
-            )
-        )
+        restore = getattr(self._gpu_clock, "restore_state", None)
+        self._settings["gpu_handoff_pending"] = True
+        self._gpu_owned = True
+        conservative_marker_ready = requested.get("mode") == "manual"
+        if not conservative_marker_ready:
+            try:
+                self._save()
+                conservative_marker_ready = True
+            except Exception:  # noqa: BLE001
+                released = bool(
+                    await self._offload_call(self._gpu_clock.set_auto)
+                )
+                self._settings["gpu_handoff_pending"] = not released
+                self._gpu_owned = not released
+                rollback_ok = False
+        if conservative_marker_ready:
+            rollback_ok = bool(
+                await self._offload_call(lambda: restore(previous_hardware))
+            ) if callable(restore) else False
+            if rollback_ok:
+                self._settings["gpu_handoff_pending"] = bool(previous_marker)
+                self._gpu_owned = bool(previous_owned)
+                try:
+                    self._save()
+                except Exception:  # noqa: BLE001
+                    self._settings["gpu_handoff_pending"] = True
+                    self._gpu_owned = True
+                    rollback_ok = False
+        try:
+            applied = self._gpu_clock.get()
+        except Exception:  # noqa: BLE001
+            applied = None
         failure = {
-            "generation": rollback["generation"],
+            "generation": self._gpu_generation,
             "requested": requested,
-            "applied": rollback["applied"],
+            "applied": (
+                {"min_mhz": int(applied[0]), "max_mhz": int(applied[1])}
+                if applied else None
+            ),
             "ok": False,
             "status": "rejected",
             "error_code": (
-                "store_write_failed" if rollback["ok"]
+                "store_write_failed" if rollback_ok
                 else "store_write_failed_rollback_failed"
             ),
             "error_type": type(error).__name__,
             "rollback": {
-                "ok": rollback["ok"],
-                "status": rollback["status"],
-                "error_code": rollback["error_code"],
+                "ok": rollback_ok,
+                "status": "restored" if rollback_ok else "failed",
+                "error_code": None if rollback_ok else "hardware_or_marker_restore_failed",
             },
         }
         self._gpu_requested = requested
@@ -3604,6 +3918,8 @@ class Plugin:
                 "backend": raw_cpu.get("backend"),
                 "supported": bool(raw_cpu.get("supported")),
                 "reason": raw_cpu.get("reason"),
+                "durable_state_reason": raw_cpu.get("durable_state_reason"),
+                "handoff_pending": self._settings.get("cpu_frequency_handoff") is not None,
                 "epoch": raw_cpu.get("epoch"),
                 "requested": raw_cpu.get("requested"),
                 "owned": bool(raw_cpu.get("owned")),
@@ -3653,6 +3969,8 @@ class Plugin:
                     "reason": operation.get("reason"),
                 } if operation else None),
                 "selection": selection,
+                "owned": bool(getattr(self, "_gpu_owned", False)),
+                "handoff_pending": bool(self._settings.get("gpu_handoff_pending")),
                 "last_result": getattr(self, "_gpu_last_result", None),
                 "last_failure": getattr(self, "_gpu_last_failure", None),
                 "history": list(getattr(self, "_gpu_history", ())),
@@ -3671,6 +3989,7 @@ class Plugin:
                 "slow": capability.get("slow"),
                 "fast": capability.get("fast"),
                 "visual_max": capability.get("visual_max"),
+                "probe_reason": raw_ppt.get("ppt_reason"),
                 "requested": tdp_state.get("requested"),
                 "applied": tdp_state.get("applied"),
                 "status": tdp_state.get("status"),
@@ -3718,9 +4037,12 @@ class Plugin:
             if appid is None:
                 return self._gpu_clock_state()
             appid = str(appid)
-            self._current_appid = appid
-            previous_profile = copy.deepcopy(self._gpu_profiles.clock(appid))
+            if not self._scope_context_is_current("game", appid, appid):
+                return self._gpu_clock_state()
             previous_data = copy.deepcopy(self._gpu_profiles._data)
+            previous_hardware = self._capture_gpu_hardware_state()
+            previous_marker = bool(self._settings.get("gpu_handoff_pending"))
+            previous_owned = bool(getattr(self, "_gpu_owned", False))
             candidate = (
                 self._gpu_profiles.clock(None)
                 if follow
@@ -3741,6 +4063,7 @@ class Plugin:
                 else {"mode": "auto", "min_mhz": None, "max_mhz": None}
             )
             self._gpu_requested = requested
+            generation = self._next_gpu_generation()
             if self._gpu_rpc_pending == 0:
                 self._gpu_rpc_profile_snapshot = dict(
                     self._gpu_profiles.clock(self._current_appid)
@@ -3748,7 +4071,9 @@ class Plugin:
             self._gpu_rpc_pending += 1
             try:
                 result = await self._offload_call(
-                    lambda: self._run_gpu_clock(requested, auto=not manual)
+                    lambda: self._run_gpu_clock(
+                        requested, auto=not manual, generation=generation
+                    )
                 )
                 if result["ok"] and result["generation"] == self._gpu_generation:
                     try:
@@ -3756,11 +4081,13 @@ class Plugin:
                             self._gpu_profiles.create_game_from_global(appid)
                         else:
                             self._gpu_profiles.set_follow_global(appid, bool(follow))
-                    except Exception as error:  # noqa: BLE001 - store boundary
+                    except Exception as error:  # noqa: BLE001
                         await self._rollback_gpu_store_failure(
                             requested,
-                            previous_profile,
                             previous_data,
+                            previous_hardware,
+                            previous_marker,
+                            previous_owned,
                             error,
                             "scope_change_store",
                             "game_follow_global" if follow else "game_own",
@@ -3780,12 +4107,17 @@ class Plugin:
                         self._apply_gpu_clock()
         return self._gpu_clock_state()
 
-    async def set_gpu_clock(self, min_mhz: int, max_mhz: int, scope: str = "global", appid=None) -> dict:
+    async def set_gpu_clock(
+        self, min_mhz: int, max_mhz: int, scope: str = "global", appid=None,
+        context_appid=_RPC_CONTEXT_UNSET,
+    ) -> dict:
         self._init()
         if self._gpu_shutdown or not self._module_enabled("system"):
             return self._gpu_clock_state()
         async with self._gpu_mutation_lock:
             if self._gpu_shutdown or not self._module_enabled("system"):
+                return self._gpu_clock_state()
+            if not self._scope_context_is_current(scope, appid, context_appid):
                 return self._gpu_clock_state()
             return await self._set_gpu_clock_unlocked(min_mhz, max_mhz, scope, appid)
 
@@ -3793,29 +4125,34 @@ class Plugin:
         self, min_mhz: int, max_mhz: int, scope: str = "global", appid=None
     ) -> dict:
         self._init()
-        if scope == "game" and appid is not None:
-            self._current_appid = str(appid)
-        previous_profile = self._gpu_profiles.clock(self._current_appid)
         previous_data = copy.deepcopy(self._gpu_profiles._data)
+        previous_hardware = self._capture_gpu_hardware_state()
+        previous_marker = bool(self._settings.get("gpu_handoff_pending"))
+        previous_owned = bool(getattr(self, "_gpu_owned", False))
         requested = {"mode": "manual", "min_mhz": int(min_mhz), "max_mhz": int(max_mhz)}
         self._gpu_requested = requested
+        generation = self._next_gpu_generation()
         if self._gpu_rpc_pending == 0:
             self._gpu_rpc_profile_snapshot = dict(
                 self._gpu_profiles.clock(self._current_appid)
             )
         self._gpu_rpc_pending += 1
         try:
-            result = await self._offload_call(lambda: self._run_gpu_clock(requested))
+            result = await self._offload_call(
+                lambda: self._run_gpu_clock(requested, generation=generation)
+            )
             if result["ok"] and result["generation"] == self._gpu_generation:
                 try:
                     self._gpu_profiles.set_clock(
                         scope, True, int(min_mhz), int(max_mhz), appid=appid
                     )
-                except Exception as error:  # noqa: BLE001 - store boundary
+                except Exception as error:  # noqa: BLE001
                     await self._rollback_gpu_store_failure(
                         requested,
-                        previous_profile,
                         previous_data,
+                        previous_hardware,
+                        previous_marker,
+                        previous_owned,
                         error,
                         "set_manual_store",
                         "global" if scope == "global" else "game_own",
@@ -3833,12 +4170,17 @@ class Plugin:
                     self._apply_gpu_clock()
         return self._gpu_clock_state()
 
-    async def set_gpu_clock_auto(self, scope: str = "global", appid=None) -> dict:
+    async def set_gpu_clock_auto(
+        self, scope: str = "global", appid=None,
+        context_appid=_RPC_CONTEXT_UNSET,
+    ) -> dict:
         self._init()
         if self._gpu_shutdown or not self._module_enabled("system"):
             return self._gpu_clock_state()
         async with self._gpu_mutation_lock:
             if self._gpu_shutdown or not self._module_enabled("system"):
+                return self._gpu_clock_state()
+            if not self._scope_context_is_current(scope, appid, context_appid):
                 return self._gpu_clock_state()
             return await self._set_gpu_clock_auto_unlocked(scope, appid)
 
@@ -3846,12 +4188,13 @@ class Plugin:
         self, scope: str = "global", appid=None
     ) -> dict:
         self._init()
-        if scope == "game" and appid is not None:
-            self._current_appid = str(appid)
-        previous_profile = self._gpu_profiles.clock(self._current_appid)
         previous_data = copy.deepcopy(self._gpu_profiles._data)
+        previous_hardware = self._capture_gpu_hardware_state()
+        previous_marker = bool(self._settings.get("gpu_handoff_pending"))
+        previous_owned = bool(getattr(self, "_gpu_owned", False))
         requested = {"mode": "auto", "min_mhz": None, "max_mhz": None}
         self._gpu_requested = requested
+        generation = self._next_gpu_generation()
         if self._gpu_rpc_pending == 0:
             self._gpu_rpc_profile_snapshot = dict(
                 self._gpu_profiles.clock(self._current_appid)
@@ -3859,16 +4202,20 @@ class Plugin:
         self._gpu_rpc_pending += 1
         try:
             result = await self._offload_call(
-                lambda: self._run_gpu_clock(requested, auto=True)
+                lambda: self._run_gpu_clock(
+                    requested, auto=True, generation=generation
+                )
             )
             if result["ok"] and result["generation"] == self._gpu_generation:
                 try:
                     self._gpu_profiles.set_clock(scope, False, 0, 0, appid=appid)
-                except Exception as error:  # noqa: BLE001 - store boundary
+                except Exception as error:  # noqa: BLE001
                     await self._rollback_gpu_store_failure(
                         requested,
-                        previous_profile,
                         previous_data,
+                        previous_hardware,
+                        previous_marker,
+                        previous_owned,
                         error,
                         "set_auto_store",
                         "global" if scope == "global" else "game_own",
@@ -3886,22 +4233,32 @@ class Plugin:
                     self._apply_gpu_clock()
         return self._gpu_clock_state()
 
-    async def set_smt(self, enabled: bool, scope: str = "global", appid=None) -> dict:
+    async def set_smt(
+        self, enabled: bool, scope: str = "global", appid=None,
+        context_appid=_RPC_CONTEXT_UNSET,
+    ) -> dict:
         self._init()
         if self._cpu_shutdown:
             return self._cpu_state()
         async with self._cpu_mutation_lock:
+            if not self._cpu_scope_is_current(scope, appid, context_appid):
+                return self._cpu_state()
             self._cpu_profiles.set_smt(scope, bool(enabled), appid=appid)
             intent = self._cpu_profile_candidate(scope, appid)
             self._exit_eco_for_cpu()
             await self._apply_cpu_awaited(intent, trigger="set_smt")
         return self._cpu_state()
 
-    async def set_cpu_boost(self, enabled: bool, scope: str = "global", appid=None) -> dict:
+    async def set_cpu_boost(
+        self, enabled: bool, scope: str = "global", appid=None,
+        context_appid=_RPC_CONTEXT_UNSET,
+    ) -> dict:
         self._init()
         if self._cpu_shutdown:
             return self._cpu_state()
         async with self._cpu_mutation_lock:
+            if not self._cpu_scope_is_current(scope, appid, context_appid):
+                return self._cpu_state()
             self._cpu_profiles.set_boost(scope, bool(enabled), appid=appid)
             intent = self._cpu_profile_candidate(scope, appid)
             self._exit_eco_for_cpu()
@@ -4051,7 +4408,7 @@ class Plugin:
         self._init()
         if appid is not None:
             appid = str(appid)
-            self._current_appid = appid  # pin so the re-apply/state use the toggled game
+            self._set_current_appid(appid)
             if not follow and not self._color.has_game(appid):
                 self._color.create_game_from_global(appid)
             self._color.set_follow_global(appid, bool(follow))
@@ -4457,7 +4814,7 @@ class Plugin:
         if scope == "game" and appid is None:
             return "global"
         if scope == "game" and appid is not None:
-            self._current_appid = str(appid)
+            self._set_current_appid(appid)
         return scope
 
     @staticmethod
@@ -4465,8 +4822,17 @@ class Plugin:
         return {"requested_w": res.requested_w, "applied_w": res.applied_w,
                 "ok": res.ok, "detail": res.detail}
 
-    async def set_tdp_watts(self, watts: int, scope: str, appid=None) -> dict:
+    async def set_tdp_watts(
+        self, watts: int, scope: str, appid=None,
+        context_appid=_RPC_CONTEXT_UNSET,
+    ) -> dict:
         self._init()
+        if (
+            context_appid is not _RPC_CONTEXT_UNSET
+            and not self._scope_context_is_current(scope, appid, context_appid)
+        ):
+            return {"requested_w": watts, "applied_w": None, "ok": False,
+                    "detail": "stale-context"}
         if not self._tdp_control_on():
             return {"requested_w": watts, "applied_w": None, "ok": False,
                     "detail": "tdp-control-disabled"}
@@ -4482,14 +4848,23 @@ class Plugin:
         res = await self._apply_tdp_now("manual-watts")
         return self._apply_result(res)
 
-    async def set_tdp_follow_global(self, follow: bool, appid) -> dict:
+    async def set_tdp_follow_global(
+        self, follow: bool, appid, context_appid=_RPC_CONTEXT_UNSET
+    ) -> dict:
         """Toggle a game between its own TDP profile and following the global one,
         keeping its stored values (never deletes). Re-applies and returns full state."""
         self._init()
+        if (
+            context_appid is not _RPC_CONTEXT_UNSET
+            and not self._scope_context_is_current(
+                "game", appid, context_appid
+            )
+        ):
+            return self._tdp_state(await self._read_tdp_observation())
         if appid is not None:
             self._clear_eco()
             appid = str(appid)
-            self._current_appid = appid  # pin so the re-apply/state use the toggled game
+            self._set_current_appid(appid)
             # "Use own" on a game with no profile yet: seed it from the current global so
             # there's an editable starting value (nothing is ever deleted).
             if not follow and not self._tdp_profiles.has_game(appid):
@@ -4521,8 +4896,17 @@ class Plugin:
             self._tdp_reason = "firmware_mode_rejected"
         return await self.get_tdp_state()
 
-    async def set_tdp_levels(self, off2: int, off3: int, scope: str, appid=None) -> dict:
+    async def set_tdp_levels(
+        self, off2: int, off3: int, scope: str, appid=None,
+        context_appid=_RPC_CONTEXT_UNSET,
+    ) -> dict:
         self._init()
+        if (
+            context_appid is not _RPC_CONTEXT_UNSET
+            and not self._scope_context_is_current(scope, appid, context_appid)
+        ):
+            return {"requested_w": 0, "applied_w": None, "ok": False,
+                    "detail": "stale-context"}
         if not self._tdp_control_on():
             return {"requested_w": 0, "applied_w": None, "ok": False,
                     "detail": "tdp-control-disabled"}
@@ -4537,12 +4921,20 @@ class Plugin:
         # requested_w/applied_w reflect resulting sustained pl1 (readback), not the offsets
         return self._apply_result(res)
 
-    async def set_tdp_boost_mode(self, mode: str, scope: str, appid=None) -> dict:
+    async def set_tdp_boost_mode(
+        self, mode: str, scope: str, appid=None,
+        context_appid=_RPC_CONTEXT_UNSET,
+    ) -> dict:
         """Set the boost behaviour (estable/auto/custom) for a scope and re-apply.
         Returns the full new state so the UI updates the segmented control + rails in
         ONE round-trip (the frontend does setTdp with it), avoiding a transient
         mode/rails mismatch."""
         self._init()
+        if (
+            context_appid is not _RPC_CONTEXT_UNSET
+            and not self._scope_context_is_current(scope, appid, context_appid)
+        ):
+            return self._tdp_state(await self._read_tdp_observation())
         resolved = self._resolve_scope(scope, appid)
         if resolved is not None:  # invalid scope → no-op (never from the UI)
             self._clear_eco()
@@ -4580,10 +4972,19 @@ class Plugin:
         self._init()
         return self._power_presets.set_hidden(cid, bool(hidden))
 
-    async def apply_power_preset(self, watts: int, scope: str, appid=None, boost=None) -> dict:
+    async def apply_power_preset(
+        self, watts: int, scope: str, appid=None, boost=None,
+        context_appid=_RPC_CONTEXT_UNSET,
+    ) -> dict:
         """Apply a preset atomically: sustained watts (+ optional boost mode/offsets) in
         one re-apply. Mirrors set_tdp_watts' guards. boost=None leaves boost untouched."""
         self._init()
+        if (
+            context_appid is not _RPC_CONTEXT_UNSET
+            and not self._scope_context_is_current(scope, appid, context_appid)
+        ):
+            return {"requested_w": watts, "applied_w": None, "ok": False,
+                    "detail": "stale-context"}
         if not self._tdp_control_on():
             return {"requested_w": watts, "applied_w": None, "ok": False,
                     "detail": "tdp-control-disabled"}
@@ -4601,11 +5002,11 @@ class Plugin:
     async def create_game_profile(self, appid) -> None:
         self._init()
         self._tdp_profiles.create_game_from_global(appid)
-        self._current_appid = str(appid)
+        self._set_current_appid(appid)
 
     async def set_current_game(self, appid) -> dict:
         self._init()
-        self._current_appid = str(appid) if appid is not None else None
+        self._set_current_appid(appid)
         self._reset_auto_windows()  # don't let the previous game's signal gate the new one
         self._reapply_ticks = 0        # fresh ~30 min re-fit window for the new game
         self._adaptive_applied = False  # re-arm the mid-session adaptive drive for this game
@@ -4938,7 +5339,7 @@ class Plugin:
             if not follow and not self._audio_eq.has_game(appid):
                 self._audio_eq.create_game_from_global(appid)
             self._audio_eq.set_follow_global(appid, bool(follow))
-            self._current_appid = appid
+            self._set_current_appid(appid)
         self._reapply_audio()
         return await self._offload_call(self._audio_state)
 
@@ -4973,7 +5374,7 @@ class Plugin:
         # Single-worker executor for subprocess-backed applies (gamescopectl /
         # systemctl / ryzenadj) → keeps them off the event loop AND serialised.
         # Created here (not _init) so unit tests that never call _main run inline.
-        self._apply_executor = ThreadPoolExecutor(max_workers=1)
+        self._ensure_apply_executor()
         decky.logger.info(
             "Panel de Control v%s loaded (euid=%s)", read_version(), os.geteuid()
         )
@@ -5004,70 +5405,118 @@ class Plugin:
             decky.logger.error("TDP startup failed: %s", e)
 
     async def _unload(self) -> None:
-        # Restore fans to firmware auto FIRST — before stopping other loops —
-        # so the hardware is never left with a stale manual curve. The restores
-        # spawn subprocesses (systemctl / gamescopectl) → run them off the loop and
-        # await, then shut the executor down.
+        decky.logger.info("Shutdown stage unload:begin")
+        self._prepare_shutdown()
+        drained = self._drain_offloaded_sync(_SHUTDOWN_DRAIN_TIMEOUT_S)
+        if drained:
+            decky.logger.info("Shutdown stage unload:drained")
+            self._perform_shutdown_handoff("unload")
+            self._shutdown_apply_executor()
+        else:
+            decky.logger.warning("Shutdown stage unload:drain-timeout")
+            self._handoff_after_drain_timeout("unload")
+        decky.logger.info("Panel de Control unloaded")
+
+    def _prepare_shutdown(self) -> None:
+        self._shutting_down = True
         self._cpu_shutdown = True
         self._gpu_shutdown = True
-        decky.logger.info("Shutdown stage unload:begin")
+        self._next_cpu_generation()
+        self._next_gpu_generation()
         self._begin_tdp_shutdown()
-        self._drain_offloaded_sync()
-        decky.logger.info("Shutdown stage unload:drained")
-        self._restore_fans_safe()
         self._cancel_color_revert()
         wait_task = getattr(self, "_display_wait_task", None)
         if wait_task is not None:
             wait_task.cancel()
             self._display_wait_task = None
         self._stop_night_loop()
-        self._restore_color_safe()
         self._audio_shutdown = True
         audio_task = getattr(self, "_audio_task", None)
         self._audio_task = None
         if audio_task is not None:
             audio_task.cancel()
-        self._restore_audio_safe()
-        decky.logger.info("Shutdown stage unload:peripheral-handoff-attempted")
-        cpu_released = self._release_cpu_controls_sync("unload")
-        decky.logger.info("Shutdown stage unload:cpu-handoff ok=%s", cpu_released)
-        gpu_released = self._release_gpu_clock_sync("unload")
-        decky.logger.info("Shutdown stage unload:gpu-handoff ok=%s", gpu_released)
-        power_released = self._restore_power_handoff()
-        decky.logger.info("Shutdown stage unload:power-handoff ok=%s", power_released)
         if getattr(self, "_sampler", None) is not None:
             self._sampler.stop()
-        self._shutdown_apply_executor()
-        decky.logger.info("Panel de Control unloaded")
+        self._cancel_queued_offloads()
 
-    def _shutdown_apply_executor(self) -> None:
+    def _perform_shutdown_handoff(
+        self, stage: str, preserve_recovery=False
+    ) -> None:
+        self._restore_fans_safe()
+        self._restore_color_safe()
+        self._restore_audio_safe()
+        decky.logger.info("Shutdown stage %s:peripheral-handoff-attempted", stage)
+        cpu_released = (
+            self._release_cpu_controls_sync(
+                stage, preserve_frequency_ownership=True
+            )
+            if preserve_recovery
+            else self._release_cpu_controls_sync(stage)
+        )
+        decky.logger.info(f"Shutdown stage {stage}:cpu-handoff ok=%s", cpu_released)
+        gpu_released = (
+            self._release_gpu_clock_sync(stage, preserve_ownership=True)
+            if preserve_recovery
+            else self._release_gpu_clock_sync(stage)
+        )
+        decky.logger.info(f"Shutdown stage {stage}:gpu-handoff ok=%s", gpu_released)
+        power_released = (
+            self._restore_power_handoff(preserve_ownership=True)
+            if preserve_recovery
+            else self._restore_power_handoff()
+        )
+        decky.logger.info(f"Shutdown stage {stage}:power-handoff ok=%s", power_released)
+
+    def _defer_shutdown_handoff(self, stage: str, remove_fan_conf: bool = False) -> bool:
+        executor = getattr(self, "_apply_executor", None)
+        if executor is None:
+            return False
+
+        def finish():
+            self._perform_shutdown_handoff(stage)
+            if remove_fan_conf:
+                fan_expose.remove_conf()
+            decky.logger.info("Shutdown stage %s:deferred-complete", stage)
+
+        try:
+            executor.submit(finish)
+            return True
+        except Exception:  # noqa: BLE001
+            decky.logger.exception("Shutdown stage %s:deferred-submit-failed", stage)
+            return False
+
+    def _handoff_after_drain_timeout(
+        self, stage: str, remove_fan_conf: bool = False
+    ) -> None:
+        self._perform_shutdown_handoff(
+            f"{stage}-emergency", preserve_recovery=True
+        )
+        if remove_fan_conf:
+            fan_expose.remove_conf()
+        self._defer_shutdown_handoff(
+            f"{stage}-final", remove_fan_conf=remove_fan_conf
+        )
+        self._shutdown_apply_executor(cancel_futures=False)
+
+    def _shutdown_apply_executor(self, cancel_futures: bool = True) -> None:
         ex = getattr(self, "_apply_executor", None)
         if ex is not None:
-            ex.shutdown(wait=False)
+            try:
+                ex.shutdown(wait=False, cancel_futures=cancel_futures)
+            except TypeError:
+                ex.shutdown(wait=False)
             self._apply_executor = None
 
     async def _uninstall(self) -> None:
-        self._cpu_shutdown = True
-        self._gpu_shutdown = True
         decky.logger.info("Shutdown stage uninstall:begin")
-        self._begin_tdp_shutdown()
-        self._drain_offloaded_sync()
-        decky.logger.info("Shutdown stage uninstall:drained")
-        self._restore_fans_safe()
-        self._restore_color_safe()
-        self._audio_shutdown = True
-        audio_task = getattr(self, "_audio_task", None)
-        self._audio_task = None
-        if audio_task is not None:
-            audio_task.cancel()
-        self._restore_audio_safe()
-        decky.logger.info("Shutdown stage uninstall:peripheral-handoff-attempted")
-        cpu_released = self._release_cpu_controls_sync("uninstall")
-        decky.logger.info("Shutdown stage uninstall:cpu-handoff ok=%s", cpu_released)
-        gpu_released = self._release_gpu_clock_sync("uninstall")
-        decky.logger.info("Shutdown stage uninstall:gpu-handoff ok=%s", gpu_released)
-        power_released = self._restore_power_handoff()
-        decky.logger.info("Shutdown stage uninstall:power-handoff ok=%s", power_released)
-        self._shutdown_apply_executor()
-        fan_expose.remove_conf()  # drop the modprobe.d option we added (guarded)
+        self._prepare_shutdown()
+        drained = self._drain_offloaded_sync(_SHUTDOWN_DRAIN_TIMEOUT_S)
+        if drained:
+            decky.logger.info("Shutdown stage uninstall:drained")
+            self._perform_shutdown_handoff("uninstall")
+            fan_expose.remove_conf()
+            self._shutdown_apply_executor()
+        else:
+            decky.logger.warning("Shutdown stage uninstall:drain-timeout")
+            self._handoff_after_drain_timeout("uninstall", remove_fan_conf=True)
         decky.logger.info("Panel de Control uninstalled")

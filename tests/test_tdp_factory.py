@@ -110,6 +110,35 @@ def test_msi_uses_msi_firmware_attr(tmp_path):
     assert b.supported and "msi-wmi-platform" in b.name
 
 
+def test_msi_claw_a8_never_uses_intel_msi_firmware_attr(tmp_path):
+    root = str(tmp_path)
+    _mk_fw(root, "msi-wmi-platform")
+
+    backend = select_backend(
+        _p("msi_claw_a8"),
+        root=root,
+        ryzenadj_resolve=lambda: "/usr/bin/ryzenadj",
+    )
+
+    assert backend.supported is True
+    assert backend.name == "ryzenadj"
+    assert [item["candidate"] for item in backend.probe_trace] == ["ryzenadj"]
+
+
+def test_msi_claw_a8_without_ryzenadj_fails_closed(tmp_path):
+    root = str(tmp_path)
+    _mk_fw(root, "msi-wmi-platform")
+
+    backend = select_backend(
+        _p("msi_claw_a8"),
+        root=root,
+        ryzenadj_resolve=_NO_RYZENADJ,
+    )
+
+    assert isinstance(backend, NullBackend)
+    assert [item["candidate"] for item in backend.probe_trace] == ["ryzenadj"]
+
+
 def test_steam_deck_uses_hwmon(tmp_path):
     root = str(tmp_path)
     _mk_hwmon(root)
@@ -313,6 +342,34 @@ def test_ryzenadj_precedes_alib(tmp_path):
     _mk_acpi_call(root)
     b = select_backend(GENERIC, root=root, ryzenadj_resolve=lambda: "/usr/bin/ryzenadj")
     assert b.name == "ryzenadj"
+
+
+def test_onexplayer_apex_prefers_alib_over_ryzenadj(tmp_path):
+    root = str(tmp_path)
+    _mk_acpi_call(root)
+
+    backend = select_backend(
+        _p("onexplayer_apex"),
+        root=root,
+        ryzenadj_resolve=lambda: "/usr/bin/ryzenadj",
+    )
+
+    assert backend.name == "acpi-alib"
+    assert [item["candidate"] for item in backend.probe_trace] == ["alib"]
+
+
+def test_onexplayer_apex_falls_back_to_ryzenadj_without_alib(tmp_path):
+    backend = select_backend(
+        _p("onexplayer_apex"),
+        root=str(tmp_path),
+        ryzenadj_resolve=lambda: "/usr/bin/ryzenadj",
+    )
+
+    assert backend.name == "ryzenadj"
+    assert [item["candidate"] for item in backend.probe_trace] == [
+        "alib",
+        "ryzenadj",
+    ]
 
 
 def test_firmware_attr_still_wins_over_alib(tmp_path):

@@ -26,24 +26,71 @@ export interface GpuClockControl {
  */
 export function useGpuClock(): GpuClockControl {
   const game = useRunningGame();
+  const appid = game?.appid ?? null;
   const [state, setState] = useState<GpuClockState | null>(null);
   const commit = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stateRef = useRef<GpuClockState | null>(null);
+  const confirmedRef = useRef<GpuClockState | null>(null);
+  const requestEpoch = useRef(0);
+  const mutationPending = useRef(false);
+  const contextAppid = useRef(appid);
   stateRef.current = state;
-  const appid = game?.appid ?? null;
-  const applyFollow = useCallback((follow: boolean, targetAppid: string) => {
-    setGpuFollowGlobal(follow, targetAppid).then(setState).catch(() => {});
+  const accept = useCallback((next: GpuClockState) => {
+    confirmedRef.current = next;
+    setState(next);
   }, []);
+  const mutate = useCallback(async (request: () => Promise<GpuClockState>) => {
+    const epoch = ++requestEpoch.current;
+    mutationPending.current = true;
+    try {
+      const next = await request();
+      if (epoch !== requestEpoch.current) return null;
+      accept(next);
+      return next;
+    } catch {
+      if (epoch !== requestEpoch.current) return null;
+      setState(confirmedRef.current);
+      try {
+        const next = await getGpuClock();
+        if (epoch !== requestEpoch.current) return null;
+        accept(next);
+        return next;
+      } catch {
+        return null;
+      }
+    } finally {
+      if (epoch === requestEpoch.current) mutationPending.current = false;
+    }
+  }, [accept]);
+  const applyFollow = useCallback(async (follow: boolean, targetAppid: string) => {
+    const next = await mutate(() => setGpuFollowGlobal(follow, targetAppid));
+    return next?.follows_global === follow;
+  }, [mutate]);
   const { scope, onScope } = useScopeSync(appid, state?.follows_global, applyFollow);
   const target = scope === "game" ? appid : null;
 
   // Re-fetch when the active scope changes so the card shows that scope's window.
   useEffect(() => {
-    getGpuClock().then(setState).catch(() => {});
+    const contextChanged = contextAppid.current !== appid;
+    contextAppid.current = appid;
+    if (mutationPending.current && !contextChanged) {
+      return () => {
+        if (commit.current) clearTimeout(commit.current);
+      };
+    }
+    if (contextChanged) mutationPending.current = false;
+    let alive = true;
+    const epoch = ++requestEpoch.current;
+    getGpuClock()
+      .then((next) => {
+        if (alive && epoch === requestEpoch.current) accept(next);
+      })
+      .catch(() => {});
     return () => {
+      alive = false;
       if (commit.current) clearTimeout(commit.current);
     };
-  }, [scope, appid]);
+  }, [scope, appid, accept]);
 
   const setManual = useCallback((manual: boolean) => {
     if (!manual) {
@@ -51,25 +98,30 @@ export function useGpuClock(): GpuClockControl {
         clearTimeout(commit.current);
         commit.current = null;
       }
-      setGpuClockAuto(scope, target).then(setState).catch(() => {});
+      mutate(() => setGpuClockAuto(scope, target, appid));
       return;
     }
     // Turning manual ON: pin the current window (seed from the shown range).
     const cur = stateRef.current;
     if (!cur) return;
     setState({ ...cur, manual: true }); // optimistic
-    setGpuClock(cur.min ?? cur.range_min ?? 0, cur.max ?? cur.range_max ?? 0, scope, target)
-      .then(setState)
-      .catch(() => {});
-  }, [scope, target]);
+    mutate(() => setGpuClock(
+      cur.min ?? cur.range_min ?? 0,
+      cur.max ?? cur.range_max ?? 0,
+      scope,
+      target,
+      appid,
+    ));
+  }, [appid, mutate, scope, target]);
 
   const setWindow = useCallback((min: number, max: number) => {
     setState((cur) => (cur ? { ...cur, manual: true, min, max } : cur)); // optimistic
     if (commit.current) clearTimeout(commit.current);
     commit.current = setTimeout(() => {
-      setGpuClock(min, max, scope, target).then(setState).catch(() => {});
+      commit.current = null;
+      mutate(() => setGpuClock(min, max, scope, target, appid));
     }, 200);
-  }, [scope, target]);
+  }, [appid, mutate, scope, target]);
 
   return { state, scope, game, onScope, setManual, setWindow };
 }

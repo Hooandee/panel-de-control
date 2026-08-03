@@ -216,19 +216,19 @@ export interface FanState {
 export const getFanState = callable<[], FanState>("get_fan_state");
 
 export const getTdpState = callable<[], TdpState>("get_tdp_state");
-export const setTdpWatts = callable<[watts: number, scope: TdpScope, appid: string | null], TdpApplyResult>("set_tdp_watts");
+export const setTdpWatts = callable<[watts: number, scope: TdpScope, appid: string | null, contextAppid: string | null], TdpApplyResult>("set_tdp_watts");
 export const createGameProfile = callable<[appid: string], void>("create_game_profile");
 export const setCurrentGame = callable<[appid: string | null], TdpState>("set_current_game");
-export const setTdpLevels = callable<[off2: number, off3: number, scope: TdpScope, appid: string | null], TdpApplyResult>("set_tdp_levels");
+export const setTdpLevels = callable<[off2: number, off3: number, scope: TdpScope, appid: string | null, contextAppid: string | null], TdpApplyResult>("set_tdp_levels");
 // Sets the boost mode; returns the full new TDP state so the UI updates the segmented
 // control + rails in one round-trip.
-export const setTdpBoostMode = callable<[mode: BoostMode, scope: TdpScope, appid: string | null], TdpState>("set_tdp_boost_mode");
+export const setTdpBoostMode = callable<[mode: BoostMode, scope: TdpScope, appid: string | null, contextAppid: string | null], TdpState>("set_tdp_boost_mode");
 // Firmware performance mode (Legion Go original). Device-global; returns fresh state.
 export const setTdpFirmwareMode = callable<[mode: string], TdpState>("set_tdp_firmware_mode");
 
 // Toggle a game between its own TDP profile and following the global one (never deletes
 // the game's stored values). Returns the full new state.
-export const setTdpFollowGlobal = callable<[follow: boolean, appid: string | null], TdpState>("set_tdp_follow_global");
+export const setTdpFollowGlobal = callable<[follow: boolean, appid: string | null, contextAppid: string | null], TdpState>("set_tdp_follow_global");
 
 // User power-preset library: quick-apply chips beyond the 3 built-ins, plus a full-screen
 // manager. Stores order/hidden/custom; built-in watts come from TdpState.presets.
@@ -249,7 +249,7 @@ export const deletePowerPreset = callable<[cid: string], PowerPresetState>("dele
 export const movePowerPreset = callable<[cid: string, direction: number], PowerPresetState>("move_power_preset");
 export const setPowerPresetHidden = callable<[cid: string, hidden: boolean], PowerPresetState>("set_power_preset_hidden");
 export const applyPowerPreset =
-  callable<[watts: number, scope: TdpScope, appid: string | null, boost: PowerPresetBoost | null], TdpApplyResult>("apply_power_preset");
+  callable<[watts: number, scope: TdpScope, appid: string | null, boost: PowerPresetBoost | null, contextAppid: string | null], TdpApplyResult>("apply_power_preset");
 
 export interface PowerDraw {
   watts: number | null;
@@ -269,7 +269,7 @@ export interface PowerDraw {
 }
 
 export const getPowerDraw = callable<[], PowerDraw>("get_power_draw");
-export const setAutoTdp = callable<[enabled: boolean, scope: TdpScope, appid: string | null], { auto_tdp: boolean }>("set_auto_tdp");
+export const setAutoTdp = callable<[enabled: boolean, scope: TdpScope, appid: string | null, contextAppid: string | null], { auto_tdp: boolean }>("set_auto_tdp");
 // Signals the QAM panel opened/closed so the auto loop can raise its floor (and bump
 // PL1 immediately) to keep the CPU-bound menu render fluid.
 export const setUiActive = callable<[enabled: boolean], boolean>("set_ui_active");
@@ -501,18 +501,16 @@ export interface CpuState {
   max_cores: number | null;
   active_cores: number | null;
   frequency: CpuFrequencyState;
-  // Per-game scope for all CPU controls: true when this game applies
-  // the global CPU profile (no own, or toggled to follow). Own values never deleted.
   follows_global: boolean;
   has_game_profile: boolean;
 }
 
 export const getCpuState = callable<[], CpuState>("get_cpu_state");
-export const setSmt = callable<[enabled: boolean, scope: TdpScope, appid: string | null], CpuState>("set_smt");
-export const setCpuBoost = callable<[enabled: boolean, scope: TdpScope, appid: string | null], CpuState>("set_cpu_boost");
-export const setActiveCores = callable<[count: number, scope: TdpScope, appid: string | null], CpuState>("set_active_cores");
-export const setCpuFrequency = callable<[minKhz: number, maxKhz: number, scope: TdpScope, appid: string | null], CpuState>("set_cpu_frequency");
-export const setCpuFrequencyAuto = callable<[scope: TdpScope, appid: string | null], CpuState>("set_cpu_frequency_auto");
+export const setSmt = callable<[enabled: boolean, scope: TdpScope, appid: string | null, contextAppid: string | null], CpuState>("set_smt");
+export const setCpuBoost = callable<[enabled: boolean, scope: TdpScope, appid: string | null, contextAppid: string | null], CpuState>("set_cpu_boost");
+export const setActiveCores = callable<[count: number, scope: TdpScope, appid: string | null, contextAppid: string | null], CpuState>("set_active_cores");
+export const setCpuFrequency = callable<[minKhz: number, maxKhz: number, scope: TdpScope, appid: string | null, contextAppid: string | null], CpuState>("set_cpu_frequency");
+export const setCpuFrequencyAuto = callable<[scope: TdpScope, appid: string | null, contextAppid: string | null], CpuState>("set_cpu_frequency_auto");
 export const setCpuFollowGlobal = callable<[follow: boolean, appid: string | null], CpuState>("set_cpu_follow_global");
 
 // ---- Download mode (low power) --------------------------------------------
@@ -593,7 +591,6 @@ export interface ColorState extends ColorPreset {
   active_preset: string | null;
 }
 
-// ---- GPU clock (Sistema) --------------------------------------------------
 export interface GpuClockState {
   supported: boolean;
   manual: boolean;
@@ -616,8 +613,8 @@ export interface GpuClockState {
 
 export const getGpuClock = callable<[], GpuClockState>("get_gpu_clock");
 export const setGpuClock =
-  callable<[min_mhz: number, max_mhz: number, scope: TdpScope, appid: string | null], GpuClockState>("set_gpu_clock");
-export const setGpuClockAuto = callable<[scope: TdpScope, appid: string | null], GpuClockState>("set_gpu_clock_auto");
+  callable<[min_mhz: number, max_mhz: number, scope: TdpScope, appid: string | null, contextAppid: string | null], GpuClockState>("set_gpu_clock");
+export const setGpuClockAuto = callable<[scope: TdpScope, appid: string | null, contextAppid: string | null], GpuClockState>("set_gpu_clock_auto");
 export const setGpuFollowGlobal =
   callable<[follow: boolean, appid: string | null], GpuClockState>("set_gpu_follow_global");
 

@@ -53,9 +53,13 @@ def _candidates(device, fallback, root, ryzenadj):
 
     key = device.key
     if device.vendor == "intel":
-        return [msi, intel]  # no AMD fallbacks on Intel
+        return [msi, intel]
     if key.startswith("steam_deck"):
         return [deck]
+    if key == "msi_claw_a8":
+        return [ryzenadj]
+    if key == "onexplayer_apex":
+        return [alib, ryzenadj]
     if key.startswith("rog_"):
         return [asus, lenovo, msi, *amd_tail]
     if key.startswith("legion_"):

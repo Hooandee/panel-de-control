@@ -24,3 +24,12 @@ def test_gpu_profiles_sanitize_malformed_values(tmp_path):
     store = GpuProfileStore(str(path))
 
     assert store.clock(None) == {"manual": False, "min": None, "max": None}
+
+
+def test_gpu_profiles_reject_zero_window_from_interrupted_migration(tmp_path):
+    path = tmp_path / "gpu_profiles.json"
+    path.write_text('{"global":{"manual":true,"min":0,"max":0}}')
+
+    store = GpuProfileStore(str(path))
+
+    assert store.clock(None) == {"manual": False, "min": None, "max": None}

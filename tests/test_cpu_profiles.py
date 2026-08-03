@@ -63,7 +63,7 @@ def test_persists(tmp_path):
     s1.set_cores("game", 6, appid="42")
     s1.set_follow_global("42", True)
     s2 = CpuProfileStore(path)
-    assert s2.effective("42") == _profile()  # follows global
+    assert s2.effective("42") == _profile()
     assert s2.is_following_global("42") is True
     s2.set_follow_global("42", False)
     assert s2.effective("42")["cores"] == 6      # own value survived reload

@@ -1,14 +1,5 @@
 import { CSSProperties, FC, useEffect, useRef } from "react";
 
-/**
- * A label that gently scrolls back and forth ONLY when it's too wide for its box
- * (otherwise a plain static label — no wasted motion). Replaces the "Pot…"
- * ellipsis on the active tab with a readable ping-pong scroll.
- *
- * Cheap by design: measurements run only on content/container resize, then a
- * compositor-only transform animation handles movement without per-frame JS.
- * Reduced-motion users receive a static ellipsis instead.
- */
 interface MarqueeTextProps {
   text: string;
   alignWhenFits?: CSSProperties["textAlign"];
@@ -38,7 +29,6 @@ export const MarqueeText: FC<MarqueeTextProps> = ({ text, alignWhenFits = "left"
       txt.style.textOverflow = staticOverflow ? "ellipsis" : "";
 
       if (!overflowing || staticOverflow) return;
-      // Pause at each end so the start/end are readable; pace scales with distance.
       animation = txt.animate(
         [
           { transform: "translateX(0)", offset: 0 },

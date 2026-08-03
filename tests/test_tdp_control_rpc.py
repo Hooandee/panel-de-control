@@ -174,6 +174,58 @@ def test_take_does_not_overwrite_saved_prev(Plugin, fake_hhd):
     assert p._settings["hhd_tdp_prev"] is True   # unchanged
 
 
+def test_take_does_not_apply_when_hhd_refuses_to_release(Plugin, monkeypatch):
+    import main as main_mod
+
+    p = Plugin()
+    p._init()
+    monkeypatch.setattr(main_mod.controller_hhd, "current_tdp_enable", lambda: True)
+    monkeypatch.setattr(
+        main_mod.controller_hhd,
+        "set_tdp_enable",
+        lambda enabled: True,
+    )
+    before = p._tdp_backend.set_levels_calls
+
+    out = asyncio.run(p.take_tdp_control())
+
+    assert out == {"ok": False, "hhd_managing": True}
+    assert p._settings["hhd_tdp_prev"] is True
+    assert p._tdp_backend.set_levels_calls == before
+
+
+def test_take_retries_marker_persistence_before_disabling_hhd(
+    Plugin, fake_hhd, monkeypatch
+):
+    p = Plugin()
+    p._init()
+    real_save = p._save
+    saves = 0
+
+    def fail_first_save():
+        nonlocal saves
+        saves += 1
+        if saves == 1:
+            raise OSError("disk full")
+        return real_save()
+
+    monkeypatch.setattr(p, "_save", fail_first_save)
+    before = p._tdp_backend.set_levels_calls
+
+    first = asyncio.run(p.take_tdp_control())
+
+    assert first == {"ok": False, "hhd_managing": True}
+    assert fake_hhd.value is True
+    assert p._settings["hhd_tdp_prev"] is None
+    assert p._tdp_backend.set_levels_calls == before
+
+    second = asyncio.run(p.take_tdp_control())
+
+    assert second == {"ok": True, "hhd_managing": False}
+    assert fake_hhd.value is False
+    assert p._settings["hhd_tdp_prev"] is True
+
+
 def test_restore_noop_when_never_taken(Plugin, fake_hhd):
     p = Plugin()
     p._init()
@@ -214,6 +266,23 @@ def test_set_tdp_watts_noop_when_control_disabled(Plugin):
     out = asyncio.run(p.set_tdp_watts(20, "global"))
     assert out["ok"] is False
     assert p._tdp_backend.set_levels_calls == 0
+
+
+def test_stale_game_tdp_rpc_cannot_retarget_active_game(Plugin):
+    p = Plugin()
+    p._init()
+    p._set_current_appid("game-b")
+    before = p._tdp_backend.set_levels_calls
+
+    result = asyncio.run(
+        p.set_tdp_watts(20, "game", "game-a", "game-a")
+    )
+
+    assert result["ok"] is False
+    assert result["detail"] == "stale-context"
+    assert p._current_appid == "game-b"
+    assert p._tdp_backend.set_levels_calls == before
+    assert p._tdp_profiles.has_game("game-a") is False
 
 
 def test_set_tdp_levels_noop_when_control_disabled(Plugin):

@@ -36,6 +36,7 @@ export function useCpu(): CpuController {
   const game = useRunningGame();
   const [state, setState] = useState<CpuState | null>(null);
   const pending = useRef(false);
+  const requestEpoch = useRef(0);
   const frequencyQueued = useRef(false);
   const frequencyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const appid = game?.appid;
@@ -50,10 +51,18 @@ export function useCpu(): CpuController {
 
   useEffect(() => {
     let alive = true;
+    ++requestEpoch.current;
+    pending.current = false;
     const tick = () => {
+      const epoch = requestEpoch.current;
       getCpuState()
         .then((s) => {
-          if (alive && !pending.current && !frequencyQueued.current) setState(s);
+          if (
+            alive
+            && epoch === requestEpoch.current
+            && !pending.current
+            && !frequencyQueued.current
+          ) setState(s);
         })
         .catch(() => {
           /* keep last values */
@@ -70,9 +79,24 @@ export function useCpu(): CpuController {
 
   // The card's tab reflects the game's active profile and IS the control (shared wiring).
   // The pending guard stops a poll landing mid-write from clobbering the optimistic state.
-  const applyFollow = useCallback((f: boolean, a: string) => {
+  const applyFollow = useCallback(async (f: boolean, a: string) => {
+    const epoch = ++requestEpoch.current;
     pending.current = true;
-    setCpuFollowGlobal(f, a).then(setState).catch(() => {}).finally(() => { pending.current = false; });
+    try {
+      const next = await setCpuFollowGlobal(f, a);
+      if (epoch !== requestEpoch.current) return false;
+      setState(next);
+      return next.follows_global === f;
+    } catch {
+      if (epoch !== requestEpoch.current) return false;
+      try {
+        const current = await getCpuState();
+        if (epoch === requestEpoch.current) setState(current);
+      } catch {}
+      return false;
+    } finally {
+      if (epoch === requestEpoch.current) pending.current = false;
+    }
   }, []);
   const { scope, onScope: syncScope } = useScopeSync(
     appid, state?.follows_global, applyFollow,
@@ -87,12 +111,17 @@ export function useCpu(): CpuController {
   const apply = useCallback(
     (optimistic: (s: CpuState) => CpuState, rpc: () => Promise<CpuState>) => {
       setState((prev) => (prev ? optimistic(prev) : prev));
+      const epoch = ++requestEpoch.current;
       pending.current = true;
       rpc()
-        .then((s) => setState(s))
-        .catch(() => getCpuState().then(setState).catch(() => {}))
+        .then((s) => {
+          if (epoch === requestEpoch.current) setState(s);
+        })
+        .catch(() => getCpuState().then((next) => {
+          if (epoch === requestEpoch.current) setState(next);
+        }).catch(() => {}))
         .finally(() => {
-          pending.current = false;
+          if (epoch === requestEpoch.current) pending.current = false;
         });
     },
     [],
@@ -100,18 +129,18 @@ export function useCpu(): CpuController {
 
   const doSmt = useCallback(
     (enabled: boolean) =>
-      apply((s) => ({ ...s, smt: { ...s.smt, enabled } }), () => setSmt(enabled, scope, target)),
-    [apply, scope, target],
+      apply((s) => ({ ...s, smt: { ...s.smt, enabled } }), () => setSmt(enabled, scope, target, appid ?? null)),
+    [appid, apply, scope, target],
   );
   const doBoost = useCallback(
     (enabled: boolean) =>
-      apply((s) => ({ ...s, boost: { ...s.boost, enabled } }), () => setCpuBoost(enabled, scope, target)),
-    [apply, scope, target],
+      apply((s) => ({ ...s, boost: { ...s.boost, enabled } }), () => setCpuBoost(enabled, scope, target, appid ?? null)),
+    [appid, apply, scope, target],
   );
   const doCores = useCallback(
     (count: number) =>
-      apply((s) => ({ ...s, active_cores: count }), () => setActiveCores(count, scope, target)),
-    [apply, scope, target],
+      apply((s) => ({ ...s, active_cores: count }), () => setActiveCores(count, scope, target, appid ?? null)),
+    [appid, apply, scope, target],
   );
 
   const doFrequency = useCallback(
@@ -131,14 +160,21 @@ export function useCpu(): CpuController {
       frequencyTimer.current = setTimeout(() => {
         frequencyTimer.current = null;
         frequencyQueued.current = false;
+        const epoch = ++requestEpoch.current;
         pending.current = true;
-        setCpuFrequency(minimumKhz, maximumKhz, scope, target)
-          .then(setState)
-          .catch(() => getCpuState().then(setState).catch(() => {}))
-          .finally(() => { pending.current = false; });
+        setCpuFrequency(minimumKhz, maximumKhz, scope, target, appid ?? null)
+          .then((next) => {
+            if (epoch === requestEpoch.current) setState(next);
+          })
+          .catch(() => getCpuState().then((next) => {
+            if (epoch === requestEpoch.current) setState(next);
+          }).catch(() => {}))
+          .finally(() => {
+            if (epoch === requestEpoch.current) pending.current = false;
+          });
       }, 200);
     },
-    [cancelQueuedFrequency, scope, target],
+    [appid, cancelQueuedFrequency, scope, target],
   );
 
   const doFrequencyManual = useCallback(
@@ -147,7 +183,7 @@ export function useCpu(): CpuController {
       if (!manual) {
         apply(
           (s) => ({ ...s, frequency: { ...s.frequency, manual: false, status: "automatic" } }),
-          () => setCpuFrequencyAuto(scope, target),
+          () => setCpuFrequencyAuto(scope, target, appid ?? null),
         );
         return;
       }
@@ -157,11 +193,11 @@ export function useCpu(): CpuController {
       if (minimum !== null && minimum !== undefined && maximum !== null && maximum !== undefined) {
         apply(
           (s) => ({ ...s, frequency: { ...s.frequency, manual: true, status: "configured" } }),
-          () => setCpuFrequency(minimum, maximum, scope, target),
+          () => setCpuFrequency(minimum, maximum, scope, target, appid ?? null),
         );
       }
     },
-    [apply, cancelQueuedFrequency, scope, state?.frequency, target],
+    [appid, apply, cancelQueuedFrequency, scope, state?.frequency, target],
   );
 
   return {

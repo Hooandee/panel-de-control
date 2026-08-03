@@ -34,7 +34,12 @@ export function useController(): ControllerControl {
   }, [appid]);
 
   const applyFollow = useCallback(
-    (f: boolean, a: string) => { setControllerFollowGlobal(f, a).then(setConfig).catch(() => {}); },
+    (f: boolean, a: string) => setControllerFollowGlobal(f, a)
+      .then((next) => {
+        setConfig(next);
+        return next.follows_global === f;
+      })
+      .catch(() => false),
     [],
   );
   const { scope, onScope } = useScopeSync(appid, config?.follows_global, applyFollow);
