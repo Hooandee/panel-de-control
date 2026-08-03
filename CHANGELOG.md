@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.32.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.31.4...panel-de-control-v0.32.0) (2026-08-03)
+
+
+### Features
+
+* add CPU frequency and Steam Deck PPT controls ([#373](https://github.com/Hooandee/panel-de-control/issues/373)) ([9d245eb](https://github.com/Hooandee/panel-de-control/commit/9d245eb032bb80fc36fa7772b01871226b9e98cf))
+* **opengamepadui:** add read-only phase zero plugin ([#340](https://github.com/Hooandee/panel-de-control/issues/340)) ([88f7184](https://github.com/Hooandee/panel-de-control/commit/88f71841efc94d016b86a4531355577b9fd2af82))
+* **windows:** add Xbox Game Bar telemetry widget ([#354](https://github.com/Hooandee/panel-de-control/issues/354)) ([afdfddc](https://github.com/Hooandee/panel-de-control/commit/afdfddca292347663f2b8c8b339c04bc34d708ba))
+
 ## [0.31.4](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.31.3...panel-de-control-v0.31.4) (2026-07-27)
 
 
