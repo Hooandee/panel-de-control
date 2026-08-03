@@ -119,6 +119,20 @@ def test_set_boost_mode_unknown_falls_back_to_estable(tmp_path):
     assert s.effective(None)["mode"] == "estable"
 
 
+def test_deck_ppt_migration_forces_stable_without_losing_stored_offsets(tmp_path):
+    store = _store(tmp_path)
+    store.set_offsets("global", 10, 5)
+    store.set_offsets("game", 8, 4, appid="42")
+
+    changed = store.migrate_deck_ppt_stable()
+
+    assert changed is True
+    assert store.effective(None)["mode"] == "estable"
+    assert store.effective("42")["mode"] == "estable"
+    assert store.game_profile("42")["off2"] == 8
+    assert store.game_profile("42")["off3"] == 4
+
+
 def test_auto_to_custom_seeds_offsets_from_derived_rails(tmp_path):
     s = _store(tmp_path)
     s.set_pl1("global", 20)

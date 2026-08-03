@@ -80,9 +80,18 @@ class _FakeToggle:
         self.supported = supported
         self.max_cores = max_cores
         self.calls = []
+        self.value = max_cores
 
     def set(self, v):
         self.calls.append(v)
+        self.value = v
+        return True
+
+    def active(self):
+        return self.value
+
+    def enabled(self):
+        return bool(self.value)
 
 
 def _plugin_cpu(disabled=None):
@@ -102,9 +111,12 @@ def test_cpu_released_to_defaults_when_system_disabled():
     # All cores online, SMT on, boost on — hand the CPU back, don't leave it parked.
     p = _plugin_cpu(disabled=["system"])
     p._apply_cpu()
-    assert p._cores.calls == [8]
-    assert p._smt.calls == [True]
-    assert p._boost.calls == [True]
+    assert p._cores.active() == 8
+    assert p._smt.enabled() is True
+    assert p._boost.enabled() is True
+    assert p._cores.calls == []
+    assert p._smt.calls == []
+    assert p._boost.calls == []
 
 
 def test_collect_sample_none_when_learning_inactive():
@@ -164,3 +176,42 @@ def test_hhd_restore_keeps_marker_when_hhd_unreachable():
         main.controller_hhd.set_tdp_enable = orig
 
     assert p._settings["hhd_tdp_prev"] is True  # kept for a later retry
+
+
+def test_emergency_hhd_restore_keeps_marker_for_final_handoff():
+    p = main.Plugin.__new__(main.Plugin)
+    p._settings = {"hhd_tdp_prev": True}
+    p._save = lambda: None
+
+    orig = main.controller_hhd.set_tdp_enable
+    main.controller_hhd.set_tdp_enable = lambda value: value
+    try:
+        emergency = p._restore_hhd_tdp(preserve_ownership=True)
+        assert emergency is True
+        assert p._settings["hhd_tdp_prev"] is True
+
+        final = p._restore_hhd_tdp()
+    finally:
+        main.controller_hhd.set_tdp_enable = orig
+
+    assert final is True
+    assert p._settings["hhd_tdp_prev"] is None
+
+
+def test_power_handoff_reports_failure_while_hhd_marker_is_pending():
+    p = main.Plugin.__new__(main.Plugin)
+    p._settings = {
+        "steamdeck_ppt_previous": None,
+        "hhd_tdp_prev": True,
+    }
+    p._save = lambda: None
+
+    orig = main.controller_hhd.set_tdp_enable
+    main.controller_hhd.set_tdp_enable = lambda value: None
+    try:
+        released = p._restore_power_handoff()
+    finally:
+        main.controller_hhd.set_tdp_enable = orig
+
+    assert released is False
+    assert p._settings["hhd_tdp_prev"] is True

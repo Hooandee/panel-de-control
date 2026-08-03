@@ -1,7 +1,6 @@
 import os
 
 from report.collector import (
-    SCHEMA,
     build_bundle,
     capabilities_from,
     controller_daemon_cmds,
@@ -79,6 +78,32 @@ def test_capabilities_from_tolerates_missing():
     caps = capabilities_from({})
     assert caps["tdp_backend"] is None
     assert caps["tdp_supported"] is False
+
+
+def test_capabilities_from_includes_cpu_gpu_backends():
+    caps = capabilities_from({
+        "cpu_gpu_diagnostics": {
+            "cpu": {
+                "backend": "cpufreq",
+                "supported": True,
+                "handoff_pending": True,
+                "durable_state_reason": "ownership_state_invalid",
+            },
+            "gpu": {
+                "backend": "amdgpu",
+                "supported": True,
+                "handoff_pending": True,
+            },
+            "steamdeck_ppt": {"supported": True},
+        }
+    })
+    assert caps["cpu_frequency_backend"] == "cpufreq"
+    assert caps["cpu_frequency_supported"] is True
+    assert caps["cpu_frequency_handoff_pending"] is True
+    assert caps["cpu_frequency_durable_state_reason"] == "ownership_state_invalid"
+    assert caps["gpu_clock_backend"] == "amdgpu"
+    assert caps["gpu_clock_handoff_pending"] is True
+    assert caps["steamdeck_ppt_supported"] is True
 
 
 # ---- redact_text ----------------------------------------------------------
@@ -184,7 +209,7 @@ def test_build_bundle_shape_and_redaction():
         stores={"profiles": {}},
         logs=[{"name": "x.log", "text": "boom"}],
     )
-    assert b["schema"] == SCHEMA
+    assert b["schema"] == 2
     assert b["app"] == "panel-de-control"
     assert b["categories"] == ["tdp", "fans"]
     assert b["text"] == "falla ~/thing"  # path redacted in free text too
@@ -271,6 +296,30 @@ def test_sysfs_snapshot_hwmon(tmp_path):
     assert chips["k10temp"] == ["temp1_label"]
 
 
+def test_sysfs_snapshot_captures_deck_ppt_values_and_permissions(tmp_path):
+    root = str(tmp_path)
+    chip = os.path.join(root, "sys/class/hwmon/hwmon7")
+    _mk(os.path.join(chip, "name"), "amdgpu\n")
+    for name, value in {
+        "power1_label": "slowPPT\n",
+        "power1_cap": "15000000\n",
+        "power1_cap_min": "3000000\n",
+        "power1_cap_max": "29000000\n",
+        "power2_label": "fastPPT\n",
+        "power2_cap": "16000000\n",
+        "power2_cap_min": "3000000\n",
+        "power2_cap_max": "30000000\n",
+    }.items():
+        _mk(os.path.join(chip, name), value)
+    os.chmod(os.path.join(chip, "power2_cap"), 0o444)
+
+    deck = sysfs_snapshot(root=root)["hwmon"][0]["ppt_nodes"]
+
+    assert deck["power1_label"] == {"value": "slowPPT", "writable": True}
+    assert deck["power1_cap_max"] == {"value": "29000000", "writable": True}
+    assert deck["power2_cap"] == {"value": "16000000", "writable": False}
+
+
 def test_sysfs_snapshot_firmware_attributes(tmp_path):
     _build_fake_sysfs(str(tmp_path))
     snap = sysfs_snapshot(root=str(tmp_path))
@@ -348,6 +397,82 @@ def test_sysfs_snapshot_modules_without_acpi_call(tmp_path):
     assert "acpi_call" not in snap["modules"]
 
 
+def test_sysfs_snapshot_captures_cpu_gpu_and_rapl_selection_surfaces(tmp_path):
+    root = str(tmp_path)
+    policy = os.path.join(root, "sys/devices/system/cpu/cpufreq/policy0")
+    _mk(os.path.join(policy, "scaling_driver"), "intel_pstate\n")
+    _mk(os.path.join(policy, "affected_cpus"), "0 1 2 3\n")
+    _mk(os.path.join(policy, "cpuinfo_min_freq"), "400000\n")
+    _mk(os.path.join(policy, "cpuinfo_max_freq"), "4800000\n")
+    _mk(os.path.join(policy, "scaling_min_freq"), "1200000\n")
+    _mk(os.path.join(policy, "scaling_max_freq"), "3000000\n")
+    xe = os.path.join(root, "sys/class/drm/card0/device/tile0/gt0/freq0")
+    for name, value in {
+        "min_freq": "300\n",
+        "max_freq": "2000\n",
+        "rpn_freq": "300\n",
+        "rp0_freq": "2000\n",
+    }.items():
+        _mk(os.path.join(xe, name), value)
+    rapl = os.path.join(
+        root,
+        "sys/devices/virtual/powercap/intel-rapl-mmio/intel-rapl-mmio:0",
+    )
+    _mk(os.path.join(rapl, "name"), "package-0\n")
+    _mk(os.path.join(rapl, "constraint_0_power_limit_uw"), "20000000\n")
+    _mk(os.path.join(rapl, "constraint_1_power_limit_uw"), "31000000\n")
+
+    surfaces = sysfs_snapshot(root=root)["cpu_gpu_power"]
+
+    assert surfaces["cpufreq"] == [{
+        "policy": "policy0",
+        "affected_cpus": "0 1 2 3",
+        "driver": "intel_pstate",
+        "hardware_min_khz": "400000",
+        "hardware_max_khz": "4800000",
+        "applied_min_khz": "1200000",
+        "applied_max_khz": "3000000",
+    }]
+    assert surfaces["gpu"] == [{
+        "backend": "xe",
+        "card": "card0",
+        "tile": "tile0",
+        "gt": "gt0",
+        "min_mhz": "300",
+        "max_mhz": "2000",
+        "hardware_min_mhz": "300",
+        "hardware_max_mhz": "2000",
+    }]
+    assert surfaces["rapl"] == [{
+        "surface": "intel-rapl-mmio:0",
+        "name": "package-0",
+        "pl1_uw": "20000000",
+        "pl2_uw": "31000000",
+    }]
+
+
+def test_sysfs_snapshot_captures_amdgpu_od_range_and_write_permissions(tmp_path):
+    root = str(tmp_path)
+    device = os.path.join(root, "sys/class/drm/card0/device")
+    od = os.path.join(device, "pp_od_clk_voltage")
+    level = os.path.join(device, "power_dpm_force_performance_level")
+    _mk(od, "OD_SCLK:\n0: 800Mhz\n1: 2000Mhz\nOD_RANGE:\nSCLK: 200Mhz 2700Mhz\n")
+    _mk(level, "auto\n")
+    os.chmod(level, 0o444)
+
+    gpu = sysfs_snapshot(root=root)["cpu_gpu_power"]["gpu"]
+
+    assert gpu == [{
+        "backend": "amdgpu",
+        "card": "card0",
+        "overdrive_present": True,
+        "overdrive_writable": True,
+        "performance_level": "auto",
+        "performance_level_writable": False,
+        "od_range": {"min_mhz": "200", "max_mhz": "2700"},
+    }]
+
+
 def test_sysfs_snapshot_empty_root_never_raises(tmp_path):
     snap = sysfs_snapshot(root=str(tmp_path))
     assert snap == {
@@ -360,6 +485,7 @@ def test_sysfs_snapshot_empty_root_never_raises(tmp_path):
         "asus_ppt": {"asus_armoury": {}, "asus_nb_wmi": {}},
         "dmi": {},
         "leds": [],
+        "cpu_gpu_power": {"cpufreq": [], "gpu": [], "rapl": []},
         "ec": {
             "debugfs_present": False,
             "ec_sys_loaded": False,

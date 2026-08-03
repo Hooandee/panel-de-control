@@ -8,6 +8,8 @@ import importlib
 import sys
 import types
 
+from cpu.frequency import CpuFrequencyResult
+
 
 class _FakeToggle:
     def __init__(self, supported=True, on=True):
@@ -24,6 +26,11 @@ class _FakeToggle:
         return True
 
 
+class _FailingToggle(_FakeToggle):
+    def set(self, enabled):
+        return False
+
+
 class _FakeCores:
     def __init__(self, supported=True, max_cores=8, active=8):
         self.supported = supported
@@ -38,7 +45,61 @@ class _FakeCores:
         return True
 
 
-def _make_plugin(tmp_path, monkeypatch, smt=None, boost=None, cores=None):
+class _FakeFrequency:
+    def __init__(self, supported=True, ok=True, status="applied"):
+        self.supported = supported
+        self.ok = ok
+        self.status = status
+        self.calls = []
+        self.window = (400_000, 3_500_000)
+        self.requested = None
+
+    def get_range(self):
+        return self.window if self.supported else None
+
+    def set_window(self, minimum, maximum):
+        self.calls.append(("manual", minimum, maximum))
+        if self.ok:
+            self.requested = (minimum, maximum)
+        return CpuFrequencyResult(
+            self.ok, self.status, (minimum, maximum),
+            self.requested or self.window,
+            {"attempted": not self.ok, "ok": True if not self.ok else None},
+            None if self.ok else "write_failed", 0,
+        )
+
+    def set_auto(self):
+        self.calls.append(("auto",))
+        self.requested = None
+        return CpuFrequencyResult(
+            True, "restored", None, self.window,
+            {"attempted": True, "ok": True}, None, 0,
+        )
+
+    def diagnostics(self):
+        minimum, maximum = self.requested or self.window
+        return {
+            "supported": self.supported,
+            "backend": "fake_cpufreq" if self.supported else "unsupported",
+            "reason": None,
+            "epoch": 0,
+            "requested": list(self.requested) if self.requested else None,
+            "owned": self.requested is not None,
+            "policies": ["policy0"] if self.supported else [],
+            "drivers": ["fake"] if self.supported else [],
+            "policy_state": ([{
+                "name": "policy0",
+                "cpus": [0, 1, 2, 3],
+                "driver": "fake",
+                "hardware_min_khz": 400_000,
+                "hardware_max_khz": 3_500_000,
+                "applied_min_khz": minimum,
+                "applied_max_khz": maximum,
+            }] if self.supported else []),
+        }
+
+
+def _make_plugin(tmp_path, monkeypatch, smt=None, boost=None, cores=None, frequency=None):
     fake_decky = types.ModuleType("decky")
     fake_decky.DECKY_PLUGIN_SETTINGS_DIR = str(tmp_path)
     fake_decky.DECKY_USER = "deck"
@@ -77,6 +138,10 @@ def _make_plugin(tmp_path, monkeypatch, smt=None, boost=None, cores=None):
 
     main = importlib.reload(importlib.import_module("main"))
     monkeypatch.setattr(main, "read_on_ac", lambda root="/": True, raising=False)
+    if frequency is not None:
+        monkeypatch.setattr(
+            main, "select_cpu_frequency", lambda **_kwargs: frequency
+        )
 
     if smt is not None or boost is not None or cores is not None:
         original_init = main.Plugin._init
@@ -89,6 +154,9 @@ def _make_plugin(tmp_path, monkeypatch, smt=None, boost=None, cores=None):
                 self._boost = boost
             if cores is not None:
                 self._cores = cores
+            self._cpu_coordinator = main.CpuCoordinator(
+                self._cores, self._smt, self._boost, self._cpu_frequency
+            )
 
         monkeypatch.setattr(main.Plugin, "_init", patched_init)
 
@@ -96,12 +164,18 @@ def _make_plugin(tmp_path, monkeypatch, smt=None, boost=None, cores=None):
 
 
 def test_get_cpu_state_shape(tmp_path, monkeypatch):
-    p = _make_plugin(tmp_path, monkeypatch, smt=_FakeToggle(), boost=_FakeToggle())
+    p = _make_plugin(
+        tmp_path, monkeypatch, smt=_FakeToggle(), boost=_FakeToggle(),
+        frequency=_FakeFrequency(),
+    )
     st = asyncio.run(p.get_cpu_state())
     assert "chip" in st
     assert st["smt"] == {"supported": True, "enabled": True}
     assert st["boost"] == {"supported": True, "enabled": True}
     assert "cores" in st and "max_khz" in st
+    assert st["frequency"]["supported"] is True
+    assert st["frequency"]["range_min_khz"] == 400_000
+    assert st["frequency"]["policy_state"][0]["name"] == "policy0"
 
 
 def test_set_smt_toggles_and_persists(tmp_path, monkeypatch):
@@ -154,3 +228,399 @@ def test_unsupported_controls_degrade(tmp_path, monkeypatch):
     assert st["smt"]["supported"] is False
     st2 = asyncio.run(p.set_cpu_boost(False))
     assert st2["boost"]["supported"] is False
+
+
+def test_set_cpu_frequency_applies_before_persisting_profile(tmp_path, monkeypatch):
+    frequency = _FakeFrequency()
+    p = _make_plugin(
+        tmp_path, monkeypatch, smt=_FakeToggle(), boost=_FakeToggle(),
+        frequency=frequency,
+    )
+
+    state = asyncio.run(p.set_cpu_frequency(1_200_000, 2_400_000))
+
+    assert frequency.calls[-1] == ("manual", 1_200_000, 2_400_000)
+    assert p._cpu_profiles.effective(None)["frequency"] == {
+        "manual": True, "min_khz": 1_200_000, "max_khz": 2_400_000,
+    }
+    assert state["frequency"]["status"] == "applied"
+    assert state["frequency"]["applied_min_khz"] == 1_200_000
+
+
+def test_stale_game_frequency_rpc_cannot_retarget_the_active_game(
+    tmp_path, monkeypatch
+):
+    frequency = _FakeFrequency()
+    p = _make_plugin(
+        tmp_path, monkeypatch, smt=_FakeToggle(), boost=_FakeToggle(),
+        frequency=frequency,
+    )
+    p._init()
+    p._current_appid = "200"
+
+    asyncio.run(
+        p.set_cpu_frequency(
+            1_200_000, 2_400_000, scope="game", appid="100"
+        )
+    )
+
+    assert p._current_appid == "200"
+    assert frequency.calls == []
+    assert p._cpu_profiles.has_game("100") is False
+
+
+def test_rejected_cpu_frequency_does_not_replace_profile(tmp_path, monkeypatch):
+    frequency = _FakeFrequency(ok=False, status="failed")
+    p = _make_plugin(
+        tmp_path, monkeypatch, smt=_FakeToggle(), boost=_FakeToggle(),
+        frequency=frequency,
+    )
+    p._init()
+    before = p._cpu_profiles.effective(None)["frequency"]
+
+    state = asyncio.run(p.set_cpu_frequency(1_200_000, 2_400_000))
+
+    assert p._cpu_profiles.effective(None)["frequency"] == before
+    assert state["frequency"]["status"] == "failed"
+    assert state["frequency"]["reason"] == "frequency_write_failed"
+
+
+def test_set_cpu_frequency_auto_restores_then_persists_auto(tmp_path, monkeypatch):
+    frequency = _FakeFrequency()
+    p = _make_plugin(
+        tmp_path, monkeypatch, smt=_FakeToggle(), boost=_FakeToggle(),
+        frequency=frequency,
+    )
+    assert asyncio.run(p.set_cpu_frequency(1_200_000, 2_400_000))["frequency"]["manual"] is True
+
+    state = asyncio.run(p.set_cpu_frequency_auto())
+
+    assert frequency.calls[-1] == ("auto",)
+    assert p._cpu_profiles.effective(None)["frequency"] == {
+        "manual": False, "min_khz": None, "max_khz": None,
+    }
+    assert state["frequency"]["manual"] is False
+
+
+def test_stale_global_frequency_rpc_cannot_apply_after_game_context_changes(
+    tmp_path, monkeypatch
+):
+    frequency = _FakeFrequency()
+    p = _make_plugin(
+        tmp_path, monkeypatch, smt=_FakeToggle(), boost=_FakeToggle(),
+        frequency=frequency,
+    )
+    p._init()
+    p._current_appid = "200"
+
+    state = asyncio.run(
+        p.set_cpu_frequency(1_200_000, 2_400_000, "global", None, "100")
+    )
+
+    assert frequency.calls == []
+    assert p._cpu_profiles.effective(None)["frequency"]["manual"] is False
+    assert p._current_appid == "200"
+    assert state["follows_global"] is True
+
+
+def test_cpu_frequency_apply_uses_offload_chokepoint(tmp_path, monkeypatch):
+    frequency = _FakeFrequency()
+    p = _make_plugin(
+        tmp_path, monkeypatch, smt=_FakeToggle(), boost=_FakeToggle(),
+        frequency=frequency,
+    )
+    calls = []
+
+    async def recording_offload(fn):
+        calls.append("offload")
+        return fn()
+
+    p._offload_call = recording_offload
+    asyncio.run(p.set_cpu_frequency(1_200_000, 2_400_000))
+
+    assert calls == ["offload"]
+
+
+def test_concurrent_cpu_setters_merge_intent_instead_of_dropping_first(
+    tmp_path, monkeypatch
+):
+    smt = _FakeToggle(on=True)
+    boost = _FakeToggle(on=True)
+    p = _make_plugin(
+        tmp_path, monkeypatch, smt=smt, boost=boost, cores=_FakeCores()
+    )
+
+    async def yielding_offload(fn):
+        await asyncio.sleep(0)
+        return fn()
+
+    p._offload_call = yielding_offload
+
+    async def drive():
+        await asyncio.gather(
+            p.set_smt(False),
+            p.set_cpu_boost(False),
+        )
+
+    asyncio.run(drive())
+
+    effective = p._cpu_profiles.effective(None)
+    assert effective["smt"] is False
+    assert effective["boost"] is False
+    assert smt.enabled() is False
+    assert boost.enabled() is False
+
+
+def test_transient_cpu_failure_keeps_requested_intent_for_reapply(
+    tmp_path, monkeypatch
+):
+    smt = _FailingToggle(on=True)
+    p = _make_plugin(
+        tmp_path, monkeypatch, smt=smt,
+        boost=_FakeToggle(), cores=_FakeCores(),
+    )
+
+    state = asyncio.run(p.set_smt(False))
+
+    assert p._cpu_profiles.effective(None)["smt"] is False
+    assert smt.enabled() is True
+    assert state["smt"]["enabled"] is True
+
+
+def test_concurrent_frequency_and_legacy_toggle_keep_both_intents(
+    tmp_path, monkeypatch
+):
+    frequency = _FakeFrequency()
+    boost = _FakeToggle(on=True)
+    p = _make_plugin(
+        tmp_path, monkeypatch, smt=_FakeToggle(), boost=boost,
+        cores=_FakeCores(), frequency=frequency,
+    )
+
+    async def yielding_offload(fn):
+        await asyncio.sleep(0)
+        return fn()
+
+    p._offload_call = yielding_offload
+
+    async def drive():
+        await asyncio.gather(
+            p.set_cpu_frequency(1_200_000, 2_400_000),
+            p.set_cpu_boost(False),
+        )
+
+    asyncio.run(drive())
+
+    effective = p._cpu_profiles.effective(None)
+    assert effective["frequency"] == {
+        "manual": True,
+        "min_khz": 1_200_000,
+        "max_khz": 2_400_000,
+    }
+    assert effective["boost"] is False
+    assert frequency.requested == (1_200_000, 2_400_000)
+    assert boost.enabled() is False
+
+
+def test_cpu_handoff_retries_transient_release_failure(tmp_path, monkeypatch):
+    p = _make_plugin(
+        tmp_path, monkeypatch, smt=_FakeToggle(), boost=_FakeToggle(),
+        cores=_FakeCores(), frequency=_FakeFrequency(),
+    )
+    outcomes = iter((False, False, True))
+    calls = []
+
+    async def release(**kwargs):
+        calls.append(kwargs)
+        return types.SimpleNamespace(ok=next(outcomes))
+
+    p._apply_cpu_awaited = release
+
+    released = asyncio.run(p._release_cpu_controls("unload"))
+
+    assert released is True
+    assert calls == [
+        {"enabled": False, "trigger": "unload-1"},
+        {"enabled": False, "trigger": "unload-2"},
+        {"enabled": False, "trigger": "unload-3"},
+    ]
+
+
+def test_cpu_frequency_reprobes_after_transient_incomplete_startup(
+    tmp_path, monkeypatch
+):
+    import main
+    from cpu.frequency import NullCpuFrequency
+
+    recovered = _FakeFrequency()
+    p = _make_plugin(
+        tmp_path,
+        monkeypatch,
+        smt=_FakeToggle(),
+        boost=_FakeToggle(),
+        frequency=NullCpuFrequency("incomplete_policy"),
+    )
+    p._init()
+    p._settings["cpu_frequency_handoff"] = {"version": 1}
+    p._cpu_profiles.set_frequency("global", 1_200_000, 2_400_000)
+    monkeypatch.setattr(
+        main,
+        "select_cpu_frequency",
+        lambda **_kwargs: recovered,
+    )
+    p._offload = lambda fn, done=None: (fn(), done() if done else None)
+
+    state = p._cpu_state()
+
+    assert p._cpu_frequency is recovered
+    assert recovered.calls == [("manual", 1_200_000, 2_400_000)]
+    assert state["frequency"]["manual"] is True
+
+
+def test_cpu_handoff_is_not_success_while_durable_frequency_needs_reprobe(
+    tmp_path, monkeypatch
+):
+    from cpu.frequency import NullCpuFrequency
+
+    p = _make_plugin(
+        tmp_path,
+        monkeypatch,
+        smt=_FakeToggle(),
+        boost=_FakeToggle(),
+        frequency=NullCpuFrequency("incomplete_policy"),
+    )
+    p._init()
+    p._settings["cpu_frequency_handoff"] = {"version": 1}
+
+    released = asyncio.run(p._release_cpu_controls("unload"))
+
+    assert released is False
+
+
+def test_cpu_shutdown_handoff_cannot_be_overwritten_by_late_rpc(
+    tmp_path, monkeypatch
+):
+    smt = _FakeToggle(on=False)
+    p = _make_plugin(
+        tmp_path, monkeypatch, smt=smt, boost=_FakeToggle(),
+        cores=_FakeCores(), frequency=_FakeFrequency(),
+    )
+    p._init()
+    p._cpu_profiles.set_smt("global", False)
+    p._cpu_shutdown = True
+
+    async def yielding_offload(fn):
+        await asyncio.sleep(0)
+        return fn()
+
+    p._offload_call = yielding_offload
+
+    async def drive():
+        released, _state = await asyncio.gather(
+            p._release_cpu_controls("unload"),
+            p.set_smt(False),
+        )
+        return released
+
+    assert asyncio.run(drive()) is True
+    assert smt.enabled() is True
+
+
+def test_queued_cpu_apply_is_rejected_after_shutdown_generation_advances(
+    tmp_path, monkeypatch
+):
+    p = _make_plugin(
+        tmp_path, monkeypatch, smt=_FakeToggle(), boost=_FakeToggle(),
+        cores=_FakeCores(), frequency=_FakeFrequency(),
+    )
+    p._init()
+    calls = []
+    coordinator = types.SimpleNamespace(
+        apply=lambda *args, **kwargs: calls.append((args, kwargs))
+    )
+    p._ensure_cpu_coordinator = lambda: coordinator
+    p._cpu_generation = 9
+
+    result = p._run_cpu_apply(p._cpu_intent(), generation=8)
+
+    assert result.ok is False
+    assert result.error_code == "stale_generation"
+    assert calls == []
+
+
+def test_manual_cpu_frequency_store_failure_restores_auto_hardware_and_memory(
+    tmp_path, monkeypatch
+):
+    frequency = _FakeFrequency()
+    p = _make_plugin(
+        tmp_path, monkeypatch, smt=_FakeToggle(), boost=_FakeToggle(),
+        cores=_FakeCores(), frequency=frequency,
+    )
+    p._init()
+
+    def fail_save():
+        raise OSError("disk full")
+
+    monkeypatch.setattr(p._cpu_profiles, "_save", fail_save)
+
+    state = asyncio.run(p.set_cpu_frequency(1_200_000, 2_400_000))
+
+    assert frequency.requested is None
+    assert p._cpu_profiles.effective(None)["frequency"]["manual"] is False
+    assert state["frequency"]["status"] == "failed"
+    assert state["frequency"]["reason"] == "store_write_failed"
+
+
+def test_auto_cpu_frequency_store_failure_restores_previous_manual_window(
+    tmp_path, monkeypatch
+):
+    frequency = _FakeFrequency()
+    p = _make_plugin(
+        tmp_path, monkeypatch, smt=_FakeToggle(), boost=_FakeToggle(),
+        cores=_FakeCores(), frequency=frequency,
+    )
+    asyncio.run(p.set_cpu_frequency(1_200_000, 2_400_000))
+
+    def fail_save():
+        raise OSError("disk full")
+
+    monkeypatch.setattr(p._cpu_profiles, "_save", fail_save)
+
+    state = asyncio.run(p.set_cpu_frequency_auto())
+
+    assert frequency.requested == (1_200_000, 2_400_000)
+    assert p._cpu_profiles.effective(None)["frequency"] == {
+        "manual": True,
+        "min_khz": 1_200_000,
+        "max_khz": 2_400_000,
+    }
+    assert state["frequency"]["status"] == "failed"
+    assert state["frequency"]["reason"] == "store_write_failed"
+
+
+def test_cpu_scope_store_failure_restores_previous_game_hardware_and_memory(
+    tmp_path, monkeypatch
+):
+    smt = _FakeToggle(on=True)
+    p = _make_plugin(
+        tmp_path, monkeypatch, smt=smt, boost=_FakeToggle(),
+        cores=_FakeCores(), frequency=_FakeFrequency(),
+    )
+    p._init()
+    p._current_appid = "42"
+    asyncio.run(p.set_smt(False, "game", "42"))
+    assert smt.enabled() is False
+    assert p._cpu_profiles.is_following_global("42") is False
+
+    def fail_save():
+        raise OSError("disk full")
+
+    monkeypatch.setattr(p._cpu_profiles, "_save", fail_save)
+
+    state = asyncio.run(p.set_cpu_follow_global(True, "42"))
+
+    assert smt.enabled() is False
+    assert p._cpu_profiles.is_following_global("42") is False
+    assert state["follows_global"] is False
+    assert state["frequency"]["status"] == "failed"
+    assert state["frequency"]["reason"] == "store_write_failed"

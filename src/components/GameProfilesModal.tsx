@@ -31,7 +31,7 @@ function resolveName(appid: string): { name: string; installed: boolean } {
 /** One translated summary line per configured section: a label + a short value. */
 function sectionLine(section: SectionId, row: GameProfileRow, t: T): SectionLine | null {
   if (section === "tdp" && row.tdp) {
-    const extra = [row.tdp.auto ? t("gameProfiles.auto") : "", row.tdp.gpu ? "GPU" : ""].filter(Boolean);
+    const extra = [row.tdp.auto ? t("gameProfiles.auto") : ""].filter(Boolean);
     return { label: t("gameProfiles.sec.tdp"), text: [`${row.tdp.pl1} W`, ...extra].join(" · "), dim: row.tdp.follows_global };
   }
   if (section === "fan" && row.fan) {
@@ -47,7 +47,17 @@ function sectionLine(section: SectionId, row: GameProfileRow, t: T): SectionLine
       `${t("gameProfiles.boost")} ${row.cpu.boost ? "on" : "off"}`,
     ];
     if (row.cpu.cores != null) parts.push(t("gameProfiles.cores", { n: row.cpu.cores }));
+    const frequency = row.cpu.frequency;
+    if (frequency?.manual && frequency.min_khz != null && frequency.max_khz != null) {
+      parts.push(`${(frequency.min_khz / 1_000_000).toFixed(2)}–${(frequency.max_khz / 1_000_000).toFixed(2)} GHz`);
+    }
     return { label: t("gameProfiles.sec.cpu"), text: parts.join(" · "), dim: row.cpu.follows_global };
+  }
+  if (section === "gpu" && row.gpu) {
+    const window = row.gpu.manual && row.gpu.min != null && row.gpu.max != null
+      ? `${row.gpu.min}–${row.gpu.max} MHz`
+      : t("gameProfiles.auto");
+    return { label: t("gameProfiles.sec.gpu"), text: window, dim: row.gpu.follows_global };
   }
   if (section === "mandos" && row.mandos) {
     return { label: t("gameProfiles.sec.mandos"), text: t("gameProfiles.buttons", { n: row.mandos.count }), dim: row.mandos.follows_global };

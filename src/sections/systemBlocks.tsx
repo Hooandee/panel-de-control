@@ -6,6 +6,7 @@ import { useI18n } from "../i18n";
 import { ValueBar } from "../components/ValueBar";
 import { BatteryCard } from "../components/BatteryCard";
 import { CpuCard } from "../components/CpuCard";
+import { GpuClockCard } from "../components/GpuClockCard";
 import { EcoCard } from "../components/EcoCard";
 import { ColoresCard } from "../components/ColoresCard";
 import { Collapsible } from "../components/Collapsible";
@@ -62,7 +63,17 @@ const CpuBlock: FC = () => {
   const summary = `${cs.cores ?? "—"} ${t("system.cpu.coresWord")} · ${t("system.cpu.turbo")} ${cs.boost.enabled ? t("system.on") : t("system.off")}`;
   return (
     <Collapsible id="cpu" icon={<LuCpu size={16} />} title={t("system.cpu.title")} summary={summary}>
-      <CpuCard state={cs} scope={cpu.scope} game={cpu.game} onScope={cpu.onScope} onSetSmt={cpu.setSmt} onSetBoost={cpu.setBoost} onSetCores={cpu.setCores} />
+      <CpuCard
+        state={cs}
+        scope={cpu.scope}
+        game={cpu.game}
+        onScope={cpu.onScope}
+        onSetSmt={cpu.setSmt}
+        onSetBoost={cpu.setBoost}
+        onSetCores={cpu.setCores}
+        onSetFrequencyManual={cpu.setFrequencyManual}
+        onSetFrequency={cpu.setFrequency}
+      />
     </Collapsible>
   );
 };
@@ -84,6 +95,8 @@ const BrightnessBlock: FC = () => {
     </PanelSectionRow>
   );
 };
+
+const GpuBlock: FC = () => <GpuClockCard />;
 
 const VolumeBlock: FC = () => {
   const { t } = useI18n();
@@ -120,6 +133,7 @@ export function registerSystemBlocks(): void {
   registerBlock("eco", { sectionId: "system", Component: EcoBlock });
   registerBlock("battery", { sectionId: "system", Component: BatteryBlock });
   registerBlock("cpu", { sectionId: "system", Component: CpuBlock });
+  registerBlock("gpu", { sectionId: "system", Component: GpuBlock });
   registerBlock("brightness", { sectionId: "system", Component: BrightnessBlock });
   registerBlock("volume", { sectionId: "system", Component: VolumeBlock });
   registerBlock("colores", {

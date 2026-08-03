@@ -86,7 +86,12 @@ export function useFanCurve(): FanCurveControl {
   // wiring): picking Global makes the running game follow the global curve, the game
   // tab activates its own, neither deletes the other.
   const applyFollow = useCallback(
-    (f: boolean, a: string) => { setFanFollowGlobal(f, a).then(setStateSafe).catch(() => {}); },
+    (f: boolean, a: string) => setFanFollowGlobal(f, a)
+      .then((next) => {
+        setStateSafe(next);
+        return next.follows_global === f;
+      })
+      .catch(() => false),
     [setStateSafe],
   );
   const { scope, onScope } = useScopeSync(appid, state?.follows_global, applyFollow);

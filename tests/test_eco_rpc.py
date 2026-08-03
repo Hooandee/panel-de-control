@@ -126,3 +126,24 @@ def test_manual_boost_change_clears_eco(tmp_path, monkeypatch):
     asyncio.run(p.set_cpu_boost(True))
     assert p._settings["eco_enabled"] is False
     assert boost.enabled() is True
+
+
+def test_manual_cpu_change_exits_eco_and_schedules_normal_tdp(
+    tmp_path, monkeypatch
+):
+    boost = _FakeToggle(on=False)
+    p = _make_plugin(tmp_path, monkeypatch, boost=boost)
+
+    asyncio.run(p.set_eco(True, 40))
+    tdp_reapplies = []
+    monkeypatch.setattr(
+        p,
+        "_schedule_tdp_apply",
+        lambda reason, on_ac=None: tdp_reapplies.append((reason, on_ac)),
+    )
+
+    asyncio.run(p.set_cpu_boost(True))
+
+    assert p._settings["eco_enabled"] is False
+    assert boost.enabled() is True
+    assert tdp_reapplies

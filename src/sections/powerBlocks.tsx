@@ -1,7 +1,6 @@
 import { FC } from "react";
 
 import { TdpSection } from "../components/TdpSection";
-import { GpuClockCard } from "../components/GpuClockCard";
 import { AutoTdpToggle } from "../components/AutoTdpToggle";
 import { usePotencia } from "../tdp/potenciaContext";
 import { registerBlock } from "../customize/blocks";
@@ -31,12 +30,6 @@ const TdpCoreBlock: FC = () => {
   );
 };
 
-const GpuBlock: FC = () => {
-  const { scope, game, monitorOnly } = usePotencia();
-  if (monitorOnly) return null;
-  return <GpuClockCard scope={scope} appid={game?.appid ?? null} />;
-};
-
 const AutoTdpBlock: FC = () => {
   const { power, onAutoTdpToggle, autoTdpEnabled, monitorOnly } = usePotencia();
   if (monitorOnly || !autoTdpEnabled) return null;
@@ -45,7 +38,6 @@ const AutoTdpBlock: FC = () => {
 
 export function registerPowerBlocks(): void {
   registerBlock("tdp", { sectionId: "power", Component: TdpCoreBlock });
-  registerBlock("gpu", { sectionId: "power", Component: GpuBlock });
   // Availability = hardware capability, not the module on/off (block self-gates).
   registerBlock("autoTdp", {
     sectionId: "power",

@@ -4,6 +4,7 @@
 // Category ids the backend + collector understand. Labels are i18n `report.cat.<id>`.
 export const REPORT_CATEGORIES = [
   "tdp",
+  "cpu_gpu",
   "fans",
   "display",
   "controllers",
