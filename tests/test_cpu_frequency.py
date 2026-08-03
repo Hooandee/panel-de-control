@@ -1,4 +1,5 @@
 import os
+import shutil
 
 import cpu.frequency as frequency_module
 from cpu.frequency import NullCpuFrequency, select_cpu_frequency
@@ -266,6 +267,7 @@ def test_transient_readback_mismatch_retries_pair_once(tmp_path, monkeypatch):
     base = _policy(str(tmp_path), 0)
     real_write = frequency_module.write_str
     ignored = False
+    delays = []
 
     def ignore_first_target_min(path, value):
         nonlocal ignored
@@ -279,10 +281,12 @@ def test_transient_readback_mismatch_retries_pair_once(tmp_path, monkeypatch):
         return real_write(path, value)
 
     monkeypatch.setattr(frequency_module, "write_str", ignore_first_target_min)
+    monkeypatch.setattr(frequency_module.time, "sleep", delays.append)
 
     result = select_cpu_frequency(root=str(tmp_path)).set_window(1_200_000, 2_400_000)
 
     assert result.ok is True
+    assert delays == [0.05]
     assert _read(str(tmp_path), f"{base}/scaling_min_freq") == 1_200_000
     assert _read(str(tmp_path), f"{base}/scaling_max_freq") == 2_400_000
 
@@ -352,6 +356,7 @@ def test_auto_retries_transient_restore_readback_once(tmp_path, monkeypatch):
     assert control.set_window(1_200_000, 2_400_000).ok is True
     real_write = frequency_module.write_str
     ignored = False
+    delays = []
 
     def ignore_first_baseline_min(path, value):
         nonlocal ignored
@@ -365,10 +370,40 @@ def test_auto_retries_transient_restore_readback_once(tmp_path, monkeypatch):
         return real_write(path, value)
 
     monkeypatch.setattr(frequency_module, "write_str", ignore_first_baseline_min)
+    monkeypatch.setattr(frequency_module.time, "sleep", delays.append)
 
     restored = control.set_auto()
 
     assert restored.ok is True
+    assert delays == [0.05]
+    assert _read(str(tmp_path), f"{base}/scaling_min_freq") == 600_000
+    assert _read(str(tmp_path), f"{base}/scaling_max_freq") == 3_000_000
+
+
+def test_auto_accepts_exact_readback_when_driver_reports_write_failure(
+    tmp_path, monkeypatch
+):
+    base = _policy(
+        str(tmp_path), 0, current_min=600_000, current_max=3_000_000
+    )
+    control = select_cpu_frequency(root=str(tmp_path))
+    assert control.set_window(1_200_000, 2_400_000).ok is True
+    real_write = frequency_module.write_str
+
+    def write_but_report_failure(path, value):
+        written = real_write(path, value)
+        if os.path.basename(path) == "scaling_min_freq" and int(value) == 600_000:
+            return False
+        return written
+
+    monkeypatch.setattr(
+        frequency_module, "write_str", write_but_report_failure
+    )
+
+    restored = control.set_auto()
+
+    assert restored.ok is True
+    assert restored.status == "restored"
     assert _read(str(tmp_path), f"{base}/scaling_min_freq") == 600_000
     assert _read(str(tmp_path), f"{base}/scaling_max_freq") == 3_000_000
 
@@ -411,3 +446,85 @@ def test_policy_topology_change_starts_new_epoch_and_applies_current_request(tmp
     assert control.diagnostics()["epoch"] == first_epoch + 1
     assert [row["name"] for row in control.diagnostics()["policy_state"]] == ["policy0", "policy4"]
     assert control.get_window() == (1_200_000, 2_400_000)
+
+
+def test_auto_keeps_baseline_across_temporary_policy_topology_change(tmp_path):
+    first = _policy(
+        str(tmp_path), 0, current_min=600_000, current_max=3_000_000
+    )
+    second = _policy(
+        str(tmp_path), 4, current_min=800_000, current_max=2_800_000,
+        cpus="4-7",
+    )
+    control = select_cpu_frequency(root=str(tmp_path))
+    assert control.set_window(1_200_000, 2_400_000).ok is True
+
+    shutil.rmtree(os.path.join(str(tmp_path), second))
+    diagnostics = control.diagnostics()
+
+    assert diagnostics["owned"] is True
+    assert diagnostics["requested"] == [1_200_000, 2_400_000]
+
+    _policy(
+        str(tmp_path), 4, current_min=1_200_000, current_max=2_400_000,
+        cpus="4-7",
+    )
+    restored = control.set_auto()
+
+    assert restored.ok is True
+    assert _read(str(tmp_path), f"{first}/scaling_min_freq") == 600_000
+    assert _read(str(tmp_path), f"{first}/scaling_max_freq") == 3_000_000
+    assert _read(str(tmp_path), f"{second}/scaling_min_freq") == 800_000
+    assert _read(str(tmp_path), f"{second}/scaling_max_freq") == 2_800_000
+
+
+def test_auto_rejects_replacement_policy_that_reuses_previous_name(tmp_path):
+    base = _policy(
+        str(tmp_path), 0, current_min=600_000, current_max=3_000_000,
+        cpus="0-3",
+    )
+    control = select_cpu_frequency(root=str(tmp_path))
+    assert control.set_window(1_200_000, 2_400_000).ok is True
+
+    shutil.rmtree(os.path.join(str(tmp_path), base))
+    _policy(
+        str(tmp_path), 0, current_min=500_000, current_max=3_200_000,
+        cpus="4-7",
+    )
+
+    restored = control.set_auto()
+
+    assert restored.ok is False
+    assert restored.status == "unverifiable"
+    assert restored.reason == "baseline_stale"
+    assert _read(str(tmp_path), f"{base}/scaling_min_freq") == 500_000
+    assert _read(str(tmp_path), f"{base}/scaling_max_freq") == 3_200_000
+
+
+def test_manual_reapply_rejects_replacement_policy_before_any_write(
+    tmp_path, monkeypatch
+):
+    base = _policy(
+        str(tmp_path), 0, current_min=600_000, current_max=3_000_000,
+        cpus="0-3",
+    )
+    control = select_cpu_frequency(root=str(tmp_path))
+    assert control.set_window(1_200_000, 2_400_000).ok is True
+
+    shutil.rmtree(os.path.join(str(tmp_path), base))
+    _policy(
+        str(tmp_path), 0, current_min=500_000, current_max=3_200_000,
+        cpus="4-7",
+    )
+    writes = []
+    monkeypatch.setattr(
+        frequency_module, "write_str",
+        lambda path, value: writes.append((path, value)),
+    )
+
+    reapplied = control.set_window(1_500_000, 3_000_000)
+
+    assert reapplied.ok is False
+    assert reapplied.status == "rejected"
+    assert reapplied.reason == "policy_identity_changed"
+    assert writes == []

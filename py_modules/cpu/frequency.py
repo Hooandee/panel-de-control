@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import glob
 import os
 import re
+import time
 
 from sysfs import read_int, read_str, write_str
 
@@ -113,16 +114,19 @@ class LinuxCpuFrequency:
         self._epoch = 0
 
     @staticmethod
+    def _policy_identity(policy):
+        return (
+            policy.name,
+            os.path.realpath(policy.path),
+            policy.cpus,
+            policy.hardware_min_khz,
+            policy.hardware_max_khz,
+        )
+
+    @staticmethod
     def _make_fingerprint(policies):
         return tuple(
-            (
-                policy.name,
-                os.path.realpath(policy.path),
-                policy.cpus,
-                policy.hardware_min_khz,
-                policy.hardware_max_khz,
-            )
-            for policy in policies
+            LinuxCpuFrequency._policy_identity(policy) for policy in policies
         )
 
     def _refresh(self):
@@ -133,7 +137,6 @@ class LinuxCpuFrequency:
         if fingerprint != self._fingerprint:
             self._policies = tuple(policies)
             self._fingerprint = fingerprint
-            self._baseline = None
             self._epoch += 1
         return None
 
@@ -170,7 +173,7 @@ class LinuxCpuFrequency:
         )
 
     def _apply_pair(self, policy, current, target):
-        for _attempt in range(2):
+        for attempt in range(2):
             for path, value in self._ordered_writes(policy, current, target):
                 if not write_str(path, f"{value}\n"):
                     return "write_failed"
@@ -180,23 +183,25 @@ class LinuxCpuFrequency:
             if applied is None:
                 return "readback_mismatch"
             current = applied
+            if attempt == 0:
+                time.sleep(0.05)
         return "readback_mismatch"
 
     def _restore_pair(self, policy, target):
         current = policy.read_window()
         if current is None:
             return False
-        for _attempt in range(2):
-            writes_ok = True
+        for attempt in range(2):
             for path, value in self._ordered_writes(policy, current, target):
-                if not write_str(path, f"{value}\n"):
-                    writes_ok = False
+                write_str(path, f"{value}\n")
             applied = policy.read_window()
-            if writes_ok and applied == target:
+            if applied == target:
                 return True
             if applied is None:
                 return False
             current = applied
+            if attempt == 0:
+                time.sleep(0.05)
         return False
 
     def _rollback(self, touched, snapshots):
@@ -246,6 +251,19 @@ class LinuxCpuFrequency:
                 False, "rejected", requested,
                 {"attempted": False, "ok": None}, "invalid_range",
             )
+        if self._baseline is not None:
+            baseline_names = {identity[0] for identity in self._baseline}
+            identity_changed = any(
+                policy.name in baseline_names
+                and self._policy_identity(policy) not in self._baseline
+                for policy in self._policies
+            )
+            if identity_changed:
+                return self._result(
+                    False, "rejected", requested,
+                    {"attempted": False, "ok": None},
+                    "policy_identity_changed",
+                )
 
         snapshots = {}
         targets = {}
@@ -258,6 +276,10 @@ class LinuxCpuFrequency:
                 )
             snapshots[policy.name] = current
             targets[policy.name] = self._target_for(policy, requested)
+        baseline_entries = {
+            self._policy_identity(policy): snapshots[policy.name]
+            for policy in self._policies
+        }
 
         touched = []
         for policy in self._policies:
@@ -268,14 +290,17 @@ class LinuxCpuFrequency:
             if failure is not None:
                 rollback = self._rollback(touched, snapshots)
                 if not rollback["ok"] and self._baseline is None:
-                    self._baseline = snapshots
+                    self._baseline = baseline_entries
                 return self._result(
                     False, "failed" if rollback["ok"] else "partial",
                     requested, rollback, failure,
                 )
 
         if self._baseline is None:
-            self._baseline = snapshots
+            self._baseline = baseline_entries
+        else:
+            for identity, window in baseline_entries.items():
+                self._baseline.setdefault(identity, window)
         self._requested = requested
         clamped = any(target != requested for target in targets.values())
         return self._result(
@@ -295,7 +320,10 @@ class LinuxCpuFrequency:
                 False, "unverifiable", None,
                 {"attempted": False, "ok": None}, "baseline_unavailable",
             )
-        if set(self._baseline) != {policy.name for policy in self._policies}:
+        current_identities = {
+            self._policy_identity(policy) for policy in self._policies
+        }
+        if set(self._baseline) != current_identities:
             return self._result(
                 False, "unverifiable", None,
                 {"attempted": False, "ok": None}, "baseline_stale",
@@ -304,7 +332,8 @@ class LinuxCpuFrequency:
         restored = True
         for policy in self._policies:
             touched.append(policy)
-            if not self._restore_pair(policy, self._baseline[policy.name]):
+            identity = self._policy_identity(policy)
+            if not self._restore_pair(policy, self._baseline[identity]):
                 restored = False
         if not restored:
             return self._result(

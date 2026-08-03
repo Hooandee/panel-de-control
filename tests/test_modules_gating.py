@@ -111,9 +111,12 @@ def test_cpu_released_to_defaults_when_system_disabled():
     # All cores online, SMT on, boost on — hand the CPU back, don't leave it parked.
     p = _plugin_cpu(disabled=["system"])
     p._apply_cpu()
-    assert p._cores.calls == [8]
-    assert p._smt.calls == [True]
-    assert p._boost.calls == [True]
+    assert p._cores.active() == 8
+    assert p._smt.enabled() is True
+    assert p._boost.enabled() is True
+    assert p._cores.calls == []
+    assert p._smt.calls == []
+    assert p._boost.calls == []
 
 
 def test_collect_sample_none_when_learning_inactive():
