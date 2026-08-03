@@ -157,6 +157,20 @@ def test_exact_steam_deck_never_falls_through_to_generic_amd_backends(tmp_path):
     assert [item["candidate"] for item in backend.probe_trace] == ["deck"]
 
 
+def test_exact_deck_with_unlabelled_amdgpu_cap_ends_at_null(tmp_path):
+    root = str(tmp_path)
+    _mk_amdgpu_powercap(root)
+
+    backend = select_backend(
+        _p("steam_deck_oled"),
+        root=root,
+        ryzenadj_resolve=lambda: "/usr/bin/ryzenadj",
+    )
+
+    assert isinstance(backend, NullBackend)
+    assert [item["candidate"] for item in backend.probe_trace] == ["deck"]
+
+
 def test_falls_back_to_null_when_nothing_present(tmp_path):
     b = select_backend(_p("rog_ally_x"), root=str(tmp_path), ryzenadj_resolve=_NO_RYZENADJ)
     assert b.supported is False and b.name == "unsupported"

@@ -10,7 +10,7 @@ from tdp.types import RailReading, TdpLimits, TdpObservation, TdpResult
 
 _HWMON = "sys/class/hwmon"
 _DECK_KEYS = {"steam_deck_lcd", "steam_deck_oled"}
-_DECK_HWMON_NAMES = {"amdgpu", "steamdeck_hwmon", "jupiter"}
+_DECK_HWMON_NAME = "amdgpu"
 _SLOW_COMMAND_RANGE = (3, 29)
 _FAST_COMMAND_RANGE = (3, 30)
 _SLOW_RESTORE_RANGE = (0, 29)
@@ -45,6 +45,8 @@ class SteamDeckHwmonBackend(TDPBackend):
         self._device_key = device_key
         self._root = root
         surface = self._discover()
+        self._restore_surface = surface
+        self._restore_identity = self._surface_identity(surface)
         self.supported = surface is not None
         self.supports_levels = bool(self.ppt_capability()["supported"])
 
@@ -53,18 +55,54 @@ class SteamDeckHwmonBackend(TDPBackend):
             return []
         surfaces = []
         for directory in sorted(glob.glob(os.path.join(self._root, _HWMON, "hwmon*"))):
-            if read_str(os.path.join(directory, "name")) not in _DECK_HWMON_NAMES:
+            probe = self._probe_surface(directory)
+            if not probe["accepted"]:
                 continue
             slow = os.path.join(directory, "power1_cap")
-            if read_int(slow) is None or not os.access(slow, os.W_OK):
-                continue
             fast = os.path.join(directory, "power2_cap")
+            fast_valid = (
+                _label(read_str(os.path.join(directory, "power2_label"))) == "fastppt"
+                and read_int(fast) is not None
+                and os.access(fast, os.W_OK)
+            )
             surfaces.append({
                 "directory": directory,
                 "slow": slow,
-                "fast": fast if read_int(fast) is not None and os.access(fast, os.W_OK) else None,
+                "fast": fast if fast_valid else None,
             })
         return surfaces
+
+    @staticmethod
+    def _probe_surface(directory):
+        slow = os.path.join(directory, "power1_cap")
+        fast = os.path.join(directory, "power2_cap")
+        name = read_str(os.path.join(directory, "name"))
+        slow_label = read_str(os.path.join(directory, "power1_label"))
+        fast_label = read_str(os.path.join(directory, "power2_label"))
+        slow_readable = read_int(slow) is not None
+        slow_writable = os.access(slow, os.W_OK)
+        if name != _DECK_HWMON_NAME:
+            reason = "name_mismatch"
+        elif _label(slow_label) != "slowppt":
+            reason = "slow_label_mismatch"
+        elif not slow_readable:
+            reason = "slow_unreadable"
+        elif not slow_writable:
+            reason = "slow_readonly"
+        else:
+            reason = None
+        return {
+            "hwmon": os.path.basename(directory),
+            "name": name,
+            "slow_label": slow_label,
+            "fast_label": fast_label,
+            "slow_readable": slow_readable,
+            "slow_writable": slow_writable,
+            "fast_readable": read_int(fast) is not None,
+            "fast_writable": os.access(fast, os.W_OK),
+            "accepted": reason is None,
+            "reason": reason,
+        }
 
     def _discover(self):
         surfaces = self._surfaces()
@@ -151,12 +189,24 @@ class SteamDeckHwmonBackend(TDPBackend):
 
     def diagnostics(self):
         _, reason = self._capability()
+        directories = sorted(glob.glob(os.path.join(self._root, _HWMON, "hwmon*")))
+        candidates = [self._probe_surface(directory) for directory in directories]
+        surface = self._discover()
         return {
             "supported": self.supported,
             "backend": self.name,
             "device_key": self._device_key,
             "ppt": self.ppt_capability(),
             "ppt_reason": reason,
+            "selected": (
+                {
+                    "hwmon": os.path.basename(surface["directory"]),
+                    "name": read_str(os.path.join(surface["directory"], "name")),
+                }
+                if surface is not None
+                else None
+            ),
+            "candidates": candidates,
         }
 
     def get_limits(self) -> TdpLimits:
@@ -228,6 +278,17 @@ class SteamDeckHwmonBackend(TDPBackend):
     def _path(surface, rail):
         return surface["slow" if rail == "slow" else "fast"]
 
+    @staticmethod
+    def _surface_identity(surface):
+        if surface is None or surface["fast"] is None:
+            return None
+        try:
+            slow = os.stat(surface["slow"])
+            fast = os.stat(surface["fast"])
+        except OSError:
+            return None
+        return slow.st_dev, slow.st_ino, fast.st_dev, fast.st_ino
+
     def _write_pair(self, surface, current, target, continue_on_failure=False):
         failures = []
         for rail in self._order(current, target):
@@ -291,6 +352,12 @@ class SteamDeckHwmonBackend(TDPBackend):
                 "snapshot_invalid",
             )
         surface = self._discover()
+        if (
+            surface is None
+            and self._restore_identity is not None
+            and self._surface_identity(self._restore_surface) == self._restore_identity
+        ):
+            surface = self._restore_surface
         if surface is None or surface["fast"] is None:
             return PptApplyResult(
                 False, requested, {}, {"attempted": False, "ok": None},
