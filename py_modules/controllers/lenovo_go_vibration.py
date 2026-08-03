@@ -337,14 +337,14 @@ class LenovoGoVibrationAdapter:
                 raw.get("right_pattern"),
             ),
             (
-                root / "touchpad/vibration_enabled",
-                "true" if desired["touchpad_enabled"] else "false",
-                raw.get("touchpad_enabled"),
-            ),
-            (
                 root / "touchpad/vibration_intensity",
                 desired["touchpad_intensity"],
                 raw.get("touchpad_intensity"),
+            ),
+            (
+                root / "touchpad/vibration_enabled",
+                "true" if desired["touchpad_enabled"] else "false",
+                raw.get("touchpad_enabled"),
             ),
         )
         changed = []
@@ -359,7 +359,21 @@ class LenovoGoVibrationAdapter:
                     raise OSError("driver readback mismatch")
         except OSError:
             rollback_confirmed = True
-            for path, baseline in reversed(changed):
+            touchpad_intensity = root / "touchpad/vibration_intensity"
+            touchpad_enabled = root / "touchpad/vibration_enabled"
+            rollback = [
+                item for item in reversed(changed)
+                if item[0] not in (touchpad_intensity, touchpad_enabled)
+            ]
+            if any(
+                path in (touchpad_intensity, touchpad_enabled)
+                for path, _baseline in changed
+            ):
+                rollback.extend((
+                    (touchpad_intensity, raw.get("touchpad_intensity")),
+                    (touchpad_enabled, raw.get("touchpad_enabled")),
+                ))
+            for path, baseline in rollback:
                 if baseline is None:
                     rollback_confirmed = False
                     continue

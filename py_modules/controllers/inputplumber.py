@@ -166,6 +166,16 @@ def get_config(store, dbus, device_key, appid=None, caps=None, vibration=None,
         vibration_config["confirmation"] = vibration_capabilities.get(
             "readback", "none"
         )
+        for field in (
+            "intensity_options",
+            "left_pattern_options",
+            "right_pattern_options",
+            "touchpad_enabled_options",
+            "touchpad_intensity_options",
+        ):
+            values = vibration_capabilities.get(field)
+            if isinstance(values, list):
+                vibration_config[field] = list(values)
     persistent_state = (
         vibration.state()
         if identified and vibration is not None
@@ -439,13 +449,14 @@ def _ensure_vibration_baseline(
                 if callable(gain_available)
                 else "value" in legacy_baseline
             )
-            if route != "lenovo_hd" and has_gain:
+            if has_gain:
                 apply_gain = getattr(vibration, "apply_gain", None)
                 if not callable(apply_gain) or not apply_gain(100):
                     return False
-                observed.setdefault(
-                    "value", legacy_baseline.get("value", 100)
-                )
+                if route != "lenovo_hd":
+                    observed.setdefault(
+                        "value", legacy_baseline.get("value", 100)
+                    )
     store.remember_vibration_baseline(
         owner, observed
     )

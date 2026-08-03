@@ -274,6 +274,16 @@ class GamescopeColorBackend:
         }
         return self._run(["gamescopectl", *args], env)
 
+    def run_control(self, args):
+        if not self._refresh_session_identity():
+            return 1, ""
+        return self._ctl(*args)
+
+    def hdr_session_context(self):
+        if not self._refresh_session_identity():
+            return None
+        return self._runtime, self._wayland, self._session_identity
+
     def _probe(self):
         rc, _ = self._ctl("version")
         self._probe_detail = f"socket={self._runtime}/{self._wayland} version rc={rc}"

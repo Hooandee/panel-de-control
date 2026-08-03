@@ -316,6 +316,17 @@ def test_ip_config_exposes_lenovo_hd_desired_and_actual_state(tmp_path):
     assert cfg["actual_right_pattern"] == "rpg"
     assert cfg["actual_touchpad_enabled"] is True
     assert cfg["actual_touchpad_intensity"] == "low"
+    assert cfg["intensity_options"] == ["off", "low", "medium", "high"]
+    assert cfg["left_pattern_options"] == [
+        "fps", "racing", "standard", "spg", "rpg",
+    ]
+    assert cfg["right_pattern_options"] == [
+        "fps", "racing", "standard", "spg", "rpg",
+    ]
+    assert cfg["touchpad_enabled_options"] == [True, False]
+    assert cfg["touchpad_intensity_options"] == [
+        "off", "low", "medium", "high",
+    ]
 
 
 def test_ip_config_never_labels_unreliable_lenovo_state_as_actual(tmp_path):
@@ -511,6 +522,14 @@ def test_ip_first_hd_edit_neutralizes_gain_and_persists_a_complete_profile(
         "touchpad_enabled": True,
         "touchpad_intensity": "low",
     }
+
+    status = inputplumber.apply_effective_components(
+        store, dbus, "legion_go_2", "42",
+        vibration=vibration, apply_buttons=False,
+    )
+
+    assert status["vibration"] is True
+    assert vibration.gain_applied == [100, 100]
 
 
 def test_ip_lenovo_hd_upgrade_blocks_if_legacy_gain_cannot_be_neutralized(

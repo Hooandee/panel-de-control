@@ -351,9 +351,80 @@ def test_hdr_reapply_never_disables_mode_it_did_not_enable(tmp_path, monkeypatch
     assert backend.calls == []
 
 
+def test_display_reapply_skips_color_when_hdr_is_not_confirmed(
+    tmp_path, monkeypatch,
+):
+    p, color = _make_plugin(tmp_path, monkeypatch)
+    asyncio.run(p.get_hdr_state())
+    p._device = dataclasses.replace(p._device, hdr=True)
+    p._color.set_hdr("global", True)
+    p._hdr_backend = type("HdrFailure", (), {
+        "set_enabled": lambda _self, _enabled: False,
+        "diagnostics": lambda _self: {
+            "enabled": True, "ok": False, "readback": True,
+        },
+    })()
+    p._display_endpoint_last = ("old-session",)
+    color.applied.clear()
+
+    assert p._reapply_display_sync() is False
+    assert color.applied == []
+    assert p._display_endpoint_last is None
+
+
+def test_hdr_state_distinguishes_accepted_from_confirmed(
+    tmp_path, monkeypatch,
+):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    asyncio.run(p.get_hdr_state())
+    p._color.set_hdr("global", True)
+    p._hdr_backend = type("HdrAccepted", (), {
+        "set_enabled": lambda _self, _enabled: True,
+        "diagnostics": lambda _self: {
+            "enabled": True,
+            "actual_enabled": None,
+            "ok": True,
+            "readback": False,
+            "confirmation": "accepted",
+        },
+    })()
+
+    state = p._hdr_state()
+
+    assert state["confirmation"] == "accepted"
+    assert "last_apply" not in state
+
+    color = p._color_backend
+    color.applied.clear()
+    assert p._reapply_display_sync() is False
+    assert color.applied == []
+
+
+def test_hdr_state_discards_confirmation_from_an_old_gamescope_session(
+    tmp_path, monkeypatch,
+):
+    p, color = _make_plugin(tmp_path, monkeypatch)
+    asyncio.run(p.get_hdr_state())
+    p._color.set_hdr("global", True)
+    color.session_identity = (2, 200)
+    p._hdr_backend = type("OldHdrSession", (), {
+        "diagnostics": lambda _self: {
+            "enabled": True,
+            "actual_enabled": True,
+            "ok": True,
+            "readback": True,
+            "session_identity": (1, 100),
+        },
+    })()
+
+    state = p._hdr_state()
+
+    assert "actual_enabled" not in state
+    assert "last_apply" not in state
+
+
 def test_color_look_applies_regardless_of_hdr(tmp_path, monkeypatch):
-    # The look colors all composited/SDR content even in HDR mode (only a native-HDR
-    # game is out of reach, which needs no special handling), so it's applied either way.
+    # Gamescope selects the G22 or PQ member of the paired look for the active EOTF.
     p, color = _make_plugin(tmp_path, monkeypatch)
     asyncio.run(p.get_hdr_state())                       # triggers _init
     p._device = dataclasses.replace(p._device, hdr=True)

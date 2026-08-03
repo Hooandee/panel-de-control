@@ -7,7 +7,6 @@ import { theme } from "../theme";
 import {
   isNativeColor,
   isCalibrated,
-  shouldWarnHdrSaturation,
 } from "../display/color";
 import { usePantalla } from "../display/pantallaContext";
 import { ContainedSlider } from "../components/ContainedSlider";
@@ -68,52 +67,6 @@ const ColorBlock: FC = () => {
             scale={0.75} onChange={color.onSaturation} />
         </div>
       </PanelSectionRow>
-      {state.hdr_saturation_supported && (
-        <PanelSectionRow>
-          <div style={{ ...theme.card, padding: theme.space.md, overflow: "hidden" }}>
-            <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 2 }}>
-              <LuPalette size={16} color={theme.color.accent} />
-              <span style={{ fontSize: theme.font.body, fontWeight: 600, color: theme.color.textPrimary }}>
-                {t("display.hdrSaturation")}
-              </span>
-              {state.hdr_saturation_experimental && (
-                <span style={{
-                  color: theme.color.warn,
-                  fontSize: theme.font.caption,
-                  fontWeight: 700,
-                }}>
-                  {t("device.experimental.badge")}
-                </span>
-              )}
-              <span style={{ marginLeft: "auto", fontSize: theme.font.value, fontWeight: 700, color: theme.color.textPrimary }}>
-                {state.hdr_saturation}%
-              </span>
-            </div>
-            <ContainedSlider
-              value={state.hdr_saturation}
-              min={100}
-              max={150}
-              step={5}
-              scale={0.75}
-              onChange={color.onHdrSaturation}
-            />
-            <div style={{
-              marginTop: theme.space.xs,
-              color: shouldWarnHdrSaturation(state.hdr_saturation)
-                ? theme.color.warn
-                : theme.color.textMuted,
-              fontSize: theme.font.caption,
-              lineHeight: 1.35,
-            }}>
-              {t(shouldWarnHdrSaturation(state.hdr_saturation)
-                ? "display.hdrSaturation.warning"
-                : state.hdr_saturation_experimental
-                  ? "display.hdrSaturation.experimental"
-                  : "display.hdrSaturation.desc")}
-            </div>
-          </div>
-        </PanelSectionRow>
-      )}
       <Collapsible
         id="color-advanced"
         icon={<LuSlidersHorizontal size={16} />}
@@ -140,13 +93,16 @@ const ColorBlock: FC = () => {
 };
 
 const HdrBlock: FC = () => {
-  const { hdr } = usePantalla();
+  const { hdr, color } = usePantalla();
   if (!hdr.state?.supported) return null;
-  return (
-    <PanelSectionRow>
-      <HdrPanel state={hdr.state} onChange={hdr.update} />
-    </PanelSectionRow>
-  );
+  const saturation = color.state?.hdr_saturation_supported
+    ? {
+        value: color.state.hdr_saturation,
+        experimental: color.state.hdr_saturation_experimental,
+        onChange: color.onHdrSaturation,
+      }
+    : undefined;
+  return <HdrPanel state={hdr.state} onChange={hdr.update} saturation={saturation} />;
 };
 
 const NightBlock: FC = () => {

@@ -350,7 +350,12 @@ class Plugin:
         self._display_wait_task = None
         # HDR output on/off (gamescope). State lives in settings (hdr_enabled); gated to
         # HDR-capable panels with gamescope.
-        self._hdr_backend = HdrBackend(run_gamescopectl)
+        self._hdr_backend = HdrBackend(
+            getattr(self._color_backend, "run_control", run_gamescopectl),
+            session_provider=getattr(
+                self._color_backend, "hdr_session_context", None
+            ),
+        )
         self._hdr_managed = False
         self._hdr_managed_session = None
         self._power_reader = PowerReader()
@@ -1196,9 +1201,7 @@ class Plugin:
         )
 
     def _reapply_display_endpoint_sync(self) -> bool:
-        hdr_applied = self._reapply_hdr_sync()
-        color_applied = self._reapply_color_sync()
-        return hdr_applied and color_applied
+        return self._reapply_display_sync()
 
     async def _poll_display_endpoint_once(self) -> None:
         fingerprint = getattr(
@@ -3034,10 +3037,7 @@ class Plugin:
         if not self._tdp_control_on():
             self._offload(self._restore_hhd_tdp)
         self._reapply_fans()   # self-offloading
-        # HDR before color: switching the HDR mode can drop the loaded LUT, so re-assert
-        # HDR first and load the color look after (both self-offloading, FIFO executor).
-        self._reapply_hdr()
-        self._reapply_color()
+        self._reapply_display()
         self._reapply_audio()  # self-offloading; no-op when the EQ is disabled
         self._reapply_controller(force=force_controller)
 
@@ -3348,10 +3348,26 @@ class Plugin:
         compositor). No executor / no loop → inline."""
         self._offload(self._reapply_color_sync)
 
+    def _reapply_display(self) -> None:
+        self._offload(self._reapply_display_sync)
+
+    def _reapply_display_sync(self) -> bool:
+        needs_confirmation = (
+            self._color.hdr(self._current_appid) or self._hdr_managed
+        )
+        if not self._reapply_hdr_sync():
+            self._display_endpoint_last = None
+            return False
+        if needs_confirmation and not self._hdr_confirmed():
+            self._display_endpoint_last = None
+            return False
+        applied = self._reapply_color_sync()
+        if not applied:
+            self._display_endpoint_last = None
+        return applied
+
     def _reapply_color_sync(self) -> bool:
-        """Push the effective color to gamescope. No-op when unsupported. Guarded.
-        Applied in HDR mode too — it colors all composited/SDR content; a native-HDR
-        game (direct scanout) is simply out of the LUT's reach, no handling needed."""
+        """Push the effective color to gamescope. No-op when unsupported. Guarded."""
         if not self._module_enabled("display"):
             return True
         try:
@@ -3378,8 +3394,7 @@ class Plugin:
             else:
                 return  # gamescope never came up (desktop) — nothing to apply
             for i in range(reasserts):
-                self._reapply_hdr()
-                self._reapply_color()
+                self._reapply_display()
                 if i < reasserts - 1:
                     await asyncio.sleep(reassert_interval)
             self._start_night_loop()
@@ -3634,19 +3649,51 @@ class Plugin:
     def _hdr_supported(self) -> bool:
         return self._device.hdr and self._color_backend.supported
 
+    def _hdr_diagnostics(self, enabled: bool):
+        diagnostics = getattr(
+            self._hdr_backend, "diagnostics", lambda: None
+        )()
+        if not (
+            isinstance(diagnostics, dict)
+            and diagnostics.get("enabled") == enabled
+        ):
+            return None
+        recorded_session = diagnostics.get("session_identity")
+        if (
+            recorded_session is not None
+            and recorded_session
+            != getattr(self._color_backend, "session_identity", None)
+        ):
+            return None
+        return diagnostics
+
     def _hdr_state(self) -> dict:
-        return {
+        enabled = self._color.hdr(self._current_appid)
+        current_diagnostics = self._hdr_diagnostics(enabled)
+        state = {
             "supported": self._hdr_supported(),
-            "enabled": self._color.hdr(self._current_appid),  # per-game (own or global)
+            "enabled": enabled,
             "follows_global": self._color.is_following_global(self._current_appid),
         }
+        if current_diagnostics is not None:
+            state["actual_enabled"] = current_diagnostics.get("actual_enabled")
+            if not current_diagnostics.get("ok"):
+                state["last_apply"] = False
+            elif current_diagnostics.get("readback") is True:
+                state["last_apply"] = True
+            else:
+                state["confirmation"] = "accepted"
+        return state
 
-    def _reapply_hdr(self) -> None:
-        # A transition to OFF is needed only after this process successfully enabled
-        # HDR. That keeps per-game profiles reversible without disabling a mode owned
-        # by Steam or another tool.
-        if self._color.hdr(self._current_appid) or self._hdr_managed:
-            self._offload(self._reapply_hdr_sync)
+    def _hdr_confirmed(self) -> bool:
+        desired = self._color.hdr(self._current_appid)
+        diagnostics = self._hdr_diagnostics(desired)
+        return bool(
+            diagnostics
+            and diagnostics.get("actual_enabled") == desired
+            and diagnostics.get("ok")
+            and diagnostics.get("readback") is True
+        )
 
     def _reapply_hdr_sync(self) -> bool:
         """Reconcile effective per-game HDR while respecting external ownership."""
@@ -3721,10 +3768,11 @@ class Plugin:
         if "enabled" in p:
             self._color.set_hdr(scope, bool(p["enabled"]), appid=appid)
         enabled = self._color.hdr(self._current_appid)
-        # Off-loop: set_enabled spawns gamescopectl (a no-op when gamescope is absent).
-        self._offload(lambda: self._set_hdr_explicit_sync(enabled))
-        # Then re-assert the color look — gamescope can drop the loaded LUT on a mode switch.
-        self._reapply_color()
+        applied = await self._offload_call(
+            lambda: self._set_hdr_explicit_sync(enabled)
+        )
+        if applied and self._hdr_confirmed():
+            await self._offload_call(self._reapply_color_sync)
         return await self._offload_call(self._hdr_state)
 
     async def _read_applied(self):

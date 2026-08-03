@@ -123,7 +123,7 @@ def test_unknown_readback_accepts_a_complete_profile_without_fake_confirmation(
 
     assert adapter.apply(desired) is True
     assert [value for _, value in writes] == [
-        "high", "fps", "rpg", "false", "medium",
+        "high", "fps", "rpg", "medium", "false",
     ]
     assert adapter.diagnostics() == {
         "probe": {
@@ -243,8 +243,8 @@ def test_apply_writes_each_handle_pattern_and_confirms_readback(
         surface / "rumble_intensity",
         surface / "left_handle/rumble_mode",
         surface / "right_handle/rumble_mode",
-        surface / "touchpad/vibration_enabled",
         surface / "touchpad/vibration_intensity",
+        surface / "touchpad/vibration_enabled",
     ]
 
 
@@ -312,6 +312,76 @@ def test_partial_write_rolls_back_every_changed_attribute(tmp_path):
         "reason": "write_failed",
         "rollback_confirmed": True,
     }
+
+
+def test_rollback_restores_touchpad_enabled_after_intensity(tmp_path):
+    surface = _surface(tmp_path)
+    enabled = surface / "touchpad/vibration_enabled"
+    intensity = surface / "touchpad/vibration_intensity"
+    enabled.write_text("false")
+    intensity.write_text("off")
+    writes = []
+    enabled_writes = 0
+
+    def firmware_write(path, value):
+        nonlocal enabled_writes
+        writes.append((path, value))
+        if path == intensity:
+            path.write_text(value)
+            enabled.write_text("true")
+        elif path == enabled:
+            enabled_writes += 1
+            if enabled_writes > 1:
+                path.write_text(value)
+        else:
+            path.write_text(value)
+
+    adapter = _adapter(tmp_path, [surface], write_text=firmware_write)
+
+    assert adapter.apply({
+        "intensity": "high",
+        "left_pattern": "fps",
+        "right_pattern": "rpg",
+        "touchpad_enabled": False,
+        "touchpad_intensity": "high",
+    }) is False
+    assert enabled.read_text() == "false"
+    assert intensity.read_text() == "off"
+    assert [path for path, _ in writes[-2:]] == [intensity, enabled]
+    assert adapter.diagnostics()["rollback_confirmed"] is True
+
+
+def test_intensity_mismatch_rolls_back_the_coupled_touchpad_pair(tmp_path):
+    surface = _surface(tmp_path)
+    enabled = surface / "touchpad/vibration_enabled"
+    intensity = surface / "touchpad/vibration_intensity"
+    enabled.write_text("false")
+    intensity.write_text("off")
+    writes = []
+
+    def firmware_write(path, value):
+        writes.append((path, value))
+        if path == intensity and value == "high":
+            enabled.write_text("true")
+        elif path == intensity:
+            path.write_text(value)
+            enabled.write_text("true")
+        else:
+            path.write_text(value)
+
+    adapter = _adapter(tmp_path, [surface], write_text=firmware_write)
+
+    assert adapter.apply({
+        "intensity": "high",
+        "left_pattern": "fps",
+        "right_pattern": "rpg",
+        "touchpad_enabled": False,
+        "touchpad_intensity": "high",
+    }) is False
+    assert enabled.read_text() == "false"
+    assert intensity.read_text() == "off"
+    assert [path for path, _ in writes[-2:]] == [intensity, enabled]
+    assert adapter.diagnostics()["rollback_confirmed"] is True
 
 
 def test_diagnostics_explain_partial_and_ambiguous_surfaces(tmp_path):

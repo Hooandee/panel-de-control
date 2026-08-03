@@ -604,10 +604,12 @@ export const getNightState = callable<[], NightState>("get_night_state");
 export const setNight = callable<[patch: NightPatch], NightState>("set_night");
 
 // ---- HDR output -----------------------------------------------------------
-// On/off only: HDR content scans out directly, so its color can't be tuned from here.
 export interface HdrState {
   supported: boolean;   // HDR-capable panel + gamescope present
   enabled: boolean;
+  actual_enabled?: boolean | null;
+  last_apply?: boolean;
+  confirmation?: "accepted";
   // Per-game via the shared color scope: true when this game follows the global HDR.
   follows_global: boolean;
 }

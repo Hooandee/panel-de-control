@@ -513,6 +513,9 @@ const DiagnosticsBlock: FC = () => {
       title={t("mandos.diagnostics.title")}
       icon={<LuActivity size={16} color={theme.color.accent} />}
     >
+      <div style={{ color: theme.color.textMuted, fontSize: theme.font.caption, lineHeight: 1.4, marginBottom: theme.space.sm }}>
+        {t("mandos.diagnostics.desc")}
+      </div>
       {groups.includes("sources") && (
         <>
           <DiagnosticHeading>{t("mandos.diagnostics.sources")}</DiagnosticHeading>
