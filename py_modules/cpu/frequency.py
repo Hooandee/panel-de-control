@@ -170,22 +170,34 @@ class LinuxCpuFrequency:
         )
 
     def _apply_pair(self, policy, current, target):
-        for path, value in self._ordered_writes(policy, current, target):
-            if not write_str(path, value):
-                return "write_failed"
-        if policy.read_window() != target:
-            return "readback_mismatch"
-        return None
+        for _attempt in range(2):
+            for path, value in self._ordered_writes(policy, current, target):
+                if not write_str(path, f"{value}\n"):
+                    return "write_failed"
+            applied = policy.read_window()
+            if applied == target:
+                return None
+            if applied is None:
+                return "readback_mismatch"
+            current = applied
+        return "readback_mismatch"
 
     def _restore_pair(self, policy, target):
         current = policy.read_window()
         if current is None:
             return False
-        writes_ok = True
-        for path, value in self._ordered_writes(policy, current, target):
-            if not write_str(path, value):
-                writes_ok = False
-        return writes_ok and policy.read_window() == target
+        for _attempt in range(2):
+            writes_ok = True
+            for path, value in self._ordered_writes(policy, current, target):
+                if not write_str(path, f"{value}\n"):
+                    writes_ok = False
+            applied = policy.read_window()
+            if writes_ok and applied == target:
+                return True
+            if applied is None:
+                return False
+            current = applied
+        return False
 
     def _rollback(self, touched, snapshots):
         ok = True
@@ -289,13 +301,16 @@ class LinuxCpuFrequency:
                 {"attempted": False, "ok": None}, "baseline_stale",
             )
         touched = []
+        restored = True
         for policy in self._policies:
             touched.append(policy)
             if not self._restore_pair(policy, self._baseline[policy.name]):
-                return self._result(
-                    False, "partial", None,
-                    {"attempted": True, "ok": False}, "restore_failed",
-                )
+                restored = False
+        if not restored:
+            return self._result(
+                False, "partial", None,
+                {"attempted": True, "ok": False}, "restore_failed",
+            )
         self._baseline = None
         self._requested = None
         return self._result(

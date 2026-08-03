@@ -209,6 +209,24 @@ def test_lowering_window_writes_min_before_max(tmp_path, monkeypatch):
     ]
 
 
+def test_sysfs_payload_ends_with_newline_for_strict_cpufreq_driver(tmp_path, monkeypatch):
+    base = _policy(str(tmp_path), 0)
+    real_write = frequency_module.write_str
+
+    def strict_sysfs_write(path, value):
+        if not str(value).endswith("\n"):
+            return True
+        return real_write(path, value)
+
+    monkeypatch.setattr(frequency_module, "write_str", strict_sysfs_write)
+
+    result = select_cpu_frequency(root=str(tmp_path)).set_window(1_200_000, 2_400_000)
+
+    assert result.ok is True
+    assert _read(str(tmp_path), f"{base}/scaling_min_freq") == 1_200_000
+    assert _read(str(tmp_path), f"{base}/scaling_max_freq") == 2_400_000
+
+
 def test_rejects_window_outside_global_envelope_without_writes(tmp_path, monkeypatch):
     _policy(str(tmp_path), 0)
     writes = []
@@ -242,6 +260,31 @@ def test_readback_mismatch_rolls_back_original_window(tmp_path, monkeypatch):
     assert result.rollback == {"attempted": True, "ok": True}
     assert _read(str(tmp_path), f"{base}/scaling_min_freq") == 400_000
     assert _read(str(tmp_path), f"{base}/scaling_max_freq") == 3_500_000
+
+
+def test_transient_readback_mismatch_retries_pair_once(tmp_path, monkeypatch):
+    base = _policy(str(tmp_path), 0)
+    real_write = frequency_module.write_str
+    ignored = False
+
+    def ignore_first_target_min(path, value):
+        nonlocal ignored
+        if (
+            not ignored
+            and os.path.basename(path) == "scaling_min_freq"
+            and int(value) == 1_200_000
+        ):
+            ignored = True
+            return True
+        return real_write(path, value)
+
+    monkeypatch.setattr(frequency_module, "write_str", ignore_first_target_min)
+
+    result = select_cpu_frequency(root=str(tmp_path)).set_window(1_200_000, 2_400_000)
+
+    assert result.ok is True
+    assert _read(str(tmp_path), f"{base}/scaling_min_freq") == 1_200_000
+    assert _read(str(tmp_path), f"{base}/scaling_max_freq") == 2_400_000
 
 
 def test_second_policy_failure_rolls_back_every_touched_policy(tmp_path, monkeypatch):
@@ -301,6 +344,58 @@ def test_auto_restores_session_baseline_once_then_becomes_unverifiable(tmp_path,
     assert second.ok is False
     assert second.status == "unverifiable"
     assert writes == []
+
+
+def test_auto_retries_transient_restore_readback_once(tmp_path, monkeypatch):
+    base = _policy(str(tmp_path), 0, current_min=600_000, current_max=3_000_000)
+    control = select_cpu_frequency(root=str(tmp_path))
+    assert control.set_window(1_200_000, 2_400_000).ok is True
+    real_write = frequency_module.write_str
+    ignored = False
+
+    def ignore_first_baseline_min(path, value):
+        nonlocal ignored
+        if (
+            not ignored
+            and os.path.basename(path) == "scaling_min_freq"
+            and int(value) == 600_000
+        ):
+            ignored = True
+            return True
+        return real_write(path, value)
+
+    monkeypatch.setattr(frequency_module, "write_str", ignore_first_baseline_min)
+
+    restored = control.set_auto()
+
+    assert restored.ok is True
+    assert _read(str(tmp_path), f"{base}/scaling_min_freq") == 600_000
+    assert _read(str(tmp_path), f"{base}/scaling_max_freq") == 3_000_000
+
+
+def test_auto_attempts_remaining_policies_after_one_restore_failure(tmp_path, monkeypatch):
+    first = _policy(str(tmp_path), 0, current_min=600_000, current_max=3_000_000)
+    second = _policy(
+        str(tmp_path), 4, current_min=800_000, current_max=2_800_000, cpus="4-7"
+    )
+    control = select_cpu_frequency(root=str(tmp_path))
+    assert control.set_window(1_200_000, 2_400_000).ok is True
+    real_write = frequency_module.write_str
+
+    def fail_first_policy_restore(path, value):
+        if "policy0" in path and int(value) == 600_000:
+            return False
+        return real_write(path, value)
+
+    monkeypatch.setattr(frequency_module, "write_str", fail_first_policy_restore)
+
+    restored = control.set_auto()
+
+    assert restored.ok is False
+    assert restored.status == "partial"
+    assert _read(str(tmp_path), f"{first}/scaling_min_freq") == 1_200_000
+    assert _read(str(tmp_path), f"{second}/scaling_min_freq") == 800_000
+    assert _read(str(tmp_path), f"{second}/scaling_max_freq") == 2_800_000
 
 
 def test_policy_topology_change_starts_new_epoch_and_applies_current_request(tmp_path):
