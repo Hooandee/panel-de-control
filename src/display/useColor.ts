@@ -33,6 +33,15 @@ export interface ColorControl {
   onReset: () => void;
 }
 
+type SaturationChannel = "sdr" | "hdr";
+
+interface PendingSaturation {
+  value: number;
+  scope: Scope;
+  appid: string | null;
+  viewAppid: string | undefined;
+}
+
 /**
  * Owns the Pantalla color state + the global/per-game scope for SATURATION.
  * Saturation saves directly (can't make the screen illegible). Calibration
@@ -43,12 +52,20 @@ export function useColor(): ColorControl {
   const game = useRunningGame();
   const [state, setState] = useState<ColorState | null>(null);
   const [revertIn, setRevertIn] = useState<number | null>(null);
-  const saturationCommit = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const hdrSaturationCommit = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saturationCommits = useRef<Record<
+    SaturationChannel,
+    ReturnType<typeof setTimeout> | null
+  >>({ sdr: null, hdr: null });
+  const pendingSaturations = useRef<Record<
+    SaturationChannel,
+    PendingSaturation | null
+  >>({ sdr: null, hdr: null });
   const calibrationCommit = useRef<ReturnType<typeof setTimeout> | null>(null);
   const countdown = useRef<ReturnType<typeof setInterval> | null>(null);
   const remaining = useRef(0);
   const stateRef = useRef<ColorState | null>(null);
+  const mounted = useRef(true);
+  const appidRef = useRef<string | undefined>(game?.appid);
   stateRef.current = state;
 
   const refresh = useCallback(() => {
@@ -66,13 +83,37 @@ export function useColor(): ColorControl {
   // _reapply_all), so cancel the pending commit AND the mirror countdown to stay in
   // sync — otherwise the confirm bar keeps ticking against a preview that's gone.
   const appid = game?.appid;
+  appidRef.current = appid;
+  const flushSaturation = useCallback((channel: SaturationChannel) => {
+    const timer = saturationCommits.current[channel];
+    if (timer !== null) {
+      clearTimeout(timer);
+      saturationCommits.current[channel] = null;
+    }
+    const pending = pendingSaturations.current[channel];
+    pendingSaturations.current[channel] = null;
+    if (!pending) return;
+    const save = channel === "hdr" ? setHdrSaturation : setSaturation;
+    save(pending.value, pending.scope, pending.appid)
+      .then((next) => {
+        if (mounted.current && appidRef.current === pending.viewAppid) {
+          setState(next);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const flushSaturations = useCallback(() => {
+    flushSaturation("sdr");
+    flushSaturation("hdr");
+  }, [flushSaturation]);
+
   useEffect(() => {
-    if (saturationCommit.current) clearTimeout(saturationCommit.current);
-    if (hdrSaturationCommit.current) clearTimeout(hdrSaturationCommit.current);
+    flushSaturations();
     if (calibrationCommit.current) clearTimeout(calibrationCommit.current);
     stopCountdown();
     refresh();
-  }, [appid, refresh, stopCountdown]);
+  }, [appid, flushSaturations, refresh, stopCountdown]);
 
   // The scope tab reflects the game's active profile and IS the control (shared wiring).
   const applyFollow = useCallback(
@@ -81,24 +122,44 @@ export function useColor(): ColorControl {
   );
   const { scope, onScope } = useScopeSync(appid, state?.follows_global, applyFollow);
 
-  useEffect(() => () => {
-    if (saturationCommit.current) clearTimeout(saturationCommit.current);
-    if (hdrSaturationCommit.current) clearTimeout(hdrSaturationCommit.current);
-    if (calibrationCommit.current) clearTimeout(calibrationCommit.current);
-    if (countdown.current) clearInterval(countdown.current);
-  }, []);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      flushSaturations();
+      if (calibrationCommit.current) clearTimeout(calibrationCommit.current);
+      if (countdown.current) clearInterval(countdown.current);
+    };
+  }, [flushSaturations]);
+
+  const queueSaturation = useCallback((
+    channel: SaturationChannel,
+    value: number,
+    targetScope: Scope,
+    targetAppid: string | null,
+  ) => {
+    const timer = saturationCommits.current[channel];
+    if (timer !== null) clearTimeout(timer);
+    pendingSaturations.current[channel] = {
+      value,
+      scope: targetScope,
+      appid: targetAppid,
+      viewAppid: appidRef.current,
+    };
+    saturationCommits.current[channel] = setTimeout(
+      () => flushSaturation(channel),
+      200,
+    );
+  }, [flushSaturation]);
 
   const onSaturation = useCallback(
     (value: number) => {
       const targetAppid = scope === "game" && game ? game.appid : null;
       const targetScope: Scope = targetAppid ? "game" : "global";
       setState((cur) => (cur ? { ...cur, saturation: value } : cur)); // optimistic
-      if (saturationCommit.current) clearTimeout(saturationCommit.current);
-      saturationCommit.current = setTimeout(() => {
-        setSaturation(value, targetScope, targetAppid).then(setState).catch(() => {});
-      }, 200);
+      queueSaturation("sdr", value, targetScope, targetAppid);
     },
-    [scope, game],
+    [scope, game, queueSaturation],
   );
 
   const onHdrSaturation = useCallback(
@@ -108,14 +169,9 @@ export function useColor(): ColorControl {
       setState((current) => (
         current ? { ...current, hdr_saturation: value } : current
       ));
-      if (hdrSaturationCommit.current) clearTimeout(hdrSaturationCommit.current);
-      hdrSaturationCommit.current = setTimeout(() => {
-        setHdrSaturation(value, targetScope, targetAppid)
-          .then(setState)
-          .catch(() => {});
-      }, 200);
+      queueSaturation("hdr", value, targetScope, targetAppid);
     },
-    [scope, game],
+    [scope, game, queueSaturation],
   );
 
   // (re)start the mirror countdown; on expiry the backend has already reverted, so

@@ -45,6 +45,17 @@ function config(version: string) {
   };
 }
 
+function vibrationConfig(value: number) {
+  return {
+    ...config("vibration"),
+    vibration: {
+      supported: true,
+      enabled: true,
+      value,
+    },
+  };
+}
+
 describe("useController request coordination", () => {
   beforeEach(() => {
     mocks.currentGame = { appid: "10", name: "First", liveAppid: 10 };
@@ -103,6 +114,40 @@ describe("useController request coordination", () => {
     );
   });
 
+  it("updates a vibration slider locally before the hardware write finishes", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    mocks.getControllerConfig.mockResolvedValue(vibrationConfig(20));
+    mocks.setControllerVibration.mockReturnValue(new Promise(() => {}));
+    const { result } = renderHook(() => useController());
+    await act(async () => { await Promise.resolve(); });
+
+    act(() => result.current.onSetVibration({ value: 65 }));
+
+    expect(result.current.config?.vibration?.value).toBe(65);
+    expect(mocks.setControllerVibration).not.toHaveBeenCalled();
+  });
+
+  it("does not let an older hardware echo overwrite a newer slider position", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const first = deferred<ReturnType<typeof vibrationConfig>>();
+    mocks.getControllerConfig.mockResolvedValue(vibrationConfig(20));
+    mocks.setControllerVibration.mockReturnValue(first.promise);
+    const { result } = renderHook(() => useController());
+    await act(async () => { await Promise.resolve(); });
+
+    act(() => {
+      result.current.onSetVibration({ value: 40 });
+      vi.advanceTimersByTime(150);
+      result.current.onSetVibration({ value: 70 });
+    });
+    await act(async () => {
+      first.resolve(vibrationConfig(40));
+      await Promise.resolve();
+    });
+
+    expect(result.current.config?.vibration?.value).toBe(70);
+  });
+
   it("applies vibration toggles immediately", async () => {
     mocks.getControllerConfig.mockResolvedValue(config("current"));
     mocks.setControllerVibration.mockResolvedValue(config("applied"));
@@ -113,6 +158,21 @@ describe("useController request coordination", () => {
 
     expect(mocks.setControllerVibration).toHaveBeenCalledWith(
       { enabled: false }, "global", null,
+    );
+  });
+
+  it("commits an Xbox trigger source on the first selection", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    mocks.getControllerConfig.mockResolvedValue(vibrationConfig(50));
+    mocks.setControllerVibration.mockResolvedValue(vibrationConfig(50));
+    const { result } = renderHook(() => useController());
+    await act(async () => { await Promise.resolve(); });
+
+    act(() => result.current.onSetVibration({ trigger_right_source: "off" }));
+
+    expect(mocks.setControllerVibration).toHaveBeenCalledTimes(1);
+    expect(mocks.setControllerVibration).toHaveBeenCalledWith(
+      { trigger_right_source: "off" }, "global", null,
     );
   });
 

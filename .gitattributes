@@ -1,0 +1,2 @@
+# Unified diffs require a leading context marker on otherwise blank lines.
+assets/inputplumber/*.patch -whitespace

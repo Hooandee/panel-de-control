@@ -106,4 +106,26 @@ describe("useColor HDR saturation", () => {
     expect(mocks.setSaturation).toHaveBeenCalledWith(130, "global", null);
     expect(mocks.setHdrSaturation).toHaveBeenCalledWith(140, "global", null);
   });
+
+  it("flushes a pending HDR value when Pantalla unmounts", async () => {
+    const hook = renderHook(() => useColor());
+    await act(async () => { await Promise.resolve(); });
+
+    act(() => hook.result.current.onHdrSaturation(135));
+    act(() => hook.unmount());
+
+    expect(mocks.setHdrSaturation).toHaveBeenCalledTimes(1);
+    expect(mocks.setHdrSaturation).toHaveBeenCalledWith(135, "global", null);
+  });
+
+  it("flushes a pending SDR value when Pantalla unmounts", async () => {
+    const hook = renderHook(() => useColor());
+    await act(async () => { await Promise.resolve(); });
+
+    act(() => hook.result.current.onSaturation(130));
+    act(() => hook.unmount());
+
+    expect(mocks.setSaturation).toHaveBeenCalledTimes(1);
+    expect(mocks.setSaturation).toHaveBeenCalledWith(130, "global", null);
+  });
 });

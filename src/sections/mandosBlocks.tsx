@@ -1,20 +1,25 @@
 import { FC, ReactNode } from "react";
-import { DialogButton, Dropdown, SliderField, ToggleField } from "@decky/ui";
-import { LuActivity, LuGamepad2, LuRotateCcw, LuVibrate } from "react-icons/lu";
+import { DialogButton, Dropdown, ToggleField } from "@decky/ui";
+import { LuActivity, LuGamepad2, LuRotateCcw } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import {
   managerDescKey,
   managerLabelKey,
-  choiceAt,
   choiceIndex,
+  isExperimentalHdVibration,
   prettyAction,
   prettyTarget,
   targetsToAction,
-  vibrationNoteKey,
+  vibrationTestStrength,
+  vibrationNotice,
 } from "../mandos/logic";
 import { openKeyboardChordEditor } from "../mandos/KeyboardChordEditor";
+import {
+  VibrationTestControl,
+  type VibrationTestChannel,
+} from "../mandos/VibrationTestControl";
 import { useMandos } from "../mandos/mandosContext";
 import {
   diagnosticOperationLabel,
@@ -25,10 +30,15 @@ import {
 import { useControllerDiagnostics } from "../mandos/useController";
 import { ProfileSelector } from "../components/ProfileSelector";
 import { ContainedSlider } from "../components/ContainedSlider";
+import {
+  CompactChoiceField,
+  CompactFieldSurface,
+  InlineNotice,
+} from "../components/CompactField";
 import { registerBlock } from "../customize/blocks";
 
-const Card: FC<{ title: string; children: ReactNode; icon?: ReactNode }> = ({ title, children, icon }) => (
-  <div style={{ ...theme.card, padding: theme.space.md, overflow: "hidden" }}>
+const Card: FC<{ title: ReactNode; children: ReactNode; icon?: ReactNode }> = ({ title, children, icon }) => (
+  <div style={{ ...theme.card, padding: theme.space.md }}>
     <div style={{ display: "flex", alignItems: "center", gap: theme.space.xs, fontSize: theme.font.body, fontWeight: 700, color: theme.color.textPrimary, marginBottom: theme.space.sm }}>
       {icon ?? <LuGamepad2 size={16} color={theme.color.accent} />} {title}
     </div>
@@ -55,38 +65,26 @@ const statusColor = (status: DiagnosticOperationLabel): string => {
   return status === "unavailable" ? theme.color.textMuted : theme.color.accent;
 };
 
-const DiscreteChoiceSlider: FC<{
+const DiscreteChoiceSelect: FC<{
   label: string;
   options: readonly string[];
   value: string;
   optionLabel: (value: string) => string;
-  notchLabel?: (value: string) => string;
   disabled?: boolean;
   onChange: (value: string) => void;
-}> = ({ label, options, value, optionLabel, notchLabel, disabled, onChange }) => {
+}> = ({ label, options, value, optionLabel, disabled, onChange }) => {
   const selected = choiceIndex(options, value);
   if (options.length < 2 || selected < 0) return null;
   return (
-    <SliderField
+    <CompactChoiceField
       label={label}
-      description={optionLabel(value)}
-      value={selected}
-      min={0}
-      max={options.length - 1}
-      step={1}
-      notchCount={options.length}
-      notchTicksVisible
-      minimumDpadGranularity={1}
-      showValue={false}
-      disabled={disabled}
-      notchLabels={options.map((option, notchIndex) => ({
-        notchIndex,
-        label: notchLabel?.(option) ?? optionLabel(option),
+      options={options.map((option) => ({
+        data: option,
+        label: optionLabel(option),
       }))}
-      onChange={(index) => {
-        const next = choiceAt(options, index);
-        if (next !== undefined) onChange(next);
-      }}
+      value={value}
+      disabled={disabled}
+      onChange={onChange}
     />
   );
 };
@@ -331,16 +329,49 @@ const VibrationBlock: FC = () => {
   const sliderMax = vibration.max ?? 100;
   const sliderStep = vibration.step ?? 5;
   const testChannels = (vibration.test_channels ?? []).filter(
-    (channel): channel is "left" | "right" | "strong" | "weak" | "both" => (
+    (channel): channel is VibrationTestChannel => (
       channel === "left" || channel === "right" || channel === "strong"
       || channel === "weak" || channel === "both"
+      || channel === "trigger_left" || channel === "trigger_right"
+      || channel === "all"
     ),
+  ).filter((channel) => vibration.mode !== "asus_xbox_hd" || channel !== "all");
+  const testStrength = (channel: VibrationTestChannel): number | null => (
+    vibrationTestStrength(vibration, channel)
   );
+  const testChannelLabel = (channel: VibrationTestChannel): string => {
+    if (vibration.mode === "asus_xbox_hd" && channel === "strong") {
+      return t("mandos.vibration.body.left");
+    }
+    if (vibration.mode === "asus_xbox_hd" && channel === "weak") {
+      return t("mandos.vibration.body.right");
+    }
+    return t(`mandos.vibration.test.${channel}`);
+  };
   const testBlocked = vibrationTestResult != null && (
     !vibrationTestResult.stopped || !vibrationTestResult.restored
   );
+  const notice = vibrationNotice(vibration, vibrationTestResult?.reason ?? null);
+  const experimental = isExperimentalHdVibration(vibration.mode);
   return (
-    <Card title={t("mandos.vibration.title")}>
+    <Card title={(
+      <span style={{ display: "inline-flex", alignItems: "center", gap: theme.space.xs, flexWrap: "wrap" }}>
+        {t("mandos.vibration.title")}
+        {experimental && (
+          <span style={{
+            padding: "2px 6px",
+            borderRadius: 999,
+            background: "rgba(255,180,84,0.10)",
+            color: theme.color.warn,
+            fontSize: 10,
+            fontWeight: 700,
+            lineHeight: 1.2,
+          }}>
+            {t("device.experimental.badge")}
+          </span>
+        )}
+      </span>
+    )}>
       <div style={{ marginBottom: theme.space.sm }}>
         <ProfileSelector
           scope={scope}
@@ -351,13 +382,22 @@ const VibrationBlock: FC = () => {
           onScope={onScope}
         />
       </div>
-      <ToggleField
-        label={t("mandos.vibration.enabled")}
-        description={t("mandos.vibration.enabled.desc")}
-        checked={vibration.enabled === true}
-        onChange={(enabled) => onSetVibration({ enabled })}
-        bottomSeparator="none"
-      />
+      {vibration.mode === "asus_xbox_hd" && (
+        <InlineNotice tone="muted">
+          {t(vibration.base_owner === "hhd"
+            ? "mandos.vibration.owner.xboxHhd"
+            : "mandos.vibration.owner.xboxIp")}
+        </InlineNotice>
+      )}
+      <CompactFieldSurface>
+        <ToggleField
+          label={t("mandos.vibration.enabled")}
+          description={t("mandos.vibration.enabled.desc")}
+          checked={vibration.enabled === true}
+          onChange={(enabled) => onSetVibration({ enabled })}
+          bottomSeparator="none"
+        />
+      </CompactFieldSurface>
       {vibration.persistent && vibration.mode === "gain" && vibration.value != null && (
         <ContainedSlider
           label={t("mandos.vibration.intensity")}
@@ -366,89 +406,174 @@ const VibrationBlock: FC = () => {
           max={sliderMax}
           step={sliderStep}
           showValue
+          valueSuffix="%"
           onChange={(value) => onSetVibration({ value })}
         />
       )}
-      {vibration.persistent && vibration.mode === "dual" && (
+      {vibration.persistent && (
+        vibration.mode === "dual" || vibration.mode === "asus_xbox_hd"
+      ) && (
         <>
+          {vibration.mode === "asus_xbox_hd" && (
+            <DiagnosticHeading>{t("mandos.vibration.bodyMotors")}</DiagnosticHeading>
+          )}
           {vibration.left != null && (
             <ContainedSlider
-              label={t("mandos.vibration.left")}
+              label={t(vibration.mode === "asus_xbox_hd"
+                ? "mandos.vibration.body.left"
+                : "mandos.vibration.left")}
               value={vibration.left}
               min={sliderMin}
               max={sliderMax}
               step={sliderStep}
               showValue
+              valueSuffix="%"
               onChange={(left) => onSetVibration({ left })}
             />
           )}
           {vibration.right != null && (
             <ContainedSlider
-              label={t("mandos.vibration.right")}
+              label={t(vibration.mode === "asus_xbox_hd"
+                ? "mandos.vibration.body.right"
+                : "mandos.vibration.right")}
               value={vibration.right}
               min={sliderMin}
               max={sliderMax}
               step={sliderStep}
               showValue
+              valueSuffix="%"
               onChange={(right) => onSetVibration({ right })}
             />
           )}
         </>
+      )}
+      {vibration.mode === "asus_xbox_hd" && vibration.hd_game_supported && (
+        <>
+          <DiagnosticHeading>{t("mandos.vibration.hdGame.title")}</DiagnosticHeading>
+          <CompactFieldSurface>
+            <ToggleField
+              label={t("mandos.vibration.hdGame.enabled")}
+              description={t("mandos.vibration.hdGame.desc")}
+              checked={vibration.hd_game_enabled === true}
+              onChange={(hd_game_enabled) => onSetVibration({ hd_game_enabled })}
+              bottomSeparator="none"
+            />
+          </CompactFieldSurface>
+          <div style={{
+            margin: `${theme.space.xs}px 0 ${theme.space.sm}px`,
+            color: theme.color.textMuted,
+            fontSize: theme.font.caption,
+            lineHeight: 1.4,
+          }}>
+            {t("mandos.vibration.hdGame.sources")}
+          </div>
+          {vibration.trigger_left != null && (
+            <ContainedSlider
+              label={t("mandos.vibration.trigger.left")}
+              value={vibration.trigger_left}
+              min={sliderMin}
+              max={sliderMax}
+              step={sliderStep}
+              showValue
+              valueSuffix="%"
+              onChange={(trigger_left) => onSetVibration({ trigger_left })}
+            />
+          )}
+          {vibration.trigger_left_source && (
+            <DiscreteChoiceSelect
+              label={t("mandos.vibration.trigger.leftSource")}
+              options={vibration.trigger_source_options ?? []}
+              value={vibration.trigger_left_source}
+              optionLabel={(value) => t(`mandos.vibration.source.${value}`)}
+              onChange={(trigger_left_source) => onSetVibration({
+                trigger_left_source: trigger_left_source as NonNullable<typeof vibration.trigger_left_source>,
+              })}
+            />
+          )}
+          {vibration.trigger_right != null && (
+            <ContainedSlider
+              label={t("mandos.vibration.trigger.right")}
+              value={vibration.trigger_right}
+              min={sliderMin}
+              max={sliderMax}
+              step={sliderStep}
+              showValue
+              valueSuffix="%"
+              onChange={(trigger_right) => onSetVibration({ trigger_right })}
+            />
+          )}
+          {vibration.trigger_right_source && (
+            <DiscreteChoiceSelect
+              label={t("mandos.vibration.trigger.rightSource")}
+              options={vibration.trigger_source_options ?? []}
+              value={vibration.trigger_right_source}
+              optionLabel={(value) => t(`mandos.vibration.source.${value}`)}
+              onChange={(trigger_right_source) => onSetVibration({
+                trigger_right_source: trigger_right_source as NonNullable<typeof vibration.trigger_right_source>,
+              })}
+            />
+          )}
+        </>
+      )}
+      {vibration.mode === "asus_xbox_hd"
+        && vibration.base_owner === "inputplumber"
+        && vibration.hd_game_supported === false && (
+        <InlineNotice tone="warning">
+          {t("mandos.vibration.hdGame.unavailable")}
+        </InlineNotice>
       )}
       {vibration.persistent && vibration.mode === "lenovo_hd" && (
         <>
           {vibration.connected !== false && (
             <>
               {vibration.intensity && (
-                <DiscreteChoiceSlider
+                <DiscreteChoiceSelect
                   label={t("mandos.vibration.handlesIntensity")}
                   options={vibration.intensity_options ?? []}
                   value={vibration.intensity}
                   optionLabel={(value) => t(`mandos.vibration.intensity.${value}`)}
-                  notchLabel={(value) => t(`mandos.vibration.intensityShort.${value}`)}
                   onChange={(intensity) => onSetVibration({
                     intensity: intensity as NonNullable<typeof vibration.intensity>,
                   })}
                 />
               )}
               {vibration.left_pattern && (
-                <DiscreteChoiceSlider
+                <DiscreteChoiceSelect
                   label={t("mandos.vibration.pattern.left")}
                   options={vibration.left_pattern_options ?? []}
                   value={vibration.left_pattern}
                   optionLabel={(value) => t(`mandos.vibration.pattern.${value}`)}
-                  notchLabel={(value) => t(`mandos.vibration.patternShort.${value}`)}
                   onChange={(left_pattern) => onSetVibration({
                     left_pattern: left_pattern as NonNullable<typeof vibration.left_pattern>,
                   })}
                 />
               )}
               {vibration.right_pattern && (
-                <DiscreteChoiceSlider
+                <DiscreteChoiceSelect
                   label={t("mandos.vibration.pattern.right")}
                   options={vibration.right_pattern_options ?? []}
                   value={vibration.right_pattern}
                   optionLabel={(value) => t(`mandos.vibration.pattern.${value}`)}
-                  notchLabel={(value) => t(`mandos.vibration.patternShort.${value}`)}
                   onChange={(right_pattern) => onSetVibration({
                     right_pattern: right_pattern as NonNullable<typeof vibration.right_pattern>,
                   })}
                 />
               )}
-              <ToggleField
-                label={t("mandos.vibration.touchpad")}
-                description={t("mandos.vibration.touchpad.desc")}
-                checked={vibration.touchpad_enabled === true}
-                onChange={(touchpad_enabled) => onSetVibration({ touchpad_enabled })}
-                bottomSeparator="none"
-              />
+              <CompactFieldSurface>
+                <ToggleField
+                  label={t("mandos.vibration.touchpad")}
+                  description={t("mandos.vibration.touchpad.desc")}
+                  checked={vibration.touchpad_enabled === true}
+                  onChange={(touchpad_enabled) => onSetVibration({ touchpad_enabled })}
+                  bottomSeparator="none"
+                />
+              </CompactFieldSurface>
               {vibration.touchpad_intensity && (
-                <DiscreteChoiceSlider
+                <DiscreteChoiceSelect
                   label={t("mandos.vibration.touchpadIntensity")}
                   options={vibration.touchpad_intensity_options ?? []}
                   value={vibration.touchpad_intensity}
                   optionLabel={(value) => t(`mandos.vibration.intensity.${value}`)}
-                  notchLabel={(value) => t(`mandos.vibration.intensityShort.${value}`)}
                   disabled={vibration.touchpad_enabled !== true}
                   onChange={(touchpad_intensity) => onSetVibration({
                     touchpad_intensity: touchpad_intensity as NonNullable<typeof vibration.touchpad_intensity>,
@@ -465,43 +590,25 @@ const VibrationBlock: FC = () => {
         </>
       )}
       {vibration.test_supported && (
-        testChannels.length > 1 ? (
-          <div style={{ display: "flex", gap: theme.space.xs }}>
-            {testChannels.map((channel) => (
-              <DialogButton
-                key={channel}
-                disabled={vibration.enabled !== true || testBlocked}
-                style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", justifyContent: "center", gap: theme.space.xs }}
-                onClick={() => onTestVibration("pulse", channel, 50)}
-              >
-                <LuVibrate size={15} /> {t(`mandos.vibration.test.${channel}`)}
-              </DialogButton>
-            ))}
-          </div>
-        ) : (
-          <DialogButton
-            disabled={vibration.enabled !== true || testBlocked}
-            style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: theme.space.xs }}
-            onClick={() => onTestVibration("pulse", testChannels[0] ?? null, 50)}
-          >
-            <LuVibrate size={15} /> {t("mandos.vibration.test")}
-          </DialogButton>
-        )
+        <VibrationTestControl
+          channels={testChannels}
+          disabled={vibration.enabled !== true || testBlocked}
+          selectLabel={t(experimental
+            ? "mandos.vibration.test.hdMotors"
+            : "mandos.vibration.test.channel")}
+          description={vibration.mode === "asus_xbox_hd"
+            ? t("mandos.vibration.test.manualDesc")
+            : undefined}
+          buttonLabel={t("mandos.vibration.test")}
+          channelLabel={testChannelLabel}
+          channelStrength={testStrength}
+          onTest={(channel, strength) => onTestVibration("pulse", channel, strength)}
+        />
       )}
-      {vibrationTestResult?.reason && (
-        <div style={{ fontSize: theme.font.caption, color: theme.color.danger, marginTop: theme.space.sm, lineHeight: 1.4 }}>
-          {t(`mandos.vibration.test.error.${vibrationTestResult.reason}`)}
-        </div>
-      )}
-      {vibration.persistent && (
-        <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, marginTop: theme.space.sm, lineHeight: 1.4 }}>
-          {t(vibrationNoteKey(vibration))}
-        </div>
-      )}
-      {vibration.last_apply === false && (
-        <div style={{ fontSize: theme.font.caption, color: theme.color.danger, marginTop: theme.space.sm, lineHeight: 1.4 }}>
-          {t("mandos.vibration.applyFailed")}
-        </div>
+      {notice && (
+        <InlineNotice tone={notice.tone}>
+          {t(notice.key)}
+        </InlineNotice>
       )}
     </Card>
   );

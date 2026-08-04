@@ -338,6 +338,26 @@ def test_failed_controller_write_remains_pending_for_lifecycle_retry(
     assert p._controller_coordinator.snapshot()["components"] == {}
 
 
+def test_successful_vibration_rpc_does_not_apply_the_profile_twice(
+    tmp_path, monkeypatch
+):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    backend = _controller_for(
+        p,
+        {"virtual_controller": {}, "buttons": {}, "vibration": {"value": 40}},
+    )
+    p._current_appid = "42"
+
+    asyncio.run(p.set_controller_vibration(
+        {"value": 40}, scope="game", appid="42"
+    ))
+
+    assert not any(
+        event[0] in {"apply_component", "wait_ready"}
+        for event in backend.events
+    )
+
+
 def test_component_results_remain_independent_after_button_write(
     tmp_path, monkeypatch
 ):

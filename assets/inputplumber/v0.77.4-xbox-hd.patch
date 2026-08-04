@@ -1,0 +1,408 @@
+diff --git a/src/dbus/interface/force_feedback.rs b/src/dbus/interface/force_feedback.rs
+index f08ab4b..501681b 100644
+--- a/src/dbus/interface/force_feedback.rs
++++ b/src/dbus/interface/force_feedback.rs
+@@ -6,7 +6,12 @@ use zbus_macros::interface;
+ 
+ use crate::{
+     dbus::polkit::check_polkit,
+-    drivers::steam_deck::hid_report::PackedRumbleReport,
++    drivers::{
++        rog_ally::haptics::{
++            get_config, machine_supported, set_config, HapticsConfig, RumbleSource,
++        },
++        steam_deck::hid_report::PackedRumbleReport,
++    },
+     input::{composite_device::client::CompositeDeviceClient, output_event::OutputEvent},
+ };
+ 
+@@ -136,6 +141,69 @@ where
+             .map_err(|err| fdo::Error::Failed(err.to_string()))?;
+         Ok(())
+     }
++
++    /// Whether this build and machine support the experimental Xbox HD haptics extension.
++    #[zbus(property)]
++    async fn xbox_hd_haptics_supported(&self) -> bool {
++        machine_supported()
++    }
++
++    /// Return enabled, left/right trigger gains and left/right rumble sources.
++    async fn get_xbox_hd_haptics(&self) -> (bool, u8, u8, u8, u8) {
++        let config = get_config();
++        (
++            config.enabled,
++            config.left_trigger_gain,
++            config.right_trigger_gain,
++            config.left_trigger_source as u8,
++            config.right_trigger_source as u8,
++        )
++    }
++
++    /// Configure the experimental trigger-motor enhancement for standard game rumble.
++    async fn set_xbox_hd_haptics(
++        &mut self,
++        enabled: bool,
++        left_trigger_gain: u8,
++        right_trigger_gain: u8,
++        left_trigger_source: u8,
++        right_trigger_source: u8,
++        #[zbus(connection)] conn: &Connection,
++        #[zbus(header)] hdr: Header<'_>,
++    ) -> fdo::Result<()> {
++        check_polkit(
++            conn,
++            Some(hdr),
++            "org.shadowblip.Output.ForceFeedback.Enable",
++        )
++        .await?;
++        if !machine_supported() {
++            return Err(fdo::Error::NotSupported(
++                "Xbox HD haptics are not supported on this machine".to_string(),
++            ));
++        }
++        if left_trigger_gain > 100 || right_trigger_gain > 100 {
++            return Err(fdo::Error::InvalidArgs(
++                "trigger gains must be between 0 and 100".to_string(),
++            ));
++        }
++        let left_trigger_source =
++            RumbleSource::try_from(left_trigger_source).map_err(fdo::Error::InvalidArgs)?;
++        let right_trigger_source =
++            RumbleSource::try_from(right_trigger_source).map_err(fdo::Error::InvalidArgs)?;
++        set_config(HapticsConfig {
++            enabled,
++            left_trigger_gain,
++            right_trigger_gain,
++            left_trigger_source,
++            right_trigger_source,
++        });
++        self.device
++            .stop()
++            .await
++            .map_err(|err| fdo::Error::Failed(err.to_string()))?;
++        Ok(())
++    }
+ }
+ 
+ impl<T> Unregisterable for ForceFeedbackInterface<T> where T: ForceFeedbacker + Send + Sync + 'static
+diff --git a/src/drivers/rog_ally/driver.rs b/src/drivers/rog_ally/driver.rs
+index 196f326..01d5f05 100644
+--- a/src/drivers/rog_ally/driver.rs
++++ b/src/drivers/rog_ally/driver.rs
+@@ -1,7 +1,10 @@
+ use crate::udev::device::{AttributeGetter, AttributeSetter, UdevDevice};
+-use std::{error::Error, time::Duration};
++use hidapi::HidDevice;
++use std::{error::Error, ffi::CString, time::Duration};
+ use udev::Device;
+ 
++use super::haptics::{machine_supported, HD_HAPTICS_INTERFACE, HD_HAPTICS_PID};
++
+ const ALLY_PID: u16 = 0x1abe;
+ const ALLYX_PID: u16 = 0x1b4c;
+ pub const PIDS: [u16; 2] = [ALLY_PID, ALLYX_PID];
+@@ -9,6 +12,7 @@ pub const VID: u16 = 0x0b05;
+ 
+ pub struct Driver {
+     _device: UdevDevice,
++    hd_haptics: Option<HidDevice>,
+ }
+ 
+ impl Driver {
+@@ -55,7 +59,30 @@ impl Driver {
+             _ => return Err(format!("Invalid interface number {if_num} provided.").into()),
+         };
+ 
+-        Ok(Self { _device: udevice })
++        let hd_haptics =
++            if pid == HD_HAPTICS_PID && if_num == HD_HAPTICS_INTERFACE && machine_supported() {
++                let api = hidapi::HidApi::new()?;
++                Some(api.open_path(&CString::new(udevice.devnode())?)?)
++            } else {
++                None
++            };
++
++        Ok(Self {
++            _device: udevice,
++            hd_haptics,
++        })
++    }
++
++    pub fn supports_hd_haptics(&self) -> bool {
++        self.hd_haptics.is_some()
++    }
++
++    pub fn write_hd_haptics(&self, report: &[u8; 9]) -> Result<(), Box<dyn Error + Send + Sync>> {
++        let Some(device) = &self.hd_haptics else {
++            return Ok(());
++        };
++        device.write(report)?;
++        Ok(())
+     }
+ }
+ 
+diff --git a/src/drivers/rog_ally/mod.rs b/src/drivers/rog_ally/mod.rs
+index 2ab9a12..500f5b2 100644
+--- a/src/drivers/rog_ally/mod.rs
++++ b/src/drivers/rog_ally/mod.rs
+@@ -1 +1,52 @@
+ pub mod driver;
++pub mod haptics;
++
++#[cfg(test)]
++mod haptics_test {
++    use super::haptics::{build_trigger_report, HapticsConfig, RumbleSource};
++
++    #[test]
++    fn maps_each_trigger_from_its_configured_game_rumble_source() {
++        let config = HapticsConfig {
++            enabled: true,
++            left_trigger_gain: 50,
++            right_trigger_gain: 25,
++            left_trigger_source: RumbleSource::Strong,
++            right_trigger_source: RumbleSource::Weak,
++        };
++
++        assert_eq!(
++            build_trigger_report(config, u16::MAX, u16::MAX / 2),
++            [0x0d, 0x03, 128, 32, 0, 0, 0xff, 0, 0xeb],
++        );
++    }
++
++    #[test]
++    fn disabled_enhancement_sends_an_explicit_trigger_stop() {
++        let config = HapticsConfig {
++            enabled: false,
++            ..HapticsConfig::default()
++        };
++
++        assert_eq!(
++            build_trigger_report(config, u16::MAX, u16::MAX),
++            [0x0d, 0x03, 0, 0, 0, 0, 0xff, 0, 0xeb],
++        );
++    }
++
++    #[test]
++    fn mix_uses_the_stronger_standard_rumble_channel() {
++        let config = HapticsConfig {
++            enabled: true,
++            left_trigger_gain: 100,
++            right_trigger_gain: 100,
++            left_trigger_source: RumbleSource::Mix,
++            right_trigger_source: RumbleSource::Off,
++        };
++
++        assert_eq!(
++            build_trigger_report(config, 10_000, 40_000),
++            [0x0d, 0x03, 156, 0, 0, 0, 0xff, 0, 0xeb],
++        );
++    }
++}
+diff --git a/src/input/source/hidraw/rog_ally.rs b/src/input/source/hidraw/rog_ally.rs
+index 45837d8..000232a 100644
+--- a/src/input/source/hidraw/rog_ally.rs
++++ b/src/input/source/hidraw/rog_ally.rs
+@@ -1,18 +1,23 @@
+ use std::{error::Error, fmt::Debug};
+ 
+ use crate::{
+-    drivers::rog_ally::driver::Driver,
++    drivers::rog_ally::{
++        driver::Driver,
++        haptics::{build_trigger_report, build_trigger_report_from_steam, get_config},
++    },
+     input::{
+         capability::Capability,
+         event::native::NativeEvent,
+-        source::{InputError, SourceInputDevice, SourceOutputDevice},
++        output_capability::OutputCapability,
++        output_event::OutputEvent,
++        source::{InputError, OutputError, SourceInputDevice, SourceOutputDevice},
+     },
+     udev::device::UdevDevice,
+ };
+ 
+ /// XpadUhid source device implementation
+ pub struct RogAlly {
+-    _driver: Driver,
++    driver: Driver,
+ }
+ 
+ impl RogAlly {
+@@ -20,7 +25,7 @@ impl RogAlly {
+     /// device information
+     pub fn new(device_info: UdevDevice) -> Result<Self, Box<dyn Error + Send + Sync>> {
+         let driver = Driver::new(device_info)?;
+-        Ok(Self { _driver: driver })
++        Ok(Self { driver })
+     }
+ }
+ 
+@@ -39,4 +44,39 @@ impl SourceInputDevice for RogAlly {
+     }
+ }
+ 
+-impl SourceOutputDevice for RogAlly {}
++impl SourceOutputDevice for RogAlly {
++    fn write_event(&mut self, event: OutputEvent) -> Result<(), OutputError> {
++        if !self.driver.supports_hd_haptics() {
++            return Ok(());
++        }
++
++        let report = match event {
++            OutputEvent::SteamDeckRumble(report) => {
++                build_trigger_report_from_steam(get_config(), report)
++            }
++            OutputEvent::GenericRumble {
++                strong_magnitude,
++                weak_magnitude,
++            } => build_trigger_report(get_config(), strong_magnitude, weak_magnitude),
++            _ => return Ok(()),
++        };
++        self.driver.write_hd_haptics(&report)?;
++        Ok(())
++    }
++
++    fn get_output_capabilities(&self) -> Result<Vec<OutputCapability>, OutputError> {
++        if self.driver.supports_hd_haptics() {
++            Ok(vec![OutputCapability::ForceFeedback])
++        } else {
++            Ok(vec![])
++        }
++    }
++
++    fn stop(&mut self) -> Result<(), OutputError> {
++        if self.driver.supports_hd_haptics() {
++            self.driver
++                .write_hd_haptics(&build_trigger_report(Default::default(), 0, 0))?;
++        }
++        Ok(())
++    }
++}
+diff --git a/src/drivers/rog_ally/haptics.rs b/src/drivers/rog_ally/haptics.rs
+new file mode 100644
+index 0000000..772dbef
+--- /dev/null
++++ b/src/drivers/rog_ally/haptics.rs
+@@ -0,0 +1,119 @@
++use std::sync::{OnceLock, RwLock};
++
++use packed_struct::types::SizedInteger;
++
++use crate::drivers::steam_deck::hid_report::PackedRumbleReport;
++
++pub const HD_HAPTICS_PID: u16 = 0x1b4c;
++pub const HD_HAPTICS_INTERFACE: &str = "05";
++
++#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
++pub enum RumbleSource {
++    #[default]
++    Off = 0,
++    Strong = 1,
++    Weak = 2,
++    Mix = 3,
++}
++
++impl TryFrom<u8> for RumbleSource {
++    type Error = String;
++
++    fn try_from(value: u8) -> Result<Self, Self::Error> {
++        match value {
++            0 => Ok(Self::Off),
++            1 => Ok(Self::Strong),
++            2 => Ok(Self::Weak),
++            3 => Ok(Self::Mix),
++            _ => Err(format!("invalid rumble source: {value}")),
++        }
++    }
++}
++
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++pub struct HapticsConfig {
++    pub enabled: bool,
++    pub left_trigger_gain: u8,
++    pub right_trigger_gain: u8,
++    pub left_trigger_source: RumbleSource,
++    pub right_trigger_source: RumbleSource,
++}
++
++impl Default for HapticsConfig {
++    fn default() -> Self {
++        Self {
++            enabled: false,
++            left_trigger_gain: 100,
++            right_trigger_gain: 100,
++            left_trigger_source: RumbleSource::Strong,
++            right_trigger_source: RumbleSource::Weak,
++        }
++    }
++}
++
++static CONFIG: OnceLock<RwLock<HapticsConfig>> = OnceLock::new();
++
++pub fn get_config() -> HapticsConfig {
++    *CONFIG
++        .get_or_init(|| RwLock::new(HapticsConfig::default()))
++        .read()
++        .unwrap_or_else(|poisoned| poisoned.into_inner())
++}
++
++pub fn set_config(config: HapticsConfig) {
++    *CONFIG
++        .get_or_init(|| RwLock::new(HapticsConfig::default()))
++        .write()
++        .unwrap_or_else(|poisoned| poisoned.into_inner()) = config;
++}
++
++pub fn machine_supported() -> bool {
++    std::fs::read_to_string("/sys/class/dmi/id/product_name")
++        .map(|name| name.trim() == "ROG Xbox Ally X RC73XA_RC73XA")
++        .unwrap_or(false)
++}
++
++pub fn build_trigger_report(
++    config: HapticsConfig,
++    strong_magnitude: u16,
++    weak_magnitude: u16,
++) -> [u8; 9] {
++    let source_value = |source: RumbleSource| match source {
++        RumbleSource::Off => 0,
++        RumbleSource::Strong => strong_magnitude,
++        RumbleSource::Weak => weak_magnitude,
++        RumbleSource::Mix => strong_magnitude.max(weak_magnitude),
++    };
++    let scale = |value: u16, gain: u8| {
++        let normalized = ((value as u32 * 255 + u16::MAX as u32 / 2) / u16::MAX as u32) as u8;
++        ((normalized as u16 * gain.min(100) as u16 + 50) / 100) as u8
++    };
++
++    let (left, right) = if config.enabled {
++        (
++            scale(
++                source_value(config.left_trigger_source),
++                config.left_trigger_gain,
++            ),
++            scale(
++                source_value(config.right_trigger_source),
++                config.right_trigger_gain,
++            ),
++        )
++    } else {
++        (0, 0)
++    };
++
++    [0x0d, 0x03, left, right, 0, 0, 0xff, 0, 0xeb]
++}
++
++pub fn build_trigger_report_from_steam(
++    config: HapticsConfig,
++    report: PackedRumbleReport,
++) -> [u8; 9] {
++    build_trigger_report(
++        config,
++        report.left_speed.to_primitive(),
++        report.right_speed.to_primitive(),
++    )
++}
+

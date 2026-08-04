@@ -1,6 +1,13 @@
 import os
 
-from display.hdr import HdrBackend, _read_hdr_feedback, _select_feedback
+from display.hdr import (
+    GamescopeLookAtom,
+    HdrBackend,
+    _MIXED_LOOK,
+    _UNAVAILABLE_LOOK,
+    _read_hdr_feedback,
+    _select_feedback,
+)
 
 
 class _Runner:
@@ -139,3 +146,67 @@ def test_backend_records_the_confirmed_gamescope_session():
 
     assert backend.set_enabled(True) is True
     assert backend.diagnostics()["session_identity"] == (1, 2)
+
+
+def test_look_atom_writes_and_reads_back_the_selected_xwayland():
+    uid = os.getuid()
+    runtime = f"/run/user/{uid}"
+    values = {}
+
+    def read_root(_uid, _username, _runtime, display, atom):
+        value = values.get(display)
+        atom_line = (
+            f'{atom}(UTF8_STRING) = "{value}"'
+            if value is not None else f"{atom}:  no such atom"
+        )
+        return f"GAMESCOPE_PID(CARDINAL) = 123\n{atom_line}"
+
+    def write_root(_uid, _username, _runtime, display, _atom, value):
+        values[display] = value
+        return True
+
+    atom = GamescopeLookAtom(
+        read_root=read_root,
+        write_root=write_root,
+        displays=lambda: [":0", ":1"],
+    )
+    session = (runtime, "gamescope-0", (1, 2))
+
+    assert atom.write(session, "/tmp/look.pq.cube") is True
+    assert atom.read(session) == "/tmp/look.pq.cube"
+    assert values == {":0": "/tmp/look.pq.cube"}
+
+
+def test_look_atom_detects_a_foreign_value_on_the_second_xwayland():
+    uid = os.getuid()
+    runtime = f"/run/user/{uid}"
+    values = {
+        ":0": "/tmp/pdc.cube",
+        ":1": "/tmp/another-plugin.cube",
+    }
+
+    def read_root(_uid, _username, _runtime, display, atom):
+        return "\n".join((
+            "GAMESCOPE_PID(CARDINAL) = 123",
+            f'{atom}(UTF8_STRING) = "{values[display]}"',
+        ))
+
+    atom = GamescopeLookAtom(
+        read_root=read_root,
+        write_root=lambda *_args: True,
+        displays=lambda: [":0", ":1"],
+    )
+
+    assert atom.read((runtime, "gamescope-0", (1, 2))) == _MIXED_LOOK
+
+
+def test_look_atom_distinguishes_unavailable_readback_from_empty_atom():
+    uid = os.getuid()
+    runtime = f"/run/user/{uid}"
+    atom = GamescopeLookAtom(
+        read_root=lambda *_args: None,
+        write_root=lambda *_args: True,
+        displays=lambda: [":0"],
+    )
+
+    assert atom.read((runtime, "gamescope-0", (1, 2))) == _UNAVAILABLE_LOOK

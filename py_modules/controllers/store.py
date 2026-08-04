@@ -14,6 +14,7 @@ _MODE = re.compile(r"[a-z0-9][a-z0-9_-]{0,31}")
 _VIBRATION_INTENSITIES = {"off", "low", "medium", "high"}
 _VIBRATION_PATTERNS = {"fps", "racing", "standard", "spg", "rpg"}
 _VIBRATION_ROUTES = {"lenovo_hd"}
+_XBOX_RUMBLE_SOURCES = {"off", "strong", "weak", "mix"}
 _LENOVO_NATIVE_FIELDS = (
     "intensity", "left_pattern", "right_pattern",
     "touchpad_enabled", "touchpad_intensity",
@@ -43,6 +44,11 @@ def _clean_vibration(raw) -> dict:
     clean = {}
     if isinstance(raw.get("enabled"), bool):
         clean["enabled"] = raw["enabled"]
+    if isinstance(raw.get("hd_game_enabled"), bool):
+        clean["hd_game_enabled"] = raw["hd_game_enabled"]
+    for field in ("trigger_left_source", "trigger_right_source"):
+        if raw.get(field) in _XBOX_RUMBLE_SOURCES:
+            clean[field] = raw[field]
     if raw.get("intensity") in _VIBRATION_INTENSITIES:
         clean["intensity"] = raw["intensity"]
     legacy_pattern = raw.get("pattern")
@@ -54,7 +60,7 @@ def _clean_vibration(raw) -> dict:
         clean["touchpad_enabled"] = raw["touchpad_enabled"]
     if raw.get("touchpad_intensity") in _VIBRATION_INTENSITIES:
         clean["touchpad_intensity"] = raw["touchpad_intensity"]
-    for field in ("value", "left", "right"):
+    for field in ("value", "left", "right", "trigger_left", "trigger_right"):
         value = raw.get(field)
         if (
             isinstance(value, (int, float))

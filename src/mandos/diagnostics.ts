@@ -188,9 +188,10 @@ function cleanOperations(value: unknown): Record<string, ControllerDiagnosticOpe
     "read_source_device_paths", "read_profile", "load_profile", "reset_default",
     "read_force_feedback", "set_force_feedback", "rumble", "stop_rumble", "apply_profile",
     "read_supported_target_device_ids", "read_target_devices", "read_target_device_types", "set_target_devices",
+    "read_xbox_hd_haptics_support", "read_xbox_hd_haptics", "set_xbox_hd_haptics",
   ]);
   const owners = new Set(["hhd", "inputplumber", "native", "evdev"]);
-  const modes = new Set(["dual", "gain", "lenovo_hd"]);
+  const modes = new Set(["dual", "gain", "lenovo_hd", "asus_xbox_hd"]);
   const reasons = new Set([
     "busctl_exit", "composite_ambiguous", "composite_not_found", "config_echo_mismatch",
     "identity_changed", "identity_unavailable", "initial_readback_unavailable", "invalid_response",

@@ -124,4 +124,33 @@ describe("controller diagnostics presentation", () => {
       readback: false,
     });
   });
+
+  it("keeps Xbox HD vibration and manager operations", () => {
+    const normalized = normalizeControllerDiagnostics({
+      ...emptyDiagnostics,
+      last_operations: {
+        manager: {
+          operation: "set_xbox_hd_haptics",
+          ok: true,
+        },
+        vibration: {
+          mode: "asus_xbox_hd",
+          ok: true,
+          readback: true,
+        },
+      },
+    });
+
+    expect(normalized.last_operations).toEqual({
+      manager: {
+        operation: "set_xbox_hd_haptics",
+        ok: true,
+      },
+      vibration: {
+        mode: "asus_xbox_hd",
+        ok: true,
+        readback: true,
+      },
+    });
+  });
 });

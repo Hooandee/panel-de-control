@@ -85,7 +85,7 @@ def test_get_color_state_shape(tmp_path, monkeypatch):
     assert st["hdr_saturation_experimental"] is False
 
 
-def test_hdr_saturation_is_legion_go_2_only_and_scoped_per_game(
+def test_hdr_saturation_is_validated_for_legion_go_2_and_scoped_per_game(
     tmp_path, monkeypatch,
 ):
     color = _FakeColorBackend(hdr_look_supported=True)
@@ -99,7 +99,7 @@ def test_hdr_saturation_is_legion_go_2_only_and_scoped_per_game(
     state = asyncio.run(p.set_hdr_saturation(140, "game", "42"))
 
     assert state["hdr_saturation_supported"] is True
-    assert state["hdr_saturation_experimental"] is True
+    assert state["hdr_saturation_experimental"] is False
     assert state["hdr_saturation"] == 140
     assert state["global_hdr_saturation"] == 100
     assert color.applied[-1]["hdr_saturation"] == 140

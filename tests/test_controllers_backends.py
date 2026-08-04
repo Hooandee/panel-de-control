@@ -208,6 +208,119 @@ def test_ip_config_exposes_persistent_dual_motor_profile(tmp_path):
     assert cfg["vibration"]["persistent"] is True
 
 
+def test_ip_xbox_ally_x_keeps_native_calibration_per_game(tmp_path):
+    class XboxHaptics(FakeVibration):
+        def __init__(self):
+            super().__init__({
+                "mode": "asus_xbox_hd", "persistent": True,
+                "left": 75, "right": 80, "min": 0, "max": 100,
+                "step": 5, "readback": True, "connected": True,
+            })
+
+        def capabilities(self):
+            return {
+                "mode": "asus_xbox_hd", "channels": ["left", "right"],
+                "readback": "driver", "min": 0, "max": 100, "step": 5,
+                "test": {
+                    "patterns": ["pulse"],
+                    "channels": [
+                        "trigger_left", "trigger_right", "strong", "weak", "all",
+                    ],
+                },
+            }
+
+        def capture_baseline(self):
+            return {"native_left": 48, "native_right": 51}
+
+    store, dbus = _store(tmp_path), FakeDbus()
+    vibration = XboxHaptics()
+
+    cfg = inputplumber.set_vibration(
+        store, dbus, "rog_xbox_ally_x", {"left": 35, "right": 45},
+        scope="game", appid="1234", vibration=vibration,
+    )
+
+    assert cfg["vibration"]["mode"] == "asus_xbox_hd"
+    assert cfg["vibration"]["left"] == 35
+    assert cfg["vibration"]["right"] == 45
+    assert cfg["vibration"]["base_owner"] == "inputplumber"
+    assert cfg["vibration"]["enhancement_owner"] == "panel"
+    assert cfg["vibration"]["test_channels"] == [
+        "trigger_left", "trigger_right", "strong", "weak", "all",
+    ]
+    assert vibration.applied == {"left": 35, "right": 45}
+    assert store.vibration_baseline("inputplumber:rog_xbox_ally_x") == {
+        "enabled": True, "left": 75, "right": 80,
+        "native_left": 48, "native_right": 51,
+    }
+
+
+def test_ip_xbox_ally_x_persists_hd_game_motor_mapping_per_game(tmp_path):
+    class XboxHaptics(FakeVibration):
+        def __init__(self):
+            super().__init__({
+                "mode": "asus_xbox_hd", "persistent": True,
+                "left": 75, "right": 80, "min": 0, "max": 100,
+                "step": 5, "readback": True, "connected": True,
+                "hd_game_supported": True, "hd_game_enabled": False,
+                "trigger_left": 100, "trigger_right": 100,
+                "trigger_left_source": "strong",
+                "trigger_right_source": "weak",
+            })
+
+        def capabilities(self):
+            return {
+                "mode": "asus_xbox_hd", "channels": ["left", "right"],
+                "readback": "driver", "min": 0, "max": 100, "step": 5,
+                "hd_game_supported": True,
+                "trigger_source_options": ["off", "strong", "weak", "mix"],
+                "test": {"patterns": ["pulse"], "channels": ["trigger_left"]},
+            }
+
+        def capture_baseline(self):
+            return {"native_left": 48, "native_right": 51}
+
+    store, dbus = _store(tmp_path), FakeDbus()
+    vibration = XboxHaptics()
+    patch = {
+        "hd_game_enabled": True,
+        "trigger_left": 60,
+        "trigger_right": 40,
+        "trigger_left_source": "mix",
+        "trigger_right_source": "weak",
+    }
+
+    cfg = inputplumber.set_vibration(
+        store, dbus, "rog_xbox_ally_x", patch,
+        scope="game", appid="1234", vibration=vibration,
+    )["vibration"]
+
+    assert cfg["hd_game_enabled"] is True
+    assert cfg["trigger_left"] == 60
+    assert cfg["trigger_left_source"] == "mix"
+    assert vibration.applied == {
+        "left": 75, "right": 80, **patch,
+    }
+
+
+def test_ip_xbox_ally_x_does_not_fake_apply_after_native_disconnect(tmp_path):
+    class DisconnectedHaptics(FakeVibration):
+        def __init__(self):
+            super().__init__(None)
+
+    store, dbus = _store(tmp_path), FakeDbus()
+    store.patch_vibration(
+        "game", "1234", {"left": 35, "right": 45}
+    )
+
+    status = inputplumber.apply_effective_components(
+        store, dbus, "rog_xbox_ally_x", "1234",
+        vibration=DisconnectedHaptics(), apply_buttons=False,
+    )
+
+    assert status["vibration"] is False
+
+
 class FakeLenovoHdVibration(FakeVibration):
     def __init__(self, applies=True):
         super().__init__({

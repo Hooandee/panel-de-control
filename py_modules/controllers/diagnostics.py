@@ -12,9 +12,11 @@ _OPERATIONS = {
     "reset_default", "read_force_feedback", "set_force_feedback", "rumble",
     "stop_rumble", "apply_profile", "read_supported_target_device_ids",
     "read_target_devices", "read_target_device_types", "set_target_devices",
+    "read_xbox_hd_haptics_support", "read_xbox_hd_haptics",
+    "set_xbox_hd_haptics",
 }
 _OWNERS = {"hhd", "inputplumber", "native", "evdev"}
-_MODES = {"dual", "gain", "lenovo_hd"}
+_MODES = {"dual", "gain", "lenovo_hd", "asus_xbox_hd"}
 _REASONS = {
     "busctl_exit", "composite_ambiguous", "composite_not_found",
     "config_echo_mismatch", "identity_changed", "identity_unavailable",

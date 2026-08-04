@@ -677,7 +677,7 @@ export interface ControllerConfig {
     supported: boolean;
     enabled: boolean | null;
     test_supported: boolean;
-    mode?: "dual" | "gain" | "lenovo_hd";
+    mode?: "dual" | "gain" | "lenovo_hd" | "asus_xbox_hd";
     persistent?: boolean;
     value?: number;
     left?: number;
@@ -709,6 +709,20 @@ export interface ControllerConfig {
     test_patterns?: string[];
     test_channels?: string[];
     last_apply?: boolean;
+    base_owner?: "hhd" | "inputplumber";
+    enhancement_owner?: "panel";
+    hd_game_supported?: boolean;
+    hd_game_enabled?: boolean;
+    trigger_left?: number;
+    trigger_right?: number;
+    trigger_left_source?: "off" | "strong" | "weak" | "mix";
+    trigger_right_source?: "off" | "strong" | "weak" | "mix";
+    trigger_source_options?: ("off" | "strong" | "weak" | "mix")[];
+    actual_hd_game_enabled?: boolean;
+    actual_trigger_left?: number;
+    actual_trigger_right?: number;
+    actual_trigger_left_source?: "off" | "strong" | "weak" | "mix";
+    actual_trigger_right_source?: "off" | "strong" | "weak" | "mix";
   };
   operation_state?: {
     generation: number;
@@ -728,6 +742,11 @@ export interface ControllerVibrationPatch {
   value?: number;
   left?: number;
   right?: number;
+  hd_game_enabled?: boolean;
+  trigger_left?: number;
+  trigger_right?: number;
+  trigger_left_source?: "off" | "strong" | "weak" | "mix";
+  trigger_right_source?: "off" | "strong" | "weak" | "mix";
   intensity?: "off" | "low" | "medium" | "high";
   left_pattern?: "fps" | "racing" | "standard" | "spg" | "rpg";
   right_pattern?: "fps" | "racing" | "standard" | "spg" | "rpg";
@@ -782,10 +801,13 @@ export const setControllerVibration =
   ], ControllerConfig>(
     "set_controller_vibration",
   );
+export type ControllerVibrationTestChannel =
+  | "left" | "right" | "strong" | "weak" | "both"
+  | "trigger_left" | "trigger_right" | "all";
 export const testControllerVibration =
   callable<[
     pattern: "pulse",
-    channel: "left" | "right" | "strong" | "weak" | "both" | null,
+    channel: ControllerVibrationTestChannel | null,
     strength: number,
   ], VibrationTestResult>("test_controller_vibration");
 

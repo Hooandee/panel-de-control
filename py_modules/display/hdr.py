@@ -12,6 +12,9 @@ from controllers.detect import clean_env, resolve_bin
 
 _FEEDBACK_ATOM = "GAMESCOPE_HDR_OUTPUT_FEEDBACK"
 _PID_ATOM = "GAMESCOPE_PID"
+_LOOK_PQ_ATOM = "GAMESCOPE_COLOR_LOOK_PQ"
+_MIXED_LOOK = "<mixed-gamescope-look>"
+_UNAVAILABLE_LOOK = "<gamescope-look-readback-unavailable>"
 
 
 def _session_contexts():
@@ -51,9 +54,8 @@ def _context_users(session_context):
         return []
 
 
-def _read_root_properties(uid, username, runtime_dir, display):
-    xprop = resolve_bin("xprop")
-    command = [xprop, "-root", _PID_ATOM, _FEEDBACK_ATOM]
+def _run_root_xprop(uid, username, runtime_dir, display, arguments):
+    command = [resolve_bin("xprop"), *arguments]
     if os.geteuid() != uid:
         command = [
             resolve_bin("runuser"), "-u", username, "--",
@@ -65,7 +67,7 @@ def _read_root_properties(uid, username, runtime_dir, display):
     env = clean_env()
     env.update({"DISPLAY": display, "XDG_RUNTIME_DIR": runtime_dir})
     try:
-        result = subprocess.run(
+        return subprocess.run(
             command,
             capture_output=True,
             text=True,
@@ -74,7 +76,113 @@ def _read_root_properties(uid, username, runtime_dir, display):
         )
     except Exception:  # noqa: BLE001
         return None
-    return result.stdout if result.returncode == 0 else None
+
+
+def _read_root_properties(uid, username, runtime_dir, display):
+    result = _run_root_xprop(
+        uid, username, runtime_dir, display,
+        ["-root", _PID_ATOM, _FEEDBACK_ATOM],
+    )
+    return result.stdout if result is not None and result.returncode == 0 else None
+
+
+def _read_root_string(uid, username, runtime_dir, display, atom):
+    result = _run_root_xprop(
+        uid, username, runtime_dir, display,
+        ["-root", _PID_ATOM, atom],
+    )
+    return result.stdout if result is not None and result.returncode == 0 else None
+
+
+def _write_root_string(uid, username, runtime_dir, display, atom, value):
+    result = _run_root_xprop(
+        uid, username, runtime_dir, display,
+        ["-root", "-f", atom, "8u", "-set", atom, value],
+    )
+    return result is not None and result.returncode == 0
+
+
+def _parse_root_string(output, atom):
+    if not output:
+        return None
+    pid_match = re.search(rf"{_PID_ATOM}\(CARDINAL\)\s*=\s*(\d+)", output)
+    if pid_match is None:
+        return None
+    value = None
+    for line in output.splitlines():
+        if not line.startswith(f"{atom}(") or "= " not in line:
+            continue
+        value = line.split("= ", 1)[1].strip()
+        if value.startswith('"') and value.endswith('"'):
+            value = value[1:-1]
+        break
+    return int(pid_match.group(1)), value
+
+
+class GamescopeLookAtom:
+    """Own one Gamescope string atom on the Xwayland tied to a live session."""
+
+    def __init__(self, atom=_LOOK_PQ_ATOM, read_root=_read_root_string,
+                 write_root=_write_root_string, displays=_display_names):
+        self._atom = atom
+        self._read_root = read_root
+        self._write_root = write_root
+        self._displays = displays
+        self._selected = None
+
+    def _observations(self, session):
+        observations = []
+        for uid, username, runtime_dir in _context_users(session):
+            for display in self._displays():
+                parsed = _parse_root_string(
+                    self._read_root(
+                        uid, username, runtime_dir, display, self._atom
+                    ),
+                    self._atom,
+                )
+                if parsed is not None:
+                    pid, value = parsed
+                    observations.append((
+                        uid, username, runtime_dir, display, pid, value,
+                    ))
+        return observations
+
+    def _target(self, session):
+        identity = _session_fields(session).get("session_identity")
+        observations = self._observations(session)
+        pids = {item[4] for item in observations}
+        if not observations or len(pids) != 1:
+            self._selected = None
+            return None
+        if self._selected is not None and self._selected[0] == identity:
+            selected_display = self._selected[1]
+            for item in observations:
+                if item[3] == selected_display:
+                    return item
+        target = observations[0]
+        self._selected = (identity, target[3])
+        return target
+
+    def read(self, session):
+        observations = self._observations(session)
+        if not observations or len({item[4] for item in observations}) != 1:
+            return _UNAVAILABLE_LOOK
+        values = {item[5] for item in observations if item[5]}
+        if len(values) > 1:
+            return _MIXED_LOOK
+        return next(iter(values), None)
+
+    def write(self, session, value):
+        target = self._target(session)
+        if target is None:
+            return False
+        uid, username, runtime_dir, display, _pid, _old = target
+        if not self._write_root(
+            uid, username, runtime_dir, display, self._atom, value
+        ):
+            return False
+        observed = self.read(session)
+        return observed == (value or None)
 
 
 def _select_feedback(observations):

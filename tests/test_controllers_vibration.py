@@ -85,6 +85,58 @@ class UnreadableLenovoAdapter(FakeLenovoAdapter):
         }
 
 
+class FakeXboxAdapter:
+    def __init__(self, state=None):
+        self.current = state
+        self.applied = []
+        self.restored = []
+        self.tests = []
+
+    def state(self):
+        return dict(self.current) if self.current is not None else None
+
+    def capabilities(self, state=None):
+        if self.current is None:
+            return None
+        return {
+            "mode": "asus_xbox_hd",
+            "channels": ["left", "right"],
+            "readback": "driver",
+            "min": 0,
+            "max": 100,
+            "step": 5,
+            "test": {
+                "patterns": ["pulse"],
+                "channels": [
+                    "trigger_left", "trigger_right", "strong", "weak", "all",
+                ],
+            },
+        }
+
+    def capture_baseline(self):
+        return {"native_left": 64, "native_right": 32}
+
+    def apply(self, patch):
+        self.applied.append(dict(patch))
+        return self.current is not None
+
+    def restore_baseline(self, baseline):
+        self.restored.append(dict(baseline))
+        return self.current is not None
+
+    def test(self, pattern, channel, strength):
+        self.tests.append((pattern, channel, strength))
+        return {
+            "sent": True,
+            "stopped": True,
+            "restored": True,
+            "reason": None,
+        }
+
+    def diagnostics(self):
+        return {"mode": "asus_xbox_hd", "ok": True}
+
+
 def _lenovo_state():
     return {
         "intensity": "medium",
@@ -93,6 +145,86 @@ def _lenovo_state():
         "touchpad_enabled": True,
         "touchpad_intensity": "low",
     }
+
+
+def _xbox_state():
+    return {
+        "mode": "asus_xbox_hd",
+        "persistent": True,
+        "left": 100,
+        "right": 50,
+        "min": 0,
+        "max": 100,
+        "step": 5,
+        "readback": True,
+        "connected": True,
+    }
+
+
+def test_xbox_ally_x_native_haptics_take_priority_over_daemon_fallback(
+    tmp_path,
+):
+    native = FakeXboxAdapter(_xbox_state())
+    controller = _controller(
+        "rog_xbox_ally_x",
+        FakeDbus(),
+        root=str(tmp_path),
+        xbox_adapter=native,
+    )
+
+    assert controller.state() == _xbox_state()
+    assert controller.capabilities()["mode"] == "asus_xbox_hd"
+    assert controller.capture_baseline() == {
+        "native_left": 64,
+        "native_right": 32,
+    }
+    assert controller.apply({"left": 35, "right": 80}) is True
+    assert native.applied == [{"left": 35, "right": 80}]
+    assert controller.test("pulse", "trigger_left", 50)["sent"] is True
+    assert native.tests == [("pulse", "trigger_left", 50)]
+    baseline = {"native_left": 64, "native_right": 32}
+    assert controller.restore_baseline(baseline) is True
+    assert native.restored == [baseline]
+
+
+def test_xbox_capabilities_reuse_the_native_state_probe(tmp_path):
+    class SnapshotXboxAdapter(FakeXboxAdapter):
+        def __init__(self):
+            super().__init__(_xbox_state())
+            self.state_calls = 0
+
+        def state(self):
+            self.state_calls += 1
+            return super().state()
+
+        def capabilities(self, state=None):
+            assert state == _xbox_state()
+            return super().capabilities()
+
+    native = SnapshotXboxAdapter()
+    controller = _controller(
+        "rog_xbox_ally_x",
+        FakeDbus(),
+        root=str(tmp_path),
+        xbox_adapter=native,
+    )
+
+    assert controller.capabilities()["mode"] == "asus_xbox_hd"
+    assert native.state_calls == 1
+
+
+def test_xbox_native_adapter_does_not_expand_other_asus_skus(tmp_path):
+    native = FakeXboxAdapter(_xbox_state())
+    controller = _controller(
+        "rog_ally_x",
+        FakeDbus(),
+        root=str(tmp_path),
+        xbox_adapter=native,
+    )
+
+    assert controller.state() is None
+    assert controller.capabilities()["mode"] == "enabled_only"
+    assert native.applied == []
 
 
 def test_legion_go_2_native_surface_takes_priority_over_gain(tmp_path):
@@ -340,6 +472,19 @@ def test_asus_external_baseline_round_trips_exact_native_values(tmp_path):
     assert intensity.read_text() == "13 64\n"
     assert controller.state()["left"] == 20
     assert controller.state()["right"] == 100
+
+
+def test_asus_dual_motor_rejects_non_finite_values_without_raising(tmp_path):
+    intensity = (
+        tmp_path / "sys/bus/hid/drivers/asus_rog_ally"
+        / "0003:0B05:1ABE.0003/vibration_intensity"
+    )
+    _write(intensity, "32 32\n")
+    controller = _controller("rog_ally", FakeDbus(), root=str(tmp_path))
+
+    assert controller.apply({"left": float("inf"), "right": 50}) is False
+    assert controller.apply({"left": 50, "right": float("nan")}) is False
+    assert intensity.read_text() == "32 32\n"
 
 
 def test_asus_dual_motor_rolls_back_when_readback_mismatches(tmp_path):

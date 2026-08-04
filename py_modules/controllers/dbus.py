@@ -16,6 +16,7 @@ MANAGER_IFACE = "org.shadowblip.InputManager"
 TARGET_IFACE = "org.shadowblip.Input.Target"
 DEFAULT_PROFILE_PATH = "/usr/share/inputplumber/profiles/default.yaml"
 _CAPABILITY_LIMIT = 64
+_XBOX_RUMBLE_SOURCES = {"off": 0, "strong": 1, "weak": 2, "mix": 3}
 
 
 def _run(args, timeout: int = 6):
@@ -464,4 +465,79 @@ class IpDbus:
         if self._failed(r, "stop_rumble"):
             return False
         self._record("stop_rumble", True)
+        return True
+
+    def xbox_hd_haptics(self):
+        path = self._path(revalidate=True)
+        if not path:
+            return None
+        supported = self._read_property(
+            path, FF_IFACE, "XboxHdHapticsSupported"
+        )
+        if (
+            self._failed(supported, "read_xbox_hd_haptics_support")
+            or not re.search(r"\btrue\b", supported.stdout)
+        ):
+            return None
+        result = self._run([
+            "busctl", "call", SVC, path, FF_IFACE, "GetXboxHdHaptics",
+        ])
+        if self._failed(result, "read_xbox_hd_haptics"):
+            return None
+        values = re.findall(r"\b(true|false|\d+)\b", result.stdout)
+        if len(values) != 5:
+            self._record(
+                "read_xbox_hd_haptics", False, reason="invalid_response"
+            )
+            return None
+        sources = {value: key for key, value in _XBOX_RUMBLE_SOURCES.items()}
+        try:
+            left, right, left_source, right_source = map(int, values[1:])
+            config = {
+                "enabled": values[0] == "true",
+                "trigger_left": left,
+                "trigger_right": right,
+                "trigger_left_source": sources[left_source],
+                "trigger_right_source": sources[right_source],
+            }
+        except (KeyError, ValueError):
+            self._record(
+                "read_xbox_hd_haptics", False, reason="invalid_response"
+            )
+            return None
+        self._record("read_xbox_hd_haptics", True)
+        return config
+
+    def set_xbox_hd_haptics(self, config) -> bool:
+        if not isinstance(config, dict):
+            return False
+        try:
+            enabled = config["enabled"]
+            left = config["trigger_left"]
+            right = config["trigger_right"]
+            left_source = _XBOX_RUMBLE_SOURCES[config["trigger_left_source"]]
+            right_source = _XBOX_RUMBLE_SOURCES[config["trigger_right_source"]]
+        except (KeyError, TypeError):
+            return False
+        if (
+            not isinstance(enabled, bool)
+            or not all(
+                isinstance(value, int)
+                and not isinstance(value, bool)
+                and 0 <= value <= 100
+                for value in (left, right)
+            )
+        ):
+            return False
+        path = self._path(revalidate=True)
+        if not path:
+            return False
+        result = self._run([
+            "busctl", "call", SVC, path, FF_IFACE, "SetXboxHdHaptics",
+            "byyyy", "true" if enabled else "false", str(left), str(right),
+            str(left_source), str(right_source),
+        ])
+        if self._failed(result, "set_xbox_hd_haptics"):
+            return False
+        self._record("set_xbox_hd_haptics", True)
         return True

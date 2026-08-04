@@ -248,6 +248,58 @@ def test_apply_writes_each_handle_pattern_and_confirms_readback(
     ]
 
 
+def test_apply_skips_every_unchanged_driver_attribute(tmp_path):
+    surface = _surface(tmp_path)
+    writes = []
+    adapter = _adapter(
+        tmp_path, [surface],
+        write_text=lambda path, value: writes.append((path, value)),
+    )
+
+    assert adapter.apply({
+        "intensity": "medium",
+        "left_pattern": "standard",
+        "right_pattern": "standard",
+        "touchpad_enabled": True,
+        "touchpad_intensity": "low",
+    }) is True
+    assert writes == []
+
+
+def test_apply_left_pattern_does_not_touch_other_motors_or_touchpad(tmp_path):
+    surface = _surface(tmp_path)
+    writes = []
+
+    def write(path, value):
+        writes.append((path, value))
+        path.write_text(value)
+
+    adapter = _adapter(tmp_path, [surface], write_text=write)
+
+    assert adapter.apply({"left_pattern": "racing"}) is True
+    assert writes == [(surface / "left_handle/rumble_mode", "racing")]
+
+
+def test_touchpad_intensity_reasserts_enabled_after_driver_side_effect(tmp_path):
+    surface = _surface(tmp_path)
+    enabled = surface / "touchpad/vibration_enabled"
+    intensity = surface / "touchpad/vibration_intensity"
+    writes = []
+
+    def firmware_write(path, value):
+        writes.append((path, value))
+        path.write_text(value)
+        if path == intensity:
+            enabled.write_text("true")
+
+    adapter = _adapter(tmp_path, [surface], write_text=firmware_write)
+    enabled.write_text("false")
+
+    assert adapter.apply({"touchpad_intensity": "high"}) is True
+    assert writes == [(intensity, "high"), (enabled, "false")]
+    assert enabled.read_text() == "false"
+
+
 def test_apply_waits_for_delayed_driver_readback(tmp_path):
     surface = _surface(tmp_path)
     pending = {}

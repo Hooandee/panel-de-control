@@ -13,14 +13,17 @@ from controllers.ip_merge import merge_profile
 from controllers.ip_merge import profiles_equal as ip_profile_profiles_equal
 
 
+_DUAL_VIBRATION_MODES = {"dual", "asus_xbox_hd"}
+
+
 def _vibration_capabilities(vibration, ff_enabled=None):
     describe = getattr(vibration, "capabilities", None)
     if callable(describe):
         return describe()
     state = vibration.state() if vibration is not None else None
-    if isinstance(state, dict) and state.get("mode") == "dual":
+    if isinstance(state, dict) and state.get("mode") in _DUAL_VIBRATION_MODES:
         return {
-            "mode": "dual", "channels": ["left", "right"],
+            "mode": state["mode"], "channels": ["left", "right"],
             "readback": "driver", "min": 0, "max": 100, "step": 5,
             "test": {
                 "patterns": ["pulse"],
@@ -109,12 +112,15 @@ def capabilities_report(dbus, device_key, vibration=None,
         exact = vibration_capabilities.get("readback") == "driver"
         owner = {
             "dual": "native",
+            "asus_xbox_hd": "native",
             "lenovo_hd": "native",
             "gain": "evdev",
         }.get(mode, "inputplumber")
         surfaces["vibration"] = surface(
             owner,
-            "experimental" if mode == "lenovo_hd" else "supported",
+            "experimental"
+            if mode in {"lenovo_hd", "asus_xbox_hd"}
+            else "supported",
             fields=dict(vibration_capabilities),
             scope=("global", "game"),
             apply="hot",
@@ -146,9 +152,14 @@ def get_config(store, dbus, device_key, appid=None, caps=None, vibration=None,
         if identified and callable(read_force_feedback)
         else None
     )
+    vibration_snapshot = None
+    snapshot = getattr(vibration, "snapshot", None)
+    if identified and callable(snapshot):
+        vibration_snapshot = snapshot()
     vibration_capabilities = (
-        _vibration_capabilities(vibration, ff_enabled)
-        if identified else None
+        vibration_snapshot.get("capabilities")
+        if isinstance(vibration_snapshot, dict)
+        else (_vibration_capabilities(vibration, ff_enabled) if identified else None)
     )
     test = (
         vibration_capabilities.get("test", {})
@@ -172,20 +183,25 @@ def get_config(store, dbus, device_key, appid=None, caps=None, vibration=None,
             "right_pattern_options",
             "touchpad_enabled_options",
             "touchpad_intensity_options",
+            "trigger_source_options",
         ):
             values = vibration_capabilities.get(field)
             if isinstance(values, list):
                 vibration_config[field] = list(values)
     persistent_state = (
-        vibration.state()
-        if identified and vibration is not None
-        else None
+        vibration_snapshot.get("state")
+        if isinstance(vibration_snapshot, dict)
+        else (
+            vibration.state()
+            if identified and vibration is not None
+            else None
+        )
     )
     if persistent_state is not None:
         desired = store.effective_vibration(appid)
         vibration_config.update(persistent_state)
         vibration_config["supported"] = True
-        if persistent_state["mode"] == "dual":
+        if persistent_state["mode"] in _DUAL_VIBRATION_MODES:
             vibration_config["actual_left"] = persistent_state["left"]
             vibration_config["actual_right"] = persistent_state["right"]
             vibration_config["left"] = desired.get(
@@ -194,6 +210,18 @@ def get_config(store, dbus, device_key, appid=None, caps=None, vibration=None,
             vibration_config["right"] = desired.get(
                 "right", persistent_state["right"]
             )
+            if persistent_state["mode"] == "asus_xbox_hd":
+                vibration_config["base_owner"] = "inputplumber"
+                vibration_config["enhancement_owner"] = "panel"
+                for field in (
+                    "hd_game_enabled", "trigger_left", "trigger_right",
+                    "trigger_left_source", "trigger_right_source",
+                ):
+                    if field in persistent_state:
+                        vibration_config[f"actual_{field}"] = persistent_state[field]
+                        vibration_config[field] = desired.get(
+                            field, persistent_state[field]
+                        )
         elif persistent_state["mode"] == "gain":
             vibration_config["actual_value"] = persistent_state.get("value")
             vibration_config["value"] = desired.get("value", 100)
@@ -370,11 +398,18 @@ def _persistent_values(controller, desired):
     state = controller.state() if controller is not None else None
     if state is None:
         return None
-    if state["mode"] == "dual":
-        return {
+    if state["mode"] in _DUAL_VIBRATION_MODES:
+        persistent = {
             "left": desired.get("left", state["left"]),
             "right": desired.get("right", state["right"]),
         }
+        if state["mode"] == "asus_xbox_hd" and state.get("hd_game_supported"):
+            for field in (
+                "hd_game_enabled", "trigger_left", "trigger_right",
+                "trigger_left_source", "trigger_right_source",
+            ):
+                persistent[field] = desired.get(field, state[field])
+        return persistent
     if state["mode"] == "gain" and "value" in desired:
         return {"value": desired["value"]}
     if state["mode"] == "lenovo_hd":
@@ -418,9 +453,15 @@ def _ensure_vibration_baseline(
     enabled = dbus.force_feedback_enabled()
     if enabled is not None:
         observed["enabled"] = enabled
-    if state is not None and state["mode"] == "dual":
+    if state is not None and state["mode"] in _DUAL_VIBRATION_MODES:
         observed["left"] = state["left"]
         observed["right"] = state["right"]
+        if state["mode"] == "asus_xbox_hd" and state.get("hd_game_supported"):
+            for field in (
+                "hd_game_enabled", "trigger_left", "trigger_right",
+                "trigger_left_source", "trigger_right_source",
+            ):
+                observed[field] = state[field]
         capture = getattr(vibration, "capture_baseline", None)
         native = capture() if callable(capture) else {}
         if (
@@ -508,6 +549,8 @@ def _native_vibration_requested(desired):
     return any(field in desired for field in (
         "value", "left", "right", "intensity", "left_pattern",
         "right_pattern", "touchpad_enabled", "touchpad_intensity",
+        "hd_game_enabled", "trigger_left", "trigger_right",
+        "trigger_left_source", "trigger_right_source",
     ))
 
 
@@ -519,7 +562,9 @@ def _apply_vibration_parts(dbus, vibration, desired, apply_native=True):
     )
     persistent = _persistent_values(vibration, desired) if apply_native else None
     intensity_applied = (
-        vibration.apply(persistent) if persistent is not None else True
+        vibration.apply(persistent)
+        if persistent is not None
+        else not apply_native
     )
     return enabled_applied, intensity_applied
 
@@ -667,6 +712,11 @@ def set_vibration(store, dbus, device_key, patch: dict, scope="global",
     if state is not None:
         fields = {
             "dual": ("left", "right"),
+            "asus_xbox_hd": (
+                "left", "right", "hd_game_enabled",
+                "trigger_left", "trigger_right",
+                "trigger_left_source", "trigger_right_source",
+            ),
             "gain": ("value",),
             "lenovo_hd": (
                 "intensity", "left_pattern", "right_pattern", "touchpad_enabled",
@@ -686,6 +736,28 @@ def set_vibration(store, dbus, device_key, patch: dict, scope="global",
         }
         for field in fields:
             value = patch.get(field)
+            if (
+                state["mode"] == "asus_xbox_hd"
+                and field == "hd_game_enabled"
+                and state.get("hd_game_supported")
+                and isinstance(value, bool)
+            ):
+                allowed[field] = value
+                continue
+            if (
+                state["mode"] == "asus_xbox_hd"
+                and field in {"trigger_left_source", "trigger_right_source"}
+                and state.get("hd_game_supported")
+                and value in {"off", "strong", "weak", "mix"}
+            ):
+                allowed[field] = value
+                continue
+            if (
+                state["mode"] == "asus_xbox_hd"
+                and field in {"trigger_left", "trigger_right"}
+                and not state.get("hd_game_supported")
+            ):
+                continue
             if (
                 state["mode"] == "lenovo_hd"
                 and value in native_capabilities.get(

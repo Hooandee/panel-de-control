@@ -16,7 +16,7 @@ MODES = ("uinput", "hori_steam", "dualsense", "hidden")
 # Paddle behavior options (only the uinput/dualsense modes expose paddles_as).
 PADDLES_AS = ("steam_input", "noob", "disabled")
 _PADDLE_MODES = ("uinput", "dualsense")
-_VIBRATION_KEYS = {"rog_ally", "rog_ally_x"}
+_VIBRATION_KEYS = {"rog_ally", "rog_ally_x", "rog_xbox_ally_x"}
 _CAPABILITY_MODES = (
     "uinput", "xbox_elite", "hori_steam", "dualsense", "hidden",
     "disabled",

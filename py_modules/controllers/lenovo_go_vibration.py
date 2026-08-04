@@ -246,27 +246,19 @@ class LenovoGoVibrationAdapter:
         })
         return root, options, raw if readable else None
 
-    def state(self):
+    def snapshot(self):
         surface = self._surface()
         if surface is None:
             return None
-        _, _, raw = surface
-        if raw is None:
-            return None
-        return {
+        _, options, raw = surface
+        state = None if raw is None else {
             "intensity": raw["intensity"],
             "left_pattern": raw["left_pattern"],
             "right_pattern": raw["right_pattern"],
             "touchpad_enabled": raw["touchpad_enabled"] == "true",
             "touchpad_intensity": raw["touchpad_intensity"],
         }
-
-    def capabilities(self):
-        surface = self._surface()
-        if surface is None:
-            return None
-        _, options, raw = surface
-        return {
+        capabilities = {
             "intensity_options": options["intensity_options"],
             "left_pattern_options": options["left_pattern_options"],
             "right_pattern_options": options["right_pattern_options"],
@@ -279,6 +271,15 @@ class LenovoGoVibrationAdapter:
             ],
             "readback": "driver" if raw is not None else "none",
         }
+        return {"state": state, "capabilities": capabilities}
+
+    def state(self):
+        snapshot = self.snapshot()
+        return snapshot["state"] if snapshot is not None else None
+
+    def capabilities(self):
+        snapshot = self.snapshot()
+        return snapshot["capabilities"] if snapshot is not None else None
 
     def apply(self, patch):
         surface = self._surface()
@@ -324,7 +325,9 @@ class LenovoGoVibrationAdapter:
                 "reason": "invalid_value",
             }
             return False
-        writes = (
+        touchpad_intensity = root / "touchpad/vibration_intensity"
+        touchpad_enabled = root / "touchpad/vibration_enabled"
+        requested_writes = (
             (root / "rumble_intensity", desired["intensity"], raw.get("intensity")),
             (
                 root / "left_handle/rumble_mode",
@@ -337,16 +340,32 @@ class LenovoGoVibrationAdapter:
                 raw.get("right_pattern"),
             ),
             (
-                root / "touchpad/vibration_intensity",
+                touchpad_intensity,
                 desired["touchpad_intensity"],
                 raw.get("touchpad_intensity"),
             ),
             (
-                root / "touchpad/vibration_enabled",
+                touchpad_enabled,
                 "true" if desired["touchpad_enabled"] else "false",
                 raw.get("touchpad_enabled"),
             ),
         )
+        if raw:
+            writes = [
+                item for item in requested_writes
+                if item[1] != item[2]
+            ]
+            if any(path == touchpad_intensity for path, _value, _old in writes):
+                writes = [
+                    item for item in writes if item[0] != touchpad_enabled
+                ]
+                writes.append((
+                    touchpad_enabled,
+                    "true" if desired["touchpad_enabled"] else "false",
+                    raw.get("touchpad_enabled"),
+                ))
+        else:
+            writes = list(requested_writes)
         changed = []
         reason = "write_failed"
         readable = bool(raw)
@@ -359,8 +378,6 @@ class LenovoGoVibrationAdapter:
                     raise OSError("driver readback mismatch")
         except OSError:
             rollback_confirmed = True
-            touchpad_intensity = root / "touchpad/vibration_intensity"
-            touchpad_enabled = root / "touchpad/vibration_enabled"
             rollback = [
                 item for item in reversed(changed)
                 if item[0] not in (touchpad_intensity, touchpad_enabled)

@@ -8,6 +8,7 @@ from display.gamescope import (
     is_native,
     transform,
 )
+from display.hdr import _UNAVAILABLE_LOOK
 
 _PTS = [(0.0, 0.0, 0.0), (0.5, 0.3, 0.7), (1.0, 1.0, 1.0), (0.8, 0.2, 0.4)]
 
@@ -162,16 +163,57 @@ class FakeRunner:
         return (0 if self.ok else 1, output if self.ok else "")
 
 
+class FakeLookAtom:
+    def __init__(self, accepted=True):
+        self.accepted = accepted
+        self.value = None
+        self.writes = []
+
+    def write(self, session, value):
+        self.writes.append((session, value))
+        if self.accepted:
+            self.value = value or None
+        return self.accepted
+
+    def read(self, session):
+        return self.value
+
+
+class FlakyLookAtom(FakeLookAtom):
+    def __init__(self):
+        super().__init__()
+        self.readback_unavailable = False
+
+    def read(self, session):
+        if self.readback_unavailable:
+            return _UNAVAILABLE_LOOK
+        return super().read(session)
+
+
+class SequencedLookAtom(FakeLookAtom):
+    def __init__(self):
+        super().__init__()
+        self.next_reads = []
+
+    def read(self, session):
+        if self.next_reads:
+            return self.next_reads.pop(0)
+        return super().read(session)
+
+
 def _backend(tmp_path, ok=True, force_composite=False, hdr_look=False,
-             info=None, edid_pq=True, clock=None):
+             info=None, edid_pq=True, clock=None, pq_atom=None):
     sock = tmp_path / "run" / "user" / "1000" / "gamescope-0"
     sock.parent.mkdir(parents=True)
     sock.write_text("")
     r = FakeRunner(ok=ok, info=info)
+    if hdr_look and pq_atom is None:
+        pq_atom = FakeLookAtom()
     b = GamescopeColorBackend(runner=r, socket_glob=str(tmp_path / "run/user/*/gamescope-*"),
                               lut_path=str(tmp_path / "look.cube"), force_composite=force_composite,
                               hdr_look=hdr_look,
                               edid_pq=lambda _connector: edid_pq,
+                              pq_atom=pq_atom,
                               **({"clock": clock} if clock is not None else {}))
     return b, r
 
@@ -287,7 +329,8 @@ def test_backend_apply_writes_cube_and_calls_set_look(tmp_path):
 
 
 def test_backend_applies_g22_and_pq_looks_in_one_command(tmp_path):
-    b, r = _backend(tmp_path, hdr_look=True)
+    atom = FakeLookAtom()
+    b, r = _backend(tmp_path, hdr_look=True, pq_atom=atom)
     r.calls.clear()
 
     assert b.apply({
@@ -295,21 +338,109 @@ def test_backend_applies_g22_and_pq_looks_in_one_command(tmp_path):
     }) is True
 
     command = _setlooks(r)[0][0]
-    assert len(command) == 4
+    assert len(command) == 3
     assert "LUT_3D_SIZE 17" in open(command[2]).read()
-    assert "LUT_3D_SIZE 33" in open(command[3]).read()
+    assert "LUT_3D_SIZE 33" in open(atom.value).read()
+    assert os.stat(command[2]).st_mode & 0o004
+    assert os.stat(atom.value).st_mode & 0o004
 
 
 def test_backend_alternates_complete_lut_pairs_between_applies(tmp_path):
-    b, r = _backend(tmp_path, hdr_look=True)
+    atom = FakeLookAtom()
+    b, r = _backend(tmp_path, hdr_look=True, pq_atom=atom)
     r.calls.clear()
 
     assert b.apply({**NATIVE, "hdr_saturation": 120}) is True
     assert b.apply({**NATIVE, "hdr_saturation": 125}) is True
 
     first, second = [call[0] for call in _setlooks(r)]
+    pq_paths = [value for _session, value in atom.writes]
     assert first[2:] != second[2:]
-    assert all(os.path.exists(path) for path in first[2:] + second[2:])
+    assert pq_paths[0] != pq_paths[1]
+    assert all(os.path.exists(path) for path in first[2:] + second[2:] + pq_paths)
+
+
+def test_backend_rejects_pq_apply_without_atom_readback(tmp_path):
+    atom = FakeLookAtom(accepted=False)
+    b, r = _backend(tmp_path, hdr_look=True, pq_atom=atom)
+
+    assert b.apply({**NATIVE, "hdr_saturation": 140}) is False
+    assert b.diagnostics()["last_apply"]["pq_atom"] is False
+    atom.accepted = True
+    r.calls.clear()
+    assert b.apply(NATIVE) is True
+    assert _unsetlooks(r) == []
+    assert len(_setlooks(r)) == 1
+
+
+def test_backend_does_not_replace_a_foreign_pq_atom(tmp_path):
+    atom = FakeLookAtom()
+    atom.value = "/tmp/another-plugin.cube"
+    b, r = _backend(tmp_path, hdr_look=True, pq_atom=atom)
+    r.calls.clear()
+
+    assert b.apply({**NATIVE, "hdr_saturation": 140}) is False
+    assert atom.value == "/tmp/another-plugin.cube"
+    assert _setlooks(r) == []
+    assert b.diagnostics()["last_apply"]["reason"] == "pq_atom_conflict"
+
+
+def test_display_fingerprint_detects_dropped_owned_pq_atom(tmp_path):
+    atom = FakeLookAtom()
+    b, _ = _backend(tmp_path, hdr_look=True, pq_atom=atom)
+    assert b.apply({**NATIVE, "hdr_saturation": 140}) is True
+    before = b.display_fingerprint()
+
+    atom.value = None
+
+    assert b.display_fingerprint() != before
+
+
+def test_backend_does_not_clear_a_foreign_pq_replacement_on_release(tmp_path):
+    atom = FakeLookAtom()
+    b, r = _backend(tmp_path, hdr_look=True, pq_atom=atom)
+    assert b.apply({**NATIVE, "hdr_saturation": 140}) is True
+    r.calls.clear()
+    atom.value = "/tmp/another-plugin.cube"
+
+    assert b.apply(NATIVE) is False
+    assert atom.value == "/tmp/another-plugin.cube"
+    assert _unsetlooks(r) == []
+    assert b.diagnostics()["last_apply"]["reason"] == (
+        "pq_atom_ownership_lost"
+    )
+    assert b.apply(NATIVE) is True
+    assert atom.value == "/tmp/another-plugin.cube"
+    assert _unsetlooks(r) == []
+
+
+def test_backend_retries_release_after_transient_pq_readback_failure(tmp_path):
+    atom = FlakyLookAtom()
+    b, _ = _backend(tmp_path, hdr_look=True, pq_atom=atom)
+    assert b.apply({**NATIVE, "hdr_saturation": 140}) is True
+    atom.readback_unavailable = True
+
+    assert b.apply(NATIVE) is False
+    assert b.diagnostics()["managed_pq_atom"] is True
+    assert b.diagnostics()["last_apply"]["reason"] == (
+        "pq_atom_readback_unavailable"
+    )
+
+    atom.readback_unavailable = False
+    assert b.apply(NATIVE) is True
+    assert atom.value is None
+    assert b.diagnostics()["managed_pq_atom"] is False
+
+
+def test_backend_uses_one_pq_observation_during_release(tmp_path):
+    atom = SequencedLookAtom()
+    b, _ = _backend(tmp_path, hdr_look=True, pq_atom=atom)
+    assert b.apply({**NATIVE, "hdr_saturation": 140}) is True
+    atom.next_reads = [atom.value, _UNAVAILABLE_LOOK]
+
+    assert b.apply(NATIVE) is True
+    assert atom.next_reads == [_UNAVAILABLE_LOOK]
+    assert atom.value is None
 
 
 def test_backend_keeps_legacy_g22_command_when_hdr_look_not_requested(tmp_path):
@@ -377,7 +508,7 @@ def test_backend_rechecks_active_display_before_applying_hdr_pair(tmp_path):
     assert b.apply({**NATIVE, "saturation": 130, "hdr_saturation": 140}) is True
     assert b.hdr_look_supported is False
     assert len(_setlooks(r)[0][0]) == 3
-    assert len(_unsetlooks(r)) == 1
+    assert len(_unsetlooks(r)) == 0
 
 
 def test_backend_diagnostics_report_successful_set_look(tmp_path):

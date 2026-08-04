@@ -7,6 +7,7 @@ import { theme } from "../theme";
 import { HdrState, HdrPatch } from "../api";
 import { shouldWarnHdrSaturation } from "../display/color";
 import { ContainedSlider } from "./ContainedSlider";
+import { InlineNotice } from "./CompactField";
 
 interface SaturationControl {
   value: number;
@@ -25,9 +26,20 @@ export const HdrPanel: FC<Props> = ({ state, onChange, saturation }) => {
   const warnSaturation = saturation
     ? shouldWarnHdrSaturation(saturation.value)
     : false;
+  const hdrStatus = state.last_apply === false
+    ? { key: "display.hdr.applyFailed", tone: "danger" as const }
+    : state.confirmation === "accepted"
+      ? { key: "display.hdr.accepted", tone: "warning" as const }
+      : null;
+  const saturationStatus = !state.enabled
+    ? { key: "display.hdrSaturation.inactive", tone: "muted" as const }
+    : warnSaturation
+      ? { key: "display.hdrSaturation.warning", tone: "warning" as const }
+      : null;
+
   return (
     <PanelSectionRow>
-      <div style={{ ...theme.card, padding: theme.space.md, margin: `${theme.space.sm}px 0`, overflow: "hidden" }}>
+      <div style={{ ...theme.card, width: "100%", boxSizing: "border-box", padding: theme.space.md, margin: `${theme.space.sm}px 0` }}>
         <ToggleField
           label={t("display.hdr")}
           description={t("display.hdr.desc")}
@@ -35,31 +47,61 @@ export const HdrPanel: FC<Props> = ({ state, onChange, saturation }) => {
           onChange={(v) => onChange({ enabled: v })}
           bottomSeparator="none"
         />
-        {state.last_apply === false && (
-          <div style={{ color: theme.color.danger, fontSize: theme.font.caption, lineHeight: 1.35 }}>
-            {t("display.hdr.applyFailed")}
-          </div>
-        )}
-        {state.confirmation === "accepted" && (
-          <div style={{ color: theme.color.warn, fontSize: theme.font.caption, lineHeight: 1.35 }}>
-            {t("display.hdr.accepted")}
-          </div>
+        {hdrStatus && (
+          <InlineNotice tone={hdrStatus.tone}>
+            {t(hdrStatus.key)}
+          </InlineNotice>
         )}
         {saturation && (
           <div style={{ borderTop: `1px solid ${theme.color.hairline}`, marginTop: theme.space.sm, paddingTop: theme.space.md }}>
-            <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 2 }}>
-              <LuPalette size={16} color={theme.color.accent} />
-              <span style={{ fontSize: theme.font.body, fontWeight: 600, color: theme.color.textPrimary }}>
-                {t("display.hdrSaturation")}
-              </span>
-              {saturation.experimental && (
-                <span style={{ color: theme.color.warn, fontSize: theme.font.caption, fontWeight: 700 }}>
-                  {t("device.experimental.badge")}
-                </span>
-              )}
-              <span style={{ marginLeft: "auto", fontSize: theme.font.value, fontWeight: 700, color: theme.color.textPrimary }}>
+            <div
+              data-testid="hdr-saturation-header"
+              style={{
+                display: "grid",
+                gridTemplateColumns: "minmax(0, 1fr) auto",
+                alignItems: "start",
+                gap: theme.space.sm,
+              }}
+            >
+              <div data-testid="hdr-saturation-copy" style={{ minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                  <LuPalette size={16} color={theme.color.accent} style={{ flexShrink: 0 }} />
+                  <span style={{ minWidth: 0, fontSize: theme.font.body, fontWeight: 600, lineHeight: 1.25, color: theme.color.textPrimary, overflowWrap: "anywhere" }}>
+                    {t("display.hdrSaturation")}
+                  </span>
+                </div>
+                {saturation.experimental && (
+                  <span style={{
+                    display: "inline-flex",
+                    marginTop: theme.space.xs,
+                    padding: "2px 6px",
+                    borderRadius: 999,
+                    background: "rgba(255,180,84,0.10)",
+                    color: theme.color.warn,
+                    fontSize: 10,
+                    fontWeight: 700,
+                    lineHeight: 1.2,
+                  }}>
+                    {t("device.experimental.badge")}
+                  </span>
+                )}
+              </div>
+              <span
+                data-testid="hdr-saturation-value"
+                style={{
+                  whiteSpace: "nowrap",
+                  fontSize: 21,
+                  fontWeight: 700,
+                  lineHeight: 1,
+                  fontVariantNumeric: "tabular-nums",
+                  color: theme.color.textPrimary,
+                }}
+              >
                 {saturation.value}%
               </span>
+            </div>
+            <div style={{ marginTop: theme.space.xs, color: theme.color.textMuted, fontSize: theme.font.caption, lineHeight: 1.4, overflowWrap: "anywhere" }}>
+              {t("display.hdrSaturation.desc")}
             </div>
             <ContainedSlider
               value={saturation.value}
@@ -69,18 +111,11 @@ export const HdrPanel: FC<Props> = ({ state, onChange, saturation }) => {
               scale={0.75}
               onChange={saturation.onChange}
             />
-            <div style={{
-              marginTop: theme.space.xs,
-              color: warnSaturation ? theme.color.warn : theme.color.textMuted,
-              fontSize: theme.font.caption,
-              lineHeight: 1.35,
-            }}>
-              {t(warnSaturation
-                ? "display.hdrSaturation.warning"
-                : saturation.experimental
-                  ? "display.hdrSaturation.experimental"
-                  : "display.hdrSaturation.desc")}
-            </div>
+            {saturationStatus && (
+              <InlineNotice tone={saturationStatus.tone}>
+                {t(saturationStatus.key)}
+              </InlineNotice>
+            )}
           </div>
         )}
       </div>

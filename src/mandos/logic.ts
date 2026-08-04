@@ -1,4 +1,8 @@
-import type { ControllerButtonAction, ControllerTarget } from "../api";
+import type {
+  ControllerButtonAction,
+  ControllerTarget,
+  ControllerVibrationTestChannel,
+} from "../api";
 
 const MANAGER_LABEL: Record<string, string> = {
   hhd: "mandos.manager.hhd",
@@ -100,6 +104,9 @@ export function vibrationNoteKey(vibration: {
   confirmation?: string;
   readback?: boolean;
 }): string {
+  if (vibration.mode === "asus_xbox_hd") {
+    return "mandos.vibration.note.xboxHd";
+  }
   if (vibration.mode === "lenovo_hd") {
     return vibration.confirmation === "driver"
       ? "mandos.vibration.note.lenovoHd"
@@ -108,6 +115,63 @@ export function vibrationNoteKey(vibration: {
   return vibration.confirmation === "driver" || vibration.readback
     ? "mandos.vibration.note.readback"
     : "mandos.vibration.note.accepted";
+}
+
+export function isExperimentalHdVibration(mode?: string): boolean {
+  return mode === "lenovo_hd" || mode === "asus_xbox_hd";
+}
+
+export function vibrationTestStrength(
+  vibration: {
+    mode?: string;
+    left?: number;
+    right?: number;
+    trigger_left?: number;
+    trigger_right?: number;
+    trigger_left_source?: string;
+    trigger_right_source?: string;
+  },
+  channel: ControllerVibrationTestChannel,
+): number | null {
+  if (vibration.mode !== "asus_xbox_hd") return null;
+  if (channel === "strong") return vibration.left ?? null;
+  if (channel === "weak") return vibration.right ?? null;
+  if (channel === "trigger_left") {
+    return vibration.trigger_left_source === "off"
+      ? 0
+      : vibration.trigger_left ?? null;
+  }
+  if (channel === "trigger_right") {
+    return vibration.trigger_right_source === "off"
+      ? 0
+      : vibration.trigger_right ?? null;
+  }
+  return null;
+}
+
+export function vibrationNotice(
+  vibration: {
+    mode?: string;
+    confirmation?: string;
+    readback?: boolean;
+    persistent?: boolean;
+    last_apply?: boolean;
+  },
+  testReason: string | null,
+): { key: string; tone: "danger" | "muted" } | null {
+  if (vibration.last_apply === false) {
+    return { key: "mandos.vibration.applyFailed", tone: "danger" };
+  }
+  if (testReason) {
+    return {
+      key: `mandos.vibration.test.error.${testReason}`,
+      tone: "danger",
+    };
+  }
+  if (vibration.persistent) {
+    return { key: vibrationNoteKey(vibration), tone: "muted" };
+  }
+  return null;
 }
 
 export function choiceIndex(

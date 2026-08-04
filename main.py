@@ -80,6 +80,7 @@ from controllers.coordinator import ControllerCoordinator
 from controllers.store import RemapStore
 from controllers.dbus import IpDbus
 from controllers.diagnostics import IntegratedDiagnostics
+from controllers import inputplumber_extension
 from sysfs import read_str
 from report import collector as report_collector
 from report import client as report_client
@@ -963,7 +964,11 @@ class Plugin:
             isinstance(vibration, dict)
             and vibration.get("last_apply") is False
         ):
-            await self._reconcile_controller_now(force=True)
+            endpoint = self._controller_config_endpoint_fingerprint(cfg)
+            if endpoint is not None:
+                self._controller_endpoint_last = endpoint
+                self._controller_endpoint_pending = None
+                self._controller_endpoint_attempts = 0
         return self._controller_config_with_operations(cfg)
 
     async def test_controller_vibration(self, pattern: str = "pulse",
@@ -1122,12 +1127,75 @@ class Plugin:
         if (
             self._controller_backend.manager
             != controller_detect.INPUTPLUMBER
-            or getattr(self._device, "key", None) != "legion_go_2"
+            or getattr(self._device, "key", None)
+            not in {"legion_go_2", "rog_xbox_ally_x"}
         ):
             return None
+        if getattr(self._device, "key", None) == "rog_xbox_ally_x":
+            actual = self._controller_dbus.xbox_hd_haptics()
+            if actual is None:
+                return (controller_detect.INPUTPLUMBER, None, False, (), ())
+            fields = (
+                "hd_game_enabled", "trigger_left", "trigger_right",
+                "trigger_left_source", "trigger_right_source",
+            )
+            desired = self._controller_store.effective_vibration(
+                self._current_appid
+            )
+            return (
+                controller_detect.INPUTPLUMBER,
+                "asus_xbox_hd",
+                True,
+                tuple(desired.get(field) for field in fields),
+                (
+                    actual["enabled"],
+                    actual["trigger_left"],
+                    actual["trigger_right"],
+                    actual["trigger_left_source"],
+                    actual["trigger_right_source"],
+                ),
+            )
         config = self._controller_backend.get_config(self._current_appid)
+        return self._controller_config_endpoint_fingerprint(config)
+
+    def _controller_config_endpoint_fingerprint(self, config):
+        if (
+            self._controller_backend.manager
+            != controller_detect.INPUTPLUMBER
+            or getattr(self._device, "key", None)
+            not in {"legion_go_2", "rog_xbox_ally_x"}
+            or not isinstance(config, dict)
+        ):
+            return None
         vibration = config.get("vibration", {})
         mode = vibration.get("mode")
+        if getattr(self._device, "key", None) == "rog_xbox_ally_x":
+            connected = (
+                mode == "asus_xbox_hd"
+                and vibration.get("hd_game_supported") is True
+            )
+            fields = (
+                "left", "right", "hd_game_enabled",
+                "trigger_left", "trigger_right",
+                "trigger_left_source", "trigger_right_source",
+            )
+            desired = tuple(vibration.get(field) for field in fields)
+            actual = (
+                vibration.get("actual_left"),
+                vibration.get("actual_right"),
+                vibration.get("actual_hd_game_enabled"),
+                vibration.get("actual_trigger_left"),
+                vibration.get("actual_trigger_right"),
+                vibration.get("actual_trigger_left_source"),
+                vibration.get("actual_trigger_right_source"),
+            )
+            return (
+                self._controller_backend.manager,
+                mode,
+                connected,
+                desired,
+                actual,
+            )
         connected = vibration.get("connected")
         if connected is None:
             connected = mode not in (None, "unavailable")
@@ -3394,7 +3462,7 @@ class Plugin:
             else:
                 return  # gamescope never came up (desktop) — nothing to apply
             for i in range(reasserts):
-                self._reapply_display()
+                await self._offload_call(self._reapply_display_sync)
                 if i < reasserts - 1:
                     await asyncio.sleep(reassert_interval)
             self._start_night_loop()
@@ -3440,7 +3508,7 @@ class Plugin:
                 "hdr_saturation"
             ],
             "hdr_saturation_supported": hdr_saturation_supported,
-            "hdr_saturation_experimental": hdr_saturation_supported,
+            "hdr_saturation_experimental": False,
             "has_game_profile": (self._current_appid is not None
                                  and self._color.has_game(self._current_appid)),
             "follows_global": self._color.is_following_global(self._current_appid),
@@ -4497,6 +4565,19 @@ class Plugin:
         # systemctl / ryzenadj) → keeps them off the event loop AND serialised.
         # Created here (not _init) so unit tests that never call _main run inline.
         self._apply_executor = ThreadPoolExecutor(max_workers=1)
+        extension = await self._offload_call(
+            lambda: inputplumber_extension.ensure(
+                self._device.key,
+                os.path.dirname(os.path.abspath(__file__)),
+            )
+        )
+        if extension.get("changed"):
+            decky.logger.info("Xbox HD haptics extension activated")
+        elif extension.get("reason") not in {None, "wrong_device", "not_bundled"}:
+            decky.logger.warning(
+                "Xbox HD haptics extension unavailable: %s",
+                extension["reason"],
+            )
         decky.logger.info(
             "Panel de Control v%s loaded (euid=%s)", read_version(), os.geteuid()
         )
@@ -4569,6 +4650,9 @@ class Plugin:
         await self._stop_audio_loop()
         await self._offload_call(self._restore_audio_safe)
         await self._offload_call(self._restore_controller_external)
+        await self._offload_call(
+            lambda: inputplumber_extension.uninstall(self._device.key)
+        )
         await self._offload_call(self._restore_hhd_tdp)  # hand HHD's TDP back if we took it
         self._shutdown_apply_executor()
         fan_expose.remove_conf()  # drop the modprobe.d option we added (guarded)

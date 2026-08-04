@@ -204,6 +204,40 @@ def test_force_feedback_test_calls_rumble_and_stop():
     assert any("Stop" in args for args in calls)
 
 
+def test_xbox_hd_haptics_has_exact_readback_and_validated_write():
+    calls = []
+
+    def run(args):
+        calls.append(args)
+        if args[1] == "tree":
+            return _result("└─/org/shadowblip/InputPlumber/CompositeDevice0\n")
+        if "XboxHdHapticsSupported" in args:
+            return _result("b true\n")
+        if "GetXboxHdHaptics" in args:
+            return _result("b true y 70 y 40 y 1 y 2\n")
+        return _result()
+
+    dbus = IpDbus(run=run)
+
+    assert dbus.xbox_hd_haptics() == {
+        "enabled": True,
+        "trigger_left": 70,
+        "trigger_right": 40,
+        "trigger_left_source": "strong",
+        "trigger_right_source": "weak",
+    }
+    assert dbus.set_xbox_hd_haptics({
+        "enabled": True,
+        "trigger_left": 55,
+        "trigger_right": 45,
+        "trigger_left_source": "mix",
+        "trigger_right_source": "off",
+    }) is True
+    assert any(args[-6:] == [
+        "byyyy", "true", "55", "45", "3", "0",
+    ] for args in calls)
+
+
 def test_source_device_paths_returns_only_nonempty_paths():
     responses = iter([
         _result("└─/org/shadowblip/InputPlumber/CompositeDevice0\n"),

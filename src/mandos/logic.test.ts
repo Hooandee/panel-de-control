@@ -11,6 +11,7 @@ import {
   targetsToAction,
   valueToTarget,
   vibrationNoteKey,
+  isExperimentalHdVibration,
 } from "./logic";
 
 describe("managerLabelKey / managerDescKey", () => {
@@ -68,6 +69,97 @@ describe("vibrationNoteKey", () => {
       .toBe("mandos.vibration.note.lenovoAccepted");
     expect(vibrationNoteKey({ mode: "lenovo_hd", confirmation: "driver" }))
       .toBe("mandos.vibration.note.lenovoHd");
+  });
+
+  it("explains the Xbox Ally X split ownership without claiming game transport", () => {
+    expect(vibrationNoteKey({ mode: "asus_xbox_hd", confirmation: "driver" }))
+      .toBe("mandos.vibration.note.xboxHd");
+  });
+});
+
+describe("isExperimentalHdVibration", () => {
+  it("marks the Legion Go 2 and Xbox Ally X native HD modes experimental", () => {
+    expect(isExperimentalHdVibration("lenovo_hd")).toBe(true);
+    expect(isExperimentalHdVibration("asus_xbox_hd")).toBe(true);
+    expect(isExperimentalHdVibration("dual")).toBe(false);
+    expect(isExperimentalHdVibration("gain")).toBe(false);
+    expect(isExperimentalHdVibration(undefined)).toBe(false);
+  });
+});
+
+describe("Xbox trigger test strength", () => {
+  const vibrationTestStrength = (
+    controllerLogic as unknown as {
+      vibrationTestStrength?: (
+        vibration: Record<string, unknown>, channel: string,
+      ) => number | null;
+    }
+  ).vibrationTestStrength ?? (() => null);
+
+  it.each([
+    [0, "strong"],
+    [70, "off"],
+  ])("disables the test with gain %s and source %s", (gain, source) => {
+    expect(vibrationTestStrength({
+      mode: "asus_xbox_hd",
+      hd_game_enabled: true,
+      trigger_left: gain,
+      trigger_left_source: source,
+    }, "trigger_left")).toBe(0);
+  });
+
+  it("uses the configured strength when the trigger is enabled", () => {
+    expect(vibrationTestStrength({
+      mode: "asus_xbox_hd",
+      hd_game_enabled: true,
+      trigger_left: 35,
+      trigger_left_source: "mix",
+    }, "trigger_left")).toBe(35);
+  });
+});
+
+describe("vibrationNotice", () => {
+  const vibrationNotice = (
+    controllerLogic as unknown as {
+      vibrationNotice?: (
+        vibration: { mode?: string; confirmation?: string; persistent?: boolean; last_apply?: boolean },
+        testReason: string | null,
+      ) => { key: string; tone: string } | null;
+    }
+  ).vibrationNotice ?? (() => null);
+
+  it("prioritizes an apply failure over a test failure and the profile note", () => {
+    expect(vibrationNotice({
+      mode: "lenovo_hd",
+      confirmation: "driver",
+      persistent: true,
+      last_apply: false,
+    }, "stop_failed")).toEqual({
+      key: "mandos.vibration.applyFailed",
+      tone: "danger",
+    });
+  });
+
+  it("shows one test failure instead of stacking the persistent note", () => {
+    expect(vibrationNotice({
+      mode: "lenovo_hd",
+      confirmation: "driver",
+      persistent: true,
+    }, "restore_failed")).toEqual({
+      key: "mandos.vibration.test.error.restore_failed",
+      tone: "danger",
+    });
+  });
+
+  it("uses the persistent profile note when there is no operational error", () => {
+    expect(vibrationNotice({
+      mode: "lenovo_hd",
+      confirmation: "driver",
+      persistent: true,
+    }, null)).toEqual({
+      key: "mandos.vibration.note.lenovoHd",
+      tone: "muted",
+    });
   });
 });
 

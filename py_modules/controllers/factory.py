@@ -12,7 +12,7 @@ from controllers import hhd as hhd_api
 from controllers import hhd_config
 from controllers import inputplumber as ip
 from controllers import ip_profile
-from controllers.capabilities import clean_report, report
+from controllers.capabilities import clean_report, report, surface
 from controllers.diagnostics import IntegratedDiagnostics
 from controllers.operations import OperationResult
 from controllers.vibration import VibrationController
@@ -543,10 +543,12 @@ class HhdBackend(ControllerBackend):
 
     manager = detect.HHD
 
-    def __init__(self, version=None, store=None, dbus=None, device_key=None):
+    def __init__(self, version=None, store=None, dbus=None, device_key=None,
+                 vibration=None):
         super().__init__(version)
         self._store = store
         self._device_key = device_key
+        self._vibration = vibration or VibrationController(device_key, dbus)
         self._last_vibration_operation = None
         self._vibration_last_apply = None
         self._virtual_mode = HhdVirtualModeAdapter(
@@ -558,6 +560,14 @@ class HhdBackend(ControllerBackend):
         )
         self._pending_virtual_mode = None
         self._last_virtual_mode_apply = None
+
+    def _xbox_native_state(self):
+        if self._device_key != "rog_xbox_ally_x":
+            return None
+        state = self._vibration.state()
+        if state is None or state.get("mode") != "asus_xbox_hd":
+            return None
+        return state
 
     def _virtual_mode_config(self, state, settings, appid=None) -> dict:
         capabilities = self._virtual_mode.capabilities(state, settings)
@@ -590,6 +600,7 @@ class HhdBackend(ControllerBackend):
                 "enabled": None,
                 "test_supported": False,
             }
+        native = self._xbox_native_state()
         desired = self._store.effective_vibration(appid)
         config = {
             **vibration,
@@ -598,6 +609,24 @@ class HhdBackend(ControllerBackend):
             "enabled": desired.get("enabled", vibration["value"] > 0),
             "value": desired.get("value", vibration["value"]),
         }
+        if native is not None:
+            capabilities = self._vibration.capabilities() or {}
+            test = capabilities.get("test", {})
+            config.update(native)
+            config.update({
+                "left": desired.get("left", native["left"]),
+                "right": desired.get("right", native["right"]),
+                "actual_left": native["left"],
+                "actual_right": native["right"],
+                "confirmation": capabilities.get("readback", "driver"),
+                "test_supported": bool(
+                    test.get("patterns") and test.get("channels")
+                ),
+                "test_patterns": list(test.get("patterns", [])),
+                "test_channels": list(test.get("channels", [])),
+                "base_owner": "hhd",
+                "enhancement_owner": "panel",
+            })
         status = (
             self._vibration_last_apply
             if apply_status is None
@@ -618,15 +647,42 @@ class HhdBackend(ControllerBackend):
         )
         config["follows_global"] = self._store.is_following_global(appid)
         config["has_game_profile"] = self._store.has_game(appid)
-        config["capabilities"] = hhd_config.capabilities_report(
-            state, self._device_key, settings
+        config["capabilities"] = self._capabilities_from_state(
+            state, settings
         )
         return self._stamp(config)
 
+    def _capabilities_from_state(self, state, settings):
+        capabilities = hhd_config.capabilities_report(
+            state, self._device_key, settings
+        )
+        if hhd_config.vibration_state(state, self._device_key) is None:
+            return capabilities
+        native = self._xbox_native_state()
+        if native is None:
+            return capabilities
+        native_capabilities = self._vibration.capabilities()
+        if not isinstance(native_capabilities, dict):
+            return capabilities
+        capabilities["surfaces"]["vibration"] = surface(
+            "hhd+panel",
+            "experimental",
+            fields={
+                **native_capabilities,
+                "base_owner": "hhd",
+                "enhancement_owner": "panel",
+            },
+            scope=("global", "game"),
+            apply="hot",
+            readback="exact",
+            evidence="upstream",
+        )
+        return clean_report(capabilities)
+
     def get_capabilities(self, appid=None) -> dict:
         state = hhd_api.read_state()
-        return hhd_config.capabilities_report(
-            state, self._device_key, hhd_api.read_settings()
+        return self._capabilities_from_state(
+            state, hhd_api.read_settings()
         )
 
     def get_config(self, appid=None) -> dict:
@@ -662,46 +718,75 @@ class HhdBackend(ControllerBackend):
                 "owner": "hhd", "ok": False, "reason": "unsupported",
             }
             return False
-        value = (
-            0
-            if desired.get("enabled") is False
-            else desired.get("value", vibration["value"])
+        value = self._desired_hhd_vibration(desired, vibration)
+        actual = self._post_hhd_vibration(state, value)
+        base_ok = actual is not None and actual["value"] == value
+        native = self._xbox_native_state()
+        native_intent = (
+            self._device_key == "rog_xbox_ally_x"
+            and any(
+                field in desired
+                for field in ("left", "right", "native_left", "native_right")
+            )
         )
-        payload = hhd_config.vibration_payload(state, value)
-        echoed = hhd_api.post_state(payload) if payload else None
-        actual = hhd_config.vibration_state(echoed, self._device_key)
-        ok = actual is not None and actual["value"] == value
-        rollback_confirmed = None
-        if not ok:
-            rollback_payload = hhd_config.vibration_payload(
-                state, vibration["value"]
-            )
-            rollback_echo = (
-                hhd_api.post_state(rollback_payload)
-                if rollback_payload
-                else None
-            )
-            rollback = hhd_config.vibration_state(
-                rollback_echo, self._device_key
-            )
-            rollback_confirmed = (
-                rollback is not None
-                and rollback["value"] == vibration["value"]
-            )
+        native_ok = self._apply_xbox_vibration(desired, native, native_intent)
+        ok = base_ok and native_ok
+        rollback_confirmed = (
+            None if ok else self._restore_hhd_vibration(state, vibration)
+        )
         self._last_vibration_operation = {
-            "owner": "hhd",
+            "owner": "hhd+panel" if native is not None else "hhd",
             "ok": ok,
             "echoed_value": actual["value"] if actual is not None else None,
             **(
                 {}
                 if ok
                 else {
-                    "reason": "config_echo_mismatch",
+                    "reason": (
+                        "native_unavailable"
+                        if native_intent and native is None
+                        else "config_echo_mismatch"
+                        if not base_ok
+                        else "native_apply_failed"
+                    ),
                     "rollback_confirmed": rollback_confirmed,
                 }
             ),
         }
         return ok
+
+    @staticmethod
+    def _desired_hhd_vibration(desired, current):
+        if desired.get("enabled") is False:
+            return 0
+        return desired.get("value", current["value"])
+
+    @staticmethod
+    def _native_baseline_requested(desired):
+        return all(
+            field in desired for field in ("native_left", "native_right")
+        )
+
+    def _post_hhd_vibration(self, state, value):
+        payload = hhd_config.vibration_payload(state, value)
+        echoed = hhd_api.post_state(payload) if payload else None
+        return hhd_config.vibration_state(echoed, self._device_key)
+
+    def _restore_hhd_vibration(self, state, baseline):
+        restored = self._post_hhd_vibration(state, baseline["value"])
+        return restored is not None and restored["value"] == baseline["value"]
+
+    def _apply_xbox_vibration(self, desired, native, requested):
+        if not requested:
+            return True
+        if native is None:
+            return False
+        if self._native_baseline_requested(desired):
+            return self._vibration.restore_baseline(desired)
+        return self._vibration.apply({
+            "left": desired.get("left", native["left"]),
+            "right": desired.get("right", native["right"]),
+        })
 
     def _ensure_vibration_baseline(self, vibration) -> None:
         current = self._store.vibration_for("global")
@@ -709,6 +794,15 @@ class HhdBackend(ControllerBackend):
             "enabled": vibration["value"] > 0,
             "value": vibration["value"],
         }
+        native = self._xbox_native_state()
+        if native is not None:
+            observed.update({
+                "left": native["left"],
+                "right": native["right"],
+            })
+            captured = self._vibration.capture_baseline()
+            if isinstance(captured, dict):
+                observed.update(captured)
         self._store.remember_vibration_baseline(
             f"hhd:{self._device_key or ''}", observed
         )
@@ -727,14 +821,16 @@ class HhdBackend(ControllerBackend):
             return self.get_config(appid)
         allowed = {
             field: patch[field]
-            for field in ("enabled", "value")
+            for field in ("enabled", "value", "left", "right")
             if field in patch
         }
         self._ensure_vibration_baseline(vibration)
         if isinstance(allowed.get("enabled"), bool) and not allowed["enabled"]:
             current = self._store.effective_vibration(appid)
             allowed.setdefault(
-                "value", current.get("value", vibration["value"])
+                "value", current.get(
+                    "value", vibration["value"]
+                )
             )
         self._store.patch_vibration(scope, appid, allowed)
         applied = self._apply_vibration(
@@ -903,11 +999,23 @@ class HhdBackend(ControllerBackend):
         self._vibration_last_apply = applied
         return mode_applied and applied
 
+    def test_vibration(self, pattern="pulse", channel=None, strength=100):
+        base = hhd_config.vibration_state(
+            hhd_api.read_state(), self._device_key
+        )
+        native = self._xbox_native_state()
+        if base is None or native is None:
+            return super().test_vibration(pattern, channel, strength)
+        return self._vibration.test(pattern, channel, strength)
+
     def diagnostics(self) -> dict:
         result = {
             **super().diagnostics(),
             "device_key": self._device_key,
-            "vibration_owner": "hhd",
+            "vibration_owner": (
+                "hhd+panel"
+                if self._xbox_native_state() is not None else "hhd"
+            ),
         }
         if self._last_vibration_operation is not None:
             result["vibration"] = dict(self._last_vibration_operation)

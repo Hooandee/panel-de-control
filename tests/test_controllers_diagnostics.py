@@ -159,3 +159,35 @@ def test_snapshot_keeps_lenovo_hd_vibration_operations():
         "rollback_confirmed": False,
         "readback": False,
     }
+
+
+def test_snapshot_keeps_xbox_hd_vibration_and_manager_operations():
+    state = IntegratedDiagnostics().snapshot(
+        "rog_xbox_ally_x",
+        {
+            "manager": "inputplumber",
+            "dbus": {
+                "last_operation": {
+                    "operation": "read_xbox_hd_haptics",
+                    "ok": True,
+                },
+            },
+            "vibration": {
+                "mode": "asus_xbox_hd",
+                "ok": True,
+                "readback": True,
+            },
+        },
+    )
+
+    assert state["last_operations"] == {
+        "manager": {
+            "operation": "read_xbox_hd_haptics",
+            "ok": True,
+        },
+        "vibration": {
+            "mode": "asus_xbox_hd",
+            "ok": True,
+            "readback": True,
+        },
+    }

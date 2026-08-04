@@ -306,6 +306,60 @@ def test_endpoint_poll_reapplies_once_when_lenovo_hd_reconnects(
     assert reapplies == [True]
 
 
+def test_endpoint_poll_reapplies_xbox_profile_after_inputplumber_restart(
+    tmp_path, monkeypatch,
+):
+    main = _main(monkeypatch, tmp_path)
+    plugin = main.Plugin.__new__(main.Plugin)
+
+    plugin._controller_backend = types.SimpleNamespace(manager="inputplumber")
+    plugin._device = types.SimpleNamespace(key="rog_xbox_ally_x")
+    plugin._current_appid = "42"
+    plugin._controller_endpoint_last = None
+    state = {"ready": False}
+    desired = {
+        "hd_game_enabled": True,
+        "trigger_left": 60,
+        "trigger_right": 40,
+        "trigger_left_source": "mix",
+        "trigger_right_source": "weak",
+    }
+    plugin._controller_dbus = types.SimpleNamespace(
+        xbox_hd_haptics=lambda: (
+            {
+                "enabled": False,
+                "trigger_left": 100,
+                "trigger_right": 100,
+                "trigger_left_source": "strong",
+                "trigger_right_source": "weak",
+            }
+            if state["ready"] else None
+        )
+    )
+    plugin._controller_store = types.SimpleNamespace(
+        effective_vibration=lambda _appid: desired
+    )
+
+    async def offload(fn):
+        return fn()
+
+    plugin._offload_call = offload
+    reapplies = []
+
+    async def reconcile(force=False):
+        reapplies.append(force)
+        return True
+
+    plugin._reconcile_controller_now = reconcile
+
+    asyncio.run(plugin._poll_controller_endpoint_once())
+    state["ready"] = True
+    asyncio.run(plugin._poll_controller_endpoint_once())
+    asyncio.run(plugin._poll_controller_endpoint_once())
+
+    assert reapplies == [True]
+
+
 def test_endpoint_poll_skips_non_go2_controller_backends(
     tmp_path, monkeypatch,
 ):

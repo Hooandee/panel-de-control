@@ -984,6 +984,153 @@ def test_hhd_asus_vibration_is_saved_and_reapplied_per_game(
     }
 
 
+class FakeXboxHaptics:
+    def __init__(self):
+        self.applied = []
+        self.tests = []
+        self.available = True
+
+    def state(self):
+        if not self.available:
+            return None
+        return {
+            "mode": "asus_xbox_hd", "persistent": True,
+            "left": 75, "right": 80, "min": 0, "max": 100,
+            "step": 5, "readback": True, "connected": True,
+        }
+
+    def capabilities(self):
+        return {
+            "mode": "asus_xbox_hd", "channels": ["left", "right"],
+            "readback": "driver", "min": 0, "max": 100, "step": 5,
+            "test": {
+                "patterns": ["pulse"],
+                "channels": [
+                    "trigger_left", "trigger_right", "strong", "weak", "all",
+                ],
+            },
+        }
+
+    def capture_baseline(self):
+        return {"native_left": 48, "native_right": 51}
+
+    def apply(self, patch):
+        self.applied.append(dict(patch))
+        return True
+
+    def restore_baseline(self, baseline):
+        self.applied.append(dict(baseline))
+        return True
+
+    def test(self, pattern, channel, strength):
+        self.tests.append((pattern, channel, strength))
+        return {
+            "sent": True, "stopped": True, "restored": True,
+            "reason": None,
+        }
+
+    def diagnostics(self):
+        return None
+
+
+def test_hhd_xbox_ally_x_combines_base_owner_and_native_per_game(
+    tmp_path, monkeypatch
+):
+    _state, posts = _hhd_ally_owner(monkeypatch)
+    store = RemapStore(str(tmp_path / "controllers.json"))
+    native = FakeXboxHaptics()
+    backend = factory.HhdBackend(
+        "3.19.23", store, FakeDbus(), "rog_xbox_ally_x",
+        vibration=native,
+    )
+
+    cfg = backend.set_vibration(
+        {"value": 60, "left": 35, "right": 45},
+        scope="game", appid="42",
+    )
+
+    assert cfg["vibration"] | {
+        "base_owner": "hhd", "enhancement_owner": "panel",
+        "mode": "asus_xbox_hd", "left": 35, "right": 45,
+    } == cfg["vibration"]
+    assert cfg["capabilities"]["surfaces"]["vibration"] == {
+        "owner": "hhd+panel",
+        "availability": "experimental",
+        "fields": {
+            "mode": "asus_xbox_hd",
+            "channels": ["left", "right"],
+            "readback": "driver",
+            "min": 0, "max": 100, "step": 5,
+            "test": {
+                "patterns": ["pulse"],
+                "channels": [
+                    "trigger_left", "trigger_right", "strong", "weak", "all",
+                ],
+            },
+            "base_owner": "hhd",
+            "enhancement_owner": "panel",
+        },
+        "scope": ["global", "game"],
+        "apply": "hot",
+        "readback": "exact",
+        "evidence": "upstream",
+    }
+    assert native.applied[-1] == {"left": 35, "right": 45}
+    assert posts[-1]["controllers"]["rog_ally"]["limits"]["manual"] == {
+        "vibration": 60,
+    }
+    assert store.vibration_baseline("hhd:rog_xbox_ally_x") == {
+        "enabled": True, "value": 80,
+        "left": 75, "right": 80,
+        "native_left": 48, "native_right": 51,
+    }
+    assert backend.apply_effective("42") is True
+    assert native.applied[-1] == {"left": 35, "right": 45}
+    assert backend.apply_effective(None) is True
+    assert native.applied[-1] == {"left": 75, "right": 80}
+
+
+def test_hhd_xbox_ally_x_does_not_fake_success_when_native_route_disappears(
+    tmp_path, monkeypatch
+):
+    _state, _posts = _hhd_ally_owner(monkeypatch)
+    store = RemapStore(str(tmp_path / "controllers.json"))
+    native = FakeXboxHaptics()
+    backend = factory.HhdBackend(
+        "3.19.23", store, FakeDbus(), "rog_xbox_ally_x",
+        vibration=native,
+    )
+    backend.set_vibration(
+        {"left": 35, "right": 45}, scope="game", appid="42",
+    )
+
+    native.available = False
+
+    assert backend.apply_effective("42") is False
+    assert backend.diagnostics()["vibration"]["reason"] == (
+        "native_unavailable"
+    )
+
+
+def test_hhd_xbox_ally_x_exposes_isolated_four_motor_tests(
+    tmp_path, monkeypatch
+):
+    _hhd_ally_owner(monkeypatch)
+    native = FakeXboxHaptics()
+    backend = factory.HhdBackend(
+        "3.19.23", RemapStore(str(tmp_path / "controllers.json")),
+        FakeDbus(), "rog_xbox_ally_x", vibration=native,
+    )
+
+    result = backend.test_vibration("pulse", "trigger_left", 70)
+
+    assert result == {
+        "sent": True, "stopped": True, "restored": True,
+        "reason": None,
+    }
+    assert native.tests == [("pulse", "trigger_left", 70)]
+
+
 def test_hhd_asus_disable_preserves_motor_levels_for_reenable(
     tmp_path, monkeypatch
 ):
@@ -1076,6 +1223,30 @@ def test_hhd_vibration_is_hidden_until_limits_are_already_manual(
     cfg = backend.set_vibration({"value": 40}, scope="global")
 
     assert cfg["vibration"]["supported"] is False
+    assert posts == []
+
+
+def test_hhd_xbox_enhancement_is_hidden_without_hhd_base_owner(
+    tmp_path, monkeypatch
+):
+    state, posts = _hhd_ally_owner(monkeypatch)
+    state["controllers"]["rog_ally"]["limits"]["mode"] = "default"
+    native = FakeXboxHaptics()
+    backend = factory.HhdBackend(
+        "3.19.23", RemapStore(str(tmp_path / "controllers.json")),
+        FakeDbus(), "rog_xbox_ally_x", vibration=native,
+    )
+
+    cfg = backend.set_vibration(
+        {"left": 35, "right": 45}, scope="global"
+    )
+
+    assert cfg["vibration"]["supported"] is False
+    assert native.applied == []
+    assert backend.test_vibration(
+        "pulse", "trigger_left", 50
+    )["reason"] == "unsupported"
+    assert native.tests == []
     assert posts == []
 
 

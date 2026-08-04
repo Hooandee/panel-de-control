@@ -15,6 +15,8 @@ import subprocess
 import tempfile
 import time
 
+from display.hdr import GamescopeLookAtom, _UNAVAILABLE_LOOK
+
 from display.const import NATIVE as _NATIVE
 from display.const import LOOK_FIELDS as _LOOK_FIELDS
 from display.edid import supports_pq
@@ -172,7 +174,7 @@ class GamescopeColorBackend:
     def __init__(self, runner=_run, socket_glob="/run/user/*/gamescope-*", lut_path=None,
                  force_composite=False, clock=time.monotonic,
                  hdr_look=False, edid_pq=None,
-                 drm_root="/sys/class/drm"):
+                 drm_root="/sys/class/drm", pq_atom=None):
         self._run = runner
         # On Intel/Xe the color LUT is only applied while gamescope COMPOSITES (it's
         # not carried by the HW DRM color pipeline as on AMD), so a look is invisible
@@ -186,6 +188,7 @@ class GamescopeColorBackend:
         self._active_connector = None
         self._drm_root = drm_root
         self._edid_pq = edid_pq or self._connector_supports_pq
+        self._pq_atom = pq_atom or GamescopeLookAtom()
         self._lut_path = lut_path or os.path.join(tempfile.gettempdir(), "pdc_look.cube")
         base, extension = os.path.splitext(self._lut_path)
         self._g22_paths = (
@@ -209,6 +212,7 @@ class GamescopeColorBackend:
         self._probe_detail = "not probed"
         self._managed = False
         self._managed_paired = False
+        self._managed_pq_atom = False
         self._composite_managed = False
         self._last_paths = None
         self._last_desired = None
@@ -237,6 +241,7 @@ class GamescopeColorBackend:
             if self._session_identity is not None:
                 self._managed = False
                 self._managed_paired = False
+                self._managed_pq_atom = False
                 self._composite_managed = False
                 self._last_paths = None
             self._runtime = self._wayland = None
@@ -262,6 +267,7 @@ class GamescopeColorBackend:
             if had_session:
                 self._managed = False
                 self._managed_paired = False
+                self._managed_pq_atom = False
                 self._composite_managed = False
                 self._last_paths = None
         return True
@@ -409,6 +415,7 @@ class GamescopeColorBackend:
             "hdr_look_detail": self._hdr_look_detail,
             "active_connector": self._active_connector,
             "managed": self._managed,
+            "managed_pq_atom": self._managed_pq_atom,
             "composite_managed": self._composite_managed,
             "session_identity": self._session_identity,
             "look_paths": dict(self._last_paths) if self._last_paths else None,
@@ -420,10 +427,14 @@ class GamescopeColorBackend:
         if not self._ensure_supported():
             return self._session_identity, None, False
         self._refresh_hdr_look()
+        pq_atom = None
+        if self._managed_pq_atom:
+            pq_atom = self._pq_atom.read(self.hdr_session_context())
         return (
             self._session_identity,
             self._active_connector,
             self._hdr_look_supported,
+            pq_atom,
         )
 
     @staticmethod
@@ -438,6 +449,7 @@ class GamescopeColorBackend:
                 output.write(content)
                 output.flush()
                 os.fsync(output.fileno())
+            os.chmod(temporary, 0o644)
             os.replace(temporary, path)
         except OSError:
             if temporary is not None:
@@ -453,13 +465,81 @@ class GamescopeColorBackend:
         if not self._ensure_supported():
             return False
         if self._managed:
-            rc, _ = self._ctl("unset_look")
-            self._last_apply = {
-                "operation": "unset_look", "ok": rc == 0, "rc": rc,
-            }
-            if rc != 0:
-                self._invalidate_session(rc)
-                return False
+            if self._managed_paired:
+                observed_pq = self._pq_atom.read(
+                    self.hdr_session_context()
+                )
+                if observed_pq == _UNAVAILABLE_LOOK:
+                    self._last_apply = {
+                        "operation": "release_look",
+                        "ok": False,
+                        "reason": "pq_atom_readback_unavailable",
+                    }
+                    return False
+                if (
+                    not self._managed_pq_atom
+                    and observed_pq in self._pq_paths
+                ):
+                    self._managed_pq_atom = True
+                    if self._last_paths is None:
+                        self._last_paths = {"g22": None, "pq": observed_pq}
+                    else:
+                        self._last_paths["pq"] = observed_pq
+                if self._managed_pq_atom:
+                    expected_pq = (
+                        self._last_paths.get("pq")
+                        if self._last_paths is not None else None
+                    )
+                    if observed_pq != expected_pq:
+                        self._managed_pq_atom = False
+                        if self._last_paths is not None:
+                            self._last_paths["pq"] = None
+                        self._last_apply = {
+                            "operation": "release_look",
+                            "ok": False,
+                            "reason": "pq_atom_ownership_lost",
+                        }
+                        return False
+                identity_path = self._g22_paths[self._pair_index]
+                try:
+                    self._write_atomic(identity_path, build_cube(_NATIVE))
+                except OSError:
+                    self._last_apply = {
+                        "operation": "release_look",
+                        "ok": False,
+                        "reason": "identity_write_failed",
+                    }
+                    return False
+                rc, _ = self._ctl("set_look", identity_path)
+                if rc != 0:
+                    self._last_apply = {
+                        "operation": "release_look",
+                        "ok": False,
+                        "rc": rc,
+                    }
+                    return False
+                if self._managed_pq_atom:
+                    atom_ok = self._pq_atom.write(
+                        self.hdr_session_context(), ""
+                    )
+                    if not atom_ok:
+                        self._last_apply = {
+                            "operation": "clear_pq_atom", "ok": False,
+                        }
+                        return False
+                    self._managed_pq_atom = False
+                self._last_apply = {
+                    "operation": "release_look", "ok": True, "rc": rc,
+                    "pq_atom": True,
+                }
+            else:
+                rc, _ = self._ctl("unset_look")
+                self._last_apply = {
+                    "operation": "unset_look", "ok": rc == 0, "rc": rc,
+                }
+                if rc != 0:
+                    self._invalidate_session(rc)
+                    return False
             self._managed = False
             self._managed_paired = False
             self._last_paths = None
@@ -498,7 +578,33 @@ class GamescopeColorBackend:
                 return False
         if native:
             return self.release()
+        if paired:
+            current_pq = self._pq_atom.read(self.hdr_session_context())
+            if current_pq == _UNAVAILABLE_LOOK:
+                self._last_apply = {
+                    "operation": "set_look",
+                    "ok": False,
+                    "reason": "pq_atom_readback_unavailable",
+                }
+                return False
+            if current_pq and current_pq not in self._pq_paths:
+                self._managed_pq_atom = False
+                if self._managed:
+                    self._managed_paired = True
+                    if self._last_paths is not None:
+                        self._last_paths["pq"] = None
+                self._last_apply = {
+                    "operation": "set_look",
+                    "ok": False,
+                    "reason": "pq_atom_conflict",
+                }
+                return False
         composite_enabled_here = False
+        previous_pq_owned = self._managed_pq_atom
+        previous_pq_path = (
+            self._last_paths.get("pq")
+            if self._last_paths is not None else None
+        )
         try:
             if self._force_composite and not self._composite_managed:
                 composite_rc, _ = self._ctl("composite_force", "1")
@@ -523,13 +629,41 @@ class GamescopeColorBackend:
                     build_hdr_cube(state.get("hdr_saturation", 100)),
                 )
                 paths["pq"] = pq_path
-                rc, _ = self._ctl("set_look", g22_path, pq_path)
-            else:
-                rc, _ = self._ctl("set_look", g22_path)
+            rc, _ = self._ctl("set_look", g22_path)
             self._last_apply = {"operation": "set_look", "ok": rc == 0, "rc": rc}
+            if rc == 0 and paired:
+                pq_ok = self._pq_atom.write(
+                    self.hdr_session_context(), pq_path
+                )
+                self._last_apply["pq_atom"] = pq_ok
+                if not pq_ok:
+                    current_pq = self._pq_atom.read(
+                        self.hdr_session_context()
+                    )
+                    readback_unavailable = current_pq == _UNAVAILABLE_LOOK
+                    owns_pq = (
+                        previous_pq_owned
+                        if readback_unavailable
+                        else current_pq in self._pq_paths
+                    )
+                    owned_pq_path = (
+                        previous_pq_path
+                        if readback_unavailable else current_pq
+                    )
+                    self._managed = True
+                    self._managed_paired = True
+                    self._managed_pq_atom = owns_pq
+                    self._last_paths = {
+                        "g22": g22_path,
+                        "pq": owned_pq_path if owns_pq else None,
+                    }
+                    self._last_apply["ok"] = False
+                    self._last_apply["reason"] = "pq_atom_readback_failed"
+                    return False
             if rc == 0:
                 self._managed = True
                 self._managed_paired = paired
+                self._managed_pq_atom = paired
                 self._last_paths = paths
                 if paired:
                     self._pair_index = 1 - pair_index

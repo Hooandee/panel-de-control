@@ -12,6 +12,7 @@ import {
   type ControllerConfig,
   type ControllerButtonAction,
   type ControllerVibrationPatch,
+  type ControllerVibrationTestChannel,
   type VibrationTestResult,
   type Scope,
 } from "../api";
@@ -34,11 +35,22 @@ export interface ControllerControl {
   vibrationTestResult: VibrationTestResult | null;
   onTestVibration: (
     pattern: "pulse",
-    channel: "left" | "right" | "strong" | "weak" | "both" | null,
+    channel: ControllerVibrationTestChannel | null,
     strength: number,
   ) => void;
   onReset: () => void;
 }
+
+const withVibrationPatch = (
+  current: ControllerConfig | null,
+  patch: ControllerVibrationPatch,
+): ControllerConfig | null => {
+  if (!current?.vibration) return current;
+  return {
+    ...current,
+    vibration: { ...current.vibration, ...patch },
+  };
+};
 
 export function useController(): ControllerControl {
   const game = useRunningGame();
@@ -71,7 +83,14 @@ export function useController(): ControllerControl {
         mounted.current
         && sequence === requestSequence.current
         && appidRef.current === viewAppid
-      ) setConfig(value);
+      ) {
+        const pending = pendingVibration.current;
+        setConfig(
+          pending !== null && pending.viewAppid === viewAppid
+            ? withVibrationPatch(value, pending.patch)
+            : value,
+        );
+      }
     }).catch(() => {});
   }, []);
 
@@ -154,6 +173,7 @@ export function useController(): ControllerControl {
   );
   const onSetVibration = useCallback(
     (patch: ControllerVibrationPatch) => {
+      setConfig((current) => withVibrationPatch(current, patch));
       const next = {
         patch,
         scope: targetScope,
@@ -180,6 +200,8 @@ export function useController(): ControllerControl {
       if (
         typeof patch.enabled === "boolean"
         || typeof patch.touchpad_enabled === "boolean"
+        || patch.trigger_left_source !== undefined
+        || patch.trigger_right_source !== undefined
       ) {
         sendPendingVibration();
         return;
@@ -192,7 +214,7 @@ export function useController(): ControllerControl {
   const onTestVibration = useCallback(
     (
       pattern: "pulse",
-      channel: "left" | "right" | "strong" | "weak" | "both" | null,
+      channel: ControllerVibrationTestChannel | null,
       strength: number,
     ) => {
       const sequence = ++vibrationTestSequence.current;
