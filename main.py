@@ -3333,6 +3333,7 @@ class Plugin:
         self._settings["eco_enabled"] = bool(enabled)
         self._save()
         self._reapply_all()
+        await self._drain_offloaded()
         return self._eco_state()
 
     # ---- HUD (MangoHud overlay) --------------------------------------------
@@ -5076,7 +5077,7 @@ class Plugin:
             else:
                 return  # gamescope never came up (desktop) — nothing to apply
             for i in range(reasserts):
-                self._reapply_color()
+                await self._offload_call(self._reapply_color_sync)
                 self._reapply_hdr()
                 if i < reasserts - 1:
                     await asyncio.sleep(reassert_interval)
