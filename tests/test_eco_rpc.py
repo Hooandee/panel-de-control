@@ -96,19 +96,18 @@ def test_eco_rpc_waits_until_cpu_override_is_applied(tmp_path, monkeypatch):
     p = _make_plugin(tmp_path, monkeypatch, boost=boost)
     started = threading.Event()
     release = threading.Event()
-    original_apply = p._run_cpu_apply
 
-    def blocked_apply(*args, **kwargs):
+    def block_apply_queue():
         started.set()
         release.wait(timeout=2)
-        return original_apply(*args, **kwargs)
 
-    monkeypatch.setattr(p, "_run_cpu_apply", blocked_apply)
+    p._submit_offloaded(p._ensure_apply_executor(), block_apply_queue)
+    assert started.wait(timeout=1)
 
     async def exercise():
         task = asyncio.create_task(p.set_eco(True, 55))
         try:
-            assert await asyncio.to_thread(started.wait, 1)
+            await asyncio.sleep(0)
             assert not task.done()
         finally:
             release.set()
