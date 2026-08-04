@@ -219,7 +219,6 @@ DEFAULT_MODEL = {
     "fontSize": 24,
     "fontSizeSecondary": 13,
     "fontSizeText": 24,
-    "separateTextSize": False,
     "layout": "vertical",
     "compact": False,
     "noSmallFont": False,
@@ -372,19 +371,6 @@ def coerce_model(raw):
         font_size = _FONT[legacy_size]
     else:
         font_size = _coerce_int(raw_font, default["fontSize"], 12, 64)
-    candidate_text_size = _coerce_int(
-        raw.get("fontSizeText"), default["fontSizeText"], 12, 64
-    )
-    raw_separate_text_size = raw.get("separateTextSize")
-    if isinstance(raw_separate_text_size, bool):
-        separate_text_size = raw_separate_text_size
-    else:
-        separate_text_size = (
-            "separateTextSize" not in raw
-            and "fontSizeText" in raw
-            and candidate_text_size != font_size
-        )
-    font_size_text = candidate_text_size if separate_text_size else font_size
     return {
         "enabled": bool(raw.get("enabled", default["enabled"])),
         "locale": locale if locale in _PDC_LABELS else default["locale"],
@@ -392,10 +378,11 @@ def coerce_model(raw):
         "position": position if position in _POSITIONS else default["position"],
         "fontSize": font_size,
         "fontSizeSecondary": _coerce_int(
-            raw.get("fontSizeSecondary"), default["fontSizeSecondary"], 6, 64
+            raw.get("fontSizeSecondary"), default["fontSizeSecondary"], 6, font_size
         ),
-        "fontSizeText": font_size_text,
-        "separateTextSize": separate_text_size,
+        "fontSizeText": _coerce_int(
+            raw.get("fontSizeText"), default["fontSizeText"], 12, 64
+        ),
         "layout": layout if layout in _LAYOUTS else default["layout"],
         "compact": bool(raw.get("compact", default["compact"])),
         "noSmallFont": bool(raw.get("noSmallFont", default["noSmallFont"])),

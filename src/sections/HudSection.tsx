@@ -3,8 +3,8 @@ import { PanelSectionRow, ToggleField, TextField, Spinner, showModal } from "@de
 import {
   LuArrowUpLeft, LuArrowUpRight, LuArrowDownLeft, LuArrowDownRight,
   LuChevronUp, LuChevronDown, LuChevronRight, LuX, LuRotateCcw, LuRefreshCw,
-  LuType, LuMinus, LuPlus, LuMoveVertical, LuCheck, LuPalette, LuSlidersHorizontal,
-  LuSettings2, LuTriangleAlert,
+  LuMinus, LuPlus, LuMoveVertical, LuCheck, LuPalette, LuSlidersHorizontal,
+  LuSettings2, LuTriangleAlert, LuType,
 } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
@@ -238,9 +238,16 @@ export const HudSection: FC = () => {
   }
 
   const m = state.model;
+  const uniformTextSize = m.noSmallFont && m.fontSizeSecondary === m.fontSize;
   const presets = Object.keys(state.presets).length ? state.presets : PRESETS;
   const patch = (p: Partial<HudModel>) => setModel({ ...m, ...p });
   const patchItems = (items: HudItem[]) => patch({ items });
+  const setUniformTextSize = (uniform: boolean) => patch({
+    noSmallFont: uniform,
+    fontSizeSecondary: uniform
+      ? m.fontSize
+      : Math.max(6, Math.round(m.fontSize * 0.55)),
+  });
   const setColor = (key: ColorKey, hex: string) => patch({ colors: { ...m.colors, [key]: hex } });
 
   const rows = listRows(m.items);
@@ -553,6 +560,27 @@ export const HudSection: FC = () => {
         </div>
 
         <div style={{ ...card, display: "flex", flexDirection: "column", gap: theme.space.sm }}>
+          <SectionLabel>{t("hud.size.section")}</SectionLabel>
+          <HudSliderRow
+            label={t("hud.size.general")}
+            value={Math.round(m.fontScale * 100)}
+            min={50}
+            max={200}
+            step={5}
+            unit="multiplier"
+            onChange={(v) => patch({ fontScale: v / 100 })}
+          />
+          <Note>{t("hud.size.general.hint")}</Note>
+          <ToggleField
+            label={t("hud.size.uniform")}
+            checked={uniformTextSize}
+            onChange={setUniformTextSize}
+            bottomSeparator="none"
+          />
+          <Note>{t("hud.size.uniform.hint")}</Note>
+        </div>
+
+        <div style={{ ...card, display: "flex", flexDirection: "column", gap: theme.space.sm }}>
           <SectionLabel>{t("hud.elements")}</SectionLabel>
           <Note>{t("hud.elements.hint")}</Note>
           {rows.length === 0 && <Note>{t("hud.order.empty")}</Note>}
@@ -713,52 +741,6 @@ export const HudSection: FC = () => {
               })}
             </div>
           </div>
-
-          <HudSliderRow label={t("hud.size.general")} value={Math.round(m.fontScale * 100)} min={50} max={200} step={5} unit="multiplier" onChange={(v) => patch({ fontScale: v / 100 })} />
-          <Note>{t("hud.size.general.hint")}</Note>
-
-          <HudDisclosure
-            id="hud-font-refine"
-            icon={<LuType size={15} />}
-            title={t("hud.size.refine")}
-            summary={t("hud.size.refine.summary")}
-            defaultOpen={false}
-          >
-            <div style={{ display: "flex", flexDirection: "column", gap: theme.space.md }}>
-              <HudSliderRow
-                label={t(m.separateTextSize ? "hud.size.main" : "hud.size.linked")}
-                value={m.fontSize}
-                min={12}
-                max={64}
-                step={1}
-                unit="px"
-                onChange={(v) => patch({
-                  fontSize: v,
-                  fontSizeText: m.separateTextSize ? m.fontSizeText : v,
-                })}
-              />
-              <ToggleField label={t("hud.noSmallFont")} checked={m.noSmallFont} onChange={(v) => patch({ noSmallFont: v })} bottomSeparator="none" />
-              {m.noSmallFont ? (
-                <Note>{t("hud.size.sameAsMain")}</Note>
-              ) : (
-                <HudSliderRow label={t("hud.size.secondary")} value={m.fontSizeSecondary} min={6} max={64} step={1} unit="px" onChange={(v) => patch({ fontSizeSecondary: v })} />
-              )}
-              <ToggleField
-                label={t("hud.size.separateText")}
-                checked={m.separateTextSize}
-                onChange={(separateTextSize) => patch({
-                  separateTextSize,
-                  fontSizeText: separateTextSize ? m.fontSizeText : m.fontSize,
-                })}
-                bottomSeparator="none"
-              />
-              {m.separateTextSize ? (
-                <HudSliderRow label={t("hud.size.text")} value={m.fontSizeText} min={12} max={64} step={1} unit="px" onChange={(v) => patch({ fontSizeText: v })} />
-              ) : (
-                <Note>{t("hud.size.text.linked")}</Note>
-              )}
-            </div>
-          </HudDisclosure>
 
           <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm, minWidth: 0 }}>
             <span style={controlLabel}>{t("hud.tempUnit")}</span>

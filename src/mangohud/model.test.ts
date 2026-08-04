@@ -18,6 +18,7 @@ import {
   matchingPresetKey,
   moveRow,
   normalizeHex,
+  previewFontSizes,
   previewRows,
   removeRow,
   rgbToHex,
@@ -32,7 +33,31 @@ const metrics = (...ids: string[]): HudItem[] => ids.map((id) => ({ kind: "metri
 describe("default model", () => {
   it("defines MangoHud's independent secondary font size", () => {
     expect(DEFAULT_MODEL).toHaveProperty("fontSizeSecondary", 13);
-    expect(DEFAULT_MODEL).toHaveProperty("separateTextSize", false);
+    expect(DEFAULT_MODEL).not.toHaveProperty("separateTextSize");
+  });
+});
+
+describe("preview font sizes", () => {
+  it("mirrors MangoHud's main, small, auxiliary and media font roles", () => {
+    expect(previewFontSizes({
+      ...DEFAULT_MODEL,
+      fontSize: 40,
+      fontSizeSecondary: 22,
+      fontSizeText: 30,
+      fontScale: 1.5,
+    })).toEqual({
+      main: 30,
+      small: 16.5,
+      auxiliary: 16.5,
+      media: 12.38,
+    });
+
+    expect(previewFontSizes({
+      ...DEFAULT_MODEL,
+      fontSize: 40,
+      fontSizeSecondary: 40,
+      noSmallFont: true,
+    })).toMatchObject({ main: 20, small: 20, auxiliary: 20 });
   });
 });
 
@@ -129,12 +154,12 @@ describe("previewRows", () => {
     }
   });
 
-  it("keeps custom text in its own font category when details use main size", () => {
+  it("classifies added text as auxiliary regardless of the unit-size toggle", () => {
     const items: HudItem[] = [{ kind: "text", id: "a", text: "x" }];
     const small = previewRows({ ...DEFAULT_MODEL, items })[0];
     const big = previewRows({ ...DEFAULT_MODEL, items, noSmallFont: true })[0];
-    if (small.kind === "line") expect(small.small).toBe(true);
-    if (big.kind === "line") expect(big.small).toBe(true);
+    if (small.kind === "line") expect(small.fontRole).toBe("auxiliary");
+    if (big.kind === "line") expect(big.fontRole).toBe("auxiliary");
   });
 
   it("is empty when nothing is selected", () => {
@@ -273,7 +298,12 @@ describe("pdc (Panel de Control) metrics", () => {
       { pdc_tdp: "17W" },
     );
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ kind: "line", label: "TDP", value: "17W", small: true });
+    expect(rows[0]).toMatchObject({
+      kind: "line",
+      label: "TDP",
+      value: "17W",
+      fontRole: "auxiliary",
+    });
   });
 
   it("renders a dash when a pdc value has not been observed", () => {

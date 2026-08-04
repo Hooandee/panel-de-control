@@ -292,53 +292,28 @@ def test_font_size_back_compat_from_old_enum():
     assert coerce_model({"size": "small", "fontSize": 50})["fontSize"] == 50
 
 
-def test_font_size_text_follows_main_size_until_explicitly_separated():
-    linked = coerce_model({
+def test_font_size_text_remains_an_independent_media_font():
+    model = coerce_model({
         "fontSize": 40,
         "fontSizeText": 16,
         "separateTextSize": False,
     })
-    assert linked["separateTextSize"] is False
-    assert linked["fontSizeText"] == 40
-    assert "font_size_text=40" in to_directives(linked)
-
-    separate = coerce_model({
-        "fontSize": 40,
-        "fontSizeText": 16,
-        "separateTextSize": True,
-    })
-    assert separate["separateTextSize"] is True
-    assert separate["fontSizeText"] == 16
-    assert "font_size_text=16" in to_directives(separate)
+    assert "separateTextSize" not in model
+    assert model["fontSizeText"] == 16
+    assert "font_size_text=16" in to_directives(model)
 
 
-def test_legacy_distinct_text_size_is_preserved_as_separated():
-    legacy = coerce_model({"fontSize": 40, "fontSizeText": 16})
-    assert legacy["separateTextSize"] is True
-    assert legacy["fontSizeText"] == 16
-    assert coerce_model(legacy) == legacy
-
-
-def test_invalid_separate_text_size_does_not_become_truthy():
-    model = coerce_model({
-        "fontSize": 40,
-        "fontSizeText": 16,
-        "separateTextSize": "false",
-    })
-    assert model["separateTextSize"] is False
-    assert model["fontSizeText"] == 40
-
-
-def test_separate_font_size_text_is_clamped():
-    assert coerce_model({"separateTextSize": True, "fontSizeText": 4})["fontSizeText"] == 12
-    assert coerce_model({"separateTextSize": True, "fontSizeText": 999})["fontSizeText"] == 64
+def test_font_size_text_is_clamped():
+    assert coerce_model({"fontSizeText": 4})["fontSizeText"] == 12
+    assert coerce_model({"fontSizeText": 999})["fontSizeText"] == 64
 
 
 def test_font_size_secondary_default_clamp_and_emit():
     assert coerce_model({})["fontSizeSecondary"] == 13
     assert coerce_model({"fontSizeSecondary": 18})["fontSizeSecondary"] == 18
     assert coerce_model({"fontSizeSecondary": 4})["fontSizeSecondary"] == 6
-    assert coerce_model({"fontSizeSecondary": 999})["fontSizeSecondary"] == 64
+    assert coerce_model({"fontSizeSecondary": 999})["fontSizeSecondary"] == 24
+    assert coerce_model({"fontSize": 16, "fontSizeSecondary": 30})["fontSizeSecondary"] == 16
     assert "font_size_secondary=18" in to_directives(
         coerce_model({"fontSizeSecondary": 18})
     )

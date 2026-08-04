@@ -5,7 +5,7 @@ import {
   HudModel,
   MetricId,
   SPACER_LINES,
-  effectiveTextFontSize,
+  previewFontSizes,
   previewRows,
   previewWouldClip,
 } from "../mangohud/model";
@@ -39,16 +39,9 @@ const HudPreviewComponent: FC<{
   const top = model.position.startsWith("top");
   const left = model.position.endsWith("left");
   const horizontal = model.layout === "horizontal";
-  const base = clampPx(Math.round(model.fontSize * model.fontScale * PREVIEW_SCALE), 8, 22);
-  const secondaryBase = model.noSmallFont
-    ? base
-    : clampPx(Math.round(model.fontSizeSecondary * model.fontScale * PREVIEW_SCALE), 6, 32);
-  const textBase = clampPx(
-    Math.round(effectiveTextFontSize(model) * model.fontScale * PREVIEW_SCALE),
-    6,
-    32,
-  );
-  const lineH = Math.round(base * 1.35);
+  const fonts = previewFontSizes(model);
+  const base = fonts.main;
+  const lineH = base * 1.35;
   const sepColor = `#${model.colors.text}`;
   const [br, bg, bb] = [model.colors.background.slice(0, 2), model.colors.background.slice(2, 4), model.colors.background.slice(4, 6)].map((h) => parseInt(h, 16));
   const boxBg = `rgba(${br || 0},${bg || 0},${bb || 0},${model.background.alpha})`;
@@ -113,7 +106,7 @@ const HudPreviewComponent: FC<{
             }
             if (r.kind === "separator") {
               return (
-                <div key={r.key} style={{ color: textColor(sepColor), whiteSpace: "nowrap", overflow: "hidden" }}>
+                <div key={r.key} style={{ color: textColor(sepColor), whiteSpace: "nowrap", overflow: "hidden", fontSize: fonts.auxiliary }}>
                   {"-".repeat(14)}
                 </div>
               );
@@ -128,7 +121,7 @@ const HudPreviewComponent: FC<{
                       <span key={i} style={{ color: textColor(r.valueColor) }}>
                         <span>{main}</span>
                         {unit && (
-                          <span data-hud-value-unit style={{ fontSize: secondaryBase }}>
+                          <span data-hud-value-unit style={{ fontSize: fonts.small }}>
                             {unit}
                           </span>
                         )}
@@ -142,19 +135,19 @@ const HudPreviewComponent: FC<{
             return (
               <div
                 key={r.key}
-                data-hud-free-text={r.small ? "" : undefined}
+                data-hud-free-text={r.fontRole === "auxiliary" ? "" : undefined}
                 style={{
                   display: "flex",
                   gap: 5,
                   whiteSpace: "nowrap",
-                  fontSize: r.small ? textBase : base,
+                  fontSize: fonts[r.fontRole],
                 }}
               >
                 {r.label && <span style={{ color: textColor(r.labelColor), fontWeight: 600 }}>{r.label}</span>}
                 <span style={{ color: textColor(r.valueColor) }}>
                   <span>{main}</span>
-                  {!r.small && unit && (
-                    <span data-hud-value-unit style={{ fontSize: secondaryBase }}>
+                  {r.fontRole === "main" && unit && (
+                    <span data-hud-value-unit style={{ fontSize: fonts.small }}>
                       {unit}
                     </span>
                   )}

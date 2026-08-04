@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   setModel: vi.fn(),
   resolveConflict: vi.fn(),
-  separateTextSize: false,
+  uniformTextSize: false,
   conflict: null as null | {
     path: string;
     expectedHash: string | null;
@@ -48,7 +48,9 @@ vi.mock("@decky/ui", () => ({
     onChange: (checked: boolean) => void;
   }) => <button onClick={() => onChange(!checked)}>{label}</button>,
   TextField: ({ label }: { label: string }) => <div>{label}</div>,
-  SliderField: ({ label }: { label?: string }) => <div>{label}</div>,
+  SliderField: ({ onChange }: { onChange: (value: number) => void }) => (
+    <button data-testid="slider" onClick={() => onChange(150)}>slider</button>
+  ),
   Spinner: () => <span>spinner</span>,
   showModal: vi.fn(),
 }));
@@ -71,7 +73,10 @@ vi.mock("../mangohud/useHud", async () => {
         conflict: mocks.conflict,
         model: {
           ...DEFAULT_MODEL,
-          separateTextSize: mocks.separateTextSize,
+          noSmallFont: mocks.uniformTextSize,
+          fontSizeSecondary: mocks.uniformTextSize
+            ? DEFAULT_MODEL.fontSize
+            : DEFAULT_MODEL.fontSizeSecondary,
           items: [
             { kind: "metric", id: "fps" },
             { kind: "metric", id: "ram" },
@@ -115,13 +120,14 @@ vi.mock("../components/ConfirmDialog", () => ({
 }));
 
 import { HudSection } from "./HudSection";
+import { DEFAULT_MODEL } from "../mangohud/model";
 
 describe("HudSection QAM composition", () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
     mocks.conflict = null;
-    mocks.separateTextSize = false;
+    mocks.uniformTextSize = false;
   });
 
   it("uses one bounded stack and only exposes editors on configurable rows", () => {
@@ -207,37 +213,46 @@ describe("HudSection QAM composition", () => {
     expect(mocks.setModel).toHaveBeenCalledTimes(1);
   });
 
-  it("links native metrics and PdC text by default and offers an explicit split", () => {
+  it("offers only a global size and one honest uniform-size toggle", () => {
     render(<HudSection />);
 
-    fireEvent.click(screen.getByText("copy:hud.style").closest("[data-testid='focusable']")!);
+    expect(screen.getByText("copy:hud.size.section")).toBeTruthy();
     expect(screen.getByText("copy:hud.size.general")).toBeTruthy();
-
-    fireEvent.click(
-      screen.getByText("copy:hud.size.refine").closest("[data-testid='focusable']")!,
-    );
-    expect(screen.getByText("copy:hud.size.linked")).toBeTruthy();
-    expect(screen.getByText("copy:hud.size.secondary")).toBeTruthy();
-    expect(screen.getByText("copy:hud.size.text.linked")).toBeTruthy();
+    expect(screen.getByText("copy:hud.size.uniform")).toBeTruthy();
+    expect(screen.queryByText("copy:hud.size.main")).toBeNull();
+    expect(screen.queryByText("copy:hud.size.secondary")).toBeNull();
     expect(screen.queryByText("copy:hud.size.text")).toBeNull();
+    expect(screen.queryByText("copy:hud.size.separateText")).toBeNull();
 
-    fireEvent.click(screen.getByText("copy:hud.size.separateText"));
+    const generalRow = screen
+      .getByText("copy:hud.size.general")
+      .closest("[data-hud-slider-row]");
+    fireEvent.click(generalRow!.querySelector("[data-testid='slider']")!);
     expect(mocks.setModel).toHaveBeenCalledWith(
-      expect.objectContaining({ separateTextSize: true }),
+      expect.objectContaining({ fontScale: 1.5 }),
+    );
+
+    fireEvent.click(screen.getByText("copy:hud.size.uniform"));
+    expect(mocks.setModel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        noSmallFont: true,
+        fontSizeSecondary: DEFAULT_MODEL.fontSize,
+      }),
     );
   });
 
-  it("shows the PdC and custom text slider only in separated mode", () => {
-    mocks.separateTextSize = true;
+  it("restores MangoHud's compact typography when uniform sizing is disabled", () => {
+    mocks.uniformTextSize = true;
     render(<HudSection />);
 
-    fireEvent.click(screen.getByText("copy:hud.style").closest("[data-testid='focusable']")!);
-    fireEvent.click(
-      screen.getByText("copy:hud.size.refine").closest("[data-testid='focusable']")!,
-    );
+    fireEvent.click(screen.getByText("copy:hud.size.uniform"));
 
-    expect(screen.getByText("copy:hud.size.main")).toBeTruthy();
-    expect(screen.getByText("copy:hud.size.text")).toBeTruthy();
+    expect(mocks.setModel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        noSmallFont: false,
+        fontSizeSecondary: 13,
+      }),
+    );
   });
 
   it("persists a HUD-specific language and hides the misleading separator colour", () => {

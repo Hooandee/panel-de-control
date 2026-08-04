@@ -72,12 +72,10 @@ export interface HudModel {
   position: HudPosition;
   /** Main metric font size in px. */
   fontSize: number;
-  /** Details and units font size in px. */
+  /** Auxiliary metrics and custom text size in px. */
   fontSizeSecondary: number;
-  /** Free and auxiliary text font size in px. */
+  /** Media metadata font size in px. */
   fontSizeText: number;
-  /** Let custom_text rows use fontSizeText instead of following fontSize. */
-  separateTextSize: boolean;
   layout: HudLayout;
   noSmallFont: boolean;
   tempUnit: TempUnit;
@@ -246,7 +244,6 @@ export const DEFAULT_MODEL: HudModel = {
   fontSize: 24,
   fontSizeSecondary: 13,
   fontSizeText: 24,
-  separateTextSize: false,
   layout: "vertical",
   noSmallFont: false,
   tempUnit: "c",
@@ -275,9 +272,6 @@ export const DEFAULT_MODEL: HudModel = {
   alpha: 1.0,
   fontScale: 1.0,
 };
-
-export const effectiveTextFontSize = (model: HudModel): number =>
-  model.separateTextSize ? model.fontSizeText : model.fontSize;
 
 // The colour controls the "Estilo general" section shows, in display order.
 // (Each corresponds to a MangoHud colour directive — see config.py.)
@@ -344,11 +338,44 @@ export function normalizeHex(hex: string): string | null {
 const GROUP_LABEL: Partial<Record<MetricGroup, string>> = { gpu: "GPU", cpu: "CPU", battery: "BAT" };
 const GROUP_COLOR: Record<BlockGroup, ColorKey> = { gpu: "gpu", cpu: "cpu", battery: "battery" };
 
+export type PreviewFontRole = "main" | "auxiliary" | "media";
+
 export type PreviewRow =
   | { kind: "group"; key: string; group: BlockGroup; label: string; labelColor: string; valueColor: string; cells: string[] }
-  | { kind: "line"; key: string; label: string; value: string; labelColor: string; valueColor: string; small: boolean }
+  | { kind: "line"; key: string; label: string; value: string; labelColor: string; valueColor: string; fontRole: PreviewFontRole }
   | { kind: "separator"; key: string }
   | { kind: "spacer"; key: string; size: SpacerSize };
+
+const AUXILIARY_METRICS = new Set<MetricId>([
+  "gpu_name", "engine_version", "vulkan_driver", "arch", "wine", "resolution",
+  "show_fps_limit", "gamemode", "vkbasalt", "frame_count", "refresh_rate",
+  "winesync", "present_mode", "display_server",
+]);
+
+export interface PreviewFontSizes {
+  main: number;
+  small: number;
+  auxiliary: number;
+  media: number;
+}
+
+const previewPx = (size: number, scale: number): number =>
+  Math.max(1, Number((size * scale * 0.5).toFixed(2)));
+
+export function previewFontSizes(model: HudModel): PreviewFontSizes {
+  return {
+    main: previewPx(model.fontSize, model.fontScale),
+    small: previewPx(
+      model.noSmallFont ? model.fontSize : model.fontSize * 0.55,
+      model.fontScale,
+    ),
+    auxiliary: previewPx(
+      Math.min(model.fontSizeSecondary, model.fontSize),
+      model.fontScale,
+    ),
+    media: previewPx(model.fontSizeText * 0.55, model.fontScale),
+  };
+}
 
 /** The colour key that tints a metric's VALUE: fps + frametime are their own
  *  (solid) colours; every other value uses the global text colour — mirroring what
@@ -388,7 +415,7 @@ export function previewRows(
       return;
     }
     if (it.kind === "text") {
-      rows.push({ kind: "line", key: `t:${it.id}:${i}`, label: "", value: it.text, labelColor: c("text"), valueColor: c("text"), small: true });
+      rows.push({ kind: "line", key: `t:${it.id}:${i}`, label: "", value: it.text, labelColor: c("text"), valueColor: c("text"), fontRole: "auxiliary" });
       return;
     }
     const meta = META[it.id];
@@ -421,7 +448,11 @@ export function previewRows(
       value,
       labelColor: c(meta.category),
       valueColor: c(valueColorKey(it.id)),
-      small: PDC_ID_SET.has(it.id),
+      fontRole: it.id === "media_player"
+        ? "media"
+        : PDC_ID_SET.has(it.id) || AUXILIARY_METRICS.has(it.id)
+          ? "auxiliary"
+          : "main",
     });
   });
   return rows;
@@ -432,23 +463,17 @@ export function previewWouldClip(
   rows: PreviewRow[] = previewRows(model),
 ): boolean {
   if (model.layout === "horizontal") return false;
-  const clamp = (value: number, lo: number, hi: number) =>
-    Math.max(lo, Math.min(hi, value));
-  const base = clamp(Math.round(model.fontSize * model.fontScale * 0.5), 8, 22);
-  const textBase = clamp(
-    Math.round(effectiveTextFontSize(model) * model.fontScale * 0.5),
-    6,
-    32,
-  );
-  const lineHeight = Math.round(base * 1.35);
-  const textLineHeight = Math.round(textBase * 1.35);
-  const gap = clamp(Math.round(1 + model.cellpaddingY * base), 0, 9);
+  const fonts = previewFontSizes(model);
+  const lineHeight = fonts.main * 1.35;
+  const gap = Math.max(0, Math.min(9, Math.round(1 + model.cellpaddingY * fonts.main)));
   const padding = model.noMargin ? 0 : model.compact ? 4 : 6;
   const contentHeight = rows.reduce((total, row) => {
     if (row.kind === "spacer") {
       return total + SPACER_LINES[row.size] * lineHeight;
     }
-    return total + (row.kind === "line" && row.small ? textLineHeight : lineHeight);
+    if (row.kind === "line") return total + fonts[row.fontRole] * 1.35;
+    if (row.kind === "separator") return total + fonts.auxiliary * 1.35;
+    return total + lineHeight;
   }, 0);
   return contentHeight + Math.max(0, rows.length - 1) * gap + padding * 2 > 152;
 }
