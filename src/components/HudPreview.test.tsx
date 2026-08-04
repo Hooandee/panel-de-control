@@ -1,8 +1,12 @@
 // @vitest-environment happy-dom
-import { cleanup, render } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { DEFAULT_MODEL, HudModel } from "../mangohud/model";
+vi.mock("../i18n", () => ({
+  useI18n: () => ({ t: (key: string) => `copy:${key}` }),
+}));
+
+import { DEFAULT_MODEL, HudModel, previewWouldClip } from "../mangohud/model";
 import { HudPreview } from "./HudPreview";
 
 describe("HudPreview typography", () => {
@@ -27,5 +31,27 @@ describe("HudPreview typography", () => {
     expect(unit.style.fontSize).toBe("7px");
     expect(freeText.textContent).toBe("Steam Deck");
     expect(freeText.style.fontSize).toBe("15px");
+  });
+
+  it("clips an overflowing overlay and warns outside the simulated frame", () => {
+    const model = {
+      ...DEFAULT_MODEL,
+      fontSize: 40,
+      items: Array.from({ length: 14 }, (_, index) => ({
+        kind: "text" as const,
+        id: `line-${index}`,
+        text: `Line ${index}`,
+      })),
+    } as HudModel;
+
+    render(<HudPreview model={model} />);
+
+    const overlay = screen.getByTestId("hud-preview-overlay");
+    const frame = screen.getByTestId("hud-preview-frame");
+    const warning = screen.getByTestId("hud-preview-clipping-warning");
+    expect(previewWouldClip(model)).toBe(true);
+    expect(frame.contains(warning)).toBe(false);
+    expect(overlay.style.overflow).toBe("hidden");
+    expect(overlay.style.overflowY).toBe("");
   });
 });

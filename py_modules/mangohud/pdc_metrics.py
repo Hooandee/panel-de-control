@@ -8,17 +8,54 @@ number: a missing/None source degrades to a short honest marker."""
 
 DASH = "-"
 
+_TEXT = {
+    "es": {
+        "auto": "Auto",
+        "learning": "Aprendiendo",
+        "active": "Activo",
+        "inactive": "Inactivo",
+        "global": "Global",
+        "game": "Juego",
+        "on": "On",
+        "off": "Off",
+        "fan_adaptive": "Adaptativo",
+        "fan_silent": "Silencioso",
+        "fan_balanced": "Equilibrado",
+        "fan_performance": "Rendimiento",
+        "fan_custom": "Curva",
+    },
+    "en": {
+        "auto": "Auto",
+        "learning": "Learning",
+        "active": "Active",
+        "inactive": "Inactive",
+        "global": "Global",
+        "game": "Game",
+        "on": "On",
+        "off": "Off",
+        "fan_adaptive": "Adaptive",
+        "fan_silent": "Silent",
+        "fan_balanced": "Balanced",
+        "fan_performance": "Performance",
+        "fan_custom": "Curve",
+    },
+}
 _FAN_MODE = {
-    "auto": "Auto",
-    "adaptive": "Adaptativo",
-    "silent": "Silencioso",
-    "balanced": "Equilibrado",
-    "performance": "Rendimiento",
-    "custom": "Curva",
+    "auto": "auto",
+    "adaptive": "fan_adaptive",
+    "silent": "fan_silent",
+    "balanced": "fan_balanced",
+    "performance": "fan_performance",
+    "custom": "fan_custom",
 }
 
 # tdp_learn reasons that mean "still gathering data" (vs off / no game).
 _LEARNING = {"no_data", "too_few", "one_level"}
+
+
+def _text(snap, key):
+    locale = snap.get("_locale")
+    return _TEXT[locale if locale in _TEXT else "es"][key]
 
 
 def _watts(value):
@@ -27,7 +64,7 @@ def _watts(value):
 
 def tdp(snap):
     watts = _watts(snap.get("applied")) or DASH
-    return f"Auto {watts}" if snap.get("auto") else watts
+    return f"{_text(snap, 'auto')} {watts}" if snap.get("auto") else watts
 
 
 def tdp_learn(snap):
@@ -35,17 +72,18 @@ def tdp_learn(snap):
     lo, hi = band.get("floor"), band.get("ceil")
     if band.get("enough") and isinstance(lo, (int, float)) and isinstance(hi, (int, float)):
         return f"{round(lo)}-{round(hi)}W"
-    return "Aprendiendo" if band.get("reason") in _LEARNING else DASH
+    return _text(snap, "learning") if band.get("reason") in _LEARNING else DASH
 
 
 def fan(snap):
     if not snap.get("fan_confirmed"):
         return DASH
-    name = _FAN_MODE.get(snap.get("fan_mode"))
-    if name is None:
+    key = _FAN_MODE.get(snap.get("fan_mode"))
+    if key is None:
         return DASH
+    name = _text(snap, key)
     if snap.get("fan_mode") == "adaptive" and snap.get("fan_learning"):
-        return f"{name} (aprendiendo)"
+        return f"{name} ({_text(snap, 'learning').lower()})"
     return name
 
 
@@ -53,7 +91,7 @@ def eco(snap):
     value = snap.get("eco")
     if value is None:
         return DASH
-    return "Activo" if value else "Inactivo"
+    return _text(snap, "active" if value else "inactive")
 
 
 def profile(snap):
@@ -61,7 +99,7 @@ def profile(snap):
     if name:
         return str(name)
     appid = snap.get("appid")
-    return f"Juego {appid}" if appid else "Global"
+    return f"{_text(snap, 'game')} {appid}" if appid else _text(snap, "global")
 
 
 def power(snap):
@@ -75,20 +113,20 @@ def model(snap):
 
 
 def auto_tdp(snap):
-    return _onoff(snap.get("auto_tdp"))
+    return _onoff(snap, snap.get("auto_tdp"))
 
 
-def _onoff(value):
+def _onoff(snap, value):
     if value is None:
         return DASH
-    return "On" if value else "Off"
+    return _text(snap, "on" if value else "off")
 
 
 def charge(snap):
     if not snap.get("charge_supported"):
         return DASH
     if not snap.get("charge_enabled"):
-        return "Off"
+        return _text(snap, "off")
     if not snap.get("charge_confirmed"):
         return DASH
     percent = snap.get("charge_percent")
@@ -101,11 +139,11 @@ def bat_health(snap):
 
 
 def smt(snap):
-    return _onoff(snap.get("smt_on")) if snap.get("smt_supported") else DASH
+    return _onoff(snap, snap.get("smt_on")) if snap.get("smt_supported") else DASH
 
 
 def boost(snap):
-    return _onoff(snap.get("boost_on")) if snap.get("boost_supported") else DASH
+    return _onoff(snap, snap.get("boost_on")) if snap.get("boost_supported") else DASH
 
 
 def cores(snap):
@@ -120,7 +158,7 @@ def gpu_clock(snap):
     if not snap.get("gpu_clock_supported"):
         return DASH
     if not snap.get("gpu_clock_manual"):
-        return "Auto"
+        return _text(snap, "auto")
     if not snap.get("gpu_clock_confirmed"):
         return DASH
     lo, hi = snap.get("gpu_clock_min"), snap.get("gpu_clock_max")
@@ -153,7 +191,11 @@ FORMATTERS = {
 }
 
 
-def render(metric_id, snapshot):
+def render(metric_id, snapshot, locale="es"):
     """The value string for a pdc metric id, or None if it isn't a pdc metric."""
     fn = FORMATTERS.get(metric_id)
-    return fn(snapshot) if fn else None
+    if fn is None:
+        return None
+    localized = dict(snapshot)
+    localized["_locale"] = locale if locale in _TEXT else "es"
+    return fn(localized)

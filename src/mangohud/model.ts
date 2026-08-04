@@ -29,6 +29,7 @@ export type ColorKey =
   | "frametime" | "network" | "background" | "outline";
 export type HudPosition = "top-left" | "top-right" | "bottom-left" | "bottom-right";
 export type HudLayout = "vertical" | "horizontal";
+export type HudLocale = "es" | "en";
 export type TempUnit = "c" | "f";
 export type MetricGroup = "fps" | "gpu" | "cpu" | "temps" | "mem" | "battery" | "system" | "pdc";
 // GPU, CPU and BATTERY render as ONE row each (a category label + a column per
@@ -66,6 +67,7 @@ export type HudItem =
 
 export interface HudModel {
   enabled: boolean;
+  locale: HudLocale;
   items: HudItem[];
   position: HudPosition;
   /** Main metric font size in px. */
@@ -236,6 +238,7 @@ export const GROUPS: { key: MetricGroup; ids: MetricId[] }[] = (
 
 export const DEFAULT_MODEL: HudModel = {
   enabled: false,
+  locale: "es",
   items: (["fps", "gpu", "cpu", "ram", "battery"] as MetricId[]).map((id) => ({ kind: "metric", id })),
   position: "top-left",
   fontSize: 24,
@@ -416,6 +419,28 @@ export function previewRows(
     });
   });
   return rows;
+}
+
+export function previewWouldClip(model: HudModel): boolean {
+  if (model.layout === "horizontal") return false;
+  const clamp = (value: number, lo: number, hi: number) =>
+    Math.max(lo, Math.min(hi, value));
+  const base = clamp(Math.round(model.fontSize * model.fontScale * 0.5), 8, 22);
+  const textBase = model.noSmallFont
+    ? base
+    : clamp(Math.round(model.fontSizeText * model.fontScale * 0.5), 6, 32);
+  const lineHeight = Math.round(base * 1.35);
+  const textLineHeight = Math.round(textBase * 1.35);
+  const gap = clamp(Math.round(1 + model.cellpaddingY * base), 0, 9);
+  const padding = model.noMargin ? 0 : model.compact ? 4 : 6;
+  const rows = previewRows(model);
+  const contentHeight = rows.reduce((total, row) => {
+    if (row.kind === "spacer") {
+      return total + SPACER_LINES[row.size] * lineHeight;
+    }
+    return total + (row.kind === "line" && row.small ? textLineHeight : lineHeight);
+  }, 0);
+  return contentHeight + Math.max(0, rows.length - 1) * gap + padding * 2 > 152;
 }
 
 export const hasMetric = (items: HudItem[], id: MetricId): boolean =>

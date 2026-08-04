@@ -209,6 +209,19 @@ describe("HudSection QAM composition", () => {
     expect(screen.getByText("copy:hud.size.text")).toBeTruthy();
   });
 
+  it("persists a HUD-specific language and hides the misleading separator colour", () => {
+    render(<HudSection />);
+
+    fireEvent.click(screen.getByText("copy:hud.style").closest("[data-testid='focusable']")!);
+    fireEvent.click(screen.getByText("copy:hud.locale.en").closest("[data-testid='focusable']")!);
+    expect(mocks.setModel).toHaveBeenCalledWith(
+      expect.objectContaining({ locale: "en" }),
+    );
+
+    fireEvent.click(screen.getByText("copy:hud.advanced").closest("[data-testid='focusable']")!);
+    expect(screen.queryByText("copy:hud.separatorColor")).toBeNull();
+  });
+
   it("adds a metric with one complete model update", () => {
     render(<HudSection />);
 

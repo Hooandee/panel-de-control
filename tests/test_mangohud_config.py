@@ -40,6 +40,12 @@ def test_coerce_fills_missing_keys():
     assert m["fontSize"] == DEFAULT_MODEL["fontSize"]
     assert m["layout"] == "vertical"
     assert "alpha" in m["background"]
+    assert m["locale"] == "es"
+
+
+def test_hud_locale_round_trips_and_rejects_unknown_values():
+    assert coerce_model({"locale": "en"})["locale"] == "en"
+    assert coerce_model({"locale": "fr"})["locale"] == "es"
 
 
 def test_coerce_drops_unknown_metrics_and_dedupes_keeping_order():
@@ -541,6 +547,20 @@ def test_pdc_dash_value_is_baked_honestly():
 def test_pdc_metric_coerced_and_labellable():
     m = coerce_model({"items": [{"kind": "metric", "id": "pdc_power", "label": "W"}]})
     assert m["items"] == [{"kind": "metric", "id": "pdc_power", "label": "W"}]
+
+
+def test_pdc_default_label_follows_the_persisted_hud_locale():
+    spanish = to_directives(coerce_model({
+        "locale": "es",
+        "items": _metrics("pdc_power"),
+    }))
+    english = to_directives(coerce_model({
+        "locale": "en",
+        "items": _metrics("pdc_power"),
+    }))
+
+    assert "custom_text=Consumo" in spanish
+    assert "custom_text=Power" in english
 
 
 def test_pdc_in_catalog():

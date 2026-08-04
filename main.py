@@ -485,6 +485,7 @@ class Plugin:
         self._hud_conflict = None
         self._hud_last_publish_at = float("-inf")
         self._pdc_active_ids = []
+        self._pdc_locale = "es"
         self._pdc_written = {}
         self._pdc_preview_values = {}
         self._pdc_refresh_failed = False
@@ -3560,6 +3561,7 @@ class Plugin:
                 return
         self._pdc_presets_path = cap["presetsPath"]
         self._hud_sessions = tuple(cap["sessions"])
+        self._pdc_locale = model.get("locale", "es")
         self._pdc_active_ids = mangohud_config.enabled_pdc_ids(model)
         values = self._pdc_values()
         self._pdc_preview_values = values
@@ -3783,7 +3785,11 @@ class Plugin:
         if extras is None:
             extras = self._read_pdc_sources()
         snap = self._pdc_snapshot(active, extras)
-        return {mid: mangohud_pdc.render(mid, snap) or mangohud_pdc.DASH for mid in active}
+        return {
+            mid: mangohud_pdc.render(mid, snap, self._pdc_locale)
+            or mangohud_pdc.DASH
+            for mid in active
+        }
 
     def _refresh_pdc_metrics_sync(self) -> None:
         if self._hud_reload_pending:

@@ -19,7 +19,7 @@ import { ConfirmDialog } from "../components/ConfirmDialog";
 import { segmentGroupStyle, segmentItemStyle } from "../components/segmented";
 import { hasLocalEditor } from "../mangohud/editorUi";
 import {
-  BlockGroup, COLOR_KEYS, ColorKey, GROUPS, HudItem, HudLayout, HudModel,
+  BlockGroup, COLOR_KEYS, ColorKey, GROUPS, HudItem, HudLayout, HudLocale, HudModel,
   HudPosition, ListRow, MetricId, SPACER_SIZES, TempUnit, PRESETS,
   addMetricItem, addSeparator, addSpacer, addTextItem, blockMetricIds, canLabel, hasBlock, hasMetric,
   isBlockGroup, isRequiredBlockMetric, listRows, moveRow, removeRow, setMetricLabel, setSpacerSizeAt, setTextAt,
@@ -33,6 +33,7 @@ const POSITIONS: { id: HudPosition; Icon: typeof LuArrowUpLeft }[] = [
   { id: "bottom-left", Icon: LuArrowDownLeft }, { id: "bottom-right", Icon: LuArrowDownRight },
 ];
 const LAYOUTS: HudLayout[] = ["vertical", "horizontal"];
+const HUD_LOCALES: HudLocale[] = ["es", "en"];
 const TEMP_UNITS: TempUnit[] = ["c", "f"];
 
 type AddEntry = { kind: "metric"; id: MetricId } | { kind: "block"; group: BlockGroup };
@@ -741,6 +742,23 @@ export const HudSection: FC = () => {
             </div>
           </div>
 
+          <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm, minWidth: 0 }}>
+            <span style={controlLabel}>{t("hud.locale")}</span>
+            <div style={{ ...segmentGroupStyle, width: "100%", minWidth: 0 }}>
+              {HUD_LOCALES.map((locale) => (
+                <QamAction
+                  key={locale}
+                  onPress={() => patch({ locale })}
+                  pressed={m.locale === locale}
+                  style={{ ...segmentItemStyle(m.locale === locale), flex: 1, padding: "5px 0" }}
+                >
+                  {t(`hud.locale.${locale}`)}
+                </QamAction>
+              ))}
+            </div>
+            <Note>{t("hud.locale.hint")}</Note>
+          </div>
+
           <HudSliderRow label={t("hud.opacity")} value={Math.round(m.background.alpha * 100)} min={0} max={100} step={5} unit="percent" onChange={(v) => patch({ background: { ...m.background, alpha: v / 100 } })} />
 
           <ToggleField label={t("hud.textOutline")} checked={m.textOutline} onChange={(v) => patch({ textOutline: v })} bottomSeparator="none" />
@@ -784,11 +802,6 @@ export const HudSection: FC = () => {
           <HudSliderRow label={t("hud.offsetY")} value={m.offsetY} min={-200} max={200} step={2} unit="px" onChange={(v) => patch({ offsetY: v })} />
           <ToggleField label={t("hud.compact")} checked={m.compact} onChange={(v) => patch({ compact: v })} bottomSeparator="none" />
           <ToggleField label={t("hud.noMargin")} checked={m.noMargin} onChange={(v) => patch({ noMargin: v })} bottomSeparator="none" />
-          <div style={{ display: "flex", alignItems: "center", gap: theme.space.sm }}>
-            <ColorPicker label={t("hud.separatorColor")} value={m.separatorColor ?? "ffffff"} onChange={(hex) => patch({ separatorColor: hex })} />
-            <Note>{t("hud.separatorColor")}</Note>
-          </div>
-          <Note>{t("hud.separatorColor.hint")}</Note>
           <Note>{t("hud.advanced.hint")}</Note>
         </div>
       </HudDisclosure>

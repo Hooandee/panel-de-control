@@ -1,6 +1,13 @@
 import { FC } from "react";
 
-import { HudModel, MetricId, SPACER_LINES, previewRows } from "../mangohud/model";
+import { useI18n } from "../i18n";
+import {
+  HudModel,
+  MetricId,
+  SPACER_LINES,
+  previewRows,
+  previewWouldClip,
+} from "../mangohud/model";
 
 // The miniature shrinks the real px size to fit the small frame while staying
 // proportional, so a bigger font_size visibly grows the preview.
@@ -19,13 +26,15 @@ function valueParts(value: string): { main: string; unit: string } {
  * colour, then a white value per column); other metrics/custom text are single
  * lines; separators draw a plain-ASCII divider (MangoHud's font has no box glyphs).
  * Honours corner, vertical/horizontal layout, opacity/rounding, size, labels,
- * small-font. Tall HUDs scroll inside the frame so every row is visible (no clipping).
+ * small-font. Tall HUDs clip like the real viewport and surface that limitation.
  */
 export const HudPreview: FC<{
   model: HudModel;
   values?: Partial<Record<MetricId, string>>;
 }> = ({ model, values }) => {
+  const { t } = useI18n();
   const rows = previewRows(model, values);
+  const clips = previewWouldClip(model);
   const top = model.position.startsWith("top");
   const left = model.position.endsWith("left");
   const horizontal = model.layout === "horizontal";
@@ -51,6 +60,10 @@ export const HudPreview: FC<{
   const textColor = (hex: string) => `${hex}${textAlpha}`;
   return (
     <div
+      style={{ display: "flex", flexDirection: "column", gap: 5, minWidth: 0 }}
+    >
+    <div
+      data-testid="hud-preview-frame"
       style={{
         position: "relative",
         height: 168,
@@ -60,6 +73,7 @@ export const HudPreview: FC<{
       }}
     >
       <div
+        data-testid="hud-preview-overlay"
         style={{
           position: "absolute",
           top: top ? 8 : undefined,
@@ -81,8 +95,7 @@ export const HudPreview: FC<{
           lineHeight: 1.35,
           maxWidth: "92%",
           maxHeight: 152,
-          overflowY: "auto",
-          overflowX: "hidden",
+          overflow: "hidden",
           WebkitTextStroke: outlineWidth
             ? `${outlineWidth}px #${model.colors.outline}${textAlpha}`
             : undefined,
@@ -146,6 +159,22 @@ export const HudPreview: FC<{
             );
         })}
       </div>
+    </div>
+    {clips && (
+      <div
+        data-testid="hud-preview-clipping-warning"
+        style={{
+          padding: "4px 7px",
+          borderRadius: 6,
+          color: "#ffcf8a",
+          background: "rgba(255,180,84,0.08)",
+          fontSize: 10,
+          lineHeight: 1.3,
+        }}
+      >
+        {t("hud.preview.clipped")}
+      </div>
+    )}
     </div>
   );
 };

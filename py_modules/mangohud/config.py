@@ -70,7 +70,7 @@ _DIRECTIVE = {
 # time (a snapshot refreshed by the auto loop). The string here is the DEFAULT row label
 # (the user can override it — pdc metrics are labellable). Formatting lives in
 # pdc_metrics.py.
-_PDC_LABEL = {
+_PDC_LABEL_ES = {
     "pdc_tdp": "TDP",
     "pdc_tdp_learn": "Banda",
     "pdc_auto_tdp": "Auto",
@@ -87,9 +87,27 @@ _PDC_LABEL = {
     "pdc_gpu_clock": "GPU MHz",
     "pdc_model": "Equipo",
 }
-PDC_IDS = frozenset(_PDC_LABEL)
+_PDC_LABEL_EN = {
+    "pdc_tdp": "TDP",
+    "pdc_tdp_learn": "Band",
+    "pdc_auto_tdp": "Auto",
+    "pdc_fan": "Fan",
+    "pdc_fan_rpm": "RPM",
+    "pdc_eco": "Download",
+    "pdc_profile": "Profile",
+    "pdc_power": "Power",
+    "pdc_charge": "Limit",
+    "pdc_bat_health": "Health",
+    "pdc_smt": "SMT",
+    "pdc_boost": "Boost",
+    "pdc_cores": "Cores",
+    "pdc_gpu_clock": "GPU MHz",
+    "pdc_model": "Device",
+}
+_PDC_LABELS = {"es": _PDC_LABEL_ES, "en": _PDC_LABEL_EN}
+PDC_IDS = frozenset(_PDC_LABEL_ES)
 
-METRIC_CATALOG = tuple(_DIRECTIVE.keys()) + tuple(_PDC_LABEL.keys())
+METRIC_CATALOG = tuple(_DIRECTIVE.keys()) + tuple(_PDC_LABEL_ES.keys())
 
 
 def enabled_pdc_ids(model):
@@ -192,6 +210,7 @@ def _single_line(value):
 
 DEFAULT_MODEL = {
     "enabled": False,
+    "locale": "es",
     # Ordered list of what shows, in screen order. Each item is a metric, a custom
     # text pill, or a separator — so text/dividers can be interleaved and reordered.
     "items": _metric_items(_DEFAULT_METRICS),
@@ -344,6 +363,7 @@ def coerce_model(raw):
     position = raw.get("position")
     layout = raw.get("layout")
     temp_unit = raw.get("tempUnit")
+    locale = raw.get("locale")
     # fontSize (px) replaces the old S/M/L enum; map a legacy `size` for back-compat.
     legacy_size = raw.get("size")
     raw_font = raw.get("fontSize")
@@ -353,6 +373,7 @@ def coerce_model(raw):
         font_size = _coerce_int(raw_font, default["fontSize"], 12, 64)
     return {
         "enabled": bool(raw.get("enabled", default["enabled"])),
+        "locale": locale if locale in _PDC_LABELS else default["locale"],
         "items": _coerce_items(raw.get("items")),
         "position": position if position in _POSITIONS else default["position"],
         "fontSize": font_size,
@@ -454,7 +475,7 @@ def _color_lines(model):
     return lines
 
 
-def _enable_lines(item, values):
+def _enable_lines(item, values, locale="es"):
     """The directive(s) that turn an enabled metric on, in emit order. A real metric:
     its custom label (only fps/cpu/gpu) then the metric key. A pdc metric: a single
     baked `custom_text=<label> <value>` line — Steam's mangoapp does not run `exec`, so
@@ -464,7 +485,7 @@ def _enable_lines(item, values):
     label = item.get("label")
     has_label = isinstance(label, str) and bool(label.strip())
     if mid in PDC_IDS:
-        text = _single_line(label if has_label else _PDC_LABEL[mid])
+        text = _single_line(label if has_label else _PDC_LABELS[locale][mid])
         value = _single_line((values or {}).get(mid))
         return [f"custom_text={text} {value}" if value else f"custom_text={text}"]
     lines = []
@@ -495,7 +516,7 @@ def to_directives(model, values=None):
     # Visible content, in item order.
     for item in model["items"]:
         if item["kind"] == "metric":
-            lines.extend(_enable_lines(item, values))
+            lines.extend(_enable_lines(item, values, model["locale"]))
         elif item["kind"] == "separator":
             lines.append(f"custom_text={_SEPARATOR_TEXT}")
         elif item["kind"] == "spacer":

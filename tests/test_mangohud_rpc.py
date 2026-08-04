@@ -521,6 +521,20 @@ def test_pdc_metric_bakes_applied_readback_not_profile_target(tmp_path, monkeypa
     assert not os.path.exists(str(tmp_path / "pdc_tdp.txt"))
 
 
+def test_persisted_hud_locale_controls_dynamic_in_game_text(tmp_path, monkeypatch):
+    presets = str(tmp_path / "presets.conf")
+    main, p = _make_plugin(tmp_path, monkeypatch)
+    _fake_overlay(main, monkeypatch, presets)
+
+    asyncio.run(p.set_hud_config({
+        "locale": "en",
+        "items": _items("pdc_eco"),
+        "enabled": True,
+    }))
+
+    assert "custom_text=Download Inactive" in open(presets).read()
+
+
 def test_changed_applied_tdp_refreshes_hud_without_profile_change(tmp_path, monkeypatch):
     presets = str(tmp_path / "presets.conf")
     main, p = _make_plugin(tmp_path, monkeypatch)

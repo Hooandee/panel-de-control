@@ -77,6 +77,16 @@ def test_eco_on_off():
     assert pdc.render("pdc_eco", {"eco": False}) == "Inactivo"
 
 
+def test_dynamic_values_follow_the_persisted_hud_locale():
+    assert pdc.render("pdc_eco", {"eco": True}, locale="es") == "Activo"
+    assert pdc.render("pdc_eco", {"eco": False}, locale="en") == "Inactive"
+    assert pdc.render(
+        "pdc_tdp_learn",
+        {"learn": {"reason": "too_few"}},
+        locale="en",
+    ) == "Learning"
+
+
 # ---- pdc_profile ----
 
 def test_profile_global_when_no_game():
