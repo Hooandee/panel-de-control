@@ -5,6 +5,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   setModel: vi.fn(),
+  resolveConflict: vi.fn(),
+  conflict: null as null | {
+    path: string;
+    expectedHash: string | null;
+    actualHash: string | null;
+  },
 }));
 
 vi.mock("@decky/ui", () => ({
@@ -52,7 +58,8 @@ vi.mock("../mangohud/useHud", async () => {
         supported: true,
         running: true,
         capability: "ready",
-        applyStatus: "applied",
+        applyStatus: mocks.conflict ? "conflict" : "reload_requested",
+        conflict: mocks.conflict,
         model: {
           ...DEFAULT_MODEL,
           items: [
@@ -74,6 +81,7 @@ vi.mock("../mangohud/useHud", async () => {
       reloadStatus: "idle",
       saveStatus: "idle",
       reset: vi.fn(),
+      resolveConflict: mocks.resolveConflict,
     }),
   };
 });
@@ -101,6 +109,7 @@ describe("HudSection QAM composition", () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+    mocks.conflict = null;
   });
 
   it("uses one bounded stack and only exposes editors on configurable rows", () => {
@@ -126,6 +135,22 @@ describe("HudSection QAM composition", () => {
     const position = badge.compareDocumentPosition(preview);
 
     expect(position & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+  });
+
+  it("offers explicit choices when external MangoHud configuration changed", () => {
+    mocks.conflict = {
+      path: ".config/MangoHud/presets.conf",
+      expectedHash: "expected",
+      actualHash: "actual",
+    };
+    render(<HudSection />);
+
+    expect(screen.getByText("copy:hud.conflict.title")).toBeTruthy();
+    fireEvent.click(screen.getByText("copy:hud.conflict.keepExternal"));
+    fireEvent.click(screen.getByText("copy:hud.conflict.usePdc"));
+
+    expect(mocks.resolveConflict).toHaveBeenNthCalledWith(1, "keep_external");
+    expect(mocks.resolveConflict).toHaveBeenNthCalledWith(2, "use_pdc");
   });
 
   it("keeps the add trigger mounted while the picker opens", () => {

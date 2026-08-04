@@ -98,14 +98,29 @@ export interface HudModel {
   fontScale: number;
 }
 
-export type HudCapability = "ready" | "unsupported" | "inactive";
-export type HudApplyStatus = "disabled" | "pending" | "unavailable" | "applied" | "failed";
+export type HudCapability = "ready" | "unsupported" | "inactive" | "ambiguous";
+export type HudApplyStatus =
+  | "disabled"
+  | "pending"
+  | "written"
+  | "reload_requested"
+  | "unavailable"
+  | "ambiguous"
+  | "conflict"
+  | "failed";
+
+export interface HudConflict {
+  path: string;
+  expectedHash: string | null;
+  actualHash: string | null;
+}
 
 export interface HudState {
   supported: boolean;
   running: boolean;
   capability: HudCapability;
   applyStatus: HudApplyStatus;
+  conflict: HudConflict | null;
   model: HudModel;
   values: Partial<Record<MetricId, string>>;
   catalog: MetricId[];

@@ -64,6 +64,43 @@ def _fake_overlay(
         lambda **_kwargs: {"running": running, "supported": supported,
                  "presetsPath": presets_path, "configFile": config_file},
     )
+    sessions = (
+        (
+            main.mangohud_detect.HudSession(
+                pid=4242,
+                starttime=9001,
+                uid=os.getuid(),
+                cwd=str(os.path.dirname(presets_path)),
+                presets_path=presets_path,
+                config_file=config_file,
+                presets_supported=supported,
+            ),
+        )
+        if running
+        else ()
+    )
+    monkeypatch.setattr(
+        main.mangohud_detect,
+        "detect_sessions",
+        lambda **_kwargs: sessions,
+    )
+    monkeypatch.setattr(
+        main.mangohud_detect,
+        "session_alive",
+        lambda _session, **_kwargs: True,
+    )
+
+    _set_reload(main, monkeypatch, lambda: True)
+
+
+def _set_reload(main, monkeypatch, request):
+    def reload_snapshot(snapshot, **_kwargs):
+        identities = tuple((session.pid, session.starttime) for session in snapshot)
+        requested = identities if request() else ()
+        pending = () if requested else identities
+        return types.SimpleNamespace(requested=requested, pending=pending)
+
+    monkeypatch.setattr(main, "reload_sessions", reload_snapshot, raising=False)
 
 
 def _items(*ids):
@@ -127,7 +164,6 @@ def test_offline_disable_clears_the_remembered_custom_path(tmp_path, monkeypatch
     default = str(tmp_path / "default" / "presets.conf")
     main, p = _make_plugin(tmp_path, monkeypatch)
     _fake_overlay(main, monkeypatch, custom)
-    monkeypatch.setattr(main, "reload_mangoapp", lambda *_args: True)
 
     asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
     assert os.path.exists(custom)
@@ -147,7 +183,6 @@ def test_supported_path_change_restores_the_previous_managed_file(tmp_path, monk
     current = str(tmp_path / "current" / "presets.conf")
     main, p = _make_plugin(tmp_path, monkeypatch)
     _fake_overlay(main, monkeypatch, previous)
-    monkeypatch.setattr(main, "reload_mangoapp", lambda *_args: True)
 
     asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
     assert os.path.exists(previous)
@@ -155,7 +190,7 @@ def test_supported_path_change_restores_the_previous_managed_file(tmp_path, monk
     _fake_overlay(main, monkeypatch, current)
     st = asyncio.run(p.reload_hud())
 
-    assert st["applyStatus"] == "applied"
+    assert st["applyStatus"] == "reload_requested"
     assert not os.path.exists(previous)
     assert not os.path.exists(f"{previous}.pdc-managed")
     assert os.path.exists(current)
@@ -172,6 +207,33 @@ def test_running_without_preset_support_is_explicitly_unavailable(tmp_path, monk
     assert st["capability"] == "unsupported"
     assert st["applyStatus"] == "unavailable"
     assert not os.path.exists(presets)
+
+
+def test_distinct_live_presets_paths_are_ambiguous_and_never_written(tmp_path, monkeypatch):
+    main, p = _make_plugin(tmp_path, monkeypatch)
+    first = str(tmp_path / "first" / "presets.conf")
+    second = str(tmp_path / "second" / "presets.conf")
+    sessions = (
+        main.mangohud_detect.HudSession(
+            20, 9001, os.getuid(), str(tmp_path), first, None, True
+        ),
+        main.mangohud_detect.HudSession(
+            21, 9002, os.getuid(), str(tmp_path), second, None, True
+        ),
+    )
+    monkeypatch.setattr(
+        main.mangohud_detect,
+        "detect_sessions",
+        lambda **_kwargs: sessions,
+    )
+
+    state = asyncio.run(
+        p.set_hud_config({"items": _items("fps"), "enabled": True})
+    )
+
+    assert state["applyStatus"] == "ambiguous"
+    assert not os.path.exists(first)
+    assert not os.path.exists(second)
 
 
 def test_set_config_persists_but_does_not_write_while_disabled(tmp_path, monkeypatch):
@@ -200,22 +262,29 @@ def test_writing_enabled_hud_requests_mangoapp_reload(tmp_path, monkeypatch):
     main, p = _make_plugin(tmp_path, monkeypatch)
     _fake_overlay(main, monkeypatch, presets)
     calls = []
-    monkeypatch.setattr(main, "reload_mangoapp", lambda *_args: calls.append(True) or True, raising=False)
+    _set_reload(main, monkeypatch, lambda: calls.append(True) or True)
 
     asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
 
     assert calls == [True]
 
 
-def test_successful_write_and_reload_reports_applied(tmp_path, monkeypatch):
+def test_successful_write_and_reload_reports_requested_not_applied(tmp_path, monkeypatch):
     presets = str(tmp_path / "presets.conf")
     main, p = _make_plugin(tmp_path, monkeypatch)
     _fake_overlay(main, monkeypatch, presets)
-    monkeypatch.setattr(main, "reload_mangoapp", lambda *_args: True, raising=False)
+    monkeypatch.setattr(
+        main,
+        "reload_sessions",
+        lambda sessions: types.SimpleNamespace(
+            requested=tuple((session.pid, session.starttime) for session in sessions),
+            pending=(),
+        ),
+    )
 
     st = asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
 
-    assert st["applyStatus"] == "applied"
+    assert st["applyStatus"] == "reload_requested"
 
 
 def test_set_config_scans_mangoapp_once(tmp_path, monkeypatch):
@@ -223,33 +292,62 @@ def test_set_config_scans_mangoapp_once(tmp_path, monkeypatch):
     main, p = _make_plugin(tmp_path, monkeypatch)
     scans = []
 
-    def detect(**_kwargs):
+    def detect_sessions(**_kwargs):
         scans.append(True)
-        return {
-            "running": True,
-            "supported": True,
-            "presetsPath": presets,
-            "configFile": None,
-        }
+        return (
+            main.mangohud_detect.HudSession(
+                4242, 9001, os.getuid(), str(tmp_path), presets, None, True
+            ),
+        )
 
-    monkeypatch.setattr(main.mangohud_detect, "detect", detect)
-    monkeypatch.setattr(main, "reload_mangoapp", lambda *_args: True, raising=False)
+    monkeypatch.setattr(main.mangohud_detect, "detect_sessions", detect_sessions)
+    monkeypatch.setattr(
+        main.mangohud_detect,
+        "session_alive",
+        lambda _session, **_kwargs: True,
+    )
+    monkeypatch.setattr(
+        main,
+        "reload_sessions",
+        lambda sessions: types.SimpleNamespace(
+            requested=tuple((session.pid, session.starttime) for session in sessions),
+            pending=(),
+        ),
+    )
 
     st = asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
 
-    assert st["applyStatus"] == "applied"
+    assert st["applyStatus"] == "reload_requested"
     assert scans == [True]
 
 
-def test_failed_reload_reports_pending_not_success(tmp_path, monkeypatch):
+def test_session_replaced_after_detection_prevents_write(tmp_path, monkeypatch):
     presets = str(tmp_path / "presets.conf")
     main, p = _make_plugin(tmp_path, monkeypatch)
     _fake_overlay(main, monkeypatch, presets)
-    monkeypatch.setattr(main, "reload_mangoapp", lambda *_args: False, raising=False)
+    monkeypatch.setattr(
+        main.mangohud_detect,
+        "session_alive",
+        lambda _session, **_kwargs: False,
+    )
+
+    state = asyncio.run(
+        p.set_hud_config({"items": _items("fps"), "enabled": True})
+    )
+
+    assert state["applyStatus"] == "pending"
+    assert not os.path.exists(presets)
+
+
+def test_failed_reload_keeps_exact_file_readback_as_written(tmp_path, monkeypatch):
+    presets = str(tmp_path / "presets.conf")
+    main, p = _make_plugin(tmp_path, monkeypatch)
+    _fake_overlay(main, monkeypatch, presets)
+    _set_reload(main, monkeypatch, lambda: False)
 
     st = asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
 
-    assert st["applyStatus"] == "pending"
+    assert st["applyStatus"] == "written"
 
 
 def test_failed_write_readback_reports_failure(tmp_path, monkeypatch):
@@ -267,13 +365,78 @@ def test_failed_clear_reports_failure(tmp_path, monkeypatch):
     presets = str(tmp_path / "presets.conf")
     main, p = _make_plugin(tmp_path, monkeypatch)
     _fake_overlay(main, monkeypatch, presets)
-    monkeypatch.setattr(main, "reload_mangoapp", lambda *_args: True, raising=False)
     asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
-    monkeypatch.setattr(main, "clear_presets", lambda _path: False, raising=False)
+    monkeypatch.setattr(
+        main,
+        "clear_presets",
+        lambda _path, **_kwargs: False,
+        raising=False,
+    )
 
     st = asyncio.run(p.set_hud_enabled(False))
 
     assert st["applyStatus"] == "failed"
+
+
+def test_external_edit_becomes_an_explicit_conflict_without_data_loss(
+    tmp_path,
+    monkeypatch,
+):
+    presets = str(tmp_path / "presets.conf")
+    external = "fps\n"
+    edited = "fps\ngpu_stats\n"
+    os.makedirs(os.path.dirname(presets), exist_ok=True)
+    with open(presets, "w") as handle:
+        handle.write(external)
+    main, p = _make_plugin(tmp_path, monkeypatch)
+    _fake_overlay(main, monkeypatch, presets)
+    asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
+    with open(presets, "w") as handle:
+        handle.write(edited)
+
+    state = asyncio.run(p.reload_hud())
+
+    assert state["applyStatus"] == "conflict"
+    assert state["conflict"]["path"] == "presets.conf"
+    assert state["conflict"]["expectedHash"]
+    assert state["conflict"]["actualHash"]
+    assert open(presets).read() == edited
+    assert open(f"{presets}.pdc-backup").read() == external
+
+
+@pytest.mark.parametrize("action", ("keep_external", "use_pdc"))
+def test_conflict_resolution_is_explicit_and_preserves_the_latest_external_edit(
+    tmp_path,
+    monkeypatch,
+    action,
+):
+    presets = str(tmp_path / "presets.conf")
+    original = "fps\n"
+    edited = "fps\ngpu_stats\n"
+    os.makedirs(os.path.dirname(presets), exist_ok=True)
+    with open(presets, "w") as handle:
+        handle.write(original)
+    main, p = _make_plugin(tmp_path, monkeypatch)
+    _fake_overlay(main, monkeypatch, presets)
+    asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
+    with open(presets, "w") as handle:
+        handle.write(edited)
+    assert asyncio.run(p.reload_hud())["applyStatus"] == "conflict"
+
+    state = asyncio.run(p.resolve_hud_conflict(action))
+
+    assert state["conflict"] is None
+    if action == "keep_external":
+        assert state["model"]["enabled"] is False
+        assert state["applyStatus"] == "disabled"
+        assert open(presets).read() == edited
+        assert not os.path.exists(f"{presets}.pdc-managed")
+        assert not os.path.exists(f"{presets}.pdc-backup")
+    else:
+        assert state["model"]["enabled"] is True
+        assert state["applyStatus"] == "reload_requested"
+        assert open(presets).read() != edited
+        assert open(f"{presets}.pdc-backup").read() == edited
 
 
 def test_disabling_hud_requests_mangoapp_reload(tmp_path, monkeypatch):
@@ -281,7 +444,7 @@ def test_disabling_hud_requests_mangoapp_reload(tmp_path, monkeypatch):
     main, p = _make_plugin(tmp_path, monkeypatch)
     _fake_overlay(main, monkeypatch, presets)
     calls = []
-    monkeypatch.setattr(main, "reload_mangoapp", lambda *_args: calls.append(True) or True, raising=False)
+    _set_reload(main, monkeypatch, lambda: calls.append(True) or True)
     asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
     calls.clear()
 
@@ -362,12 +525,7 @@ def test_changed_applied_tdp_refreshes_hud_without_profile_change(tmp_path, monk
     monkeypatch.setattr(p._tdp_backend, "read_applied", lambda: applied["watts"])
     _fake_overlay(main, monkeypatch, presets)
     reloads = []
-    monkeypatch.setattr(
-        main,
-        "reload_mangoapp",
-        lambda *_args: reloads.append(True) or True,
-        raising=False,
-    )
+    _set_reload(main, monkeypatch, lambda: reloads.append(True) or True)
 
     asyncio.run(p.set_hud_config({"items": _items("pdc_tdp"), "enabled": True}))
     reloads.clear()
@@ -436,7 +594,7 @@ def test_changed_pdc_value_reloads_running_mangoapp(tmp_path, monkeypatch):
     main, p = _make_plugin(tmp_path, monkeypatch)
     _fake_overlay(main, monkeypatch, presets)
     calls = []
-    monkeypatch.setattr(main, "reload_mangoapp", lambda *_args: calls.append(True) or True, raising=False)
+    _set_reload(main, monkeypatch, lambda: calls.append(True) or True)
     asyncio.run(p.set_hud_config({"items": _items("pdc_eco"), "enabled": True}))
     calls.clear()
 
@@ -458,7 +616,9 @@ def test_failed_pdc_reload_is_retried_on_next_tick(tmp_path, monkeypatch):
         calls.append(True)
         return next(results)
 
-    monkeypatch.setattr(main, "reload_mangoapp", reload, raising=False)
+    _set_reload(main, monkeypatch, reload)
+    times = iter((100.0, 101.1))
+    monkeypatch.setattr(main, "_monotonic", lambda: next(times), raising=False)
     asyncio.run(p.set_hud_config({"items": _items("pdc_eco"), "enabled": True}))
 
     asyncio.run(p._refresh_pdc_metrics())
@@ -466,11 +626,58 @@ def test_failed_pdc_reload_is_retried_on_next_tick(tmp_path, monkeypatch):
     assert calls == [True, True]
 
 
+def test_partial_reload_retries_only_the_pending_session(tmp_path, monkeypatch):
+    presets = str(tmp_path / "presets.conf")
+    main, p = _make_plugin(tmp_path, monkeypatch)
+    first = main.mangohud_detect.HudSession(
+        20, 9001, os.getuid(), str(tmp_path), presets, None, True
+    )
+    second = main.mangohud_detect.HudSession(
+        21, 9002, os.getuid(), str(tmp_path), presets, None, True
+    )
+    monkeypatch.setattr(
+        main.mangohud_detect,
+        "detect_sessions",
+        lambda **_kwargs: (first, second),
+    )
+    monkeypatch.setattr(
+        main.mangohud_detect,
+        "session_alive",
+        lambda _session, **_kwargs: True,
+    )
+    calls = []
+
+    def reload_sessions(sessions):
+        calls.append(tuple(sessions))
+        if len(calls) == 1:
+            return types.SimpleNamespace(
+                requested=((first.pid, first.starttime),),
+                pending=((second.pid, second.starttime),),
+            )
+        return types.SimpleNamespace(
+            requested=((second.pid, second.starttime),),
+            pending=(),
+        )
+
+    monkeypatch.setattr(main, "reload_sessions", reload_sessions)
+    times = iter((100.0, 101.1))
+    monkeypatch.setattr(main, "_monotonic", lambda: next(times), raising=False)
+
+    state = asyncio.run(
+        p.set_hud_config({"items": _items("pdc_eco"), "enabled": True})
+    )
+    assert state["applyStatus"] == "written"
+
+    asyncio.run(p._refresh_pdc_metrics())
+
+    assert calls == [(first, second), (second,)]
+    assert p._hud_apply_status == "reload_requested"
+
+
 def test_pdc_refresh_write_failure_reports_failed_and_stays_retryable(tmp_path, monkeypatch):
     presets = str(tmp_path / "presets.conf")
     main, p = _make_plugin(tmp_path, monkeypatch)
     _fake_overlay(main, monkeypatch, presets)
-    monkeypatch.setattr(main, "reload_mangoapp", lambda *_args: True, raising=False)
     asyncio.run(p.set_hud_config({"items": _items("pdc_eco"), "enabled": True}))
     written = dict(p._pdc_written)
     p._settings["eco_enabled"] = True
@@ -518,7 +725,6 @@ def test_pdc_refresh_uses_serial_apply_executor(tmp_path, monkeypatch):
     presets = str(tmp_path / "presets.conf")
     main, p = _make_plugin(tmp_path, monkeypatch)
     _fake_overlay(main, monkeypatch, presets)
-    monkeypatch.setattr(main, "reload_mangoapp", lambda *_args: True, raising=False)
     asyncio.run(p.set_hud_config({"items": _items("pdc_eco"), "enabled": True}))
     executor = _RecordingExecutor()
     p._apply_executor = executor
@@ -533,7 +739,6 @@ def test_pdc_refresh_applies_multiple_changed_values_once(tmp_path, monkeypatch)
     presets = str(tmp_path / "presets.conf")
     main, p = _make_plugin(tmp_path, monkeypatch)
     _fake_overlay(main, monkeypatch, presets)
-    monkeypatch.setattr(main, "reload_mangoapp", lambda *_args: True, raising=False)
     asyncio.run(p.set_hud_config({
         "items": _items("pdc_eco", "pdc_profile"),
         "enabled": True,
@@ -548,12 +753,7 @@ def test_pdc_refresh_applies_multiple_changed_values_once(tmp_path, monkeypatch)
         return original_apply_hud(*args, **kwargs)
 
     monkeypatch.setattr(main, "apply_hud", apply_once, raising=False)
-    monkeypatch.setattr(
-        main,
-        "reload_mangoapp",
-        lambda *_args: reload_calls.append(True) or True,
-        raising=False,
-    )
+    _set_reload(main, monkeypatch, lambda: reload_calls.append(True) or True)
     p._settings["eco_enabled"] = True
     p._current_appid = "42"
     p._current_game_name = "Game"

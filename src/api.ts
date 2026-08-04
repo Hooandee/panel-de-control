@@ -772,6 +772,8 @@ export const setHudConfig = callable<[model: HudModel], HudState>("set_hud_confi
 export const setHudEnabled = callable<[enabled: boolean], HudState>("set_hud_enabled");
 export const resetHud = callable<[], HudState>("reset_hud");
 export const reloadHud = callable<[], HudState>("reload_hud");
+export const resolveHudConflict =
+  callable<[action: "keep_external" | "use_pdc"], HudState>("resolve_hud_conflict");
 
 // ---- Sonido: audio EQ ----------------------------------------------------
 export interface AudioPresetDef {

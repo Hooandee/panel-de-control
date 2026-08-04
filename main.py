@@ -81,7 +81,8 @@ from mangohud.store import HudStore
 from mangohud import detect as mangohud_detect
 from mangohud import config as mangohud_config
 from mangohud import pdc_metrics as mangohud_pdc
-from mangohud.apply import apply_hud, clear_presets, reload_mangoapp
+from mangohud import ownership as mangohud_ownership
+from mangohud.apply import apply_hud, clear_presets, reload_sessions
 from report import collector as report_collector
 from report import client as report_client
 
@@ -104,6 +105,7 @@ _AUDIO_POLL_S = 4
 _NIGHT_TICK_S = 30  # how often the night-mode clock checks for a schedule-edge crossing
 _SHUTDOWN_DRAIN_TIMEOUT_S = 12.0
 _RPC_CONTEXT_UNSET = object()
+_monotonic = time.monotonic
 
 # "custom" = our TDP owns the rails, vs a named platform_profile mode.
 _CUSTOM_MODE = "custom"
@@ -464,6 +466,11 @@ class Plugin:
         # without re-scanning /proc. _pdc_written = the last baked values, so a tick
         # whose values are unchanged skips the presets.conf rewrite (no churn).
         self._pdc_presets_path = None
+        self._hud_sessions = ()
+        self._hud_reload_pending = ()
+        self._hud_reload_attempt = 0
+        self._hud_reload_retry_at = 0.0
+        self._hud_conflict = None
         self._pdc_active_ids = []
         self._pdc_written = {}
         self._pdc_preview_values = {}
@@ -3312,13 +3319,29 @@ class Plugin:
     # ---- HUD (MangoHud overlay) --------------------------------------------
     def _detect_hud(self) -> dict:
         uid = self._hud_owner[0] if self._hud_owner is not None else None
-        cap = mangohud_detect.detect(home=self._hud_home, uid=uid)
-        presets_path = self._trusted_hud_path(cap.get("presetsPath"))
-        if presets_path is None:
-            cap["supported"] = False
-            presets_path = mangohud_detect.presets_path({}, self._hud_home)
-        cap["presetsPath"] = presets_path
-        return cap
+        sessions = mangohud_detect.detect_sessions(home=self._hud_home, uid=uid)
+        supported = tuple(
+            session
+            for session in sessions
+            if session.presets_supported
+            and self._trusted_hud_path(session.presets_path) is not None
+        )
+        paths = {self._trusted_hud_path(session.presets_path) for session in supported}
+        paths.discard(None)
+        ambiguous = len(paths) > 1
+        presets_path = (
+            next(iter(paths))
+            if len(paths) == 1
+            else mangohud_detect.presets_path({}, self._hud_home)
+        )
+        return {
+            "running": bool(sessions),
+            "supported": bool(supported) and not ambiguous,
+            "presetsPath": presets_path,
+            "configFile": sessions[0].config_file if sessions else None,
+            "sessions": supported,
+            "ambiguous": ambiguous,
+        }
 
     def _trusted_hud_path(self, path):
         if not isinstance(path, str) or not path:
@@ -3352,14 +3375,17 @@ class Plugin:
         cap = self._detect_hud() if cap is None else cap
         model = self._hud.load() if model is None else model
         capability = (
-            "ready" if cap["supported"]
+            "ambiguous" if cap.get("ambiguous")
+            else "ready" if cap["supported"]
             else "unsupported" if cap["running"]
             else "inactive"
         )
-        if not model["enabled"]:
+        if cap.get("ambiguous"):
+            apply_status = "ambiguous"
+        elif not model["enabled"]:
             apply_status = (
                 self._hud_apply_status
-                if self._hud_apply_status in ("failed", "pending")
+                if self._hud_apply_status in ("conflict", "failed", "pending")
                 else "disabled"
             )
         elif capability == "inactive":
@@ -3373,17 +3399,78 @@ class Plugin:
             "running": cap["running"],
             "capability": capability,
             "applyStatus": apply_status,
+            "conflict": (
+                {
+                    "path": self._hud_conflict["path"],
+                    "expectedHash": self._hud_conflict["expectedHash"],
+                    "actualHash": self._hud_conflict["actualHash"],
+                }
+                if self._hud_conflict is not None
+                else None
+            ),
             "model": model,
             "values": dict(self._pdc_preview_values),
             "catalog": list(mangohud_config.METRIC_CATALOG),
             "presets": {k: list(v) for k, v in mangohud_config.PRESETS.items()},
         }
 
-    def _reload_mangoapp(self) -> bool:
-        uid = self._hud_owner[0] if self._hud_owner else None
-        return reload_mangoapp(uid)
+    def _record_hud_conflict(self, path, conflict) -> None:
+        safe_path = self._trusted_hud_path(path)
+        shown_path = (
+            os.path.relpath(safe_path, self._hud_home)
+            if safe_path is not None
+            else "presets.conf"
+        )
+        self._hud_conflict = {
+            "managedPath": safe_path,
+            "path": shown_path,
+            "expectedHash": conflict.expected_hash,
+            "actualHash": conflict.actual_hash,
+        }
+        self._hud_apply_status = "conflict"
 
-    def _apply_hud(self, *, cap=None, model=None) -> None:
+    def _request_hud_reload(self, snapshot, *, reset_backoff) -> bool:
+        snapshot = tuple(snapshot)
+        if reset_backoff:
+            self._hud_reload_attempt = 0
+        result = reload_sessions(snapshot)
+        pending = set(result.pending)
+        self._hud_reload_pending = tuple(
+            session
+            for session in snapshot
+            if (session.pid, session.starttime) in pending
+        )
+        complete = (
+            bool(snapshot)
+            and not self._hud_reload_pending
+            and len(result.requested) == len(snapshot)
+        )
+        if complete:
+            self._hud_reload_attempt = 0
+            self._hud_reload_retry_at = 0.0
+            return True
+        if self._hud_reload_pending:
+            delays = (1.0, 2.0, 4.0)
+            delay = delays[min(self._hud_reload_attempt, len(delays) - 1)]
+            self._hud_reload_attempt += 1
+            self._hud_reload_retry_at = _monotonic() + delay
+        return False
+
+    def _reload_mangoapp(self, sessions=None) -> bool:
+        snapshot = tuple(self._hud_sessions if sessions is None else sessions)
+        return self._request_hud_reload(snapshot, reset_backoff=True)
+
+    def _retry_pending_hud_reload(self) -> bool:
+        if not self._hud_reload_pending:
+            return True
+        if _monotonic() < self._hud_reload_retry_at:
+            return False
+        return self._request_hud_reload(
+            self._hud_reload_pending,
+            reset_backoff=False,
+        )
+
+    def _apply_hud(self, *, cap=None, model=None, replace_conflict=False) -> None:
         """Reflect the saved model to presets.conf (Steam reads it per overlay level).
         pdc plugin-state metrics are baked into their `custom_text` line as
         "<label> <value>": Steam's mangoapp does not run `exec` commands (only the label
@@ -3398,9 +3485,15 @@ class Plugin:
             self._pdc_active_ids = []
             self._pdc_written = {}
             self._pdc_preview_values = {}
-            if not clear_presets(managed_path):
+            try:
+                cleared = clear_presets(managed_path, raise_conflict=True)
+            except mangohud_ownership.HudOwnershipConflict as conflict:
+                self._record_hud_conflict(managed_path, conflict)
+                return
+            if not cleared:
                 self._hud_apply_status = "failed"
                 return
+            self._hud_conflict = None
             try:
                 self._remember_hud_path(None)
             except OSError:
@@ -3409,25 +3502,44 @@ class Plugin:
             if (
                 cap["supported"]
                 and cap["running"]
-                and not self._reload_mangoapp()
+                and not self._reload_mangoapp(cap["sessions"])
             ):
                 self._hud_apply_status = "pending"
             else:
                 self._hud_apply_status = "disabled"
+            self._hud_sessions = ()
             return
         if not cap["supported"]:
             self._pdc_active_ids = []
             self._pdc_preview_values = {}
             self._hud_apply_status = (
-                "pending" if not cap["running"] else "unavailable"
+                "ambiguous"
+                if cap.get("ambiguous")
+                else "pending" if not cap["running"] else "unavailable"
             )
+            return
+        if not all(
+            mangohud_detect.session_alive(session)
+            for session in cap["sessions"]
+        ):
+            self._pdc_active_ids = []
+            self._pdc_preview_values = {}
+            self._hud_apply_status = "pending"
             return
         # Cache the presets path + active ids for the auto loop's re-bake (no /proc rescan).
         if (
             self._hud_managed_path is not None
             and self._hud_managed_path != cap["presetsPath"]
         ):
-            if not clear_presets(self._hud_managed_path):
+            try:
+                cleared = clear_presets(
+                    self._hud_managed_path,
+                    raise_conflict=True,
+                )
+            except mangohud_ownership.HudOwnershipConflict as conflict:
+                self._record_hud_conflict(self._hud_managed_path, conflict)
+                return
+            if not cleared:
                 self._hud_apply_status = "failed"
                 return
             try:
@@ -3436,6 +3548,7 @@ class Plugin:
                 self._hud_apply_status = "failed"
                 return
         self._pdc_presets_path = cap["presetsPath"]
+        self._hud_sessions = tuple(cap["sessions"])
         self._pdc_active_ids = mangohud_config.enabled_pdc_ids(model)
         values = self._pdc_values()
         self._pdc_preview_values = values
@@ -3446,7 +3559,11 @@ class Plugin:
                 cap["presetsPath"],
                 values,
                 owner=self._hud_owner,
+                replace_conflict=replace_conflict,
             )
+        except mangohud_ownership.HudOwnershipConflict as conflict:
+            self._record_hud_conflict(cap["presetsPath"], conflict)
+            return
         except OSError:
             self._pdc_written = {}
             self._hud_apply_status = "failed"
@@ -3462,12 +3579,12 @@ class Plugin:
             self._pdc_written = {}
             self._hud_apply_status = "failed"
             return
-        if self._reload_mangoapp():
-            self._pdc_written = values
-            self._hud_apply_status = "applied"
+        self._pdc_written = values
+        self._hud_conflict = None
+        if self._reload_mangoapp(cap["sessions"]):
+            self._hud_apply_status = "reload_requested"
         else:
-            self._pdc_written = {}
-            self._hud_apply_status = "pending"
+            self._hud_apply_status = "written"
 
     # ---- HUD plugin-state metrics (pdc_*, baked into custom_text) -----------
     def _read_pdc_sources(self) -> dict:
@@ -3576,6 +3693,12 @@ class Plugin:
         return {mid: mangohud_pdc.render(mid, snap) or mangohud_pdc.DASH for mid in active}
 
     def _refresh_pdc_metrics_sync(self) -> None:
+        if self._hud_reload_pending:
+            self._hud_apply_status = (
+                "reload_requested"
+                if self._retry_pending_hud_reload()
+                else "written"
+            )
         if not self._pdc_active_ids or not self._pdc_presets_path:
             return
         extras = self._read_pdc_sources()
@@ -3592,6 +3715,9 @@ class Plugin:
                     values,
                     owner=self._hud_owner,
                 )
+            except mangohud_ownership.HudOwnershipConflict as conflict:
+                self._record_hud_conflict(self._pdc_presets_path, conflict)
+                return
             except OSError:
                 self._hud_apply_status = "failed"
                 raise
@@ -3601,13 +3727,17 @@ class Plugin:
                 return
             if self._reload_mangoapp():
                 self._pdc_written = values
-                self._hud_apply_status = "applied"
+                self._hud_apply_status = "reload_requested"
             else:
-                self._hud_apply_status = "pending"
+                self._pdc_written = values
+                self._hud_apply_status = "written"
 
     async def _refresh_pdc_metrics(self) -> None:
         """Refresh changed pdc values through the serial apply executor."""
-        if not self._pdc_active_ids or not self._pdc_presets_path:
+        if (
+            not self._hud_reload_pending
+            and (not self._pdc_active_ids or not self._pdc_presets_path)
+        ):
             return
         await self._offload_call(self._refresh_pdc_metrics_sync)
 
@@ -3646,6 +3776,45 @@ class Plugin:
         self._init()
         return await self._offload_call(
             lambda: self._apply_hud_state(self._hud.load())
+        )
+
+    def _resolve_hud_conflict_sync(self, action) -> dict:
+        if action not in ("keep_external", "use_pdc"):
+            raise ValueError("Unknown HUD conflict action")
+        conflict = self._hud_conflict
+        if conflict is None or conflict["managedPath"] is None:
+            return self._hud_state()
+        path = conflict["managedPath"]
+        if action == "keep_external":
+            model = self._hud.load()
+            model["enabled"] = False
+            model = self._hud.save(model)
+            mangohud_ownership.relinquish_managed(path)
+            self._remember_hud_path(None)
+            self._pdc_presets_path = None
+            self._hud_sessions = ()
+            self._hud_reload_pending = ()
+            self._pdc_active_ids = []
+            self._pdc_written = {}
+            self._pdc_preview_values = {}
+            self._hud_conflict = None
+            self._hud_apply_status = "disabled"
+            return self._hud_state(model=model)
+
+        cap = self._detect_hud()
+        if not cap["supported"] or cap["presetsPath"] != path:
+            self._hud_apply_status = (
+                "ambiguous" if cap.get("ambiguous") else "pending"
+            )
+            return self._hud_state(cap=cap)
+        model = self._hud.load()
+        self._apply_hud(cap=cap, model=model, replace_conflict=True)
+        return self._hud_state(cap=cap, model=model)
+
+    async def resolve_hud_conflict(self, action: str) -> dict:
+        self._init()
+        return await self._offload_call(
+            lambda: self._resolve_hud_conflict_sync(action)
         )
 
     def _cpu_state(self) -> dict:

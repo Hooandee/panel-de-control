@@ -210,7 +210,16 @@ const RowAction: FC<{
 
 export const HudSection: FC = () => {
   const { t } = useI18n();
-  const { state, setModel, setEnabled, reload, reloadStatus, saveStatus, reset } = useHud();
+  const {
+    state,
+    setModel,
+    setEnabled,
+    reload,
+    reloadStatus,
+    saveStatus,
+    reset,
+    resolveConflict,
+  } = useHud();
   const [selected, setSelected] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
 
@@ -443,10 +452,14 @@ export const HudSection: FC = () => {
                 padding: "3px 7px",
                 borderRadius: 999,
                 fontSize: theme.font.caption,
-                color: state.applyStatus === "failed" || state.applyStatus === "unavailable"
+                color: state.applyStatus === "failed"
+                    || state.applyStatus === "unavailable"
+                    || state.applyStatus === "conflict"
                   ? theme.color.danger
-                  : state.applyStatus === "applied"
+                  : state.applyStatus === "reload_requested"
                     ? theme.color.accent
+                    : state.applyStatus === "written" || state.applyStatus === "ambiguous"
+                      ? theme.color.warn
                     : theme.color.textMuted,
                 boxShadow: `inset 0 0 0 1px ${theme.color.hairline}`,
               }}
@@ -472,10 +485,37 @@ export const HudSection: FC = () => {
           </div>
           {state.capability === "inactive" ? (
             <Note>{t("hud.inactive")}</Note>
+          ) : state.capability === "ambiguous" ? (
+            <Note>{t("hud.ambiguous")}</Note>
           ) : state.capability === "unsupported" ? (
             <Note>{t("hud.unsupported")}</Note>
           ) : (
             <Note>{t("hud.show.hint")}</Note>
+          )}
+          {state.conflict && (
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: theme.space.sm,
+                padding: theme.space.sm,
+                minWidth: 0,
+                borderRadius: theme.radius.sm,
+                background: "rgba(255,92,92,0.08)",
+                boxShadow: `inset 0 0 0 1px ${theme.color.danger}55`,
+              }}
+            >
+              <SectionLabel>{t("hud.conflict.title")}</SectionLabel>
+              <Note>{t("hud.conflict.body", { path: state.conflict.path })}</Note>
+              <div style={{ display: "flex", gap: theme.space.sm, minWidth: 0 }}>
+                <OutlineBtn onClick={() => resolveConflict("keep_external")}>
+                  {t("hud.conflict.keepExternal")}
+                </OutlineBtn>
+                <OutlineBtn onClick={() => resolveConflict("use_pdc")}>
+                  {t("hud.conflict.usePdc")}
+                </OutlineBtn>
+              </div>
+            </div>
           )}
           {saveStatus === "error" && <Note>{t("hud.save.error")}</Note>}
           <div style={{ display: "flex", gap: theme.space.sm, minWidth: 0 }}>

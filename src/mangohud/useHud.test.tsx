@@ -5,11 +5,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("../api", () => ({
   getHudState: vi.fn(),
   reloadHud: vi.fn(),
+  resolveHudConflict: vi.fn(),
   resetHud: vi.fn(),
   setHudConfig: vi.fn(),
 }));
 
-import { getHudState, reloadHud, setHudConfig } from "../api";
+import { getHudState, reloadHud, resolveHudConflict, setHudConfig } from "../api";
 import { DEFAULT_MODEL, HudState } from "./model";
 import { useHud } from "./useHud";
 
@@ -18,6 +19,7 @@ const state = (model = DEFAULT_MODEL): HudState => ({
   running: false,
   capability: "inactive",
   applyStatus: model.enabled ? "pending" : "disabled",
+  conflict: null,
   model,
   values: {},
   catalog: [],
@@ -43,6 +45,7 @@ describe("useHud coordination", () => {
     vi.mocked(getHudState).mockResolvedValue(state());
     vi.mocked(setHudConfig).mockImplementation(async (model) => state(model));
     vi.mocked(reloadHud).mockResolvedValue(state());
+    vi.mocked(resolveHudConflict).mockResolvedValue(state());
   });
 
   afterEach(() => {
@@ -139,6 +142,27 @@ describe("useHud coordination", () => {
     await settle();
 
     expect(reloadHud).toHaveBeenCalledTimes(1);
+  });
+
+  it("waits for the latest persistence before resolving an ownership conflict", async () => {
+    const saveRequest = deferred<HudState>();
+    vi.mocked(setHudConfig).mockReturnValueOnce(saveRequest.promise);
+    const { result } = renderHook(() => useHud());
+    await settle();
+
+    const latest = { ...DEFAULT_MODEL, offsetY: 16 };
+    act(() => result.current.setModel(latest));
+    act(() => vi.advanceTimersByTime(700));
+    await settle();
+    act(() => result.current.resolveConflict("use_pdc"));
+    await settle();
+
+    expect(resolveHudConflict).not.toHaveBeenCalled();
+
+    saveRequest.resolve(state(latest));
+    await settle();
+
+    expect(resolveHudConflict).toHaveBeenCalledWith("use_pdc");
   });
 
   it("does not let an older poll replace a newer local edit", async () => {

@@ -1,6 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 
-import { HudModel, HudState, getHudState, reloadHud, resetHud, setHudConfig } from "../api";
+import {
+  HudModel,
+  HudState,
+  getHudState,
+  reloadHud,
+  resetHud,
+  resolveHudConflict,
+  setHudConfig,
+} from "../api";
 import { useMountedRef } from "../hooks/useMountedRef";
 
 const POLL_MS = 4000;
@@ -18,7 +26,11 @@ export interface HudController {
   reloadStatus: ReloadStatus;
   saveStatus: SaveStatus;
   reset: () => void;
+  resolveConflict: (action: "keep_external" | "use_pdc") => void;
 }
+
+const isApplyError = (status: HudState["applyStatus"]) =>
+  status === "failed" || status === "conflict" || status === "ambiguous";
 
 export function useHud(): HudController {
   const [state, setState] = useState<HudState | null>(null);
@@ -84,8 +96,8 @@ export function useHud(): HudController {
       .then((remote) => {
         if (!mounted.current || revision !== revisionRef.current) return;
         accept(remote);
-        setSaveStatus(remote.applyStatus === "failed" ? "error" : "saved");
-        if (remote.applyStatus !== "failed") scheduleFeedbackReset();
+        setSaveStatus(isApplyError(remote.applyStatus) ? "error" : "saved");
+        if (!isApplyError(remote.applyStatus)) scheduleFeedbackReset();
       })
       .catch(() => {
         if (!mounted.current || revision !== revisionRef.current) return;
@@ -189,9 +201,15 @@ export function useHud(): HudController {
       .then((remote) => {
         if (!mounted.current || revision !== revisionRef.current) return;
         accept(remote);
-        if (remote.applyStatus === "failed" || remote.applyStatus === "unavailable") {
+        if (
+          isApplyError(remote.applyStatus)
+          || remote.applyStatus === "unavailable"
+        ) {
           setReloadStatus("error");
-        } else if (remote.applyStatus === "pending") {
+        } else if (
+          remote.applyStatus === "pending"
+          || remote.applyStatus === "written"
+        ) {
           setReloadStatus("pending");
         } else {
           setReloadStatus("ok");
@@ -220,8 +238,8 @@ export function useHud(): HudController {
       .then((remote) => {
         if (!mounted.current || revision !== revisionRef.current) return;
         accept(remote);
-        setSaveStatus(remote.applyStatus === "failed" ? "error" : "saved");
-        if (remote.applyStatus !== "failed") scheduleFeedbackReset();
+        setSaveStatus(isApplyError(remote.applyStatus) ? "error" : "saved");
+        if (!isApplyError(remote.applyStatus)) scheduleFeedbackReset();
       })
       .catch(() => {
         if (!mounted.current || revision !== revisionRef.current) return;
@@ -232,5 +250,43 @@ export function useHud(): HudController {
       });
   };
 
-  return { state, setModel, setEnabled, reload, reloadStatus, saveStatus, reset };
+  const resolveConflict = (action: "keep_external" | "use_pdc") => {
+    const latest = modelRef.current;
+    if (!latest) return;
+    const hadUnsavedModel = dirtyRef.current;
+    clearDebounce();
+    dirtyRef.current = false;
+    const revision = revisionRef.current + 1;
+    revisionRef.current = revision;
+    if (hadUnsavedModel) persist(latest, revision);
+    pendingRef.current += 1;
+    setSaveStatus("saving");
+
+    void waitForPersistDrain()
+      .then(() => resolveHudConflict(action))
+      .then((remote) => {
+        if (!mounted.current || revision !== revisionRef.current) return;
+        accept(remote);
+        setSaveStatus(isApplyError(remote.applyStatus) ? "error" : "saved");
+        if (!isApplyError(remote.applyStatus)) scheduleFeedbackReset();
+      })
+      .catch(() => {
+        if (!mounted.current || revision !== revisionRef.current) return;
+        setSaveStatus("error");
+      })
+      .finally(() => {
+        pendingRef.current = Math.max(0, pendingRef.current - 1);
+      });
+  };
+
+  return {
+    state,
+    setModel,
+    setEnabled,
+    reload,
+    reloadStatus,
+    saveStatus,
+    reset,
+    resolveConflict,
+  };
 }

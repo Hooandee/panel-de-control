@@ -18,19 +18,28 @@ class ReloadResult:
     pending: tuple[tuple[int, int], ...]
 
 
-def clear_presets(path):
+def clear_presets(path, *, raise_conflict=False):
     """Restore a file that existed before Panel de Control, or remove only our own."""
     try:
         ownership.restore_managed(path)
-    except (OSError, ownership.HudOwnershipConflict):
+    except ownership.HudOwnershipConflict:
+        if raise_conflict:
+            raise
+        return False
+    except OSError:
         return False
     return True
 
 
-def apply_hud(model, path, values=None, owner=None):
+def apply_hud(model, path, values=None, owner=None, replace_conflict=False):
     """Write the model to presets.conf atomically and return exact file readback."""
     desired = build_presets_conf(model, values)
-    result = ownership.write_managed(path, desired, owner=owner)
+    result = ownership.write_managed(
+        path,
+        desired,
+        owner=owner,
+        replace_conflict=replace_conflict,
+    )
     if result.content is None:
         raise OSError("MangoHud presets readback is missing")
     return result.content
