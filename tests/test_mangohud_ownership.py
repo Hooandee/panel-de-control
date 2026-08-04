@@ -32,10 +32,33 @@ def _write_marker(path, phase, managed, rollback, previous=None):
         json.dump(marker, handle)
 
 
+def test_initial_write_requires_explicit_takeover_of_external_config(tmp_path):
+    path = str(tmp_path / "presets.conf")
+    external = "external\n"
+    desired = "pdc\n"
+    (tmp_path / "presets.conf").write_text(external)
+    before = os.stat(path)
+
+    with pytest.raises(HudOwnershipConflict) as error:
+        write_managed(path, desired)
+
+    after = os.stat(path)
+    assert error.value.reason == "external_config"
+    assert error.value.expected_hash == _hash(desired)
+    assert error.value.actual_hash == _hash(external)
+    assert read_text(path) == external
+    assert after.st_mtime_ns == before.st_mtime_ns
+    assert after.st_mode == before.st_mode
+    assert after.st_uid == before.st_uid
+    assert after.st_gid == before.st_gid
+    assert read_text(f"{path}.pdc-backup") is None
+    assert read_text(f"{path}.pdc-managed") is None
+
+
 def test_update_refuses_external_edit_without_touching_backup(tmp_path):
     path = str(tmp_path / "presets.conf")
     (tmp_path / "presets.conf").write_text("external-before\n")
-    write_managed(path, "pdc-one\n")
+    write_managed(path, "pdc-one\n", replace_conflict=True)
     (tmp_path / "presets.conf").write_text("external-after\n")
     backup_before = read_text(f"{path}.pdc-backup")
 
@@ -184,7 +207,7 @@ def test_legacy_marker_mismatch_preserves_all_files_byte_for_byte(tmp_path):
 def test_replace_conflict_adopts_current_external_content_as_new_rollback(tmp_path):
     path = str(tmp_path / "presets.conf")
     (tmp_path / "presets.conf").write_text("external-before\n")
-    write_managed(path, "pdc-one\n")
+    write_managed(path, "pdc-one\n", replace_conflict=True)
     (tmp_path / "presets.conf").write_text("external-after\n")
 
     result = write_managed(path, "pdc-two\n", replace_conflict=True)
@@ -288,7 +311,7 @@ def test_restore_accepts_previous_owned_content_during_interrupted_update(tmp_pa
 def test_replace_conflict_adopts_missing_external_file_as_absent_rollback(tmp_path):
     path = str(tmp_path / "presets.conf")
     (tmp_path / "presets.conf").write_text("external-before\n")
-    write_managed(path, "pdc-one\n")
+    write_managed(path, "pdc-one\n", replace_conflict=True)
     os.remove(path)
 
     result = write_managed(path, "pdc-two\n", replace_conflict=True)

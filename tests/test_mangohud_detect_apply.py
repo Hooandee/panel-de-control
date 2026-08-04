@@ -232,7 +232,11 @@ def test_apply_restores_a_preexisting_user_presets_file_on_disable(tmp_path):
     original = "# personal MangoHud presets\n[preset 1]\nfps=1\n"
     (tmp_path / "presets.conf").write_text(original)
 
-    apply_hud(coerce_model({"items": [{"kind": "metric", "id": "fps"}]}), path)
+    apply_hud(
+        coerce_model({"items": [{"kind": "metric", "id": "fps"}]}),
+        path,
+        replace_conflict=True,
+    )
     assert read_presets(path) != original
 
     assert clear_presets(path) is True
@@ -247,7 +251,11 @@ def test_clear_presets_refuses_to_overwrite_an_external_edit(tmp_path):
     original = "external-before\n"
     external_edit = "external-after\n"
     (tmp_path / "presets.conf").write_text(original)
-    apply_hud(coerce_model({"items": [{"kind": "metric", "id": "fps"}]}), path)
+    apply_hud(
+        coerce_model({"items": [{"kind": "metric", "id": "fps"}]}),
+        path,
+        replace_conflict=True,
+    )
     (tmp_path / "presets.conf").write_text(external_edit)
 
     cleared = clear_presets(path)
@@ -270,7 +278,11 @@ def test_failed_restore_keeps_a_retryable_state(tmp_path, monkeypatch):
     path = str(tmp_path / "presets.conf")
     original = "[preset 1]\nfps=1\n"
     (tmp_path / "presets.conf").write_text(original)
-    apply_hud(coerce_model({"items": [{"kind": "metric", "id": "fps"}]}), path)
+    apply_hud(
+        coerce_model({"items": [{"kind": "metric", "id": "fps"}]}),
+        path,
+        replace_conflict=True,
+    )
     real_replace = apply.os.replace
 
     def fail_backup_restore(source, destination):
@@ -294,7 +306,11 @@ def test_retry_after_restored_backup_only_removes_the_marker(tmp_path, monkeypat
     path = str(tmp_path / "presets.conf")
     original = "[preset 1]\nfps=1\n"
     (tmp_path / "presets.conf").write_text(original)
-    apply_hud(coerce_model({"items": [{"kind": "metric", "id": "fps"}]}), path)
+    apply_hud(
+        coerce_model({"items": [{"kind": "metric", "id": "fps"}]}),
+        path,
+        replace_conflict=True,
+    )
     real_remove = apply.os.remove
 
     def fail_marker_removal(candidate):
@@ -352,7 +368,11 @@ def test_failed_marker_write_leaves_the_original_without_an_orphan_backup(
     monkeypatch.setattr(ownership, "_write_atomic", fail_marker_write)
 
     with pytest.raises(PermissionError):
-        apply_hud(coerce_model({"items": [{"kind": "metric", "id": "fps"}]}), path)
+        apply_hud(
+            coerce_model({"items": [{"kind": "metric", "id": "fps"}]}),
+            path,
+            replace_conflict=True,
+        )
     assert read_presets(path) == original
     assert not (tmp_path / "presets.conf.pdc-backup").exists()
     assert not (tmp_path / "presets.conf.pdc-managed").exists()

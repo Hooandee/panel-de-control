@@ -212,6 +212,15 @@ def write_managed(path, desired, owner=None, replace_conflict=False):
     marker = None if replace_conflict else _load_marker(path)
     current = read_text(path)
     desired_hash = _sha256(desired)
+    if marker is None and not replace_conflict:
+        if os.path.exists(backup_path):
+            raise HudOwnershipConflict("orphan_rollback")
+        if current is not None:
+            raise HudOwnershipConflict(
+                "external_config",
+                desired_hash,
+                _sha256(current),
+            )
     if marker is not None:
         if marker.get("phase") == "legacy":
             desired_hash = _sha256(desired)
@@ -281,8 +290,6 @@ def write_managed(path, desired, owner=None, replace_conflict=False):
         rollback = _rollback_text(path, marker)
     else:
         rollback = current
-        if os.path.exists(backup_path) and not replace_conflict:
-            raise HudOwnershipConflict("orphan_rollback")
     if marker is None:
         _write_atomic(
             marker_path,

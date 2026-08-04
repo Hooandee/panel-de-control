@@ -394,7 +394,11 @@ def test_external_edit_becomes_an_explicit_conflict_without_data_loss(
         handle.write(external)
     main, p = _make_plugin(tmp_path, monkeypatch)
     _fake_overlay(main, monkeypatch, presets)
-    asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
+    initial = asyncio.run(
+        p.set_hud_config({"items": _items("fps"), "enabled": True})
+    )
+    assert initial["applyStatus"] == "conflict"
+    asyncio.run(p.resolve_hud_conflict("use_pdc"))
     with open(presets, "w") as handle:
         handle.write(edited)
 
