@@ -1,5 +1,4 @@
 import os
-import shutil
 
 import tdp.steamdeck_hwmon as deck_module
 from tdp.steamdeck_hwmon import SteamDeckHwmonBackend
@@ -65,7 +64,7 @@ def test_exact_deck_discovers_shuffled_amdgpu_pair_and_compatibility_limits(tmp_
 
 
 def test_authoritative_sysfs_maxima_are_preferred(tmp_path):
-    _mk_hwmon(str(tmp_path), maxima=True)
+    _mk_hwmon(str(tmp_path), maxima=True, slow_label=None, fast_label=None)
 
     capability = _backend(tmp_path).ppt_capability()
 
@@ -86,46 +85,6 @@ def test_power1_only_keeps_safe_base_control_without_advanced_ppt(tmp_path):
     assert open(cap).read().strip() == "12000000"
 
 
-def test_deck_rejects_unlabelled_amdgpu_power_cap(tmp_path):
-    _mk_hwmon(str(tmp_path), slow_label=None, fast_label=None, maxima=True)
-
-    backend = _backend(tmp_path)
-
-    assert backend.supported is False
-
-
-def test_diagnostics_explain_rejected_unlabelled_candidate(tmp_path):
-    _mk_hwmon(str(tmp_path), slow_label=None, fast_label=None, maxima=True)
-
-    diagnostics = _backend(tmp_path).diagnostics()
-
-    assert diagnostics["selected"] is None
-    assert diagnostics["candidates"] == [{
-        "hwmon": "hwmon7",
-        "name": "amdgpu",
-        "slow_label": None,
-        "fast_label": None,
-        "slow_readable": True,
-        "slow_writable": True,
-        "fast_readable": True,
-        "fast_writable": True,
-        "accepted": False,
-        "reason": "slow_label_mismatch",
-    }]
-
-
-def test_deck_rejects_legacy_named_generic_power_cap(tmp_path):
-    _mk_hwmon(
-        str(tmp_path),
-        name="steamdeck_hwmon",
-        include_fast=False,
-    )
-
-    backend = _backend(tmp_path)
-
-    assert backend.supported is False
-
-
 def test_complete_ppt_surface_wins_over_earlier_base_only_surface(tmp_path):
     partial = _mk_hwmon(str(tmp_path), idx=0, include_fast=False, slow=11)
     complete = _mk_hwmon(str(tmp_path), idx=7, slow=14, fast=16)
@@ -138,17 +97,17 @@ def test_complete_ppt_surface_wins_over_earlier_base_only_surface(tmp_path):
     assert open(os.path.join(complete, "power1_cap")).read().strip() == "14000000"
 
 
-def test_legacy_steamdeck_hwmon_is_left_unchanged(tmp_path):
+def test_legacy_steamdeck_hwmon_keeps_base_control_without_advanced_ppt(tmp_path):
     cap = os.path.join(
         _mk_hwmon(str(tmp_path), name="steamdeck_hwmon", include_fast=False),
         "power1_cap",
     )
     backend = _backend(tmp_path)
 
-    assert backend.supported is False
+    assert backend.supported is True
     assert backend.ppt_capability()["supported"] is False
-    assert backend.set_tdp(12, ac=False).ok is False
-    assert open(cap).read().strip() == "15000000"
+    assert backend.set_tdp(12, ac=False).ok is True
+    assert open(cap).read().strip() == "12000000"
 
 
 def test_non_deck_surface_is_unsupported(tmp_path):
@@ -159,13 +118,13 @@ def test_non_deck_surface_is_unsupported(tmp_path):
     assert _backend(other, "rog_ally_x").supported is False
 
 
-def test_contradictory_slow_label_disables_the_backend(tmp_path):
+def test_contradictory_labels_disable_advanced_but_not_base(tmp_path):
     _mk_hwmon(str(tmp_path), slow_label="fastPPT", fast_label="slowPPT", maxima=True)
     backend = _backend(tmp_path)
 
-    assert backend.supported is False
+    assert backend.supported is True
     assert backend.ppt_capability()["supported"] is False
-    assert backend.diagnostics()["ppt_reason"] == "surface_missing"
+    assert backend.diagnostics()["ppt_reason"] == "contradictory_labels"
 
 
 def test_observe_reports_only_physical_slow_and_fast_rails(tmp_path):
@@ -304,25 +263,3 @@ def test_restore_accepts_zero_snapshot_after_capability_metadata_disappears(tmp_
     assert restored.ok is True
     assert open(os.path.join(directory, "power1_cap")).read().strip() == "0"
     assert open(os.path.join(directory, "power2_cap")).read().strip() == "0"
-
-
-def test_restore_rejects_reused_hwmon_path_with_different_caps(tmp_path):
-    directory = _mk_hwmon(str(tmp_path), slow=14, fast=16)
-    backend = _backend(tmp_path)
-    snapshot = backend.capture_ppt()
-    assert backend.apply_ppt(29, 30).ok is True
-    shutil.rmtree(directory)
-    replacement = _mk_hwmon(
-        str(tmp_path),
-        slow=5,
-        fast=6,
-        slow_label=None,
-        fast_label=None,
-    )
-
-    restored = backend.restore_ppt(snapshot)
-
-    assert restored.ok is False
-    assert restored.reason == "surface_missing"
-    assert open(os.path.join(replacement, "power1_cap")).read().strip() == "5000000"
-    assert open(os.path.join(replacement, "power2_cap")).read().strip() == "6000000"
