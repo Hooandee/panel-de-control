@@ -8,6 +8,8 @@ const mocks = vi.hoisted(() => ({
   setSaturation: vi.fn(),
   setHdrSaturation: vi.fn(),
   setColorFollowGlobal: vi.fn(),
+  applyColorPreset: vi.fn(),
+  resetColor: vi.fn(),
 }));
 
 vi.mock("../tdp/useRunningGame", () => ({
@@ -21,8 +23,8 @@ vi.mock("../api", () => ({
   previewCalibration: vi.fn(),
   setCalibration: vi.fn(),
   applyOledLook: vi.fn(),
-  applyColorPreset: vi.fn(),
-  resetColor: vi.fn(),
+  applyColorPreset: mocks.applyColorPreset,
+  resetColor: mocks.resetColor,
 }));
 
 import { useColor } from "./useColor";
@@ -67,6 +69,8 @@ describe("useColor HDR saturation", () => {
     mocks.setHdrSaturation.mockResolvedValue({
       ...state, hdr_saturation: 140,
     });
+    mocks.applyColorPreset.mockResolvedValue(state);
+    mocks.resetColor.mockResolvedValue(state);
   });
 
   afterEach(() => vi.useRealTimers());
@@ -112,7 +116,10 @@ describe("useColor HDR saturation", () => {
     await act(async () => { await Promise.resolve(); });
 
     act(() => hook.result.current.onHdrSaturation(135));
-    act(() => hook.unmount());
+    await act(async () => {
+      hook.unmount();
+      await Promise.resolve();
+    });
 
     expect(mocks.setHdrSaturation).toHaveBeenCalledTimes(1);
     expect(mocks.setHdrSaturation).toHaveBeenCalledWith(135, "global", null);
@@ -123,9 +130,92 @@ describe("useColor HDR saturation", () => {
     await act(async () => { await Promise.resolve(); });
 
     act(() => hook.result.current.onSaturation(130));
-    act(() => hook.unmount());
+    await act(async () => {
+      hook.unmount();
+      await Promise.resolve();
+    });
 
     expect(mocks.setSaturation).toHaveBeenCalledTimes(1);
     expect(mocks.setSaturation).toHaveBeenCalledWith(130, "global", null);
+  });
+
+  it("persists a pending drag before changing scope", async () => {
+    let finishSave: ((value: typeof state) => void) | undefined;
+    mocks.setHdrSaturation.mockImplementation(() => new Promise((resolve) => {
+      finishSave = resolve;
+    }));
+    const hook = renderHook(() => useColor());
+    await act(async () => { await Promise.resolve(); });
+
+    act(() => hook.result.current.onHdrSaturation(135));
+    act(() => hook.result.current.onScope("game"));
+    await act(async () => { await Promise.resolve(); });
+
+    expect(mocks.setHdrSaturation).toHaveBeenCalledWith(135, "global", null);
+    expect(mocks.setColorFollowGlobal).not.toHaveBeenCalled();
+
+    await act(async () => {
+      finishSave?.({ ...state, hdr_saturation: 135 });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mocks.setColorFollowGlobal).toHaveBeenCalledWith(false, "42");
+  });
+
+  it("does not let a pending game drag undo switching to global", async () => {
+    mocks.getColorState.mockResolvedValue({
+      ...state, follows_global: false, has_game_profile: true,
+    });
+    const hook = renderHook(() => useColor());
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    act(() => hook.result.current.onHdrSaturation(135));
+    act(() => hook.result.current.onScope("global"));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mocks.setHdrSaturation).toHaveBeenCalledWith(135, "game", "42");
+    expect(mocks.setHdrSaturation.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.setColorFollowGlobal.mock.invocationCallOrder[0],
+    );
+    expect(mocks.setColorFollowGlobal).toHaveBeenCalledWith(true, "42");
+  });
+
+  it("persists pending saturation before preset and reset actions", async () => {
+    const hook = renderHook(() => useColor());
+    await act(async () => { await Promise.resolve(); });
+
+    act(() => {
+      hook.result.current.onSaturation(125);
+      hook.result.current.onPreset("native");
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mocks.setSaturation.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.applyColorPreset.mock.invocationCallOrder[0],
+    );
+
+    act(() => {
+      hook.result.current.onHdrSaturation(130);
+      hook.result.current.onReset();
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mocks.setHdrSaturation.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.resetColor.mock.invocationCallOrder[0],
+    );
   });
 });

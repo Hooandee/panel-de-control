@@ -201,6 +201,29 @@ class SequencedLookAtom(FakeLookAtom):
         return super().read(session)
 
 
+class FailNextLookAtom(FakeLookAtom):
+    def __init__(self):
+        super().__init__()
+        self.fail_next = False
+
+    def write(self, session, value):
+        if self.fail_next:
+            self.fail_next = False
+            self.writes.append((session, value))
+            return False
+        return super().write(session, value)
+
+
+class UnconfirmedLookAtom(FailNextLookAtom):
+    def write(self, session, value):
+        if self.fail_next:
+            self.fail_next = False
+            self.writes.append((session, value))
+            self.value = value or None
+            return False
+        return super().write(session, value)
+
+
 def _backend(tmp_path, ok=True, force_composite=False, hdr_look=False,
              info=None, edid_pq=True, clock=None, pq_atom=None):
     sock = tmp_path / "run" / "user" / "1000" / "gamescope-0"
@@ -214,6 +237,7 @@ def _backend(tmp_path, ok=True, force_composite=False, hdr_look=False,
                               hdr_look=hdr_look,
                               edid_pq=lambda _connector: edid_pq,
                               pq_atom=pq_atom,
+                              socket_owner=lambda _path: 123,
                               **({"clock": clock} if clock is not None else {}))
     return b, r
 
@@ -370,7 +394,58 @@ def test_backend_rejects_pq_apply_without_atom_readback(tmp_path):
     r.calls.clear()
     assert b.apply(NATIVE) is True
     assert _unsetlooks(r) == []
-    assert len(_setlooks(r)) == 1
+    assert _setlooks(r) == []
+
+
+def test_failed_pq_publication_restores_previous_complete_pair(tmp_path):
+    atom = FailNextLookAtom()
+    backend, runner = _backend(
+        tmp_path, hdr_look=True, pq_atom=atom
+    )
+    first = {**NATIVE, "saturation": 120, "hdr_saturation": 130}
+    second = {**NATIVE, "saturation": 140, "hdr_saturation": 150}
+
+    assert backend.apply(first) is True
+    previous_g22 = _setlooks(runner)[-1][0][2]
+    previous_pq = atom.value
+    atom.fail_next = True
+
+    assert backend.apply(second) is False
+
+    assert _setlooks(runner)[-1][0][2] == previous_g22
+    assert atom.value == previous_pq
+    assert backend.diagnostics()["last_apply"]["rollback_confirmed"] is True
+
+
+def test_failed_pq_clear_restores_previous_complete_pair(tmp_path):
+    atom = FailNextLookAtom()
+    backend, runner = _backend(tmp_path, hdr_look=True, pq_atom=atom)
+    vivid = {**NATIVE, "saturation": 120, "hdr_saturation": 130}
+    assert backend.apply(vivid) is True
+    previous_g22 = _setlooks(runner)[-1][0][2]
+    previous_pq = atom.value
+    atom.fail_next = True
+
+    assert backend.apply(NATIVE) is False
+
+    assert _setlooks(runner)[-1][0][2] == previous_g22
+    assert atom.value == previous_pq
+    assert backend.diagnostics()["last_apply"]["rollback_confirmed"] is True
+
+
+def test_unconfirmed_pq_clear_republishes_previous_pair(tmp_path):
+    atom = UnconfirmedLookAtom()
+    backend, runner = _backend(tmp_path, hdr_look=True, pq_atom=atom)
+    assert backend.apply({**NATIVE, "hdr_saturation": 130}) is True
+    previous_g22 = _setlooks(runner)[-1][0][2]
+    previous_pq = atom.value
+    atom.fail_next = True
+
+    assert backend.apply(NATIVE) is False
+
+    assert _setlooks(runner)[-1][0][2] == previous_g22
+    assert atom.value == previous_pq
+    assert backend.diagnostics()["last_apply"]["rollback_confirmed"] is True
 
 
 def test_backend_does_not_replace_a_foreign_pq_atom(tmp_path):
@@ -396,6 +471,37 @@ def test_display_fingerprint_detects_dropped_owned_pq_atom(tmp_path):
     assert b.display_fingerprint() != before
 
 
+def test_display_fingerprint_observes_pending_pq_release_on_external(
+    tmp_path,
+):
+    atom = FlakyLookAtom()
+    backend, runner = _backend(tmp_path, hdr_look=True, pq_atom=atom)
+    assert backend.apply({**NATIVE, "hdr_saturation": 140}) is True
+    runner.info = (
+        "gamescope_control info:\n"
+        "  - Connector Name: DP-1\n"
+        "  - Display Flags: 0x2\n"
+        "  Features:\n"
+        "  - Look (6) - Version: 1 - Flags: 0x0\n"
+    )
+    atom.readback_unavailable = True
+    unavailable = backend.display_fingerprint()
+    atom.readback_unavailable = False
+
+    assert backend.display_fingerprint() != unavailable
+
+
+def test_display_fingerprint_detects_cleared_foreign_pq_conflict(tmp_path):
+    atom = FakeLookAtom()
+    atom.value = "/tmp/another-plugin.cube"
+    backend, _ = _backend(tmp_path, hdr_look=True, pq_atom=atom)
+
+    conflict = backend.display_fingerprint()
+    atom.value = None
+
+    assert backend.display_fingerprint() != conflict
+
+
 def test_backend_does_not_clear_a_foreign_pq_replacement_on_release(tmp_path):
     atom = FakeLookAtom()
     b, r = _backend(tmp_path, hdr_look=True, pq_atom=atom)
@@ -403,15 +509,14 @@ def test_backend_does_not_clear_a_foreign_pq_replacement_on_release(tmp_path):
     r.calls.clear()
     atom.value = "/tmp/another-plugin.cube"
 
-    assert b.apply(NATIVE) is False
-    assert atom.value == "/tmp/another-plugin.cube"
-    assert _unsetlooks(r) == []
-    assert b.diagnostics()["last_apply"]["reason"] == (
-        "pq_atom_ownership_lost"
-    )
     assert b.apply(NATIVE) is True
     assert atom.value == "/tmp/another-plugin.cube"
     assert _unsetlooks(r) == []
+    assert len(_setlooks(r)) == 1
+    assert b.diagnostics()["last_apply"]["reason"] == (
+        "pq_atom_ownership_lost"
+    )
+    assert b.diagnostics()["managed"] is False
 
 
 def test_backend_retries_release_after_transient_pq_readback_failure(tmp_path):
@@ -481,6 +586,21 @@ def test_backend_recognizes_look_feature_when_client_label_is_stale(tmp_path):
 
     assert b.hdr_look_supported is True
     assert "look=1" in b.diagnostics()["hdr_look_detail"]
+
+
+def test_backend_rejects_hdr_look_on_external_connector(tmp_path):
+    info = (
+        "gamescope_control info:\n"
+        "  - Connector Name: DP-1\n"
+        "  - Display Flags: 0x3\n"
+        "  Features:\n"
+        "  - Look (6) - Version: 1 - Flags: 0x0\n"
+    )
+
+    backend, _ = _backend(tmp_path, hdr_look=True, info=info)
+
+    assert backend.hdr_look_supported is False
+    assert "internal_connector=False" in backend.diagnostics()["hdr_look_detail"]
 
 
 def test_backend_falls_back_to_g22_when_active_panel_edid_has_no_pq(tmp_path):

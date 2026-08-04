@@ -1,5 +1,3 @@
-"""Read-only, redacted diagnostics for the selected integrated controller."""
-
 import re
 
 from controllers.capabilities import clean_report

@@ -1,6 +1,7 @@
 import hashlib
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import zipfile
 
@@ -26,6 +27,10 @@ def _runtime_tree(root: Path, include_xbox_extension=True) -> None:
         "scripts/build-inputplumber-xbox-hd.sh",
     ):
         (root / relative).write_text(relative)
+    shutil.copyfile(
+        ROOT / "scripts/verify-inputplumber-xbox-hd.sh",
+        root / "scripts/verify-inputplumber-xbox-hd.sh",
+    )
     if not include_xbox_extension:
         return
     binary = root / "bin/inputplumber-xbox-hd-v0.77.4"
@@ -33,6 +38,11 @@ def _runtime_tree(root: Path, include_xbox_extension=True) -> None:
     binary.chmod(0o755)
     Path(f"{binary}.sha256").write_text(
         f"{hashlib.sha256(binary.read_bytes()).hexdigest()}\n"
+    )
+    patch = root / "assets/inputplumber/v0.77.4-xbox-hd.patch"
+    Path(f"{binary}.provenance").write_text(
+        "inputplumber_commit=bb7424fd6fc097d123850950aaf1e6988f2093f3\n"
+        f"patch_sha256={hashlib.sha256(patch.read_bytes()).hexdigest()}\n"
     )
 
 
@@ -69,6 +79,10 @@ def test_package_contains_the_verified_xbox_extension(tmp_path):
         )
         assert (
             "Panel de Control/scripts/build-inputplumber-xbox-hd.sh"
+            in archive.namelist()
+        )
+        assert (
+            "Panel de Control/scripts/verify-inputplumber-xbox-hd.sh"
             in archive.namelist()
         )
         assert "Panel de Control/dist/index.js.map" not in archive.namelist()

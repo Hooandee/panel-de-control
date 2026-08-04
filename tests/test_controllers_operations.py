@@ -101,3 +101,26 @@ def test_lenovo_hd_vibration_fields_survive_operation_sanitizing():
         desired=desired,
     )) is True
     assert state.snapshot()["components"]["vibration"]["desired"] == desired
+
+
+def test_xbox_hd_vibration_fields_survive_operation_sanitizing():
+    state = OperationState()
+    desired = {
+        "hd_game_enabled": False,
+        "trigger_left": 0,
+        "trigger_right": 45,
+        "trigger_left_source": "off",
+        "trigger_right_source": "mix",
+    }
+    generation = state.start("42", {"vibration": desired})
+
+    assert state.publish(_result(
+        "vibration", "applied", generation,
+        desired=desired, actual=desired,
+    )) is True
+    assert state.snapshot()["components"]["vibration"] == {
+        "status": "applied",
+        "owner": "native",
+        "desired": desired,
+        "actual": desired,
+    }

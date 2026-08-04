@@ -108,7 +108,7 @@ def test_feedback_is_limited_to_the_target_runtime_user():
         ))
 
     value = _read_hdr_feedback(
-        (runtime, "gamescope-0", (1, 2)),
+        (runtime, "gamescope-0", (1, 2, 123)),
         read_root=read_root,
         displays=lambda: [":0", ":1"],
     )
@@ -170,7 +170,7 @@ def test_look_atom_writes_and_reads_back_the_selected_xwayland():
         write_root=write_root,
         displays=lambda: [":0", ":1"],
     )
-    session = (runtime, "gamescope-0", (1, 2))
+    session = (runtime, "gamescope-0", (1, 2, 123))
 
     assert atom.write(session, "/tmp/look.pq.cube") is True
     assert atom.read(session) == "/tmp/look.pq.cube"
@@ -197,7 +197,7 @@ def test_look_atom_detects_a_foreign_value_on_the_second_xwayland():
         displays=lambda: [":0", ":1"],
     )
 
-    assert atom.read((runtime, "gamescope-0", (1, 2))) == _MIXED_LOOK
+    assert atom.read((runtime, "gamescope-0", (1, 2, 123))) == _MIXED_LOOK
 
 
 def test_look_atom_distinguishes_unavailable_readback_from_empty_atom():
@@ -209,4 +209,35 @@ def test_look_atom_distinguishes_unavailable_readback_from_empty_atom():
         displays=lambda: [":0"],
     )
 
-    assert atom.read((runtime, "gamescope-0", (1, 2))) == _UNAVAILABLE_LOOK
+    assert atom.read(
+        (runtime, "gamescope-0", (1, 2, 123))
+    ) == _UNAVAILABLE_LOOK
+
+
+def test_xwayland_observations_must_match_wayland_socket_owner():
+    uid = os.getuid()
+    runtime = f"/run/user/{uid}"
+
+    def read_root(_uid, _username, _runtime, _display, atom):
+        return "\n".join((
+            "GAMESCOPE_PID(CARDINAL) = 100",
+            f'{atom}(UTF8_STRING) = "/tmp/foreign.cube"',
+        ))
+
+    atom = GamescopeLookAtom(
+        read_root=read_root,
+        write_root=lambda *_args: True,
+        displays=lambda: [":0"],
+    )
+    session = (runtime, "gamescope-0", (1, 2, 200))
+
+    assert atom.read(session) == _UNAVAILABLE_LOOK
+    assert atom.write(session, "/tmp/ours.cube") is False
+    assert _read_hdr_feedback(
+        session,
+        read_root=lambda *_args: "\n".join((
+            "GAMESCOPE_PID(CARDINAL) = 100",
+            "GAMESCOPE_HDR_OUTPUT_FEEDBACK(CARDINAL) = 1",
+        )),
+        displays=lambda: [":0"],
+    ) is None

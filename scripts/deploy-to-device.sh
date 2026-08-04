@@ -21,6 +21,8 @@ SUDO_PASS="${DECK_SUDO_PASS:?set DECK_SUDO_PASS to the device sudo password}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
+bash scripts/verify-inputplumber-xbox-hd.sh "$ROOT"
+
 echo "==> Building frontend"
 pnpm build
 

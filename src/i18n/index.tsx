@@ -244,7 +244,6 @@ const es: Record<string, string> = {
   "params.saved": "Guardado",
   "params.readError": "No se pudieron leer los parámetros actuales. Ciérralo y vuelve a abrirlo.",
   "params.saveError": "No se pudo guardar",
-  // Mandos (gestor de mando)
   "mandos.title": "Mandos",
   "mandos.manager.label": "Gestor:",
   "mandos.manager.hhd": "Handheld Daemon (HHD)",
@@ -407,7 +406,6 @@ const es: Record<string, string> = {
   "mandos.diagnostics.status.requested": "Solicitado",
   "mandos.diagnostics.status.failed": "Falló",
   "mandos.diagnostics.status.unavailable": "Sin confirmar",
-  // Pantalla (color del panel)
   "display.oled.title": "Aspecto OLED",
   "display.oled.desc": "Acerca el color de tu pantalla al de un OLED (más vivo y con más profundidad). No cambia el panel; solo ajusta el color.",
   "display.oled.apply": "Aplicar",
@@ -1048,7 +1046,6 @@ const en: Record<string, string> = {
   "params.saved": "Saved",
   "params.readError": "Couldn't read the current options. Close and reopen.",
   "params.saveError": "Couldn't save",
-  // Controllers (controller manager)
   "mandos.title": "Controllers",
   "mandos.manager.label": "Manager:",
   "mandos.manager.hhd": "Handheld Daemon (HHD)",
@@ -1211,7 +1208,6 @@ const en: Record<string, string> = {
   "mandos.diagnostics.status.requested": "Requested",
   "mandos.diagnostics.status.failed": "Failed",
   "mandos.diagnostics.status.unavailable": "Unconfirmed",
-  // Display (panel color)
   "display.oled.title": "OLED look",
   "display.oled.desc": "Nudges your screen's color toward an OLED (more vibrant, deeper). It doesn't change the panel — only the color.",
   "display.oled.apply": "Apply",

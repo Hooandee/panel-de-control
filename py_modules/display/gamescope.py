@@ -166,6 +166,29 @@ def run_gamescopectl(args, socket_glob="/run/user/*/gamescope-*"):
     return 1, ""
 
 
+def _socket_owner_pid(path):
+    try:
+        with open("/proc/net/unix") as sockets:
+            matches = [
+                line.split()[6]
+                for line in sockets
+                if len(line.split()) >= 8 and line.split()[-1] == path
+            ]
+    except OSError:
+        return None
+    if len(matches) != 1:
+        return None
+    link = f"socket:[{matches[0]}]"
+    owners = set()
+    for fd in glob.glob("/proc/[0-9]*/fd/*"):
+        try:
+            if os.readlink(fd) == link:
+                owners.add(int(fd.split("/")[2]))
+        except (OSError, ValueError):
+            continue
+    return next(iter(owners)) if len(owners) == 1 else None
+
+
 class GamescopeColorBackend:
     """Applies color via `gamescopectl set_look`. Discovers the gamescope Wayland
     socket under /run/user/*/gamescope-*; probe-gated on `gamescopectl` responding.
@@ -174,7 +197,8 @@ class GamescopeColorBackend:
     def __init__(self, runner=_run, socket_glob="/run/user/*/gamescope-*", lut_path=None,
                  force_composite=False, clock=time.monotonic,
                  hdr_look=False, edid_pq=None,
-                 drm_root="/sys/class/drm", pq_atom=None):
+                 drm_root="/sys/class/drm", pq_atom=None,
+                 socket_owner=_socket_owner_pid):
         self._run = runner
         # On Intel/Xe the color LUT is only applied while gamescope COMPOSITES (it's
         # not carried by the HW DRM color pipeline as on AMD), so a look is invisible
@@ -202,6 +226,7 @@ class GamescopeColorBackend:
         self._pair_index = 0
         # The socket may not exist yet when the plugin loads, so probe on demand.
         self._socket_glob = socket_glob
+        self._socket_owner = socket_owner
         self._clock = clock
         self._last_probe = None
         self._runtime = self._wayland = None
@@ -251,6 +276,17 @@ class GamescopeColorBackend:
                 f"no gamescope socket under {self._socket_glob}"
             )
             return False
+        previous_identity = self._session_identity
+        owner = (
+            previous_identity[2]
+            if (
+                previous_identity is not None
+                and previous_identity[:2] == identity
+                and previous_identity[2] is not None
+            )
+            else self._socket_owner(os.path.join(runtime, wayland))
+        )
+        identity = (*identity, owner)
         session = runtime, wayland, identity
         previous = (
             self._runtime, self._wayland, self._session_identity
@@ -314,6 +350,10 @@ class GamescopeColorBackend:
         self._active_connector = (
             connector.group(1).strip() if connector else None
         )
+        internal_connector = bool(
+            self._active_connector
+            and re.fullmatch(r"(?:eDP|DSI)-\d+", self._active_connector, re.I)
+        )
         edid_pq = bool(
             self._active_connector
             and self._edid_pq(self._active_connector)
@@ -323,12 +363,13 @@ class GamescopeColorBackend:
             and feature
             and int(feature.group(1)) >= 1
             and flags & 0x3 == 0x3
+            and internal_connector
             and edid_pq
         )
         self._hdr_look_detail = (
             f"info rc={rc} look={feature.group(1) if feature else 'missing'} "
             f"display_flags=0x{flags:x} connector={self._active_connector or 'unknown'} "
-            f"edid_pq={edid_pq}"
+            f"internal_connector={internal_connector} edid_pq={edid_pq}"
         )
 
     def _refresh_hdr_look(self):
@@ -428,8 +469,18 @@ class GamescopeColorBackend:
             return self._session_identity, None, False
         self._refresh_hdr_look()
         pq_atom = None
-        if self._managed_pq_atom:
-            pq_atom = self._pq_atom.read(self.hdr_session_context())
+        if (
+            self._hdr_look_supported
+            or self._managed_paired
+            or self._managed_pq_atom
+        ):
+            observed = self._pq_atom.read(self.hdr_session_context())
+            if observed == _UNAVAILABLE_LOOK:
+                pq_atom = "unavailable"
+            elif observed in self._pq_paths:
+                pq_atom = "owned"
+            elif observed:
+                pq_atom = "foreign"
         return (
             self._session_identity,
             self._active_connector,
@@ -466,6 +517,7 @@ class GamescopeColorBackend:
             return False
         if self._managed:
             if self._managed_paired:
+                pq_ownership_lost = False
                 observed_pq = self._pq_atom.read(
                     self.hdr_session_context()
                 )
@@ -496,10 +548,10 @@ class GamescopeColorBackend:
                             self._last_paths["pq"] = None
                         self._last_apply = {
                             "operation": "release_look",
-                            "ok": False,
+                            "ok": True,
                             "reason": "pq_atom_ownership_lost",
                         }
-                        return False
+                        pq_ownership_lost = True
                 identity_path = self._g22_paths[self._pair_index]
                 try:
                     self._write_atomic(identity_path, build_cube(_NATIVE))
@@ -523,15 +575,41 @@ class GamescopeColorBackend:
                         self.hdr_session_context(), ""
                     )
                     if not atom_ok:
+                        session = self.hdr_session_context()
+                        current_pq = self._pq_atom.read(session)
+                        pq_rollback = current_pq == expected_pq
+                        if (
+                            not pq_rollback
+                            and current_pq != _UNAVAILABLE_LOOK
+                            and (not current_pq or current_pq in self._pq_paths)
+                        ):
+                            pq_rollback = self._pq_atom.write(
+                                session, expected_pq or ""
+                            )
+                        previous_g22 = (
+                            self._last_paths.get("g22")
+                            if self._last_paths is not None else None
+                        )
+                        rollback_confirmed = bool(previous_g22)
+                        if previous_g22:
+                            rollback_rc, _ = self._ctl(
+                                "set_look", previous_g22
+                            )
+                            rollback_confirmed = rollback_rc == 0
                         self._last_apply = {
                             "operation": "clear_pq_atom", "ok": False,
+                            "rollback_confirmed": (
+                                pq_rollback and rollback_confirmed
+                            ),
                         }
                         return False
                     self._managed_pq_atom = False
                 self._last_apply = {
                     "operation": "release_look", "ok": True, "rc": rc,
-                    "pq_atom": True,
+                    "pq_atom": not pq_ownership_lost,
                 }
+                if pq_ownership_lost:
+                    self._last_apply["reason"] = "pq_atom_ownership_lost"
             else:
                 rc, _ = self._ctl("unset_look")
                 self._last_apply = {
@@ -557,7 +635,6 @@ class GamescopeColorBackend:
         return True
 
     def apply(self, state):
-        """Load the effective look without touching a look this instance does not own."""
         if not self._ensure_supported():
             return False
         self._refresh_hdr_look()
@@ -600,11 +677,13 @@ class GamescopeColorBackend:
                 }
                 return False
         composite_enabled_here = False
+        previous_managed = self._managed
+        previous_managed_paired = self._managed_paired
         previous_pq_owned = self._managed_pq_atom
-        previous_pq_path = (
-            self._last_paths.get("pq")
-            if self._last_paths is not None else None
+        previous_paths = (
+            dict(self._last_paths) if self._last_paths is not None else None
         )
+        previous_pq_path = previous_paths.get("pq") if previous_paths else None
         try:
             if self._force_composite and not self._composite_managed:
                 composite_rc, _ = self._ctl("composite_force", "1")
@@ -640,25 +719,33 @@ class GamescopeColorBackend:
                     current_pq = self._pq_atom.read(
                         self.hdr_session_context()
                     )
-                    readback_unavailable = current_pq == _UNAVAILABLE_LOOK
-                    owns_pq = (
-                        previous_pq_owned
-                        if readback_unavailable
-                        else current_pq in self._pq_paths
+                    expected_pq = previous_pq_path or ""
+                    pq_rollback = current_pq == previous_pq_path
+                    if (
+                        not pq_rollback
+                        and current_pq != _UNAVAILABLE_LOOK
+                        and (not current_pq or current_pq in self._pq_paths)
+                    ):
+                        pq_rollback = self._pq_atom.write(
+                            self.hdr_session_context(), expected_pq
+                        )
+                    previous_g22 = (
+                        previous_paths.get("g22") if previous_paths else None
                     )
-                    owned_pq_path = (
-                        previous_pq_path
-                        if readback_unavailable else current_pq
+                    rollback_operation = (
+                        ("set_look", previous_g22)
+                        if previous_g22 else ("unset_look",)
                     )
-                    self._managed = True
-                    self._managed_paired = True
-                    self._managed_pq_atom = owns_pq
-                    self._last_paths = {
-                        "g22": g22_path,
-                        "pq": owned_pq_path if owns_pq else None,
-                    }
+                    rollback_rc, _ = self._ctl(*rollback_operation)
+                    self._managed = previous_managed
+                    self._managed_paired = previous_managed_paired
+                    self._managed_pq_atom = previous_pq_owned
+                    self._last_paths = previous_paths
                     self._last_apply["ok"] = False
                     self._last_apply["reason"] = "pq_atom_readback_failed"
+                    self._last_apply["rollback_confirmed"] = (
+                        pq_rollback and rollback_rc == 0
+                    )
                     return False
             if rc == 0:
                 self._managed = True

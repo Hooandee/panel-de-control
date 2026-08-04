@@ -60,6 +60,7 @@ export function useColor(): ColorControl {
     SaturationChannel,
     PendingSaturation | null
   >>({ sdr: null, hdr: null });
+  const saturationWrites = useRef<Promise<void>>(Promise.resolve());
   const calibrationCommit = useRef<ReturnType<typeof setTimeout> | null>(null);
   const countdown = useRef<ReturnType<typeof setInterval> | null>(null);
   const remaining = useRef(0);
@@ -92,38 +93,45 @@ export function useColor(): ColorControl {
     }
     const pending = pendingSaturations.current[channel];
     pendingSaturations.current[channel] = null;
-    if (!pending) return;
+    if (!pending) return saturationWrites.current;
     const save = channel === "hdr" ? setHdrSaturation : setSaturation;
-    save(pending.value, pending.scope, pending.appid)
-      .then((next) => {
+    const commit = async () => {
+      try {
+        const next = await save(
+          pending.value, pending.scope, pending.appid,
+        );
         if (mounted.current && appidRef.current === pending.viewAppid) {
           setState(next);
         }
-      })
-      .catch(() => {});
+      } catch {}
+    };
+    saturationWrites.current = saturationWrites.current.then(commit, commit);
+    return saturationWrites.current;
   }, []);
 
   const flushSaturations = useCallback(() => {
-    flushSaturation("sdr");
-    flushSaturation("hdr");
+    return Promise.all([
+      flushSaturation("sdr"),
+      flushSaturation("hdr"),
+    ]).then(() => undefined);
   }, [flushSaturation]);
 
   useEffect(() => {
-    flushSaturations();
+    void flushSaturations().then(refresh);
     if (calibrationCommit.current) clearTimeout(calibrationCommit.current);
     stopCountdown();
-    refresh();
   }, [appid, flushSaturations, refresh, stopCountdown]);
 
   // The scope tab reflects the game's active profile and IS the control (shared wiring).
   const applyFollow = useCallback(
-    (f: boolean, a: string) => setColorFollowGlobal(f, a)
-      .then((next) => {
+    async (f: boolean, a: string) => {
+      await flushSaturations();
+      return setColorFollowGlobal(f, a).then((next) => {
         setState(next);
         return next.follows_global === f;
-      })
-      .catch(() => false),
-    [],
+      }).catch(() => false);
+    },
+    [flushSaturations],
   );
   const { scope, onScope } = useScopeSync(appid, state?.follows_global, applyFollow);
 
@@ -131,7 +139,7 @@ export function useColor(): ColorControl {
     mounted.current = true;
     return () => {
       mounted.current = false;
-      flushSaturations();
+      void flushSaturations();
       if (calibrationCommit.current) clearTimeout(calibrationCommit.current);
       if (countdown.current) clearInterval(countdown.current);
     };
@@ -217,23 +225,29 @@ export function useColor(): ColorControl {
     if (!cur) return;
     stopCountdown();
     if (calibrationCommit.current) clearTimeout(calibrationCommit.current);
-    setCalibration(pickCalibration(cur), wScope, wTarget).then(setState).catch(() => {});
-  }, [stopCountdown, wScope, wTarget]);
+    void flushSaturations().then(
+      () => setCalibration(pickCalibration(cur), wScope, wTarget),
+    ).then(setState).catch(() => {});
+  }, [flushSaturations, stopCountdown, wScope, wTarget]);
 
   const onOledLook = useCallback(() => {
     stopCountdown();
-    applyOledLook(wScope, wTarget).then(setState).catch(() => {});
-  }, [stopCountdown, wScope, wTarget]);
+    void flushSaturations().then(
+      () => applyOledLook(wScope, wTarget),
+    ).then(setState).catch(() => {});
+  }, [flushSaturations, stopCountdown, wScope, wTarget]);
 
   const onPreset = useCallback((key: string) => {
     stopCountdown();
-    applyColorPreset(key, wScope, wTarget).then(setState).catch(() => {});
-  }, [stopCountdown, wScope, wTarget]);
+    void flushSaturations().then(
+      () => applyColorPreset(key, wScope, wTarget),
+    ).then(setState).catch(() => {});
+  }, [flushSaturations, stopCountdown, wScope, wTarget]);
 
   const onReset = useCallback(() => {
     stopCountdown();
-    resetColor().then(setState).catch(() => {});
-  }, [stopCountdown]);
+    void flushSaturations().then(resetColor).then(setState).catch(() => {});
+  }, [flushSaturations, stopCountdown]);
 
   return {
     state, scope, game, revertIn, onScope,

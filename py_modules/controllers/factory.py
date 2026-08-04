@@ -1,12 +1,3 @@
-"""One controller backend per device, mirroring tdp/factory.select_backend.
-
-The two daemons (Handheld Daemon on Bazzite, InputPlumber on SteamOS) offer
-different config surfaces, so each backend returns a discriminated `get_config`
-(`kind: "remap" | "settings" | "none"`). main.py holds ONE `self._controller_backend`
-and every RPC is a one-line delegation — no per-manager if/elif in the RPCs. Each
-backend stamps `manager` / `manager_version` / `supported` onto its config so the
-frontend needs a single round-trip.
-"""
 from controllers import detect
 from controllers import hhd as hhd_api
 from controllers import hhd_config
@@ -22,9 +13,52 @@ from controllers.virtual_mode import (
 )
 
 
-class ControllerBackend:
-    """No manager present: honest empty config; writes are no-ops returning it."""
+_VIBRATION_READBACK_FIELDS = (
+    "enabled", "value", "left", "right", "intensity",
+    "left_pattern", "right_pattern", "touchpad_enabled",
+    "touchpad_intensity", "hd_game_enabled", "trigger_left",
+    "trigger_right", "trigger_left_source", "trigger_right_source",
+)
 
+
+def _vibration_readback(desired, state, dbus):
+    route_fields = {
+        "lenovo_hd": {
+            "intensity", "left_pattern", "right_pattern",
+            "touchpad_enabled", "touchpad_intensity",
+        },
+        "asus_xbox_hd": {
+            "left", "right", "hd_game_enabled", "trigger_left",
+            "trigger_right", "trigger_left_source", "trigger_right_source",
+        },
+    }
+    readable = route_fields.get(state.get("mode"), set(state)) | {"enabled"}
+    actual = {}
+    for field in _VIBRATION_READBACK_FIELDS:
+        if field not in desired or field not in readable:
+            continue
+        if field == "enabled":
+            read_enabled = getattr(
+                dbus, "force_feedback_enabled", lambda: None
+            )
+            value = read_enabled()
+        else:
+            value = state.get(field)
+        actual[field] = value
+    expected = {
+        field: desired[field]
+        for field in _VIBRATION_READBACK_FIELDS
+        if field in desired and field in readable
+    }
+    complete = all(
+        field in readable
+        for field in _VIBRATION_READBACK_FIELDS
+        if field in desired
+    )
+    return actual, actual == expected, complete
+
+
+class ControllerBackend:
     manager = detect.NONE
 
     def __init__(self, version=None):
@@ -68,9 +102,6 @@ class ControllerBackend:
     def reset(self, scope="global", appid=None) -> dict:
         return self.get_config()
 
-    # Per-game scope: only InputPlumber (we own its remap store). No-ops elsewhere so
-    # main.py can call uniformly. `effective_overrides` returning None means "not a
-    # per-game backend" → the game-change re-apply skips it.
     def has_game(self, appid) -> bool:
         return False
 
@@ -174,8 +205,6 @@ class ControllerBackend:
 
 
 class IpBackend(ControllerBackend):
-    """InputPlumber (SteamOS): per-button remap."""
-
     manager = detect.INPUTPLUMBER
 
     def __init__(self, store, dbus, version=None, device_key=None):
@@ -414,23 +443,31 @@ class IpBackend(ControllerBackend):
                 )
                 if baseline_ready else (False, False)
             )
-            native_diagnostics = getattr(
-                self._vibration, "diagnostics", lambda: {}
-            )() or {}
+            post_state = (
+                self._vibration.state()
+                if enabled_applied and native_applied else None
+            )
+            exact = bool(post_state and post_state.get("readback"))
+            actual, readback_matches, readback_complete = (
+                _vibration_readback(desired, post_state, self._dbus)
+                if exact else (None, True, False)
+            )
+            native_confirmed = native_applied and readback_matches
             route_recovered = ip._finish_vibration_route(
                 self._store, self._device_key,
                 state if baseline_ready and native_requested else None,
-                self._vibration, native_applied, appid,
+                self._vibration, native_confirmed, appid,
             )
-            applied = enabled_applied and native_applied and route_recovered
-            post_state = self._vibration.state() if applied else None
-            exact = bool(post_state and post_state.get("readback"))
+            applied = enabled_applied and native_confirmed and route_recovered
+            native_diagnostics = getattr(
+                self._vibration, "diagnostics", lambda: {}
+            )() or {}
             recovery_required = not applied and (
                 native_diagnostics.get("rollback_confirmed") is False
                 or not route_recovered
             )
             status = (
-                "applied" if applied and exact
+                "applied" if applied and exact and readback_complete
                 else "accepted_unverifiable" if applied
                 else "recovery_required" if recovery_required
                 else "failed"
@@ -440,10 +477,12 @@ class IpBackend(ControllerBackend):
                 component, status, desired, appid, generation,
                 reason=(
                     None if applied
+                    else "readback_mismatch"
+                    if exact and not readback_matches
                     else "restore_failed" if recovery_required
                     else "apply_failed"
                 ),
-                actual=desired if applied and exact else None,
+                actual=actual if exact else None,
             )
         return super().apply_component(
             component, desired, appid, generation
@@ -539,8 +578,6 @@ class IpBackend(ControllerBackend):
 
 
 class HhdBackend(ControllerBackend):
-    """Handheld Daemon (Bazzite): controller settings (mode + paddle behavior)."""
-
     manager = detect.HHD
 
     def __init__(self, version=None, store=None, dbus=None, device_key=None,
@@ -548,7 +585,7 @@ class HhdBackend(ControllerBackend):
         super().__init__(version)
         self._store = store
         self._device_key = device_key
-        self._vibration = vibration or VibrationController(device_key, dbus)
+        self._vibration = vibration or VibrationController(device_key, None)
         self._last_vibration_operation = None
         self._vibration_last_apply = None
         self._virtual_mode = HhdVirtualModeAdapter(
@@ -729,11 +766,22 @@ class HhdBackend(ControllerBackend):
                 for field in ("left", "right", "native_left", "native_right")
             )
         )
-        native_ok = self._apply_xbox_vibration(desired, native, native_intent)
-        ok = base_ok and native_ok
-        rollback_confirmed = (
-            None if ok else self._restore_hhd_vibration(state, vibration)
+        native_ok = (
+            self._apply_xbox_vibration(desired, native, native_intent)
+            if base_ok else True
         )
+        ok = base_ok and native_ok
+        rollback_confirmed = None
+        if not ok:
+            base_rollback = self._restore_hhd_vibration(state, vibration)
+            native_diagnostics = getattr(
+                self._vibration, "diagnostics", lambda: None
+            )() or {}
+            native_rollback = (
+                native_diagnostics.get("rollback_confirmed", True)
+                if base_ok and native_intent and not native_ok else True
+            )
+            rollback_confirmed = base_rollback and native_rollback
         self._last_vibration_operation = {
             "owner": "hhd+panel" if native is not None else "hhd",
             "ok": ok,
@@ -931,6 +979,8 @@ class HhdBackend(ControllerBackend):
                 component, status, desired, appid, generation,
                 reason=(
                     None if confirmed
+                    else "profile_conflict"
+                    if result.get("reason") == "profile_conflict"
                     else "readback_mismatch" if rollback
                     else "restore_failed"
                 ),
@@ -952,11 +1002,21 @@ class HhdBackend(ControllerBackend):
         if component == "vibration":
             applied = self._apply_vibration(desired)
             self._vibration_last_apply = applied
+            recovery_required = bool(
+                not applied
+                and (self._last_vibration_operation or {}).get(
+                    "rollback_confirmed"
+                ) is False
+            )
             return self._operation_result(
                 component,
-                "accepted_unverifiable" if applied else "failed",
+                "accepted_unverifiable" if applied
+                else "recovery_required" if recovery_required
+                else "failed",
                 desired, appid, generation,
-                reason=None if applied else "apply_failed",
+                reason=None if applied
+                else "restore_failed" if recovery_required
+                else "apply_failed",
             )
         return super().apply_component(
             component, desired, appid, generation
@@ -1023,9 +1083,6 @@ class HhdBackend(ControllerBackend):
 
 
 def select_controller_backend(detected: dict, store, dbus, device=None) -> ControllerBackend:
-    """Pick the backend for the detected manager; NullBackend-equivalent otherwise.
-    Takes the whole DeviceProfile (like select_fan_backend / select_charge_limit /
-    tdp select_backend); the device key drives InputPlumber's per-device button table."""
     mgr = detected.get("manager")
     version = detected.get("version")
     if mgr == detect.INPUTPLUMBER:

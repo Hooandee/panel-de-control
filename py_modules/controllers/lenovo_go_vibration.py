@@ -1,5 +1,3 @@
-"""Capability-gated hid-lenovo-go vibration controls for Legion Go 2."""
-
 import glob
 import os
 import re
@@ -355,14 +353,25 @@ class LenovoGoVibrationAdapter:
                 item for item in requested_writes
                 if item[1] != item[2]
             ]
-            if any(path == touchpad_intensity for path, _value, _old in writes):
+            if any(
+                path in (touchpad_intensity, touchpad_enabled)
+                for path, _value, _old in writes
+            ):
                 writes = [
-                    item for item in writes if item[0] != touchpad_enabled
+                    item for item in writes
+                    if item[0] not in (touchpad_intensity, touchpad_enabled)
                 ]
-                writes.append((
-                    touchpad_enabled,
-                    "true" if desired["touchpad_enabled"] else "false",
-                    raw.get("touchpad_enabled"),
+                writes.extend((
+                    (
+                        touchpad_intensity,
+                        desired["touchpad_intensity"],
+                        raw.get("touchpad_intensity"),
+                    ),
+                    (
+                        touchpad_enabled,
+                        "true" if desired["touchpad_enabled"] else "false",
+                        raw.get("touchpad_enabled"),
+                    ),
                 ))
         else:
             writes = list(requested_writes)

@@ -361,6 +361,111 @@ def test_ip_vibration_component_reports_unrecoverable_partial_native_write(
     assert result.reason == "restore_failed"
 
 
+def test_ip_vibration_component_rejects_exact_readback_mismatch(
+    tmp_path, monkeypatch,
+):
+    store = RemapStore(str(tmp_path / "controllers.json"))
+
+    class MismatchedVibration:
+        def state(self):
+            return {
+                "mode": "lenovo_hd",
+                "persistent": True,
+                "intensity": "medium",
+                "left_pattern": "fps",
+                "right_pattern": "fps",
+                "touchpad_enabled": True,
+                "touchpad_intensity": "medium",
+                "readback": True,
+                "connected": True,
+            }
+
+        def capture_baseline(self):
+            return {
+                "intensity": "medium",
+                "left_pattern": "fps",
+                "right_pattern": "fps",
+                "touchpad_enabled": True,
+                "touchpad_intensity": "medium",
+            }
+
+        def gain_available(self):
+            return False
+
+        def apply(self, _desired):
+            return True
+
+        def diagnostics(self):
+            return {"mode": "lenovo_hd", "ok": True, "readback": True}
+
+    vibration = MismatchedVibration()
+    class VibrationDbus(FakeDbus):
+        def force_feedback_enabled(self):
+            return True
+
+    monkeypatch.setattr(
+        factory, "VibrationController", lambda *args, **kwargs: vibration
+    )
+    backend = factory.IpBackend(
+        store, VibrationDbus(), device_key="legion_go_2"
+    )
+
+    result = backend.apply_component(
+        "vibration", {"intensity": "high"}, "42", 1
+    )
+
+    assert result.status == "failed"
+    assert result.reason == "readback_mismatch"
+    assert result.actual == {"intensity": "medium"}
+
+
+def test_ip_vibration_readback_ignores_private_native_baseline_fields():
+    desired = {
+        "enabled": True,
+        "left": 75,
+        "right": 80,
+        "native_left": 48,
+        "native_right": 51,
+    }
+    dbus = SimpleNamespace(force_feedback_enabled=lambda: True)
+
+    actual, matches, complete = factory._vibration_readback(
+        desired,
+        {"mode": "asus_xbox_hd", "left": 75, "right": 80},
+        dbus,
+    )
+
+    assert matches is True
+    assert complete is True
+    assert actual == {"enabled": True, "left": 75, "right": 80}
+
+
+def test_lenovo_readback_treats_migrated_legacy_gain_as_unverifiable():
+    desired = {
+        "enabled": True,
+        "value": 35,
+        "intensity": "high",
+        "left_pattern": "fps",
+        "right_pattern": "racing",
+        "touchpad_enabled": False,
+        "touchpad_intensity": "low",
+    }
+    state = {
+        "mode": "lenovo_hd",
+        **{field: value for field, value in desired.items() if field != "value"},
+    }
+
+    actual, matches, complete = factory._vibration_readback(
+        desired,
+        state,
+        SimpleNamespace(force_feedback_enabled=lambda: True),
+    )
+
+    assert matches is True
+    assert complete is False
+    assert "value" not in actual
+
+
 def test_ip_report_composes_only_live_buttons_and_persistent_vibration(
     tmp_path, monkeypatch
 ):
@@ -704,6 +809,26 @@ def test_select_hhd_backend_is_hhd():
     assert b.manager == detect.HHD
     # IP-only op is a no-op on the HHD backend.
     assert isinstance(b.set_button("LeftPaddle1", []), dict)
+
+
+def test_hhd_backend_does_not_route_native_haptics_through_inputplumber(
+    tmp_path, monkeypatch
+):
+    captured = []
+
+    class NativeVibration:
+        def __init__(self, device_key, dbus):
+            captured.append((device_key, dbus))
+
+    monkeypatch.setattr(factory, "VibrationController", NativeVibration)
+
+    factory.HhdBackend(
+        store=RemapStore(str(tmp_path / "controllers.json")),
+        dbus=FakeDbus(),
+        device_key="rog_xbox_ally_x",
+    )
+
+    assert captured == [("rog_xbox_ally_x", None)]
 
 
 def test_hhd_config_and_capabilities_share_one_live_state(
@@ -1281,6 +1406,75 @@ def test_hhd_vibration_echo_mismatch_rolls_back_config(
         "vibration"
     ] == 80
     assert backend.get_config()["vibration"]["last_apply"] is False
+
+
+def test_hhd_base_echo_failure_does_not_mutate_xbox_native_motors(
+    tmp_path, monkeypatch,
+):
+    state, _posts = _hhd_ally_owner(monkeypatch)
+    calls = []
+
+    def ignore_first_then_echo(payload):
+        calls.append(payload)
+        if len(calls) == 2:
+            value = payload["controllers"]["rog_ally"]["limits"][
+                "manual"
+            ]["vibration"]
+            state["controllers"]["rog_ally"]["limits"]["manual"][
+                "vibration"
+            ] = value
+        return state
+
+    monkeypatch.setattr(factory.hhd_api, "post_state", ignore_first_then_echo)
+    native = FakeXboxHaptics()
+    backend = factory.HhdBackend(
+        "3.19.23",
+        RemapStore(str(tmp_path / "controllers.json")),
+        FakeDbus(),
+        "rog_xbox_ally_x",
+        vibration=native,
+    )
+
+    config = backend.set_vibration(
+        {"value": 40, "left": 35, "right": 45}, scope="global"
+    )
+
+    assert config["vibration"]["last_apply"] is False
+    assert native.applied == []
+    assert backend.diagnostics()["vibration"]["rollback_confirmed"] is True
+
+
+def test_hhd_native_rollback_failure_requires_recovery(
+    tmp_path, monkeypatch,
+):
+    _hhd_ally_owner(monkeypatch)
+
+    class UnrecoverableXbox(FakeXboxHaptics):
+        def apply(self, patch):
+            self.applied.append(dict(patch))
+            return False
+
+        def diagnostics(self):
+            return {"rollback_confirmed": False}
+
+    backend = factory.HhdBackend(
+        "3.19.23",
+        RemapStore(str(tmp_path / "controllers.json")),
+        FakeDbus(),
+        "rog_xbox_ally_x",
+        vibration=UnrecoverableXbox(),
+    )
+
+    result = backend.apply_component(
+        "vibration",
+        {"value": 40, "left": 35, "right": 45},
+        "42",
+        1,
+    )
+
+    assert result.status == "recovery_required"
+    assert result.reason == "restore_failed"
+    assert backend.diagnostics()["vibration"]["rollback_confirmed"] is False
 
 
 def test_unknown_inputplumber_device_cannot_write_vibration(tmp_path):

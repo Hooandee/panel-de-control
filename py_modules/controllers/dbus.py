@@ -539,5 +539,18 @@ class IpDbus:
         ])
         if self._failed(result, "set_xbox_hd_haptics"):
             return False
+        requested = {
+            "enabled": enabled,
+            "trigger_left": left,
+            "trigger_right": right,
+            "trigger_left_source": config["trigger_left_source"],
+            "trigger_right_source": config["trigger_right_source"],
+        }
+        if self.xbox_hd_haptics() != requested:
+            self._record(
+                "set_xbox_hd_haptics", False,
+                reason="readback_mismatch",
+            )
+            return False
         self._record("set_xbox_hd_haptics", True)
         return True

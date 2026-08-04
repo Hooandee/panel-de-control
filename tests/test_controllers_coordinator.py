@@ -154,6 +154,35 @@ def test_identical_completed_profile_is_coalesced():
     assert len(backend.calls) == call_count
 
 
+def test_failed_component_is_retried_for_identical_profile():
+    class FailingOnceBackend(OrderedBackend):
+        def __init__(self):
+            super().__init__()
+            self.failed = False
+
+        def apply_component(self, component, desired, appid, generation):
+            result = super().apply_component(
+                component, desired, appid, generation
+            )
+            if component == "vibration" and not self.failed:
+                self.failed = True
+                return OperationResult(
+                    component, "failed", "apply_failed", self.manager,
+                    generation, appid, desired,
+                )
+            return result
+
+    backend = FailingOnceBackend()
+    coordinator = ControllerCoordinator(backend)
+
+    first = coordinator.reconcile("42", _profile())
+    second = coordinator.reconcile("42", _profile())
+
+    assert first["components"]["vibration"]["status"] == "failed"
+    assert second["components"]["vibration"]["status"] == "applied"
+    assert backend.calls.count(("vibration", "42")) == 2
+
+
 def test_failed_external_restore_is_recovery_required_after_cleanup():
     backend = OrderedBackend(mode_status="failed")
     backend.restore_external = lambda: False

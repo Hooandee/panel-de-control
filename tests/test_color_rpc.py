@@ -319,6 +319,15 @@ def test_hdr_reapply_releases_only_mode_owned_by_plugin(tmp_path, monkeypatch):
             self.calls.append(enabled)
             return True
 
+        def diagnostics(self):
+            actual = self.calls[-1] if self.calls else None
+            return {
+                "enabled": actual,
+                "actual_enabled": actual,
+                "ok": actual is not None,
+                "readback": actual is not None,
+            }
+
     backend = FakeHdrBackend()
     p._hdr_backend = backend
     p._color.set_hdr("global", True)
@@ -398,6 +407,37 @@ def test_hdr_state_distinguishes_accepted_from_confirmed(
     color.applied.clear()
     assert p._reapply_display_sync() is False
     assert color.applied == []
+
+
+def test_unconfirmed_hdr_disable_keeps_retrying_and_blocks_color(
+    tmp_path, monkeypatch,
+):
+    p, color = _make_plugin(tmp_path, monkeypatch)
+    asyncio.run(p.get_hdr_state())
+    p._device = dataclasses.replace(p._device, hdr=True)
+    p._color.set_hdr("global", False)
+    calls = []
+    p._hdr_backend = type("HdrAccepted", (), {
+        "set_enabled": lambda _self, enabled: calls.append(enabled) or True,
+        "diagnostics": lambda _self: {
+            "enabled": False,
+            "actual_enabled": None,
+            "ok": True,
+            "readback": False,
+            "confirmation": "accepted",
+        },
+    })()
+    p._hdr_managed = True
+    p._hdr_managed_session = None
+    color.applied.clear()
+
+    assert p._reapply_display_sync() is False
+    assert p._reapply_display_sync() is False
+
+    assert calls == [False, False]
+    assert p._hdr_managed is True
+    assert color.applied == []
+    assert p._set_hdr_explicit_sync(False) is False
 
 
 def test_hdr_state_discards_confirmation_from_an_old_gamescope_session(

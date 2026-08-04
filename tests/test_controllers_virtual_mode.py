@@ -115,6 +115,20 @@ def test_auto_uses_immutable_external_baseline(tmp_path):
     )
 
 
+def test_hhd_ownership_survives_adapter_restart(tmp_path):
+    api = HhdApi(_state("uinput"), _settings("uinput", "dualsense"))
+
+    assert _adapter(tmp_path, api).apply("dualsense")["config_confirmed"] is True
+
+    restarted = _adapter(tmp_path, api)
+    result = restarted.apply("auto")
+
+    assert result["config_confirmed"] is True
+    assert result["actual"] == {
+        "mode": "uinput", "paddles_as": "steam_input",
+    }
+
+
 def test_rejected_hhd_echo_rolls_back_to_previous_mode(tmp_path):
     api = HhdApi(_state("uinput"), _settings("uinput", "dualsense"))
     adapter = _adapter(tmp_path, api)
@@ -160,6 +174,26 @@ def test_readiness_failure_can_restore_the_exact_previous_profile(tmp_path):
     assert api.state["controllers"]["rog_ally"]["controller_mode"]["mode"] == (
         "uinput"
     )
+
+
+def test_hhd_does_not_overwrite_a_foreign_live_profile(tmp_path):
+    api = HhdApi(
+        _state("uinput"),
+        _settings("uinput", "dualsense", "xbox_elite"),
+    )
+    adapter = _adapter(tmp_path, api)
+
+    assert adapter.apply("dualsense")["config_confirmed"] is True
+    api.state = _state("xbox_elite", "disabled")
+    posts = len(api.posts)
+
+    result = adapter.apply("uinput")
+
+    assert result["reason"] == "profile_conflict"
+    assert result["actual"] == {
+        "mode": "xbox_elite", "paddles_as": "disabled",
+    }
+    assert len(api.posts) == posts
 
 
 class InputPlumberApi:

@@ -1,4 +1,3 @@
-"""Versioned, component-scoped controller profiles."""
 import copy
 import json
 import math
@@ -8,7 +7,7 @@ from controllers import ip_profile
 from json_store import atomic_json_save
 
 
-_VERSION = 5
+_VERSION = 6
 _COMPONENTS = {"buttons", "vibration", "virtual_controller"}
 _MODE = re.compile(r"[a-z0-9][a-z0-9_-]{0,31}")
 _VIBRATION_INTENSITIES = {"off", "low", "medium", "high"}
@@ -174,6 +173,17 @@ def _clean_virtual_mode_baselines(raw) -> dict:
     }
 
 
+def _clean_virtual_mode_applied(raw) -> dict:
+    if not isinstance(raw, dict):
+        return {}
+    return {
+        owner: clean
+        for owner, value in raw.items()
+        if isinstance(owner, str) and owner
+        if (clean := _clean_virtual_mode_baseline(value))
+    }
+
+
 def _clean_profile(raw) -> dict:
     raw = raw if isinstance(raw, dict) else {}
     return {
@@ -195,6 +205,7 @@ def _empty_data() -> dict:
         "vibration_routes": {},
         "vibration_route_baselines": {},
         "virtual_mode_baselines": {},
+        "virtual_mode_applied": {},
     }
 
 
@@ -241,7 +252,7 @@ class RemapStore:
     def _coerce(self, raw) -> dict:
         if not isinstance(raw, dict):
             return _empty_data()
-        if raw.get("version") in {3, 4, _VERSION}:
+        if raw.get("version") in {3, 4, 5, _VERSION}:
             global_profile = _clean_profile(raw.get("global"))
             games = {}
             raw_games = raw.get("games")
@@ -275,6 +286,9 @@ class RemapStore:
                 "virtual_mode_baselines": _clean_virtual_mode_baselines(
                     raw.get("virtual_mode_baselines")
                 ),
+                "virtual_mode_applied": _clean_virtual_mode_applied(
+                    raw.get("virtual_mode_applied")
+                ),
             }
         # Old flat shape {source: targets} → migrate into the global scope.
         if "global" not in raw and "games" not in raw:
@@ -290,6 +304,7 @@ class RemapStore:
                 "vibration_routes": {},
                 "vibration_route_baselines": {},
                 "virtual_mode_baselines": {},
+                "virtual_mode_applied": {},
             }
         games = {}
         raw_games = raw.get("games")
@@ -323,6 +338,9 @@ class RemapStore:
             ),
             "virtual_mode_baselines": _clean_virtual_mode_baselines(
                 raw.get("virtual_mode_baselines")
+            ),
+            "virtual_mode_applied": _clean_virtual_mode_applied(
+                raw.get("virtual_mode_applied")
             ),
         }
 
@@ -438,6 +456,19 @@ class RemapStore:
             self._data["virtual_mode_baselines"][owner] = clean
             self._save()
 
+    def applied_virtual_mode(self, owner: str) -> dict:
+        return copy.deepcopy(self._data["virtual_mode_applied"].get(owner, {}))
+
+    def remember_applied_virtual_mode(self, owner: str, value: dict) -> None:
+        if not isinstance(owner, str) or not owner:
+            return
+        clean = _clean_virtual_mode_baseline(value)
+        if clean:
+            self._data["virtual_mode_applied"][owner] = clean
+        else:
+            self._data["virtual_mode_applied"].pop(owner, None)
+        self._save()
+
     def remember_applied_virtual_targets(self, owner: str, targets) -> None:
         baseline = self._data["virtual_mode_baselines"].get(owner)
         clean = ip_profile.clean_target_devices(targets)
@@ -463,6 +494,7 @@ class RemapStore:
     def forget_virtual_mode_baseline(self, owner: str) -> None:
         if owner in self._data["virtual_mode_baselines"]:
             del self._data["virtual_mode_baselines"][owner]
+            self._data["virtual_mode_applied"].pop(owner, None)
             self._save()
 
     def profile_state(self, device_key) -> dict | None:
@@ -543,7 +575,6 @@ class RemapStore:
         self._save()
 
     def game_profile(self, appid):
-        """The game's own stored button overrides, or None if no entry."""
         g = self._game(appid)
         return copy.deepcopy(g["buttons"]) if g is not None else None
 

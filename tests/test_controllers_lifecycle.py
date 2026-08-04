@@ -312,7 +312,30 @@ def test_endpoint_poll_reapplies_xbox_profile_after_inputplumber_restart(
     main = _main(monkeypatch, tmp_path)
     plugin = main.Plugin.__new__(main.Plugin)
 
-    plugin._controller_backend = types.SimpleNamespace(manager="inputplumber")
+    class Backend:
+        manager = "inputplumber"
+
+        def get_config(self, _appid):
+            if not state["ready"]:
+                return {"vibration": {"mode": "unavailable"}}
+            return {
+                "vibration": {
+                    "mode": "asus_xbox_hd",
+                    "hd_game_supported": True,
+                    "left": 100,
+                    "right": 100,
+                    "actual_left": 100,
+                    "actual_right": 100,
+                    **desired,
+                    "actual_hd_game_enabled": False,
+                    "actual_trigger_left": 100,
+                    "actual_trigger_right": 100,
+                    "actual_trigger_left_source": "strong",
+                    "actual_trigger_right_source": "weak",
+                },
+            }
+
+    plugin._controller_backend = Backend()
     plugin._device = types.SimpleNamespace(key="rog_xbox_ally_x")
     plugin._current_appid = "42"
     plugin._controller_endpoint_last = None
@@ -324,22 +347,6 @@ def test_endpoint_poll_reapplies_xbox_profile_after_inputplumber_restart(
         "trigger_left_source": "mix",
         "trigger_right_source": "weak",
     }
-    plugin._controller_dbus = types.SimpleNamespace(
-        xbox_hd_haptics=lambda: (
-            {
-                "enabled": False,
-                "trigger_left": 100,
-                "trigger_right": 100,
-                "trigger_left_source": "strong",
-                "trigger_right_source": "weak",
-            }
-            if state["ready"] else None
-        )
-    )
-    plugin._controller_store = types.SimpleNamespace(
-        effective_vibration=lambda _appid: desired
-    )
-
     async def offload(fn):
         return fn()
 
@@ -358,6 +365,78 @@ def test_endpoint_poll_reapplies_xbox_profile_after_inputplumber_restart(
     asyncio.run(plugin._poll_controller_endpoint_once())
 
     assert reapplies == [True]
+
+
+def test_controller_reconcile_rejects_partial_component_failure(
+    tmp_path, monkeypatch,
+):
+    main = _main(monkeypatch, tmp_path)
+    plugin = main.Plugin.__new__(main.Plugin)
+    request = types.SimpleNamespace(profile={
+        "virtual_controller": {"mode": "xbox"},
+        "buttons": {"M1": [{"key": "KeyTab"}]},
+        "vibration": {"value": 50},
+    })
+    plugin._prepare_controller_reconcile = lambda _force: request
+    plugin._controller_coordinator = types.SimpleNamespace(
+        execute=lambda _request: {
+            "components": {
+                "virtual_controller": {"status": "applied"},
+                "buttons": {"status": "failed"},
+                "vibration": {"status": "applied"},
+            },
+        }
+    )
+
+    async def offload(fn):
+        return fn()
+
+    plugin._offload_call = offload
+
+    assert asyncio.run(plugin._reconcile_controller_now()) is False
+
+
+def test_endpoint_poll_reapplies_xbox_body_gain_after_driver_reset(
+    tmp_path, monkeypatch,
+):
+    main = _main(monkeypatch, tmp_path)
+    plugin = main.Plugin.__new__(main.Plugin)
+    values = {"actual_left": 60}
+
+    def config(_appid):
+        return {"vibration": {
+            "mode": "asus_xbox_hd",
+            "hd_game_supported": True,
+            "left": 60,
+            "right": 70,
+            "actual_left": values["actual_left"],
+            "actual_right": 70,
+        }}
+
+    plugin._controller_backend = types.SimpleNamespace(
+        manager="inputplumber", get_config=config,
+    )
+    plugin._device = types.SimpleNamespace(key="rog_xbox_ally_x")
+    plugin._current_appid = "42"
+    plugin._controller_endpoint_last = None
+
+    async def offload(fn):
+        return fn()
+
+    async def reconcile(force=False):
+        reapplies.append(force)
+        values["actual_left"] = 60
+        return True
+
+    plugin._offload_call = offload
+    reapplies = []
+    plugin._reconcile_controller_now = reconcile
+
+    asyncio.run(plugin._poll_controller_endpoint_once())
+    values["actual_left"] = 100
+    asyncio.run(plugin._poll_controller_endpoint_once())
+
+    assert reapplies == [True, True]
 
 
 def test_endpoint_poll_skips_non_go2_controller_backends(
@@ -600,6 +679,30 @@ def test_display_poll_retries_failed_reapply(tmp_path, monkeypatch):
     assert plugin._display_endpoint_last == ("eDP-1", True)
 
 
+def test_display_poll_records_post_apply_fingerprint(tmp_path, monkeypatch):
+    main = _main(monkeypatch, tmp_path)
+    plugin = main.Plugin.__new__(main.Plugin)
+    current = {"value": ("eDP-1", "pair-a")}
+    plugin._color_backend = types.SimpleNamespace(
+        display_fingerprint=lambda: current["value"]
+    )
+    plugin._display_endpoint_last = ("eDP-1", "old")
+
+    async def offload(fn):
+        return fn()
+
+    async def reapply():
+        current["value"] = ("eDP-1", "pair-b")
+        return True
+
+    plugin._offload_call = offload
+    plugin._reapply_display_endpoint_now = reapply
+
+    asyncio.run(plugin._poll_display_endpoint_once())
+
+    assert plugin._display_endpoint_last == ("eDP-1", "pair-b")
+
+
 def test_display_poll_initial_apply_has_bounded_retry_budget(
     tmp_path, monkeypatch,
 ):
@@ -681,6 +784,41 @@ def test_display_restore_failures_are_reported(tmp_path, monkeypatch):
         "HDR ownership release failed: %s",
     ]
     assert warnings[1][1] == {"enabled": False, "ok": False, "rc": None}
+
+
+def test_hdr_restore_confirms_requested_off_state_not_persisted_profile(
+    tmp_path, monkeypatch,
+):
+    main = _main(monkeypatch, tmp_path)
+    plugin = main.Plugin.__new__(main.Plugin)
+    actual = {"enabled": True}
+    plugin._device = types.SimpleNamespace(hdr=True)
+    plugin._color = types.SimpleNamespace(hdr=lambda _appid: True)
+    plugin._current_appid = None
+    plugin._color_backend = types.SimpleNamespace(
+        supported=True, session_identity=(1, 100),
+    )
+
+    def set_enabled(enabled):
+        actual["enabled"] = enabled
+        return True
+
+    plugin._hdr_backend = types.SimpleNamespace(
+        set_enabled=set_enabled,
+        diagnostics=lambda: {
+            "enabled": actual["enabled"],
+            "actual_enabled": actual["enabled"],
+            "ok": True,
+            "readback": True,
+            "session_identity": (1, 100),
+        },
+    )
+    plugin._hdr_managed = True
+    plugin._hdr_managed_session = (1, 100)
+
+    assert plugin._restore_hdr_safe() is True
+    assert actual["enabled"] is False
+    assert plugin._hdr_managed is False
 
 
 def test_hdr_ownership_is_discarded_without_write_on_new_gamescope_session(

@@ -300,6 +300,22 @@ def test_touchpad_intensity_reasserts_enabled_after_driver_side_effect(tmp_path)
     assert enabled.read_text() == "false"
 
 
+def test_touchpad_enable_change_reasserts_intensity_before_enabled(tmp_path):
+    surface = _surface(tmp_path)
+    enabled = surface / "touchpad/vibration_enabled"
+    intensity = surface / "touchpad/vibration_intensity"
+    writes = []
+
+    def firmware_write(path, value):
+        writes.append((path, value))
+        path.write_text(value)
+
+    adapter = _adapter(tmp_path, [surface], write_text=firmware_write)
+
+    assert adapter.apply({"touchpad_enabled": False}) is True
+    assert writes == [(intensity, "low"), (enabled, "false")]
+
+
 def test_apply_waits_for_delayed_driver_readback(tmp_path):
     surface = _surface(tmp_path)
     pending = {}

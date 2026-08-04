@@ -9,7 +9,7 @@ index f08ab4b..501681b 100644
 -    drivers::steam_deck::hid_report::PackedRumbleReport,
 +    drivers::{
 +        rog_ally::haptics::{
-+            get_config, machine_supported, set_config, HapticsConfig, RumbleSource,
++            available, get_config, machine_supported, set_config, HapticsConfig, RumbleSource,
 +        },
 +        steam_deck::hid_report::PackedRumbleReport,
 +    },
@@ -24,7 +24,7 @@ index f08ab4b..501681b 100644
 +    /// Whether this build and machine support the experimental Xbox HD haptics extension.
 +    #[zbus(property)]
 +    async fn xbox_hd_haptics_supported(&self) -> bool {
-+        machine_supported()
++        machine_supported() && available()
 +    }
 +
 +    /// Return enabled, left/right trigger gains and left/right rumble sources.
@@ -56,7 +56,7 @@ index f08ab4b..501681b 100644
 +            "org.shadowblip.Output.ForceFeedback.Enable",
 +        )
 +        .await?;
-+        if !machine_supported() {
++        if !machine_supported() || !available() {
 +            return Err(fdo::Error::NotSupported(
 +                "Xbox HD haptics are not supported on this machine".to_string(),
 +            ));
@@ -70,6 +70,10 @@ index f08ab4b..501681b 100644
 +            RumbleSource::try_from(left_trigger_source).map_err(fdo::Error::InvalidArgs)?;
 +        let right_trigger_source =
 +            RumbleSource::try_from(right_trigger_source).map_err(fdo::Error::InvalidArgs)?;
++        self.device
++            .stop()
++            .await
++            .map_err(|err| fdo::Error::Failed(err.to_string()))?;
 +        set_config(HapticsConfig {
 +            enabled,
 +            left_trigger_gain,
@@ -77,10 +81,6 @@ index f08ab4b..501681b 100644
 +            left_trigger_source,
 +            right_trigger_source,
 +        });
-+        self.device
-+            .stop()
-+            .await
-+            .map_err(|err| fdo::Error::Failed(err.to_string()))?;
 +        Ok(())
 +    }
  }
@@ -90,19 +90,21 @@ diff --git a/src/drivers/rog_ally/driver.rs b/src/drivers/rog_ally/driver.rs
 index 196f326..01d5f05 100644
 --- a/src/drivers/rog_ally/driver.rs
 +++ b/src/drivers/rog_ally/driver.rs
-@@ -1,7 +1,10 @@
+@@ -1,7 +1,12 @@
  use crate::udev::device::{AttributeGetter, AttributeSetter, UdevDevice};
 -use std::{error::Error, time::Duration};
 +use hidapi::HidDevice;
 +use std::{error::Error, ffi::CString, time::Duration};
  use udev::Device;
  
-+use super::haptics::{machine_supported, HD_HAPTICS_INTERFACE, HD_HAPTICS_PID};
++use super::haptics::{
++    machine_supported, set_available, HD_HAPTICS_INTERFACE, HD_HAPTICS_PID,
++};
 +
  const ALLY_PID: u16 = 0x1abe;
  const ALLYX_PID: u16 = 0x1b4c;
  pub const PIDS: [u16; 2] = [ALLY_PID, ALLYX_PID];
-@@ -9,6 +12,7 @@ pub const VID: u16 = 0x0b05;
+@@ -9,6 +14,7 @@ pub const VID: u16 = 0x0b05;
  
  pub struct Driver {
      _device: UdevDevice,
@@ -110,7 +112,7 @@ index 196f326..01d5f05 100644
  }
  
  impl Driver {
-@@ -55,7 +59,30 @@ impl Driver {
+@@ -55,7 +61,54 @@ impl Driver {
              _ => return Err(format!("Invalid interface number {if_num} provided.").into()),
          };
  
@@ -118,7 +120,9 @@ index 196f326..01d5f05 100644
 +        let hd_haptics =
 +            if pid == HD_HAPTICS_PID && if_num == HD_HAPTICS_INTERFACE && machine_supported() {
 +                let api = hidapi::HidApi::new()?;
-+                Some(api.open_path(&CString::new(udevice.devnode())?)?)
++                let device = api.open_path(&CString::new(udevice.devnode())?)?;
++                set_available(true);
++                Some(device)
 +            } else {
 +                None
 +            };
@@ -137,10 +141,32 @@ index 196f326..01d5f05 100644
 +        let Some(device) = &self.hd_haptics else {
 +            return Ok(());
 +        };
-+        device.write(report)?;
++        let written = match device.write(report) {
++            Ok(written) => written,
++            Err(error) => {
++                set_available(false);
++                return Err(error.into());
++            }
++        };
++        if written != report.len() {
++            set_available(false);
++            return Err(std::io::Error::new(
++                std::io::ErrorKind::WriteZero,
++                format!("short HD haptics write: {written}/{}", report.len()),
++            ).into());
++        }
++        set_available(true);
 +        Ok(())
      }
  }
++
++impl Drop for Driver {
++    fn drop(&mut self) {
++        if self.hd_haptics.is_some() {
++            set_available(false);
++        }
++    }
++}
  
 diff --git a/src/drivers/rog_ally/mod.rs b/src/drivers/rog_ally/mod.rs
 index 2ab9a12..500f5b2 100644
@@ -285,8 +311,11 @@ new file mode 100644
 index 0000000..772dbef
 --- /dev/null
 +++ b/src/drivers/rog_ally/haptics.rs
-@@ -0,0 +1,119 @@
-+use std::sync::{OnceLock, RwLock};
+@@ -0,0 +1,131 @@
++use std::sync::{
++    atomic::{AtomicBool, Ordering},
++    OnceLock, RwLock,
++};
 +
 +use packed_struct::types::SizedInteger;
 +
@@ -340,6 +369,15 @@ index 0000000..772dbef
 +}
 +
 +static CONFIG: OnceLock<RwLock<HapticsConfig>> = OnceLock::new();
++static AVAILABLE: AtomicBool = AtomicBool::new(false);
++
++pub fn available() -> bool {
++    AVAILABLE.load(Ordering::Acquire)
++}
++
++pub fn set_available(available: bool) {
++    AVAILABLE.store(available, Ordering::Release);
++}
 +
 +pub fn get_config() -> HapticsConfig {
 +    *CONFIG
@@ -405,4 +443,3 @@ index 0000000..772dbef
 +        report.right_speed.to_primitive(),
 +    )
 +}
-

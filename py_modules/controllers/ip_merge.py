@@ -49,7 +49,6 @@ def merge_profile(baseline_yaml: str, overrides: dict):
 
 
 def profiles_equal(left: str, right: str) -> bool:
-    """Compare profile contents without relying on YAML formatting stability."""
     if left == right:
         return True
     if not isinstance(left, str) or not isinstance(right, str):

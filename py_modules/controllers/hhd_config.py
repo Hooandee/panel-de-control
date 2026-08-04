@@ -179,7 +179,6 @@ def apply_setting(state, field: str, value: str) -> dict:
 
 
 def vibration_state(state, device_profile_key):
-    """Read HHD's owned Ally vibration control from its live config tree."""
     if device_profile_key not in _VIBRATION_KEYS:
         return None
     key = device_key(state)

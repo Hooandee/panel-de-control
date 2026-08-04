@@ -1,5 +1,3 @@
-"""HDR output on/off via gamescope, with compositor feedback when available."""
-
 import glob
 import os
 import pwd
@@ -52,6 +50,14 @@ def _context_users(session_context):
         return [(uid, pwd.getpwuid(uid).pw_name, runtime_dir)]
     except (IndexError, KeyError, TypeError, ValueError):
         return []
+
+
+def _session_pid(session):
+    try:
+        pid = session[2][2]
+        return pid if isinstance(pid, int) and pid > 0 else None
+    except (IndexError, TypeError):
+        return None
 
 
 def _run_root_xprop(uid, username, runtime_dir, display, arguments):
@@ -120,8 +126,6 @@ def _parse_root_string(output, atom):
 
 
 class GamescopeLookAtom:
-    """Own one Gamescope string atom on the Xwayland tied to a live session."""
-
     def __init__(self, atom=_LOOK_PQ_ATOM, read_root=_read_root_string,
                  write_root=_write_root_string, displays=_display_names):
         self._atom = atom
@@ -132,6 +136,9 @@ class GamescopeLookAtom:
 
     def _observations(self, session):
         observations = []
+        expected_pid = _session_pid(session)
+        if expected_pid is None:
+            return observations
         for uid, username, runtime_dir in _context_users(session):
             for display in self._displays():
                 parsed = _parse_root_string(
@@ -142,6 +149,8 @@ class GamescopeLookAtom:
                 )
                 if parsed is not None:
                     pid, value = parsed
+                    if pid != expected_pid:
+                        continue
                     observations.append((
                         uid, username, runtime_dir, display, pid, value,
                     ))
@@ -205,6 +214,9 @@ def _session_fields(session):
 def _read_hdr_feedback(session_context=None, read_root=_read_root_properties,
                        displays=_display_names):
     observations = []
+    expected_pid = _session_pid(session_context)
+    if session_context is not None and expected_pid is None:
+        return None
     for uid, username, runtime_dir in _context_users(session_context):
         for display in displays():
             output = read_root(uid, username, runtime_dir, display) or ""
@@ -215,16 +227,16 @@ def _read_hdr_feedback(session_context=None, read_root=_read_root_properties,
                 rf"{_FEEDBACK_ATOM}\(CARDINAL\)\s*=\s*([01])", output
             )
             if pid and feedback:
+                observed_pid = int(pid.group(1))
+                if expected_pid is not None and observed_pid != expected_pid:
+                    continue
                 observations.append((
-                    int(pid.group(1)), feedback.group(1) == "1"
+                    observed_pid, feedback.group(1) == "1"
                 ))
     return _select_feedback(observations)
 
 
 class HdrBackend:
-    """Toggles gamescope HDR. `runner(args) -> (rc, stdout)` is the shared gamescopectl
-    runner (injected for testing)."""
-
     def __init__(self, runner, feedback_reader=None, sleep=time.sleep,
                  readback_attempts=10, readback_interval=0.05,
                  session_provider=None):

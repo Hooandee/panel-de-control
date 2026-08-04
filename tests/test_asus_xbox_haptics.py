@@ -241,18 +241,20 @@ def test_xbox_ally_x_merges_persistent_game_hd_haptics(tmp_path):
 
     class Dbus:
         applied = None
+        config = {
+            "enabled": True,
+            "trigger_left": 70,
+            "trigger_right": 40,
+            "trigger_left_source": "strong",
+            "trigger_right_source": "weak",
+        }
 
         def xbox_hd_haptics(self):
-            return {
-                "enabled": True,
-                "trigger_left": 70,
-                "trigger_right": 40,
-                "trigger_left_source": "strong",
-                "trigger_right_source": "weak",
-            }
+            return dict(self.config)
 
         def set_xbox_hd_haptics(self, config):
             self.applied = dict(config)
+            self.config = dict(config)
             return True
 
     dbus = Dbus()
@@ -279,6 +281,91 @@ def test_xbox_ally_x_merges_persistent_game_hd_haptics(tmp_path):
         "trigger_right": 50,
         "trigger_left_source": "mix",
         "trigger_right_source": "weak",
+    }
+
+
+def test_xbox_ally_x_restores_body_gains_when_hd_apply_fails(tmp_path):
+    from controllers.asus_xbox_haptics import AsusXboxHapticsAdapter
+
+    intensity, _raw = _surface(tmp_path)
+
+    class Dbus:
+        def xbox_hd_haptics(self):
+            return {
+                "enabled": True,
+                "trigger_left": 70,
+                "trigger_right": 40,
+                "trigger_left_source": "strong",
+                "trigger_right_source": "weak",
+            }
+
+        def set_xbox_hd_haptics(self, _config):
+            return False
+
+    adapter = AsusXboxHapticsAdapter(
+        "rog_xbox_ally_x", root=str(tmp_path), dbus=Dbus(),
+    )
+
+    assert adapter.apply({
+        "left": 35,
+        "right": 45,
+        "hd_game_enabled": True,
+        "trigger_left": 60,
+        "trigger_right": 50,
+        "trigger_left_source": "mix",
+        "trigger_right_source": "weak",
+    }) is False
+
+    assert intensity.read_text() == "64 64\n"
+    assert adapter.diagnostics() == {
+        "mode": "asus_xbox_hd",
+        "ok": False,
+        "reason": "hd_apply_failed",
+        "rollback_confirmed": True,
+    }
+
+
+def test_xbox_ally_x_rejects_hd_readback_mismatch_and_restores_body(
+    tmp_path,
+):
+    from controllers.asus_xbox_haptics import AsusXboxHapticsAdapter
+
+    intensity, _raw = _surface(tmp_path)
+    baseline = {
+        "enabled": True,
+        "trigger_left": 70,
+        "trigger_right": 40,
+        "trigger_left_source": "strong",
+        "trigger_right_source": "weak",
+    }
+
+    class Dbus:
+        def xbox_hd_haptics(self):
+            return dict(baseline)
+
+        def set_xbox_hd_haptics(self, _config):
+            return True
+
+    adapter = AsusXboxHapticsAdapter(
+        "rog_xbox_ally_x", root=str(tmp_path), dbus=Dbus(),
+    )
+
+    assert adapter.apply({
+        "left": 35,
+        "right": 45,
+        "hd_game_enabled": True,
+        "trigger_left": 60,
+        "trigger_right": 50,
+        "trigger_left_source": "mix",
+        "trigger_right_source": "weak",
+    }) is False
+
+    assert intensity.read_text() == "64 64\n"
+    assert adapter.diagnostics() == {
+        "mode": "asus_xbox_hd",
+        "ok": False,
+        "reason": "hd_readback_mismatch",
+        "rollback_confirmed": True,
     }
 
 
@@ -312,3 +399,48 @@ def test_xbox_ally_x_capabilities_reuse_the_captured_state(tmp_path):
 
     assert capabilities["hd_game_supported"] is True
     assert dbus.calls == 1
+
+
+def test_xbox_ally_x_restores_complete_body_and_hd_baseline(tmp_path):
+    from controllers.asus_xbox_haptics import AsusXboxHapticsAdapter
+
+    intensity, _hidraw = _surface(tmp_path)
+    config = {
+        "enabled": False,
+        "trigger_left": 70,
+        "trigger_right": 40,
+        "trigger_left_source": "strong",
+        "trigger_right_source": "weak",
+    }
+
+    class Dbus:
+        def xbox_hd_haptics(self):
+            return dict(config)
+
+        def set_xbox_hd_haptics(self, value):
+            config.clear()
+            config.update(value)
+            return True
+
+    adapter = AsusXboxHapticsAdapter(
+        "rog_xbox_ally_x", root=str(tmp_path), dbus=Dbus(),
+    )
+    baseline = adapter.capture_baseline()
+    intensity.write_text("20 30\n")
+    config.update({
+        "enabled": True,
+        "trigger_left": 10,
+        "trigger_right": 20,
+        "trigger_left_source": "mix",
+        "trigger_right_source": "off",
+    })
+
+    assert adapter.restore_baseline(baseline) is True
+    assert intensity.read_text() == "64 64\n"
+    assert config == {
+        "enabled": False,
+        "trigger_left": 70,
+        "trigger_right": 40,
+        "trigger_left_source": "strong",
+        "trigger_right_source": "weak",
+    }

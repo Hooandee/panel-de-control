@@ -10,7 +10,6 @@ interface Props {
   step?: number;
   showValue?: boolean;
   valueSuffix?: string;
-  /** Optional compact label rendered beside the value, above the slider. */
   label?: ReactNode;
   /** Uniform shrink factor. Default 0.80; use a smaller value in tighter cards
    *  (e.g. the Pantalla cards) where 0.80 still bleeds past the right edge. */

@@ -1,10 +1,3 @@
-"""Persistent per-game vibration controls exposed by the active kernel stack.
-
-InputPlumber owns routing and transient test effects. Persistent intensity uses
-the narrowest device interface available: ASUS' two-motor sysfs control with
-readback, otherwise the selected physical evdev source's FF_GAIN. The desired
-value is stored by RemapStore and re-applied on game changes.
-"""
 import ctypes
 import glob
 import math

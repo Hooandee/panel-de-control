@@ -1,5 +1,3 @@
-"""BT.2100 PQ/ICtCp saturation transform for gamescope's HDR look LUT."""
-
 import math
 from functools import lru_cache
 

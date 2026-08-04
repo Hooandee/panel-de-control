@@ -548,6 +548,28 @@ def test_report_bundle_omits_private_cpu_handoff_snapshot(tmp_path, monkeypatch)
     assert "cpu_frequency_handoff" not in stores["settings"]
 
 
+def test_report_bundle_omits_private_controller_recovery_snapshots(
+    tmp_path, monkeypatch,
+):
+    plugin, _ = _make_plugin(tmp_path, monkeypatch)
+    plugin._init()
+    (tmp_path / "controller_remap.json").write_text(json.dumps({
+        "global": {"vibration": {"value": 40}},
+        "profile_states": {"device": {"mode": "xbox"}},
+        "vibration_baselines": {"device": {"value": 80}},
+        "vibration_route_baselines": {"device": {"intensity": "medium"}},
+        "virtual_mode_baselines": {"device": {"mode": "xbox"}},
+    }))
+
+    controller = plugin._report_stores()["controller_remap"]
+
+    assert controller["global"] == {"vibration": {"value": 40}}
+    assert controller["profile_state_devices"] == ["device"]
+    assert "vibration_baselines" not in controller
+    assert "vibration_route_baselines" not in controller
+    assert "virtual_mode_baselines" not in controller
+
+
 def test_disabling_power_module_keeps_manual_gpu_clock(tmp_path, monkeypatch):
     plugin, gpu = _make_plugin(tmp_path, monkeypatch)
     asyncio.run(plugin.set_gpu_clock(1_200, 2_400))

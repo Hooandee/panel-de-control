@@ -1,4 +1,3 @@
-"""Generation-safe, redacted state for controller component operations."""
 import copy
 import math
 import re
@@ -24,6 +23,7 @@ OWNERS = {"hhd", "inputplumber", "native", "evdev", "none"}
 _MODE = re.compile(r"[a-z0-9][a-z0-9_-]{0,31}")
 _LENOVO_INTENSITIES = {"off", "low", "medium", "high"}
 _LENOVO_PATTERNS = {"fps", "racing", "standard", "spg", "rpg"}
+_XBOX_RUMBLE_SOURCES = {"off", "strong", "weak", "mix"}
 
 
 @dataclass(frozen=True)
@@ -56,7 +56,11 @@ def _component_state(component: str, value) -> dict:
         clean = {}
         if isinstance(value.get("enabled"), bool):
             clean["enabled"] = value["enabled"]
-        for field in ("value", "left", "right"):
+        if isinstance(value.get("hd_game_enabled"), bool):
+            clean["hd_game_enabled"] = value["hd_game_enabled"]
+        for field in (
+            "value", "left", "right", "trigger_left", "trigger_right",
+        ):
             number = value.get(field)
             if (
                 isinstance(number, (int, float))
@@ -73,6 +77,10 @@ def _component_state(component: str, value) -> dict:
             pattern = value.get(field)
             if pattern in _LENOVO_PATTERNS:
                 clean[field] = pattern
+        for field in ("trigger_left_source", "trigger_right_source"):
+            source = value.get(field)
+            if source in _XBOX_RUMBLE_SOURCES:
+                clean[field] = source
         if isinstance(value.get("touchpad_enabled"), bool):
             clean["touchpad_enabled"] = value["touchpad_enabled"]
         return clean

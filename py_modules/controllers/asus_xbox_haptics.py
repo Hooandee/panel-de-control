@@ -1,4 +1,3 @@
-"""Native Xbox Ally X haptic calibration and four-motor test reports."""
 import glob
 import math
 import os
@@ -17,6 +16,10 @@ _CHANNELS = {
     "strong": (0x04, 2),
     "weak": (0x08, 3),
 }
+_HD_FIELDS = (
+    "hd_game_enabled", "trigger_left", "trigger_right",
+    "trigger_left_source", "trigger_right_source",
+)
 
 
 def build_rumble_report(channel, strength):
@@ -254,7 +257,15 @@ class AsusXboxHapticsAdapter:
         values = self._read_native(path) if path is not None else None
         if values is None:
             return {}
-        return {"native_left": values[0], "native_right": values[1]}
+        baseline = {"native_left": values[0], "native_right": values[1]}
+        read_hd = getattr(self._dbus, "xbox_hd_haptics", None)
+        hd = read_hd() if callable(read_hd) else None
+        if isinstance(hd, dict):
+            baseline.update({
+                "hd_game_enabled": hd["enabled"],
+                **{field: hd[field] for field in _HD_FIELDS[1:]},
+            })
+        return baseline
 
     def _write_native(self, values):
         path = self._intensity_path()
@@ -300,22 +311,43 @@ class AsusXboxHapticsAdapter:
                 "reason": "invalid_value",
             }
             return False
+        body_baseline = self.capture_baseline()
         body_applied = self._write_native((self._native(left), self._native(right)))
         if not body_applied:
             return False
-        hd_fields = (
-            "hd_game_enabled", "trigger_left", "trigger_right",
-            "trigger_left_source", "trigger_right_source",
-        )
-        if not all(field in patch for field in hd_fields):
+        if not all(field in patch for field in _HD_FIELDS):
             return True
         apply_hd = getattr(self._dbus, "set_xbox_hd_haptics", None)
-        if not callable(apply_hd):
-            return False
-        return apply_hd({
+        read_hd = getattr(self._dbus, "xbox_hd_haptics", None)
+        hd_baseline = read_hd() if callable(read_hd) else None
+        requested = {
             "enabled": patch["hd_game_enabled"],
-            **{field: patch[field] for field in hd_fields[1:]},
-        })
+            **{field: patch[field] for field in _HD_FIELDS[1:]},
+        }
+        hd_applied = bool(callable(apply_hd) and apply_hd(requested))
+        if hd_applied and callable(read_hd) and read_hd() == requested:
+            self._last_operation = {
+                "mode": "asus_xbox_hd", "ok": True, "readback": True,
+            }
+            return True
+        body_restored = self.restore_baseline(body_baseline)
+        hd_restored = True
+        if isinstance(hd_baseline, dict) and callable(read_hd):
+            hd_restored = read_hd() == hd_baseline
+            if not hd_restored and callable(apply_hd):
+                hd_restored = bool(
+                    apply_hd(hd_baseline) and read_hd() == hd_baseline
+                )
+        self._last_operation = {
+            "mode": "asus_xbox_hd",
+            "ok": False,
+            "reason": (
+                "hd_readback_mismatch" if hd_applied
+                else "hd_apply_failed"
+            ),
+            "rollback_confirmed": body_restored and hd_restored,
+        }
+        return False
 
     def restore_baseline(self, baseline):
         if not isinstance(baseline, dict):
@@ -328,7 +360,54 @@ class AsusXboxHapticsAdapter:
             for value in values
         ):
             return False
-        return self._write_native(values)
+        current = self.capture_baseline()
+        if not self._write_native(values):
+            return False
+        if not all(field in baseline for field in _HD_FIELDS):
+            return True
+        apply_hd = getattr(self._dbus, "set_xbox_hd_haptics", None)
+        read_hd = getattr(self._dbus, "xbox_hd_haptics", None)
+        requested = {
+            "enabled": baseline["hd_game_enabled"],
+            **{field: baseline[field] for field in _HD_FIELDS[1:]},
+        }
+        if callable(read_hd) and read_hd() == requested:
+            self._last_operation = {
+                "mode": "asus_xbox_hd", "ok": True, "readback": True,
+            }
+            return True
+        if (
+            callable(apply_hd)
+            and callable(read_hd)
+            and apply_hd(requested)
+            and read_hd() == requested
+        ):
+            self._last_operation = {
+                "mode": "asus_xbox_hd", "ok": True, "readback": True,
+            }
+            return True
+        body_rollback = self._write_native((
+            current.get("native_left"), current.get("native_right")
+        ))
+        hd_rollback = False
+        if all(field in current for field in _HD_FIELDS):
+            previous_hd = {
+                "enabled": current["hd_game_enabled"],
+                **{field: current[field] for field in _HD_FIELDS[1:]},
+            }
+            hd_rollback = bool(
+                callable(apply_hd)
+                and callable(read_hd)
+                and apply_hd(previous_hd)
+                and read_hd() == previous_hd
+            )
+        self._last_operation = {
+            "mode": "asus_xbox_hd",
+            "ok": False,
+            "reason": "hd_restore_failed",
+            "rollback_confirmed": body_rollback and hd_rollback,
+        }
+        return False
 
     @staticmethod
     def _test_result(sent, stopped, reason):

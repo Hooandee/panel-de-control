@@ -1,4 +1,3 @@
-"""Capability-gated virtual controller transitions for resident managers."""
 import glob
 import os
 import threading
@@ -75,6 +74,16 @@ class HhdVirtualModeAdapter:
         self._sleep = sleep
         self._owner = f"hhd:{self._device_key}"
         self._last_before = None
+        read_applied = getattr(self._store, "applied_virtual_mode", None)
+        self._last_applied = (
+            read_applied(self._owner) or None
+            if callable(read_applied) else None
+        )
+
+    def _remember_applied(self):
+        remember = getattr(self._store, "remember_applied_virtual_mode", None)
+        if callable(remember):
+            remember(self._owner, self._last_applied or {})
 
     def capabilities(self, state=None, settings=None):
         state = self._read_state() if state is None else state
@@ -150,6 +159,14 @@ class HhdVirtualModeAdapter:
                 "actual": before,
                 "reason": "capability_unavailable",
             }
+        owned = before == baseline or before == self._last_applied
+        if not owned:
+            return {
+                "config_confirmed": False,
+                "rollback_confirmed": True,
+                "actual": before,
+                "reason": "profile_conflict",
+            }
         if mode == "auto":
             desired = baseline
         elif mode in capabilities["options"]:
@@ -168,6 +185,8 @@ class HhdVirtualModeAdapter:
         )
         if confirmed:
             self._last_before = before
+            self._last_applied = None if actual == baseline else actual
+            self._remember_applied()
             return {
                 "config_confirmed": True,
                 "rollback_confirmed": True,
@@ -191,6 +210,12 @@ class HhdVirtualModeAdapter:
         confirmed = actual == desired
         if confirmed:
             self._last_before = None
+            self._last_applied = (
+                None
+                if desired == self._store.virtual_mode_baseline(self._owner)
+                else desired
+            )
+            self._remember_applied()
         return confirmed
 
     @staticmethod

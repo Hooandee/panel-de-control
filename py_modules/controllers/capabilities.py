@@ -1,5 +1,3 @@
-"""Strict, JSON-safe descriptions of controller capability surfaces."""
-
 import math
 
 

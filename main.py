@@ -335,6 +335,7 @@ class Plugin:
         self._display_endpoint_attempts = 0
         self._hardware_retry_limit = 6
         self._hardware_watch_task = None
+        self._controller_extension_task = None
         self._fan_reader = FanReader()
         # temp_fn feeds the software-loop backends (Steam Deck / Legion Go 2) the
         # live driving temp; hardware-curve backends (ASUS/MSI) ignore it.
@@ -922,6 +923,12 @@ class Plugin:
             controller_remap["profile_state_devices"] = (
                 sorted(states) if isinstance(states, dict) else []
             )
+            for key in (
+                "vibration_baselines",
+                "vibration_route_baselines",
+                "virtual_mode_baselines",
+            ):
+                controller_remap.pop(key, None)
 
         report_settings = dict(self._settings)
         report_settings.pop("cpu_frequency_handoff", None)
@@ -936,13 +943,6 @@ class Plugin:
             "telemetry": _rj("telemetry.json"),
         }
 
-    # ---- Mandos (controller manager + conflict) ----------------------------
-    # One backend per device (factory), mirroring the TDP backend: each RPC is a
-    # one-line delegation, no per-manager if/elif here. The config carries
-    # manager / manager_version / supported so the UI needs a single round-trip.
-    # get_config / set_button / reset spawn busctl (InputPlumber) or hit HHD's local
-    # HTTP — blocking work that must stay off the event loop (a busctl stall while the
-    # daemon re-grabs the pad would freeze the QAM). All offloaded via _offload_call.
     async def get_controller_config(self) -> dict:
         self._init()
         config = await self._offload_call(
@@ -1058,7 +1058,6 @@ class Plugin:
 
     async def set_controller_vibration(self, patch: dict,
                                        scope: str = "global", appid=None) -> dict:
-        """Set a persistent vibration option in the selected controller scope."""
         self._init()
         scope = self._resolve_scope(scope, appid)
         if scope is None:
@@ -1088,7 +1087,6 @@ class Plugin:
     async def test_controller_vibration(self, pattern: str = "pulse",
                                         channel=None,
                                         strength: int = 100) -> dict:
-        """Send a bounded test and return its stop/restore confirmation."""
         self._init()
         def test():
             self._controller_coordinator.cancel_transients("superseded")
@@ -1117,7 +1115,6 @@ class Plugin:
         return self._controller_config_with_operations(config)
 
     async def set_controller_setting(self, field: str, value: str) -> dict:
-        """Change a controller setting on HHD (mode / paddles_as; no-op on others)."""
         self._init()
         config = await self._offload_call(
             lambda: self._controller_backend.set_setting(
@@ -1128,7 +1125,6 @@ class Plugin:
     async def set_controller_virtual_mode(
         self, mode: str, scope: str = "global", appid=None,
     ) -> dict:
-        """Persist a live-supported virtual controller mode in one scope."""
         self._init()
         resolved = self._resolve_scope(scope, appid)
         if (
@@ -1207,10 +1203,15 @@ class Plugin:
         snapshot = await self._offload_call(
             lambda: self._controller_coordinator.execute(request)
         )
-        vibration = snapshot.get("components", {}).get("vibration", {})
-        return vibration.get("status") in {
-            "applied", "accepted_unverifiable",
-        }
+        components = snapshot.get("components", {})
+        successful = {"applied", "accepted_unverifiable"}
+        return all(
+            components.get(component, {}).get("status") in successful
+            for component in request.profile
+            if component in {
+                "virtual_controller", "buttons", "vibration",
+            }
+        )
 
     def _reapply_controller(self, force=False) -> None:
         request = self._prepare_controller_reconcile(force)
@@ -1245,30 +1246,6 @@ class Plugin:
             not in {"legion_go_2", "rog_xbox_ally_x"}
         ):
             return None
-        if getattr(self._device, "key", None) == "rog_xbox_ally_x":
-            actual = self._controller_dbus.xbox_hd_haptics()
-            if actual is None:
-                return (controller_detect.INPUTPLUMBER, None, False, (), ())
-            fields = (
-                "hd_game_enabled", "trigger_left", "trigger_right",
-                "trigger_left_source", "trigger_right_source",
-            )
-            desired = self._controller_store.effective_vibration(
-                self._current_appid
-            )
-            return (
-                controller_detect.INPUTPLUMBER,
-                "asus_xbox_hd",
-                True,
-                tuple(desired.get(field) for field in fields),
-                (
-                    actual["enabled"],
-                    actual["trigger_left"],
-                    actual["trigger_right"],
-                    actual["trigger_left_source"],
-                    actual["trigger_right_source"],
-                ),
-            )
         config = self._controller_backend.get_config(self._current_appid)
         return self._controller_config_endpoint_fingerprint(config)
 
@@ -1416,6 +1393,7 @@ class Plugin:
                         current,
                     )
                 return
+            current = await self._offload_call(fingerprint)
         self._display_endpoint_last = current
         self._display_endpoint_pending = None
         self._display_endpoint_attempts = 0
@@ -1485,7 +1463,6 @@ class Plugin:
         return ok
 
     def _restore_controller_external(self) -> bool:
-        """Return controller state to the immutable pre-plugin baseline."""
         snapshot = self._controller_coordinator.shutdown(True)
         ok = snapshot.get("restore_external") == "applied"
         if not ok:
@@ -4824,7 +4801,6 @@ class Plugin:
         return applied
 
     def _reapply_color_sync(self) -> bool:
-        """Push the effective color to gamescope. No-op when unsupported. Guarded."""
         if not self._module_enabled("display"):
             return True
         try:
@@ -5142,8 +5118,11 @@ class Plugin:
                 state["confirmation"] = "accepted"
         return state
 
-    def _hdr_confirmed(self) -> bool:
-        desired = self._color.hdr(self._current_appid)
+    def _hdr_confirmed(self, expected=None) -> bool:
+        desired = (
+            self._color.hdr(self._current_appid)
+            if expected is None else bool(expected)
+        )
         diagnostics = self._hdr_diagnostics(desired)
         return bool(
             diagnostics
@@ -5153,7 +5132,6 @@ class Plugin:
         )
 
     def _reapply_hdr_sync(self) -> bool:
-        """Reconcile effective per-game HDR while respecting external ownership."""
         try:
             session = getattr(
                 self._color_backend, "session_identity", None
@@ -5173,7 +5151,11 @@ class Plugin:
                     self._hdr_managed_session = session
                     return True
                 return False
-            elif self._hdr_managed and self._hdr_backend.set_enabled(False):
+            elif self._hdr_managed:
+                if not self._hdr_backend.set_enabled(False):
+                    return False
+                if not self._hdr_confirmed():
+                    return False
                 self._hdr_managed = False
                 self._hdr_managed_session = None
                 return True
@@ -5184,13 +5166,17 @@ class Plugin:
     def _set_hdr_explicit_sync(self, enabled: bool) -> bool:
         try:
             if self._hdr_backend.set_enabled(enabled):
-                self._hdr_managed = enabled
-                self._hdr_managed_session = (
-                    getattr(self._color_backend, "session_identity", None)
-                    if enabled
-                    else None
+                session = getattr(
+                    self._color_backend, "session_identity", None
                 )
-                return True
+                confirmed = self._hdr_confirmed(enabled)
+                if enabled or not confirmed:
+                    self._hdr_managed = True
+                    self._hdr_managed_session = session
+                else:
+                    self._hdr_managed = False
+                    self._hdr_managed_session = None
+                return enabled or confirmed
         except Exception:  # noqa: BLE001
             return False
         return False
@@ -5676,7 +5662,6 @@ class Plugin:
             pass
 
     def _restore_color_safe(self) -> bool:
-        """Release only a look owned by this plugin instance. Guarded."""
         try:
             cb = getattr(self, "_color_backend", None)
             release = getattr(cb, "release", None)
@@ -6024,25 +6009,39 @@ class Plugin:
         )
         log("Lifecycle transition %s", encoded)
 
+    async def _activate_controller_extension(self) -> None:
+        try:
+            extension = await self._offload_call(
+                lambda: inputplumber_extension.ensure(
+                    self._device.key,
+                    os.path.dirname(os.path.abspath(__file__)),
+                )
+            )
+            if extension.get("changed"):
+                decky.logger.info("Xbox HD haptics extension activated")
+                if not self._controller_shutdown:
+                    await self._offload_call(self._refresh_controller_backend)
+                    await self._reconcile_controller_now(force=True)
+            elif extension.get("reason") not in {
+                None, "wrong_device", "not_bundled",
+            }:
+                decky.logger.warning(
+                    "Xbox HD haptics extension unavailable: %s",
+                    extension["reason"],
+                )
+        except asyncio.CancelledError:
+            pass
+        except Exception as error:  # noqa: BLE001
+            decky.logger.warning(
+                "Xbox HD haptics extension activation failed: %s", error
+            )
+
     async def _main(self) -> None:
         self._init()
         # Single-worker executor for subprocess-backed applies (gamescopectl /
         # systemctl / ryzenadj) → keeps them off the event loop AND serialised.
         # Created here (not _init) so unit tests that never call _main run inline.
         self._ensure_apply_executor()
-        extension = await self._offload_call(
-            lambda: inputplumber_extension.ensure(
-                self._device.key,
-                os.path.dirname(os.path.abspath(__file__)),
-            )
-        )
-        if extension.get("changed"):
-            decky.logger.info("Xbox HD haptics extension activated")
-        elif extension.get("reason") not in {None, "wrong_device", "not_bundled"}:
-            decky.logger.warning(
-                "Xbox HD haptics extension unavailable: %s",
-                extension["reason"],
-            )
         decky.logger.info(
             "Panel de Control v%s loaded (euid=%s)", read_version(), os.geteuid()
         )
@@ -6068,6 +6067,9 @@ class Plugin:
             # has it on without waiting for the QAM.
             self._start_auto_loop()
             self._start_audio_loop()
+            self._controller_extension_task = asyncio.create_task(
+                self._activate_controller_extension()
+            )
             if self._learning_active():
                 self._start_sampler()
         except Exception as e:  # noqa: BLE001
@@ -6099,6 +6101,10 @@ class Plugin:
         if wait_task is not None:
             wait_task.cancel()
             self._display_wait_task = None
+        extension_task = getattr(self, "_controller_extension_task", None)
+        if extension_task is not None:
+            extension_task.cancel()
+            self._controller_extension_task = None
         self._stop_night_loop()
         self._audio_shutdown = True
         audio_task = getattr(self, "_audio_task", None)

@@ -1,6 +1,3 @@
-"""Minimal EDID/CTA parser for the ST 2084 HDR capability bit."""
-
-
 _BLOCK_SIZE = 128
 _CTA_EXTENSION = 0x02
 _EXTENDED_DATA_BLOCK = 0x07

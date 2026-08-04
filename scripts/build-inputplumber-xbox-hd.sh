@@ -25,3 +25,7 @@ binary="$outdir/inputplumber-xbox-hd-v0.77.4"
 cp "$work/InputPlumber/target/release/inputplumber" "$binary"
 chmod 0755 "$binary"
 sha256sum "$binary" | awk '{print $1}' > "$binary.sha256"
+{
+  echo "inputplumber_commit=$INPUTPLUMBER_COMMIT"
+  echo "patch_sha256=$(sha256sum "$root/assets/inputplumber/v0.77.4-xbox-hd.patch" | awk '{print $1}')"
+} > "$binary.provenance"

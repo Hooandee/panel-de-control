@@ -1,4 +1,3 @@
-"""Serialized, generation-safe controller profile reconciliation."""
 import copy
 import threading
 
@@ -97,17 +96,20 @@ class ControllerCoordinator:
                 ))
                 return self.snapshot()
 
+            completed = True
             for component in ("buttons", "vibration"):
                 if not self._current(generation, normalized_appid):
                     return self.snapshot()
-                self._apply(
+                result = self._apply(
                     component,
                     desired_profile.get(component, {}),
                     normalized_appid,
                     generation,
                 )
+                if result is None or result.status not in _MODE_OK:
+                    completed = False
 
-            if self._current(generation, normalized_appid):
+            if completed and self._current(generation, normalized_appid):
                 with self._meta_lock:
                     self._last_completed = request.key
             return self.snapshot()

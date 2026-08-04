@@ -16,16 +16,16 @@ case "$output" in
   *) output="$PWD/$output" ;;
 esac
 
-binary="$root/bin/inputplumber-xbox-hd-v0.77.4"
-checksum="$binary.sha256"
 required=(
   dist main.py plugin.json package.json README.md README.en.md LICENSE
   THIRD_PARTY_NOTICES.md py_modules assets bin
   assets/inputplumber/README.md
   assets/inputplumber/v0.77.4-xbox-hd.patch
   scripts/build-inputplumber-xbox-hd.sh
+  scripts/verify-inputplumber-xbox-hd.sh
   bin/inputplumber-xbox-hd-v0.77.4
   bin/inputplumber-xbox-hd-v0.77.4.sha256
+  bin/inputplumber-xbox-hd-v0.77.4.provenance
 )
 for relative in "${required[@]}"; do
   test -e "$root/$relative" || {
@@ -33,24 +33,7 @@ for relative in "${required[@]}"; do
     exit 1
   }
 done
-test -x "$binary" || {
-  echo "Xbox InputPlumber extension is not executable" >&2
-  exit 1
-}
-
-if command -v sha256sum >/dev/null 2>&1; then
-  actual="$(sha256sum "$binary" | awk '{print $1}')"
-elif command -v shasum >/dev/null 2>&1; then
-  actual="$(shasum -a 256 "$binary" | awk '{print $1}')"
-else
-  echo "missing SHA-256 tool" >&2
-  exit 1
-fi
-expected="$(tr -d '[:space:]' < "$checksum")"
-test "$actual" = "$expected" || {
-  echo "Xbox InputPlumber extension checksum mismatch" >&2
-  exit 1
-}
+bash "$root/scripts/verify-inputplumber-xbox-hd.sh" "$root"
 
 staging="$(mktemp -d)"
 trap 'rm -rf "$staging"' EXIT
@@ -69,6 +52,7 @@ cp -rL \
   "$root/bin" \
   "$staging/$plugin_name"
 cp "$root/scripts/build-inputplumber-xbox-hd.sh" "$staging/$plugin_name/scripts"
+cp "$root/scripts/verify-inputplumber-xbox-hd.sh" "$staging/$plugin_name/scripts"
 rm -f "$staging/$plugin_name/dist/"*.map
 find "$staging/$plugin_name" -type d -name __pycache__ -prune -exec rm -rf {} +
 find "$staging/$plugin_name" -type f -name '*.pyc' -delete

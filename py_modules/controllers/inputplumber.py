@@ -476,13 +476,16 @@ def _ensure_vibration_baseline(
         observed["value"] = 100
     elif state is not None and state["mode"] == "lenovo_hd":
         if prepare_native:
+            route = getattr(
+                store, "vibration_route", lambda _owner: None
+            )(owner)
+            route_baseline = _lenovo_route_baseline(state)
+            if route != "lenovo_hd" and not route_baseline:
+                return False
             capture = getattr(vibration, "capture_baseline", None)
             native = capture() if callable(capture) else {}
             if isinstance(native, dict):
                 observed.update(native)
-            route = getattr(
-                store, "vibration_route", lambda _owner: None
-            )(owner)
             legacy_baseline = store.vibration_baseline(owner)
             gain_available = getattr(vibration, "gain_available", None)
             has_gain = (
@@ -622,7 +625,6 @@ def apply_effective(store, dbus, device_key, appid, vibration=None,
 
 
 def restore_external(store, dbus, device_key, vibration=None) -> bool:
-    """Restore the immutable state captured before the plugin took ownership."""
     if not ip_profile.composite_names_for(device_key):
         return False
     buttons_applied = (
@@ -659,6 +661,10 @@ def restore_external(store, dbus, device_key, vibration=None) -> bool:
         )
         if native_baseline and callable(restore):
             intensity_applied = restore(baseline)
+        elif "value" in baseline and callable(
+            apply_gain := getattr(vibration, "apply_gain", None)
+        ):
+            intensity_applied = bool(apply_gain(baseline["value"]))
         else:
             persistent = _persistent_values(vibration, baseline)
             intensity_applied = (
@@ -682,7 +688,6 @@ def restore_external(store, dbus, device_key, vibration=None) -> bool:
 
 def reset(store, dbus, device_key=None, scope="global", appid=None,
           vibration=None, merge=merge_profile, virtual_mode=None) -> dict:
-    """Restore the plugin-captured profile without touching foreign mappings."""
     prospective = store.overrides_for(scope, appid)
     prospective.clear()
     if _apply_overrides(

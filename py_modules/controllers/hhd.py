@@ -56,7 +56,6 @@ def read_state(root: str = "/"):
 
 
 def read_settings(root: str = "/"):
-    """Device-filtered HHD settings schema, or None if unavailable."""
     token = _token(root)
     if not token:
         return None

@@ -51,6 +51,7 @@ jobs:
               - "assets/inputplumber/**"
               - "bin/inputplumber-xbox-hd-v0.77.4*"
               - "scripts/build-inputplumber-xbox-hd.sh"
+              - "scripts/verify-inputplumber-xbox-hd.sh"
               - "scripts/package-plugin.sh"
 
   backend-tests:
@@ -158,8 +159,4 @@ jobs:
         run: bash scripts/build-inputplumber-xbox-hd.sh bin
       - name: Verify Xbox Ally X InputPlumber extension
         if: needs.changes.outputs.inputplumber_extension == 'true'
-        run: |
-          set -euo pipefail
-          binary=bin/inputplumber-xbox-hd-v0.77.4
-          test -x "$binary"
-          test "$(sha256sum "$binary" | awk '{print $1}')" = "$(cat "$binary.sha256")"
+        run: bash scripts/verify-inputplumber-xbox-hd.sh .
