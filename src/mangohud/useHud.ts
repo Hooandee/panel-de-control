@@ -14,6 +14,39 @@ import { useMountedRef } from "../hooks/useMountedRef";
 const POLL_MS = 4000;
 const DEBOUNCE_MS = 700;
 const FEEDBACK_MS = 1800;
+export const HUD_RPC_TIMEOUT_MS = 4000;
+
+export class HudRpcTimeout extends Error {
+  constructor() {
+    super("HUD RPC timed out");
+    this.name = "HudRpcTimeout";
+  }
+}
+
+export function withHudTimeout<T>(promise: Promise<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      reject(new HudRpcTimeout());
+    }, HUD_RPC_TIMEOUT_MS);
+    promise.then(
+      (value) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
 
 export type ReloadStatus = "idle" | "busy" | "ok" | "pending" | "error";
 export type SaveStatus = "idle" | "saving" | "saved" | "error";
@@ -92,7 +125,7 @@ export function useHud(): HudController {
     persistingRef.current = true;
     pendingRef.current += 1;
     if (mounted.current) setSaveStatus("saving");
-    void setHudConfig(model)
+    void withHudTimeout(setHudConfig(model))
       .then((remote) => {
         if (!mounted.current || revision !== revisionRef.current) return;
         accept(remote);
@@ -120,7 +153,7 @@ export function useHud(): HudController {
     const tick = () => {
       if (dirtyRef.current || pendingRef.current > 0) return;
       const revision = revisionRef.current;
-      getHudState()
+      withHudTimeout(getHudState())
         .then((remote) => {
           if (
             mounted.current
@@ -197,7 +230,7 @@ export function useHud(): HudController {
     if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
 
     void waitForPersistDrain()
-      .then(() => reloadHud())
+      .then(() => withHudTimeout(reloadHud()))
       .then((remote) => {
         if (!mounted.current || revision !== revisionRef.current) return;
         accept(remote);
@@ -234,7 +267,7 @@ export function useHud(): HudController {
     pendingRef.current += 1;
     setSaveStatus("saving");
     void waitForPersistDrain()
-      .then(() => resetHud())
+      .then(() => withHudTimeout(resetHud()))
       .then((remote) => {
         if (!mounted.current || revision !== revisionRef.current) return;
         accept(remote);
@@ -263,7 +296,7 @@ export function useHud(): HudController {
     setSaveStatus("saving");
 
     void waitForPersistDrain()
-      .then(() => resolveHudConflict(action))
+      .then(() => withHudTimeout(resolveHudConflict(action)))
       .then((remote) => {
         if (!mounted.current || revision !== revisionRef.current) return;
         accept(remote);

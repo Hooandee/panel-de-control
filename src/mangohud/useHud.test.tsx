@@ -98,6 +98,60 @@ describe("useHud coordination", () => {
     expect(setHudConfig).toHaveBeenLastCalledWith(latest);
   });
 
+  it("times out a stalled save and starts the latest queued model", async () => {
+    const stalled = deferred<HudState>();
+    vi.mocked(setHudConfig).mockReturnValueOnce(stalled.promise);
+    const { result } = renderHook(() => useHud());
+    await settle();
+
+    const first = { ...DEFAULT_MODEL, fontSize: 30 };
+    act(() => result.current.setModel(first));
+    act(() => vi.advanceTimersByTime(700));
+    await settle();
+    const latest = { ...first, offsetX: 18 };
+    act(() => result.current.setModel(latest));
+    act(() => vi.advanceTimersByTime(700));
+    await settle();
+
+    expect(setHudConfig).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      vi.advanceTimersByTime(4000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(setHudConfig).toHaveBeenCalledTimes(2);
+    expect(setHudConfig).toHaveBeenLastCalledWith(latest);
+    expect(result.current.state?.model).toEqual(latest);
+  });
+
+  it("ignores a stalled save that settles after its timeout", async () => {
+    const stalled = deferred<HudState>();
+    vi.mocked(setHudConfig).mockReturnValueOnce(stalled.promise);
+    const { result } = renderHook(() => useHud());
+    await settle();
+
+    const old = { ...DEFAULT_MODEL, fontSize: 20 };
+    act(() => result.current.setModel(old));
+    act(() => vi.advanceTimersByTime(700));
+    await settle();
+    await act(async () => {
+      vi.advanceTimersByTime(4000);
+      await Promise.resolve();
+    });
+
+    const latest = { ...old, fontSize: 44 };
+    act(() => result.current.setModel(latest));
+    act(() => vi.advanceTimersByTime(700));
+    await settle();
+    expect(result.current.state?.model).toEqual(latest);
+
+    stalled.resolve(state(old));
+    await settle();
+
+    expect(result.current.state?.model).toEqual(latest);
+  });
+
   it("enables using the latest unsaved style instead of racing a stale debounce", async () => {
     const { result } = renderHook(() => useHud());
     await settle();
