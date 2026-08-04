@@ -4,7 +4,11 @@ import json
 import os
 import time
 from collections import deque
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
+from concurrent.futures import (
+    CancelledError as FutureCancelledError,
+    ThreadPoolExecutor,
+    TimeoutError as FutureTimeoutError,
+)
 from dataclasses import asdict, dataclass
 from datetime import datetime
 
@@ -84,6 +88,7 @@ from mangohud import pdc_metrics as mangohud_pdc
 from mangohud import ownership as mangohud_ownership
 from mangohud.apply import apply_hud, clear_presets, reload_sessions
 from mangohud.coordinator import HudClosed, HudCoordinator, HudStale
+from mangohud.observations import TimedValue, fresh_value
 from report import collector as report_collector
 from report import client as report_client
 
@@ -107,6 +112,8 @@ _NIGHT_TICK_S = 30  # how often the night-mode clock checks for a schedule-edge 
 _SHUTDOWN_DRAIN_TIMEOUT_S = 12.0
 _RPC_CONTEXT_UNSET = object()
 _monotonic = time.monotonic
+_HUD_OBSERVATION_MAX_AGE_S = 3.0
+_MIN_HUD_REFRESH_S = 1.0
 
 # "custom" = our TDP owns the rails, vs a named platform_profile mode.
 _CUSTOM_MODE = "custom"
@@ -341,6 +348,7 @@ class Plugin:
         self._fan_curves = FanCurveStore(
             os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "fan_curves.json")
         )
+        self._fan_apply_confirmed = False
         # Pantalla: panel color. Saturation is per-game (store), calibration global.
         # Applied via gamescope atoms; the backend is probe-gated (UI hidden if the
         # host has no gamescope display) so nothing fake is ever shown.
@@ -475,6 +483,7 @@ class Plugin:
         self._hud_reload_attempt = 0
         self._hud_reload_retry_at = 0.0
         self._hud_conflict = None
+        self._hud_last_publish_at = float("-inf")
         self._pdc_active_ids = []
         self._pdc_written = {}
         self._pdc_preview_values = {}
@@ -1450,6 +1459,7 @@ class Plugin:
         if not self._module_enabled("fanControl"):
             # Fan control disabled: hand the fans back to firmware auto, never drive.
             self._restore_fans_safe()
+            self._fan_apply_confirmed = False
             return True
         try:
             profile = self._fan_curves.effective(self._current_appid)
@@ -1466,8 +1476,11 @@ class Plugin:
                 res = self._fan_ctrl.apply_curve_all(profile["points"])
             # A malformed response (None / {} / no "ok") is not success, so reset_ok
             # can't ride a bad re-apply.
-            return bool(res.get("ok")) if isinstance(res, dict) else False
+            confirmed = bool(res.get("ok")) if isinstance(res, dict) else False
+            self._fan_apply_confirmed = confirmed
+            return confirmed
         except Exception:  # noqa: BLE001
+            self._fan_apply_confirmed = False
             return False
 
     def _adaptive_curve_points(self, appid):
@@ -2004,15 +2017,7 @@ class Plugin:
                 # loop): re-bake presets.conf and reload mangoapp when a shown value
                 # changes. Runs regardless of the auto-TDP gating below (it must update
                 # on desktop / manual / eco too). No-op when no pdc metric is shown.
-                try:
-                    await self._refresh_pdc_metrics()
-                    if self._pdc_refresh_failed:
-                        decky.logger.info("HUD metric refresh recovered")
-                    self._pdc_refresh_failed = False
-                except Exception as exc:  # noqa: BLE001
-                    if not self._pdc_refresh_failed:
-                        decky.logger.warning("HUD metric refresh failed: %s", type(exc).__name__)
-                    self._pdc_refresh_failed = True
+                self._offer_pdc_refresh()
                 # Auto-TDP is a per-GAME dynamic control: don't adjust the global
                 # setpoint from desktop/loading activity. Idle → drop stale window
                 # so re-entry into a game starts homogeneous.
@@ -3070,21 +3075,25 @@ class Plugin:
         lo, hi = self._charge_limit.range()
         enabled = bool(self._settings.get("charge_limit_enabled", False))
         percent = int(self._settings.get("charge_limit_percent", 80))
+        applied_percent = None
         fixed = getattr(self._charge_limit, "fixed_percent", None)
         if not self._charge_limit.adjustable and fixed is not None:
             # Fixed-cap backend (Lenovo conservation): report the firmware level so
             # the UI can state it explicitly (e.g. "caps at 80%").
             percent = fixed
+            applied_percent = fixed
         elif enabled and self._charge_limit.supported and self._charge_limit.adjustable:
             # report what the firmware actually holds (it may clamp our write).
             actual = self._charge_limit.get()
             if actual is not None:
                 percent = actual
+                applied_percent = actual
         return {
             "supported": self._charge_limit.supported,
             "adjustable": self._charge_limit.adjustable,
             "enabled": enabled,
             "percent": percent,
+            "applied_percent": applied_percent,
             "min": lo,
             "max": hi,
             "last_apply": (
@@ -3582,6 +3591,7 @@ class Plugin:
             self._hud_apply_status = "failed"
             return
         self._pdc_written = values
+        self._hud_last_publish_at = _monotonic()
         self._hud_conflict = None
         if self._reload_mangoapp(cap["sessions"]):
             self._hud_apply_status = "reload_requested"
@@ -3595,23 +3605,75 @@ class Plugin:
         the periodic refresh never blocks it; only reads what the shown metrics require."""
         active = set(self._pdc_active_ids)
         src = {}
+
+        def observed(reader, confirmed):
+            try:
+                value = reader()
+                is_confirmed = bool(confirmed(value))
+            except Exception:  # noqa: BLE001
+                return TimedValue(None, _monotonic(), False)
+            return TimedValue(value, _monotonic(), is_confirmed)
+
         if "pdc_power" in active:
-            src["power"] = self._power_reader.read()
+            src["power"] = observed(
+                self._power_reader.read,
+                lambda value: isinstance(value.get("watts"), (int, float)),
+            )
         if "pdc_fan_rpm" in active:
-            src["fans"] = self._read_fans()
+            src["fans"] = observed(
+                self._read_fans,
+                lambda value: any(
+                    isinstance(fan.get("rpm"), (int, float))
+                    for fan in value.get("fans", [])
+                ),
+            )
         if "pdc_bat_health" in active:
-            src["battery"] = self._battery.read()
+            src["battery"] = observed(
+                self._battery.read,
+                lambda value: isinstance(value.get("health_percent"), (int, float)),
+            )
         if "pdc_charge" in active:
-            src["charge"] = self._charge_limit_state()
+            src["charge"] = observed(
+                self._charge_limit_state,
+                lambda value: (
+                    not value.get("enabled")
+                    or isinstance(value.get("applied_percent"), (int, float))
+                ),
+            )
         if "pdc_gpu_clock" in active:
-            src["gpu_clock"] = self._gpu_clock_state()
+            src["gpu_clock"] = observed(
+                self._gpu_clock_state,
+                lambda value: (
+                    not value.get("manual")
+                    or (
+                        isinstance(value.get("applied_min"), (int, float))
+                        and isinstance(value.get("applied_max"), (int, float))
+                    )
+                ),
+            )
         if "pdc_tdp" in active and self._tdp_backend.supported:
-            src["tdp"] = (
-                self._tdp_observation
-                if getattr(self._tdp_backend, "blocking", False)
-                else self._observe_tdp_sync()
+            src["tdp"] = observed(
+                lambda: (
+                    self._tdp_observation
+                    if getattr(self._tdp_backend, "blocking", False)
+                    else self._observe_tdp_sync()
+                ),
+                lambda value: bool(value.readable),
             )
         return src
+
+    def _fresh_pdc_source(self, extras, key, fallback):
+        if key not in extras:
+            return fallback()
+        sample = extras[key]
+        if not isinstance(sample, TimedValue):
+            return sample
+        value = fresh_value(
+            sample,
+            _monotonic(),
+            _HUD_OBSERVATION_MAX_AGE_S,
+        )
+        return {} if value is None else value
 
     def _pdc_snapshot(self, active_ids, extras=None) -> dict:
         """Gather the live plugin state the active pdc metrics need. Only computes what
@@ -3626,10 +3688,14 @@ class Plugin:
                 snap["eco"] = bool(self._settings.get("eco_enabled"))
             if "pdc_tdp" in active_ids:
                 snap["auto"] = self._tdp_profiles.auto_tdp(appid)
-                observation = extras.get("tdp")
+                observation = self._fresh_pdc_source(
+                    extras,
+                    "tdp",
+                    lambda: None,
+                )
                 primary = (
                     observation.surfaces.get(self._tdp_backend.name, {})
-                    if observation is not None and observation.readable
+                    if getattr(observation, "readable", False)
                     else {}
                 )
                 reading = primary.get("pl1")
@@ -3641,10 +3707,11 @@ class Plugin:
         if self._fan_ctrl.supported and "pdc_fan" in active_ids:
             prof = self._fan_curves.effective(appid)
             snap["fan_mode"] = prof.get("preset")
+            snap["fan_confirmed"] = self._fan_apply_confirmed
             snap["fan_learning"] = (prof.get("preset") == "adaptive"
                                     and not self._fan_suggestion(appid)["available"])
         if "pdc_fan_rpm" in active_ids:
-            fans = extras["fans"] if "fans" in extras else self._read_fans()
+            fans = self._fresh_pdc_source(extras, "fans", self._read_fans)
             snap["fan_rpms"] = [
                 f.get("rpm") for f in fans.get("fans", []) if f.get("rpm") is not None
             ]
@@ -3652,15 +3719,31 @@ class Plugin:
             snap["appid"] = appid
             snap["profile_name"] = self._current_game_name if appid is not None else None
         if "pdc_power" in active_ids:
-            snap["watts"] = extras.get("power", {}).get("watts")
-            snap["gpu_busy"] = extras.get("power", {}).get("gpu_busy")
+            power = self._fresh_pdc_source(
+                extras,
+                "power",
+                self._power_reader.read,
+            )
+            snap["watts"] = power.get("watts")
         if "pdc_charge" in active_ids:
-            cl = extras["charge"] if "charge" in extras else self._charge_limit_state()
-            snap["charge_supported"] = cl["supported"]
-            snap["charge_enabled"] = cl["enabled"]
-            snap["charge_percent"] = cl["percent"]
+            cl = self._fresh_pdc_source(
+                extras,
+                "charge",
+                self._charge_limit_state,
+            )
+            snap["charge_supported"] = bool(cl.get("supported"))
+            snap["charge_enabled"] = bool(cl.get("enabled"))
+            snap["charge_confirmed"] = isinstance(
+                cl.get("applied_percent"),
+                (int, float),
+            )
+            snap["charge_percent"] = cl.get("applied_percent")
         if "pdc_bat_health" in active_ids:
-            bat = extras["battery"] if "battery" in extras else self._battery.read()
+            bat = self._fresh_pdc_source(
+                extras,
+                "battery",
+                self._battery.read,
+            )
             snap["bat_health"] = bat.get("health_percent")
         if "pdc_smt" in active_ids:
             snap["smt_supported"] = self._smt.supported
@@ -3672,11 +3755,19 @@ class Plugin:
             snap["cores_active"] = self._cores.active() if self._cores.supported else None
             snap["cores_max"] = self._cores.max_cores
         if "pdc_gpu_clock" in active_ids:
-            gc = extras["gpu_clock"] if "gpu_clock" in extras else self._gpu_clock_state()
-            snap["gpu_clock_supported"] = gc["supported"]
-            snap["gpu_clock_manual"] = gc["manual"]
-            snap["gpu_clock_min"] = gc["min"]
-            snap["gpu_clock_max"] = gc["max"]
+            gc = self._fresh_pdc_source(
+                extras,
+                "gpu_clock",
+                self._gpu_clock_state,
+            )
+            snap["gpu_clock_supported"] = bool(gc.get("supported"))
+            snap["gpu_clock_manual"] = bool(gc.get("manual"))
+            snap["gpu_clock_min"] = gc.get("applied_min")
+            snap["gpu_clock_max"] = gc.get("applied_max")
+            snap["gpu_clock_confirmed"] = (
+                isinstance(gc.get("applied_min"), (int, float))
+                and isinstance(gc.get("applied_max"), (int, float))
+            )
         if "pdc_model" in active_ids:
             snap["model_name"] = self._device.display_name
         return snap
@@ -3707,6 +3798,9 @@ class Plugin:
         values = self._pdc_values(extras)
         if values == self._pdc_written:
             return
+        now = _monotonic()
+        if now - self._hud_last_publish_at < _MIN_HUD_REFRESH_S:
+            return
         model = self._hud.load()
         if model["enabled"]:
             self._pdc_preview_values = values
@@ -3729,9 +3823,11 @@ class Plugin:
                 return
             if self._reload_mangoapp():
                 self._pdc_written = values
+                self._hud_last_publish_at = now
                 self._hud_apply_status = "reload_requested"
             else:
                 self._pdc_written = values
+                self._hud_last_publish_at = now
                 self._hud_apply_status = "written"
 
     async def _refresh_pdc_metrics(self) -> None:
@@ -3752,6 +3848,38 @@ class Plugin:
         except (HudClosed, HudStale):
             if not self._hud_shutdown:
                 raise
+
+    def _finish_offered_pdc_refresh(self, future) -> None:
+        try:
+            future.result()
+        except (FutureCancelledError, HudClosed, HudStale):
+            return
+        except Exception as error:  # noqa: BLE001
+            if not self._pdc_refresh_failed:
+                decky.logger.warning(
+                    "HUD metric refresh failed: %s",
+                    type(error).__name__,
+                )
+            self._pdc_refresh_failed = True
+            return
+        if self._pdc_refresh_failed:
+            decky.logger.info("HUD metric refresh recovered")
+        self._pdc_refresh_failed = False
+
+    def _offer_pdc_refresh(self) -> None:
+        if (
+            self._hud_shutdown
+            or (
+                not self._hud_reload_pending
+                and (not self._pdc_active_ids or not self._pdc_presets_path)
+            )
+        ):
+            return
+        future = self._hud_coordinator.submit_latest(
+            self._hud_generation,
+            self._refresh_pdc_metrics_sync,
+        )
+        future.add_done_callback(self._finish_offered_pdc_refresh)
 
     async def _hud_call(self, fn):
         if self._hud_shutdown or getattr(self, "_shutting_down", False):

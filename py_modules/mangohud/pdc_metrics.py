@@ -39,6 +39,8 @@ def tdp_learn(snap):
 
 
 def fan(snap):
+    if not snap.get("fan_confirmed"):
+        return DASH
     name = _FAN_MODE.get(snap.get("fan_mode"))
     if name is None:
         return DASH
@@ -63,14 +65,8 @@ def profile(snap):
 
 
 def power(snap):
-    parts = []
     watts = _watts(snap.get("watts"))
-    if watts:
-        parts.append(watts)
-    gpu = snap.get("gpu_busy")
-    if isinstance(gpu, (int, float)):
-        parts.append(f"{round(gpu)}%")
-    return " ".join(parts) if parts else DASH
+    return watts or DASH
 
 
 def model(snap):
@@ -93,6 +89,8 @@ def charge(snap):
         return DASH
     if not snap.get("charge_enabled"):
         return "Off"
+    if not snap.get("charge_confirmed"):
+        return DASH
     percent = snap.get("charge_percent")
     return f"{round(percent)}%" if isinstance(percent, (int, float)) else DASH
 
@@ -123,6 +121,8 @@ def gpu_clock(snap):
         return DASH
     if not snap.get("gpu_clock_manual"):
         return "Auto"
+    if not snap.get("gpu_clock_confirmed"):
+        return DASH
     lo, hi = snap.get("gpu_clock_min"), snap.get("gpu_clock_max")
     if isinstance(lo, (int, float)) and isinstance(hi, (int, float)):
         return f"{round(lo)}-{round(hi)}"

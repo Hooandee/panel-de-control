@@ -9,6 +9,8 @@ import types
 
 import pytest
 
+from mangohud.observations import TimedValue
+
 
 def _make_plugin(tmp_path, monkeypatch):
     fake_decky = types.ModuleType("decky")
@@ -240,6 +242,7 @@ def test_distinct_live_presets_paths_are_ambiguous_and_never_written(tmp_path, m
 def test_set_config_persists_but_does_not_write_while_disabled(tmp_path, monkeypatch):
     presets = str(tmp_path / "presets.conf")
     main, p = _make_plugin(tmp_path, monkeypatch)
+    p._init()
     _fake_overlay(main, monkeypatch, presets)
     st = asyncio.run(p.set_hud_config({"items": _items("fps", "gpu"), "enabled": False}))
     assert st["model"]["items"] == _items("fps", "gpu")
@@ -531,6 +534,8 @@ def test_changed_applied_tdp_refreshes_hud_without_profile_change(tmp_path, monk
     asyncio.run(p.set_hud_config({"items": _items("pdc_tdp"), "enabled": True}))
     reloads.clear()
     applied["watts"] = 13
+    p._hud_last_publish_at = 0.0
+    monkeypatch.setattr(main, "_monotonic", lambda: 2.0)
 
     asyncio.run(p._refresh_pdc_metrics())
 
@@ -600,6 +605,8 @@ def test_changed_pdc_value_reloads_running_mangoapp(tmp_path, monkeypatch):
     calls.clear()
 
     p._settings["eco_enabled"] = True
+    p._hud_last_publish_at = 0.0
+    monkeypatch.setattr(main, "_monotonic", lambda: 2.0)
     asyncio.run(p._refresh_pdc_metrics())
 
     assert "custom_text=Descarga Activo" in open(presets).read()
@@ -618,10 +625,11 @@ def test_failed_pdc_reload_is_retried_on_next_tick(tmp_path, monkeypatch):
         return next(results)
 
     _set_reload(main, monkeypatch, reload)
-    times = iter((100.0, 101.1))
-    monkeypatch.setattr(main, "_monotonic", lambda: next(times), raising=False)
+    clock = {"now": 100.0}
+    monkeypatch.setattr(main, "_monotonic", lambda: clock["now"], raising=False)
     asyncio.run(p.set_hud_config({"items": _items("pdc_eco"), "enabled": True}))
 
+    clock["now"] = 101.1
     asyncio.run(p._refresh_pdc_metrics())
 
     assert calls == [True, True]
@@ -661,14 +669,15 @@ def test_partial_reload_retries_only_the_pending_session(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(main, "reload_sessions", reload_sessions)
-    times = iter((100.0, 101.1))
-    monkeypatch.setattr(main, "_monotonic", lambda: next(times), raising=False)
+    clock = {"now": 100.0}
+    monkeypatch.setattr(main, "_monotonic", lambda: clock["now"], raising=False)
 
     state = asyncio.run(
         p.set_hud_config({"items": _items("pdc_eco"), "enabled": True})
     )
     assert state["applyStatus"] == "written"
 
+    clock["now"] = 101.1
     asyncio.run(p._refresh_pdc_metrics())
 
     assert calls == [(first, second), (second,)]
@@ -682,6 +691,8 @@ def test_pdc_refresh_write_failure_reports_failed_and_stays_retryable(tmp_path, 
     asyncio.run(p.set_hud_config({"items": _items("pdc_eco"), "enabled": True}))
     written = dict(p._pdc_written)
     p._settings["eco_enabled"] = True
+    p._hud_last_publish_at = 0.0
+    monkeypatch.setattr(main, "_monotonic", lambda: 2.0)
 
     def fail_write(*_args, **_kwargs):
         raise OSError("disk unavailable")
@@ -758,6 +769,8 @@ def test_pdc_refresh_applies_multiple_changed_values_once(tmp_path, monkeypatch)
     p._settings["eco_enabled"] = True
     p._current_appid = "42"
     p._current_game_name = "Game"
+    p._hud_last_publish_at = 0.0
+    monkeypatch.setattr(main, "_monotonic", lambda: 2.0)
 
     asyncio.run(p._refresh_pdc_metrics())
 
@@ -789,6 +802,61 @@ def test_empty_preread_battery_result_is_not_read_twice(tmp_path, monkeypatch):
     assert reads == []
 
 
+def test_stale_or_unconfirmed_power_observation_renders_dash(tmp_path, monkeypatch):
+    main, p = _make_plugin(tmp_path, monkeypatch)
+    p._init()
+    p._pdc_active_ids = ["pdc_power"]
+    monkeypatch.setattr(main, "_monotonic", lambda: 13.1)
+
+    assert p._pdc_values({
+        "power": TimedValue({"watts": 15}, 10.0, True),
+    }) == {"pdc_power": "-"}
+    assert p._pdc_values({
+        "power": TimedValue({"watts": 15}, 13.0, False),
+    }) == {"pdc_power": "-"}
+
+
+def test_dynamic_hud_publication_is_bounded_to_one_per_second(
+    tmp_path,
+    monkeypatch,
+):
+    presets = str(tmp_path / "presets.conf")
+    main, p = _make_plugin(tmp_path, monkeypatch)
+    p._init()
+    _fake_overlay(main, monkeypatch, presets)
+    clock = {"now": 0.0}
+    watts = {"value": 10.0}
+    monkeypatch.setattr(main, "_monotonic", lambda: clock["now"])
+    monkeypatch.setattr(
+        p._power_reader,
+        "read",
+        lambda: {"watts": watts["value"], "gpu_busy": 99},
+    )
+    asyncio.run(p.set_hud_config({"items": _items("pdc_power"), "enabled": True}))
+    publications = []
+
+    def publish(model, path, values, **_kwargs):
+        publications.append((clock["now"], dict(values)))
+        return main.mangohud_config.build_presets_conf(model, values)
+
+    monkeypatch.setattr(main, "apply_hud", publish)
+    for sample in range(1, 3601):
+        clock["now"] = sample / 10
+        watts["value"] = 10 + sample / 100
+        p._refresh_pdc_metrics_sync()
+
+    assert len(publications) <= 360
+
+    publications.clear()
+    p._pdc_written = {"pdc_power": "15W"}
+    for sample in range(1, 31):
+        clock["now"] = 400 + sample / 10
+        watts["value"] = 15.1 if sample % 2 else 15.4
+        p._refresh_pdc_metrics_sync()
+
+    assert publications == []
+
+
 def test_unavailable_tdp_and_fan_capabilities_render_dashes(tmp_path, monkeypatch):
     _main, p = _make_plugin(tmp_path, monkeypatch)
     p._init()
@@ -804,12 +872,13 @@ def test_unavailable_tdp_and_fan_capabilities_render_dashes(tmp_path, monkeypatc
     }
 
 
-def test_hud_refresh_failure_does_not_skip_the_rest_of_auto_tick(tmp_path, monkeypatch):
+def test_auto_tick_offers_hud_refresh_without_awaiting_it(tmp_path, monkeypatch):
     main, p = _make_plugin(tmp_path, monkeypatch)
     p._init()
     p._current_appid = None
     sleeps = 0
     resets = []
+    offers = []
 
     async def sleep(_seconds):
         nonlocal sleeps
@@ -817,16 +886,37 @@ def test_hud_refresh_failure_does_not_skip_the_rest_of_auto_tick(tmp_path, monke
         if sleeps > 1:
             raise asyncio.CancelledError
 
-    async def fail_refresh():
-        raise OSError("presets unavailable")
+    async def fail_if_awaited():
+        raise AssertionError("auto loop awaited the HUD worker")
 
     monkeypatch.setattr(main.asyncio, "sleep", sleep)
-    monkeypatch.setattr(p, "_refresh_pdc_metrics", fail_refresh)
+    monkeypatch.setattr(p, "_refresh_pdc_metrics", fail_if_awaited)
+    monkeypatch.setattr(p, "_offer_pdc_refresh", lambda: offers.append(True), raising=False)
     monkeypatch.setattr(p, "_reset_auto_windows", lambda: resets.append(True))
 
     asyncio.run(p._auto_loop())
 
+    assert offers == [True]
     assert resets == [True]
+
+
+def test_offered_refresh_records_worker_failure(tmp_path, monkeypatch):
+    _main, p = _make_plugin(tmp_path, monkeypatch)
+    p._init()
+    p._pdc_active_ids = ["pdc_power"]
+    p._pdc_presets_path = str(tmp_path / "presets.conf")
+    monkeypatch.setattr(
+        p,
+        "_refresh_pdc_metrics_sync",
+        lambda: (_ for _ in ()).throw(OSError("presets unavailable")),
+    )
+
+    p._offer_pdc_refresh()
+    p._hud_coordinator.call(p._hud_generation, lambda: None).result(timeout=1)
+
+    assert p._pdc_refresh_failed is True
+    p._hud_generation += 1
+    p._hud_coordinator.close(p._hud_generation, lambda: None)
 
 
 def test_prepare_shutdown_invalidates_hud_ingress_synchronously(tmp_path, monkeypatch):
