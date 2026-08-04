@@ -31,7 +31,7 @@ If you believe attribution is missing or incorrect, please open an issue.
 | [RyzenAdj](https://github.com/FlyGoat/RyzenAdj) | LGPL-3.0 | Generic AMD TDP fallback. Invoked as an external subprocess (never linked into our code). See the bundled-dependencies section below — release builds ship a prebuilt binary. |
 | [PowerControl](https://github.com/mengmeet/PowerControl) | See project | Upstream of the Lenovo firmware-attributes path (chain credit). |
 | [LegionGoRemapper](https://github.com/aarron-lee/LegionGoRemapper) | See project | Controller/remap reference for Legion devices. |
-| [InputPlumber](https://github.com/ShadowBlip/InputPlumber) | GPL-3.0 | SteamOS controller daemon. We normally cooperate over D-Bus; the exact Xbox Ally X extension described below is redistributed as a modified binary. |
+| [InputPlumber](https://github.com/ShadowBlip/InputPlumber) | GPL-3.0-or-later | SteamOS controller daemon. We normally cooperate over D-Bus; the exact Xbox Ally X extension described below is redistributed as a modified binary. |
 | [PowerTools](https://git.ngni.us/NG-SD-Plugins/PowerTools) | See project | Resume/re-apply concepts (idea only). |
 | [Fantastic](https://git.ngram.ca/NG-SD-Plugins/Fantastic) | See project | Fan monitor/curve approach. Fans/temps read via the kernel `hwmon` ABI (facts). |
 | Linux kernel ABI docs | Documentation | `sysfs` interfaces: `firmware-attributes`, `powercap`, `hwmon`, `power_supply`, `cpufreq`, and vendor WMI paths. |
@@ -64,10 +64,10 @@ built from commit
 `bb7424fd6fc097d123850950aaf1e6988f2093f3` with
 `assets/inputplumber/v0.77.4-xbox-hd.patch` and is activated only when the
 device, installed InputPlumber version and stock executable hash all match.
-InputPlumber is licensed under **GPL-3.0**. The pinned upstream commit, bundled
-patch and `scripts/build-inputplumber-xbox-hd.sh` constitute the reproducible
-corresponding-source recipe for the redistributed executable; the GPL text is
-included in this repository's [LICENSE](LICENSE).
+InputPlumber is licensed under **GPL-3.0-or-later**. The pinned upstream commit,
+bundled patch and `scripts/build-inputplumber-xbox-hd.sh` constitute the
+reproducible corresponding-source recipe for the redistributed executable; the
+GPL text is included in this repository's [LICENSE](LICENSE).
 
 ### Windows Xbox Game Bar package
 

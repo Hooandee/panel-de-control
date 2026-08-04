@@ -69,5 +69,8 @@ cp -rL \
   "$root/bin" \
   "$staging/$plugin_name"
 cp "$root/scripts/build-inputplumber-xbox-hd.sh" "$staging/$plugin_name/scripts"
+rm -f "$staging/$plugin_name/dist/"*.map
+find "$staging/$plugin_name" -type d -name __pycache__ -prune -exec rm -rf {} +
+find "$staging/$plugin_name" -type f -name '*.pyc' -delete
 rm -f "$output"
 (cd "$staging" && zip -qr "$output" "$plugin_name")

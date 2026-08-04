@@ -21,6 +21,17 @@ jobs:
           node-version: 20
           cache: pnpm
 
+      - name: Install InputPlumber build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libclang-dev libiio-dev libudev-dev pkg-config
+          rustup toolchain install 1.92.0 --profile minimal --no-self-update
+
+      - name: Build Xbox Ally X InputPlumber extension
+        env:
+          RUSTUP_TOOLCHAIN: 1.92.0
+        run: bash scripts/build-inputplumber-xbox-hd.sh bin
+
       - name: Build and package prerelease
         env:
           BRANCH: ${{ github.ref_name }}
@@ -33,11 +44,7 @@ jobs:
           echo "Building $PLUGIN_NAME v${VERSION} from ${BRANCH}"
           pnpm install --frozen-lockfile
           pnpm build
-          rm -f dist/*.map
-          staging=$(mktemp -d)
-          mkdir -p "$staging/$PLUGIN_NAME"
-          cp -rL dist main.py plugin.json package.json README.md README.en.md LICENSE py_modules assets bin "$staging/$PLUGIN_NAME"
-          (cd "$staging" && zip -r "$GITHUB_WORKSPACE/$PLUGIN_NAME.zip" "$PLUGIN_NAME")
+          bash scripts/package-plugin.sh "$PLUGIN_NAME.zip" "$PLUGIN_NAME"
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

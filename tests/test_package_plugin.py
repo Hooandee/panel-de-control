@@ -11,11 +11,14 @@ SCRIPT = ROOT / "scripts/package-plugin.sh"
 
 def _runtime_tree(root: Path, include_xbox_extension=True) -> None:
     for directory in (
-        "dist", "py_modules", "assets/inputplumber", "bin", "scripts",
+        "dist", "py_modules/__pycache__", "assets/inputplumber", "bin",
+        "scripts",
     ):
         (root / directory).mkdir(parents=True, exist_ok=True)
     for relative in (
-        "dist/index.js", "py_modules/runtime.py", "assets/icon.txt",
+        "dist/index.js", "dist/index.js.map", "py_modules/runtime.py",
+        "py_modules/__pycache__/runtime.cpython-314.pyc",
+        "assets/icon.txt",
         "main.py", "plugin.json", "package.json", "README.md",
         "README.en.md", "LICENSE", "THIRD_PARTY_NOTICES.md",
         "assets/inputplumber/README.md",
@@ -67,6 +70,11 @@ def test_package_contains_the_verified_xbox_extension(tmp_path):
         assert (
             "Panel de Control/scripts/build-inputplumber-xbox-hd.sh"
             in archive.namelist()
+        )
+        assert "Panel de Control/dist/index.js.map" not in archive.namelist()
+        assert not any(
+            "__pycache__" in name or name.endswith(".pyc")
+            for name in archive.namelist()
         )
 
 
