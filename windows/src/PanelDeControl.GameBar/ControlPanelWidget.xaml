@@ -50,7 +50,7 @@
                 Height="44"
                 Padding="0"
                 IsTabStop="True"
-                AutomationProperties.Name="Actualizar telemetría"
+                AutomationProperties.Name="Actualizar telemetría y volumen"
                 Click="RefreshButton_Click"
                 CornerRadius="12"
                 Background="#FF313A48"
@@ -104,6 +104,7 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
@@ -137,8 +138,81 @@
                 </Border>
 
                 <Border
-                    x:Name="CpuCard"
+                    x:Name="VolumeCard"
                     Grid.Row="1"
+                    Grid.ColumnSpan="2"
+                    Margin="0,12,0,0"
+                    Padding="18"
+                    Background="{StaticResource CardBackgroundBrush}"
+                    CornerRadius="16">
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="VOLUMEN DEL SISTEMA" Style="{StaticResource TelemetryLabelStyle}" />
+                            <TextBlock
+                                x:Name="VolumeValue"
+                                Grid.Column="1"
+                                Text="—"
+                                FontSize="18"
+                                FontWeight="SemiBold"
+                                Foreground="White" />
+                        </Grid>
+                        <Slider
+                            x:Name="VolumeSlider"
+                            Margin="0,12,0,0"
+                            Minimum="0"
+                            Maximum="100"
+                            StepFrequency="5"
+                            SmallChange="5"
+                            IsEnabled="False"
+                            IsTabStop="True"
+                            AutomationProperties.Name="Volumen del sistema"
+                            AutomationProperties.HelpText="Ajusta el volumen del dispositivo de audio predeterminado"
+                            ValueChanged="VolumeSlider_ValueChanged" />
+                        <TextBlock
+                            x:Name="VolumeStatus"
+                            Margin="0,6,0,0"
+                            Text="Comprobando audio predeterminado…"
+                            FontSize="12"
+                            Foreground="#FF8591A3"
+                            TextWrapping="Wrap" />
+                        <Grid Margin="0,16,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="SILENCIAR" Style="{StaticResource TelemetryLabelStyle}" />
+                                <TextBlock
+                                    x:Name="MuteStatus"
+                                    Margin="0,5,16,0"
+                                    Text="Comprobando estado de silencio…"
+                                    FontSize="12"
+                                    Foreground="#FF8591A3"
+                                    AutomationProperties.LiveSetting="Polite"
+                                    TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ToggleSwitch
+                                x:Name="MuteToggle"
+                                Grid.Column="1"
+                                VerticalAlignment="Center"
+                                IsEnabled="False"
+                                IsTabStop="True"
+                                OffContent="Con sonido"
+                                OnContent="Silenciado"
+                                AutomationProperties.Name="Silenciar audio del sistema"
+                                AutomationProperties.HelpText="Activa o desactiva el silencio del dispositivo de audio predeterminado y verifica el estado leído"
+                                Toggled="MuteToggle_Toggled" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <Border
+                    x:Name="CpuCard"
+                    Grid.Row="2"
                     Grid.Column="0"
                     Margin="0,12,6,0"
                     Padding="18"
@@ -153,7 +227,7 @@
 
                 <Border
                     x:Name="GpuCard"
-                    Grid.Row="1"
+                    Grid.Row="2"
                     Grid.Column="1"
                     Margin="6,12,0,0"
                     Padding="18"
@@ -171,7 +245,7 @@
         <TextBlock
             Grid.Row="3"
             Margin="0,16,0,0"
-            Text="Solo lectura · Los controles de potencia y ventiladores llegarán después de la validación física."
+            Text="Volumen del sistema con verificación · Telemetría experimental de solo lectura · Sin control de potencia ni ventiladores."
             FontSize="11"
             Foreground="#FF6F7B8C"
             TextWrapping="Wrap" />

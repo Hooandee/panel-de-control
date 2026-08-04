@@ -22,7 +22,7 @@ import re
 from sysfs import read_str
 
 # Bump when the bundle shape changes so consumers can adapt.
-SCHEMA = 1
+SCHEMA = 2
 
 _MAX_TEXT = 4000  # user free-text cap (defensive; the UI also limits it)
 
@@ -187,7 +187,14 @@ _SNAP_MAX_CHIPS = 32
 _SNAP_MAX_NAMES = 128
 _SNAP_MAX_MODULES = 512
 _SNAP_CAP = 60_000
-_HWMON_PATTERNS = ("pwm*", "fan*_input", "temp*_label")
+_HWMON_PATTERNS = (
+    "pwm*", "fan*_input", "temp*_label", "power[12]_label", "power[12]_cap*",
+)
+_DECK_PPT_NODES = tuple(
+    f"power{rail}_{suffix}"
+    for rail in (1, 2)
+    for suffix in ("label", "cap", "cap_min", "cap_max")
+)
 
 
 def _glob(root: str, pattern: str) -> list[str]:
@@ -212,11 +219,37 @@ def _hwmon_nodes(chip_dir: str) -> list[str]:
     return sorted(names)[:_SNAP_MAX_NAMES]
 
 
+def _mode_writable(path: str) -> bool:
+    try:
+        return bool(os.stat(path).st_mode & 0o222)
+    except OSError:
+        return False
+
+
+def _hwmon_ppt_nodes(chip_dir: str) -> dict:
+    values = {}
+    for name in _DECK_PPT_NODES:
+        path = os.path.join(chip_dir, name)
+        if os.path.exists(path):
+            values[name] = {
+                "value": read_str(path),
+                "writable": _mode_writable(path),
+            }
+    return values
+
+
 def _snap_hwmon(root: str) -> list[dict]:
     out: list[dict] = []
     for chip in sorted(_glob(root, "sys/class/hwmon/hwmon*"))[:_SNAP_MAX_CHIPS]:
         try:
-            out.append({"name": read_str(os.path.join(chip, "name")), "nodes": _hwmon_nodes(chip)})
+            entry = {
+                "name": read_str(os.path.join(chip, "name")),
+                "nodes": _hwmon_nodes(chip),
+            }
+            ppt_nodes = _hwmon_ppt_nodes(chip)
+            if ppt_nodes:
+                entry["ppt_nodes"] = ppt_nodes
+            out.append(entry)
         except Exception:  # noqa: BLE001
             continue
     return out
@@ -309,6 +342,92 @@ def _snap_modules(root: str) -> list[str]:
     except OSError:
         return []
     return sorted(names)
+
+
+def _snap_cpu_gpu_power(root: str) -> dict:
+    out = {"cpufreq": [], "gpu": [], "rapl": []}
+    for policy in sorted(
+        _glob(root, "sys/devices/system/cpu/cpufreq/policy*")
+    )[:_SNAP_MAX_CHIPS]:
+        out["cpufreq"].append({
+            "policy": os.path.basename(policy),
+            "affected_cpus": read_str(os.path.join(policy, "affected_cpus")),
+            "driver": read_str(os.path.join(policy, "scaling_driver")),
+            "hardware_min_khz": read_str(os.path.join(policy, "cpuinfo_min_freq")),
+            "hardware_max_khz": read_str(os.path.join(policy, "cpuinfo_max_freq")),
+            "applied_min_khz": read_str(os.path.join(policy, "scaling_min_freq")),
+            "applied_max_khz": read_str(os.path.join(policy, "scaling_max_freq")),
+        })
+
+    for maximum in sorted(
+        _glob(root, "sys/class/drm/card*/device/tile*/gt*/freq0/max_freq")
+    )[:_SNAP_MAX_CHIPS]:
+        directory = os.path.dirname(maximum)
+        parts = os.path.relpath(
+            directory, os.path.join(root, "sys/class/drm")
+        ).split(os.sep)
+        out["gpu"].append({
+            "backend": "xe",
+            "card": parts[0] if parts else None,
+            "tile": parts[2] if len(parts) > 2 else None,
+            "gt": parts[3] if len(parts) > 3 else None,
+            "min_mhz": read_str(os.path.join(directory, "min_freq")),
+            "max_mhz": read_str(maximum),
+            "hardware_min_mhz": read_str(os.path.join(directory, "rpn_freq")),
+            "hardware_max_mhz": read_str(os.path.join(directory, "rp0_freq")),
+        })
+    for maximum in sorted(
+        _glob(root, "sys/class/drm/card*/gt_max_freq_mhz")
+    )[:_SNAP_MAX_CHIPS]:
+        directory = os.path.dirname(maximum)
+        out["gpu"].append({
+            "backend": "i915",
+            "card": os.path.basename(directory),
+            "min_mhz": read_str(os.path.join(directory, "gt_min_freq_mhz")),
+            "max_mhz": read_str(maximum),
+            "hardware_min_mhz": read_str(os.path.join(directory, "gt_RPn_freq_mhz")),
+            "hardware_max_mhz": read_str(os.path.join(directory, "gt_RP0_freq_mhz")),
+        })
+    for overdrive in sorted(
+        _glob(root, "sys/class/drm/card*/device/pp_od_clk_voltage")
+    )[:_SNAP_MAX_CHIPS]:
+        card = os.path.basename(os.path.dirname(os.path.dirname(overdrive)))
+        contents = read_str(overdrive)
+        match = re.search(
+            r"SCLK:\s*(\d+)\s*Mhz\s+(\d+)\s*Mhz",
+            contents or "",
+            re.IGNORECASE,
+        )
+        level = os.path.join(
+            os.path.dirname(overdrive), "power_dpm_force_performance_level"
+        )
+        out["gpu"].append({
+            "backend": "amdgpu",
+            "card": card,
+            "overdrive_present": True,
+            "overdrive_writable": _mode_writable(overdrive),
+            "performance_level": read_str(level),
+            "performance_level_writable": _mode_writable(level),
+            "od_range": (
+                {"min_mhz": match.group(1), "max_mhz": match.group(2)}
+                if match else None
+            ),
+        })
+
+    for surface in sorted(
+        _glob(root, "sys/devices/virtual/powercap/intel-rapl*/*")
+    )[:_SNAP_MAX_CHIPS]:
+        pl1 = read_str(os.path.join(surface, "constraint_0_power_limit_uw"))
+        pl2 = read_str(os.path.join(surface, "constraint_1_power_limit_uw"))
+        if pl1 is None and pl2 is None:
+            continue
+        out["rapl"].append({
+            "surface": os.path.basename(surface),
+            "name": read_str(os.path.join(surface, "name")),
+            "pl1_uw": pl1,
+            "pl2_uw": pl2,
+        })
+    return out
 
 
 _DMI_FIELDS = ("sys_vendor", "board_vendor", "board_name",
@@ -407,7 +526,9 @@ def sysfs_snapshot(
     snap: dict = {"hwmon": [], "firmware_attributes": {}, "power_supply": {},
                   "platform_profile": {"acpi": {}, "class": {}}, "acpi": {}, "modules": [],
                   "asus_ppt": {"asus_armoury": {}, "asus_nb_wmi": {}},
-                  "dmi": {}, "leds": [], "ec": {}}
+                  "dmi": {}, "leds": [],
+                  "cpu_gpu_power": {"cpufreq": [], "gpu": [], "rapl": []},
+                  "ec": {}}
     try:
         snap["hwmon"] = _snap_hwmon(root)
     except Exception:  # noqa: BLE001
@@ -444,6 +565,10 @@ def sysfs_snapshot(
         pass
     try:
         snap["leds"] = _snap_leds(root)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        snap["cpu_gpu_power"] = _snap_cpu_gpu_power(root)
     except Exception:  # noqa: BLE001
         pass
     try:
@@ -485,6 +610,10 @@ def capabilities_from(states: dict) -> dict:
     ltools = launch.get("tools") or {}
     running = (launch.get("frontend") or {}).get("runningGame")
     running = running if isinstance(running, dict) else {}
+    cpu_gpu = states.get("cpu_gpu_diagnostics") or {}
+    cpu_frequency = cpu_gpu.get("cpu") or {}
+    gpu_frequency = cpu_gpu.get("gpu") or {}
+    deck_ppt = cpu_gpu.get("steamdeck_ppt") or {}
     return {
         "tdp_backend": tdp.get("backend"),
         "tdp_supported": bool(tdp.get("supported")),
@@ -498,6 +627,19 @@ def capabilities_from(states: dict) -> dict:
         "charge_limit_supported": bool(batt.get("supported")),
         "charge_limit_adjustable": bool(batt.get("adjustable")),
         "gpu_clock_supported": bool(gpu.get("supported")),
+        "cpu_frequency_backend": cpu_frequency.get("backend"),
+        "cpu_frequency_supported": bool(cpu_frequency.get("supported")),
+        "cpu_frequency_handoff_pending": bool(
+            cpu_frequency.get("handoff_pending")
+        ),
+        "cpu_frequency_durable_state_reason": cpu_frequency.get(
+            "durable_state_reason"
+        ),
+        "gpu_clock_backend": gpu_frequency.get("backend"),
+        "gpu_clock_handoff_pending": bool(
+            gpu_frequency.get("handoff_pending")
+        ),
+        "steamdeck_ppt_supported": bool(deck_ppt.get("supported")),
         "color_supported": bool(color.get("supported")),
         "controller_manager": ctl.get("manager"),
         "controller_kind": ctl.get("kind"),

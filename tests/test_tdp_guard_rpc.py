@@ -488,6 +488,10 @@ def test_report_contains_tdp_transition_history(plugin, monkeypatch):
     } <= last.keys()
     diagnostics = bundle["state"]["tdp_diagnostics"]
     assert diagnostics["backend_descriptor"] == plugin._tdp_backend_diagnostics()
+    cpu_gpu = bundle["state"]["cpu_gpu_diagnostics"]
+    assert set(cpu_gpu) == {"cpu", "gpu", "steamdeck_ppt", "reapply"}
+    assert cpu_gpu["cpu"]["supported"] is False
+    assert cpu_gpu["gpu"]["supported"] is False
     assert bundle["state"]["lifecycle_diagnostics"] == plugin._lifecycle.diagnostics()
     assert bundle["state"]["controller_diagnostics"] == (
         plugin._controller_backend.diagnostics()
@@ -503,6 +507,40 @@ def test_report_contains_tdp_transition_history(plugin, monkeypatch):
     assert {"supported", "probe_detail", "wayland_display", "last_apply"} <= (
         display["backend"].keys()
     )
+
+
+def test_cpu_gpu_diagnostics_allowlist_drops_app_identity(plugin):
+    class _MaliciousGpu:
+        supported = True
+        backend = "fake"
+
+        def diagnostics(self):
+            return {
+                "backend": "fake",
+                "supported": True,
+                "range": {"min_mhz": 200, "max_mhz": 2000},
+                "applied": {"min_mhz": 300, "max_mhz": 1800},
+                "appid": "APPID-SECRET",
+                "title": "GAME-TITLE-SECRET",
+                "raw_sysfs": "/home/alice/secret",
+            }
+
+    plugin._gpu_clock = _MaliciousGpu()
+    encoded = json.dumps(plugin._cpu_gpu_diagnostics(), sort_keys=True)
+    assert "APPID-SECRET" not in encoded
+    assert "GAME-TITLE-SECRET" not in encoded
+    assert "/home/alice" not in encoded
+
+
+def test_cpu_gpu_diagnostics_keeps_deck_ppt_probe_failure_reason(plugin):
+    plugin._tdp_backend.diagnostics = lambda: {
+        "ppt": {"supported": False, "source": None},
+        "ppt_reason": "contradictory_labels",
+    }
+
+    deck = plugin._cpu_gpu_diagnostics()["steamdeck_ppt"]
+
+    assert deck["probe_reason"] == "contradictory_labels"
 
 
 def test_confirmed_resume_is_written_to_plugin_log(plugin):
@@ -678,6 +716,7 @@ def test_disabling_control_records_handoff_without_writing(plugin, monkeypatch):
 
     def handoff():
         plugin._tdp_backend._levels["pl1"] = 20
+        return True
 
     monkeypatch.setattr(plugin, "_restore_hhd_tdp", handoff)
     asyncio.run(plugin.set_tdp_control_enabled(False))
@@ -689,6 +728,35 @@ def test_disabling_control_records_handoff_without_writing(plugin, monkeypatch):
     assert event["write"] is None
     assert event["observation"]["surfaces"]["fake"]["pl1"]["applied"] == 20
     assert plugin._tdp_backend.set_levels_calls == 0
+
+
+def test_disabling_control_reports_pending_release_when_handoff_fails(
+    plugin, monkeypatch
+):
+    monkeypatch.setattr(plugin, "_restore_power_handoff", lambda: False)
+
+    asyncio.run(plugin.set_tdp_control_enabled(False))
+
+    assert plugin._settings["tdp_control_enabled"] is False
+    assert plugin._tdp_status == "rejected"
+    assert plugin._tdp_reason == "release_failed"
+    event = plugin._tdp_history[-1]
+    assert event["reason"] == "control-disable-release-failed"
+    assert event["status"] == "rejected"
+
+
+def test_disabling_power_module_reports_pending_release_when_handoff_fails(
+    plugin, monkeypatch
+):
+    monkeypatch.setattr(plugin, "_restore_power_handoff", lambda: False)
+
+    asyncio.run(plugin.set_ui_module("power", True))
+
+    assert plugin._tdp_status == "rejected"
+    assert plugin._tdp_reason == "release_failed"
+    event = plugin._tdp_history[-1]
+    assert event["reason"] == "module-disable-release-failed"
+    assert event["status"] == "rejected"
 
 
 def test_stable_guard_does_not_add_history_or_logs(plugin):

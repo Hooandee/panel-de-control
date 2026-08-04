@@ -1,3 +1,4 @@
+using PanelDeControl.Core.Controls;
 using PanelDeControl.Core.Telemetry;
 
 namespace PanelDeControl.Hardware;
@@ -25,6 +26,31 @@ public interface IPowerStatusReader
 public interface IHardwareSnapshotProvider
 {
     HardwareSnapshot Capture();
+}
+
+public interface IAudioEndpointVolumeProvider
+{
+    IAudioEndpointVolumeSession OpenDefaultRenderEndpoint();
+}
+
+public interface IAudioEndpointVolumeSession : IDisposable
+{
+    double GetMasterVolumeLevel();
+
+    void SetMasterVolumeLevel(double requestedLevel);
+
+    bool GetMute();
+
+    void SetMute(bool requestedMuted);
+}
+
+public interface ISystemVolumeController
+{
+    VolumeControlResponse Get();
+
+    VolumeControlResponse Set(double requestedLevel);
+
+    VolumeControlResponse SetMute(bool requestedMuted);
 }
 
 public sealed class SystemClock : IClock

@@ -25,9 +25,15 @@ def _mk_hwmon(root):
     d = os.path.join(root, "sys/class/hwmon/hwmon0")
     os.makedirs(d, exist_ok=True)
     with open(os.path.join(d, "name"), "w") as f:
-        f.write("steamdeck_hwmon")
+        f.write("amdgpu")
     with open(os.path.join(d, "power1_cap"), "w") as f:
         f.write("15000000")
+    with open(os.path.join(d, "power1_label"), "w") as f:
+        f.write("slowPPT")
+    with open(os.path.join(d, "power2_cap"), "w") as f:
+        f.write("15000000")
+    with open(os.path.join(d, "power2_label"), "w") as f:
+        f.write("fastPPT")
 
 
 def _mk_dmi(root, vendor, product):
@@ -104,11 +110,51 @@ def test_msi_uses_msi_firmware_attr(tmp_path):
     assert b.supported and "msi-wmi-platform" in b.name
 
 
+def test_msi_claw_a8_never_uses_intel_msi_firmware_attr(tmp_path):
+    root = str(tmp_path)
+    _mk_fw(root, "msi-wmi-platform")
+
+    backend = select_backend(
+        _p("msi_claw_a8"),
+        root=root,
+        ryzenadj_resolve=lambda: "/usr/bin/ryzenadj",
+    )
+
+    assert backend.supported is True
+    assert backend.name == "ryzenadj"
+    assert [item["candidate"] for item in backend.probe_trace] == ["ryzenadj"]
+
+
+def test_msi_claw_a8_without_ryzenadj_fails_closed(tmp_path):
+    root = str(tmp_path)
+    _mk_fw(root, "msi-wmi-platform")
+
+    backend = select_backend(
+        _p("msi_claw_a8"),
+        root=root,
+        ryzenadj_resolve=_NO_RYZENADJ,
+    )
+
+    assert isinstance(backend, NullBackend)
+    assert [item["candidate"] for item in backend.probe_trace] == ["ryzenadj"]
+
+
 def test_steam_deck_uses_hwmon(tmp_path):
     root = str(tmp_path)
     _mk_hwmon(root)
     b = select_backend(_p("steam_deck_oled"), root=root, ryzenadj_resolve=_NO_RYZENADJ)
     assert b.supported and b.name == "steamdeck-hwmon"
+
+
+def test_exact_steam_deck_never_falls_through_to_generic_amd_backends(tmp_path):
+    backend = select_backend(
+        _p("steam_deck_oled"),
+        root=str(tmp_path),
+        ryzenadj_resolve=lambda: "/usr/bin/ryzenadj",
+    )
+
+    assert isinstance(backend, NullBackend)
+    assert [item["candidate"] for item in backend.probe_trace] == ["deck"]
 
 
 def test_falls_back_to_null_when_nothing_present(tmp_path):
@@ -296,6 +342,34 @@ def test_ryzenadj_precedes_alib(tmp_path):
     _mk_acpi_call(root)
     b = select_backend(GENERIC, root=root, ryzenadj_resolve=lambda: "/usr/bin/ryzenadj")
     assert b.name == "ryzenadj"
+
+
+def test_onexplayer_apex_prefers_alib_over_ryzenadj(tmp_path):
+    root = str(tmp_path)
+    _mk_acpi_call(root)
+
+    backend = select_backend(
+        _p("onexplayer_apex"),
+        root=root,
+        ryzenadj_resolve=lambda: "/usr/bin/ryzenadj",
+    )
+
+    assert backend.name == "acpi-alib"
+    assert [item["candidate"] for item in backend.probe_trace] == ["alib"]
+
+
+def test_onexplayer_apex_falls_back_to_ryzenadj_without_alib(tmp_path):
+    backend = select_backend(
+        _p("onexplayer_apex"),
+        root=str(tmp_path),
+        ryzenadj_resolve=lambda: "/usr/bin/ryzenadj",
+    )
+
+    assert backend.name == "ryzenadj"
+    assert [item["candidate"] for item in backend.probe_trace] == [
+        "alib",
+        "ryzenadj",
+    ]
 
 
 def test_firmware_attr_still_wins_over_alib(tmp_path):

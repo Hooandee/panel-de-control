@@ -2,9 +2,10 @@ import { CSSProperties, FC, useState } from "react";
 import { Focusable, SliderField } from "@decky/ui";
 import { LuChevronDown, LuChevronRight } from "react-icons/lu";
 
-import { Levels, LevelBound, BoostMode } from "../api";
+import { Levels, LevelBound, BoostMode, SteamDeckPptState } from "../api";
 import { useI18n } from "../i18n";
 import { offsetOf } from "../tdp/logic";
+import { MarqueeText } from "./MarqueeText";
 import { segmentGroupStyle, segmentItemStyle } from "./segmented";
 import { theme } from "../theme";
 
@@ -12,6 +13,7 @@ interface AdvancedBoostProps {
   levels: Levels;
   mode: BoostMode;
   bounds: { pl2?: LevelBound; pl3?: LevelBound };
+  ppt?: SteamDeckPptState | null;
   onSetMode: (mode: BoostMode) => void;
   onSetLevels: (off2: number, off3: number) => void;
 }
@@ -22,6 +24,7 @@ export const AdvancedBoost: FC<AdvancedBoostProps> = ({
   levels,
   mode,
   bounds,
+  ppt = null,
   onSetMode,
   onSetLevels,
 }) => {
@@ -41,6 +44,7 @@ export const AdvancedBoost: FC<AdvancedBoostProps> = ({
     boxShadow: `inset 0 0 0 1px ${modeColor}`,
   };
   const Chevron = open ? LuChevronDown : LuChevronRight;
+  const isDeckPpt = Boolean(ppt?.supported);
 
   const railRow = (
     label: string,
@@ -81,30 +85,45 @@ export const AdvancedBoost: FC<AdvancedBoostProps> = ({
   return (
     <div style={{ ...theme.card, padding: theme.space.md, marginTop: theme.space.sm, overflow: "hidden" }}>
       <Focusable
-        style={{ display: "flex", alignItems: "center", gap: theme.space.sm, cursor: "pointer" }}
+        style={{ display: "flex", flexDirection: "column", alignItems: "stretch", gap: theme.space.xs, cursor: "pointer" }}
         onActivate={() => setOpen((o) => !o)}
         onClick={() => setOpen((o) => !o)}
       >
-        <Chevron size={16} color={theme.color.textMuted} />
-        <span style={{ flex: 1 }}>{t("tdp.boost.title")}</span>
-        <span style={badge}>{t(`tdp.boost.mode.${mode}`)}</span>
+        <span style={{ display: "flex", alignItems: "center", gap: theme.space.sm, minWidth: 0 }}>
+          <Chevron size={16} color={theme.color.textMuted} />
+          <span>{t(isDeckPpt ? "tdp.deckPpt.title" : "tdp.boost.title")}</span>
+        </span>
+        <span style={{ display: "flex", flexWrap: "wrap", gap: theme.space.xs, paddingLeft: 16 + theme.space.sm }}>
+          {isDeckPpt && <span style={{ ...badge, color: theme.color.warn, boxShadow: `inset 0 0 0 1px ${theme.color.warn}` }}>{t("tdp.deckPpt.experimental")}</span>}
+          <span style={badge}>{t(`tdp.boost.mode.${mode}`)}</span>
+        </span>
       </Focusable>
 
       {open && (
         <>
-          <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, marginTop: theme.space.xs }}>
-            {t(`tdp.boost.hint.${mode}`)}
+          <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, marginTop: theme.space.sm }}>
+            {isDeckPpt ? t("tdp.deckPpt.hint") : t(`tdp.boost.hint.${mode}`)}
           </div>
 
-          <div style={{ ...segmentGroupStyle, marginTop: theme.space.sm }}>
+          <div style={{ ...segmentGroupStyle, gap: theme.space.sm, marginTop: theme.space.sm }}>
             {MODES.map((m) => (
               <Focusable
                 key={m}
-                style={{ ...segmentItemStyle(m === mode), flex: 1, padding: "4px 6px" }}
+                style={{
+                  ...segmentItemStyle(m === mode),
+                  flex: 1,
+                  minWidth: 0,
+                  padding: "4px 3px",
+                  fontSize: theme.font.caption,
+                  lineHeight: 1.15,
+                }}
                 onActivate={() => onSetMode(m)}
                 onClick={() => onSetMode(m)}
               >
-                {t(`tdp.boost.mode.${m}`)}
+                <MarqueeText
+                  text={t(isDeckPpt && m === "estable" ? "tdp.deckPpt.off" : `tdp.boost.mode.${m}`)}
+                  alignWhenFits="center"
+                />
               </Focusable>
             ))}
           </div>
@@ -112,16 +131,25 @@ export const AdvancedBoost: FC<AdvancedBoostProps> = ({
           {/* Resulting rails: the watts the firmware actually holds, for any mode. */}
           <div style={{
             display: "flex", justifyContent: "space-between",
-            fontSize: theme.font.caption, color: theme.color.textMuted, marginTop: theme.space.sm,
+            fontSize: theme.font.caption, color: theme.color.textMuted, marginTop: theme.space.md,
           }}>
-            <span>SPPT {levels.pl2} W</span>
-            <span>FPPT {levels.pl3} W</span>
+            <span>{isDeckPpt ? "SlowPPT" : "SPPT"} {levels.pl2} W</span>
+            <span>{isDeckPpt ? "FastPPT" : "FPPT"} {levels.pl3} W</span>
           </div>
+
+          {isDeckPpt && mode !== "estable" && ppt && (
+            <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, marginTop: theme.space.xs }}>
+              {t("tdp.deckPpt.applied", {
+                slow: ppt.applied.slow ?? "—",
+                fast: ppt.applied.fast ?? "—",
+              })}
+            </div>
+          )}
 
           {mode === "custom" && (
             <>
-              {bounds.pl2 && railRow(t("tdp.level.slow"), levels.pl2, levels.pl1, bounds.pl2, (v) => onSetLevels(Math.max(0, v - levels.pl1), off3))}
-              {bounds.pl3 && railRow(t("tdp.level.fast"), levels.pl3, levels.pl2, bounds.pl3, (v) => onSetLevels(off2, Math.max(0, v - levels.pl2)))}
+              {bounds.pl2 && railRow(isDeckPpt ? "SlowPPT" : t("tdp.level.slow"), levels.pl2, levels.pl1, bounds.pl2, (v) => onSetLevels(Math.max(0, v - levels.pl1), off3))}
+              {bounds.pl3 && railRow(isDeckPpt ? "FastPPT" : t("tdp.level.fast"), levels.pl3, levels.pl2, bounds.pl3, (v) => onSetLevels(off2, Math.max(0, v - levels.pl2)))}
             </>
           )}
         </>

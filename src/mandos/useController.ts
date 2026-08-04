@@ -138,9 +138,28 @@ export function useController(): ControllerControl {
 
   const applyFollow = useCallback(
     (f: boolean, a: string) => {
-      accept(setControllerFollowGlobal(f, a), appidRef.current);
+      const sequence = ++requestSequence.current;
+      vibrationTestSequence.current += 1;
+      setVibrationTestResult(null);
+      return setControllerFollowGlobal(f, a)
+        .then((next) => {
+          if (
+            mounted.current
+            && sequence === requestSequence.current
+            && appidRef.current === a
+          ) {
+            const pending = pendingVibration.current;
+            setConfig(
+              pending !== null && pending.viewAppid === a
+                ? withVibrationPatch(next, pending.patch)
+                : next,
+            );
+          }
+          return next.follows_global === f;
+        })
+        .catch(() => false);
     },
-    [accept],
+    [],
   );
   const { scope, onScope } = useScopeSync(appid, config?.follows_global, applyFollow);
 

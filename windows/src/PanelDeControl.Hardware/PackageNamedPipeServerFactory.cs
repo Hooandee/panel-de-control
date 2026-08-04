@@ -14,16 +14,32 @@ public static class PackageNamedPipeServerFactory
 
     public static NamedPipeServerStream Create(string pipeName)
     {
+        return Create(pipeName, includeWorldAccess: true);
+    }
+
+    public static NamedPipeServerStream CreateControl(string pipeName)
+    {
+        return Create(pipeName, includeWorldAccess: false);
+    }
+
+    private static NamedPipeServerStream Create(
+        string pipeName,
+        bool includeWorldAccess)
+    {
         if (!OperatingSystem.IsWindows())
         {
             throw new PlatformNotSupportedException();
         }
 
         var security = new PipeSecurity();
-        AddRule(
-            security,
-            new SecurityIdentifier(WellKnownSidType.WorldSid, null),
-            PipeAccessRights.ReadWrite);
+        if (includeWorldAccess)
+        {
+            AddRule(
+                security,
+                new SecurityIdentifier(WellKnownSidType.WorldSid, null),
+                PipeAccessRights.ReadWrite);
+        }
+
         AddRule(security, ReadCurrentPackageSid(), PipeAccessRights.ReadWrite);
 
         var currentUser = WindowsIdentity.GetCurrent().User

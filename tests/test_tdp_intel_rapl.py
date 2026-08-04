@@ -52,10 +52,33 @@ class TestIntelRapl:
         assert res.applied_w == 20
         assert res.ok is True
 
-    def test_set_tdp_also_raises_pl2_boost(self, tmp_path):
-        d = _mk_rapl(str(tmp_path), _MMIO)
-        IntelRaplBackend(_FALLBACK, root=str(tmp_path)).set_tdp(20, True)
-        assert _read_uw(d, 1) >= 20_000_000  # PL2 (constraint_1) >= PL1
+    def test_set_tdp_only_owns_pl1_and_never_writes_observed_pl2(
+        self, tmp_path, monkeypatch
+    ):
+        directory = _mk_rapl(
+            str(tmp_path),
+            _MMIO,
+            pl1_uw=17_000_000,
+            pl2_uw=31_000_000,
+        )
+        backend = IntelRaplBackend(_FALLBACK, root=str(tmp_path))
+        real_write = backend._write
+        writes = []
+
+        def recording_write(path, value):
+            writes.append((os.path.basename(path), value))
+            return real_write(path, value)
+
+        monkeypatch.setattr(backend, "_write", recording_write)
+
+        result = backend.set_tdp(20, True)
+
+        assert result.ok is True
+        assert _read_uw(directory, 0) == 20_000_000
+        assert _read_uw(directory, 1) == 31_000_000
+        assert writes == [
+            ("constraint_0_power_limit_uw", 20_000_000),
+        ]
 
     def test_set_tdp_clamps_to_fallback_max(self, tmp_path):
         d = _mk_rapl(str(tmp_path), _MMIO)

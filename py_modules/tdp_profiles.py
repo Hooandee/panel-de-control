@@ -134,6 +134,13 @@ class ProfileStore(ScopedProfileStore):
                                               "min": int(gmin), "max": int(gmax)}
         self._save()
 
+    def drop_legacy_gpu_clocks(self):
+        changed = self._data["global"].pop("gpu", None) is not None
+        for profile in self._data["games"].values():
+            changed = (profile.pop("gpu", None) is not None) or changed
+        if changed:
+            self._save()
+
     def effective(self, appid):
         prof = self._effective_prof(appid)
         pl1 = prof["pl1"]
@@ -173,6 +180,17 @@ class ProfileStore(ScopedProfileStore):
             prof["off2"], prof["off3"] = pl2 - prof["pl1"], pl3 - pl2
         prof["mode"] = mode
         self._save()
+
+    def migrate_deck_ppt_stable(self):
+        changed = False
+        profiles = [self._data["global"], *self._data["games"].values()]
+        for profile in profiles:
+            if profile.get("mode") != "estable":
+                profile["mode"] = "estable"
+                changed = True
+        if changed:
+            self._save()
+        return changed
 
     def set_offsets(self, scope, off2, off3, appid=None):
         """Switch to custom mode with explicit boost margins."""

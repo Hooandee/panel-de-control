@@ -110,6 +110,12 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
   const inFwMode = hasFwModes && tdp.firmware_mode !== "custom";
   const shownWatts = inFwMode ? (tdp.applied_w ?? view.watts) : view.watts;
   const ownership = ownershipView(tdp.ownership);
+  const deckPptActive = Boolean(tdp.ppt?.supported && view.mode !== "estable");
+  const arcTarget = deckPptActive ? (tdp.ppt?.requested.slow ?? shownWatts) : shownWatts;
+  const arcApplied = deckPptActive ? (tdp.ppt?.applied.slow ?? null) : (power?.applied ?? null);
+  const basePpt = deckPptActive ? shownWatts : null;
+  const slowPpt = deckPptActive ? (tdp.ppt?.requested.slow ?? null) : null;
+  const fastPpt = deckPptActive ? (tdp.ppt?.requested.fast ?? null) : null;
 
   // Master switch off: keep the live arc, drop every write control.
   if (monitorOnly) {
@@ -120,14 +126,18 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
         </PanelSectionRow>
         <PanelSectionRow>
           <PowerArc
-            watts={shownWatts}
+            watts={arcTarget}
             limits={tdp.limits}
             onAc={tdp.on_ac}
             actualWatts={power?.watts ?? null}
             gpuBusy={power?.gpu_busy ?? null}
             auto={isAutoOn}
             setpoint={power?.setpoint ?? null}
-            appliedWatts={power?.applied ?? null}
+            appliedWatts={arcApplied}
+            visualMax={deckPptActive ? tdp.ppt?.visual_max : null}
+            baseMarkerWatts={basePpt}
+            slowMarkerWatts={slowPpt}
+            fastMarkerWatts={fastPpt}
           />
         </PanelSectionRow>
       </>
@@ -152,14 +162,18 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
       )}
       <PanelSectionRow>
         <PowerArc
-          watts={shownWatts}
+          watts={arcTarget}
           limits={tdp.limits}
           onAc={tdp.on_ac}
           actualWatts={power?.watts ?? null}
           gpuBusy={power?.gpu_busy ?? null}
           auto={isAutoOn}
           setpoint={power?.setpoint ?? null}
-          appliedWatts={power?.applied ?? null}
+          appliedWatts={arcApplied}
+          visualMax={deckPptActive ? tdp.ppt?.visual_max : null}
+          baseMarkerWatts={basePpt}
+          slowMarkerWatts={slowPpt}
+          fastMarkerWatts={fastPpt}
         />
       </PanelSectionRow>
       {ownership.show && (
@@ -277,6 +291,7 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
                 levels={view.levels}
                 mode={view.mode}
                 bounds={{ pl2: tdp.level_limits.pl2, pl3: tdp.level_limits.pl3 }}
+                ppt={tdp.ppt}
                 onSetLevels={onSetLevels}
                 onSetMode={onSetMode}
               />

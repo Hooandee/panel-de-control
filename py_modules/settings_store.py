@@ -1,4 +1,6 @@
+import copy
 import json
+import threading
 
 from json_store import atomic_json_save
 
@@ -9,6 +11,7 @@ class SettingsStore:
 
     def __init__(self, path):
         self._path = path
+        self._save_lock = threading.Lock()
 
     def load(self, defaults):
         try:
@@ -21,4 +24,5 @@ class SettingsStore:
         return merged
 
     def save(self, data):
-        atomic_json_save(self._path, data)
+        with self._save_lock:
+            atomic_json_save(self._path, copy.deepcopy(data))

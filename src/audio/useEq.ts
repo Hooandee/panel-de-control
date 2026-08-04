@@ -101,7 +101,12 @@ export function useEq(): EqControl {
   }, [flush]);
 
   const applyFollow = useCallback(
-    (f: boolean, a: string) => { setAudioFollowGlobal(f, a).then(setState).catch(() => {}); },
+    (f: boolean, a: string) => setAudioFollowGlobal(f, a)
+      .then((next) => {
+        setState(next);
+        return next.follows_global === f;
+      })
+      .catch(() => false),
     [],
   );
   const { scope, onScope } = useScopeSync(appid, state?.follows_global, applyFollow);
