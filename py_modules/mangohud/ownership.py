@@ -1,7 +1,10 @@
+from contextlib import contextmanager
 from dataclasses import dataclass
 import hashlib
 import json
 import os
+import stat
+import sys
 import tempfile
 
 
@@ -12,7 +15,6 @@ _PHASES = {"installing", "managed", "updating", "restoring"}
 
 @dataclass(frozen=True)
 class FileMutation:
-    status: str
     content: str | None
 
 
@@ -31,7 +33,8 @@ class HudOwnershipConflict(OSError):
 
 def read_text(path):
     try:
-        with open(path) as handle:
+        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        with os.fdopen(fd) as handle:
             return handle.read()
     except FileNotFoundError:
         return None
@@ -66,7 +69,39 @@ def _ensure_directory(path, owner):
             os.chown(created, *owner)
 
 
-def _write_atomic(path, text, owner=None):
+def _fsync_directory(path):
+    directory = os.path.dirname(path) or os.curdir
+    fd = os.open(directory, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def _remove(path):
+    os.remove(path)
+    _fsync_directory(path)
+
+
+def _replace(source, destination):
+    os.replace(source, destination)
+    _fsync_directory(destination)
+    if os.path.dirname(source) != os.path.dirname(destination):
+        _fsync_directory(source)
+
+
+def _apply_metadata(fd, source):
+    metadata = os.stat(source, follow_symlinks=False)
+    os.fchown(fd, metadata.st_uid, metadata.st_gid)
+    os.fchmod(fd, stat.S_IMODE(metadata.st_mode))
+    if hasattr(os, "listxattr"):
+        for name in os.listxattr(source, follow_symlinks=False):
+            value = os.getxattr(source, name, follow_symlinks=False)
+            os.setxattr(fd, name, value)
+    os.utime(fd, ns=(metadata.st_atime_ns, metadata.st_mtime_ns))
+
+
+def _write_atomic(path, text, owner=None, metadata_from=None):
     directory = os.path.dirname(path)
     if directory:
         _ensure_directory(directory, owner)
@@ -75,14 +110,17 @@ def _write_atomic(path, text, owner=None):
         with os.fdopen(fd, "w") as handle:
             handle.write(text)
             handle.flush()
-            os.fsync(handle.fileno())
-            os.fchmod(handle.fileno(), 0o644)
-            if owner is not None:
+            if metadata_from is not None:
+                _apply_metadata(handle.fileno(), metadata_from)
+            else:
+                os.fchmod(handle.fileno(), 0o644)
+            if owner is not None and metadata_from is None:
                 os.fchown(handle.fileno(), *owner)
-        os.replace(tmp, path)
+            os.fsync(handle.fileno())
+        _replace(tmp, path)
     except Exception:
         try:
-            os.remove(tmp)
+            _remove(tmp)
         except OSError:
             pass
         raise
@@ -169,7 +207,12 @@ def _resume_install(path, desired, marker, owner):
         backup = read_text(backup_path)
         if rollback_present:
             if backup is None:
-                _write_atomic(backup_path, current, owner)
+                _write_atomic(
+                    backup_path,
+                    current,
+                    owner,
+                    metadata_from=path,
+                )
             elif _sha256(backup) != rollback_hash:
                 raise HudOwnershipConflict(
                     "rollback_mismatch", rollback_hash, _sha256(backup)
@@ -185,7 +228,7 @@ def _resume_install(path, desired, marker, owner):
         _marker_text(managed_hash, rollback_content),
         owner,
     )
-    return FileMutation("written", read_text(path))
+    return FileMutation(read_text(path))
 
 
 def _resume_update(path, desired, marker, owner):
@@ -203,10 +246,10 @@ def _resume_update(path, desired, marker, owner):
         reason = "managed_content_missing" if current is None else "managed_content_mismatch"
         raise HudOwnershipConflict(reason, managed_hash, current_hash)
     _write_atomic(marker_path, _marker_text(managed_hash, rollback), owner)
-    return FileMutation("written", read_text(path))
+    return FileMutation(read_text(path))
 
 
-def write_managed(path, desired, owner=None, replace_conflict=False):
+def _write_managed(path, desired, owner=None, replace_conflict=False):
     marker_path = f"{path}{_MANAGED_SUFFIX}"
     backup_path = f"{path}{_BACKUP_SUFFIX}"
     marker = None if replace_conflict else _load_marker(path)
@@ -235,7 +278,7 @@ def write_managed(path, desired, owner=None, replace_conflict=False):
                 _marker_text(desired_hash, rollback),
                 owner,
             )
-            return FileMutation("written", current)
+            return FileMutation(current)
         if marker.get("phase") == "installing":
             rollback_meta = marker.get("rollback") or {}
             rollback_present = bool(rollback_meta.get("present"))
@@ -297,9 +340,14 @@ def write_managed(path, desired, owner=None, replace_conflict=False):
             owner,
         )
         if rollback is not None:
-            _write_atomic(backup_path, rollback, owner)
+            _write_atomic(
+                backup_path,
+                rollback,
+                owner,
+                metadata_from=path,
+            )
         elif replace_conflict and os.path.exists(backup_path):
-            os.remove(backup_path)
+            _remove(backup_path)
     elif current != desired:
         _write_atomic(
             marker_path,
@@ -311,18 +359,20 @@ def write_managed(path, desired, owner=None, replace_conflict=False):
             ),
             owner,
         )
+    elif marker is not None and marker.get("phase") == "managed":
+        return FileMutation(current)
     if current != desired:
         _write_atomic(path, desired, owner)
     _write_atomic(marker_path, _marker_text(desired_hash, rollback), owner)
-    return FileMutation("written", read_text(path))
+    return FileMutation(read_text(path))
 
 
-def restore_managed(path, owner=None):
+def _restore_managed(path, owner=None):
     marker_path = f"{path}{_MANAGED_SUFFIX}"
     backup_path = f"{path}{_BACKUP_SUFFIX}"
     marker = _load_marker(path)
     if marker is None:
-        return FileMutation("disabled", read_text(path))
+        return FileMutation(read_text(path))
     current = read_text(path)
     expected = marker.get("managed_sha256")
     actual = _sha256(current)
@@ -340,20 +390,20 @@ def restore_managed(path, owner=None):
                 "rollback_mismatch", rollback_hash, _sha256(backup)
             )
         if backup is not None:
-            os.remove(backup_path)
-        os.remove(marker_path)
-        return FileMutation("disabled", current)
+            _remove(backup_path)
+        _remove(marker_path)
+        return FileMutation(current)
     if marker.get("phase") == "restoring":
         if rollback_present and actual == rollback_hash:
             if os.path.exists(backup_path):
                 raise HudOwnershipConflict(
                     "unexpected_rollback", None, _sha256(read_text(backup_path))
                 )
-            os.remove(marker_path)
-            return FileMutation("disabled", current)
+            _remove(marker_path)
+            return FileMutation(current)
         if not rollback_present and current is None:
-            os.remove(marker_path)
-            return FileMutation("disabled", None)
+            _remove(marker_path)
+            return FileMutation(None)
     if marker.get("phase") == "updating" and actual == marker.get("previous_sha256"):
         expected = actual
     if current is None:
@@ -367,17 +417,84 @@ def restore_managed(path, owner=None):
         owner,
     )
     if rollback is None:
-        os.remove(path)
+        _remove(path)
     else:
-        os.replace(backup_path, path)
-    os.remove(marker_path)
-    return FileMutation("disabled", read_text(path))
+        _replace(backup_path, path)
+    _remove(marker_path)
+    return FileMutation(read_text(path))
 
 
-def relinquish_managed(path):
+def _relinquish_managed(path):
     for suffix in (_MANAGED_SUFFIX, _BACKUP_SUFFIX):
         try:
-            os.remove(f"{path}{suffix}")
+            _remove(f"{path}{suffix}")
         except FileNotFoundError:
             pass
-    return FileMutation("disabled", read_text(path))
+    return FileMutation(read_text(path))
+
+
+@contextmanager
+def _pinned_target(path, trusted_root, owner, create_parent):
+    if trusted_root is None or sys.platform != "linux":
+        yield path
+        return
+    if not os.path.isdir("/proc/self/fd"):
+        raise OSError("The Linux proc filesystem is required for safe HUD writes")
+    root = os.path.realpath(trusted_root)
+    target = os.path.abspath(path)
+    try:
+        relative = os.path.relpath(target, root)
+        if relative == os.pardir or relative.startswith(f"{os.pardir}{os.sep}"):
+            raise OSError("MangoHud presets path is outside the trusted user home")
+    except ValueError as exc:
+        raise OSError("Invalid MangoHud presets path") from exc
+    parts = relative.split(os.sep)
+    filename = parts.pop()
+    if not filename or any(part in ("", os.curdir, os.pardir) for part in parts):
+        raise OSError("Invalid MangoHud presets path")
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    directory_fd = os.open(root, flags)
+    try:
+        for part in parts:
+            try:
+                next_fd = os.open(part, flags, dir_fd=directory_fd)
+            except FileNotFoundError:
+                if not create_parent:
+                    yield None
+                    return
+                os.mkdir(part, mode=0o755, dir_fd=directory_fd)
+                if owner is not None:
+                    os.chown(
+                        part,
+                        *owner,
+                        dir_fd=directory_fd,
+                        follow_symlinks=False,
+                    )
+                os.fsync(directory_fd)
+                next_fd = os.open(part, flags, dir_fd=directory_fd)
+            os.close(directory_fd)
+            directory_fd = next_fd
+        yield f"/proc/self/fd/{directory_fd}/{filename}"
+    finally:
+        os.close(directory_fd)
+
+
+def write_managed(
+    path,
+    desired,
+    owner=None,
+    replace_conflict=False,
+    trusted_root=None,
+):
+    with _pinned_target(path, trusted_root, owner, True) as target:
+        return _write_managed(target, desired, owner, replace_conflict)
+
+
+def restore_managed(path, owner=None, trusted_root=None):
+    with _pinned_target(path, trusted_root, owner, False) as target:
+        return FileMutation(None) if target is None else _restore_managed(target, owner)
+
+
+def relinquish_managed(path, trusted_root=None):
+    with _pinned_target(path, trusted_root, None, False) as target:
+        return FileMutation(None) if target is None else _relinquish_managed(target)

@@ -1,8 +1,3 @@
-// Frontend mirror of the HUD model (backend: py_modules/mangohud/config.py). The
-// preview renders exactly what MangoHud will show — the ordered items, coloured per
-// category, honouring custom labels/separators/font — so it never lies about the
-// real overlay.
-
 export type MetricId =
   | "fps" | "fps_metrics" | "frametime" | "frame_count" | "show_fps_limit" | "time"
   | "gpu" | "gpu_temp" | "gpu_junction_temp" | "gpu_clock" | "gpu_mem_clock"
@@ -36,27 +31,41 @@ export type MetricGroup = "fps" | "gpu" | "cpu" | "temps" | "mem" | "battery" | 
 // sub-metric) and are GATED by their parent (dropping the group drops its sub-metrics);
 // the elements list mirrors that with a single expandable container per group.
 export type BlockGroup = "gpu" | "cpu" | "battery";
-export const BLOCK_GROUPS: BlockGroup[] = ["gpu", "cpu", "battery"];
-const BLOCK_GROUP_SET = new Set<BlockGroup>(BLOCK_GROUPS);
+const BLOCK_GROUP_SET = new Set<BlockGroup>(["gpu", "cpu", "battery"]);
 export const isBlockGroup = (group: string): group is BlockGroup =>
   BLOCK_GROUP_SET.has(group as BlockGroup);
 
 // MangoHud can only relabel these three lines; a label on any other metric is
 // ignored (mirrors _LABEL_DIRECTIVE in config.py). The pdc metrics are ALSO
 // labellable — they render as a custom_text line whose label we emit ourselves.
-export const PDC_IDS: MetricId[] = [
+const PDC_IDS: MetricId[] = [
   "pdc_tdp", "pdc_tdp_learn", "pdc_auto_tdp", "pdc_fan", "pdc_fan_rpm", "pdc_eco",
   "pdc_profile", "pdc_power", "pdc_charge", "pdc_bat_health", "pdc_smt", "pdc_boost",
   "pdc_cores", "pdc_gpu_clock", "pdc_model",
 ];
 const PDC_ID_SET = new Set<MetricId>(PDC_IDS);
-export const LABELABLE: MetricId[] = ["fps", "cpu", "gpu", ...PDC_IDS];
-const LABELABLE_SET = new Set<MetricId>(LABELABLE);
+const PDC_LABEL_EN: Partial<Record<MetricId, string>> = {
+  pdc_tdp: "TDP",
+  pdc_tdp_learn: "Band",
+  pdc_auto_tdp: "Auto",
+  pdc_fan: "Fan",
+  pdc_fan_rpm: "RPM",
+  pdc_eco: "Download",
+  pdc_profile: "Profile",
+  pdc_power: "Power",
+  pdc_charge: "Limit",
+  pdc_bat_health: "Health",
+  pdc_smt: "SMT",
+  pdc_boost: "Boost",
+  pdc_cores: "Cores",
+  pdc_gpu_clock: "GPU MHz",
+  pdc_model: "Device",
+};
+const LABELABLE_SET = new Set<MetricId>(["fps", "cpu", "gpu", ...PDC_IDS]);
 export const canLabel = (id: MetricId): boolean => LABELABLE_SET.has(id);
 
 export type SpacerSize = "small" | "medium" | "large";
 export const SPACER_SIZES: SpacerSize[] = ["small", "medium", "large"];
-// Blank rows per spacer size (mirrors _SPACER_LINES in config.py).
 export const SPACER_LINES: Record<SpacerSize, number> = { small: 1, medium: 2, large: 3 };
 
 export type HudItem =
@@ -81,7 +90,6 @@ export interface HudModel {
   tempUnit: TempUnit;
   textOutline: boolean;
   textOutlineThickness: number;
-  separatorColor: string | null;
   colors: Record<ColorKey, string>;
   background: { alpha: number; roundCorners: boolean };
   // ---- Avanzado (global style) ----
@@ -118,15 +126,11 @@ export interface HudConflict {
 }
 
 export interface HudState {
-  supported: boolean;
-  running: boolean;
   capability: HudCapability;
   applyStatus: HudApplyStatus;
   conflict: HudConflict | null;
   model: HudModel;
   values: Partial<Record<MetricId, string>>;
-  catalog: MetricId[];
-  presets: Record<string, MetricId[]>;
 }
 
 interface MetricMeta {
@@ -148,14 +152,12 @@ interface MetricMeta {
 
 // Catalog order == default row order == the order the pill catalog shows.
 export const METRICS: MetricMeta[] = [
-  // FPS
   { id: "fps", category: "fps", group: "fps", label: "FPS", value: "60" },
   { id: "fps_metrics", category: "fps", group: "fps", label: "FPS AVG", value: "58" },
   { id: "frametime", category: "frametime", group: "fps", label: "FRAME", value: "16.6ms" },
   { id: "frame_count", category: "text", group: "fps", label: "FRAMES", value: "12042" },
   { id: "show_fps_limit", category: "text", group: "fps", label: "LIMIT", value: "60" },
   { id: "time", category: "text", group: "fps", label: "TIME", value: "22:14" },
-  // GPU
   { id: "gpu", category: "gpu", group: "gpu", label: "GPU", value: "74%" },
   { id: "gpu_temp", category: "gpu", group: "gpu", catalogGroup: "temps", label: "GPU°", value: "68°C" },
   { id: "gpu_junction_temp", category: "gpu", group: "gpu", catalogGroup: "temps", label: "JUNC°", value: "78°C" },
@@ -169,25 +171,21 @@ export const METRICS: MetricMeta[] = [
   { id: "vram", category: "vram", group: "gpu", label: "VRAM", value: "4.1G" },
   { id: "proc_vram", category: "vram", group: "gpu", label: "PROC VRAM", value: "3.4G" },
   { id: "gpu_name", category: "gpu", group: "gpu", label: "GPU", value: "Radeon" },
-  // CPU
   { id: "cpu", category: "cpu", group: "cpu", label: "CPU", value: "41%" },
   { id: "cpu_temp", category: "cpu", group: "cpu", catalogGroup: "temps", label: "CPU°", value: "62°C" },
   { id: "cpu_clock", category: "cpu", group: "cpu", label: "CCLK", value: "3400MHz" },
   { id: "cpu_power", category: "cpu", group: "cpu", label: "CPU W", value: "12W" },
   { id: "cpu_efficiency", category: "cpu", group: "cpu", label: "CPU EFF", value: "2.8" },
   { id: "cores", category: "cpu", group: "cpu", label: "CORE", value: "▂▄▆▅▃▆" },
-  // Memory
   { id: "ram", category: "ram", group: "mem", label: "RAM", value: "9.2G" },
   { id: "procmem", category: "ram", group: "mem", label: "PROC RAM", value: "5.4G" },
   { id: "swap", category: "ram", group: "mem", label: "SWAP", value: "0.2G" },
   { id: "io_read", category: "ram", group: "mem", label: "IO R", value: "1.2" },
   { id: "io_write", category: "ram", group: "mem", label: "IO W", value: "0.4" },
-  // Battery
   { id: "battery", category: "battery", group: "battery", label: "BAT", value: "82%" },
   { id: "battery_watt", category: "battery", group: "battery", label: "BAT W", value: "12W" },
   { id: "battery_time", category: "battery", group: "battery", label: "BAT", value: "2:41" },
   { id: "device_battery", category: "battery", group: "battery", label: "GP", value: "70%" },
-  // System
   { id: "resolution", category: "text", group: "system", label: "RES", value: "1920x1080" },
   { id: "refresh_rate", category: "text", group: "system", label: "HZ", value: "120Hz" },
   { id: "arch", category: "text", group: "system", label: "ARCH", value: "x86_64" },
@@ -229,7 +227,12 @@ const META: Record<MetricId, MetricMeta> = METRICS.reduce(
   {} as Record<MetricId, MetricMeta>,
 );
 
-export const metricMeta = (id: MetricId): MetricMeta => META[id];
+const BLOCK_METRIC_IDS = [...BLOCK_GROUP_SET].reduce((byGroup, group) => {
+  byGroup[group] = METRICS
+    .filter((metric) => metric.group === group)
+    .map((metric) => metric.id);
+  return byGroup;
+}, {} as Record<BlockGroup, readonly MetricId[]>);
 
 // Catalog groups for the pill UI, in display order.
 export const GROUPS: { key: MetricGroup; ids: MetricId[] }[] = (
@@ -249,7 +252,6 @@ export const DEFAULT_MODEL: HudModel = {
   tempUnit: "c",
   textOutline: true,
   textOutlineThickness: 1.0,
-  separatorColor: null,
   colors: {
     text: "ffffff",
     fps: "ffffff",
@@ -304,7 +306,6 @@ export function matchingPresetKey(
   return null;
 }
 
-// ---- Colour maths (pure, no @decky/ui → unit-testable) ----
 // The Steam CEF native <input type=color> is dead, so the ColorPicker uses RGB
 // sliders + a hex field built on these. Hex is always 6 chars, no leading '#'.
 
@@ -316,8 +317,6 @@ export function rgbToHex({ r, g, b }: Rgb): string {
   return [r, g, b].map((n) => clampByte(n).toString(16).padStart(2, "0")).join("");
 }
 
-/** Parse a hex colour to RGB. Accepts an optional '#' and 3- or 6-digit hex;
- *  falls back to black on anything unparseable (never throws). */
 export function hexToRgb(hex: string): Rgb {
   let h = (hex || "").trim().replace(/^#/, "").toLowerCase();
   if (/^[0-9a-f]{3}$/.test(h)) h = h.split("").map((c) => c + c).join("");
@@ -325,8 +324,6 @@ export function hexToRgb(hex: string): Rgb {
   return { r: parseInt(h.slice(0, 2), 16), g: parseInt(h.slice(2, 4), 16), b: parseInt(h.slice(4, 6), 16) };
 }
 
-/** Normalise arbitrary user hex input to a clean 6-digit lowercase hex, or null
- *  if it can't be parsed (so the caller can reject a half-typed value). */
 export function normalizeHex(hex: string): string | null {
   const h = (hex || "").trim().replace(/^#/, "").toLowerCase();
   if (/^[0-9a-f]{3}$/.test(h)) return h.split("").map((c) => c + c).join("");
@@ -338,9 +335,9 @@ export function normalizeHex(hex: string): string | null {
 const GROUP_LABEL: Partial<Record<MetricGroup, string>> = { gpu: "GPU", cpu: "CPU", battery: "BAT" };
 const GROUP_COLOR: Record<BlockGroup, ColorKey> = { gpu: "gpu", cpu: "cpu", battery: "battery" };
 
-export type PreviewFontRole = "main" | "auxiliary" | "media";
+type PreviewFontRole = "main" | "auxiliary" | "media";
 
-export type PreviewRow =
+type PreviewRow =
   | { kind: "group"; key: string; group: BlockGroup; label: string; labelColor: string; valueColor: string; cells: string[] }
   | { kind: "line"; key: string; label: string; value: string; labelColor: string; valueColor: string; fontRole: PreviewFontRole }
   | { kind: "separator"; key: string }
@@ -352,17 +349,10 @@ const AUXILIARY_METRICS = new Set<MetricId>([
   "winesync", "present_mode", "display_server",
 ]);
 
-export interface PreviewFontSizes {
-  main: number;
-  small: number;
-  auxiliary: number;
-  media: number;
-}
-
 const previewPx = (size: number, scale: number): number =>
   Math.max(1, Number((size * scale * 0.5).toFixed(2)));
 
-export function previewFontSizes(model: HudModel): PreviewFontSizes {
+export function previewFontSizes(model: HudModel) {
   return {
     main: previewPx(model.fontSize, model.fontScale),
     small: previewPx(
@@ -441,10 +431,13 @@ export function previewRows(
       }
       return;
     }
+    const defaultLabel = model.locale === "en"
+      ? PDC_LABEL_EN[it.id] ?? meta.label
+      : meta.label;
     rows.push({
       kind: "line",
       key: `m:${it.id}`,
-      label: canLabel(it.id) && it.label ? it.label : meta.label,
+      label: canLabel(it.id) && it.label ? it.label : defaultLabel,
       value,
       labelColor: c(meta.category),
       valueColor: c(valueColorKey(it.id)),
@@ -481,18 +474,13 @@ export function previewWouldClip(
 export const hasMetric = (items: HudItem[], id: MetricId): boolean =>
   items.some((it) => it.kind === "metric" && it.id === id);
 
-/** The block a metric belongs to (GPU/CPU render as one merged row), or null for a
- *  standalone metric. Based on the metric's group so vram/gpu_name join the GPU row. */
 export function blockGroupOf(id: MetricId): BlockGroup | null {
   const g = META[id].group;
   return isBlockGroup(g) ? g : null;
 }
 
-/** All metric ids that belong to a block group (its expandable sub-metrics). */
-export const blockMetricIds = (group: BlockGroup): MetricId[] =>
-  METRICS.filter((m) => m.group === group).map((m) => m.id);
-
-export const requiredMetricForBlock = (group: BlockGroup): MetricId => group;
+export const blockMetricIds = (group: BlockGroup): readonly MetricId[] =>
+  BLOCK_METRIC_IDS[group];
 
 export const isRequiredBlockMetric = (id: MetricId): boolean =>
   isBlockGroup(id);
@@ -500,14 +488,11 @@ export const isRequiredBlockMetric = (id: MetricId): boolean =>
 export const hasBlock = (items: HudItem[], group: BlockGroup): boolean =>
   items.some((it) => it.kind === "metric" && blockGroupOf(it.id) === group);
 
-/** Add a metric. A block-group metric is inserted right after the last member of
- *  its block so the group stays contiguous (== how the merged row renders); other
- *  metrics append. No-op if already present. */
 export function addMetricItem(items: HudItem[], id: MetricId): HudItem[] {
   if (hasMetric(items, id)) return items;
   const group = blockGroupOf(id);
   if (group) {
-    const parent = requiredMetricForBlock(group);
+    const parent: MetricId = group;
     const first = items.findIndex(
       (it) => it.kind === "metric" && blockGroupOf(it.id) === group,
     );
@@ -531,7 +516,6 @@ export function addMetricItem(items: HudItem[], id: MetricId): HudItem[] {
   return [...items, { kind: "metric", id }];
 }
 
-/** Add a metric if absent, remove it if present. */
 export function toggleMetricItem(items: HudItem[], id: MetricId): HudItem[] {
   if (hasMetric(items, id) && isRequiredBlockMetric(id)) return items;
   return hasMetric(items, id)
@@ -548,7 +532,6 @@ export const addSeparator = (items: HudItem[], id: string): HudItem[] =>
 export const addSpacer = (items: HudItem[], id: string, size: SpacerSize = "small"): HudItem[] =>
   [...items, { kind: "spacer", id, size }];
 
-/** Set the size of the spacer item at flat `index` (no-op if it isn't a spacer). */
 export function setSpacerSizeAt(items: HudItem[], index: number, size: SpacerSize): HudItem[] {
   const it = items[index];
   if (!it || it.kind !== "spacer") return items;
@@ -556,8 +539,6 @@ export function setSpacerSizeAt(items: HudItem[], index: number, size: SpacerSiz
   next[index] = { ...it, size };
   return next;
 }
-
-// ---- Elements list as blocks (GPU/CPU collapse to one expandable row each) ----
 
 export type ListRow =
   | { kind: "block"; group: BlockGroup; ids: MetricId[]; start: number; len: number }
@@ -590,22 +571,20 @@ export function listRows(items: HudItem[]): ListRow[] {
   return rows;
 }
 
-/** The item span [start, start+len) each list row occupies in the flat items. */
 function rowSpans(items: HudItem[]): { start: number; len: number }[] {
   return listRows(items).map((r) =>
     r.kind === "block" ? { start: r.start, len: r.len } : { start: r.index, len: 1 },
   );
 }
 
-/** Move a whole list row (block or single) by `delta` (+1 down / -1 up), clamped. */
-export function moveRow(items: HudItem[], rowIndex: number, delta: number): HudItem[] {
+export function moveRow(items: HudItem[], rowIndex: number, delta: -1 | 1): HudItem[] {
   const spans = rowSpans(items);
   const a = rowIndex;
   const b = rowIndex + delta;
-  if (b < 0 || b >= spans.length || delta === 0) return items;
+  if (b < 0 || b >= spans.length) return items;
   const [lo, hi] = a < b ? [a, b] : [b, a];
   const first = spans[lo];
-  const second = spans[hi]; // adjacent rows → first.start+first.len === second.start
+  const second = spans[hi];
   return [
     ...items.slice(0, first.start),
     ...items.slice(second.start, second.start + second.len),
@@ -614,15 +593,12 @@ export function moveRow(items: HudItem[], rowIndex: number, delta: number): HudI
   ];
 }
 
-/** Remove a whole list row (all members of a block, or a single item). */
 export function removeRow(items: HudItem[], rowIndex: number): HudItem[] {
   const span = rowSpans(items)[rowIndex];
   if (!span) return items;
   return [...items.slice(0, span.start), ...items.slice(span.start + span.len)];
 }
 
-/** Set (or clear) the custom label on the metric with id `id`. No-op on a metric
- *  MangoHud can't relabel (only fps/cpu/gpu). Used by the block/line editor. */
 export function setMetricLabel(items: HudItem[], id: MetricId, label: string): HudItem[] {
   if (!canLabel(id)) return items;
   const trimmed = label.trim();
@@ -633,7 +609,6 @@ export function setMetricLabel(items: HudItem[], id: MetricId, label: string): H
   );
 }
 
-/** Set the text on a text item at flat `index`. */
 export function setTextAt(items: HudItem[], index: number, text: string): HudItem[] {
   const it = items[index];
   if (!it || it.kind !== "text") return items;

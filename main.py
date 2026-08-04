@@ -114,6 +114,7 @@ _RPC_CONTEXT_UNSET = object()
 _monotonic = time.monotonic
 _HUD_OBSERVATION_MAX_AGE_S = 3.0
 _MIN_HUD_REFRESH_S = 1.0
+_HUD_RELOAD_MAX_ATTEMPTS = 4
 
 # "custom" = our TDP owns the rails, vs a named platform_profile mode.
 _CUSTOM_MODE = "custom"
@@ -495,6 +496,7 @@ class Plugin:
         self._tdp_observation = TdpObservation(
             readable=bool(getattr(self._tdp_backend, "readback", True)),
         )
+        self._tdp_observation_at = float("-inf")
         self._tdp_reconcile_memory = ReconcileMemory()
         self._tdp_status = (
             "settling" if self._tdp_backend.supported else "unsupported"
@@ -655,8 +657,8 @@ class Plugin:
                 await self._offload_call(self._restore_power_handoff)
             )
             if hasattr(self, "_tdp_backend"):
-                self._tdp_observation = await self._offload_call(
-                    self._observe_tdp_sync
+                self._remember_tdp_observation(
+                    await self._offload_call(self._observe_tdp_sync)
                 )
                 self._tdp_targets = None
                 self._tdp_status = "unverifiable" if released else "rejected"
@@ -1305,8 +1307,8 @@ class Plugin:
             released = bool(
                 await self._offload_call(self._restore_power_handoff)
             )
-            self._tdp_observation = await self._offload_call(
-                self._observe_tdp_sync
+            self._remember_tdp_observation(
+                await self._offload_call(self._observe_tdp_sync)
             )
             self._tdp_targets = None
             self._tdp_status = "unverifiable" if released else "rejected"
@@ -2510,6 +2512,11 @@ class Plugin:
             }
         return TdpObservation(readable=True, surfaces=surfaces)
 
+    def _remember_tdp_observation(self, observation):
+        self._tdp_observation = observation
+        self._tdp_observation_at = _monotonic()
+        return observation
+
     def _apply_tdp_targets(self, target, on_ac):
         apply_targets = getattr(self._tdp_backend, "apply_targets", None)
         if callable(apply_targets):
@@ -2570,7 +2577,7 @@ class Plugin:
                 self._tdp_status = "rejected"
                 self._tdp_reason = "firmware_mode_rejected"
                 self._tdp_targets = None
-                self._tdp_observation = self._observe_tdp_sync()
+                self._remember_tdp_observation(self._observe_tdp_sync())
                 result = TdpResult(
                     logical_watts,
                     self._tdp_backend.read_applied(),
@@ -2588,7 +2595,7 @@ class Plugin:
             self._tdp_status = "unverifiable"
             self._tdp_reason = "firmware_mode"
             self._tdp_targets = None
-            self._tdp_observation = self._observe_tdp_sync()
+            self._remember_tdp_observation(self._observe_tdp_sync())
             result = TdpResult(
                 logical_watts,
                 self._tdp_backend.read_applied(),
@@ -2662,7 +2669,7 @@ class Plugin:
             ),
         )
         self._tdp_targets = targets
-        self._tdp_observation = after
+        self._remember_tdp_observation(after)
         self._tdp_reconcile_memory = outcome.memory
         self._tdp_status = outcome.status
         self._tdp_reason = outcome.reason
@@ -2778,7 +2785,7 @@ class Plugin:
         if command.generation != self._tdp_generation:
             return
         self._tdp_targets = targets
-        self._tdp_observation = observation
+        self._remember_tdp_observation(observation)
         self._tdp_reconcile_memory = outcome.memory
         self._tdp_status = outcome.status
         self._tdp_reason = outcome.reason
@@ -3330,8 +3337,14 @@ class Plugin:
 
     # ---- HUD (MangoHud overlay) --------------------------------------------
     def _detect_hud(self) -> dict:
-        uid = self._hud_owner[0] if self._hud_owner is not None else None
-        sessions = mangohud_detect.detect_sessions(home=self._hud_home, uid=uid)
+        sessions = (
+            mangohud_detect.detect_sessions(
+                home=self._hud_home,
+                uid=self._hud_owner[0],
+            )
+            if self._hud_owner is not None
+            else ()
+        )
         supported = tuple(
             session
             for session in sessions
@@ -3350,7 +3363,6 @@ class Plugin:
             "running": bool(sessions),
             "supported": bool(supported) and not ambiguous,
             "presetsPath": presets_path,
-            "configFile": sessions[0].config_file if sessions else None,
             "sessions": supported,
             "ambiguous": ambiguous,
         }
@@ -3407,8 +3419,6 @@ class Plugin:
         else:
             apply_status = self._hud_apply_status or "pending"
         return {
-            "supported": cap["supported"],
-            "running": cap["running"],
             "capability": capability,
             "applyStatus": apply_status,
             "conflict": (
@@ -3422,8 +3432,6 @@ class Plugin:
             ),
             "model": model,
             "values": dict(self._pdc_preview_values),
-            "catalog": list(mangohud_config.METRIC_CATALOG),
-            "presets": {k: list(v) for k, v in mangohud_config.PRESETS.items()},
         }
 
     def _record_hud_conflict(self, path, conflict) -> None:
@@ -3445,12 +3453,17 @@ class Plugin:
         snapshot = tuple(snapshot)
         if reset_backoff:
             self._hud_reload_attempt = 0
+        elif self._hud_reload_attempt >= _HUD_RELOAD_MAX_ATTEMPTS:
+            self._hud_reload_pending = ()
+            self._hud_reload_retry_at = 0.0
+            return False
         result = reload_sessions(snapshot)
         pending = set(result.pending)
         self._hud_reload_pending = tuple(
             session
             for session in snapshot
             if (session.pid, session.starttime) in pending
+            and mangohud_detect.session_alive(session)
         )
         complete = (
             bool(snapshot)
@@ -3463,9 +3476,13 @@ class Plugin:
             return True
         if self._hud_reload_pending:
             delays = (1.0, 2.0, 4.0)
-            delay = delays[min(self._hud_reload_attempt, len(delays) - 1)]
             self._hud_reload_attempt += 1
-            self._hud_reload_retry_at = _monotonic() + delay
+            if self._hud_reload_attempt >= _HUD_RELOAD_MAX_ATTEMPTS:
+                self._hud_reload_pending = ()
+                self._hud_reload_retry_at = 0.0
+            else:
+                delay = delays[min(self._hud_reload_attempt - 1, len(delays) - 1)]
+                self._hud_reload_retry_at = _monotonic() + delay
         return False
 
     def _reload_mangoapp(self, sessions=None) -> bool:
@@ -3498,7 +3515,12 @@ class Plugin:
             self._pdc_written = {}
             self._pdc_preview_values = {}
             try:
-                cleared = clear_presets(managed_path, raise_conflict=True)
+                cleared = clear_presets(
+                    managed_path,
+                    owner=self._hud_owner,
+                    trusted_root=self._hud_home,
+                    raise_conflict=True,
+                )
             except mangohud_ownership.HudOwnershipConflict as conflict:
                 self._record_hud_conflict(managed_path, conflict)
                 return
@@ -3546,6 +3568,8 @@ class Plugin:
             try:
                 cleared = clear_presets(
                     self._hud_managed_path,
+                    owner=self._hud_owner,
+                    trusted_root=self._hud_home,
                     raise_conflict=True,
                 )
             except mangohud_ownership.HudOwnershipConflict as conflict:
@@ -3565,14 +3589,14 @@ class Plugin:
         self._pdc_active_ids = mangohud_config.enabled_pdc_ids(model)
         values = self._pdc_values()
         self._pdc_preview_values = values
-        expected = mangohud_config.build_presets_conf(model, values)
         try:
-            on_disk = apply_hud(
+            apply_hud(
                 model,
                 cap["presetsPath"],
                 values,
                 owner=self._hud_owner,
                 replace_conflict=replace_conflict,
+                trusted_root=self._hud_home,
             )
         except mangohud_ownership.HudOwnershipConflict as conflict:
             self._record_hud_conflict(cap["presetsPath"], conflict)
@@ -3581,14 +3605,14 @@ class Plugin:
             self._pdc_written = {}
             self._hud_apply_status = "failed"
             return
-        if on_disk != expected:
-            self._pdc_written = {}
-            self._hud_apply_status = "failed"
-            return
         try:
             self._remember_hud_path(cap["presetsPath"])
         except OSError:
-            clear_presets(cap["presetsPath"])
+            clear_presets(
+                cap["presetsPath"],
+                owner=self._hud_owner,
+                trusted_root=self._hud_home,
+            )
             self._pdc_written = {}
             self._hud_apply_status = "failed"
             return
@@ -3654,14 +3678,18 @@ class Plugin:
                 ),
             )
         if "pdc_tdp" in active and self._tdp_backend.supported:
-            src["tdp"] = observed(
-                lambda: (
-                    self._tdp_observation
-                    if getattr(self._tdp_backend, "blocking", False)
-                    else self._observe_tdp_sync()
-                ),
-                lambda value: bool(value.readable),
-            )
+            if getattr(self._tdp_backend, "blocking", False):
+                observation = self._tdp_observation
+                src["tdp"] = TimedValue(
+                    observation,
+                    self._tdp_observation_at,
+                    bool(observation.readable),
+                )
+            else:
+                src["tdp"] = observed(
+                    self._observe_tdp_sync,
+                    lambda value: bool(value.readable),
+                )
         return src
 
     def _fresh_pdc_source(self, extras, key, fallback):
@@ -3700,7 +3728,8 @@ class Plugin:
                     if getattr(observation, "readable", False)
                     else {}
                 )
-                reading = primary.get("pl1")
+                primary_rail = getattr(self._tdp_backend, "primary_rail", "pl1")
+                reading = primary.get(primary_rail)
                 snap["applied"] = reading.applied_w if reading is not None else None
             if "pdc_auto_tdp" in active_ids:
                 snap["auto_tdp"] = self._tdp_profiles.auto_tdp(appid)
@@ -3811,11 +3840,12 @@ class Plugin:
         if model["enabled"]:
             self._pdc_preview_values = values
             try:
-                on_disk = apply_hud(
+                apply_hud(
                     model,
                     self._pdc_presets_path,
                     values,
                     owner=self._hud_owner,
+                    trusted_root=self._hud_home,
                 )
             except mangohud_ownership.HudOwnershipConflict as conflict:
                 self._record_hud_conflict(self._pdc_presets_path, conflict)
@@ -3823,10 +3853,6 @@ class Plugin:
             except OSError:
                 self._hud_apply_status = "failed"
                 raise
-            expected = mangohud_config.build_presets_conf(model, values)
-            if on_disk != expected:
-                self._hud_apply_status = "failed"
-                return
             if self._reload_mangoapp():
                 self._pdc_written = values
                 self._hud_last_publish_at = now
@@ -3909,7 +3935,20 @@ class Plugin:
 
     async def get_hud_state(self) -> dict:
         self._init()
-        return await self._hud_call(self._hud_state)
+        def refresh_pending_state():
+            model = self._hud.load()
+            if model["enabled"] and self._hud_apply_status in (
+                "pending",
+                "unavailable",
+                "ambiguous",
+            ):
+                cap = self._detect_hud()
+                if cap["supported"]:
+                    self._apply_hud(cap=cap, model=model)
+                return self._hud_state(cap=cap, model=model)
+            return self._hud_state(model=model)
+
+        return await self._hud_call(refresh_pending_state)
 
     def _apply_hud_state(self, model) -> dict:
         cap = self._detect_hud()
@@ -3955,7 +3994,10 @@ class Plugin:
             model = self._hud.load()
             model["enabled"] = False
             model = self._hud.save(model)
-            mangohud_ownership.relinquish_managed(path)
+            mangohud_ownership.relinquish_managed(
+                path,
+                trusted_root=self._hud_home,
+            )
             self._remember_hud_path(None)
             self._pdc_presets_path = None
             self._hud_sessions = ()
@@ -5319,7 +5361,9 @@ class Plugin:
         return b.read_applied()
 
     async def _read_tdp_observation(self):
-        return await self._offload_call(self._observe_tdp_sync)
+        return self._remember_tdp_observation(
+            await self._offload_call(self._observe_tdp_sync)
+        )
 
     async def get_tdp_state(self) -> dict:
         self._init()
@@ -5768,7 +5812,11 @@ class Plugin:
         try:
             cap = self._detect_hud()
             managed_path = self._hud_managed_path or cap["presetsPath"]
-            if clear_presets(managed_path):
+            if clear_presets(
+                managed_path,
+                owner=self._hud_owner,
+                trusted_root=self._hud_home,
+            ):
                 self._remember_hud_path(None)
                 if cap["supported"] and cap["running"]:
                     self._reload_mangoapp(cap["sessions"])

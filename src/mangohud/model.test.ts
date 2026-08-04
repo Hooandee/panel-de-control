@@ -310,6 +310,22 @@ describe("pdc (Panel de Control) metrics", () => {
     const rows = previewRows({ ...DEFAULT_MODEL, items: [{ kind: "metric", id: "pdc_model" }] });
     expect(rows[0]).toMatchObject({ kind: "line", label: "Equipo", value: "-" });
   });
+
+  it("uses the HUD locale for default pdc labels", () => {
+    const rows = previewRows({
+      ...DEFAULT_MODEL,
+      locale: "en",
+      items: [
+        { kind: "metric", id: "pdc_power" },
+        { kind: "metric", id: "pdc_model" },
+      ],
+    });
+
+    expect(rows).toEqual([
+      expect.objectContaining({ label: "Power" }),
+      expect.objectContaining({ label: "Device" }),
+    ]);
+  });
 });
 
 describe("spacer", () => {

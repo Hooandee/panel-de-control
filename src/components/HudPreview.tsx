@@ -5,6 +5,7 @@ import {
   HudModel,
   MetricId,
   SPACER_LINES,
+  hexToRgb,
   previewFontSizes,
   previewRows,
   previewWouldClip,
@@ -43,8 +44,8 @@ const HudPreviewComponent: FC<{
   const base = fonts.main;
   const lineH = base * 1.35;
   const sepColor = `#${model.colors.text}`;
-  const [br, bg, bb] = [model.colors.background.slice(0, 2), model.colors.background.slice(2, 4), model.colors.background.slice(4, 6)].map((h) => parseInt(h, 16));
-  const boxBg = `rgba(${br || 0},${bg || 0},${bb || 0},${model.background.alpha})`;
+  const background = hexToRgb(model.colors.background);
+  const boxBg = `rgba(${background.r},${background.g},${background.b},${model.background.alpha})`;
   const pad = model.noMargin ? 0 : model.compact ? 4 : 6;
   const rowGap = clampPx(Math.round(1 + model.cellpaddingY * base), 0, 9);
   const outlineWidth = model.textOutline

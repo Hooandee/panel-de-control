@@ -15,15 +15,11 @@ import { DEFAULT_MODEL, HudState } from "./model";
 import { useHud, useHudValues } from "./useHud";
 
 const state = (model = DEFAULT_MODEL): HudState => ({
-  supported: false,
-  running: false,
   capability: "inactive",
   applyStatus: model.enabled ? "pending" : "disabled",
   conflict: null,
   model,
   values: {},
-  catalog: [],
-  presets: {},
 });
 
 async function settle() {
@@ -98,7 +94,7 @@ describe("useHud coordination", () => {
     expect(setHudConfig).toHaveBeenLastCalledWith(latest);
   });
 
-  it("times out a stalled save and starts the latest queued model", async () => {
+  it("reports a stalled save without overlapping the underlying RPC", async () => {
     const stalled = deferred<HudState>();
     vi.mocked(setHudConfig).mockReturnValueOnce(stalled.promise);
     const { result } = renderHook(() => useHud());
@@ -120,9 +116,36 @@ describe("useHud coordination", () => {
       await Promise.resolve();
     });
 
+    expect(setHudConfig).toHaveBeenCalledTimes(1);
+    expect(result.current.saveStatus).toBe("error");
+    expect(result.current.state?.model).toEqual(latest);
+
+    stalled.resolve(state(first));
+    await settle();
+
     expect(setHudConfig).toHaveBeenCalledTimes(2);
     expect(setHudConfig).toHaveBeenLastCalledWith(latest);
-    expect(result.current.state?.model).toEqual(latest);
+  });
+
+  it("does not overlap polls after the visible timeout", async () => {
+    const stalled = deferred<HudState>();
+    vi.mocked(getHudState).mockReturnValue(stalled.promise);
+    renderHook(() => useHud());
+    await settle();
+
+    await act(async () => {
+      vi.advanceTimersByTime(12000);
+      await Promise.resolve();
+    });
+
+    expect(getHudState).toHaveBeenCalledTimes(1);
+
+    stalled.resolve(state());
+    await settle();
+    act(() => vi.advanceTimersByTime(4000));
+    await settle();
+
+    expect(getHudState).toHaveBeenCalledTimes(2);
   });
 
   it("ignores a stalled save that settles after its timeout", async () => {
@@ -177,6 +200,31 @@ describe("useHud coordination", () => {
     expect(result.current.reloadStatus).toBe("error");
   });
 
+  it("does not overlap manual commands after the visible timeout", async () => {
+    const stalled = deferred<HudState>();
+    vi.mocked(reloadHud).mockReturnValueOnce(stalled.promise);
+    const { result } = renderHook(() => useHud());
+    await settle();
+
+    act(() => result.current.reload());
+    await settle();
+    await act(async () => {
+      vi.advanceTimersByTime(4000);
+      await Promise.resolve();
+    });
+    act(() => result.current.reload());
+
+    expect(reloadHud).toHaveBeenCalledTimes(1);
+    expect(result.current.reloadStatus).toBe("error");
+
+    stalled.resolve(state());
+    await settle();
+    act(() => result.current.reload());
+    await settle();
+
+    expect(reloadHud).toHaveBeenCalledTimes(2);
+  });
+
   it("waits for the latest persistence before reloading MangoHud", async () => {
     const saveRequest = deferred<HudState>();
     vi.mocked(setHudConfig).mockReturnValueOnce(saveRequest.promise);
@@ -193,6 +241,38 @@ describe("useHud coordination", () => {
     expect(reloadHud).not.toHaveBeenCalled();
 
     saveRequest.resolve(state(latest));
+    await settle();
+
+    expect(reloadHud).toHaveBeenCalledTimes(1);
+  });
+
+  it("drains a queued save before acquiring the manual command slot", async () => {
+    const firstRequest = deferred<HudState>();
+    const latestRequest = deferred<HudState>();
+    vi.mocked(setHudConfig)
+      .mockReturnValueOnce(firstRequest.promise)
+      .mockReturnValueOnce(latestRequest.promise);
+    const { result } = renderHook(() => useHud());
+    await settle();
+
+    const first = { ...DEFAULT_MODEL, fontSize: 30 };
+    act(() => result.current.setModel(first));
+    act(() => vi.advanceTimersByTime(700));
+    await settle();
+    const latest = { ...first, offsetX: 18 };
+    act(() => result.current.setModel(latest));
+    act(() => vi.advanceTimersByTime(700));
+    await settle();
+    act(() => result.current.reload());
+
+    firstRequest.resolve(state(first));
+    await settle();
+
+    expect(setHudConfig).toHaveBeenCalledTimes(2);
+    expect(setHudConfig).toHaveBeenLastCalledWith(latest);
+    expect(reloadHud).not.toHaveBeenCalled();
+
+    latestRequest.resolve(state(latest));
     await settle();
 
     expect(reloadHud).toHaveBeenCalledTimes(1);

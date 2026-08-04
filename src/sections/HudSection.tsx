@@ -48,15 +48,14 @@ const rowKey = (row: ListRow): string => {
   }
 };
 
-const Pill: FC<{ label: string; active: boolean; onClick: () => void }> = ({ label, active, onClick }) => (
+const Pill: FC<{ label: string; onClick: () => void }> = ({ label, onClick }) => (
   <QamAction
     onPress={onClick}
-    pressed={active}
     style={{
       padding: "5px 10px", borderRadius: 999, fontSize: theme.font.caption, cursor: "pointer",
-      background: active ? theme.color.accent : "transparent",
-      color: active ? theme.color.onAccent : theme.color.textPrimary,
-      boxShadow: active ? "none" : `inset 0 0 0 1px ${theme.color.hairline}`,
+      background: "transparent",
+      color: theme.color.textPrimary,
+      boxShadow: `inset 0 0 0 1px ${theme.color.hairline}`,
       whiteSpace: "nowrap",
     }}
   >
@@ -239,7 +238,7 @@ export const HudSection: FC = () => {
 
   const m = state.model;
   const uniformTextSize = m.noSmallFont && m.fontSizeSecondary === m.fontSize;
-  const presets = Object.keys(state.presets).length ? state.presets : PRESETS;
+  const presets = PRESETS;
   const patch = (p: Partial<HudModel>) => setModel({ ...m, ...p });
   const patchItems = (items: HudItem[]) => patch({ items });
   const setUniformTextSize = (uniform: boolean) => patch({
@@ -258,7 +257,7 @@ export const HudSection: FC = () => {
       return hasBlock(m.items, groupKey) ? [] : [{ kind: "block", group: groupKey }];
     }
     return ids
-      .filter((id) => state.catalog.includes(id) && !hasMetric(m.items, id))
+      .filter((id) => !hasMetric(m.items, id))
       .map((id) => ({ kind: "metric", id }));
   };
 
@@ -382,7 +381,6 @@ export const HudSection: FC = () => {
         </div>
       );
     }
-    // standalone metric line
     const id = r.id;
     const colorKey: ColorKey | null = id === "fps" ? "fps" : id === "frametime" ? "frametime" : null;
     return (
@@ -589,8 +587,8 @@ export const HudSection: FC = () => {
             const isSel = selected === key;
             const isBlock = r.kind === "block";
             const editable = hasLocalEditor(r);
-            const active = isBlock ? blockMetricIds(r.group).filter((id) => hasMetric(m.items, id)).length : 0;
-            const total = isBlock ? blockMetricIds(r.group).length : 0;
+            const blockIds = isBlock ? blockMetricIds(r.group) : [];
+            const active = blockIds.filter((id) => hasMetric(m.items, id)).length;
             const title = (
               <>
                 {editable && (
@@ -608,7 +606,7 @@ export const HudSection: FC = () => {
                   {rowTitle(r)}
                 </span>
                 {isBlock && (
-                  <span style={{ flexShrink: 0, fontSize: theme.font.caption, color: theme.color.textMuted }}>{active}/{total}</span>
+                  <span style={{ flexShrink: 0, fontSize: theme.font.caption, color: theme.color.textMuted }}>{active}/{blockIds.length}</span>
                 )}
               </>
             );
@@ -679,7 +677,6 @@ export const HudSection: FC = () => {
                         <Pill
                           key={e.kind === "block" ? `b:${e.group}` : e.id}
                           label={e.kind === "block" ? t(`hud.group.${e.group}`) : t(`hud.metric.${e.id}`)}
-                          active={false}
                           onClick={() => add(e)}
                         />
                       ))}

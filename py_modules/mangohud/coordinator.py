@@ -17,7 +17,6 @@ class _Work:
     generation: int
     fn: object
     future: concurrent.futures.Future
-    replaceable: bool
 
 
 def _failed(error):
@@ -53,7 +52,7 @@ class HudCoordinator:
             if generation != self._generation:
                 return _failed(HudStale("HUD generation is stale"))
             future = concurrent.futures.Future()
-            work = _Work(generation, fn, future, replaceable)
+            work = _Work(generation, fn, future)
             if replaceable and self._latest is not None:
                 previous = self._latest
                 previous.future.cancel()

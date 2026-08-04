@@ -22,14 +22,12 @@ el subsistema HUD no debe realizar trabajo periódico.
 MangoHud no admite tamaño por elemento. La interfaz presenta su jerarquía real en un único bloque:
 
 1. **Tamaño general**: escala todo el HUD.
-2. **Afinar por tipo**:
-   - Métricas principales.
-   - Detalles y unidades.
-   - Texto libre y metadatos.
+2. **Todo al mismo tamaño**: desactiva la fuente pequeña nativa y alinea detalles y unidades con
+   las métricas principales.
 
-El modelo conserva compatibilidad con `font_scale`, `font_size` y `font_size_text`, y añade
-`font_size_secondary`. La previsualización y la serialización usan las cuatro propiedades con el
-mismo significado que MangoHud. Ningún editor de elemento promete un tamaño individual.
+El modelo conserva compatibilidad interna con `font_scale`, `font_size`, `font_size_secondary` y
+`font_size_text`, pero no presenta esos parámetros como tamaños independientes que MangoHud no
+puede garantizar. Ningún editor de elemento promete un tamaño individual.
 
 ## Elementos dependientes
 
@@ -47,8 +45,7 @@ bloque.
 
 - Cada pista de slider tiene 8 px de espacio lateral y `box-sizing: border-box`.
 - Los controles mantienen una sola columna y no dependen de escalado CSS para caber.
-- «Afinar por tipo» permanece cerrado por defecto para reducir carga visual.
-- Los textos diferencian tamaño global, categoría de texto y limitaciones por elemento.
+- Los textos distinguen la escala global de la opción que elimina la jerarquía de fuente pequeña.
 
 ## Aplicación y rendimiento
 

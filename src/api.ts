@@ -769,7 +769,6 @@ export type { HudModel, HudState } from "./mangohud/model";
 
 export const getHudState = callable<[], HudState>("get_hud_state");
 export const setHudConfig = callable<[model: HudModel], HudState>("set_hud_config");
-export const setHudEnabled = callable<[enabled: boolean], HudState>("set_hud_enabled");
 export const resetHud = callable<[], HudState>("reset_hud");
 export const reloadHud = callable<[], HudState>("reload_hud");
 export const resolveHudConflict =

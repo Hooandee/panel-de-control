@@ -112,7 +112,11 @@ export function useHud(): HudController {
   const queuedPersistRef = useRef<{ model: HudModel; revision: number } | null>(null);
   const drainWaitersRef = useRef<Array<() => void>>([]);
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveFeedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reloadFeedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pollingRef = useRef(false);
+  const commandPendingRef = useRef(false);
+  const commandInFlightRef = useRef(false);
   const controlSignatureRef = useRef<string | null>(null);
 
   const accept = (remote: HudState) => {
@@ -132,12 +136,31 @@ export function useHud(): HudController {
     debounceTimer.current = null;
   };
 
-  const scheduleFeedbackReset = () => {
-    if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
-    feedbackTimer.current = setTimeout(() => {
+  const clearSaveFeedback = () => {
+    if (!saveFeedbackTimer.current) return;
+    clearTimeout(saveFeedbackTimer.current);
+    saveFeedbackTimer.current = null;
+  };
+
+  const clearReloadFeedback = () => {
+    if (!reloadFeedbackTimer.current) return;
+    clearTimeout(reloadFeedbackTimer.current);
+    reloadFeedbackTimer.current = null;
+  };
+
+  const scheduleSaveFeedbackReset = () => {
+    clearSaveFeedback();
+    saveFeedbackTimer.current = setTimeout(() => {
+      if (!mounted.current) return;
+      setSaveStatus("idle");
+    }, FEEDBACK_MS);
+  };
+
+  const scheduleReloadFeedbackReset = () => {
+    clearReloadFeedback();
+    reloadFeedbackTimer.current = setTimeout(() => {
       if (!mounted.current) return;
       setReloadStatus("idle");
-      setSaveStatus("idle");
     }, FEEDBACK_MS);
   };
 
@@ -154,8 +177,45 @@ export function useHud(): HudController {
     waiters.forEach((resolve) => resolve());
   };
 
+  const runCommand = (
+    requestFactory: () => Promise<HudState>,
+    revision: number,
+    onSuccess: (remote: HudState) => void,
+    onError: () => void,
+  ) => {
+    commandPendingRef.current = true;
+    pendingRef.current += 1;
+    const release = () => {
+      pendingRef.current = Math.max(0, pendingRef.current - 1);
+      commandPendingRef.current = false;
+      commandInFlightRef.current = false;
+      const queued = queuedPersistRef.current;
+      queuedPersistRef.current = null;
+      if (queued) persist(queued.model, queued.revision);
+    };
+    void waitForPersistDrain()
+      .then(() => {
+        commandInFlightRef.current = true;
+        const request = requestFactory();
+        void withHudTimeout(request)
+          .then((remote) => {
+            if (!mounted.current || revision !== revisionRef.current) return;
+            onSuccess(remote);
+          })
+          .catch(() => {
+            if (!mounted.current || revision !== revisionRef.current) return;
+            onError();
+          });
+        void request.catch(() => {}).finally(release);
+      })
+      .catch(() => {
+        if (mounted.current && revision === revisionRef.current) onError();
+        release();
+      });
+  };
+
   const persist = (model: HudModel, revision: number) => {
-    if (persistingRef.current) {
+    if (persistingRef.current || commandInFlightRef.current) {
       queuedPersistRef.current = { model, revision };
       if (mounted.current) setSaveStatus("saving");
       return;
@@ -163,18 +223,24 @@ export function useHud(): HudController {
 
     persistingRef.current = true;
     pendingRef.current += 1;
-    if (mounted.current) setSaveStatus("saving");
-    void withHudTimeout(setHudConfig(model))
+    if (mounted.current) {
+      clearSaveFeedback();
+      setSaveStatus("saving");
+    }
+    const request = setHudConfig(model);
+    void withHudTimeout(request)
       .then((remote) => {
         if (!mounted.current || revision !== revisionRef.current) return;
         accept(remote);
         setSaveStatus(isApplyError(remote.applyStatus) ? "error" : "saved");
-        if (!isApplyError(remote.applyStatus)) scheduleFeedbackReset();
+        if (!isApplyError(remote.applyStatus)) scheduleSaveFeedbackReset();
       })
       .catch(() => {
-        if (!mounted.current || revision !== revisionRef.current) return;
+        if (!mounted.current) return;
         setSaveStatus("error");
-      })
+      });
+    void request
+      .catch(() => {})
       .finally(() => {
         pendingRef.current = Math.max(0, pendingRef.current - 1);
         persistingRef.current = false;
@@ -190,9 +256,11 @@ export function useHud(): HudController {
 
   useEffect(() => {
     const tick = () => {
-      if (dirtyRef.current || pendingRef.current > 0) return;
+      if (dirtyRef.current || pendingRef.current > 0 || pollingRef.current) return;
       const revision = revisionRef.current;
-      withHudTimeout(getHudState())
+      pollingRef.current = true;
+      const request = getHudState();
+      void withHudTimeout(request)
         .then((remote) => {
           if (
             mounted.current
@@ -204,13 +272,19 @@ export function useHud(): HudController {
           }
         })
         .catch(() => {});
+      void request
+        .catch(() => {})
+        .finally(() => {
+          pollingRef.current = false;
+        });
     };
 
     tick();
     const poll = setInterval(tick, POLL_MS);
     return () => {
       clearInterval(poll);
-      if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
+      clearSaveFeedback();
+      clearReloadFeedback();
       if (debounceTimer.current && modelRef.current) {
         clearTimeout(debounceTimer.current);
         debounceTimer.current = null;
@@ -231,6 +305,7 @@ export function useHud(): HudController {
     dirtyRef.current = true;
     revisionRef.current += 1;
     setState(optimistic);
+    clearSaveFeedback();
     setSaveStatus("idle");
     clearDebounce();
     debounceTimer.current = setTimeout(() => {
@@ -258,6 +333,7 @@ export function useHud(): HudController {
   };
 
   const reload = () => {
+    if (commandPendingRef.current || commandInFlightRef.current) return;
     const latest = modelRef.current;
     if (!latest) return;
     const hadUnsavedModel = dirtyRef.current;
@@ -266,14 +342,13 @@ export function useHud(): HudController {
     const revision = revisionRef.current + 1;
     revisionRef.current = revision;
     if (hadUnsavedModel) persist(latest, revision);
-    pendingRef.current += 1;
+    clearReloadFeedback();
     setReloadStatus("busy");
-    if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
 
-    void waitForPersistDrain()
-      .then(() => withHudTimeout(reloadHud()))
-      .then((remote) => {
-        if (!mounted.current || revision !== revisionRef.current) return;
+    runCommand(
+      reloadHud,
+      revision,
+      (remote) => {
         accept(remote);
         if (
           isApplyError(remote.applyStatus)
@@ -287,44 +362,36 @@ export function useHud(): HudController {
           setReloadStatus("pending");
         } else {
           setReloadStatus("ok");
-          scheduleFeedbackReset();
+          scheduleReloadFeedbackReset();
         }
-      })
-      .catch(() => {
-        if (!mounted.current || revision !== revisionRef.current) return;
-        setReloadStatus("error");
-      })
-      .finally(() => {
-        pendingRef.current = Math.max(0, pendingRef.current - 1);
-      });
+      },
+      () => setReloadStatus("error"),
+    );
   };
 
   const reset = () => {
+    if (commandPendingRef.current || commandInFlightRef.current) return;
     clearDebounce();
     dirtyRef.current = false;
     const revision = revisionRef.current + 1;
     revisionRef.current = revision;
     queuedPersistRef.current = null;
-    pendingRef.current += 1;
+    clearSaveFeedback();
     setSaveStatus("saving");
-    void waitForPersistDrain()
-      .then(() => withHudTimeout(resetHud()))
-      .then((remote) => {
-        if (!mounted.current || revision !== revisionRef.current) return;
+    runCommand(
+      resetHud,
+      revision,
+      (remote) => {
         accept(remote);
         setSaveStatus(isApplyError(remote.applyStatus) ? "error" : "saved");
-        if (!isApplyError(remote.applyStatus)) scheduleFeedbackReset();
-      })
-      .catch(() => {
-        if (!mounted.current || revision !== revisionRef.current) return;
-        setSaveStatus("error");
-      })
-      .finally(() => {
-        pendingRef.current = Math.max(0, pendingRef.current - 1);
-      });
+        if (!isApplyError(remote.applyStatus)) scheduleSaveFeedbackReset();
+      },
+      () => setSaveStatus("error"),
+    );
   };
 
   const resolveConflict = (action: "keep_external" | "use_pdc") => {
+    if (commandPendingRef.current || commandInFlightRef.current) return;
     const latest = modelRef.current;
     if (!latest) return;
     const hadUnsavedModel = dirtyRef.current;
@@ -333,24 +400,19 @@ export function useHud(): HudController {
     const revision = revisionRef.current + 1;
     revisionRef.current = revision;
     if (hadUnsavedModel) persist(latest, revision);
-    pendingRef.current += 1;
+    clearSaveFeedback();
     setSaveStatus("saving");
 
-    void waitForPersistDrain()
-      .then(() => withHudTimeout(resolveHudConflict(action)))
-      .then((remote) => {
-        if (!mounted.current || revision !== revisionRef.current) return;
+    runCommand(
+      () => resolveHudConflict(action),
+      revision,
+      (remote) => {
         accept(remote);
         setSaveStatus(isApplyError(remote.applyStatus) ? "error" : "saved");
-        if (!isApplyError(remote.applyStatus)) scheduleFeedbackReset();
-      })
-      .catch(() => {
-        if (!mounted.current || revision !== revisionRef.current) return;
-        setSaveStatus("error");
-      })
-      .finally(() => {
-        pendingRef.current = Math.max(0, pendingRef.current - 1);
-      });
+        if (!isApplyError(remote.applyStatus)) scheduleSaveFeedbackReset();
+      },
+      () => setSaveStatus("error"),
+    );
   };
 
   return {

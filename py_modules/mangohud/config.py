@@ -5,14 +5,12 @@ import math
 # on-screen order (MangoHud renders in config order); the pill catalog uses this
 # order too, grouped for the UI.
 _DIRECTIVE = {
-    # FPS
     "fps": "fps",
     "fps_metrics": "fps_metrics",
     "frametime": "frametime",
     "frame_count": "frame_count",
     "show_fps_limit": "show_fps_limit",
     "time": "time",
-    # GPU
     "gpu": "gpu_stats",
     "gpu_temp": "gpu_temp",
     "gpu_junction_temp": "gpu_junction_temp",
@@ -26,25 +24,21 @@ _DIRECTIVE = {
     "vram": "vram",
     "proc_vram": "proc_vram",
     "gpu_name": "gpu_name",
-    # CPU
     "cpu": "cpu_stats",
     "cpu_temp": "cpu_temp",
     "cpu_clock": "cpu_mhz",
     "cpu_power": "cpu_power",
     "cpu_efficiency": "cpu_efficiency",
     "cores": "core_load",
-    # Memory
     "ram": "ram",
     "procmem": "procmem",
     "swap": "swap",
     "io_read": "io_read",
     "io_write": "io_write",
-    # Battery
     "battery": "battery",
     "battery_watt": "battery_watt",
     "battery_time": "battery_time",
     "device_battery": "device_battery",
-    # System
     "resolution": "resolution",
     "refresh_rate": "refresh_rate",
     "arch": "arch",
@@ -181,6 +175,8 @@ _DEFAULT_COLORS = {
 _COLOR_KEYS = frozenset(_DEFAULT_COLORS)
 
 _DEFAULT_METRICS = ["fps", "gpu", "cpu", "ram", "battery"]
+_MAX_ITEMS = 128
+_MAX_ITEM_ID_CHARS = 64
 _MAX_TEXT_CHARS = 160
 _BLOCK_MEMBERS = {
     "gpu": frozenset((
@@ -211,8 +207,6 @@ def _single_line(value):
 DEFAULT_MODEL = {
     "enabled": False,
     "locale": "es",
-    # Ordered list of what shows, in screen order. Each item is a metric, a custom
-    # text pill, or a separator — so text/dividers can be interleaved and reordered.
     "items": _metric_items(_DEFAULT_METRICS),
     "position": "top-left",
     # MangoHud exposes global font categories, not per-element sizes.
@@ -226,13 +220,11 @@ DEFAULT_MODEL = {
     "textOutline": True,
     "textOutlineThickness": 1.0,
     "alpha": 1.0,
-    # Vertical padding between rows; the MangoHud default that gives our tight look.
     "cellpaddingY": -0.085,
     "noMargin": False,
     "offsetX": 0,
     "offsetY": 0,
     "fontScale": 1.0,
-    "separatorColor": None,
     "colors": dict(_DEFAULT_COLORS),
     "background": {"alpha": 0.5, "roundCorners": True},
 }
@@ -261,12 +253,30 @@ def _clean_hex(value):
     return hexval if _is_hex6(hexval) else None
 
 
+def _coerce_bool(value, default):
+    return value if isinstance(value, bool) else default
+
+
+def _coerce_item_id(kind, value, index, seen):
+    candidate = value.strip()[:_MAX_ITEM_ID_CHARS] if isinstance(value, str) else ""
+    base = candidate or f"{kind}-{index + 1}"
+    candidate = base
+    suffix = 2
+    while (kind, candidate) in seen:
+        tail = f"-{suffix}"
+        candidate = f"{base[:_MAX_ITEM_ID_CHARS - len(tail)]}{tail}"
+        suffix += 1
+    seen.add((kind, candidate))
+    return candidate
+
+
 def _coerce_items(raw):
     if not isinstance(raw, list):
         return _metric_items(_DEFAULT_METRICS)
     out = []
     seen = set()
-    for item in raw:
+    custom_ids = set()
+    for index, item in enumerate(raw[:_MAX_ITEMS - len(_BLOCK_MEMBERS)]):
         if not isinstance(item, dict):
             continue
         kind = item.get("kind")
@@ -284,15 +294,21 @@ def _coerce_items(raw):
         elif kind == "text" and isinstance(item.get("text"), str):
             out.append({
                 "kind": "text",
-                "id": str(item.get("id", "")),
+                "id": _coerce_item_id(kind, item.get("id"), index, custom_ids),
                 "text": _single_line(item["text"]),
             })
         elif kind == "separator":
-            out.append({"kind": "separator", "id": str(item.get("id", ""))})
+            out.append({
+                "kind": "separator",
+                "id": _coerce_item_id(kind, item.get("id"), index, custom_ids),
+            })
         elif kind == "spacer":
             size = item.get("size")
-            out.append({"kind": "spacer", "id": str(item.get("id", "")),
-                        "size": size if size in _SPACER_LINES else "small"})
+            out.append({
+                "kind": "spacer",
+                "id": _coerce_item_id(kind, item.get("id"), index, custom_ids),
+                "size": size if size in _SPACER_LINES else "small",
+            })
     for parent, members in _BLOCK_MEMBERS.items():
         metric_ids = {
             item["id"] for item in out
@@ -351,7 +367,10 @@ def _coerce_background(raw):
     )
     return {
         "alpha": alpha,
-        "roundCorners": bool(raw.get("roundCorners", default["roundCorners"])),
+        "roundCorners": _coerce_bool(
+            raw.get("roundCorners"),
+            default["roundCorners"],
+        ),
     }
 
 
@@ -372,7 +391,7 @@ def coerce_model(raw):
     else:
         font_size = _coerce_int(raw_font, default["fontSize"], 12, 64)
     return {
-        "enabled": bool(raw.get("enabled", default["enabled"])),
+        "enabled": _coerce_bool(raw.get("enabled"), default["enabled"]),
         "locale": locale if locale in _PDC_LABELS else default["locale"],
         "items": _coerce_items(raw.get("items")),
         "position": position if position in _POSITIONS else default["position"],
@@ -384,10 +403,16 @@ def coerce_model(raw):
             raw.get("fontSizeText"), default["fontSizeText"], 12, 64
         ),
         "layout": layout if layout in _LAYOUTS else default["layout"],
-        "compact": bool(raw.get("compact", default["compact"])),
-        "noSmallFont": bool(raw.get("noSmallFont", default["noSmallFont"])),
+        "compact": _coerce_bool(raw.get("compact"), default["compact"]),
+        "noSmallFont": _coerce_bool(
+            raw.get("noSmallFont"),
+            default["noSmallFont"],
+        ),
         "tempUnit": temp_unit if temp_unit in _TEMP_UNITS else default["tempUnit"],
-        "textOutline": bool(raw.get("textOutline", default["textOutline"])),
+        "textOutline": _coerce_bool(
+            raw.get("textOutline"),
+            default["textOutline"],
+        ),
         "textOutlineThickness": _coerce_float(
             raw.get("textOutlineThickness"),
             default["textOutlineThickness"],
@@ -398,13 +423,12 @@ def coerce_model(raw):
         "cellpaddingY": _coerce_float(
             raw.get("cellpaddingY"), default["cellpaddingY"], -0.3, 0.5
         ),
-        "noMargin": bool(raw.get("noMargin", default["noMargin"])),
+        "noMargin": _coerce_bool(raw.get("noMargin"), default["noMargin"]),
         "offsetX": _coerce_int(raw.get("offsetX"), default["offsetX"], -2000, 2000),
         "offsetY": _coerce_int(raw.get("offsetY"), default["offsetY"], -2000, 2000),
         "fontScale": _coerce_float(
             raw.get("fontScale"), default["fontScale"], 0.5, 2.0
         ),
-        "separatorColor": _clean_hex(raw.get("separatorColor")),
         "colors": _coerce_colors(raw.get("colors")),
         "background": _coerce_background(raw.get("background")),
     }
@@ -434,7 +458,6 @@ def _style_lines(model):
         f"background_alpha={model['background']['alpha']}",
         f"round_corners={_ROUND_RADIUS if model['background']['roundCorners'] else 0}",
     ]
-    # Position nudges — only when set (0 = MangoHud's default, no need to emit).
     if model["offsetX"]:
         lines.append(f"offset_x={model['offsetX']}")
     if model["offsetY"]:
@@ -445,8 +468,6 @@ def _style_lines(model):
         lines.append("temp_fahrenheit=1")
     lines.append(f"text_outline={1 if model['textOutline'] else 0}")
     lines.append(f"text_outline_thickness={model['textOutlineThickness']}")
-    if model["separatorColor"]:
-        lines.append(f"horizontal_separator_color={model['separatorColor']}")
     lines.extend(_color_lines(model))
     return lines
 
@@ -507,13 +528,10 @@ def to_directives(model, values=None):
     model = coerce_model(model)
     enabled = {it["id"] for it in model["items"] if it["kind"] == "metric"}
     lines = _style_lines(model)
-    # Turn OFF every real metric not chosen (order irrelevant — they don't show).
-    # pdc ids have no directive, so they're never part of this disable set.
     for mid in _DIRECTIVE:
         if mid in enabled or mid in _OMIT_WHEN_OFF:
             continue
         lines.append(f"{_DIRECTIVE[mid]}=0")
-    # Visible content, in item order.
     for item in model["items"]:
         if item["kind"] == "metric":
             lines.extend(_enable_lines(item, values, model["locale"]))

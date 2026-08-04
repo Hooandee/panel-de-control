@@ -4,9 +4,8 @@ import os
 import pytest
 
 from mangohud import apply
-from mangohud import detect as detection
 from mangohud import ownership
-from mangohud.apply import apply_hud, clear_presets, read_presets, reload_sessions
+from mangohud.apply import apply_hud, clear_presets, reload_sessions
 from mangohud.config import build_presets_conf, coerce_model
 from mangohud.detect import detect_sessions, presets_path, presets_supported, session_alive
 
@@ -77,6 +76,25 @@ def _fake_mangoapp(
         (process / "cwd").symlink_to(cwd)
 
 
+def _single_session(tmp_path):
+    proc = tmp_path / "proc"
+    home = tmp_path / "home"
+    cwd = tmp_path / "cwd"
+    proc.mkdir()
+    home.mkdir()
+    cwd.mkdir()
+    _fake_mangoapp(
+        proc,
+        20,
+        1000,
+        {"STEAM_MANGOAPP_PRESETS_SUPPORTED": "1"},
+        starttime=9001,
+        cwd=cwd,
+    )
+    session = detect_sessions(home=str(home), uid=1000, proc_root=str(proc))[0]
+    return proc, session
+
+
 def test_detect_sessions_returns_complete_ordered_process_identities(tmp_path):
     proc = tmp_path / "proc"
     home = tmp_path / "home"
@@ -116,13 +134,12 @@ def test_detect_sessions_returns_complete_ordered_process_identities(tmp_path):
             session.uid,
             session.cwd,
             session.presets_path,
-            session.config_file,
             session.presets_supported,
         )
         for session in sessions
     ] == [
-        (20, 9001, 1000, str(cwd), expected_path, str(home / "live.conf"), True),
-        (21, 9002, 1000, str(cwd), expected_path, str(home / "live.conf"), True),
+        (20, 9001, 1000, str(cwd), expected_path, True),
+        (21, 9002, 1000, str(cwd), expected_path, True),
     ]
 
 
@@ -150,34 +167,23 @@ def test_session_identity_rejects_pid_reuse(tmp_path):
     assert session_alive(session, proc_root=str(proc)) is False
 
 
-def test_detect_ignores_mangoapp_owned_by_another_user(tmp_path, monkeypatch):
+def test_detect_sessions_ignores_mangoapp_owned_by_another_user(tmp_path):
     proc = tmp_path / "proc"
+    home = tmp_path / "home"
+    cwd = tmp_path / "cwd"
     proc.mkdir()
+    home.mkdir()
+    cwd.mkdir()
     _fake_mangoapp(
         proc,
         10,
         1001,
         {"STEAM_MANGOAPP_PRESETS_SUPPORTED": "1", "HOME": "/home/other"},
+        starttime=9001,
+        cwd=cwd,
     )
-    monkeypatch.setattr(detection, "_PROC", str(proc))
 
-    cap = detection.detect(home="/home/deck", uid=1000)
-
-    assert cap["running"] is False
-    assert cap["presetsPath"] == "/home/deck/.config/MangoHud/presets.conf"
-
-
-def test_detect_uses_matching_user_and_trusted_home_fallback(tmp_path, monkeypatch):
-    proc = tmp_path / "proc"
-    proc.mkdir()
-    _fake_mangoapp(proc, 10, 1000, {"STEAM_MANGOAPP_PRESETS_SUPPORTED": "1"})
-    monkeypatch.setattr(detection, "_PROC", str(proc))
-
-    cap = detection.detect(home="/home/deck", uid=1000)
-
-    assert cap["running"] is True
-    assert cap["supported"] is True
-    assert cap["presetsPath"] == "/home/deck/.config/MangoHud/presets.conf"
+    assert detect_sessions(home=str(home), uid=1000, proc_root=str(proc)) == ()
 
 
 # ---- apply: write presets.conf + honest readback ----
@@ -187,7 +193,23 @@ def test_apply_writes_presets_conf_and_reads_it_back(tmp_path):
     model = coerce_model({"metrics": ["fps", "gpu"]})
     on_disk = apply_hud(model, path)
     assert on_disk == build_presets_conf(model)
-    assert read_presets(path) == on_disk  # readback = what actually landed
+    assert ownership.read_text(path) == on_disk
+
+
+def test_apply_rejects_a_readback_that_differs_from_requested_config(
+    tmp_path,
+    monkeypatch,
+):
+    path = str(tmp_path / "presets.conf")
+    model = coerce_model({"items": [{"kind": "metric", "id": "fps"}]})
+    monkeypatch.setattr(
+        ownership,
+        "write_managed",
+        lambda *_args, **_kwargs: ownership.FileMutation("different\n"),
+    )
+
+    with pytest.raises(OSError, match="does not match"):
+        apply_hud(model, path)
 
 
 def test_apply_new_path_uses_requested_user_ownership(tmp_path):
@@ -206,24 +228,26 @@ def test_apply_skips_atomic_replace_when_bytes_are_unchanged(tmp_path, monkeypat
     model = coerce_model({"items": [{"kind": "metric", "id": "fps"}]})
     apply_hud(model, path)
     writes = []
-    monkeypatch.setattr(apply, "_write_atomic", lambda *args: writes.append(args))
+    real_write = ownership._write_atomic
+
+    def record_write(candidate, *args, **kwargs):
+        writes.append(candidate)
+        return real_write(candidate, *args, **kwargs)
+
+    monkeypatch.setattr(ownership, "_write_atomic", record_write)
 
     on_disk = apply_hud(model, path)
 
     assert on_disk == build_presets_conf(model)
-    assert writes == []
-
-
-def test_read_presets_missing_returns_none(tmp_path):
-    assert read_presets(str(tmp_path / "nope.conf")) is None
+    assert path not in writes
 
 
 def test_clear_presets_removes_our_file_and_is_idempotent(tmp_path):
     path = str(tmp_path / "presets.conf")
     apply_hud(coerce_model({"metrics": ["fps"]}), path)
-    assert read_presets(path) is not None
+    assert ownership.read_text(path) is not None
     assert clear_presets(path) is True  # hands the overlay back to MangoHud's stock defaults
-    assert read_presets(path) is None
+    assert ownership.read_text(path) is None
     assert clear_presets(path) is True  # already gone — must not raise
 
 
@@ -237,13 +261,13 @@ def test_apply_restores_a_preexisting_user_presets_file_on_disable(tmp_path):
         path,
         replace_conflict=True,
     )
-    assert read_presets(path) != original
+    assert ownership.read_text(path) != original
 
     assert clear_presets(path) is True
-    assert read_presets(path) == original
+    assert ownership.read_text(path) == original
     assert not (tmp_path / "presets.conf.pdc-backup").exists()
     assert clear_presets(path) is True
-    assert read_presets(path) == original
+    assert ownership.read_text(path) == original
 
 
 def test_clear_presets_refuses_to_overwrite_an_external_edit(tmp_path):
@@ -261,8 +285,8 @@ def test_clear_presets_refuses_to_overwrite_an_external_edit(tmp_path):
     cleared = clear_presets(path)
 
     assert cleared is False
-    assert read_presets(path) == external_edit
-    assert read_presets(f"{path}.pdc-backup") == original
+    assert ownership.read_text(path) == external_edit
+    assert ownership.read_text(f"{path}.pdc-backup") == original
 
 
 def test_clear_presets_never_deletes_an_unmanaged_file(tmp_path):
@@ -271,7 +295,7 @@ def test_clear_presets_never_deletes_an_unmanaged_file(tmp_path):
     (tmp_path / "presets.conf").write_text(original)
 
     assert clear_presets(path) is True
-    assert read_presets(path) == original
+    assert ownership.read_text(path) == original
 
 
 def test_failed_restore_keeps_a_retryable_state(tmp_path, monkeypatch):
@@ -293,12 +317,12 @@ def test_failed_restore_keeps_a_retryable_state(tmp_path, monkeypatch):
     monkeypatch.setattr(apply.os, "replace", fail_backup_restore)
     assert clear_presets(path) is False
     assert (tmp_path / "presets.conf.pdc-backup").exists()
-    marker = json.loads(read_presets(str(tmp_path / "presets.conf.pdc-managed")))
+    marker = json.loads(ownership.read_text(str(tmp_path / "presets.conf.pdc-managed")))
     assert marker["phase"] == "restoring"
 
     monkeypatch.setattr(apply.os, "replace", real_replace)
     assert clear_presets(path) is True
-    assert read_presets(path) == original
+    assert ownership.read_text(path) == original
     assert not (tmp_path / "presets.conf.pdc-managed").exists()
 
 
@@ -320,14 +344,14 @@ def test_retry_after_restored_backup_only_removes_the_marker(tmp_path, monkeypat
 
     monkeypatch.setattr(apply.os, "remove", fail_marker_removal)
     assert clear_presets(path) is False
-    assert read_presets(path) == original
+    assert ownership.read_text(path) == original
     assert not (tmp_path / "presets.conf.pdc-backup").exists()
-    marker = json.loads(read_presets(f"{path}.pdc-managed"))
+    marker = json.loads(ownership.read_text(f"{path}.pdc-managed"))
     assert marker["phase"] == "restoring"
 
     monkeypatch.setattr(apply.os, "remove", real_remove)
     assert clear_presets(path) is True
-    assert read_presets(path) == original
+    assert ownership.read_text(path) == original
     assert not (tmp_path / "presets.conf.pdc-managed").exists()
 
 
@@ -338,8 +362,8 @@ def test_legacy_marker_does_not_authorize_clear_without_expected_content(tmp_pat
     (tmp_path / "presets.conf.pdc-managed").write_text("1\n")
 
     assert clear_presets(path) is False
-    assert read_presets(path) == content
-    assert read_presets(f"{path}.pdc-managed") == "1\n"
+    assert ownership.read_text(path) == content
+    assert ownership.read_text(f"{path}.pdc-managed") == "1\n"
 
 
 def test_unknown_marker_never_authorizes_deletion(tmp_path):
@@ -349,7 +373,7 @@ def test_unknown_marker_never_authorizes_deletion(tmp_path):
     (tmp_path / "presets.conf.pdc-managed").write_text("unexpected\n")
 
     assert clear_presets(path) is False
-    assert read_presets(path) == original
+    assert ownership.read_text(path) == original
 
 
 def test_failed_marker_write_leaves_the_original_without_an_orphan_backup(
@@ -373,7 +397,7 @@ def test_failed_marker_write_leaves_the_original_without_an_orphan_backup(
             path,
             replace_conflict=True,
         )
-    assert read_presets(path) == original
+    assert ownership.read_text(path) == original
     assert not (tmp_path / "presets.conf.pdc-backup").exists()
     assert not (tmp_path / "presets.conf.pdc-managed").exists()
 
@@ -392,27 +416,6 @@ def test_apply_bakes_pdc_values_into_presets(tmp_path):
     on_disk = apply_hud(model, path, {"pdc_tdp": "21W"})
     assert "custom_text=TDP 21W" in on_disk
     assert "exec=" not in on_disk
-
-
-def test_reload_uses_discovered_mangohud_control_tool(monkeypatch):
-    calls = []
-
-    def run(command, **kwargs):
-        calls.append((command, kwargs))
-        return type("Result", (), {"returncode": 0})()
-
-    tools = {
-        "mangohudctl": "/usr/local/bin/mangohudctl",
-        "mangoapp": "/usr/local/bin/mangoapp",
-    }
-    monkeypatch.setattr(apply.shutil, "which", lambda name, **kwargs: tools.get(name))
-    monkeypatch.setattr(apply, "_mangoapp_cwd", lambda: "/home/deck", raising=False)
-    monkeypatch.setattr(apply.subprocess, "run", run)
-
-    assert apply.reload_mangoapp() is True
-    assert calls[0][0] == ["/usr/local/bin/mangohudctl", "set", "reload_config", "true"]
-    assert calls[0][1]["timeout"] == 2
-    assert calls[0][1]["cwd"] == "/home/deck"
 
 
 def test_reload_requests_every_live_session_from_the_same_snapshot(tmp_path, monkeypatch):
@@ -503,59 +506,30 @@ def test_partial_reload_returns_only_failed_identity_as_pending(tmp_path, monkey
     assert result.pending == ((21, 9002),)
 
 
-def test_reload_failure_is_non_fatal(monkeypatch):
-    def run(command, **kwargs):
-        raise OSError("missing")
+def test_reload_without_control_tool_keeps_session_pending(tmp_path, monkeypatch):
+    proc, session = _single_session(tmp_path)
+    monkeypatch.setattr(apply.shutil, "which", lambda *_args, **_kwargs: None)
 
-    monkeypatch.setattr(apply.shutil, "which", lambda *a, **k: "/usr/bin/mangohudctl")
-    monkeypatch.setattr(apply.subprocess, "run", run)
+    result = reload_sessions((session,), proc_root=str(proc))
 
-    assert apply.reload_mangoapp() is False
-
-
-def test_reload_without_control_tool_is_non_fatal(monkeypatch):
-    monkeypatch.setattr(apply.shutil, "which", lambda *a, **k: None)
-
-    assert apply.reload_mangoapp() is False
+    assert result.requested == ()
+    assert result.pending == ((20, 9001),)
 
 
-def test_reload_without_mangoapp_cwd_does_not_create_the_wrong_ipc_queue(monkeypatch):
-    calls = []
-    monkeypatch.setattr(apply.shutil, "which", lambda *a, **k: "/usr/bin/mangohudctl")
-    monkeypatch.setattr(apply, "_mangoapp_cwd", lambda: None)
-    monkeypatch.setattr(apply.subprocess, "run", lambda *a, **k: calls.append((a, k)))
-
-    assert apply.reload_mangoapp() is False
-    assert calls == []
-
-
-def test_reload_cwd_ignores_a_mangoapp_owned_by_another_user(tmp_path, monkeypatch):
-    proc = tmp_path / "proc"
-    process = proc / "10"
-    process.mkdir(parents=True)
-    (process / "comm").write_text("mangoapp\n")
-    (process / "status").write_text("Name:\tmangoapp\nUid:\t1001\t1001\t1001\t1001\n")
-    (process / "cwd").symlink_to(tmp_path)
-    monkeypatch.setattr(apply, "_PROC", str(proc))
-
-    assert apply._mangoapp_cwd(uid=1000) is None
-    assert apply._mangoapp_cwd(uid=1001) == str(tmp_path)
-
-
-def test_reload_searches_service_path(monkeypatch):
-    monkeypatch.setenv("PATH", "/opt/mangohud/bin")
-
-    def which(name, *, path):
-        if "/opt/mangohud/bin" not in path:
-            return None
-        return f"/opt/mangohud/bin/{name}"
-
-    monkeypatch.setattr(apply.shutil, "which", which)
-    monkeypatch.setattr(apply, "_mangoapp_cwd", lambda: "/home/deck")
+def test_reload_process_failure_is_non_fatal(tmp_path, monkeypatch):
+    proc, session = _single_session(tmp_path)
+    monkeypatch.setattr(
+        apply.shutil,
+        "which",
+        lambda *_args, **_kwargs: "/usr/bin/mangohudctl",
+    )
     monkeypatch.setattr(
         apply.subprocess,
         "run",
-        lambda *a, **k: type("Result", (), {"returncode": 0})(),
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("missing")),
     )
 
-    assert apply.reload_mangoapp() is True
+    result = reload_sessions((session,), proc_root=str(proc))
+
+    assert result.requested == ()
+    assert result.pending == ((20, 9001),)

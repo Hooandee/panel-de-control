@@ -1,9 +1,11 @@
 import hashlib
 import json
 import os
+import sys
 
 import pytest
 
+import mangohud.ownership as ownership
 from mangohud.ownership import (
     HudOwnershipConflict,
     read_text,
@@ -53,6 +55,78 @@ def test_initial_write_requires_explicit_takeover_of_external_config(tmp_path):
     assert after.st_gid == before.st_gid
     assert read_text(f"{path}.pdc-backup") is None
     assert read_text(f"{path}.pdc-managed") is None
+
+
+def test_takeover_restores_external_file_metadata(tmp_path):
+    path = str(tmp_path / "presets.conf")
+    external = "external\n"
+    (tmp_path / "presets.conf").write_text(external)
+    os.chmod(path, 0o600)
+    timestamp_ns = 1_700_000_000_123_456_789
+    os.utime(path, ns=(timestamp_ns, timestamp_ns))
+
+    write_managed(path, "pdc\n", replace_conflict=True)
+    restore_managed(path)
+
+    restored = os.stat(path)
+    assert read_text(path) == external
+    assert restored.st_mode & 0o777 == 0o600
+    assert restored.st_mtime_ns == timestamp_ns
+
+
+def test_interrupted_takeover_publishes_backup_with_original_metadata(
+    tmp_path,
+    monkeypatch,
+):
+    path = str(tmp_path / "presets.conf")
+    backup = f"{path}.pdc-backup"
+    (tmp_path / "presets.conf").write_text("external\n")
+    os.chmod(path, 0o600)
+    real_write = ownership._write_atomic
+
+    def interrupt_managed_write(candidate, *args, **kwargs):
+        if candidate == path:
+            raise OSError("interrupted after backup publication")
+        return real_write(candidate, *args, **kwargs)
+
+    monkeypatch.setattr(
+        ownership,
+        "_write_atomic",
+        interrupt_managed_write,
+    )
+
+    with pytest.raises(OSError, match="interrupted"):
+        write_managed(path, "pdc\n", replace_conflict=True)
+
+    assert read_text(backup) == "external\n"
+    assert os.stat(backup).st_mode & 0o777 == 0o600
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux dir-fd hardening")
+def test_trusted_write_rejects_parent_symlink_swap(tmp_path, monkeypatch):
+    root = tmp_path / "home"
+    config = root / ".config"
+    outside = tmp_path / "outside"
+    config.mkdir(parents=True)
+    outside.mkdir()
+    path = str(config / "MangoHud" / "presets.conf")
+    real_open = os.open
+    swapped = False
+
+    def swap_before_open(candidate, flags, *args, **kwargs):
+        nonlocal swapped
+        if candidate == ".config" and kwargs.get("dir_fd") is not None and not swapped:
+            swapped = True
+            config.rename(root / ".config-original")
+            config.symlink_to(outside, target_is_directory=True)
+        return real_open(candidate, flags, *args, **kwargs)
+
+    monkeypatch.setattr("mangohud.ownership.os.open", swap_before_open)
+
+    with pytest.raises(OSError):
+        write_managed(path, "pdc\n", trusted_root=str(root))
+
+    assert not (outside / "MangoHud" / "presets.conf").exists()
 
 
 def test_update_refuses_external_edit_without_touching_backup(tmp_path):

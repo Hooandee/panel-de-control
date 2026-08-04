@@ -10,7 +10,7 @@ export type HudValueUnit =
 export const hasLocalEditor = (row: ListRow): boolean => {
   if (row.kind === "separator") return false;
   if (row.kind === "block" || row.kind === "text" || row.kind === "spacer") return true;
-  return canLabel(row.id) || row.id === "fps" || row.id === "frametime";
+  return canLabel(row.id) || row.id === "frametime";
 };
 
 export const formatHudValue = (value: number, unit: HudValueUnit): string => {

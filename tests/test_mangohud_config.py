@@ -97,6 +97,41 @@ def test_coerce_clamps_background_alpha():
     assert coerce_model({"background": {"alpha": -2}})["background"]["alpha"] == 0.0
 
 
+def test_coerce_rejects_non_boolean_toggle_values():
+    model = coerce_model({
+        "enabled": "false",
+        "compact": 1,
+        "noSmallFont": [],
+        "textOutline": None,
+        "noMargin": "true",
+        "background": {"roundCorners": 0},
+    })
+
+    assert model["enabled"] is DEFAULT_MODEL["enabled"]
+    assert model["compact"] is DEFAULT_MODEL["compact"]
+    assert model["noSmallFont"] is DEFAULT_MODEL["noSmallFont"]
+    assert model["textOutline"] is DEFAULT_MODEL["textOutline"]
+    assert model["noMargin"] is DEFAULT_MODEL["noMargin"]
+    assert model["background"]["roundCorners"] is DEFAULT_MODEL["background"]["roundCorners"]
+
+
+def test_coerce_assigns_bounded_unique_ids_and_limits_custom_rows():
+    items = [
+        {"kind": "text", "id": "", "text": "one"},
+        {"kind": "text", "id": "duplicate", "text": "two"},
+        {"kind": "text", "id": "duplicate", "text": "three"},
+        {"kind": "separator", "id": "x" * 100},
+        *({"kind": "spacer", "id": "", "size": "small"} for _ in range(200)),
+    ]
+
+    coerced = coerce_model({"items": items})["items"]
+    ids = [(item["kind"], item["id"]) for item in coerced]
+
+    assert len(coerced) <= 128
+    assert len(ids) == len(set(ids))
+    assert all(1 <= len(item_id) <= 64 for _, item_id in ids)
+
+
 def test_coerce_strips_hash_and_validates_hex_colors():
     m = coerce_model({"colors": {"gpu": "#AABBCC", "cpu": "xyz", "bogus": "ffffff"}})
     assert m["colors"]["gpu"] == "aabbcc"  # hash stripped, lowercased
@@ -444,15 +479,6 @@ def test_temp_fahrenheit_only_when_f():
     assert "temp_fahrenheit=1" in to_directives(coerce_model({"tempUnit": "f"}))
     assert "temp_fahrenheit=1" not in to_directives(coerce_model({"tempUnit": "c"}))
     assert coerce_model({"tempUnit": "kelvin"})["tempUnit"] == "c"
-
-
-def test_separator_color_emitted_without_hash_when_valid():
-    lines = to_directives(coerce_model({"separatorColor": "#AD64C1"}))
-    assert "horizontal_separator_color=ad64c1" in lines
-    assert coerce_model({"separatorColor": "xyz"})["separatorColor"] is None
-    assert "horizontal_separator_color" not in " ".join(
-        to_directives(coerce_model({"separatorColor": None}))
-    )
 
 
 # ---- device_battery: value directive, omitted when off ----

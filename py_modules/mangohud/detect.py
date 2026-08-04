@@ -12,7 +12,6 @@ class HudSession:
     uid: int
     cwd: str
     presets_path: str
-    config_file: str | None
     presets_supported: bool
 
 
@@ -45,17 +44,6 @@ def presets_path(environ, home):
     if not _inside_home(candidate, home):
         return default
     return candidate
-
-
-def _process_uid(pid):
-    try:
-        with open(os.path.join(_PROC, pid, "status")) as handle:
-            for line in handle:
-                if line.startswith("Uid:"):
-                    return int(line.split()[1])
-    except (OSError, ValueError, IndexError):
-        return None
-    return None
 
 
 def _process_starttime(pid, proc_root):
@@ -115,7 +103,6 @@ def detect_sessions(home=None, uid=None, proc_root=_PROC):
             uid=process_uid,
             cwd=cwd,
             presets_path=presets_path(environ, home),
-            config_file=environ.get("MANGOHUD_CONFIGFILE"),
             presets_supported=presets_supported(environ),
         ))
     return tuple(sessions)
@@ -146,51 +133,3 @@ def session_alive(session, proc_root=_PROC):
         and _process_starttime(session.pid, proc_root) == session.starttime
         and cwd == session.cwd
     )
-
-
-def _mangoapp_environ(uid=None):
-    """The environment of the running mangoapp process, or None if not running.
-    Scans /proc, so it isn't unit-tested."""
-    try:
-        pids = sorted(
-            (p for p in os.listdir(_PROC) if p.isdigit()),
-            key=int,
-        )
-    except OSError:
-        return None
-    for pid in pids:
-        try:
-            if uid is not None and _process_uid(pid) != uid:
-                continue
-            with open(os.path.join(_PROC, pid, "comm")) as handle:
-                if handle.read().strip() != "mangoapp":
-                    continue
-            with open(os.path.join(_PROC, pid, "environ"), "rb") as handle:
-                raw = handle.read()
-        except OSError:
-            continue
-        env = {}
-        for entry in raw.split(b"\0"):
-            if b"=" in entry:
-                key, _, value = entry.partition(b"=")
-                env[key.decode("utf-8", "replace")] = value.decode("utf-8", "replace")
-        return env
-    return None
-
-
-def detect(home=None, uid=None):
-    """Overlay capability for the HUD tab. `supported` is only True when mangoapp is
-    actually running with native presets support. `configFile` is the live
-    per-session config Steam feeds mangoapp; None when mangoapp isn't running or
-    doesn't expose it."""
-    home = home or os.path.expanduser("~")
-    env = _mangoapp_environ(uid)
-    if env is None:
-        return {"running": False, "supported": False,
-                "presetsPath": presets_path({}, home), "configFile": None}
-    return {
-        "running": True,
-        "supported": presets_supported(env),
-        "presetsPath": presets_path(env, home),
-        "configFile": env.get("MANGOHUD_CONFIGFILE"),
-    }

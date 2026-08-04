@@ -66,8 +66,6 @@ vi.mock("../mangohud/useHud", async () => {
   return {
     useHud: () => ({
       state: {
-        supported: true,
-        running: true,
         capability: "ready",
         applyStatus: mocks.conflict ? "conflict" : "reload_requested",
         conflict: mocks.conflict,
@@ -87,8 +85,6 @@ vi.mock("../mangohud/useHud", async () => {
           ],
         },
         values: {},
-        catalog: ["fps", "ram", "battery", "battery_watt", "time"],
-        presets: { essentials: ["fps"] },
       },
       setModel: mocks.setModel,
       setEnabled: vi.fn(),
@@ -255,7 +251,7 @@ describe("HudSection QAM composition", () => {
     );
   });
 
-  it("persists a HUD-specific language and hides the misleading separator colour", () => {
+  it("persists a HUD-specific language", () => {
     render(<HudSection />);
 
     fireEvent.click(screen.getByText("copy:hud.style").closest("[data-testid='focusable']")!);
@@ -264,8 +260,6 @@ describe("HudSection QAM composition", () => {
       expect.objectContaining({ locale: "en" }),
     );
 
-    fireEvent.click(screen.getByText("copy:hud.advanced").closest("[data-testid='focusable']")!);
-    expect(screen.queryByText("copy:hud.separatorColor")).toBeNull();
   });
 
   it("adds a metric with one complete model update", () => {
