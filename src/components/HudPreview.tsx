@@ -1,10 +1,11 @@
-import { FC } from "react";
+import { FC, memo, useMemo } from "react";
 
 import { useI18n } from "../i18n";
 import {
   HudModel,
   MetricId,
   SPACER_LINES,
+  effectiveTextFontSize,
   previewRows,
   previewWouldClip,
 } from "../mangohud/model";
@@ -28,13 +29,13 @@ function valueParts(value: string): { main: string; unit: string } {
  * Honours corner, vertical/horizontal layout, opacity/rounding, size, labels,
  * small-font. Tall HUDs clip like the real viewport and surface that limitation.
  */
-export const HudPreview: FC<{
+const HudPreviewComponent: FC<{
   model: HudModel;
   values?: Partial<Record<MetricId, string>>;
 }> = ({ model, values }) => {
   const { t } = useI18n();
-  const rows = previewRows(model, values);
-  const clips = previewWouldClip(model);
+  const rows = useMemo(() => previewRows(model, values), [model, values]);
+  const clips = useMemo(() => previewWouldClip(model, rows), [model, rows]);
   const top = model.position.startsWith("top");
   const left = model.position.endsWith("left");
   const horizontal = model.layout === "horizontal";
@@ -42,9 +43,11 @@ export const HudPreview: FC<{
   const secondaryBase = model.noSmallFont
     ? base
     : clampPx(Math.round(model.fontSizeSecondary * model.fontScale * PREVIEW_SCALE), 6, 32);
-  const textBase = model.noSmallFont
-    ? base
-    : clampPx(Math.round(model.fontSizeText * model.fontScale * PREVIEW_SCALE), 6, 32);
+  const textBase = clampPx(
+    Math.round(effectiveTextFontSize(model) * model.fontScale * PREVIEW_SCALE),
+    6,
+    32,
+  );
   const lineH = Math.round(base * 1.35);
   const sepColor = `#${model.colors.text}`;
   const [br, bg, bb] = [model.colors.background.slice(0, 2), model.colors.background.slice(2, 4), model.colors.background.slice(4, 6)].map((h) => parseInt(h, 16));
@@ -69,6 +72,7 @@ export const HudPreview: FC<{
         height: 168,
         borderRadius: 10,
         overflow: "hidden",
+        contain: "layout paint",
         background: "linear-gradient(135deg, #1a2740, #101b2e)",
       }}
     >
@@ -178,3 +182,5 @@ export const HudPreview: FC<{
     </div>
   );
 };
+
+export const HudPreview = memo(HudPreviewComponent);

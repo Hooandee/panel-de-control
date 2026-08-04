@@ -12,7 +12,7 @@ import { HudPreview } from "./HudPreview";
 describe("HudPreview typography", () => {
   afterEach(cleanup);
 
-  it("uses the secondary size for units and the text size for free text", () => {
+  it("keeps native metrics and added text aligned until text is explicitly separated", () => {
     const model = {
       ...DEFAULT_MODEL,
       fontSizeSecondary: 14,
@@ -30,6 +30,40 @@ describe("HudPreview typography", () => {
     expect(unit.textContent).toBe("%");
     expect(unit.style.fontSize).toBe("7px");
     expect(freeText.textContent).toBe("Steam Deck");
+    expect(freeText.style.fontSize).toBe("12px");
+  });
+
+  it("uses the independent text size when the user separates it", () => {
+    const model = {
+      ...DEFAULT_MODEL,
+      separateTextSize: true,
+      fontSizeText: 30,
+      items: [{ kind: "text", id: "note", text: "Steam Deck" }],
+    } as HudModel;
+
+    render(<HudPreview model={model} />);
+
+    const freeText = document.querySelector("[data-hud-free-text]") as HTMLElement;
+    expect(freeText.style.fontSize).toBe("15px");
+  });
+
+  it("keeps custom text independent when details use the main size", () => {
+    const model = {
+      ...DEFAULT_MODEL,
+      noSmallFont: true,
+      separateTextSize: true,
+      fontSizeText: 30,
+      items: [
+        { kind: "metric", id: "gpu" },
+        { kind: "text", id: "note", text: "Steam Deck" },
+      ],
+    } as HudModel;
+
+    render(<HudPreview model={model} />);
+
+    const unit = document.querySelector("[data-hud-value-unit]") as HTMLElement;
+    const freeText = document.querySelector("[data-hud-free-text]") as HTMLElement;
+    expect(unit.style.fontSize).toBe("12px");
     expect(freeText.style.fontSize).toBe("15px");
   });
 

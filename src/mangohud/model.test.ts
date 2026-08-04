@@ -32,6 +32,7 @@ const metrics = (...ids: string[]): HudItem[] => ids.map((id) => ({ kind: "metri
 describe("default model", () => {
   it("defines MangoHud's independent secondary font size", () => {
     expect(DEFAULT_MODEL).toHaveProperty("fontSizeSecondary", 13);
+    expect(DEFAULT_MODEL).toHaveProperty("separateTextSize", false);
   });
 });
 
@@ -128,12 +129,12 @@ describe("previewRows", () => {
     }
   });
 
-  it("custom text is small unless noSmallFont forces one size", () => {
+  it("keeps custom text in its own font category when details use main size", () => {
     const items: HudItem[] = [{ kind: "text", id: "a", text: "x" }];
     const small = previewRows({ ...DEFAULT_MODEL, items })[0];
     const big = previewRows({ ...DEFAULT_MODEL, items, noSmallFont: true })[0];
     if (small.kind === "line") expect(small.small).toBe(true);
-    if (big.kind === "line") expect(big.small).toBe(false);
+    if (big.kind === "line") expect(big.small).toBe(true);
   });
 
   it("is empty when nothing is selected", () => {

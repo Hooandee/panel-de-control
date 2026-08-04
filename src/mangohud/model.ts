@@ -76,6 +76,8 @@ export interface HudModel {
   fontSizeSecondary: number;
   /** Free and auxiliary text font size in px. */
   fontSizeText: number;
+  /** Let custom_text rows use fontSizeText instead of following fontSize. */
+  separateTextSize: boolean;
   layout: HudLayout;
   noSmallFont: boolean;
   tempUnit: TempUnit;
@@ -244,6 +246,7 @@ export const DEFAULT_MODEL: HudModel = {
   fontSize: 24,
   fontSizeSecondary: 13,
   fontSizeText: 24,
+  separateTextSize: false,
   layout: "vertical",
   noSmallFont: false,
   tempUnit: "c",
@@ -272,6 +275,9 @@ export const DEFAULT_MODEL: HudModel = {
   alpha: 1.0,
   fontScale: 1.0,
 };
+
+export const effectiveTextFontSize = (model: HudModel): number =>
+  model.separateTextSize ? model.fontSizeText : model.fontSize;
 
 // The colour controls the "Estilo general" section shows, in display order.
 // (Each corresponds to a MangoHud colour directive — see config.py.)
@@ -382,7 +388,7 @@ export function previewRows(
       return;
     }
     if (it.kind === "text") {
-      rows.push({ kind: "line", key: `t:${it.id}:${i}`, label: "", value: it.text, labelColor: c("text"), valueColor: c("text"), small: !model.noSmallFont });
+      rows.push({ kind: "line", key: `t:${it.id}:${i}`, label: "", value: it.text, labelColor: c("text"), valueColor: c("text"), small: true });
       return;
     }
     const meta = META[it.id];
@@ -415,25 +421,29 @@ export function previewRows(
       value,
       labelColor: c(meta.category),
       valueColor: c(valueColorKey(it.id)),
-      small: PDC_ID_SET.has(it.id) && !model.noSmallFont,
+      small: PDC_ID_SET.has(it.id),
     });
   });
   return rows;
 }
 
-export function previewWouldClip(model: HudModel): boolean {
+export function previewWouldClip(
+  model: HudModel,
+  rows: PreviewRow[] = previewRows(model),
+): boolean {
   if (model.layout === "horizontal") return false;
   const clamp = (value: number, lo: number, hi: number) =>
     Math.max(lo, Math.min(hi, value));
   const base = clamp(Math.round(model.fontSize * model.fontScale * 0.5), 8, 22);
-  const textBase = model.noSmallFont
-    ? base
-    : clamp(Math.round(model.fontSizeText * model.fontScale * 0.5), 6, 32);
+  const textBase = clamp(
+    Math.round(effectiveTextFontSize(model) * model.fontScale * 0.5),
+    6,
+    32,
+  );
   const lineHeight = Math.round(base * 1.35);
   const textLineHeight = Math.round(textBase * 1.35);
   const gap = clamp(Math.round(1 + model.cellpaddingY * base), 0, 9);
   const padding = model.noMargin ? 0 : model.compact ? 4 : 6;
-  const rows = previewRows(model);
   const contentHeight = rows.reduce((total, row) => {
     if (row.kind === "spacer") {
       return total + SPACER_LINES[row.size] * lineHeight;

@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   setModel: vi.fn(),
   resolveConflict: vi.fn(),
+  separateTextSize: false,
   conflict: null as null | {
     path: string;
     expectedHash: string | null;
@@ -37,7 +38,15 @@ vi.mock("@decky/ui", () => ({
   PanelSectionRow: ({ children }: { children: ReactNode }) => (
     <div data-panel-section-row>{children}</div>
   ),
-  ToggleField: ({ label }: { label: string }) => <div>{label}</div>,
+  ToggleField: ({
+    label,
+    checked,
+    onChange,
+  }: {
+    label: string;
+    checked: boolean;
+    onChange: (checked: boolean) => void;
+  }) => <button onClick={() => onChange(!checked)}>{label}</button>,
   TextField: ({ label }: { label: string }) => <div>{label}</div>,
   SliderField: ({ label }: { label?: string }) => <div>{label}</div>,
   Spinner: () => <span>spinner</span>,
@@ -62,6 +71,7 @@ vi.mock("../mangohud/useHud", async () => {
         conflict: mocks.conflict,
         model: {
           ...DEFAULT_MODEL,
+          separateTextSize: mocks.separateTextSize,
           items: [
             { kind: "metric", id: "fps" },
             { kind: "metric", id: "ram" },
@@ -83,6 +93,7 @@ vi.mock("../mangohud/useHud", async () => {
       reset: vi.fn(),
       resolveConflict: mocks.resolveConflict,
     }),
+    useHudValues: () => ({}),
   };
 });
 
@@ -110,6 +121,7 @@ describe("HudSection QAM composition", () => {
     cleanup();
     vi.clearAllMocks();
     mocks.conflict = null;
+    mocks.separateTextSize = false;
   });
 
   it("uses one bounded stack and only exposes editors on configurable rows", () => {
@@ -195,7 +207,7 @@ describe("HudSection QAM composition", () => {
     expect(mocks.setModel).toHaveBeenCalledTimes(1);
   });
 
-  it("presents one general size and optional refinements by text type", () => {
+  it("links native metrics and PdC text by default and offers an explicit split", () => {
     render(<HudSection />);
 
     fireEvent.click(screen.getByText("copy:hud.style").closest("[data-testid='focusable']")!);
@@ -204,8 +216,27 @@ describe("HudSection QAM composition", () => {
     fireEvent.click(
       screen.getByText("copy:hud.size.refine").closest("[data-testid='focusable']")!,
     );
-    expect(screen.getByText("copy:hud.size.main")).toBeTruthy();
+    expect(screen.getByText("copy:hud.size.linked")).toBeTruthy();
     expect(screen.getByText("copy:hud.size.secondary")).toBeTruthy();
+    expect(screen.getByText("copy:hud.size.text.linked")).toBeTruthy();
+    expect(screen.queryByText("copy:hud.size.text")).toBeNull();
+
+    fireEvent.click(screen.getByText("copy:hud.size.separateText"));
+    expect(mocks.setModel).toHaveBeenCalledWith(
+      expect.objectContaining({ separateTextSize: true }),
+    );
+  });
+
+  it("shows the PdC and custom text slider only in separated mode", () => {
+    mocks.separateTextSize = true;
+    render(<HudSection />);
+
+    fireEvent.click(screen.getByText("copy:hud.style").closest("[data-testid='focusable']")!);
+    fireEvent.click(
+      screen.getByText("copy:hud.size.refine").closest("[data-testid='focusable']")!,
+    );
+
+    expect(screen.getByText("copy:hud.size.main")).toBeTruthy();
     expect(screen.getByText("copy:hud.size.text")).toBeTruthy();
   });
 

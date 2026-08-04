@@ -12,7 +12,7 @@ vi.mock("../api", () => ({
 
 import { getHudState, reloadHud, resolveHudConflict, setHudConfig } from "../api";
 import { DEFAULT_MODEL, HudState } from "./model";
-import { useHud } from "./useHud";
+import { useHud, useHudValues } from "./useHud";
 
 const state = (model = DEFAULT_MODEL): HudState => ({
   supported: false,
@@ -236,6 +236,62 @@ describe("useHud coordination", () => {
     });
 
     expect(result.current.state?.model).toEqual(latest);
+  });
+
+  it("publishes live values without replacing the editor state on every poll", async () => {
+    const initial = { ...state(), values: { pdc_tdp: "15W" } } as HudState;
+    const refreshed = { ...state(), values: { pdc_tdp: "16W" } } as HudState;
+    const cleared = state();
+    vi.mocked(getHudState)
+      .mockResolvedValueOnce(initial)
+      .mockResolvedValueOnce(refreshed)
+      .mockResolvedValueOnce(cleared);
+
+    const { result } = renderHook(() => ({
+      controller: useHud(),
+      values: useHudValues(),
+    }));
+    await settle();
+    const editorState = result.current.controller.state;
+
+    await act(async () => {
+      vi.advanceTimersByTime(4000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(result.current.values.pdc_tdp).toBe("16W");
+    expect(result.current.controller.state).toBe(editorState);
+
+    await act(async () => {
+      vi.advanceTimersByTime(4000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(result.current.values.pdc_tdp).toBeUndefined();
+    expect(result.current.controller.state).toBe(editorState);
+  });
+
+  it("still replaces editor state when a control status changes", async () => {
+    const initial = state();
+    const failed = { ...state(), applyStatus: "failed" } as HudState;
+    vi.mocked(getHudState)
+      .mockResolvedValueOnce(initial)
+      .mockResolvedValueOnce(failed);
+
+    const { result } = renderHook(() => useHud());
+    await settle();
+    const editorState = result.current.state;
+
+    await act(async () => {
+      vi.advanceTimersByTime(4000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(result.current.state).not.toBe(editorState);
+    expect(result.current.state?.applyStatus).toBe("failed");
   });
 
   it("flushes the latest debounced model when the section unmounts", async () => {

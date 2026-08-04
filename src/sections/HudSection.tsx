@@ -9,7 +9,7 @@ import {
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
-import { useHud } from "../mangohud/useHud";
+import { useHud, useHudValues } from "../mangohud/useHud";
 import { HudPreview } from "../components/HudPreview";
 import { HudDisclosure } from "../components/HudDisclosure";
 import { HudSliderRow } from "../components/HudSliderRow";
@@ -181,6 +181,11 @@ const controlLabel = {
   fontSize: theme.font.caption,
   color: theme.color.textMuted,
 } as const;
+
+const HudLivePreview: FC<{ model: HudModel }> = ({ model }) => {
+  const values = useHudValues();
+  return <HudPreview model={model} values={values} />;
+};
 
 const RowAction: FC<{
   label: string;
@@ -444,7 +449,7 @@ export const HudSection: FC = () => {
               {t("hud.experimental.badge")}
             </span>
           </div>
-          <HudPreview model={m} values={state.values} />
+          <HudLivePreview model={m} />
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: theme.space.sm }}>
             <SectionLabel>{t("hud.title")}</SectionLabel>
             <span
@@ -720,14 +725,38 @@ export const HudSection: FC = () => {
             defaultOpen={false}
           >
             <div style={{ display: "flex", flexDirection: "column", gap: theme.space.md }}>
-              <HudSliderRow label={t("hud.size.main")} value={m.fontSize} min={12} max={64} step={1} unit="px" onChange={(v) => patch({ fontSize: v })} />
+              <HudSliderRow
+                label={t(m.separateTextSize ? "hud.size.main" : "hud.size.linked")}
+                value={m.fontSize}
+                min={12}
+                max={64}
+                step={1}
+                unit="px"
+                onChange={(v) => patch({
+                  fontSize: v,
+                  fontSizeText: m.separateTextSize ? m.fontSizeText : v,
+                })}
+              />
               <ToggleField label={t("hud.noSmallFont")} checked={m.noSmallFont} onChange={(v) => patch({ noSmallFont: v })} bottomSeparator="none" />
               {m.noSmallFont ? (
                 <Note>{t("hud.size.sameAsMain")}</Note>
               ) : (
                 <HudSliderRow label={t("hud.size.secondary")} value={m.fontSizeSecondary} min={6} max={64} step={1} unit="px" onChange={(v) => patch({ fontSizeSecondary: v })} />
               )}
-              <HudSliderRow label={t("hud.size.text")} value={m.fontSizeText} min={12} max={64} step={1} unit="px" onChange={(v) => patch({ fontSizeText: v })} />
+              <ToggleField
+                label={t("hud.size.separateText")}
+                checked={m.separateTextSize}
+                onChange={(separateTextSize) => patch({
+                  separateTextSize,
+                  fontSizeText: separateTextSize ? m.fontSizeText : m.fontSize,
+                })}
+                bottomSeparator="none"
+              />
+              {m.separateTextSize ? (
+                <HudSliderRow label={t("hud.size.text")} value={m.fontSizeText} min={12} max={64} step={1} unit="px" onChange={(v) => patch({ fontSizeText: v })} />
+              ) : (
+                <Note>{t("hud.size.text.linked")}</Note>
+              )}
             </div>
           </HudDisclosure>
 

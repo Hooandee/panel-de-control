@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import {
   HudModel,
@@ -15,6 +15,39 @@ const POLL_MS = 4000;
 const DEBOUNCE_MS = 700;
 const FEEDBACK_MS = 1800;
 export const HUD_RPC_TIMEOUT_MS = 4000;
+
+type HudValues = HudState["values"];
+
+let hudValuesSnapshot: HudValues = {};
+const hudValuesSubscribers = new Set<() => void>();
+
+const sameHudValues = (left: HudValues, right: HudValues): boolean => {
+  if (left === right) return true;
+  const leftKeys = Object.keys(left) as Array<keyof HudValues>;
+  const rightKeys = Object.keys(right) as Array<keyof HudValues>;
+  return leftKeys.length === rightKeys.length
+    && leftKeys.every((key) => left[key] === right[key]);
+};
+
+const publishHudValues = (values: HudValues) => {
+  if (sameHudValues(hudValuesSnapshot, values)) return;
+  hudValuesSnapshot = values;
+  hudValuesSubscribers.forEach((notify) => notify());
+};
+
+const subscribeHudValues = (notify: () => void) => {
+  hudValuesSubscribers.add(notify);
+  return () => hudValuesSubscribers.delete(notify);
+};
+
+export const useHudValues = (): HudValues => useSyncExternalStore(
+  subscribeHudValues,
+  () => hudValuesSnapshot,
+  () => hudValuesSnapshot,
+);
+
+const hudControlSignature = ({ values: _values, ...control }: HudState) =>
+  JSON.stringify(control);
 
 export class HudRpcTimeout extends Error {
   constructor() {
@@ -80,11 +113,17 @@ export function useHud(): HudController {
   const drainWaitersRef = useRef<Array<() => void>>([]);
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const controlSignatureRef = useRef<string | null>(null);
 
   const accept = (remote: HudState) => {
+    const signature = hudControlSignature(remote);
     stateRef.current = remote;
     modelRef.current = remote.model;
-    setState(remote);
+    publishHudValues(remote.values);
+    if (signature !== controlSignatureRef.current) {
+      controlSignatureRef.current = signature;
+      setState(remote);
+    }
   };
 
   const clearDebounce = () => {
@@ -188,6 +227,7 @@ export function useHud(): HudController {
     const optimistic = { ...current, model };
     stateRef.current = optimistic;
     modelRef.current = model;
+    controlSignatureRef.current = hudControlSignature(optimistic);
     dirtyRef.current = true;
     revisionRef.current += 1;
     setState(optimistic);
@@ -212,6 +252,7 @@ export function useHud(): HudController {
     revisionRef.current = revision;
     stateRef.current = optimistic;
     modelRef.current = model;
+    controlSignatureRef.current = hudControlSignature(optimistic);
     setState(optimistic);
     persist(model, revision);
   };
