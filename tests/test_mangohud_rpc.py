@@ -4,6 +4,7 @@ import concurrent.futures
 import importlib
 import os
 import sys
+import threading
 import types
 
 import pytest
@@ -721,7 +722,7 @@ def test_inactive_pdc_refresh_skips_executor(tmp_path, monkeypatch):
     assert executor.count == 0
 
 
-def test_pdc_refresh_uses_serial_apply_executor(tmp_path, monkeypatch):
+def test_pdc_refresh_does_not_use_the_shared_apply_executor(tmp_path, monkeypatch):
     presets = str(tmp_path / "presets.conf")
     main, p = _make_plugin(tmp_path, monkeypatch)
     _fake_overlay(main, monkeypatch, presets)
@@ -732,7 +733,7 @@ def test_pdc_refresh_uses_serial_apply_executor(tmp_path, monkeypatch):
 
     asyncio.run(p._refresh_pdc_metrics())
 
-    assert executor.count == 1
+    assert executor.count == 0
 
 
 def test_pdc_refresh_applies_multiple_changed_values_once(tmp_path, monkeypatch):
@@ -826,3 +827,84 @@ def test_hud_refresh_failure_does_not_skip_the_rest_of_auto_tick(tmp_path, monke
     asyncio.run(p._auto_loop())
 
     assert resets == [True]
+
+
+def test_prepare_shutdown_invalidates_hud_ingress_synchronously(tmp_path, monkeypatch):
+    _main, p = _make_plugin(tmp_path, monkeypatch)
+    p._init()
+    generation = p._hud_generation
+
+    p._prepare_shutdown()
+
+    assert p._hud_shutdown is True
+    assert p._hud_generation == generation + 1
+
+
+def test_hud_save_entering_after_shutdown_never_reaches_store(tmp_path, monkeypatch):
+    _main, p = _make_plugin(tmp_path, monkeypatch)
+    p._init()
+    saves = []
+    monkeypatch.setattr(p._hud, "save", lambda model: saves.append(model) or model)
+    p._prepare_shutdown()
+
+    with pytest.raises(RuntimeError, match="plugin_shutting_down"):
+        asyncio.run(
+            p.set_hud_config({"items": _items("fps"), "enabled": True})
+        )
+
+    assert saves == []
+
+
+@pytest.mark.parametrize("method", ("_unload", "_uninstall"))
+def test_shutdown_restores_managed_hud_for_unload_and_uninstall(
+    tmp_path,
+    monkeypatch,
+    method,
+):
+    presets = str(tmp_path / "presets.conf")
+    main, p = _make_plugin(tmp_path, monkeypatch)
+    _fake_overlay(main, monkeypatch, presets)
+    asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
+    assert os.path.exists(presets)
+    monkeypatch.setattr(p, "_perform_shutdown_handoff", lambda *_args: None)
+    monkeypatch.setattr(p, "_drain_offloaded_sync", lambda *_args: True)
+    monkeypatch.setattr(p, "_shutdown_apply_executor", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(main.fan_expose, "remove_conf", lambda: None)
+
+    asyncio.run(getattr(p, method)())
+
+    assert not os.path.exists(presets)
+    assert not os.path.exists(f"{presets}.pdc-managed")
+
+
+def test_refresh_queued_before_shutdown_cannot_rewrite_after_restore(
+    tmp_path,
+    monkeypatch,
+):
+    presets = str(tmp_path / "presets.conf")
+    main, p = _make_plugin(tmp_path, monkeypatch)
+    _fake_overlay(main, monkeypatch, presets)
+    asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
+    started = threading.Event()
+    release = threading.Event()
+    closed = threading.Event()
+    p._hud_coordinator.call(
+        p._hud_generation,
+        lambda: (started.set(), release.wait(timeout=2)),
+    )
+    assert started.wait(timeout=1)
+    queued = p._hud_coordinator.submit_latest(
+        p._hud_generation,
+        p._apply_hud,
+    )
+    closer = threading.Thread(target=lambda: (p._prepare_shutdown(), closed.set()))
+    closer.start()
+    assert not closed.wait(timeout=0.05)
+
+    release.set()
+    closer.join(timeout=1)
+
+    assert queued.cancelled()
+    assert closed.is_set()
+    assert not os.path.exists(presets)
+    assert not os.path.exists(f"{presets}.pdc-managed")

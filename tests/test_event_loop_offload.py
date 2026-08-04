@@ -240,7 +240,7 @@ def test_offload_runs_off_the_loop_thread(tmp_path, monkeypatch):
 
 # ---- reapply paths dispatch off-loop -----------------------------------------
 
-def test_reapply_all_offloads_tdp_fans_color_and_hud(tmp_path, monkeypatch):
+def test_reapply_all_keeps_hud_out_of_the_shared_apply_executor(tmp_path, monkeypatch):
     p, _ = _make_plugin(tmp_path, monkeypatch)
     rec = _RecordingExecutor()
     p._apply_executor = rec
@@ -249,9 +249,33 @@ def test_reapply_all_offloads_tdp_fans_color_and_hud(tmp_path, monkeypatch):
         p._reapply_all()  # sync, but under a running loop
 
     asyncio.run(_run())
-    # tdp + power handoff + fans + color + HUD self-heal are offloaded; charge,
-    # CPU and GPU-clock stay inline (sysfs). HDR only offloads when enabled.
-    assert rec.count == 5
+    # TDP + power handoff + fans + color use the shared worker. HUD has its own.
+    assert rec.count == 4
+
+
+def test_shared_apply_worker_progresses_while_hud_worker_is_blocked(
+    tmp_path,
+    monkeypatch,
+):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    started = threading.Event()
+    release = threading.Event()
+    p._hud_coordinator.call(
+        p._hud_generation,
+        lambda: (started.set(), release.wait(timeout=2)),
+    )
+    assert started.wait(timeout=1)
+    p._apply_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+
+    try:
+        result = asyncio.run(p._offload_call(lambda: "tdp-progress"))
+    finally:
+        release.set()
+        p._hud_generation += 1
+        p._hud_coordinator.close(p._hud_generation, lambda: None)
+        p._shutdown_apply_executor()
+
+    assert result == "tdp-progress"
 
 
 def test_set_saturation_applies_color_off_loop(tmp_path, monkeypatch):

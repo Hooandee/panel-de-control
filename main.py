@@ -83,6 +83,7 @@ from mangohud import config as mangohud_config
 from mangohud import pdc_metrics as mangohud_pdc
 from mangohud import ownership as mangohud_ownership
 from mangohud.apply import apply_hud, clear_presets, reload_sessions
+from mangohud.coordinator import HudClosed, HudCoordinator, HudStale
 from report import collector as report_collector
 from report import client as report_client
 
@@ -466,6 +467,9 @@ class Plugin:
         # without re-scanning /proc. _pdc_written = the last baked values, so a tick
         # whose values are unchanged skips the presets.conf rewrite (no churn).
         self._pdc_presets_path = None
+        self._hud_generation = 0
+        self._hud_shutdown = False
+        self._hud_coordinator = HudCoordinator(self._hud_generation)
         self._hud_sessions = ()
         self._hud_reload_pending = ()
         self._hud_reload_attempt = 0
@@ -2981,10 +2985,8 @@ class Plugin:
         self._reapply_color()
         self._reapply_audio()  # self-offloading; no-op when the EQ is disabled
         self._reapply_controller()  # diff-gated; no-op unless the effective remap changed
-        # Re-assert the overlay: a game launch is when mangoapp comes up (and exposes the
-        # real config path), so a HUD saved out-of-game lands now. Off-loop — detect scans
-        # /proc. No-op when the overlay isn't running/supported.
-        self._offload(self._apply_hud)
+        # Re-assert the overlay when mangoapp comes up on its independent serial worker.
+        self._schedule_hud_apply()
 
     # ---- Battery + charge limit --------------------------------------------
     def _record_charge_limit_apply(self, action, requested, ok, attempts) -> None:
@@ -3733,17 +3735,47 @@ class Plugin:
                 self._hud_apply_status = "written"
 
     async def _refresh_pdc_metrics(self) -> None:
-        """Refresh changed pdc values through the serial apply executor."""
+        """Refresh changed pdc values through the isolated HUD worker."""
         if (
             not self._hud_reload_pending
             and (not self._pdc_active_ids or not self._pdc_presets_path)
         ):
             return
-        await self._offload_call(self._refresh_pdc_metrics_sync)
+        if self._hud_shutdown:
+            return
+        future = self._hud_coordinator.submit_latest(
+            self._hud_generation,
+            self._refresh_pdc_metrics_sync,
+        )
+        try:
+            await asyncio.wrap_future(future, loop=asyncio.get_running_loop())
+        except (HudClosed, HudStale):
+            if not self._hud_shutdown:
+                raise
+
+    async def _hud_call(self, fn):
+        if self._hud_shutdown or getattr(self, "_shutting_down", False):
+            raise RuntimeError("plugin_shutting_down")
+        future = self._hud_coordinator.call(self._hud_generation, fn)
+        try:
+            return await asyncio.wrap_future(
+                future,
+                loop=asyncio.get_running_loop(),
+            )
+        except (HudClosed, HudStale) as error:
+            raise RuntimeError("plugin_shutting_down") from error
+
+    def _schedule_hud_apply(self) -> None:
+        if self._hud_shutdown:
+            return
+        self._hud_coordinator.submit_latest(
+            self._hud_generation,
+            self._apply_hud,
+        )
 
     async def get_hud_state(self) -> dict:
         self._init()
-        return await self._offload_call(self._hud_state)
+        return await self._hud_call(self._hud_state)
 
     def _apply_hud_state(self, model) -> dict:
         cap = self._detect_hud()
@@ -3755,7 +3787,7 @@ class Plugin:
 
     async def set_hud_config(self, model: dict) -> dict:
         self._init()
-        return await self._offload_call(lambda: self._save_apply_hud_state(model))
+        return await self._hud_call(lambda: self._save_apply_hud_state(model))
 
     async def set_hud_enabled(self, enabled: bool) -> dict:
         self._init()
@@ -3763,18 +3795,18 @@ class Plugin:
             model = self._hud.load()
             model["enabled"] = bool(enabled)
             return self._save_apply_hud_state(model)
-        return await self._offload_call(save_apply_state)
+        return await self._hud_call(save_apply_state)
 
     async def reset_hud(self) -> dict:
         self._init()
-        return await self._offload_call(
+        return await self._hud_call(
             lambda: self._save_apply_hud_state(mangohud_config.DEFAULT_MODEL)
         )
 
     async def reload_hud(self) -> dict:
         """Re-bake presets.conf now with fresh pdc values and reload mangoapp."""
         self._init()
-        return await self._offload_call(
+        return await self._hud_call(
             lambda: self._apply_hud_state(self._hud.load())
         )
 
@@ -3813,7 +3845,7 @@ class Plugin:
 
     async def resolve_hud_conflict(self, action: str) -> dict:
         self._init()
-        return await self._offload_call(
+        return await self._hud_call(
             lambda: self._resolve_hud_conflict_sync(action)
         )
 
@@ -5605,7 +5637,7 @@ class Plugin:
             if clear_presets(managed_path):
                 self._remember_hud_path(None)
                 if cap["supported"] and cap["running"]:
-                    self._reload_mangoapp()
+                    self._reload_mangoapp(cap["sessions"])
         except Exception:  # noqa: BLE001
             pass
 
@@ -5999,6 +6031,12 @@ class Plugin:
 
     def _prepare_shutdown(self) -> None:
         self._shutting_down = True
+        if not getattr(self, "_hud_shutdown", False):
+            self._hud_shutdown = True
+            self._hud_generation = int(getattr(self, "_hud_generation", 0)) + 1
+            coordinator = getattr(self, "_hud_coordinator", None)
+            if coordinator is not None:
+                coordinator.close(self._hud_generation, self._restore_hud_safe)
         self._cpu_shutdown = True
         self._gpu_shutdown = True
         self._next_cpu_generation()
@@ -6094,7 +6132,6 @@ class Plugin:
         if drained:
             decky.logger.info("Shutdown stage uninstall:drained")
             self._perform_shutdown_handoff("uninstall")
-            self._restore_hud_safe()
             fan_expose.remove_conf()
             self._shutdown_apply_executor()
         else:
