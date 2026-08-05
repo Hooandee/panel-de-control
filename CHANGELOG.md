@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.34.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.33.0...panel-de-control-v0.34.0) (2026-08-05)
+
+
+### Features
+
+* añadir FSR4 para Proton oficial ([#388](https://github.com/Hooandee/panel-de-control/issues/388)) ([3a1a3ad](https://github.com/Hooandee/panel-de-control/commit/3a1a3ade11e475fc9fe1c0004f22e99df1fe66da))
+
 ## [0.33.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.32.0...panel-de-control-v0.33.0) (2026-08-05)
 
 
