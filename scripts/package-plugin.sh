@@ -20,12 +20,10 @@ required=(
   dist main.py plugin.json package.json README.md README.en.md LICENSE
   THIRD_PARTY_NOTICES.md py_modules assets bin
   assets/inputplumber/README.md
-  assets/inputplumber/v0.77.4-xbox-hd.patch
+  assets/inputplumber/compatibility.json
   scripts/build-inputplumber-xbox-hd.sh
+  scripts/inputplumber-manifest.py
   scripts/verify-inputplumber-xbox-hd.sh
-  bin/inputplumber-xbox-hd-v0.77.4
-  bin/inputplumber-xbox-hd-v0.77.4.sha256
-  bin/inputplumber-xbox-hd-v0.77.4.provenance
 )
 for relative in "${required[@]}"; do
   test -e "$root/$relative" || {
@@ -33,7 +31,16 @@ for relative in "${required[@]}"; do
     exit 1
   }
 done
-bash "$root/scripts/verify-inputplumber-xbox-hd.sh" "$root"
+entries="$(python3 "$root/scripts/inputplumber-manifest.py" "$root" all)"
+while IFS=$'\t' read -r version commit patch_path artifact checksum provenance; do
+  for relative in "$patch_path" "$artifact" "$checksum" "$provenance"; do
+    test -e "$root/$relative" || {
+      echo "missing package input for InputPlumber $version: $relative" >&2
+      exit 1
+    }
+  done
+done <<< "$entries"
+bash "$root/scripts/verify-inputplumber-xbox-hd.sh" "$root" all
 
 staging="$(mktemp -d)"
 trap 'rm -rf "$staging"' EXIT
@@ -52,6 +59,7 @@ cp -rL \
   "$root/bin" \
   "$staging/$plugin_name"
 cp "$root/scripts/build-inputplumber-xbox-hd.sh" "$staging/$plugin_name/scripts"
+cp "$root/scripts/inputplumber-manifest.py" "$staging/$plugin_name/scripts"
 cp "$root/scripts/verify-inputplumber-xbox-hd.sh" "$staging/$plugin_name/scripts"
 rm -f "$staging/$plugin_name/dist/"*.map
 find "$staging/$plugin_name" -type d -name __pycache__ -prune -exec rm -rf {} +

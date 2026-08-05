@@ -73,15 +73,27 @@ def _parse_build(plugin_dir: str, raw) -> InputPlumberBuild:
         raise ManifestError("invalid version")
     if not isinstance(commit, str) or _COMMIT.fullmatch(commit) is None:
         raise ManifestError("invalid upstream commit")
+    patch = _safe_relative_path(plugin_dir, raw["patch"])
+    artifact = _safe_relative_path(plugin_dir, raw["artifact"])
+    artifact_sha256 = _safe_relative_path(
+        plugin_dir, raw["artifact_sha256"]
+    )
+    provenance = _safe_relative_path(plugin_dir, raw["provenance"])
+    expected_artifact = f"bin/inputplumber-xbox-hd-v{version}"
+    if (
+        patch != f"assets/inputplumber/v{version}-xbox-hd.patch"
+        or artifact != expected_artifact
+        or artifact_sha256 != f"{expected_artifact}.sha256"
+        or provenance != f"{expected_artifact}.provenance"
+    ):
+        raise ManifestError("build paths do not match version")
     return InputPlumberBuild(
         version=version,
         upstream_commit=commit,
-        patch=_safe_relative_path(plugin_dir, raw["patch"]),
-        artifact=_safe_relative_path(plugin_dir, raw["artifact"]),
-        artifact_sha256=_safe_relative_path(
-            plugin_dir, raw["artifact_sha256"]
-        ),
-        provenance=_safe_relative_path(plugin_dir, raw["provenance"]),
+        patch=patch,
+        artifact=artifact,
+        artifact_sha256=artifact_sha256,
+        provenance=provenance,
         stock_sha256=_string_tuple(
             raw["stock_sha256"], _SHA256, "stock_sha256"
         ),
@@ -108,6 +120,18 @@ def load_builds(plugin_dir: str) -> Sequence[InputPlumberBuild]:
     versions = [build.version for build in builds]
     if len(versions) != len(set(versions)):
         raise ManifestError("duplicate InputPlumber version")
+    paths = [
+        path
+        for build in builds
+        for path in (
+            build.patch,
+            build.artifact,
+            build.artifact_sha256,
+            build.provenance,
+        )
+    ]
+    if len(paths) != len(set(paths)):
+        raise ManifestError("duplicate InputPlumber build path")
     return tuple(
         sorted(
             builds,

@@ -1,0 +1,26 @@
+name: InputPlumber Xbox HD compatibility
+
+on:
+  schedule:
+    - cron: "17 8 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compatibility:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Install InputPlumber build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libclang-dev libiio-dev libudev-dev pkg-config
+          rustup toolchain install 1.92.0 --profile minimal --no-self-update
+      - name: Check latest InputPlumber release
+        env:
+          RUSTUP_TOOLCHAIN: 1.92.0
+        run: bash scripts/check-inputplumber-xbox-hd-update.sh .

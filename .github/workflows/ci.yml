@@ -48,9 +48,12 @@ jobs:
           filters: |
             inputplumber_extension:
               - ".github/workflows/ci.yml"
+              - ".github/workflows/inputplumber-xbox-hd-monitor.yml"
               - "assets/inputplumber/**"
-              - "bin/inputplumber-xbox-hd-v0.77.4*"
+              - "bin/inputplumber-xbox-hd-v*"
               - "scripts/build-inputplumber-xbox-hd.sh"
+              - "scripts/check-inputplumber-xbox-hd-update.sh"
+              - "scripts/inputplumber-manifest.py"
               - "scripts/verify-inputplumber-xbox-hd.sh"
               - "scripts/package-plugin.sh"
 
@@ -156,7 +159,7 @@ jobs:
         if: needs.changes.outputs.inputplumber_extension == 'true'
         env:
           RUSTUP_TOOLCHAIN: 1.92.0
-        run: bash scripts/build-inputplumber-xbox-hd.sh bin
+        run: bash scripts/build-inputplumber-xbox-hd.sh bin all
       - name: Verify Xbox Ally X InputPlumber extension
         if: needs.changes.outputs.inputplumber_extension == 'true'
-        run: bash scripts/verify-inputplumber-xbox-hd.sh .
+        run: bash scripts/verify-inputplumber-xbox-hd.sh . all

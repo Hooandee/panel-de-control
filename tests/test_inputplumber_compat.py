@@ -106,6 +106,7 @@ def test_selection_fails_closed(manager, device, version, stock, tmp_path):
         lambda entry: entry.update(upstream_commit="B" * 40),
         lambda entry: entry.update(patch="/tmp/patch"),
         lambda entry: entry.update(artifact="../inputplumber"),
+        lambda entry: entry.update(artifact="bin/unversioned-inputplumber"),
         lambda entry: entry.update(stock_sha256=["A" * 64]),
         lambda entry: entry.update(stock_sha256=[]),
         lambda entry: entry.update(verified_platforms=[]),
@@ -121,9 +122,12 @@ def test_rejects_invalid_build_entries(tmp_path, mutate):
 
 
 def test_rejects_unknown_root_fields_duplicates_and_more_than_three(tmp_path):
+    reused_path = _entry("0.78.0", "5" * 64)
+    reused_path["artifact"] = _entry()["artifact"]
     invalid_manifests = [
         ([_entry()], {"extra": True}),
         ([_entry(), _entry()], {}),
+        ([_entry(), reused_path], {}),
         ([_entry(f"0.77.{index}") for index in range(4)], {}),
     ]
 

@@ -30,7 +30,9 @@ jobs:
       - name: Build Xbox Ally X InputPlumber extension
         env:
           RUSTUP_TOOLCHAIN: 1.92.0
-        run: bash scripts/build-inputplumber-xbox-hd.sh bin
+        run: |
+          bash scripts/build-inputplumber-xbox-hd.sh bin all
+          bash scripts/verify-inputplumber-xbox-hd.sh . all
 
       - name: Build and package prerelease
         env:
