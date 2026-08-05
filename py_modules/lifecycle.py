@@ -53,8 +53,9 @@ class LifecycleManager:
 
     def __init__(self, apply_cb, root="/", wakeup_delay=4.0, interval=2.0,
                  read_wakeup=None, read_ac=None, reassert_cb=None,
-                 read_suspend=None, event_cb=None):
+                 read_suspend=None, event_cb=None, resume_apply_cb=None):
         self._apply = apply_cb
+        self._resume_apply = resume_apply_cb or apply_cb
         # Settle-retries re-assert only the power rails, not the full re-apply; fall back to
         # the full apply when not given.
         self._reassert = reassert_cb or apply_cb
@@ -249,7 +250,8 @@ class LifecycleManager:
             )
         # fire scheduled re-applies whose delay has elapsed (re-reading AC live)
         self._pending = self._fire_due(
-            self._pending, self._apply, now, "resume-full-reapply", ac
+            self._pending, self._resume_apply, now,
+            "resume-full-reapply", ac
         )
         self._pending_light = self._fire_due(
             self._pending_light, self._reassert, now, "tdp-settle-reassert", ac

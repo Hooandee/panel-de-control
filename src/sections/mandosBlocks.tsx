@@ -1,27 +1,99 @@
 import { FC, ReactNode } from "react";
-import { DialogButton, Dropdown } from "@decky/ui";
-import { LuGamepad2, LuRotateCcw } from "react-icons/lu";
+import { DialogButton, Dropdown, ToggleField } from "@decky/ui";
+import { LuActivity, LuGamepad2, LuRotateCcw } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import {
-  currentTargetValue,
   managerDescKey,
   managerLabelKey,
+  choiceIndex,
+  isExperimentalHdVibration,
+  prettyAction,
   prettyTarget,
+  targetsToAction,
+  vibrationTestStrength,
+  vibrationNotice,
 } from "../mandos/logic";
+import { openKeyboardChordEditor } from "../mandos/KeyboardChordEditor";
+import {
+  VibrationTestControl,
+  type VibrationTestChannel,
+} from "../mandos/VibrationTestControl";
 import { useMandos } from "../mandos/mandosContext";
+import {
+  diagnosticOperationLabel,
+  visibleDiagnosticGroups,
+  type ControllerCapabilitySurface,
+  type DiagnosticOperationLabel,
+} from "../mandos/diagnostics";
+import { useControllerDiagnostics } from "../mandos/useController";
 import { ProfileSelector } from "../components/ProfileSelector";
+import { ContainedSlider } from "../components/ContainedSlider";
+import {
+  CompactChoiceField,
+  CompactFieldSurface,
+  InlineNotice,
+} from "../components/CompactField";
 import { registerBlock } from "../customize/blocks";
 
-const Card: FC<{ title: string; children: ReactNode }> = ({ title, children }) => (
-  <div style={{ ...theme.card, padding: theme.space.md, overflow: "hidden" }}>
+const Card: FC<{ title: ReactNode; children: ReactNode; icon?: ReactNode }> = ({ title, children, icon }) => (
+  <div style={{ ...theme.card, padding: theme.space.md }}>
     <div style={{ display: "flex", alignItems: "center", gap: theme.space.xs, fontSize: theme.font.body, fontWeight: 700, color: theme.color.textPrimary, marginBottom: theme.space.sm }}>
-      <LuGamepad2 size={16} color={theme.color.accent} /> {title}
+      {icon ?? <LuGamepad2 size={16} color={theme.color.accent} />} {title}
     </div>
     {children}
   </div>
 );
+
+const DiagnosticLine: FC<{ label: string; value: ReactNode }> = ({ label, value }) => (
+  <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: theme.space.md, padding: `${theme.space.xs}px 0`, borderBottom: `1px solid ${theme.color.hairline}` }}>
+    <span style={{ minWidth: 0, fontSize: theme.font.caption, color: theme.color.textMuted }}>{label}</span>
+    <span style={{ minWidth: 0, textAlign: "right", overflowWrap: "anywhere", fontSize: theme.font.caption, fontWeight: 700, color: theme.color.textPrimary }}>{value}</span>
+  </div>
+);
+
+const DiagnosticHeading: FC<{ children: ReactNode }> = ({ children }) => (
+  <div style={{ marginTop: theme.space.sm, fontSize: theme.font.caption, fontWeight: 700, color: theme.color.accent, letterSpacing: 0.7, textTransform: "uppercase" }}>
+    {children}
+  </div>
+);
+
+const statusColor = (status: DiagnosticOperationLabel): string => {
+  if (status === "confirmed") return theme.color.ok;
+  if (status === "failed") return theme.color.danger;
+  return status === "unavailable" ? theme.color.textMuted : theme.color.accent;
+};
+
+const DiscreteChoiceSelect: FC<{
+  label: string;
+  options: readonly string[];
+  value: string;
+  optionLabel: (value: string) => string;
+  disabled?: boolean;
+  onChange: (value: string) => void;
+}> = ({ label, options, value, optionLabel, disabled, onChange }) => {
+  const selected = choiceIndex(options, value);
+  if (options.length < 2 || selected < 0) return null;
+  return (
+    <CompactChoiceField
+      label={label}
+      options={options.map((option) => ({
+        data: option,
+        label: optionLabel(option),
+      }))}
+      value={value}
+      disabled={disabled}
+      onChange={onChange}
+    />
+  );
+};
+
+const primitiveFieldSummary = (surface: ControllerCapabilitySurface): string => Object.entries(surface.fields)
+  .filter(([, value]) => ["string", "number", "boolean"].includes(typeof value))
+  .slice(0, 6)
+  .map(([key, value]) => `${key}: ${String(value)}`)
+  .join(" · ");
 
 const Row: FC<{ label: string; children: ReactNode }> = ({ label, children }) => (
   <div style={{ display: "flex", flexDirection: "column", gap: theme.space.xs, padding: `${theme.space.xs}px 0` }}>
@@ -61,17 +133,20 @@ const ManagerBlock: FC = () => {
 
 const RemapBlock: FC = () => {
   const { t } = useI18n();
-  const { config, scope, game, onScope, onSetButton, onReset } = useMandos();
+  const {
+    config, scope, game, onScope, onSetButtonAction, onSetVirtualMode, onReset,
+  } = useMandos();
   if (config?.kind !== "remap") return null;
   const buttons = config.buttons ?? [];
-  const targetGroups = [
-    { data: "", label: t("mandos.remap.default") },
-    { label: t("mandos.targets.buttons"), options: (config.gamepad_targets ?? []).map((g) => ({ data: `gp:${g}`, label: prettyTarget(`gp:${g}`) })) },
-    { label: t("mandos.targets.keys"), options: (config.key_targets ?? []).map((k) => ({ data: `key:${k}`, label: prettyTarget(`key:${k}`) })) },
-  ];
+  const virtual = config.virtual_controller;
+  const hasControls = buttons.length > 0 || virtual?.supported === true;
+  const modeLabel = (mode: string) => {
+    const value = t(`mandos.mode.${mode}`);
+    return value === `mandos.mode.${mode}` ? mode : value;
+  };
   return (
     <Card title={t("mandos.remap.title")}>
-      {buttons.length === 0 ? (
+      {!hasControls ? (
         <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, lineHeight: 1.4 }}>
           {t(config.device_known === false ? "mandos.remap.uncalibrated" : "mandos.remap.nobuttons")}
         </div>
@@ -87,25 +162,91 @@ const RemapBlock: FC = () => {
               onScope={onScope}
             />
           </div>
-          {buttons.map((b) => (
-            <RemapRow key={b.source} label={b.label}>
+          {virtual?.supported && (
+            <Row label={t("mandos.mode.label")}>
               <Dropdown
-                rgOptions={targetGroups}
-                selectedOption={currentTargetValue(b.target ?? [])}
-                strDefaultLabel={t("mandos.remap.default")}
-                onChange={(o) => onSetButton(b.source, o.data as string)}
+                rgOptions={virtual.options.map((mode) => ({
+                  data: mode,
+                  label: modeLabel(mode),
+                }))}
+                selectedOption={virtual.mode}
+                onChange={(option) => onSetVirtualMode(option.data as string)}
               />
-            </RemapRow>
-          ))}
-          <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, margin: `${theme.space.sm}px 0`, lineHeight: 1.4 }}>
-            {t("mandos.remap.note")}
-          </div>
-          <DialogButton
-            style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: theme.space.xs }}
-            onClick={onReset}
-          >
-            <LuRotateCcw size={14} /> {t("mandos.remap.reset")}
-          </DialogButton>
+            </Row>
+          )}
+          {virtual?.actual_mode && virtual.mode !== "auto" && virtual.actual_mode !== virtual.mode && (
+            <div style={{ fontSize: theme.font.caption, color: theme.color.accent, marginBottom: theme.space.sm, lineHeight: 1.4 }}>
+              {t("mandos.mode.recreating")}
+            </div>
+          )}
+          {virtual?.last_apply === false && (
+            <div style={{ fontSize: theme.font.caption, color: theme.color.danger, marginBottom: theme.space.sm, lineHeight: 1.4 }}>
+              {t("mandos.mode.applyFailed")}
+            </div>
+          )}
+          {buttons.length === 0 && (
+            <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, lineHeight: 1.4 }}>
+              {t(config.device_known === false ? "mandos.remap.uncalibrated" : "mandos.remap.nobuttons")}
+            </div>
+          )}
+          {buttons.map((b) => {
+            const action = targetsToAction(b.target ?? []);
+            const selected = action.kind === "gamepad" ? `gp:${action.target}` : action.kind === "keyboard_chord" ? "shortcut" : "";
+            const shortcutLabel = action.kind === "keyboard_chord"
+              ? prettyAction(action)
+              : t("mandos.remap.shortcut");
+            const targetGroups = [
+              { data: "", label: t("mandos.remap.default") },
+              { label: t("mandos.targets.buttons"), options: (config.gamepad_targets ?? []).map((target) => ({ data: `gp:${target}`, label: prettyTarget(`gp:${target}`) })) },
+              { label: t("mandos.targets.keys"), options: [{ data: "shortcut", label: shortcutLabel }] },
+            ];
+            return (
+              <RemapRow key={b.source} label={b.label}>
+                <Dropdown
+                  rgOptions={targetGroups}
+                  selectedOption={selected}
+                  strDefaultLabel={t("mandos.remap.default")}
+                  onChange={(option) => {
+                    const value = option.data as string;
+                    if (value === "shortcut") {
+                      openKeyboardChordEditor({
+                        initialKeys: action.kind === "keyboard_chord" ? action.keys : [],
+                        keyTargets: config.key_targets ?? [],
+                        onSave: (keys) => onSetButtonAction(b.source, { kind: "keyboard_chord", keys }),
+                      });
+                      return;
+                    }
+                    onSetButtonAction(
+                      b.source,
+                      value.startsWith("gp:")
+                        ? { kind: "gamepad", target: value.slice(3) }
+                        : { kind: "default" },
+                    );
+                  }}
+                />
+              </RemapRow>
+            );
+          })}
+          {buttons.length > 0 && (
+            <>
+              <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, margin: `${theme.space.sm}px 0`, lineHeight: 1.4 }}>
+                {t("mandos.remap.note")}
+              </div>
+              {config.last_apply === false && (
+                <div style={{ fontSize: theme.font.caption, color: theme.color.danger, marginBottom: theme.space.sm, lineHeight: 1.4 }}>
+                  {t(config.apply_error === "profile_conflict"
+                    ? "mandos.remap.conflict"
+                    : "mandos.remap.applyFailed")}
+                </div>
+              )}
+              <DialogButton
+                style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: theme.space.xs }}
+                onClick={onReset}
+              >
+                <LuRotateCcw size={14} /> {t("mandos.remap.reset")}
+              </DialogButton>
+            </>
+          )}
         </>
       )}
     </Card>
@@ -114,22 +255,51 @@ const RemapBlock: FC = () => {
 
 const SettingsBlock: FC = () => {
   const { t } = useI18n();
-  const { config, onSetSetting } = useMandos();
+  const {
+    config, scope, game, onScope, onSetSetting, onSetVirtualMode,
+  } = useMandos();
   if (config?.kind !== "settings") return null;
+  const virtual = config.virtual_controller;
   const label = (key: string, fallback: string) => {
     const v = t(key);
     return v === key ? fallback : v;
   };
   return (
     <Card title={t("mandos.settings.title")}>
-      <Row label={t("mandos.mode.label")}>
-        <Dropdown
-          rgOptions={(config.mode_options ?? []).map((m) => ({ data: m, label: label(`mandos.mode.${m}`, m) }))}
-          selectedOption={config.mode ?? undefined}
-          onChange={(o) => onSetSetting("mode", o.data as string)}
-        />
-      </Row>
-      {config.paddles_as != null && (
+      {virtual?.supported && virtual.scope.includes("game") && (
+        <div style={{ marginBottom: theme.space.sm }}>
+          <ProfileSelector
+            scope={scope}
+            gameName={game?.name ?? null}
+            hasGameProfile={config.has_game_profile ?? false}
+            globalLabel={t("tdp.scope.global")}
+            inheritHint={t("mandos.mode.inherit")}
+            onScope={onScope}
+          />
+        </div>
+      )}
+      {virtual?.supported ? (
+        <Row label={t("mandos.mode.label")}>
+          <Dropdown
+            rgOptions={virtual.options.map((mode) => ({
+              data: mode,
+              label: label(`mandos.mode.${mode}`, mode),
+            }))}
+            selectedOption={virtual.mode}
+            onChange={(option) => onSetVirtualMode(option.data as string)}
+          />
+        </Row>
+      ) : (
+        <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, marginBottom: theme.space.sm, lineHeight: 1.4 }}>
+          {t("mandos.mode.unavailable")}
+        </div>
+      )}
+      {virtual?.actual_mode && virtual.mode !== "auto" && virtual.actual_mode !== virtual.mode && (
+        <div style={{ fontSize: theme.font.caption, color: theme.color.accent, marginBottom: theme.space.sm, lineHeight: 1.4 }}>
+          {t("mandos.mode.recreating")}
+        </div>
+      )}
+      {virtual?.supported && scope === "global" && config.paddles_as != null && (
         <Row label={t("mandos.paddles.label")}>
           <Dropdown
             rgOptions={(config.paddles_options ?? []).map((p) => ({ data: p, label: label(`mandos.paddles.${p}`, p) }))}
@@ -139,8 +309,415 @@ const SettingsBlock: FC = () => {
         </Row>
       )}
       <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, marginTop: theme.space.sm, lineHeight: 1.4 }}>
-        {t("mandos.settings.note")}
+        {t(virtual?.mode === "dualsense"
+          ? "mandos.mode.dualsense.warning"
+          : "mandos.settings.note")}
       </div>
+    </Card>
+  );
+};
+
+const VibrationBlock: FC = () => {
+  const { t } = useI18n();
+  const {
+    config, scope, game, onScope, onSetVibration, onTestVibration,
+    vibrationTestResult,
+  } = useMandos();
+  const vibration = config?.vibration;
+  if (!vibration?.supported) return null;
+  const sliderMin = vibration.min ?? 0;
+  const sliderMax = vibration.max ?? 100;
+  const sliderStep = vibration.step ?? 5;
+  const testChannels = (vibration.test_channels ?? []).filter(
+    (channel): channel is VibrationTestChannel => (
+      channel === "left" || channel === "right" || channel === "strong"
+      || channel === "weak" || channel === "both"
+      || channel === "trigger_left" || channel === "trigger_right"
+      || channel === "all"
+    ),
+  ).filter((channel) => vibration.mode !== "asus_xbox_hd" || channel !== "all");
+  const testStrength = (channel: VibrationTestChannel): number | null => (
+    vibrationTestStrength(vibration, channel)
+  );
+  const testChannelLabel = (channel: VibrationTestChannel): string => {
+    if (vibration.mode === "asus_xbox_hd" && channel === "strong") {
+      return t("mandos.vibration.body.left");
+    }
+    if (vibration.mode === "asus_xbox_hd" && channel === "weak") {
+      return t("mandos.vibration.body.right");
+    }
+    return t(`mandos.vibration.test.${channel}`);
+  };
+  const testBlocked = vibrationTestResult != null && (
+    !vibrationTestResult.stopped || !vibrationTestResult.restored
+  );
+  const notice = vibrationNotice(vibration, vibrationTestResult?.reason ?? null);
+  const experimental = isExperimentalHdVibration(vibration.mode);
+  return (
+    <Card title={(
+      <span style={{ display: "inline-flex", alignItems: "center", gap: theme.space.xs, flexWrap: "wrap" }}>
+        {t("mandos.vibration.title")}
+        {experimental && (
+          <span style={{
+            padding: "2px 6px",
+            borderRadius: 999,
+            background: "rgba(255,180,84,0.10)",
+            color: theme.color.warn,
+            fontSize: 10,
+            fontWeight: 700,
+            lineHeight: 1.2,
+          }}>
+            {t("device.experimental.badge")}
+          </span>
+        )}
+      </span>
+    )}>
+      <div style={{ marginBottom: theme.space.sm }}>
+        <ProfileSelector
+          scope={scope}
+          gameName={game?.name ?? null}
+          hasGameProfile={config?.has_game_profile ?? false}
+          globalLabel={t("tdp.scope.global")}
+          inheritHint={t("mandos.vibration.inherit")}
+          onScope={onScope}
+        />
+      </div>
+      {vibration.mode === "asus_xbox_hd" && (
+        <InlineNotice tone="muted">
+          {t(vibration.base_owner === "hhd"
+            ? "mandos.vibration.owner.xboxHhd"
+            : "mandos.vibration.owner.xboxIp")}
+        </InlineNotice>
+      )}
+      <CompactFieldSurface>
+        <ToggleField
+          label={t("mandos.vibration.enabled")}
+          description={t("mandos.vibration.enabled.desc")}
+          checked={vibration.enabled === true}
+          onChange={(enabled) => onSetVibration({ enabled })}
+          bottomSeparator="none"
+        />
+      </CompactFieldSurface>
+      {vibration.persistent && vibration.mode === "gain" && vibration.value != null && (
+        <ContainedSlider
+          label={t("mandos.vibration.intensity")}
+          value={vibration.value}
+          min={sliderMin}
+          max={sliderMax}
+          step={sliderStep}
+          showValue
+          valueSuffix="%"
+          onChange={(value) => onSetVibration({ value })}
+        />
+      )}
+      {vibration.persistent && (
+        vibration.mode === "dual" || vibration.mode === "asus_xbox_hd"
+      ) && (
+        <>
+          {vibration.mode === "asus_xbox_hd" && (
+            <DiagnosticHeading>{t("mandos.vibration.bodyMotors")}</DiagnosticHeading>
+          )}
+          {vibration.left != null && (
+            <ContainedSlider
+              label={t(vibration.mode === "asus_xbox_hd"
+                ? "mandos.vibration.body.left"
+                : "mandos.vibration.left")}
+              value={vibration.left}
+              min={sliderMin}
+              max={sliderMax}
+              step={sliderStep}
+              showValue
+              valueSuffix="%"
+              onChange={(left) => onSetVibration({ left })}
+            />
+          )}
+          {vibration.right != null && (
+            <ContainedSlider
+              label={t(vibration.mode === "asus_xbox_hd"
+                ? "mandos.vibration.body.right"
+                : "mandos.vibration.right")}
+              value={vibration.right}
+              min={sliderMin}
+              max={sliderMax}
+              step={sliderStep}
+              showValue
+              valueSuffix="%"
+              onChange={(right) => onSetVibration({ right })}
+            />
+          )}
+        </>
+      )}
+      {vibration.mode === "asus_xbox_hd" && vibration.hd_game_supported && (
+        <>
+          <DiagnosticHeading>{t("mandos.vibration.hdGame.title")}</DiagnosticHeading>
+          <CompactFieldSurface>
+            <ToggleField
+              label={t("mandos.vibration.hdGame.enabled")}
+              description={t("mandos.vibration.hdGame.desc")}
+              checked={vibration.hd_game_enabled === true}
+              onChange={(hd_game_enabled) => onSetVibration({ hd_game_enabled })}
+              bottomSeparator="none"
+            />
+          </CompactFieldSurface>
+          <div style={{
+            margin: `${theme.space.xs}px 0 ${theme.space.sm}px`,
+            color: theme.color.textMuted,
+            fontSize: theme.font.caption,
+            lineHeight: 1.4,
+          }}>
+            {t("mandos.vibration.hdGame.sources")}
+          </div>
+          {vibration.trigger_left != null && (
+            <ContainedSlider
+              label={t("mandos.vibration.trigger.left")}
+              value={vibration.trigger_left}
+              min={sliderMin}
+              max={sliderMax}
+              step={sliderStep}
+              showValue
+              valueSuffix="%"
+              onChange={(trigger_left) => onSetVibration({ trigger_left })}
+            />
+          )}
+          {vibration.trigger_left_source && (
+            <DiscreteChoiceSelect
+              label={t("mandos.vibration.trigger.leftSource")}
+              options={vibration.trigger_source_options ?? []}
+              value={vibration.trigger_left_source}
+              optionLabel={(value) => t(`mandos.vibration.source.${value}`)}
+              onChange={(trigger_left_source) => onSetVibration({
+                trigger_left_source: trigger_left_source as NonNullable<typeof vibration.trigger_left_source>,
+              })}
+            />
+          )}
+          {vibration.trigger_right != null && (
+            <ContainedSlider
+              label={t("mandos.vibration.trigger.right")}
+              value={vibration.trigger_right}
+              min={sliderMin}
+              max={sliderMax}
+              step={sliderStep}
+              showValue
+              valueSuffix="%"
+              onChange={(trigger_right) => onSetVibration({ trigger_right })}
+            />
+          )}
+          {vibration.trigger_right_source && (
+            <DiscreteChoiceSelect
+              label={t("mandos.vibration.trigger.rightSource")}
+              options={vibration.trigger_source_options ?? []}
+              value={vibration.trigger_right_source}
+              optionLabel={(value) => t(`mandos.vibration.source.${value}`)}
+              onChange={(trigger_right_source) => onSetVibration({
+                trigger_right_source: trigger_right_source as NonNullable<typeof vibration.trigger_right_source>,
+              })}
+            />
+          )}
+        </>
+      )}
+      {vibration.mode === "asus_xbox_hd"
+        && vibration.base_owner === "inputplumber"
+        && vibration.hd_game_supported === false && (
+        <InlineNotice tone="warning">
+          {t("mandos.vibration.hdGame.unavailable")}
+        </InlineNotice>
+      )}
+      {vibration.persistent && vibration.mode === "lenovo_hd" && (
+        <>
+          {vibration.connected !== false && (
+            <>
+              {vibration.intensity && (
+                <DiscreteChoiceSelect
+                  label={t("mandos.vibration.handlesIntensity")}
+                  options={vibration.intensity_options ?? []}
+                  value={vibration.intensity}
+                  optionLabel={(value) => t(`mandos.vibration.intensity.${value}`)}
+                  onChange={(intensity) => onSetVibration({
+                    intensity: intensity as NonNullable<typeof vibration.intensity>,
+                  })}
+                />
+              )}
+              {vibration.left_pattern && (
+                <DiscreteChoiceSelect
+                  label={t("mandos.vibration.pattern.left")}
+                  options={vibration.left_pattern_options ?? []}
+                  value={vibration.left_pattern}
+                  optionLabel={(value) => t(`mandos.vibration.pattern.${value}`)}
+                  onChange={(left_pattern) => onSetVibration({
+                    left_pattern: left_pattern as NonNullable<typeof vibration.left_pattern>,
+                  })}
+                />
+              )}
+              {vibration.right_pattern && (
+                <DiscreteChoiceSelect
+                  label={t("mandos.vibration.pattern.right")}
+                  options={vibration.right_pattern_options ?? []}
+                  value={vibration.right_pattern}
+                  optionLabel={(value) => t(`mandos.vibration.pattern.${value}`)}
+                  onChange={(right_pattern) => onSetVibration({
+                    right_pattern: right_pattern as NonNullable<typeof vibration.right_pattern>,
+                  })}
+                />
+              )}
+              <CompactFieldSurface>
+                <ToggleField
+                  label={t("mandos.vibration.touchpad")}
+                  description={t("mandos.vibration.touchpad.desc")}
+                  checked={vibration.touchpad_enabled === true}
+                  onChange={(touchpad_enabled) => onSetVibration({ touchpad_enabled })}
+                  bottomSeparator="none"
+                />
+              </CompactFieldSurface>
+              {vibration.touchpad_intensity && (
+                <DiscreteChoiceSelect
+                  label={t("mandos.vibration.touchpadIntensity")}
+                  options={vibration.touchpad_intensity_options ?? []}
+                  value={vibration.touchpad_intensity}
+                  optionLabel={(value) => t(`mandos.vibration.intensity.${value}`)}
+                  disabled={vibration.touchpad_enabled !== true}
+                  onChange={(touchpad_intensity) => onSetVibration({
+                    touchpad_intensity: touchpad_intensity as NonNullable<typeof vibration.touchpad_intensity>,
+                  })}
+                />
+              )}
+            </>
+          )}
+          {vibration.connected === false && (
+            <div style={{ fontSize: theme.font.caption, color: theme.color.warn, marginTop: theme.space.sm, lineHeight: 1.4 }}>
+              {t("mandos.vibration.lenovoDisconnected")}
+            </div>
+          )}
+        </>
+      )}
+      {vibration.test_supported && (
+        <VibrationTestControl
+          channels={testChannels}
+          disabled={vibration.enabled !== true || testBlocked}
+          selectLabel={t(experimental
+            ? "mandos.vibration.test.hdMotors"
+            : "mandos.vibration.test.channel")}
+          description={vibration.mode === "asus_xbox_hd"
+            ? t("mandos.vibration.test.manualDesc")
+            : undefined}
+          buttonLabel={t("mandos.vibration.test")}
+          channelLabel={testChannelLabel}
+          channelStrength={testStrength}
+          onTest={(channel, strength) => onTestVibration("pulse", channel, strength)}
+        />
+      )}
+      {notice && (
+        <InlineNotice tone={notice.tone}>
+          {t(notice.key)}
+        </InlineNotice>
+      )}
+    </Card>
+  );
+};
+
+const DiagnosticsBlock: FC = () => {
+  const { t } = useI18n();
+  const diagnostics = useControllerDiagnostics();
+  if (!diagnostics) return null;
+  const groups = visibleDiagnosticGroups(diagnostics);
+  if (groups.length === 0) return null;
+  const capability = (surface: ControllerCapabilitySurface) => {
+    const status = surface.availability === "supported" ? "confirmed" : "unavailable";
+    const detail = primitiveFieldSummary(surface);
+    return (
+      <>
+        <DiagnosticLine
+          label={t("mandos.diagnostics.owner")}
+          value={surface.owner}
+        />
+        <DiagnosticLine
+          label={t("mandos.diagnostics.availability")}
+          value={<span style={{ color: statusColor(status) }}>{t(`mandos.diagnostics.availability.${surface.availability}`)}</span>}
+        />
+        <DiagnosticLine
+          label={t("mandos.diagnostics.readback")}
+          value={t(`mandos.diagnostics.readback.${surface.readback}`)}
+        />
+        <DiagnosticLine
+          label={t("mandos.diagnostics.scope")}
+          value={surface.scope.map((scope) => t(`mandos.diagnostics.scope.${scope}`)).join(" · ")}
+        />
+        {detail && <DiagnosticLine label={t("mandos.diagnostics.values")} value={detail} />}
+      </>
+    );
+  };
+
+  return (
+    <Card
+      title={t("mandos.diagnostics.title")}
+      icon={<LuActivity size={16} color={theme.color.accent} />}
+    >
+      <div style={{ color: theme.color.textMuted, fontSize: theme.font.caption, lineHeight: 1.4, marginBottom: theme.space.sm }}>
+        {t("mandos.diagnostics.desc")}
+      </div>
+      {groups.includes("sources") && (
+        <>
+          <DiagnosticHeading>{t("mandos.diagnostics.sources")}</DiagnosticHeading>
+          {diagnostics.sources.map((source, index) => (
+            <DiagnosticLine
+              key={`${source.manager}-${index}`}
+              label={source.name ?? t(`mandos.manager.${source.manager === "inputplumber" ? "ip" : "hhd"}`)}
+              value={[
+                source.version ? `v${source.version}` : null,
+                source.source_count != null ? t("mandos.diagnostics.sourceCount", { count: source.source_count }) : null,
+              ].filter(Boolean).join(" · ") || t("mandos.diagnostics.detected")}
+            />
+          ))}
+        </>
+      )}
+      {groups.includes("batteries") && (
+        <>
+          <DiagnosticHeading>{t("mandos.diagnostics.batteries")}</DiagnosticHeading>
+          {diagnostics.batteries.map((battery) => (
+            <DiagnosticLine key={battery.label} label={battery.label} value={`${battery.percent}%`} />
+          ))}
+        </>
+      )}
+      {groups.includes("inputs") && (
+        <>
+          <DiagnosticHeading>{t("mandos.diagnostics.inputs")}</DiagnosticHeading>
+          {(diagnostics.inputs.buttons ?? []).map((button) => (
+            <DiagnosticLine key={button.source} label={button.label} value={button.source} />
+          ))}
+        </>
+      )}
+      {diagnostics.motion && (
+        <>
+          <DiagnosticHeading>{t("mandos.diagnostics.motion")}</DiagnosticHeading>
+          {capability(diagnostics.motion)}
+        </>
+      )}
+      {diagnostics.virtual_controller && (
+        <>
+          <DiagnosticHeading>{t("mandos.diagnostics.virtualController")}</DiagnosticHeading>
+          {capability(diagnostics.virtual_controller)}
+        </>
+      )}
+      {diagnostics.vibration && (
+        <>
+          <DiagnosticHeading>{t("mandos.diagnostics.vibration")}</DiagnosticHeading>
+          {capability(diagnostics.vibration)}
+        </>
+      )}
+      {groups.includes("operations") && (
+        <>
+          <DiagnosticHeading>{t("mandos.diagnostics.operations")}</DiagnosticHeading>
+          {Object.entries(diagnostics.last_operations).map(([name, operation]) => {
+            const status = diagnosticOperationLabel(operation);
+            return (
+              <DiagnosticLine
+                key={name}
+                label={operation.operation ?? name}
+                value={<span style={{ color: statusColor(status) }}>{t(`mandos.diagnostics.status.${status}`)}</span>}
+              />
+            );
+          })}
+        </>
+      )}
     </Card>
   );
 };
@@ -156,5 +733,14 @@ export function registerMandosBlocks(): void {
     sectionId: "mandos",
     Component: SettingsBlock,
     useAvailable: () => useMandos().config?.kind === "settings",
+  });
+  registerBlock("vibration", {
+    sectionId: "mandos",
+    Component: VibrationBlock,
+    useAvailable: () => useMandos().config?.vibration?.supported === true,
+  });
+  registerBlock("diagnostics", {
+    sectionId: "mandos",
+    Component: DiagnosticsBlock,
   });
 }

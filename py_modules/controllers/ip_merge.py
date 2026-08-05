@@ -20,8 +20,16 @@ _SCRIPT = (
     "from controllers.ip_profile import apply_overrides_to_profile;"
     "prof=yaml.safe_load(sys.stdin.read()) or {};"
     "ov=json.loads(sys.argv[2]);"
-    "sys.stdout.write(yaml.safe_dump(apply_overrides_to_profile(prof, ov),"
+    "out=apply_overrides_to_profile(prof, ov);"
+    "sys.exit(2) if out is None else sys.stdout.write(yaml.safe_dump(out,"
     " sort_keys=False, default_flow_style=False))"
+)
+
+_COMPARE_SCRIPT = (
+    "import sys,json,yaml;"
+    "docs=json.load(sys.stdin);"
+    "print('true' if yaml.safe_load(docs[0]) == yaml.safe_load(docs[1]) "
+    "else 'false')"
 )
 
 
@@ -38,3 +46,19 @@ def merge_profile(baseline_yaml: str, overrides: dict):
     except Exception:
         pass
     return None
+
+
+def profiles_equal(left: str, right: str) -> bool:
+    if left == right:
+        return True
+    if not isinstance(left, str) or not isinstance(right, str):
+        return False
+    try:
+        result = subprocess.run(
+            [resolve_bin("python3"), "-c", _COMPARE_SCRIPT],
+            input=json.dumps([left, right]), capture_output=True, text=True,
+            timeout=8, env=clean_env(),
+        )
+        return result.returncode == 0 and result.stdout.strip() == "true"
+    except Exception:
+        return False

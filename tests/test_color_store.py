@@ -5,7 +5,8 @@ from display.color_store import ColorStore
 # Native/neutral: saturation 100 (%, per-game); every other field is global panel
 # calibration at its neutral (bipolar 0, or gain 100 = 1.0).
 NATIVE = {
-    "saturation": 100, "temperature": 0, "contrast": 0, "gamma": 0, "hue": 0, "black": 0,
+    "saturation": 100, "hdr_saturation": 100,
+    "temperature": 0, "contrast": 0, "gamma": 0, "hue": 0, "black": 0,
     "gain_r": 100, "gain_g": 100, "gain_b": 100, "vibrance": 0,
 }
 
@@ -55,6 +56,25 @@ def test_saturation_is_per_game_over_global(tmp_path):
     assert s.effective("123")["saturation"] == 160  # own override
     assert s.effective(None)["saturation"] == 120    # global untouched
     assert s.has_game("123") is True
+
+
+def test_hdr_saturation_is_per_game_over_global_and_clamped(tmp_path):
+    s = _store(tmp_path)
+    s.set_hdr_saturation("global", 120)
+    s.set_hdr_saturation("game", 999, appid="123")
+
+    assert s.effective(None)["hdr_saturation"] == 120
+    assert s.effective("123")["hdr_saturation"] == 150
+
+
+def test_hdr_saturation_follow_global_keeps_own_value(tmp_path):
+    s = _store(tmp_path)
+    s.set_hdr_saturation("global", 115)
+    s.set_hdr_saturation("game", 140, appid="42")
+    s.set_follow_global("42", True)
+    assert s.effective("42")["hdr_saturation"] == 115
+    s.set_follow_global("42", False)
+    assert s.effective("42")["hdr_saturation"] == 140
 
 
 def test_calibration_is_global_only(tmp_path):
@@ -151,6 +171,7 @@ def test_partial_saved_data_fills_native_defaults(tmp_path):
     p.write_text(json.dumps({"global": {"saturation": 150}}))
     eff = ColorStore(str(p)).effective(None)
     assert eff["saturation"] == 150
+    assert eff["hdr_saturation"] == 100
     assert eff["contrast"] == 0 and eff["temperature"] == 0  # missing → native
 
 
@@ -172,6 +193,18 @@ def test_apply_preset_keeps_hdr_game(tmp_path):
     s.set_hdr("game", True, appid="7")
     s.apply_preset("game", {"saturation": 130}, appid="7")
     assert s.hdr("7") is True
+
+
+def test_apply_preset_keeps_hdr_saturation_for_each_scope(tmp_path):
+    s = _store(tmp_path)
+    s.set_hdr_saturation("global", 125)
+    s.set_hdr_saturation("game", 140, appid="7")
+
+    s.apply_preset("global", {"saturation": 130})
+    s.apply_preset("game", {"saturation": 145}, appid="7")
+
+    assert s.effective(None)["hdr_saturation"] == 125
+    assert s.effective("7")["hdr_saturation"] == 140
 
 
 def test_reset_keeps_hdr(tmp_path):

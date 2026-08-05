@@ -21,6 +21,8 @@ SUDO_PASS="${DECK_SUDO_PASS:?set DECK_SUDO_PASS to the device sudo password}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
+bash scripts/verify-inputplumber-xbox-hd.sh "$ROOT"
+
 echo "==> Building frontend"
 pnpm build
 
@@ -32,7 +34,7 @@ TARBALL="$WORK/plugin.tgz"
 tar --no-xattrs \
   --exclude='__pycache__' --exclude='*.pyc' \
   -czf "$TARBALL" \
-  dist main.py py_modules plugin.json package.json assets LICENSE README.md
+  dist main.py py_modules plugin.json package.json assets bin LICENSE README.md
 
 echo "==> Copying to ${HOST}"
 scp -q "$TARBALL" "${HOST}:/tmp/pdc-plugin.tgz"

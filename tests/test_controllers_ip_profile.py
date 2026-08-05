@@ -90,6 +90,90 @@ def test_buttons_rog_xbox_ally_family_two_macro_buttons():
     assert ip.buttons_for("rog_xbox_ally_x", caps) == expected
 
 
+def test_buttons_original_rog_ally_family_two_macro_buttons():
+    caps = [
+        "Gamepad:Button:South",
+        "Gamepad:Button:LeftPaddle1",
+        "Gamepad:Button:RightPaddle1",
+        "Gamepad:Button:QuickAccess",
+    ]
+    expected = [
+        ("LeftPaddle1", "M2"),
+        ("RightPaddle1", "M1"),
+    ]
+    assert ip.buttons_for("rog_ally", caps) == expected
+    assert ip.buttons_for("rog_ally_x", caps) == expected
+
+
+def test_ally_paddles_require_installed_map_and_raw_key_evidence(tmp_path):
+    profile = tmp_path / "usr/share/inputplumber/devices/50-rog_ally.yaml"
+    mapping = (
+        tmp_path
+        / "usr/share/inputplumber/capability_maps/ally_type1.yaml"
+    )
+    keys = tmp_path / "sys/class/input/event3/device/capabilities/key"
+    profile.parent.mkdir(parents=True)
+    mapping.parent.mkdir(parents=True)
+    keys.parent.mkdir(parents=True)
+    profile.write_text(
+        "name: ASUS ROG Ally\ncapability_map_id: aly1\n"
+    )
+    mapping.write_text(
+        "id: aly1\n"
+        "mapping:\n"
+        "  - name: Left Paddle\n"
+        "    source_events:\n"
+        "      - keyboard: KeyF14\n"
+        "    target_event:\n"
+        "      gamepad:\n"
+        "        button: LeftPaddle1\n"
+        "  - name: Right Paddle\n"
+        "    source_events:\n"
+        "      - keyboard: KeyF15\n"
+        "    target_event:\n"
+        "      gamepad:\n"
+        "        button: RightPaddle1\n"
+    )
+    keys.write_text(f"{(1 << 184) | (1 << 185):x}\n")
+
+    proven = ip.proven_mapped_capabilities(
+        "rog_ally", ["/dev/input/event3"], root=str(tmp_path)
+    )
+
+    assert proven == {"LeftPaddle1", "RightPaddle1"}
+    assert ip.buttons_for("rog_ally", [], proven) == [
+        ("LeftPaddle1", "M2"),
+        ("RightPaddle1", "M1"),
+    ]
+
+
+def test_ally_paddle_proof_rejects_map_or_raw_capability_mismatch(
+    tmp_path,
+):
+    profile = tmp_path / "usr/share/inputplumber/devices/50-rog_ally.yaml"
+    mapping = (
+        tmp_path
+        / "usr/share/inputplumber/capability_maps/ally_type1.yaml"
+    )
+    keys = tmp_path / "sys/class/input/event3/device/capabilities/key"
+    profile.parent.mkdir(parents=True)
+    mapping.parent.mkdir(parents=True)
+    keys.parent.mkdir(parents=True)
+    profile.write_text(
+        "name: ASUS ROG Ally\ncapability_map_id: aly1\n"
+    )
+    mapping.write_text(
+        "id: aly1\nsource_events:\n"
+        "  - keyboard: KeyF14\ntarget_event:\n"
+        "  gamepad:\n    button: Guide\n"
+    )
+    keys.write_text(f"{1 << 184:x}\n")
+
+    assert ip.proven_mapped_capabilities(
+        "rog_ally", ["/dev/input/event3"], root=str(tmp_path)
+    ) == set()
+
+
 def test_buttons_rog_xbox_ally_family_supports_legacy_paddle_capabilities():
     caps = [
         "Gamepad:Button:South",
@@ -143,7 +227,16 @@ def test_is_known_device():
     assert ip.is_known_device("legion_go_s") is True
     assert ip.is_known_device("rog_xbox_ally") is True
     assert ip.is_known_device("rog_xbox_ally_x") is True
+    assert ip.is_known_device("rog_ally") is True
+    assert ip.is_known_device("rog_ally_x") is True
     assert ip.is_known_device(None) is False
+
+
+def test_expected_composite_names_are_exact_per_device():
+    assert ip.composite_names_for("legion_go") == ("Lenovo Legion Go",)
+    assert ip.composite_names_for("legion_go_s") == ("Lenovo Legion Go S",)
+    assert ip.composite_names_for("rog_ally") == ("ASUS ROG Ally",)
+    assert ip.composite_names_for("unknown") == ()
 
 
 def test_sanitize_targets():
@@ -151,6 +244,74 @@ def test_sanitize_targets():
     assert ip.sanitize_target({"key": "KeyEsc"}) == {"key": "KeyEsc"}
     assert ip.sanitize_target({"gamepad": "Bogus"}) is None
     assert ip.sanitize_targets([{"gamepad": "South"}, {"key": "bad"}]) == [{"gamepad": "South"}]
+
+
+def test_virtual_mode_replaces_only_the_gamepad_target():
+    original = ["xbox-elite", "mouse", "keyboard", "touchpad"]
+
+    out = ip.replace_gamepad_target(
+        original, "ds5-edge",
+    )
+
+    assert out == [
+        "ds5-edge", "mouse", "keyboard", "touchpad",
+    ]
+    assert original[0] == "xbox-elite"
+
+
+def test_virtual_mode_refuses_an_ambiguous_gamepad_profile():
+    assert ip.replace_gamepad_target(
+        ["xb360", "ds5", "keyboard"], "xbox-series"
+    ) == []
+
+
+def test_virtual_mode_catalog_is_curated_from_official_gamepad_ids():
+    assert ip.virtual_mode_options([
+        "debug", "keyboard", "xbox-series", "ds5-edge", "xb360",
+        "made-up",
+    ]) == ["auto", "xb360", "xbox-series", "ds5-edge"]
+
+
+def test_ctrl_tab_is_a_valid_chord():
+    assert ip.sanitize_button_action([
+        {"key": "KeyLeftCtrl"}, {"key": "KeyTab"},
+    ]) == [
+        {"key": "KeyLeftCtrl"}, {"key": "KeyTab"},
+    ]
+    assert ip.is_keyboard_chord([
+        {"key": "KeyLeftCtrl"}, {"key": "KeyTab"},
+    ]) is True
+
+
+def test_chord_canonicalizes_modifiers_before_main_keys():
+    assert ip.sanitize_button_action([
+        {"key": "KeyTab"}, {"key": "KeyLeftShift"},
+        {"key": "KeyLeftCtrl"},
+    ]) == [
+        {"key": "KeyLeftCtrl"}, {"key": "KeyLeftShift"},
+        {"key": "KeyTab"},
+    ]
+
+
+def test_mixed_duplicate_unsafe_and_oversized_actions_are_rejected():
+    assert ip.sanitize_button_action([
+        {"gamepad": "South"}, {"key": "KeyTab"},
+    ]) == []
+    assert ip.sanitize_button_action([
+        {"key": "KeyTab"}, {"key": "KeyTab"},
+    ]) == []
+    assert ip.sanitize_button_action([{"key": "KeyPower"}]) == []
+    assert ip.sanitize_button_action([{"key": "KeySysrq"}]) == []
+    assert ip.sanitize_button_action([
+        {"key": "KeyLeftCtrl"}, {"key": "KeyLeftShift"},
+        {"key": "KeyLeftAlt"}, {"key": "KeyLeftMeta"},
+        {"key": "KeyTab"},
+    ]) == []
+
+
+def test_curated_chord_catalog_includes_letters_digits_navigation_and_f_keys():
+    for key in ("KeyA", "Key7", "KeyHome", "KeyPageDown", "KeyF24"):
+        assert ip.sanitize_button_action([{"key": key}]) == [{"key": key}]
 
 
 def test_apply_override_replaces_only_that_button_and_preserves_the_rest():
@@ -185,6 +346,37 @@ def test_apply_override_to_keyboard_key():
         "source_event": {"gamepad": {"button": "RightPaddle1"}},
         "target_events": [{"keyboard": "KeyEsc"}],
     }]
+
+
+def test_chord_becomes_ordered_target_events():
+    output = ip.apply_overrides_to_profile({"mapping": []}, {
+        "LeftPaddle1": [
+            {"key": "KeyLeftCtrl"}, {"key": "KeyTab"},
+        ],
+    })
+
+    assert output["mapping"][0]["target_events"] == [
+        {"keyboard": "KeyLeftCtrl"}, {"keyboard": "KeyTab"},
+    ]
+
+
+def test_ambiguous_duplicate_source_mapping_is_a_merge_conflict():
+    profile = {"mapping": [
+        {
+            "name": "first",
+            "source_event": {"gamepad": {"button": "LeftPaddle1"}},
+            "target_events": [{"keyboard": "KeyF14"}],
+        },
+        {
+            "name": "foreign duplicate",
+            "source_event": {"gamepad": {"button": "LeftPaddle1"}},
+            "target_events": [{"keyboard": "KeyF15"}],
+        },
+    ]}
+
+    assert ip.apply_overrides_to_profile(profile, {
+        "LeftPaddle1": [{"key": "KeyTab"}],
+    }) is None
 
 
 def test_apply_empty_override_reverts_button_to_default():

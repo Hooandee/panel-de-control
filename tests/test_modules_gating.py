@@ -1,5 +1,6 @@
 import sys
 import types
+import asyncio
 
 if "decky" not in sys.modules:
     _decky = types.ModuleType("decky")
@@ -159,6 +160,121 @@ def test_disabling_power_module_hands_hhd_back():
     assert calls == [True]  # HHD's TDP handed back
     assert p._settings["hhd_tdp_prev"] is None  # confirmed → marker cleared
     assert "power" in res["disabled"]
+
+
+def test_disabling_controller_module_restores_global_profile():
+    import asyncio
+
+    p = main.Plugin.__new__(main.Plugin)
+    p._settings = {
+        "disabled_modules": [],
+        "tdp_control_enabled": True,
+        "telemetry_enabled": True,
+    }
+    p._init = lambda: None
+    p._save = lambda: None
+    p._reapply_all = lambda *a, **k: None
+    p._sync_sampler = lambda: None
+    calls = []
+    p._restore_controller_global = lambda: calls.append("controller")
+
+    async def _offload(fn):
+        return fn()
+
+    p._offload_call = _offload
+
+    res = asyncio.run(p.set_ui_module("mandos", True))
+
+    assert calls == ["controller"]
+    assert "mandos" in res["disabled"]
+
+
+def test_reenabling_controller_module_forces_profile_retry():
+    p = main.Plugin.__new__(main.Plugin)
+    p._settings = {
+        "disabled_modules": ["mandos"],
+        "tdp_control_enabled": True,
+        "telemetry_enabled": True,
+    }
+    p._init = lambda: None
+    p._save = lambda: None
+    reapplies = []
+    p._reapply_all = lambda *a, **k: reapplies.append(k)
+    p._sync_sampler = lambda: None
+
+    asyncio.run(p.set_ui_module("mandos", False))
+
+    assert reapplies == [{"force_controller": True}]
+
+
+def test_controller_diagnostics_disabled_returns_empty_without_backend():
+    p = _plugin(disabled=["mandos"])
+    p._init = lambda: None
+    p._device = types.SimpleNamespace(key="legion_go")
+    calls = []
+    p._controller_backend = types.SimpleNamespace(
+        get_integrated_diagnostics=lambda: calls.append(True)
+    )
+
+    state = asyncio.run(p.get_controller_diagnostics())
+
+    assert state == {
+        "device_key": "legion_go",
+        "sources": [],
+        "batteries": [],
+        "inputs": {},
+        "motion": None,
+        "virtual_controller": None,
+        "vibration": None,
+        "last_operations": {},
+    }
+    assert calls == []
+
+
+def test_controller_button_action_disabled_never_mutates_backend():
+    p = _plugin(disabled=["mandos"])
+    p._init = lambda: None
+    p._current_appid = None
+    mutations = []
+    p._controller_backend = types.SimpleNamespace(
+        get_config=lambda appid: {"kind": "remap", "buttons": []},
+        set_button=lambda *args: mutations.append(args),
+    )
+    p._controller_coordinator = types.SimpleNamespace(
+        snapshot=lambda: {"generation": 0, "appid": None, "components": {}}
+    )
+
+    async def offload(fn):
+        return fn()
+
+    p._offload_call = offload
+    result = asyncio.run(p.set_controller_button_action(
+        "LeftPaddle1",
+        {"kind": "keyboard_chord", "keys": ["KeyLeftCtrl", "KeyTab"]},
+    ))
+
+    assert mutations == []
+    assert result["operation_state"]["generation"] == 0
+
+
+def test_controller_diagnostics_is_offloaded_when_enabled():
+    p = _plugin()
+    p._init = lambda: None
+    p._device = types.SimpleNamespace(key="rog_ally")
+    state = main.IntegratedDiagnostics.empty("rog_ally")
+    p._controller_backend = types.SimpleNamespace(
+        get_integrated_diagnostics=lambda: state
+    )
+    offloaded = []
+
+    async def offload(fn):
+        offloaded.append(fn)
+        return fn()
+
+    p._offload_call = offload
+
+    assert asyncio.run(p.get_controller_diagnostics()) == state
+    assert len(offloaded) == 1
 
 
 def test_hhd_restore_keeps_marker_when_hhd_unreachable():

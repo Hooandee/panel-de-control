@@ -12,8 +12,9 @@ import types
 
 
 class _FakeColorBackend:
-    def __init__(self, supported=True):
+    def __init__(self, supported=True, hdr_look_supported=False):
         self.supported = supported
+        self.hdr_look_supported = hdr_look_supported
         self.probe_detail = "fake"
         self.applied = []
 
@@ -73,13 +74,50 @@ def test_get_color_state_shape(tmp_path, monkeypatch):
     p, _ = _make_plugin(tmp_path, monkeypatch)
     st = asyncio.run(p.get_color_state())
     assert st["supported"] is True
-    for f in ("saturation", "temperature", "contrast", "gamma", "hue",
+    for f in ("saturation", "hdr_saturation", "temperature", "contrast", "gamma", "hue",
               "gain_r", "gain_g", "gain_b", "vibrance"):
         assert f in st
     assert st["saturation"] == 100  # native by default
     assert st["gamma"] == 0 and st["gain_r"] == 100 and st["vibrance"] == 0
     assert "native" in st["presets"] and st["active_preset"] == "native"
     assert "oled_look" in st and "appid" in st and "has_game_profile" in st
+    assert st["hdr_saturation_supported"] is False
+    assert st["hdr_saturation_experimental"] is False
+
+
+def test_hdr_saturation_is_validated_for_legion_go_2_and_scoped_per_game(
+    tmp_path, monkeypatch,
+):
+    color = _FakeColorBackend(hdr_look_supported=True)
+    p, _ = _make_plugin(tmp_path, monkeypatch, color=color)
+    asyncio.run(p.get_color_state())
+    p._device = dataclasses.replace(
+        p._device, key="legion_go_2", hdr=True, panel="oled"
+    )
+
+    asyncio.run(p.set_current_game("42"))
+    state = asyncio.run(p.set_hdr_saturation(140, "game", "42"))
+
+    assert state["hdr_saturation_supported"] is True
+    assert state["hdr_saturation_experimental"] is False
+    assert state["hdr_saturation"] == 140
+    assert state["global_hdr_saturation"] == 100
+    assert color.applied[-1]["hdr_saturation"] == 140
+
+
+def test_hdr_saturation_does_not_change_active_sdr_preset(
+    tmp_path, monkeypatch,
+):
+    color = _FakeColorBackend(hdr_look_supported=True)
+    p, _ = _make_plugin(tmp_path, monkeypatch, color=color)
+    asyncio.run(p.get_color_state())
+    p._device = dataclasses.replace(
+        p._device, key="legion_go_2", hdr=True, panel="oled"
+    )
+
+    state = asyncio.run(p.set_hdr_saturation(135, "global", None))
+
+    assert state["active_preset"] == "native"
 
 
 def test_set_saturation_global_applies(tmp_path, monkeypatch):
@@ -268,9 +306,165 @@ def test_set_hdr_persists(tmp_path, monkeypatch):
     assert asyncio.run(p2.get_hdr_state())["enabled"] is True
 
 
+def test_hdr_reapply_releases_only_mode_owned_by_plugin(tmp_path, monkeypatch):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    asyncio.run(p.get_hdr_state())
+    p._device = dataclasses.replace(p._device, hdr=True)
+
+    class FakeHdrBackend:
+        def __init__(self):
+            self.calls = []
+
+        def set_enabled(self, enabled):
+            self.calls.append(enabled)
+            return True
+
+        def diagnostics(self):
+            actual = self.calls[-1] if self.calls else None
+            return {
+                "enabled": actual,
+                "actual_enabled": actual,
+                "ok": actual is not None,
+                "readback": actual is not None,
+            }
+
+    backend = FakeHdrBackend()
+    p._hdr_backend = backend
+    p._color.set_hdr("global", True)
+    p._reapply_hdr_sync()
+    p._color.set_hdr("game", False, appid="42")
+    p._current_appid = "42"
+    p._reapply_hdr_sync()
+    p._reapply_hdr_sync()
+
+    assert backend.calls == [True, False]
+
+
+def test_hdr_reapply_never_disables_mode_it_did_not_enable(tmp_path, monkeypatch):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    asyncio.run(p.get_hdr_state())
+    p._device = dataclasses.replace(p._device, hdr=True)
+
+    class FakeHdrBackend:
+        def __init__(self):
+            self.calls = []
+
+        def set_enabled(self, enabled):
+            self.calls.append(enabled)
+            return True
+
+    backend = FakeHdrBackend()
+    p._hdr_backend = backend
+    p._reapply_hdr_sync()
+
+    assert backend.calls == []
+
+
+def test_display_reapply_skips_color_when_hdr_is_not_confirmed(
+    tmp_path, monkeypatch,
+):
+    p, color = _make_plugin(tmp_path, monkeypatch)
+    asyncio.run(p.get_hdr_state())
+    p._device = dataclasses.replace(p._device, hdr=True)
+    p._color.set_hdr("global", True)
+    p._hdr_backend = type("HdrFailure", (), {
+        "set_enabled": lambda _self, _enabled: False,
+        "diagnostics": lambda _self: {
+            "enabled": True, "ok": False, "readback": True,
+        },
+    })()
+    p._display_endpoint_last = ("old-session",)
+    color.applied.clear()
+
+    assert p._reapply_display_sync() is False
+    assert color.applied == []
+    assert p._display_endpoint_last is None
+
+
+def test_hdr_state_distinguishes_accepted_from_confirmed(
+    tmp_path, monkeypatch,
+):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    asyncio.run(p.get_hdr_state())
+    p._color.set_hdr("global", True)
+    p._hdr_backend = type("HdrAccepted", (), {
+        "set_enabled": lambda _self, _enabled: True,
+        "diagnostics": lambda _self: {
+            "enabled": True,
+            "actual_enabled": None,
+            "ok": True,
+            "readback": False,
+            "confirmation": "accepted",
+        },
+    })()
+
+    state = p._hdr_state()
+
+    assert state["confirmation"] == "accepted"
+    assert "last_apply" not in state
+
+    color = p._color_backend
+    color.applied.clear()
+    assert p._reapply_display_sync() is False
+    assert color.applied == []
+
+
+def test_unconfirmed_hdr_disable_keeps_retrying_and_blocks_color(
+    tmp_path, monkeypatch,
+):
+    p, color = _make_plugin(tmp_path, monkeypatch)
+    asyncio.run(p.get_hdr_state())
+    p._device = dataclasses.replace(p._device, hdr=True)
+    p._color.set_hdr("global", False)
+    calls = []
+    p._hdr_backend = type("HdrAccepted", (), {
+        "set_enabled": lambda _self, enabled: calls.append(enabled) or True,
+        "diagnostics": lambda _self: {
+            "enabled": False,
+            "actual_enabled": None,
+            "ok": True,
+            "readback": False,
+            "confirmation": "accepted",
+        },
+    })()
+    p._hdr_managed = True
+    p._hdr_managed_session = None
+    color.applied.clear()
+
+    assert p._reapply_display_sync() is False
+    assert p._reapply_display_sync() is False
+
+    assert calls == [False, False]
+    assert p._hdr_managed is True
+    assert color.applied == []
+    assert p._set_hdr_explicit_sync(False) is False
+
+
+def test_hdr_state_discards_confirmation_from_an_old_gamescope_session(
+    tmp_path, monkeypatch,
+):
+    p, color = _make_plugin(tmp_path, monkeypatch)
+    asyncio.run(p.get_hdr_state())
+    p._color.set_hdr("global", True)
+    color.session_identity = (2, 200)
+    p._hdr_backend = type("OldHdrSession", (), {
+        "diagnostics": lambda _self: {
+            "enabled": True,
+            "actual_enabled": True,
+            "ok": True,
+            "readback": True,
+            "session_identity": (1, 100),
+        },
+    })()
+
+    state = p._hdr_state()
+
+    assert "actual_enabled" not in state
+    assert "last_apply" not in state
+
+
 def test_color_look_applies_regardless_of_hdr(tmp_path, monkeypatch):
-    # The look colors all composited/SDR content even in HDR mode (only a native-HDR
-    # game is out of reach, which needs no special handling), so it's applied either way.
+    # Gamescope selects the G22 or PQ member of the paired look for the active EOTF.
     p, color = _make_plugin(tmp_path, monkeypatch)
     asyncio.run(p.get_hdr_state())                       # triggers _init
     p._device = dataclasses.replace(p._device, hdr=True)

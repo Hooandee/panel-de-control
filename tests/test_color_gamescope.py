@@ -1,3 +1,6 @@
+import os
+from types import SimpleNamespace
+
 from display.const import NATIVE
 from display.gamescope import (
     _PROBE_RETRY_S,
@@ -6,6 +9,7 @@ from display.gamescope import (
     is_native,
     transform,
 )
+from display.hdr import _UNAVAILABLE_LOOK
 
 _PTS = [(0.0, 0.0, 0.0), (0.5, 0.3, 0.7), (1.0, 1.0, 1.0), (0.8, 0.2, 0.4)]
 
@@ -143,22 +147,99 @@ def test_is_native():
 # ---- backend (injected runner + fake socket) ----
 
 class FakeRunner:
-    def __init__(self, ok=True):
+    def __init__(self, ok=True, info=None):
         self.ok = ok
         self.calls = []
+        self.info = info or (
+            "gamescope_control info:\n"
+            "  - Connector Name: eDP-1\n"
+            "  - Display Flags: 0x3\n"
+            "  Features:\n"
+            "  - Look (6) - Version: 1 - Flags: 0x0\n"
+        )
 
     def __call__(self, args, env):
         self.calls.append((args, env))
-        return (0 if self.ok else 1, "gamescope version 3.16" if self.ok else "")
+        output = self.info if len(args) == 1 else "gamescope version 3.16"
+        return (0 if self.ok else 1, output if self.ok else "")
 
 
-def _backend(tmp_path, ok=True, force_composite=False):
+class FakeLookAtom:
+    def __init__(self, accepted=True):
+        self.accepted = accepted
+        self.value = None
+        self.writes = []
+
+    def write(self, session, value):
+        self.writes.append((session, value))
+        if self.accepted:
+            self.value = value or None
+        return self.accepted
+
+    def read(self, session):
+        return self.value
+
+
+class FlakyLookAtom(FakeLookAtom):
+    def __init__(self):
+        super().__init__()
+        self.readback_unavailable = False
+
+    def read(self, session):
+        if self.readback_unavailable:
+            return _UNAVAILABLE_LOOK
+        return super().read(session)
+
+
+class SequencedLookAtom(FakeLookAtom):
+    def __init__(self):
+        super().__init__()
+        self.next_reads = []
+
+    def read(self, session):
+        if self.next_reads:
+            return self.next_reads.pop(0)
+        return super().read(session)
+
+
+class FailNextLookAtom(FakeLookAtom):
+    def __init__(self):
+        super().__init__()
+        self.fail_next = False
+
+    def write(self, session, value):
+        if self.fail_next:
+            self.fail_next = False
+            self.writes.append((session, value))
+            return False
+        return super().write(session, value)
+
+
+class UnconfirmedLookAtom(FailNextLookAtom):
+    def write(self, session, value):
+        if self.fail_next:
+            self.fail_next = False
+            self.writes.append((session, value))
+            self.value = value or None
+            return False
+        return super().write(session, value)
+
+
+def _backend(tmp_path, ok=True, force_composite=False, hdr_look=False,
+             info=None, edid_pq=True, clock=None, pq_atom=None):
     sock = tmp_path / "run" / "user" / "1000" / "gamescope-0"
     sock.parent.mkdir(parents=True)
     sock.write_text("")
-    r = FakeRunner(ok=ok)
+    r = FakeRunner(ok=ok, info=info)
+    if hdr_look and pq_atom is None:
+        pq_atom = FakeLookAtom()
     b = GamescopeColorBackend(runner=r, socket_glob=str(tmp_path / "run/user/*/gamescope-*"),
-                              lut_path=str(tmp_path / "look.cube"), force_composite=force_composite)
+                              lut_path=str(tmp_path / "look.cube"), force_composite=force_composite,
+                              hdr_look=hdr_look,
+                              edid_pq=lambda _connector: edid_pq,
+                              pq_atom=pq_atom,
+                              socket_owner=lambda _path: 123,
+                              **({"clock": clock} if clock is not None else {}))
     return b, r
 
 
@@ -170,7 +251,9 @@ def test_backend_supported_when_gamescopectl_responds(tmp_path):
     b, r = _backend(tmp_path)
     assert b.supported is True
     _, env = r.calls[0]
-    assert env["WAYLAND_DISPLAY"] == "gamescope-0" and env["XDG_RUNTIME_DIR"].endswith("/1000")
+    assert env["WAYLAND_DISPLAY"] == "gamescope-0"
+    assert env["GAMESCOPE_WAYLAND_DISPLAY"] == "gamescope-0"
+    assert env["XDG_RUNTIME_DIR"].endswith("/1000")
 
 
 def test_backend_unsupported_when_no_socket(tmp_path):
@@ -195,6 +278,40 @@ def test_backend_self_heals_when_socket_appears_after_init(tmp_path):
     sock.write_text("")
     assert b.supported is True             # gamescope came up → re-discovered + probed
     assert b.apply({**NATIVE, "saturation": 150}) is True
+
+
+def test_backend_discards_ownership_and_reprobes_when_session_restarts(
+    tmp_path,
+    monkeypatch,
+):
+    socket = tmp_path / "run" / "user" / "1000" / "gamescope-0"
+    real_stat = os.stat
+    socket_mtime = {"value": 1}
+
+    def stat_with_reused_inode(path, *args, **kwargs):
+        result = real_stat(path, *args, **kwargs)
+        if os.fspath(path) == str(socket):
+            return SimpleNamespace(
+                st_dev=7,
+                st_ino=11,
+                st_mtime_ns=socket_mtime["value"],
+            )
+        return result
+
+    monkeypatch.setattr(os, "stat", stat_with_reused_inode)
+    b, r = _backend(tmp_path, hdr_look=True)
+    assert b.apply({**NATIVE, "hdr_saturation": 130}) is True
+    before = b.display_fingerprint()
+    socket.unlink()
+    socket.write_text("")
+    socket_mtime["value"] += 1
+    r.calls.clear()
+
+    after = b.display_fingerprint()
+
+    assert after != before
+    assert b.diagnostics()["managed"] is False
+    assert not _unsetlooks(r)
 
 
 def test_backend_rate_limits_probe_of_unresponsive_socket(tmp_path):
@@ -252,6 +369,285 @@ def test_backend_apply_writes_cube_and_calls_set_look(tmp_path):
     assert "LUT_3D_SIZE" in open(path).read()
 
 
+def test_backend_applies_g22_and_pq_looks_in_one_command(tmp_path):
+    atom = FakeLookAtom()
+    b, r = _backend(tmp_path, hdr_look=True, pq_atom=atom)
+    r.calls.clear()
+
+    assert b.apply({
+        **NATIVE, "saturation": 130, "hdr_saturation": 140,
+    }) is True
+
+    command = _setlooks(r)[0][0]
+    assert len(command) == 3
+    assert "LUT_3D_SIZE 17" in open(command[2]).read()
+    assert "LUT_3D_SIZE 33" in open(atom.value).read()
+    assert os.stat(command[2]).st_mode & 0o004
+    assert os.stat(atom.value).st_mode & 0o004
+
+
+def test_backend_alternates_complete_lut_pairs_between_applies(tmp_path):
+    atom = FakeLookAtom()
+    b, r = _backend(tmp_path, hdr_look=True, pq_atom=atom)
+    r.calls.clear()
+
+    assert b.apply({**NATIVE, "hdr_saturation": 120}) is True
+    assert b.apply({**NATIVE, "hdr_saturation": 125}) is True
+
+    first, second = [call[0] for call in _setlooks(r)]
+    pq_paths = [value for _session, value in atom.writes]
+    assert first[2:] != second[2:]
+    assert pq_paths[0] != pq_paths[1]
+    assert all(os.path.exists(path) for path in first[2:] + second[2:] + pq_paths)
+
+
+def test_backend_rejects_pq_apply_without_atom_readback(tmp_path):
+    atom = FakeLookAtom(accepted=False)
+    b, r = _backend(tmp_path, hdr_look=True, pq_atom=atom)
+
+    assert b.apply({**NATIVE, "hdr_saturation": 140}) is False
+    assert b.diagnostics()["last_apply"]["pq_atom"] is False
+    atom.accepted = True
+    r.calls.clear()
+    assert b.apply(NATIVE) is True
+    assert _unsetlooks(r) == []
+    assert _setlooks(r) == []
+
+
+def test_failed_pq_publication_restores_previous_complete_pair(tmp_path):
+    atom = FailNextLookAtom()
+    backend, runner = _backend(
+        tmp_path, hdr_look=True, pq_atom=atom
+    )
+    first = {**NATIVE, "saturation": 120, "hdr_saturation": 130}
+    second = {**NATIVE, "saturation": 140, "hdr_saturation": 150}
+
+    assert backend.apply(first) is True
+    previous_g22 = _setlooks(runner)[-1][0][2]
+    previous_pq = atom.value
+    atom.fail_next = True
+
+    assert backend.apply(second) is False
+
+    assert _setlooks(runner)[-1][0][2] == previous_g22
+    assert atom.value == previous_pq
+    assert backend.diagnostics()["last_apply"]["rollback_confirmed"] is True
+
+
+def test_failed_pq_clear_restores_previous_complete_pair(tmp_path):
+    atom = FailNextLookAtom()
+    backend, runner = _backend(tmp_path, hdr_look=True, pq_atom=atom)
+    vivid = {**NATIVE, "saturation": 120, "hdr_saturation": 130}
+    assert backend.apply(vivid) is True
+    previous_g22 = _setlooks(runner)[-1][0][2]
+    previous_pq = atom.value
+    atom.fail_next = True
+
+    assert backend.apply(NATIVE) is False
+
+    assert _setlooks(runner)[-1][0][2] == previous_g22
+    assert atom.value == previous_pq
+    assert backend.diagnostics()["last_apply"]["rollback_confirmed"] is True
+
+
+def test_unconfirmed_pq_clear_republishes_previous_pair(tmp_path):
+    atom = UnconfirmedLookAtom()
+    backend, runner = _backend(tmp_path, hdr_look=True, pq_atom=atom)
+    assert backend.apply({**NATIVE, "hdr_saturation": 130}) is True
+    previous_g22 = _setlooks(runner)[-1][0][2]
+    previous_pq = atom.value
+    atom.fail_next = True
+
+    assert backend.apply(NATIVE) is False
+
+    assert _setlooks(runner)[-1][0][2] == previous_g22
+    assert atom.value == previous_pq
+    assert backend.diagnostics()["last_apply"]["rollback_confirmed"] is True
+
+
+def test_backend_does_not_replace_a_foreign_pq_atom(tmp_path):
+    atom = FakeLookAtom()
+    atom.value = "/tmp/another-plugin.cube"
+    b, r = _backend(tmp_path, hdr_look=True, pq_atom=atom)
+    r.calls.clear()
+
+    assert b.apply({**NATIVE, "hdr_saturation": 140}) is False
+    assert atom.value == "/tmp/another-plugin.cube"
+    assert _setlooks(r) == []
+    assert b.diagnostics()["last_apply"]["reason"] == "pq_atom_conflict"
+
+
+def test_display_fingerprint_detects_dropped_owned_pq_atom(tmp_path):
+    atom = FakeLookAtom()
+    b, _ = _backend(tmp_path, hdr_look=True, pq_atom=atom)
+    assert b.apply({**NATIVE, "hdr_saturation": 140}) is True
+    before = b.display_fingerprint()
+
+    atom.value = None
+
+    assert b.display_fingerprint() != before
+
+
+def test_display_fingerprint_observes_pending_pq_release_on_external(
+    tmp_path,
+):
+    atom = FlakyLookAtom()
+    backend, runner = _backend(tmp_path, hdr_look=True, pq_atom=atom)
+    assert backend.apply({**NATIVE, "hdr_saturation": 140}) is True
+    runner.info = (
+        "gamescope_control info:\n"
+        "  - Connector Name: DP-1\n"
+        "  - Display Flags: 0x2\n"
+        "  Features:\n"
+        "  - Look (6) - Version: 1 - Flags: 0x0\n"
+    )
+    atom.readback_unavailable = True
+    unavailable = backend.display_fingerprint()
+    atom.readback_unavailable = False
+
+    assert backend.display_fingerprint() != unavailable
+
+
+def test_display_fingerprint_detects_cleared_foreign_pq_conflict(tmp_path):
+    atom = FakeLookAtom()
+    atom.value = "/tmp/another-plugin.cube"
+    backend, _ = _backend(tmp_path, hdr_look=True, pq_atom=atom)
+
+    conflict = backend.display_fingerprint()
+    atom.value = None
+
+    assert backend.display_fingerprint() != conflict
+
+
+def test_backend_does_not_clear_a_foreign_pq_replacement_on_release(tmp_path):
+    atom = FakeLookAtom()
+    b, r = _backend(tmp_path, hdr_look=True, pq_atom=atom)
+    assert b.apply({**NATIVE, "hdr_saturation": 140}) is True
+    r.calls.clear()
+    atom.value = "/tmp/another-plugin.cube"
+
+    assert b.apply(NATIVE) is True
+    assert atom.value == "/tmp/another-plugin.cube"
+    assert _unsetlooks(r) == []
+    assert len(_setlooks(r)) == 1
+    assert b.diagnostics()["last_apply"]["reason"] == (
+        "pq_atom_ownership_lost"
+    )
+    assert b.diagnostics()["managed"] is False
+
+
+def test_backend_retries_release_after_transient_pq_readback_failure(tmp_path):
+    atom = FlakyLookAtom()
+    b, _ = _backend(tmp_path, hdr_look=True, pq_atom=atom)
+    assert b.apply({**NATIVE, "hdr_saturation": 140}) is True
+    atom.readback_unavailable = True
+
+    assert b.apply(NATIVE) is False
+    assert b.diagnostics()["managed_pq_atom"] is True
+    assert b.diagnostics()["last_apply"]["reason"] == (
+        "pq_atom_readback_unavailable"
+    )
+
+    atom.readback_unavailable = False
+    assert b.apply(NATIVE) is True
+    assert atom.value is None
+    assert b.diagnostics()["managed_pq_atom"] is False
+
+
+def test_backend_uses_one_pq_observation_during_release(tmp_path):
+    atom = SequencedLookAtom()
+    b, _ = _backend(tmp_path, hdr_look=True, pq_atom=atom)
+    assert b.apply({**NATIVE, "hdr_saturation": 140}) is True
+    atom.next_reads = [atom.value, _UNAVAILABLE_LOOK]
+
+    assert b.apply(NATIVE) is True
+    assert atom.next_reads == [_UNAVAILABLE_LOOK]
+    assert atom.value is None
+
+
+def test_backend_keeps_legacy_g22_command_when_hdr_look_not_requested(tmp_path):
+    b, r = _backend(tmp_path, hdr_look=False)
+    r.calls.clear()
+
+    assert b.apply({**NATIVE, "saturation": 130}) is True
+
+    assert _setlooks(r)[0][0] == [
+        "gamescopectl", "set_look", str(tmp_path / "look.cube"),
+    ]
+
+
+def test_backend_falls_back_to_g22_when_look_feature_is_missing(tmp_path):
+    info = (
+        "gamescope_control info:\n"
+        "  - Connector Name: eDP-1\n"
+        "  - Display Flags: 0x3\n"
+        "  Features:\n"
+    )
+    b, r = _backend(tmp_path, hdr_look=True, info=info)
+    r.calls.clear()
+
+    assert b.hdr_look_supported is False
+    assert b.apply({**NATIVE, "saturation": 130}) is True
+    assert len(_setlooks(r)[0][0]) == 3
+
+
+def test_backend_recognizes_look_feature_when_client_label_is_stale(tmp_path):
+    info = (
+        "gamescope_control info:\n"
+        "  - Connector Name: eDP-1\n"
+        "  - Display Flags: 0x7\n"
+        "  Features:\n"
+        "  - Unknown (6) - Version: 1 - Flags: 0x0\n"
+    )
+    b, _ = _backend(tmp_path, hdr_look=True, info=info)
+
+    assert b.hdr_look_supported is True
+    assert "look=1" in b.diagnostics()["hdr_look_detail"]
+
+
+def test_backend_rejects_hdr_look_on_external_connector(tmp_path):
+    info = (
+        "gamescope_control info:\n"
+        "  - Connector Name: DP-1\n"
+        "  - Display Flags: 0x3\n"
+        "  Features:\n"
+        "  - Look (6) - Version: 1 - Flags: 0x0\n"
+    )
+
+    backend, _ = _backend(tmp_path, hdr_look=True, info=info)
+
+    assert backend.hdr_look_supported is False
+    assert "internal_connector=False" in backend.diagnostics()["hdr_look_detail"]
+
+
+def test_backend_falls_back_to_g22_when_active_panel_edid_has_no_pq(tmp_path):
+    b, r = _backend(tmp_path, hdr_look=True, edid_pq=False)
+    r.calls.clear()
+
+    assert b.hdr_look_supported is False
+    assert b.apply({**NATIVE, "saturation": 130, "hdr_saturation": 140}) is True
+    assert len(_setlooks(r)[0][0]) == 3
+    assert "edid_pq=False" in b.diagnostics()["hdr_look_detail"]
+
+
+def test_backend_rechecks_active_display_before_applying_hdr_pair(tmp_path):
+    b, r = _backend(tmp_path, hdr_look=True)
+    assert b.apply({**NATIVE, "hdr_saturation": 140}) is True
+    r.calls.clear()
+    r.info = (
+        "gamescope_control info:\n"
+        "  - Connector Name: DP-1\n"
+        "  - Display Flags: 0x2\n"
+        "  Features:\n"
+        "  - Look (6) - Version: 1 - Flags: 0x0\n"
+    )
+
+    assert b.apply({**NATIVE, "saturation": 130, "hdr_saturation": 140}) is True
+    assert b.hdr_look_supported is False
+    assert len(_setlooks(r)[0][0]) == 3
+    assert len(_unsetlooks(r)) == 0
+
+
 def test_backend_diagnostics_report_successful_set_look(tmp_path):
     b, _ = _backend(tmp_path)
 
@@ -266,6 +662,9 @@ def test_backend_diagnostics_report_successful_set_look(tmp_path):
         "ok": True,
         "rc": 0,
     }
+    assert diagnostics["managed"] is True
+    assert diagnostics["look_paths"]["g22"].endswith("look.cube")
+    assert diagnostics["desired"]["saturation"] == 150
     assert "version rc=0" in diagnostics["probe_detail"]
 
 
@@ -284,8 +683,25 @@ def test_backend_diagnostics_report_failed_set_look(tmp_path):
     }
 
 
+def test_backend_invalidates_failed_session_and_reprobes_on_next_apply(tmp_path):
+    now = [100.0]
+    b, runner = _backend(tmp_path, clock=lambda: now[0])
+    runner.ok = False
+
+    assert b.apply({**NATIVE, "saturation": 150}) is False
+    assert b.supported is False
+
+    runner.ok = True
+    now[0] += _PROBE_RETRY_S + 1
+    assert b.apply({**NATIVE, "saturation": 150}) is True
+
+
 def _setlooks(runner):
     return [c for c in runner.calls if c[0][:2] == ["gamescopectl", "set_look"]]
+
+
+def _unsetlooks(runner):
+    return [c for c in runner.calls if c[0][:2] == ["gamescopectl", "unset_look"]]
 
 
 def test_backend_no_composite_force_when_not_needed(tmp_path):
@@ -308,16 +724,61 @@ def test_backend_forces_composition_for_nonnative_and_clears_on_native(tmp_path)
     assert ["gamescopectl", "composite_force", "0"] in _composite_calls(r)
 
 
-def test_backend_clears_leftover_once_then_skips_native(tmp_path):
-    # A fresh backend assumes a prior process may have left a look → the FIRST native
-    # apply clears it once; subsequent native applies are no-ops (no wasted set_look).
+def test_backend_rolls_back_composition_when_set_look_fails(tmp_path):
+    b, r = _backend(tmp_path, force_composite=True)
+    original = r.__call__
+
+    def fail_set_look(args, env):
+        if args[:2] == ["gamescopectl", "set_look"]:
+            r.calls.append((args, env))
+            return 1, ""
+        return original(args, env)
+
+    b._run = fail_set_look
+    r.calls.clear()
+
+    assert b.apply({**NATIVE, "saturation": 150}) is False
+    assert _composite_calls(r) == [
+        ["gamescopectl", "composite_force", "1"],
+        ["gamescopectl", "composite_force", "0"],
+    ]
+    assert b.diagnostics()["composite_managed"] is False
+
+
+def test_backend_retries_composition_release_without_unsetting_twice(tmp_path):
+    b, r = _backend(tmp_path, force_composite=True)
+    assert b.apply({**NATIVE, "saturation": 150}) is True
+    original = r.__call__
+
+    def fail_composite_off(args, env):
+        if args == ["gamescopectl", "composite_force", "0"]:
+            r.calls.append((args, env))
+            return 1, ""
+        return original(args, env)
+
+    b._run = fail_composite_off
+    r.calls.clear()
+
+    assert b.release() is False
+    assert len(_unsetlooks(r)) == 1
+    assert b.diagnostics()["managed"] is False
+    assert b.diagnostics()["composite_managed"] is True
+
+    b._run = original
+    r.calls.clear()
+    assert b.release() is True
+    assert _unsetlooks(r) == []
+    assert _composite_calls(r) == [
+        ["gamescopectl", "composite_force", "0"],
+    ]
+
+
+def test_backend_does_not_touch_an_unowned_look_for_native_state(tmp_path):
     b, r = _backend(tmp_path)
     r.calls.clear()
     assert b.apply(NATIVE) is True
-    assert len(_setlooks(r)) == 1   # cleared the (possible) leftover once
-    r.calls.clear()
-    assert b.apply(NATIVE) is True
-    assert _setlooks(r) == []       # already native → skipped
+    assert _setlooks(r) == []
+    assert _unsetlooks(r) == []
 
 
 def test_backend_clears_look_once_when_returning_to_native(tmp_path):
@@ -325,7 +786,19 @@ def test_backend_clears_look_once_when_returning_to_native(tmp_path):
     b.apply({**NATIVE, "saturation": 150})  # non-native → loaded
     r.calls.clear()
     assert b.apply(NATIVE) is True          # returns to native → clears once
-    assert len(_setlooks(r)) == 1
+    assert len(_unsetlooks(r)) == 1
     r.calls.clear()
     assert b.apply(NATIVE) is True          # already native → skipped
-    assert _setlooks(r) == []
+    assert _unsetlooks(r) == []
+
+
+def test_backend_release_only_unsets_a_look_owned_by_this_instance(tmp_path):
+    b, r = _backend(tmp_path)
+    r.calls.clear()
+    assert b.release() is True
+    assert _unsetlooks(r) == []
+
+    assert b.apply({**NATIVE, "saturation": 150}) is True
+    r.calls.clear()
+    assert b.release() is True
+    assert len(_unsetlooks(r)) == 1

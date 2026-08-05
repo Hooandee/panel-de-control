@@ -10,8 +10,13 @@ from controllers.detect import clean_env, resolve_bin
 
 SVC = "org.shadowblip.InputPlumber"
 IFACE = "org.shadowblip.Input.CompositeDevice"
+FF_IFACE = "org.shadowblip.Output.ForceFeedback"
+MANAGER_PATH = "/org/shadowblip/InputPlumber/Manager"
+MANAGER_IFACE = "org.shadowblip.InputManager"
+TARGET_IFACE = "org.shadowblip.Input.Target"
 DEFAULT_PROFILE_PATH = "/usr/share/inputplumber/profiles/default.yaml"
 _CAPABILITY_LIMIT = 64
+_XBOX_RUMBLE_SOURCES = {"off": 0, "strong": 1, "weak": 2, "mix": 3}
 
 
 def _run(args, timeout: int = 6):
@@ -25,26 +30,31 @@ def _run(args, timeout: int = 6):
         return None
 
 
-def _composite_path(run) -> str | None:
+def _composite_paths(run) -> list[str]:
     r = run(["busctl", "tree", SVC])
     if not r or r.returncode != 0:
-        return None
-    m = re.findall(r"(/org/shadowblip/InputPlumber/CompositeDevice\d+)", r.stdout)
-    return m[0] if m else None
+        return []
+    return list(dict.fromkeys(
+        re.findall(r"(/org/shadowblip/InputPlumber/CompositeDevice\d+)", r.stdout)
+    ))
 
 
 class IpDbus:
     """Drives the active CompositeDevice: read capabilities + current profile,
     load a remap profile, reset to default."""
 
-    def __init__(self, run=_run, event_cb=None):
+    def __init__(self, run=_run, event_cb=None, expected_names=()):
         self._run = run
         self._event_cb = event_cb
+        self._expected_names = tuple(expected_names or ())
         self._cached_path = None
+        self._composite_name = None
+        self._source_device_count = None
         self._last_capabilities = []
         self._last_reported_capabilities = None
         self._discovery_failures = 0
         self._last_operation = None
+        self._profile_apply = None
 
     @staticmethod
     def _is_logarithmic_sample(count):
@@ -68,7 +78,7 @@ class IpDbus:
                 capability,
             ),
         )[:_CAPABILITY_LIMIT]
-        return {
+        result = {
             "composite_path_available": self._cached_path is not None,
             "capability_count": len(self._last_capabilities),
             "capabilities": diagnostic_capabilities,
@@ -78,25 +88,146 @@ class IpDbus:
                 else None
             ),
         }
+        if self._composite_name is not None:
+            result["composite_name"] = self._composite_name
+            result["source_device_count"] = self._source_device_count
+        if self._profile_apply is not None:
+            result["profile_apply"] = dict(self._profile_apply)
+        return result
 
-    def _path(self):
+    def record_profile_apply(self, ok, reason=None, **details):
+        self._profile_apply = {
+            "ok": bool(ok),
+            **({} if reason is None else {"reason": reason}),
+            **details,
+        }
+        self._record(
+            "apply_profile", ok,
+            **({} if reason is None else {"reason": reason}),
+            **details,
+        )
+
+    def profile_apply_status(self):
+        return (
+            dict(self._profile_apply)
+            if self._profile_apply is not None
+            else None
+        )
+
+    def set_expected_names(self, names) -> None:
+        names = tuple(names or ())
+        if names != self._expected_names:
+            self._expected_names = names
+            self._cached_path = None
+            self._composite_name = None
+            self._source_device_count = None
+
+    def _read_property(self, path, interface, prop):
+        return self._run(["busctl", "get-property", SVC, path, interface, prop])
+
+    def _clear_cached_path(self):
+        self._cached_path = None
+        self._composite_name = None
+        self._source_device_count = None
+        self._last_capabilities = []
+        self._last_reported_capabilities = None
+
+    def _discover_composite(self):
+        paths = _composite_paths(self._run)
+        if not paths:
+            return None, "composite_not_found"
+        if not self._expected_names:
+            if len(paths) != 1:
+                return None, "composite_ambiguous"
+            return paths[0], None
+
+        matches = []
+        for path in paths:
+            name_result = self._read_property(path, IFACE, "Name")
+            sources_result = self._read_property(path, IFACE, "SourceDevicePaths")
+            if (
+                not name_result
+                or name_result.returncode != 0
+                or not sources_result
+                or sources_result.returncode != 0
+            ):
+                continue
+            names = re.findall(r'"([^"]+)"', name_result.stdout)
+            sources = [
+                source for source in re.findall(r'"([^"]*)"', sources_result.stdout)
+                if source
+            ]
+            if names and names[0] in self._expected_names and sources:
+                matches.append((path, names[0], len(sources)))
+        if len(matches) != 1:
+            return None, (
+                "composite_not_found" if not matches else "composite_ambiguous"
+            )
+        path, self._composite_name, self._source_device_count = matches[0]
+        return path, None
+
+    def _cached_identity_valid(self) -> bool:
+        if self._cached_path is None or not self._expected_names:
+            return self._cached_path is not None
+        name_result = self._read_property(
+            self._cached_path, IFACE, "Name"
+        )
+        sources_result = self._read_property(
+            self._cached_path, IFACE, "SourceDevicePaths"
+        )
+        if (
+            not name_result
+            or name_result.returncode != 0
+            or not sources_result
+            or sources_result.returncode != 0
+        ):
+            self._clear_cached_path()
+            self._record(
+                "validate_composite", False,
+                reason="identity_unavailable",
+            )
+            return False
+        names = re.findall(r'"([^"]+)"', name_result.stdout)
+        sources = [
+            value for value in re.findall(
+                r'"([^"]*)"', sources_result.stdout
+            )
+            if value
+        ]
+        if (
+            not names
+            or names[0] not in self._expected_names
+            or not sources
+        ):
+            self._clear_cached_path()
+            self._record(
+                "validate_composite", False, reason="identity_changed"
+            )
+            return False
+        self._composite_name = names[0]
+        self._source_device_count = len(sources)
+        return True
+
+    def _path(self, revalidate=False):
         # The composite object path is stable for the daemon's lifetime; discover it
         # once (a `busctl tree` spawn) and reuse — every method needs it, so this
         # roughly halves the busctl subprocesses per remap action.
         if self._cached_path is None:
-            self._cached_path = _composite_path(self._run)
+            self._cached_path, reason = self._discover_composite()
             if self._cached_path is None:
                 self._discovery_failures += 1
                 self._record(
                     "discover_composite",
                     False,
                     emit=self._is_logarithmic_sample(self._discovery_failures),
-                    reason="composite_not_found",
+                    reason=reason,
                     failure_count=self._discovery_failures,
                 )
             else:
                 self._discovery_failures = 0
                 self._record("discover_composite", True)
+        if revalidate and not self._cached_identity_valid():
+            return None
         return self._cached_path
 
     def _failed(self, r, operation) -> bool:
@@ -109,9 +240,7 @@ class IpDbus:
                 if r is None
                 else {"reason": "busctl_exit", "returncode": int(r.returncode)}
             )
-            self._cached_path = None
-            self._last_capabilities = []
-            self._last_reported_capabilities = None
+            self._clear_cached_path()
             self._record(operation, False, **details)
             return True
         return False
@@ -139,8 +268,101 @@ class IpDbus:
             self._last_reported_capabilities = reported_capabilities
         return list(self._last_capabilities)
 
+    def source_device_paths(self) -> list:
+        path = self._path(revalidate=True)
+        if not path:
+            return []
+        r = self._read_property(path, IFACE, "SourceDevicePaths")
+        if self._failed(r, "read_source_device_paths"):
+            return []
+        paths = [
+            value for value in re.findall(r'"([^"]*)"', r.stdout)
+            if value
+        ]
+        self._record(
+            "read_source_device_paths", True, source_device_count=len(paths)
+        )
+        return paths
+
+    def supported_target_device_ids(self) -> list:
+        r = self._read_property(
+            MANAGER_PATH, MANAGER_IFACE, "SupportedTargetDeviceIds"
+        )
+        if not r or r.returncode != 0:
+            self._record(
+                "read_supported_target_device_ids", False,
+                reason=(
+                    "process_unavailable" if r is None else "busctl_exit"
+                ),
+            )
+            return []
+        ids = re.findall(r'"([^"]+)"', r.stdout)
+        self._record(
+            "read_supported_target_device_ids", True,
+            target_type_count=len(ids),
+        )
+        return list(dict.fromkeys(ids))
+
+    def target_device_types(self) -> list:
+        path = self._path(revalidate=True)
+        if not path:
+            return []
+        result = self._read_property(path, IFACE, "TargetDevices")
+        if self._failed(result, "read_target_devices"):
+            return []
+        paths = [
+            value for value in re.findall(r'"([^"]*)"', result.stdout)
+            if value
+        ]
+        if not paths:
+            self._record(
+                "read_target_device_types", False,
+                reason="target_devices_empty",
+            )
+            return []
+        types = []
+        for target_path in paths:
+            target = self._read_property(
+                target_path, TARGET_IFACE, "DeviceType"
+            )
+            if not target or target.returncode != 0:
+                self._record(
+                    "read_target_device_types", False,
+                    reason="target_identity_unavailable",
+                )
+                return []
+            values = re.findall(r'"([^"]+)"', target.stdout)
+            if len(values) != 1:
+                self._record(
+                    "read_target_device_types", False,
+                    reason="target_identity_invalid",
+                )
+                return []
+            types.append(values[0])
+        self._record(
+            "read_target_device_types", True,
+            target_type_count=len(types),
+        )
+        return types
+
+    def set_target_devices(self, target_types) -> bool:
+        path = self._path(revalidate=True)
+        if not path or not isinstance(target_types, list):
+            return False
+        r = self._run([
+            "busctl", "call", SVC, path, IFACE, "SetTargetDevices", "as",
+            str(len(target_types)), *target_types,
+        ])
+        if self._failed(r, "set_target_devices"):
+            return False
+        self._record(
+            "set_target_devices", True,
+            target_type_count=len(target_types),
+        )
+        return True
+
     def get_profile_yaml(self) -> str | None:
-        path = self._path()
+        path = self._path(revalidate=True)
         if not path:
             return None
         r = self._run(["busctl", "--json=short", "call", SVC, path, IFACE, "GetProfileYaml"])
@@ -160,7 +382,7 @@ class IpDbus:
             return None
 
     def load_profile_yaml(self, yaml: str) -> bool:
-        path = self._path()
+        path = self._path(revalidate=True)
         if not path:
             return False
         r = self._run(["busctl", "call", SVC, path, IFACE, "LoadProfileFromYaml", "s", yaml])
@@ -170,11 +392,165 @@ class IpDbus:
         return True
 
     def reset_default(self) -> bool:
-        path = self._path()
+        path = self._path(revalidate=True)
         if not path:
             return False
         r = self._run(["busctl", "call", SVC, path, IFACE, "LoadProfilePath", "s", DEFAULT_PROFILE_PATH])
         if self._failed(r, "reset_default"):
             return False
         self._record("reset_default", True)
+        return True
+
+    def force_feedback_enabled(self):
+        path = self._path(revalidate=True)
+        if not path:
+            return None
+        r = self._read_property(path, FF_IFACE, "Enabled")
+        if self._failed(r, "read_force_feedback"):
+            return None
+        match = re.search(r"\b(true|false)\b", r.stdout)
+        if not match:
+            self._record(
+                "read_force_feedback", False, reason="invalid_response"
+            )
+            return None
+        enabled = match.group(1) == "true"
+        self._record("read_force_feedback", True, enabled=enabled)
+        return enabled
+
+    def set_force_feedback_enabled(self, enabled: bool) -> bool:
+        path = self._path(revalidate=True)
+        if not path:
+            return False
+        desired = bool(enabled)
+        r = self._run([
+            "busctl", "set-property", SVC, path, FF_IFACE, "Enabled", "b",
+            "true" if desired else "false",
+        ])
+        if self._failed(r, "set_force_feedback"):
+            return False
+        actual = self.force_feedback_enabled()
+        ok = actual is desired
+        self._record(
+            "set_force_feedback",
+            ok,
+            desired=desired,
+            actual=actual,
+            **({} if ok else {"reason": "readback_mismatch"}),
+        )
+        return ok
+
+    def rumble(self, strength) -> bool:
+        path = self._path(revalidate=True)
+        if not path:
+            return False
+        try:
+            value = min(1.0, max(0.0, float(strength)))
+        except (TypeError, ValueError):
+            return False
+        r = self._run([
+            "busctl", "call", SVC, path, FF_IFACE, "Rumble", "d",
+            f"{value:g}",
+        ])
+        if self._failed(r, "rumble"):
+            return False
+        self._record("rumble", True, strength=value)
+        return True
+
+    def stop_rumble(self) -> bool:
+        path = self._path(revalidate=True)
+        if not path:
+            return False
+        r = self._run(["busctl", "call", SVC, path, FF_IFACE, "Stop"])
+        if self._failed(r, "stop_rumble"):
+            return False
+        self._record("stop_rumble", True)
+        return True
+
+    def xbox_hd_haptics(self):
+        path = self._path(revalidate=True)
+        if not path:
+            return None
+        supported = self._read_property(
+            path, FF_IFACE, "XboxHdHapticsSupported"
+        )
+        if (
+            self._failed(supported, "read_xbox_hd_haptics_support")
+            or not re.search(r"\btrue\b", supported.stdout)
+        ):
+            return None
+        result = self._run([
+            "busctl", "call", SVC, path, FF_IFACE, "GetXboxHdHaptics",
+        ])
+        if self._failed(result, "read_xbox_hd_haptics"):
+            return None
+        values = re.findall(r"\b(true|false|\d+)\b", result.stdout)
+        if len(values) != 5:
+            self._record(
+                "read_xbox_hd_haptics", False, reason="invalid_response"
+            )
+            return None
+        sources = {value: key for key, value in _XBOX_RUMBLE_SOURCES.items()}
+        try:
+            left, right, left_source, right_source = map(int, values[1:])
+            config = {
+                "enabled": values[0] == "true",
+                "trigger_left": left,
+                "trigger_right": right,
+                "trigger_left_source": sources[left_source],
+                "trigger_right_source": sources[right_source],
+            }
+        except (KeyError, ValueError):
+            self._record(
+                "read_xbox_hd_haptics", False, reason="invalid_response"
+            )
+            return None
+        self._record("read_xbox_hd_haptics", True)
+        return config
+
+    def set_xbox_hd_haptics(self, config) -> bool:
+        if not isinstance(config, dict):
+            return False
+        try:
+            enabled = config["enabled"]
+            left = config["trigger_left"]
+            right = config["trigger_right"]
+            left_source = _XBOX_RUMBLE_SOURCES[config["trigger_left_source"]]
+            right_source = _XBOX_RUMBLE_SOURCES[config["trigger_right_source"]]
+        except (KeyError, TypeError):
+            return False
+        if (
+            not isinstance(enabled, bool)
+            or not all(
+                isinstance(value, int)
+                and not isinstance(value, bool)
+                and 0 <= value <= 100
+                for value in (left, right)
+            )
+        ):
+            return False
+        path = self._path(revalidate=True)
+        if not path:
+            return False
+        result = self._run([
+            "busctl", "call", SVC, path, FF_IFACE, "SetXboxHdHaptics",
+            "byyyy", "true" if enabled else "false", str(left), str(right),
+            str(left_source), str(right_source),
+        ])
+        if self._failed(result, "set_xbox_hd_haptics"):
+            return False
+        requested = {
+            "enabled": enabled,
+            "trigger_left": left,
+            "trigger_right": right,
+            "trigger_left_source": config["trigger_left_source"],
+            "trigger_right_source": config["trigger_right_source"],
+        }
+        if self.xbox_hd_haptics() != requested:
+            self._record(
+                "set_xbox_hd_haptics", False,
+                reason="readback_mismatch",
+            )
+            return False
+        self._record("set_xbox_hd_haptics", True)
         return True

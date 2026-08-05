@@ -3,6 +3,7 @@ import asyncio
 import importlib
 import sys
 import types
+from concurrent.futures import Future
 
 
 class _FakeToggle:
@@ -88,6 +89,44 @@ def test_eco_on_forces_min_tdp_and_boost_off(tmp_path, monkeypatch):
     levels, _active, _ac = p._effective_levels(None)
     assert levels["pl1"] == 5 and levels["pl2"] == 5 and levels["pl3"] == 5
     assert boost.enabled() is False  # boost forced off
+
+
+def test_set_eco_waits_until_boost_is_off(tmp_path, monkeypatch):
+    class ControlledExecutor:
+        def __init__(self):
+            self.pending = None
+            self.paused = True
+
+        def submit(self, operation):
+            future = Future()
+            if self.paused:
+                self.pending = operation, future
+            else:
+                future.set_result(operation())
+            return future
+
+        def resume(self):
+            operation, future = self.pending
+            self.pending = None
+            self.paused = False
+            future.set_result(operation())
+
+    boost = _FakeToggle(on=True)
+    p = _make_plugin(tmp_path, monkeypatch, boost=boost)
+    executor = ControlledExecutor()
+    p._apply_executor = executor
+
+    async def run():
+        task = asyncio.create_task(p.set_eco(True, 55))
+        while executor.pending is None:
+            await asyncio.sleep(0)
+        assert not task.done()
+        executor.resume()
+        state = await task
+        assert state["enabled"] is True
+        assert boost.enabled() is False
+
+    asyncio.run(run())
 
 
 def test_eco_off_restores(tmp_path, monkeypatch):

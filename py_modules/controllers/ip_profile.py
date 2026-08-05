@@ -17,6 +17,8 @@ Design:
   frozen backend may not bundle PyYAML. The MERGE itself is a pure function here so
   it's unit-tested; only load()/dump() live in the system-python helper.
 """
+import os
+import re
 
 # The remappable PHYSICAL buttons per device, each mapping the source capability a
 # button emits to its silkscreen label. This is a per-device table, NOT derived from
@@ -51,6 +53,12 @@ DEVICE_BUTTONS = {
     "msi_claw_a8": [
         ("RightPaddle1", "M1"), ("LeftPaddle1", "M2"),
     ],
+    "rog_ally": [
+        ("LeftPaddle1", "M2"), ("RightPaddle1", "M1"),
+    ],
+    "rog_ally_x": [
+        ("LeftPaddle1", "M2"), ("RightPaddle1", "M1"),
+    ],
 }
 
 # InputPlumber changed the normalized Xbox Ally paddle capabilities between shipped
@@ -68,6 +76,42 @@ DEVICE_BUTTON_VARIANTS = {
     ],
 }
 
+# Exact CompositeDevice.Name values published by InputPlumber's shipped device
+# profiles. Selection must never fall back to "the first composite" when more than
+# one exists: a docked/Bluetooth controller may otherwise receive handheld writes.
+COMPOSITE_NAMES = {
+    "legion_go": ("Lenovo Legion Go",),
+    "legion_go_s": ("Lenovo Legion Go S",),
+    "legion_go_2": ("Lenovo Legion Go 2",),
+    "rog_ally": ("ASUS ROG Ally",),
+    "rog_ally_x": ("ASUS ROG Ally X",),
+    "rog_xbox_ally": ("ASUS ROG Xbox Ally",),
+    "rog_xbox_ally_x": ("ASUS ROG Xbox Ally",),
+    "msi_claw_8_ai_plus": ("MSI Claw 8 AI+ A2VM",),
+    "msi_claw_a8": ("MSI Claw A8 BZ2EM",),
+    "gpd_win_5": ("GPD Win5",),
+}
+
+_PROFILE_PROOFS = {
+    "rog_ally": {
+        "profile": "/usr/share/inputplumber/devices/50-rog_ally.yaml",
+        "profile_name": "ASUS ROG Ally",
+        "map": "/usr/share/inputplumber/capability_maps/ally_type1.yaml",
+        "map_id": "aly1",
+    },
+    "rog_ally_x": {
+        "profile": "/usr/share/inputplumber/devices/50-rog_ally_x.yaml",
+        "profile_name": "ASUS ROG Ally X",
+        "map": "/usr/share/inputplumber/capability_maps/ally_type1.yaml",
+        "map_id": "aly1",
+    },
+}
+
+_ALLY_PADDLE_MAP = {
+    "LeftPaddle1": ("KeyF14", 184),
+    "RightPaddle1": ("KeyF15", 185),
+}
+
 # Gamepad buttons offered as remap targets (what an extra button can become).
 GAMEPAD_TARGETS = (
     "South", "North", "East", "West",
@@ -79,13 +123,82 @@ GAMEPAD_TARGETS = (
     "Screenshot",
 )
 
-# Keyboard keys offered as remap targets (common shortcuts).
+MODIFIER_KEYS = (
+    "KeyLeftCtrl", "KeyRightCtrl", "KeyLeftShift", "KeyRightShift",
+    "KeyLeftAlt", "KeyRightAlt", "KeyLeftMeta", "KeyRightMeta",
+)
 KEY_TARGETS = (
-    "KeyEsc", "KeyEnter", "KeySpace", "KeyTab",
+    *MODIFIER_KEYS,
+    "KeyEsc", "KeyEnter", "KeySpace", "KeyTab", "KeyBackspace",
+    "KeyHome", "KeyEnd", "KeyPageUp", "KeyPageDown",
+    "KeyUp", "KeyDown", "KeyLeft", "KeyRight", "KeyInsert", "KeyDelete",
+    *(f"Key{letter}" for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ"),
+    *(f"Key{digit}" for digit in "1234567890"),
+    *(f"KeyF{number}" for number in range(1, 25)),
     "KeyVolumeUp", "KeyVolumeDown", "KeyMute",
     "KeyBrightnessUp", "KeyBrightnessDown",
-    "KeyLeftCtrl", "KeyLeftShift", "KeyLeftAlt",
 )
+
+# Curated from InputPlumber's official TargetDeviceTypeId catalog. Auxiliary
+# targets are deliberately excluded: changing gamepad emulation must preserve the
+# profile's keyboard, mouse, touchpad and touchscreen devices.
+VIRTUAL_GAMEPAD_TARGETS = (
+    "xb360", "xbox-elite", "xbox-series",
+    "ds5", "ds5-edge", "hori-steam",
+)
+OFFICIAL_GAMEPAD_TARGETS = (
+    *VIRTUAL_GAMEPAD_TARGETS,
+    "deck", "deck-uhid", "8bitdo-u2", "gamepad", "unified-gamepad",
+)
+OFFICIAL_TARGETS = (
+    *OFFICIAL_GAMEPAD_TARGETS,
+    "keyboard", "mouse", "touchpad", "touchscreen",
+    "null", "dbus", "debug",
+)
+
+
+def virtual_mode_options(supported_ids) -> list:
+    supported = {
+        value for value in (supported_ids or [])
+        if isinstance(value, str)
+    }
+    return [
+        "auto",
+        *(mode for mode in VIRTUAL_GAMEPAD_TARGETS if mode in supported),
+    ]
+
+
+def gamepad_target(target_devices) -> str | None:
+    if not isinstance(target_devices, list):
+        return None
+    gamepads = [
+        target for target in target_devices
+        if target in OFFICIAL_GAMEPAD_TARGETS
+    ]
+    return gamepads[0] if len(gamepads) == 1 else None
+
+
+def clean_target_devices(target_devices) -> list:
+    if (
+        not isinstance(target_devices, list)
+        or not 1 <= len(target_devices) <= 16
+        or len(target_devices) != len(set(target_devices))
+        or any(target not in OFFICIAL_TARGETS for target in target_devices)
+        or gamepad_target(target_devices) is None
+    ):
+        return []
+    return list(target_devices)
+
+
+def replace_gamepad_target(target_devices, target_mode) -> list:
+    clean = clean_target_devices(target_devices)
+    current = gamepad_target(clean)
+    if not clean or target_mode not in VIRTUAL_GAMEPAD_TARGETS:
+        return []
+    return [
+        target_mode if target == current else target
+        for target in clean
+    ]
 
 
 def _capability_names(capabilities) -> set:
@@ -98,14 +211,94 @@ def _capability_names(capabilities) -> set:
     }
 
 
-def buttons_for(device_key, capabilities) -> list:
+def _read_text(root, absolute):
+    try:
+        with open(os.path.join(root, absolute.lstrip("/"))) as file:
+            return file.read()
+    except OSError:
+        return None
+
+
+def _bitmap_bits(raw):
+    try:
+        words = [int(word, 16) for word in raw.split()]
+    except (AttributeError, ValueError):
+        return 0
+    bits = 0
+    for index, word in enumerate(reversed(words)):
+        bits |= word << (index * 64)
+    return bits
+
+
+def _mapping_declared(mapping, source, target):
+    pattern = (
+        rf"(?m)^\s*source_events:\s*$\n"
+        rf"\s*-\s*keyboard:\s*{re.escape(source)}\s*$\n"
+        rf"\s*target_event:\s*$\n"
+        rf"\s*gamepad:\s*$\n"
+        rf"\s*button:\s*{re.escape(target)}\s*$"
+    )
+    return re.search(pattern, mapping) is not None
+
+
+def proven_mapped_capabilities(device_key, source_paths, root="/") -> set:
+    """Capabilities omitted by CompositeDevice but proven by the installed map.
+
+    InputPlumber 0.78 maps the Ally's raw F14/F15 keys to paddle capabilities,
+    yet does not list those mapped targets in CompositeDevice.Capabilities. Both
+    the exact installed profile/map and the raw evdev key bit must agree before a
+    paddle is surfaced.
+    """
+    proof = _PROFILE_PROOFS.get(device_key or "")
+    if proof is None:
+        return set()
+    profile = _read_text(root, proof["profile"])
+    mapping = _read_text(root, proof["map"])
+    if profile is None or mapping is None:
+        return set()
+    if re.search(
+        rf"(?m)^name:\s*{re.escape(proof['profile_name'])}\s*$",
+        profile,
+    ) is None or re.search(
+        rf"(?m)^capability_map_id:\s*{re.escape(proof['map_id'])}\s*$",
+        profile,
+    ) is None or re.search(
+        rf"(?m)^id:\s*{re.escape(proof['map_id'])}\s*$", mapping
+    ) is None:
+        return set()
+
+    raw_bits = 0
+    for source_path in source_paths or []:
+        event = os.path.basename(source_path)
+        if re.fullmatch(r"event\d+", event) is None:
+            continue
+        raw = _read_text(
+            root, f"/sys/class/input/{event}/device/capabilities/key"
+        )
+        raw_bits |= _bitmap_bits(raw)
+
+    return {
+        target
+        for target, (source, code) in _ALLY_PADDLE_MAP.items()
+        if raw_bits & (1 << code)
+        and _mapping_declared(mapping, source, target)
+    }
+
+
+def needs_mapped_capability_proof(device_key) -> bool:
+    return (device_key or "") in _PROFILE_PROOFS
+
+
+def buttons_for(device_key, capabilities, proven_capabilities=()) -> list:
     """The remappable physical buttons for this device as [(capability, silkscreen)],
     in display order. The per-device table is the source of truth for which buttons
     and what to call them; it's intersected with the LIVE capability set so we only
     surface a button the daemon actually reports (defensive — never invent one). An
     unknown device (not in the table) yields an empty list."""
     key = device_key or ""
-    have = _capability_names(capabilities)
+    have = _capability_names(capabilities) | set(
+        proven_capabilities or ()
+    )
     variants = DEVICE_BUTTON_VARIANTS.get(key)
     entries = DEVICE_BUTTONS.get(key, [])
     if variants:
@@ -125,6 +318,10 @@ def is_known_device(device_key) -> bool:
     return device_key in DEVICE_BUTTONS or device_key in DEVICE_BUTTON_VARIANTS
 
 
+def composite_names_for(device_key) -> tuple:
+    return COMPOSITE_NAMES.get(device_key or "", ())
+
+
 def sanitize_target(target: dict):
     """Coerce one target to {"gamepad"|"key": name}, or None if invalid."""
     if not isinstance(target, dict):
@@ -142,6 +339,35 @@ def sanitize_targets(targets) -> list:
     return [s for t in targets if (s := sanitize_target(t)) is not None]
 
 
+def sanitize_button_action(targets) -> list:
+    if not isinstance(targets, (list, tuple)) or not 1 <= len(targets) <= 4:
+        return []
+    clean = sanitize_targets(targets)
+    if len(clean) != len(targets):
+        return []
+    if len(clean) == 1 and "gamepad" in clean[0]:
+        return clean
+    if not all("key" in target for target in clean):
+        return []
+    keys = [target["key"] for target in clean]
+    if len(keys) != len(set(keys)):
+        return []
+    modifier_order = {
+        key: index for index, key in enumerate(MODIFIER_KEYS)
+    }
+    modifiers = sorted(
+        (key for key in keys if key in modifier_order),
+        key=modifier_order.__getitem__,
+    )
+    main = [key for key in keys if key not in modifier_order]
+    return [{"key": key} for key in (*modifiers, *main)]
+
+
+def is_keyboard_chord(targets) -> bool:
+    clean = sanitize_button_action(targets)
+    return bool(clean) and all("key" in target for target in clean)
+
+
 def _target_event(target: dict) -> dict:
     """Our internal target → an InputPlumber target_event dict."""
     if "gamepad" in target:
@@ -157,7 +383,7 @@ def _mapping_entry(button: str, targets: list) -> dict:
     }
 
 
-def apply_overrides_to_profile(profile: dict, overrides: dict) -> dict:
+def apply_overrides_to_profile(profile: dict, overrides: dict) -> dict | None:
     """Return a copy of `profile` with each override applied to its button's entry.
 
     Pure: preserves every existing mapping (dials, untouched buttons) and only
@@ -172,7 +398,10 @@ def apply_overrides_to_profile(profile: dict, overrides: dict) -> dict:
         return se.get("gamepad", {}).get("button")
 
     for button, targets in overrides.items():
-        clean = sanitize_targets(targets)
+        matches = [entry for entry in mapping if source_button(entry) == button]
+        if len(matches) > 1:
+            return None
+        clean = sanitize_button_action(targets)
         mapping = [e for e in mapping if source_button(e) != button]  # drop old
         if clean:
             mapping.append(_mapping_entry(button, clean))

@@ -551,6 +551,7 @@ export const restartLoader = callable<[], void>("restart_loader");
 // calibration → GLOBAL. See ColorPreset for ranges.
 export interface ColorPreset {
   saturation: number;   // 0..200, 100 neutral (per-game)
+  hdr_saturation: number; // 100..150, 100 neutral (per-game, PQ look)
   temperature: number;  // -100 cool .. +100 warm, 0 neutral (global)
   contrast: number;     // -100 flat .. +100 punchy, 0 neutral (global)
   gamma: number;        // -100 dark .. +100 bright midtones, 0 neutral (global)
@@ -564,12 +565,15 @@ export interface ColorPreset {
 
 // Calibration = a ColorPreset minus the per-game saturation. The key list lives in
 // display/color.ts (kept free of this module's @decky/api import).
-export type Calibration = Omit<ColorPreset, "saturation">;
+export type Calibration = Omit<ColorPreset, "saturation" | "hdr_saturation">;
 
 export interface ColorState extends ColorPreset {
   // False when the host has no gamescope color control → UI shows an honest note.
   supported: boolean;
   global_saturation: number;
+  global_hdr_saturation: number;
+  hdr_saturation_supported: boolean;
+  hdr_saturation_experimental: boolean;
   has_game_profile: boolean;
   // True when this game applies the global saturation (no own, or toggled to follow).
   follows_global: boolean;
@@ -621,6 +625,8 @@ export const setGpuFollowGlobal =
 export const getColorState = callable<[], ColorState>("get_color_state");
 export const setSaturation =
   callable<[value: number, scope: Scope, appid: string | null], ColorState>("set_saturation");
+export const setHdrSaturation =
+  callable<[value: number, scope: Scope, appid: string | null], ColorState>("set_hdr_saturation");
 export const setColorFollowGlobal =
   callable<[follow: boolean, appid: string | null], ColorState>("set_color_follow_global");
 // Preview calibration live (arms the backend auto-revert); confirm with setCalibration.
@@ -658,10 +664,12 @@ export const getNightState = callable<[], NightState>("get_night_state");
 export const setNight = callable<[patch: NightPatch], NightState>("set_night");
 
 // ---- HDR output -----------------------------------------------------------
-// On/off only: HDR content scans out directly, so its color can't be tuned from here.
 export interface HdrState {
   supported: boolean;   // HDR-capable panel + gamescope present
   enabled: boolean;
+  actual_enabled?: boolean | null;
+  last_apply?: boolean;
+  confirmation?: "accepted";
   // Per-game via the shared color scope: true when this game follows the global HDR.
   follows_global: boolean;
 }
@@ -675,6 +683,10 @@ export const setHdr = callable<[patch: HdrPatch, scope: Scope, appid: string | n
 
 // ---- Mandos (controller manager) ------------------------------------------
 export type ControllerTarget = { gamepad: string } | { key: string };
+export type ControllerButtonAction =
+  | { kind: "default" }
+  | { kind: "gamepad"; target: string }
+  | { kind: "keyboard_chord"; keys: string[] };
 
 export interface RemapButton {
   // The InputPlumber source capability (e.g. "LeftPaddle1") — used when remapping.
@@ -704,12 +716,102 @@ export interface ControllerConfig {
   // remap, and whether it has its own saved profile — drive the scope tab.
   follows_global?: boolean;
   has_game_profile?: boolean;
+  last_apply?: boolean;
+  apply_error?: string;
   // settings (HHD)
   device_key?: string;
   mode?: string | null;
   mode_options?: string[];
   paddles_as?: string | null;
   paddles_options?: string[];
+  virtual_controller?: {
+    supported: boolean;
+    mode: string;
+    actual_mode: string | null;
+    options: string[];
+    scope: Scope[];
+    readiness?: "evdev_identity" | "dbus_target_type";
+    last_apply?: boolean;
+  };
+  vibration?: {
+    supported: boolean;
+    enabled: boolean | null;
+    test_supported: boolean;
+    mode?: "dual" | "gain" | "lenovo_hd" | "asus_xbox_hd";
+    persistent?: boolean;
+    value?: number;
+    left?: number;
+    right?: number;
+    actual_value?: number | null;
+    actual_left?: number;
+    actual_right?: number;
+    intensity?: "off" | "low" | "medium" | "high";
+    left_pattern?: "fps" | "racing" | "standard" | "spg" | "rpg";
+    right_pattern?: "fps" | "racing" | "standard" | "spg" | "rpg";
+    touchpad_enabled?: boolean;
+    touchpad_intensity?: "off" | "low" | "medium" | "high";
+    actual_intensity?: "off" | "low" | "medium" | "high";
+    actual_left_pattern?: "fps" | "racing" | "standard" | "spg" | "rpg";
+    actual_right_pattern?: "fps" | "racing" | "standard" | "spg" | "rpg";
+    actual_touchpad_enabled?: boolean;
+    actual_touchpad_intensity?: "off" | "low" | "medium" | "high";
+    intensity_options?: ("off" | "low" | "medium" | "high")[];
+    left_pattern_options?: ("fps" | "racing" | "standard" | "spg" | "rpg")[];
+    right_pattern_options?: ("fps" | "racing" | "standard" | "spg" | "rpg")[];
+    touchpad_enabled_options?: boolean[];
+    touchpad_intensity_options?: ("off" | "low" | "medium" | "high")[];
+    connected?: boolean;
+    min?: number;
+    max?: number;
+    step?: number;
+    readback?: boolean;
+    confirmation?: "driver" | "none";
+    test_patterns?: string[];
+    test_channels?: string[];
+    last_apply?: boolean;
+    base_owner?: "hhd" | "inputplumber";
+    enhancement_owner?: "panel";
+    hd_game_supported?: boolean;
+    hd_game_enabled?: boolean;
+    trigger_left?: number;
+    trigger_right?: number;
+    trigger_left_source?: "off" | "strong" | "weak" | "mix";
+    trigger_right_source?: "off" | "strong" | "weak" | "mix";
+    trigger_source_options?: ("off" | "strong" | "weak" | "mix")[];
+    actual_hd_game_enabled?: boolean;
+    actual_trigger_left?: number;
+    actual_trigger_right?: number;
+    actual_trigger_left_source?: "off" | "strong" | "weak" | "mix";
+    actual_trigger_right_source?: "off" | "strong" | "weak" | "mix";
+  };
+  operation_state?: {
+    generation: number;
+    appid: string | null;
+    components: Record<string, {
+      status: "applied" | "accepted_unverifiable" | "pending" | "unsupported" | "conflict" | "failed" | "recovery_required" | "cancelled";
+      owner?: "hhd" | "inputplumber" | "native" | "evdev" | "none";
+      reason?: string;
+      desired: Record<string, unknown>;
+      actual?: Record<string, unknown>;
+    }>;
+  };
+}
+
+export interface ControllerVibrationPatch {
+  enabled?: boolean;
+  value?: number;
+  left?: number;
+  right?: number;
+  hd_game_enabled?: boolean;
+  trigger_left?: number;
+  trigger_right?: number;
+  trigger_left_source?: "off" | "strong" | "weak" | "mix";
+  trigger_right_source?: "off" | "strong" | "weak" | "mix";
+  intensity?: "off" | "low" | "medium" | "high";
+  left_pattern?: "fps" | "racing" | "standard" | "spg" | "rpg";
+  right_pattern?: "fps" | "racing" | "standard" | "spg" | "rpg";
+  touchpad_enabled?: boolean;
+  touchpad_intensity?: "off" | "low" | "medium" | "high";
 }
 
 // ---- Bug reporter ---------------------------------------------------------
@@ -734,12 +836,51 @@ export const getControllerConfig = callable<[], ControllerConfig>("get_controlle
 export const setControllerButton =
   callable<[source: string, targets: ControllerTarget[], scope: Scope, appid: string | null], ControllerConfig>(
     "set_controller_button");
+export const setControllerButtonAction =
+  callable<[
+    source: string,
+    action: ControllerButtonAction,
+    scope: Scope,
+    appid: string | null,
+  ], ControllerConfig>("set_controller_button_action");
 export const setControllerFollowGlobal =
   callable<[follow: boolean, appid: string], ControllerConfig>("set_controller_follow_global");
 export const setControllerSetting =
   callable<[field: string, value: string], ControllerConfig>("set_controller_setting");
+export const setControllerVirtualMode =
+  callable<[mode: string, scope: Scope, appid: string | null], ControllerConfig>(
+    "set_controller_virtual_mode",
+  );
 export const resetController =
   callable<[scope: Scope, appid: string | null], ControllerConfig>("reset_controller");
+export const setControllerVibration =
+  callable<[
+    patch: ControllerVibrationPatch,
+    scope: Scope,
+    appid: string | null,
+  ], ControllerConfig>(
+    "set_controller_vibration",
+  );
+export type ControllerVibrationTestChannel =
+  | "left" | "right" | "strong" | "weak" | "both"
+  | "trigger_left" | "trigger_right" | "all";
+export const testControllerVibration =
+  callable<[
+    pattern: "pulse",
+    channel: ControllerVibrationTestChannel | null,
+    strength: number,
+  ], VibrationTestResult>("test_controller_vibration");
+
+export interface VibrationTestResult {
+  sent: boolean;
+  stopped: boolean;
+  restored: boolean;
+  reason: string | null;
+}
+// Kept unknown at the RPC boundary: the diagnostics panel validates every
+// capability enum before presenting manager-provided data.
+export const getControllerDiagnostics =
+  callable<[], unknown>("get_controller_diagnostics");
 
 // ---- Ajustes: per-game profile overview -----------------------------------
 // One row per game that has a stored per-game profile in any section (raw own values).
@@ -756,7 +897,12 @@ export interface GameProfileRow {
     follows_global: boolean;
   };
   gpu?: { manual: boolean; min: number | null; max: number | null; follows_global: boolean };
-  mandos?: { count: number; follows_global: boolean };
+  mandos?: {
+    count: number;
+    vibration: boolean;
+    mode: string | null;
+    follows_global: boolean;
+  };
   audio?: { follows_global: boolean };
 }
 export const listGameProfiles = callable<[], GameProfileRow[]>("list_game_profiles");

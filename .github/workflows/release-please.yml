@@ -82,7 +82,8 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake pkg-config
+          sudo apt-get install -y build-essential cmake libclang-dev libiio-dev libudev-dev pkg-config
+          rustup toolchain install 1.92.0 --profile minimal --no-self-update
           bash scripts/build-ryzenadj.sh bin
 
       # The binary must be a valid executable with no unresolved libraries. A
@@ -109,6 +110,14 @@ jobs:
             echo "::error::bundled binary loader error"; exit 1
           fi
 
+      - name: Build Xbox Ally X InputPlumber extension
+        if: ${{ steps.release.outputs.release_created }}
+        env:
+          RUSTUP_TOOLCHAIN: 1.92.0
+        run: |
+          bash scripts/build-inputplumber-xbox-hd.sh bin all
+          bash scripts/verify-inputplumber-xbox-hd.sh . all
+
       - name: Build and package
         if: ${{ steps.release.outputs.release_created }}
         env:
@@ -116,11 +125,7 @@ jobs:
         run: |
           pnpm install --frozen-lockfile
           pnpm build
-          rm -f dist/*.map
-          staging=$(mktemp -d)
-          mkdir -p "$staging/$PLUGIN_NAME"
-          cp -rL dist main.py plugin.json package.json README.md README.en.md LICENSE py_modules assets bin "$staging/$PLUGIN_NAME"
-          (cd "$staging" && zip -r "$GITHUB_WORKSPACE/$PLUGIN_NAME.zip" "$PLUGIN_NAME")
+          bash scripts/package-plugin.sh "$PLUGIN_NAME.zip" "$PLUGIN_NAME"
 
       # Attach the artifact first, so provenance signing can never block the release
       # asset (e.g. build provenance is unavailable on private repos).

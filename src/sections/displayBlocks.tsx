@@ -4,7 +4,10 @@ import { LuGlobe, LuPalette, LuSlidersHorizontal, LuSparkles } from "react-icons
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
-import { isNativeColor, isCalibrated } from "../display/color";
+import {
+  isNativeColor,
+  isCalibrated,
+} from "../display/color";
 import { usePantalla } from "../display/pantallaContext";
 import { ContainedSlider } from "../components/ContainedSlider";
 import { Collapsible } from "../components/Collapsible";
@@ -90,13 +93,16 @@ const ColorBlock: FC = () => {
 };
 
 const HdrBlock: FC = () => {
-  const { hdr } = usePantalla();
+  const { hdr, color } = usePantalla();
   if (!hdr.state?.supported) return null;
-  return (
-    <PanelSectionRow>
-      <HdrPanel state={hdr.state} onChange={hdr.update} />
-    </PanelSectionRow>
-  );
+  const saturation = color.state?.hdr_saturation_supported
+    ? {
+        value: color.state.hdr_saturation,
+        experimental: color.state.hdr_saturation_experimental,
+        onChange: color.onHdrSaturation,
+      }
+    : undefined;
+  return <HdrPanel state={hdr.state} onChange={hdr.update} saturation={saturation} />;
 };
 
 const NightBlock: FC = () => {

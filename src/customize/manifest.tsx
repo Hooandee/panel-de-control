@@ -3,7 +3,7 @@ import {
   LuGauge, LuSlidersHorizontal, LuFan, LuSettings,
   LuLeaf, LuBatteryFull, LuCpu, LuSun, LuVolume2, LuWind, LuThermometer, LuChartSpline,
   LuLightbulb, LuPalette, LuGamepad2, LuMemoryStick, LuActivity, LuHeartPulse, LuAudioLines,
-  LuSparkles, LuMoon, LuReplace, LuSlidersVertical, LuRocket,
+  LuSparkles, LuMoon, LuReplace, LuSlidersVertical, LuRocket, LuVibrate,
 } from "react-icons/lu";
 
 /** Presentation metadata shared by a tab and a configurable block. */
@@ -23,6 +23,12 @@ export const PINNED_TAB = "settings";
 export const POWER_TAB = "power";
 
 const ICON = 15;
+
+const CONTROLLER_DIAGNOSTICS_BLOCK: BlockDef = {
+  id: "diagnostics",
+  labelKey: "mandos.diagnostics.title",
+  icon: <LuActivity size={ICON} />,
+};
 
 /**
  * The tabs (id + label + icon), in DEFAULT order. Kept here — decoupled from the
@@ -71,6 +77,7 @@ export const SECTION_BLOCKS: Record<string, BlockDef[]> = {
     { id: "manager", labelKey: "customize.block.manager", icon: <LuGamepad2 size={ICON} /> },
     { id: "remap", labelKey: "mandos.remap.title", icon: <LuReplace size={ICON} /> },
     { id: "settings", labelKey: "mandos.settings.title", icon: <LuSlidersVertical size={ICON} /> },
+    { id: "vibration", labelKey: "mandos.vibration.title", icon: <LuVibrate size={ICON} /> },
   ],
 };
 
@@ -90,6 +97,18 @@ export function blockOrder(sectionId: string): string[] {
   return (SECTION_BLOCKS[sectionId] ?? []).map((b) => b.id);
 }
 
+export function pickableBlockIds(
+  sectionId: string,
+  presentIds: readonly string[] | null,
+): string[] {
+  const defaults = blockOrder(sectionId);
+  const base = presentIds ?? defaults;
+  const extras = (PICKABLE_BLOCKS[sectionId] ?? [])
+    .map(({ id }) => id)
+    .filter((id) => !defaults.includes(id));
+  return [...new Set([...extras, ...base])];
+}
+
 /**
  * Blocks a custom view can pick, per section. Superset of SECTION_BLOCKS: adds the
  * fixed cores that aren't reorderable in their own tab but CAN be placed in a view
@@ -100,5 +119,9 @@ export const PICKABLE_BLOCKS: Record<string, BlockDef[]> = {
   power: [
     { id: "tdp", labelKey: "customize.block.tdp", icon: <LuGauge size={ICON} /> },
     ...SECTION_BLOCKS.power,
+  ],
+  mandos: [
+    ...SECTION_BLOCKS.mandos,
+    CONTROLLER_DIAGNOSTICS_BLOCK,
   ],
 };

@@ -14,6 +14,8 @@ import threading
 import time
 import types
 
+from controllers.coordinator import ControllerCoordinator
+from controllers.operations import OperationResult
 import pytest
 
 
@@ -332,6 +334,252 @@ def test_unload_stops_new_tdp_writes_before_handoff(tmp_path, monkeypatch):
     assert events == ["handoff"]
 
 
+class _LifecycleController:
+    manager = "inputplumber"
+
+    def __init__(self, profile, statuses=None, write_ok=True):
+        self.profile = profile
+        self.statuses = statuses or {}
+        self.write_ok = write_ok
+        self.events = []
+
+    def set_button(self, source, targets, scope, appid):
+        self.events.append(("set_button", source, targets, scope, appid))
+        return {"last_apply": self.write_ok}
+
+    def set_vibration(self, patch, scope, appid):
+        return {"vibration": {"last_apply": self.write_ok}}
+
+    def effective_profile(self, appid):
+        return self.profile
+
+    def get_config(self, appid):
+        return {
+            "kind": "remap",
+            "buttons": [
+                {"source": "LeftPaddle1", "label": "M2", "target": None},
+            ],
+        }
+
+    def owns_loaded_profile(self):
+        return True
+
+    def apply_component(self, component, desired, appid, generation):
+        self.events.append((component, appid))
+        status = self.statuses.get(component, "applied")
+        return OperationResult(
+            component, status,
+            "apply_failed" if status == "failed" else None,
+            self.manager, generation, appid, desired,
+            desired if status == "applied" else None,
+        )
+
+    def wait_ready(self, appid, generation):
+        self.events.append(("wait_ready", appid))
+        return True
+
+    def cancel_transients(self, reason):
+        self.events.append(("cancel", reason))
+
+    def clear_translated_state(self):
+        self.events.append(("clear", None))
+        return True
+
+    def restore_external(self):
+        self.events.append(("restore_external", None))
+        return True
+
+
+def _controller_for(p, profile, statuses=None, write_ok=True):
+    backend = _LifecycleController(profile, statuses, write_ok)
+    p._controller_backend = backend
+    p._controller_coordinator = ControllerCoordinator(backend)
+    return backend
+
+
+def test_failed_controller_write_remains_pending_for_lifecycle_retry(
+    tmp_path, monkeypatch
+):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    _controller_for(
+        p,
+        {"virtual_controller": {}, "buttons": {}, "vibration": {"value": 40}},
+        write_ok=False,
+    )
+    p._current_appid = "42"
+
+    asyncio.run(p.set_controller_vibration(
+        {"value": 40}, scope="game", appid="42"
+    ))
+
+    assert p._controller_coordinator.snapshot()["components"] == {}
+
+
+def test_successful_vibration_rpc_does_not_apply_the_profile_twice(
+    tmp_path, monkeypatch
+):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    backend = _controller_for(
+        p,
+        {"virtual_controller": {}, "buttons": {}, "vibration": {"value": 40}},
+    )
+    p._current_appid = "42"
+
+    asyncio.run(p.set_controller_vibration(
+        {"value": 40}, scope="game", appid="42"
+    ))
+
+    assert not any(
+        event[0] in {"apply_component", "wait_ready"}
+        for event in backend.events
+    )
+
+
+def test_component_results_remain_independent_after_button_write(
+    tmp_path, monkeypatch
+):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    backend = _controller_for(
+        p,
+        {
+            "virtual_controller": {},
+            "buttons": {"LeftPaddle1": [{"gamepad": "South"}]},
+            "vibration": {"value": 40},
+        },
+        statuses={"vibration": "failed"},
+    )
+    p._current_appid = "42"
+
+    asyncio.run(p.set_controller_button(
+        "LeftPaddle1", [{"gamepad": "South"}],
+        scope="game", appid="42",
+    ))
+
+    components = p._controller_coordinator.snapshot()["components"]
+    assert components["buttons"]["status"] == "applied"
+    assert components["vibration"]["status"] == "failed"
+    assert ("vibration", "42") in backend.events
+
+
+def test_unload_reconciles_global_controller_before_handoff(
+    tmp_path, monkeypatch
+):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    backend = _controller_for(p, {
+        "virtual_controller": {}, "buttons": {},
+        "vibration": {"value": 100},
+    })
+    p._restore_fans_safe = lambda: None
+    p._restore_color_safe = lambda: None
+    p._restore_audio_safe = lambda: None
+    p._restore_hhd_tdp = lambda: backend.events.append(("handoff", None))
+
+    asyncio.run(p._unload())
+
+    assert ("virtual_controller", None) in backend.events
+    assert backend.events[-1] == ("handoff", None)
+
+
+def test_forced_controller_reapply_runs_same_desired_profile(
+    tmp_path, monkeypatch
+):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    profile = {
+        "virtual_controller": {}, "buttons": {},
+        "vibration": {"value": 40},
+    }
+    backend = _controller_for(p, profile)
+    p._current_appid = "42"
+
+    p._reapply_controller(force=True)
+    p._reapply_controller(force=True)
+
+    assert backend.events.count(("vibration", "42")) == 2
+
+
+def test_forced_startup_restores_owned_profile_with_empty_global(
+    tmp_path, monkeypatch
+):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    backend = _controller_for(p, {
+        "virtual_controller": {}, "buttons": {}, "vibration": {},
+    })
+    p._current_appid = None
+
+    p._reapply_controller(force=True)
+
+    assert ("buttons", None) in backend.events
+
+
+def test_game_switch_restores_owned_empty_global_without_force(
+    tmp_path, monkeypatch,
+):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    backend = _controller_for(p, {
+        "virtual_controller": {}, "buttons": {}, "vibration": {},
+    })
+    p._current_appid = None
+
+    p._reapply_controller()
+
+    assert backend.events[:2] == [
+        ("virtual_controller", None), ("wait_ready", None),
+    ]
+    assert ("buttons", None) in backend.events
+
+
+def test_button_action_rejects_invalid_shapes_without_mutating_backend(
+    tmp_path, monkeypatch
+):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    backend = _controller_for(p, {
+        "virtual_controller": {}, "buttons": {}, "vibration": {},
+    })
+    p._current_appid = "42"
+    invalid = [
+        ("LeftPaddle1", {"kind": "keyboard_chord", "keys": [
+            "KeyLeftCtrl", "KeyLeftShift", "KeyLeftAlt", "KeyLeftMeta", "KeyTab",
+        ]}, "game", "42"),
+        ("LeftPaddle1", {"kind": "keyboard_chord", "keys": ["KeyTab", "KeyTab"]}, "game", "42"),
+        ("LeftPaddle1", {"kind": "gamepad", "target": "South"}, "game", None),
+        ("LeftPaddle1", {"kind": "gamepad", "target": "South"}, "invalid", None),
+        ("Guide", {"kind": "keyboard_chord", "keys": ["KeyTab"]}, "global", None),
+    ]
+
+    for source, action, scope, appid in invalid:
+        asyncio.run(p.set_controller_button_action(
+            source, action, scope=scope, appid=appid
+        ))
+
+    assert not any(event[0] == "set_button" for event in backend.events)
+
+
+def test_valid_button_action_enters_coordinator_generation(
+    tmp_path, monkeypatch
+):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    profile = {
+        "virtual_controller": {},
+        "buttons": {"LeftPaddle1": [
+            {"key": "KeyLeftCtrl"}, {"key": "KeyTab"},
+        ]},
+        "vibration": {},
+    }
+    backend = _controller_for(p, profile)
+    p._current_appid = "42"
+
+    config = asyncio.run(p.set_controller_button_action(
+        "LeftPaddle1",
+        {"kind": "keyboard_chord", "keys": ["KeyLeftCtrl", "KeyTab"]},
+        scope="game", appid="42",
+    ))
+
+    set_event = next(event for event in backend.events if event[0] == "set_button")
+    assert set_event[2] == [
+        {"key": "KeyLeftCtrl"}, {"key": "KeyTab"},
+    ]
+    assert config["operation_state"]["appid"] == "42"
+    assert config["operation_state"]["components"]["buttons"]["status"] == "applied"
 def test_unload_completes_without_yielding_to_the_stopping_event_loop(
     tmp_path, monkeypatch
 ):

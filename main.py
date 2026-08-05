@@ -47,7 +47,12 @@ from launch import custom_vars as launch_custom_vars
 from display.color_store import ColorStore, sanitize_calibration
 from display.gamescope import GamescopeColorBackend, run_gamescopectl
 from display.oled_look import oled_look_for
-from display.const import NATIVE as COLOR_NATIVE, FIELDS as COLOR_FIELDS, CALIBRATION as COLOR_CALIBRATION
+from display.const import (
+    NATIVE as COLOR_NATIVE,
+    FIELDS as COLOR_FIELDS,
+    CALIBRATION as COLOR_CALIBRATION,
+    LOOK_FIELDS as COLOR_LOOK_FIELDS,
+)
 from display.night_store import NightStore
 from display.night import is_night_active
 from display import presets as color_presets
@@ -72,10 +77,14 @@ from telemetry.store import TelemetryStore
 from telemetry.sampler import TelemetrySampler
 from controllers import detect as controller_detect
 from controllers import hhd as controller_hhd
+from controllers import ip_profile as controller_ip_profile
 from controllers import conflict as controller_conflict
 from controllers import factory as controller_factory
+from controllers.coordinator import ControllerCoordinator
 from controllers.store import RemapStore
 from controllers.dbus import IpDbus
+from controllers.diagnostics import IntegratedDiagnostics
+from controllers import inputplumber_extension
 from sysfs import read_str
 from report import collector as report_collector
 from report import client as report_client
@@ -302,13 +311,31 @@ class Plugin:
         # the InputPlumber backend. The factory picks ONE backend (HHD REST / IP dbus /
         # none). `_last_controller_overrides` gates the game-change re-apply so we only
         # touch the daemon when the effective profile actually changes.
+        self._controller_store = RemapStore(
+            os.path.join(
+                decky.DECKY_PLUGIN_SETTINGS_DIR, "controller_remap.json"
+            )
+        )
+        self._controller_dbus = IpDbus(event_cb=self._log_controller_event)
         self._controller_backend = controller_factory.select_controller_backend(
             self._controller,
-            RemapStore(os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "controller_remap.json")),
-            IpDbus(event_cb=self._log_controller_event),
+            self._controller_store,
+            self._controller_dbus,
             self._device,
         )
-        self._last_controller_overrides = None
+        self._controller_coordinator = ControllerCoordinator(
+            self._controller_backend
+        )
+        self._controller_shutdown = False
+        self._controller_endpoint_last = None
+        self._display_endpoint_last = None
+        self._controller_endpoint_pending = None
+        self._display_endpoint_pending = None
+        self._controller_endpoint_attempts = 0
+        self._display_endpoint_attempts = 0
+        self._hardware_retry_limit = 6
+        self._hardware_watch_task = None
+        self._controller_extension_task = None
         self._fan_reader = FanReader()
         # temp_fn feeds the software-loop backends (Steam Deck / Legion Go 2) the
         # live driving temp; hardware-curve backends (ASUS/MSI) ignore it.
@@ -348,7 +375,8 @@ class Plugin:
         # Intel/Xe needs gamescope composition forced for a color look to show in-game
         # (the LUT isn't carried by the HW color pipeline as it is on AMD).
         self._color_backend = GamescopeColorBackend(
-            force_composite=(self._device.vendor == "intel")
+            force_composite=(self._device.vendor == "intel"),
+            hdr_look=(self._device.key == "legion_go_2"),
         )
         decky.logger.info(
             "color: supported=%s (%s)",
@@ -380,7 +408,14 @@ class Plugin:
         self._display_wait_task = None
         # HDR output on/off (gamescope). State lives in settings (hdr_enabled); gated to
         # HDR-capable panels with gamescope.
-        self._hdr_backend = HdrBackend(run_gamescopectl)
+        self._hdr_backend = HdrBackend(
+            getattr(self._color_backend, "run_control", run_gamescopectl),
+            session_provider=getattr(
+                self._color_backend, "hdr_session_context", None
+            ),
+        )
+        self._hdr_managed = False
+        self._hdr_managed_session = None
         self._power_reader = PowerReader()
         self._battery = BatteryReader()
         self._charge_limit = select_charge_limit(self._device)
@@ -451,6 +486,7 @@ class Plugin:
         self._tdp_guard_task = None
         self._tdp_shutdown = False
         self._lifecycle = LifecycleManager(apply_cb=self._reapply_all,
+                                           resume_apply_cb=self._reapply_after_resume,
                                            reassert_cb=self._reassert_tdp_only,
                                            event_cb=self._log_lifecycle_event)
         self._auto_task = None
@@ -591,7 +627,12 @@ class Plugin:
             else {}
         )
         self._save()
-        self._reapply_all()   # already dispatches its subprocess work off-loop
+        if module_id == "mandos" and disabled:
+            await self._offload_call(self._restore_controller_global)
+        if module_id == "mandos" and not disabled:
+            self._reapply_all(force_controller=True)
+        else:
+            self._reapply_all()
         # Turning the power module off = stepping aside; hand HHD's TDP back, same
         # as set_tdp_control_enabled(False). Otherwise no manager drives the TDP.
         if module_id == "system" and disabled:
@@ -875,6 +916,20 @@ class Plugin:
             except Exception:  # noqa: BLE001
                 return None
 
+        controller_remap = _rj("controller_remap.json")
+        if isinstance(controller_remap, dict):
+            controller_remap = dict(controller_remap)
+            states = controller_remap.pop("profile_states", {})
+            controller_remap["profile_state_devices"] = (
+                sorted(states) if isinstance(states, dict) else []
+            )
+            for key in (
+                "vibration_baselines",
+                "vibration_route_baselines",
+                "virtual_mode_baselines",
+            ):
+                controller_remap.pop(key, None)
+
         report_settings = dict(self._settings)
         report_settings.pop("cpu_frequency_handoff", None)
         return {
@@ -884,37 +939,162 @@ class Plugin:
             "fan_curves": _rj("fan_curves.json"),
             "color": _rj("color.json"),
             "audio": _rj("audio.json"),
-            "controller_remap": _rj("controller_remap.json"),
+            "controller_remap": controller_remap,
             "telemetry": _rj("telemetry.json"),
         }
 
-    # ---- Mandos (controller manager + conflict) ----------------------------
-    # One backend per device (factory), mirroring the TDP backend: each RPC is a
-    # one-line delegation, no per-manager if/elif here. The config carries
-    # manager / manager_version / supported so the UI needs a single round-trip.
-    # get_config / set_button / reset spawn busctl (InputPlumber) or hit HHD's local
-    # HTTP — blocking work that must stay off the event loop (a busctl stall while the
-    # daemon re-grabs the pad would freeze the QAM). All offloaded via _offload_call.
     async def get_controller_config(self) -> dict:
         self._init()
+        config = await self._offload_call(
+            lambda: self._controller_backend.get_config(self._current_appid)
+        )
+        return self._controller_config_with_operations(config)
+
+    async def get_controller_diagnostics(self) -> dict:
+        self._init()
+        device_key = getattr(self._device, "key", None)
+        if not self._module_enabled("mandos"):
+            return IntegratedDiagnostics.empty(device_key)
         return await self._offload_call(
-            lambda: self._controller_backend.get_config(self._current_appid))
+            self._controller_backend.get_integrated_diagnostics
+        )
+
+    def _controller_config_with_operations(self, config) -> dict:
+        value = dict(config) if isinstance(config, dict) else {}
+        value["operation_state"] = self._controller_coordinator.snapshot()
+        return value
+
+    @staticmethod
+    def _controller_action_targets(action) -> list | None:
+        if not isinstance(action, dict):
+            return None
+        kind = action.get("kind")
+        if kind == "default" and set(action) == {"kind"}:
+            return []
+        if kind == "gamepad" and set(action) == {"kind", "target"}:
+            targets = [{"gamepad": action.get("target")}]
+        elif (
+            kind == "keyboard_chord"
+            and set(action) == {"kind", "keys"}
+            and isinstance(action.get("keys"), list)
+        ):
+            targets = [{"key": key} for key in action["keys"]]
+        else:
+            return None
+        clean = controller_ip_profile.sanitize_button_action(targets)
+        return clean or None
+
+    async def set_controller_button_action(
+        self, source: str, action: dict,
+        scope: str = "global", appid=None,
+    ) -> dict:
+        self._init()
+
+        async def unchanged():
+            config = await self._offload_call(
+                lambda: self._controller_backend.get_config(
+                    self._current_appid
+                )
+            )
+            return self._controller_config_with_operations(config)
+
+        targets = self._controller_action_targets(action)
+        if (
+            not self._module_enabled("mandos")
+            or not isinstance(source, str)
+            or not source
+            or targets is None
+            or scope not in {"global", "game"}
+            or (scope == "game" and appid is None)
+        ):
+            return await unchanged()
+        resolved = self._resolve_scope(scope, appid)
+        if resolved is None:
+            return await unchanged()
+
+        def apply():
+            config = self._controller_backend.get_config(
+                self._current_appid
+            )
+            valid_sources = {
+                button.get("source")
+                for button in config.get("buttons", [])
+                if isinstance(button, dict)
+            }
+            if source not in valid_sources:
+                return config, False
+            return (
+                self._controller_backend.set_button(
+                    source, targets, resolved, appid
+                ),
+                True,
+            )
+
+        config, mutated = await self._offload_call(apply)
+        if mutated and config.get("last_apply") is not False:
+            await self._reconcile_controller_now(force=True)
+        return self._controller_config_with_operations(config)
 
     async def set_controller_button(self, source: str, targets: list,
                                     scope: str = "global", appid=None) -> dict:
         """Remap one extra button in a scope (global / a game; InputPlumber only,
         no-op on others). Editing tracks the applied set so the game-change re-apply
         can tell whether anything changed."""
+        clean = controller_ip_profile.sanitize_button_action(targets)
+        if not targets:
+            action = {"kind": "default"}
+        elif len(clean) == 1 and "gamepad" in clean[0]:
+            action = {"kind": "gamepad", "target": clean[0]["gamepad"]}
+        elif clean and all("key" in target for target in clean):
+            action = {
+                "kind": "keyboard_chord",
+                "keys": [target["key"] for target in clean],
+            }
+        else:
+            action = {"kind": "invalid"}
+        return await self.set_controller_button_action(
+            source, action, scope, appid
+        )
+
+    async def set_controller_vibration(self, patch: dict,
+                                       scope: str = "global", appid=None) -> dict:
         self._init()
-        scope = self._resolve_scope(scope, appid)  # game+no-appid → global; pins _current_appid
+        scope = self._resolve_scope(scope, appid)
         if scope is None:
-            return await self._offload_call(
-                lambda: self._controller_backend.get_config(self._current_appid))
+            config = await self._offload_call(
+                lambda: self._controller_backend.get_config(
+                    self._current_appid
+                )
+            )
+            return self._controller_config_with_operations(config)
         cfg = await self._offload_call(
-            lambda: self._controller_backend.set_button(source, targets, scope, appid))
-        self._last_controller_overrides = self._controller_backend.effective_overrides(
-            self._current_appid)
-        return cfg
+            lambda: self._controller_backend.set_vibration(
+                patch, scope, appid
+            )
+        )
+        vibration = cfg.get("vibration") if isinstance(cfg, dict) else None
+        if not (
+            isinstance(vibration, dict)
+            and vibration.get("last_apply") is False
+        ):
+            endpoint = self._controller_config_endpoint_fingerprint(cfg)
+            if endpoint is not None:
+                self._controller_endpoint_last = endpoint
+                self._controller_endpoint_pending = None
+                self._controller_endpoint_attempts = 0
+        return self._controller_config_with_operations(cfg)
+
+    async def test_controller_vibration(self, pattern: str = "pulse",
+                                        channel=None,
+                                        strength: int = 100) -> dict:
+        self._init()
+        def test():
+            self._controller_coordinator.cancel_transients("superseded")
+            return self._controller_backend.test_vibration(
+                pattern, channel, strength
+            )
+
+        return await self._offload_call(test)
 
     async def set_controller_follow_global(self, follow: bool, appid) -> dict:
         """Toggle a game between its own remap and following the global one, keeping
@@ -928,51 +1108,373 @@ class Plugin:
                 self._controller_backend.create_game_from_global(appid)  # already sets follow_global=False
             else:
                 self._controller_backend.set_follow_global(appid, bool(follow))
-            self._reapply_controller()
-        return await self._offload_call(
-            lambda: self._controller_backend.get_config(self._current_appid))
+            await self._reconcile_controller_now()
+        config = await self._offload_call(
+            lambda: self._controller_backend.get_config(self._current_appid)
+        )
+        return self._controller_config_with_operations(config)
 
     async def set_controller_setting(self, field: str, value: str) -> dict:
-        """Change a controller setting on HHD (mode / paddles_as; no-op on others)."""
         self._init()
-        return await self._offload_call(
-            lambda: self._controller_backend.set_setting(field, value))
+        config = await self._offload_call(
+            lambda: self._controller_backend.set_setting(
+                field, value, self._current_appid
+            ))
+        return self._controller_config_with_operations(config)
+
+    async def set_controller_virtual_mode(
+        self, mode: str, scope: str = "global", appid=None,
+    ) -> dict:
+        self._init()
+        resolved = self._resolve_scope(scope, appid)
+        if (
+            not self._module_enabled("mandos")
+            or resolved is None
+            or not isinstance(mode, str)
+        ):
+            config = await self._offload_call(
+                lambda: self._controller_backend.get_config(
+                    self._current_appid
+                )
+            )
+            return self._controller_config_with_operations(config)
+        config = await self._offload_call(
+            lambda: self._controller_backend.set_virtual_mode(
+                mode, resolved, appid
+            )
+        )
+        virtual = config.get("virtual_controller", {})
+        if virtual.get("supported") and virtual.get("mode") == mode:
+            await self._reconcile_controller_now(force=True)
+            config = await self._offload_call(
+                lambda: self._controller_backend.get_config(
+                    self._current_appid
+                )
+            )
+        return self._controller_config_with_operations(config)
 
     async def reset_controller(self, scope: str = "global", appid=None) -> dict:
         """Reset a scope's remap to the device default (InputPlumber; no-op on others)."""
         self._init()
         scope = self._resolve_scope(scope, appid)
         if scope is None:
-            return await self._offload_call(
-                lambda: self._controller_backend.get_config(self._current_appid))
+            config = await self._offload_call(
+                lambda: self._controller_backend.get_config(
+                    self._current_appid
+                )
+            )
+            return self._controller_config_with_operations(config)
         cfg = await self._offload_call(
             lambda: self._controller_backend.reset(scope, appid))
-        self._last_controller_overrides = self._controller_backend.effective_overrides(
-            self._current_appid)
-        return cfg
+        if cfg.get("last_apply") is not False:
+            await self._reconcile_controller_now(force=True)
+        return self._controller_config_with_operations(cfg)
 
-    def _reapply_controller(self) -> None:
-        """On a game change, load the effective InputPlumber profile for the running
-        game — but only when it DIFFERS from what's already loaded, so the common case
-        (following global, or the same profile) never touches the daemon and can't
-        race its own re-grab on game launch. Offloaded (dbus + YAML subprocess). No-op
-        on HHD/none (effective_overrides returns None)."""
-        if not self._module_enabled("mandos"):
-            return
-        ov = self._controller_backend.effective_overrides(self._current_appid)
-        if ov is None or ov == self._last_controller_overrides:
-            return
-        # No remaps configured and none ever applied this session → leave the daemon
-        # untouched (don't reset it to default just because a game launched).
-        if not ov and self._last_controller_overrides is None:
-            return
-        appid = self._current_appid
+    def _prepare_controller_reconcile(self, force=False):
+        if (
+            self._controller_shutdown
+            or not self._module_enabled("mandos")
+        ):
+            return None
+        profile = self._controller_backend.effective_profile(
+            self._current_appid
+        )
+        if profile is None:
+            return None
+        has_values = any(
+            profile.get(component)
+            for component in (
+                "virtual_controller", "buttons", "vibration",
+            )
+        )
+        owns_loaded_profile = getattr(
+            self._controller_backend, "owns_loaded_profile", lambda: False
+        )()
+        if not has_values and not owns_loaded_profile:
+            return None
+        return self._controller_coordinator.prepare(
+            self._current_appid, profile, force=force
+        )
 
-        def apply():
-            if self._controller_backend.apply_effective(appid):
-                self._last_controller_overrides = ov
+    async def _reconcile_controller_now(self, force=False) -> bool:
+        request = self._prepare_controller_reconcile(force)
+        if request is None:
+            return True
+        snapshot = await self._offload_call(
+            lambda: self._controller_coordinator.execute(request)
+        )
+        components = snapshot.get("components", {})
+        successful = {"applied", "accepted_unverifiable"}
+        return all(
+            components.get(component, {}).get("status") in successful
+            for component in request.profile
+            if component in {
+                "virtual_controller", "buttons", "vibration",
+            }
+        )
 
-        self._offload(apply)
+    def _reapply_controller(self, force=False) -> None:
+        request = self._prepare_controller_reconcile(force)
+        if request is not None:
+            self._offload(
+                lambda: self._controller_coordinator.execute(request)
+            )
+
+    def _reapply_after_resume(self, on_ac=None) -> None:
+        def prepare():
+            self._controller_coordinator.cancel_transients("resume")
+            self._controller_endpoint_last = None
+            self._display_endpoint_last = None
+            self._controller_endpoint_pending = None
+            self._display_endpoint_pending = None
+            self._controller_endpoint_attempts = 0
+            self._display_endpoint_attempts = 0
+            self._refresh_controller_backend()
+
+        self._offload(
+            prepare,
+            done=lambda: self._reapply_all(
+                on_ac, force_controller=True
+            ),
+        )
+
+    def _controller_endpoint_fingerprint(self):
+        if (
+            self._controller_backend.manager
+            != controller_detect.INPUTPLUMBER
+            or getattr(self._device, "key", None)
+            not in {"legion_go_2", "rog_xbox_ally_x"}
+        ):
+            return None
+        config = self._controller_backend.get_config(self._current_appid)
+        return self._controller_config_endpoint_fingerprint(config)
+
+    def _controller_config_endpoint_fingerprint(self, config):
+        if (
+            self._controller_backend.manager
+            != controller_detect.INPUTPLUMBER
+            or getattr(self._device, "key", None)
+            not in {"legion_go_2", "rog_xbox_ally_x"}
+            or not isinstance(config, dict)
+        ):
+            return None
+        vibration = config.get("vibration", {})
+        mode = vibration.get("mode")
+        if getattr(self._device, "key", None) == "rog_xbox_ally_x":
+            connected = (
+                mode == "asus_xbox_hd"
+                and vibration.get("hd_game_supported") is True
+            )
+            fields = (
+                "left", "right", "hd_game_enabled",
+                "trigger_left", "trigger_right",
+                "trigger_left_source", "trigger_right_source",
+            )
+            desired = tuple(vibration.get(field) for field in fields)
+            actual = (
+                vibration.get("actual_left"),
+                vibration.get("actual_right"),
+                vibration.get("actual_hd_game_enabled"),
+                vibration.get("actual_trigger_left"),
+                vibration.get("actual_trigger_right"),
+                vibration.get("actual_trigger_left_source"),
+                vibration.get("actual_trigger_right_source"),
+            )
+            return (
+                self._controller_backend.manager,
+                mode,
+                connected,
+                desired,
+                actual,
+            )
+        connected = vibration.get("connected")
+        if connected is None:
+            connected = mode not in (None, "unavailable")
+        native_fields = (
+            "intensity", "left_pattern", "right_pattern",
+            "touchpad_enabled", "touchpad_intensity",
+        )
+        desired = tuple(vibration.get(field) for field in native_fields)
+        actual = tuple(
+            vibration.get(f"actual_{field}") for field in native_fields
+        )
+        return (
+            self._controller_backend.manager,
+            mode,
+            bool(connected),
+            desired,
+            actual,
+        )
+
+    async def _poll_controller_endpoint_once(self) -> None:
+        current = await self._offload_call(
+            self._controller_endpoint_fingerprint
+        )
+        if current is None:
+            return
+        previous = self._controller_endpoint_last
+        changed_to_connected = current[2] and (
+            previous is None
+            or (
+                current != previous
+                and (
+                    not previous[2]
+                    or current[1] != previous[1]
+                    or current[3:] != previous[3:]
+                )
+            )
+        )
+        if changed_to_connected:
+            if getattr(self, "_controller_endpoint_pending", None) != current:
+                self._controller_endpoint_pending = current
+                self._controller_endpoint_attempts = 0
+            attempts = getattr(self, "_controller_endpoint_attempts", 0)
+            limit = getattr(self, "_hardware_retry_limit", 6)
+            if attempts >= limit:
+                return
+            try:
+                applied = await self._reconcile_controller_now(force=True)
+            except Exception as error:  # noqa: BLE001
+                applied = False
+                decky.logger.warning(
+                    "Controller endpoint reapply failed: %s", error
+                )
+            if not applied:
+                self._controller_endpoint_attempts = attempts + 1
+                if self._controller_endpoint_attempts == limit:
+                    decky.logger.warning(
+                        "Controller endpoint retry budget exhausted: %s",
+                        current,
+                    )
+                return
+            current = await self._offload_call(
+                self._controller_endpoint_fingerprint
+            )
+        self._controller_endpoint_last = current
+        self._controller_endpoint_pending = None
+        self._controller_endpoint_attempts = 0
+
+    async def _reapply_display_endpoint_now(self) -> bool:
+        return await self._offload_call(
+            self._reapply_display_endpoint_sync
+        )
+
+    def _reapply_display_endpoint_sync(self) -> bool:
+        return self._reapply_display_sync()
+
+    async def _poll_display_endpoint_once(self) -> None:
+        fingerprint = getattr(
+            self._color_backend, "display_fingerprint", None
+        )
+        if not callable(fingerprint):
+            return
+        current = await self._offload_call(fingerprint)
+        previous = self._display_endpoint_last
+        if previous is None or current != previous:
+            if getattr(self, "_display_endpoint_pending", None) != current:
+                self._display_endpoint_pending = current
+                self._display_endpoint_attempts = 0
+            attempts = getattr(self, "_display_endpoint_attempts", 0)
+            limit = getattr(self, "_hardware_retry_limit", 6)
+            if attempts >= limit:
+                return
+            try:
+                applied = await self._reapply_display_endpoint_now()
+            except Exception as error:  # noqa: BLE001
+                applied = False
+                decky.logger.warning(
+                    "Display endpoint reapply failed: %s", error
+                )
+            if not applied:
+                self._display_endpoint_attempts = attempts + 1
+                if self._display_endpoint_attempts == limit:
+                    decky.logger.warning(
+                        "Display endpoint retry budget exhausted: %s",
+                        current,
+                    )
+                return
+            current = await self._offload_call(fingerprint)
+        self._display_endpoint_last = current
+        self._display_endpoint_pending = None
+        self._display_endpoint_attempts = 0
+
+    async def _hardware_watch_loop(self, interval=5.0) -> None:
+        try:
+            while not self._controller_shutdown:
+                try:
+                    await self._poll_controller_endpoint_once()
+                    await self._poll_display_endpoint_once()
+                except Exception as error:  # noqa: BLE001
+                    decky.logger.warning(
+                        "Hardware endpoint poll failed: %s", error
+                    )
+                await asyncio.sleep(interval)
+        except asyncio.CancelledError:
+            pass
+
+    def _start_hardware_watch_loop(self) -> None:
+        task = self._hardware_watch_task
+        if task is None or task.done():
+            self._hardware_watch_task = asyncio.create_task(
+                self._hardware_watch_loop()
+            )
+
+    def _stop_hardware_watch_loop(self) -> None:
+        task = getattr(self, "_hardware_watch_task", None)
+        if task is not None:
+            task.cancel()
+            self._hardware_watch_task = None
+
+    def _refresh_controller_backend(self) -> None:
+        detected = controller_detect.detect()
+        if (
+            detected.get("manager") == controller_detect.NONE
+            and self._controller_backend.manager != controller_detect.NONE
+        ):
+            return
+        if detected == self._controller:
+            return
+        self._controller_coordinator.invalidate("owner_changed")
+        self._controller = detected
+        self._controller_backend = (
+            controller_factory.select_controller_backend(
+                detected,
+                self._controller_store,
+                self._controller_dbus,
+                self._device,
+            )
+        )
+        self._controller_coordinator = ControllerCoordinator(
+            self._controller_backend
+        )
+
+    def _restore_controller_global(self) -> bool:
+        snapshot = self._controller_coordinator.shutdown(False)
+        ok = all(
+            value.get("status") in {
+                "applied", "accepted_unverifiable",
+            }
+            for value in snapshot.get("components", {}).values()
+        )
+        if not ok:
+            decky.logger.warning(
+                "Controller global handoff was not confirmed"
+            )
+        return ok
+
+    def _restore_controller_external(self) -> bool:
+        snapshot = self._controller_coordinator.shutdown(True)
+        ok = snapshot.get("restore_external") == "applied"
+        if not ok:
+            decky.logger.warning(
+                "Controller external handoff was not confirmed"
+            )
+        return ok
+
+    def _begin_controller_shutdown(self) -> None:
+        self._controller_shutdown = True
+        self._stop_hardware_watch_loop()
+        self._controller_coordinator.invalidate("shutdown")
 
     # ---- Ajustes: per-game profile overview --------------------------------
     def _scoped_stores(self):
@@ -1020,6 +1522,8 @@ class Plugin:
                           "follows_global": self._cpu_profiles.is_following_global(appid)}
         if self._controller_backend.differs_from_global(appid):
             row["mandos"] = {"count": len(self._controller_backend.game_profile(appid)),
+                             "vibration": self._controller_backend.game_vibration_differs(appid),
+                             "mode": self._controller_backend.game_virtual_mode(appid),
                              "follows_global": self._controller_backend.is_following_global(appid)}
         if self._audio_eq.differs_from_global(appid):
             row["audio"] = {"follows_global": self._audio_eq.is_following_global(appid)}
@@ -1043,7 +1547,7 @@ class Plugin:
         for store in self._scoped_stores():
             store.forget_game(appid)
         if appid == self._current_appid:
-            self._reapply_all()
+            self._reapply_all(force_controller=True)
         return await self.list_game_profiles()
 
     async def get_controller_conflict(self) -> dict:
@@ -2903,7 +3407,9 @@ class Plugin:
         firmware's post-transition reset without re-running the full re-apply each time."""
         self._schedule_tdp_apply("settle-retry", on_ac)
 
-    def _reapply_all(self, on_ac=None) -> None:
+    def _reapply_all(
+        self, on_ac=None, force_controller=False, apply_cpu=True
+    ) -> None:
         """Lifecycle callback: re-assert TDP, the fan curve, the charge limit and the
         CPU controls (resume/AC — firmware may drop these across a suspend)."""
         # A context change (resume, AC/DC, game change, eco) invalidates any
@@ -2915,19 +3421,17 @@ class Plugin:
         self._color_preview = None
         # sysfs (fast) → inline; subprocess-backed (tdp-ryzenadj/fans/color) → off-loop.
         self._apply_charge_limit()
-        self._apply_cpu()
+        if apply_cpu:
+            self._apply_cpu()
         self._apply_gpu_clock()
         self._schedule_tdp_apply("lifecycle", on_ac)
         # Stepped aside: retry a pending HHD hand-back (no-op while we control / no marker).
         if not self._tdp_control_on():
             self._offload(self._restore_power_handoff)
         self._reapply_fans()   # self-offloading
-        # HDR before color: switching the HDR mode can drop the loaded LUT, so re-assert
-        # HDR first and load the color look after (both self-offloading, FIFO executor).
-        self._reapply_hdr()
-        self._reapply_color()
+        self._reapply_display()
         self._reapply_audio()  # self-offloading; no-op when the EQ is disabled
-        self._reapply_controller()  # diff-gated; no-op unless the effective remap changed
+        self._reapply_controller(force=force_controller)
 
     # ---- Battery + charge limit --------------------------------------------
     def _record_charge_limit_apply(self, action, requested, ok, attempts) -> None:
@@ -3252,11 +3756,13 @@ class Plugin:
         # Snapshot the wake brightness only if it's a real reading (> 0). The FE may
         # pass 0 while brightness is still loading; storing 0 would restore the screen
         # to black on exit (unrecoverable from the card). Keep the previous value then.
-        if enabled and int(current_brightness) > 0:
-            self._settings["eco_brightness"] = int(current_brightness)
-        self._settings["eco_enabled"] = bool(enabled)
-        self._save()
-        self._reapply_all()
+        async with self._cpu_mutation_lock:
+            if enabled and int(current_brightness) > 0:
+                self._settings["eco_brightness"] = int(current_brightness)
+            self._settings["eco_enabled"] = bool(enabled)
+            self._save()
+            await self._apply_cpu_awaited(trigger="set_eco")
+            self._reapply_all(apply_cpu=False)
         return self._eco_state()
 
     def _cpu_state(self) -> dict:
@@ -4281,17 +4787,33 @@ class Plugin:
         compositor). No executor / no loop → inline."""
         self._offload(self._reapply_color_sync)
 
-    def _reapply_color_sync(self) -> None:
-        """Push the effective color to gamescope. No-op when unsupported. Guarded.
-        Applied in HDR mode too — it colors all composited/SDR content; a native-HDR
-        game (direct scanout) is simply out of the LUT's reach, no handling needed."""
+    def _reapply_display(self) -> None:
+        self._offload(self._reapply_display_sync)
+
+    def _reapply_display_sync(self) -> bool:
+        needs_confirmation = (
+            self._color.hdr(self._current_appid) or self._hdr_managed
+        )
+        if not self._reapply_hdr_sync():
+            self._display_endpoint_last = None
+            return False
+        if needs_confirmation and not self._hdr_confirmed():
+            self._display_endpoint_last = None
+            return False
+        applied = self._reapply_color_sync()
+        if not applied:
+            self._display_endpoint_last = None
+        return applied
+
+    def _reapply_color_sync(self) -> bool:
         if not self._module_enabled("display"):
-            return
+            return True
         try:
             if self._color_backend.supported:
-                self._color_backend.apply(self._effective_color())
+                return self._color_backend.apply(self._effective_color())
         except Exception:  # noqa: BLE001
-            pass
+            return False
+        return True
 
     async def _await_display_backend(self, attempts=30, interval=5.0,
                                      reasserts=40, reassert_interval=3.0) -> None:
@@ -4310,8 +4832,7 @@ class Plugin:
             else:
                 return  # gamescope never came up (desktop) — nothing to apply
             for i in range(reasserts):
-                self._reapply_color()
-                self._reapply_hdr()
+                await self._offload_call(self._reapply_display_sync)
                 if i < reasserts - 1:
                     await asyncio.sleep(reassert_interval)
             self._start_night_loop()
@@ -4343,10 +4864,21 @@ class Plugin:
     def _color_state(self) -> dict:
         eff = self._display_color()
         preset_keys = color_presets.preset_keys(self._device)
+        hdr_saturation_supported = bool(
+            self._device.key == "legion_go_2"
+            and getattr(
+                self._color_backend, "hdr_look_supported", False
+            )
+        )
         return {
             "supported": self._color_backend.supported,
             **{f: eff[f] for f in COLOR_FIELDS},
             "global_saturation": self._color.effective(None)["saturation"],
+            "global_hdr_saturation": self._color.effective(None)[
+                "hdr_saturation"
+            ],
+            "hdr_saturation_supported": hdr_saturation_supported,
+            "hdr_saturation_experimental": False,
             "has_game_profile": (self._current_appid is not None
                                  and self._color.has_game(self._current_appid)),
             "follows_global": self._color.is_following_global(self._current_appid),
@@ -4373,7 +4905,7 @@ class Plugin:
         for key in keys:
             preset = color_presets.resolve_preset(self._device, key)
             full = self._color._clean_global(preset or {})  # same merge+clamp apply uses
-            if all(cur[f] == full[f] for f in COLOR_FIELDS):
+            if all(cur[f] == full[f] for f in COLOR_LOOK_FIELDS):
                 return key
         return None
 
@@ -4400,6 +4932,15 @@ class Plugin:
         self._init()
         self._color.set_saturation(scope, int(value), appid=appid)
         self._reapply_color()
+        return await self._offload_call(self._color_state)
+
+    async def set_hdr_saturation(
+        self, value: int, scope: str, appid=None
+    ) -> dict:
+        self._init()
+        if self._device.key == "legion_go_2":
+            self._color.set_hdr_saturation(scope, int(value), appid=appid)
+            self._reapply_color()
         return await self._offload_call(self._color_state)
 
     async def set_color_follow_global(self, follow: bool, appid) -> dict:
@@ -4546,27 +5087,122 @@ class Plugin:
     def _hdr_supported(self) -> bool:
         return self._device.hdr and self._color_backend.supported
 
+    def _hdr_diagnostics(self, enabled: bool):
+        diagnostics = getattr(
+            self._hdr_backend, "diagnostics", lambda: None
+        )()
+        if not (
+            isinstance(diagnostics, dict)
+            and diagnostics.get("enabled") == enabled
+        ):
+            return None
+        recorded_session = diagnostics.get("session_identity")
+        if (
+            recorded_session is not None
+            and recorded_session
+            != getattr(self._color_backend, "session_identity", None)
+        ):
+            return None
+        return diagnostics
+
     def _hdr_state(self) -> dict:
-        return {
+        enabled = self._color.hdr(self._current_appid)
+        current_diagnostics = self._hdr_diagnostics(enabled)
+        state = {
             "supported": self._hdr_supported(),
-            "enabled": self._color.hdr(self._current_appid),  # per-game (own or global)
+            "enabled": enabled,
             "follows_global": self._color.is_following_global(self._current_appid),
         }
+        if current_diagnostics is not None:
+            state["actual_enabled"] = current_diagnostics.get("actual_enabled")
+            if not current_diagnostics.get("ok"):
+                state["last_apply"] = False
+            elif current_diagnostics.get("readback") is True:
+                state["last_apply"] = True
+            else:
+                state["confirmation"] = "accepted"
+        return state
 
-    def _reapply_hdr(self) -> None:
-        # Gate on the effective per-game HDR (skips a no-op executor hop on the common
-        # path); the supported probe (may spawn gamescopectl) runs off-loop below.
-        if self._color.hdr(self._current_appid):
-            self._offload(self._reapply_hdr_sync)
+    def _hdr_confirmed(self, expected=None) -> bool:
+        desired = (
+            self._color.hdr(self._current_appid)
+            if expected is None else bool(expected)
+        )
+        diagnostics = self._hdr_diagnostics(desired)
+        return bool(
+            diagnostics
+            and diagnostics.get("actual_enabled") == desired
+            and diagnostics.get("ok")
+            and diagnostics.get("readback") is True
+        )
 
-    def _reapply_hdr_sync(self) -> None:
-        """Re-assert HDR ON (never force a supported panel OUT of an HDR mode set
-        elsewhere, e.g. Steam's own toggle)."""
+    def _reapply_hdr_sync(self) -> bool:
         try:
-            if self._hdr_supported() and self._color.hdr(self._current_appid):
-                self._hdr_backend.set_enabled(True)
+            session = getattr(
+                self._color_backend, "session_identity", None
+            )
+            if (
+                self._hdr_managed
+                and getattr(self, "_hdr_managed_session", None) != session
+            ):
+                self._hdr_managed = False
+                self._hdr_managed_session = None
+            if not self._hdr_supported():
+                return True
+            desired = self._color.hdr(self._current_appid)
+            if desired:
+                if self._hdr_backend.set_enabled(True):
+                    self._hdr_managed = True
+                    self._hdr_managed_session = session
+                    return True
+                return False
+            elif self._hdr_managed:
+                if not self._hdr_backend.set_enabled(False):
+                    return False
+                if not self._hdr_confirmed():
+                    return False
+                self._hdr_managed = False
+                self._hdr_managed_session = None
+                return True
+            return not self._hdr_managed
         except Exception:  # noqa: BLE001
-            pass
+            return False
+
+    def _set_hdr_explicit_sync(self, enabled: bool) -> bool:
+        try:
+            if self._hdr_backend.set_enabled(enabled):
+                session = getattr(
+                    self._color_backend, "session_identity", None
+                )
+                confirmed = self._hdr_confirmed(enabled)
+                if enabled or not confirmed:
+                    self._hdr_managed = True
+                    self._hdr_managed_session = session
+                else:
+                    self._hdr_managed = False
+                    self._hdr_managed_session = None
+                return enabled or confirmed
+        except Exception:  # noqa: BLE001
+            return False
+        return False
+
+    def _restore_hdr_safe(self) -> bool:
+        if not getattr(self, "_hdr_managed", False):
+            return True
+        session = getattr(self._color_backend, "session_identity", None)
+        if getattr(self, "_hdr_managed_session", None) != session:
+            self._hdr_managed = False
+            self._hdr_managed_session = None
+            return True
+        if self._set_hdr_explicit_sync(False):
+            return True
+        diagnostics = getattr(
+            self._hdr_backend, "diagnostics", lambda: None
+        )() or {"enabled": False, "ok": False, "rc": None}
+        decky.logger.warning(
+            "HDR ownership release failed: %s", diagnostics
+        )
+        return False
 
     async def get_hdr_state(self) -> dict:
         self._init()
@@ -4580,10 +5216,11 @@ class Plugin:
         if "enabled" in p:
             self._color.set_hdr(scope, bool(p["enabled"]), appid=appid)
         enabled = self._color.hdr(self._current_appid)
-        # Off-loop: set_enabled spawns gamescopectl (a no-op when gamescope is absent).
-        self._offload(lambda: self._hdr_backend.set_enabled(enabled))
-        # Then re-assert the color look — gamescope can drop the loaded LUT on a mode switch.
-        self._reapply_color()
+        applied = await self._offload_call(
+            lambda: self._set_hdr_explicit_sync(enabled)
+        )
+        if applied and self._hdr_confirmed():
+            await self._offload_call(self._reapply_color_sync)
         return await self._offload_call(self._hdr_state)
 
     async def _read_applied(self):
@@ -5029,15 +5666,23 @@ class Plugin:
         except Exception:  # noqa: BLE001
             pass
 
-    def _restore_color_safe(self) -> None:
-        """Clear any applied color LUT (back to the panel's native look) so a
-        disabled/uninstalled plugin leaves no lingering color. Guarded."""
+    def _restore_color_safe(self) -> bool:
         try:
             cb = getattr(self, "_color_backend", None)
-            if cb is not None and cb.supported:
-                cb.apply(dict(COLOR_NATIVE))
-        except Exception:  # noqa: BLE001
-            pass
+            release = getattr(cb, "release", None)
+            if not callable(release):
+                return True
+            if release():
+                return True
+            diagnostics = getattr(cb, "diagnostics", lambda: None)()
+            decky.logger.warning(
+                "Color ownership release failed: %s", diagnostics
+            )
+        except Exception as error:  # noqa: BLE001
+            decky.logger.warning(
+                "Color ownership release failed: %s", error
+            )
+        return False
 
     # ---- Sonido: audio EQ ---------------------------------------------------
     def _current_route(self) -> str:
@@ -5369,6 +6014,34 @@ class Plugin:
         )
         log("Lifecycle transition %s", encoded)
 
+    async def _activate_controller_extension(self) -> None:
+        try:
+            extension = await self._offload_call(
+                lambda: inputplumber_extension.ensure(
+                    self._device.key,
+                    self._controller_backend.manager,
+                    os.path.dirname(os.path.abspath(__file__)),
+                )
+            )
+            if extension.get("changed"):
+                decky.logger.info("Xbox HD haptics extension activated")
+                if not self._controller_shutdown:
+                    await self._offload_call(self._refresh_controller_backend)
+                    await self._reconcile_controller_now(force=True)
+            elif extension.get("reason") not in {
+                None, "wrong_device", "wrong_manager", "not_bundled",
+            }:
+                decky.logger.warning(
+                    "Xbox HD haptics extension unavailable: %s",
+                    extension["reason"],
+                )
+        except asyncio.CancelledError:
+            pass
+        except Exception as error:  # noqa: BLE001
+            decky.logger.warning(
+                "Xbox HD haptics extension activation failed: %s", error
+            )
+
     async def _main(self) -> None:
         self._init()
         # Single-worker executor for subprocess-backed applies (gamescopectl /
@@ -5387,8 +6060,9 @@ class Plugin:
         try:
             if self._settings.get("steamdeck_ppt_previous") is not None:
                 await self._offload_call(self._restore_steamdeck_ppt)
-            self._reapply_all()
+            self._reapply_all(force_controller=True)
             self._lifecycle.start()
+            self._start_hardware_watch_loop()
             self._start_tdp_guard_loop()
             self._start_night_loop()
             # Re-assert the look across gamescope's session bringup, when a single apply
@@ -5399,6 +6073,9 @@ class Plugin:
             # has it on without waiting for the QAM.
             self._start_auto_loop()
             self._start_audio_loop()
+            self._controller_extension_task = asyncio.create_task(
+                self._activate_controller_extension()
+            )
             if self._learning_active():
                 self._start_sampler()
         except Exception as e:  # noqa: BLE001
@@ -5424,11 +6101,16 @@ class Plugin:
         self._next_cpu_generation()
         self._next_gpu_generation()
         self._begin_tdp_shutdown()
+        self._begin_controller_shutdown()
         self._cancel_color_revert()
         wait_task = getattr(self, "_display_wait_task", None)
         if wait_task is not None:
             wait_task.cancel()
             self._display_wait_task = None
+        extension_task = getattr(self, "_controller_extension_task", None)
+        if extension_task is not None:
+            extension_task.cancel()
+            self._controller_extension_task = None
         self._stop_night_loop()
         self._audio_shutdown = True
         audio_task = getattr(self, "_audio_task", None)
@@ -5440,12 +6122,31 @@ class Plugin:
         self._cancel_queued_offloads()
 
     def _perform_shutdown_handoff(
-        self, stage: str, preserve_recovery=False
+        self, stage: str, preserve_recovery=False, restore_external=False
     ) -> None:
         self._restore_fans_safe()
+        self._restore_hdr_safe()
         self._restore_color_safe()
         self._restore_audio_safe()
         decky.logger.info("Shutdown stage %s:peripheral-handoff-attempted", stage)
+        controller_released = (
+            self._restore_controller_external()
+            if restore_external
+            else self._restore_controller_global()
+        )
+        decky.logger.info(
+            f"Shutdown stage {stage}:controller-handoff ok=%s",
+            controller_released,
+        )
+        if restore_external and not preserve_recovery:
+            extension_removed = inputplumber_extension.uninstall(
+                self._device.key,
+                os.path.dirname(os.path.abspath(__file__)),
+            )
+            decky.logger.info(
+                f"Shutdown stage {stage}:controller-extension ok=%s",
+                extension_removed,
+            )
         cpu_released = (
             self._release_cpu_controls_sync(
                 stage, preserve_frequency_ownership=True
@@ -5467,13 +6168,18 @@ class Plugin:
         )
         decky.logger.info(f"Shutdown stage {stage}:power-handoff ok=%s", power_released)
 
-    def _defer_shutdown_handoff(self, stage: str, remove_fan_conf: bool = False) -> bool:
+    def _defer_shutdown_handoff(
+        self, stage: str, remove_fan_conf: bool = False,
+        restore_external: bool = False,
+    ) -> bool:
         executor = getattr(self, "_apply_executor", None)
         if executor is None:
             return False
 
         def finish():
-            self._perform_shutdown_handoff(stage)
+            self._perform_shutdown_handoff(
+                stage, restore_external=restore_external
+            )
             if remove_fan_conf:
                 fan_expose.remove_conf()
             decky.logger.info("Shutdown stage %s:deferred-complete", stage)
@@ -5486,15 +6192,20 @@ class Plugin:
             return False
 
     def _handoff_after_drain_timeout(
-        self, stage: str, remove_fan_conf: bool = False
+        self, stage: str, remove_fan_conf: bool = False,
+        restore_external: bool = False,
     ) -> None:
         self._perform_shutdown_handoff(
-            f"{stage}-emergency", preserve_recovery=True
+            f"{stage}-emergency",
+            preserve_recovery=True,
+            restore_external=restore_external,
         )
         if remove_fan_conf:
             fan_expose.remove_conf()
         self._defer_shutdown_handoff(
-            f"{stage}-final", remove_fan_conf=remove_fan_conf
+            f"{stage}-final",
+            remove_fan_conf=remove_fan_conf,
+            restore_external=restore_external,
         )
         self._shutdown_apply_executor(cancel_futures=False)
 
@@ -5513,10 +6224,16 @@ class Plugin:
         drained = self._drain_offloaded_sync(_SHUTDOWN_DRAIN_TIMEOUT_S)
         if drained:
             decky.logger.info("Shutdown stage uninstall:drained")
-            self._perform_shutdown_handoff("uninstall")
+            self._perform_shutdown_handoff(
+                "uninstall", restore_external=True
+            )
             fan_expose.remove_conf()
             self._shutdown_apply_executor()
         else:
             decky.logger.warning("Shutdown stage uninstall:drain-timeout")
-            self._handoff_after_drain_timeout("uninstall", remove_fan_conf=True)
+            self._handoff_after_drain_timeout(
+                "uninstall",
+                remove_fan_conf=True,
+                restore_external=True,
+            )
         decky.logger.info("Panel de Control uninstalled")

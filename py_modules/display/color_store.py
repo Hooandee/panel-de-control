@@ -6,6 +6,7 @@ from display.const import CALIBRATION as _CALIBRATION
 # to an unreadable grey/black. Every field in NATIVE must have a range here.
 _RANGES = {
     "saturation": (0, 200),
+    "hdr_saturation": (100, 150),
     "temperature": (-100, 100),
     "contrast": (-60, 60),
     "gamma": (-100, 100),
@@ -58,6 +59,7 @@ class ColorStore(ScopedProfileStore):
         # that intent: keep the global calibration, override just the saturation, so the
         # game doesn't drop to native calibration on load.
         if (isinstance(raw, dict) and "saturation" in raw
+                and "hdr_saturation" not in raw
                 and not raw.get("follow_global")
                 and not any(f in raw for f in _CALIBRATION)):
             prof = {k: v for k, v in glob.items() if k != "follow_global"}
@@ -83,6 +85,12 @@ class ColorStore(ScopedProfileStore):
         self._target(scope, appid)["saturation"] = _clamp("saturation", value)
         self._save()
 
+    def set_hdr_saturation(self, scope, value, appid=None):
+        self._target(scope, appid)["hdr_saturation"] = _clamp(
+            "hdr_saturation", value
+        )
+        self._save()
+
     def set_calibration(self, scope, appid=None, **fields):
         t = self._target(scope, appid)
         for f in _CALIBRATION:
@@ -94,7 +102,11 @@ class ColorStore(ScopedProfileStore):
         """Overwrite a scope's profile from a preset dict (per-model OLED look): the full
         calibration + saturation in one write. Missing fields → native. HDR is a display
         mode, not part of a look, so the scope's current HDR is kept across the change."""
+        hdr_saturation = self.effective(
+            appid if scope == "game" else None
+        )["hdr_saturation"]
         prof = self._clean_global(preset)
+        prof["hdr_saturation"] = hdr_saturation
         if scope == "game":
             if appid is None:
                 raise ValueError("appid required for game scope")

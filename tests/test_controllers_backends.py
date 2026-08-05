@@ -22,6 +22,9 @@ class FakeDbus:
         self.loaded = None
         self.reset_called = False
         self._profile = "version: 1\nkind: DeviceProfile\nname: Default\nmapping: []\n"
+        self.ff_enabled = True
+        self.rumbled = None
+        self.profile_apply = None
 
     def capabilities(self):
         return list(self._caps)
@@ -31,11 +34,54 @@ class FakeDbus:
 
     def load_profile_yaml(self, yaml):
         self.loaded = yaml
+        self._profile = yaml
         return True
 
     def reset_default(self):
         self.reset_called = True
         return True
+
+    def force_feedback_enabled(self):
+        return self.ff_enabled
+
+    def set_force_feedback_enabled(self, enabled):
+        self.ff_enabled = bool(enabled)
+        return True
+
+    def rumble(self, strength):
+        self.rumbled = strength
+        return True
+
+    def stop_rumble(self):
+        self.rumbled = 0
+        return True
+
+    def source_device_paths(self):
+        return []
+
+    def record_profile_apply(self, ok, reason=None, **details):
+        self.profile_apply = {
+            "ok": bool(ok),
+            **({} if reason is None else {"reason": reason}),
+            **details,
+        }
+
+    def profile_apply_status(self):
+        return self.profile_apply
+
+
+class FakeVibration:
+    def __init__(self, state=None, applies=True):
+        self._state = state
+        self.applies = applies
+        self.applied = None
+
+    def state(self):
+        return dict(self._state) if self._state is not None else None
+
+    def apply(self, patch):
+        self.applied = dict(patch)
+        return self.applies
 
 
 class InvalidatingDbus(FakeDbus):
@@ -55,13 +101,37 @@ class InvalidatingDbus(FakeDbus):
         self.reset_called = True
         return False
 
+    def load_profile_yaml(self, yaml):
+        self.loaded = yaml
+        return False
+
+
+class IgnoringProfileLoadDbus(FakeDbus):
+    def load_profile_yaml(self, yaml):
+        self.loaded = yaml
+        return True
+
+
+class UnrecoverableProfileLoadDbus(FakeDbus):
+    def __init__(self):
+        super().__init__()
+        self.load_count = 0
+
+    def load_profile_yaml(self, yaml):
+        self.load_count += 1
+        self.loaded = yaml
+        if self.load_count == 1:
+            self._profile = "unexpected-yaml"
+            return True
+        return False
+
 
 # ---- InputPlumber backend --------------------------------------------------
 
 CLAW = "msi_claw_8_ai_plus"  # caps LeftPaddle1/RightPaddle1 → silkscreen M2/M1
 
 
-_MERGE = lambda baseline, overrides: "merged-yaml"  # noqa: E731 — the real one shells to system python
+_MERGE = lambda baseline, overrides: ("merged-yaml" if overrides else baseline)  # noqa: E731
 
 
 def test_ip_get_config_lists_device_buttons_with_silkscreen_labels(tmp_path):
@@ -104,15 +174,827 @@ def test_ip_get_config_lists_xbox_ally_macro_buttons(tmp_path):
     ]
 
 
+def test_ip_config_exposes_force_feedback_without_fake_strength(tmp_path):
+    cfg = inputplumber.get_config(_store(tmp_path), FakeDbus(), CLAW)
+    assert cfg["vibration"] == {
+        "supported": True,
+        "enabled": True,
+        "test_supported": True,
+        "test_patterns": ["pulse"],
+        "test_channels": ["both"],
+        "confirmation": "none",
+    }
+
+
+def test_ip_config_exposes_persistent_dual_motor_profile(tmp_path):
+    store = _store(tmp_path)
+    store.patch_vibration(
+        "game", "1234", {"left": 35, "right": 45}
+    )
+    vibration = FakeVibration({
+        "mode": "dual", "persistent": True, "left": 100, "right": 80,
+        "min": 0, "max": 100, "step": 5, "readback": True,
+    })
+
+    cfg = inputplumber.get_config(
+        store, FakeDbus(), CLAW, appid="1234", vibration=vibration
+    )
+
+    assert cfg["vibration"]["mode"] == "dual"
+    assert cfg["vibration"]["left"] == 35
+    assert cfg["vibration"]["right"] == 45
+    assert cfg["vibration"]["actual_left"] == 100
+    assert cfg["vibration"]["actual_right"] == 80
+    assert cfg["vibration"]["persistent"] is True
+
+
+def test_ip_xbox_ally_x_keeps_native_calibration_per_game(tmp_path):
+    class XboxHaptics(FakeVibration):
+        def __init__(self):
+            super().__init__({
+                "mode": "asus_xbox_hd", "persistent": True,
+                "left": 75, "right": 80, "min": 0, "max": 100,
+                "step": 5, "readback": True, "connected": True,
+            })
+
+        def capabilities(self):
+            return {
+                "mode": "asus_xbox_hd", "channels": ["left", "right"],
+                "readback": "driver", "min": 0, "max": 100, "step": 5,
+                "test": {
+                    "patterns": ["pulse"],
+                    "channels": [
+                        "trigger_left", "trigger_right", "strong", "weak", "all",
+                    ],
+                },
+            }
+
+        def capture_baseline(self):
+            return {"native_left": 48, "native_right": 51}
+
+    store, dbus = _store(tmp_path), FakeDbus()
+    vibration = XboxHaptics()
+
+    cfg = inputplumber.set_vibration(
+        store, dbus, "rog_xbox_ally_x", {"left": 35, "right": 45},
+        scope="game", appid="1234", vibration=vibration,
+    )
+
+    assert cfg["vibration"]["mode"] == "asus_xbox_hd"
+    assert cfg["vibration"]["left"] == 35
+    assert cfg["vibration"]["right"] == 45
+    assert cfg["vibration"]["base_owner"] == "inputplumber"
+    assert cfg["vibration"]["enhancement_owner"] == "panel"
+    assert cfg["vibration"]["test_channels"] == [
+        "trigger_left", "trigger_right", "strong", "weak", "all",
+    ]
+    assert vibration.applied == {"left": 35, "right": 45}
+    assert store.vibration_baseline("inputplumber:rog_xbox_ally_x") == {
+        "enabled": True, "left": 75, "right": 80,
+        "native_left": 48, "native_right": 51,
+    }
+
+
+def test_ip_xbox_ally_x_persists_hd_game_motor_mapping_per_game(tmp_path):
+    class XboxHaptics(FakeVibration):
+        def __init__(self):
+            super().__init__({
+                "mode": "asus_xbox_hd", "persistent": True,
+                "left": 75, "right": 80, "min": 0, "max": 100,
+                "step": 5, "readback": True, "connected": True,
+                "hd_game_supported": True, "hd_game_enabled": False,
+                "trigger_left": 100, "trigger_right": 100,
+                "trigger_left_source": "strong",
+                "trigger_right_source": "weak",
+            })
+
+        def capabilities(self):
+            return {
+                "mode": "asus_xbox_hd", "channels": ["left", "right"],
+                "readback": "driver", "min": 0, "max": 100, "step": 5,
+                "hd_game_supported": True,
+                "trigger_source_options": ["off", "strong", "weak", "mix"],
+                "test": {"patterns": ["pulse"], "channels": ["trigger_left"]},
+            }
+
+        def capture_baseline(self):
+            return {"native_left": 48, "native_right": 51}
+
+    store, dbus = _store(tmp_path), FakeDbus()
+    vibration = XboxHaptics()
+    patch = {
+        "hd_game_enabled": True,
+        "trigger_left": 60,
+        "trigger_right": 40,
+        "trigger_left_source": "mix",
+        "trigger_right_source": "weak",
+    }
+
+    cfg = inputplumber.set_vibration(
+        store, dbus, "rog_xbox_ally_x", patch,
+        scope="game", appid="1234", vibration=vibration,
+    )["vibration"]
+
+    assert cfg["hd_game_enabled"] is True
+    assert cfg["trigger_left"] == 60
+    assert cfg["trigger_left_source"] == "mix"
+    assert vibration.applied == {
+        "left": 75, "right": 80, **patch,
+    }
+
+
+def test_ip_xbox_ally_x_does_not_fake_apply_after_native_disconnect(tmp_path):
+    class DisconnectedHaptics(FakeVibration):
+        def __init__(self):
+            super().__init__(None)
+
+    store, dbus = _store(tmp_path), FakeDbus()
+    store.patch_vibration(
+        "game", "1234", {"left": 35, "right": 45}
+    )
+
+    status = inputplumber.apply_effective_components(
+        store, dbus, "rog_xbox_ally_x", "1234",
+        vibration=DisconnectedHaptics(), apply_buttons=False,
+    )
+
+    assert status["vibration"] is False
+
+
+class FakeLenovoHdVibration(FakeVibration):
+    def __init__(self, applies=True):
+        super().__init__({
+            "mode": "lenovo_hd",
+            "persistent": True,
+            "intensity": "medium",
+            "left_pattern": "standard",
+            "right_pattern": "rpg",
+            "touchpad_enabled": True,
+            "touchpad_intensity": "low",
+            "readback": True,
+            "connected": True,
+        }, applies=applies)
+        self.restored = None
+        self.gain_applied = []
+
+    def capabilities(self):
+        return {
+            "mode": "lenovo_hd",
+            "channels": ["handles", "touchpad"],
+            "readback": "driver",
+            "intensity_options": ["off", "low", "medium", "high"],
+            "left_pattern_options": ["fps", "racing", "standard", "spg", "rpg"],
+            "right_pattern_options": ["fps", "racing", "standard", "spg", "rpg"],
+            "touchpad_enabled_options": [True, False],
+            "touchpad_intensity_options": ["off", "low", "medium", "high"],
+            "test": {
+                "patterns": ["pulse"],
+                "channels": ["strong", "weak", "both"],
+            },
+        }
+
+    def capture_baseline(self):
+        return {
+            "intensity": "medium",
+            "left_pattern": "standard",
+            "right_pattern": "rpg",
+            "touchpad_enabled": True,
+            "touchpad_intensity": "low",
+        }
+
+    def gain_available(self):
+        return True
+
+    def restore_baseline(self, baseline):
+        self.restored = dict(baseline)
+        return True
+
+    def apply_gain(self, value):
+        self.gain_applied.append(value)
+        return True
+
+
+class FakeUnreadableLenovoHdVibration(FakeLenovoHdVibration):
+    def __init__(self, applies=True):
+        super().__init__(applies)
+        self._state["readback"] = False
+        self.apply_calls = []
+
+    def capabilities(self):
+        capabilities = super().capabilities()
+        capabilities["readback"] = "none"
+        return capabilities
+
+    def capture_baseline(self):
+        return {}
+
+    def apply(self, patch):
+        self.apply_calls.append(dict(patch))
+        return super().apply(patch)
+
+
+def test_ip_lenovo_hd_surface_is_experimental_until_hardware_gate():
+    capabilities = inputplumber.capabilities_report(
+        FakeDbus(), "legion_go_2", vibration=FakeLenovoHdVibration()
+    )
+
+    assert capabilities["surfaces"]["vibration"]["availability"] == "experimental"
+    assert capabilities["surfaces"]["vibration"]["evidence"] == "upstream"
+
+
+def test_ip_config_exposes_lenovo_hd_desired_and_actual_state(tmp_path):
+    store = _store(tmp_path)
+    store.patch_vibration("game", "42", {
+        "intensity": "high",
+        "left_pattern": "fps",
+        "right_pattern": "racing",
+        "touchpad_enabled": False,
+        "touchpad_intensity": "medium",
+    })
+    vibration = FakeLenovoHdVibration()
+
+    cfg = inputplumber.get_config(
+        store, FakeDbus(), "legion_go_2", appid="42",
+        vibration=vibration,
+    )["vibration"]
+
+    assert cfg["mode"] == "lenovo_hd"
+    assert cfg["intensity"] == "high"
+    assert cfg["left_pattern"] == "fps"
+    assert cfg["right_pattern"] == "racing"
+    assert cfg["touchpad_enabled"] is False
+    assert cfg["touchpad_intensity"] == "medium"
+    assert cfg["actual_intensity"] == "medium"
+    assert cfg["actual_left_pattern"] == "standard"
+    assert cfg["actual_right_pattern"] == "rpg"
+    assert cfg["actual_touchpad_enabled"] is True
+    assert cfg["actual_touchpad_intensity"] == "low"
+    assert cfg["intensity_options"] == ["off", "low", "medium", "high"]
+    assert cfg["left_pattern_options"] == [
+        "fps", "racing", "standard", "spg", "rpg",
+    ]
+    assert cfg["right_pattern_options"] == [
+        "fps", "racing", "standard", "spg", "rpg",
+    ]
+    assert cfg["touchpad_enabled_options"] == [True, False]
+    assert cfg["touchpad_intensity_options"] == [
+        "off", "low", "medium", "high",
+    ]
+
+
+def test_ip_config_never_labels_unreliable_lenovo_state_as_actual(tmp_path):
+    store = _store(tmp_path)
+    vibration = FakeUnreadableLenovoHdVibration()
+
+    cfg = inputplumber.get_config(
+        store, FakeDbus(), "legion_go_2", vibration=vibration,
+    )["vibration"]
+
+    assert cfg["mode"] == "lenovo_hd"
+    assert cfg["confirmation"] == "none"
+    assert cfg["intensity"] == "medium"
+    assert not any(key.startswith("actual_") for key in cfg)
+
+
+def test_ip_lenovo_hd_profile_is_saved_reapplied_and_restored(tmp_path):
+    store, dbus = _store(tmp_path), FakeDbus()
+    vibration = FakeLenovoHdVibration()
+    desired = {
+        "intensity": "high",
+        "left_pattern": "fps",
+        "right_pattern": "racing",
+        "touchpad_enabled": False,
+        "touchpad_intensity": "medium",
+    }
+
+    cfg = inputplumber.set_vibration(
+        store, dbus, "legion_go_2", desired,
+        scope="game", appid="42", vibration=vibration,
+    )
+
+    assert cfg["vibration"]["last_apply"] is True
+    assert vibration.applied == desired
+    assert store.vibration_for("global") == {
+        "enabled": True,
+        "intensity": "medium",
+        "left_pattern": "standard",
+        "right_pattern": "rpg",
+        "touchpad_enabled": True,
+        "touchpad_intensity": "low",
+    }
+    assert inputplumber.apply_effective(
+        store, dbus, "legion_go_2", "42",
+        vibration=vibration, apply_buttons=False,
+    ) is True
+    assert vibration.applied == desired
+    assert inputplumber.restore_external(
+        store, dbus, "legion_go_2", vibration=vibration,
+    ) is True
+    assert vibration.restored == {
+        "intensity": "medium",
+        "left_pattern": "standard",
+        "right_pattern": "rpg",
+        "touchpad_enabled": True,
+        "touchpad_intensity": "low",
+    }
+    assert dbus.ff_enabled is True
+
+
+def test_ip_lenovo_hd_discovery_records_route_without_mutating_legacy_baseline(
+    tmp_path,
+):
+    store, dbus = _store(tmp_path), FakeDbus()
+    owner = "inputplumber:legion_go_2"
+    store.remember_vibration_baseline(
+        owner, {"enabled": True, "value": 100}
+    )
+    store.patch_vibration("global", None, {"value": 35})
+    vibration = FakeLenovoHdVibration()
+
+    config = inputplumber.set_vibration(
+        store, dbus, "legion_go_2", {"intensity": "high"},
+        vibration=vibration,
+    )
+
+    assert config["vibration"]["last_apply"] is True
+    assert vibration.gain_applied == [100]
+    assert store.vibration_route(owner) == "lenovo_hd"
+    assert store.vibration_baseline(owner) == {
+        "enabled": True, "value": 100,
+    }
+    assert store.vibration_route_baseline(owner) == {
+        "intensity": "medium",
+        "left_pattern": "standard",
+        "right_pattern": "rpg",
+        "touchpad_enabled": True,
+        "touchpad_intensity": "low",
+    }
+    assert inputplumber.restore_external(
+        store, dbus, "legion_go_2", vibration=vibration,
+    ) is True
+    assert vibration.restored == store.vibration_route_baseline(owner)
+    assert vibration.gain_applied == [100, 100]
+
+
+def test_ip_failed_unreadable_hd_adoption_restores_gain_and_does_not_own_route(
+    tmp_path,
+):
+    store, dbus = _store(tmp_path), FakeDbus()
+    owner = "inputplumber:legion_go_2"
+    store.remember_vibration_baseline(
+        owner, {"enabled": True, "value": 100}
+    )
+    store.patch_vibration("global", None, {"value": 35})
+    vibration = FakeUnreadableLenovoHdVibration(applies=False)
+
+    config = inputplumber.set_vibration(
+        store, dbus, "legion_go_2", {"intensity": "high"},
+        vibration=vibration,
+    )
+
+    assert config["vibration"]["last_apply"] is False
+    assert vibration.gain_applied == []
+    assert store.vibration_route(owner) is None
+
+
+def test_ip_enabled_only_does_not_adopt_hd_or_change_gain(tmp_path):
+    store, dbus = _store(tmp_path), FakeDbus()
+    owner = "inputplumber:legion_go_2"
+    vibration = FakeUnreadableLenovoHdVibration()
+
+    config = inputplumber.set_vibration(
+        store, dbus, "legion_go_2", {"enabled": False},
+        vibration=vibration,
+    )
+
+    assert config["vibration"]["last_apply"] is True
+    assert vibration.gain_applied == []
+    assert vibration.apply_calls == []
+    assert store.vibration_route(owner) is None
+    assert store.vibration_baseline(owner) == {"enabled": True}
+
+    result = inputplumber.apply_effective_components(
+        store, dbus, "legion_go_2", None,
+        vibration=vibration, apply_buttons=False,
+    )
+
+    assert result["vibration"] is True
+    assert vibration.gain_applied == []
+    assert vibration.apply_calls == []
+    assert store.vibration_route(owner) is None
+
+
+def test_ip_unreadable_lenovo_hd_does_not_adopt_without_restorable_baseline(
+    tmp_path,
+):
+    store, dbus = _store(tmp_path), FakeDbus()
+    owner = "inputplumber:legion_go_2"
+    store.remember_vibration_baseline(
+        owner, {"enabled": True, "value": 100}
+    )
+    store.patch_vibration("global", None, {"value": 35})
+    vibration = FakeUnreadableLenovoHdVibration()
+
+    config = inputplumber.set_vibration(
+        store, dbus, "legion_go_2", {"intensity": "high"},
+        vibration=vibration,
+    )
+
+    assert config["vibration"]["last_apply"] is False
+    assert vibration.gain_applied == []
+    assert store.vibration_route(owner) is None
+    assert store.vibration_route_baseline(owner) == {}
+    assert inputplumber.restore_external(
+        store, dbus, "legion_go_2", vibration=vibration,
+    ) is True
+    assert vibration.apply_calls == []
+    assert vibration.gain_applied == [100]
+
+
+def test_ip_first_unreadable_hd_edit_is_rejected_without_invented_baseline(
+    tmp_path,
+):
+    store, dbus = _store(tmp_path), FakeDbus()
+    owner = "inputplumber:legion_go_2"
+    vibration = FakeUnreadableLenovoHdVibration()
+
+    config = inputplumber.set_vibration(
+        store, dbus, "legion_go_2", {"intensity": "high"},
+        scope="game", appid="42", vibration=vibration,
+    )
+
+    assert config["vibration"]["last_apply"] is False
+    assert vibration.gain_applied == []
+    assert store.vibration_baseline(owner) == {}
+    assert store.vibration_for("game", "42") == {}
+    assert store.vibration_route(owner) is None
+
+
+def test_ip_lenovo_hd_upgrade_blocks_if_legacy_gain_cannot_be_neutralized(
+    tmp_path,
+):
+    class FailingGainVibration(FakeLenovoHdVibration):
+        def apply_gain(self, value):
+            self.gain_applied.append(value)
+            return False
+
+    store, dbus = _store(tmp_path), FakeDbus()
+    owner = "inputplumber:legion_go_2"
+    store.remember_vibration_baseline(
+        owner, {"enabled": True, "value": 100}
+    )
+    store.patch_vibration("global", None, {"value": 35})
+    vibration = FailingGainVibration()
+
+    config = inputplumber.set_vibration(
+        store, dbus, "legion_go_2", {"intensity": "high"},
+        vibration=vibration,
+    )
+
+    assert config["vibration"]["last_apply"] is False
+    assert vibration.gain_applied == [100]
+    assert vibration.applied is None
+    assert store.vibration_route(owner) is None
+    assert store.effective_vibration(None) == {"value": 35}
+
+
+def test_ip_lenovo_hd_rejects_values_outside_live_driver_options(tmp_path):
+    store, dbus = _store(tmp_path), FakeDbus()
+    vibration = FakeLenovoHdVibration()
+
+    cfg = inputplumber.set_vibration(
+        store, dbus, "legion_go_2",
+        {
+            "left_pattern": "cinema",
+            "right_pattern": "cinema",
+            "intensity": "maximum",
+        },
+        vibration=vibration,
+    )
+
+    assert store.effective_vibration(None) == {}
+    assert vibration.applied is None
+    assert "last_apply" not in cfg["vibration"]
+
+
+def test_ip_vibration_enabled_is_per_game(tmp_path):
+    store, dbus = _store(tmp_path), FakeDbus()
+    cfg = inputplumber.set_vibration(
+        store, dbus, CLAW, {"enabled": False}, scope="game", appid="1234"
+    )
+    assert store.effective_vibration("1234") == {"enabled": False}
+    assert dbus.ff_enabled is False
+    assert cfg["vibration"]["enabled"] is False
+
+
+def test_ip_vibration_failure_keeps_per_game_intent_for_retry(tmp_path):
+    store, dbus = _store(tmp_path), FakeDbus()
+    vibration = FakeVibration(
+        {
+            "mode": "gain", "persistent": True, "value": None,
+            "min": 0, "max": 100, "step": 5, "readback": False,
+        },
+        applies=False,
+    )
+    cfg = inputplumber.set_vibration(
+        store, dbus, CLAW, {"value": 40}, scope="game", appid="42",
+        vibration=vibration,
+    )
+    assert store.effective_vibration("42") == {
+        "enabled": True, "value": 40,
+    }
+    assert cfg["vibration"]["value"] == 40
+    assert cfg["vibration"]["last_apply"] is False
+
+
+def test_ip_apply_effective_reapplies_persistent_gain(tmp_path):
+    store, dbus = _store(tmp_path), FakeDbus()
+    store.patch_vibration("game", "42", {"value": 65})
+    vibration = FakeVibration({
+        "mode": "gain", "persistent": True, "value": None,
+        "min": 0, "max": 100, "step": 5, "readback": False,
+    })
+
+    assert inputplumber.apply_effective(
+        store, dbus, CLAW, "42", vibration=vibration, merge=_MERGE
+    ) is True
+    assert vibration.applied == {"value": 65}
+
+
+def test_ip_vibration_only_game_change_does_not_reload_button_profile(tmp_path):
+    store, dbus = _store(tmp_path), FakeDbus()
+    store.patch_vibration("game", "42", {"value": 65})
+    vibration = FakeVibration({
+        "mode": "gain", "persistent": True, "value": None,
+        "min": 0, "max": 100, "step": 5, "readback": False,
+    })
+
+    assert inputplumber.apply_effective(
+        store, dbus, CLAW, "42", vibration=vibration,
+        apply_buttons=False, merge=_MERGE
+    ) is True
+    assert dbus.loaded is None
+    assert vibration.applied == {"value": 65}
+
+
+def test_ip_game_vibration_captures_global_baseline_for_handoff(tmp_path):
+    store, dbus = _store(tmp_path), FakeDbus()
+    vibration = FakeVibration({
+        "mode": "gain", "persistent": True, "value": None,
+        "min": 0, "max": 100, "step": 5, "readback": False,
+    })
+
+    inputplumber.set_vibration(
+        store, dbus, CLAW, {"value": 40}, scope="game", appid="42",
+        vibration=vibration,
+    )
+
+    assert store.vibration_for("global") == {
+        "enabled": True, "value": 100,
+    }
+    assert inputplumber.apply_effective(
+        store, dbus, CLAW, None, vibration=vibration,
+        apply_buttons=False,
+    ) is True
+    assert vibration.applied == {"value": 100}
+
+
+def test_ip_profile_conflict_does_not_block_vibration_handoff(tmp_path):
+    store, dbus = _store(tmp_path), FakeDbus()
+    store.remember_profile_baseline(CLAW, "known-baseline")
+    dbus._profile = "external-profile"
+    store.patch_vibration("global", None, {"value": 100})
+    store.patch_vibration("game", "42", {"value": 40})
+    vibration = FakeVibration({
+        "mode": "gain", "persistent": True, "value": None,
+        "min": 0, "max": 100, "step": 5, "readback": False,
+    })
+
+    assert inputplumber.apply_effective(
+        store, dbus, CLAW, "42", vibration=vibration,
+        apply_buttons=True, merge=_MERGE,
+    ) is False
+    assert vibration.applied == {"value": 40}
+
+
+def test_ip_external_restore_uses_immutable_vibration_baseline(tmp_path):
+    store, dbus = _store(tmp_path), FakeDbus()
+    store.remember_vibration_baseline(
+        f"inputplumber:{CLAW}",
+        {"enabled": True, "value": 100},
+    )
+    store.patch_vibration(
+        "global", None, {"enabled": False, "value": 35}
+    )
+    vibration = FakeVibration({
+        "mode": "gain", "persistent": True, "value": None,
+        "min": 0, "max": 100, "step": 5, "readback": False,
+    })
+
+    assert inputplumber.restore_external(
+        store, dbus, CLAW, vibration=vibration
+    ) is True
+    assert dbus.ff_enabled is True
+    assert vibration.applied == {"value": 100}
+
+
+def test_ip_external_restore_uses_exact_native_asus_baseline(tmp_path):
+    class NativeVibration(FakeVibration):
+        def __init__(self):
+            super().__init__({
+                "mode": "dual", "persistent": True,
+                "left": 0, "right": 100,
+                "min": 0, "max": 100, "step": 5, "readback": True,
+            })
+            self.restored = None
+
+        def capture_baseline(self):
+            return {"native_left": 1, "native_right": 63}
+
+        def restore_baseline(self, baseline):
+            self.restored = dict(baseline)
+            return True
+
+    store, dbus = _store(tmp_path), FakeDbus()
+    vibration = NativeVibration()
+
+    inputplumber.set_vibration(
+        store, dbus, "rog_ally", {"left": 35, "right": 45},
+        vibration=vibration,
+    )
+    assert store.vibration_baseline("inputplumber:rog_ally") == {
+        "enabled": True,
+        "left": 0,
+        "right": 100,
+        "native_left": 1,
+        "native_right": 63,
+    }
+    assert store.vibration_for("global") == {
+        "enabled": True,
+        "left": 35,
+        "right": 45,
+    }
+    assert inputplumber.restore_external(
+        store, dbus, "rog_ally", vibration=vibration
+    ) is True
+    assert vibration.restored == {
+        "enabled": True,
+        "left": 0,
+        "right": 100,
+        "native_left": 1,
+        "native_right": 63,
+    }
+
+
+def test_ip_upgrade_does_not_infer_native_baseline_from_plugin_state(tmp_path):
+    class MigratedVibration(FakeVibration):
+        def capture_baseline(self):
+            return {"native_left": 22, "native_right": 29}
+
+        def restore_baseline(self, baseline):
+            raise AssertionError("legacy baseline must use percentage fallback")
+
+    store, dbus = _store(tmp_path), FakeDbus()
+    store.remember_vibration_baseline(
+        "inputplumber:rog_ally",
+        {"enabled": True, "left": 20, "right": 80},
+    )
+    store.patch_vibration(
+        "global", None, {"enabled": True, "left": 35, "right": 45}
+    )
+    vibration = MigratedVibration({
+        "mode": "dual", "persistent": True,
+        "left": 35, "right": 45,
+        "min": 0, "max": 100, "step": 5, "readback": True,
+    })
+
+    assert inputplumber.apply_effective(
+        store, dbus, "rog_ally", None, vibration=vibration,
+        apply_buttons=False,
+    ) is True
+    assert store.vibration_baseline("inputplumber:rog_ally") == {
+        "enabled": True,
+        "left": 20,
+        "right": 80,
+    }
+    assert inputplumber.restore_external(
+        store, dbus, "rog_ally", vibration=vibration
+    ) is True
+    assert vibration.applied == {"left": 20, "right": 80}
+
+
+def test_ip_startup_captures_owner_baseline_before_reapply(tmp_path):
+    store, dbus = _store(tmp_path), FakeDbus()
+    store.patch_vibration("global", None, {"value": 40})
+    vibration = FakeVibration({
+        "mode": "gain", "persistent": True, "value": None,
+        "min": 0, "max": 100, "step": 5, "readback": False,
+    })
+
+    assert inputplumber.apply_effective(
+        store, dbus, CLAW, None, vibration=vibration,
+        apply_buttons=False,
+    ) is True
+    assert store.vibration_baseline(f"inputplumber:{CLAW}") == {
+        "enabled": True, "value": 100,
+    }
+    assert inputplumber.restore_external(
+        store, dbus, CLAW, vibration=vibration
+    ) is True
+    assert vibration.applied == {"value": 100}
+
+
 def test_ip_set_button_stores_and_applies(tmp_path):
     store, dbus = _store(tmp_path), FakeDbus()
     cfg = inputplumber.set_button(store, dbus, CLAW, "LeftPaddle1", [{"gamepad": "South"}],
                                   merge=_MERGE)
     assert store.overrides_for("global")["LeftPaddle1"] == [{"gamepad": "South"}]
-    assert dbus.reset_called is True   # rebuilt from the pristine default
+    assert dbus.reset_called is False
     assert dbus.loaded == "merged-yaml"  # the merged profile was loaded
     by_src = {b["source"]: b["target"] for b in cfg["buttons"]}
     assert by_src["LeftPaddle1"] == [{"gamepad": "South"}]
+
+
+def test_ip_set_button_stores_and_applies_keyboard_chord(tmp_path):
+    store, dbus = _store(tmp_path), FakeDbus()
+    chord = [{"key": "KeyLeftCtrl"}, {"key": "KeyTab"}]
+
+    cfg = inputplumber.set_button(
+        store, dbus, CLAW, "LeftPaddle1", chord, merge=_MERGE,
+    )
+
+    assert store.overrides_for("global")["LeftPaddle1"] == chord
+    assert dbus.loaded == "merged-yaml"
+    by_source = {button["source"]: button["target"] for button in cfg["buttons"]}
+    assert by_source["LeftPaddle1"] == chord
+
+
+def test_ip_rejects_mixed_chord_without_profile_or_store_write(tmp_path):
+    store, dbus = _store(tmp_path), FakeDbus()
+
+    inputplumber.set_button(
+        store, dbus, CLAW, "LeftPaddle1",
+        [{"gamepad": "South"}, {"key": "KeyTab"}], merge=_MERGE,
+    )
+
+    assert store.overrides_for("global") == {}
+    assert dbus.loaded is None
+
+
+def test_ip_rejects_reserved_sources_even_when_advertised(tmp_path):
+    store = _store(tmp_path)
+    dbus = FakeDbus(caps=[
+        "Gamepad:Button:LeftPaddle1",
+        "Gamepad:Button:Guide",
+        "Gamepad:Button:QuickAccess",
+    ])
+
+    for source in ("Guide", "QuickAccess"):
+        inputplumber.set_button(
+            store, dbus, CLAW, source,
+            [{"key": "KeyLeftCtrl"}, {"key": "KeyTab"}], merge=_MERGE,
+        )
+
+    assert store.overrides_for("global") == {}
+    assert dbus.loaded is None
+
+
+def test_ip_set_button_accepts_profile_proven_ally_paddle(
+    tmp_path, monkeypatch
+):
+    store = _store(tmp_path)
+    dbus = FakeDbus(caps=["Gamepad:Button:South"])
+    monkeypatch.setattr(
+        inputplumber.ip_profile,
+        "proven_mapped_capabilities",
+        lambda *args, **kwargs: {"LeftPaddle1", "RightPaddle1"},
+    )
+
+    config = inputplumber.set_button(
+        store, dbus, "rog_ally", "LeftPaddle1",
+        [{"gamepad": "South"}], merge=_MERGE,
+    )
+
+    assert config["last_apply"] is True
+    assert store.overrides_for("global")["LeftPaddle1"] == [
+        {"gamepad": "South"}
+    ]
+
+
+def test_live_buttons_does_not_probe_sources_for_non_ally():
+    dbus = FakeDbus(caps=["Gamepad:Button:LeftPaddle1"])
+    calls = []
+
+    def source_paths():
+        calls.append(True)
+        return ["/dev/input/event2"]
+
+    dbus.source_device_paths = source_paths
+
+    assert inputplumber.live_buttons(
+        dbus, CLAW, dbus.capabilities()
+    ) == [("LeftPaddle1", "M2")]
+    assert calls == []
 
 
 def test_ip_set_failure_does_not_return_stale_buttons(tmp_path):
@@ -135,7 +1017,7 @@ def test_ip_set_failure_does_not_return_stale_buttons(tmp_path):
 
 def test_ip_set_button_empty_reverts_to_default(tmp_path):
     store = _store(tmp_path, {"LeftPaddle1": [{"gamepad": "South"}]})
-    inputplumber.set_button(store, FakeDbus(), CLAW, "LeftPaddle1", [{"key": "bad"}], merge=_MERGE)
+    inputplumber.set_button(store, FakeDbus(), CLAW, "LeftPaddle1", [], merge=_MERGE)
     assert "LeftPaddle1" not in store.overrides_for("global")  # cleared → device default
 
 
@@ -150,9 +1032,21 @@ def test_ip_set_button_ignores_source_not_on_this_device(tmp_path):
 def test_ip_reset_clears_and_loads_default(tmp_path):
     store = _store(tmp_path, {"LeftPaddle1": [{"gamepad": "South"}]})
     dbus = FakeDbus()
-    inputplumber.reset(store, dbus)
+    inputplumber.reset(store, dbus, CLAW, merge=_MERGE)
     assert store.overrides_for("global") == {}
-    assert dbus.reset_called is True
+    assert dbus.reset_called is False
+    assert dbus.loaded is None
+
+
+def test_ip_identical_managed_profile_does_not_recreate_targets(tmp_path):
+    store, dbus = _store(tmp_path), FakeDbus()
+    store.remember_profile_baseline(CLAW, dbus._profile)
+
+    assert inputplumber._apply_overrides(
+        store, dbus, CLAW, {}, merge=lambda baseline, _overrides: baseline
+    ) is True
+    assert dbus.loaded is None
+    assert store.profile_state(CLAW) is None
 
 
 def test_ip_per_game_scope_is_independent_from_global(tmp_path):
@@ -174,8 +1068,90 @@ def test_ip_per_game_scope_is_independent_from_global(tmp_path):
 def test_ip_apply_effective_uses_global_when_following(tmp_path):
     store, dbus = _store(tmp_path, {"LeftPaddle1": [{"gamepad": "South"}]}), FakeDbus()
     # A game with no own profile follows global → applies the global overrides.
-    assert inputplumber.apply_effective(store, dbus, "999", merge=_MERGE) is True
+    assert inputplumber.apply_effective(
+        store, dbus, CLAW, "999", merge=_MERGE
+    ) is True
     assert dbus.loaded == "merged-yaml"
+
+
+def test_ip_refuses_to_clobber_profile_changed_by_another_editor(tmp_path):
+    store, dbus = _store(tmp_path), FakeDbus()
+    inputplumber.set_button(
+        store, dbus, CLAW, "LeftPaddle1", [{"gamepad": "South"}],
+        merge=_MERGE,
+    )
+    dbus._profile = "externally-edited-yaml"
+    dbus.loaded = None
+
+    cfg = inputplumber.set_button(
+        store, dbus, CLAW, "RightPaddle1", [{"gamepad": "North"}],
+        merge=_MERGE,
+    )
+
+    assert dbus.loaded is None
+    assert "RightPaddle1" not in store.overrides_for("global")
+    assert cfg["last_apply"] is False
+    assert cfg["apply_error"] == "profile_conflict"
+
+
+def test_ip_rejects_successful_load_without_matching_readback(tmp_path):
+    store, dbus = _store(tmp_path), IgnoringProfileLoadDbus()
+
+    inputplumber.set_button(
+        store, dbus, CLAW, "LeftPaddle1", [{"gamepad": "South"}],
+        merge=_MERGE,
+    )
+
+    assert store.overrides_for("global") == {}
+    assert store.profile_state(CLAW) is None
+
+
+def test_ip_reapplies_after_daemon_restart_restores_known_baseline(tmp_path):
+    store, dbus = _store(tmp_path), FakeDbus()
+    baseline = dbus._profile
+    inputplumber.set_button(
+        store, dbus, CLAW, "LeftPaddle1", [{"gamepad": "South"}],
+        merge=_MERGE,
+    )
+    dbus._profile = baseline
+    dbus.loaded = None
+
+    inputplumber.set_button(
+        store, dbus, CLAW, "RightPaddle1", [{"gamepad": "North"}],
+        merge=_MERGE,
+    )
+
+    assert dbus.loaded == "merged-yaml"
+    assert "RightPaddle1" in store.overrides_for("global")
+
+
+def test_vibration_test_requires_stop_confirmation():
+    class FailedStop:
+        def test(self, pattern, channel, strength):
+            assert (pattern, channel, strength) == ("pulse", "both", 50)
+            return {
+                "sent": True, "stopped": False, "restored": True,
+                "reason": "stop_failed",
+            }
+
+    assert inputplumber.test_vibration(
+        FailedStop(), "pulse", "both", 50
+    )["reason"] == "stop_failed"
+
+
+def test_ip_keeps_recovery_ownership_when_rollback_is_unconfirmed(tmp_path):
+    store, dbus = _store(tmp_path), UnrecoverableProfileLoadDbus()
+    baseline = dbus._profile
+
+    cfg = inputplumber.set_button(
+        store, dbus, CLAW, "LeftPaddle1", [{"gamepad": "South"}],
+        merge=_MERGE,
+    )
+
+    state = store.profile_state(CLAW)
+    assert cfg["last_apply"] is False
+    assert state["baseline_yaml"] == baseline
+    assert state["recovery_yamls"] == [baseline, "merged-yaml"]
 
 
 # ---- HHD config ------------------------------------------------------------
@@ -183,6 +1159,37 @@ def test_ip_apply_effective_uses_global_when_following(tmp_path):
 def _hhd_state(mode="uinput", paddles="noob"):
     cm = {"mode": mode, mode: {"paddles_as": paddles}}
     return {"controllers": {"rog_ally": {"controller_mode": cm}}}
+
+
+def _hhd_settings(*modes, version="test"):
+    mode_nodes = {}
+    for mode in modes:
+        node = {"type": "container", "children": {}}
+        if mode in {"uinput", "dualsense"}:
+            node["children"]["paddles_as"] = {
+                "type": "multiple",
+                "options": {
+                    "steam_input": "Steam Input",
+                    "disabled": "Disabled",
+                },
+            }
+        mode_nodes[mode] = node
+    settings = {
+        "controllers": {
+            "rog_ally": {
+                "type": "container",
+                "children": {
+                    "controller_mode": {
+                        "type": "mode",
+                        "modes": mode_nodes,
+                    }
+                },
+            }
+        }
+    }
+    if version is not None:
+        settings["version"] = version
+    return settings
 
 
 def test_hhd_device_key_from_state():
@@ -206,6 +1213,129 @@ def test_hhd_get_config_hides_paddles_for_non_paddle_mode():
 
 def test_hhd_get_config_none_without_controllers():
     assert hhd_config.get_config({})["kind"] == "none"
+
+
+def test_hhd_capabilities_use_only_options_present_in_live_state():
+    state = {
+        "version": "test",
+        "controllers": {
+            "rog_ally": {
+                "controller_mode": {
+                    "mode": "uinput",
+                    "uinput": {"paddles_as": "steam_input"},
+                    "dualsense": {"paddles_as": "disabled"},
+                    "invented_mode": {"paddles_as": "invented"},
+                },
+                "limits": {
+                    "mode": "manual",
+                    "manual": {"vibration": 40},
+                },
+            }
+        }
+    }
+
+    capabilities = hhd_config.capabilities_report(
+        state,
+        "rog_ally",
+        _hhd_settings("uinput", "xbox_elite", "dualsense", "disabled"),
+    )
+
+    assert capabilities["surfaces"]["settings"] == {
+        "owner": "hhd",
+        "availability": "supported",
+        "fields": {
+            "mode": "uinput",
+            "mode_options": [
+                "uinput", "xbox_elite", "dualsense", "disabled",
+            ],
+            "paddles_as": "steam_input",
+            "paddles_options": ["steam_input", "disabled"],
+        },
+        "scope": ["global"],
+        "apply": "recreate",
+        "readback": "accepted",
+        "evidence": "upstream",
+    }
+    assert capabilities["surfaces"]["vibration"] == {
+        "owner": "hhd",
+        "availability": "supported",
+        "fields": {
+            "mode": "gain",
+            "persistent": True,
+            "value": 40,
+            "min": 0,
+            "max": 100,
+            "step": 20,
+        },
+        "scope": ["global", "game"],
+        "apply": "hot",
+        "readback": "accepted",
+        "evidence": "upstream",
+    }
+
+
+def test_hhd_capabilities_omit_absent_or_ambiguous_routes():
+    state = {
+        "controllers": {
+            "rog_ally": {
+                "controller_mode": {"mode": "invented_mode"},
+                "limits": {"mode": "default"},
+            }
+        }
+    }
+
+    assert hhd_config.capabilities_report(
+        state, "rog_ally", _hhd_settings("uinput", "dualsense")
+    )["surfaces"] == {}
+
+
+def test_hhd_capabilities_reject_stale_settings_schema():
+    state = {
+        "version": "new",
+        "controllers": {
+            "rog_ally": {
+                "controller_mode": {
+                    "mode": "uinput",
+                    "uinput": {"paddles_as": "steam_input"},
+                }
+            }
+        },
+    }
+
+    capabilities = hhd_config.capabilities_report(
+        state,
+        "rog_ally",
+        _hhd_settings("uinput", version="old"),
+    )
+
+    assert capabilities["surfaces"] == {}
+
+
+def test_hhd_capabilities_require_versions_on_state_and_schema():
+    controller = {
+        "controllers": {
+            "rog_ally": {
+                "controller_mode": {
+                    "mode": "uinput",
+                    "uinput": {"paddles_as": "steam_input"},
+                }
+            }
+        }
+    }
+
+    without_state_version = hhd_config.capabilities_report(
+        controller,
+        "rog_ally",
+        _hhd_settings("uinput", version="test"),
+    )
+    without_schema_version = hhd_config.capabilities_report(
+        {"version": "test", **controller},
+        "rog_ally",
+        _hhd_settings("uinput", version=None),
+    )
+
+    assert without_state_version["surfaces"] == {}
+    assert without_schema_version["surfaces"] == {}
 
 
 def test_hhd_build_payload_paths():

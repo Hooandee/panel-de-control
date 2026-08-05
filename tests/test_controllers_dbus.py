@@ -135,3 +135,249 @@ def test_missing_composite_discovery_is_logarithmically_sampled():
         if event["operation"] == "discover_composite"
     ]
     assert [event["failure_count"] for event in failures] == [1, 2, 4, 8]
+
+
+def test_selects_composite_by_exact_expected_name():
+    calls = []
+
+    def run(args):
+        calls.append(args)
+        if args[1] == "tree":
+            return _result(
+                "├─/org/shadowblip/InputPlumber/CompositeDevice0\n"
+                "└─/org/shadowblip/InputPlumber/CompositeDevice1\n"
+            )
+        if args[-1] == "Name":
+            path = args[3]
+            return _result(
+                's "ASUS ROG Ally"\n'
+                if path.endswith("1")
+                else 's "Bluetooth Controller"\n'
+            )
+        if args[-1] == "SourceDevicePaths":
+            return _result('as 1 "/sys/devices/virtual/input/input0"\n')
+        if args[-1] == "Capabilities":
+            return _result('as 1 "Gamepad:Button:LeftPaddle1"\n')
+        raise AssertionError(args)
+
+    dbus = IpDbus(run=run, expected_names=("ASUS ROG Ally",))
+    assert dbus.capabilities() == ["Gamepad:Button:LeftPaddle1"]
+    assert dbus.diagnostics()["composite_name"] == "ASUS ROG Ally"
+
+
+def test_refuses_ambiguous_composite_without_expected_name():
+    dbus = IpDbus(
+        run=lambda _args: _result(
+            "├─/org/shadowblip/InputPlumber/CompositeDevice0\n"
+            "└─/org/shadowblip/InputPlumber/CompositeDevice1\n"
+        )
+    )
+    assert dbus.capabilities() == []
+    assert dbus.diagnostics()["last_operation"]["reason"] == "composite_ambiguous"
+
+
+def test_force_feedback_enabled_has_exact_readback():
+    responses = iter([
+        _result("└─/org/shadowblip/InputPlumber/CompositeDevice0\n"),
+        _result("b true\n"),
+        _result(),
+        _result("b false\n"),
+    ])
+    dbus = IpDbus(run=lambda _args: next(responses))
+    assert dbus.force_feedback_enabled() is True
+    assert dbus.set_force_feedback_enabled(False) is True
+
+
+def test_force_feedback_test_calls_rumble_and_stop():
+    calls = []
+
+    def run(args):
+        calls.append(args)
+        if args[1] == "tree":
+            return _result("└─/org/shadowblip/InputPlumber/CompositeDevice0\n")
+        return _result()
+
+    dbus = IpDbus(run=run)
+    assert dbus.rumble(0.7) is True
+    assert dbus.stop_rumble() is True
+    assert any(args[-2:] == ["d", "0.7"] for args in calls)
+    assert any("Stop" in args for args in calls)
+
+
+def test_xbox_hd_haptics_has_exact_readback_and_validated_write():
+    calls = []
+    set_seen = False
+
+    def run(args):
+        nonlocal set_seen
+        calls.append(args)
+        if args[1] == "tree":
+            return _result("└─/org/shadowblip/InputPlumber/CompositeDevice0\n")
+        if "XboxHdHapticsSupported" in args:
+            return _result("b true\n")
+        if "SetXboxHdHaptics" in args:
+            set_seen = True
+            return _result()
+        if "GetXboxHdHaptics" in args:
+            return _result(
+                "b true y 55 y 45 y 3 y 0\n"
+                if set_seen else
+                "b true y 70 y 40 y 1 y 2\n"
+            )
+        return _result()
+
+    dbus = IpDbus(run=run)
+
+    assert dbus.xbox_hd_haptics() == {
+        "enabled": True,
+        "trigger_left": 70,
+        "trigger_right": 40,
+        "trigger_left_source": "strong",
+        "trigger_right_source": "weak",
+    }
+    assert dbus.set_xbox_hd_haptics({
+        "enabled": True,
+        "trigger_left": 55,
+        "trigger_right": 45,
+        "trigger_left_source": "mix",
+        "trigger_right_source": "off",
+    }) is True
+    assert any(args[-6:] == [
+        "byyyy", "true", "55", "45", "3", "0",
+    ] for args in calls)
+
+
+def test_xbox_hd_haptics_write_rejects_readback_mismatch():
+    def run(args):
+        if args[1] == "tree":
+            return _result("└─/org/shadowblip/InputPlumber/CompositeDevice0\n")
+        if "XboxHdHapticsSupported" in args:
+            return _result("b true\n")
+        if "GetXboxHdHaptics" in args:
+            return _result("b true y 70 y 40 y 1 y 2\n")
+        return _result()
+
+    dbus = IpDbus(run=run)
+
+    assert dbus.set_xbox_hd_haptics({
+        "enabled": True,
+        "trigger_left": 55,
+        "trigger_right": 45,
+        "trigger_left_source": "mix",
+        "trigger_right_source": "off",
+    }) is False
+    assert dbus.diagnostics()["last_operation"] == {
+        "operation": "set_xbox_hd_haptics",
+        "ok": False,
+        "reason": "readback_mismatch",
+    }
+
+
+def test_source_device_paths_returns_only_nonempty_paths():
+    responses = iter([
+        _result("└─/org/shadowblip/InputPlumber/CompositeDevice0\n"),
+        _result('as 3 "/dev/input/event2" "" "/dev/hidraw1"\n'),
+    ])
+    dbus = IpDbus(run=lambda _args: next(responses))
+
+    assert dbus.source_device_paths() == [
+        "/dev/input/event2",
+        "/dev/hidraw1",
+    ]
+
+
+def test_supported_target_ids_come_from_manager_property():
+    calls = []
+
+    def run(args):
+        calls.append(args)
+        return _result('as 4 "xb360" "xbox-elite" "keyboard" "mouse"\n')
+
+    dbus = IpDbus(run=run)
+
+    assert dbus.supported_target_device_ids() == [
+        "xb360", "xbox-elite", "keyboard", "mouse",
+    ]
+    assert calls == [[
+        "busctl", "get-property", "org.shadowblip.InputPlumber",
+        "/org/shadowblip/InputPlumber/Manager",
+        "org.shadowblip.InputManager", "SupportedTargetDeviceIds",
+    ]]
+
+
+def test_target_device_types_require_every_exact_target_property():
+    def run(args):
+        if args[1] == "tree":
+            return _result(
+                "└─/org/shadowblip/InputPlumber/CompositeDevice0\n"
+            )
+        if args[-1] == "TargetDevices":
+            return _result(
+                'as 3 "/org/shadowblip/InputPlumber/target/gamepad0" '
+                '"/org/shadowblip/InputPlumber/target/keyboard0" ""\n'
+            )
+        if args[-1] == "DeviceType":
+            return _result(
+                's "xbox-elite"\n'
+                if args[3].endswith("gamepad0")
+                else 's "keyboard"\n'
+            )
+        raise AssertionError(args)
+
+    dbus = IpDbus(run=run)
+
+    assert dbus.target_device_types() == ["xbox-elite", "keyboard"]
+
+
+def test_set_target_devices_calls_exact_composite_dbus_signature():
+    calls = []
+
+    def run(args):
+        calls.append(args)
+        if args[1] == "tree":
+            return _result(
+                "└─/org/shadowblip/InputPlumber/CompositeDevice3\n"
+            )
+        return _result()
+
+    dbus = IpDbus(run=run)
+
+    assert dbus.set_target_devices([
+        "ds5-edge", "mouse", "keyboard", "touchpad",
+    ]) is True
+    assert calls[-1] == [
+        "busctl", "call", "org.shadowblip.InputPlumber",
+        "/org/shadowblip/InputPlumber/CompositeDevice3",
+        "org.shadowblip.Input.CompositeDevice", "SetTargetDevices", "as",
+        "4", "ds5-edge", "mouse", "keyboard", "touchpad",
+    ]
+
+
+def test_write_revalidates_cached_composite_identity():
+    changed = False
+
+    def run(args):
+        nonlocal changed
+        if args[1] == "tree":
+            return _result(
+                "└─/org/shadowblip/InputPlumber/CompositeDevice0\n"
+            )
+        if args[-1] == "Name":
+            return _result(
+                's "Bluetooth Controller"\n'
+                if changed else 's "Lenovo Legion Go"\n'
+            )
+        if args[-1] == "SourceDevicePaths":
+            return _result('as 1 "/dev/input/event2"\n')
+        if args[-1] == "Capabilities":
+            return _result('as 1 "Gamepad:Button:LeftPaddle1"\n')
+        if "Rumble" in args:
+            raise AssertionError("must not write to a changed composite")
+        return _result()
+
+    dbus = IpDbus(run=run, expected_names=("Lenovo Legion Go",))
+    assert dbus.capabilities() == ["Gamepad:Button:LeftPaddle1"]
+    changed = True
+
+    assert dbus.rumble(1.0) is False
+    assert dbus.diagnostics()["composite_path_available"] is False

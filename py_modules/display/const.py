@@ -4,6 +4,7 @@ files load safe. saturation is per-game; everything else is global calibration."
 
 NATIVE = {
     "saturation": 100,  # unipolar, 100 = neutral
+    "hdr_saturation": 100,
     "temperature": 0,
     "contrast": 0,
     "gamma": 0,
@@ -16,7 +17,12 @@ NATIVE = {
 }
 
 FIELDS = tuple(NATIVE)
-CALIBRATION = tuple(f for f in NATIVE if f != "saturation")
+CALIBRATION = tuple(
+    field
+    for field in NATIVE
+    if field not in {"saturation", "hdr_saturation"}
+)
+LOOK_FIELDS = tuple(field for field in NATIVE if field != "hdr_saturation")
 
 
 def is_oled(device):
