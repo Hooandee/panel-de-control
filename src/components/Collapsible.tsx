@@ -16,6 +16,8 @@ interface Props {
   /** Optional header accessory shown beside the chevron (e.g. a full-screen button).
    *  Rendered outside the toggle so activating it doesn't collapse the card. */
   action?: ReactNode;
+  /** Initial state when no preference exists. Existing persisted state wins. */
+  defaultOpen?: boolean;
   children: ReactNode;
 }
 
@@ -26,8 +28,16 @@ interface Props {
  * (defaults to open). Children render the card's inner content directly
  * (Collapsible owns the card chrome + padding).
  */
-export const Collapsible: FC<Props> = ({ id, icon, title, summary, action, children }) => {
-  const [open, setOpen] = useState(() => !isCollapsed(id));
+export const Collapsible: FC<Props> = ({
+  id,
+  icon,
+  title,
+  summary,
+  action,
+  defaultOpen = true,
+  children,
+}) => {
+  const [open, setOpen] = useState(() => !isCollapsed(id, !defaultOpen));
   const toggle = () => {
     const next = !open;
     setOpen(next);

@@ -21,6 +21,15 @@ describe("buildFocusCss", () => {
   it("uses !important so it wins over the elements' inline box-shadow", () => {
     expect(css).toContain("!important");
   });
+
+  it("compacts Decky's HUD slider chrome and removes its fixed minimum width", () => {
+    expect(css).toContain(".pdc-hud-slider");
+    expect(css).toContain("margin-inline: 0 !important");
+    expect(css).toContain("padding-block: 6px !important");
+    expect(css).toContain(".pdc-hud-slider > div > div");
+    expect(css).toContain("min-width: 0 !important");
+    expect(css).toContain("width: 100% !important");
+  });
 });
 
 // Minimal document stub (no jsdom) — just the surface ensureFocusStyles touches.

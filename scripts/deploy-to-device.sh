@@ -29,7 +29,7 @@ WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 TARBALL="$WORK/plugin.tgz"
 # --no-xattrs avoids the macOS AppleDouble (._*) droppings on the device.
-tar --no-xattrs \
+COPYFILE_DISABLE=1 tar --no-xattrs \
   --exclude='__pycache__' --exclude='*.pyc' \
   -czf "$TARBALL" \
   dist main.py py_modules plugin.json package.json assets LICENSE README.md
@@ -47,6 +47,7 @@ sudo() { command sudo -S "$@" <<<"$SUDO_PASS"; }
 sudo mkdir -p "$DEST"
 sudo rsync -a --exclude='__pycache__' "$STAGE"/ "$DEST"/
 sudo chown -R root:root "$DEST"
+sudo chmod 755 "$DEST"
 rm -rf "$STAGE" /tmp/pdc-plugin.tgz
 sudo systemctl restart plugin_loader
 echo "installed into $DEST"

@@ -453,6 +453,17 @@ def test_report_contains_tdp_transition_history(plugin, monkeypatch):
         "build_bundle",
         lambda **kwargs: kwargs,
     )
+
+    def hud_state():
+        return {
+            "capability": "inactive",
+            "applyStatus": "pending",
+            "conflict": None,
+            "model": {},
+            "values": {},
+        }
+
+    monkeypatch.setattr(plugin, "_hud_state", hud_state)
     plugin._execute_tdp_command(
         plugin._capture_tdp_command("report-test")
     )
@@ -507,6 +518,8 @@ def test_report_contains_tdp_transition_history(plugin, monkeypatch):
     assert {"supported", "probe_detail", "wayland_display", "last_apply"} <= (
         display["backend"].keys()
     )
+    hud = bundle["state"]["hud_diagnostics"]
+    assert hud["capability"] == "inactive"
 
 
 def test_cpu_gpu_diagnostics_allowlist_drops_app_identity(plugin):

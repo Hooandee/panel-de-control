@@ -106,6 +106,20 @@ def test_capabilities_from_includes_cpu_gpu_backends():
     assert caps["steamdeck_ppt_supported"] is True
 
 
+def test_capabilities_from_includes_hud_summary():
+    caps = capabilities_from({
+        "hud_diagnostics": {
+            "capability": "ready",
+            "apply_status": "reload_requested",
+            "enabled": True,
+        }
+    })
+
+    assert caps["hud_capability"] == "ready"
+    assert caps["hud_apply_status"] == "reload_requested"
+    assert caps["hud_enabled"] is True
+
+
 # ---- redact_text ----------------------------------------------------------
 def test_redact_text_home_paths():
     assert redact_text("/home/deck/homebrew/x.log") == "~/homebrew/x.log"

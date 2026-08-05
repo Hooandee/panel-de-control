@@ -1,5 +1,5 @@
 import { setCurrentGame } from "../api";
-import { shouldReportAppid } from "./gameReport";
+import { GameReport, isSameGameReport, shouldReportGame } from "./gameReport";
 import { readRunningGame } from "./runningGame";
 
 /**
@@ -24,10 +24,10 @@ import { readRunningGame } from "./runningGame";
  *     game → the backend would stay at appid=None forever. So we run a bounded
  *     startup poll (every ~2 s) until we have SUCCESSFULLY reported a real appid,
  *     independent of whether the event API exists.
- *  2. The backend RPC may not be ready at load. We commit `lastAppid` ONLY after
+ *  2. The backend RPC may not be ready at load. We commit the report ONLY after
  *     setCurrentGame RESOLVES OK; on rejection we leave it so the next tick retries.
  *
- * Reports only on appid change (never the same appid twice, once committed).
+ * Reports on game identity changes and when Steam hydrates a better display name.
  * Degrades: if the Steam/Decky API is unavailable or throws, it never throws.
  */
 // Startup poll cadence and how long to keep polling for the first successful
@@ -40,11 +40,8 @@ export function startGameWatcher(): () => void {
   let unregister: (() => void) | null = null;
   let startupTimer: ReturnType<typeof setInterval> | null = null;
   let eventFallbackTimer: ReturnType<typeof setInterval> | null = null;
-  let lastAppid: string | null = null;
-  // The appid currently being sent to the backend (in-flight), so overlapping
-  // ticks/events don't fire duplicate RPCs for the same target. `undefined` = idle;
-  // `null` is a real target ("no game"), so it must not be the idle value.
-  let inFlight: string | null | undefined = undefined;
+  let committed: GameReport = { appid: null, name: null };
+  let inFlight: GameReport | undefined;
   let sawRealAppid = false; // have we ever SUCCESSFULLY reported a non-null appid?
   let startupTicks = 0;
 
@@ -58,29 +55,30 @@ export function startGameWatcher(): () => void {
   const report = (): void => {
     if (!alive) return;
     const next = readRunningGame();
-    const appid = next ? next.appid : null;
-    // Nothing to do if it's already committed or the same request is in flight.
-    if (!shouldReportAppid(appid, lastAppid, inFlight)) return;
-    inFlight = appid;
+    const target: GameReport = {
+      appid: next ? next.appid : null,
+      name: next ? next.name : null,
+    };
+    if (!shouldReportGame(target, committed, inFlight)) return;
+    inFlight = target;
     try {
-      Promise.resolve(setCurrentGame(appid))
+      // Pass the display name too so the HUD's Perfil metric can show it; the backend
+      // ignores it beyond that (the appid stays the profile key).
+      Promise.resolve(setCurrentGame(target.appid, target.name))
         .then(() => {
-          if (!alive) return;
-          // Commit ONLY on success, so a failed report retries next tick.
-          lastAppid = appid;
+          if (!alive || !inFlight || !isSameGameReport(inFlight, target)) return;
+          committed = target;
           inFlight = undefined;
-          if (appid !== null) {
+          if (target.appid !== null) {
             sawRealAppid = true;
             stopStartupPoll(); // got a real game → startup retries no longer needed
           }
         })
         .catch(() => {
-          // Backend not ready / RPC failed → do NOT commit; allow a retry.
-          if (inFlight === appid) inFlight = undefined;
+          if (inFlight && isSameGameReport(inFlight, target)) inFlight = undefined;
         });
     } catch {
-      // setCurrentGame threw synchronously (API missing) → allow a retry.
-      if (inFlight === appid) inFlight = undefined;
+      if (inFlight && isSameGameReport(inFlight, target)) inFlight = undefined;
     }
   };
 

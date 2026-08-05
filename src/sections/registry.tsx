@@ -8,6 +8,7 @@ import { PantallaSection } from "./PantallaSection";
 import { VentiladoresSection } from "./VentiladoresSection";
 import { SonidoSection } from "./SonidoSection";
 import { MandosSection } from "./MandosSection";
+import { HudSection } from "./HudSection";
 import { ParametrosSection } from "./ParametrosSection";
 import { AjustesSection } from "./AjustesSection";
 import { registerSystemBlocks } from "./systemBlocks";
@@ -33,6 +34,7 @@ const COMPONENTS: Record<string, FC> = {
   fans: VentiladoresSection,
   audio: SonidoSection,
   mandos: MandosSection,
+  hud: HudSection,
   params: ParametrosSection,
   settings: AjustesSection,
 };

@@ -4,7 +4,11 @@ import json
 import os
 import time
 from collections import deque
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
+from concurrent.futures import (
+    CancelledError as FutureCancelledError,
+    ThreadPoolExecutor,
+    TimeoutError as FutureTimeoutError,
+)
 from dataclasses import asdict, dataclass
 from datetime import datetime
 
@@ -77,6 +81,14 @@ from controllers import factory as controller_factory
 from controllers.store import RemapStore
 from controllers.dbus import IpDbus
 from sysfs import read_str
+from mangohud.store import HudStore
+from mangohud import detect as mangohud_detect
+from mangohud import config as mangohud_config
+from mangohud import pdc_metrics as mangohud_pdc
+from mangohud import ownership as mangohud_ownership
+from mangohud.apply import apply_hud, clear_presets, reload_sessions
+from mangohud.coordinator import HudClosed, HudCoordinator, HudStale
+from mangohud.observations import TimedValue, fresh_value
 from report import collector as report_collector
 from report import client as report_client
 
@@ -99,6 +111,10 @@ _AUDIO_POLL_S = 4
 _NIGHT_TICK_S = 30  # how often the night-mode clock checks for a schedule-edge crossing
 _SHUTDOWN_DRAIN_TIMEOUT_S = 12.0
 _RPC_CONTEXT_UNSET = object()
+_monotonic = time.monotonic
+_HUD_OBSERVATION_MAX_AGE_S = 3.0
+_MIN_HUD_REFRESH_S = 1.0
+_HUD_RELOAD_MAX_ATTEMPTS = 4
 
 # "custom" = our TDP owns the rails, vs a named platform_profile mode.
 _CUSTOM_MODE = "custom"
@@ -198,6 +214,7 @@ DEFAULTS = {
     # User-defined launch variables (env NAME=VALUE / game args), reusable across
     # games. The library is global; the on/off is per-game (in Steam's string).
     "custom_launch_vars": [],
+    "hud_managed_path": None,
 }
 
 
@@ -332,6 +349,7 @@ class Plugin:
         self._fan_curves = FanCurveStore(
             os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "fan_curves.json")
         )
+        self._fan_apply_confirmed = False
         # Pantalla: panel color. Saturation is per-game (store), calibration global.
         # Applied via gamescope atoms; the backend is probe-gated (UI hidden if the
         # host has no gamescope display) so nothing fake is ever shown.
@@ -381,6 +399,22 @@ class Plugin:
         # HDR output on/off (gamescope). State lives in settings (hdr_enabled); gated to
         # HDR-capable panels with gamescope.
         self._hdr_backend = HdrBackend(run_gamescopectl)
+        # In-game performance overlay (MangoHud). Single global model; applied by
+        # writing ~/.config/MangoHud/presets.conf, which Steam reads per overlay level.
+        self._hud = HudStore(
+            os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "hud.json")
+        )
+        self._hud_home = (
+            getattr(decky, "DECKY_USER_HOME", None) or os.path.expanduser("~")
+        )
+        try:
+            hud_home_stat = os.stat(self._hud_home)
+            self._hud_owner = (hud_home_stat.st_uid, hud_home_stat.st_gid)
+        except OSError:
+            self._hud_owner = None
+        self._hud_managed_path = self._trusted_hud_path(
+            self._settings.get("hud_managed_path")
+        )
         self._power_reader = PowerReader()
         self._battery = BatteryReader()
         self._charge_limit = select_charge_limit(self._device)
@@ -436,11 +470,33 @@ class Plugin:
         self._chip = read_cpu_model() if not self._device.is_generic else None
         self._os_name = osinfo.read_os_name()
         self._current_appid = None
+        self._current_game_name = None  # display name of the running game (for the HUD)
+        # HUD (MangoHud) plugin-state metrics: the presets.conf path + the shown pdc
+        # ids, cached by _apply_hud so the auto loop can re-bake fresh values each tick
+        # without re-scanning /proc. _pdc_written = the last baked values, so a tick
+        # whose values are unchanged skips the presets.conf rewrite (no churn).
+        self._pdc_presets_path = None
+        self._hud_generation = 0
+        self._hud_shutdown = False
+        self._hud_coordinator = HudCoordinator(self._hud_generation)
+        self._hud_sessions = ()
+        self._hud_reload_pending = ()
+        self._hud_reload_attempt = 0
+        self._hud_reload_retry_at = 0.0
+        self._hud_conflict = None
+        self._hud_last_publish_at = float("-inf")
+        self._pdc_active_ids = []
+        self._pdc_locale = "es"
+        self._pdc_written = {}
+        self._pdc_preview_values = {}
+        self._pdc_refresh_failed = False
+        self._hud_apply_status = None
         self._tdp_generation = 0
         self._tdp_targets = None
         self._tdp_observation = TdpObservation(
             readable=bool(getattr(self._tdp_backend, "readback", True)),
         )
+        self._tdp_observation_at = float("-inf")
         self._tdp_reconcile_memory = ReconcileMemory()
         self._tdp_status = (
             "settling" if self._tdp_backend.supported else "unsupported"
@@ -451,8 +507,8 @@ class Plugin:
         self._tdp_guard_task = None
         self._tdp_shutdown = False
         self._lifecycle = LifecycleManager(apply_cb=self._reapply_all,
-                                           reassert_cb=self._reassert_tdp_only,
-                                           event_cb=self._log_lifecycle_event)
+                                            reassert_cb=self._reassert_tdp_only,
+                                            event_cb=self._log_lifecycle_event)
         self._auto_task = None
         self._auto_setpoint = None
         # Audio EQ output-route watcher: last applied route + its loop task.
@@ -601,8 +657,8 @@ class Plugin:
                 await self._offload_call(self._restore_power_handoff)
             )
             if hasattr(self, "_tdp_backend"):
-                self._tdp_observation = await self._offload_call(
-                    self._observe_tdp_sync
+                self._remember_tdp_observation(
+                    await self._offload_call(self._observe_tdp_sync)
                 )
                 self._tdp_targets = None
                 self._tdp_status = "unverifiable" if released else "rejected"
@@ -712,6 +768,11 @@ class Plugin:
             except Exception:  # noqa: BLE001
                 return {}
 
+        hud_diagnostics = await _safe(
+            self._hud_call(
+                lambda: self._hud_report_diagnostics(self._hud_state())
+            )
+        )
         states = {
             "device": await _safe(self.get_device()),
             "tdp": await _safe(self.get_tdp_state()),
@@ -736,6 +797,7 @@ class Plugin:
             "eco": await _safe(self.get_eco_state()),
             "audio": await _safe(self.get_audio_state()),
             "audio_diag": await _safe(self._offload_call(self._audio.diagnostics)),
+            "hud_diagnostics": hud_diagnostics,
             # Detected tools + current game + the frontend's running-game snapshot.
             "launch": self._launch_report_state(context),
         }
@@ -773,6 +835,59 @@ class Plugin:
             home=home,
             hostname=hostname,
         )
+
+    def _hud_report_diagnostics(self, state) -> dict:
+        state = state if isinstance(state, dict) else {}
+        model = state.get("model")
+        model = model if isinstance(model, dict) else {}
+        raw_items = model.get("items")
+        items = (
+            [item for item in raw_items if isinstance(item, dict)]
+            if isinstance(raw_items, list)
+            else []
+        )
+        metric_ids = [
+            item.get("id")
+            for item in items
+            if item.get("kind") == "metric"
+            and item.get("id") in mangohud_config.METRIC_CATALOG
+        ]
+        values = state.get("values")
+        values = values if isinstance(values, dict) else {}
+        conflict = getattr(self, "_hud_conflict", None)
+        conflict = conflict if isinstance(conflict, dict) else {}
+        return {
+            "capability": state.get("capability"),
+            "apply_status": state.get("applyStatus"),
+            "enabled": bool(model.get("enabled")),
+            "layout": model.get("layout"),
+            "position": model.get("position"),
+            "item_count": len(items),
+            "metric_ids": metric_ids,
+            "pdc_metric_ids": [
+                metric_id for metric_id in metric_ids
+                if metric_id in mangohud_config.PDC_IDS
+            ],
+            "live_value_ids": sorted(
+                metric_id for metric_id in values
+                if metric_id in mangohud_config.PDC_IDS
+            ),
+            "custom_text_count": sum(item.get("kind") == "text" for item in items),
+            "separator_count": sum(item.get("kind") == "separator" for item in items),
+            "typography": {
+                "font_size": model.get("fontSize"),
+                "font_size_secondary": model.get("fontSizeSecondary"),
+                "font_scale": model.get("fontScale"),
+                "no_small_font": bool(model.get("noSmallFont")),
+            },
+            "managed_path_present": bool(getattr(self, "_hud_managed_path", None)),
+            "managed_session_count": len(getattr(self, "_hud_sessions", ())),
+            "reload_pending_count": len(getattr(self, "_hud_reload_pending", ())),
+            "reload_attempt": int(getattr(self, "_hud_reload_attempt", 0)),
+            "conflict": bool(state.get("conflict") or conflict),
+            "conflict_reason": conflict.get("reason"),
+            "shutdown": bool(getattr(self, "_hud_shutdown", False)),
+        }
 
     def _display_diagnostics(self, context) -> dict:
         diagnostics = getattr(self._color_backend, "diagnostics", None)
@@ -1251,8 +1366,8 @@ class Plugin:
             released = bool(
                 await self._offload_call(self._restore_power_handoff)
             )
-            self._tdp_observation = await self._offload_call(
-                self._observe_tdp_sync
+            self._remember_tdp_observation(
+                await self._offload_call(self._observe_tdp_sync)
             )
             self._tdp_targets = None
             self._tdp_status = "unverifiable" if released else "rejected"
@@ -1406,6 +1521,7 @@ class Plugin:
         if not self._module_enabled("fanControl"):
             # Fan control disabled: hand the fans back to firmware auto, never drive.
             self._restore_fans_safe()
+            self._fan_apply_confirmed = False
             return True
         try:
             profile = self._fan_curves.effective(self._current_appid)
@@ -1422,8 +1538,11 @@ class Plugin:
                 res = self._fan_ctrl.apply_curve_all(profile["points"])
             # A malformed response (None / {} / no "ok") is not success, so reset_ok
             # can't ride a bad re-apply.
-            return bool(res.get("ok")) if isinstance(res, dict) else False
+            confirmed = bool(res.get("ok")) if isinstance(res, dict) else False
+            self._fan_apply_confirmed = confirmed
+            return confirmed
         except Exception:  # noqa: BLE001
+            self._fan_apply_confirmed = False
             return False
 
     def _adaptive_curve_points(self, appid):
@@ -1956,6 +2075,11 @@ class Plugin:
         while True:
             try:
                 await asyncio.sleep(2)
+                # Piggyback the HUD plugin-state refresh on this existing tick (no new
+                # loop): re-bake presets.conf and reload mangoapp when a shown value
+                # changes. Runs regardless of the auto-TDP gating below (it must update
+                # on desktop / manual / eco too). No-op when no pdc metric is shown.
+                self._offer_pdc_refresh()
                 # Auto-TDP is a per-GAME dynamic control: don't adjust the global
                 # setpoint from desktop/loading activity. Idle → drop stale window
                 # so re-entry into a game starts homogeneous.
@@ -2447,6 +2571,11 @@ class Plugin:
             }
         return TdpObservation(readable=True, surfaces=surfaces)
 
+    def _remember_tdp_observation(self, observation):
+        self._tdp_observation = observation
+        self._tdp_observation_at = _monotonic()
+        return observation
+
     def _apply_tdp_targets(self, target, on_ac):
         apply_targets = getattr(self._tdp_backend, "apply_targets", None)
         if callable(apply_targets):
@@ -2507,7 +2636,7 @@ class Plugin:
                 self._tdp_status = "rejected"
                 self._tdp_reason = "firmware_mode_rejected"
                 self._tdp_targets = None
-                self._tdp_observation = self._observe_tdp_sync()
+                self._remember_tdp_observation(self._observe_tdp_sync())
                 result = TdpResult(
                     logical_watts,
                     self._tdp_backend.read_applied(),
@@ -2525,7 +2654,7 @@ class Plugin:
             self._tdp_status = "unverifiable"
             self._tdp_reason = "firmware_mode"
             self._tdp_targets = None
-            self._tdp_observation = self._observe_tdp_sync()
+            self._remember_tdp_observation(self._observe_tdp_sync())
             result = TdpResult(
                 logical_watts,
                 self._tdp_backend.read_applied(),
@@ -2599,7 +2728,7 @@ class Plugin:
             ),
         )
         self._tdp_targets = targets
-        self._tdp_observation = after
+        self._remember_tdp_observation(after)
         self._tdp_reconcile_memory = outcome.memory
         self._tdp_status = outcome.status
         self._tdp_reason = outcome.reason
@@ -2715,7 +2844,7 @@ class Plugin:
         if command.generation != self._tdp_generation:
             return
         self._tdp_targets = targets
-        self._tdp_observation = observation
+        self._remember_tdp_observation(observation)
         self._tdp_reconcile_memory = outcome.memory
         self._tdp_status = outcome.status
         self._tdp_reason = outcome.reason
@@ -2928,6 +3057,8 @@ class Plugin:
         self._reapply_color()
         self._reapply_audio()  # self-offloading; no-op when the EQ is disabled
         self._reapply_controller()  # diff-gated; no-op unless the effective remap changed
+        # Re-assert the overlay when mangoapp comes up on its independent serial worker.
+        self._schedule_hud_apply()
 
     # ---- Battery + charge limit --------------------------------------------
     def _record_charge_limit_apply(self, action, requested, ok, attempts) -> None:
@@ -3011,21 +3142,25 @@ class Plugin:
         lo, hi = self._charge_limit.range()
         enabled = bool(self._settings.get("charge_limit_enabled", False))
         percent = int(self._settings.get("charge_limit_percent", 80))
+        applied_percent = None
         fixed = getattr(self._charge_limit, "fixed_percent", None)
         if not self._charge_limit.adjustable and fixed is not None:
             # Fixed-cap backend (Lenovo conservation): report the firmware level so
             # the UI can state it explicitly (e.g. "caps at 80%").
             percent = fixed
+            applied_percent = fixed
         elif enabled and self._charge_limit.supported and self._charge_limit.adjustable:
             # report what the firmware actually holds (it may clamp our write).
             actual = self._charge_limit.get()
             if actual is not None:
                 percent = actual
+                applied_percent = actual
         return {
             "supported": self._charge_limit.supported,
             "adjustable": self._charge_limit.adjustable,
             "enabled": enabled,
             "percent": percent,
+            "applied_percent": applied_percent,
             "min": lo,
             "max": hi,
             "last_apply": (
@@ -3257,7 +3392,699 @@ class Plugin:
         self._settings["eco_enabled"] = bool(enabled)
         self._save()
         self._reapply_all()
+        await self._drain_offloaded()
         return self._eco_state()
+
+    # ---- HUD (MangoHud overlay) --------------------------------------------
+    def _detect_hud(self) -> dict:
+        sessions = (
+            mangohud_detect.detect_sessions(
+                home=self._hud_home,
+                uid=self._hud_owner[0],
+            )
+            if self._hud_owner is not None
+            else ()
+        )
+        supported = tuple(
+            session
+            for session in sessions
+            if session.presets_supported
+            and self._trusted_hud_path(session.presets_path) is not None
+        )
+        paths = {self._trusted_hud_path(session.presets_path) for session in supported}
+        paths.discard(None)
+        ambiguous = len(paths) > 1
+        presets_path = (
+            next(iter(paths))
+            if len(paths) == 1
+            else mangohud_detect.presets_path({}, self._hud_home)
+        )
+        return {
+            "running": bool(sessions),
+            "supported": bool(supported) and not ambiguous,
+            "presetsPath": presets_path,
+            "sessions": supported,
+            "ambiguous": ambiguous,
+        }
+
+    def _trusted_hud_path(self, path):
+        if not isinstance(path, str) or not path:
+            return None
+        home = os.path.realpath(self._hud_home)
+        candidate = os.path.realpath(path)
+        try:
+            if os.path.commonpath((home, candidate)) != home or candidate == home:
+                return None
+        except ValueError:
+            return None
+        return candidate
+
+    def _remember_hud_path(self, path) -> None:
+        safe_path = self._trusted_hud_path(path)
+        if path is not None and safe_path is None:
+            raise OSError("MangoHud presets path is outside the trusted user home")
+        previous = self._settings.get("hud_managed_path")
+        if previous == safe_path:
+            self._hud_managed_path = safe_path
+            return
+        self._settings["hud_managed_path"] = safe_path
+        try:
+            self._save()
+        except Exception as exc:
+            self._settings["hud_managed_path"] = previous
+            raise OSError("Could not persist the managed MangoHud presets path") from exc
+        self._hud_managed_path = safe_path
+
+    def _hud_state(self, *, cap=None, model=None) -> dict:
+        cap = self._detect_hud() if cap is None else cap
+        model = self._hud.load() if model is None else model
+        capability = (
+            "ambiguous" if cap.get("ambiguous")
+            else "ready" if cap["supported"]
+            else "unsupported" if cap["running"]
+            else "inactive"
+        )
+        if cap.get("ambiguous"):
+            apply_status = "ambiguous"
+        elif not model["enabled"]:
+            apply_status = (
+                self._hud_apply_status
+                if self._hud_apply_status in ("conflict", "failed", "pending")
+                else "disabled"
+            )
+        elif capability == "inactive":
+            apply_status = "pending"
+        elif capability == "unsupported":
+            apply_status = "unavailable"
+        else:
+            apply_status = self._hud_apply_status or "pending"
+        return {
+            "capability": capability,
+            "applyStatus": apply_status,
+            "conflict": (
+                {
+                    "path": self._hud_conflict["path"],
+                    "expectedHash": self._hud_conflict["expectedHash"],
+                    "actualHash": self._hud_conflict["actualHash"],
+                }
+                if self._hud_conflict is not None
+                else None
+            ),
+            "model": model,
+            "values": dict(self._pdc_preview_values),
+        }
+
+    def _record_hud_conflict(self, path, conflict) -> None:
+        safe_path = self._trusted_hud_path(path)
+        shown_path = (
+            os.path.relpath(safe_path, self._hud_home)
+            if safe_path is not None
+            else "presets.conf"
+        )
+        self._hud_conflict = {
+            "managedPath": safe_path,
+            "path": shown_path,
+            "reason": conflict.reason,
+            "expectedHash": conflict.expected_hash,
+            "actualHash": conflict.actual_hash,
+        }
+        self._hud_apply_status = "conflict"
+
+    def _request_hud_reload(self, snapshot, *, reset_backoff) -> bool:
+        snapshot = tuple(snapshot)
+        if reset_backoff:
+            self._hud_reload_attempt = 0
+        elif self._hud_reload_attempt >= _HUD_RELOAD_MAX_ATTEMPTS:
+            self._hud_reload_pending = ()
+            self._hud_reload_retry_at = 0.0
+            return False
+        result = reload_sessions(snapshot)
+        pending = set(result.pending)
+        self._hud_reload_pending = tuple(
+            session
+            for session in snapshot
+            if (session.pid, session.starttime) in pending
+            and mangohud_detect.session_alive(session)
+        )
+        complete = (
+            bool(snapshot)
+            and not self._hud_reload_pending
+            and len(result.requested) == len(snapshot)
+        )
+        if complete:
+            self._hud_reload_attempt = 0
+            self._hud_reload_retry_at = 0.0
+            return True
+        if self._hud_reload_pending:
+            delays = (1.0, 2.0, 4.0)
+            self._hud_reload_attempt += 1
+            if self._hud_reload_attempt >= _HUD_RELOAD_MAX_ATTEMPTS:
+                self._hud_reload_pending = ()
+                self._hud_reload_retry_at = 0.0
+            else:
+                delay = delays[min(self._hud_reload_attempt - 1, len(delays) - 1)]
+                self._hud_reload_retry_at = _monotonic() + delay
+        return False
+
+    def _reload_mangoapp(self, sessions=None) -> bool:
+        snapshot = tuple(self._hud_sessions if sessions is None else sessions)
+        return self._request_hud_reload(snapshot, reset_backoff=True)
+
+    def _retry_pending_hud_reload(self) -> bool:
+        if not self._hud_reload_pending:
+            return True
+        if _monotonic() < self._hud_reload_retry_at:
+            return False
+        return self._request_hud_reload(
+            self._hud_reload_pending,
+            reset_backoff=False,
+        )
+
+    def _apply_hud(self, *, cap=None, model=None, replace_conflict=False) -> None:
+        """Reflect the saved model to presets.conf (Steam reads it per overlay level).
+        pdc plugin-state metrics are baked into their `custom_text` line as
+        "<label> <value>": Steam's mangoapp does not run `exec` commands (only the label
+        would show), so we bake a value snapshot here (it refreshes on re-apply / the
+        auto loop, then reloaded through mangohudctl). We never write Steam's own live
+        config. When off: clear presets.conf. No-op when the overlay isn't supported."""
+        cap = self._detect_hud() if cap is None else cap
+        model = self._hud.load() if model is None else model
+        if not model["enabled"]:
+            managed_path = self._hud_managed_path or cap["presetsPath"]
+            self._pdc_presets_path = None
+            self._pdc_active_ids = []
+            self._pdc_written = {}
+            self._pdc_preview_values = {}
+            try:
+                cleared = clear_presets(
+                    managed_path,
+                    owner=self._hud_owner,
+                    trusted_root=self._hud_home,
+                    raise_conflict=True,
+                )
+            except mangohud_ownership.HudOwnershipConflict as conflict:
+                self._record_hud_conflict(managed_path, conflict)
+                return
+            if not cleared:
+                self._hud_apply_status = "failed"
+                return
+            self._hud_conflict = None
+            try:
+                self._remember_hud_path(None)
+            except OSError:
+                self._hud_apply_status = "failed"
+                return
+            if (
+                cap["supported"]
+                and cap["running"]
+                and not self._reload_mangoapp(cap["sessions"])
+            ):
+                self._hud_apply_status = "pending"
+            else:
+                self._hud_apply_status = "disabled"
+            self._hud_sessions = ()
+            return
+        if not cap["supported"]:
+            self._pdc_active_ids = []
+            self._pdc_preview_values = {}
+            self._hud_apply_status = (
+                "ambiguous"
+                if cap.get("ambiguous")
+                else "pending" if not cap["running"] else "unavailable"
+            )
+            return
+        if not all(
+            mangohud_detect.session_alive(session)
+            for session in cap["sessions"]
+        ):
+            self._pdc_active_ids = []
+            self._pdc_preview_values = {}
+            self._hud_apply_status = "pending"
+            return
+        # Cache the presets path + active ids for the auto loop's re-bake (no /proc rescan).
+        if (
+            self._hud_managed_path is not None
+            and self._hud_managed_path != cap["presetsPath"]
+        ):
+            try:
+                cleared = clear_presets(
+                    self._hud_managed_path,
+                    owner=self._hud_owner,
+                    trusted_root=self._hud_home,
+                    raise_conflict=True,
+                )
+            except mangohud_ownership.HudOwnershipConflict as conflict:
+                self._record_hud_conflict(self._hud_managed_path, conflict)
+                return
+            if not cleared:
+                self._hud_apply_status = "failed"
+                return
+            try:
+                self._remember_hud_path(None)
+            except OSError:
+                self._hud_apply_status = "failed"
+                return
+        self._pdc_presets_path = cap["presetsPath"]
+        self._hud_sessions = tuple(cap["sessions"])
+        self._pdc_locale = model.get("locale", "es")
+        self._pdc_active_ids = mangohud_config.enabled_pdc_ids(model)
+        values = self._pdc_values()
+        self._pdc_preview_values = values
+        try:
+            apply_hud(
+                model,
+                cap["presetsPath"],
+                values,
+                owner=self._hud_owner,
+                replace_conflict=replace_conflict,
+                trusted_root=self._hud_home,
+            )
+        except mangohud_ownership.HudOwnershipConflict as conflict:
+            self._record_hud_conflict(cap["presetsPath"], conflict)
+            return
+        except OSError:
+            self._pdc_written = {}
+            self._hud_apply_status = "failed"
+            return
+        try:
+            self._remember_hud_path(cap["presetsPath"])
+        except OSError:
+            clear_presets(
+                cap["presetsPath"],
+                owner=self._hud_owner,
+                trusted_root=self._hud_home,
+            )
+            self._pdc_written = {}
+            self._hud_apply_status = "failed"
+            return
+        self._pdc_written = values
+        self._hud_last_publish_at = _monotonic()
+        self._hud_conflict = None
+        if self._reload_mangoapp(cap["sessions"]):
+            self._hud_apply_status = "reload_requested"
+        else:
+            self._hud_apply_status = "written"
+
+    # ---- HUD plugin-state metrics (pdc_*, baked into custom_text) -----------
+    def _read_pdc_sources(self) -> dict:
+        """Pre-read the sysfs-backed sources the active pdc metrics need (power, fans,
+        battery, charge limit, GPU clock). Called off the event loop by the auto tick so
+        the periodic refresh never blocks it; only reads what the shown metrics require."""
+        active = set(self._pdc_active_ids)
+        src = {}
+
+        def observed(reader, confirmed):
+            try:
+                value = reader()
+                is_confirmed = bool(confirmed(value))
+            except Exception:  # noqa: BLE001
+                return TimedValue(None, _monotonic(), False)
+            return TimedValue(value, _monotonic(), is_confirmed)
+
+        if "pdc_power" in active:
+            src["power"] = observed(
+                self._power_reader.read,
+                lambda value: isinstance(value.get("watts"), (int, float)),
+            )
+        if "pdc_fan_rpm" in active:
+            src["fans"] = observed(
+                self._read_fans,
+                lambda value: any(
+                    isinstance(fan.get("rpm"), (int, float))
+                    for fan in value.get("fans", [])
+                ),
+            )
+        if "pdc_bat_health" in active:
+            src["battery"] = observed(
+                self._battery.read,
+                lambda value: isinstance(value.get("health_percent"), (int, float)),
+            )
+        if "pdc_charge" in active:
+            src["charge"] = observed(
+                self._charge_limit_state,
+                lambda value: (
+                    not value.get("enabled")
+                    or isinstance(value.get("applied_percent"), (int, float))
+                ),
+            )
+        if "pdc_gpu_clock" in active:
+            src["gpu_clock"] = observed(
+                self._gpu_clock_state,
+                lambda value: (
+                    not value.get("manual")
+                    or (
+                        isinstance(value.get("applied_min"), (int, float))
+                        and isinstance(value.get("applied_max"), (int, float))
+                    )
+                ),
+            )
+        if "pdc_tdp" in active and self._tdp_backend.supported:
+            if getattr(self._tdp_backend, "blocking", False):
+                observation = self._tdp_observation
+                src["tdp"] = TimedValue(
+                    observation,
+                    self._tdp_observation_at,
+                    bool(observation.readable),
+                )
+            else:
+                src["tdp"] = observed(
+                    self._observe_tdp_sync,
+                    lambda value: bool(value.readable),
+                )
+        return src
+
+    def _fresh_pdc_source(self, extras, key, fallback):
+        if key not in extras:
+            return fallback()
+        sample = extras[key]
+        if not isinstance(sample, TimedValue):
+            return sample
+        value = fresh_value(
+            sample,
+            _monotonic(),
+            _HUD_OBSERVATION_MAX_AGE_S,
+        )
+        return {} if value is None else value
+
+    def _pdc_snapshot(self, active_ids, extras=None) -> dict:
+        """Gather the live plugin state the active pdc metrics need. Only computes what
+        the shown metrics require; the sysfs-backed sources come pre-read in `extras`
+        (falling back to a direct read for the one-off seed). Honest: unavailable sources
+        stay None and format to a dash."""
+        extras = extras or {}
+        appid = self._current_appid
+        snap = {}
+        if self._tdp_backend.supported:
+            if "pdc_eco" in active_ids:
+                snap["eco"] = bool(self._settings.get("eco_enabled"))
+            if "pdc_tdp" in active_ids:
+                snap["auto"] = self._tdp_profiles.auto_tdp(appid)
+                observation = self._fresh_pdc_source(
+                    extras,
+                    "tdp",
+                    lambda: None,
+                )
+                primary = (
+                    observation.surfaces.get(self._tdp_backend.name, {})
+                    if getattr(observation, "readable", False)
+                    else {}
+                )
+                primary_rail = getattr(self._tdp_backend, "primary_rail", "pl1")
+                reading = primary.get(primary_rail)
+                snap["applied"] = reading.applied_w if reading is not None else None
+            if "pdc_auto_tdp" in active_ids:
+                snap["auto_tdp"] = self._tdp_profiles.auto_tdp(appid)
+            if "pdc_tdp_learn" in active_ids:
+                snap["learn"] = self._tdp_learned_info(appid)
+        if self._fan_ctrl.supported and "pdc_fan" in active_ids:
+            prof = self._fan_curves.effective(appid)
+            snap["fan_mode"] = prof.get("preset")
+            snap["fan_confirmed"] = self._fan_apply_confirmed
+            snap["fan_learning"] = (prof.get("preset") == "adaptive"
+                                    and not self._fan_suggestion(appid)["available"])
+        if "pdc_fan_rpm" in active_ids:
+            fans = self._fresh_pdc_source(extras, "fans", self._read_fans)
+            snap["fan_rpms"] = [
+                f.get("rpm") for f in fans.get("fans", []) if f.get("rpm") is not None
+            ]
+        if "pdc_profile" in active_ids:
+            snap["appid"] = appid
+            snap["profile_name"] = self._current_game_name if appid is not None else None
+        if "pdc_power" in active_ids:
+            power = self._fresh_pdc_source(
+                extras,
+                "power",
+                self._power_reader.read,
+            )
+            snap["watts"] = power.get("watts")
+        if "pdc_charge" in active_ids:
+            cl = self._fresh_pdc_source(
+                extras,
+                "charge",
+                self._charge_limit_state,
+            )
+            snap["charge_supported"] = bool(cl.get("supported"))
+            snap["charge_enabled"] = bool(cl.get("enabled"))
+            snap["charge_confirmed"] = isinstance(
+                cl.get("applied_percent"),
+                (int, float),
+            )
+            snap["charge_percent"] = cl.get("applied_percent")
+        if "pdc_bat_health" in active_ids:
+            bat = self._fresh_pdc_source(
+                extras,
+                "battery",
+                self._battery.read,
+            )
+            snap["bat_health"] = bat.get("health_percent")
+        if "pdc_smt" in active_ids:
+            snap["smt_supported"] = self._smt.supported
+            snap["smt_on"] = self._smt.enabled() if self._smt.supported else None
+        if "pdc_boost" in active_ids:
+            snap["boost_supported"] = self._boost.supported
+            snap["boost_on"] = self._boost.enabled() if self._boost.supported else None
+        if "pdc_cores" in active_ids:
+            snap["cores_active"] = self._cores.active() if self._cores.supported else None
+            snap["cores_max"] = self._cores.max_cores
+        if "pdc_gpu_clock" in active_ids:
+            gc = self._fresh_pdc_source(
+                extras,
+                "gpu_clock",
+                self._gpu_clock_state,
+            )
+            snap["gpu_clock_supported"] = bool(gc.get("supported"))
+            snap["gpu_clock_manual"] = bool(gc.get("manual"))
+            snap["gpu_clock_min"] = gc.get("applied_min")
+            snap["gpu_clock_max"] = gc.get("applied_max")
+            snap["gpu_clock_confirmed"] = (
+                isinstance(gc.get("applied_min"), (int, float))
+                and isinstance(gc.get("applied_max"), (int, float))
+            )
+        if "pdc_model" in active_ids:
+            snap["model_name"] = self._device.display_name
+        return snap
+
+    def _pdc_values(self, extras=None) -> dict:
+        """The baked value string for each active pdc metric (id -> value; the label is
+        emitted separately in config.py). Reads the sysfs sources it needs (or reuses a
+        pre-read `extras`); honest dash for anything unavailable. Empty when no pdc
+        metric is shown."""
+        active = self._pdc_active_ids
+        if not active:
+            return {}
+        if extras is None:
+            extras = self._read_pdc_sources()
+        snap = self._pdc_snapshot(active, extras)
+        return {
+            mid: mangohud_pdc.render(mid, snap, self._pdc_locale)
+            or mangohud_pdc.DASH
+            for mid in active
+        }
+
+    def _refresh_pdc_metrics_sync(self) -> None:
+        if self._hud_reload_pending:
+            self._hud_apply_status = (
+                "reload_requested"
+                if self._retry_pending_hud_reload()
+                else "written"
+            )
+        if not self._pdc_active_ids or not self._pdc_presets_path:
+            return
+        extras = self._read_pdc_sources()
+        values = self._pdc_values(extras)
+        if values == self._pdc_written:
+            return
+        now = _monotonic()
+        if now - self._hud_last_publish_at < _MIN_HUD_REFRESH_S:
+            return
+        model = self._hud.load()
+        if model["enabled"]:
+            self._pdc_preview_values = values
+            try:
+                apply_hud(
+                    model,
+                    self._pdc_presets_path,
+                    values,
+                    owner=self._hud_owner,
+                    trusted_root=self._hud_home,
+                )
+            except mangohud_ownership.HudOwnershipConflict as conflict:
+                self._record_hud_conflict(self._pdc_presets_path, conflict)
+                return
+            except OSError:
+                self._hud_apply_status = "failed"
+                raise
+            if self._reload_mangoapp():
+                self._pdc_written = values
+                self._hud_last_publish_at = now
+                self._hud_apply_status = "reload_requested"
+            else:
+                self._pdc_written = values
+                self._hud_last_publish_at = now
+                self._hud_apply_status = "written"
+
+    async def _refresh_pdc_metrics(self) -> None:
+        """Refresh changed pdc values through the isolated HUD worker."""
+        if (
+            not self._hud_reload_pending
+            and (not self._pdc_active_ids or not self._pdc_presets_path)
+        ):
+            return
+        if self._hud_shutdown:
+            return
+        future = self._hud_coordinator.submit_latest(
+            self._hud_generation,
+            self._refresh_pdc_metrics_sync,
+        )
+        try:
+            await asyncio.wrap_future(future, loop=asyncio.get_running_loop())
+        except (HudClosed, HudStale):
+            if not self._hud_shutdown:
+                raise
+
+    def _finish_offered_pdc_refresh(self, future) -> None:
+        try:
+            future.result()
+        except (FutureCancelledError, HudClosed, HudStale):
+            return
+        except Exception as error:  # noqa: BLE001
+            if not self._pdc_refresh_failed:
+                decky.logger.warning(
+                    "HUD metric refresh failed: %s",
+                    type(error).__name__,
+                )
+            self._pdc_refresh_failed = True
+            return
+        if self._pdc_refresh_failed:
+            decky.logger.info("HUD metric refresh recovered")
+        self._pdc_refresh_failed = False
+
+    def _offer_pdc_refresh(self) -> None:
+        if (
+            self._hud_shutdown
+            or (
+                not self._hud_reload_pending
+                and (not self._pdc_active_ids or not self._pdc_presets_path)
+            )
+        ):
+            return
+        future = self._hud_coordinator.submit_latest(
+            self._hud_generation,
+            self._refresh_pdc_metrics_sync,
+        )
+        future.add_done_callback(self._finish_offered_pdc_refresh)
+
+    async def _hud_call(self, fn):
+        if self._hud_shutdown or getattr(self, "_shutting_down", False):
+            raise RuntimeError("plugin_shutting_down")
+        future = self._hud_coordinator.call(self._hud_generation, fn)
+        try:
+            return await asyncio.wrap_future(
+                future,
+                loop=asyncio.get_running_loop(),
+            )
+        except (HudClosed, HudStale) as error:
+            raise RuntimeError("plugin_shutting_down") from error
+
+    def _schedule_hud_apply(self) -> None:
+        if self._hud_shutdown:
+            return
+        self._hud_coordinator.submit_latest(
+            self._hud_generation,
+            self._apply_hud,
+        )
+
+    async def get_hud_state(self) -> dict:
+        self._init()
+        def refresh_pending_state():
+            model = self._hud.load()
+            if model["enabled"] and self._hud_apply_status in (
+                "pending",
+                "unavailable",
+                "ambiguous",
+            ):
+                cap = self._detect_hud()
+                if cap["supported"]:
+                    self._apply_hud(cap=cap, model=model)
+                return self._hud_state(cap=cap, model=model)
+            return self._hud_state(model=model)
+
+        return await self._hud_call(refresh_pending_state)
+
+    def _apply_hud_state(self, model) -> dict:
+        cap = self._detect_hud()
+        self._apply_hud(cap=cap, model=model)
+        return self._hud_state(cap=cap, model=model)
+
+    def _save_apply_hud_state(self, model) -> dict:
+        return self._apply_hud_state(self._hud.save(model))
+
+    async def set_hud_config(self, model: dict) -> dict:
+        self._init()
+        return await self._hud_call(lambda: self._save_apply_hud_state(model))
+
+    async def set_hud_enabled(self, enabled: bool) -> dict:
+        self._init()
+        def save_apply_state():
+            model = self._hud.load()
+            model["enabled"] = bool(enabled)
+            return self._save_apply_hud_state(model)
+        return await self._hud_call(save_apply_state)
+
+    async def reset_hud(self) -> dict:
+        self._init()
+        return await self._hud_call(
+            lambda: self._save_apply_hud_state(mangohud_config.DEFAULT_MODEL)
+        )
+
+    async def reload_hud(self) -> dict:
+        """Re-bake presets.conf now with fresh pdc values and reload mangoapp."""
+        self._init()
+        return await self._hud_call(
+            lambda: self._apply_hud_state(self._hud.load())
+        )
+
+    def _resolve_hud_conflict_sync(self, action) -> dict:
+        if action not in ("keep_external", "use_pdc"):
+            raise ValueError("Unknown HUD conflict action")
+        conflict = self._hud_conflict
+        if conflict is None or conflict["managedPath"] is None:
+            return self._hud_state()
+        path = conflict["managedPath"]
+        if action == "keep_external":
+            model = self._hud.load()
+            model["enabled"] = False
+            model = self._hud.save(model)
+            mangohud_ownership.relinquish_managed(
+                path,
+                trusted_root=self._hud_home,
+            )
+            self._remember_hud_path(None)
+            self._pdc_presets_path = None
+            self._hud_sessions = ()
+            self._hud_reload_pending = ()
+            self._pdc_active_ids = []
+            self._pdc_written = {}
+            self._pdc_preview_values = {}
+            self._hud_conflict = None
+            self._hud_apply_status = "disabled"
+            return self._hud_state(model=model)
+
+        cap = self._detect_hud()
+        if not cap["supported"] or cap["presetsPath"] != path:
+            self._hud_apply_status = (
+                "ambiguous" if cap.get("ambiguous") else "pending"
+            )
+            return self._hud_state(cap=cap)
+        model = self._hud.load()
+        self._apply_hud(cap=cap, model=model, replace_conflict=True)
+        return self._hud_state(cap=cap, model=model)
+
+    async def resolve_hud_conflict(self, action: str) -> dict:
+        self._init()
+        return await self._hud_call(
+            lambda: self._resolve_hud_conflict_sync(action)
+        )
 
     def _cpu_state(self) -> dict:
         self._ensure_cpu_coordinator()
@@ -4310,7 +5137,7 @@ class Plugin:
             else:
                 return  # gamescope never came up (desktop) — nothing to apply
             for i in range(reasserts):
-                self._reapply_color()
+                await self._offload_call(self._reapply_color_sync)
                 self._reapply_hdr()
                 if i < reasserts - 1:
                     await asyncio.sleep(reassert_interval)
@@ -4595,7 +5422,9 @@ class Plugin:
         return b.read_applied()
 
     async def _read_tdp_observation(self):
-        return await self._offload_call(self._observe_tdp_sync)
+        return self._remember_tdp_observation(
+            await self._offload_call(self._observe_tdp_sync)
+        )
 
     async def get_tdp_state(self) -> dict:
         self._init()
@@ -5004,9 +5833,20 @@ class Plugin:
         self._tdp_profiles.create_game_from_global(appid)
         self._set_current_appid(appid)
 
-    async def set_current_game(self, appid) -> dict:
+    async def set_current_game(self, appid, name=None) -> dict:
         self._init()
-        self._set_current_appid(appid)
+        next_appid = str(appid) if appid is not None else None
+        next_name = str(name) if (appid is not None and name) else None
+        if (
+            next_appid is not None
+            and next_appid == self._current_appid
+            and next_name != self._current_game_name
+        ):
+            self._current_game_name = next_name
+            await self._refresh_pdc_metrics()
+            return await self.get_tdp_state()
+        self._set_current_appid(next_appid)
+        self._current_game_name = next_name
         self._reset_auto_windows()  # don't let the previous game's signal gate the new one
         self._reapply_ticks = 0        # fresh ~30 min re-fit window for the new game
         self._adaptive_applied = False  # re-arm the mid-session adaptive drive for this game
@@ -5026,6 +5866,21 @@ class Plugin:
         try:
             if getattr(self, "_fan_ctrl", None) is not None:
                 self._fan_ctrl.restore_auto()
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _restore_hud_safe(self) -> None:
+        try:
+            cap = self._detect_hud()
+            managed_path = self._hud_managed_path or cap["presetsPath"]
+            if clear_presets(
+                managed_path,
+                owner=self._hud_owner,
+                trusted_root=self._hud_home,
+            ):
+                self._remember_hud_path(None)
+                if cap["supported"] and cap["running"]:
+                    self._reload_mangoapp(cap["sessions"])
         except Exception:  # noqa: BLE001
             pass
 
@@ -5419,6 +6274,12 @@ class Plugin:
 
     def _prepare_shutdown(self) -> None:
         self._shutting_down = True
+        if not getattr(self, "_hud_shutdown", False):
+            self._hud_shutdown = True
+            self._hud_generation = int(getattr(self, "_hud_generation", 0)) + 1
+            coordinator = getattr(self, "_hud_coordinator", None)
+            if coordinator is not None:
+                coordinator.close(self._hud_generation, self._restore_hud_safe)
         self._cpu_shutdown = True
         self._gpu_shutdown = True
         self._next_cpu_generation()

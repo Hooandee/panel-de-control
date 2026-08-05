@@ -611,6 +611,7 @@ def capabilities_from(states: dict) -> dict:
     running = (launch.get("frontend") or {}).get("runningGame")
     running = running if isinstance(running, dict) else {}
     cpu_gpu = states.get("cpu_gpu_diagnostics") or {}
+    hud = states.get("hud_diagnostics") or {}
     cpu_frequency = cpu_gpu.get("cpu") or {}
     gpu_frequency = cpu_gpu.get("gpu") or {}
     deck_ppt = cpu_gpu.get("steamdeck_ppt") or {}
@@ -640,6 +641,9 @@ def capabilities_from(states: dict) -> dict:
             gpu_frequency.get("handoff_pending")
         ),
         "steamdeck_ppt_supported": bool(deck_ppt.get("supported")),
+        "hud_capability": hud.get("capability"),
+        "hud_apply_status": hud.get("apply_status"),
+        "hud_enabled": bool(hud.get("enabled")),
         "color_supported": bool(color.get("supported")),
         "controller_manager": ctl.get("manager"),
         "controller_kind": ctl.get("kind"),

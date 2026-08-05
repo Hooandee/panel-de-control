@@ -2,6 +2,7 @@
 import asyncio
 import importlib
 import sys
+import threading
 import types
 
 
@@ -88,6 +89,32 @@ def test_eco_on_forces_min_tdp_and_boost_off(tmp_path, monkeypatch):
     levels, _active, _ac = p._effective_levels(None)
     assert levels["pl1"] == 5 and levels["pl2"] == 5 and levels["pl3"] == 5
     assert boost.enabled() is False  # boost forced off
+
+
+def test_eco_rpc_waits_until_cpu_override_is_applied(tmp_path, monkeypatch):
+    boost = _FakeToggle(on=True)
+    p = _make_plugin(tmp_path, monkeypatch, boost=boost)
+    started = threading.Event()
+    release = threading.Event()
+
+    def block_apply_queue():
+        started.set()
+        release.wait(timeout=2)
+
+    p._submit_offloaded(p._ensure_apply_executor(), block_apply_queue)
+    assert started.wait(timeout=1)
+
+    async def exercise():
+        task = asyncio.create_task(p.set_eco(True, 55))
+        try:
+            await asyncio.sleep(0)
+            assert not task.done()
+        finally:
+            release.set()
+        await task
+
+    asyncio.run(exercise())
+    assert boost.enabled() is False
 
 
 def test_eco_off_restores(tmp_path, monkeypatch):

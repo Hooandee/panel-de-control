@@ -107,6 +107,20 @@ Remapeo de botones cooperando con el demonio que ya controla el mando en tu sist
 en Bazzite, InputPlumber en SteamOS), en lugar de pelearse con él. Incluye un aviso en Ajustes si
 detecta un conflicto de configuración. Esta parte está todavía en fase temprana.
 
+### HUD
+
+Editor del overlay de rendimiento de MangoHud integrado en el panel. Permite elegir y ordenar todo
+el catálogo de métricas disponible, agrupar GPU, CPU y batería como las representa MangoHud, añadir
+texto, separadores y espacios, aplicar presets y ajustar posición, tipografía, colores, opacidad y
+espaciado con una previsualización inmediata. También puede mostrar valores propios de Panel de
+Control —TDP, Auto‑TDP, ventiladores, perfil, batería o frecuencia de GPU— usando solo lecturas reales;
+si una fuente no está disponible, se muestra `-`.
+
+La configuración se puede preparar sin un juego abierto: queda marcada como pendiente hasta que
+exista una instancia compatible de MangoHud. El panel distingue entre guardado y aplicado, verifica
+el archivo escrito y conserva cualquier `presets.conf` personal para restaurarlo al desactivar el
+HUD.
+
 ### Parámetros
 
 Gestiona las opciones de lanzamiento de cada juego sin pelearte con la sintaxis de Steam. La lista

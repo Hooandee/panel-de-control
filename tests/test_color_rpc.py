@@ -8,6 +8,7 @@ import asyncio
 import dataclasses
 import importlib
 import sys
+import threading
 import types
 
 
@@ -342,6 +343,37 @@ def test_display_reapply_reasserts_multiple_times(tmp_path, monkeypatch):
     asyncio.run(p._await_display_backend(
         attempts=2, interval=0, reasserts=4, reassert_interval=0))
     assert len(late.applied) == 4
+
+
+def test_display_reapply_waits_for_each_hardware_apply(tmp_path, monkeypatch):
+    late = _LateColorBackend(ready_after=0)
+    p, _ = _make_plugin(tmp_path, monkeypatch, color=late)
+    asyncio.run(p.set_saturation(150, "global", None))
+    asyncio.run(p._drain_offloaded())
+    late.applied.clear()
+    started = threading.Event()
+    release = threading.Event()
+    original_apply = late.apply
+
+    def blocked_apply(state):
+        started.set()
+        release.wait(timeout=2)
+        return original_apply(state)
+
+    monkeypatch.setattr(late, "apply", blocked_apply)
+
+    async def exercise():
+        task = asyncio.create_task(p._await_display_backend(
+            attempts=2, interval=0, reasserts=1, reassert_interval=0))
+        try:
+            assert await asyncio.to_thread(started.wait, 1)
+            assert not task.done()
+        finally:
+            release.set()
+        await task
+
+    asyncio.run(exercise())
+    assert len(late.applied) == 1
 
 
 def test_display_reapply_gives_up_without_gamescope(tmp_path, monkeypatch):
