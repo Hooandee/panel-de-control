@@ -3,9 +3,10 @@
 ## [0.33.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.32.0...panel-de-control-v0.33.0) (2026-08-05)
 
 
-### Features
+### Novedades / Features
 
-* in-game performance overlay (HUD) editor for MangoHud ([#248](https://github.com/Hooandee/panel-de-control/issues/248)) ([845c850](https://github.com/Hooandee/panel-de-control/commit/845c85069df832488f522286c9dd1012f0624906))
+* **ES:** Añade un editor Experimental del HUD de rendimiento dentro del juego basado en MangoHud: permite elegir y ordenar métricas, ajustar el diseño y los colores, previsualizar el resultado y recargar los cambios sin reiniciar el juego. Incluye métricas de Panel de Control y protege las configuraciones externas de MangoHud. ([#248](https://github.com/Hooandee/panel-de-control/issues/248)) ([845c850](https://github.com/Hooandee/panel-de-control/commit/845c85069df832488f522286c9dd1012f0624906))
+* **EN:** Add an Experimental in-game performance HUD editor powered by MangoHud: choose and reorder metrics, adjust layout and colors, preview the result, and reload changes without restarting the game. It includes Control Panel metrics and protects external MangoHud configurations. ([#248](https://github.com/Hooandee/panel-de-control/issues/248)) ([845c850](https://github.com/Hooandee/panel-de-control/commit/845c85069df832488f522286c9dd1012f0624906))
 
 ## [0.32.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.31.4...panel-de-control-v0.32.0) (2026-08-03)
 
