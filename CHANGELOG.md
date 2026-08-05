@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.33.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.32.0...panel-de-control-v0.33.0) (2026-08-05)
+
+
+### Features
+
+* in-game performance overlay (HUD) editor for MangoHud ([#248](https://github.com/Hooandee/panel-de-control/issues/248)) ([845c850](https://github.com/Hooandee/panel-de-control/commit/845c85069df832488f522286c9dd1012f0624906))
+
 ## [0.32.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.31.4...panel-de-control-v0.32.0) (2026-08-03)
 
 
