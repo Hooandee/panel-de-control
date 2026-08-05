@@ -29,6 +29,12 @@ async function settle() {
   });
 }
 
+async function renderHud() {
+  const hook = renderHook(() => useHud());
+  await settle();
+  return hook;
+}
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((done) => { resolve = done; });
@@ -50,8 +56,7 @@ describe("useHud coordination", () => {
   });
 
   it("coalesces edits and persists only the latest complete model", async () => {
-    const { result } = renderHook(() => useHud());
-    await settle();
+    const { result } = await renderHud();
 
     const first = { ...DEFAULT_MODEL, fontSize: 30 };
     const latest = { ...first, offsetX: 12 };
@@ -70,8 +75,7 @@ describe("useHud coordination", () => {
   it("keeps one request in flight and replaces the queued model with the latest edit", async () => {
     const firstRequest = deferred<HudState>();
     vi.mocked(setHudConfig).mockReturnValueOnce(firstRequest.promise);
-    const { result } = renderHook(() => useHud());
-    await settle();
+    const { result } = await renderHud();
 
     const first = { ...DEFAULT_MODEL, fontSize: 30 };
     act(() => result.current.setModel(first));
@@ -97,8 +101,7 @@ describe("useHud coordination", () => {
   it("reports a stalled save without overlapping the underlying RPC", async () => {
     const stalled = deferred<HudState>();
     vi.mocked(setHudConfig).mockReturnValueOnce(stalled.promise);
-    const { result } = renderHook(() => useHud());
-    await settle();
+    const { result } = await renderHud();
 
     const first = { ...DEFAULT_MODEL, fontSize: 30 };
     act(() => result.current.setModel(first));
@@ -130,8 +133,7 @@ describe("useHud coordination", () => {
   it("does not overlap polls after the visible timeout", async () => {
     const stalled = deferred<HudState>();
     vi.mocked(getHudState).mockReturnValue(stalled.promise);
-    renderHook(() => useHud());
-    await settle();
+    await renderHud();
 
     await act(async () => {
       vi.advanceTimersByTime(12000);
@@ -151,8 +153,7 @@ describe("useHud coordination", () => {
   it("ignores a stalled save that settles after its timeout", async () => {
     const stalled = deferred<HudState>();
     vi.mocked(setHudConfig).mockReturnValueOnce(stalled.promise);
-    const { result } = renderHook(() => useHud());
-    await settle();
+    const { result } = await renderHud();
 
     const old = { ...DEFAULT_MODEL, fontSize: 20 };
     act(() => result.current.setModel(old));
@@ -176,8 +177,7 @@ describe("useHud coordination", () => {
   });
 
   it("enables using the latest unsaved style instead of racing a stale debounce", async () => {
-    const { result } = renderHook(() => useHud());
-    await settle();
+    const { result } = await renderHud();
 
     const styled = { ...DEFAULT_MODEL, offsetY: 28 };
     act(() => result.current.setModel(styled));
@@ -191,8 +191,7 @@ describe("useHud coordination", () => {
 
   it("reports a reload failure instead of announcing success", async () => {
     vi.mocked(reloadHud).mockRejectedValueOnce(new Error("reload failed"));
-    const { result } = renderHook(() => useHud());
-    await settle();
+    const { result } = await renderHud();
 
     act(() => result.current.reload());
     await settle();
@@ -203,8 +202,7 @@ describe("useHud coordination", () => {
   it("does not overlap manual commands after the visible timeout", async () => {
     const stalled = deferred<HudState>();
     vi.mocked(reloadHud).mockReturnValueOnce(stalled.promise);
-    const { result } = renderHook(() => useHud());
-    await settle();
+    const { result } = await renderHud();
 
     act(() => result.current.reload());
     await settle();
@@ -228,8 +226,7 @@ describe("useHud coordination", () => {
   it("waits for the latest persistence before reloading MangoHud", async () => {
     const saveRequest = deferred<HudState>();
     vi.mocked(setHudConfig).mockReturnValueOnce(saveRequest.promise);
-    const { result } = renderHook(() => useHud());
-    await settle();
+    const { result } = await renderHud();
 
     const latest = { ...DEFAULT_MODEL, offsetY: 16 };
     act(() => result.current.setModel(latest));
@@ -252,8 +249,7 @@ describe("useHud coordination", () => {
     vi.mocked(setHudConfig)
       .mockReturnValueOnce(firstRequest.promise)
       .mockReturnValueOnce(latestRequest.promise);
-    const { result } = renderHook(() => useHud());
-    await settle();
+    const { result } = await renderHud();
 
     const first = { ...DEFAULT_MODEL, fontSize: 30 };
     act(() => result.current.setModel(first));
@@ -281,8 +277,7 @@ describe("useHud coordination", () => {
   it("waits for the latest persistence before resolving an ownership conflict", async () => {
     const saveRequest = deferred<HudState>();
     vi.mocked(setHudConfig).mockReturnValueOnce(saveRequest.promise);
-    const { result } = renderHook(() => useHud());
-    await settle();
+    const { result } = await renderHud();
 
     const latest = { ...DEFAULT_MODEL, offsetY: 16 };
     act(() => result.current.setModel(latest));
@@ -304,8 +299,7 @@ describe("useHud coordination", () => {
     vi.mocked(getHudState)
       .mockResolvedValueOnce(state())
       .mockReturnValueOnce(oldPoll.promise);
-    const { result } = renderHook(() => useHud());
-    await settle();
+    const { result } = await renderHud();
 
     act(() => vi.advanceTimersByTime(4000));
     const latest = { ...DEFAULT_MODEL, fontSize: 44 };
@@ -360,8 +354,7 @@ describe("useHud coordination", () => {
       .mockResolvedValueOnce(initial)
       .mockResolvedValueOnce(failed);
 
-    const { result } = renderHook(() => useHud());
-    await settle();
+    const { result } = await renderHud();
     const editorState = result.current.state;
 
     await act(async () => {
@@ -375,8 +368,7 @@ describe("useHud coordination", () => {
   });
 
   it("flushes the latest debounced model when the section unmounts", async () => {
-    const { result, unmount } = renderHook(() => useHud());
-    await settle();
+    const { result, unmount } = await renderHud();
 
     const latest = { ...DEFAULT_MODEL, fontScale: 1.35 };
     act(() => result.current.setModel(latest));
@@ -388,8 +380,7 @@ describe("useHud coordination", () => {
   it("queues the latest unmounted model behind an in-flight request", async () => {
     const firstRequest = deferred<HudState>();
     vi.mocked(setHudConfig).mockReturnValueOnce(firstRequest.promise);
-    const { result, unmount } = renderHook(() => useHud());
-    await settle();
+    const { result, unmount } = await renderHud();
 
     const first = { ...DEFAULT_MODEL, fontScale: 1.1 };
     act(() => result.current.setModel(first));

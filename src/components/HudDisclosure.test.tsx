@@ -26,20 +26,17 @@ vi.mock("./QamAction", () => ({
 
 import { HudDisclosure } from "./HudDisclosure";
 
+const renderDisclosure = (title = "Style", summary = "Closed") => render(
+  <HudDisclosure id="hud-test" icon={<span>i</span>} title={title} summary={summary}>
+    <span>Controls</span>
+  </HudDisclosure>,
+);
+
 describe("HudDisclosure", () => {
   afterEach(cleanup);
 
   it("is a card-only disclosure with explicit expansion state", () => {
-    render(
-      <HudDisclosure
-        id="hud-test"
-        icon={<span>i</span>}
-        title="Style"
-        summary="Closed"
-      >
-        <span>Controls</span>
-      </HudDisclosure>,
-    );
+    renderDisclosure();
 
     expect(screen.getByText("Closed")).toBeTruthy();
     const trigger = screen.getByRole("button");
@@ -53,16 +50,7 @@ describe("HudDisclosure", () => {
   });
 
   it("keeps a narrow title on one line and truncates the summary first", () => {
-    render(
-      <HudDisclosure
-        id="hud-font-refine"
-        icon={<span>T</span>}
-        title="Refine by type"
-        summary="Main · details · text"
-      >
-        <span>Controls</span>
-      </HudDisclosure>,
-    );
+    renderDisclosure("Refine by type", "Main · details · text");
 
     const title = screen.getByText("Refine by type");
     const summary = screen.getByText("Main · details · text");

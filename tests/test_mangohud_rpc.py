@@ -103,6 +103,13 @@ def _items(*ids):
     return [{"kind": "metric", "id": i} for i in ids]
 
 
+def _ready_plugin(tmp_path, monkeypatch):
+    presets = str(tmp_path / "presets.conf")
+    main, plugin = _make_plugin(tmp_path, monkeypatch)
+    _fake_overlay(main, monkeypatch, presets)
+    return main, plugin, presets
+
+
 def test_get_hud_state_shape(tmp_path, monkeypatch):
     main, p = _make_plugin(tmp_path, monkeypatch)
     _fake_overlay(main, monkeypatch, str(tmp_path / "presets.conf"))
@@ -321,9 +328,7 @@ def test_set_config_persists_but_does_not_write_while_disabled(tmp_path, monkeyp
 
 
 def test_enabling_writes_presets_conf_and_disabling_clears_it(tmp_path, monkeypatch):
-    presets = str(tmp_path / "presets.conf")
-    main, p = _make_plugin(tmp_path, monkeypatch)
-    _fake_overlay(main, monkeypatch, presets)
+    main, p, presets = _ready_plugin(tmp_path, monkeypatch)
     asyncio.run(p.set_hud_config({"items": _items("fps", "gpu"), "enabled": False}))
     asyncio.run(p.set_hud_enabled(True))
     text = open(presets).read()
@@ -333,9 +338,7 @@ def test_enabling_writes_presets_conf_and_disabling_clears_it(tmp_path, monkeypa
 
 
 def test_writing_enabled_hud_requests_mangoapp_reload(tmp_path, monkeypatch):
-    presets = str(tmp_path / "presets.conf")
-    main, p = _make_plugin(tmp_path, monkeypatch)
-    _fake_overlay(main, monkeypatch, presets)
+    main, p, presets = _ready_plugin(tmp_path, monkeypatch)
     calls = []
     _set_reload(main, monkeypatch, lambda: calls.append(True) or True)
 
@@ -345,9 +348,7 @@ def test_writing_enabled_hud_requests_mangoapp_reload(tmp_path, monkeypatch):
 
 
 def test_successful_write_and_reload_reports_requested_not_applied(tmp_path, monkeypatch):
-    presets = str(tmp_path / "presets.conf")
-    main, p = _make_plugin(tmp_path, monkeypatch)
-    _fake_overlay(main, monkeypatch, presets)
+    main, p, presets = _ready_plugin(tmp_path, monkeypatch)
     monkeypatch.setattr(
         main,
         "reload_sessions",
@@ -397,9 +398,7 @@ def test_set_config_scans_mangoapp_once(tmp_path, monkeypatch):
 
 
 def test_session_replaced_after_detection_prevents_write(tmp_path, monkeypatch):
-    presets = str(tmp_path / "presets.conf")
-    main, p = _make_plugin(tmp_path, monkeypatch)
-    _fake_overlay(main, monkeypatch, presets)
+    main, p, presets = _ready_plugin(tmp_path, monkeypatch)
     monkeypatch.setattr(
         main.mangohud_detect,
         "session_alive",
@@ -415,9 +414,7 @@ def test_session_replaced_after_detection_prevents_write(tmp_path, monkeypatch):
 
 
 def test_failed_reload_keeps_exact_file_readback_as_written(tmp_path, monkeypatch):
-    presets = str(tmp_path / "presets.conf")
-    main, p = _make_plugin(tmp_path, monkeypatch)
-    _fake_overlay(main, monkeypatch, presets)
+    main, p, presets = _ready_plugin(tmp_path, monkeypatch)
     _set_reload(main, monkeypatch, lambda: False)
 
     st = asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
@@ -426,9 +423,7 @@ def test_failed_reload_keeps_exact_file_readback_as_written(tmp_path, monkeypatc
 
 
 def test_rejected_write_readback_reports_failure(tmp_path, monkeypatch):
-    presets = str(tmp_path / "presets.conf")
-    main, p = _make_plugin(tmp_path, monkeypatch)
-    _fake_overlay(main, monkeypatch, presets)
+    main, p, presets = _ready_plugin(tmp_path, monkeypatch)
     monkeypatch.setattr(
         main,
         "apply_hud",
@@ -442,9 +437,7 @@ def test_rejected_write_readback_reports_failure(tmp_path, monkeypatch):
 
 
 def test_failed_clear_reports_failure(tmp_path, monkeypatch):
-    presets = str(tmp_path / "presets.conf")
-    main, p = _make_plugin(tmp_path, monkeypatch)
-    _fake_overlay(main, monkeypatch, presets)
+    main, p, presets = _ready_plugin(tmp_path, monkeypatch)
     asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
     monkeypatch.setattr(
         main,
@@ -524,9 +517,7 @@ def test_conflict_resolution_is_explicit_and_preserves_the_latest_external_edit(
 
 
 def test_disabling_hud_requests_mangoapp_reload(tmp_path, monkeypatch):
-    presets = str(tmp_path / "presets.conf")
-    main, p = _make_plugin(tmp_path, monkeypatch)
-    _fake_overlay(main, monkeypatch, presets)
+    main, p, presets = _ready_plugin(tmp_path, monkeypatch)
     calls = []
     _set_reload(main, monkeypatch, lambda: calls.append(True) or True)
     asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
@@ -547,9 +538,7 @@ def test_unsupported_overlay_never_writes(tmp_path, monkeypatch):
 
 
 def test_reset_restores_default_model(tmp_path, monkeypatch):
-    presets = str(tmp_path / "presets.conf")
-    main, p = _make_plugin(tmp_path, monkeypatch)
-    _fake_overlay(main, monkeypatch, presets)
+    main, p, presets = _ready_plugin(tmp_path, monkeypatch)
     asyncio.run(p.set_hud_config({"items": _items("time"), "enabled": True}))
     st = asyncio.run(p.reset_hud())
     assert st["model"]["items"] == main.mangohud_config.DEFAULT_MODEL["items"]
@@ -602,9 +591,7 @@ def test_pdc_metric_bakes_applied_readback_not_profile_target(tmp_path, monkeypa
 
 
 def test_persisted_hud_locale_controls_dynamic_in_game_text(tmp_path, monkeypatch):
-    presets = str(tmp_path / "presets.conf")
-    main, p = _make_plugin(tmp_path, monkeypatch)
-    _fake_overlay(main, monkeypatch, presets)
+    main, p, presets = _ready_plugin(tmp_path, monkeypatch)
 
     asyncio.run(p.set_hud_config({
         "locale": "en",
@@ -708,9 +695,7 @@ def test_blocking_tdp_backend_does_not_refresh_stale_cached_observation(
 
 
 def test_pdc_custom_label_baked_with_value(tmp_path, monkeypatch):
-    presets = str(tmp_path / "presets.conf")
-    main, p = _make_plugin(tmp_path, monkeypatch)
-    _fake_overlay(main, monkeypatch, presets)
+    main, p, presets = _ready_plugin(tmp_path, monkeypatch)
     asyncio.run(p.set_hud_config({
         "items": [{"kind": "metric", "id": "pdc_eco", "label": "Bateria"}],
         "enabled": True,
@@ -719,9 +704,7 @@ def test_pdc_custom_label_baked_with_value(tmp_path, monkeypatch):
 
 
 def test_pdc_metric_gone_from_presets_when_dropped(tmp_path, monkeypatch):
-    presets = str(tmp_path / "presets.conf")
-    main, p = _make_plugin(tmp_path, monkeypatch)
-    _fake_overlay(main, monkeypatch, presets)
+    main, p, presets = _ready_plugin(tmp_path, monkeypatch)
     asyncio.run(p.set_hud_config({"items": _items("pdc_eco"), "enabled": True}))
     assert "pdc_eco" not in open(presets).read()  # no directive; but the label is baked
     assert "custom_text=Descarga Inactivo" in open(presets).read()
@@ -731,9 +714,7 @@ def test_pdc_metric_gone_from_presets_when_dropped(tmp_path, monkeypatch):
 
 
 def test_changed_pdc_value_reloads_running_mangoapp(tmp_path, monkeypatch):
-    presets = str(tmp_path / "presets.conf")
-    main, p = _make_plugin(tmp_path, monkeypatch)
-    _fake_overlay(main, monkeypatch, presets)
+    main, p, presets = _ready_plugin(tmp_path, monkeypatch)
     calls = []
     _set_reload(main, monkeypatch, lambda: calls.append(True) or True)
     asyncio.run(p.set_hud_config({"items": _items("pdc_eco"), "enabled": True}))
@@ -749,9 +730,7 @@ def test_changed_pdc_value_reloads_running_mangoapp(tmp_path, monkeypatch):
 
 
 def test_failed_pdc_reload_is_retried_on_next_tick(tmp_path, monkeypatch):
-    presets = str(tmp_path / "presets.conf")
-    main, p = _make_plugin(tmp_path, monkeypatch)
-    _fake_overlay(main, monkeypatch, presets)
+    main, p, presets = _ready_plugin(tmp_path, monkeypatch)
     results = iter((False, True))
     calls = []
 
@@ -771,9 +750,7 @@ def test_failed_pdc_reload_is_retried_on_next_tick(tmp_path, monkeypatch):
 
 
 def test_reload_retries_stop_after_the_bounded_attempt_budget(tmp_path, monkeypatch):
-    presets = str(tmp_path / "presets.conf")
-    main, p = _make_plugin(tmp_path, monkeypatch)
-    _fake_overlay(main, monkeypatch, presets)
+    main, p, presets = _ready_plugin(tmp_path, monkeypatch)
     calls = []
     _set_reload(main, monkeypatch, lambda: calls.append(True) or False)
     clock = {"now": 100.0}
@@ -838,9 +815,7 @@ def test_partial_reload_retries_only_the_pending_session(tmp_path, monkeypatch):
 
 
 def test_pdc_refresh_write_failure_reports_failed_and_stays_retryable(tmp_path, monkeypatch):
-    presets = str(tmp_path / "presets.conf")
-    main, p = _make_plugin(tmp_path, monkeypatch)
-    _fake_overlay(main, monkeypatch, presets)
+    main, p, presets = _ready_plugin(tmp_path, monkeypatch)
     asyncio.run(p.set_hud_config({"items": _items("pdc_eco"), "enabled": True}))
     written = dict(p._pdc_written)
     p._settings["eco_enabled"] = True
@@ -887,9 +862,7 @@ def test_inactive_pdc_refresh_skips_executor(tmp_path, monkeypatch):
 
 
 def test_pdc_refresh_does_not_use_the_shared_apply_executor(tmp_path, monkeypatch):
-    presets = str(tmp_path / "presets.conf")
-    main, p = _make_plugin(tmp_path, monkeypatch)
-    _fake_overlay(main, monkeypatch, presets)
+    main, p, presets = _ready_plugin(tmp_path, monkeypatch)
     asyncio.run(p.set_hud_config({"items": _items("pdc_eco"), "enabled": True}))
     executor = _RecordingExecutor()
     p._apply_executor = executor
@@ -901,9 +874,7 @@ def test_pdc_refresh_does_not_use_the_shared_apply_executor(tmp_path, monkeypatc
 
 
 def test_pdc_refresh_applies_multiple_changed_values_once(tmp_path, monkeypatch):
-    presets = str(tmp_path / "presets.conf")
-    main, p = _make_plugin(tmp_path, monkeypatch)
-    _fake_overlay(main, monkeypatch, presets)
+    main, p, presets = _ready_plugin(tmp_path, monkeypatch)
     asyncio.run(p.set_hud_config({
         "items": _items("pdc_eco", "pdc_profile"),
         "enabled": True,
@@ -1104,9 +1075,7 @@ def test_shutdown_restores_managed_hud_for_unload_and_uninstall(
     monkeypatch,
     method,
 ):
-    presets = str(tmp_path / "presets.conf")
-    main, p = _make_plugin(tmp_path, monkeypatch)
-    _fake_overlay(main, monkeypatch, presets)
+    main, p, presets = _ready_plugin(tmp_path, monkeypatch)
     asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
     assert os.path.exists(presets)
     monkeypatch.setattr(p, "_perform_shutdown_handoff", lambda *_args: None)
@@ -1124,9 +1093,7 @@ def test_refresh_queued_before_shutdown_cannot_rewrite_after_restore(
     tmp_path,
     monkeypatch,
 ):
-    presets = str(tmp_path / "presets.conf")
-    main, p = _make_plugin(tmp_path, monkeypatch)
-    _fake_overlay(main, monkeypatch, presets)
+    main, p, presets = _ready_plugin(tmp_path, monkeypatch)
     asyncio.run(p.set_hud_config({"items": _items("fps"), "enabled": True}))
     started = threading.Event()
     release = threading.Event()

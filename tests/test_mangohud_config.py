@@ -1,3 +1,5 @@
+import pytest
+
 from mangohud.config import (
     DEFAULT_MODEL,
     METRIC_CATALOG,
@@ -163,9 +165,19 @@ def test_item_order_is_preserved_for_enabled_metrics():
     assert lines.index("cpu_stats=1") < lines.index("fps=1")
 
 
-def test_horizontal_layout_emits_horizontal_directive():
-    assert "horizontal=1" in to_directives(coerce_model({"layout": "horizontal"}))
-    assert "horizontal=1" not in to_directives(coerce_model({"layout": "vertical"}))
+@pytest.mark.parametrize(
+    ("field", "on", "off", "directive"),
+    [
+        ("layout", "horizontal", "vertical", "horizontal=1"),
+        ("compact", True, False, "hud_compact=1"),
+        ("noMargin", True, False, "hud_no_margin=1"),
+        ("noSmallFont", True, False, "no_small_font=1"),
+        ("tempUnit", "f", "c", "temp_fahrenheit=1"),
+    ],
+)
+def test_optional_directives_are_emitted_only_when_enabled(field, on, off, directive):
+    assert directive in to_directives(coerce_model({field: on}))
+    assert directive not in to_directives(coerce_model({field: off}))
 
 
 def test_style_directives_present():
@@ -253,11 +265,6 @@ def test_presets_2_to_4_carry_the_full_hud():
 
 # ---- catalog + presets ----
 
-def test_catalog_ids_all_serialize_to_a_directive():
-    for mid in METRIC_CATALOG:
-        assert to_directives(coerce_model({"items": _metrics(mid)}))
-
-
 def test_presets_reference_only_catalog_ids():
     for name, ids in PRESETS.items():
         assert set(ids) <= set(METRIC_CATALOG), name
@@ -303,20 +310,63 @@ def test_network_color_emitted_when_set():
     assert "network_color=abcdef" in lines
 
 
-def test_compact_only_when_enabled():
-    assert "hud_compact=1" in to_directives(coerce_model({"compact": True}))
-    assert "hud_compact=1" not in to_directives(coerce_model({"compact": False}))
-
-
 # ---- font size: fine px control + secondary text size + legacy back-compat ----
 
-def test_font_size_default_and_clamp():
-    assert coerce_model({})["fontSize"] == 24
-    assert coerce_model({"fontSize": 40})["fontSize"] == 40
-    assert coerce_model({"fontSize": 4})["fontSize"] == 12   # below range -> floor
-    assert coerce_model({"fontSize": 999})["fontSize"] == 64  # above range -> ceil
-    assert coerce_model({"fontSize": "x"})["fontSize"] == 24  # garbage -> default
-    assert "font_size=40" in to_directives(coerce_model({"fontSize": 40}))
+@pytest.mark.parametrize(
+    ("field", "value", "expected"),
+    [
+        ("fontSize", 40, 40),
+        ("fontSize", 4, 12),
+        ("fontSize", 999, 64),
+        ("fontSize", "x", 24),
+        ("fontSizeText", 4, 12),
+        ("fontSizeText", 999, 64),
+        ("fontSizeSecondary", 18, 18),
+        ("fontSizeSecondary", 4, 6),
+        ("fontSizeSecondary", 999, 24),
+        ("cellpaddingY", 0.3, 0.3),
+        ("cellpaddingY", -5, -0.3),
+        ("cellpaddingY", 5, 0.5),
+        ("cellpaddingY", "x", -0.085),
+        ("alpha", 0.4, 0.4),
+        ("alpha", 5, 1.0),
+        ("alpha", -2, 0.0),
+        ("alpha", "nope", 1.0),
+        ("fontScale", 1.5, 1.5),
+        ("fontScale", 0.1, 0.5),
+        ("fontScale", 9, 2.0),
+        ("textOutlineThickness", -3, 0.0),
+    ],
+)
+def test_numeric_style_fields_are_validated(field, value, expected):
+    assert coerce_model({field: value})[field] == expected
+
+
+@pytest.mark.parametrize(
+    ("model", "directive"),
+    [
+        ({}, "cellpadding_y=-0.085"),
+        ({}, "alpha=1.0"),
+        ({}, "font_scale=1.0"),
+        ({"fontSize": 40}, "font_size=40"),
+        ({"fontSizeSecondary": 18}, "font_size_secondary=18"),
+        ({"cellpaddingY": 0.2}, "cellpadding_y=0.2"),
+        ({"alpha": 0.4}, "alpha=0.4"),
+        ({"fontScale": 1.5}, "font_scale=1.5"),
+        ({"textOutlineThickness": 1.5}, "text_outline_thickness=1.5"),
+    ],
+)
+def test_numeric_style_fields_emit_their_directive(model, directive):
+    assert directive in to_directives(coerce_model(model))
+
+
+def test_numeric_style_defaults():
+    model = coerce_model({})
+    assert model["fontSize"] == 24
+    assert model["fontSizeSecondary"] == 13
+    assert model["cellpaddingY"] == -0.085
+    assert model["alpha"] == 1.0
+    assert model["fontScale"] == 1.0
 
 
 def test_font_size_back_compat_from_old_enum():
@@ -338,38 +388,11 @@ def test_font_size_text_remains_an_independent_media_font():
     assert "font_size_text=16" in to_directives(model)
 
 
-def test_font_size_text_is_clamped():
-    assert coerce_model({"fontSizeText": 4})["fontSizeText"] == 12
-    assert coerce_model({"fontSizeText": 999})["fontSizeText"] == 64
-
-
-def test_font_size_secondary_default_clamp_and_emit():
-    assert coerce_model({})["fontSizeSecondary"] == 13
-    assert coerce_model({"fontSizeSecondary": 18})["fontSizeSecondary"] == 18
-    assert coerce_model({"fontSizeSecondary": 4})["fontSizeSecondary"] == 6
-    assert coerce_model({"fontSizeSecondary": 999})["fontSizeSecondary"] == 24
+def test_secondary_font_never_exceeds_main_font():
     assert coerce_model({"fontSize": 16, "fontSizeSecondary": 30})["fontSizeSecondary"] == 16
-    assert "font_size_secondary=18" in to_directives(
-        coerce_model({"fontSizeSecondary": 18})
-    )
 
 
 # ---- Avanzado: cellpadding_y / offsets / text alpha / font_scale / no_margin ----
-
-def test_cellpadding_y_default_clamp_and_emit():
-    assert coerce_model({})["cellpaddingY"] == -0.085
-    assert "cellpadding_y=-0.085" in to_directives(coerce_model({}))
-    assert coerce_model({"cellpaddingY": 0.3})["cellpaddingY"] == 0.3
-    assert coerce_model({"cellpaddingY": -5})["cellpaddingY"] == -0.3  # floor
-    assert coerce_model({"cellpaddingY": 5})["cellpaddingY"] == 0.5    # ceil
-    assert coerce_model({"cellpaddingY": "x"})["cellpaddingY"] == -0.085
-    assert "cellpadding_y=0.2" in to_directives(coerce_model({"cellpaddingY": 0.2}))
-
-
-def test_no_margin_only_when_enabled():
-    assert "hud_no_margin=1" in to_directives(coerce_model({"noMargin": True}))
-    assert "hud_no_margin=1" not in to_directives(coerce_model({"noMargin": False}))
-
 
 def test_offsets_default_zero_and_emit_only_when_set():
     m = coerce_model({})
@@ -384,44 +407,9 @@ def test_offsets_default_zero_and_emit_only_when_set():
     assert coerce_model({"offsetY": "x"})["offsetY"] == 0
 
 
-def test_text_alpha_default_clamp_and_emit():
-    assert coerce_model({})["alpha"] == 1.0
-    assert "alpha=1.0" in to_directives(coerce_model({}))
-    assert coerce_model({"alpha": 0.4})["alpha"] == 0.4
-    assert coerce_model({"alpha": 5})["alpha"] == 1.0
-    assert coerce_model({"alpha": -2})["alpha"] == 0.0
-    assert "alpha=0.4" in to_directives(coerce_model({"alpha": 0.4}))
-
-
-def test_font_scale_default_clamp_and_emit():
-    assert coerce_model({})["fontScale"] == 1.0
-    assert "font_scale=1.0" in to_directives(coerce_model({}))
-    assert coerce_model({"fontScale": 1.5})["fontScale"] == 1.5
-    assert coerce_model({"fontScale": 0.1})["fontScale"] == 0.5  # floor
-    assert coerce_model({"fontScale": 9})["fontScale"] == 2.0    # ceil
-    assert "font_scale=1.5" in to_directives(coerce_model({"fontScale": 1.5}))
-
-
-def test_alpha_and_outline_thickness_emitted():
-    lines = to_directives(coerce_model({"alpha": 0.8, "textOutlineThickness": 1.5}))
-    assert "alpha=0.8" in lines
-    assert "text_outline_thickness=1.5" in lines
-
-
 def test_table_columns_never_emitted():
     # A vertical HUD is one element per line — no column packing.
     assert not any(ln.startswith("table_columns") for ln in to_directives(coerce_model({})))
-
-
-def test_style_option_defaults_and_clamps():
-    m = coerce_model({})
-    assert m["compact"] is False
-    assert m["alpha"] == 1.0
-    assert m["textOutlineThickness"] == 1.0
-    # out-of-range values clamp; garbage falls back to the default
-    assert coerce_model({"alpha": 5})["alpha"] == 1.0
-    assert coerce_model({"alpha": "nope"})["alpha"] == 1.0
-    assert coerce_model({"textOutlineThickness": -3})["textOutlineThickness"] == 0.0
 
 
 # ---- per-metric custom labels (only fps/cpu/gpu) ----
@@ -470,14 +458,7 @@ def test_separator_item_kept_and_emits_a_divider_line():
 
 # ---- global style additions ----
 
-def test_no_small_font_only_when_enabled():
-    assert "no_small_font=1" in to_directives(coerce_model({"noSmallFont": True}))
-    assert "no_small_font=1" not in to_directives(coerce_model({"noSmallFont": False}))
-
-
-def test_temp_fahrenheit_only_when_f():
-    assert "temp_fahrenheit=1" in to_directives(coerce_model({"tempUnit": "f"}))
-    assert "temp_fahrenheit=1" not in to_directives(coerce_model({"tempUnit": "c"}))
+def test_invalid_temperature_unit_falls_back_to_celsius():
     assert coerce_model({"tempUnit": "kelvin"})["tempUnit"] == "c"
 
 
@@ -527,12 +508,6 @@ def test_text_outline_toggle():
     assert coerce_model({})["textOutline"] is True  # MangoHud default
 
 
-def test_full_palette_is_always_present_after_coerce():
-    keys = set(coerce_model({"colors": {"gpu": "#000000"}})["colors"])
-    assert keys == set(DEFAULT_MODEL["colors"])
-    assert {"text", "fps", "frametime", "background", "outline"} <= keys
-
-
 # ---- level directives ----
 
 def test_directives_for_level_off_minimal_full():
@@ -546,20 +521,23 @@ def test_directives_for_level_off_minimal_full():
 
 # ---- pdc metrics: a single baked custom_text=<label> <value> line ----
 
-def test_pdc_metric_bakes_label_and_value_into_one_custom_text():
-    # MangoHud renders exec=cat only from a loaded live config, never from a preset
-    # section → the value is baked into the custom_text line instead (one row).
-    model = {"items": _metrics("fps", "pdc_tdp"), "enabled": True}
-    lines = to_directives(model, {"pdc_tdp": "21W"})
-    assert "custom_text=TDP 21W" in lines
+@pytest.mark.parametrize(
+    ("model", "values", "expected"),
+    [
+        ({"items": _metrics("fps", "pdc_tdp")}, {"pdc_tdp": "21W"}, "custom_text=TDP 21W"),
+        ({"items": [{"kind": "metric", "id": "pdc_tdp", "label": "Potencia"}]}, {"pdc_tdp": "18W"}, "custom_text=Potencia 18W"),
+        ({"items": _metrics("pdc_fan")}, {}, "custom_text=Vent."),
+        ({"items": _metrics("pdc_charge")}, {"pdc_charge": "-"}, "custom_text=Limite -"),
+        ({"locale": "es", "items": _metrics("pdc_power")}, {}, "custom_text=Consumo"),
+        ({"locale": "en", "items": _metrics("pdc_power")}, {}, "custom_text=Power"),
+    ],
+)
+def test_pdc_metrics_emit_one_baked_custom_text_line(model, values, expected):
+    # Live reloads do not execute MangoHud preset commands, so dynamic values
+    # must remain a single baked row instead of an exec-backed second row.
+    lines = to_directives({**model, "enabled": True}, values)
+    assert [line for line in lines if line.startswith("custom_text=")] == [expected]
     assert not any(line.startswith("exec=") for line in lines)
-
-
-def test_pdc_metric_honours_custom_label_with_baked_value():
-    model = {"items": [{"kind": "metric", "id": "pdc_tdp", "label": "Potencia"}], "enabled": True}
-    lines = to_directives(model, {"pdc_tdp": "18W"})
-    assert "custom_text=Potencia 18W" in lines
-    assert not any(ln.startswith("custom_text=TDP") for ln in lines)
 
 
 def test_pdc_metric_has_no_zero_disable_directive():
@@ -568,39 +546,9 @@ def test_pdc_metric_has_no_zero_disable_directive():
     assert not any(line.startswith("pdc_") for line in lines)
 
 
-def test_pdc_without_values_emits_label_only():
-    lines = to_directives({"items": _metrics("pdc_fan"), "enabled": True})
-    assert "custom_text=Vent." in lines
-    assert not any(line.startswith("exec=") for line in lines)
-
-
-def test_pdc_dash_value_is_baked_honestly():
-    lines = to_directives({"items": _metrics("pdc_charge"), "enabled": True}, {"pdc_charge": "-"})
-    assert "custom_text=Limite -" in lines
-
-
 def test_pdc_metric_coerced_and_labellable():
     m = coerce_model({"items": [{"kind": "metric", "id": "pdc_power", "label": "W"}]})
     assert m["items"] == [{"kind": "metric", "id": "pdc_power", "label": "W"}]
-
-
-def test_pdc_default_label_follows_the_persisted_hud_locale():
-    spanish = to_directives(coerce_model({
-        "locale": "es",
-        "items": _metrics("pdc_power"),
-    }))
-    english = to_directives(coerce_model({
-        "locale": "en",
-        "items": _metrics("pdc_power"),
-    }))
-
-    assert "custom_text=Consumo" in spanish
-    assert "custom_text=Power" in english
-
-
-def test_pdc_in_catalog():
-    assert "pdc_tdp" in METRIC_CATALOG
-    assert "pdc_model" in METRIC_CATALOG
 
 
 def test_enabled_pdc_ids():

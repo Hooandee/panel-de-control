@@ -168,14 +168,12 @@ describe("previewRows", () => {
 });
 
 describe("blocks (GPU/CPU one expandable row each)", () => {
-  it("blockGroupOf groups gpu/vram under GPU, cpu under CPU, battery under BATTERY, others null", () => {
-    expect(blockGroupOf("gpu")).toBe("gpu");
-    expect(blockGroupOf("vram")).toBe("gpu");
-    expect(blockGroupOf("cpu_temp")).toBe("cpu");
-    expect(blockGroupOf("battery")).toBe("battery");
-    expect(blockGroupOf("device_battery")).toBe("battery");
-    expect(blockGroupOf("fps")).toBeNull();
-    expect(blockGroupOf("ram")).toBeNull();
+  it.each([
+    ["gpu", "gpu"], ["vram", "gpu"], ["cpu_temp", "cpu"],
+    ["battery", "battery"], ["device_battery", "battery"],
+    ["fps", null], ["ram", null],
+  ] as const)("maps %s to its block", (metric, group) => {
+    expect(blockGroupOf(metric)).toBe(group);
   });
 
   it("blockMetricIds lists every sub-metric of a group", () => {
@@ -272,14 +270,12 @@ describe("item helpers", () => {
 });
 
 describe("canLabel", () => {
-  it("is true for fps/cpu/gpu and the pdc metrics, false otherwise", () => {
-    expect(canLabel("fps")).toBe(true);
-    expect(canLabel("cpu")).toBe(true);
-    expect(canLabel("gpu")).toBe(true);
-    expect(canLabel("pdc_tdp")).toBe(true);
-    expect(canLabel("pdc_power")).toBe(true);
-    expect(canLabel("vram")).toBe(false);
-    expect(canLabel("battery")).toBe(false);
+  it.each([
+    ["fps", true], ["cpu", true], ["gpu", true],
+    ["pdc_tdp", true], ["pdc_power", true],
+    ["vram", false], ["battery", false],
+  ] as const)("reports whether %s has a configurable label", (metric, expected) => {
+    expect(canLabel(metric)).toBe(expected);
   });
 });
 

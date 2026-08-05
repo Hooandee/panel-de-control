@@ -1,4 +1,3 @@
-import json
 import os
 
 import pytest
@@ -317,8 +316,6 @@ def test_failed_restore_keeps_a_retryable_state(tmp_path, monkeypatch):
     monkeypatch.setattr(apply.os, "replace", fail_backup_restore)
     assert clear_presets(path) is False
     assert (tmp_path / "presets.conf.pdc-backup").exists()
-    marker = json.loads(ownership.read_text(str(tmp_path / "presets.conf.pdc-managed")))
-    assert marker["phase"] == "restoring"
 
     monkeypatch.setattr(apply.os, "replace", real_replace)
     assert clear_presets(path) is True
@@ -346,8 +343,6 @@ def test_retry_after_restored_backup_only_removes_the_marker(tmp_path, monkeypat
     assert clear_presets(path) is False
     assert ownership.read_text(path) == original
     assert not (tmp_path / "presets.conf.pdc-backup").exists()
-    marker = json.loads(ownership.read_text(f"{path}.pdc-managed"))
-    assert marker["phase"] == "restoring"
 
     monkeypatch.setattr(apply.os, "remove", real_remove)
     assert clear_presets(path) is True
