@@ -367,7 +367,7 @@ const es: Record<string, string> = {
   "params.detectedProton": "Versión: {name}",
   // Pills · Escalado
   "params.pill.fsr4": "Subir a FSR 4",
-  "params.pill.fsr4.desc": "Mejora los juegos con FSR 3.1 a FSR 4. Solo con GPU compatible.",
+  "params.pill.fsr4.desc": "Sustituye FSR 3.1 por FSR 4 en juegos compatibles.",
   "params.pill.optiscaler": "OptiScaler",
   "params.pill.optiscaler.desc": "Sustituye DLSS por FSR/XeSS y añade generación de fotogramas. Solo Proton‑CachyOS.",
   // Pills · Pantalla
@@ -392,7 +392,7 @@ const es: Record<string, string> = {
   "params.pill.protonNoNtsync.help": "Como el anterior pero para el método más nuevo (ntsync). En kernels recientes suele ser el culpable; alterna entre este y el de fsync.",
   "params.pill.protonWined3d.help": "Usa OpenGL en vez de la traducción normal a Vulkan. Último recurso si un juego ni arranca; suele ir más lento, no lo dejes puesto sin motivo.",
   "params.pill.protonLog.help": "Genera un registro técnico del arranque para diagnosticar por qué falla un juego. Actívalo solo para reportar un problema y quítalo después.",
-  "params.pill.fsr4.help": "Sustituye el escalado del juego (FSR 3.1) por FSR 4, con mejor imagen. El panel elige la variante correcta según tu GPU (RDNA3/RDNA4). En el juego deja el escalado en FSR (seguirá diciendo 3.1); FSR 4 se aplica por debajo. Proton usa FSR4 4.0.0; algún juego exigente (p.ej. Monster Hunter Wilds) puede petar y necesitar el método manual/OptiScaler o Proton‑CachyOS.",
+  "params.pill.fsr4.help": "Sustituye el escalado del juego (FSR 3.1) por FSR 4, con mejor imagen. El panel elige el parámetro compatible con tu versión de Proton y tu GPU. En el juego deja el escalado en FSR; FSR 4 se aplica por debajo.",
   "params.pill.optiscaler.help": "Cambia el escalado (DLSS→FSR/XeSS) y añade generación de fotogramas, integrado en Proton-CachyOS sin tocar ficheros. Solo en esa versión de Proton.",
   "params.pill.protonHdr.help": "Activa la salida HDR en juegos compatibles. Necesita panel HDR (tu Deck OLED / Legion Go 2 lo tienen) y activa el driver Wayland.",
   "params.pill.protonWayland.help": "Usa el driver Wayland en vez de X11. Necesario para HDR y para algunos juegos recientes. Experimental: si algo va raro, quítalo.",
@@ -1227,7 +1227,7 @@ const en: Record<string, string> = {
   "params.detectedProton": "Version: {name}",
   // Pills · Upscaling
   "params.pill.fsr4": "Upgrade to FSR 4",
-  "params.pill.fsr4.desc": "Upgrades FSR 3.1 games to FSR 4. Only on a supported GPU.",
+  "params.pill.fsr4.desc": "Replaces FSR 3.1 with FSR 4 in compatible games.",
   "params.pill.optiscaler": "OptiScaler",
   "params.pill.optiscaler.desc": "Swaps DLSS for FSR/XeSS and adds frame generation. Proton‑CachyOS only.",
   // Pills · Display
@@ -1252,7 +1252,7 @@ const en: Record<string, string> = {
   "params.pill.protonNoNtsync.help": "Like the previous one but for the newer method (ntsync). On recent kernels it's often the culprit; alternate between this and fsync.",
   "params.pill.protonWined3d.help": "Uses OpenGL instead of the normal Vulkan translation. A last resort if a game won't even start; usually slower, don't leave it on without reason.",
   "params.pill.protonLog.help": "Generates a technical startup log to diagnose why a game fails. Only turn it on to report a problem, then remove it.",
-  "params.pill.fsr4.help": "Replaces the game's upscaling (FSR 3.1) with FSR 4, better image. The panel picks the right variant for your GPU (RDNA3/RDNA4). Leave the game's upscaler on FSR (it'll still say 3.1); FSR 4 is applied underneath. Proton uses FSR4 4.0.0; a demanding game (e.g. Monster Hunter Wilds) may crash and need the manual/OptiScaler method or Proton‑CachyOS.",
+  "params.pill.fsr4.help": "Replaces the game's upscaling (FSR 3.1) with FSR 4 for better image quality. The panel picks the parameter supported by your Proton version and GPU. Leave the game's upscaler on FSR; FSR 4 is applied underneath.",
   "params.pill.optiscaler.help": "Swaps upscaling (DLSS→FSR/XeSS) and adds frame generation, built into Proton-CachyOS with no file drop. Only on that Proton version.",
   "params.pill.protonHdr.help": "Enables HDR output in supported games. Needs an HDR panel (your Deck OLED / Legion Go 2 have one) and turns on the Wayland driver.",
   "params.pill.protonWayland.help": "Uses the Wayland driver instead of X11. Required for HDR and some recent games. Experimental: if something looks off, remove it.",

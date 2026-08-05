@@ -4,7 +4,7 @@ import { toaster } from "@decky/api";
 import { bumpLaunchUsage, getLaunchUsage } from "../api";
 import { translate } from "../i18n";
 import { Parsed, parse, serialize } from "./compose";
-import { AMBIGUOUS, CATALOG, Pill, Selections, Usage, buildLaunchOptions, detectSelections } from "./catalog";
+import { AMBIGUOUS, CATALOG, Pill, Selections, Usage, buildLaunchOptions, detectSelections, updateSelection } from "./catalog";
 import { pendingSave } from "./editorSave";
 import { GameEntry, readAppDetails, writeLaunchOptions } from "./steamApi";
 
@@ -93,13 +93,8 @@ export function useLaunchEditor(game: GameEntry, catalog: Pill[] = CATALOG): Lau
   const dirty = baseline ? preview !== serialize(baseline) : false;
 
   const set = useCallback((id: string, value: string | boolean | null) => {
-    setSelections((s) => {
-      const next = { ...s };
-      if (value === null || value === false) delete next[id];
-      else next[id] = value;
-      return next;
-    });
-  }, []);
+    setSelections((s) => updateSelection(s, id, value, catalog));
+  }, [catalog]);
 
   // Debounced autosave. Baseline/usage/"saved" adopted ONLY on a successful write;
   // a missing/throwing setter surfaces as "error", never a fake "Saved".

@@ -9,9 +9,8 @@ export const getVersion = callable<[], string>("get_version");
 // pills. LaunchTools is defined in the pure catalog module (no @decky import).
 export type { LaunchTools };
 export const getLaunchTools = callable<[], LaunchTools>("get_launch_tools");
-// Which PROTON_* vars the game's Proton build actually supports (read from its
-// script) → gate version-specific pills honestly. `found` false = the build wasn't
-// located (native/non-Steam/missing), and then `envs` is empty — no unconfirmed options.
+// Launch-option capabilities detected from the game's installed Proton build.
+// `found` false means native/non-Steam/missing, so no Proton options are offered.
 export interface ProtonCaps {
   envs: string[];
   found: boolean;

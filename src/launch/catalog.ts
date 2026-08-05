@@ -69,6 +69,9 @@ export interface Pill {
   /** Show only on these GPU generations (absent = any). FSR4 uses this to pick the
    *  right per-GPU env var: RDNA4 vs RDNA3 need different Proton flags. */
   gpus?: GpuGen[];
+  capabilityEnv?: string;
+  hiddenWhenSupported?: { env: string; gpus?: GpuGen[] }[];
+  exclusiveGroup?: string;
   // env pills
   envName?: string;
   envValue?: string; // fixed value (simple env toggle)
@@ -116,10 +119,32 @@ export const CATALOG: Pill[] = [
   { id: "heapDelayFree", section: "advanced", subgroup: "params.sub.proton", kind: "env", envName: "PROTON_HEAP_DELAY_FREE", envValue: "1", raw: "PROTON_HEAP_DELAY_FREE", labelKey: "params.pill.heapDelayFree", descKey: "params.pill.heapDelayFree.desc" },
 
   // ── Avanzado · Escalado (según versión + GPU) ─────────────────────────────
-  // FSR4 needs a different Proton env var per GPU: RDNA4 vs RDNA3 (the RDNA3 path
-  // adds the wmma workaround). Two pills, same label — only one shows per device.
-  { id: "fsr4", section: "advanced", subgroup: "params.sub.upscaling", kind: "env", envName: "PROTON_FSR4_UPGRADE", envValue: "1", raw: "PROTON_FSR4_UPGRADE", gpus: ["rdna4"], labelKey: "params.pill.fsr4", descKey: "params.pill.fsr4.desc" },
-  { id: "fsr4Rdna3", section: "advanced", subgroup: "params.sub.upscaling", kind: "env", envName: "PROTON_FSR4_RDNA3_UPGRADE", envValue: "1", raw: "PROTON_FSR4_RDNA3_UPGRADE", gpus: ["rdna3"], labelKey: "params.pill.fsr4", descKey: "params.pill.fsr4.desc" },
+  // Custom Proton builds keep their per-GPU variables. Official Proton uses the
+  // shorter FSR4_UPGRADE name; it is the fallback when no custom variant applies
+  // to this GPU, so builds exposing both never show duplicate switches.
+  {
+    id: "fsr4", section: "advanced", subgroup: "params.sub.upscaling", kind: "env",
+    envName: "PROTON_FSR4_UPGRADE", envValue: "1", raw: "PROTON_FSR4_UPGRADE",
+    exclusiveGroup: "fsr4-upgrade", gpus: ["rdna4"],
+    labelKey: "params.pill.fsr4", descKey: "params.pill.fsr4.desc",
+  },
+  {
+    id: "fsr4Rdna3", section: "advanced", subgroup: "params.sub.upscaling", kind: "env",
+    envName: "PROTON_FSR4_RDNA3_UPGRADE", envValue: "1", raw: "PROTON_FSR4_RDNA3_UPGRADE",
+    exclusiveGroup: "fsr4-upgrade", gpus: ["rdna3"],
+    labelKey: "params.pill.fsr4", descKey: "params.pill.fsr4.desc",
+  },
+  {
+    id: "fsr4Official", section: "advanced", subgroup: "params.sub.upscaling", kind: "env",
+    envName: "FSR4_UPGRADE", envValue: "1", raw: "FSR4_UPGRADE",
+    capabilityEnv: "FSR4_UPGRADE",
+    hiddenWhenSupported: [
+      { env: "PROTON_FSR4_UPGRADE", gpus: ["rdna4"] },
+      { env: "PROTON_FSR4_RDNA3_UPGRADE", gpus: ["rdna3"] },
+    ],
+    exclusiveGroup: "fsr4-upgrade", gpus: ["rdna3", "rdna4"],
+    labelKey: "params.pill.fsr4", descKey: "params.pill.fsr4.desc",
+  },
   { id: "optiscaler", section: "advanced", subgroup: "params.sub.upscaling", kind: "env", envName: "PROTON_USE_OPTISCALER", envValue: "1", raw: "PROTON_USE_OPTISCALER", labelKey: "params.pill.optiscaler", descKey: "params.pill.optiscaler.desc" },
 
   // ── Avanzado · Pantalla ───────────────────────────────────────────────────
@@ -174,19 +199,46 @@ export function baseCatalogTokens(catalog: Pill[] = CATALOG): Set<string> {
   return s;
 }
 
-/** Whether a pill applies here. A PROTON_* env pill shows only if the game's
- *  Proton build actually supports that variable (`supportedEnvs`, read from its
- *  script) — self-updating per version, never faking unsupported options. GPU-
- *  gated pills (FSR4) also need a matching GPU. Non-Proton pills always show.
+function requiredCapability(pill: Pill): string | undefined {
+  return pill.capabilityEnv
+    ?? (pill.envName?.startsWith("PROTON_") ? pill.envName : undefined);
+}
+
+function capabilitySupported(pill: Pill, supportedEnvs: string[]): boolean {
+  const required = requiredCapability(pill);
+  return !required || supportedEnvs.includes(required);
+}
+
+/** Whether a pill applies here. A Proton capability env shows only if the game's
+ *  build actually supports that variable (`supportedEnvs`, read from its script)
+ *  — self-updating per version, never faking unsupported options. GPU-gated pills
+ *  (FSR4) also need a matching GPU. Other envs such as LANG always show.
  *  Tool availability is separate (those show disabled, not hidden). */
 export function pillVisible(pill: Pill, supportedEnvs: string[], gpu: GpuGen): boolean {
   // User-defined pills aren't capability-gated (we can't verify an arbitrary var).
   if (isCustomPillId(pill.id)) return true;
   if (pill.gpus && !pill.gpus.includes(gpu)) return false;
-  if (pill.kind === "env" && pill.envName?.startsWith("PROTON_") && !supportedEnvs.includes(pill.envName)) {
-    return false;
+  if (pill.hiddenWhenSupported?.some(({ env, gpus }) =>
+    supportedEnvs.includes(env) && (!gpus || gpus.includes(gpu)))) return false;
+  return capabilitySupported(pill, supportedEnvs);
+}
+
+export function updateSelection(
+  current: Selections,
+  id: string,
+  value: string | boolean | null,
+  catalog: Pill[] = CATALOG,
+): Selections {
+  const next = { ...current };
+  const group = catalog.find((pill) => pill.id === id)?.exclusiveGroup;
+  if (group) {
+    for (const pill of catalog) {
+      if (pill.exclusiveGroup === group) delete next[pill.id];
+    }
   }
-  return true;
+  delete next[id];
+  if (value !== null && value !== false) next[id] = value;
+  return next;
 }
 
 // Wrapper chain order (outer→inner), independent of display order: gamemode wraps
@@ -195,6 +247,23 @@ const WRAPPER_PRECEDENCE: Record<string, number> = { gamemoderun: 0, mangohud: 1
 
 function isActive(sel: string | boolean | undefined): boolean {
   return sel !== undefined && sel !== false && sel !== AMBIGUOUS;
+}
+
+export function selectionForPill(
+  pill: Pill,
+  selections: Selections,
+  gpu: GpuGen,
+  supportedEnvs: string[],
+  catalog: Pill[] = CATALOG,
+): string | boolean | undefined {
+  const direct = selections[pill.id];
+  if (isActive(direct) || !pill.exclusiveGroup) return direct;
+  const equivalent = catalog.find((candidate) =>
+    candidate.exclusiveGroup === pill.exclusiveGroup
+    && (!candidate.gpus || candidate.gpus.includes(gpu))
+    && capabilitySupported(candidate, supportedEnvs)
+    && isActive(selections[candidate.id]));
+  return equivalent ? selections[equivalent.id] : direct;
 }
 
 /** True when the pill owns its whole env variable (value pills + free-text), vs a
