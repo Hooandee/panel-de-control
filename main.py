@@ -6014,6 +6014,7 @@ class Plugin:
             extension = await self._offload_call(
                 lambda: inputplumber_extension.ensure(
                     self._device.key,
+                    self._controller_backend.manager,
                     os.path.dirname(os.path.abspath(__file__)),
                 )
             )
@@ -6023,7 +6024,7 @@ class Plugin:
                     await self._offload_call(self._refresh_controller_backend)
                     await self._reconcile_controller_now(force=True)
             elif extension.get("reason") not in {
-                None, "wrong_device", "not_bundled",
+                None, "wrong_device", "wrong_manager", "not_bundled",
             }:
                 decky.logger.warning(
                     "Xbox HD haptics extension unavailable: %s",
@@ -6134,7 +6135,8 @@ class Plugin:
         )
         if restore_external and not preserve_recovery:
             extension_removed = inputplumber_extension.uninstall(
-                self._device.key
+                self._device.key,
+                os.path.dirname(os.path.abspath(__file__)),
             )
             decky.logger.info(
                 f"Shutdown stage {stage}:controller-extension ok=%s",

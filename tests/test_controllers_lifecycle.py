@@ -87,6 +87,33 @@ class LifecycleBackend:
         return self.get_config(appid)
 
 
+def test_controller_extension_receives_the_active_manager(tmp_path, monkeypatch):
+    main = _main(monkeypatch, tmp_path)
+    plugin = main.Plugin.__new__(main.Plugin)
+    plugin._device = types.SimpleNamespace(key="rog_xbox_ally_x")
+    plugin._controller_backend = types.SimpleNamespace(manager="hhd")
+    plugin._controller_shutdown = False
+    calls = []
+
+    def ensure(*args):
+        calls.append(args)
+        return {
+            "available": False,
+            "changed": False,
+            "reason": "wrong_manager",
+        }
+
+    async def offload(function):
+        return function()
+
+    monkeypatch.setattr(main.inputplumber_extension, "ensure", ensure)
+    plugin._offload_call = offload
+
+    asyncio.run(plugin._activate_controller_extension())
+
+    assert calls[0][0:2] == ("rog_xbox_ally_x", "hhd")
+
+
 def test_game_switch_generation_is_captured_before_worker_runs(
     tmp_path, monkeypatch
 ):

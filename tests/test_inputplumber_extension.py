@@ -1,6 +1,7 @@
 from pathlib import Path
 from types import SimpleNamespace
 import hashlib
+import json
 
 from controllers import inputplumber_extension as extension
 
@@ -9,57 +10,147 @@ def _result(stdout="", returncode=0):
     return SimpleNamespace(stdout=stdout, returncode=returncode)
 
 
+def _write_manifest(plugin, version, stock_hash, binary=b"patched"):
+    artifact = plugin / f"bin/inputplumber-xbox-hd-v{version}"
+    artifact.parent.mkdir(parents=True)
+    artifact.write_bytes(binary)
+    Path(f"{artifact}.sha256").write_text(hashlib.sha256(binary).hexdigest())
+    manifest = plugin / "assets/inputplumber/compatibility.json"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text(json.dumps({
+        "schema": 1,
+        "device": "rog_xbox_ally_x",
+        "builds": [{
+            "version": version,
+            "upstream_commit": "b" * 40,
+            "patch": f"assets/inputplumber/v{version}-xbox-hd.patch",
+            "artifact": f"bin/inputplumber-xbox-hd-v{version}",
+            "artifact_sha256": f"bin/inputplumber-xbox-hd-v{version}.sha256",
+            "provenance": f"bin/inputplumber-xbox-hd-v{version}.provenance",
+            "stock_sha256": [stock_hash],
+            "verified_platforms": ["steamos-test-rc73xa"],
+        }],
+    }))
+    return artifact
+
+
+def test_extension_refuses_hhd_owner_without_system_mutation(tmp_path):
+    calls = []
+
+    result = extension.ensure(
+        device_key="rog_xbox_ally_x",
+        manager="hhd",
+        plugin_dir=str(tmp_path),
+        run=lambda args: calls.append(args),
+    )
+
+    assert result == {
+        "available": False, "changed": False, "reason": "wrong_manager",
+    }
+    assert calls == []
+
+
 def test_extension_refuses_other_devices_without_system_mutation(tmp_path):
     calls = []
     result = extension.ensure(
-        "legion_go_2", str(tmp_path), run=lambda args: calls.append(args)
+        "legion_go_2", "inputplumber", str(tmp_path),
+        run=lambda args: calls.append(args),
     )
     assert result["reason"] == "wrong_device"
     assert calls == []
 
 
-def test_extension_refuses_missing_versioned_artifact(tmp_path):
+def test_extension_refuses_missing_versioned_artifact(tmp_path, monkeypatch):
+    stock = tmp_path / "stock-inputplumber"
+    stock.write_bytes(b"stock")
+    stock_hash = hashlib.sha256(stock.read_bytes()).hexdigest()
+    artifact = _write_manifest(tmp_path, "0.77.4", stock_hash)
+    Path(f"{artifact}.sha256").unlink()
+    monkeypatch.setattr(extension, "STOCK_PATH", str(stock))
+
+    def run(args):
+        if args == [str(stock), "--version"]:
+            return _result("inputplumber 0.77.4\n")
+        return _result()
+
     result = extension.ensure(
-        "rog_xbox_ally_x", str(tmp_path), run=lambda _args: _result()
+        "rog_xbox_ally_x", "inputplumber", str(tmp_path),
+        run=run,
     )
     assert result == {
         "available": False, "changed": False, "reason": "not_bundled",
     }
 
 
-def test_extension_refuses_tampered_bundle(tmp_path):
-    binary = Path(tmp_path) / "bin/inputplumber-xbox-hd-v0.77.4"
-    binary.parent.mkdir()
-    binary.write_bytes(b"patched")
+def test_extension_refuses_tampered_bundle(tmp_path, monkeypatch):
+    stock = tmp_path / "stock-inputplumber"
+    stock.write_bytes(b"stock")
+    stock_hash = hashlib.sha256(stock.read_bytes()).hexdigest()
+    binary = _write_manifest(tmp_path, "0.77.4", stock_hash)
     Path(f"{binary}.sha256").write_text("0" * 64)
+    monkeypatch.setattr(extension, "STOCK_PATH", str(stock))
+
+    def run(args):
+        if args == [str(stock), "--version"]:
+            return _result("inputplumber 0.77.4\n")
+        return _result()
 
     result = extension.ensure(
-        "rog_xbox_ally_x", str(tmp_path), run=lambda _args: _result()
+        "rog_xbox_ally_x", "inputplumber", str(tmp_path),
+        run=run,
     )
     assert result["reason"] == "bundle_mismatch"
+
+
+def test_extension_selects_the_exact_manifest_build(tmp_path, monkeypatch):
+    plugin = tmp_path / "plugin"
+    stock = tmp_path / "stock-inputplumber"
+    stock.write_bytes(b"stock-0.77.5")
+    stock_hash = hashlib.sha256(stock.read_bytes()).hexdigest()
+    _write_manifest(plugin, "0.77.5", stock_hash)
+    install_root = tmp_path / "var/lib/panel/inputplumber"
+    dropin_dir = tmp_path / "etc/systemd/inputplumber.service.d"
+    monkeypatch.setattr(extension, "STOCK_PATH", str(stock))
+    monkeypatch.setattr(extension, "INSTALL_ROOT", str(install_root), raising=False)
+    monkeypatch.setattr(extension, "DROPIN_DIR", str(dropin_dir))
+    monkeypatch.setattr(
+        extension, "DROPIN_PATH", str(dropin_dir / "90-panel-hd-haptics.conf")
+    )
+
+    def run(args):
+        if args == [str(stock), "--version"]:
+            return _result("inputplumber 0.77.5\n")
+        if args[-2:] == ["tree", extension.SERVICE]:
+            return _result("/org/shadowblip/InputPlumber/CompositeDevice0\n")
+        if args[-1:] == ["XboxHdHapticsSupported"]:
+            return _result("b true\n")
+        return _result()
+
+    result = extension.ensure(
+        "rog_xbox_ally_x", "inputplumber", str(plugin), run=run
+    )
+
+    assert result == {
+        "available": True,
+        "changed": True,
+        "reason": None,
+        "version": "0.77.5",
+    }
+    assert (install_root / "0.77.5/inputplumber").read_bytes() == b"patched"
 
 
 def test_extension_installs_versioned_dropin_and_passes_healthcheck(
     tmp_path, monkeypatch,
 ):
     plugin = Path(tmp_path) / "plugin"
-    binary = plugin / "bin/inputplumber-xbox-hd-v0.77.4"
-    binary.parent.mkdir(parents=True)
-    binary.write_bytes(b"patched")
-    expected = hashlib.sha256(b"patched").hexdigest()
-    Path(f"{binary}.sha256").write_text(expected)
     stock = Path(tmp_path) / "stock-inputplumber"
     stock.write_bytes(b"stock")
+    stock_hash = hashlib.sha256(stock.read_bytes()).hexdigest()
+    _write_manifest(plugin, "0.77.4", stock_hash)
     install_dir = Path(tmp_path) / "var/lib/panel/inputplumber/0.77.4"
     dropin_dir = Path(tmp_path) / "etc/systemd/inputplumber.service.d"
     monkeypatch.setattr(extension, "STOCK_PATH", str(stock))
-    monkeypatch.setattr(
-        extension, "STOCK_SHA256", hashlib.sha256(b"stock").hexdigest()
-    )
-    monkeypatch.setattr(extension, "INSTALL_DIR", str(install_dir))
-    monkeypatch.setattr(
-        extension, "INSTALL_PATH", str(install_dir / "inputplumber")
-    )
+    monkeypatch.setattr(extension, "INSTALL_ROOT", str(install_dir.parent))
     monkeypatch.setattr(extension, "DROPIN_DIR", str(dropin_dir))
     monkeypatch.setattr(
         extension, "DROPIN_PATH", str(dropin_dir / "90-panel-hd-haptics.conf")
@@ -78,9 +169,16 @@ def test_extension_installs_versioned_dropin_and_passes_healthcheck(
             return _result("b true\n")
         return _result()
 
-    result = extension.ensure("rog_xbox_ally_x", str(plugin), run=run)
+    result = extension.ensure(
+        "rog_xbox_ally_x", "inputplumber", str(plugin), run=run
+    )
 
-    assert result == {"available": True, "changed": True, "reason": None}
+    assert result == {
+        "available": True,
+        "changed": True,
+        "reason": None,
+        "version": "0.77.4",
+    }
     assert (install_dir / "inputplumber").read_bytes() == b"patched"
     assert (dropin_dir / "90-panel-hd-haptics.conf").read_text() == (
         "[Service]\nExecStart=\n"
@@ -126,14 +224,10 @@ def test_extension_removes_owned_override_after_stock_version_changes(
     tmp_path, monkeypatch,
 ):
     plugin = Path(tmp_path) / "plugin"
-    binary = plugin / "bin/inputplumber-xbox-hd-v0.77.4"
-    binary.parent.mkdir(parents=True)
-    binary.write_bytes(b"patched")
-    Path(f"{binary}.sha256").write_text(
-        hashlib.sha256(b"patched").hexdigest()
-    )
     stock = Path(tmp_path) / "stock-inputplumber"
     stock.write_bytes(b"stock")
+    stock_hash = hashlib.sha256(stock.read_bytes()).hexdigest()
+    _write_manifest(plugin, "0.77.4", stock_hash)
     install_dir = Path(tmp_path) / "var/lib/panel/inputplumber/0.77.4"
     dropin_dir = Path(tmp_path) / "etc/systemd/inputplumber.service.d"
     dropin_dir.mkdir(parents=True)
@@ -143,13 +237,7 @@ def test_extension_removes_owned_override_after_stock_version_changes(
         f"ExecStart={install_dir / 'inputplumber'}\n"
     )
     monkeypatch.setattr(extension, "STOCK_PATH", str(stock))
-    monkeypatch.setattr(
-        extension, "STOCK_SHA256", hashlib.sha256(b"stock").hexdigest()
-    )
-    monkeypatch.setattr(extension, "INSTALL_DIR", str(install_dir))
-    monkeypatch.setattr(
-        extension, "INSTALL_PATH", str(install_dir / "inputplumber")
-    )
+    monkeypatch.setattr(extension, "INSTALL_ROOT", str(install_dir.parent))
     monkeypatch.setattr(extension, "DROPIN_DIR", str(dropin_dir))
     monkeypatch.setattr(extension, "DROPIN_PATH", str(dropin))
     calls = []
@@ -160,12 +248,14 @@ def test_extension_removes_owned_override_after_stock_version_changes(
             return _result("inputplumber 0.77.5\n")
         return _result()
 
-    result = extension.ensure("rog_xbox_ally_x", str(plugin), run=run)
+    result = extension.ensure(
+        "rog_xbox_ally_x", "inputplumber", str(plugin), run=run
+    )
 
     assert result == {
         "available": False,
         "changed": True,
-        "reason": "version_mismatch",
+        "reason": "unsupported_version",
     }
     assert not dropin.exists()
     assert [call[1:] for call in calls[-3:]] == [
@@ -177,6 +267,8 @@ def test_extension_removes_owned_override_after_stock_version_changes(
 def test_uninstall_removes_only_owned_override_and_installed_artifacts(
     tmp_path, monkeypatch,
 ):
+    plugin = tmp_path / "plugin"
+    _write_manifest(plugin, "0.77.4", "4" * 64)
     install_dir = tmp_path / "var/lib/panel/inputplumber/0.77.4"
     install_dir.mkdir(parents=True)
     installed = install_dir / "inputplumber"
@@ -185,12 +277,11 @@ def test_uninstall_removes_only_owned_override_and_installed_artifacts(
     staged.write_bytes(b"staged")
     dropin = tmp_path / "90-panel-hd-haptics.conf"
     dropin.write_text("owned")
-    monkeypatch.setattr(extension, "INSTALL_DIR", str(install_dir))
-    monkeypatch.setattr(extension, "INSTALL_PATH", str(installed))
+    monkeypatch.setattr(extension, "INSTALL_ROOT", str(install_dir.parent))
     monkeypatch.setattr(extension, "DROPIN_PATH", str(dropin))
 
     assert extension.uninstall(
-        "another_device", run=lambda _args: _result()
+        "another_device", str(plugin), run=lambda _args: _result()
     ) is True
     assert not dropin.exists()
     assert not installed.exists()
