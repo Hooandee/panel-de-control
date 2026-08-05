@@ -5,7 +5,6 @@ import pytest
 from controllers.inputplumber_compat import (
     ManifestError,
     load_builds,
-    owned_paths,
     select_build,
 )
 
@@ -41,7 +40,7 @@ def _write_manifest(tmp_path, builds=None, **root_overrides):
     return root
 
 
-def test_loads_sorted_immutable_builds_and_owned_paths(tmp_path):
+def test_loads_sorted_immutable_builds(tmp_path):
     root = _write_manifest(
         tmp_path, [_entry("0.77.4"), _entry("0.78.0", "5" * 64)]
     )
@@ -50,12 +49,6 @@ def test_loads_sorted_immutable_builds_and_owned_paths(tmp_path):
 
     assert [build.version for build in builds] == ["0.78.0", "0.77.4"]
     assert builds[1].stock_sha256 == (STOCK_HASH,)
-    assert owned_paths(str(root), builds[1:]) == (
-        str(root / "assets/inputplumber/v0.77.4-xbox-hd.patch"),
-        str(root / "bin/inputplumber-xbox-hd-v0.77.4"),
-        str(root / "bin/inputplumber-xbox-hd-v0.77.4.sha256"),
-        str(root / "bin/inputplumber-xbox-hd-v0.77.4.provenance"),
-    )
     with pytest.raises(AttributeError):
         builds[0].version = "0.79.0"
 

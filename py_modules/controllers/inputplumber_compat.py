@@ -156,18 +156,3 @@ def select_build(
             return build
     return None
 
-
-def owned_paths(
-    plugin_dir: str, builds: Sequence[InputPlumberBuild]
-) -> Sequence[str]:
-    root = Path(plugin_dir)
-    return tuple(
-        str(root / relative)
-        for build in builds
-        for relative in (
-            build.patch,
-            build.artifact,
-            build.artifact_sha256,
-            build.provenance,
-        )
-    )
