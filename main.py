@@ -768,6 +768,11 @@ class Plugin:
             except Exception:  # noqa: BLE001
                 return {}
 
+        hud_diagnostics = await _safe(
+            self._hud_call(
+                lambda: self._hud_report_diagnostics(self._hud_state())
+            )
+        )
         states = {
             "device": await _safe(self.get_device()),
             "tdp": await _safe(self.get_tdp_state()),
@@ -792,6 +797,7 @@ class Plugin:
             "eco": await _safe(self.get_eco_state()),
             "audio": await _safe(self.get_audio_state()),
             "audio_diag": await _safe(self._offload_call(self._audio.diagnostics)),
+            "hud_diagnostics": hud_diagnostics,
             # Detected tools + current game + the frontend's running-game snapshot.
             "launch": self._launch_report_state(context),
         }
@@ -829,6 +835,59 @@ class Plugin:
             home=home,
             hostname=hostname,
         )
+
+    def _hud_report_diagnostics(self, state) -> dict:
+        state = state if isinstance(state, dict) else {}
+        model = state.get("model")
+        model = model if isinstance(model, dict) else {}
+        raw_items = model.get("items")
+        items = (
+            [item for item in raw_items if isinstance(item, dict)]
+            if isinstance(raw_items, list)
+            else []
+        )
+        metric_ids = [
+            item.get("id")
+            for item in items
+            if item.get("kind") == "metric"
+            and item.get("id") in mangohud_config.METRIC_CATALOG
+        ]
+        values = state.get("values")
+        values = values if isinstance(values, dict) else {}
+        conflict = getattr(self, "_hud_conflict", None)
+        conflict = conflict if isinstance(conflict, dict) else {}
+        return {
+            "capability": state.get("capability"),
+            "apply_status": state.get("applyStatus"),
+            "enabled": bool(model.get("enabled")),
+            "layout": model.get("layout"),
+            "position": model.get("position"),
+            "item_count": len(items),
+            "metric_ids": metric_ids,
+            "pdc_metric_ids": [
+                metric_id for metric_id in metric_ids
+                if metric_id in mangohud_config.PDC_IDS
+            ],
+            "live_value_ids": sorted(
+                metric_id for metric_id in values
+                if metric_id in mangohud_config.PDC_IDS
+            ),
+            "custom_text_count": sum(item.get("kind") == "text" for item in items),
+            "separator_count": sum(item.get("kind") == "separator" for item in items),
+            "typography": {
+                "font_size": model.get("fontSize"),
+                "font_size_secondary": model.get("fontSizeSecondary"),
+                "font_scale": model.get("fontScale"),
+                "no_small_font": bool(model.get("noSmallFont")),
+            },
+            "managed_path_present": bool(getattr(self, "_hud_managed_path", None)),
+            "managed_session_count": len(getattr(self, "_hud_sessions", ())),
+            "reload_pending_count": len(getattr(self, "_hud_reload_pending", ())),
+            "reload_attempt": int(getattr(self, "_hud_reload_attempt", 0)),
+            "conflict": bool(state.get("conflict") or conflict),
+            "conflict_reason": conflict.get("reason"),
+            "shutdown": bool(getattr(self, "_hud_shutdown", False)),
+        }
 
     def _display_diagnostics(self, context) -> dict:
         diagnostics = getattr(self._color_backend, "diagnostics", None)
@@ -3445,6 +3504,7 @@ class Plugin:
         self._hud_conflict = {
             "managedPath": safe_path,
             "path": shown_path,
+            "reason": conflict.reason,
             "expectedHash": conflict.expected_hash,
             "actualHash": conflict.actual_hash,
         }

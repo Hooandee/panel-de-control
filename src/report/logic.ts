@@ -5,6 +5,7 @@
 export const REPORT_CATEGORIES = [
   "tdp",
   "cpu_gpu",
+  "hud",
   "fans",
   "display",
   "controllers",

@@ -45,6 +45,11 @@ describe("REPORT_CATEGORIES", () => {
   it("toggles CPU and GPU control reports", () => {
     expect(toggleCategory([], "cpu_gpu")).toEqual(["cpu_gpu"]);
   });
+
+  it("offers performance HUD reports", () => {
+    expect(REPORT_CATEGORIES).toContain("hud");
+    expect(toggleCategory([], "hud")).toEqual(["hud"]);
+  });
 });
 
 describe("displayReportContext", () => {

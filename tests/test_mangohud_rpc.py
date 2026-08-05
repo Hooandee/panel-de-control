@@ -2,6 +2,7 @@
 import asyncio
 import concurrent.futures
 import importlib
+import json
 import os
 import sys
 import threading
@@ -118,6 +119,71 @@ def test_get_hud_state_shape(tmp_path, monkeypatch):
     assert st["capability"] == "ready"
     assert st["applyStatus"] == "disabled"
     assert st["values"] == {}
+
+
+def test_hud_report_diagnostics_are_useful_without_custom_content(
+    tmp_path,
+    monkeypatch,
+):
+    _main, p = _make_plugin(tmp_path, monkeypatch)
+    p._init()
+    p._hud_managed_path = str(tmp_path / "private-presets.conf")
+    p._hud_sessions = (object(), object())
+    p._hud_reload_pending = (object(),)
+    p._hud_reload_attempt = 2
+    p._hud_conflict = {"reason": "external_config"}
+    state = {
+        "capability": "ready",
+        "applyStatus": "conflict",
+        "model": {
+            "enabled": True,
+            "layout": "horizontal",
+            "position": "bottom-right",
+            "fontSize": 32,
+            "fontSizeSecondary": 18,
+            "fontScale": 1.25,
+            "noSmallFont": False,
+            "items": [
+                {"kind": "metric", "id": "fps", "label": "PRIVATE-LABEL"},
+                {"kind": "metric", "id": "pdc_tdp"},
+                {"kind": "text", "id": "note", "text": "PRIVATE-TEXT"},
+                {"kind": "separator", "id": "line"},
+            ],
+        },
+        "values": {"pdc_tdp": "PRIVATE-VALUE"},
+    }
+
+    diagnostics = p._hud_report_diagnostics(state)
+
+    assert diagnostics == {
+        "capability": "ready",
+        "apply_status": "conflict",
+        "enabled": True,
+        "layout": "horizontal",
+        "position": "bottom-right",
+        "item_count": 4,
+        "metric_ids": ["fps", "pdc_tdp"],
+        "pdc_metric_ids": ["pdc_tdp"],
+        "live_value_ids": ["pdc_tdp"],
+        "custom_text_count": 1,
+        "separator_count": 1,
+        "typography": {
+            "font_size": 32,
+            "font_size_secondary": 18,
+            "font_scale": 1.25,
+            "no_small_font": False,
+        },
+        "managed_path_present": True,
+        "managed_session_count": 2,
+        "reload_pending_count": 1,
+        "reload_attempt": 2,
+        "conflict": True,
+        "conflict_reason": "external_config",
+        "shutdown": False,
+    }
+    encoded = json.dumps(diagnostics)
+    assert "PRIVATE" not in encoded
+    assert str(tmp_path) not in encoded
 
 
 def test_hud_detection_fails_closed_when_user_ownership_is_unknown(
@@ -477,6 +543,9 @@ def test_external_edit_becomes_an_explicit_conflict_without_data_loss(
     assert state["conflict"]["path"] == "presets.conf"
     assert state["conflict"]["expectedHash"]
     assert state["conflict"]["actualHash"]
+    assert p._hud_report_diagnostics(state)["conflict_reason"] == (
+        "managed_content_mismatch"
+    )
     assert open(presets).read() == edited
     assert open(f"{presets}.pdc-backup").read() == external
 
