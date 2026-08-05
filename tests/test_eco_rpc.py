@@ -107,7 +107,11 @@ def test_set_eco_waits_until_boost_is_off(tmp_path, monkeypatch):
 
     async def run():
         task = asyncio.create_task(p.set_eco(True, 55))
-        await asyncio.wait_for(asyncio.to_thread(started.wait), timeout=1)
+        for _attempt in range(100):
+            if started.is_set():
+                break
+            await asyncio.sleep(0.01)
+        assert started.is_set()
         try:
             assert not task.done()
         finally:
