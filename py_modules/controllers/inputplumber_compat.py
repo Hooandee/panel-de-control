@@ -155,4 +155,3 @@ def select_build(
         if build.version == version and stock_sha256 in build.stock_sha256:
             return build
     return None
-
