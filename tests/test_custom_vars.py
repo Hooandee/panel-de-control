@@ -88,9 +88,10 @@ def test_drops_tokens_owned_by_the_base_catalog():
     raw = [
         {"id": "a", "name": "base env", "kind": "env", "envName": "PROTON_LOG", "envValue": "1"},
         {"id": "b", "name": "base arg", "kind": "arg", "arg": "-novid"},
-        {"id": "c", "name": "custom", "kind": "arg", "arg": "-my-flag"},
+        {"id": "c", "name": "official FSR4", "kind": "env", "envName": "FSR4_UPGRADE", "envValue": "1"},
+        {"id": "d", "name": "custom", "kind": "arg", "arg": "-my-flag"},
     ]
-    assert [v["id"] for v in coerce_custom_vars(raw)] == ["c"]
+    assert [v["id"] for v in coerce_custom_vars(raw)] == ["d"]
 
 
 def test_preserves_only_a_boolean_retired_marker():

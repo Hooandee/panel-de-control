@@ -6,7 +6,8 @@ import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { ValuePills } from "./LaunchPills";
 import { LaunchEditor } from "../launch/useLaunchEditor";
-import { LaunchTools, Pill, isPillAvailable, pillLabel, pillDesc, pillHelp } from "../launch/catalog";
+import { LaunchTools, Pill, isPillAvailable, pillLabel, pillDesc, pillHelp, selectionForPill } from "../launch/catalog";
+import { GpuGen } from "../launch/proton";
 
 /** A round on/off switch matching the section's visual language. */
 const RowSwitch: FC<{ active: boolean; disabled?: boolean; onToggle: () => void }> = ({ active, disabled, onToggle }) => {
@@ -46,11 +47,11 @@ const Badge: FC<{ text: string; accent?: boolean }> = ({ text, accent }) => (
  * Toggles get a switch; value pills a chip row; free-text pills a text field. An
  * unavailable pill (tool not installed) is dimmed with an honest badge.
  */
-export const LaunchRow: FC<{ pill: Pill; ed: LaunchEditor; tools: LaunchTools; caveat?: string }> = ({ pill, ed, tools, caveat }) => {
+export const LaunchRow: FC<{ pill: Pill; ed: LaunchEditor; tools: LaunchTools; gpu: GpuGen; supportedEnvs: string[]; catalog: Pill[]; caveat?: string }> = ({ pill, ed, tools, gpu, supportedEnvs, catalog, caveat }) => {
   const { t } = useI18n();
   const [expanded, setExpanded] = useState(false);
   const available = isPillAvailable(pill, tools);
-  const sel = ed.selections[pill.id];
+  const sel = selectionForPill(pill, ed.selections, gpu, supportedEnvs, catalog);
   const isValue = !!pill.options;
   const isText = !!pill.freeText;
   const isToggle = !isValue && !isText;

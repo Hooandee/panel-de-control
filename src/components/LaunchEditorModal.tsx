@@ -20,7 +20,7 @@ import { GameEntry } from "../launch/steamApi";
 import { getDevice, getLaunchTools, getProtonCaps, LaunchTools } from "../api";
 import { useLaunchEditor } from "../launch/useLaunchEditor";
 import { useCustomVars } from "../launch/useCustomVars";
-import { CATALOG, SUBGROUP_ORDER, Pill, Section, frequentPills, recommendedPills, ownedTokens, pillVisible } from "../launch/catalog";
+import { CATALOG, SUBGROUP_ORDER, Pill, Section, frequentPills, recommendedPills, ownedTokens, pillVisible, selectionForPill } from "../launch/catalog";
 import { customPillVisible } from "../launch/customVars";
 import { GpuGen } from "../launch/proton";
 
@@ -93,6 +93,9 @@ const Subgroup: FC<{ section: Section; subgroup: string; ed: Editor; tools: Laun
           pill={p}
           ed={ed}
           tools={tools}
+          gpu={gpu}
+          supportedEnvs={envs}
+          catalog={catalog}
           caveat={p.id === "langEs" && tools.locale_reliable === false ? t("params.caveat.locale") : undefined}
         />
       ))}
@@ -116,7 +119,7 @@ const LaunchEditorBody: FC<{ game: GameEntry }> = ({ game }) => {
   const ed = useLaunchEditor(game, catalog);
   const [tools, setTools] = useState<LaunchTools | null>(null);
   const [gpu, setGpu] = useState<GpuGen>("unknown");
-  // PROTON_* vars the game's Proton build actually supports (null until loaded).
+  // Launch-option vars the game's Proton build actually supports (null until loaded).
   const [envs, setEnvs] = useState<string[] | null>(null);
   const [versionLabel, setVersionLabel] = useState("");
 
@@ -134,7 +137,7 @@ const LaunchEditorBody: FC<{ game: GameEntry }> = ({ game }) => {
   }, []);
 
   // Read the game's Proton capabilities from the compat tool the editor resolved
-  // (via the details callback). Empty/native → no PROTON caps → only base pills show.
+  // (via the details callback). Empty/native → no Proton caps → only base pills show.
   useEffect(() => {
     if (ed.loading) return;
     let cancelled = false;
@@ -148,7 +151,8 @@ const LaunchEditorBody: FC<{ game: GameEntry }> = ({ game }) => {
   }, [ed.loading, ed.compatName, ed.compatDisplay]);
 
   const supportedEnvs = envs ?? [];
-  const advancedCount = catalog.filter((p) => p.section === "advanced" && !!ed.selections[p.id] && pillVisible(p, supportedEnvs, gpu)).length;
+  const advancedCount = catalog.filter((p) =>
+    p.section === "advanced" && !!selectionForPill(p, ed.selections, gpu, supportedEnvs, catalog) && pillVisible(p, supportedEnvs, gpu)).length;
   const owned = ownedTokens(ed.selections, catalog);
   const frequents: Pill[] = tools ? frequentPills(ed.usage, tools).filter((p) => pillVisible(p, supportedEnvs, gpu)) : [];
   // No usage yet → offer a "Start here" set of safe recommended picks instead.
@@ -216,7 +220,7 @@ const LaunchEditorBody: FC<{ game: GameEntry }> = ({ game }) => {
             <div>
               <Heading icon={<LuStar size={13} />}>{t("params.frequent")}</Heading>
               {frequents.map((p) => (
-                <LaunchRow key={`fav-${p.id}`} pill={p} ed={ed} tools={tools} />
+                <LaunchRow key={`fav-${p.id}`} pill={p} ed={ed} tools={tools} gpu={gpu} supportedEnvs={supportedEnvs} catalog={catalog} />
               ))}
             </div>
           )}
@@ -225,7 +229,7 @@ const LaunchEditorBody: FC<{ game: GameEntry }> = ({ game }) => {
             <div>
               <Heading icon={<LuSparkles size={13} />}>{t("params.startHere")}</Heading>
               {starters.map((p) => (
-                <LaunchRow key={`start-${p.id}`} pill={p} ed={ed} tools={tools} />
+                <LaunchRow key={`start-${p.id}`} pill={p} ed={ed} tools={tools} gpu={gpu} supportedEnvs={supportedEnvs} catalog={catalog} />
               ))}
             </div>
           )}

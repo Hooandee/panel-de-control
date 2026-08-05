@@ -10,6 +10,19 @@ def _write_proton(root, compat_name, body):
         f.write(body)
 
 
+def _write_builtin_proton(root, folder, body, *, official_fsr4=False):
+    d = os.path.join(root, ".steam", "steam", "steamapps", "common", folder)
+    os.makedirs(d, exist_ok=True)
+    with open(os.path.join(d, "proton"), "w") as f:
+        f.write(body)
+    if official_fsr4:
+        contrib = os.path.join(d, "contrib")
+        os.makedirs(contrib, exist_ok=True)
+        with open(os.path.join(contrib, "amdxcffx64.dll"), "wb"):
+            pass
+    return d
+
+
 PROTON_BODY = """
     def config(self):
         self.check_environment("PROTON_NO_NTSYNC", "nontsync")
@@ -17,7 +30,6 @@ PROTON_BODY = """
         self.check_environment("PROTON_FSR4_RDNA3_UPGRADE", "fsr4rdna3")
         self.check_environment("PROTON_PREFER_SDL", "sdlinput")
 """
-
 
 def test_reads_supported_vars_from_script(tmp_path):
     _write_proton(str(tmp_path), "GE-Proton10-21", PROTON_BODY)
@@ -37,6 +49,29 @@ def test_absent_var_not_reported(tmp_path):
     # FSR3/XeSS aren't in this script → not offered.
     assert "PROTON_FSR3_UPGRADE" not in caps["envs"]
     assert "PROTON_XESS_UPGRADE" not in caps["envs"]
+
+
+def test_refreshes_official_fsr4_from_bundled_dll(tmp_path):
+    install_dir = _write_builtin_proton(
+        str(tmp_path),
+        "Proton - Experimental",
+        "# official Proton script",
+    )
+    caps = detect_capabilities("proton_experimental", home=str(tmp_path))
+    assert "FSR4_UPGRADE" not in caps["envs"]
+
+    _write_builtin_proton(
+        str(tmp_path),
+        "Proton - Experimental",
+        "# updated official Proton script",
+        official_fsr4=True,
+    )
+    caps = detect_capabilities("proton_experimental", home=str(tmp_path))
+    assert "FSR4_UPGRADE" in caps["envs"]
+
+    os.remove(os.path.join(install_dir, "contrib", "amdxcffx64.dll"))
+    caps = detect_capabilities("proton_experimental", home=str(tmp_path))
+    assert "FSR4_UPGRADE" not in caps["envs"]
 
 
 def test_not_found_offers_nothing(tmp_path):

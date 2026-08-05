@@ -563,8 +563,7 @@ class Plugin:
         return dict(self._launch_tools)
 
     async def get_proton_caps(self, compat_name: str = "") -> dict:
-        """Which PROTON_* vars the given game's Proton build supports (read from its
-        own script) → the editor only shows options that actually work there."""
+        """Which launch-option vars the installed Proton build supports."""
         self._init()
         home = getattr(decky, "DECKY_USER_HOME", None) or os.path.expanduser("~")
         return proton_caps.detect_capabilities(compat_name, home=home)

@@ -8,6 +8,8 @@ import {
   isPillAvailable,
   frequentPills,
   pillVisible,
+  selectionForPill,
+  updateSelection,
   LaunchTools,
 } from "./catalog";
 
@@ -47,6 +49,48 @@ describe("buildLaunchOptions", () => {
 
   it("langEs sets LANG to Spanish", () => {
     expect(buildLaunchOptions(parse(""), { langEs: true })).toBe("LANG=es_ES.UTF-8 %command%");
+  });
+
+  it("adds the official Proton FSR4 upgrade variable", () => {
+    expect(buildLaunchOptions(parse(""), { fsr4Official: true })).toBe("FSR4_UPGRADE=1 %command%");
+  });
+
+  it("replaces a hidden official FSR4 token when enabling the custom-Proton variant", () => {
+    const baseline = parse("FSR4_UPGRADE=1 %command%");
+    const selections = updateSelection(detectSelections(baseline), "fsr4", true);
+    expect(buildLaunchOptions(baseline, selections)).toBe("PROTON_FSR4_UPGRADE=1 %command%");
+  });
+
+  it("replaces a hidden custom-Proton token when enabling the official variant", () => {
+    const baseline = parse("PROTON_FSR4_RDNA3_UPGRADE=1 %command%");
+    const selections = updateSelection(detectSelections(baseline), "fsr4Official", true);
+    expect(buildLaunchOptions(baseline, selections)).toBe("FSR4_UPGRADE=1 %command%");
+  });
+
+  it("shows the visible FSR4 variant active when an equivalent hidden token is active", () => {
+    const visible = CATALOG.find((pill) => pill.id === "fsr4")!;
+    const selections = detectSelections(parse("FSR4_UPGRADE=1 %command%"));
+    expect(selectionForPill(
+      visible,
+      selections,
+      "rdna4",
+      ["PROTON_FSR4_UPGRADE", "FSR4_UPGRADE"],
+    )).toBe(true);
+  });
+
+  it("does not activate FSR4 from an equivalent intended for another GPU", () => {
+    const visible = CATALOG.find((pill) => pill.id === "fsr4Official")!;
+    const rdna3Selections = detectSelections(parse("PROTON_FSR4_RDNA3_UPGRADE=1 %command%"));
+    const rdna4Selections = detectSelections(parse("PROTON_FSR4_UPGRADE=1 %command%"));
+    const supported = ["PROTON_FSR4_UPGRADE", "PROTON_FSR4_RDNA3_UPGRADE", "FSR4_UPGRADE"];
+    expect(selectionForPill(visible, rdna3Selections, "rdna4", supported)).toBeUndefined();
+    expect(selectionForPill(visible, rdna4Selections, "rdna3", supported)).toBeUndefined();
+  });
+
+  it("does not activate FSR4 from an equivalent unsupported by the current Proton", () => {
+    const visible = CATALOG.find((pill) => pill.id === "fsr4Official")!;
+    const selections = detectSelections(parse("PROTON_FSR4_UPGRADE=1 %command%"));
+    expect(selectionForPill(visible, selections, "rdna4", ["FSR4_UPGRADE"])).toBeUndefined();
   });
 
   it("does NOT clobber a user's own LANG value, and is not detected as active", () => {
@@ -219,6 +263,32 @@ describe("pillVisible (Proton capability + GPU gating)", () => {
     expect(pillVisible(pill("fsr4Rdna3"), ["PROTON_FSR4_RDNA3_UPGRADE"], "rdna3")).toBe(true);
     expect(pillVisible(pill("fsr4Rdna3"), [], "rdna3")).toBe(false); // var unsupported by build
     expect(pillVisible(pill("fsr4Rdna3"), ["PROTON_FSR4_RDNA3_UPGRADE"], "rdna2")).toBe(false); // Steam Deck
+  });
+
+  it("uses official FSR4 only when supported and no custom-Proton variant exists", () => {
+    expect(pillVisible(pill("fsr4Official"), ["FSR4_UPGRADE"], "rdna3")).toBe(true);
+    expect(pillVisible(pill("fsr4Official"), [], "rdna3")).toBe(false);
+    expect(pillVisible(pill("fsr4Official"), ["FSR4_UPGRADE"], "rdna2")).toBe(false);
+    expect(pillVisible(
+      pill("fsr4Official"),
+      ["FSR4_UPGRADE", "PROTON_FSR4_UPGRADE"],
+      "rdna4",
+    )).toBe(false);
+    expect(pillVisible(
+      pill("fsr4Official"),
+      ["FSR4_UPGRADE", "PROTON_FSR4_RDNA3_UPGRADE"],
+      "rdna3",
+    )).toBe(false);
+    expect(pillVisible(
+      pill("fsr4Official"),
+      ["FSR4_UPGRADE", "PROTON_FSR4_UPGRADE"],
+      "rdna3",
+    )).toBe(true);
+    expect(pillVisible(
+      pill("fsr4Official"),
+      ["FSR4_UPGRADE", "PROTON_FSR4_RDNA3_UPGRADE"],
+      "rdna4",
+    )).toBe(true);
   });
 
   it("OptiScaler shows only where its var exists (CachyOS)", () => {
