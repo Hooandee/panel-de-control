@@ -257,7 +257,7 @@ class GamescopeColorBackend:
             stat = os.stat(os.path.join(runtime, wayland))
         except OSError:
             return None
-        return stat.st_dev, stat.st_ino
+        return stat.st_dev, stat.st_ino, stat.st_mtime_ns
 
     def _refresh_session_identity(self):
         runtime, wayland = self._discover(self._socket_glob)
@@ -277,16 +277,20 @@ class GamescopeColorBackend:
             )
             return False
         previous_identity = self._session_identity
+        same_socket = (
+            previous_identity is not None
+            and (
+                previous_identity[0],
+                previous_identity[1],
+                previous_identity[3],
+            ) == identity
+        )
         owner = (
             previous_identity[2]
-            if (
-                previous_identity is not None
-                and previous_identity[:2] == identity
-                and previous_identity[2] is not None
-            )
+            if same_socket and previous_identity[2] is not None
             else self._socket_owner(os.path.join(runtime, wayland))
         )
-        identity = (*identity, owner)
+        identity = identity[:2] + (owner, identity[2])
         session = runtime, wayland, identity
         previous = (
             self._runtime, self._wayland, self._session_identity

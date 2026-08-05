@@ -1,4 +1,5 @@
 import os
+from types import SimpleNamespace
 
 from display.const import NATIVE
 from display.gamescope import (
@@ -281,13 +282,29 @@ def test_backend_self_heals_when_socket_appears_after_init(tmp_path):
 
 def test_backend_discards_ownership_and_reprobes_when_session_restarts(
     tmp_path,
+    monkeypatch,
 ):
+    socket = tmp_path / "run" / "user" / "1000" / "gamescope-0"
+    real_stat = os.stat
+    socket_mtime = {"value": 1}
+
+    def stat_with_reused_inode(path, *args, **kwargs):
+        result = real_stat(path, *args, **kwargs)
+        if os.fspath(path) == str(socket):
+            return SimpleNamespace(
+                st_dev=7,
+                st_ino=11,
+                st_mtime_ns=socket_mtime["value"],
+            )
+        return result
+
+    monkeypatch.setattr(os, "stat", stat_with_reused_inode)
     b, r = _backend(tmp_path, hdr_look=True)
     assert b.apply({**NATIVE, "hdr_saturation": 130}) is True
     before = b.display_fingerprint()
-    socket = tmp_path / "run" / "user" / "1000" / "gamescope-0"
     socket.unlink()
     socket.write_text("")
+    socket_mtime["value"] += 1
     r.calls.clear()
 
     after = b.display_fingerprint()

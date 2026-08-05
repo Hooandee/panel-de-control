@@ -2,6 +2,7 @@
 import asyncio
 import importlib
 import sys
+import threading
 import types
 
 
@@ -88,6 +89,34 @@ def test_eco_on_forces_min_tdp_and_boost_off(tmp_path, monkeypatch):
     levels, _active, _ac = p._effective_levels(None)
     assert levels["pl1"] == 5 and levels["pl2"] == 5 and levels["pl3"] == 5
     assert boost.enabled() is False  # boost forced off
+
+
+def test_set_eco_waits_until_boost_is_off(tmp_path, monkeypatch):
+    started = threading.Event()
+    release = threading.Event()
+
+    class BlockingToggle(_FakeToggle):
+        def set(self, enabled):
+            if not enabled:
+                started.set()
+                release.wait(timeout=2)
+            return super().set(enabled)
+
+    boost = BlockingToggle(on=True)
+    p = _make_plugin(tmp_path, monkeypatch, boost=boost)
+
+    async def run():
+        task = asyncio.create_task(p.set_eco(True, 55))
+        await asyncio.wait_for(asyncio.to_thread(started.wait), timeout=1)
+        try:
+            assert not task.done()
+        finally:
+            release.set()
+        state = await task
+        assert state["enabled"] is True
+        assert boost.enabled() is False
+
+    asyncio.run(run())
 
 
 def test_eco_off_restores(tmp_path, monkeypatch):

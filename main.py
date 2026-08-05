@@ -3407,7 +3407,9 @@ class Plugin:
         firmware's post-transition reset without re-running the full re-apply each time."""
         self._schedule_tdp_apply("settle-retry", on_ac)
 
-    def _reapply_all(self, on_ac=None, force_controller=False) -> None:
+    def _reapply_all(
+        self, on_ac=None, force_controller=False, apply_cpu=True
+    ) -> None:
         """Lifecycle callback: re-assert TDP, the fan curve, the charge limit and the
         CPU controls (resume/AC — firmware may drop these across a suspend)."""
         # A context change (resume, AC/DC, game change, eco) invalidates any
@@ -3419,7 +3421,8 @@ class Plugin:
         self._color_preview = None
         # sysfs (fast) → inline; subprocess-backed (tdp-ryzenadj/fans/color) → off-loop.
         self._apply_charge_limit()
-        self._apply_cpu()
+        if apply_cpu:
+            self._apply_cpu()
         self._apply_gpu_clock()
         self._schedule_tdp_apply("lifecycle", on_ac)
         # Stepped aside: retry a pending HHD hand-back (no-op while we control / no marker).
@@ -3753,11 +3756,13 @@ class Plugin:
         # Snapshot the wake brightness only if it's a real reading (> 0). The FE may
         # pass 0 while brightness is still loading; storing 0 would restore the screen
         # to black on exit (unrecoverable from the card). Keep the previous value then.
-        if enabled and int(current_brightness) > 0:
-            self._settings["eco_brightness"] = int(current_brightness)
-        self._settings["eco_enabled"] = bool(enabled)
-        self._save()
-        self._reapply_all()
+        async with self._cpu_mutation_lock:
+            if enabled and int(current_brightness) > 0:
+                self._settings["eco_brightness"] = int(current_brightness)
+            self._settings["eco_enabled"] = bool(enabled)
+            self._save()
+            await self._apply_cpu_awaited(trigger="set_eco")
+            self._reapply_all(apply_cpu=False)
         return self._eco_state()
 
     def _cpu_state(self) -> dict:
