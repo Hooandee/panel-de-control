@@ -2,8 +2,8 @@
 import asyncio
 import importlib
 import sys
-import threading
 import types
+from concurrent.futures import Future
 
 
 class _FakeToggle:
@@ -92,30 +92,36 @@ def test_eco_on_forces_min_tdp_and_boost_off(tmp_path, monkeypatch):
 
 
 def test_set_eco_waits_until_boost_is_off(tmp_path, monkeypatch):
-    started = threading.Event()
-    release = threading.Event()
+    class ControlledExecutor:
+        def __init__(self):
+            self.pending = None
+            self.paused = True
 
-    class BlockingToggle(_FakeToggle):
-        def set(self, enabled):
-            if not enabled:
-                started.set()
-                release.wait(timeout=2)
-            return super().set(enabled)
+        def submit(self, operation):
+            future = Future()
+            if self.paused:
+                self.pending = operation, future
+            else:
+                future.set_result(operation())
+            return future
 
-    boost = BlockingToggle(on=True)
+        def resume(self):
+            operation, future = self.pending
+            self.pending = None
+            self.paused = False
+            future.set_result(operation())
+
+    boost = _FakeToggle(on=True)
     p = _make_plugin(tmp_path, monkeypatch, boost=boost)
+    executor = ControlledExecutor()
+    p._apply_executor = executor
 
     async def run():
         task = asyncio.create_task(p.set_eco(True, 55))
-        for _attempt in range(100):
-            if started.is_set():
-                break
-            await asyncio.sleep(0.01)
-        assert started.is_set()
-        try:
-            assert not task.done()
-        finally:
-            release.set()
+        while executor.pending is None:
+            await asyncio.sleep(0)
+        assert not task.done()
+        executor.resume()
         state = await task
         assert state["enabled"] is True
         assert boost.enabled() is False
