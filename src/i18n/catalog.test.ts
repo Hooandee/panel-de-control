@@ -113,6 +113,24 @@ describe("Italian catalog", () => {
 
     expect(i18n.translate("app.title")).toBe("Pannello di controllo");
   });
+
+  it("formats reviewed count labels without fixed singular or plural forms", () => {
+    window.localStorage.setItem(STORAGE_KEY, "it");
+
+    expect(i18n.translate("params.activeCount", { n: 1 })).toBe("Attivi: 1");
+    expect(i18n.translate("params.activeCount", { n: 2 })).toBe("Attivi: 2");
+    expect(i18n.translate("gameProfiles.buttons", { n: 1 })).toBe("Pulsanti: 1");
+    expect(i18n.translate("gameProfiles.buttons", { n: 2 })).toBe("Pulsanti: 2");
+  });
+
+  it("uses the reviewed Italian hardware-control labels", () => {
+    expect(italianCatalog()).toMatchObject({
+      "gpu.clock.manual": "Imposta la frequenza GPU",
+      "settings.tdpcontrol": "Controllo del TDP",
+      "settings.cooler": "Sistema di raffreddamento esterno collegato",
+      "settings.cooler.desc": "Attivalo solo se hai collegato il sistema di raffreddamento esterno o la batteria esterna: aumenta il limite TDP fino a {max} W. Non attivarlo senza il sistema di raffreddamento esterno, perché il dispositivo potrebbe surriscaldarsi.",
+    });
+  });
 });
 
 describe("LanguageToggle", () => {
