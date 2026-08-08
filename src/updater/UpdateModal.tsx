@@ -4,43 +4,7 @@ import { type ReactNode, useState } from "react";
 import type { InstallResult } from "../api";
 import { useUpdate } from "./useUpdate";
 import type { Lang } from "../i18n";
-
-const STRINGS = {
-  es: {
-    title: "Novedades",
-    noNotes: "Sin notas para esta versión.",
-    install: "Instalar actualización",
-    installing: "Instalando…",
-    installed: "Actualización instalada.",
-    restartNote: "Reinicia Decky para aplicarla.",
-    restart: "Reiniciar Decky",
-    failed: "No se pudo instalar. Inténtalo de nuevo.",
-  },
-  en: {
-    title: "What's new",
-    noNotes: "No notes for this release.",
-    install: "Install update",
-    installing: "Installing…",
-    installed: "Update installed.",
-    restartNote: "Restart Decky to apply it.",
-    restart: "Restart Decky",
-    failed: "Install failed. Please try again.",
-  },
-  it: {
-    title: "Novità",
-    noNotes: "Nessuna nota per questa versione.",
-    install: "Installa l'aggiornamento",
-    installing: "Installazione in corso…",
-    installed: "Aggiornamento installato.",
-    restartNote: "Riavvia Decky per applicare l'aggiornamento.",
-    restart: "Riavvia Decky",
-    failed: "Installazione non riuscita. Riprova.",
-  },
-} as const;
-
-export function getUpdateModalStrings(lang: Lang) {
-  return STRINGS[lang];
-}
+import { getUpdaterStrings } from "./strings";
 
 const MONO = "ui-monospace, SFMono-Regular, Menlo, monospace";
 
@@ -121,7 +85,7 @@ export function UpdateModal({
   notes: string;
   closeModal?: () => void;
 }) {
-  const t = getUpdateModalStrings(lang);
+  const t = getUpdaterStrings(lang).modal;
   const { install, restart, status } = useUpdate(lang);
   const [result, setResult] = useState<InstallResult | null>(null);
   const installing = status === "installing";

@@ -26,20 +26,9 @@ vi.mock("../api", () => ({
   restartLoader: mocks.restartLoader,
 }));
 
-import * as useUpdateModule from "./useUpdate";
-
-const { useUpdate } = useUpdateModule;
-const getUpdateAvailableTitle = Reflect.get(useUpdateModule, "getUpdateAvailableTitle") as
-  | ((lang: "it") => string)
-  | undefined;
+import { useUpdate } from "./useUpdate";
 
 describe("useUpdate Italian notification", () => {
-  it("exposes the Italian toast copy without em dashes", () => {
-    expect(getUpdateAvailableTitle).toBeTypeOf("function");
-    expect(getUpdateAvailableTitle?.("it")).toBe("Aggiornamento disponibile");
-    expect(getUpdateAvailableTitle?.("it")).not.toContain("—");
-  });
-
   it("shows the update toast in Italian", async () => {
     renderHook(() => useUpdate("it"));
 

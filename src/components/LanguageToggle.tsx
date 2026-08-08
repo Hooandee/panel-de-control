@@ -27,7 +27,6 @@ const FlagIT: FC = () => (
   </svg>
 );
 
-// Compact flag selector: the active button stays at full opacity with a bright ring.
 export const LanguageToggle: FC = () => {
   const { lang, setLang, t } = useI18n();
 

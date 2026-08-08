@@ -131,6 +131,17 @@ describe("Italian catalog", () => {
       "settings.cooler.desc": "Attivalo solo se hai collegato il sistema di raffreddamento esterno o la batteria esterna: aumenta il limite TDP fino a {max} W. Non attivarlo senza il sistema di raffreddamento esterno, perché il dispositivo potrebbe surriscaldarsi.",
     });
   });
+
+  it("uses consistent Italian controller and generated-frame terminology", () => {
+    expect(italianCatalog()).toMatchObject({
+      "hud.metric.frame_count": "Fotogrammi totali",
+      "params.pill.lsfg.desc": "Genera fotogrammi aggiuntivi per una maggiore fluidità. Richiede il plugin lsfg-vk.",
+      "params.pill.optiscaler.desc": "Sostituisce DLSS con FSR/XeSS e aggiunge la generazione di fotogrammi. Solo Proton-CachyOS.",
+      "params.pill.lsfg.help": "Inserisce fotogrammi intermedi con Lossless Scaling per aumentare la fluidità. È ideale per i giochi a 30-40 FPS. Il moltiplicatore si regola nel plugin lsfg-vk.",
+      "params.pill.optiscaler.help": "Sostituisce l'upscaling DLSS con FSR/XeSS e aggiunge la generazione di fotogrammi, integrandosi in Proton-CachyOS senza modificare file. Funziona solo con questa versione di Proton.",
+      "mandos.mode.hori_steam": "HORI (giroscopio/pulsanti posteriori)",
+    });
+  });
 });
 
 describe("LanguageToggle", () => {

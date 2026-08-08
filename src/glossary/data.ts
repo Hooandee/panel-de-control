@@ -1,9 +1,5 @@
 // Glossary content lives here (not in the i18n dictionary) because it's bulky,
 // multilingual prose. Only the modal's chrome strings go through i18n.
-//
-// Tone: written for a gamer who has never heard the term. Plain, conversational,
-// and centred on how it affects your games. Spanish and English retain their shared
-// display term; Italian uses `termIt` where that term needs translating.
 
 import type { Lang } from "../i18n";
 
@@ -131,10 +127,10 @@ export const CATEGORIES: GlossaryCategory[] = [
       {
         id: "frame-gen",
         term: "Generación de fotogramas",
-        termIt: "Generazione dei frame",
+        termIt: "Generazione di fotogrammi",
         es: "La consola calcula fotogramas de relleno y los cuela entre los reales para que el movimiento se vea más suave. Ayuda a que todo fluya, pero tiene truco: gasta algo de gráfica y a veces los controles responden un pelín más tarde.",
         en: "The console works out filler frames and slips them between the real ones so motion looks smoother. It helps everything flow, but there's a catch: it uses some graphics power and the controls can feel a touch slower to respond.",
-        it: "Il dispositivo calcola frame aggiuntivi e li inserisce tra quelli reali per rendere il movimento più fluido. Il risultato può essere ottimo, ma richiede parte della potenza grafica e può aggiungere un lieve ritardo ai comandi.",
+        it: "Il dispositivo calcola fotogrammi aggiuntivi e li inserisce tra quelli reali per rendere il movimento più fluido. Il risultato può essere ottimo, ma richiede parte della potenza grafica e può aggiungere un lieve ritardo ai comandi.",
       },
       {
         id: "optiscaler",

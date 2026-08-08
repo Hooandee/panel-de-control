@@ -53,6 +53,15 @@ describe("glossary data", () => {
 
     expect(italian.some((value) => value.includes("—"))).toBe(false);
   });
+
+  it("uses Italian generated-frame terminology", () => {
+    const frameGeneration = terms.find((term) => term.id === "frame-gen");
+
+    expect(frameGeneration).toMatchObject({
+      termIt: "Generazione di fotogrammi",
+      it: "Il dispositivo calcola fotogrammi aggiuntivi e li inserisce tra quelli reali per rendere il movimento più fluido. Il risultato può essere ottimo, ma richiede parte della potenza grafica e può aggiungere un lieve ritardo ai comandi.",
+    });
+  });
 });
 
 describe("pick", () => {
