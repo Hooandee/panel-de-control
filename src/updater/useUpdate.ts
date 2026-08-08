@@ -33,6 +33,10 @@ const UPDATE_AVAILABLE: Record<Lang, string> = {
   it: "Aggiornamento disponibile",
 };
 
+export function getUpdateAvailableTitle(lang: Lang) {
+  return UPDATE_AVAILABLE[lang];
+}
+
 export function useUpdate(lang: Lang): UseUpdate {
   const [info, setInfo] = useState<UpdateInfo | null>(sessionInfo);
   const [status, setStatus] = useState<UpdateStatus>("idle");
@@ -48,7 +52,7 @@ export function useUpdate(lang: Lang): UseUpdate {
         if (res.has_update && !sessionToasted) {
           sessionToasted = true;
           toaster.toast({
-            title: UPDATE_AVAILABLE[lang],
+            title: getUpdateAvailableTitle(lang),
             body: `v${res.latest}`,
           });
         }

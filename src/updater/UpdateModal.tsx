@@ -29,14 +29,18 @@ const STRINGS = {
   it: {
     title: "Novità",
     noNotes: "Nessuna nota per questa versione.",
-    install: "Installa aggiornamento",
-    installing: "Installazione…",
+    install: "Installa l'aggiornamento",
+    installing: "Installazione in corso…",
     installed: "Aggiornamento installato.",
-    restartNote: "Riavvia Decky per applicarlo.",
+    restartNote: "Riavvia Decky per applicare l'aggiornamento.",
     restart: "Riavvia Decky",
     failed: "Installazione non riuscita. Riprova.",
   },
 } as const;
+
+export function getUpdateModalStrings(lang: Lang) {
+  return STRINGS[lang];
+}
 
 const MONO = "ui-monospace, SFMono-Regular, Menlo, monospace";
 
@@ -117,7 +121,7 @@ export function UpdateModal({
   notes: string;
   closeModal?: () => void;
 }) {
-  const t = STRINGS[lang];
+  const t = getUpdateModalStrings(lang);
   const { install, restart, status } = useUpdate(lang);
   const [result, setResult] = useState<InstallResult | null>(null);
   const installing = status === "installing";

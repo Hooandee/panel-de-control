@@ -24,21 +24,25 @@ const STRINGS = {
   },
   it: {
     version: "Versione",
-    latest: "(ultima)",
-    newPrefix: "nuova",
-    checking: "ricerca…",
+    latest: "(più recente)",
+    newPrefix: "disponibile",
+    checking: "verifica in corso…",
     check: "Cerca aggiornamenti",
     update: "Scopri le novità e installa",
-    error: "Impossibile verificare. Controlla la connessione.",
+    error: "Verifica non riuscita. Controlla la connessione.",
   },
 } as const;
+
+export function getUpdatePanelStrings(lang: Lang) {
+  return STRINGS[lang];
+}
 
 const MUTED = "rgba(255,255,255,0.55)";
 
 // Inline: a single unified version line + one button. The changelog and the
 // install action live in a modal (opened when an update is available).
 export function UpdatePanel({ lang, version }: { lang: Lang; version?: string }) {
-  const t = STRINGS[lang];
+  const t = getUpdatePanelStrings(lang);
   const { info, status, check } = useUpdate(lang);
 
   const current = info?.current ?? version ?? "";
