@@ -42,7 +42,7 @@ jobs:
           manifest-file: .release-please-manifest.json
 
       # Build + attach the plugin zip only when a release was just tagged.
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: ${{ steps.release.outputs.release_created }}
         with:
           persist-credentials: false
@@ -60,7 +60,7 @@ jobs:
           python3 scripts/changelog_notes.py --release-body > "$RUNNER_TEMP/notes.md"
           gh release edit "$TAG" --notes-file "$RUNNER_TEMP/notes.md"
 
-      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         if: ${{ steps.release.outputs.release_created }}
         with:
           version: 10
