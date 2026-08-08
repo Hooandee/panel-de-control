@@ -3,6 +3,7 @@ import { FocusRoot } from "../components/FocusRoot";
 import { type ReactNode, useState } from "react";
 import type { InstallResult } from "../api";
 import { useUpdate } from "./useUpdate";
+import type { Lang } from "../i18n";
 
 const STRINGS = {
   es: {
@@ -24,6 +25,16 @@ const STRINGS = {
     restartNote: "Restart Decky to apply it.",
     restart: "Restart Decky",
     failed: "Install failed. Please try again.",
+  },
+  it: {
+    title: "Novità",
+    noNotes: "Nessuna nota per questa versione.",
+    install: "Installa aggiornamento",
+    installing: "Installazione…",
+    installed: "Aggiornamento installato.",
+    restartNote: "Riavvia Decky per applicarlo.",
+    restart: "Riavvia Decky",
+    failed: "Installazione non riuscita. Riprova.",
   },
 } as const;
 
@@ -101,7 +112,7 @@ export function UpdateModal({
   notes,
   closeModal,
 }: {
-  lang: "es" | "en";
+  lang: Lang;
   latest: string;
   notes: string;
   closeModal?: () => void;

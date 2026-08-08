@@ -1,11 +1,29 @@
-import { describe, expect, it } from "vitest";
+// @vitest-environment happy-dom
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("./api", () => ({
+  getUiPrefs: vi.fn(async () => ({})),
+  setUiPrefs: vi.fn(async () => true),
+}));
+
+import { translate } from "./i18n";
 import { nextRowText } from "./pluginListName";
 
 const IDENTITY = "Panel de Control";
 
 describe("nextRowText", () => {
+  afterEach(() => window.localStorage.clear());
+
   it("localizes the identity row when the target differs (English)", () => {
     expect(nextRowText(IDENTITY, IDENTITY, "Control Panel")).toBe("Control Panel");
+  });
+
+  it("localizes the identity row from a persisted Italian selection", () => {
+    window.localStorage.setItem("panel-de-control-lang", "it");
+
+    expect(nextRowText(IDENTITY, IDENTITY, translate("app.title"))).toBe(
+      "Pannello di controllo",
+    );
   });
 
   it("leaves the row untouched when the target equals the identity (Spanish)", () => {

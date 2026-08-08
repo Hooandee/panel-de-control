@@ -7,6 +7,7 @@ describe("CPU frequency controls", () => {
   it("formats exact server readback in GHz with two decimals", () => {
     expect(formatCpuFrequency(2_400_000, "es")).toBe("2,40 GHz");
     expect(formatCpuFrequency(2_400_000, "en")).toBe("2.40 GHz");
+    expect(formatCpuFrequency(2_400_000, "it")).toBe("2,40 GHz");
     expect(formatCpuFrequency(null, "es")).toBe("—");
   });
 

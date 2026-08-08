@@ -1,6 +1,7 @@
 import { DialogButton, showModal } from "@decky/ui";
 import { useUpdate } from "./useUpdate";
 import { UpdateModal } from "./UpdateModal";
+import type { Lang } from "../i18n";
 
 const STRINGS = {
   es: {
@@ -21,13 +22,22 @@ const STRINGS = {
     update: "See what's new & install",
     error: "Couldn't check. Check your connection.",
   },
+  it: {
+    version: "Versione",
+    latest: "(ultima)",
+    newPrefix: "nuova",
+    checking: "ricerca…",
+    check: "Cerca aggiornamenti",
+    update: "Scopri le novità e installa",
+    error: "Impossibile verificare. Controlla la connessione.",
+  },
 } as const;
 
 const MUTED = "rgba(255,255,255,0.55)";
 
 // Inline: a single unified version line + one button. The changelog and the
 // install action live in a modal (opened when an update is available).
-export function UpdatePanel({ lang, version }: { lang: "es" | "en"; version?: string }) {
+export function UpdatePanel({ lang, version }: { lang: Lang; version?: string }) {
   const t = STRINGS[lang];
   const { info, status, check } = useUpdate(lang);
 
