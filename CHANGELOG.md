@@ -5,9 +5,9 @@
 
 ### Novedades / Features / Novità
 
-* **ES:** Añade una traducción completa al italiano para la interfaz de Decky, incluidos la navegación, los ajustes, los textos del actualizador, los términos y explicaciones del glosario, el formato numérico, la detección del idioma de Steam y la selección manual del idioma. Las traducciones del actualizador se centralizan en un único catálogo tipado. Las etiquetas largas de los preajustes de color usan el desplazamiento existente, permanecen centradas cuando caben y respetan la preferencia de movimiento reducido.
-* **EN:** Add a complete Italian localization for the Decky interface, including navigation, settings, updater copy, glossary terms and explanations, numeric formatting, Steam language detection, and manual language selection. Updater translations now live in a single typed catalog. Long color preset labels use the existing overflow marquee, remain centered when they fit, and respect reduced-motion settings.
-* **IT:** Aggiunge una localizzazione italiana completa all'interfaccia Decky, che comprende la navigazione, le impostazioni, i testi degli aggiornamenti, i termini e le spiegazioni del glossario, la formattazione dei numeri, il rilevamento della lingua di Steam e la selezione manuale della lingua. Le traduzioni degli aggiornamenti sono ora raccolte in un unico catalogo con tipi definiti. Le etichette più lunghe dei preset di colore usano lo scorrimento già disponibile, restano centrate quando c'è spazio e rispettano l'impostazione per ridurre le animazioni.
+* **ES:** Añade una traducción completa al italiano para toda la interfaz de Decky.
+* **EN:** Add a complete Italian translation for the entire Decky interface.
+* **IT:** Aggiunge una traduzione italiana completa per tutta l'interfaccia Decky.
 
 ## [0.34.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.33.0...panel-de-control-v0.34.0) (2026-08-05)
 
