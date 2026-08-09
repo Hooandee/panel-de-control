@@ -12,6 +12,7 @@ import { OledLookCard } from "../components/OledLookCard";
 import { AdvancedColor } from "../components/AdvancedColor";
 import { NightModeCard } from "../components/NightModeCard";
 import { HdrPanel } from "../components/HdrPanel";
+import { MarqueeText } from "../components/MarqueeText";
 import { segmentGroupStyle, segmentItemStyle } from "../components/segmented";
 import { registerBlock } from "../customize/blocks";
 
@@ -43,7 +44,7 @@ const ColorBlock: FC = () => {
             {state.presets.map((key) => (
               <Focusable key={key} style={chip(state.active_preset === key)}
                 onActivate={() => color.onPreset(key)} onClick={() => color.onPreset(key)}>
-                {t(`display.look.${key}`)}
+                <MarqueeText text={t(`display.look.${key}`)} alignWhenFits="center" />
               </Focusable>
             ))}
           </Focusable>
