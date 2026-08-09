@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { CATEGORIES, pick } from "./data";
+import { CATEGORIES, pick, pickTerm, type GlossaryTerm } from "./data";
 
 describe("glossary data", () => {
   const terms = CATEGORIES.flatMap((c) => c.terms);
@@ -22,28 +22,74 @@ describe("glossary data", () => {
   it("uses unique term display names (no two cards titled the same)", () => {
     const names = terms.map((t) => t.term);
     expect(new Set(names).size).toBe(names.length);
+
+    const italianNames = terms.map((t) => t.termIt);
+    expect(italianNames.every(Boolean)).toBe(true);
+    expect(new Set(italianNames).size).toBe(italianNames.length);
   });
 
-  it("has non-empty bilingual text for every category title", () => {
+  it("has non-empty text in every language for each category title", () => {
     for (const c of CATEGORIES) {
       expect(c.es.trim()).not.toBe("");
       expect(c.en.trim()).not.toBe("");
+      expect(c.it.trim()).not.toBe("");
     }
   });
 
-  it("has a name and non-empty es/en explanation for every term", () => {
+  it("has a name and non-empty explanation in every language for each term", () => {
     for (const t of terms) {
       expect(t.term.trim()).not.toBe("");
       expect(t.es.trim()).not.toBe("");
       expect(t.en.trim()).not.toBe("");
+      expect(t.it.trim()).not.toBe("");
     }
+  });
+
+  it("does not use em dashes in Italian text", () => {
+    const italian = CATEGORIES.flatMap((category) => [
+      category.it,
+      ...category.terms.flatMap((term) => [term.termIt, term.it]),
+    ]);
+
+    expect(italian.some((value) => value.includes("—"))).toBe(false);
+  });
+
+  it("uses Italian generated-frame terminology", () => {
+    const frameGeneration = terms.find((term) => term.id === "frame-gen");
+
+    expect(frameGeneration).toMatchObject({
+      termIt: "Generazione di fotogrammi",
+      it: "Il dispositivo calcola fotogrammi aggiuntivi e li inserisce tra quelli reali per rendere il movimento più fluido. Il risultato può essere ottimo, ma richiede parte della potenza grafica e può aggiungere un lieve ritardo ai comandi.",
+    });
+  });
+
+  it("distinguishes battery health from charge and capacity", () => {
+    const batteryHealth = terms.find((term) => term.id === "battery-health");
+
+    expect(batteryHealth?.termIt).toBe("Stato di salute della batteria");
   });
 });
 
 describe("pick", () => {
   it("returns the matching language", () => {
-    const entry = { es: "hola", en: "hi" };
+    const entry = { es: "hola", en: "hi", it: "ciao" };
     expect(pick(entry, "es")).toBe("hola");
     expect(pick(entry, "en")).toBe("hi");
+    expect(pick(entry, "it")).toBe("ciao");
+  });
+
+  it("uses the Italian display term without changing Spanish or English", () => {
+    const entry: GlossaryTerm = {
+      id: "battery",
+      term: "Salud de la batería",
+      termIt: "Stato di salute della batteria",
+      es: "estado",
+      en: "health",
+      it: "stato",
+    };
+
+    expect(pickTerm(entry, "es")).toBe("Salud de la batería");
+    expect(pickTerm(entry, "en")).toBe("Salud de la batería");
+    expect(pickTerm(entry, "it")).toBe("Stato di salute della batteria");
   });
 });

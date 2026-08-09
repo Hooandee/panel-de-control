@@ -1,5 +1,6 @@
 // Pure helpers for the CPU card. No React/SteamClient so they're unit-testable.
 import { clamp } from "./logic";
+import type { Lang } from "../i18n";
 
 /** kHz → "5.1 GHz". "—" when absent/invalid (honest unknown). */
 export function formatGhz(khz: number | null): string {
@@ -7,10 +8,10 @@ export function formatGhz(khz: number | null): string {
   return `${(khz / 1_000_000).toFixed(1)} GHz`;
 }
 
-export function formatCpuFrequency(khz: number | null, locale: "es" | "en"): string {
+export function formatCpuFrequency(khz: number | null, locale: Lang): string {
   if (khz === null || !isFinite(khz) || khz <= 0) return "—";
   const value = (khz / 1_000_000).toFixed(2);
-  return `${locale === "es" ? value.replace(".", ",") : value} GHz`;
+  return `${locale === "en" ? value : value.replace(".", ",")} GHz`;
 }
 
 export function clampCpuWindow(

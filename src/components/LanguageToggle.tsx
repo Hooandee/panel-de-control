@@ -19,8 +19,14 @@ const FlagEN: FC = () => (
   </svg>
 );
 
-// Flag toggle mirroring decky-colores: two Focusable flag buttons, the active one
-// at full opacity with a bright ring. Compact; the parent controls placement.
+const FlagIT: FC = () => (
+  <svg width={20} height={14} viewBox="0 0 20 14" xmlns="http://www.w3.org/2000/svg">
+    <rect width={20 / 3} height={14} fill="#009246" />
+    <rect x={20 / 3} width={20 / 3} height={14} fill="#fff" />
+    <rect x={(20 / 3) * 2} width={20 / 3} height={14} fill="#ce2b37" />
+  </svg>
+);
+
 export const LanguageToggle: FC = () => {
   const { lang, setLang, t } = useI18n();
 
@@ -56,6 +62,14 @@ export const LanguageToggle: FC = () => {
         style={buttonStyle(lang === "en")}
       >
         <FlagEN />
+      </Focusable>
+      <Focusable
+        onActivate={() => setLang("it")}
+        onClick={() => setLang("it")}
+        aria-label={t("lang.italian")}
+        style={buttonStyle(lang === "it")}
+      >
+        <FlagIT />
       </Focusable>
     </Focusable>
   );

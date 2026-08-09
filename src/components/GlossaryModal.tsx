@@ -3,7 +3,7 @@ import { ModalRoot, showModal, Focusable } from "@decky/ui";
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
-import { CATEGORIES, pick } from "../glossary/data";
+import { CATEGORIES, pick, pickTerm } from "../glossary/data";
 import { FocusRoot } from "./FocusRoot";
 
 // Full-screen glossary. Content lives in ../glossary/data (bulky bilingual
@@ -33,7 +33,7 @@ const GlossaryBody: FC = () => {
               noFocusRing
               style={{ ...theme.card, padding: theme.space.md, display: "flex", flexDirection: "column", gap: theme.space.xs }}
             >
-              <div style={{ fontSize: theme.font.body, fontWeight: 600, color: theme.color.accent }}>{term.term}</div>
+              <div style={{ fontSize: theme.font.body, fontWeight: 600, color: theme.color.accent }}>{pickTerm(term, lang)}</div>
               <div style={{ fontSize: theme.font.body, color: theme.color.textPrimary, lineHeight: 1.45 }}>{pick(term, lang)}</div>
             </Focusable>
           ))}

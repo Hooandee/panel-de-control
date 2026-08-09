@@ -19,8 +19,9 @@ import {
 } from "../system/pdcStorage";
 import { steamLangToLang } from "./detect";
 import { readSteamLanguage } from "./steamLanguage";
+import { it } from "./it";
 
-export type Lang = "es" | "en";
+export type Lang = "es" | "en" | "it";
 
 const STORAGE_KEY = "panel-de-control-lang";
 
@@ -35,6 +36,7 @@ const es: Record<string, string> = {
   "device.experimental.hint": "Modelo reconocido; todavía lo estamos afinando, así que activamos solo lo que responde de verdad.",
   "lang.spanish": "Español",
   "lang.english": "Inglés",
+  "lang.italian": "Italiano",
   "nav.power": "Potencia",
   "nav.system": "Sistema",
   "nav.display": "Pantalla",
@@ -894,6 +896,7 @@ const en: Record<string, string> = {
   "device.experimental.hint": "Recognised model; we're still fine-tuning it, so we only enable what actually responds.",
   "lang.spanish": "Spanish",
   "lang.english": "English",
+  "lang.italian": "Italian",
   "nav.power": "Power",
   "nav.system": "System",
   "nav.display": "Display",
@@ -1741,11 +1744,11 @@ const en: Record<string, string> = {
   "report.retry": "Retry",
 };
 
-const DICTS: Record<Lang, Record<string, string>> = { es, en };
+export const DICTS: Record<Lang, Record<string, string>> = { es, en, it };
 
 function initialLang(): Lang {
   const stored = readString(STORAGE_KEY);
-  return stored === "es" || stored === "en" ? stored : "es"; // Spanish default
+  return stored === "es" || stored === "en" || stored === "it" ? stored : "es";
 }
 
 interface I18nValue {
