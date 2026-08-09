@@ -1,21 +1,34 @@
 #!/usr/bin/env python3
-"""Derive release notes from the newest CHANGELOG.md section.
+"""Derive multilingual release notes from the newest CHANGELOG.md section.
 
 Modes:
-  --check         exit non-zero unless every entry in the newest release section has
-                  both an English bullet and a matching Spanish (**ES:**) bullet.
-  --release-body  print a clean bilingual release body (Spanish first, then English,
-                  with the PR/commit links stripped) for the in-app updater to render.
+  --check         validate Spanish, English and optional Italian entries in the newest
+                  release section.
+  --release-body  print clean release notes in Spanish, English and Italian, with the
+                  PR/commit links stripped, for the in-app updater to render.
 
-The changelog uses release-please's format: a section per version, each entry a
-`* <English> ([#N](...)) ([sha](...))` bullet followed by a `* **ES:** <Spanish> ...`
-bullet. Only the top (newest) section is considered.
+The preferred format groups entries below `### Español`, `### English` and
+`### Italiano` headings. Explicit `**ES:**`, `**EN:**` and `**IT:**` labels remain
+supported, as do Release Please's unlabelled English entries. Only the top (newest)
+section is considered.
 """
 import pathlib
 import re
 import sys
 
 _LINK = re.compile(r"\s*\(\[[^\]]+\]\(https?://[^)]+\)\).*$")
+_LANGUAGE_LABEL = re.compile(r"^\*\*(?P<language>[A-Z]{2}):\*\*\s*(?P<text>.*)$")
+_LANGUAGES = ("ES", "EN", "IT")
+_LANGUAGE_BLOCKS = {
+    "### Español": "ES",
+    "### English": "EN",
+    "### Italiano": "IT",
+}
+_HEADINGS = {
+    "ES": "### Novedades",
+    "EN": "### What's new",
+    "IT": "### Novità",
+}
 
 
 def _top_section(text):
@@ -28,41 +41,66 @@ def _top_section(text):
 
 
 def _bullets(section):
-    """(is_es, text) for each `* ` bullet, with trailing PR/commit links stripped."""
-    out = []
+    entries = {language: [] for language in _LANGUAGES}
+    unsupported = []
+    current_language = "EN"
     for line in section:
+        if line.startswith("### "):
+            current_language = _LANGUAGE_BLOCKS.get(line.strip(), "EN")
+            continue
         if not line.startswith("* "):
             continue
         body = line[2:].strip()
-        is_es = body.startswith("**ES:**")
-        if is_es:
-            body = body[len("**ES:**"):].strip()
-        out.append((is_es, _LINK.sub("", body).strip()))
-    return out
+        label = _LANGUAGE_LABEL.match(body)
+        if label:
+            language = label.group("language")
+            if language not in entries:
+                unsupported.append(language)
+                continue
+            body = label.group("text")
+        else:
+            language = current_language
+        entries[language].append(_LINK.sub("", body).strip())
+    return entries, unsupported
 
 
 def main():
     mode = sys.argv[1] if len(sys.argv) > 1 else ""
     section = _top_section(pathlib.Path("CHANGELOG.md").read_text(encoding="utf-8"))
-    bullets = _bullets(section)
-    english = [b for is_es, b in bullets if not is_es]
-    spanish = [b for is_es, b in bullets if is_es]
+    entries, unsupported = _bullets(section)
+    spanish = entries["ES"]
+    english = entries["EN"]
+    italian = entries["IT"]
 
     if mode == "--check":
+        if unsupported:
+            labels = ", ".join(sorted(set(unsupported)))
+            print(f"::error::CHANGELOG.md contains unsupported language label: {labels}")
+            return 1
         if english and len(spanish) != len(english):
             print("::error::CHANGELOG.md top section is not bilingual: "
                   f"{len(english)} English bullet(s) vs {len(spanish)} Spanish "
-                  "(**ES:**) one(s). Add a '* **ES:** ...' line for each entry.")
+                  "entry or entries below '### Español'.")
             return 1
-        print("CHANGELOG top section is bilingual.")
+        if (spanish or italian) and not english:
+            print("::error::CHANGELOG.md top section has translations but no English "
+                  "(**EN:** or unlabelled) entries.")
+            return 1
+        if italian and len(italian) != len(english):
+            print("::error::CHANGELOG.md top section is not trilingual: "
+                  f"{len(english)} English bullet(s) vs {len(italian)} Italian (**IT:**) "
+                  "entries. Complete the '### Italiano' block.")
+            return 1
+        kind = "trilingual" if italian else "bilingual"
+        print(f"CHANGELOG top section is {kind}.")
         return 0
 
     if mode == "--release-body":
         parts = []
-        if spanish:
-            parts += ["### Novedades", ""] + [f"- {b}" for b in spanish] + [""]
-        if english:
-            parts += ["### What's new", ""] + [f"- {b}" for b in english]
+        for language in _LANGUAGES:
+            if entries[language]:
+                parts += [_HEADINGS[language], ""]
+                parts += [f"- {text}" for text in entries[language]] + [""]
         sys.stdout.write("\n".join(parts).strip() + "\n")
         return 0
 
