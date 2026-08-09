@@ -13,6 +13,7 @@ import { effectiveEnabled } from "../customize/moduleLogic";
 import { isValueToastEnabled, setValueToastEnabled } from "../system/valueToast";
 import { UpdatePanel } from "../updater/UpdatePanel";
 import { theme } from "../theme";
+import { QamShortcutSetting } from "../components/QamShortcutSetting";
 
 const AUTHOR = "Hooandee";
 const CHANNEL_URL = "https://www.youtube.com/@Hooandee";
@@ -143,6 +144,8 @@ export const AjustesSection: FC = () => {
             bottomSeparator="none"
           />
         )}
+
+        <QamShortcutSetting />
 
         <ToggleField
           label={t("settings.valueToast")}

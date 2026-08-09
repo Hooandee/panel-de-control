@@ -1,7 +1,7 @@
 import { PanelSection, PanelSectionRow, ErrorBoundary } from "@decky/ui";
 import { FC, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { getDevice, DeviceInfo, setUiActive } from "../api";
+import { getDevice, DeviceInfo } from "../api";
 import { useI18n } from "../i18n";
 import { DeviceHeader } from "./DeviceHeader";
 import { Loading } from "./Loading";
@@ -30,6 +30,7 @@ import { getPresent, usePresentVersion } from "../customize/present";
 import { theme } from "../theme";
 import { FocusRoot } from "./FocusRoot";
 import { useAccent } from "../system/useAccent";
+import { acquireUiActivity } from "../system/uiActivity";
 
 /**
  * The control-center shell: persistent chrome (device header + language flags +
@@ -96,16 +97,7 @@ export const ControlCenter: FC = () => {
     getDevice().then(setDevice).catch(() => setFailed(true));
   }, []);
 
-  // Tell the backend the plugin UI (QAM panel) is open while this content is
-  // mounted; Decky unmounts it on close → the cleanup fires. Lets the auto-TDP loop
-  // raise its floor so the CPU-bound menu render stays fluid. Degrades if the RPC
-  // is absent/unreachable (try/catch on the promise).
-  useEffect(() => {
-    setUiActive(true).catch(() => {});
-    return () => {
-      setUiActive(false).catch(() => {});
-    };
-  }, []);
+  useEffect(() => acquireUiActivity(), []);
 
   // Apply the user's tab order + visibility (reusing the memoized id list above).
   // Settings stays pinned; a hidden active tab falls back to the first visible
