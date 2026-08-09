@@ -5,6 +5,7 @@ from device_registry import detect
 
 # (product_name as it appears in /sys/class/dmi/id/product_name) -> expected key
 KNOWN = {
+    "Fremont": "steam_machine",
     "Jupiter": "steam_deck_lcd",
     "Galileo": "steam_deck_oled",
     "ROG Ally RC71L_RC71L": "rog_ally",
@@ -20,6 +21,15 @@ KNOWN = {
     "Claw 8 AI+ A2VM": "msi_claw_8_ai_plus",
     "ROG Xbox Ally RC73YA_RC73YA": "rog_xbox_ally",
 }
+
+
+def test_steam_machine_is_a_validated_desktop_without_false_cpu_watt_presets():
+    prof = detect(product_name="Fremont")
+    assert prof.is_generic is False
+    assert prof.experimental is False
+    assert prof.desktop_mode is True
+    assert prof.tdp_max == 30
+    assert prof.tdp_presets == ()
 
 
 def test_detects_each_known_device():

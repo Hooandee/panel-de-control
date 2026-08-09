@@ -47,6 +47,49 @@ def test_read_dict_shape(tmp_path):
     assert r == {"watts": 10.0, "gpu_busy": None}
 
 
+def test_desktop_snapshot_names_gpu_domain_and_reads_clock_and_vram(tmp_path):
+    _mk_hwmon(str(tmp_path), 7, "amdgpu", {
+        "power1_average": 18_400_000,
+        "freq1_input": 1_850_000_000,
+        "freq1_max": 2_209_000_000,
+    })
+    _mk_drm_card(str(tmp_path), 0, 61)
+    card = os.path.join(str(tmp_path), "sys/class/drm/card0/device")
+    with open(os.path.join(card, "mem_info_vram_used"), "w") as handle:
+        handle.write(str(3 * 1024 * 1024 * 1024))
+    with open(os.path.join(card, "mem_info_vram_total"), "w") as handle:
+        handle.write(str(8 * 1024 * 1024 * 1024))
+    snapshot = PowerReader(root=str(tmp_path), gpu_samples=1).read_desktop()
+    assert snapshot == {
+        "cpu_watts": None,
+        "gpu_watts": 18.4,
+        "gpu_busy": 61,
+        "gpu_clock_mhz": 1850,
+        "gpu_clock_max_mhz": 2209,
+        "vram_used_mb": 3072,
+        "vram_total_mb": 8192,
+    }
+
+
+def test_generic_desktop_hides_uncorrelated_gpu_metrics(tmp_path):
+    _mk_hwmon(str(tmp_path), 7, "amdgpu", {"power1_average": 13_000_000})
+    _mk_drm_card(str(tmp_path), 0, 74)
+
+    snapshot = PowerReader(root=str(tmp_path), gpu_samples=1).read_desktop(
+        device_key="generic"
+    )
+
+    assert snapshot == {
+        "cpu_watts": None,
+        "gpu_watts": None,
+        "gpu_busy": None,
+        "gpu_clock_mhz": None,
+        "gpu_clock_max_mhz": None,
+        "vram_used_mb": None,
+        "vram_total_mb": None,
+    }
+
+
 # --- gpu_busy tests ---
 
 def test_reads_gpu_busy_percent(tmp_path):

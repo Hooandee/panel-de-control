@@ -56,9 +56,59 @@ export interface DeviceInfo {
   // with the charger connected — the firmware caps the sustained limit on battery. Hide
   // the "raise on battery" toggle; the arc shows the locked charger segment instead.
   charger_only_extra: boolean;
+  desktop_mode?: boolean;
 }
 
 export const getDevice = callable<[], DeviceInfo>("get_device");
+
+export type DesktopPowerMode = "free" | "silent" | "balanced" | "performance" | "custom";
+export interface DesktopTelemetry {
+  cpu_watts: number | null;
+  gpu_watts: number | null;
+  gpu_busy: number | null;
+  gpu_clock_mhz: number | null;
+  gpu_clock_max_mhz: number | null;
+  vram_used_mb: number | null;
+  vram_total_mb: number | null;
+}
+export interface DesktopPowerState {
+  supported: boolean;
+  cpu_supported: boolean;
+  cpu_policy_supported: boolean;
+  cpu_policy: string | null;
+  gpu_supported: boolean;
+  mode: DesktopPowerMode;
+  cpu_w: number | null;
+  gpu_w: number | null;
+  cpu_min_w: number;
+  cpu_max_w: number;
+  gpu_min_w: number | null;
+  gpu_max_w: number | null;
+  presets: Record<string, {
+    cpu_w: number | null;
+    cpu_policy: string | null;
+    gpu_w: number | null;
+  }>;
+}
+export interface DesktopState {
+  enabled: boolean;
+  automatic: boolean;
+  manual_enabled: boolean;
+  power: DesktopPowerState;
+  telemetry: DesktopTelemetry | null;
+  cpu: Record<string, unknown> | null;
+}
+export interface DesktopApplyResult {
+  ok: boolean;
+  mode: DesktopPowerMode;
+  cpu_w: number | null;
+  gpu_w: number | null;
+  detail: string;
+}
+export const getDesktopState = callable<[], DesktopState>("get_desktop_state");
+export const setDesktopModeEnabled = callable<[enabled: boolean], DesktopState>("set_desktop_mode_enabled");
+export const setDesktopPowerMode = callable<[mode: DesktopPowerMode], DesktopApplyResult>("set_desktop_power_mode");
+export const setDesktopPowerLimits = callable<[cpuW: number, gpuW: number], DesktopApplyResult>("set_desktop_power_limits");
 
 // Generic (unrecognised) or experimental (recognised, unconfirmed): both drive the
 // header badge and the Ajustes note.
@@ -199,6 +249,8 @@ export interface FanInfo {
   label: string;
   rpm: number | null; // null = speed unknown this read (e.g. a sensor glitch)
   percent: number | null;
+  max_rpm?: number | null;
+  channel?: "system" | "gpu";
 }
 
 export interface TempInfo {
@@ -210,6 +262,8 @@ export interface FanState {
   supported: boolean;
   fans: FanInfo[];
   temps: TempInfo[];
+  desktop?: true;
+  device_key?: string | null;
 }
 
 export const getFanState = callable<[], FanState>("get_fan_state");
@@ -344,6 +398,21 @@ export interface FanCurveState {
   // a newer kernel), so control will start working once SteamOS updates. Drives an
   // honest note; meanwhile the experimental EC path is offered.
   kernel_pending?: boolean;
+  device_key?: string | null;
+  independent?: boolean;
+  channels?: DesktopFanChannel[];
+  apply_ok?: boolean;
+  rollback_ok?: boolean;
+}
+
+export interface DesktopFanChannel {
+  key: "system" | "gpu";
+  preset: Exclude<FanPreset, "adaptive">;
+  points: [number, number][] | null;
+  sensor: string | null;
+  rpm: number | null;
+  max_rpm: number | null;
+  controllable: boolean;
 }
 
 // Learning on/off (get/set_telemetry_enabled) is driven via the module editor now
@@ -390,6 +459,11 @@ export const setFanAdaptive =
   callable<[scope: FanScope, appid: string | null], FanCurveState>("set_fan_adaptive");
 export const setFanAdaptiveBias =
   callable<[bias: number, scope: FanScope, appid: string | null], FanCurveState>("set_fan_adaptive_bias");
+export const setDesktopFanCurve =
+  callable<[channel: "system" | "gpu", preset: Exclude<FanPreset, "adaptive">,
+            points: [number, number][] | null, scope: FanScope, appid: string | null], FanCurveState>("set_desktop_fan_curve");
+export const setDesktopFanFollowGlobal =
+  callable<[follow: boolean, appid: string | null], FanCurveState>("set_desktop_fan_follow_global");
 
 // Fan-curve suggestion fit to a game's observed temperature band.
 export interface FanSuggestion {

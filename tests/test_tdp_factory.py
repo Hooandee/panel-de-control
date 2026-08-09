@@ -157,6 +157,17 @@ def test_exact_steam_deck_never_falls_through_to_generic_amd_backends(tmp_path):
     assert [item["candidate"] for item in backend.probe_trace] == ["deck"]
 
 
+def test_steam_machine_does_not_claim_ryzenadj_from_binary_presence(tmp_path):
+    # Physical Fremont returns "unsupported model 124" from ryzenadj and exposes no
+    # readable CPU watts/limit. A binary on disk is not a supported CPU TDP backend.
+    backend = select_backend(
+        _p("steam_machine"), root=str(tmp_path),
+        ryzenadj_resolve=lambda: "/usr/bin/ryzenadj")
+    assert backend.supported is False
+    assert backend.name == "unsupported"
+    assert "ryzenadj" not in [item["candidate"] for item in backend.probe_trace]
+
+
 def test_falls_back_to_null_when_nothing_present(tmp_path):
     b = select_backend(_p("rog_ally_x"), root=str(tmp_path), ryzenadj_resolve=_NO_RYZENADJ)
     assert b.supported is False and b.name == "unsupported"

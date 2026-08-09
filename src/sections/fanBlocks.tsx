@@ -21,18 +21,40 @@ import { registerBlock } from "../customize/blocks";
 import { useModules } from "../customize/modules";
 import { effectiveEnabled } from "../customize/moduleLogic";
 import { theme } from "../theme";
+import { DesktopFanCurves } from "../components/DesktopFanCurves";
+import { FanInfo } from "../api";
+import { desktopFanVisible } from "../fans/presentation";
 
 const card = { ...theme.card, padding: theme.space.md } as const;
 
 const tempLabel = (t: (k: string) => string, sensor: string) =>
-  sensor === "CPU" ? t("fans.temp.cpu") : sensor === "GPU" ? t("fans.temp.gpu") : sensor;
+  sensor === "CPU" ? t("fans.temp.cpu")
+  : sensor === "GPU" ? t("fans.temp.gpu")
+  : sensor === "GPU junction" ? t("fans.temp.gpuJunction")
+  : sensor === "VRAM" ? t("fans.temp.vram") : sensor;
+
+const DesktopFanTile: FC<{
+  fan: FanInfo;
+  values: number[];
+  layout: "stack" | "wide";
+  t: (key: string, vars?: Record<string, string | number>) => string;
+}> = ({ fan, values, layout, t }) => {
+  const channel = fan.channel!;
+  const label = t(`desktop.fan.channel.${channel}`);
+  return (
+    <div style={{ ...theme.tile, display: "flex", minWidth: 0, flexDirection: "column", alignItems: "center", gap: theme.space.xs }}>
+      <FanChip label={label} rpm={fan.rpm} values={values} maxRpm={fan.max_rpm} layout={layout} />
+    </div>
+  );
+};
 
 const FanRpmBlock: FC = () => {
   const { t } = useI18n();
   const { state, fanHistory } = useFanState();
   if (!state) return null;
-  const solo = isSolo(state);
-  const soloFan = solo ? state.fans[0] : null;
+  const visibleFans = state.fans.filter((fan) => desktopFanVisible(state.device_key, fan.channel));
+  const solo = !state.desktop && isSolo(state);
+  const soloFan = solo ? visibleFans[0] : null;
   const soloTemp = solo ? state.temps[0] : null;
   if (solo && soloFan && soloTemp) {
     return (
@@ -50,15 +72,33 @@ const FanRpmBlock: FC = () => {
       </PanelSectionRow>
     );
   }
-  if (state.fans.length > 0) {
+  if (visibleFans.length > 0) {
     return (
       <PanelSectionRow>
-        <div style={{ ...card, display: "flex", gap: theme.space.sm }}>
-          {state.fans.map((fan, i) => (
-            <div key={fan.label} style={theme.tile}>
-              <FanChip label={t("fans.fan", { n: i + 1 })} rpm={fan.rpm}
-                       values={fanHistory[fan.label] ?? []} layout={state.fans.length === 1 ? "wide" : "stack"} />
-            </div>
+        <div style={{
+          ...card,
+          display: state.desktop ? "grid" : "flex",
+          gridTemplateColumns: state.desktop
+            ? (visibleFans.length === 1 ? "minmax(0, 1fr)" : "repeat(2, minmax(0, 1fr))")
+            : undefined,
+          gap: theme.space.sm,
+        }}>
+          {visibleFans.map((fan, i) => (
+            state.desktop && fan.channel ? (
+              <DesktopFanTile
+                key={fan.channel}
+                fan={fan}
+                values={fanHistory[fan.label] ?? []}
+                layout={visibleFans.length === 1 ? "wide" : "stack"}
+                t={t}
+              />
+            ) : (
+              <div key={fan.label} style={theme.tile}>
+                <FanChip label={t("fans.fan", { n: i + 1 })} rpm={fan.rpm}
+                         values={fanHistory[fan.label] ?? []}
+                         layout={visibleFans.length === 1 ? "wide" : "stack"} />
+              </div>
+            )
           ))}
         </div>
       </PanelSectionRow>
@@ -79,7 +119,7 @@ const TempsBlock: FC = () => {
   if (!tempsAvailable(state) || !state) return null;
   return (
     <PanelSectionRow>
-      <div style={{ ...card, display: "flex", flexWrap: "wrap", gap: theme.space.sm }}>
+      <div style={{ ...card, display: state.desktop ? "grid" : "flex", gridTemplateColumns: state.desktop ? "repeat(2, minmax(0, 1fr))" : undefined, flexWrap: state.desktop ? undefined : "wrap", gap: theme.space.sm }}>
         {state.temps.map((tmp) => (
           <TempStat key={tmp.label} label={tempLabel(t, tmp.label)} celsius={tmp.celsius} />
         ))}
@@ -104,6 +144,8 @@ const CurveBlock: FC = () => {
 
   const liveTemp = state && state.temps.length ? Math.max(...state.temps.map((x) => x.celsius)) : null;
   const curveState = curve.state;
+
+  if (curveState?.independent) return <DesktopFanCurves initial={curveState} />;
 
   return (
     <>

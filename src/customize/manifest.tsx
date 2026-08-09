@@ -12,7 +12,10 @@ export interface ItemMeta {
   labelKey: string;
   icon: ReactNode;
 }
-export type BlockDef = ItemMeta;
+export interface BlockDef extends ItemMeta {
+  desktopOnly?: boolean;
+  handheldOnly?: boolean;
+}
 
 /** The tab that can never be hidden — the escape hatch back to the customization
  *  editor. Single source of truth for both the shell and the editor. */
@@ -46,7 +49,8 @@ export const CATEGORY_IDS = TABS.map((t) => t.id).filter((id) => id !== PINNED_T
 
 export const SECTION_BLOCKS: Record<string, BlockDef[]> = {
   power: [
-    { id: "autoTdp", labelKey: "tdp.auto.title", icon: <LuActivity size={ICON} /> },
+    { id: "desktopPower", labelKey: "desktop.power.title", icon: <LuGauge size={ICON} />, desktopOnly: true },
+    { id: "autoTdp", labelKey: "tdp.auto.title", icon: <LuActivity size={ICON} />, handheldOnly: true },
   ],
   system: [
     { id: "eco", labelKey: "system.eco.title", icon: <LuLeaf size={ICON} /> },
@@ -75,6 +79,21 @@ export const SECTION_BLOCKS: Record<string, BlockDef[]> = {
   ],
 };
 
+export function blocksForSection(sectionId: string, desktopMode = false): BlockDef[] {
+  return (SECTION_BLOCKS[sectionId] ?? []).filter((block) =>
+    (!block.desktopOnly || desktopMode) && (!block.handheldOnly || !desktopMode));
+}
+
+export function customizationBlocks(
+  sectionId: string,
+  desktopMode: boolean,
+  presentIds: string[] | null,
+): BlockDef[] {
+  const blocks = blocksForSection(sectionId, desktopMode);
+  if (!presentIds) return blocks;
+  return blocks.filter((block) => block.desktopOnly || presentIds.includes(block.id));
+}
+
 /**
  * Fixed sub-items WITHIN a block that the user can HIDE (only hide — they're a
  * fixed part of their block, not reorderable). Keyed by block id. Section render
@@ -87,8 +106,8 @@ export const SUBITEMS: Record<string, ItemMeta[]> = {
 };
 
 /** Default block-id order for a section (empty for sections without blocks). */
-export function blockOrder(sectionId: string): string[] {
-  return (SECTION_BLOCKS[sectionId] ?? []).map((b) => b.id);
+export function blockOrder(sectionId: string, desktopMode = false): string[] {
+  return blocksForSection(sectionId, desktopMode).map((b) => b.id);
 }
 
 /**
@@ -99,7 +118,28 @@ export function blockOrder(sectionId: string): string[] {
 export const PICKABLE_BLOCKS: Record<string, BlockDef[]> = {
   ...SECTION_BLOCKS,
   power: [
-    { id: "tdp", labelKey: "customize.block.tdp", icon: <LuGauge size={ICON} /> },
+    { id: "tdp", labelKey: "customize.block.tdp", icon: <LuGauge size={ICON} />, handheldOnly: true },
     ...SECTION_BLOCKS.power,
   ],
 };
+
+export function blockAvailableInMode(id: string, desktopMode: boolean): boolean {
+  for (const blocks of Object.values(PICKABLE_BLOCKS)) {
+    const block = blocks.find((candidate) => candidate.id === id);
+    if (!block) continue;
+    return (!block.desktopOnly || desktopMode) && (!block.handheldOnly || !desktopMode);
+  }
+  return true;
+}
+
+export function pickableBlocksForSection(
+  sectionId: string,
+  desktopMode: boolean,
+  presentIds: string[] | null,
+): BlockDef[] {
+  if (sectionId === "power" && !desktopMode) {
+    const tdp = PICKABLE_BLOCKS.power.find((block) => block.id === "tdp")!;
+    return [tdp, ...customizationBlocks(sectionId, false, presentIds)];
+  }
+  return customizationBlocks(sectionId, desktopMode, presentIds);
+}

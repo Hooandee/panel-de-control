@@ -44,9 +44,9 @@ export const BlockProbe: FC<{ sectionKey: string; id: string }> = ({ sectionKey,
   return null;
 };
 
-export const SectionView: FC<{ sectionId: string }> = ({ sectionId }) => {
+export const SectionView: FC<{ sectionId: string; desktopMode?: boolean }> = ({ sectionId, desktopMode = false }) => {
   const layout = useLayout();
-  const ids = useMemo(() => blockOrder(sectionId), [sectionId]);
+  const ids = useMemo(() => blockOrder(sectionId, desktopMode), [sectionId, desktopMode]);
   const visible = useMemo(
     () => visibleIds(ids, layout.blocks[sectionId]),
     [ids, layout, sectionId],

@@ -431,6 +431,11 @@ def select_fan_backend(device, root: str = "/", temp_fn=None, ec=None, experimen
     on firmware auto until a safe ceiling is proven. ``ec`` stays for that
     backend's own tests.
     """
+    if getattr(device, "key", None) == "steam_machine":
+        from fans.fremont import FremontFanBackend
+        fremont = FremontFanBackend(temp_fn=temp_fn, root=root)
+        if fremont.supported:
+            return fremont
     for backend_cls in (AsusFanCurveBackend, MsiFanCurveBackend, LegionWmiFanBackend):
         backend = backend_cls(root=root)
         if backend.supported:

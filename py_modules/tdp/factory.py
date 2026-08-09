@@ -54,6 +54,12 @@ def _candidates(device, fallback, root, ryzenadj):
     key = device.key
     if device.vendor == "intel":
         return [msi, intel]
+    if key == "steam_machine":
+        # Fremont's AMD Custom CPU 1772 is not a Ryzen Mobile model: physical
+        # validation returns "unsupported model 124" from ryzenadj. A bundled
+        # binary is therefore not a capability. Keep future firmware-attribute
+        # paths discoverable, but never fall into write-only generic AMD methods.
+        return [asus, lenovo, msi]
     if key.startswith("steam_deck"):
         return [deck]
     if key == "msi_claw_a8":

@@ -58,7 +58,12 @@ from display import presets as color_presets
 from display.hdr import HdrBackend
 from gpu.clock import select_gpu_clock
 from gpu.profiles import GpuProfileStore
+from gpu.power_cap import AmdGpuPowerCap
 from power.reader import PowerReader
+from desktop.mode import effective_desktop_mode, migrate_desktop_defaults
+from desktop.power import DesktopPowerCoordinator
+from desktop.fan_store import DesktopFanStore
+from desktop.cpu_policy import DesktopCpuPolicy
 from battery.reader import BatteryReader
 from battery.charge_limit import select_charge_limit
 from audio.eq_store import EqStore
@@ -145,6 +150,15 @@ DEFAULTS = {
     "_cpu_scope_migrated": False,
     "_gpu_scope_migrated": False,
     "_hdr_scope_migrated": False,
+    "_desktop_defaults_migrated": False,
+    # Manual opt-in for generic Linux desktops. Validated desktop hardware such as
+    # Fremont enables the topology automatically, but still starts in pass-through.
+    "desktop_mode_enabled": False,
+    "desktop_power_mode": "free",
+    "desktop_cpu_w": 23,
+    "desktop_gpu_w": 80,
+    "desktop_prev_tdp_control": None,
+    "desktop_power_handoff": None,
     "auto_tdp": False,
     # Learn from usage (local-only telemetry powering fan-curve suggestions). Opt-out:
     # when False the sampler never runs — nothing is read or written during play.
@@ -242,6 +256,8 @@ class Plugin:
         # Probe hardware/environment HERE, wrapped so it NEVER raises — a raise in
         # init or _main bricks plugin load (UI stuck on spinner forever).
         self._device = device_registry.detect()
+        if migrate_desktop_defaults(self._settings, self._device):
+            self._store.save(self._settings)
         self._tdp_profiles = ProfileStore(
             os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "tdp_profiles.json"),
             default_watts=self._device.tdp_default or 15,
@@ -304,6 +320,15 @@ class Plugin:
             self._tdp_profiles.migrate_deck_ppt_stable()
             self._settings["_deck_ppt_scope_migrated"] = True
             self._store.save(self._settings)
+        self._gpu_power_cap = AmdGpuPowerCap(device_key=self._device.key)
+        self._desktop_power = DesktopPowerCoordinator(
+            self._tdp_backend,
+            self._gpu_power_cap,
+            DesktopCpuPolicy(),
+            persisted_state=self._settings.get("desktop_power_handoff"),
+            persist_state=self._persist_desktop_power_state,
+            device_key=self._device.key,
+        )
         self._powerstation_detector = powerstation_conflict.Detector()
         # Safety self-heal: correct any stored TDP value an older version persisted
         # outside the device's real range (a bogus firmware max could leak in) so it can
@@ -326,7 +351,8 @@ class Plugin:
             self._device,
         )
         self._last_controller_overrides = None
-        self._fan_reader = FanReader()
+        self._fan_reader = FanReader(
+            desktop=self._desktop_mode_on(), device_key=self._device.key)
         # temp_fn feeds the software-loop backends (Steam Deck / Legion Go 2) the
         # live driving temp; hardware-curve backends (ASUS/MSI) ignore it.
         self._fan_ctrl = fan_control.select_fan_backend(
@@ -350,6 +376,9 @@ class Plugin:
             os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "fan_curves.json")
         )
         self._fan_apply_confirmed = False
+        self._desktop_fans = DesktopFanStore(
+            os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "desktop_fans.json")
+        )
         # Pantalla: panel color. Saturation is per-game (store), calibration global.
         # Applied via gamescope atoms; the backend is probe-gated (UI hidden if the
         # host has no gamescope display) so nothing fake is ever shown.
@@ -553,6 +582,15 @@ class Plugin:
     def _save(self) -> None:
         self._store.save(self._settings)
 
+    def _persist_desktop_power_state(self, state) -> None:
+        previous = copy.deepcopy(self._settings.get("desktop_power_handoff"))
+        self._settings["desktop_power_handoff"] = copy.deepcopy(state)
+        try:
+            self._save()
+        except Exception:
+            self._settings["desktop_power_handoff"] = previous
+            raise
+
     # ---- RPC methods (referenced by name from src/api.ts) -------------------
     async def get_version(self) -> str:
         self._init()
@@ -708,6 +746,99 @@ class Plugin:
         # GPU generation for upscaler gating in Parámetros (FSR4 = rdna3/rdna4).
         d["gpu_gen"] = device_registry.gpu_generation(self._device.vendor, d["chip"])
         return d
+
+    def _desktop_mode_on(self) -> bool:
+        return effective_desktop_mode(
+            self._device, bool(self._settings.get("desktop_mode_enabled", False)))
+
+    def _desktop_state(self) -> dict:
+        power = self._desktop_power.state()
+        return {
+            "enabled": self._desktop_mode_on(),
+            "automatic": bool(getattr(self._device, "desktop_mode", False)),
+            "manual_enabled": bool(self._settings.get("desktop_mode_enabled", False)),
+            "power": power,
+        }
+
+    async def get_desktop_state(self) -> dict:
+        self._init()
+        state = self._desktop_state()
+        reader = getattr(self, "_power_reader", None)
+        state["telemetry"] = (
+            await self._offload_call(lambda: reader.read_desktop(self._device.key))
+            if state["enabled"] and reader is not None else None
+        )
+        cpu_info = getattr(self, "_cpu_info", None)
+        state["cpu"] = dict(cpu_info) if isinstance(cpu_info, dict) else None
+        return state
+
+    async def set_desktop_mode_enabled(self, enabled: bool) -> dict:
+        """Opt a generic Linux PC into the desktop topology, reversibly.
+
+        Validated desktops stay automatic. Enabling first steps the APU-oriented TDP
+        loop aside; disabling restores both desktop domains before restoring the
+        previous handheld TDP preference.
+        """
+        self._init()
+        if getattr(self._device, "desktop_mode", False):
+            return self._desktop_state()
+        enabled = bool(enabled)
+        current = bool(self._settings.get("desktop_mode_enabled", False))
+        if enabled == current:
+            return self._desktop_state()
+        if enabled:
+            self._settings["desktop_prev_tdp_control"] = bool(
+                self._settings.get("tdp_control_enabled", True))
+            await self.set_tdp_control_enabled(False)
+            self._settings["desktop_power_mode"] = "free"
+            self._settings["desktop_mode_enabled"] = True
+        else:
+            restored = await self._offload_call(self._desktop_power.restore)
+            if not restored.get("ok"):
+                return self._desktop_state()
+            self._settings["desktop_power_mode"] = "free"
+            self._settings["desktop_mode_enabled"] = False
+            previous = self._settings.get("desktop_prev_tdp_control")
+            self._settings["desktop_prev_tdp_control"] = None
+            if isinstance(previous, bool):
+                await self.set_tdp_control_enabled(previous)
+        fan_reader = getattr(self, "_fan_reader", None)
+        if fan_reader is not None:
+            fan_reader.set_desktop(self._desktop_mode_on())
+        self._save()
+        return self._desktop_state()
+
+    async def set_desktop_power_mode(self, mode: str) -> dict:
+        self._init()
+        if not self._desktop_mode_on():
+            return {"ok": False, "mode": "free", "cpu_w": None, "gpu_w": None,
+                    "detail": "desktop mode disabled"}
+        mode = str(mode)
+        result = await self._offload_call(lambda: self._desktop_power.apply(mode))
+        if result.get("ok"):
+            self._settings["desktop_power_mode"] = mode
+            self._settings["tdp_control_enabled"] = False
+            self._save()
+        return result
+
+    async def set_desktop_power_limits(self, cpu_w: int, gpu_w: int) -> dict:
+        self._init()
+        if not self._desktop_mode_on():
+            return {"ok": False, "mode": "free", "cpu_w": None, "gpu_w": None,
+                    "detail": "desktop mode disabled"}
+        result = await self._offload_call(
+            lambda: self._desktop_power.apply_custom(int(cpu_w), int(gpu_w)))
+        if result.get("ok"):
+            applied_cpu = result.get("cpu_w")
+            applied_gpu = result.get("gpu_w")
+            self._settings["desktop_cpu_w"] = int(
+                cpu_w if applied_cpu is None else applied_cpu)
+            self._settings["desktop_gpu_w"] = int(
+                gpu_w if applied_gpu is None else applied_gpu)
+            self._settings["desktop_power_mode"] = "custom"
+            self._settings["tdp_control_enabled"] = False
+            self._save()
+        return result
 
     # ---- Bug reporter ------------------------------------------------------
     async def submit_report(self, categories=None, text: str = "", context=None) -> dict:
@@ -991,6 +1122,7 @@ class Plugin:
 
         report_settings = dict(self._settings)
         report_settings.pop("cpu_frequency_handoff", None)
+        report_settings.pop("desktop_power_handoff", None)
         return {
             "settings": report_settings,
             "tdp_profiles": _rj("tdp_profiles.json"),
@@ -1523,6 +1655,22 @@ class Plugin:
             self._fan_apply_confirmed = False
             return True
         try:
+            hw_state = self._fan_ctrl.read_state()
+            if self._desktop_mode_on() and hw_state.get("independent"):
+                profile = self._desktop_fans.effective(self._current_appid)
+                ok = True
+                for channel in ("system", "gpu"):
+                    channel_profile = profile[channel]
+                    channel_hw = next(
+                        (fan for fan in hw_state.get("fans", []) if fan.get("key") == channel), {})
+                    if not channel_hw.get("controllable", False):
+                        continue
+                    if channel_profile["preset"] == "auto" or not channel_profile["points"]:
+                        result = self._fan_ctrl.set_auto(channel)
+                    else:
+                        result = self._fan_ctrl.set_curve(channel, channel_profile["points"])
+                    ok = bool(result.get("ok")) and ok
+                return ok
             profile = self._fan_curves.effective(self._current_appid)
             preset = profile["preset"]
             if preset == "adaptive":
@@ -1569,7 +1717,7 @@ class Plugin:
             curve = self._ec_curve.read_curve()
             if curve:
                 firmware_points = [{"temp": t, "pct": p} for t, p in curve]
-        return {
+        state = {
             "supported": hw_state.get("supported", False),
             "resettable": bool(getattr(self._fan_ctrl, "resettable", False)),
             "firmware_points": firmware_points,
@@ -1598,7 +1746,29 @@ class Plugin:
             # Active firmware mode governing the fan; None = custom / no firmware modes.
             "firmware_mode": (fw if (fw := self._firmware_mode()) != _CUSTOM_MODE else None),
             "has_firmware_modes": bool(self._firmware_choices()),
+            "device_key": getattr(self._device, "key", None),
         }
+        if self._desktop_mode_on() and hw_state.get("independent"):
+            profile = self._desktop_fans.effective(self._current_appid)
+            hardware = {fan.get("key"): fan for fan in hw_state.get("fans", [])}
+            state["independent"] = True
+            state["channels"] = [
+                {
+                    "key": key,
+                    "preset": profile[key]["preset"],
+                    "points": profile[key]["points"],
+                    "sensor": hardware.get(key, {}).get("sensor"),
+                    "rpm": hardware.get(key, {}).get("rpm"),
+                    "max_rpm": hardware.get(key, {}).get("max_rpm"),
+                    "controllable": bool(hardware[key].get("controllable", False)),
+                }
+                for key in ("system", "gpu")
+                if key in hardware
+            ]
+        else:
+            state["independent"] = False
+            state["channels"] = []
+        return state
 
     def _fan_kernel_pending(self) -> bool:
         if getattr(self._device, "key", None) != "onexplayer_apex":
@@ -1612,6 +1782,64 @@ class Plugin:
 
     async def get_fan_curve_state(self) -> dict:
         self._init()
+        return await self._fan_curve_state_offloop()
+
+    def _desktop_fan_mutation_lock(self):
+        lock = getattr(self, "_desktop_fan_rpc_lock", None)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._desktop_fan_rpc_lock = lock
+        return lock
+
+    async def _commit_desktop_fan_mutation(self, mutate) -> dict:
+        async with self._desktop_fan_mutation_lock():
+            checkpoint = self._desktop_fans.checkpoint()
+            mutate()
+            applied = await self._offload_call(self._reapply_fans_sync)
+            rollback_ok = None
+            if not applied:
+                self._desktop_fans.restore_checkpoint(checkpoint)
+                rollback_ok = await self._offload_call(self._reapply_fans_sync)
+            self._ensure_fan_loop()
+            state = await self._fan_curve_state_offloop()
+            state["apply_ok"] = bool(applied)
+            if rollback_ok is not None:
+                state["rollback_ok"] = bool(rollback_ok)
+            return state
+
+    async def set_desktop_fan_curve(self, channel: str, preset: str,
+                                    points=None, scope: str = "global", appid=None) -> dict:
+        self._init()
+        if not self._desktop_mode_on() or channel not in ("system", "gpu"):
+            return await self._fan_curve_state_offloop()
+        hardware = self._fan_ctrl.read_state()
+        channel_hw = next(
+            (fan for fan in hardware.get("fans", []) if fan.get("key") == channel), {})
+        if not channel_hw.get("controllable", False):
+            return await self._fan_curve_state_offloop()
+        if preset in fan_presets.RESOLVED:
+            resolved_points = [list(point) for point in fan_presets.RESOLVED[preset]]
+        elif preset == "custom" and isinstance(points, list) and points:
+            resolved_points = [list(point) for point in fan_control.sanitize_curve(points)]
+        elif preset == "auto":
+            resolved_points = None
+        else:
+            return await self._fan_curve_state_offloop()
+        resolved_scope = self._resolve_scope(scope, appid)
+        if resolved_scope is None:
+            return await self._fan_curve_state_offloop()
+        return await self._commit_desktop_fan_mutation(lambda: self._desktop_fans.set_channel(
+            resolved_scope, channel, preset, resolved_points, appid))
+
+    async def set_desktop_fan_follow_global(self, follow: bool, appid) -> dict:
+        self._init()
+        if appid is not None:
+            appid = str(appid)
+            def mutate():
+                if not follow and not self._desktop_fans.has_game(appid):
+                    self._desktop_fans.create_game_from_global(appid)
+                self._desktop_fans.set_follow_global(appid, bool(follow))
+            return await self._commit_desktop_fan_mutation(mutate)
         return await self._fan_curve_state_offloop()
 
     async def set_fan_experimental(self, enabled: bool) -> dict:
@@ -3046,6 +3274,8 @@ class Plugin:
         self._apply_cpu()
         self._apply_gpu_clock()
         self._schedule_tdp_apply("lifecycle", on_ac)
+        if self._desktop_mode_on():
+            self._offload(self._reapply_desktop_power)
         # Stepped aside: retry a pending HHD hand-back (no-op while we control / no marker).
         if not self._tdp_control_on():
             self._offload(self._restore_power_handoff)
@@ -3058,6 +3288,17 @@ class Plugin:
         self._reapply_controller()  # diff-gated; no-op unless the effective remap changed
         # Re-assert the overlay when mangoapp comes up on its independent serial worker.
         self._schedule_hud_apply()
+
+    def _reapply_desktop_power(self) -> None:
+        mode = str(self._settings.get("desktop_power_mode", "free"))
+        if mode == "custom":
+            self._desktop_power.apply_custom(
+                int(self._settings.get("desktop_cpu_w", 23)),
+                int(self._settings.get("desktop_gpu_w", 80)))
+        elif mode in ("silent", "balanced", "performance"):
+            self._desktop_power.apply(mode)
+        else:
+            self._desktop_power.apply("free")
 
     # ---- Battery + charge limit --------------------------------------------
     def _record_charge_limit_apply(self, action, requested, ok, attempts) -> None:
@@ -5868,6 +6109,16 @@ class Plugin:
         except Exception:  # noqa: BLE001
             pass
 
+    def _restore_desktop_power_safe(self) -> bool:
+        try:
+            coordinator = getattr(self, "_desktop_power", None)
+            if coordinator is None:
+                return True
+            result = coordinator.restore()
+            return bool(result.get("ok")) if isinstance(result, dict) else False
+        except Exception:  # noqa: BLE001
+            return False
+
     def _restore_hud_safe(self) -> None:
         try:
             cap = self._detect_hud()
@@ -6303,9 +6554,15 @@ class Plugin:
         self, stage: str, preserve_recovery=False
     ) -> None:
         self._restore_fans_safe()
+        desktop_power_released = self._restore_desktop_power_safe()
         self._restore_color_safe()
         self._restore_audio_safe()
         decky.logger.info("Shutdown stage %s:peripheral-handoff-attempted", stage)
+        decky.logger.info(
+            "Shutdown stage %s:desktop-power-handoff ok=%s",
+            stage,
+            desktop_power_released,
+        )
         cpu_released = (
             self._release_cpu_controls_sync(
                 stage, preserve_frequency_ownership=True
