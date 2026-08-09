@@ -1,9 +1,8 @@
-name: changelog-bilingual
+name: changelog-multilingual
 
-# Blocks a PR whose newest CHANGELOG.md section isn't bilingual (every English entry
-# needs a matching Spanish "**ES:**" one). Runs on the release-please PR before merge,
-# so a monolingual release can never reach main. release-please writes English only,
-# so the Spanish line is added by hand on the release PR and this check enforces it.
+# Blocks a PR whose newest CHANGELOG.md section lacks a Spanish entry for every
+# English entry or contains an incomplete Italian translation. Release Please's
+# unlabelled English bullets remain supported alongside explicit ES, EN and IT labels.
 on:
   pull_request:
     types: [opened, edited, reopened, synchronize]
