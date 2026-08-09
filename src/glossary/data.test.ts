@@ -62,6 +62,12 @@ describe("glossary data", () => {
       it: "Il dispositivo calcola fotogrammi aggiuntivi e li inserisce tra quelli reali per rendere il movimento più fluido. Il risultato può essere ottimo, ma richiede parte della potenza grafica e può aggiungere un lieve ritardo ai comandi.",
     });
   });
+
+  it("distinguishes battery health from charge and capacity", () => {
+    const batteryHealth = terms.find((term) => term.id === "battery-health");
+
+    expect(batteryHealth?.termIt).toBe("Stato di salute della batteria");
+  });
 });
 
 describe("pick", () => {
@@ -76,7 +82,7 @@ describe("pick", () => {
     const entry: GlossaryTerm = {
       id: "battery",
       term: "Salud de la batería",
-      termIt: "Stato della batteria",
+      termIt: "Stato di salute della batteria",
       es: "estado",
       en: "health",
       it: "stato",
@@ -84,6 +90,6 @@ describe("pick", () => {
 
     expect(pickTerm(entry, "es")).toBe("Salud de la batería");
     expect(pickTerm(entry, "en")).toBe("Salud de la batería");
-    expect(pickTerm(entry, "it")).toBe("Stato della batteria");
+    expect(pickTerm(entry, "it")).toBe("Stato di salute della batteria");
   });
 });

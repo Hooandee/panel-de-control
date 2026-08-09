@@ -142,6 +142,16 @@ describe("Italian catalog", () => {
       "mandos.mode.hori_steam": "HORI (giroscopio/pulsanti posteriori)",
     });
   });
+
+  it("distinguishes battery health from charge and capacity", () => {
+    expect(italianCatalog()).toMatchObject({
+      "hud.metric.pdc_bat_health": "Salute batteria",
+      "system.battery.health": "Stato di salute",
+      "system.battery.healthGroup": "Stato di salute della batteria",
+      "system.battery.capacity": "Capacità",
+      "system.battery.limit": "Limite di carica",
+    });
+  });
 });
 
 describe("LanguageToggle", () => {

@@ -79,7 +79,7 @@ export const CATEGORIES: GlossaryCategory[] = [
       {
         id: "battery-health",
         term: "Salud de la batería",
-        termIt: "Stato della batteria",
+        termIt: "Stato di salute della batteria",
         es: "Es cuánta batería le queda a tu consola comparada con el día que la estrenaste. Con el uso todas se van gastando, así que si marca 90% quiere decir que ahora aguanta un 90% de las partidas que aguantaba nueva.",
         en: "It's how much battery your console has left compared to the day it was new. They all wear down with use, so if it reads 90% it means it now lasts for 90% of the play it managed when new.",
         it: "Indica quanta capacità conserva la batteria rispetto a quando era nuova. Tutte le batterie si usurano nel tempo: un valore del 90% significa che oggi offre circa il 90% dell'autonomia iniziale.",
