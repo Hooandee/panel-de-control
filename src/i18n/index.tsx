@@ -1748,7 +1748,7 @@ export const DICTS: Record<Lang, Record<string, string>> = { es, en, it };
 
 function initialLang(): Lang {
   const stored = readString(STORAGE_KEY);
-  return stored === "es" || stored === "en" || stored === "it" ? stored : "es"; // Spanish default
+  return stored === "es" || stored === "en" || stored === "it" ? stored : "es";
 }
 
 interface I18nValue {
