@@ -1,8 +1,9 @@
 name: changelog-multilingual
 
 # Blocks a PR whose newest CHANGELOG.md section lacks a Spanish entry for every
-# English entry or contains an incomplete Italian translation. Release Please's
-# unlabelled English bullets remain supported alongside explicit ES, EN and IT labels.
+# English entry or contains an incomplete Italian translation. Separate Español,
+# English and Italiano blocks are preferred; Release Please's unlabelled English
+# bullets and explicit ES, EN and IT labels remain compatible.
 on:
   pull_request:
     types: [opened, edited, reopened, synchronize]

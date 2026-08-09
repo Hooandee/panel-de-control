@@ -2,20 +2,26 @@
 
 ## [0.37.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.36.0...panel-de-control-v0.37.0) (2026-08-09)
 
-### Novedades / Features / Novità
+### Español
 
-* **ES:** Panel de Control ahora puede abrirse desde su propio icono en el menú de acceso rápido, junto a Decky.
-* **EN:** Panel de Control can now be opened from its own icon in the Quick Access Menu, next to Decky.
-* **IT:** Panel de Control ora può essere aperto dalla propria icona nel menu di accesso rapido, accanto a Decky.
-* **ES:** El acceso directo está activo por defecto y puede desactivarse desde Ajustes. Reiniciar Decky aplica el cambio.
-* **EN:** The shortcut is enabled by default and can be disabled in Settings. Restarting Decky applies the change.
-* **IT:** L'accesso diretto è attivo per impostazione predefinita e può essere disattivato dalle Impostazioni. Il riavvio di Decky applica la modifica.
-* **ES:** Si el acceso directo no está disponible, el panel completo sigue siendo accesible desde Decky.
-* **EN:** If the shortcut is unavailable, the full panel remains accessible through Decky.
-* **IT:** Se l'accesso diretto non è disponibile, il pannello completo rimane accessibile tramite Decky.
-* **ES:** El contenido completo del panel solo se carga mientras está visible, reduciendo el trabajo innecesario en el QAM.
-* **EN:** The full panel content loads only while visible, reducing unnecessary QAM work.
-* **IT:** Il contenuto completo del pannello viene caricato solo quando è visibile, riducendo il lavoro non necessario nel QAM.
+* Panel de Control ahora puede abrirse desde su propio icono en el menú de acceso rápido, junto a Decky.
+* El acceso directo está activo por defecto y puede desactivarse desde Ajustes. Reiniciar Decky aplica el cambio.
+* Si el acceso directo no está disponible, el panel completo sigue siendo accesible desde Decky.
+* El contenido completo del panel solo se carga mientras está visible, reduciendo el trabajo innecesario en el QAM.
+
+### English
+
+* Panel de Control can now be opened from its own icon in the Quick Access Menu, next to Decky.
+* The shortcut is enabled by default and can be disabled in Settings. Restarting Decky applies the change.
+* If the shortcut is unavailable, the full panel remains accessible through Decky.
+* The full panel content loads only while visible, reducing unnecessary QAM work.
+
+### Italiano
+
+* Panel de Control ora può essere aperto dalla propria icona nel menu di accesso rapido, accanto a Decky.
+* L'accesso diretto è attivo per impostazione predefinita e può essere disattivato dalle Impostazioni. Il riavvio di Decky applica la modifica.
+* Se l'accesso diretto non è disponibile, il pannello completo rimane accessibile tramite Decky.
+* Il contenuto completo del pannello viene caricato solo quando è visibile, riducendo il lavoro non necessario nel QAM.
 
 ## [0.36.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.35.0...panel-de-control-v0.36.0) (2026-08-09)
 

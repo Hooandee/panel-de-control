@@ -18,17 +18,25 @@ def _run(tmp_path: Path, mode: str, changelog: str) -> subprocess.CompletedProce
     )
 
 
-def test_check_accepts_explicit_spanish_english_and_italian_entries(tmp_path):
+def test_check_accepts_separate_spanish_english_and_italian_blocks(tmp_path):
     changelog = """# Changelog
 
 ## [0.37.0](https://example.test/0.37.0)
 
-* **ES:** Abre el panel desde el QAM.
-* **EN:** Open the panel from the QAM.
-* **IT:** Apri il pannello dal QAM.
-* **ES:** Reinicia Decky para aplicar el cambio.
-* **EN:** Restart Decky to apply the change.
-* **IT:** Riavvia Decky per applicare la modifica.
+### Español
+
+* Abre el panel desde el QAM.
+* Reinicia Decky para aplicar el cambio.
+
+### English
+
+* Open the panel from the QAM.
+* Restart Decky to apply the change.
+
+### Italiano
+
+* Apri il pannello dal QAM.
+* Riavvia Decky per applicare la modifica.
 
 ## [0.36.0](https://example.test/0.36.0)
 """
@@ -44,9 +52,17 @@ def test_release_body_groups_and_strips_all_three_language_labels(tmp_path):
 
 ## [0.37.0](https://example.test/0.37.0)
 
-* **ES:** Abre el panel desde el QAM. ([#415](https://example.test/415))
-* **EN:** Open the panel from the QAM. ([#415](https://example.test/415))
-* **IT:** Apri il pannello dal QAM. ([#415](https://example.test/415))
+### Español
+
+* Abre el panel desde el QAM. ([#415](https://example.test/415))
+
+### English
+
+* Open the panel from the QAM. ([#415](https://example.test/415))
+
+### Italiano
+
+* Apri il pannello dal QAM. ([#415](https://example.test/415))
 
 ## [0.36.0](https://example.test/0.36.0)
 """
@@ -73,11 +89,19 @@ def test_check_rejects_partial_italian_translation(tmp_path):
 
 ## [0.37.0](https://example.test/0.37.0)
 
-* **ES:** Primera entrada.
-* **EN:** First entry.
-* **IT:** Prima voce.
-* **ES:** Segunda entrada.
-* **EN:** Second entry.
+### Español
+
+* Primera entrada.
+* Segunda entrada.
+
+### English
+
+* First entry.
+* Second entry.
+
+### Italiano
+
+* Prima voce.
 """
 
     result = _run(tmp_path, "--check", changelog)
@@ -99,6 +123,22 @@ def test_check_keeps_release_please_english_bullets_compatible(tmp_path):
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert "bilingual" in result.stdout
+
+
+def test_check_keeps_explicit_language_labels_compatible(tmp_path):
+    changelog = """# Changelog
+
+## [0.37.0](https://example.test/0.37.0)
+
+* **ES:** Abre el panel desde el QAM.
+* **EN:** Open the panel from the QAM.
+* **IT:** Apri il pannello dal QAM.
+"""
+
+    result = _run(tmp_path, "--check", changelog)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "trilingual" in result.stdout
 
 
 def test_check_rejects_unknown_language_labels(tmp_path):
