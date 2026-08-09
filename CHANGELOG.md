@@ -1,20 +1,13 @@
 # Changelog
 
-## Unreleased
+## [0.35.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.34.0...panel-de-control-v0.35.0) (2026-08-09)
 
 
 ### Novedades / Features / Novità
 
-* **ES:** Añade una traducción completa al italiano para la interfaz de Decky, que abarca la navegación, los ajustes, el actualizador y el glosario. El plugin también reconoce el idioma de Steam y desplaza suavemente las etiquetas largas cuando no caben.
-* **EN:** Add a complete Italian translation for the Decky interface, including navigation, settings, the updater, and the glossary. The plugin also recognises Steam's language and gently scrolls long labels when they do not fit.
-* **IT:** Aggiunge una traduzione italiana completa all'interfaccia Decky, che copre la navigazione, le impostazioni, gli aggiornamenti e il glossario. Il plugin riconosce anche la lingua di Steam e fa scorrere le etichette più lunghe quando non c'è abbastanza spazio.
-
-## [0.35.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.34.0...panel-de-control-v0.35.0) (2026-08-09)
-
-
-### Features
-
-* **i18n:** add Italian localization ([#410](https://github.com/Hooandee/panel-de-control/issues/410)) ([7a98201](https://github.com/Hooandee/panel-de-control/commit/7a9820166f9fff11087a95b15380ed72e60ba523))
+* **ES:** Añade una traducción completa al italiano para la interfaz de Decky, que abarca la navegación, los ajustes, el actualizador y el glosario. El plugin también reconoce el idioma de Steam y desplaza suavemente las etiquetas largas cuando no caben. ([#410](https://github.com/Hooandee/panel-de-control/issues/410)) ([7a98201](https://github.com/Hooandee/panel-de-control/commit/7a9820166f9fff11087a95b15380ed72e60ba523))
+* **EN:** Add a complete Italian translation for the Decky interface, including navigation, settings, the updater, and the glossary. The plugin also recognises Steam's language and gently scrolls long labels when they do not fit. ([#410](https://github.com/Hooandee/panel-de-control/issues/410)) ([7a98201](https://github.com/Hooandee/panel-de-control/commit/7a9820166f9fff11087a95b15380ed72e60ba523))
+* **IT:** Aggiunge una traduzione italiana completa all'interfaccia Decky, che copre la navigazione, le impostazioni, gli aggiornamenti e il glossario. Il plugin riconosce anche la lingua di Steam e fa scorrere le etichette più lunghe quando non c'è abbastanza spazio. ([#410](https://github.com/Hooandee/panel-de-control/issues/410)) ([7a98201](https://github.com/Hooandee/panel-de-control/commit/7a9820166f9fff11087a95b15380ed72e60ba523))
 
 ## [0.34.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.33.0...panel-de-control-v0.34.0) (2026-08-05)
 
