@@ -39,6 +39,10 @@ class DeviceProfile:
     # higher sustained limit on battery (ROG Ally / Ally X). Hides the on-battery unlock
     # toggle. Default False: the extra is unlockable on battery (Xbox Ally X, Legion).
     charger_only_extra: bool = False
+    # Desktop topology: CPU package and discrete GPU are separate power/thermal
+    # domains. Automatic only for hardware that has been validated end-to-end;
+    # generic Linux hosts remain opt-in from Settings.
+    desktop_mode: bool = False
 
 
 # Conservative, safe fallback when detection fails - visibly generic.
@@ -61,6 +65,9 @@ GENERIC = DeviceProfile(
 
 # Ordered most-specific first (so "ROG Ally X" wins before "ROG Ally").
 DEVICE_TABLE = (
+    DeviceProfile("steam_machine", "Steam Machine", "AMD Custom CPU 1772", "amd",
+                  4, 23, 30, 30, match_names=("Fremont",),
+                  desktop_mode=True),
     DeviceProfile("steam_deck_lcd", "Steam Deck", "AMD Van Gogh", "amd",
                   3, 12, 15, 15, match_names=("Jupiter",)),
     DeviceProfile("steam_deck_oled", "Steam Deck OLED", "AMD Sephiroth", "amd",

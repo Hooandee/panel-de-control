@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { effectiveEnabled, moduleState, countStates } from "./moduleLogic";
+import { effectiveEnabled, moduleState, countStates, sectionModuleDisabled } from "./moduleLogic";
 
 const S = (...ids: string[]) => new Set(ids);
 
@@ -53,5 +53,13 @@ describe("countStates", () => {
       S("display"),
     );
     expect(c).toEqual({ visible: 1, background: 1, disabled: 1, blocked: 0 });
+  });
+});
+
+describe("desktop section module state", () => {
+  it("does not let unsupported classic TDP mask desktop power customization", () => {
+    expect(sectionModuleDisabled("power", S("power"), true)).toBe(false);
+    expect(sectionModuleDisabled("power", S("power"), false)).toBe(true);
+    expect(sectionModuleDisabled("fans", S("fans"), true)).toBe(true);
   });
 });
