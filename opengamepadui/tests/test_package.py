@@ -854,9 +854,9 @@ class WorkflowIsolationTests(unittest.TestCase):
             r"actions/checkout@[0-9a-f]{40}",
         )
         self.assertIn("persist-credentials: false", changes)
-        self.assertIn(
-            "dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36",
+        self.assertRegex(
             changes,
+            r"(?m)^\s*uses: dorny/paths-filter@[0-9a-f]{40}(?:\s+#.*)?$",
         )
         self.assertNotRegex(workflow, r"(?m)^\s*(release|tags):")
 
