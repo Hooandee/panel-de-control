@@ -6,6 +6,7 @@ name: changelog-bilingual
 # so the Spanish line is added by hand on the release PR and this check enforces it.
 on:
   pull_request:
+    types: [opened, edited, reopened, synchronize]
     paths: ["CHANGELOG.md"]
 
 permissions:
@@ -18,4 +19,9 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
+      - name: Keep the release PR parseable
+        env:
+          RELEASE_PR_TITLE: ${{ github.event.pull_request.title }}
+          RELEASE_PR_BODY: ${{ github.event.pull_request.body }}
+        run: python3 scripts/release_guard.py pr
       - run: python3 scripts/changelog_notes.py --check
