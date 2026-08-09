@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.35.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.34.0...panel-de-control-v0.35.0) (2026-08-09)
+## 0.35.0 (2026-08-09)
 
 
 ### Novedades / Features / Novità
