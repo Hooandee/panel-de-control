@@ -1,13 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.35.0 (2026-08-09)
 
 
 ### Novedades / Features / Novità
 
-* **ES:** Añade una traducción completa al italiano para la interfaz de Decky, que abarca la navegación, los ajustes, el actualizador y el glosario. El plugin también reconoce el idioma de Steam y desplaza suavemente las etiquetas largas cuando no caben.
-* **EN:** Add a complete Italian translation for the Decky interface, including navigation, settings, the updater, and the glossary. The plugin also recognises Steam's language and gently scrolls long labels when they do not fit.
-* **IT:** Aggiunge una traduzione italiana completa all'interfaccia Decky, che copre la navigazione, le impostazioni, gli aggiornamenti e il glossario. Il plugin riconosce anche la lingua di Steam e fa scorrere le etichette più lunghe quando non c'è abbastanza spazio.
+* **ES:** Añade una traducción completa al italiano para toda la interfaz de Decky.
+* **EN:** Add a complete Italian translation for the entire Decky interface.
+* **IT:** Aggiunge una traduzione italiana completa per tutta l'interfaccia Decky.
 
 ## [0.34.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.33.0...panel-de-control-v0.34.0) (2026-08-05)
 
