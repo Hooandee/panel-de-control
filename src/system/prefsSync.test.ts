@@ -7,6 +7,7 @@ describe("isDurableKey", () => {
     expect(isDurableKey("pdc:layout")).toBe(true);
     expect(isDurableKey("pdc:collapsed:battery")).toBe(true);
     expect(isDurableKey("pdc:valueToast:enabled")).toBe(true);
+    expect(isDurableKey("pdc:qamShortcut")).toBe(true);
   });
   it("excludes the ephemeral active-tab and unmanaged keys", () => {
     expect(isDurableKey("pdc:activeTab")).toBe(false);

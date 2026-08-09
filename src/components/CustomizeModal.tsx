@@ -4,12 +4,12 @@ import { LuChevronUp, LuChevronDown, LuEye, LuEyeOff, LuPower, LuPencil, LuCheck
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
-import { TABS, SECTION_BLOCKS, SUBITEMS, blockOrder, PINNED_TAB, CATEGORY_IDS } from "../customize/manifest";
+import { TABS, SUBITEMS, customizationBlocks, blockOrder, PINNED_TAB, CATEGORY_IDS } from "../customize/manifest";
 import { iconBtn, IconAction } from "./IconAction";
 import { orderIds, move, toggle, ensure, Layout } from "../customize/layout";
 import { useLayout, saveLayout, resetLayout } from "../customize/store";
 import { useModules, setModuleDisabled, resetModules } from "../customize/modules";
-import { moduleState, isDisableableSection } from "../customize/moduleLogic";
+import { moduleState, isDisableableSection, sectionModuleDisabled } from "../customize/moduleLogic";
 import { FocusRoot } from "./FocusRoot";
 import { ACCENTS } from "../system/accentColor";
 import { useAccent, setAccent } from "../system/useAccent";
@@ -21,6 +21,7 @@ import { viewTabId, isViewTabId } from "../customize/views";
 import { viewIconNode } from "../customize/viewIcons";
 import { openViewEditorModal } from "./ViewEditor";
 import { openDisableModuleModal } from "./DisableModuleModal";
+import { useDesktopState } from "../desktop/useDesktop";
 
 // Blocks that are actually backend MODULES (get the on/off power control) rather
 // than cosmetic cards (which get the show/hide eye). Everything else is cosmetic.
@@ -99,6 +100,7 @@ const CustomizeBody: FC = () => {
   const { t } = useI18n();
   const layout = useLayout();
   const disabled = useModules();
+  const desktopMode = !!useDesktopState().state?.enabled;
   useAccent(); // re-render the whole modal live when the accent changes (separate root)
   usePresentVersion(); // reflect which blocks each machine actually has
   const [editing, setEditing] = useState(false);
@@ -236,14 +238,13 @@ const CustomizeBody: FC = () => {
           }
           const meta = catMeta(id);
           const present = getPresent(id);
-          const off = disabled.has(id);
+          const off = sectionModuleDisabled(id, disabled, desktopMode);
           // Effective hidden = the tab won't show: user hid it, or every block it
           // has on this machine is hidden. Reflected on the parent's eye so it
           // doesn't read "visible" while the tab is gone.
-          const hidden = !off && (tabHidden(id) || allBlocksHidden(id, layout.blocks, present));
+          const hidden = !off && (tabHidden(id) || allBlocksHidden(id, layout.blocks, present, desktopMode));
           // Only the blocks this machine actually renders (fallback: manifest).
-          const manifestBlocks = SECTION_BLOCKS[id] ?? [];
-          const blocks = present ? manifestBlocks.filter((b) => present.includes(b.id)) : manifestBlocks;
+          const blocks = customizationBlocks(id, desktopMode, present);
           const expandable = blocks.length > 0 && !off && !editing;
           const open = openId === id && expandable;
           const stateNote = off ? t("customize.state.disabled") : hidden ? t("customize.state.background") : "";
@@ -285,7 +286,7 @@ const CustomizeBody: FC = () => {
                         </IconAction>
                       )}
                     </span>
-                    {isDisableableSection(id) ? (
+                    {isDisableableSection(id, desktopMode) ? (
                       <IconAction label={off ? t("customize.enable") : t("customize.disable")} color={off ? theme.color.textMuted : theme.color.accent} onTap={() => toggleModule(id, t(meta.labelKey), off, () => hideTab(id))}>
                         <LuPower size={18} />
                       </IconAction>
@@ -307,7 +308,7 @@ const CustomizeBody: FC = () => {
 
               {open && (
                 <div style={{ marginTop: theme.space.sm, paddingTop: theme.space.sm, borderTop: `1px solid ${theme.color.hairline}`, display: "flex", flexDirection: "column", gap: theme.space.sm }}>
-                  {orderIds(blockOrder(id), layout.blocks[id]?.order).map((bid) => {
+                  {orderIds(blockOrder(id, desktopMode), layout.blocks[id]?.order).map((bid) => {
                     const b = blocks.find((x) => x.id === bid);
                     if (!b) return null;
                     const modId = BLOCK_MODULE[bid];

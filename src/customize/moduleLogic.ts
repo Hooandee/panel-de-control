@@ -12,7 +12,12 @@ interface Requirement {
 
 // Section tabs backed by a backend module (disable-able); others are hide-only.
 const SECTION_MODULES = new Set<string>(["power", "system", "display", "fans", "mandos"]);
-export const isDisableableSection = (id: string): boolean => SECTION_MODULES.has(id);
+export const isDisableableSection = (id: string, desktopMode = false): boolean =>
+  SECTION_MODULES.has(id) && !(desktopMode && id === "power");
+
+export function sectionModuleDisabled(id: string, disabled: Set<string>, desktopMode: boolean): boolean {
+  return disabled.has(id) && !(desktopMode && id === "power");
+}
 
 // autoTdp/fanControl cascade from their tab (all); learning needs a consumer (any).
 export const REQUIRES: Partial<Record<ModuleId, Requirement>> = {

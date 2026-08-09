@@ -13,6 +13,8 @@ import { effectiveEnabled } from "../customize/moduleLogic";
 import { isValueToastEnabled, setValueToastEnabled } from "../system/valueToast";
 import { UpdatePanel } from "../updater/UpdatePanel";
 import { theme } from "../theme";
+import { useDesktopState } from "../desktop/useDesktop";
+import { QamShortcutSetting } from "../components/QamShortcutSetting";
 
 const AUTHOR = "Hooandee";
 const CHANNEL_URL = "https://www.youtube.com/@Hooandee";
@@ -41,6 +43,7 @@ export const AjustesSection: FC = () => {
   const [battMax, onToggleBattMax] = useToggleSetting(getUnlockBatteryMax, setUnlockBatteryMax, false);
   const [coolerBoost, onToggleCoolerBoost] = useToggleSetting(getCoolerBoost, setCoolerBoost, false);
   const [qamBoost, onToggleQamBoost] = useToggleSetting(getQamTdpBoost, setQamTdpBoost, false);
+  const desktop = useDesktopState();
 
   // Master TDP switch via the power module (shared with the layout editor): off hands
   // control back. Shown only on TDP-capable devices.
@@ -103,7 +106,18 @@ export const AjustesSection: FC = () => {
           <LanguageToggle />
         </div>
 
-        {tdpSupported && (
+        {(device?.is_generic || desktop.state?.automatic) && desktop.state && (
+          <ToggleField
+            label={t("settings.desktop")}
+            description={t(desktop.state.automatic ? "settings.desktop.auto.desc" : "settings.desktop.desc")}
+            checked={desktop.state.enabled}
+            disabled={desktop.state.automatic}
+            onChange={desktop.setEnabled}
+            bottomSeparator="none"
+          />
+        )}
+
+        {tdpSupported && !desktop.state?.enabled && (
           <ToggleField
             label={t("settings.tdpcontrol")}
             description={t("settings.tdpcontrol.desc")}
@@ -113,7 +127,7 @@ export const AjustesSection: FC = () => {
           />
         )}
 
-        {battMax !== null && device &&
+        {!desktop.state?.enabled && battMax !== null && device &&
           device.tdp_max_charger > device.tdp_max && !device.charger_only_extra && (
           <ToggleField
             label={t("settings.battmax")}
@@ -124,7 +138,7 @@ export const AjustesSection: FC = () => {
           />
         )}
 
-        {coolerBoost !== null && device?.cooler_max != null && (
+        {!desktop.state?.enabled && coolerBoost !== null && device?.cooler_max != null && (
           <ToggleField
             label={t("settings.cooler")}
             description={t("settings.cooler.desc", { max: device.cooler_max })}
@@ -134,7 +148,7 @@ export const AjustesSection: FC = () => {
           />
         )}
 
-        {qamBoost !== null && (
+        {!desktop.state?.enabled && qamBoost !== null && (
           <ToggleField
             label={t("settings.qamboost")}
             description={t("settings.qamboost.desc")}
@@ -143,6 +157,8 @@ export const AjustesSection: FC = () => {
             bottomSeparator="none"
           />
         )}
+
+        <QamShortcutSetting />
 
         <ToggleField
           label={t("settings.valueToast")}

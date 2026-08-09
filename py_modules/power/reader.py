@@ -92,3 +92,46 @@ class PowerReader:
 
     def read(self):
         return {"watts": self.read_watts(), "gpu_busy": self.read_gpu_busy()}
+
+    def _gpu_device_dir(self):
+        pattern = os.path.join(self._root, "sys/class/drm", "card*", "device")
+        for directory in sorted(glob.glob(pattern)):
+            if os.path.exists(os.path.join(directory, "gpu_busy_percent")):
+                return directory
+        return None
+
+    def _hwmon_mhz(self, leaf):
+        if self._amdgpu_hwmon is None or not os.path.isdir(self._amdgpu_hwmon):
+            self._amdgpu_hwmon = self._find_amdgpu_dir()
+        if self._amdgpu_hwmon is None:
+            return None
+        hz = self._read_int(os.path.join(self._amdgpu_hwmon, leaf))
+        return None if hz is None else round(hz / 1_000_000)
+
+    def _vram_mb(self, leaf):
+        directory = self._gpu_device_dir()
+        value = self._read_int(os.path.join(directory, leaf)) if directory else None
+        return None if value is None else round(value / (1024 * 1024))
+
+    def read_desktop(self, device_key=None):
+        """Explicit dual-domain snapshot; CPU package power remains unknown unless
+        the host exposes a trustworthy separate source (none is guessed here)."""
+        if device_key not in (None, "steam_machine"):
+            return {
+                "cpu_watts": None,
+                "gpu_watts": None,
+                "gpu_busy": None,
+                "gpu_clock_mhz": None,
+                "gpu_clock_max_mhz": None,
+                "vram_used_mb": None,
+                "vram_total_mb": None,
+            }
+        return {
+            "cpu_watts": None,
+            "gpu_watts": self.read_watts(),
+            "gpu_busy": self.read_gpu_busy(),
+            "gpu_clock_mhz": self._hwmon_mhz("freq1_input"),
+            "gpu_clock_max_mhz": self._hwmon_mhz("freq1_max"),
+            "vram_used_mb": self._vram_mb("mem_info_vram_used"),
+            "vram_total_mb": self._vram_mb("mem_info_vram_total"),
+        }
