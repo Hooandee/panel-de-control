@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.37.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.0...panel-de-control-v0.37.1) (2026-08-10)
+
+
+### Bug Fixes
+
+* preserve QAM scroll position ([#427](https://github.com/Hooandee/panel-de-control/issues/427)) ([0bd5540](https://github.com/Hooandee/panel-de-control/commit/0bd5540ff50254b5068fdf8d9945bdc6306e1510))
+
 ## [0.37.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.36.0...panel-de-control-v0.37.0) (2026-08-09)
 
 ### Español
