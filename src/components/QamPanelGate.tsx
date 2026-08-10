@@ -17,6 +17,18 @@ interface QamPanelGateProps extends PropsWithChildren {
   fallback?: ReactNode;
 }
 
+// Ancestor overflow can suppress IntersectionObserver updates after vertical clipping.
+const RETAINED_TAB_CHECK_MS = 100;
+
+interface HorizontalBounds {
+  left: number;
+  right: number;
+}
+
+function overlapsHorizontally(rect: DOMRect, bounds: HorizontalBounds): boolean {
+  return rect.left < bounds.right && rect.right > bounds.left;
+}
+
 export function canGateQamPanel(host: QamPanelCapabilities = window): boolean {
   return typeof host.ResizeObserver === "function"
     && typeof host.IntersectionObserver === "function";
@@ -36,12 +48,29 @@ export const QamPanelGate: FC<QamPanelGateProps> = ({ children, lifecycle, fallb
 
     let resize: ResizeObserver | null = null;
     let intersection: IntersectionObserver | null = null;
-    let intersecting = false;
+    let fullyIntersecting = false;
+    let retainedDuringScroll = false;
+    let visibleHorizontalBounds: HorizontalBounds | null = null;
+    let retentionPoll: number | null = null;
     let gated = false;
     let stopped = false;
+    const stopRetentionPoll = () => {
+      if (retentionPoll === null) return;
+      doc.defaultView?.clearInterval(retentionPoll);
+      retentionPoll = null;
+    };
+    const canRetainAtCurrentPosition = () => {
+      const rect = host.getBoundingClientRect();
+      return visibleHorizontalBounds !== null
+        && rect.width > 0
+        && rect.height > 0
+        && overlapsHorizontally(rect, visibleHorizontalBounds);
+    };
     const refresh = () => {
       if (stopped) return;
       if (lifecycle.aborted || doc.visibilityState !== "visible") {
+        retainedDuringScroll = false;
+        stopRetentionPoll();
         setMode("hidden");
         return;
       }
@@ -50,11 +79,28 @@ export const QamPanelGate: FC<QamPanelGateProps> = ({ children, lifecycle, fallb
         return;
       }
       const rect = host.getBoundingClientRect();
-      setMode(intersecting && rect.width > 0 && rect.height > 0 ? "content" : "hidden");
+      setMode(
+        (fullyIntersecting || retainedDuringScroll) && rect.width > 0 && rect.height > 0
+          ? "content"
+          : "hidden",
+      );
+    };
+    const pollRetainedPosition = () => {
+      const nextRetained = canRetainAtCurrentPosition();
+      if (nextRetained === retainedDuringScroll) return;
+      retainedDuringScroll = nextRetained;
+      if (!nextRetained) stopRetentionPoll();
+      refresh();
+    };
+    const startRetentionPoll = () => {
+      const view = doc.defaultView;
+      if (retentionPoll !== null || !view) return;
+      retentionPoll = view.setInterval(pollRetainedPosition, RETAINED_TAB_CHECK_MS);
     };
     const disconnect = () => {
       intersection?.disconnect();
       resize?.disconnect();
+      stopRetentionPoll();
       intersection = null;
       resize = null;
     };
@@ -83,12 +129,30 @@ export const QamPanelGate: FC<QamPanelGateProps> = ({ children, lifecycle, fallb
     }
 
     try {
-      resize = new Resize(refresh);
-      intersection = new Intersection((entries) => {
-        const entry = entries.find((candidate) => candidate.target === host);
-        intersecting = !!entry?.isIntersecting && entry.intersectionRatio > 0;
+      resize = new Resize(() => {
+        if (retainedDuringScroll) {
+          retainedDuringScroll = canRetainAtCurrentPosition();
+          if (!retainedDuringScroll) stopRetentionPoll();
+        }
         refresh();
       });
+      intersection = new Intersection((entries) => {
+        const entry = entries.find((candidate) => candidate.target === host);
+        fullyIntersecting = !!entry?.isIntersecting && entry.intersectionRatio === 1;
+        if (fullyIntersecting && entry) {
+          retainedDuringScroll = false;
+          visibleHorizontalBounds = {
+            left: entry.boundingClientRect.left,
+            right: entry.boundingClientRect.right,
+          };
+          stopRetentionPoll();
+        } else {
+          retainedDuringScroll = !!entry && canRetainAtCurrentPosition();
+          if (retainedDuringScroll) startRetentionPoll();
+          else stopRetentionPoll();
+        }
+        refresh();
+      }, { threshold: [0, 1] });
       gated = true;
       resize.observe(host);
       intersection.observe(host);
