@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.37.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.0...panel-de-control-v0.37.1) (2026-08-10)
+
+### Español
+
+* Corrige que el panel volviera automáticamente al principio al desplazarse hacia abajo desde el icono propio de Panel de Control en el menú de acceso rápido. El desplazamiento funciona ahora tanto con la pantalla táctil como con los mandos, mientras que el acceso mediante Decky conserva su comportamiento anterior. ([#427](https://github.com/Hooandee/panel-de-control/pull/427))
+
+### English
+
+* Fixes the panel automatically jumping back to the top when scrolling down from Panel de Control's own Quick Access Menu icon. Scrolling now works with both touch and controllers, while access through Decky keeps its previous behavior. ([#427](https://github.com/Hooandee/panel-de-control/pull/427))
+
+### Italiano
+
+* Corregge un problema per cui il pannello tornava automaticamente all'inizio scorrendo verso il basso dall'icona dedicata di Panel de Control nel menu di accesso rapido. Ora lo scorrimento funziona sia con il touchscreen sia con il controller, mentre l'accesso tramite Decky mantiene il comportamento precedente. ([#427](https://github.com/Hooandee/panel-de-control/pull/427))
+
 ## [0.37.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.36.0...panel-de-control-v0.37.0) (2026-08-09)
 
 ### Español
