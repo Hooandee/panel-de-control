@@ -14,7 +14,7 @@ export type { RunningGame };
  * backend report out of it means there is a single reporter and no race.
  *
  * Subscribes to SteamClient.GameSessions.RegisterForAppLifetimeNotifications
- * for live updates; falls back to a 2 s polling interval if that API is absent.
+ * for immediate updates and polls every 2 s for convergence.
  * Unsubscribes / clears the interval on unmount. Never throws.
  */
 export function useRunningGame(): RunningGame | null {
@@ -44,10 +44,9 @@ export function useRunningGame(): RunningGame | null {
       );
     };
 
-    // Initial read.
     sync();
+    timer = setInterval(sync, 2000);
 
-    // Subscribe to lifetime notifications for immediate updates.
     try {
       const reg =
         SteamClient?.GameSessions?.RegisterForAppLifetimeNotifications?.(
@@ -61,14 +60,8 @@ export function useRunningGame(): RunningGame | null {
             /* ignore */
           }
         };
-      } else {
-        // Notification API absent — fall back to polling.
-        timer = setInterval(sync, 2000);
       }
-    } catch {
-      // Notification API threw — fall back to polling.
-      timer = setInterval(sync, 2000);
-    }
+    } catch { /* polling remains active */ }
 
     return () => {
       alive = false;
