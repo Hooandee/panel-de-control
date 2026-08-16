@@ -5,6 +5,7 @@ from device_profiles import DEVICE_TABLE, GENERIC
 from tdp import factory
 from tdp.backend import NullBackend
 from tdp.factory import select_backend
+from tdp.reconcile import build_targets
 
 
 def _p(key):
@@ -42,6 +43,17 @@ def _mk_dmi(root, vendor, product):
     for name, value in (("sys_vendor", vendor), ("product_name", product)):
         with open(os.path.join(base, name), "w") as f:
             f.write(value)
+
+
+def _set_fw_max(root, rail, value):
+    path = os.path.join(
+        root,
+        "sys/class/firmware-attributes/lenovo-wmi-other-0/attributes",
+        rail,
+        "max_value",
+    )
+    with open(path, "w") as handle:
+        handle.write(str(value))
 
 
 _NO_RYZENADJ = lambda: None  # noqa: E731
@@ -87,6 +99,141 @@ def test_only_exact_legion_go_s_83n6_gets_measured_rail_floors(tmp_path):
 
     assert getattr(exact, "_rail_floors", None) == {"pl2": 15, "pl3": 20}
     assert getattr(nearby, "_rail_floors", None) == {}
+
+
+def test_exact_legion_go_s_83n6_applies_profile_safe_target_despite_low_firmware_max(tmp_path):
+    root = str(tmp_path)
+    _mk_fw(root, "lenovo-wmi-other-0", pl1_max=15)
+    _mk_dmi(root, "LENOVO", "83N6")
+    _set_fw_max(root, "ppt_pl2_sppt", 15)
+    _set_fw_max(root, "ppt_pl3_fppt", 20)
+
+    backend = select_backend(
+        _p("legion_go_s"),
+        root=root,
+        ryzenadj_resolve=_NO_RYZENADJ,
+    )
+    requested = {"pl1": 30, "pl2": 30, "pl3": 30}
+    targets = build_targets(requested, backend.level_limits(), backend.observe())
+    result = backend.apply_targets(targets.target, ac=True)
+
+    assert targets.target == requested
+    assert result.ok is True
+    assert result.applied_w == 30
+
+
+def test_exact_legion_go_s_83n6_does_not_unlock_unverified_boost_range(tmp_path):
+    root = str(tmp_path)
+    _mk_fw(root, "lenovo-wmi-other-0", pl1_max=15)
+    _mk_dmi(root, "LENOVO", "83N6")
+    _set_fw_max(root, "ppt_pl2_sppt", 15)
+    _set_fw_max(root, "ppt_pl3_fppt", 20)
+    backend = select_backend(
+        _p("legion_go_s"),
+        root=root,
+        ryzenadj_resolve=_NO_RYZENADJ,
+    )
+
+    targets = build_targets(
+        {"pl1": 999, "pl2": 999, "pl3": 999},
+        backend.level_limits(),
+        backend.observe(),
+    )
+
+    assert targets.target == {"pl1": 40, "pl2": 40, "pl3": 40}
+
+
+def test_exact_legion_go_s_83n6_uses_non_sentinel_live_max(tmp_path):
+    root = str(tmp_path)
+    _mk_fw(root, "lenovo-wmi-other-0", pl1_max=25)
+    _mk_dmi(root, "LENOVO", "83N6")
+    _set_fw_max(root, "ppt_pl2_sppt", 30)
+    _set_fw_max(root, "ppt_pl3_fppt", 35)
+    backend = select_backend(
+        _p("legion_go_s"),
+        root=root,
+        ryzenadj_resolve=_NO_RYZENADJ,
+    )
+
+    rails = backend.observe().surfaces[backend.name]
+
+    assert {rail: reading.max_w for rail, reading in rails.items()} == {
+        "pl1": 25,
+        "pl2": 30,
+        "pl3": 35,
+    }
+
+
+def test_exact_legion_go_s_83n6_diagnostics_keep_reported_sentinel_max(tmp_path):
+    root = str(tmp_path)
+    _mk_fw(root, "lenovo-wmi-other-0", pl1_max=15)
+    _mk_dmi(root, "LENOVO", "83N6")
+    _set_fw_max(root, "ppt_pl2_sppt", 15)
+    _set_fw_max(root, "ppt_pl3_fppt", 20)
+    backend = select_backend(
+        _p("legion_go_s"),
+        root=root,
+        ryzenadj_resolve=_NO_RYZENADJ,
+    )
+
+    assert backend.diagnostics() == {
+        "boost_capped_to_active": True,
+        "ignored_live_maxes": {"pl1": 15, "pl2": 15, "pl3": 20},
+        "reported_live_bounds": {
+            "pl1": {"min": 5, "max": 15},
+            "pl2": {"min": 5, "max": 15},
+            "pl3": {"min": 5, "max": 20},
+        },
+    }
+
+
+def test_nearby_legion_go_s_still_honours_low_firmware_max(tmp_path):
+    root = str(tmp_path)
+    _mk_fw(root, "lenovo-wmi-other-0", pl1_max=15)
+    _mk_dmi(root, "LENOVO", "83L3")
+    _set_fw_max(root, "ppt_pl2_sppt", 15)
+    _set_fw_max(root, "ppt_pl3_fppt", 20)
+    backend = select_backend(
+        _p("legion_go_s"),
+        root=root,
+        ryzenadj_resolve=_NO_RYZENADJ,
+    )
+
+    targets = build_targets(
+        {"pl1": 30, "pl2": 30, "pl3": 30},
+        backend.level_limits(),
+        backend.observe(),
+    )
+
+    assert targets.target == {"pl1": 15, "pl2": 15, "pl3": 20}
+
+
+def test_exact_legion_go_s_83n6_without_pl1_firmware_attr_uses_ryzenadj(tmp_path):
+    root = str(tmp_path)
+    base = os.path.join(
+        root,
+        "sys/class/firmware-attributes/lenovo-wmi-other-0/attributes",
+    )
+    for attr in ("ppt_cpu_cl", "ppt_pl2_sppt", "ppt_pl3_fppt"):
+        path = os.path.join(base, attr)
+        os.makedirs(path, exist_ok=True)
+        with open(os.path.join(path, "current_value"), "w") as handle:
+            handle.write("15")
+    _mk_dmi(root, "LENOVO", "83N6")
+
+    backend = select_backend(
+        _p("legion_go_s"),
+        root=root,
+        ryzenadj_resolve=lambda: "/usr/bin/ryzenadj",
+    )
+
+    assert backend.name == "ryzenadj"
+    assert [item["candidate"] for item in backend.probe_trace] == [
+        "lenovo",
+        "asus",
+        "msi",
+        "ryzenadj",
+    ]
 
 
 def test_generic_device_does_not_get_83n6_rail_floors_from_dmi_alone(tmp_path):
