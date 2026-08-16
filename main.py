@@ -5991,11 +5991,10 @@ class Plugin:
         while True:
             try:
                 await asyncio.sleep(_AUDIO_POLL_S)
-                if not self._settings.get("audio_eq_enabled"):
-                    self._audio_route_last = None
-                    await self._offload_call(self._restore_audio_safe)
-                    continue
-                if not self._audio.is_supported():
+                if (
+                    not self._settings.get("audio_eq_enabled")
+                    or not self._audio.is_supported()
+                ):
                     self._audio_route_last = None
                     await self._offload_call(self._restore_audio_safe)
                     continue

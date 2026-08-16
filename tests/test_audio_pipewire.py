@@ -68,8 +68,6 @@ def test_choose_downstream_prefers_the_active_default():
 
 
 def test_choose_downstream_falls_back_to_the_running_sink_when_default_is_our_eq():
-    # EQ is the default → enumerate, and prefer the RUNNING output (headphones here) so the
-    # per-route curve + volume-pin follow the active device, not just the first-listed one.
     assert choose_downstream("X EQ", _DECK_SHORT, "X EQ").endswith("Headphones__sink")
 
 
@@ -349,8 +347,6 @@ def _make_eq(tmp_path, fake, conf_exists):
 
 
 def test_ensure_sink_first_enable_carries_downstream_volume(tmp_path):
-    # Genuine first-ever enable (no persisted conf): carry the downstream's real level
-    # onto our sink so enabling the EQ doesn't jump loudness to unity.
     fake = _FakeRunner(downstream_vol="40%")
     eq = _make_eq(tmp_path, fake, conf_exists=False)
     assert eq.ensure_sink([0] * 10) is True
@@ -521,9 +517,6 @@ def test_trusted_home_alias_is_resolved_before_secure_directory_walk(
 
 
 def test_ensure_sink_boot_reassert_preserves_user_volume(tmp_path):
-    # A persisted conf already exists → the EQ sink comes back with the user's level
-    # (WirePlumber restores it by node.name). A boot/reload re-assert must NOT copy the
-    # always-unity downstream onto it, or the user's volume is wiped to 100% every boot.
     fake = _FakeRunner(downstream_vol="100%")
     eq = _make_eq(tmp_path, fake, conf_exists=True)
     assert eq.ensure_sink([0] * 10) is True
@@ -1666,11 +1659,10 @@ def test_linked_downstream_returns_only_a_current_physical_candidate():
 
 def test_relevant_links_keeps_eq_and_hardware_drops_noise():
     out = _relevant_links(_PW_LINK)
-    assert "effect_output.pdc_eq" in out          # our node
-    assert "alsa_output.pci-0000_c2_00.6" in out   # hardware output
-    assert "loopback" in out                        # the virtual hop it routes through
-    assert "some_unrelated_node" not in out         # noise dropped
-    # the indented continuation of a kept node is preserved
+    assert "effect_output.pdc_eq" in out
+    assert "alsa_output.pci-0000_c2_00.6" in out
+    assert "loopback" in out
+    assert "some_unrelated_node" not in out
     assert "|-> alsa_loopback_device" in out
 
 

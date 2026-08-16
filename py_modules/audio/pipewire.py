@@ -1,9 +1,4 @@
-"""Device layer for the EQ sink: writes the filter-chain conf into the user's
-filter-chain.conf.d/, restarts the filter-chain service to apply, and sets the sink as
-default. Runs session commands (pactl / systemctl --user) against the logged-in user from
-the root backend, mirroring the gamescope/fan spawn hygiene (clean_env + XDG_RUNTIME_DIR).
-Apply on release: every gain change rewrites the conf and restarts (~1s); live per-band
-control isn't available via the CLI on current PipeWire."""
+"""PipeWire filter-chain lifecycle for the system EQ."""
 import glob
 import json
 import os
@@ -31,6 +26,13 @@ _RETRY_MIN_S = 15.0
 _RETRY_MAX_S = 60.0
 _RETRY_MAX_ATTEMPTS = 3
 _MAX_ENTRY_BYTES = 64 * 1024
+_RETRY_OPERATIONS = {
+    "config": "config_write",
+    "default": "default_sink",
+    "link": "target_link",
+    "service": "service_restart",
+    "teardown": "teardown",
+}
 
 
 def _find_lib(*relative):
@@ -152,15 +154,13 @@ def _configured_default_sink(pw_metadata_text):
 
 
 def _relevant_links(pw_link_text, *, cap=2500):
-    """Filter `pw-link -l` to the lines that reveal the EQ routing — our node, hardware
-    outputs and loopbacks — keeping each matched node line with its indented `|->`/`|<-`
-    continuation. Capped so the report bundle stays small."""
+    """Return the bounded subset of links involved in EQ routing."""
     if not pw_link_text:
         return ""
     keep = ("pdc_eq", "alsa_output", "bluez_output", "loopback")
     out, keeping = [], False
     for line in pw_link_text.splitlines():
-        if line[:1] not in (" ", "\t"):  # a node line (not an indented peer)
+        if line[:1] not in (" ", "\t"):
             keeping = any(k in line.lower() for k in keep)
         if keeping:
             out.append(line)
@@ -168,8 +168,7 @@ def _relevant_links(pw_link_text, *, cap=2500):
 
 
 def _find_session():
-    """The logged-in user's PipeWire session: (uid, runtime_dir, user) from the pipewire
-    socket under /run/user/*, or None when no session is present."""
+    """Return the session owning the active PipeWire socket."""
     for sock in glob.glob("/run/user/*/pipewire-0"):
         runtime = os.path.dirname(sock)
         try:
@@ -208,15 +207,10 @@ class PipeWireEq:
         self._retry_attempts = 0
         self._retry_service_token = None
         self._retry_recovery = None
-        # Human-facing sink name shown in the system/Steam volume OSD (reads node.name),
-        # e.g. "Legion Go EQ". Used both as the label and as the sink's node.name.
         self._name = name or "Panel de Control"
         self._label = f"{self._name} EQ"
 
-    # --- session command plumbing -------------------------------------------------
     def _session_cmd(self, argv):
-        """Build (cmd, env) to run `argv` as the logged-in user with a clean env + XDG
-        runtime, from the (root) backend. Returns (None, None) with no session."""
         if not self._session:
             return None, None
         _uid, runtime, user = self._session
@@ -233,7 +227,6 @@ class PipeWireEq:
         return cmd, env
 
     def _run(self, argv, timeout=8):
-        """Run a session command and return its stdout (or ''). Never raises."""
         cmd, env = self._session_cmd(argv)
         if cmd is None:
             return ""
@@ -289,14 +282,17 @@ class PipeWireEq:
         path = self._conf_path()
         return f"{path}.first-enable-pending" if path else None
 
+    def _session_ids(self):
+        try:
+            account = pwd.getpwuid(self._session[0])
+            return account.pw_uid, account.pw_gid
+        except KeyError:
+            return self._session[0], self._session[0]
+
     def _open_parent_dir(self, path, *, create=False):
         if not path or not self._session or not os.path.isabs(path):
             return None
-        try:
-            account = pwd.getpwuid(self._session[0])
-            uid, gid = account.pw_uid, account.pw_gid
-        except KeyError:
-            uid = gid = self._session[0]
+        uid, gid = self._session_ids()
         flags = os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW
         current_fd = None
         try:
@@ -409,11 +405,7 @@ class PipeWireEq:
         name = os.path.basename(path)
         temp_name = f".{name}.{os.getpid()}.{secrets.token_hex(8)}"
         temp_fd = None
-        try:
-            account = pwd.getpwuid(self._session[0])
-            uid, gid = account.pw_uid, account.pw_gid
-        except KeyError:
-            uid = gid = self._session[0]
+        uid, gid = self._session_ids()
         try:
             try:
                 existing = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
@@ -480,15 +472,14 @@ class PipeWireEq:
             ),
         )
 
-    def _first_enable_is_pending(self):
+    def _pending_first_enable(self, downstream):
         path = self._pending_path()
-        return self._first_enable_pending or bool(path and self._entry_exists(path))
-
-    def _pending_first_enable_volume(self, downstream):
-        path = self._pending_path()
-        if path and self._entry_exists(path):
+        stored = self._read_entry(path) if path else None
+        persisted = bool(path and (stored is not None or self._entry_exists(path)))
+        volume = None
+        if stored is not None:
             try:
-                pending = json.loads(self._read_entry(path))
+                pending = json.loads(stored)
             except (ValueError, TypeError):
                 pending = None
             if (
@@ -496,10 +487,10 @@ class PipeWireEq:
                 and pending.get("sink") == downstream
                 and re.fullmatch(r"\d+%", str(pending.get("volume", "")))
             ):
-                return pending["volume"]
-        if self._first_enable_downstream == downstream:
-            return self._first_enable_volume
-        return None
+                volume = pending["volume"]
+        if volume is None and self._first_enable_downstream == downstream:
+            volume = self._first_enable_volume
+        return self._first_enable_pending or persisted, volume
 
     def _clear_first_enable_pending(self):
         path = self._pending_path()
@@ -516,9 +507,8 @@ class PipeWireEq:
             self._clear_first_enable_pending()
         return removed
 
-    # --- capability ---------------------------------------------------------------
     def is_supported(self):
-        if not self._session:  # re-probe: the session may come up after _init (self-heal)
+        if not self._session:
             self._session = _find_session()
         return (
             bool(self._session)
@@ -531,7 +521,6 @@ class PipeWireEq:
     def _binary_available(name):
         return resolve_bin(name) != name or shutil.which(name) is not None
 
-    # --- lifecycle ----------------------------------------------------------------
     def _write_conf(self, gains, bass, loudness, downstream=None):
         path = self._conf_path()
         if not path:
@@ -688,9 +677,6 @@ class PipeWireEq:
         return True
 
     def _pin_downstream(self, downstream, balance):
-        """Hold the physical sink at unity, offset per-channel for L/R balance (far side
-        attenuated, near side at unity). Pin unity first so a non-stereo sink stays
-        transparent when the two-value write fails, rather than a hidden attenuation."""
         if downstream not in self._downstream_volumes:
             self._downstream_volumes[downstream] = self._sink_volume_pcts(downstream)
         left, right = balance_channels(balance)
@@ -722,13 +708,7 @@ class PipeWireEq:
             if service_changed or link_recovered:
                 self._clear_retry()
                 return False
-            operation = {
-                "config": "config_write",
-                "default": "default_sink",
-                "link": "target_link",
-                "service": "service_restart",
-                "teardown": "teardown",
-            }.get(self._retry_recovery, "apply")
+            operation = _RETRY_OPERATIONS.get(self._retry_recovery, "apply")
             self._record_apply(
                 False,
                 f"{operation}_retry_exhausted",
@@ -753,6 +733,22 @@ class PipeWireEq:
         self._retry_recovery = recovery
         self._retry_at = self._monotonic() + self._retry_delay
         self._retry_delay = min(_RETRY_MAX_S, self._retry_delay * 2)
+
+    def _defer_failure(
+        self,
+        request,
+        recovery,
+        reason,
+        downstream,
+        *,
+        bypass=False,
+        **details,
+    ):
+        self._defer_retry(request, recovery)
+        if bypass:
+            details["bypass_confirmed"] = self._bypass_eq_default(downstream)
+        self._record_apply(False, reason, downstream=downstream, **details)
+        return False
 
     def _clear_retry(self):
         self._retry_request = None
@@ -785,16 +781,6 @@ class PipeWireEq:
         )
 
     def ensure_sink(self, gains, bass=0, loudness=False, balance=0):
-        """Create/refresh the EQ sink (bands + optional bass enhancer), make it default,
-        and keep the physical sink it feeds pinned at unity (100%), offset for balance.
-        Steam's volume controls the default sink — i.e. ours — so the downstream must stay
-        transparent, or its level becomes a hidden second attenuation the user can't reach.
-        Re-pinning every apply is self-healing across resume/reload; captured physical levels
-        are restored on route handoff and teardown.
-
-        Diff-gated: an unchanged (gains, bass, loudness) skips the conf rewrite + ~1s restart
-        (just re-asserts default + the pin). Balance is outside the gate — it only moves the
-        pin, so it re-applies without a restart."""
         if not self.is_supported():
             self._record_apply(False, "unsupported")
             return False
@@ -812,8 +798,6 @@ class PipeWireEq:
             and downstream == self._active_downstream
             and self._target_link_confirmed(downstream)
         )
-        # First-ever enable (no conf yet) vs a boot re-assert (conf exists) — check before
-        # _write_conf creates it.
         first = self._orig_default is None
         conf_path = self._conf_path()
         first_ever = not (conf_path and self._entry_exists(conf_path))
@@ -822,13 +806,12 @@ class PipeWireEq:
             self._first_enable_downstream = downstream
             self._first_enable_volume = self._sink_volume_pct(downstream)
             if not self._persist_first_enable_pending():
-                self._defer_retry(request, "config")
-                self._record_apply(
-                    False,
+                return self._defer_failure(
+                    request,
+                    "config",
                     "pending_marker_write_failed",
-                    downstream=downstream,
+                    downstream,
                 )
-                return False
         configured_same = self._configured_request == request and not first_ever
         if not unchanged and not configured_same:
             try:
@@ -841,16 +824,14 @@ class PipeWireEq:
             if not wrote_conf:
                 if first and first_ever:
                     self._discard_first_enable_config(conf_path)
-                bypass_confirmed = self._bypass_eq_default(downstream)
-                self._defer_retry(request, "config")
-                self._record_apply(
-                    False,
+                return self._defer_failure(
+                    request,
+                    "config",
                     "config_write_failed",
-                    downstream=downstream,
-                    bypass_confirmed=bypass_confirmed,
+                    downstream,
+                    bypass=True,
                     **({"error": write_error} if write_error else {}),
                 )
-                return False
         if not unchanged:
             if not configured_same:
                 current_default = self._runner(["pactl", "get-default-sink"])
@@ -865,26 +846,22 @@ class PipeWireEq:
                     )
                     return False
                 if not self._restart():
-                    self._defer_retry(request, "service")
-                    bypass_confirmed = self._bypass_eq_default(downstream)
-                    self._record_apply(
-                        False,
+                    return self._defer_failure(
+                        request,
+                        "service",
                         "service_restart_failed",
-                        downstream=downstream,
-                        bypass_confirmed=bypass_confirmed,
+                        downstream,
+                        bypass=True,
                     )
-                    return False
                 self._configured_request = request
             if not self._target_link_confirmed(downstream, retry=True):
-                self._defer_retry(request, "link")
-                bypass_confirmed = self._bypass_eq_default(downstream)
-                self._record_apply(
-                    False,
+                return self._defer_failure(
+                    request,
+                    "link",
                     "target_link_not_confirmed",
-                    downstream=downstream,
-                    bypass_confirmed=bypass_confirmed,
+                    downstream,
+                    bypass=True,
                 )
-                return False
         if not self._set_default_confirmed(self._label):
             rollback_confirmed = None
             if first and first_ever:
@@ -894,41 +871,33 @@ class PipeWireEq:
                 self._cleanup_pending = not rollback_confirmed
                 self._set_default_confirmed(downstream)
                 self._configured_request = None
-            bypass_confirmed = self._bypass_eq_default(downstream)
-            self._defer_retry(request, "default")
-            self._record_apply(
-                False,
+            return self._defer_failure(
+                request,
+                "default",
                 "default_sink_not_confirmed",
-                downstream=downstream,
-                bypass_confirmed=bypass_confirmed,
+                downstream,
+                bypass=True,
                 **(
                     {"rollback_confirmed": rollback_confirmed}
                     if rollback_confirmed is not None
                     else {}
                 ),
             )
-            return False
         if first:
-            if self._first_enable_is_pending():
-                # Carry the downstream's level onto our sink so enabling doesn't jump
-                # loudness. Skip on a boot re-assert: the sink already holds the user's
-                # level (WirePlumber restores it), and the downstream is always unity.
-                vol = self._pending_first_enable_volume(
-                    downstream
-                ) or self._sink_volume_pct(downstream)
+            pending, pending_volume = self._pending_first_enable(downstream)
+            if pending:
+                vol = pending_volume or self._sink_volume_pct(downstream)
                 if vol:
                     self._user_vol = vol
                     self._runner(["pactl", "set-sink-volume", self._label, vol])
             if not self._clear_first_enable_pending():
-                bypass_confirmed = self._bypass_eq_default(downstream)
-                self._defer_retry(request, "config")
-                self._record_apply(
-                    False,
+                return self._defer_failure(
+                    request,
+                    "config",
                     "pending_marker_cleanup_failed",
-                    downstream=downstream,
-                    bypass_confirmed=bypass_confirmed,
+                    downstream,
+                    bypass=True,
                 )
-                return False
             self._orig_default = downstream
         self._owns_sink = True
         previous_downstream = self._active_downstream
@@ -946,7 +915,6 @@ class PipeWireEq:
         return True
 
     def set_gains(self, gains, bass=0, loudness=False, balance=0):
-        """Apply on release: rewrite the conf + restart (balance just moves the pin)."""
         return self.ensure_sink(gains, bass, loudness, balance)
 
     def current_route(self):
@@ -956,9 +924,6 @@ class PipeWireEq:
             return "speaker"
 
     def is_default(self):
-        """True when our EQ sink is the current default output. WirePlumber can re-pick
-        the physical device as default on resume/hotplug (dropping the EQ); the watcher
-        uses this to re-assert."""
         return self._runner(["pactl", "get-default-sink"]) == self._label
 
     def diagnostics(self):
@@ -982,11 +947,6 @@ class PipeWireEq:
                 "route": self.current_route(),
                 "eq_volume": self._sink_volume_pct(self._label),
                 "downstream_volume": self._sink_volume_pct(downstream) if downstream else None,
-                # Where the EQ node's output actually routes (does it reach a hardware
-                # output, or a virtual/loopback sink that swallows it?). This is the
-                # signal that tells a "no sound with the EQ on" report apart: node graph
-                # + whether the filter-chain loaded. Filtered to the relevant nodes and
-                # capped so the bundle stays small.
                 "links": _relevant_links(self._runner(["pw-link", "-l"])),
                 "modules": self._runner(["pactl", "list", "short", "modules"]) or "",
             })
@@ -999,10 +959,6 @@ class PipeWireEq:
         return info
 
     def teardown(self):
-        """Remove the sink and hand the user's current level back to the physical sink
-        (fail-safe on disable/unload). No-op when we never created a sink — otherwise we'd
-        needlessly restart the shared filter-chain service (interrupting the user's own
-        filters) on every unload."""
         self.stop_test()
         path = self._conf_path()
         had_conf = bool(path and self._entry_exists(path))
@@ -1047,17 +1003,15 @@ class PipeWireEq:
         restarted = self._restart()
         sink_absent = restarted and self._sink_absent_confirmed(self._label)
         if not restarted or not sink_absent:
-            bypass_confirmed = self._bypass_eq_default(downstream)
             for sink in list(self._downstream_volumes):
                 self._restore_downstream_volume(sink)
-            self._defer_retry(retry_request, "teardown")
-            self._record_apply(
-                False,
+            return self._defer_failure(
+                retry_request,
+                "teardown",
                 "teardown_restart_failed" if not restarted else "teardown_sink_still_present",
-                downstream=downstream,
-                bypass_confirmed=bypass_confirmed,
+                downstream,
+                bypass=True,
             )
-            return False
         for sink in list(self._downstream_volumes):
             self._restore_downstream_volume(sink)
         if transfer_volume and downstream:
@@ -1065,17 +1019,19 @@ class PipeWireEq:
                 ["pactl", "set-sink-volume", downstream, our_vol or "100%"]
             )
             if not self._set_default_confirmed(downstream):
-                self._defer_retry(retry_request, "teardown")
-                self._record_apply(
-                    False,
+                return self._defer_failure(
+                    retry_request,
+                    "teardown",
                     "teardown_default_not_confirmed",
-                    downstream=downstream,
+                    downstream,
                 )
-                return False
         elif transfer_volume:
-            self._defer_retry(retry_request, "teardown")
-            self._record_apply(False, "teardown_downstream_missing")
-            return False
+            return self._defer_failure(
+                retry_request,
+                "teardown",
+                "teardown_downstream_missing",
+                downstream,
+            )
         self._orig_default = None
         self._active_downstream = None
         self._requested_downstream = None
