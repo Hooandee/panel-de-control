@@ -3,9 +3,17 @@
 ## [0.37.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.1...panel-de-control-v0.37.2) (2026-08-16)
 
 
-### Bug Fixes
+### Español
 
-* handle bogus Legion Go S TDP ceilings ([#463](https://github.com/Hooandee/panel-de-control/issues/463)) ([9903934](https://github.com/Hooandee/panel-de-control/commit/9903934ebf195702d269bd66e11d11a9bfd65b38))
+* Corrige los límites de TDP incorrectos en Lenovo Legion Go S cuando el firmware informa máximos falsos. Los límites reales se mantienen en otras variantes y, si faltan los atributos necesarios, se utiliza una ruta alternativa segura.
+
+### English
+
+* Fixes incorrect TDP limits on Lenovo Legion Go S when the firmware reports bogus maximum values. Real limits remain enforced on other variants, and a safe fallback is used when required attributes are missing.
+
+### Italiano
+
+* Corregge i limiti TDP errati su Lenovo Legion Go S quando il firmware segnala valori massimi non validi. I limiti reali restano applicati sulle altre varianti e, se mancano gli attributi necessari, viene utilizzato un percorso alternativo sicuro.
 
 ## [0.37.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.0...panel-de-control-v0.37.1) (2026-08-10)
 
