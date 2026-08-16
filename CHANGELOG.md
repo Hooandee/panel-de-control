@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.37.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.2...panel-de-control-v0.37.3) (2026-08-16)
+
+
+### Español
+
+* Mantiene sincronizados los perfiles por juego después de salir de un juego, incluso cuando Steam notifica la salida antes de actualizar internamente qué juego sigue en ejecución. ([#465](https://github.com/Hooandee/panel-de-control/pull/465)) ([663dc69](https://github.com/Hooandee/panel-de-control/commit/663dc6912a0bce7d151c510d6072dd899ee12502))
+
+### English
+
+* Keeps per-game profiles synchronized after exiting a game, even when Steam reports the exit before updating its internal running-game state. ([#465](https://github.com/Hooandee/panel-de-control/pull/465)) ([663dc69](https://github.com/Hooandee/panel-de-control/commit/663dc6912a0bce7d151c510d6072dd899ee12502))
+
+### Italiano
+
+* Mantiene sincronizzati i profili per gioco dopo l'uscita da un gioco, anche quando Steam segnala l'uscita prima di aggiornare internamente quale gioco è ancora in esecuzione. ([#465](https://github.com/Hooandee/panel-de-control/pull/465)) ([663dc69](https://github.com/Hooandee/panel-de-control/commit/663dc6912a0bce7d151c510d6072dd899ee12502))
+
 ## [0.37.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.1...panel-de-control-v0.37.2) (2026-08-16)
 
 
