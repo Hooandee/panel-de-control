@@ -27,10 +27,13 @@ SCHEMA = 2
 _MAX_TEXT = 4000  # user free-text cap (defensive; the UI also limits it)
 
 # Scrub the VALUE of any dict key that looks like a hardware identifier.
-_SCRUB_KEY = re.compile(r"serial|uuid|\bmac\b|mac_?addr|hostname|host_name", re.I)
+_SCRUB_KEY = re.compile(
+    r"serial|uuid|\bmac\b|mac_?addr|hostname|host_name|^(?:user|username)$",
+    re.I,
+)
 _HOME_PATH = re.compile(r"/home/[^/\s:\"']+")
 # Identifiers that can appear inside free text (log lines, dmesg/journal output).
-_MAC = re.compile(r"\b(?:[0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}\b")
+_MAC = re.compile(r"\b(?:[0-9a-fA-F]{2}[:_-]){5}[0-9a-fA-F]{2}\b")
 _UUID = re.compile(
     r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b"
 )

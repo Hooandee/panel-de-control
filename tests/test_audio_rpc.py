@@ -56,6 +56,7 @@ class _FakePipeWireEq:
 
     def teardown(self):
         self.torn_down += 1
+        return True
 
 
 def _make_plugin(tmp_path, monkeypatch, audio=None):
@@ -166,6 +167,26 @@ def test_audio_apply_exception_is_preserved_in_state(tmp_path, monkeypatch):
     }
 
 
+def test_apply_exception_is_not_hidden_by_stale_backend_diagnostics(tmp_path, monkeypatch):
+    class StaleDiagnostics(_FakePipeWireEq):
+        def apply_diagnostics(self):
+            return {"ok": True}
+
+    p, _fake = _make_plugin(
+        tmp_path,
+        monkeypatch,
+        audio=StaleDiagnostics(raise_apply=True),
+    )
+
+    state = asyncio.run(p.set_audio_enabled(True))
+
+    assert state["last_apply"] == {
+        "ok": False,
+        "reason": "exception",
+        "error": "RuntimeError",
+    }
+
+
 def test_audio_watcher_retries_inactive_eq_on_unchanged_route(tmp_path, monkeypatch):
     async def scenario():
         p, fake = _make_plugin(
@@ -193,12 +214,100 @@ def test_audio_watcher_retries_inactive_eq_on_unchanged_route(tmp_path, monkeypa
     assert asyncio.run(scenario()) == [True]
 
 
+def test_audio_watcher_cleans_runtime_when_required_tools_disappear(tmp_path, monkeypatch):
+    async def scenario():
+        p, fake = _make_plugin(
+            tmp_path,
+            monkeypatch,
+            audio=_FakePipeWireEq(supported=False),
+        )
+        await p.get_audio_state()
+        p._settings["audio_eq_enabled"] = True
+        sleeps = 0
+
+        async def one_iteration(_delay):
+            nonlocal sleeps
+            sleeps += 1
+            if sleeps > 1:
+                raise asyncio.CancelledError
+
+        monkeypatch.setattr(asyncio, "sleep", one_iteration)
+        await p._audio_loop()
+        return fake.torn_down
+
+    assert asyncio.run(scenario()) == 1
+
+
+def test_audio_watcher_replaces_a_failed_teardown_with_its_recovery(tmp_path, monkeypatch):
+    class RecoveringTeardown(_FakePipeWireEq):
+        def __init__(self):
+            super().__init__()
+            self._diagnostics = {"ok": False, "reason": "teardown_restart_failed"}
+
+        def teardown(self):
+            self.torn_down += 1
+            self._diagnostics = {"ok": True, "operation": "teardown"}
+            return True
+
+        def apply_diagnostics(self):
+            return self._diagnostics
+
+    async def scenario():
+        p, _fake = _make_plugin(tmp_path, monkeypatch, audio=RecoveringTeardown())
+        await p.get_audio_state()
+        p._settings["audio_eq_enabled"] = False
+        p._audio_last_apply = {"ok": False, "reason": "teardown_restart_failed"}
+        sleeps = 0
+
+        async def one_iteration(_delay):
+            nonlocal sleeps
+            sleeps += 1
+            if sleeps > 1:
+                raise asyncio.CancelledError
+
+        monkeypatch.setattr(asyncio, "sleep", one_iteration)
+        await p._audio_loop()
+        return await p.get_audio_state()
+
+    state = asyncio.run(scenario())
+    assert state["last_apply"] == {"ok": True, "operation": "teardown"}
+
+
 def test_disable_tears_down(tmp_path, monkeypatch):
     p, fake = _make_plugin(tmp_path, monkeypatch)
     asyncio.run(p.set_audio_enabled(True))
     st = asyncio.run(p.set_audio_enabled(False))
     assert st["enabled"] is False
     assert fake.torn_down >= 1
+
+
+def test_disable_reports_a_teardown_failure_instead_of_the_previous_apply(tmp_path, monkeypatch):
+    class TeardownFailure(_FakePipeWireEq):
+        def __init__(self):
+            super().__init__()
+            self._teardown_diagnostics = None
+
+        def teardown(self):
+            self.torn_down += 1
+            self._teardown_diagnostics = {
+                "ok": False,
+                "reason": "teardown_restart_failed",
+            }
+            return False
+
+        def apply_diagnostics(self):
+            return self._teardown_diagnostics or super().apply_diagnostics()
+
+    p, _fake = _make_plugin(tmp_path, monkeypatch, audio=TeardownFailure())
+    asyncio.run(p.set_audio_enabled(True))
+
+    state = asyncio.run(p.set_audio_enabled(False))
+
+    assert state["enabled"] is False
+    assert state["last_apply"] == {
+        "ok": False,
+        "reason": "teardown_restart_failed",
+    }
 
 
 def test_apply_preset_persists(tmp_path, monkeypatch):
@@ -220,6 +329,18 @@ def test_set_bands_replaces_all(tmp_path, monkeypatch):
     st = asyncio.run(p.set_audio_bands([2] * 10, "global"))
     assert st["gains"] == [2.0] * 10
     assert st["preset"] == "custom"
+
+
+def test_stale_route_commit_does_not_overwrite_the_new_output_profile(tmp_path, monkeypatch):
+    p, fake = _make_plugin(tmp_path, monkeypatch)
+
+    st = asyncio.run(
+        p.set_audio_bands([8] * 10, "global", expected_route="headphone")
+    )
+
+    assert st["route"] == "speaker"
+    assert st["gains"] == [0.0] * 10
+    assert p._audio_eq.effective(None, "headphone")["gains"] == [0.0] * 10
 
 
 def test_set_curve_sets_gains_and_bass_together(tmp_path, monkeypatch):

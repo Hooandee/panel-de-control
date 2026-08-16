@@ -21,6 +21,8 @@ import { useRunningGame } from "../tdp/useRunningGame";
 import { useScopeSync } from "../useScopeSync";
 import { applyTone, bassToEnhancer, ToneRegion } from "./logic";
 
+const ROUTE_REFRESH_MS = 4_000;
+
 export interface EqControl {
   state: AudioState | null;
   scope: Scope;
@@ -86,6 +88,7 @@ export function useEq(): EqControl {
   }, []);
 
   const refresh = useCallback(() => {
+    if (Object.keys(pendings.current).length > 0) return;
     getAudioState().then(setState).catch(() => {});
   }, []);
 
@@ -94,6 +97,12 @@ export function useEq(): EqControl {
     flush();
     refresh();
   }, [appid, refresh, flush]);
+
+  useEffect(() => {
+    if (!state?.enabled) return;
+    const timer = setInterval(refresh, ROUTE_REFRESH_MS);
+    return () => clearInterval(timer);
+  }, [state?.enabled, refresh]);
 
   useEffect(() => () => {
     flush();
@@ -120,12 +129,13 @@ export function useEq(): EqControl {
   }, []);
 
   const onPreset = useCallback((id: string) => {
-    applyAudioPreset(id, wScope, wTarget).then(setState).catch(() => {});
+    applyAudioPreset(id, wScope, wTarget, stateRef.current?.route ?? null).then(setState).catch(() => {});
   }, [wScope, wTarget]);
 
   const onBands = useCallback((gains: number[]) => {
+    const route = stateRef.current?.route ?? null;
     setState((cur) => (cur ? { ...cur, gains, preset: "custom" } : cur)); // optimistic
-    schedule("curve", () => { setAudioBands(gains, wScope, wTarget).then(setState).catch(() => {}); });
+    schedule("curve", () => { setAudioBands(gains, wScope, wTarget, route).then(setState).catch(() => {}); });
   }, [wScope, wTarget, schedule]);
 
   // A tone slider sets one region's level. Graves also engages the bass enhancer. Reads the
@@ -136,17 +146,18 @@ export function useEq(): EqControl {
     const gains = applyTone(cur.gains, region, level);
     const bass = region === "graves" ? bassToEnhancer(level) : cur.bass;
     setState({ ...cur, gains, bass, preset: "custom" });
-    schedule("curve", () => { setAudioCurve(gains, bass, wScope, wTarget).then(setState).catch(() => {}); });
+    schedule("curve", () => { setAudioCurve(gains, bass, wScope, wTarget, cur.route).then(setState).catch(() => {}); });
   }, [wScope, wTarget, schedule]);
 
   const onLoudness = useCallback((on: boolean) => {
     setState((cur) => (cur ? { ...cur, loudness: on } : cur)); // optimistic
-    setAudioLoudness(on, wScope, wTarget).then(setState).catch(() => {});
+    setAudioLoudness(on, wScope, wTarget, stateRef.current?.route ?? null).then(setState).catch(() => {});
   }, [wScope, wTarget]);
 
   const onBalance = useCallback((value: number) => {
+    const route = stateRef.current?.route ?? null;
     setState((cur) => (cur ? { ...cur, balance: value } : cur)); // optimistic
-    schedule("balance", () => { setAudioBalance(value, wScope, wTarget).then(setState).catch(() => {}); });
+    schedule("balance", () => { setAudioBalance(value, wScope, wTarget, route).then(setState).catch(() => {}); });
   }, [wScope, wTarget, schedule]);
 
   const onGuard = useCallback((on: boolean) => {
@@ -156,7 +167,7 @@ export function useEq(): EqControl {
 
   const onReset = useCallback(() => {
     cancel();
-    resetAudio(wScope, wTarget).then(setState).catch(() => {});
+    resetAudio(wScope, wTarget, stateRef.current?.route ?? null).then(setState).catch(() => {});
   }, [wScope, wTarget, cancel]);
 
   const onTest = useCallback((sample: string) => {
@@ -171,7 +182,7 @@ export function useEq(): EqControl {
     saveAudioProfile(name).then(setState).catch(() => {});
   }, []);
   const onApplyProfile = useCallback((name: string) => {
-    applyAudioProfile(name, wScope, wTarget).then(setState).catch(() => {});
+    applyAudioProfile(name, wScope, wTarget, stateRef.current?.route ?? null).then(setState).catch(() => {});
   }, [wScope, wTarget]);
   const onDeleteProfile = useCallback((name: string) => {
     deleteAudioProfile(name).then(setState).catch(() => {});
