@@ -41,6 +41,21 @@ def _normalise_rail_floors(values):
     return floors
 
 
+def _normalise_rail_values(values):
+    if not isinstance(values, dict):
+        return {}
+    known_rails = {rail for rail, _attr in _RAIL_ATTRS}
+    normalised = {}
+    for rail, value in values.items():
+        if rail not in known_rails:
+            continue
+        try:
+            normalised[rail] = int(value)
+        except (TypeError, ValueError):
+            continue
+    return normalised
+
+
 class FirmwareAttrBackend(TDPBackend):
     """TDP via kernel firmware-attributes. Covers ASUS (asus-armoury), Lenovo
     (lenovo-wmi-other), MSI (msi-wmi-platform): ppt_pl1_spl/ppt_pl2_sppt/ppt_pl3_fppt
@@ -54,6 +69,8 @@ class FirmwareAttrBackend(TDPBackend):
         profile_name=None,
         is_generic=False,
         rail_floors=None,
+        ignored_live_maxes=None,
+        cap_boost_to_active=False,
     ):
         self.name = f"firmware-attr:{driver_prefix}"
         self._fallback = fallback
@@ -61,6 +78,8 @@ class FirmwareAttrBackend(TDPBackend):
         self._profile_name = profile_name  # Lenovo: set this platform-profile to "custom" first
         self._is_generic = is_generic
         self._rail_floors = _normalise_rail_floors(rail_floors)
+        self._ignored_live_maxes = _normalise_rail_values(ignored_live_maxes)
+        self.cap_boost_to_active = bool(cap_boost_to_active)
         self._dir = self._find_driver_dir(driver_prefix)
         self.supported = self._dir is not None and os.path.exists(self._attr("ppt_pl1_spl"))
         self._pp_dir = self._find_profile_dir()  # static, resolved once
@@ -205,13 +224,10 @@ class FirmwareAttrBackend(TDPBackend):
                     )
                     out[key] = {"min": lo, "max": hi}
             return out
-        # Recognised: rails from the profile (PL1 = charger max, boost scaled); writes
-        # clamp to the live ceiling anyway.
-        mn, mx = self._fallback.min_w, self._fallback.max_ac_w
+        mn = self._fallback.min_w
         bounds = {
-            "pl1": {"min": mn, "max": mx},
-            "pl2": {"min": mn, "max": round(mx * _PL2_BOOST_RATIO)},
-            "pl3": {"min": mn, "max": round(mx * _PL3_BOOST_RATIO)},
+            rail: {"min": mn, "max": self._profile_rail_max(attr)}
+            for rail, attr in _RAIL_ATTRS
         }
         for rail, floor in self._rail_floors.items():
             bound = bounds[rail]
@@ -223,21 +239,29 @@ class FirmwareAttrBackend(TDPBackend):
         charger max, boost rails profile-scaled. The profile is the authority — not the
         firmware's reported max, which some ASUS kernels report as a bogus 150 W."""
         mx = self._fallback.max_ac_w
+        if self.cap_boost_to_active:
+            return mx
         if attr == "ppt_pl2_sppt":
             return round(mx * _PL2_BOOST_RATIO)
         if attr == "ppt_pl3_fppt":
             return round(mx * _PL3_BOOST_RATIO)
         return mx
 
+    def _effective_live_max(self, rail, reported):
+        if reported == self._ignored_live_maxes.get(rail):
+            return None
+        return reported
+
     def _clamp_live(self, value, attr):
         mn, mx = self._live_bounds(attr)
         safe_hi = self._profile_rail_max(attr)
-        hi = min(mx if mx is not None else safe_hi, safe_hi)
-        live_lo = mn if mn is not None else self._fallback.min_w
         rail = next(
             (rail for rail, rail_attr in _RAIL_ATTRS if rail_attr == attr),
             None,
         )
+        live_hi = self._effective_live_max(rail, mx)
+        hi = min(live_hi if live_hi is not None else safe_hi, safe_hi)
+        live_lo = mn if mn is not None else self._fallback.min_w
         floor = self._rail_floors.get(rail, self._fallback.min_w)
         lo = min(hi, max(self._fallback.min_w, live_lo, floor))
         return max(lo, min(int(value), hi))
@@ -245,9 +269,6 @@ class FirmwareAttrBackend(TDPBackend):
     def set_levels(self, pl1, pl2, pl3, ac):
         if not self.supported:
             return TdpResult(pl1, None, False, "firmware-attributes path not present")
-        # Custom mode first (Lenovo prestep), then clamp each rail to the LIVE ceiling:
-        # writing above it is rejected, so the applied value follows what the firmware
-        # accepts now (25 W on battery, 30 W on charger) while the profile range stays put.
         self._set_custom_profile()
         values = {"pl1": pl1, "pl2": pl2, "pl3": pl3}
         attrs = dict(_RAIL_ATTRS)
@@ -299,7 +320,11 @@ class FirmwareAttrBackend(TDPBackend):
             if not os.path.exists(path):
                 continue
             lo, hi = self._live_bounds(attr)
-            primary[rail] = RailReading(self._read_int(path), lo, hi)
+            primary[rail] = RailReading(
+                self._read_int(path),
+                lo,
+                self._effective_live_max(rail, hi),
+            )
         surfaces = {self.name: primary} if primary else {}
         legacy = {
             rail: RailReading(self._read_int(path))
@@ -308,6 +333,19 @@ class FirmwareAttrBackend(TDPBackend):
         if legacy:
             surfaces["asus-nb-wmi"] = legacy
         return TdpObservation(readable=True, surfaces=surfaces)
+
+    def diagnostics(self):
+        reported = {}
+        for rail, attr in _RAIL_ATTRS:
+            if rail not in self._rails:
+                continue
+            lo, hi = self._live_bounds(attr)
+            reported[rail] = {"min": lo, "max": hi}
+        return {
+            "boost_capped_to_active": self.cap_boost_to_active,
+            "ignored_live_maxes": dict(self._ignored_live_maxes),
+            "reported_live_bounds": reported,
+        }
 
     @staticmethod
     def _observation_mismatches(observation, targets):

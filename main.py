@@ -2250,13 +2250,12 @@ class Plugin:
         return levels, active, ac
 
     def _cap_level_limits(self, ll: dict, active_max: int) -> dict:
-        """Cap PL1 (sustained) to the active power ceiling. The boost rails PL2/PL3
-        keep their FIRMWARE max — they are short-term limits that legitimately exceed
-        PL1 (SPPT 45 / FPPT 55 on the Ally). Capping them to PL1's ceiling left the
-        additive boost offsets at 0 once PL1 reached the max (e.g. unlocked to 35 W)."""
         out = {}
+        cap_boost = bool(
+            getattr(self._tdp_backend, "cap_boost_to_active", False)
+        )
         for key, b in ll.items():
-            if key == "pl1":
+            if key == "pl1" or cap_boost:
                 hi = min(b["max"], active_max)
                 out[key] = {"min": min(b["min"], hi), "max": hi}
             else:

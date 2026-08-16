@@ -691,6 +691,29 @@ def test_backend_diagnostics_include_selected_rail_floors(plugin):
     assert descriptor.get("rail_floors") == {"pl2": 15, "pl3": 20}
 
 
+def test_backend_can_cap_boost_rails_to_active_battery_max(plugin):
+    plugin._tdp_backend.cap_boost_to_active = True
+    plugin._tdp_backend.get_limits = lambda: TdpLimits(
+        min_w=5,
+        default_w=15,
+        max_w=33,
+        max_ac_w=40,
+    )
+    plugin._tdp_backend.level_limits = lambda: {
+        "pl1": {"min": 5, "max": 40},
+        "pl2": {"min": 15, "max": 40},
+        "pl3": {"min": 20, "max": 40},
+    }
+
+    command = plugin._capture_tdp_command("battery", on_ac=False)
+
+    assert command.safe_bounds == {
+        "pl1": {"min": 5, "max": 33},
+        "pl2": {"min": 15, "max": 33},
+        "pl3": {"min": 20, "max": 33},
+    }
+
+
 def test_confirmed_secondary_rail_floor_is_constrained_without_retry(plugin):
     plugin._tdp_backend._rail_floors = {"pl2": 15, "pl3": 20}
     plugin._tdp_backend.level_limits = lambda: {
