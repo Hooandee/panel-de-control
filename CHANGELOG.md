@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.37.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.2...panel-de-control-v0.37.3) (2026-08-16)
+
+
+### Bug Fixes
+
+* keep game profiles in sync after game exit ([#465](https://github.com/Hooandee/panel-de-control/issues/465)) ([663dc69](https://github.com/Hooandee/panel-de-control/commit/663dc6912a0bce7d151c510d6072dd899ee12502))
+
 ## [0.37.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.1...panel-de-control-v0.37.2) (2026-08-16)
 
 
