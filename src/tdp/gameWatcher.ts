@@ -1,5 +1,5 @@
 import { setCurrentGame } from "../api";
-import { GameReport, isSameGameReport, shouldReportGame } from "./gameReport";
+import { GameReport, isSameGameReport } from "./gameReport";
 import { readRunningGame } from "./runningGame";
 
 /**
@@ -17,85 +17,88 @@ import { readRunningGame } from "./runningGame";
  * useRunningGame is now a LOCAL UI read only — it does NOT report to the
  * backend, so there is no double-report / race with this watcher.
  *
- * Robustness (the crux of the restart bug — two failure modes):
- *  1. Router.MainRunningApp hydrates ASYNC. At plugin load the initial read can
- *     still be null even though a game is already running, and
- *     RegisterForAppLifetimeNotifications does NOT re-emit for an already-running
- *     game → the backend would stay at appid=None forever. So we run a bounded
- *     startup poll (every ~2 s) until we have SUCCESSFULLY reported a real appid,
- *     independent of whether the event API exists.
- *  2. The backend RPC may not be ready at load. We commit the report ONLY after
- *     setCurrentGame RESOLVES OK; on rejection we leave it so the next tick retries.
- *
  * Reports on game identity changes and when Steam hydrates a better display name.
  * Degrades: if the Steam/Decky API is unavailable or throws, it never throws.
  */
-// Startup poll cadence and how long to keep polling for the first successful
-// real-appid report before falling back to event-only steady state.
-const STARTUP_POLL_MS = 2000;
-const STARTUP_POLL_MAX = 30; // ~60 s of bounded startup retries
+const GAME_POLL_MS = 2000;
+const GAME_REPORT_TIMEOUT_MS = 30000;
+const MAX_PENDING_GAME_REPORTS = 2;
+
+interface PendingGameReport {
+  id: number;
+  target: GameReport;
+  timeout: ReturnType<typeof setTimeout> | null;
+}
 
 export function startGameWatcher(): () => void {
   let alive = true;
   let unregister: (() => void) | null = null;
-  let startupTimer: ReturnType<typeof setInterval> | null = null;
-  let eventFallbackTimer: ReturnType<typeof setInterval> | null = null;
-  let committed: GameReport = { appid: null, name: null };
-  let inFlight: GameReport | undefined;
-  let sawRealAppid = false; // have we ever SUCCESSFULLY reported a non-null appid?
-  let startupTicks = 0;
+  let pollTimer: ReturnType<typeof setInterval> | null = null;
+  let committed: GameReport | undefined;
+  let desired: GameReport = { appid: null, name: null };
+  let inFlight: PendingGameReport | undefined;
+  let nextRequestId = 0;
+  const pendingRequestIds = new Set<number>();
 
-  const stopStartupPoll = (): void => {
-    if (startupTimer !== null) {
-      clearInterval(startupTimer);
-      startupTimer = null;
+  const clearActiveRequest = (request: PendingGameReport): boolean => {
+    if (inFlight?.id !== request.id) return false;
+    if (request.timeout !== null) clearTimeout(request.timeout);
+    inFlight = undefined;
+    return true;
+  };
+
+  const sendDesired = (): void => {
+    if (
+      !alive
+      || inFlight
+      || pendingRequestIds.size >= MAX_PENDING_GAME_REPORTS
+      || (committed && isSameGameReport(desired, committed))
+    ) return;
+    const request: PendingGameReport = {
+      id: ++nextRequestId,
+      target: desired,
+      timeout: null,
+    };
+    inFlight = request;
+    pendingRequestIds.add(request.id);
+    request.timeout = setTimeout(() => {
+      if (!alive || !clearActiveRequest(request)) return;
+      sendDesired();
+    }, GAME_REPORT_TIMEOUT_MS);
+    try {
+      Promise.resolve(setCurrentGame(request.target.appid, request.target.name))
+        .then(() => {
+          pendingRequestIds.delete(request.id);
+          if (!alive) return;
+          clearActiveRequest(request);
+          committed = request.target;
+          sendDesired();
+        })
+        .catch(() => {
+          pendingRequestIds.delete(request.id);
+          if (!alive) return;
+          clearActiveRequest(request);
+        });
+    } catch {
+      pendingRequestIds.delete(request.id);
+      clearActiveRequest(request);
     }
   };
 
-  const report = (): void => {
+  const report = (confirmIdle = false): void => {
     if (!alive) return;
     const next = readRunningGame();
-    const target: GameReport = {
+    desired = {
       appid: next ? next.appid : null,
       name: next ? next.name : null,
     };
-    if (!shouldReportGame(target, committed, inFlight)) return;
-    inFlight = target;
-    try {
-      // Pass the display name too so the HUD's Perfil metric can show it; the backend
-      // ignores it beyond that (the appid stays the profile key).
-      Promise.resolve(setCurrentGame(target.appid, target.name))
-        .then(() => {
-          if (!alive || !inFlight || !isSameGameReport(inFlight, target)) return;
-          committed = target;
-          inFlight = undefined;
-          if (target.appid !== null) {
-            sawRealAppid = true;
-            stopStartupPoll(); // got a real game → startup retries no longer needed
-          }
-        })
-        .catch(() => {
-          if (inFlight && isSameGameReport(inFlight, target)) inFlight = undefined;
-        });
-    } catch {
-      if (inFlight && isSameGameReport(inFlight, target)) inFlight = undefined;
-    }
+    if (desired.appid === null && committed === undefined && !inFlight && !confirmIdle) return;
+    sendDesired();
   };
 
-  // Startup poll: keep trying the initial read+report until we SUCCESSFULLY report
-  // a real appid (Router hydration + backend readiness), then stop. Bounded so a
-  // genuine "no game running" boot doesn't poll forever.
-  report(); // fire once immediately
-  startupTimer = setInterval(() => {
-    startupTicks += 1;
-    if (!alive || sawRealAppid || startupTicks >= STARTUP_POLL_MAX) {
-      stopStartupPoll();
-      return;
-    }
-    report();
-  }, STARTUP_POLL_MS);
+  report();
+  pollTimer = setInterval(() => report(true), GAME_POLL_MS);
 
-  // Subscribe to app lifetime notifications for immediate steady-state updates.
   try {
     const reg =
       SteamClient?.GameSessions?.RegisterForAppLifetimeNotifications?.(
@@ -109,19 +112,14 @@ export function startGameWatcher(): () => void {
           /* ignore */
         }
       };
-    } else {
-      // Notification API absent — poll steady-state too (in addition to startup).
-      eventFallbackTimer = setInterval(report, STARTUP_POLL_MS);
     }
-  } catch {
-    // Notification API threw — fall back to steady-state polling.
-    eventFallbackTimer = setInterval(report, STARTUP_POLL_MS);
-  }
+  } catch { /* polling remains active */ }
 
   return () => {
     alive = false;
     if (unregister) unregister();
-    stopStartupPoll();
-    if (eventFallbackTimer !== null) clearInterval(eventFallbackTimer);
+    if (pollTimer !== null) clearInterval(pollTimer);
+    if (inFlight?.timeout != null) clearTimeout(inFlight.timeout);
+    pendingRequestIds.clear();
   };
 }
