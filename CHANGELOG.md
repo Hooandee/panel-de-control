@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.37.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.1...panel-de-control-v0.37.2) (2026-08-16)
+
+
+### Bug Fixes
+
+* handle bogus Legion Go S TDP ceilings ([#463](https://github.com/Hooandee/panel-de-control/issues/463)) ([9903934](https://github.com/Hooandee/panel-de-control/commit/9903934ebf195702d269bd66e11d11a9bfd65b38))
+
 ## [0.37.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.0...panel-de-control-v0.37.1) (2026-08-10)
 
 ### Español
