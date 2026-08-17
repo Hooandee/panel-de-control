@@ -14,6 +14,13 @@
 
 * **QAM:** Impedisce a Decky di duplicare icone e pannelli durante il ricaricamento dei plugin o il cambio di scheda. Panel de Control usa il proprio accesso diretto solo quando Decky riesce a riconciliare esattamente le schede; in caso contrario, il pannello completo resta disponibile dalla voce standard di Decky. I nuovi report includono conteggi QAM limitati per distinguere le schede duplicate dai problemi di layout. Questa diagnostica non include testo né identificatori delle schede.
 
+## [0.37.6](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.5...panel-de-control-v0.37.6) (2026-08-17)
+
+
+### Bug Fixes
+
+* evita pestañas y paneles duplicados en el QAM ([#476](https://github.com/Hooandee/panel-de-control/issues/476)) ([c7b8688](https://github.com/Hooandee/panel-de-control/commit/c7b8688b3b0858d032e5ac83b1a1193a92954efe))
+
 ## [0.37.5](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.4...panel-de-control-v0.37.5) (2026-08-17)
 
 ### Español
