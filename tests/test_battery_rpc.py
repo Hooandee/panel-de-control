@@ -640,6 +640,100 @@ def test_reapply_transfers_private_candidate_once_for_null_backend(
     assert p._charge_limit_candidate is None
 
 
+def test_latest_of_two_queued_intents_applies_private_candidate(
+    tmp_path, monkeypatch
+):
+    candidate = _late_probe_backend(tmp_path, "sysfs")
+    candidate.set(80)
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=NullChargeLimit())
+    p._init()
+    p._settings["charge_limit_enabled"] = True
+    p._settings["charge_limit_percent"] = 80
+    p._charge_limit_candidate = candidate
+    first_offload_started = asyncio.Event()
+    release_first_offload = asyncio.Event()
+    serial_lock = asyncio.Lock()
+    offload_calls = 0
+
+    async def controlled_offload(operation):
+        nonlocal offload_calls
+        async with serial_lock:
+            offload_calls += 1
+            if offload_calls == 1:
+                first_offload_started.set()
+                await release_first_offload.wait()
+            return operation()
+
+    p._offload_call = controlled_offload
+    monkeypatch.setattr(
+        p, "_schedule_charge_limit_reconcile", lambda trigger: None
+    )
+
+    async def scenario():
+        first = asyncio.create_task(p.set_charge_limit(False, 80))
+        await first_offload_started.wait()
+        second = asyncio.create_task(p.set_charge_limit(True, 60))
+        while p._settings["charge_limit_percent"] != 60:
+            await asyncio.sleep(0)
+        release_first_offload.set()
+        await asyncio.gather(first, second)
+
+    asyncio.run(scenario())
+
+    assert candidate.get() == 60
+    assert p._charge_limit_candidate is None
+    assert isinstance(p._charge_limit, NullChargeLimit)
+
+
+def test_latest_of_two_queued_reapplies_applies_private_candidate(
+    tmp_path, monkeypatch
+):
+    candidate = _late_probe_backend(tmp_path, "sysfs")
+    candidate.set(80)
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=NullChargeLimit())
+    p._init()
+    p._device = types.SimpleNamespace(key="rog_xbox_ally_x")
+    p._settings["charge_limit_enabled"] = True
+    p._settings["charge_limit_percent"] = 70
+    p._charge_limit_candidate = candidate
+
+    for name in (
+        "_cancel_color_revert",
+        "_apply_cpu",
+        "_apply_gpu_clock",
+        "_schedule_tdp_apply",
+        "_reapply_fans",
+        "_reapply_hdr",
+        "_reapply_color",
+        "_reapply_audio",
+        "_reapply_controller",
+        "_schedule_hud_apply",
+    ):
+        monkeypatch.setattr(p, name, lambda *args: None)
+    monkeypatch.setattr(p, "_tdp_control_on", lambda: True)
+    queued = []
+    monkeypatch.setattr(
+        p,
+        "_offload",
+        lambda operation, done=None: queued.append((operation, done)),
+    )
+    monkeypatch.setattr(
+        p, "_schedule_charge_limit_reconcile", lambda trigger: None
+    )
+
+    p._reapply_all()
+    p._settings["charge_limit_percent"] = 60
+    p._reapply_all()
+    for operation, done in queued:
+        operation()
+        if done is not None:
+            done()
+
+    assert candidate.get() == 60
+    assert p._charge_limit_candidate is None
+    assert isinstance(p._charge_limit, NullChargeLimit)
+
+
 def test_newer_disable_reaches_private_candidate_without_stale_promotion(
     tmp_path, monkeypatch
 ):
