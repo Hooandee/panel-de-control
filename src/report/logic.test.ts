@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   REPORT_CATEGORIES,
+  buildReportContext,
   canSubmit,
   displayReportContext,
   toggleCategory,
@@ -82,5 +83,19 @@ describe("displayReportContext", () => {
 
   it("does not collect display context for unrelated reports", () => {
     expect(displayReportContext(["fans"], {})).toEqual({});
+  });
+});
+
+describe("buildReportContext", () => {
+  it("includes bounded QAM diagnostics with the existing frontend context", () => {
+    expect(buildReportContext(
+      ["other"],
+      {},
+      { runningGame: { appid: "123" } },
+      { rendered_count: 9, rendered_unique_count: 8 },
+    )).toEqual({
+      runningGame: { appid: "123" },
+      qam: { rendered_count: 9, rendered_unique_count: 8 },
+    });
   });
 });

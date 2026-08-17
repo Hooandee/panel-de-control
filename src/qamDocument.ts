@@ -13,10 +13,12 @@ export function setQamDocument(doc: Document): void {
   for (const l of listeners) {
     try {
       l(doc);
-    } catch {
-      /* a listener must never break the mount */
-    }
+    } catch {}
   }
+}
+
+export function getQamDocument(): Document | null {
+  return current;
 }
 
 export function onQamDocument(cb: Listener): () => void {
@@ -24,9 +26,7 @@ export function onQamDocument(cb: Listener): () => void {
   if (current) {
     try {
       cb(current);
-    } catch {
-      /* best-effort */
-    }
+    } catch {}
   }
   return () => {
     listeners.delete(cb);

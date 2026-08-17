@@ -481,6 +481,10 @@ def test_report_contains_tdp_transition_history(plugin, monkeypatch):
                         "set_available": True,
                     },
                 },
+                "qam": {
+                    "rendered_count": 8,
+                    "rendered_unique_count": 7,
+                },
             },
         )
     )
@@ -518,6 +522,10 @@ def test_report_contains_tdp_transition_history(plugin, monkeypatch):
     assert {"supported", "probe_detail", "wayland_display", "last_apply"} <= (
         display["backend"].keys()
     )
+    assert bundle["state"]["launch"]["frontend"]["qam"] == {
+        "rendered_count": 8,
+        "rendered_unique_count": 7,
+    }
     hud = bundle["state"]["hud_diagnostics"]
     assert hud["capability"] == "inactive"
 
