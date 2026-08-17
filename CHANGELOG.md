@@ -14,6 +14,13 @@
 
 * Corregge il routing dell'equalizzatore quando si passa tra altoparlanti, cuffie, Bluetooth, USB e HDMI. Volume e mute vengono preservati durante riavvii, sospensione, disconnessioni ed errori, mentre le uscite precedenti vengono ripristinate in sicurezza quando tornano disponibili. ([#469](https://github.com/Hooandee/panel-de-control/pull/469))
 
+## [0.37.4](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.3...panel-de-control-v0.37.4) (2026-08-17)
+
+
+### Bug Fixes
+
+* **audio:** follow the selected output route ([#469](https://github.com/Hooandee/panel-de-control/issues/469)) ([e511349](https://github.com/Hooandee/panel-de-control/commit/e51134970422864f2d9cbe0947efa0daf21a5183))
+
 ## [0.37.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.2...panel-de-control-v0.37.3) (2026-08-16)
 
 
