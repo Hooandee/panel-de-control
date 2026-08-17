@@ -161,6 +161,28 @@ class _BlockingChargeLimit(_FakeChargeLimit):
         return super().set(percent)
 
 
+class _BlockingFailedWriteChargeLimit(_FakeChargeLimit):
+    def __init__(self):
+        super().__init__()
+        self.write_started = threading.Event()
+        self.release_write = threading.Event()
+        self.writes = []
+        self._first_write = True
+
+    def set(self, percent):
+        self.writes.append(int(percent))
+        if self._first_write:
+            self._first_write = False
+            self.write_started.set()
+            self.release_write.wait(timeout=1)
+            return False
+        return super().set(percent)
+
+    def disable(self):
+        self.writes.append("off")
+        return super().disable()
+
+
 class _FixedChargeLimit(_RecordingChargeLimit):
     adjustable = False
     name = "lenovo-conservation"
@@ -329,9 +351,36 @@ def test_reconcile_restores_saved_limit_after_external_reset(tmp_path, monkeypat
                 "action": "write",
                 "ok": True,
                 "backend": "fake",
+                "reason": "mismatch_corrected",
             }
         ],
     }
+
+
+def test_later_match_replaces_failed_reconcile_summary(tmp_path, monkeypatch):
+    backend = _FakeChargeLimit()
+    reads = iter((100, 100, 80))
+    monkeypatch.setattr(backend, "get", lambda: next(reads, 80))
+    monkeypatch.setattr(backend, "set", lambda percent: False)
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=backend)
+    p._init()
+    p._settings["charge_limit_enabled"] = True
+    p._settings["charge_limit_percent"] = 80
+    p._charge_limit_generation += 1
+    monkeypatch.setattr(p, "_charge_limit_verify_delays", (0.0, 0.0))
+
+    asyncio.run(
+        p._reconcile_charge_limit(p._charge_limit_generation, "test")
+    )
+
+    summary = p._charge_limit_reconciliation
+    assert summary["status"] == "confirmed"
+    assert summary["reason"] == "matched"
+    assert summary["readback"] == 80
+    assert summary["checks"] == 2
+    assert summary["writes"] == 1
+    assert summary["history"][-2]["ok"] is False
+    assert summary["history"][-1]["ok"] is True
 
 
 def test_newer_disable_invalidates_reconcile_before_stale_write(tmp_path, monkeypatch):
@@ -523,6 +572,84 @@ def test_exact_profile_rejects_unwritable_late_probe_candidate(
     assert set_requests == [80]
 
 
+@pytest.mark.parametrize(
+    (
+        "case",
+        "expected_reason",
+        "expected_backend",
+        "expected_readback",
+        "expected_action",
+        "expected_writes",
+    ),
+    [
+        ("no_candidate", "no_candidate", "unsupported", None, "unavailable", 0),
+        ("wrong_class", "wrong_class", "fake", None, "unavailable", 0),
+        ("unreadable", "unreadable", "sysfs-threshold", None, "unavailable", 0),
+        ("write_rejected", "write_rejected", "sysfs-threshold", 100, "write", 1),
+        (
+            "confirmation_failed",
+            "confirmation_failed",
+            "sysfs-threshold",
+            100,
+            "write",
+            1,
+        ),
+    ],
+)
+def test_late_probe_reports_allowlisted_failure_reason(
+    tmp_path,
+    monkeypatch,
+    case,
+    expected_reason,
+    expected_backend,
+    expected_readback,
+    expected_action,
+    expected_writes,
+):
+    if case == "no_candidate":
+        candidate = NullChargeLimit()
+    elif case == "wrong_class":
+        candidate = _RecordingChargeLimit()
+    else:
+        candidate = _late_probe_backend(tmp_path, "sysfs")
+        if case == "unreadable":
+            monkeypatch.setattr(candidate, "get", lambda: None)
+        elif case == "write_rejected":
+            monkeypatch.setattr(candidate, "set", lambda percent: False)
+        else:
+            monkeypatch.setattr(candidate, "set", lambda percent: True)
+
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=NullChargeLimit())
+    p._init()
+    p._device = types.SimpleNamespace(key="rog_xbox_ally_x")
+    p._settings["charge_limit_enabled"] = True
+    p._settings["charge_limit_percent"] = 80
+    p._charge_limit_generation += 1
+    monkeypatch.setattr(p, "_charge_limit_verify_delays", (0.0,))
+    monkeypatch.setattr(sys.modules["main"], "select_charge_limit", lambda _: candidate)
+
+    asyncio.run(
+        p._reconcile_charge_limit(p._charge_limit_generation, "test")
+    )
+
+    summary = p._charge_limit_reconciliation
+    assert summary["status"] == "failed"
+    assert summary["reason"] == expected_reason
+    assert summary["readback"] == expected_readback
+    assert summary["writes"] == expected_writes
+    assert summary["history"][-1] == {
+        "trigger": "test",
+        "check": 1,
+        "requested": 80,
+        "readback": expected_readback,
+        "action": expected_action,
+        "ok": False,
+        "backend": expected_backend,
+        "reason": expected_reason,
+    }
+    assert isinstance(p._charge_limit, NullChargeLimit)
+
+
 def test_failed_private_candidate_is_consumed_once(tmp_path, monkeypatch):
     candidate = _FailingChargeLimit()
     p = _make_plugin(tmp_path, monkeypatch, charge_limit=NullChargeLimit())
@@ -684,6 +811,66 @@ def test_latest_of_two_queued_intents_applies_private_candidate(
     assert candidate.get() == 60
     assert p._charge_limit_candidate is None
     assert isinstance(p._charge_limit, NullChargeLimit)
+
+
+def test_selected_backend_skips_retry_after_newer_intent(
+    tmp_path, monkeypatch
+):
+    backend = _BlockingFailedWriteChargeLimit()
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=backend)
+    p._init()
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    p._apply_executor = executor
+
+    async def scenario():
+        old = asyncio.create_task(p.set_charge_limit(True, 80))
+        while not backend.write_started.is_set():
+            await asyncio.sleep(0)
+        latest = asyncio.create_task(p.set_charge_limit(False, 80))
+        while p._settings["charge_limit_enabled"]:
+            await asyncio.sleep(0)
+        backend.release_write.set()
+        await asyncio.gather(old, latest)
+
+    try:
+        asyncio.run(scenario())
+    finally:
+        backend.release_write.set()
+        executor.shutdown(wait=True)
+
+    assert backend.writes == [80, "off"]
+    assert backend.value == 100
+
+
+def test_private_candidate_skips_retry_after_newer_intent(
+    tmp_path, monkeypatch
+):
+    candidate = _BlockingFailedWriteChargeLimit()
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=NullChargeLimit())
+    p._init()
+    p._charge_limit_candidate = candidate
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    p._apply_executor = executor
+
+    async def scenario():
+        old = asyncio.create_task(p.set_charge_limit(True, 80))
+        while not candidate.write_started.is_set():
+            await asyncio.sleep(0)
+        latest = asyncio.create_task(p.set_charge_limit(False, 80))
+        while p._settings["charge_limit_enabled"]:
+            await asyncio.sleep(0)
+        candidate.release_write.set()
+        await asyncio.gather(old, latest)
+
+    try:
+        asyncio.run(scenario())
+    finally:
+        candidate.release_write.set()
+        executor.shutdown(wait=True)
+
+    assert candidate.writes == [80, "off"]
+    assert candidate.value == 100
+    assert p._charge_limit_candidate is None
 
 
 def test_cancelled_queued_intent_still_applies_private_candidate(
@@ -1031,6 +1218,7 @@ def test_reconcile_history_keeps_only_eight_allowlisted_events(
         "action",
         "ok",
         "backend",
+        "reason",
     }
 
 

@@ -11,6 +11,7 @@ from concurrent.futures import (
 )
 from dataclasses import asdict, dataclass
 from datetime import datetime
+from typing import Literal
 
 import decky
 
@@ -149,9 +150,34 @@ class _TdpCommand:
 
 @dataclass(frozen=True)
 class _ChargeLimitProbe:
-    readback: int
-    confirmed: int
-    wrote: bool
+    backend: str
+    reason: Literal[
+        "matched",
+        "backend_recovered",
+        "no_candidate",
+        "wrong_class",
+        "unreadable",
+        "write_rejected",
+        "confirmation_failed",
+        "stale",
+    ]
+    readback: int | None = None
+    confirmed: int | None = None
+    write_attempted: bool = False
+
+    @property
+    def ok(self) -> bool:
+        return self.reason in ("matched", "backend_recovered")
+
+    @property
+    def observed(self) -> int | None:
+        return self.confirmed if self.confirmed is not None else self.readback
+
+    @property
+    def action(self) -> Literal["hold", "write", "unavailable"]:
+        if self.write_attempted:
+            return "write"
+        return "hold" if self.ok else "unavailable"
 
 
 def _now_minutes() -> int:
@@ -3168,12 +3194,24 @@ class Plugin:
                 json.dumps(event, sort_keys=True, separators=(",", ":")),
             )
 
-    def _apply_charge_limit_operation(self, action, requested, operation) -> None:
+    def _charge_limit_apply_current(self, generation) -> bool:
+        return (
+            generation is None
+            or self._charge_limit_intent_current(generation)
+        )
+
+    def _apply_charge_limit_operation(
+        self, action, requested, operation, generation=None
+    ) -> None:
         attempts = 1
         result = operation()
+        if not self._charge_limit_apply_current(generation):
+            return
         if result is False:
             attempts = 2
             result = operation()
+        if not self._charge_limit_apply_current(generation):
+            return
         self._record_charge_limit_apply(
             action,
             requested,
@@ -3182,10 +3220,10 @@ class Plugin:
         )
 
     def _apply_charge_limit(self, generation=None) -> None:
-        self._apply_selected_charge_limit()
+        self._apply_selected_charge_limit(generation)
         self._apply_pending_charge_limit_candidate(generation)
 
-    def _apply_selected_charge_limit(self) -> None:
+    def _apply_selected_charge_limit(self, generation=None) -> None:
         """Write the persisted charge limit (or 100 = no cap when disabled). Safe to
         call on any device — a Null backend no-ops."""
         if not self._charge_limit.supported:
@@ -3196,6 +3234,7 @@ class Plugin:
                 "disable_module",
                 None,
                 self._charge_limit.disable,
+                generation,
             )
             return
         enabled = bool(self._settings.get("charge_limit_enabled", False))
@@ -3205,6 +3244,7 @@ class Plugin:
                 "set",
                 requested,
                 lambda: self._charge_limit.set(requested),
+                generation,
             )
         else:
             # backend-specific "no cap" (ASUS 100, Deck 0)
@@ -3212,6 +3252,7 @@ class Plugin:
                 "disable",
                 None,
                 self._charge_limit.disable,
+                generation,
             )
 
     def _apply_pending_charge_limit_candidate(self, generation=None) -> None:
@@ -3242,7 +3283,10 @@ class Plugin:
                 def operation():
                     return backend.set(requested)
             applied = operation()
-            if applied is False:
+            if (
+                applied is False
+                and self._charge_limit_apply_current(generation)
+            ):
                 operation()
         finally:
             generation_current = (
@@ -3383,15 +3427,16 @@ class Plugin:
 
     async def _reprobe_charge_limit(
         self, generation, requested
-    ) -> _ChargeLimitProbe | None:
+    ) -> _ChargeLimitProbe:
         current = self._charge_limit
         candidate = await self._offload_call(
             lambda: select_charge_limit(self._device)
         )
+        backend = getattr(candidate, "name", "unsupported")
         if not self._charge_limit_generation_current(generation):
-            return None
+            return _ChargeLimitProbe(backend, "stale")
         if not getattr(candidate, "supported", False):
-            return None
+            return _ChargeLimitProbe(backend, "no_candidate")
         if type(candidate) is not type(current):
             device_key = getattr(self._device, "key", "")
             allowed_late_probe = (
@@ -3409,15 +3454,12 @@ class Plugin:
                 )
             )
             if not allowed_late_probe:
-                return None
+                return _ChargeLimitProbe(backend, "wrong_class")
         readback = await self._offload_call(candidate.get)
-        if (
-            not self._charge_limit_generation_current(generation)
-            or readback is None
-        ):
-            return None
-        wrote = False
-        confirmed = readback
+        if not self._charge_limit_generation_current(generation):
+            return _ChargeLimitProbe(backend, "stale", readback)
+        if readback is None:
+            return _ChargeLimitProbe(backend, "unreadable")
         if readback != requested:
             pending = candidate
             self._charge_limit_candidate = pending
@@ -3430,21 +3472,55 @@ class Plugin:
 
                 applied = await self._offload_call(write_candidate_if_current)
                 if not self._charge_limit_generation_current(generation):
-                    return None
+                    return _ChargeLimitProbe(
+                        backend, "stale", readback, write_attempted=True
+                    )
+                if not applied:
+                    return _ChargeLimitProbe(
+                        backend,
+                        "write_rejected",
+                        readback,
+                        write_attempted=True,
+                    )
                 confirmed = await self._offload_call(candidate.get)
                 if not self._charge_limit_generation_current(generation):
-                    return None
-                if not applied or confirmed != requested:
-                    return None
-                wrote = True
+                    return _ChargeLimitProbe(
+                        backend,
+                        "stale",
+                        readback,
+                        confirmed,
+                        write_attempted=True,
+                    )
+                if confirmed != requested:
+                    return _ChargeLimitProbe(
+                        backend,
+                        "confirmation_failed",
+                        readback,
+                        confirmed,
+                        True,
+                    )
             finally:
                 if (
                     self._charge_limit_intent_current(generation)
                     and self._charge_limit_candidate is pending
                 ):
                     self._charge_limit_candidate = None
+            result = _ChargeLimitProbe(
+                backend,
+                "backend_recovered",
+                readback,
+                confirmed,
+                True,
+            )
+        else:
+            result = _ChargeLimitProbe(
+                backend,
+                "matched",
+                readback,
+                readback,
+            )
         self._charge_limit = candidate
-        return _ChargeLimitProbe(readback, confirmed, wrote)
+        return result
 
     async def _reconcile_charge_limit(self, generation, trigger) -> None:
         if not self._charge_limit_generation_current(generation):
@@ -3471,48 +3547,28 @@ class Plugin:
                 )
                 if not self._charge_limit_generation_current(generation):
                     return
-                if reprobe is None:
-                    checks += 1
-                    last_readback = None
-                    status = "failed"
-                    reason = "backend_unavailable"
-                    self._charge_limit_history.append({
-                        "trigger": trigger,
-                        "check": check,
-                        "requested": requested,
-                        "readback": None,
-                        "action": "unavailable",
-                        "ok": False,
-                        "backend": getattr(
-                            self._charge_limit, "name", "unsupported"
-                        ),
-                    })
-                    self._publish_charge_limit_reconciliation(
-                        generation,
-                        trigger,
-                        status,
-                        checks,
-                        writes,
-                        last_readback,
-                        reason,
-                    )
-                    continue
                 checks += 1
-                if reprobe.wrote:
+                last_readback = reprobe.observed
+                if reprobe.write_attempted:
                     writes += 1
-                    status = "recovered"
-                    reason = "backend_recovered"
-                last_readback = reprobe.confirmed
+                if reprobe.ok:
+                    status = (
+                        "recovered"
+                        if reprobe.write_attempted
+                        else "confirmed"
+                    )
+                else:
+                    status = "failed"
+                reason = reprobe.reason
                 self._charge_limit_history.append({
                     "trigger": trigger,
                     "check": check,
                     "requested": requested,
                     "readback": reprobe.readback,
-                    "action": "write" if reprobe.wrote else "hold",
-                    "ok": True,
-                    "backend": getattr(
-                        self._charge_limit, "name", "unsupported"
-                    ),
+                    "action": reprobe.action,
+                    "ok": reprobe.ok,
+                    "backend": reprobe.backend,
+                    "reason": reason,
                 })
                 self._publish_charge_limit_reconciliation(
                     generation,
@@ -3548,6 +3604,9 @@ class Plugin:
                 ok = bool(applied) and last_readback == requested
                 status = "recovered" if ok else "failed"
                 reason = "mismatch_corrected" if ok else "write_unconfirmed"
+            else:
+                status = "confirmed"
+                reason = "matched"
             event = {
                 "trigger": trigger,
                 "check": check,
@@ -3556,6 +3615,7 @@ class Plugin:
                 "action": action,
                 "ok": ok,
                 "backend": getattr(self._charge_limit, "name", "unsupported"),
+                "reason": reason,
             }
             self._charge_limit_history.append(event)
             self._publish_charge_limit_reconciliation(
