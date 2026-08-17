@@ -238,6 +238,28 @@ def test_audio_watcher_cleans_runtime_when_required_tools_disappear(tmp_path, mo
     assert asyncio.run(scenario()) == 1
 
 
+def test_audio_watcher_does_not_repeat_confirmed_cleanup_when_disabled(
+    tmp_path, monkeypatch
+):
+    async def scenario():
+        p, fake = _make_plugin(tmp_path, monkeypatch)
+        await p.get_audio_state()
+        p._settings["audio_eq_enabled"] = False
+        sleeps = 0
+
+        async def three_iterations(_delay):
+            nonlocal sleeps
+            sleeps += 1
+            if sleeps > 3:
+                raise asyncio.CancelledError
+
+        monkeypatch.setattr(asyncio, "sleep", three_iterations)
+        await p._audio_loop()
+        return fake.torn_down
+
+    assert asyncio.run(scenario()) == 1
+
+
 def test_audio_watcher_replaces_a_failed_teardown_with_its_recovery(tmp_path, monkeypatch):
     class RecoveringTeardown(_FakePipeWireEq):
         def __init__(self):

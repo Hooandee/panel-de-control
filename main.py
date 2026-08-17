@@ -514,6 +514,8 @@ class Plugin:
         # Audio EQ output-route watcher: last applied route + its loop task.
         self._audio_task = None
         self._audio_route_last = None
+        self._audio_cleanup_pending = True
+        self._audio_runtime_expected = False
         self._audio_shutdown = False
         self._shutting_down = False
         self._offload_futures = set()
@@ -5939,6 +5941,7 @@ class Plugin:
                 self._record_audio_apply_failure(detail)
             else:
                 self._audio_apply_failures = 0
+                self._audio_runtime_expected = True
                 diagnostics = getattr(self._audio, "apply_diagnostics", None)
                 self._audio_last_apply = (
                     diagnostics()
@@ -5991,13 +5994,17 @@ class Plugin:
         while True:
             try:
                 await asyncio.sleep(_AUDIO_POLL_S)
-                if (
-                    not self._settings.get("audio_eq_enabled")
-                    or not self._audio.is_supported()
-                ):
+                enabled = bool(self._settings.get("audio_eq_enabled"))
+                supported = enabled and self._audio.is_supported()
+                if not enabled or not supported:
+                    if self._audio_runtime_expected:
+                        self._audio_cleanup_pending = True
+                    self._audio_runtime_expected = False
                     self._audio_route_last = None
-                    await self._offload_call(self._restore_audio_safe)
+                    if self._audio_cleanup_pending:
+                        await self._offload_call(self._restore_audio_safe)
                     continue
+                self._audio_runtime_expected = True
                 probe = await self._offload_call(self._audio_check)
                 if not probe["active"] or probe["route"] != self._audio_route_last:
                     self._audio_route_last = probe["route"]
@@ -6012,11 +6019,14 @@ class Plugin:
         disabled/uninstalled plugin leaves the audio untouched. Guarded."""
         try:
             if getattr(self, "_audio", None) is not None:
-                self._audio.teardown()
+                cleaned = self._audio.teardown()
+                self._audio_cleanup_pending = cleaned is not True
+                self._audio_runtime_expected = False
                 diagnostics = self._audio.apply_diagnostics()
                 if isinstance(diagnostics, dict):
                     self._audio_last_apply = dict(diagnostics)
         except Exception as error:  # noqa: BLE001
+            self._audio_cleanup_pending = True
             self._audio_last_apply = {
                 "ok": False,
                 "reason": "exception",
@@ -6067,6 +6077,8 @@ class Plugin:
         if enabled:
             self._reapply_audio()
         else:
+            self._audio_cleanup_pending = True
+            self._audio_runtime_expected = False
             self._offload(self._restore_audio_safe)
         return await self._offload_call(self._audio_state)
 

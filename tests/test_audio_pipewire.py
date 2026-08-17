@@ -439,6 +439,14 @@ def test_secure_remove_does_not_confirm_through_a_symlinked_parent(tmp_path):
     assert entry.read_text() == "keep"
 
 
+def test_missing_parent_confirms_pending_marker_absence(tmp_path):
+    fake = _FakeRunner()
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    eq._conf_path = lambda: str(tmp_path / "missing" / "pdc-eq.conf")
+
+    assert eq._clear_first_enable_pending() is True
+
+
 def test_secure_entry_io_rejects_oversized_files(tmp_path):
     fake = _FakeRunner()
     eq = _make_eq(tmp_path, fake, conf_exists=False)
@@ -1489,6 +1497,58 @@ def test_disable_after_failed_reapply_restores_owned_eq_volume(tmp_path):
         "40%",
     ]
     assert fake._default == "alsa_speaker"
+
+
+def test_teardown_without_runtime_reports_pending_marker_cleanup_failure(
+    tmp_path, monkeypatch
+):
+    fake = _FakeRunner()
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    marker_path = eq._pending_path()
+    Path(marker_path).write_text('{"sink":"alsa_speaker","volume":"40%"}')
+    remove_entry = eq._remove_entry
+
+    def reject_marker_removal(path):
+        if path == marker_path:
+            return False
+        return remove_entry(path)
+
+    monkeypatch.setattr(eq, "_remove_entry", reject_marker_removal)
+
+    assert eq.teardown() is False
+    assert Path(marker_path).exists()
+    assert eq.apply_diagnostics() == {
+        "ok": False,
+        "reason": "teardown_marker_cleanup_failed",
+        "downstream": None,
+    }
+    assert ["systemctl", "--user", "restart", "filter-chain.service"] not in fake.calls
+
+
+def test_teardown_reports_marker_failure_after_restoring_audio(tmp_path, monkeypatch):
+    fake = _FakeRunner(downstream_vol="40%")
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    assert eq.ensure_sink([0] * 10) is True
+    marker_path = eq._pending_path()
+    Path(marker_path).write_text('{"sink":"alsa_speaker","volume":"40%"}')
+    remove_entry = eq._remove_entry
+
+    def reject_marker_removal(path):
+        if path == marker_path:
+            return False
+        return remove_entry(path)
+
+    monkeypatch.setattr(eq, "_remove_entry", reject_marker_removal)
+
+    assert eq.teardown() is False
+    assert fake._default == "alsa_speaker"
+    assert "\tX EQ\t" not in fake._sinks
+    assert Path(marker_path).exists()
+    assert eq.apply_diagnostics() == {
+        "ok": False,
+        "reason": "teardown_marker_cleanup_failed",
+        "downstream": "alsa_speaker",
+    }
 
 
 def test_teardown_failure_bypasses_eq_and_retains_state_for_cleanup_retry(tmp_path):

@@ -26,10 +26,12 @@ _RETRY_MIN_S = 15.0
 _RETRY_MAX_S = 60.0
 _RETRY_MAX_ATTEMPTS = 3
 _MAX_ENTRY_BYTES = 64 * 1024
+_MISSING_PARENT = object()
 _RETRY_OPERATIONS = {
     "config": "config_write",
     "default": "default_sink",
     "link": "target_link",
+    "marker": "pending_marker_cleanup",
     "service": "service_restart",
     "teardown": "teardown",
 }
@@ -289,7 +291,7 @@ class PipeWireEq:
         except KeyError:
             return self._session[0], self._session[0]
 
-    def _open_parent_dir(self, path, *, create=False):
+    def _open_parent_dir(self, path, *, create=False, missing_ok=False):
         if not path or not self._session or not os.path.isabs(path):
             return None
         uid, gid = self._session_ids()
@@ -306,7 +308,7 @@ class PipeWireEq:
                 except FileNotFoundError:
                     if not create:
                         os.close(current_fd)
-                        return None
+                        return _MISSING_PARENT if missing_ok else None
                     try:
                         os.mkdir(component, 0o755, dir_fd=current_fd)
                     except FileExistsError:
@@ -346,7 +348,9 @@ class PipeWireEq:
             os.close(parent_fd)
 
     def _remove_entry(self, path):
-        parent_fd = self._open_parent_dir(path)
+        parent_fd = self._open_parent_dir(path, missing_ok=True)
+        if parent_fd is _MISSING_PARENT:
+            return True
         if parent_fd is None:
             return False
         name = os.path.basename(path)
@@ -975,9 +979,20 @@ class PipeWireEq:
             or eq_present
         )
         if not runtime_pending:
-            self._clear_first_enable_pending()
+            retry_request = ("teardown_marker",)
+            if self._retry_blocked(retry_request, None):
+                return False
+            if not self._clear_first_enable_pending():
+                return self._defer_failure(
+                    retry_request,
+                    "marker",
+                    "teardown_marker_cleanup_failed",
+                    None,
+                )
+            self._cleanup_pending = False
             self._active = False
             self._owns_sink = False
+            self._clear_retry()
             self._record_apply(True, operation="teardown", unchanged=True)
             return True
         self._cleanup_pending = True
@@ -1037,7 +1052,6 @@ class PipeWireEq:
         self._requested_downstream = None
         self._configured_default_seen = None
         self._configured_request = None
-        self._clear_first_enable_pending()
         self._cleanup_pending = False
         self._last_applied = None
         self._user_vol = None
@@ -1045,5 +1059,12 @@ class PipeWireEq:
         self._clear_retry()
         self._active = False
         self._owns_sink = False
+        if not self._clear_first_enable_pending():
+            return self._defer_failure(
+                ("teardown_marker",),
+                "marker",
+                "teardown_marker_cleanup_failed",
+                downstream,
+            )
         self._record_apply(True, operation="teardown")
         return True
