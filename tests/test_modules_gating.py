@@ -75,6 +75,32 @@ def test_charge_limit_applied_when_system_enabled():
     assert ("set", 80) in p._charge_limit.calls
 
 
+def test_disabling_system_invalidates_old_charge_limit_reconcile():
+    import asyncio
+
+    p = _plugin_cl()
+    p._init = lambda: None
+    p._save = lambda: None
+    p._sync_sampler = lambda: None
+    p._release_gpu_clock = lambda *_: asyncio.sleep(0)
+    p._reapply_all = p._apply_charge_limit
+    p._charge_limit_generation = 1
+    p._charge_limit_reconcile_task = None
+    p._charge_limit_history = []
+    p._charge_limit_reconciliation = {}
+    p._charge_limit_verify_delays = (0.0,)
+    old_generation = p._charge_limit_generation
+
+    async def scenario():
+        await p.set_ui_module("system", True)
+        await p._reconcile_charge_limit(old_generation, "test")
+
+    asyncio.run(scenario())
+
+    assert p._charge_limit_generation > old_generation
+    assert p._charge_limit.calls == [("disable",)]
+
+
 class _FakeToggle:
     def __init__(self, supported=True, max_cores=8):
         self.supported = supported

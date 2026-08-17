@@ -6,7 +6,16 @@ _init never touches live hardware), then injects a fake charge-limit backend.
 import asyncio
 import importlib
 import sys
+import threading
 import types
+
+import pytest
+
+from battery.charge_limit import (
+    NullChargeLimit,
+    SteamDeckChargeLimit,
+    SysfsChargeLimit,
+)
 
 
 def _make_plugin(tmp_path, monkeypatch, charge_limit=None):
@@ -113,6 +122,64 @@ class _FlakyChargeLimit(_FakeChargeLimit):
         if self.attempts == 1:
             return False
         return super().set(percent)
+
+
+class _RecordingChargeLimit(_FakeChargeLimit):
+    def __init__(self, supported=True):
+        super().__init__(supported=supported)
+        self.set_requests = []
+
+    def set(self, percent):
+        self.set_requests.append(percent)
+        return super().set(percent)
+
+
+class _ReplaceableChargeLimit(_RecordingChargeLimit):
+    def __init__(self, lost=False):
+        super().__init__()
+        self.lost = lost
+
+    def get(self):
+        return None if self.lost else super().get()
+
+    def set(self, percent):
+        self.set_requests.append(percent)
+        if self.lost:
+            return False
+        return _FakeChargeLimit.set(self, percent)
+
+
+class _BlockingChargeLimit(_FakeChargeLimit):
+    def __init__(self):
+        super().__init__()
+        self.release = threading.Event()
+
+    def set(self, percent):
+        if not self.release.wait(0.2):
+            return False
+        return super().set(percent)
+
+
+class _FixedChargeLimit(_RecordingChargeLimit):
+    adjustable = False
+    name = "lenovo-conservation"
+
+    def get(self):
+        return None
+
+
+def _late_probe_backend(tmp_path, kind):
+    if kind == "sysfs":
+        node = tmp_path / "sys/class/power_supply/BAT0/charge_control_end_threshold"
+        backend_class = SysfsChargeLimit
+    else:
+        node = tmp_path / "sys/class/hwmon/hwmon3/max_battery_charge_level"
+        backend_class = SteamDeckChargeLimit
+        node.parent.mkdir(parents=True, exist_ok=True)
+        (node.parent / "name").write_text("steamdeck_hwmon")
+    node.parent.mkdir(parents=True, exist_ok=True)
+    node.write_text("100")
+    return backend_class(root=str(tmp_path))
 
 
 def test_get_battery_state_shape(tmp_path, monkeypatch):
@@ -228,3 +295,337 @@ def test_unsupported_charge_limit_degrades(tmp_path, monkeypatch):
     p = _make_plugin(tmp_path, monkeypatch, charge_limit=_FakeChargeLimit(supported=False))
     result = asyncio.run(p.set_charge_limit(True, 70))
     assert result["supported"] is False
+
+
+def test_reconcile_restores_saved_limit_after_external_reset(tmp_path, monkeypatch):
+    backend = _FakeChargeLimit()
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=backend)
+    p._init()
+    p._settings["charge_limit_enabled"] = True
+    p._settings["charge_limit_percent"] = 80
+    backend.set(80)
+    backend.value = 100
+    monkeypatch.setattr(p, "_charge_limit_verify_delays", (0.0,), raising=False)
+
+    p._charge_limit_generation += 1
+    asyncio.run(p._reconcile_charge_limit(p._charge_limit_generation, "test"))
+
+    assert backend.value == 80
+    assert p._charge_limit_reconciliation == {
+        "generation": 1,
+        "trigger": "test",
+        "status": "recovered",
+        "checks": 1,
+        "writes": 1,
+        "readback": 80,
+        "reason": "mismatch_corrected",
+        "history": [
+            {
+                "trigger": "test",
+                "check": 1,
+                "requested": 80,
+                "readback": 100,
+                "action": "write",
+                "ok": True,
+                "backend": "fake",
+            }
+        ],
+    }
+
+
+def test_newer_disable_invalidates_reconcile_before_stale_write(tmp_path, monkeypatch):
+    backend = _RecordingChargeLimit()
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=backend)
+    p._init()
+    p._settings["charge_limit_enabled"] = True
+    p._settings["charge_limit_percent"] = 80
+    p._charge_limit_generation += 1
+    generation = p._charge_limit_generation
+    monkeypatch.setattr(p, "_charge_limit_verify_delays", (0.0,))
+    read_started = asyncio.Event()
+    release_read = asyncio.Event()
+
+    async def paused_offload(operation):
+        if operation == backend.get and not read_started.is_set():
+            read_started.set()
+            await release_read.wait()
+        return operation()
+
+    p._offload_call = paused_offload
+
+    async def scenario():
+        reconcile = asyncio.create_task(
+            p._reconcile_charge_limit(generation, "test")
+        )
+        await read_started.wait()
+        await p.set_charge_limit(False, 80)
+        release_read.set()
+        await reconcile
+
+    asyncio.run(scenario())
+
+    assert p._charge_limit_generation > generation
+    assert backend.set_requests == []
+    assert backend.value == 100
+
+
+def test_shutdown_invalidates_reconcile_before_stale_write(tmp_path, monkeypatch):
+    backend = _RecordingChargeLimit()
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=backend)
+    p._init()
+    p._settings["charge_limit_enabled"] = True
+    p._settings["charge_limit_percent"] = 80
+    p._charge_limit_generation += 1
+    generation = p._charge_limit_generation
+    monkeypatch.setattr(p, "_charge_limit_verify_delays", (0.0,))
+
+    p._prepare_shutdown()
+    asyncio.run(p._reconcile_charge_limit(generation, "test"))
+
+    assert p._charge_limit_generation > generation
+    assert p._charge_limit_reconcile_task is None
+    assert backend.set_requests == []
+
+
+def test_reconcile_replaces_lost_backend_with_same_class(tmp_path, monkeypatch):
+    lost = _ReplaceableChargeLimit(lost=True)
+    replacement = _ReplaceableChargeLimit()
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=lost)
+    p._init()
+    p._settings["charge_limit_enabled"] = True
+    p._settings["charge_limit_percent"] = 80
+    p._charge_limit_generation += 1
+    monkeypatch.setattr(p, "_charge_limit_verify_delays", (0.0,))
+    monkeypatch.setattr(sys.modules["main"], "select_charge_limit", lambda _: replacement)
+
+    asyncio.run(
+        p._reconcile_charge_limit(p._charge_limit_generation, "test")
+    )
+
+    assert p._charge_limit is replacement
+    assert lost.set_requests == []
+    assert replacement.set_requests == [80]
+    assert replacement.value == 80
+
+
+def test_reconcile_rejects_different_replacement_class(tmp_path, monkeypatch):
+    lost = _ReplaceableChargeLimit(lost=True)
+    different = _RecordingChargeLimit()
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=lost)
+    p._init()
+    p._settings["charge_limit_enabled"] = True
+    p._settings["charge_limit_percent"] = 80
+    p._charge_limit_generation += 1
+    monkeypatch.setattr(p, "_charge_limit_verify_delays", (0.0,))
+    monkeypatch.setattr(sys.modules["main"], "select_charge_limit", lambda _: different)
+
+    asyncio.run(
+        p._reconcile_charge_limit(p._charge_limit_generation, "test")
+    )
+
+    assert p._charge_limit is lost
+    assert lost.set_requests == []
+    assert different.set_requests == []
+
+
+@pytest.mark.parametrize(
+    ("device_key", "kind", "backend_class"),
+    [
+        ("rog_xbox_ally_x", "sysfs", SysfsChargeLimit),
+        ("steam_deck_oled", "deck", SteamDeckChargeLimit),
+    ],
+)
+def test_exact_profile_can_gain_supported_backend_late(
+    tmp_path, monkeypatch, device_key, kind, backend_class
+):
+    replacement = _late_probe_backend(tmp_path, kind)
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=NullChargeLimit())
+    p._init()
+    p._device = types.SimpleNamespace(key=device_key)
+    p._settings["charge_limit_enabled"] = True
+    p._settings["charge_limit_percent"] = 80
+    p._charge_limit_generation += 1
+    monkeypatch.setattr(p, "_charge_limit_verify_delays", (0.0,))
+    monkeypatch.setattr(sys.modules["main"], "select_charge_limit", lambda _: replacement)
+
+    asyncio.run(
+        p._reconcile_charge_limit(p._charge_limit_generation, "test")
+    )
+
+    assert isinstance(p._charge_limit, backend_class)
+    assert p._charge_limit.get() == 80
+
+
+@pytest.mark.parametrize(
+    "device_key",
+    ["msi_claw_8_ai_plus", "generic", "rog_future"],
+)
+def test_late_probe_does_not_expand_null_backend_support(
+    tmp_path, monkeypatch, device_key
+):
+    replacement = _late_probe_backend(tmp_path, "sysfs")
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=NullChargeLimit())
+    p._init()
+    p._device = types.SimpleNamespace(key=device_key)
+    p._settings["charge_limit_enabled"] = True
+    p._settings["charge_limit_percent"] = 80
+    p._charge_limit_generation += 1
+    monkeypatch.setattr(p, "_charge_limit_verify_delays", (0.0,))
+    monkeypatch.setattr(sys.modules["main"], "select_charge_limit", lambda _: replacement)
+
+    asyncio.run(
+        p._reconcile_charge_limit(p._charge_limit_generation, "test")
+    )
+
+    assert isinstance(p._charge_limit, NullChargeLimit)
+    assert replacement.get() == 100
+
+
+def test_set_charge_limit_offloads_apply_and_schedules_reconcile(
+    tmp_path, monkeypatch
+):
+    backend = _BlockingChargeLimit()
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=backend)
+
+    async def scenario():
+        asyncio.get_running_loop().call_later(0.01, backend.release.set)
+        result = await p.set_charge_limit(True, 80)
+        task = p._charge_limit_reconcile_task
+        assert task is not None
+        assert not task.done()
+        task.cancel()
+        return result
+
+    result = asyncio.run(scenario())
+
+    assert result["applied_percent"] == 80
+    assert result["reconciliation"]["trigger"] == "set_charge_limit"
+
+
+def test_reapply_offloads_charge_limit_before_scheduling_reconcile(
+    tmp_path, monkeypatch
+):
+    backend = _RecordingChargeLimit()
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=backend)
+    p._init()
+    p._settings["charge_limit_enabled"] = True
+    p._settings["charge_limit_percent"] = 80
+    events = []
+
+    for name in (
+        "_cancel_color_revert",
+        "_apply_cpu",
+        "_apply_gpu_clock",
+        "_schedule_tdp_apply",
+        "_reapply_fans",
+        "_reapply_hdr",
+        "_reapply_color",
+        "_reapply_audio",
+        "_reapply_controller",
+        "_schedule_hud_apply",
+    ):
+        monkeypatch.setattr(p, name, lambda *args: None)
+    monkeypatch.setattr(p, "_tdp_control_on", lambda: True)
+
+    def immediate_offload(operation, done=None):
+        events.append("offload")
+        operation()
+        events.append("apply")
+        if done is not None:
+            done()
+
+    monkeypatch.setattr(p, "_offload", immediate_offload)
+    original_schedule = p._schedule_charge_limit_reconcile
+
+    def record_schedule(trigger):
+        events.append("schedule")
+        original_schedule(trigger)
+
+    monkeypatch.setattr(p, "_schedule_charge_limit_reconcile", record_schedule)
+
+    async def scenario():
+        p._reapply_all()
+        assert p._charge_limit_reconcile_task is not None
+        p._charge_limit_reconcile_task.cancel()
+
+    asyncio.run(scenario())
+
+    assert events[:3] == ["offload", "apply", "schedule"]
+    assert backend.set_requests == [80]
+
+
+def test_reconcile_does_not_invent_readback_for_fixed_backend(
+    tmp_path, monkeypatch
+):
+    backend = _FixedChargeLimit()
+    replacement = _FixedChargeLimit()
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=backend)
+    p._init()
+    p._settings["charge_limit_enabled"] = True
+    p._settings["charge_limit_percent"] = 80
+    p._charge_limit_generation += 1
+    monkeypatch.setattr(p, "_charge_limit_verify_delays", (0.0,))
+    monkeypatch.setattr(sys.modules["main"], "select_charge_limit", lambda _: replacement)
+
+    asyncio.run(
+        p._reconcile_charge_limit(p._charge_limit_generation, "test")
+    )
+
+    assert backend.set_requests == []
+    assert replacement.set_requests == []
+    assert p._charge_limit_reconciliation["status"] == "unverifiable"
+    assert p._charge_limit_reconciliation["readback"] is None
+    assert p._charge_limit_reconciliation["writes"] == 0
+
+
+def test_reconcile_history_keeps_only_eight_allowlisted_events(
+    tmp_path, monkeypatch
+):
+    backend = _FakeChargeLimit()
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=backend)
+    p._init()
+    p._settings["charge_limit_enabled"] = True
+    p._settings["charge_limit_percent"] = 80
+    monkeypatch.setattr(p, "_charge_limit_verify_delays", (0.0,))
+
+    async def scenario():
+        for index in range(10):
+            p._charge_limit_generation += 1
+            await p._reconcile_charge_limit(
+                p._charge_limit_generation, f"test-{index}"
+            )
+
+    asyncio.run(scenario())
+
+    history = p._charge_limit_reconciliation["history"]
+    assert len(history) == 8
+    assert history[0]["trigger"] == "test-2"
+    assert set(history[-1]) == {
+        "trigger",
+        "check",
+        "requested",
+        "readback",
+        "action",
+        "ok",
+        "backend",
+    }
+
+
+def test_new_schedule_cancels_previous_reconcile_task(tmp_path, monkeypatch):
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=_FakeChargeLimit())
+    p._init()
+    p._settings["charge_limit_enabled"] = True
+    monkeypatch.setattr(p, "_charge_limit_verify_delays", (3600.0,))
+
+    async def scenario():
+        p._schedule_charge_limit_reconcile("first")
+        first = p._charge_limit_reconcile_task
+        p._schedule_charge_limit_reconcile("second")
+        second = p._charge_limit_reconcile_task
+        await asyncio.sleep(0)
+        assert first.cancelled()
+        assert second is not first
+        assert not second.done()
+        second.cancel()
+
+    asyncio.run(scenario())

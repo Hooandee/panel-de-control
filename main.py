@@ -60,7 +60,12 @@ from gpu.clock import select_gpu_clock
 from gpu.profiles import GpuProfileStore
 from power.reader import PowerReader
 from battery.reader import BatteryReader
-from battery.charge_limit import select_charge_limit
+from battery.charge_limit import (
+    NullChargeLimit,
+    SteamDeckChargeLimit,
+    SysfsChargeLimit,
+    select_charge_limit,
+)
 from audio.eq_store import EqStore
 from audio.pipewire import PipeWireEq
 from audio.profile_store import AudioProfileStore
@@ -115,6 +120,17 @@ _monotonic = time.monotonic
 _HUD_OBSERVATION_MAX_AGE_S = 3.0
 _MIN_HUD_REFRESH_S = 1.0
 _HUD_RELOAD_MAX_ATTEMPTS = 4
+_CHARGE_LIMIT_VERIFY_DELAYS = (2.0, 8.0, 20.0)
+_ROG_CHARGE_LIMIT_PROFILES = frozenset({
+    "rog_ally",
+    "rog_ally_x",
+    "rog_xbox_ally",
+    "rog_xbox_ally_x",
+})
+_STEAM_DECK_CHARGE_LIMIT_PROFILES = frozenset({
+    "steam_deck_lcd",
+    "steam_deck_oled",
+})
 
 # "custom" = our TDP owns the rails, vs a named platform_profile mode.
 _CUSTOM_MODE = "custom"
@@ -420,6 +436,20 @@ class Plugin:
         self._charge_limit = select_charge_limit(self._device)
         self._charge_limit_last_apply = None
         self._charge_limit_failures = 0
+        self._charge_limit_verify_delays = _CHARGE_LIMIT_VERIFY_DELAYS
+        self._charge_limit_generation = 0
+        self._charge_limit_reconcile_task = None
+        self._charge_limit_history = deque(maxlen=8)
+        self._charge_limit_reconciliation = {
+            "generation": 0,
+            "trigger": None,
+            "status": "idle",
+            "checks": 0,
+            "writes": 0,
+            "readback": None,
+            "reason": "not_scheduled",
+            "history": [],
+        }
         self._smt = SmtControl()
         self._boost = select_boost()
         self._cores = CoreControl()
@@ -633,8 +663,10 @@ class Plugin:
         self._init()
         disabled = bool(disabled)
         if module_id in self._MODULE_SETTING:
+            self._cancel_charge_limit_reconcile("module_changed")
             self._settings[self._MODULE_SETTING[module_id]] = not disabled
         elif module_id in self._GENERIC_MODULES:
+            self._cancel_charge_limit_reconcile("module_changed")
             cur = set(self._disabled_modules())
             cur.add(module_id) if disabled else cur.discard(module_id)
             self._settings["disabled_modules"] = sorted(cur)
@@ -680,6 +712,7 @@ class Plugin:
         """Reset the customization layout. Leaves the functional switches (TDP control,
         telemetry) as-is; a visual reset must not silently re-enable them."""
         self._init()
+        self._cancel_charge_limit_reconcile("module_reset")
         self._settings["disabled_modules"] = []
         self._save()
         self._reapply_all()
@@ -3042,8 +3075,23 @@ class Plugin:
         self._last_reapply_trigger = "lifecycle_or_context"
         self._cancel_color_revert()
         self._color_preview = None
-        # sysfs (fast) → inline; subprocess-backed (tdp-ryzenadj/fans/color) → off-loop.
-        self._apply_charge_limit()
+        charge_generation = self._cancel_charge_limit_reconcile("reapply")
+
+        def apply_charge_limit():
+            if self._charge_limit_intent_current(charge_generation):
+                self._apply_charge_limit()
+
+        def schedule_charge_limit_reconcile():
+            if self._charge_limit_intent_current(charge_generation):
+                self._schedule_charge_limit_reconcile("reapply_all")
+
+        if bool(getattr(self._charge_limit, "supported", False)):
+            self._offload(
+                apply_charge_limit,
+                done=schedule_charge_limit_reconcile,
+            )
+        elif self._charge_limit_late_probe_eligible():
+            schedule_charge_limit_reconcile()
         self._apply_cpu()
         self._apply_gpu_clock()
         self._schedule_tdp_apply("lifecycle", on_ac)
@@ -3138,6 +3186,217 @@ class Plugin:
                 self._charge_limit.disable,
             )
 
+    def _charge_limit_generation_current(self, generation) -> bool:
+        return (
+            self._charge_limit_intent_current(generation)
+            and self._module_enabled("system")
+            and bool(self._settings.get("charge_limit_enabled", False))
+        )
+
+    def _charge_limit_intent_current(self, generation) -> bool:
+        return (
+            generation == self._charge_limit_generation
+            and not getattr(self, "_shutting_down", False)
+        )
+
+    def _charge_limit_late_probe_eligible(self) -> bool:
+        key = getattr(self._device, "key", "")
+        return (
+            key in _ROG_CHARGE_LIMIT_PROFILES
+            or key in _STEAM_DECK_CHARGE_LIMIT_PROFILES
+        )
+
+    def _cancel_charge_limit_reconcile(self, reason) -> int:
+        self._charge_limit_generation = int(
+            getattr(self, "_charge_limit_generation", 0)
+        ) + 1
+        task = getattr(self, "_charge_limit_reconcile_task", None)
+        self._charge_limit_reconcile_task = None
+        if task is not None and not task.done():
+            task.cancel()
+        self._charge_limit_reconciliation = {
+            "generation": self._charge_limit_generation,
+            "trigger": None,
+            "status": "cancelled",
+            "checks": 0,
+            "writes": 0,
+            "readback": None,
+            "reason": reason,
+            "history": list(getattr(self, "_charge_limit_history", ())),
+        }
+        return self._charge_limit_generation
+
+    def _schedule_charge_limit_reconcile(self, trigger) -> None:
+        generation = self._cancel_charge_limit_reconcile("rescheduled")
+        eligible = (
+            self._module_enabled("system")
+            and bool(self._settings.get("charge_limit_enabled", False))
+            and bool(getattr(self._charge_limit, "adjustable", True))
+            and (
+                bool(getattr(self._charge_limit, "supported", False))
+                or self._charge_limit_late_probe_eligible()
+            )
+        )
+        if not eligible:
+            self._charge_limit_reconciliation["trigger"] = trigger
+            self._charge_limit_reconciliation["status"] = "idle"
+            self._charge_limit_reconciliation["reason"] = "not_applicable"
+            return
+        self._charge_limit_reconciliation = {
+            "generation": generation,
+            "trigger": trigger,
+            "status": "scheduled",
+            "checks": 0,
+            "writes": 0,
+            "readback": None,
+            "reason": "verification_pending",
+            "history": list(self._charge_limit_history),
+        }
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            self._charge_limit_reconciliation["status"] = "idle"
+            self._charge_limit_reconciliation["reason"] = "no_event_loop"
+            return
+        task = loop.create_task(
+            self._reconcile_charge_limit(generation, trigger)
+        )
+        self._charge_limit_reconcile_task = task
+
+        def finished(done):
+            if self._charge_limit_reconcile_task is done:
+                self._charge_limit_reconcile_task = None
+            if not done.cancelled():
+                done.exception()
+
+        task.add_done_callback(finished)
+
+    async def _reprobe_charge_limit(self, generation) -> bool:
+        current = self._charge_limit
+        candidate = await self._offload_call(
+            lambda: select_charge_limit(self._device)
+        )
+        if not self._charge_limit_generation_current(generation):
+            return False
+        if not getattr(candidate, "supported", False):
+            return False
+        if type(candidate) is not type(current):
+            device_key = getattr(self._device, "key", "")
+            allowed_late_probe = (
+                type(current) is NullChargeLimit
+                and (
+                    (
+                        device_key in _ROG_CHARGE_LIMIT_PROFILES
+                        and type(candidate) is SysfsChargeLimit
+                    )
+                    or (
+                        device_key in _STEAM_DECK_CHARGE_LIMIT_PROFILES
+                        and type(candidate)
+                        in (SteamDeckChargeLimit, SysfsChargeLimit)
+                    )
+                )
+            )
+            if not allowed_late_probe:
+                return False
+        self._charge_limit = candidate
+        return True
+
+    async def _reconcile_charge_limit(self, generation, trigger) -> None:
+        if not self._charge_limit_generation_current(generation):
+            return
+        if not bool(getattr(self._charge_limit, "adjustable", True)):
+            self._charge_limit_reconciliation = {
+                "generation": generation,
+                "trigger": trigger,
+                "status": "unverifiable",
+                "checks": 0,
+                "writes": 0,
+                "readback": None,
+                "reason": "fixed_threshold",
+                "history": list(self._charge_limit_history),
+            }
+            return
+        checks = 0
+        writes = 0
+        last_readback = None
+        status = "confirmed"
+        reason = "matched"
+        started = asyncio.get_running_loop().time()
+        for check, delay in enumerate(self._charge_limit_verify_delays, 1):
+            remaining = started + delay - asyncio.get_running_loop().time()
+            if remaining > 0:
+                await asyncio.sleep(remaining)
+            if not self._charge_limit_generation_current(generation):
+                return
+            requested = int(self._settings.get("charge_limit_percent", 80))
+            readback = await self._offload_call(self._charge_limit.get)
+            if not self._charge_limit_generation_current(generation):
+                return
+            if readback is None:
+                if await self._reprobe_charge_limit(generation):
+                    readback = await self._offload_call(self._charge_limit.get)
+                    if not self._charge_limit_generation_current(generation):
+                        return
+                else:
+                    checks += 1
+                    last_readback = None
+                    status = "failed"
+                    reason = "backend_unavailable"
+                    self._charge_limit_history.append({
+                        "trigger": trigger,
+                        "check": check,
+                        "requested": requested,
+                        "readback": None,
+                        "action": "unavailable",
+                        "ok": False,
+                        "backend": getattr(
+                            self._charge_limit, "name", "unsupported"
+                        ),
+                    })
+                    continue
+            checks += 1
+            last_readback = readback
+            action = "hold"
+            ok = readback == requested
+            if readback != requested:
+                action = "write"
+                writes += 1
+
+                def write_if_current():
+                    if not self._charge_limit_generation_current(generation):
+                        return None
+                    return self._charge_limit.set(requested)
+
+                applied = await self._offload_call(
+                    write_if_current
+                )
+                if not self._charge_limit_generation_current(generation):
+                    return
+                last_readback = await self._offload_call(self._charge_limit.get)
+                ok = bool(applied) and last_readback == requested
+                status = "recovered" if ok else "failed"
+                reason = "mismatch_corrected" if ok else "write_unconfirmed"
+            event = {
+                "trigger": trigger,
+                "check": check,
+                "requested": requested,
+                "readback": readback,
+                "action": action,
+                "ok": ok,
+                "backend": getattr(self._charge_limit, "name", "unsupported"),
+            }
+            self._charge_limit_history.append(event)
+        self._charge_limit_reconciliation = {
+            "generation": generation,
+            "trigger": trigger,
+            "status": status,
+            "checks": checks,
+            "writes": writes,
+            "readback": last_readback,
+            "reason": reason,
+            "history": list(self._charge_limit_history),
+        }
+
     def _charge_limit_state(self) -> dict:
         lo, hi = self._charge_limit.range()
         enabled = bool(self._settings.get("charge_limit_enabled", False))
@@ -3161,6 +3420,7 @@ class Plugin:
                 if getattr(self, "_charge_limit_last_apply", None) is not None
                 else None
             ),
+            "reconciliation": dict(self._charge_limit_reconciliation),
         }
 
     async def get_battery_state(self) -> dict:
@@ -5089,13 +5349,22 @@ class Plugin:
         """Enable/disable the charge cap and set its threshold. Persists, applies via
         readback, and returns the resulting charge_limit block."""
         self._init()
+        generation = self._cancel_charge_limit_reconcile("new_intent")
         lo, hi = self._charge_limit.range()
         percent = max(lo, min(hi, int(percent)))
         self._settings["charge_limit_enabled"] = bool(enabled)
         self._settings["charge_limit_percent"] = percent
         self._save()
-        self._apply_charge_limit()
-        return self._charge_limit_state()
+        await self._offload_call(
+            lambda: (
+                self._apply_charge_limit()
+                if self._charge_limit_intent_current(generation)
+                else None
+            )
+        )
+        if self._charge_limit_intent_current(generation):
+            self._schedule_charge_limit_reconcile("set_charge_limit")
+        return await self._offload_call(self._charge_limit_state)
 
     # ---- Pantalla (panel color via gamescope) -------------------------------
     def _reapply_color(self) -> None:
@@ -6331,6 +6600,7 @@ class Plugin:
         decky.logger.info("Panel de Control unloaded")
 
     def _prepare_shutdown(self) -> None:
+        self._cancel_charge_limit_reconcile("shutdown")
         self._shutting_down = True
         if not getattr(self, "_hud_shutdown", False):
             self._hud_shutdown = True
