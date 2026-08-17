@@ -1,10 +1,5 @@
 import type { ReactNode } from "react";
 
-// The one place that reaches INTERNAL Decky Loader globals
-// (`window.DeckyPluginLoader`, `window.DeckyBackend`) — NOT part of @decky/api.
-// Centralised + guarded so a Decky version that moves them degrades in one spot.
-// No @decky/ui import here so pure modules can consume it.
-
 export const PDC_QAM_TAB_ID = 0x504443;
 
 const PDC_QAM_TAB_OWNER = "panel-de-control";
@@ -21,10 +16,16 @@ interface DeckyQuickAccessTab extends QuickAccessTabView {
   __pdcOwner?: string;
 }
 
+interface RenderedQuickAccessTab {
+  decky?: boolean;
+  key: unknown;
+}
+
 interface DeckyTabsHook {
   tabs: DeckyQuickAccessTab[];
   add(tab: DeckyQuickAccessTab): void;
   removeById(id: number): void;
+  render(existingTabs: RenderedQuickAccessTab[], visible: boolean): void;
 }
 
 export interface QuickAccessTabRegistration {
@@ -45,6 +46,7 @@ function tabsHookOf(host: unknown): DeckyTabsHook | null {
     || !Array.isArray(hook.tabs)
     || typeof hook.add !== "function"
     || typeof hook.removeById !== "function"
+    || typeof hook.render !== "function"
     || !hook.tabs.some((tab) => tab?.id === DECKY_PLUGIN_TAB_ID)
   ) {
     return null;
@@ -60,10 +62,87 @@ function ownsQamTab(tab: DeckyQuickAccessTab): boolean {
   return tab.__pdcOwner === PDC_QAM_TAB_OWNER;
 }
 
+export function quickAccessTabDiagnostics(
+  host: unknown = window,
+  qamDocument: Document | null = null,
+) {
+  let hook: { tabs?: unknown } | null = null;
+  try {
+    const candidate = (host as { __TABS_HOOK_INSTANCE?: unknown } | null)
+      ?.__TABS_HOOK_INSTANCE;
+    if (candidate && typeof candidate === "object") hook = candidate;
+  } catch {}
+
+  const tabs = Array.isArray(hook?.tabs) ? hook.tabs : null;
+  const registryIds = tabs?.map((tab) => (
+    tab && typeof tab === "object" ? (tab as { id?: unknown }).id : undefined
+  )) ?? null;
+
+  let renderedIds: string[] | null = null;
+  let roots: Element[] | null = null;
+  try {
+    if (qamDocument) {
+      renderedIds = Array.from(
+        qamDocument.querySelectorAll<HTMLElement>("[id^='quickaccess_tab_']"),
+        (node) => node.id,
+      );
+      roots = Array.from(qamDocument.querySelectorAll(".pdc-root"));
+    }
+  } catch {}
+
+  return {
+    hook_available: hook !== null,
+    registry_count: registryIds?.length ?? null,
+    registry_unique_count: registryIds ? new Set(registryIds).size : null,
+    registry_decky_count: registryIds?.filter((id) => id === DECKY_PLUGIN_TAB_ID).length ?? null,
+    registry_pdc_count: registryIds?.filter((id) => id === PDC_QAM_TAB_ID).length ?? null,
+    qam_document_available: qamDocument !== null,
+    qam_document_hidden: qamDocument?.hidden ?? null,
+    rendered_count: renderedIds?.length ?? null,
+    rendered_unique_count: renderedIds ? new Set(renderedIds).size : null,
+    rendered_decky_count:
+      renderedIds?.filter((id) => id === `quickaccess_tab_${DECKY_PLUGIN_TAB_ID}`).length ?? null,
+    rendered_pdc_count:
+      renderedIds?.filter((id) => id === `quickaccess_tab_${PDC_QAM_TAB_ID}`).length ?? null,
+    panel_root_count: roots?.length ?? null,
+    visible_panel_root_count: roots?.filter((node) => {
+      const rect = node.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    }).length ?? null,
+  };
+}
+
+function reconcilesTabsExactly(
+  hook: DeckyTabsHook,
+  desiredTabs: DeckyQuickAccessTab[],
+): boolean {
+  const nativeTab = Object.freeze({ key: "pdc-native-probe" });
+  const renderedTabs: RenderedQuickAccessTab[] = [
+    nativeTab,
+    ...hook.tabs.map((tab) => ({ decky: true, key: tab.id })),
+  ];
+  const probeTabs = desiredTabs.map((tab) => Object.freeze({ ...tab }));
+  if (new Set(probeTabs.map((tab) => tab.id)).size !== probeTabs.length) return false;
+
+  const probeHook = Object.create(hook) as DeckyTabsHook;
+  Object.defineProperty(probeHook, "tabs", { value: Object.freeze(probeTabs) });
+  hook.render.call(probeHook, renderedTabs, false);
+
+  return renderedTabs.length === probeTabs.length + 1
+    && renderedTabs[0] === nativeTab
+    && renderedTabs.slice(1).every((tab, index) => (
+      tab.decky === true && tab.key === probeTabs[index].id
+    ));
+}
+
 function removeOwnedQamTabs(hook: DeckyTabsHook): boolean {
   const matching = matchingQamTabs(hook);
   if (matching.some((tab) => !ownsQamTab(tab))) return false;
-  if (matching.length > 0) hook.removeById(PDC_QAM_TAB_ID);
+  if (matching.length > 0) {
+    const remaining = hook.tabs.filter((tab) => tab.id !== PDC_QAM_TAB_ID);
+    if (!reconcilesTabsExactly(hook, remaining)) return false;
+    hook.removeById(PDC_QAM_TAB_ID);
+  }
   return matchingQamTabs(hook).length === 0;
 }
 
@@ -89,6 +168,7 @@ export function registerQuickAccessTab(
       id: PDC_QAM_TAB_ID,
       __pdcOwner: PDC_QAM_TAB_OWNER,
     };
+    if (!reconcilesTabsExactly(hook, [...hook.tabs, tab])) return NO_QAM_TAB;
     try {
       hook.add(tab);
     } catch {
@@ -108,10 +188,7 @@ export function registerQuickAccessTab(
         if (disposed) return;
         disposed = true;
         try {
-          const matching = matchingQamTabs(hook);
-          if (matching.includes(tab) && matching.every(ownsQamTab)) {
-            hook.removeById(PDC_QAM_TAB_ID);
-          }
+          if (matchingQamTabs(hook).includes(tab)) removeOwnedQamTabs(hook);
         } catch {}
       },
     };
@@ -139,7 +216,6 @@ export function disabledPlugins(): string[] {
   return pluginNames("disabledPlugins");
 }
 
-// Rejects if the global is absent or the call throws, so callers decide how to degrade.
 export async function callBackend(method: string, ...args: unknown[]): Promise<unknown> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const backend = (window as any).DeckyBackend;
@@ -147,13 +223,9 @@ export async function callBackend(method: string, ...args: unknown[]): Promise<u
   return backend.call(method, ...args);
 }
 
-// Make a plugin the active QAM plugin. No-op (user lands on the Decky plugin list)
-// if the setter is gone.
 export function setActivePlugin(name: string): void {
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (window as any).DeckyPluginLoader?.deckyState?.setActivePlugin?.(name);
-  } catch {
-    /* land on the Decky plugin list */
-  }
+  } catch {}
 }

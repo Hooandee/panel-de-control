@@ -1,5 +1,19 @@
 # Changelog
 
+## Sin publicar / Unreleased / Non pubblicato
+
+### Español
+
+* **QAM:** Evita que Decky duplique iconos y paneles al recargar plugins o cambiar de pestaña. Panel de Control solo usa su acceso directo cuando Decky puede reconciliar las pestañas exactamente; en caso contrario, conserva el panel completo desde la entrada estándar de Decky. Los nuevos reportes incluyen conteos QAM acotados para distinguir pestañas duplicadas de problemas de layout. Este diagnóstico no incluye texto ni identificadores de las pestañas.
+
+### English
+
+* **QAM:** Prevents Decky from duplicating icons and panels when plugins reload or tabs change. Panel de Control uses its direct shortcut only when Decky can reconcile tabs exactly; otherwise, the full panel remains available through the standard Decky entry. New reports include bounded QAM counts to distinguish duplicate tabs from layout problems. These diagnostics contain no tab text or identifiers.
+
+### Italiano
+
+* **QAM:** Impedisce a Decky di duplicare icone e pannelli durante il ricaricamento dei plugin o il cambio di scheda. Panel de Control usa il proprio accesso diretto solo quando Decky riesce a riconciliare esattamente le schede; in caso contrario, il pannello completo resta disponibile dalla voce standard di Decky. I nuovi report includono conteggi QAM limitati per distinguere le schede duplicate dai problemi di layout. Questa diagnostica non include testo né identificatori delle schede.
+
 ## [0.37.5](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.4...panel-de-control-v0.37.5) (2026-08-17)
 
 ### Español

@@ -7,16 +7,17 @@ import { getDevice, submitReport, DeviceInfo, ReportResult } from "../api";
 import {
   REPORT_CATEGORIES,
   ReportCategory,
+  buildReportContext,
   canSubmit,
-  displayReportContext,
   toggleCategory,
 } from "../report/logic";
 import { FocusRoot } from "./FocusRoot";
 import { launchReportContext } from "../launch/reportContext";
+import { quickAccessTabDiagnostics } from "../deckyInternal";
+import { getQamDocument } from "../qamDocument";
 
 type Phase = "form" | "sending" | "done" | "error";
 
-// One selectable category row: a checkbox box + label, accent-outlined when on.
 const CategoryChip: FC<{ label: string; on: boolean; onClick: () => void }> = ({
   label,
   on,
@@ -75,16 +76,17 @@ const ReportBody: FC<{ closeModal?: () => void }> = ({ closeModal }) => {
 
   const submit = async () => {
     setPhase("sending");
-    // Collect category-specific signals that exist only in the frontend.
     const launchContext = selected.includes("launch")
       ? await launchReportContext().catch(() => ({}))
       : {};
     const steamDisplay =
       typeof SteamClient === "undefined" ? undefined : SteamClient?.System?.Display;
-    const context = {
-      ...launchContext,
-      ...displayReportContext(selected, steamDisplay),
-    };
+    const context = buildReportContext(
+      selected,
+      steamDisplay,
+      launchContext,
+      quickAccessTabDiagnostics(window, getQamDocument()),
+    );
     submitReport(selected, text, context)
       .then((r) => {
         setResult(r);
@@ -101,9 +103,7 @@ const ReportBody: FC<{ closeModal?: () => void }> = ({ closeModal }) => {
     try {
       navigator.clipboard?.writeText(result.code);
       setCopied(true);
-    } catch {
-      /* clipboard may be unavailable in gamescope - ignore */
-    }
+    } catch {}
   };
 
   const wrap = (children: React.ReactNode) => (
@@ -183,7 +183,6 @@ const ReportBody: FC<{ closeModal?: () => void }> = ({ closeModal }) => {
     );
   }
 
-  // phase === "form"
   return wrap(
     <>
       <div style={{ fontSize: theme.font.body, color: theme.color.textMuted }}>
@@ -254,7 +253,6 @@ const ReportModal: FC<{ closeModal?: () => void }> = ({ closeModal }) => (
   </ModalRoot>
 );
 
-/** Open the full-screen "report a problem" flow. */
 export function openReportModal(): void {
   showModal(<ReportModal />, window);
 }

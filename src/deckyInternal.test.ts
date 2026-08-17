@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import {
   PDC_QAM_TAB_ID,
+  quickAccessTabDiagnostics,
   registerQuickAccessTab,
   removeOwnedQuickAccessTabs,
 } from "./deckyInternal";
 
 type FakeTab = Record<string, unknown> & { id: number };
+type RenderedTab = Record<string, unknown> & { decky?: boolean; key: number | string };
 
 function createHook() {
   const hook = {
@@ -17,8 +19,26 @@ function createHook() {
     removeById(id: number) {
       hook.tabs = hook.tabs.filter((tab) => tab.id !== id);
     },
+    render(this: { tabs: FakeTab[] }, existingTabs: RenderedTab[]) {
+      const nativeTabs = existingTabs.filter((tab) => !tab.decky);
+      existingTabs.splice(
+        0,
+        existingTabs.length,
+        ...nativeTabs,
+        ...this.tabs.map((tab) => ({ decky: true, key: tab.id })),
+      );
+    },
   };
   return hook;
+}
+
+function appendRegistryOnCountChange(
+  this: { tabs: FakeTab[] },
+  existingTabs: RenderedTab[],
+) {
+  const deckyTabCount = existingTabs.filter((tab) => tab.decky).length;
+  if (deckyTabCount === this.tabs.length) return;
+  existingTabs.push(...this.tabs.map((tab) => ({ decky: true, key: tab.id })));
 }
 
 describe("registerQuickAccessTab", () => {
@@ -46,6 +66,32 @@ describe("registerQuickAccessTab", () => {
     result.dispose();
 
     expect(hook.tabs.filter((tab) => tab.id === PDC_QAM_TAB_ID)).toHaveLength(0);
+  });
+
+  it("falls back when Decky appends the full registry after a tab count change", () => {
+    const hook = createHook();
+    hook.render = appendRegistryOnCountChange;
+
+    const result = registerQuickAccessTab(
+      { title: "Panel de Control", content: "panel", icon: "icon" },
+      { __TABS_HOOK_INSTANCE: hook },
+    );
+
+    expect(result.registered).toBe(false);
+    expect(hook.tabs.map((tab) => tab.id)).toEqual([999]);
+  });
+
+  it("does not remove a registered tab if Decky stops reconciling exactly", () => {
+    const hook = createHook();
+    const result = registerQuickAccessTab(
+      { title: "Panel de Control", content: "panel", icon: "icon" },
+      { __TABS_HOOK_INSTANCE: hook },
+    );
+    hook.render = appendRegistryOnCountChange;
+
+    result.dispose();
+
+    expect(hook.tabs.filter((tab) => tab.id === PDC_QAM_TAB_ID)).toHaveLength(1);
   });
 
   it("replaces its stale registration without allowing the stale disposer to remove the new one", () => {
@@ -182,6 +228,7 @@ describe("registerQuickAccessTab", () => {
       { __TABS_HOOK_INSTANCE: withoutDecky },
       { __TABS_HOOK_INSTANCE: { tabs: [{ id: 999 }], removeById() {} } },
       { __TABS_HOOK_INSTANCE: { tabs: [{ id: 999 }], add() {} } },
+      { __TABS_HOOK_INSTANCE: { tabs: [{ id: 999 }], add() {}, removeById() {} } },
     ];
 
     for (const host of hosts) {
@@ -189,5 +236,63 @@ describe("registerQuickAccessTab", () => {
       expect(result.registered).toBe(false);
       expect(() => result.dispose()).not.toThrow();
     }
+  });
+});
+
+describe("quickAccessTabDiagnostics", () => {
+  it("uses null counts when QAM internals are unavailable", () => {
+    expect(quickAccessTabDiagnostics({}, null)).toEqual({
+      hook_available: false,
+      registry_count: null,
+      registry_unique_count: null,
+      registry_decky_count: null,
+      registry_pdc_count: null,
+      qam_document_available: false,
+      qam_document_hidden: null,
+      rendered_count: null,
+      rendered_unique_count: null,
+      rendered_decky_count: null,
+      rendered_pdc_count: null,
+      panel_root_count: null,
+      visible_panel_root_count: null,
+    });
+  });
+
+  it("reports bounded QAM counts without exposing tab identifiers", () => {
+    const host = {
+      __TABS_HOOK_INSTANCE: {
+        tabs: [{ id: 999 }, { id: PDC_QAM_TAB_ID }, { id: PDC_QAM_TAB_ID }],
+      },
+    };
+    const visibleRoot = { getBoundingClientRect: () => ({ width: 320, height: 600 }) };
+    const hiddenRoot = { getBoundingClientRect: () => ({ width: 0, height: 0 }) };
+    const doc = {
+      hidden: false,
+      querySelectorAll(selector: string) {
+        if (selector === ".pdc-root") return [visibleRoot, hiddenRoot];
+        return [
+          { id: "quickaccess_tab_0" },
+          { id: "quickaccess_tab_999" },
+          { id: "quickaccess_tab_999" },
+          { id: `quickaccess_tab_${PDC_QAM_TAB_ID}` },
+        ];
+      },
+    };
+
+    expect(quickAccessTabDiagnostics(host, doc as unknown as Document)).toEqual({
+      hook_available: true,
+      registry_count: 3,
+      registry_unique_count: 2,
+      registry_decky_count: 1,
+      registry_pdc_count: 2,
+      qam_document_available: true,
+      qam_document_hidden: false,
+      rendered_count: 4,
+      rendered_unique_count: 3,
+      rendered_decky_count: 2,
+      rendered_pdc_count: 1,
+      panel_root_count: 2,
+      visible_panel_root_count: 1,
+    });
   });
 });
