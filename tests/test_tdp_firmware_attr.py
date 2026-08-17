@@ -3,7 +3,7 @@ import inspect
 
 from device_registry import detect
 from tdp.firmware_attr import FirmwareAttrBackend
-from tdp.types import TdpLimits
+from tdp.types import RailReading, TdpLimits, TdpObservation
 
 FALLBACK = TdpLimits(min_w=4, default_w=15, max_w=30, max_ac_w=30)
 
@@ -20,6 +20,29 @@ def _mk_full(root, driver="lenovo-wmi-other-0"):
     _mk_attr(root, driver, "ppt_pl1_spl", 35, 5, 35)
     _mk_attr(root, driver, "ppt_pl2_sppt", 37, 5, 37)
     _mk_attr(root, driver, "ppt_pl3_fppt", 45, 5, 45)
+
+
+def _settling_backend(root, *delays):
+    _mk_full(root)
+    return FirmwareAttrBackend(
+        "lenovo-wmi-other",
+        FALLBACK,
+        root=root,
+        readback_settle_delays=delays,
+    )
+
+
+def _observation(backend, pl1, pl2, pl3):
+    return TdpObservation(
+        readable=True,
+        surfaces={
+            backend.name: {
+                "pl1": RailReading(pl1),
+                "pl2": RailReading(pl2),
+                "pl3": RailReading(pl3),
+            },
+        },
+    )
 
 
 def _mk_profile(root, name="lenovo-wmi-gamezone", cur="balanced",
@@ -74,6 +97,83 @@ def test_set_tdp_writes_pl1_and_reads_back(tmp_path):
     spl = open(os.path.join(root, "sys/class/firmware-attributes/lenovo-wmi-other-0/attributes/ppt_pl1_spl/current_value")).read().strip()
     assert spl == "25"
     assert b.read_applied() == 25
+
+
+def test_set_levels_rechecks_async_readback_without_rewriting(
+    tmp_path,
+    monkeypatch,
+):
+    root = str(tmp_path)
+    b = _settling_backend(root, 0)
+    stale = _observation(b, 35, 37, 45)
+    original_observe = b.observe
+    observations = iter((stale,))
+
+    def observe_after_firmware_settles():
+        return next(observations, None) or original_observe()
+
+    writes = []
+    original_write = b._write
+
+    def record_write(path, value):
+        writes.append((path, value))
+        return original_write(path, value)
+
+    monkeypatch.setattr(b, "observe", observe_after_firmware_settles)
+    monkeypatch.setattr(b, "_write", record_write)
+
+    result = b.set_levels(20, 20, 20, ac=True)
+
+    assert result.ok is True
+    assert result.applied_w == 20
+    assert [
+        value
+        for path, value in writes
+        if path.endswith("current_value")
+    ] == [20, 20, 20]
+
+
+def test_set_levels_keeps_failure_when_async_readback_never_converges(
+    tmp_path,
+    monkeypatch,
+):
+    root = str(tmp_path)
+    b = _settling_backend(root, 0, 0)
+    stale = _observation(b, 35, 37, 45)
+    monkeypatch.setattr(b, "observe", lambda: stale)
+
+    result = b.set_levels(20, 20, 20, ac=True)
+
+    assert result.ok is False
+    assert result.applied_w == 35
+    assert f"{b.name}/pl1=35" in result.detail
+
+
+def test_set_levels_does_not_wait_after_a_write_error(tmp_path, monkeypatch):
+    root = str(tmp_path)
+    b = _settling_backend(root, 0)
+    original_write = b._write
+    pl2_path = b._attr("ppt_pl2_sppt")
+
+    def reject_pl2(path, value):
+        return False if path == pl2_path else original_write(path, value)
+
+    observations = 0
+    original_observe = b.observe
+
+    def count_observations():
+        nonlocal observations
+        observations += 1
+        return original_observe()
+
+    monkeypatch.setattr(b, "_write", reject_pl2)
+    monkeypatch.setattr(b, "observe", count_observations)
+
+    result = b.set_levels(20, 20, 20, ac=True)
+
+    assert result.ok is False
+    assert observations == 1
+    assert f"{b.name}/pl2" in result.detail
 
 
 def test_set_tdp_clamps_to_profile_then_live_firmware(tmp_path):

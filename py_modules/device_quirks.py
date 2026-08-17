@@ -25,6 +25,16 @@ def is_legion_go_s_83n6(device, root: str = "/") -> bool:
     )
 
 
+def legion_go_s_83l3_firmware_attr_quirks(device, root: str = "/") -> dict:
+    if (
+        getattr(device, "key", None) != "legion_go_s"
+        or _read_dmi(root, "sys_vendor").casefold() != "lenovo"
+        or _read_dmi(root, "product_name").casefold() != "83l3"
+    ):
+        return {}
+    return {"readback_settle_delays": (0.05, 0.10, 0.20, 0.40)}
+
+
 def legion_go_s_83n6_rail_floors(device, root: str = "/") -> dict[str, int]:
     if is_legion_go_s_83n6(device, root):
         return {"pl2": 15, "pl3": 20}

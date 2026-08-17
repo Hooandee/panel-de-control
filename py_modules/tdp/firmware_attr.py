@@ -1,5 +1,6 @@
 import glob
 import os
+import time
 
 from sysfs import read_str
 from tdp.backend import TDPBackend
@@ -71,6 +72,7 @@ class FirmwareAttrBackend(TDPBackend):
         rail_floors=None,
         ignored_live_maxes=None,
         cap_boost_to_active=False,
+        readback_settle_delays=None,
     ):
         self.name = f"firmware-attr:{driver_prefix}"
         self._fallback = fallback
@@ -80,6 +82,9 @@ class FirmwareAttrBackend(TDPBackend):
         self._rail_floors = _normalise_rail_floors(rail_floors)
         self._ignored_live_maxes = _normalise_rail_values(ignored_live_maxes)
         self.cap_boost_to_active = bool(cap_boost_to_active)
+        self._readback_settle_delays = tuple(
+            float(delay) for delay in (readback_settle_delays or ())
+        )
         self._dir = self._find_driver_dir(driver_prefix)
         self.supported = self._dir is not None and os.path.exists(self._attr("ppt_pl1_spl"))
         self._pp_dir = self._find_profile_dir()  # static, resolved once
@@ -287,6 +292,16 @@ class FirmwareAttrBackend(TDPBackend):
         failed.extend(self._write_legacy(targets))
         observation = self.observe()
         mismatches = self._observation_mismatches(observation, targets)
+        if not failed:
+            for delay in self._readback_settle_delays:
+                if not mismatches:
+                    break
+                time.sleep(delay)
+                observation = self.observe()
+                mismatches = self._observation_mismatches(
+                    observation,
+                    targets,
+                )
         applied = observation.surfaces.get(self.name, {}).get("pl1")
         applied_w = applied.applied_w if applied else None
         problems = failed + mismatches
@@ -344,6 +359,9 @@ class FirmwareAttrBackend(TDPBackend):
         return {
             "boost_capped_to_active": self.cap_boost_to_active,
             "ignored_live_maxes": dict(self._ignored_live_maxes),
+            "readback_settle_ms": round(
+                sum(self._readback_settle_delays) * 1000
+            ),
             "reported_live_bounds": reported,
         }
 
