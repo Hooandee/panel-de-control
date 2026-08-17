@@ -1,5 +1,19 @@
 # Changelog
 
+## Sin publicar / Unreleased / Non pubblicato
+
+### Español
+
+* **Batería:** Separa el límite solicitado del valor leído y recupera, durante una ventana acotada, los umbrales que el firmware o el sistema restablecen después del arranque, la reanudación o un cambio de contexto. La redetección queda limitada a perfiles ROG y Steam Deck confirmados; Lenovo conserva su modo booleano y MSI y los equipos genéricos no ganan soporte. Los reportes incluyen el backend, el readback y el resultado de cada comprobación sin rutas ni salida cruda.
+
+### English
+
+* **Battery:** Separates the requested charge limit from hardware readback and restores thresholds reset by firmware or the operating system within a bounded window after startup, resume, or a context change. Re-detection is limited to confirmed ROG and Steam Deck profiles; Lenovo keeps its boolean conservation mode, while MSI and generic devices gain no new support. Reports include the backend, readback, and each verification result without paths or raw output.
+
+### Italiano
+
+* **Batteria:** Separa il limite richiesto dal valore letto e ripristina, entro una finestra limitata, le soglie reimpostate dal firmware o dal sistema dopo l'avvio, la riattivazione o un cambio di contesto. Il nuovo rilevamento è limitato ai profili ROG e Steam Deck confermati; Lenovo mantiene la modalità di conservazione booleana, mentre MSI e i dispositivi generici non ottengono nuovo supporto. I report includono backend, valore letto e risultato di ogni verifica senza percorsi né output grezzo.
+
 ## [0.37.6](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.5...panel-de-control-v0.37.6) (2026-08-17)
 
 ### Español
