@@ -14,6 +14,13 @@
 
 * **TDP:** Corregge i falsi rifiuti del TDP manuale su Lenovo Legion Go S 83L3 mentre il firmware aggiorna PL1, PL2 e PL3 in modo asincrono. Panel de Control conferma il readback entro una finestra limitata senza ripetere le scritture e conserva l'errore reale se i limiti non convergono. Le altre varianti e gli altri backend mantengono il percorso precedente.
 
+## [0.37.5](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.4...panel-de-control-v0.37.5) (2026-08-17)
+
+
+### Bug Fixes
+
+* confirm asynchronous TDP readback on Legion Go S 83L3 ([#474](https://github.com/Hooandee/panel-de-control/issues/474)) ([29de32a](https://github.com/Hooandee/panel-de-control/commit/29de32a901efb4414a424a253c02fe01e6fad033))
+
 ## [0.37.4](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.3...panel-de-control-v0.37.4) (2026-08-17)
 
 
