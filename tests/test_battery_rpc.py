@@ -4,6 +4,7 @@ Bootstraps a real Plugin with a fake decky module and a fake TDP backend (so
 _init never touches live hardware), then injects a fake charge-limit backend.
 """
 import asyncio
+import concurrent.futures
 import importlib
 import sys
 import threading
@@ -683,6 +684,61 @@ def test_latest_of_two_queued_intents_applies_private_candidate(
     assert candidate.get() == 60
     assert p._charge_limit_candidate is None
     assert isinstance(p._charge_limit, NullChargeLimit)
+
+
+def test_cancelled_queued_intent_still_applies_private_candidate(
+    tmp_path, monkeypatch
+):
+    candidate = _late_probe_backend(tmp_path, "sysfs")
+    candidate.set(80)
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=NullChargeLimit())
+    p._init()
+    p._device = types.SimpleNamespace(key="rog_xbox_ally_x")
+    p._settings["charge_limit_enabled"] = True
+    p._settings["charge_limit_percent"] = 80
+    p._charge_limit_candidate = candidate
+    worker_started = threading.Event()
+    release_worker = threading.Event()
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    p._apply_executor = executor
+
+    def block_worker():
+        worker_started.set()
+        release_worker.wait(timeout=1)
+
+    executor.submit(block_worker)
+
+    async def scenario():
+        while not worker_started.is_set():
+            await asyncio.sleep(0)
+        rpc = asyncio.create_task(p.set_charge_limit(False, 80))
+        while not p._offload_futures:
+            await asyncio.sleep(0)
+        rpc.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await rpc
+        release_worker.set()
+        await p._drain_offloaded()
+        for _ in range(20):
+            if (
+                p._charge_limit_reconciliation["trigger"]
+                == "set_charge_limit"
+            ):
+                break
+            await asyncio.sleep(0)
+        reconcile = p._charge_limit_reconcile_task
+        if reconcile is not None:
+            reconcile.cancel()
+
+    try:
+        asyncio.run(scenario())
+    finally:
+        release_worker.set()
+        executor.shutdown(wait=True)
+
+    assert candidate.get() == 100
+    assert p._charge_limit_candidate is None
+    assert p._charge_limit_reconciliation["trigger"] == "set_charge_limit"
 
 
 def test_latest_of_two_queued_reapplies_applies_private_candidate(

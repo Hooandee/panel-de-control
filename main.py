@@ -446,6 +446,7 @@ class Plugin:
         self._charge_limit_verify_delays = _CHARGE_LIMIT_VERIFY_DELAYS
         self._charge_limit_generation = 0
         self._charge_limit_reconcile_task = None
+        self._charge_limit_apply_tasks = set()
         self._charge_limit_candidate = None
         self._charge_limit_history = deque(maxlen=8)
         self._charge_limit_reconciliation = {
@@ -5528,6 +5529,21 @@ class Plugin:
         self._settings["charge_limit_enabled"] = bool(enabled)
         self._settings["charge_limit_percent"] = percent
         self._save()
+        apply_task = asyncio.create_task(
+            self._apply_charge_limit_intent(generation)
+        )
+        self._charge_limit_apply_tasks.add(apply_task)
+
+        def finished(done):
+            self._charge_limit_apply_tasks.discard(done)
+            if not done.cancelled():
+                done.exception()
+
+        apply_task.add_done_callback(finished)
+        await asyncio.shield(apply_task)
+        return await self._offload_call(self._charge_limit_state)
+
+    async def _apply_charge_limit_intent(self, generation) -> None:
         await self._offload_call(
             lambda: (
                 self._apply_charge_limit(generation)
@@ -5537,7 +5553,6 @@ class Plugin:
         )
         if self._charge_limit_intent_current(generation):
             self._schedule_charge_limit_reconcile("set_charge_limit")
-        return await self._offload_call(self._charge_limit_state)
 
     # ---- Pantalla (panel color via gamescope) -------------------------------
     def _reapply_color(self) -> None:
