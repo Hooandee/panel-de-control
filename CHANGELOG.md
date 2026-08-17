@@ -14,6 +14,13 @@
 
 * **Batteria:** Separa il limite richiesto dal valore letto e ripristina, entro una finestra limitata, le soglie reimpostate dal firmware o dal sistema dopo l'avvio, la riattivazione o un cambio di contesto. Solo l'acquisizione di un backend da uno stato inizialmente non supportato è limitata ai profili ROG e Steam Deck confermati; il recupero della stessa classe resta disponibile nei percorsi già supportati. Lenovo mantiene la modalità di conservazione booleana, mentre MSI e i dispositivi generici non ottengono nuovo supporto. I report includono backend, valore letto e risultato di ogni verifica senza percorsi né output grezzo.
 
+## [0.37.7](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.6...panel-de-control-v0.37.7) (2026-08-17)
+
+
+### Bug Fixes
+
+* **battery:** recupera límites de carga restablecidos ([#479](https://github.com/Hooandee/panel-de-control/issues/479)) ([ed8e0a4](https://github.com/Hooandee/panel-de-control/commit/ed8e0a4867829ccc60e8c77d87435e324893ffc6))
+
 ## [0.37.6](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.5...panel-de-control-v0.37.6) (2026-08-17)
 
 ### Español
