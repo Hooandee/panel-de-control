@@ -6,6 +6,7 @@ from tdp import factory
 from tdp.backend import NullBackend
 from tdp.factory import select_backend
 from tdp.reconcile import build_targets
+from tdp.types import RailReading, TdpObservation
 
 
 def _p(key):
@@ -56,6 +57,19 @@ def _set_fw_max(root, rail, value):
         handle.write(str(value))
 
 
+def _observation(backend, pl1, pl2, pl3):
+    return TdpObservation(
+        readable=True,
+        surfaces={
+            backend.name: {
+                "pl1": RailReading(pl1),
+                "pl2": RailReading(pl2),
+                "pl3": RailReading(pl3),
+            },
+        },
+    )
+
+
 _NO_RYZENADJ = lambda: None  # noqa: E731
 
 
@@ -69,6 +83,7 @@ def test_rog_uses_asus_armoury_firmware_attr(tmp_path):
         "backend": "firmware-attr:asus-armoury",
         "supported": True,
     },)
+    assert b.diagnostics()["readback_settle_ms"] == 0
 
 
 def test_legion_uses_lenovo_firmware_attr(tmp_path):
@@ -76,6 +91,7 @@ def test_legion_uses_lenovo_firmware_attr(tmp_path):
     _mk_fw(root, "lenovo-wmi-other-0")
     b = select_backend(_p("legion_go_2"), root=root, ryzenadj_resolve=_NO_RYZENADJ)
     assert b.supported and "lenovo-wmi-other" in b.name
+    assert b.diagnostics()["readback_settle_ms"] == 0
 
 
 def test_only_exact_legion_go_s_83n6_gets_measured_rail_floors(tmp_path):
@@ -99,6 +115,35 @@ def test_only_exact_legion_go_s_83n6_gets_measured_rail_floors(tmp_path):
 
     assert getattr(exact, "_rail_floors", None) == {"pl2": 15, "pl3": 20}
     assert getattr(nearby, "_rail_floors", None) == {}
+
+
+def test_exact_legion_go_s_83l3_waits_for_async_firmware_readback(
+    tmp_path,
+    monkeypatch,
+):
+    root = str(tmp_path)
+    _mk_fw(root, "lenovo-wmi-other-0")
+    _mk_dmi(root, "LENOVO", "83L3")
+    backend = select_backend(
+        _p("legion_go_s"),
+        root=root,
+        ryzenadj_resolve=_NO_RYZENADJ,
+    )
+    stale = _observation(backend, 15, 15, 15)
+    original_observe = backend.observe
+    observations = iter((stale,))
+
+    def observe_after_firmware_settles():
+        return next(observations, None) or original_observe()
+
+    monkeypatch.setattr(backend, "observe", observe_after_firmware_settles)
+    monkeypatch.setattr("tdp.firmware_attr.time.sleep", lambda _delay: None)
+
+    result = backend.set_levels(20, 20, 20, ac=True)
+
+    assert result.ok is True
+    assert result.applied_w == 20
+    assert backend.diagnostics()["readback_settle_ms"] == 750
 
 
 def test_exact_legion_go_s_83n6_applies_profile_safe_target_despite_low_firmware_max(tmp_path):
@@ -179,6 +224,7 @@ def test_exact_legion_go_s_83n6_diagnostics_keep_reported_sentinel_max(tmp_path)
     assert backend.diagnostics() == {
         "boost_capped_to_active": True,
         "ignored_live_maxes": {"pl1": 15, "pl2": 15, "pl3": 20},
+        "readback_settle_ms": 0,
         "reported_live_bounds": {
             "pl1": {"min": 5, "max": 15},
             "pl2": {"min": 5, "max": 15},

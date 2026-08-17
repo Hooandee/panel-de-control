@@ -1,5 +1,6 @@
 from device_quirks import (
     is_gpd_win_mini_2025,
+    legion_go_s_83l3_firmware_attr_quirks,
     legion_go_s_83n6_firmware_attr_quirks,
     legion_go_s_83n6_rail_floors,
 )
@@ -34,6 +35,7 @@ def _candidates(device, fallback, root, ryzenadj):
             profile_name="lenovo-wmi-gamezone",
             is_generic=generic,
             rail_floors=legion_go_s_83n6_rail_floors(device, root),
+            **legion_go_s_83l3_firmware_attr_quirks(device, root),
             **legion_go_s_83n6_firmware_attr_quirks(device, root),
         )
 
