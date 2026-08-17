@@ -446,6 +446,7 @@ class Plugin:
         self._charge_limit_verify_delays = _CHARGE_LIMIT_VERIFY_DELAYS
         self._charge_limit_generation = 0
         self._charge_limit_reconcile_task = None
+        self._charge_limit_candidate = None
         self._charge_limit_history = deque(maxlen=8)
         self._charge_limit_reconciliation = {
             "generation": 0,
@@ -3165,6 +3166,10 @@ class Plugin:
         )
 
     def _apply_charge_limit(self) -> None:
+        self._apply_selected_charge_limit()
+        self._apply_pending_charge_limit_candidate()
+
+    def _apply_selected_charge_limit(self) -> None:
         """Write the persisted charge limit (or 100 = no cap when disabled). Safe to
         call on any device — a Null backend no-ops."""
         if not self._charge_limit.supported:
@@ -3192,6 +3197,32 @@ class Plugin:
                 None,
                 self._charge_limit.disable,
             )
+
+    def _apply_pending_charge_limit_candidate(self) -> None:
+        pending = getattr(self, "_charge_limit_candidate", None)
+        if pending is None:
+            return
+        backend = pending
+        if backend is self._charge_limit:
+            self._charge_limit_candidate = None
+            return
+        if not getattr(backend, "supported", False):
+            return
+        if (
+            not self._module_enabled("system")
+            or not bool(self._settings.get("charge_limit_enabled", False))
+        ):
+            operation = backend.disable
+        else:
+            requested = int(self._settings.get("charge_limit_percent", 80))
+
+            def operation():
+                return backend.set(requested)
+        applied = operation()
+        if applied is False:
+            applied = operation()
+        if applied and self._charge_limit_candidate is pending:
+            self._charge_limit_candidate = None
 
     def _charge_limit_generation_current(self, generation) -> bool:
         return (
@@ -3353,6 +3384,9 @@ class Plugin:
         wrote = False
         confirmed = readback
         if readback != requested:
+            pending = candidate
+            self._charge_limit_candidate = pending
+
             def write_candidate_if_current():
                 if not self._charge_limit_generation_current(generation):
                     return None
@@ -3362,9 +3396,15 @@ class Plugin:
             if not self._charge_limit_generation_current(generation):
                 return None
             confirmed = await self._offload_call(candidate.get)
+            if not self._charge_limit_generation_current(generation):
+                return None
             if not applied or confirmed != requested:
+                if self._charge_limit_candidate is pending:
+                    self._charge_limit_candidate = None
                 return None
             wrote = True
+            if self._charge_limit_candidate is pending:
+                self._charge_limit_candidate = None
         self._charge_limit = candidate
         return _ChargeLimitProbe(readback, confirmed, wrote)
 
@@ -3391,6 +3431,8 @@ class Plugin:
                 reprobe = await self._reprobe_charge_limit(
                     generation, requested
                 )
+                if not self._charge_limit_generation_current(generation):
+                    return
                 if reprobe is None:
                     checks += 1
                     last_readback = None
@@ -3463,6 +3505,8 @@ class Plugin:
                 if not self._charge_limit_generation_current(generation):
                     return
                 last_readback = await self._offload_call(self._charge_limit.get)
+                if not self._charge_limit_generation_current(generation):
+                    return
                 ok = bool(applied) and last_readback == requested
                 status = "recovered" if ok else "failed"
                 reason = "mismatch_corrected" if ok else "write_unconfirmed"

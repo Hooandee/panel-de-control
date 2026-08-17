@@ -522,6 +522,102 @@ def test_exact_profile_rejects_unwritable_late_probe_candidate(
     assert set_requests == [80]
 
 
+def test_newer_disable_reaches_private_candidate_without_stale_promotion(
+    tmp_path, monkeypatch
+):
+    candidate = _late_probe_backend(tmp_path, "sysfs")
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=NullChargeLimit())
+    p._init()
+    p._device = types.SimpleNamespace(key="rog_xbox_ally_x")
+    p._settings["charge_limit_enabled"] = True
+    p._settings["charge_limit_percent"] = 80
+    p._charge_limit_generation += 1
+    generation = p._charge_limit_generation
+    monkeypatch.setattr(p, "_charge_limit_verify_delays", (0.0,))
+    monkeypatch.setattr(sys.modules["main"], "select_charge_limit", lambda _: candidate)
+    confirmation_started = asyncio.Event()
+    release_confirmation = asyncio.Event()
+    candidate_reads = 0
+
+    async def controlled_offload(operation):
+        nonlocal candidate_reads
+        if (
+            getattr(operation, "__self__", None) is candidate
+            and getattr(operation, "__name__", "") == "get"
+        ):
+            candidate_reads += 1
+            if candidate_reads == 2:
+                confirmation_started.set()
+                await release_confirmation.wait()
+        return operation()
+
+    p._offload_call = controlled_offload
+
+    async def scenario():
+        old_reconcile = asyncio.create_task(
+            p._reconcile_charge_limit(generation, "old")
+        )
+        await confirmation_started.wait()
+        disabled = await p.set_charge_limit(False, 80)
+        diagnostics = p._charge_limit_reconciliation
+        disabled_value = candidate.get()
+        release_confirmation.set()
+        await old_reconcile
+        return disabled, disabled_value, diagnostics
+
+    disabled, disabled_value, diagnostics = asyncio.run(scenario())
+
+    assert disabled["supported"] is False
+    assert disabled_value == 100
+    assert isinstance(p._charge_limit, NullChargeLimit)
+    assert p._charge_limit_reconciliation == diagnostics
+    assert p._charge_limit_reconciliation["generation"] > generation
+
+
+def test_newer_disable_prevents_stale_post_write_diagnostics(
+    tmp_path, monkeypatch
+):
+    backend = _RecordingChargeLimit()
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=backend)
+    p._init()
+    p._settings["charge_limit_enabled"] = True
+    p._settings["charge_limit_percent"] = 80
+    p._charge_limit_generation += 1
+    generation = p._charge_limit_generation
+    monkeypatch.setattr(p, "_charge_limit_verify_delays", (0.0,))
+    confirmation_started = asyncio.Event()
+    release_confirmation = asyncio.Event()
+    backend_reads = 0
+
+    async def controlled_offload(operation):
+        nonlocal backend_reads
+        if operation == backend.get:
+            backend_reads += 1
+            if backend_reads == 2:
+                confirmation_started.set()
+                await release_confirmation.wait()
+        return operation()
+
+    p._offload_call = controlled_offload
+
+    async def scenario():
+        old_reconcile = asyncio.create_task(
+            p._reconcile_charge_limit(generation, "old")
+        )
+        await confirmation_started.wait()
+        await p.set_charge_limit(False, 80)
+        diagnostics = p._charge_limit_reconciliation
+        release_confirmation.set()
+        await old_reconcile
+        return diagnostics
+
+    diagnostics = asyncio.run(scenario())
+
+    assert backend.value == 100
+    assert p._charge_limit_reconciliation == diagnostics
+    assert p._charge_limit_reconciliation["generation"] > generation
+
+
 @pytest.mark.parametrize(
     "device_key",
     ["msi_claw_8_ai_plus", "generic", "rog_future"],
