@@ -671,10 +671,14 @@ class Plugin:
         self._init()
         disabled = bool(disabled)
         if module_id in self._MODULE_SETTING:
-            self._cancel_charge_limit_reconcile("module_changed")
+            self._cancel_charge_limit_reconcile(
+                "module_changed", preserve_candidate=True
+            )
             self._settings[self._MODULE_SETTING[module_id]] = not disabled
         elif module_id in self._GENERIC_MODULES:
-            self._cancel_charge_limit_reconcile("module_changed")
+            self._cancel_charge_limit_reconcile(
+                "module_changed", preserve_candidate=True
+            )
             cur = set(self._disabled_modules())
             cur.add(module_id) if disabled else cur.discard(module_id)
             self._settings["disabled_modules"] = sorted(cur)
@@ -720,7 +724,9 @@ class Plugin:
         """Reset the customization layout. Leaves the functional switches (TDP control,
         telemetry) as-is; a visual reset must not silently re-enable them."""
         self._init()
-        self._cancel_charge_limit_reconcile("module_reset")
+        self._cancel_charge_limit_reconcile(
+            "module_reset", preserve_candidate=True
+        )
         self._settings["disabled_modules"] = []
         self._save()
         self._reapply_all()
@@ -3083,17 +3089,21 @@ class Plugin:
         self._last_reapply_trigger = "lifecycle_or_context"
         self._cancel_color_revert()
         self._color_preview = None
+        charge_limit_candidate = self._take_charge_limit_candidate()
         charge_generation = self._cancel_charge_limit_reconcile("reapply")
 
         def apply_charge_limit():
             if self._charge_limit_intent_current(charge_generation):
-                self._apply_charge_limit()
+                self._apply_charge_limit(charge_limit_candidate)
 
         def schedule_charge_limit_reconcile():
             if self._charge_limit_intent_current(charge_generation):
                 self._schedule_charge_limit_reconcile("reapply_all")
 
-        if bool(getattr(self._charge_limit, "supported", False)):
+        if (
+            bool(getattr(self._charge_limit, "supported", False))
+            or charge_limit_candidate is not None
+        ):
             self._offload(
                 apply_charge_limit,
                 done=schedule_charge_limit_reconcile,
@@ -3165,9 +3175,16 @@ class Plugin:
             attempts,
         )
 
-    def _apply_charge_limit(self) -> None:
+    def _take_charge_limit_candidate(self):
+        candidate = getattr(self, "_charge_limit_candidate", None)
+        self._charge_limit_candidate = None
+        return candidate
+
+    def _apply_charge_limit(self, candidate=None) -> None:
+        if candidate is None:
+            candidate = self._take_charge_limit_candidate()
         self._apply_selected_charge_limit()
-        self._apply_pending_charge_limit_candidate()
+        self._apply_pending_charge_limit_candidate(candidate)
 
     def _apply_selected_charge_limit(self) -> None:
         """Write the persisted charge limit (or 100 = no cap when disabled). Safe to
@@ -3198,13 +3215,11 @@ class Plugin:
                 self._charge_limit.disable,
             )
 
-    def _apply_pending_charge_limit_candidate(self) -> None:
-        pending = getattr(self, "_charge_limit_candidate", None)
-        if pending is None:
+    def _apply_pending_charge_limit_candidate(self, candidate) -> None:
+        if candidate is None:
             return
-        backend = pending
+        backend = candidate
         if backend is self._charge_limit:
-            self._charge_limit_candidate = None
             return
         if not getattr(backend, "supported", False):
             return
@@ -3220,9 +3235,7 @@ class Plugin:
                 return backend.set(requested)
         applied = operation()
         if applied is False:
-            applied = operation()
-        if applied and self._charge_limit_candidate is pending:
-            self._charge_limit_candidate = None
+            operation()
 
     def _charge_limit_generation_current(self, generation) -> bool:
         return (
@@ -3244,10 +3257,14 @@ class Plugin:
             or key in _STEAM_DECK_CHARGE_LIMIT_PROFILES
         )
 
-    def _cancel_charge_limit_reconcile(self, reason) -> int:
+    def _cancel_charge_limit_reconcile(
+        self, reason, preserve_candidate=False
+    ) -> int:
         self._charge_limit_generation = int(
             getattr(self, "_charge_limit_generation", 0)
         ) + 1
+        if not preserve_candidate:
+            self._charge_limit_candidate = None
         task = getattr(self, "_charge_limit_reconcile_task", None)
         self._charge_limit_reconcile_task = None
         if task is not None and not task.done():
@@ -3387,24 +3404,24 @@ class Plugin:
             pending = candidate
             self._charge_limit_candidate = pending
 
-            def write_candidate_if_current():
+            try:
+                def write_candidate_if_current():
+                    if not self._charge_limit_generation_current(generation):
+                        return None
+                    return candidate.set(requested)
+
+                applied = await self._offload_call(write_candidate_if_current)
                 if not self._charge_limit_generation_current(generation):
                     return None
-                return candidate.set(requested)
-
-            applied = await self._offload_call(write_candidate_if_current)
-            if not self._charge_limit_generation_current(generation):
-                return None
-            confirmed = await self._offload_call(candidate.get)
-            if not self._charge_limit_generation_current(generation):
-                return None
-            if not applied or confirmed != requested:
+                confirmed = await self._offload_call(candidate.get)
+                if not self._charge_limit_generation_current(generation):
+                    return None
+                if not applied or confirmed != requested:
+                    return None
+                wrote = True
+            finally:
                 if self._charge_limit_candidate is pending:
                     self._charge_limit_candidate = None
-                return None
-            wrote = True
-            if self._charge_limit_candidate is pending:
-                self._charge_limit_candidate = None
         self._charge_limit = candidate
         return _ChargeLimitProbe(readback, confirmed, wrote)
 
@@ -5482,6 +5499,7 @@ class Plugin:
         """Enable/disable the charge cap and set its threshold. Persists, applies via
         readback, and returns the resulting charge_limit block."""
         self._init()
+        charge_limit_candidate = self._take_charge_limit_candidate()
         generation = self._cancel_charge_limit_reconcile("new_intent")
         lo, hi = self._charge_limit.range()
         percent = max(lo, min(hi, int(percent)))
@@ -5490,7 +5508,7 @@ class Plugin:
         self._save()
         await self._offload_call(
             lambda: (
-                self._apply_charge_limit()
+                self._apply_charge_limit(charge_limit_candidate)
                 if self._charge_limit_intent_current(generation)
                 else None
             )

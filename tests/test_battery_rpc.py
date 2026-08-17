@@ -522,6 +522,124 @@ def test_exact_profile_rejects_unwritable_late_probe_candidate(
     assert set_requests == [80]
 
 
+def test_failed_private_candidate_is_consumed_once(tmp_path, monkeypatch):
+    candidate = _FailingChargeLimit()
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=NullChargeLimit())
+    p._init()
+    p._settings["charge_limit_enabled"] = True
+    p._settings["charge_limit_percent"] = 80
+    p._charge_limit_candidate = candidate
+
+    p._apply_charge_limit()
+    p._apply_charge_limit()
+
+    assert candidate.attempts == 2
+    assert p._charge_limit_candidate is None
+
+
+@pytest.mark.parametrize("action", ["cancel", "reschedule", "shutdown"])
+def test_private_candidate_is_cleared_at_lifecycle_boundary(
+    tmp_path, monkeypatch, action
+):
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=NullChargeLimit())
+    p._init()
+    p._charge_limit_candidate = _FakeChargeLimit()
+
+    if action == "cancel":
+        p._cancel_charge_limit_reconcile("test")
+    elif action == "reschedule":
+        p._schedule_charge_limit_reconcile("test")
+    else:
+        p._prepare_shutdown()
+
+    assert p._charge_limit_candidate is None
+
+
+def test_cancelled_probe_task_clears_private_candidate(tmp_path, monkeypatch):
+    candidate = _late_probe_backend(tmp_path, "sysfs")
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=NullChargeLimit())
+    p._init()
+    p._device = types.SimpleNamespace(key="rog_xbox_ally_x")
+    p._settings["charge_limit_enabled"] = True
+    p._settings["charge_limit_percent"] = 80
+    p._charge_limit_generation += 1
+    generation = p._charge_limit_generation
+    monkeypatch.setattr(p, "_charge_limit_verify_delays", (0.0,))
+    monkeypatch.setattr(sys.modules["main"], "select_charge_limit", lambda _: candidate)
+    confirmation_started = asyncio.Event()
+    candidate_reads = 0
+
+    async def controlled_offload(operation):
+        nonlocal candidate_reads
+        if (
+            getattr(operation, "__self__", None) is candidate
+            and getattr(operation, "__name__", "") == "get"
+        ):
+            candidate_reads += 1
+            if candidate_reads == 2:
+                confirmation_started.set()
+                await asyncio.Event().wait()
+        return operation()
+
+    p._offload_call = controlled_offload
+
+    async def scenario():
+        reconcile = asyncio.create_task(
+            p._reconcile_charge_limit(generation, "test")
+        )
+        await confirmation_started.wait()
+        reconcile.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await reconcile
+
+    asyncio.run(scenario())
+
+    assert p._charge_limit_candidate is None
+
+
+def test_reapply_transfers_private_candidate_once_for_null_backend(
+    tmp_path, monkeypatch
+):
+    candidate = _FailingChargeLimit()
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=NullChargeLimit())
+    p._init()
+    p._device = types.SimpleNamespace(key="rog_xbox_ally_x")
+    p._settings["charge_limit_enabled"] = True
+    p._settings["charge_limit_percent"] = 80
+    p._charge_limit_candidate = candidate
+
+    for name in (
+        "_cancel_color_revert",
+        "_apply_cpu",
+        "_apply_gpu_clock",
+        "_schedule_tdp_apply",
+        "_reapply_fans",
+        "_reapply_hdr",
+        "_reapply_color",
+        "_reapply_audio",
+        "_reapply_controller",
+        "_schedule_hud_apply",
+    ):
+        monkeypatch.setattr(p, name, lambda *args: None)
+    monkeypatch.setattr(p, "_tdp_control_on", lambda: True)
+
+    def immediate_offload(operation, done=None):
+        operation()
+        if done is not None:
+            done()
+
+    monkeypatch.setattr(p, "_offload", immediate_offload)
+    monkeypatch.setattr(
+        p, "_schedule_charge_limit_reconcile", lambda trigger: None
+    )
+
+    p._reapply_all()
+    p._reapply_all()
+
+    assert candidate.attempts == 2
+    assert p._charge_limit_candidate is None
+
+
 def test_newer_disable_reaches_private_candidate_without_stale_promotion(
     tmp_path, monkeypatch
 ):
