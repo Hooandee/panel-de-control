@@ -147,6 +147,13 @@ class _TdpCommand:
     on_ac: bool
 
 
+@dataclass(frozen=True)
+class _ChargeLimitProbe:
+    readback: int
+    confirmed: int
+    wrote: bool
+
+
 def _now_minutes() -> int:
     t = datetime.now()
     return t.hour * 60 + t.minute
@@ -3214,23 +3221,61 @@ class Plugin:
         self._charge_limit_reconcile_task = None
         if task is not None and not task.done():
             task.cancel()
+        self._publish_charge_limit_reconciliation(
+            self._charge_limit_generation,
+            None,
+            "cancelled",
+            0,
+            0,
+            None,
+            reason,
+        )
+        return self._charge_limit_generation
+
+    def _publish_charge_limit_reconciliation(
+        self,
+        generation,
+        trigger,
+        status,
+        checks,
+        writes,
+        readback,
+        reason,
+    ) -> None:
         self._charge_limit_reconciliation = {
-            "generation": self._charge_limit_generation,
-            "trigger": None,
-            "status": "cancelled",
-            "checks": 0,
-            "writes": 0,
-            "readback": None,
+            "generation": generation,
+            "trigger": trigger,
+            "status": status,
+            "checks": checks,
+            "writes": writes,
+            "readback": readback,
             "reason": reason,
             "history": list(getattr(self, "_charge_limit_history", ())),
         }
-        return self._charge_limit_generation
 
     def _schedule_charge_limit_reconcile(self, trigger) -> None:
         generation = self._cancel_charge_limit_reconcile("rescheduled")
-        eligible = (
+        active = (
             self._module_enabled("system")
             and bool(self._settings.get("charge_limit_enabled", False))
+        )
+        if (
+            active
+            and bool(getattr(self._charge_limit, "supported", False))
+            and not bool(getattr(self._charge_limit, "adjustable", True))
+        ):
+            self._publish_charge_limit_reconciliation(
+                generation,
+                trigger,
+                "unverifiable",
+                0,
+                0,
+                None,
+                "fixed_threshold",
+            )
+            return
+        eligible = (
+            active
             and bool(getattr(self._charge_limit, "adjustable", True))
             and (
                 bool(getattr(self._charge_limit, "supported", False))
@@ -3242,16 +3287,15 @@ class Plugin:
             self._charge_limit_reconciliation["status"] = "idle"
             self._charge_limit_reconciliation["reason"] = "not_applicable"
             return
-        self._charge_limit_reconciliation = {
-            "generation": generation,
-            "trigger": trigger,
-            "status": "scheduled",
-            "checks": 0,
-            "writes": 0,
-            "readback": None,
-            "reason": "verification_pending",
-            "history": list(self._charge_limit_history),
-        }
+        self._publish_charge_limit_reconciliation(
+            generation,
+            trigger,
+            "scheduled",
+            0,
+            0,
+            None,
+            "verification_pending",
+        )
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
@@ -3271,15 +3315,17 @@ class Plugin:
 
         task.add_done_callback(finished)
 
-    async def _reprobe_charge_limit(self, generation) -> bool:
+    async def _reprobe_charge_limit(
+        self, generation, requested
+    ) -> _ChargeLimitProbe | None:
         current = self._charge_limit
         candidate = await self._offload_call(
             lambda: select_charge_limit(self._device)
         )
         if not self._charge_limit_generation_current(generation):
-            return False
+            return None
         if not getattr(candidate, "supported", False):
-            return False
+            return None
         if type(candidate) is not type(current):
             device_key = getattr(self._device, "key", "")
             allowed_late_probe = (
@@ -3297,24 +3343,33 @@ class Plugin:
                 )
             )
             if not allowed_late_probe:
-                return False
+                return None
+        readback = await self._offload_call(candidate.get)
+        if (
+            not self._charge_limit_generation_current(generation)
+            or readback is None
+        ):
+            return None
+        wrote = False
+        confirmed = readback
+        if readback != requested:
+            def write_candidate_if_current():
+                if not self._charge_limit_generation_current(generation):
+                    return None
+                return candidate.set(requested)
+
+            applied = await self._offload_call(write_candidate_if_current)
+            if not self._charge_limit_generation_current(generation):
+                return None
+            confirmed = await self._offload_call(candidate.get)
+            if not applied or confirmed != requested:
+                return None
+            wrote = True
         self._charge_limit = candidate
-        return True
+        return _ChargeLimitProbe(readback, confirmed, wrote)
 
     async def _reconcile_charge_limit(self, generation, trigger) -> None:
         if not self._charge_limit_generation_current(generation):
-            return
-        if not bool(getattr(self._charge_limit, "adjustable", True)):
-            self._charge_limit_reconciliation = {
-                "generation": generation,
-                "trigger": trigger,
-                "status": "unverifiable",
-                "checks": 0,
-                "writes": 0,
-                "readback": None,
-                "reason": "fixed_threshold",
-                "history": list(self._charge_limit_history),
-            }
             return
         checks = 0
         writes = 0
@@ -3333,11 +3388,10 @@ class Plugin:
             if not self._charge_limit_generation_current(generation):
                 return
             if readback is None:
-                if await self._reprobe_charge_limit(generation):
-                    readback = await self._offload_call(self._charge_limit.get)
-                    if not self._charge_limit_generation_current(generation):
-                        return
-                else:
+                reprobe = await self._reprobe_charge_limit(
+                    generation, requested
+                )
+                if reprobe is None:
                     checks += 1
                     last_readback = None
                     status = "failed"
@@ -3353,7 +3407,43 @@ class Plugin:
                             self._charge_limit, "name", "unsupported"
                         ),
                     })
+                    self._publish_charge_limit_reconciliation(
+                        generation,
+                        trigger,
+                        status,
+                        checks,
+                        writes,
+                        last_readback,
+                        reason,
+                    )
                     continue
+                checks += 1
+                if reprobe.wrote:
+                    writes += 1
+                    status = "recovered"
+                    reason = "backend_recovered"
+                last_readback = reprobe.confirmed
+                self._charge_limit_history.append({
+                    "trigger": trigger,
+                    "check": check,
+                    "requested": requested,
+                    "readback": reprobe.readback,
+                    "action": "write" if reprobe.wrote else "hold",
+                    "ok": True,
+                    "backend": getattr(
+                        self._charge_limit, "name", "unsupported"
+                    ),
+                })
+                self._publish_charge_limit_reconciliation(
+                    generation,
+                    trigger,
+                    status,
+                    checks,
+                    writes,
+                    last_readback,
+                    reason,
+                )
+                continue
             checks += 1
             last_readback = readback
             action = "hold"
@@ -3386,16 +3476,15 @@ class Plugin:
                 "backend": getattr(self._charge_limit, "name", "unsupported"),
             }
             self._charge_limit_history.append(event)
-        self._charge_limit_reconciliation = {
-            "generation": generation,
-            "trigger": trigger,
-            "status": status,
-            "checks": checks,
-            "writes": writes,
-            "readback": last_readback,
-            "reason": reason,
-            "history": list(self._charge_limit_history),
-        }
+            self._publish_charge_limit_reconciliation(
+                generation,
+                trigger,
+                status,
+                checks,
+                writes,
+                last_readback,
+                reason,
+            )
 
     def _charge_limit_state(self) -> dict:
         lo, hi = self._charge_limit.range()
