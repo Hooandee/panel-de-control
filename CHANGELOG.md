@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Español
+
+* Corrige el enrutado del ecualizador al cambiar entre altavoces, auriculares, Bluetooth, USB y HDMI. Conserva volumen y mute durante reinicios, suspensión, desconexiones y fallos, y restaura de forma segura las salidas anteriores cuando vuelven a estar disponibles. ([#469](https://github.com/Hooandee/panel-de-control/pull/469))
+
+### English
+
+* Fixes EQ routing when switching between speakers, headphones, Bluetooth, USB, and HDMI. Volume and mute survive restarts, suspend, disconnects, and failures, while previous outputs are safely restored when they become available again. ([#469](https://github.com/Hooandee/panel-de-control/pull/469))
+
+### Italiano
+
+* Corregge il routing dell'equalizzatore quando si passa tra altoparlanti, cuffie, Bluetooth, USB e HDMI. Volume e mute vengono preservati durante riavvii, sospensione, disconnessioni ed errori, mentre le uscite precedenti vengono ripristinate in sicurezza quando tornano disponibili. ([#469](https://github.com/Hooandee/panel-de-control/pull/469))
+
 ## [0.37.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.2...panel-de-control-v0.37.3) (2026-08-16)
 
 

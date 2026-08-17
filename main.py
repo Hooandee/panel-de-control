@@ -514,6 +514,8 @@ class Plugin:
         # Audio EQ output-route watcher: last applied route + its loop task.
         self._audio_task = None
         self._audio_route_last = None
+        self._audio_cleanup_pending = True
+        self._audio_runtime_expected = False
         self._audio_shutdown = False
         self._shutting_down = False
         self._offload_futures = set()
@@ -5939,6 +5941,7 @@ class Plugin:
                 self._record_audio_apply_failure(detail)
             else:
                 self._audio_apply_failures = 0
+                self._audio_runtime_expected = True
                 diagnostics = getattr(self._audio, "apply_diagnostics", None)
                 self._audio_last_apply = (
                     diagnostics()
@@ -5980,7 +5983,11 @@ class Plugin:
 
     def _audio_check(self) -> dict:
         """Off-loop probe for the watcher: active route + confirmed EQ ownership."""
-        return {"route": self._current_route(), "active": self._audio.is_active()}
+        active = self._audio.is_active()
+        if active:
+            sync_state = getattr(self._audio, "sync_state", None)
+            active = not callable(sync_state) or sync_state() is True
+        return {"route": self._current_route(), "active": active}
 
     async def _audio_loop(self) -> None:
         """While the EQ is enabled, keep it live with the QAM closed: re-apply when the
@@ -5991,9 +5998,17 @@ class Plugin:
         while True:
             try:
                 await asyncio.sleep(_AUDIO_POLL_S)
-                if not self._settings.get("audio_eq_enabled") or not self._audio.is_supported():
+                enabled = bool(self._settings.get("audio_eq_enabled"))
+                supported = enabled and self._audio.is_supported()
+                if not enabled or not supported:
+                    if self._audio_runtime_expected:
+                        self._audio_cleanup_pending = True
+                    self._audio_runtime_expected = False
                     self._audio_route_last = None
+                    if self._audio_cleanup_pending:
+                        await self._offload_call(self._restore_audio_safe)
                     continue
+                self._audio_runtime_expected = True
                 probe = await self._offload_call(self._audio_check)
                 if not probe["active"] or probe["route"] != self._audio_route_last:
                     self._audio_route_last = probe["route"]
@@ -6008,9 +6023,19 @@ class Plugin:
         disabled/uninstalled plugin leaves the audio untouched. Guarded."""
         try:
             if getattr(self, "_audio", None) is not None:
-                self._audio.teardown()
-        except Exception:  # noqa: BLE001
-            pass
+                cleaned = self._audio.teardown()
+                self._audio_cleanup_pending = cleaned is not True
+                self._audio_runtime_expected = False
+                diagnostics = self._audio.apply_diagnostics()
+                if isinstance(diagnostics, dict):
+                    self._audio_last_apply = dict(diagnostics)
+        except Exception as error:  # noqa: BLE001
+            self._audio_cleanup_pending = True
+            self._audio_last_apply = {
+                "ok": False,
+                "reason": "exception",
+                "error": type(error).__name__,
+            }
 
     def _audio_state(self) -> dict:
         route = self._current_route()
@@ -6056,6 +6081,8 @@ class Plugin:
         if enabled:
             self._reapply_audio()
         else:
+            self._audio_cleanup_pending = True
+            self._audio_runtime_expected = False
             self._offload(self._restore_audio_safe)
         return await self._offload_call(self._audio_state)
 
@@ -6066,60 +6093,86 @@ class Plugin:
         self._reapply_audio()
         return await self._offload_call(self._audio_state)
 
-    async def apply_audio_preset(self, preset: str, scope: str = "global", appid=None) -> dict:
+    async def _audio_route_for_write(self, expected_route=None):
+        route = await self._offload_call(self._current_route)
+        if expected_route is not None and expected_route != route:
+            return None
+        return route
+
+    async def apply_audio_preset(
+        self, preset: str, scope: str = "global", appid=None, expected_route=None
+    ) -> dict:
         """Apply a preset to the active route for the given scope. device_tuned resolves
         to the per-machine speaker correction (flat on headphones)."""
         self._init()
         resolved = self._resolve_scope(scope, appid)
         if resolved is None:
             return await self._offload_call(self._audio_state)
-        route = await self._offload_call(self._current_route)  # pactl → off the loop
+        route = await self._audio_route_for_write(expected_route)
+        if route is None:
+            return await self._offload_call(self._audio_state)
         setting = audio_presets.resolve_preset(getattr(self._device, "key", None), preset, route)
         self._audio_eq.set_setting(resolved, route, setting, appid=appid)
         self._reapply_audio()
         return await self._offload_call(self._audio_state)
 
-    async def set_audio_band(self, index: int, gain: float, scope: str, appid=None) -> dict:
+    async def set_audio_band(
+        self, index: int, gain: float, scope: str, appid=None, expected_route=None
+    ) -> dict:
         self._init()
         resolved = self._resolve_scope(scope, appid)
         if resolved is None:
             return await self._offload_call(self._audio_state)
-        route = await self._offload_call(self._current_route)  # pactl → off the loop
+        route = await self._audio_route_for_write(expected_route)
+        if route is None:
+            return await self._offload_call(self._audio_state)
         self._audio_eq.set_band(resolved, route, int(index), float(gain), appid=appid)
         self._reapply_audio()
         return await self._offload_call(self._audio_state)
 
-    async def set_audio_bands(self, gains: list, scope: str, appid=None) -> dict:
+    async def set_audio_bands(
+        self, gains: list, scope: str, appid=None, expected_route=None
+    ) -> dict:
         """Replace all 10 band gains for the active route (drag-commit of the whole curve)."""
         self._init()
         resolved = self._resolve_scope(scope, appid)
         if resolved is None:
             return await self._offload_call(self._audio_state)
-        route = await self._offload_call(self._current_route)  # pactl → off the loop
+        route = await self._audio_route_for_write(expected_route)
+        if route is None:
+            return await self._offload_call(self._audio_state)
         self._audio_eq.set_bands(resolved, route, gains, appid=appid)
         self._reapply_audio()
         return await self._offload_call(self._audio_state)
 
-    async def set_audio_loudness(self, on: bool, scope: str, appid=None) -> dict:
+    async def set_audio_loudness(
+        self, on: bool, scope: str, appid=None, expected_route=None
+    ) -> dict:
         """Toggle volume leveling (compression) for the active route — dialogue stays
         audible without loud peaks blasting; also protects small speakers."""
         self._init()
         resolved = self._resolve_scope(scope, appid)
         if resolved is None:
             return await self._offload_call(self._audio_state)
-        route = await self._offload_call(self._current_route)
+        route = await self._audio_route_for_write(expected_route)
+        if route is None:
+            return await self._offload_call(self._audio_state)
         self._audio_eq.set_loudness(resolved, route, bool(on), appid=appid)
         self._reapply_audio()
         return await self._offload_call(self._audio_state)
 
-    async def set_audio_balance(self, value: int, scope: str, appid=None) -> dict:
+    async def set_audio_balance(
+        self, value: int, scope: str, appid=None, expected_route=None
+    ) -> dict:
         """Set the L/R balance (-100..100) for the active route. Applies instantly — it
         only offsets the downstream pin, no filter-chain restart."""
         self._init()
         resolved = self._resolve_scope(scope, appid)
         if resolved is None:
             return await self._offload_call(self._audio_state)
-        route = await self._offload_call(self._current_route)
+        route = await self._audio_route_for_write(expected_route)
+        if route is None:
+            return await self._offload_call(self._audio_state)
         self._audio_eq.set_balance(resolved, route, int(value), appid=appid)
         self._reapply_audio()
         return await self._offload_call(self._audio_state)
@@ -6132,14 +6185,18 @@ class Plugin:
         self._audio_profiles.save(name, eff["gains"], eff["bass"])
         return await self._offload_call(self._audio_state)
 
-    async def apply_audio_profile(self, name: str, scope: str, appid=None) -> dict:
+    async def apply_audio_profile(
+        self, name: str, scope: str, appid=None, expected_route=None
+    ) -> dict:
         """Apply a saved profile's curve + bass to the active route for the given scope."""
         self._init()
         resolved = self._resolve_scope(scope, appid)
         prof = self._audio_profiles.get(name)
         if resolved is None or prof is None:
             return await self._offload_call(self._audio_state)
-        route = await self._offload_call(self._current_route)
+        route = await self._audio_route_for_write(expected_route)
+        if route is None:
+            return await self._offload_call(self._audio_state)
         self._audio_eq.set_bands(resolved, route, prof["gains"], appid=appid)
         self._audio_eq.set_bass(resolved, route, prof["bass"], appid=appid)
         self._reapply_audio()
@@ -6172,14 +6229,18 @@ class Plugin:
         except Exception:  # noqa: BLE001
             self._test_sample = None
 
-    async def set_audio_curve(self, gains: list, bass: int, scope: str, appid=None) -> dict:
+    async def set_audio_curve(
+        self, gains: list, bass: int, scope: str, appid=None, expected_route=None
+    ) -> dict:
         """Set the EQ gains and the bass-enhancement amount together in one apply (the tone
         sliders drive both — the Graves slider engages the bass enhancer)."""
         self._init()
         resolved = self._resolve_scope(scope, appid)
         if resolved is None:
             return await self._offload_call(self._audio_state)
-        route = await self._offload_call(self._current_route)  # pactl → off the loop
+        route = await self._audio_route_for_write(expected_route)
+        if route is None:
+            return await self._offload_call(self._audio_state)
         self._audio_eq.set_bands(resolved, route, gains, appid=appid)
         self._audio_eq.set_bass(resolved, route, int(bass), appid=appid)
         self._reapply_audio()
@@ -6196,13 +6257,17 @@ class Plugin:
         self._reapply_audio()
         return await self._offload_call(self._audio_state)
 
-    async def reset_audio(self, scope: str = "global", appid=None) -> dict:
+    async def reset_audio(
+        self, scope: str = "global", appid=None, expected_route=None
+    ) -> dict:
         """Flatten the active route's EQ for the given scope."""
         self._init()
         resolved = self._resolve_scope(scope, appid)
         if resolved is None:
             return await self._offload_call(self._audio_state)
-        route = await self._offload_call(self._current_route)  # pactl → off the loop
+        route = await self._audio_route_for_write(expected_route)
+        if route is None:
+            return await self._offload_call(self._audio_state)
         self._audio_eq.reset(resolved, route, appid=appid)
         self._reapply_audio()
         return await self._offload_call(self._audio_state)

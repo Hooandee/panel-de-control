@@ -814,24 +814,24 @@ export const getAudioState = callable<[], AudioState>("get_audio_state");
 export const setSpeakerGuard = callable<[enabled: boolean], AudioState>("set_speaker_guard");
 export const setAudioEnabled = callable<[enabled: boolean], AudioState>("set_audio_enabled");
 export const applyAudioPreset =
-  callable<[preset: string, scope: Scope, appid: string | null], AudioState>("apply_audio_preset");
+  callable<[preset: string, scope: Scope, appid: string | null, expectedRoute: AudioState["route"] | null], AudioState>("apply_audio_preset");
 export const setAudioBand =
-  callable<[index: number, gain: number, scope: Scope, appid: string | null], AudioState>("set_audio_band");
+  callable<[index: number, gain: number, scope: Scope, appid: string | null, expectedRoute: AudioState["route"] | null], AudioState>("set_audio_band");
 export const setAudioBands =
-  callable<[gains: number[], scope: Scope, appid: string | null], AudioState>("set_audio_bands");
+  callable<[gains: number[], scope: Scope, appid: string | null, expectedRoute: AudioState["route"] | null], AudioState>("set_audio_bands");
 export const setAudioFollowGlobal =
   callable<[follow: boolean, appid: string | null], AudioState>("set_audio_follow_global");
 export const resetAudio =
-  callable<[scope: Scope, appid: string | null], AudioState>("reset_audio");
+  callable<[scope: Scope, appid: string | null, expectedRoute: AudioState["route"] | null], AudioState>("reset_audio");
 export const setAudioCurve =
-  callable<[gains: number[], bass: number, scope: Scope, appid: string | null], AudioState>("set_audio_curve");
+  callable<[gains: number[], bass: number, scope: Scope, appid: string | null, expectedRoute: AudioState["route"] | null], AudioState>("set_audio_curve");
 export const setAudioLoudness =
-  callable<[on: boolean, scope: Scope, appid: string | null], AudioState>("set_audio_loudness");
+  callable<[on: boolean, scope: Scope, appid: string | null, expectedRoute: AudioState["route"] | null], AudioState>("set_audio_loudness");
 export const setAudioBalance =
-  callable<[value: number, scope: Scope, appid: string | null], AudioState>("set_audio_balance");
+  callable<[value: number, scope: Scope, appid: string | null, expectedRoute: AudioState["route"] | null], AudioState>("set_audio_balance");
 export const setAudioTest =
   callable<[playing: boolean, sample: string], AudioState>("set_audio_test");
 export const saveAudioProfile = callable<[name: string], AudioState>("save_audio_profile");
 export const applyAudioProfile =
-  callable<[name: string, scope: Scope, appid: string | null], AudioState>("apply_audio_profile");
+  callable<[name: string, scope: Scope, appid: string | null, expectedRoute: AudioState["route"] | null], AudioState>("apply_audio_profile");
 export const deleteAudioProfile = callable<[name: string], AudioState>("delete_audio_profile");

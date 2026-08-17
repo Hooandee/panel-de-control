@@ -20,6 +20,26 @@ def test_sink_name_and_class():
     assert "node.passive = true" in cfg
 
 
+def test_playback_stream_targets_the_selected_physical_sink():
+    cfg = build_chain_config(
+        gains=[0.0] * 10,
+        sink_name="pdc_eq",
+        target="bluez_output.headset",
+    )
+
+    assert 'target.object = "bluez_output.headset"' in cfg
+
+
+def test_playback_target_is_escaped_as_a_pipewire_string():
+    cfg = build_chain_config(
+        gains=[0.0] * 10,
+        sink_name="pdc_eq",
+        target='sink."quoted"\\path',
+    )
+
+    assert 'target.object = "sink.\\"quoted\\"\\\\path"' in cfg
+
+
 def test_gains_are_embedded():
     gains = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     cfg = build_chain_config(gains=gains, sink_name="pdc_eq")

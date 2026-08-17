@@ -52,11 +52,23 @@ export const SonidoSection: FC = () => {
 
   if (!state.supported) {
     return (
-      <PanelSectionRow>
-        <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
-          {t("audio.unsupported")}
-        </div>
-      </PanelSectionRow>
+      <div style={{ display: "flex", flexDirection: "column", gap: theme.space.section }}>
+        {state.enabled && (
+          <PanelSectionRow>
+            <ToggleField
+              label={t("audio.enable")}
+              description={t("audio.enable.desc")}
+              checked
+              onChange={onEnable}
+            />
+          </PanelSectionRow>
+        )}
+        <PanelSectionRow>
+          <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
+            {t("audio.unsupported")}
+          </div>
+        </PanelSectionRow>
+      </div>
     );
   }
 

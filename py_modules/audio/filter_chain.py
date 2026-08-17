@@ -24,7 +24,19 @@ def _band_nodes(gains):
     ]
 
 
-def build_chain_config(gains, sink_name, description="Panel de Control", bass=0, loudness=False, caps=None):
+def _pipewire_string(value):
+    return str(value).replace("\\", "\\\\").replace('"', '\\"')
+
+
+def build_chain_config(
+    gains,
+    sink_name,
+    description="Panel de Control",
+    bass=0,
+    loudness=False,
+    caps=None,
+    target=None,
+):
     nodes = _band_nodes(gains)
     links = [
         f'          {{ output = "eq_band_{i}:Out" input = "eq_band_{i + 1}:In" }}'
@@ -49,6 +61,7 @@ def build_chain_config(gains, sink_name, description="Panel de Control", bass=0,
         tail = "comp:out"
     nodes_s = "\n".join(nodes)
     links_s = "\n".join(links)
+    target_prop = f' target.object = "{_pipewire_string(target)}"' if target else ""
     return f"""context.modules = [
   {{ name = libpipewire-module-filter-chain
     args = {{
@@ -65,7 +78,7 @@ def build_chain_config(gains, sink_name, description="Panel de Control", bass=0,
       audio.channels = 2
       audio.position = [ FL FR ]
       capture.props  = {{ node.name = "{description}" node.description = "{description}" node.nick = "{description}" media.class = Audio/Sink priority.session = 2000 }}
-      playback.props = {{ node.name = "effect_output.{sink_name}" node.passive = true }}
+      playback.props = {{ node.name = "effect_output.{sink_name}" node.passive = true{target_prop} }}
     }}
   }}
 ]

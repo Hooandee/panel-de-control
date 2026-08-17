@@ -142,6 +142,12 @@ def test_redact_text_keeps_device_names():
     assert redact_text("Steam Deck OLED") == "Steam Deck OLED"
 
 
+def test_redact_text_scrubs_bluez_mac_with_underscore_separators():
+    out = redact_text("bluez_output.AA_BB_CC_DD_EE_FF.1")
+
+    assert out == "bluez_output.[mac].1"
+
+
 def test_redact_text_scrubs_labeled_serials():
     # DMI/dmesg serial lines: keep the label for context, drop the value.
     out = redact_text("board_serial: ABCD1234EFGH")
@@ -173,6 +179,12 @@ def test_redact_obj_scrubs_serial_like_keys():
     assert out["product_serial"] == "[redacted]"
     assert out["board_uuid"] == "[redacted]"
     assert out["model"] == "Ally"
+
+
+def test_redact_obj_scrubs_session_username_keys():
+    out = redact_obj({"audio": {"session": {"user": "alice", "uid": 1000}}})
+
+    assert out == {"audio": {"session": {"user": "[redacted]", "uid": 1000}}}
 
 
 def test_redact_obj_recurses_and_redacts_paths():
