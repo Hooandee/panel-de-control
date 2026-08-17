@@ -248,6 +248,8 @@ class _FakeRunner:
         else:
             self._volumes = {}
             self._vol = downstream_vol
+        self._volume_channels = {}
+        self._mutes = {}
         self._default = "alsa_speaker"
         self._link_target = "alsa_speaker"
         self._configured_target = None
@@ -264,6 +266,16 @@ class _FakeRunner:
             return self._default
         if argv[:2] == ["pactl", "set-default-sink"]:
             self._default = argv[2]
+            self._configured_default = argv[2]
+            return ""
+        if argv[:2] == ["pactl", "set-sink-volume"]:
+            values = [value for value in argv[3:] if value.endswith("%")]
+            if values:
+                self._volumes[argv[2]] = values[0]
+                self._volume_channels[argv[2]] = tuple(values)
+            return ""
+        if argv[:2] == ["pactl", "set-sink-mute"]:
+            self._mutes[argv[2]] = argv[3] in ("1", "yes", "true")
             return ""
         if argv == ["systemctl", "--user", "restart", "filter-chain.service"]:
             self._service_generation += 1
@@ -319,8 +331,17 @@ class _FakeRunner:
         if "list" in s and "sinks" in s:
             return self._sinks
         if "get-sink-volume" in s:
-            volume = self._volumes.get(argv[-1], self._vol)
+            sink = argv[-1]
+            values = self._volume_channels.get(sink)
+            if values:
+                return "Volume: " + " ".join(
+                    f"channel-{index}: 26214 / {value} / ..."
+                    for index, value in enumerate(values)
+                )
+            volume = self._volumes.get(sink, self._vol)
             return f"Volume: front-left: 26214 / {volume} / ..."
+        if "get-sink-mute" in s:
+            return "Mute: yes" if self._mutes.get(argv[-1], False) else "Mute: no"
         return ""
 
     def volume_sets(self, sink):
@@ -337,6 +358,7 @@ def _make_eq(tmp_path, fake, conf_exists):
     eq._conf_path = lambda: str(conf)
     fake._conf_path = str(conf)
     eq.is_supported = lambda: True
+    eq._sleep = lambda _delay: None
     def write_conf(*args, **kwargs):
         fake._configured_target = kwargs.get("downstream") or args[-1]
         conf.write_text("x")
@@ -350,8 +372,375 @@ def test_ensure_sink_first_enable_carries_downstream_volume(tmp_path):
     fake = _FakeRunner(downstream_vol="40%")
     eq = _make_eq(tmp_path, fake, conf_exists=False)
     assert eq.ensure_sink([0] * 10) is True
-    assert fake.volume_sets("X EQ") == [["pactl", "set-sink-volume", "X EQ", "40%"]]
+    assert fake.volume_sets("X EQ") == [
+        ["pactl", "set-sink-volume", "X EQ", "100%"],
+        ["pactl", "set-sink-volume", "X EQ", "40%"],
+    ]
     assert ["pactl", "set-sink-volume", "alsa_speaker", "100%"] in fake.calls
+
+
+def test_first_enable_stages_unity_before_switching_the_default(tmp_path):
+    fake = _FakeRunner(downstream_vol="40%")
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    eq._sleep = lambda _delay: None
+
+    assert eq.ensure_sink([0] * 10) is True
+
+    stage = fake.calls.index(["pactl", "set-sink-volume", "X EQ", "100%"])
+    switch = fake.calls.index(["pactl", "set-default-sink", "X EQ"])
+    commit = fake.calls.index(["pactl", "set-sink-volume", "X EQ", "40%"])
+    pin = fake.calls.index(["pactl", "set-sink-volume", "alsa_speaker", "100%"])
+    assert stage < switch < commit < pin
+
+
+def test_first_enable_without_volume_readback_stays_on_the_physical_sink(tmp_path):
+    fake = _FakeRunner(downstream_vol="")
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    eq._sleep = lambda _delay: None
+
+    assert eq.ensure_sink([0] * 10) is False
+    assert fake._default == "alsa_speaker"
+    assert fake.volume_sets("alsa_speaker") == []
+    assert eq.apply_diagnostics() == {
+        "ok": False,
+        "reason": "downstream_volume_missing",
+        "downstream": "alsa_speaker",
+    }
+
+
+def test_first_enable_requires_unity_stage_readback(tmp_path):
+    fake = _FakeRunner(downstream_vol="40%")
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    eq._sleep = lambda _delay: None
+    run = eq._runner
+
+    def ignore_unity_stage(argv, timeout=8):
+        if argv == ["pactl", "set-sink-volume", "X EQ", "100%"]:
+            fake.calls.append(argv)
+            return ""
+        return run(argv, timeout)
+
+    eq._runner = ignore_unity_stage
+
+    assert eq.ensure_sink([0] * 10) is False
+    assert fake._default == "alsa_speaker"
+    assert fake.volume_sets("alsa_speaker") == [
+        ["pactl", "set-sink-volume", "alsa_speaker", "40%"],
+    ]
+    assert eq.apply_diagnostics()["reason"] == "eq_volume_stage_not_confirmed"
+
+
+def test_first_enable_requires_eq_volume_commit_readback(tmp_path):
+    fake = _FakeRunner(downstream_vol="40%")
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    eq._sleep = lambda _delay: None
+    run = eq._runner
+
+    def ignore_eq_commit(argv, timeout=8):
+        if argv == ["pactl", "set-sink-volume", "X EQ", "40%"]:
+            fake.calls.append(argv)
+            return ""
+        return run(argv, timeout)
+
+    eq._runner = ignore_eq_commit
+
+    assert eq.ensure_sink([0] * 10) is False
+    assert fake._default == "alsa_speaker"
+    assert fake._volumes["alsa_speaker"] == "40%"
+    assert eq.apply_diagnostics()["reason"] == "eq_volume_commit_not_confirmed"
+
+
+def test_first_enable_requires_physical_pin_readback(tmp_path):
+    fake = _FakeRunner(downstream_vol="40%")
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    eq._sleep = lambda _delay: None
+    run = eq._runner
+
+    def ignore_physical_pin(argv, timeout=8):
+        if argv == ["pactl", "set-sink-volume", "alsa_speaker", "100%"]:
+            fake.calls.append(argv)
+            return ""
+        return run(argv, timeout)
+
+    eq._runner = ignore_physical_pin
+
+    assert eq.ensure_sink([0] * 10) is False
+    assert fake._default == "alsa_speaker"
+    assert fake._volumes["alsa_speaker"] == "40%"
+    assert eq.apply_diagnostics()["reason"] == "downstream_volume_pin_not_confirmed"
+
+
+def test_default_reversion_after_physical_pin_rolls_back_without_publishing(tmp_path):
+    fake = _FakeRunner(downstream_vol="40%")
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    run = eq._runner
+
+    def revert_after_pin(argv, timeout=8):
+        result = run(argv, timeout)
+        if argv == ["pactl", "set-sink-volume", "alsa_speaker", "100%"]:
+            fake._default = "alsa_speaker"
+            fake._configured_default = "alsa_speaker"
+        return result
+
+    eq._runner = revert_after_pin
+
+    assert eq.ensure_sink([0] * 10) is False
+    assert fake._default == "alsa_speaker"
+    assert fake._volumes["alsa_speaker"] == "40%"
+    assert eq.is_active() is False
+    assert eq.apply_diagnostics() == {
+        "ok": False,
+        "reason": "post_pin_route_not_confirmed",
+        "downstream": "alsa_speaker",
+        "current": "alsa_speaker",
+        "rollback_confirmed": True,
+    }
+
+
+def test_mute_ownership_moves_to_eq_and_back_to_the_physical_sink(tmp_path):
+    fake = _FakeRunner(downstream_vol="40%")
+    fake._mutes["alsa_speaker"] = True
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+
+    assert eq.ensure_sink([0] * 10) is True
+    assert fake._mutes["X EQ"] is True
+    assert fake._mutes["alsa_speaker"] is False
+
+    fake._mutes["X EQ"] = False
+    assert eq.teardown() is True
+    assert fake._mutes["alsa_speaker"] is False
+
+
+def test_mute_selected_while_eq_is_active_survives_teardown(tmp_path):
+    fake = _FakeRunner(downstream_vol="40%")
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    assert eq.ensure_sink([0] * 10) is True
+
+    fake._mutes["X EQ"] = True
+
+    assert eq.teardown() is True
+    assert fake._mutes["alsa_speaker"] is True
+
+
+def test_volume_selected_while_eq_is_active_survives_teardown(tmp_path):
+    fake = _FakeRunner(downstream_vol="40%")
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    assert eq.ensure_sink([0] * 10) is True
+
+    fake(["pactl", "set-sink-volume", "X EQ", "55%"])
+
+    assert eq.teardown() is True
+    assert fake._volumes["alsa_speaker"] == "55%"
+
+
+def test_hotplug_during_default_confirmation_aborts_before_volume_commit(tmp_path):
+    fake = _FakeRunner(downstream_vol={
+        "alsa_speaker": "40%",
+        "bluez_output.headset": "65%",
+    })
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    eq._sleep = lambda _delay: None
+    set_default = eq._set_default_confirmed
+
+    def confirm_then_hotplug(sink, expected_downstream=None):
+        confirmed = set_default(sink, expected_downstream)
+        if sink == "X EQ":
+            fake._default = "X EQ"
+            fake._link_target = "bluez_output.headset"
+            fake._sinks = (
+                "2\tbluez_output.headset\tPipeWire\t...\tRUNNING\n"
+                "3\tX EQ\tPipeWire\t...\tRUNNING\n"
+            )
+        return confirmed
+
+    eq._set_default_confirmed = confirm_then_hotplug
+
+    assert eq.ensure_sink([0] * 10) is False
+    assert fake._default == "bluez_output.headset"
+    assert ["pactl", "set-sink-volume", "alsa_speaker", "100%"] not in fake.calls
+    assert ["pactl", "set-sink-volume", "bluez_output.headset", "100%"] not in fake.calls
+    assert eq.apply_diagnostics() == {
+        "ok": False,
+        "reason": "downstream_changed_during_default",
+            "downstream": "alsa_speaker",
+            "current": "bluez_output.headset",
+            "bypass_confirmed": True,
+            "rollback_confirmed": False,
+        }
+    assert eq._route_state()["pending_restores"][0]["sink"] == "alsa_speaker"
+
+
+def test_pactl_handoff_restores_physical_configured_default_on_teardown(tmp_path):
+    fake = _FakeRunner(downstream_vol="40%")
+    fake._configured_default = "alsa_speaker"
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    eq._sleep = lambda _delay: None
+    run = eq._runner
+    transient = {"pending": False}
+
+    def model_configured_default(argv, timeout=8):
+        result = run(argv, timeout)
+        if argv[:5] == [
+            "pw-metadata",
+            "-n",
+            "default",
+            "0",
+            "default.audio.sink",
+        ]:
+            transient["pending"] = True
+        elif argv == ["pactl", "get-default-sink"] and transient["pending"]:
+            transient["pending"] = False
+            fake._default = "alsa_speaker"
+        elif argv[:2] == ["pactl", "set-default-sink"]:
+            fake._configured_default = argv[2]
+        return result
+
+    eq._runner = model_configured_default
+
+    assert eq.ensure_sink([0] * 10) is True
+    assert fake._configured_default == "X EQ"
+    assert eq.teardown() is True
+    assert fake._default == "alsa_speaker"
+    assert fake._configured_default == "alsa_speaker"
+
+
+def test_pactl_fallback_handoff_restores_the_latest_physical_intent(tmp_path):
+    fake = _FakeRunner(downstream_vol={
+        "alsa_speaker": "40%",
+        "bluez_output.headset": "65%",
+    })
+    fake._configured_default = "alsa_speaker"
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    eq._sleep = lambda _delay: None
+    run = eq._runner
+    transient = {"pending": False}
+
+    def model_configured_default(argv, timeout=8):
+        result = run(argv, timeout)
+        if argv[:5] == [
+            "pw-metadata",
+            "-n",
+            "default",
+            "0",
+            "default.audio.sink",
+        ]:
+            transient["pending"] = True
+        elif argv == ["pactl", "get-default-sink"] and transient["pending"]:
+            transient["pending"] = False
+            fake._default = "alsa_speaker"
+        elif argv[:2] == ["pactl", "set-default-sink"]:
+            fake._configured_default = argv[2]
+        return result
+
+    eq._runner = model_configured_default
+    assert eq.ensure_sink([0] * 10) is True
+
+    fake._default = "bluez_output.headset"
+    fake._configured_default = "bluez_output.headset"
+    fake._sinks = (
+        "1\talsa_speaker\tPipeWire\t...\tIDLE\n"
+        "2\tbluez_output.headset\tPipeWire\t...\tRUNNING\n"
+        "3\tX EQ\tPipeWire\t...\tRUNNING\n"
+    )
+    assert eq.ensure_sink([0] * 10) is True
+    assert eq._active_downstream == "bluez_output.headset"
+    assert fake._configured_default == "X EQ"
+
+    assert eq.teardown() is True
+    assert fake._default == "bluez_output.headset"
+    assert fake._configured_default == "bluez_output.headset"
+
+
+def test_empty_default_readback_aborts_before_physical_volume_pin(tmp_path):
+    fake = _FakeRunner(downstream_vol="40%")
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    eq._sleep = lambda _delay: None
+    run = eq._runner
+    probing = {"active": False}
+
+    def lose_default_readback(argv, timeout=8):
+        result = run(argv, timeout)
+        if argv == ["pactl", "set-default-sink", "X EQ"]:
+            probing["active"] = True
+        if argv == ["pactl", "get-default-sink"] and probing["active"]:
+            return ""
+        return result
+
+    eq._runner = lose_default_readback
+
+    assert eq.ensure_sink([0] * 10) is False
+    assert fake.calls.count(["pactl", "set-default-sink", "X EQ"]) == 1
+    assert fake.volume_sets("alsa_speaker") == []
+
+
+def test_route_change_during_default_confirmation_is_not_overridden(tmp_path):
+    fake = _FakeRunner(downstream_vol={
+        "alsa_speaker": "40%",
+        "bluez_output.headset": "65%",
+    })
+    fake._configured_default = "alsa_speaker"
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    eq._sleep = lambda _delay: None
+    run = eq._runner
+    probing = {"reads": 0}
+
+    def select_headset_during_probe(argv, timeout=8):
+        result = run(argv, timeout)
+        if argv == ["pactl", "get-default-sink"] and fake._default == "X EQ":
+            probing["reads"] += 1
+            if probing["reads"] == 2:
+                fake._default = "bluez_output.headset"
+                fake._configured_default = "bluez_output.headset"
+                fake._link_target = "bluez_output.headset"
+                fake._sinks = (
+                    "2\tbluez_output.headset\tPipeWire\t...\tRUNNING\n"
+                    "3\tX EQ\tPipeWire\t...\tRUNNING\n"
+                )
+        return result
+
+    eq._runner = select_headset_during_probe
+
+    assert eq.ensure_sink([0] * 10) is False
+    assert fake._default == "bluez_output.headset"
+    assert fake.calls.count(["pactl", "set-default-sink", "X EQ"]) == 1
+    assert fake.volume_sets("alsa_speaker") == []
+    assert fake.volume_sets("bluez_output.headset") == []
+
+
+def test_first_enable_rolls_back_when_all_eq_default_writes_are_transient(tmp_path):
+    fake = _FakeRunner(downstream_vol="40%")
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    eq._sleep = lambda _delay: None
+    run = eq._runner
+    transient = {"pending": False}
+
+    def revert_eq_default(argv, timeout=8):
+        result = run(argv, timeout)
+        if (
+            argv[:5]
+            == ["pw-metadata", "-n", "default", "0", "default.audio.sink"]
+            or argv == ["pactl", "set-default-sink", "X EQ"]
+        ):
+            transient["pending"] = True
+        elif argv == ["pactl", "get-default-sink"] and transient["pending"]:
+            transient["pending"] = False
+            fake._default = "alsa_speaker"
+        return result
+
+    eq._runner = revert_eq_default
+
+    assert eq.ensure_sink([0] * 10) is False
+    assert fake._default == "alsa_speaker"
+    assert ["pactl", "set-sink-volume", "alsa_speaker", "100%"] not in fake.calls
+    assert Path(eq._conf_path()).exists()
+    assert eq._route_state()["phase"] == "prepared"
+    assert eq.apply_diagnostics() == {
+        "ok": False,
+        "reason": "default_sink_not_confirmed",
+        "downstream": "alsa_speaker",
+        "bypass_confirmed": True,
+        "current": "alsa_speaker",
+    }
 
 
 def test_first_enable_creates_a_missing_pipewire_config_directory(tmp_path):
@@ -364,7 +753,15 @@ def test_first_enable_creates_a_missing_pipewire_config_directory(tmp_path):
 
     assert eq.ensure_sink([0] * 10) is True
     assert conf.exists()
-    assert not Path(f"{conf}.first-enable-pending").exists()
+    assert json.loads(Path(f"{conf}.first-enable-pending").read_text()) == {
+        "sink": "alsa_speaker",
+        "volume": "40%",
+        "phase": "active",
+        "muted": False,
+        "physical_volumes": ["40%"],
+        "physical_muted": False,
+        "pending_restores": [],
+    }
 
 
 def test_volume_marker_refuses_to_follow_a_symlink(tmp_path):
@@ -376,6 +773,8 @@ def test_volume_marker_refuses_to_follow_a_symlink(tmp_path):
     marker.symlink_to(victim)
     eq._first_enable_downstream = "alsa_speaker"
     eq._first_enable_volume = "40%"
+    eq._first_enable_volumes = ("40%",)
+    eq._first_enable_mute = False
 
     assert eq._persist_first_enable_pending() is False
     assert victim.read_text() == "unchanged"
@@ -472,6 +871,8 @@ def test_config_and_volume_marker_are_private_to_the_session_user(tmp_path):
     eq = _make_eq(tmp_path, fake, conf_exists=False)
     eq._first_enable_downstream = "alsa_speaker"
     eq._first_enable_volume = "40%"
+    eq._first_enable_volumes = ("40%",)
+    eq._first_enable_mute = False
 
     assert eq._persist_first_enable_pending() is True
     assert stat.S_IMODE(os.stat(eq._pending_path()).st_mode) == 0o600
@@ -524,12 +925,30 @@ def test_trusted_home_alias_is_resolved_before_secure_directory_walk(
     assert Path(eq._conf_path()).exists()
 
 
-def test_ensure_sink_boot_reassert_preserves_user_volume(tmp_path):
+def test_boot_activation_from_physical_default_preserves_user_volume(tmp_path):
     fake = _FakeRunner(downstream_vol="100%")
     eq = _make_eq(tmp_path, fake, conf_exists=True)
     assert eq.ensure_sink([0] * 10) is True
-    assert fake.volume_sets("X EQ") == []
+    assert fake.volume_sets("X EQ") == [
+        ["pactl", "set-sink-volume", "X EQ", "100%"],
+    ]
     assert ["pactl", "set-sink-volume", "alsa_speaker", "100%"] in fake.calls
+
+
+def test_reassert_with_eq_already_default_never_stages_audible_volume(tmp_path):
+    fake = _FakeRunner(downstream_vol={
+        "alsa_speaker": "100%",
+        "X EQ": "40%",
+    })
+    fake._default = "X EQ"
+    fake._configured_default = "alsa_speaker"
+    fake._sinks += "3\tX EQ\tPipeWire\t...\tRUNNING\n"
+    eq = _make_eq(tmp_path, fake, conf_exists=True)
+    eq._sleep = lambda _delay: None
+
+    assert eq.ensure_sink([0] * 10) is True
+    assert ["pactl", "set-sink-volume", "X EQ", "100%"] not in fake.calls
+    assert fake._volumes["X EQ"] == "40%"
 
 
 def test_same_curve_restarts_filter_chain_when_output_changes(tmp_path):
@@ -664,9 +1083,20 @@ def test_teardown_falls_back_to_a_live_sink_after_hot_unplug(tmp_path):
         "3\tX EQ\tPipeWire\t...\tRUNNING\n"
     )
 
-    eq.teardown()
+    assert eq.teardown() is False
 
     assert fake._default == "alsa_speaker"
+    assert eq._route_state()["pending_restores"][0]["sink"] == (
+        "bluez_output.headset"
+    )
+
+    fake._sinks = (
+        "1\talsa_speaker\tPipeWire\t...\tRUNNING\n"
+        "2\tbluez_output.headset\tPipeWire\t...\tIDLE\n"
+    )
+    eq._monotonic = lambda: 100.0
+
+    assert eq.teardown() is True
     assert eq.apply_diagnostics()["ok"] is True
 
 
@@ -690,15 +1120,67 @@ def test_route_handoff_retargets_while_eq_remains_default(tmp_path):
 
     handoff = fake.calls[checkpoint:]
     restart = handoff.index(["systemctl", "--user", "restart", "filter-chain.service"])
-    eq_default = next(
-        index
-        for index, call in enumerate(handoff)
-        if call[:5]
-        == ["pw-metadata", "-n", "default", "0", "default.audio.sink"]
-    )
+    eq_default = handoff.index(["pactl", "set-default-sink", "X EQ"])
     assert ["pactl", "set-default-sink", "alsa_speaker"] not in handoff
     assert restart < eq_default
     assert fake._link_target == "alsa_speaker"
+
+
+def test_route_handoff_stages_eq_before_republishing_it(tmp_path):
+    fake = _FakeRunner(downstream_vol={
+        "alsa_speaker": "40%",
+        "bluez_output.headset": "65%",
+    })
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    assert eq.ensure_sink([0] * 10) is True
+
+    fake._default = "bluez_output.headset"
+    fake._configured_default = "bluez_output.headset"
+    fake._sinks = (
+        "1\talsa_speaker\tPipeWire\t...\tIDLE\n"
+        "2\tbluez_output.headset\tPipeWire\t...\tRUNNING\n"
+        "3\tX EQ\tPipeWire\t...\tRUNNING\n"
+    )
+    checkpoint = len(fake.calls)
+
+    assert eq.ensure_sink([0] * 10) is True
+
+    handoff = fake.calls[checkpoint:]
+    stage = handoff.index(["pactl", "set-sink-volume", "X EQ", "100%"])
+    switch = handoff.index(["pactl", "set-default-sink", "X EQ"])
+    commit = handoff.index(["pactl", "set-sink-volume", "X EQ", "40%"])
+    pin = handoff.index([
+        "pactl", "set-sink-volume", "bluez_output.headset", "100%"
+    ])
+    assert stage < switch < commit < pin
+    assert eq._route_state()["sink"] == "bluez_output.headset"
+
+
+def test_eq_default_route_handoff_restores_old_sink_after_restart(tmp_path):
+    fake = _FakeRunner(downstream_vol={
+        "alsa_speaker": "40%",
+        "bluez_output.headset": "65%",
+    })
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    assert eq.ensure_sink([0] * 10) is True
+    fake._configured_default = "bluez_output.headset"
+    fake._sinks = (
+        "1\talsa_speaker\tPipeWire\t...\tIDLE\n"
+        "2\tbluez_output.headset\tPipeWire\t...\tRUNNING\n"
+        "3\tX EQ\tPipeWire\t...\tRUNNING\n"
+    )
+    checkpoint = len(fake.calls)
+
+    assert eq.ensure_sink([0] * 10) is True
+
+    handoff = fake.calls[checkpoint:]
+    restart = handoff.index([
+        "systemctl", "--user", "restart", "filter-chain.service"
+    ])
+    restore = handoff.index([
+        "pactl", "set-sink-volume", "alsa_speaker", "40%"
+    ])
+    assert restart < restore
 
 
 def test_route_handoff_fails_honestly_when_target_link_is_not_confirmed(tmp_path):
@@ -769,80 +1251,79 @@ def test_output_change_during_apply_aborts_before_restarting_old_target(tmp_path
     }
 
 
-def test_ensure_sink_retries_until_default_readback_confirms(tmp_path):
+def test_ensure_sink_uses_only_the_canonical_pactl_default_write(tmp_path):
     fake = _FakeRunner()
     eq = _make_eq(tmp_path, fake, conf_exists=False)
     eq._sleep = lambda _delay: None
-    attempts = 0
-    run = eq._runner
 
-    def confirm_on_third_attempt(argv, timeout=8):
-        nonlocal attempts
-        if argv[:5] == [
+    assert eq.ensure_sink([0] * 10) is True
+    assert ["pactl", "set-default-sink", "X EQ"] in fake.calls
+    assert not any(
+        call[:5] == [
             "pw-metadata", "-n", "default", "0", "default.audio.sink"
-        ]:
-            attempts += 1
-            if attempts < 3:
-                fake.calls.append(argv)
-                return ""
-        return run(argv, timeout)
-
-    eq._runner = confirm_on_third_attempt
-
-    assert eq.ensure_sink([0] * 10) is True
-    assert attempts == 3
+        ]
+        for call in fake.calls
+    )
 
 
-def test_ensure_sink_sets_effective_default_without_overwriting_configured_output(tmp_path):
+def test_default_probe_uses_short_subprocess_timeouts(tmp_path):
     fake = _FakeRunner()
     eq = _make_eq(tmp_path, fake, conf_exists=False)
+    eq._sleep = lambda _delay: None
+    timeouts = []
+
+    def bounded_runner(argv, timeout=8):
+        if argv[0] in ("pactl", "pw-metadata"):
+            timeouts.append(timeout)
+        return fake(argv, timeout)
+
+    eq._runner = bounded_runner
+
+    assert eq._set_default_confirmed("X EQ", "alsa_speaker") is True
+    assert timeouts
+    assert max(timeouts) <= 1
+
+
+def test_default_probe_has_a_finite_end_to_end_budget(tmp_path):
+    fake = _FakeRunner()
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    now = {"value": 0.0}
+
+    eq._monotonic = lambda: now["value"]
     run = eq._runner
 
-    def metadata_default(argv, timeout=8):
-        if argv[:5] == [
-            "pw-metadata",
-            "-n",
-            "default",
-            "0",
-            "default.audio.sink",
-        ]:
+    def reject_default(argv, timeout=8):
+        now["value"] += 3.0
+        if argv == ["pactl", "set-default-sink", "X EQ"]:
             fake.calls.append(argv)
-            fake._default = "X EQ"
             return ""
         return run(argv, timeout)
 
-    eq._runner = metadata_default
+    eq._runner = reject_default
+
+    assert eq._set_default_confirmed("X EQ", "alsa_speaker") is False
+    assert eq._default_failure == {
+        "reason": "default_confirmation_timeout",
+        "current": "alsa_speaker",
+    }
+    assert fake.calls.count(["pactl", "set-default-sink", "X EQ"]) < 5
+
+
+def test_ensure_sink_journals_physical_output_before_configured_default_is_eq(tmp_path):
+    fake = _FakeRunner()
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
 
     assert eq.ensure_sink([0] * 10) is True
-    assert not any(
-        call[:3] == ["pactl", "set-default-sink", "X EQ"] for call in fake.calls
-    )
-
-
-def test_eq_default_confirmation_never_falls_back_to_pactl(tmp_path):
-    fake = _FakeRunner()
-    eq = _make_eq(tmp_path, fake, conf_exists=True)
-    eq._sleep = lambda _delay: None
-    run = eq._runner
-
-    def ignore_metadata_change(argv, timeout=8):
-        if argv[:5] == [
-            "pw-metadata",
-            "-n",
-            "default",
-            "0",
-            "default.audio.sink",
-        ]:
-            fake.calls.append(argv)
-            return ""
-        return run(argv, timeout)
-
-    eq._runner = ignore_metadata_change
-
-    assert eq.ensure_sink([0] * 10) is False
-    assert not any(
-        call[:3] == ["pactl", "set-default-sink", "X EQ"] for call in fake.calls
-    )
+    assert fake._configured_default == "X EQ"
+    assert eq._route_state() == {
+        "sink": "alsa_speaker",
+        "volume": "40%",
+        "phase": "active",
+        "muted": False,
+        "physical_volumes": ["40%"],
+        "physical_muted": False,
+        "pending_restores": [],
+    }
 
 
 def test_empty_readbacks_never_confirm_bypass_or_sink_absence(tmp_path):
@@ -859,15 +1340,10 @@ def test_ensure_sink_default_confirmation_retry_is_bounded(tmp_path):
     fake = _FakeRunner()
     eq = _make_eq(tmp_path, fake, conf_exists=True)
     eq._sleep = lambda _delay: None
-    attempts = 0
     run = eq._runner
 
     def never_confirm(argv, timeout=8):
-        nonlocal attempts
-        if argv[:5] == [
-            "pw-metadata", "-n", "default", "0", "default.audio.sink"
-        ]:
-            attempts += 1
+        if argv == ["pactl", "set-default-sink", "X EQ"]:
             fake.calls.append(argv)
             return ""
         return run(argv, timeout)
@@ -875,7 +1351,7 @@ def test_ensure_sink_default_confirmation_retry_is_bounded(tmp_path):
     eq._runner = never_confirm
 
     assert eq.ensure_sink([0] * 10) is False
-    assert 1 < attempts <= 6
+    assert fake.calls.count(["pactl", "set-default-sink", "X EQ"]) == 3
 
 
 def test_failed_restart_does_not_publish_new_curve_or_restart_again_immediately(tmp_path):
@@ -1004,7 +1480,7 @@ def test_default_confirmation_failure_has_one_finite_retry_budget(tmp_path):
     def reject_eq_default(argv, timeout=8):
         if argv[:5] == [
             "pw-metadata", "-n", "default", "0", "default.audio.sink"
-        ]:
+        ] or argv == ["pactl", "set-default-sink", "X EQ"]:
             fake.calls.append(argv)
             return ""
         return run(argv, timeout)
@@ -1018,12 +1494,7 @@ def test_default_confirmation_failure_has_one_finite_retry_budget(tmp_path):
     assert fake.calls.count(
         ["systemctl", "--user", "restart", "filter-chain.service"]
     ) == 1
-    assert sum(
-        call[:5] == [
-            "pw-metadata", "-n", "default", "0", "default.audio.sink"
-        ]
-        for call in fake.calls
-    ) == 15
+    assert fake.calls.count(["pactl", "set-default-sink", "X EQ"]) == 9
     assert eq.apply_diagnostics()["reason"] == "default_sink_retry_exhausted"
 
 
@@ -1055,6 +1526,15 @@ def test_support_requires_pw_link_for_route_readback(monkeypatch):
     monkeypatch.setattr(pipewire.shutil, "which", lambda _name: None)
     eq = PipeWireEq(runner=_FakeRunner(), name="X")
     eq._session = (1000, "/run/user/1000", "deck")
+
+    assert eq.is_supported() is False
+
+
+def test_support_requires_pactl_for_confirmed_handoffs(monkeypatch):
+    monkeypatch.setattr(pipewire, "filter_chain_module", lambda: "/lib/filter-chain.so")
+    eq = PipeWireEq(runner=_FakeRunner(), name="X")
+    eq._session = (1000, "/run/user/1000", "deck")
+    eq._binary_available = lambda name: name != "pactl"
 
     assert eq.is_supported() is False
 
@@ -1092,7 +1572,7 @@ def test_ensure_sink_requires_default_sink_readback(tmp_path):
     def ignore_default_change(argv, timeout=8):
         if argv[:5] == [
             "pw-metadata", "-n", "default", "0", "default.audio.sink"
-        ]:
+        ] or argv == ["pactl", "set-default-sink", "X EQ"]:
             fake.calls.append(argv)
             return ""
         return fake(argv, timeout)
@@ -1101,13 +1581,15 @@ def test_ensure_sink_requires_default_sink_readback(tmp_path):
 
     assert eq.ensure_sink([0] * 10) is False
 
-    assert fake.volume_sets("alsa_speaker") == []
+    assert fake.volume_sets("alsa_speaker") == [
+        ["pactl", "set-sink-volume", "alsa_speaker", "40%"],
+    ]
     assert eq.apply_diagnostics() == {
         "ok": False,
         "reason": "default_sink_not_confirmed",
         "downstream": "alsa_speaker",
         "bypass_confirmed": True,
-        "rollback_confirmed": True,
+        "current": "alsa_speaker",
     }
 
 
@@ -1122,26 +1604,32 @@ def test_failed_first_enable_rolls_back_and_retry_preserves_volume(tmp_path):
     run = eq._runner
 
     def fail_first_default_change(argv, timeout=8):
-        if argv[:5] == [
-            "pw-metadata", "-n", "default", "0", "default.audio.sink"
-        ]:
-            if block_default["enabled"]:
-                fake.calls.append(argv)
-                return ""
+        targets_eq = (
+            argv[:5]
+            == ["pw-metadata", "-n", "default", "0", "default.audio.sink"]
+            or argv == ["pactl", "set-default-sink", "X EQ"]
+        )
+        if targets_eq and block_default["enabled"]:
+            fake.calls.append(argv)
+            return ""
         return run(argv, timeout)
 
     eq._runner = fail_first_default_change
 
     assert eq.ensure_sink([0] * 10) is False
-    assert not Path(conf).exists()
+    assert Path(conf).exists()
+    assert eq._route_state()["phase"] == "prepared"
     block_default["enabled"] = False
     now["value"] += 16
     assert eq.ensure_sink([0] * 10) is True
 
     assert fake.volume_sets("X EQ") == [
+        ["pactl", "set-sink-volume", "X EQ", "100%"],
+        ["pactl", "set-sink-volume", "X EQ", "100%"],
         ["pactl", "set-sink-volume", "X EQ", "40%"],
     ]
     assert fake.volume_sets("alsa_speaker") == [
+        ["pactl", "set-sink-volume", "alsa_speaker", "40%"],
         ["pactl", "set-sink-volume", "alsa_speaker", "100%"],
     ]
 
@@ -1166,6 +1654,7 @@ def test_first_enable_restart_retry_still_carries_the_physical_volume(tmp_path):
     now["value"] += 16
     assert eq.ensure_sink([0] * 10) is True
     assert fake.volume_sets("X EQ") == [
+        ["pactl", "set-sink-volume", "X EQ", "100%"],
         ["pactl", "set-sink-volume", "X EQ", "40%"],
     ]
 
@@ -1188,6 +1677,7 @@ def test_first_enable_volume_handoff_survives_a_process_restart(tmp_path):
     recovered = _make_eq(tmp_path, recovered_fake, conf_exists=True)
     assert recovered.ensure_sink([0] * 10) is True
     assert recovered_fake.volume_sets("X EQ") == [
+        ["pactl", "set-sink-volume", "X EQ", "100%"],
         ["pactl", "set-sink-volume", "X EQ", "40%"],
     ]
 
@@ -1201,7 +1691,7 @@ def test_disable_after_failed_first_enable_does_not_change_physical_volume(tmp_p
     def ignore_default_change(argv, timeout=8):
         if argv[:5] == [
             "pw-metadata", "-n", "default", "0", "default.audio.sink"
-        ]:
+        ] or argv == ["pactl", "set-default-sink", "X EQ"]:
             fake.calls.append(argv)
             return ""
         return fake(argv, timeout)
@@ -1211,7 +1701,9 @@ def test_disable_after_failed_first_enable_does_not_change_physical_volume(tmp_p
 
     eq.teardown()
 
-    assert fake.volume_sets("alsa_speaker") == []
+    assert fake.volume_sets("alsa_speaker")[-1] == [
+        "pactl", "set-sink-volume", "alsa_speaker", "40%"
+    ]
     assert eq.is_active() is False
 
 
@@ -1343,7 +1835,7 @@ def test_first_enable_volume_survives_a_crash_after_config_publish(tmp_path):
         "X EQ",
         "40%",
     ]
-    assert not os.path.exists(f"{eq._conf_path()}.first-enable-pending")
+    assert recovered._route_state()["phase"] == "active"
 
 
 def test_first_enable_rejects_a_crash_marker_from_another_output(tmp_path):
@@ -1427,7 +1919,7 @@ def test_failed_config_removal_keeps_the_route_scoped_volume_marker(
     ]
 
 
-def test_marker_cleanup_failure_bypasses_eq_until_cleanup_can_retry(
+def test_route_state_cleanup_failure_is_retained_until_teardown_can_retry(
     tmp_path, monkeypatch
 ):
     fake = _FakeRunner(downstream_vol="40%")
@@ -1444,19 +1936,20 @@ def test_marker_cleanup_failure_bypasses_eq_until_cleanup_can_retry(
 
     monkeypatch.setattr(eq, "_remove_entry", reject_marker_removal)
 
-    assert eq.ensure_sink([0] * 10) is False
-    assert fake._default == "alsa_speaker"
+    assert eq.ensure_sink([0] * 10) is True
+    assert fake._default == "X EQ"
     assert os.path.exists(marker_path)
+    assert eq.teardown() is False
+    assert fake._default == "alsa_speaker"
     assert eq.apply_diagnostics() == {
         "ok": False,
-        "reason": "pending_marker_cleanup_failed",
+        "reason": "teardown_marker_cleanup_failed",
         "downstream": "alsa_speaker",
-        "bypass_confirmed": True,
     }
 
     monkeypatch.setattr(eq, "_remove_entry", remove_entry)
     now["value"] += 120
-    assert eq.ensure_sink([0] * 10) is True
+    assert eq.teardown() is True
     assert not os.path.exists(marker_path)
 
 
@@ -1520,7 +2013,7 @@ def test_teardown_without_runtime_reports_pending_marker_cleanup_failure(
     assert eq.apply_diagnostics() == {
         "ok": False,
         "reason": "teardown_marker_cleanup_failed",
-        "downstream": None,
+        "downstream": "alsa_speaker",
     }
     assert ["systemctl", "--user", "restart", "filter-chain.service"] not in fake.calls
 
@@ -1586,6 +2079,94 @@ def test_teardown_cleans_a_persisted_eq_from_a_fresh_process(tmp_path):
     assert eq.teardown() is True
     assert fake._default == "alsa_speaker"
     assert "\tX EQ\t" not in fake._sinks
+
+
+def test_fresh_process_recovers_target_from_its_config_without_a_live_link(tmp_path):
+    fake = _FakeRunner(downstream_vol={
+        "alsa_speaker": "40%",
+        "alsa_output.hdmi": "65%",
+        "X EQ": "65%",
+    })
+    fake._default = "X EQ"
+    fake._configured_default = "X EQ"
+    fake._link_target = ""
+    fake._sinks = (
+        "1\talsa_speaker\tPipeWire\t...\tIDLE\n"
+        "2\talsa_output.hdmi\tPipeWire\t...\tRUNNING\n"
+        "3\tX EQ\tPipeWire\t...\tRUNNING\n"
+    )
+    eq = _make_eq(tmp_path, fake, conf_exists=True)
+    Path(eq._conf_path()).write_text('target.object = "alsa_output.hdmi"')
+
+    assert eq._downstream_sink() == "alsa_output.hdmi"
+    assert eq.teardown() is True
+    assert fake._default == "alsa_output.hdmi"
+
+
+def test_fresh_process_rejects_ambiguous_targets_instead_of_guessing(tmp_path):
+    fake = _FakeRunner(downstream_vol={
+        "alsa_speaker": "40%",
+        "alsa_output.hdmi": "65%",
+        "X EQ": "40%",
+    })
+    fake._default = "X EQ"
+    fake._configured_default = "X EQ"
+    fake._link_target = ""
+    fake._sinks = (
+        "1\talsa_speaker\tPipeWire\t...\tIDLE\n"
+        "2\talsa_output.hdmi\tPipeWire\t...\tRUNNING\n"
+        "3\tX EQ\tPipeWire\t...\tRUNNING\n"
+    )
+    eq = _make_eq(tmp_path, fake, conf_exists=True)
+    Path(eq._conf_path()).write_text("invalid")
+
+    assert eq._downstream_sink() is None
+    assert eq.teardown() is False
+    assert fake._default == "X EQ"
+
+
+def test_teardown_hands_off_volume_and_default_before_removing_eq(tmp_path):
+    fake = _FakeRunner(downstream_vol="40%")
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    assert eq.ensure_sink([0] * 10) is True
+    checkpoint = len(fake.calls)
+
+    assert eq.teardown() is True
+
+    teardown = fake.calls[checkpoint:]
+    volume = teardown.index([
+        "pactl", "set-sink-volume", "alsa_speaker", "40%"
+    ])
+    default = teardown.index(["pactl", "set-default-sink", "alsa_speaker"])
+    restart = teardown.index([
+        "systemctl", "--user", "restart", "filter-chain.service"
+    ])
+    assert volume < default < restart
+
+
+def test_fresh_teardown_prefers_pending_volume_over_staged_eq_volume(tmp_path):
+    fake = _FakeRunner(downstream_vol={
+        "alsa_speaker": "40%",
+        "X EQ": "100%",
+    })
+    fake._default = "X EQ"
+    fake._configured_default = "alsa_speaker"
+    fake._sinks += "3\tX EQ\tPipeWire\t...\tRUNNING\n"
+    eq = _make_eq(tmp_path, fake, conf_exists=True)
+    Path(eq._pending_path()).write_text(
+        '{"sink":"alsa_speaker","volume":"40%","phase":"prepared",'
+        '"muted":false,"physical_volumes":["40%"],"physical_muted":false}'
+    )
+
+    assert eq.teardown() is True
+    assert fake._default == "alsa_speaker"
+    assert fake.volume_sets("alsa_speaker")[-1] == [
+        "pactl",
+        "set-sink-volume",
+        "alsa_speaker",
+        "40%",
+    ]
+    assert not Path(eq._pending_path()).exists()
 
 
 def test_teardown_removes_an_orphan_eq_sink_without_a_config_file(tmp_path):
@@ -1687,6 +2268,629 @@ def test_teardown_does_not_publish_success_without_default_handoff(tmp_path):
         "reason": "teardown_default_not_confirmed",
         "downstream": "alsa_speaker",
     }
+
+
+def test_route_state_rejects_schema_without_physical_ownership(tmp_path):
+    fake = _FakeRunner()
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    Path(eq._pending_path()).write_text(
+        '{"sink":"alsa_speaker","volume":"40%",'
+        '"phase":"active","muted":true}'
+    )
+
+    assert eq._route_state() is None
+    assert fake.volume_sets("alsa_speaker") == []
+
+
+def test_route_state_migrates_the_original_two_field_journal(tmp_path):
+    fake = _FakeRunner()
+    fake._default = "X EQ"
+    fake._mutes["X EQ"] = True
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    Path(eq._pending_path()).write_text(
+        '{"sink":"alsa_speaker","volume":"40%"}'
+    )
+
+    assert eq._route_state() == {
+        "sink": "alsa_speaker",
+        "volume": "40%",
+        "phase": "prepared",
+        "muted": True,
+        "physical_volumes": ["40%"],
+        "physical_muted": False,
+        "pending_restores": [],
+    }
+
+
+def test_two_field_journal_uses_live_physical_channels_and_default_mute(tmp_path):
+    fake = _FakeRunner()
+    fake._volume_channels["alsa_speaker"] = ("35%", "45%")
+    fake._mutes["alsa_speaker"] = True
+    fake._mutes["X EQ"] = False
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    Path(eq._pending_path()).write_text(
+        '{"sink":"alsa_speaker","volume":"35%"}'
+    )
+
+    state = eq._route_state()
+    assert state["muted"] is True
+    assert state["physical_volumes"] == ["35%", "45%"]
+    assert state["physical_muted"] is True
+
+
+def test_route_state_rejects_incomplete_ownership_data(tmp_path):
+    fake = _FakeRunner()
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    Path(eq._pending_path()).write_text(
+        '{"sink":"alsa_speaker","volume":"40%","phase":"active"}'
+    )
+
+    assert eq._route_state() is None
+
+
+def test_pin_aborts_before_mutation_without_a_complete_snapshot(tmp_path):
+    fake = _FakeRunner()
+    eq = _make_eq(tmp_path, fake, conf_exists=True)
+    run = eq._runner
+
+    def omit_mute(argv, timeout=8):
+        if argv == ["pactl", "get-sink-mute", "alsa_speaker"]:
+            fake.calls.append(argv)
+            return ""
+        return run(argv, timeout)
+
+    eq._runner = omit_mute
+
+    assert eq._pin_downstream("alsa_speaker", 0) is False
+    assert fake.volume_sets("alsa_speaker") == []
+
+
+def test_restore_retains_ownership_until_readback_confirms_it(tmp_path):
+    fake = _FakeRunner(downstream_vol="100%")
+    eq = _make_eq(tmp_path, fake, conf_exists=True)
+    eq._downstream_volumes["alsa_speaker"] = ("40%",)
+    eq._downstream_mutes["alsa_speaker"] = True
+    run = eq._runner
+
+    def ignore_restore(argv, timeout=8):
+        if argv == ["pactl", "set-sink-volume", "alsa_speaker", "40%"]:
+            fake.calls.append(argv)
+            return ""
+        return run(argv, timeout)
+
+    eq._runner = ignore_restore
+
+    assert eq._restore_downstream("alsa_speaker") is False
+    assert eq._downstream_volumes["alsa_speaker"] == ("40%",)
+    assert eq._downstream_mutes["alsa_speaker"] is True
+
+
+def test_active_reapply_refreshes_live_volume_and_mute_in_the_journal(tmp_path):
+    fake = _FakeRunner()
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    assert eq.ensure_sink([0] * 10) is True
+
+    fake._volumes["X EQ"] = "25%"
+    fake._volume_channels["X EQ"] = ("25%",)
+    fake._mutes["X EQ"] = True
+
+    assert eq.ensure_sink([0] * 10) is True
+    assert eq._route_state()["volume"] == "25%"
+    assert eq._route_state()["muted"] is True
+    assert eq._route_state()["physical_volumes"] == ["40%"]
+
+
+def test_active_state_sync_refreshes_live_volume_and_mute(tmp_path):
+    fake = _FakeRunner()
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    assert eq.ensure_sink([0] * 10) is True
+
+    fake._volumes["X EQ"] = "25%"
+    fake._volume_channels["X EQ"] = ("25%",)
+    fake._mutes["X EQ"] = True
+
+    assert eq.sync_state() is True
+    assert eq._route_state()["volume"] == "25%"
+    assert eq._route_state()["muted"] is True
+    assert eq._route_state()["physical_volumes"] == ["40%"]
+
+
+def test_active_state_sync_restores_a_replugged_old_sink(tmp_path):
+    fake = _FakeRunner(downstream_vol={
+        "alsa_speaker": "100%",
+        "bluez_output.headset": "100%",
+        "X EQ": "25%",
+    })
+    fake._default = "X EQ"
+    fake._link_target = "bluez_output.headset"
+    fake._sinks = (
+        "1\talsa_speaker\tPipeWire\t...\tIDLE\n"
+        "2\tbluez_output.headset\tPipeWire\t...\tRUNNING\n"
+        "3\tX EQ\tPipeWire\t...\tRUNNING\n"
+    )
+    eq = _make_eq(tmp_path, fake, conf_exists=True)
+    Path(eq._pending_path()).write_text(json.dumps({
+        "sink": "bluez_output.headset",
+        "volume": "25%",
+        "phase": "active",
+        "muted": False,
+        "physical_volumes": ["65%"],
+        "physical_muted": False,
+        "pending_restores": [{
+            "sink": "alsa_speaker",
+            "volumes": ["40%"],
+            "muted": True,
+        }],
+    }))
+
+    assert eq.sync_state() is True
+    assert fake._volumes["alsa_speaker"] == "40%"
+    assert fake._mutes["alsa_speaker"] is True
+    assert fake._volumes["bluez_output.headset"] == "100%"
+    assert eq._route_state()["pending_restores"] == []
+
+
+def test_curve_restart_restores_journaled_eq_volume_and_mute(tmp_path):
+    fake = _FakeRunner()
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    assert eq.ensure_sink([0] * 10) is True
+    fake._volumes["X EQ"] = "25%"
+    fake._volume_channels["X EQ"] = ("25%",)
+    fake._mutes["X EQ"] = True
+    run = eq._runner
+
+    def reset_eq_controls_on_restart(argv, timeout=8):
+        result = run(argv, timeout)
+        if argv == ["systemctl", "--user", "restart", "filter-chain.service"]:
+            fake._volumes["X EQ"] = "100%"
+            fake._volume_channels["X EQ"] = ("100%",)
+            fake._mutes["X EQ"] = False
+        return result
+
+    eq._runner = reset_eq_controls_on_restart
+
+    assert eq.ensure_sink([1] * 10) is True
+    assert fake._volumes["X EQ"] == "25%"
+    assert fake._mutes["X EQ"] is True
+    assert eq._route_state()["volume"] == "25%"
+    assert eq._route_state()["muted"] is True
+
+
+def test_route_restart_preserves_live_state_newer_than_journal(tmp_path):
+    fake = _FakeRunner(downstream_vol={
+        "alsa_speaker": "40%",
+        "bluez_output.headset": "65%",
+    })
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    assert eq.ensure_sink([0] * 10) is True
+    fake._volumes["X EQ"] = "25%"
+    fake._volume_channels["X EQ"] = ("25%",)
+    fake._mutes["X EQ"] = True
+    fake._configured_default = "bluez_output.headset"
+    fake._sinks = (
+        "1\talsa_speaker\tPipeWire\t...\tIDLE\n"
+        "2\tbluez_output.headset\tPipeWire\t...\tRUNNING\n"
+        "3\tX EQ\tPipeWire\t...\tRUNNING\n"
+    )
+    run = eq._runner
+
+    def reset_eq_controls_on_restart(argv, timeout=8):
+        result = run(argv, timeout)
+        if argv == ["systemctl", "--user", "restart", "filter-chain.service"]:
+            fake._volumes["X EQ"] = "100%"
+            fake._volume_channels["X EQ"] = ("100%",)
+            fake._mutes["X EQ"] = False
+        return result
+
+    eq._runner = reset_eq_controls_on_restart
+
+    assert eq.ensure_sink([0] * 10) is True
+    assert fake._volumes["X EQ"] == "25%"
+    assert fake._mutes["X EQ"] is True
+    assert eq._route_state()["sink"] == "bluez_output.headset"
+    assert eq._route_state()["volume"] == "25%"
+    assert eq._route_state()["muted"] is True
+
+
+def test_curve_restart_crash_recovers_prepared_eq_volume_and_mute(tmp_path):
+    fake = _FakeRunner()
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    assert eq.ensure_sink([0] * 10) is True
+    fake._volumes["X EQ"] = "25%"
+    fake._volume_channels["X EQ"] = ("25%",)
+    fake._mutes["X EQ"] = True
+    assert eq.sync_state() is True
+    restart = eq._restart
+
+    def crash_after_restart():
+        assert restart() is True
+        fake._volumes["X EQ"] = "100%"
+        fake._volume_channels["X EQ"] = ("100%",)
+        fake._mutes["X EQ"] = False
+        raise RuntimeError("process terminated")
+
+    eq._restart = crash_after_restart
+
+    try:
+        eq.ensure_sink([1] * 10)
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("expected simulated process termination")
+
+    assert eq._route_state()["phase"] == "prepared"
+    assert eq._route_state()["volume"] == "25%"
+    assert eq._route_state()["muted"] is True
+
+    recovered = _make_eq(tmp_path, fake, conf_exists=True)
+
+    assert recovered.ensure_sink([1] * 10) is True
+    assert fake._volumes["X EQ"] == "25%"
+    assert fake._mutes["X EQ"] is True
+
+
+def test_activation_rejects_a_missing_final_mute_readback(tmp_path):
+    fake = _FakeRunner()
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    run = eq._runner
+    reads = {"eq_mute": 0}
+
+    def lose_final_mute(argv, timeout=8):
+        if argv == ["pactl", "get-sink-mute", "X EQ"]:
+            reads["eq_mute"] += 1
+            if reads["eq_mute"] == 2:
+                fake.calls.append(argv)
+                return ""
+        return run(argv, timeout)
+
+    eq._runner = lose_final_mute
+
+    assert eq.ensure_sink([0] * 10) is False
+    assert eq.apply_diagnostics()["reason"] == "route_state_write_failed"
+
+
+def test_fresh_backend_preserves_live_eq_state_and_physical_snapshot(tmp_path):
+    fake = _FakeRunner()
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    assert eq.ensure_sink([0] * 10) is True
+    fake._sinks += "3\tX EQ\tPipeWire\t...\tRUNNING\n"
+    fake._volumes["X EQ"] = "25%"
+    fake._volume_channels["X EQ"] = ("25%",)
+    fake._mutes["X EQ"] = True
+
+    recovered = _make_eq(tmp_path, fake, conf_exists=True)
+
+    assert recovered.ensure_sink([0] * 10) is True
+    state = recovered._route_state()
+    assert state["volume"] == "25%"
+    assert state["muted"] is True
+    assert state["physical_volumes"] == ["40%"]
+    assert state["physical_muted"] is False
+
+
+def test_upgrade_without_journal_captures_live_eq_before_restart(tmp_path):
+    fake = _FakeRunner(downstream_vol={
+        "alsa_speaker": "40%",
+        "X EQ": "25%",
+    })
+    fake._default = "X EQ"
+    fake._link_target = "alsa_speaker"
+    fake._mutes["X EQ"] = True
+    fake._sinks = (
+        "1\talsa_speaker\tPipeWire\t...\tIDLE\n"
+        "3\tX EQ\tPipeWire\t...\tRUNNING\n"
+    )
+    eq = _make_eq(tmp_path, fake, conf_exists=True)
+    run = eq._runner
+
+    def reset_eq_controls_on_restart(argv, timeout=8):
+        result = run(argv, timeout)
+        if argv == ["systemctl", "--user", "restart", "filter-chain.service"]:
+            fake._volumes["X EQ"] = "100%"
+            fake._volume_channels["X EQ"] = ("100%",)
+            fake._mutes["X EQ"] = False
+        return result
+
+    eq._runner = reset_eq_controls_on_restart
+
+    assert eq.ensure_sink([0] * 10) is True
+    assert fake._volumes["X EQ"] == "25%"
+    assert fake._mutes["X EQ"] is True
+    assert eq._route_state()["volume"] == "25%"
+    assert eq._route_state()["muted"] is True
+
+
+def test_journal_only_teardown_restores_last_active_user_state(tmp_path):
+    fake = _FakeRunner(downstream_vol="100%")
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    Path(eq._pending_path()).write_text(json.dumps({
+        "sink": "alsa_speaker",
+        "volume": "25%",
+        "phase": "active",
+        "muted": True,
+        "physical_volumes": ["40%"],
+        "physical_muted": False,
+        "pending_restores": [],
+    }))
+
+    assert eq.teardown() is True
+    assert fake._volumes["alsa_speaker"] == "25%"
+    assert fake._mutes["alsa_speaker"] is True
+    assert not Path(eq._pending_path()).exists()
+
+
+def test_fresh_teardown_restores_owned_sink_after_external_default_change(tmp_path):
+    fake = _FakeRunner(downstream_vol={
+        "alsa_speaker": "100%",
+        "bluez_output.headset": "65%",
+        "X EQ": "25%",
+    })
+    fake._default = "bluez_output.headset"
+    fake._sinks = (
+        "1\talsa_speaker\tPipeWire\t...\tIDLE\n"
+        "2\tbluez_output.headset\tPipeWire\t...\tRUNNING\n"
+        "3\tX EQ\tPipeWire\t...\tRUNNING\n"
+    )
+    eq = _make_eq(tmp_path, fake, conf_exists=True)
+    Path(eq._pending_path()).write_text(json.dumps({
+        "sink": "alsa_speaker",
+        "volume": "25%",
+        "phase": "active",
+        "muted": False,
+        "physical_volumes": ["40%"],
+        "physical_muted": True,
+        "pending_restores": [],
+    }))
+
+    assert eq.teardown() is True
+    assert fake._default == "bluez_output.headset"
+    assert fake._volumes["alsa_speaker"] == "40%"
+    assert fake._mutes["alsa_speaker"] is True
+    assert not Path(eq._pending_path()).exists()
+
+
+def test_fresh_teardown_transfers_state_when_owned_sink_is_already_default(tmp_path):
+    fake = _FakeRunner(downstream_vol={
+        "alsa_speaker": "100%",
+        "X EQ": "25%",
+    })
+    fake._default = "alsa_speaker"
+    fake._mutes["X EQ"] = True
+    fake._sinks = (
+        "1\talsa_speaker\tPipeWire\t...\tRUNNING\n"
+        "3\tX EQ\tPipeWire\t...\tIDLE\n"
+    )
+    eq = _make_eq(tmp_path, fake, conf_exists=True)
+    Path(eq._pending_path()).write_text(json.dumps({
+        "sink": "alsa_speaker",
+        "volume": "40%",
+        "phase": "active",
+        "muted": False,
+        "physical_volumes": ["40%"],
+        "physical_muted": False,
+        "pending_restores": [],
+    }))
+
+    assert eq.teardown() is True
+    assert fake._volumes["alsa_speaker"] == "25%"
+    assert fake._mutes["alsa_speaker"] is True
+    assert not Path(eq._pending_path()).exists()
+
+
+def test_fresh_teardown_retains_unplugged_owned_sink_until_replug(tmp_path):
+    fake = _FakeRunner(downstream_vol={
+        "alsa_speaker": "100%",
+        "bluez_output.headset": "65%",
+        "X EQ": "25%",
+    })
+    fake._default = "bluez_output.headset"
+    fake._sinks = (
+        "2\tbluez_output.headset\tPipeWire\t...\tRUNNING\n"
+        "3\tX EQ\tPipeWire\t...\tRUNNING\n"
+    )
+    eq = _make_eq(tmp_path, fake, conf_exists=True)
+    Path(eq._pending_path()).write_text(json.dumps({
+        "sink": "alsa_speaker",
+        "volume": "25%",
+        "phase": "active",
+        "muted": False,
+        "physical_volumes": ["40%"],
+        "physical_muted": True,
+        "pending_restores": [],
+    }))
+
+    assert eq.teardown() is False
+    assert eq._route_state()["pending_restores"] == [{
+        "sink": "alsa_speaker",
+        "volumes": ["40%"],
+        "muted": True,
+    }]
+
+    fake._sinks = (
+        "1\talsa_speaker\tPipeWire\t...\tRUNNING\n"
+        "2\tbluez_output.headset\tPipeWire\t...\tIDLE\n"
+    )
+    eq._monotonic = lambda: 100.0
+
+    assert eq.teardown() is True
+    assert fake._volumes["alsa_speaker"] == "40%"
+    assert fake._mutes["alsa_speaker"] is True
+    assert not Path(eq._pending_path()).exists()
+
+
+def test_fresh_eq_teardown_retains_unplugged_link_target_until_replug(tmp_path):
+    fake = _FakeRunner(downstream_vol={
+        "alsa_speaker": "100%",
+        "bluez_output.headset": "65%",
+        "X EQ": "25%",
+    })
+    fake._default = "X EQ"
+    fake._link_target = "alsa_speaker"
+    fake._sinks = (
+        "2\tbluez_output.headset\tPipeWire\t...\tRUNNING\n"
+        "3\tX EQ\tPipeWire\t...\tRUNNING\n"
+    )
+    eq = _make_eq(tmp_path, fake, conf_exists=True)
+    Path(eq._pending_path()).write_text(json.dumps({
+        "sink": "alsa_speaker",
+        "volume": "25%",
+        "phase": "active",
+        "muted": False,
+        "physical_volumes": ["40%"],
+        "physical_muted": True,
+        "pending_restores": [],
+    }))
+
+    assert eq.teardown() is False
+    assert fake._default == "bluez_output.headset"
+    assert eq._route_state()["pending_restores"][0]["sink"] == "alsa_speaker"
+
+    fake._sinks = (
+        "1\talsa_speaker\tPipeWire\t...\tRUNNING\n"
+        "2\tbluez_output.headset\tPipeWire\t...\tIDLE\n"
+    )
+    eq._monotonic = lambda: 100.0
+
+    assert eq.teardown() is True
+    assert fake._volumes["alsa_speaker"] == "40%"
+    assert fake._mutes["alsa_speaker"] is True
+    assert not Path(eq._pending_path()).exists()
+
+
+def test_route_handoff_recovers_after_crash_before_new_journal(tmp_path):
+    fake = _FakeRunner(downstream_vol={
+        "alsa_speaker": "40%",
+        "bluez_output.headset": "65%",
+    })
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    assert eq.ensure_sink([0] * 10) is True
+
+    fake._default = "bluez_output.headset"
+    fake._configured_default = "bluez_output.headset"
+    fake._sinks = (
+        "1\talsa_speaker\tPipeWire\t...\tIDLE\n"
+        "2\tbluez_output.headset\tPipeWire\t...\tRUNNING\n"
+        "3\tX EQ\tPipeWire\t...\tRUNNING\n"
+    )
+    persist = eq._persist_route_state
+
+    def crash_before_new_journal(downstream, *args):
+        if downstream == "bluez_output.headset":
+            raise RuntimeError("process terminated")
+        return persist(downstream, *args)
+
+    eq._persist_route_state = crash_before_new_journal
+
+    try:
+        eq.ensure_sink([0] * 10)
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("expected simulated process termination")
+
+    assert fake._volumes["alsa_speaker"] == "100%"
+    assert eq._route_state()["sink"] == "alsa_speaker"
+
+    recovered = _make_eq(tmp_path, fake, conf_exists=True)
+
+    assert recovered.ensure_sink([0] * 10) is True
+    assert fake._volumes["alsa_speaker"] == "40%"
+    assert recovered._route_state()["sink"] == "bluez_output.headset"
+    assert recovered._route_state()["physical_volumes"] == ["65%"]
+
+
+def test_eq_default_route_handoff_journals_target_before_pin(tmp_path):
+    fake = _FakeRunner(downstream_vol={
+        "alsa_speaker": "40%",
+        "bluez_output.headset": "65%",
+    })
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    assert eq.ensure_sink([0] * 10) is True
+    fake._configured_default = "bluez_output.headset"
+    fake._sinks = (
+        "1\talsa_speaker\tPipeWire\t...\tIDLE\n"
+        "2\tbluez_output.headset\tPipeWire\t...\tRUNNING\n"
+        "3\tX EQ\tPipeWire\t...\tRUNNING\n"
+    )
+    persist = eq._persist_route_state
+
+    def crash_after_target_pin(
+        downstream,
+        volume,
+        phase,
+        muted,
+        physical_volumes,
+        physical_muted,
+    ):
+        if downstream == "bluez_output.headset" and phase == "active":
+            raise RuntimeError("process terminated")
+        return persist(
+            downstream,
+            volume,
+            phase,
+            muted,
+            physical_volumes,
+            physical_muted,
+        )
+
+    eq._persist_route_state = crash_after_target_pin
+
+    try:
+        eq.ensure_sink([0] * 10)
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("expected simulated process termination")
+
+    state = eq._route_state()
+    assert state["sink"] == "bluez_output.headset"
+    assert state["phase"] == "prepared"
+    assert state["physical_volumes"] == ["65%"]
+
+    recovered = _make_eq(tmp_path, fake, conf_exists=True)
+
+    assert recovered.ensure_sink([0] * 10) is True
+    assert recovered._route_state()["physical_volumes"] == ["65%"]
+
+
+def test_hot_unplug_restore_survives_retry_exhaustion_and_replug(tmp_path):
+    fake = _FakeRunner(downstream_vol={
+        "alsa_speaker": "40%",
+        "bluez_output.headset": "65%",
+    })
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    assert eq.ensure_sink([0] * 10) is True
+
+    fake._default = "bluez_output.headset"
+    fake._configured_default = "bluez_output.headset"
+    fake._sinks = (
+        "2\tbluez_output.headset\tPipeWire\t...\tRUNNING\n"
+        "3\tX EQ\tPipeWire\t...\tRUNNING\n"
+    )
+    assert eq.ensure_sink([0] * 10) is True
+    assert eq._route_state()["pending_restores"] == [{
+        "sink": "alsa_speaker",
+        "volumes": ["40%"],
+        "muted": False,
+    }]
+
+    now = {"value": 100.0}
+    eq._monotonic = lambda: now["value"]
+    assert eq.teardown() is False
+    for _attempt in range(4):
+        now["value"] += 20
+        assert eq.teardown() is False
+
+    fake._sinks = (
+        "1\talsa_speaker\tPipeWire\t...\tRUNNING\n"
+        "2\tbluez_output.headset\tPipeWire\t...\tIDLE\n"
+    )
+    now["value"] += 20
+
+    assert eq.teardown() is True
+    assert fake._volumes["alsa_speaker"] == "40%"
+    assert fake._mutes["alsa_speaker"] is False
+    assert not Path(eq._pending_path()).exists()
 
 
 _PW_LINK = """effect_output.pdc_eq:output_FL

@@ -21,6 +21,7 @@ class _FakePipeWireEq:
         self._raise_apply = raise_apply
         self.applied = []
         self.torn_down = 0
+        self.synced = 0
 
     def is_supported(self):
         return self._supported
@@ -44,6 +45,10 @@ class _FakePipeWireEq:
 
     def is_active(self):
         return self._apply_ok
+
+    def sync_state(self):
+        self.synced += 1
+        return True
 
     def start_test(self, path):
         self._playing = True
@@ -212,6 +217,27 @@ def test_audio_watcher_retries_inactive_eq_on_unchanged_route(tmp_path, monkeypa
         return reapplies
 
     assert asyncio.run(scenario()) == [True]
+
+
+def test_audio_watcher_syncs_active_ownership_state(tmp_path, monkeypatch):
+    async def scenario():
+        p, fake = _make_plugin(tmp_path, monkeypatch)
+        await p.get_audio_state()
+        p._settings["audio_eq_enabled"] = True
+        p._audio_route_last = "speaker"
+        sleeps = 0
+
+        async def one_iteration(_delay):
+            nonlocal sleeps
+            sleeps += 1
+            if sleeps > 1:
+                raise asyncio.CancelledError
+
+        monkeypatch.setattr(asyncio, "sleep", one_iteration)
+        await p._audio_loop()
+        return fake.synced
+
+    assert asyncio.run(scenario()) == 1
 
 
 def test_audio_watcher_cleans_runtime_when_required_tools_disappear(tmp_path, monkeypatch):

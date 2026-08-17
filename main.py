@@ -5983,7 +5983,11 @@ class Plugin:
 
     def _audio_check(self) -> dict:
         """Off-loop probe for the watcher: active route + confirmed EQ ownership."""
-        return {"route": self._current_route(), "active": self._audio.is_active()}
+        active = self._audio.is_active()
+        if active:
+            sync_state = getattr(self._audio, "sync_state", None)
+            active = not callable(sync_state) or sync_state() is True
+        return {"route": self._current_route(), "active": active}
 
     async def _audio_loop(self) -> None:
         """While the EQ is enabled, keep it live with the QAM closed: re-apply when the
