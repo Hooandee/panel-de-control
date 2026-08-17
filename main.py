@@ -3143,19 +3143,12 @@ class Plugin:
         enabled = bool(self._settings.get("charge_limit_enabled", False))
         percent = int(self._settings.get("charge_limit_percent", 80))
         applied_percent = None
-        fixed = getattr(self._charge_limit, "fixed_percent", None)
-        if not self._charge_limit.adjustable and fixed is not None:
-            # Fixed-cap backend (Lenovo conservation): report the firmware level so
-            # the UI can state it explicitly (e.g. "caps at 80%").
-            percent = fixed
-            applied_percent = fixed
-        elif enabled and self._charge_limit.supported and self._charge_limit.adjustable:
-            # report what the firmware actually holds (it may clamp our write).
+        if enabled and self._charge_limit.supported:
             actual = self._charge_limit.get()
             if actual is not None:
-                percent = actual
                 applied_percent = actual
         return {
+            "backend": getattr(self._charge_limit, "name", "unsupported"),
             "supported": self._charge_limit.supported,
             "adjustable": self._charge_limit.adjustable,
             "enabled": enabled,
@@ -5096,8 +5089,10 @@ class Plugin:
         """Enable/disable the charge cap and set its threshold. Persists, applies via
         readback, and returns the resulting charge_limit block."""
         self._init()
+        lo, hi = self._charge_limit.range()
+        percent = max(lo, min(hi, int(percent)))
         self._settings["charge_limit_enabled"] = bool(enabled)
-        self._settings["charge_limit_percent"] = int(percent)
+        self._settings["charge_limit_percent"] = percent
         self._save()
         self._apply_charge_limit()
         return self._charge_limit_state()

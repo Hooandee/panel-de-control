@@ -428,11 +428,13 @@ export interface BatteryInfo {
 }
 
 export interface ChargeLimit {
+  backend: string;
   supported: boolean;
-  // false = fixed firmware cap (on/off only, no slider — e.g. Lenovo conservation)
+  // false = firmware-controlled on/off cap (no slider — e.g. Lenovo conservation)
   adjustable: boolean;
   enabled: boolean;
   percent: number;
+  applied_percent: number | null;
   min: number;
   max: number;
 }

@@ -68,6 +68,7 @@ def _make_plugin(tmp_path, monkeypatch, charge_limit=None):
 
 class _FakeChargeLimit:
     adjustable = True
+    name = "fake"
 
     def __init__(self, supported=True):
         self.supported = supported
@@ -134,6 +135,28 @@ def test_set_charge_limit_enables_and_applies(tmp_path, monkeypatch):
     assert cl_backend.value == 70  # applied to hardware
 
 
+def test_battery_state_keeps_saved_intent_separate_from_readback(tmp_path, monkeypatch):
+    backend = _FakeChargeLimit()
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=backend)
+    asyncio.run(p.set_charge_limit(True, 80))
+    backend.value = 0
+
+    state = asyncio.run(p.get_battery_state())["charge_limit"]
+
+    assert state["percent"] == 80
+    assert state["applied_percent"] == 0
+    assert state["backend"] == "fake"
+
+
+def test_set_charge_limit_clamps_intent_before_persisting(tmp_path, monkeypatch):
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=_FakeChargeLimit())
+
+    result = asyncio.run(p.set_charge_limit(True, 140))
+
+    assert result["percent"] == 100
+    assert p._settings["charge_limit_percent"] == 100
+
+
 def test_failed_charge_limit_write_keeps_intent_and_reports_readback(tmp_path, monkeypatch):
     backend = _FailingChargeLimit()
     p = _make_plugin(
@@ -146,7 +169,8 @@ def test_failed_charge_limit_write_keeps_intent_and_reports_readback(tmp_path, m
 
     assert result["enabled"] is True
     assert backend.attempts == 2
-    assert result["percent"] == 100
+    assert result["percent"] == 70
+    assert result["applied_percent"] == 100
     assert result["last_apply"] == {
         "action": "set",
         "requested": 70,

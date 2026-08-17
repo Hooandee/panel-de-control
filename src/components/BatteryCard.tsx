@@ -165,9 +165,9 @@ export const BatteryCard: FC<Props> = ({ state, onSetLimit, hideHealth = false }
                 </span>
               </div>
             )}
-            {cl.enabled && !cl.adjustable && (
+            {cl.enabled && !cl.adjustable && cl.applied_percent !== null && (
               <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
-                {t("system.battery.limit.fixed", { percent: cl.percent })}
+                {t("system.battery.limit.fixed", { percent: cl.applied_percent })}
               </div>
             )}
           </div>
