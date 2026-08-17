@@ -13,14 +13,17 @@ import { reloadLayout } from "./customize/store";
 import { hydrateModules } from "./customize/modules";
 import { installGameContextMenu } from "./launch/gameContextMenu";
 import { startPluginListLocalizer } from "./pluginListLocalizer";
-import { registerQuickAccessTab, removeOwnedQuickAccessTabs } from "./deckyInternal";
-import { QamPanelGate, canGateQamPanel } from "./components/QamPanelGate";
+import {
+  cleanupOwnedQuickAccessTabs,
+  registerQuickAccessTab,
+} from "./deckyInternal";
 import {
   refreshQamShortcutPreference,
   startQamShortcut,
 } from "./system/qamShortcut";
 import { shutdownUiActivity } from "./system/uiActivity";
-import { QamShortcutDeckyEntry } from "./components/QamShortcutDeckyEntry";
+import { StandardDeckyContent } from "./components/StandardDeckyContent";
+import { DirectQamShortcut } from "./components/DirectQamShortcut";
 
 // Localized header title only; the internal plugin name / install folder stays
 // "Panel de Control" (renaming it would break existing installs and the updater).
@@ -34,30 +37,23 @@ const ControlCenterContent: FC = () => (
   </ErrorBoundary>
 );
 
-const PluginContent: FC = () => (
-  <I18nProvider><ControlCenterContent /></I18nProvider>
-);
-
-const VisiblePluginContent: FC<{ lifecycle: AbortSignal }> = ({ lifecycle }) => (
-  <QamPanelGate
-    lifecycle={lifecycle}
-    fallback={<div>{translate("settings.qamShortcut.fallback")}</div>}
-  >
-    <PluginContent />
-  </QamPanelGate>
-);
-
-const ShortcutDeckyContent: FC<{
-  directLifecycle: AbortController;
-  fallbackLifecycle: AbortSignal;
-}> = ({ directLifecycle, fallbackLifecycle }) => (
+const StandardPluginContent: FC<{
+  lifecycle: AbortSignal;
+}> = ({ lifecycle }) => (
   <I18nProvider>
-    <QamShortcutDeckyEntry
-      lifecycle={directLifecycle}
-      fallbackLifecycle={fallbackLifecycle}
-    >
+    <StandardDeckyContent lifecycle={lifecycle}>
       <ControlCenterContent />
-    </QamShortcutDeckyEntry>
+    </StandardDeckyContent>
+  </I18nProvider>
+);
+
+const DirectPluginContent: FC<{
+  lifecycle: AbortSignal;
+}> = ({ lifecycle }) => (
+  <I18nProvider>
+    <DirectQamShortcut lifecycle={lifecycle}>
+      <ControlCenterContent />
+    </DirectQamShortcut>
   </I18nProvider>
 );
 
@@ -87,32 +83,33 @@ export default definePlugin(() => {
   // Decky renders the plugin-list row from the (fixed) install name, ignoring the
   // localized title. Relabel that row in place to follow the selected language.
   const stopListLocalizer = startPluginListLocalizer();
-  const qamLifecycle = new AbortController();
-  const fallbackLifecycle = new AbortController();
+  const standardLifecycle = new AbortController();
+  const directLifecycle = new AbortController();
   const qamShortcut = startQamShortcut(
-    () => registerQuickAccessTab({
-      title: <PluginTitle />,
-      content: <VisiblePluginContent lifecycle={qamLifecycle.signal} />,
-      icon: <LuGauge />,
-    }),
-    () => removeOwnedQuickAccessTabs(window),
-    () => qamLifecycle.abort(),
-    canGateQamPanel(window),
+    (onRuntimeFailure) => registerQuickAccessTab(
+      {
+        title: <PluginTitle />,
+        content: <DirectPluginContent lifecycle={directLifecycle.signal} />,
+        icon: <LuGauge />,
+      },
+      window,
+      onRuntimeFailure,
+    ),
+    () => cleanupOwnedQuickAccessTabs(window),
   );
 
   return {
     name: "Panel de Control",
     titleView: <PluginTitle />,
     content: (
-      <ShortcutDeckyContent
-        directLifecycle={qamLifecycle}
-        fallbackLifecycle={fallbackLifecycle.signal}
+      <StandardPluginContent
+        lifecycle={standardLifecycle.signal}
       />
     ),
     icon: <LuGauge />,
     onDismount() {
-      qamLifecycle.abort();
-      fallbackLifecycle.abort();
+      standardLifecycle.abort();
+      directLifecycle.abort();
       qamShortcut.dispose();
       stopPrefsHealed();
       shutdownUiActivity();

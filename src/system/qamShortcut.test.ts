@@ -67,9 +67,7 @@ describe("QAM shortcut preference", () => {
     const dispose = vi.fn();
     const register = vi.fn(() => ({ registered: true, dispose }));
     const removeOwned = vi.fn();
-    const deactivate = vi.fn();
-
-    const session = state.startQamShortcut(register, removeOwned, deactivate, true);
+    const session = state.startQamShortcut(register, removeOwned);
 
     expect(removeOwned).toHaveBeenCalledOnce();
     expect(register).toHaveBeenCalledOnce();
@@ -81,7 +79,6 @@ describe("QAM shortcut preference", () => {
     resolvePrefs({ "pdc:qamShortcut": "0" });
     await session.ready;
     expect(register).toHaveBeenCalledOnce();
-    expect(deactivate).toHaveBeenCalledOnce();
     expect(dispose).toHaveBeenCalledOnce();
     expect(removeOwned).toHaveBeenCalledTimes(2);
     expect(state.getQamShortcutSnapshot()).toMatchObject({
@@ -99,7 +96,7 @@ describe("QAM shortcut preference", () => {
     const register = vi.fn(() => ({ registered: true, dispose: vi.fn() }));
 
     const removeOwned = vi.fn();
-    const session = state.startQamShortcut(register, removeOwned, vi.fn(), true);
+    const session = state.startQamShortcut(register, removeOwned);
     expect(removeOwned).toHaveBeenCalledOnce();
     await session.ready;
 
@@ -118,7 +115,7 @@ describe("QAM shortcut preference", () => {
     getUiPrefs.mockRejectedValue(new Error("backend unavailable"));
     const state = await import("./qamShortcut");
 
-    const session = state.startQamShortcut(vi.fn(), vi.fn(), vi.fn(), true);
+    const session = state.startQamShortcut(vi.fn(), vi.fn());
 
     expect(state.getQamShortcutSnapshot()).toMatchObject({
       appliedEnabled: false,
@@ -126,5 +123,64 @@ describe("QAM shortcut preference", () => {
       initialized: true,
     });
     await session.ready;
+  });
+
+  it("requires a restart when disabling cannot clear an obsolete direct tab", async () => {
+    localStorage.setItem("pdc:qamShortcut", "0");
+    const state = await import("./qamShortcut");
+
+    const session = state.startQamShortcut(vi.fn(), () => true);
+
+    expect(state.getQamShortcutSnapshot()).toMatchObject({
+      enabled: false,
+      appliedEnabled: false,
+      registered: false,
+      restartRequired: true,
+    });
+    await session.ready;
+  });
+
+  it("publishes a restart immediately when the registered shortcut fails at runtime", async () => {
+    const state = await import("./qamShortcut");
+    let failRuntime!: () => void;
+    state.startQamShortcut(
+      (onRuntimeFailure) => {
+        failRuntime = onRuntimeFailure;
+        return { registered: true, dispose() {} };
+      },
+      () => false,
+    );
+
+    failRuntime();
+
+    expect(state.getQamShortcutSnapshot()).toMatchObject({
+      registered: false,
+      restartRequired: true,
+    });
+  });
+
+  it("does not erase a runtime failure when preference hydration completes", async () => {
+    let resolvePrefs!: (prefs: Record<string, string>) => void;
+    getUiPrefs.mockImplementation(() => new Promise((resolve) => {
+      resolvePrefs = resolve;
+    }));
+    const state = await import("./qamShortcut");
+    let failRuntime!: () => void;
+    const session = state.startQamShortcut(
+      (onRuntimeFailure) => {
+        failRuntime = onRuntimeFailure;
+        return { registered: true, dispose() {} };
+      },
+      () => false,
+    );
+
+    failRuntime();
+    resolvePrefs({ "pdc:qamShortcut": "1" });
+    await session.ready;
+
+    expect(state.getQamShortcutSnapshot()).toMatchObject({
+      registered: false,
+      restartRequired: true,
+    });
   });
 });

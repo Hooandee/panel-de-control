@@ -49,6 +49,7 @@ export const QamPanelGate: FC<QamPanelGateProps> = ({ children, lifecycle, fallb
     let resize: ResizeObserver | null = null;
     let intersection: IntersectionObserver | null = null;
     let fullyIntersecting = false;
+    let intersectionReported = false;
     let retainedDuringScroll = false;
     let visibleHorizontalBounds: HorizontalBounds | null = null;
     let retentionPoll: number | null = null;
@@ -65,6 +66,14 @@ export const QamPanelGate: FC<QamPanelGateProps> = ({ children, lifecycle, fallb
         && rect.width > 0
         && rect.height > 0
         && overlapsHorizontally(rect, visibleHorizontalBounds);
+    };
+    const visibleFromLayout = () => {
+      const rect = host.getBoundingClientRect();
+      const width = doc.documentElement.clientWidth || doc.defaultView?.innerWidth || 0;
+      return width > 0
+        && rect.width > 0
+        && rect.height > 0
+        && overlapsHorizontally(rect, { left: 0, right: width });
     };
     const refresh = () => {
       if (stopped) return;
@@ -130,6 +139,7 @@ export const QamPanelGate: FC<QamPanelGateProps> = ({ children, lifecycle, fallb
 
     try {
       resize = new Resize(() => {
+        if (!intersectionReported && visibleFromLayout()) fullyIntersecting = true;
         if (retainedDuringScroll) {
           retainedDuringScroll = canRetainAtCurrentPosition();
           if (!retainedDuringScroll) stopRetentionPoll();
@@ -138,6 +148,7 @@ export const QamPanelGate: FC<QamPanelGateProps> = ({ children, lifecycle, fallb
       });
       intersection = new Intersection((entries) => {
         const entry = entries.find((candidate) => candidate.target === host);
+        intersectionReported = !!entry;
         fullyIntersecting = !!entry?.isIntersecting && entry.intersectionRatio === 1;
         if (fullyIntersecting && entry) {
           retainedDuringScroll = false;
@@ -156,6 +167,7 @@ export const QamPanelGate: FC<QamPanelGateProps> = ({ children, lifecycle, fallb
       gated = true;
       resize.observe(host);
       intersection.observe(host);
+      fullyIntersecting = visibleFromLayout();
       refresh();
     } catch {
       disconnect();

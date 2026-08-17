@@ -12,6 +12,7 @@ export interface QamShortcutSnapshot {
 
 interface QamShortcutRegistration {
   registered: boolean;
+  restartRequired?: boolean;
   dispose(): void;
 }
 
@@ -25,6 +26,7 @@ let enabled = readFlag(KEY, true);
 let appliedEnabled = enabled;
 let registered = false;
 let initialized = false;
+let runtimeRestartRequired = false;
 let snapshot = buildSnapshot();
 
 function buildSnapshot(): QamShortcutSnapshot {
@@ -33,7 +35,7 @@ function buildSnapshot(): QamShortcutSnapshot {
     appliedEnabled,
     registered,
     initialized,
-    restartRequired: initialized && enabled !== appliedEnabled,
+    restartRequired: runtimeRestartRequired || (initialized && enabled !== appliedEnabled),
   };
 }
 
@@ -60,9 +62,14 @@ export function refreshQamShortcutPreference(): void {
   publish();
 }
 
-export function setQamShortcutRuntime(nextAppliedEnabled: boolean, nextRegistered: boolean): void {
+export function setQamShortcutRuntime(
+  nextAppliedEnabled: boolean,
+  nextRegistered: boolean,
+  nextRestartRequired = false,
+): void {
   appliedEnabled = nextAppliedEnabled;
   registered = nextRegistered;
+  runtimeRestartRequired = nextRestartRequired;
   initialized = true;
   publish();
 }
@@ -77,29 +84,42 @@ export function subscribeQamShortcut(listener: () => void): () => void {
 }
 
 export function startQamShortcut(
-  register: () => QamShortcutRegistration,
-  removeOwned: () => unknown,
-  deactivate: () => void,
-  supported: boolean,
+  register: (onRuntimeFailure: () => void) => QamShortcutRegistration,
+  removeOwned: () => boolean,
 ): QamShortcutSession {
   let stopped = false;
-  removeOwned();
+  let runtimeFailed = false;
+  const onRuntimeFailure = () => {
+    if (stopped) return;
+    runtimeFailed = true;
+    registered = false;
+    runtimeRestartRequired = true;
+    initialized = true;
+    publish();
+  };
+  const cleanupRestartRequired = removeOwned() === true;
   const startupEnabled = getQamShortcutEnabled();
-  let registration = startupEnabled && supported ? register() : null;
-  setQamShortcutRuntime(startupEnabled, registration?.registered === true);
+  let registration = startupEnabled ? register(onRuntimeFailure) : null;
+  setQamShortcutRuntime(
+    startupEnabled,
+    !runtimeFailed && registration?.registered === true,
+    runtimeFailed || cleanupRestartRequired || registration?.restartRequired === true,
+  );
   const ready = hydratePrefs().then(() => {
     if (stopped || !prefsHydrated()) return;
     refreshQamShortcutPreference();
     const nextEnabled = getQamShortcutEnabled();
     if (!nextEnabled) {
-      deactivate();
       registration?.dispose();
       registration = null;
-      removeOwned();
-      setQamShortcutRuntime(false, false);
+      setQamShortcutRuntime(false, false, runtimeFailed || removeOwned() === true);
       return;
     }
-    setQamShortcutRuntime(startupEnabled, registration?.registered === true);
+    setQamShortcutRuntime(
+      startupEnabled,
+      !runtimeFailed && registration?.registered === true,
+      runtimeFailed || cleanupRestartRequired || registration?.restartRequired === true,
+    );
   });
 
   return {

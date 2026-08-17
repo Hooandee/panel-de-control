@@ -59,10 +59,10 @@ vi.mock("../i18n", () => ({
   useI18n: () => ({
     t: (key: string) => ({
       "settings.qamShortcut": "Acceso directo en el QAM",
-      "settings.qamShortcut.desc": "Muestra Panel de Control como un icono propio junto a Decky.",
+      "settings.qamShortcut.desc": "Añade un icono opcional junto a Decky. Panel de Control siempre sigue disponible dentro de Decky.",
       "settings.qamShortcut.restart": "Reinicia Decky para aplicar el cambio.",
       "settings.qamShortcut.restartButton": "Reiniciar Decky",
-      "settings.qamShortcut.fallback": "El acceso directo no está disponible; se está usando la entrada de Decky.",
+      "settings.qamShortcut.fallback": "No se ha podido añadir el icono directo. Panel de Control sigue disponible dentro de Decky.",
     })[key] ?? key,
   }),
 }));
@@ -121,7 +121,7 @@ describe("QamShortcutSetting", () => {
     render(<QamShortcutSetting />);
 
     expect(screen.getByText(
-      "El acceso directo no está disponible; se está usando la entrada de Decky.",
+      "No se ha podido añadir el icono directo. Panel de Control sigue disponible dentro de Decky.",
     )).toBeTruthy();
   });
 });
