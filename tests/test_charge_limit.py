@@ -139,9 +139,20 @@ def test_lenovo_conservation_is_boolean_toggle(tmp_path):
     assert cl.supported is True
     assert cl.adjustable is False
     assert cl.get() is None  # no known percent read from sysfs
-    assert cl.fixed_percent == 80  # firmware conservation level, surfaced to the UI
+    assert not hasattr(cl, "fixed_percent")
     assert cl.set(80) is True  # percent ignored -> writes 1 (on)
     assert cl.disable() is True
+
+
+def test_charge_limit_backend_names_are_stable(tmp_path):
+    _mk_bat(str(tmp_path), value="80")
+    _mk_deck_hwmon(str(tmp_path), value="0")
+    _mk_conservation(str(tmp_path), value="0")
+
+    assert NullChargeLimit().name == "unsupported"
+    assert SysfsChargeLimit(root=str(tmp_path)).name == "sysfs-threshold"
+    assert SteamDeckChargeLimit(root=str(tmp_path)).name == "steamdeck-hwmon"
+    assert LenovoConservationMode(root=str(tmp_path)).name == "lenovo-conservation"
 
 
 def test_lenovo_conservation_unsupported_without_file(tmp_path):

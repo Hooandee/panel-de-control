@@ -24,9 +24,7 @@ class ChargeLimitBackend:
 
     supported = False
     adjustable = True
-    # For fixed-cap (non-adjustable) backends, the percentage the firmware holds
-    # when enabled — surfaced so the UI can state it explicitly. None = unknown.
-    fixed_percent = None
+    name = "unsupported"
 
     def get(self):
         return None
@@ -81,6 +79,7 @@ class SysfsChargeLimit(_FileChargeLimit):
     it under power_supply/BAT*). 100 = no cap."""
 
     _OFF = _MAX
+    name = "sysfs-threshold"
 
     def __init__(self, root="/"):
         super().__init__(self._find(root))
@@ -100,6 +99,7 @@ class SteamDeckChargeLimit(_FileChargeLimit):
     from the ASUS/Lenovo 100)."""
 
     _OFF = 0
+    name = "steamdeck-hwmon"
 
     def __init__(self, root="/"):
         super().__init__(self._find(root))
@@ -117,12 +117,10 @@ class SteamDeckChargeLimit(_FileChargeLimit):
 
 class LenovoConservationMode(ChargeLimitBackend):
     """Lenovo (Legion Go) `conservation_mode`: a boolean (1=cap on) with a
-    firmware-fixed threshold, NOT a settable percent.
-    `adjustable=False` → the UI shows an on/off toggle (no slider) and states the
-    fixed cap (`fixed_percent`, the Legion Go conservation level ≈80%)."""
+    firmware-controlled threshold, NOT a settable percent."""
 
     adjustable = False
-    fixed_percent = 80
+    name = "lenovo-conservation"
 
     def __init__(self, root="/"):
         self._path = self._find(root)
