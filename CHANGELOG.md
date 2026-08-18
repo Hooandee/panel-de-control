@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## [0.37.8](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.7...panel-de-control-v0.37.8) (2026-08-18)
+
 ### Español
 
 * **QAM:** Corrige el acceso directo que podía quedar obsoleto al actualizar desde 0.37.5 a 0.37.6 con Decky 3.2.6 y abrir la lista de Decky en lugar de Panel de Control. La entrada estándar permanece siempre disponible, el icono vuelve a mostrar el panel directamente y el contenido completo solo se monta en la entrada visible. Ajustes solicita reiniciar Decky si no puede limpiar un registro obsoleto. ([#478](https://github.com/Hooandee/panel-de-control/issues/478)) ([#480](https://github.com/Hooandee/panel-de-control/issues/480))
