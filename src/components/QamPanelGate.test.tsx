@@ -124,6 +124,25 @@ describe("QamPanelGate", () => {
     expect(screen.queryByTestId("heavy-panel")).toBeNull();
   });
 
+  it("mounts an initially visible panel before IntersectionObserver reports", () => {
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+      left: 40,
+      right: 308,
+      top: 70,
+      bottom: 600,
+      width: 268,
+      height: 530,
+    } as DOMRect);
+
+    render(
+      <QamPanelGate lifecycle={new AbortController().signal}>
+        <div data-testid="initial-panel" />
+      </QamPanelGate>,
+    );
+
+    expect(screen.getByTestId("initial-panel")).toBeTruthy();
+  });
+
   it("keeps mounted content when vertical scrolling moves the gate edge above the viewport", () => {
     render(
       <QamPanelGate lifecycle={new AbortController().signal}>

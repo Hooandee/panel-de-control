@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Español
+
+* **QAM:** Panel de Control permanece siempre accesible desde la entrada estándar de Decky aunque no se pueda registrar el icono directo. El icono opcional vuelve a mostrar el panel directamente y el contenido completo solo se monta en la entrada visible, sin depender de una redirección ni mantener dos paneles activos. Ajustes solicita reiniciar Decky si no puede limpiar un registro obsoleto. ([#478](https://github.com/Hooandee/panel-de-control/issues/478)) ([#480](https://github.com/Hooandee/panel-de-control/issues/480))
+
+### English
+
+* **QAM:** Panel de Control always remains accessible from the standard Decky entry even when the direct icon cannot be registered. The optional icon displays the panel directly again, while the full content mounts only in the visible entry, without relying on a redirect or keeping two panels active. Settings asks to restart Decky when a stale registration cannot be cleared. ([#478](https://github.com/Hooandee/panel-de-control/issues/478)) ([#480](https://github.com/Hooandee/panel-de-control/issues/480))
+
+### Italiano
+
+* **QAM:** Pannello di controllo resta sempre accessibile dalla voce standard di Decky anche quando non è possibile registrare l'icona diretta. L'icona opzionale mostra di nuovo il pannello direttamente e il contenuto completo viene montato solo nella voce visibile, senza dipendere da un reindirizzamento né mantenere attivi due pannelli. Impostazioni richiede il riavvio di Decky se non riesce a rimuovere una registrazione obsoleta. ([#478](https://github.com/Hooandee/panel-de-control/issues/478)) ([#480](https://github.com/Hooandee/panel-de-control/issues/480))
+
 ## [0.37.7](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.6...panel-de-control-v0.37.7) (2026-08-17)
 
 ### Español
