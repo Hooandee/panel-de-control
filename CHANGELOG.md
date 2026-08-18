@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.37.9](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.8...panel-de-control-v0.37.9) (2026-08-18)
+
+
+### Bug Fixes
+
+* **tdp:** confirm delayed firmware readback ([#490](https://github.com/Hooandee/panel-de-control/issues/490)) ([2590942](https://github.com/Hooandee/panel-de-control/commit/25909420680917f3c7c8afc68323d8baed8dbe12))
+
 ## [0.37.8](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.7...panel-de-control-v0.37.8) (2026-08-18)
 
 ### Español
