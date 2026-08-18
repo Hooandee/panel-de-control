@@ -131,6 +131,40 @@ def test_preview_calibration_applies_live_but_does_not_persist(tmp_path, monkeyp
     assert asyncio.run(p2.get_color_state())["contrast"] == 0
 
 
+def test_contextual_preview_includes_saturation_without_persisting(tmp_path, monkeypatch):
+    p, color = _make_plugin(tmp_path, monkeypatch)
+
+    st = asyncio.run(p.preview_calibration(
+        {"saturation": 145, "contrast": 20}, "global", None, None
+    ))
+
+    assert st["preview"] is True
+    assert st["saturation"] == 145 and st["contrast"] == 20
+    assert color.applied[-1]["saturation"] == 145
+    restored, _ = _make_plugin(tmp_path, monkeypatch)
+    assert asyncio.run(restored.get_color_state())["saturation"] == 100
+
+
+def test_contextual_saturation_rpc_keeps_legacy_direct_save(tmp_path, monkeypatch):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+
+    st = asyncio.run(p.set_saturation(145, "global", None, None))
+
+    assert st["preview"] is False and st["saturation"] == 145
+    restored, _ = _make_plugin(tmp_path, monkeypatch)
+    assert asyncio.run(restored.get_color_state())["saturation"] == 145
+
+
+def test_contextual_apply_preset_rpc_keeps_legacy_direct_save(tmp_path, monkeypatch):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+
+    st = asyncio.run(p.apply_color_preset("cine", "global", None, None))
+
+    assert st["preview"] is False and st["active_preset"] == "cine"
+    restored, _ = _make_plugin(tmp_path, monkeypatch)
+    assert asyncio.run(restored.get_color_state())["active_preset"] == "cine"
+
+
 def test_preview_calibration_honors_safety_floor(tmp_path, monkeypatch):
     # A LIVE preview must be clamped to the same safe range as a saved value, so a
     # mis-drag can't push the panel past the -60 contrast floor before confirming.
@@ -148,12 +182,52 @@ def test_preview_empty_payload_does_not_arm_confirm(tmp_path, monkeypatch):
     assert st["preview"] is False
 
 
+def test_empty_preview_payload_restores_an_existing_preview(tmp_path, monkeypatch):
+    p, color = _make_plugin(tmp_path, monkeypatch)
+    asyncio.run(p.set_calibration({"contrast": 20}))
+    asyncio.run(p.preview_calibration({"contrast": 60}))
+    color.applied.clear()
+
+    st = asyncio.run(p.preview_calibration({"saturation": 150}))
+
+    assert st["preview"] is False and st["contrast"] == 20
+    assert color.applied[-1]["contrast"] == 20
+
+
 def test_confirm_after_preview_persists(tmp_path, monkeypatch):
     p, _ = _make_plugin(tmp_path, monkeypatch)
     asyncio.run(p.preview_calibration({"temperature": -30, "contrast": 40}))
     asyncio.run(p.set_calibration({"temperature": -30, "contrast": 40}))
     p2, _ = _make_plugin(tmp_path, monkeypatch)
     assert asyncio.run(p2.get_color_state())["contrast"] == 40  # saved
+
+
+def test_contextual_confirm_persists_the_full_preview(tmp_path, monkeypatch):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    profile = {"saturation": 145, "temperature": 10, "contrast": 20}
+    asyncio.run(p.preview_calibration(profile, "global", None, None))
+
+    st = asyncio.run(p.set_calibration(profile, "global", None, None))
+
+    assert st["preview"] is False
+    restored, _ = _make_plugin(tmp_path, monkeypatch)
+    saved = asyncio.run(restored.get_color_state())
+    assert saved["saturation"] == 145 and saved["contrast"] == 20
+
+
+def test_contextual_game_confirm_keeps_global_untouched(tmp_path, monkeypatch):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    asyncio.run(p.set_saturation(120, "global", None))
+    asyncio.run(p.set_current_game("42"))
+    profile = {"saturation": 165, "temperature": 10, "contrast": 20}
+    asyncio.run(p.preview_calibration(profile, "game", "42", "42"))
+
+    st = asyncio.run(p.set_calibration(profile, "game", "42", "42"))
+
+    assert st["preview"] is False and st["saturation"] == 165
+    asyncio.run(p.set_current_game(None))
+    global_state = asyncio.run(p.get_color_state())
+    assert global_state["saturation"] == 120 and global_state["contrast"] == 0
 
 
 def test_auto_revert_drops_preview_and_reapplies_saved(tmp_path, monkeypatch):
@@ -167,11 +241,163 @@ def test_auto_revert_drops_preview_and_reapplies_saved(tmp_path, monkeypatch):
     assert color.applied[-1]["contrast"] == 20
 
 
+def test_auto_revert_restores_saved_saturation(tmp_path, monkeypatch):
+    p, color = _make_plugin(tmp_path, monkeypatch)
+    asyncio.run(p.set_saturation(120, "global", None))
+    asyncio.run(p.preview_calibration(
+        {"saturation": 180}, "global", None, None
+    ))
+
+    p._do_color_revert()
+
+    st = asyncio.run(p.get_color_state())
+    assert st["preview"] is False and st["saturation"] == 120
+    assert color.applied[-1]["saturation"] == 120
+
+
+def test_discard_preview_reapplies_saved_immediately(tmp_path, monkeypatch):
+    p, color = _make_plugin(tmp_path, monkeypatch)
+    asyncio.run(p.set_calibration({"contrast": 20}))
+    asyncio.run(p.preview_calibration({"contrast": 60}))
+
+    st = asyncio.run(p.discard_calibration())
+
+    assert st["preview"] is False and st["contrast"] == 20
+    assert color.applied[-1]["contrast"] == 20
+
+
+def test_preview_state_exposes_its_target_and_remaining_window(tmp_path, monkeypatch):
+    p, _color = _make_plugin(tmp_path, monkeypatch)
+    asyncio.run(p.set_current_game("42"))
+
+    st = asyncio.run(p.preview_calibration(
+        {"contrast": 20}, "game", "42", "42"
+    ))
+
+    assert st["preview_scope"] == "game"
+    assert st["preview_appid"] == "42"
+    assert 1 <= st["revert_remaining"] <= st["revert_seconds"]
+
+
+def test_preview_cannot_be_confirmed_into_a_different_scope(tmp_path, monkeypatch):
+    p, _color = _make_plugin(tmp_path, monkeypatch)
+    asyncio.run(p.set_current_game("42"))
+    asyncio.run(p.preview_calibration(
+        {"contrast": 40}, "game", "42", "42"
+    ))
+
+    st = asyncio.run(p.set_calibration(
+        {"contrast": 40}, "global", None, "42"
+    ))
+
+    assert st["preview"] is True
+    assert p._color.effective(None)["contrast"] == 0
+
+
+def test_legacy_preview_can_still_be_confirmed_for_a_game(tmp_path, monkeypatch):
+    p, _color = _make_plugin(tmp_path, monkeypatch)
+    asyncio.run(p.set_current_game("42"))
+    asyncio.run(p.preview_calibration({"contrast": 40}))
+
+    st = asyncio.run(p.set_calibration({"contrast": 40}, "game", "42"))
+
+    assert st["preview"] is False
+    assert p._color.effective("42")["contrast"] == 40
+    assert p._color.effective(None)["contrast"] == 0
+
+
+def test_active_preview_cannot_move_to_a_different_scope(tmp_path, monkeypatch):
+    p, _color = _make_plugin(tmp_path, monkeypatch)
+    asyncio.run(p.set_current_game("42"))
+    asyncio.run(p.preview_calibration(
+        {"contrast": 40}, "game", "42", "42"
+    ))
+
+    st = asyncio.run(p.preview_calibration(
+        {"contrast": -20}, "global", None, "42"
+    ))
+
+    assert st["preview_scope"] == "game"
+    assert st["preview_appid"] == "42"
+    assert st["contrast"] == 40
+
+
+def test_stale_game_preview_cannot_leak_into_the_next_context(tmp_path, monkeypatch):
+    p, color = _make_plugin(tmp_path, monkeypatch)
+    asyncio.run(p.set_current_game("42"))
+    asyncio.run(p.set_current_game("99"))
+    color.applied.clear()
+
+    st = asyncio.run(p.preview_calibration(
+        {"contrast": 40}, "game", "42", "42"
+    ))
+
+    assert st["appid"] == "99" and st["preview"] is False
+    assert color.applied == []
+
+
+def test_stale_game_color_mutations_cannot_change_an_inactive_profile(
+    tmp_path, monkeypatch
+):
+    p, color = _make_plugin(tmp_path, monkeypatch)
+    asyncio.run(p.set_current_game("42"))
+    asyncio.run(p.set_current_game("99"))
+    color.applied.clear()
+
+    asyncio.run(p.set_saturation(180, "game", "42", "42"))
+    asyncio.run(p.set_calibration(
+        {"contrast": 40}, "game", "42", "42"
+    ))
+    asyncio.run(p.apply_color_preset("vivo", "game", "42", "42"))
+    asyncio.run(p.preview_color_preset("vivo", "game", "42", "42"))
+    asyncio.run(p.apply_oled_look("game", "42", "42"))
+    asyncio.run(p.preview_oled_look("game", "42", "42"))
+    asyncio.run(p.set_color_follow_global(False, "42", "42"))
+
+    assert p._color.has_game("42") is False
+    assert color.applied == []
+
+
+def test_stale_color_reset_cannot_clear_the_active_profiles(tmp_path, monkeypatch):
+    p, color = _make_plugin(tmp_path, monkeypatch)
+    asyncio.run(p.set_calibration({"contrast": 20}))
+    asyncio.run(p.set_current_game("42"))
+    asyncio.run(p.set_current_game("99"))
+    color.applied.clear()
+
+    st = asyncio.run(p.reset_color("42"))
+
+    assert st["contrast"] == 20
+    assert color.applied == []
+
+
+def test_legacy_contextual_reset_still_saves_directly(tmp_path, monkeypatch):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    asyncio.run(p.set_calibration({"contrast": 20}))
+    asyncio.run(p.set_current_game("42"))
+
+    st = asyncio.run(p.reset_color("42"))
+
+    assert st["preview"] is False and st["contrast"] == 0
+    restored, _ = _make_plugin(tmp_path, monkeypatch)
+    assert asyncio.run(restored.get_color_state())["contrast"] == 0
+
+
 def test_apply_oled_look_applies_a_vibrancy_boost(tmp_path, monkeypatch):
     p, color = _make_plugin(tmp_path, monkeypatch)
     st = asyncio.run(p.apply_oled_look())
     assert st["saturation"] > 100  # the generic look boosts vibrancy
     assert color.applied[-1]["saturation"] == st["saturation"]
+
+
+def test_contextual_oled_look_is_previewed_before_persisting(tmp_path, monkeypatch):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+
+    st = asyncio.run(p.preview_oled_look("global", None, None))
+
+    assert st["preview"] is True and st["saturation"] > 100
+    restored, _ = _make_plugin(tmp_path, monkeypatch)
+    assert asyncio.run(restored.get_color_state())["saturation"] == 100
 
 
 def test_apply_color_preset_sets_full_look(tmp_path, monkeypatch):
@@ -180,6 +406,27 @@ def test_apply_color_preset_sets_full_look(tmp_path, monkeypatch):
     assert st["active_preset"] == "cine"
     assert st["saturation"] != 100 and st["contrast"] != 0   # a full look, not just saturation
     assert color.applied[-1]["saturation"] == st["saturation"]
+
+
+def test_contextual_preset_is_previewed_before_persisting(tmp_path, monkeypatch):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+
+    st = asyncio.run(p.preview_color_preset("cine", "global", None, None))
+
+    assert st["preview"] is True and st["active_preset"] == "cine"
+    restored, _ = _make_plugin(tmp_path, monkeypatch)
+    assert asyncio.run(restored.get_color_state())["active_preset"] == "native"
+
+
+def test_discard_contextual_preset_restores_saved_color(tmp_path, monkeypatch):
+    p, color = _make_plugin(tmp_path, monkeypatch)
+    asyncio.run(p.set_saturation(120, "global", None))
+    asyncio.run(p.preview_color_preset("cine", "global", None, None))
+
+    st = asyncio.run(p.discard_calibration(None))
+
+    assert st["preview"] is False and st["saturation"] == 120
+    assert color.applied[-1]["saturation"] == 120
 
 
 def test_apply_native_preset_resets(tmp_path, monkeypatch):
@@ -222,6 +469,42 @@ def test_reset_color_back_to_native(tmp_path, monkeypatch):
     asyncio.run(p.set_saturation(180, "global", None))
     st = asyncio.run(p.reset_color())
     assert st["saturation"] == 100 and st["contrast"] == 0 and st["temperature"] == 0
+
+
+def test_contextual_reset_previews_native_without_clearing_saved_profiles(
+    tmp_path, monkeypatch
+):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    asyncio.run(p.apply_color_preset("vivo"))
+    asyncio.run(p.set_saturation(170, "game", "42"))
+
+    st = asyncio.run(p.reset_color("global", None, None))
+
+    assert st["preview"] is True and st["active_preset"] == "native"
+    restored, _ = _make_plugin(tmp_path, monkeypatch)
+    assert asyncio.run(restored.get_color_state())["active_preset"] == "vivo"
+    assert restored._color.has_game("42") is True
+
+
+def test_contextual_game_reset_only_changes_that_game_after_confirm(tmp_path, monkeypatch):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    asyncio.run(p.set_saturation(120, "global", None))
+    asyncio.run(p.set_saturation(170, "game", "42"))
+    asyncio.run(p.set_saturation(180, "game", "99"))
+    asyncio.run(p.set_current_game("42"))
+
+    preview = asyncio.run(p.reset_color("game", "42", "42"))
+    assert preview["preview"] is True and preview["saturation"] == 100
+    fields = (
+        "saturation", "temperature", "contrast", "gamma", "hue",
+        "black", "gain_r", "gain_g", "gain_b", "vibrance",
+    )
+    profile = {field: preview[field] for field in fields}
+    asyncio.run(p.set_calibration(profile, "game", "42", "42"))
+
+    assert p._color.effective("42")["saturation"] == 100
+    assert p._color.effective("99")["saturation"] == 180
+    assert p._color.effective(None)["saturation"] == 120
 
 
 def test_night_mode_manual_overlay_applies_but_does_not_leak(tmp_path, monkeypatch):

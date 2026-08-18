@@ -41,6 +41,12 @@ def sanitize_calibration(fields):
     return {f: _clamp(f, fields[f]) for f in _CALIBRATION if f in fields}
 
 
+def sanitize_color(fields):
+    if not isinstance(fields, dict):
+        return {}
+    return {f: _clamp(f, fields[f]) for f in _NATIVE if f in fields}
+
+
 class ColorStore(ScopedProfileStore):
     """Panel color settings. The WHOLE profile (saturation + calibration:
     temperature/contrast/gamma/hue/gains/vibrance + HDR mode) is per-game. See
@@ -88,6 +94,12 @@ class ColorStore(ScopedProfileStore):
         for f in _CALIBRATION:
             if f in fields:
                 t[f] = _clamp(f, fields[f])
+        self._save()
+
+    def set_color(self, scope, fields, appid=None):
+        target = self._target(scope, appid)
+        for field, value in sanitize_color(fields).items():
+            target[field] = value
         self._save()
 
     def apply_preset(self, scope, preset, appid=None):

@@ -49,7 +49,7 @@ from fan_curves import FanCurveStore
 from launch import tools as launch_tools
 from launch import proton_caps
 from launch import custom_vars as launch_custom_vars
-from display.color_store import ColorStore, sanitize_calibration
+from display.color_store import ColorStore, sanitize_calibration, sanitize_color
 from display.gamescope import GamescopeColorBackend, run_gamescopectl
 from display.oled_look import oled_look_for
 from display.const import NATIVE as COLOR_NATIVE, FIELDS as COLOR_FIELDS, CALIBRATION as COLOR_CALIBRATION
@@ -399,9 +399,6 @@ class Plugin:
             os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "fan_curves.json")
         )
         self._fan_apply_confirmed = False
-        # Pantalla: panel color. Saturation is per-game (store), calibration global.
-        # Applied via gamescope atoms; the backend is probe-gated (UI hidden if the
-        # host has no gamescope display) so nothing fake is ever shown.
         self._color = ColorStore(
             os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "color.json")
         )
@@ -435,7 +432,9 @@ class Plugin:
         # value after _COLOR_REVERT_SECS unless confirmed (so a mis-drag to an
         # illegible screen self-heals even if the QAM closes). None = nothing pending.
         self._color_preview = None
+        self._color_preview_target = None
         self._color_revert_task = None
+        self._color_revert_deadline = None
         # Night mode: a scheduled warm shift on top of the calibration; _night_loop
         # re-applies on a schedule edge so it works with the QAM closed.
         self._night = NightStore(
@@ -3114,8 +3113,7 @@ class Plugin:
         # stale preview can't leak onto the new context (nor a dangling timer fire).
         self._reapply_generation = int(getattr(self, "_reapply_generation", 0)) + 1
         self._last_reapply_trigger = "lifecycle_or_context"
-        self._cancel_color_revert()
-        self._color_preview = None
+        self._drop_color_preview()
         charge_generation = self._cancel_charge_limit_reconcile(
             "reapply",
             preserve_candidate=not getattr(self, "_shutting_down", False),
@@ -5647,6 +5645,15 @@ class Plugin:
     def _color_state(self) -> dict:
         eff = self._display_color()
         preset_keys = color_presets.preset_keys(self._device)
+        preview_target = self._color_preview_target
+        if self._color_preview is None:
+            revert_remaining = None
+        elif self._color_revert_deadline is None:
+            revert_remaining = self._COLOR_REVERT_SECS
+        else:
+            revert_remaining = max(
+                0, int(self._color_revert_deadline - time.monotonic() + 0.999)
+            )
         return {
             "supported": self._color_backend.supported,
             **{f: eff[f] for f in COLOR_FIELDS},
@@ -5665,6 +5672,9 @@ class Plugin:
             # Calibration preview pending confirmation (auto-reverts) + its window.
             "preview": self._color_preview is not None,
             "revert_seconds": self._COLOR_REVERT_SECS,
+            "revert_remaining": revert_remaining,
+            "preview_scope": preview_target[0] if preview_target else None,
+            "preview_appid": preview_target[1] if preview_target else None,
             "presets": preset_keys,
             "active_preset": self._active_preset(preset_keys),
         }
@@ -5673,7 +5683,7 @@ class Plugin:
         """The look key the color actually shown for the current scope matches, or None.
         Compares the effective color (so a per-game saturation override that hides the
         look's saturation correctly reads as custom, not a false match)."""
-        cur = self._color.effective(self._current_appid)
+        cur = self._display_color()
         for key in keys:
             preset = color_presets.resolve_preset(self._device, key)
             full = self._color._clean_global(preset or {})  # same merge+clamp apply uses
@@ -5685,11 +5695,23 @@ class Plugin:
         self._init()
         return await self._offload_call(self._color_state)
 
-    async def apply_color_preset(self, key: str, scope: str = "global", appid=None) -> dict:
+    def _color_context_is_current(
+        self, scope, appid, context_appid
+    ) -> bool:
+        return (
+            context_appid is _RPC_CONTEXT_UNSET
+            or self._scope_context_is_current(scope, appid, context_appid)
+        )
+
+    async def apply_color_preset(
+        self, key: str, scope: str = "global", appid=None,
+        context_appid=_RPC_CONTEXT_UNSET,
+    ) -> dict:
         """Apply a look to the given scope (native = reset that scope). Saved directly."""
         self._init()
-        self._cancel_color_revert()
-        self._color_preview = None
+        if not self._color_context_is_current(scope, appid, context_appid):
+            return await self._offload_call(self._color_state)
+        self._drop_color_preview()
         preset = color_presets.resolve_preset(self._device, key)
         if key == "native":
             self._color.apply_preset(scope, dict(COLOR_NATIVE), appid=appid)
@@ -5698,18 +5720,40 @@ class Plugin:
         self._reapply_color()
         return await self._offload_call(self._color_state)
 
-    async def set_saturation(self, value: int, scope: str, appid=None) -> dict:
-        # Saturation can't make the screen illegible (0 = grayscale) → save directly,
-        # no confirm timer.
+    async def preview_color_preset(
+        self, key: str, scope: str, appid=None,
+        context_appid=_RPC_CONTEXT_UNSET,
+    ) -> dict:
         self._init()
+        if not self._color_context_is_current(scope, appid, context_appid):
+            return await self._offload_call(self._color_state)
+        preset = color_presets.resolve_preset(self._device, key)
+        if key != "native" and preset is None:
+            return await self._offload_call(self._color_state)
+        profile = dict(COLOR_NATIVE) if key == "native" else preset
+        return await self.preview_calibration(
+            self._color._clean_global(profile), scope, appid, context_appid
+        )
+
+    async def set_saturation(
+        self, value: int, scope: str, appid=None,
+        context_appid=_RPC_CONTEXT_UNSET,
+    ) -> dict:
+        self._init()
+        if not self._color_context_is_current(scope, appid, context_appid):
+            return await self._offload_call(self._color_state)
         self._color.set_saturation(scope, int(value), appid=appid)
         self._reapply_color()
         return await self._offload_call(self._color_state)
 
-    async def set_color_follow_global(self, follow: bool, appid) -> dict:
-        """Toggle a game between its own saturation and following the global one, keeping
-        its stored value (never deletes). Seeds from global on "use own" if it has none."""
+    async def set_color_follow_global(
+        self, follow: bool, appid, context_appid=_RPC_CONTEXT_UNSET
+    ) -> dict:
+        """Toggle a game between its own color profile and the global one, keeping its
+        stored values. Seeds from global on "use own" if it has none."""
         self._init()
+        if not self._color_context_is_current("game", appid, context_appid):
+            return await self._offload_call(self._color_state)
         if appid is not None:
             appid = str(appid)
             self._set_current_appid(appid)
@@ -5719,28 +5763,59 @@ class Plugin:
             self._reapply_color()
         return await self._offload_call(self._color_state)
 
-    async def preview_calibration(self, calibration: dict) -> dict:
-        """Apply calibration LIVE without saving, and arm the auto-revert timer. Any
-        subset of the calibration fields may be sent; sanitized to the safe ranges so
-        the live preview honours the same floors as a saved value. The UI confirms with
-        set_calibration; if it doesn't, the screen self-heals."""
+    async def preview_calibration(
+        self, calibration: dict, scope: str = "global", appid=None,
+        context_appid=_RPC_CONTEXT_UNSET,
+    ) -> dict:
+        """Apply color live without saving and arm the auto-revert timer."""
         self._init()
+        if not self._color_context_is_current(scope, appid, context_appid):
+            return await self._offload_call(self._color_state)
+        target_appid = str(appid) if scope == "game" and appid is not None else None
+        target = None if context_appid is _RPC_CONTEXT_UNSET else (scope, target_appid)
+        if (
+            self._color_preview is not None
+            and self._color_preview_target is not None
+            and self._color_preview_target != target
+        ):
+            return await self._offload_call(self._color_state)
         # Empty/malformed payload → nothing to preview: don't arm a revert timer or
         # show a confirm bar with nothing to confirm.
-        self._color_preview = sanitize_calibration(calibration) or None
-        self._reapply_color()
+        sanitize = (
+            sanitize_color
+            if context_appid is not _RPC_CONTEXT_UNSET
+            else sanitize_calibration
+        )
+        self._color_preview = sanitize(calibration) or None
         if self._color_preview is not None:
+            self._color_preview_target = target
+            self._reapply_color()
             self._arm_color_revert()
         else:
-            self._cancel_color_revert()  # empty payload → drop any timer already armed
+            self._drop_color_preview()
+            self._reapply_color()
         return await self._offload_call(self._color_state)
 
-    async def set_calibration(self, calibration: dict, scope: str = "global", appid=None) -> dict:
-        """Confirm (save) the calibration for a scope: persist, cancel auto-revert, apply."""
+    async def set_calibration(
+        self, calibration: dict, scope: str = "global", appid=None,
+        context_appid=_RPC_CONTEXT_UNSET,
+    ) -> dict:
+        """Confirm the pending color for a scope."""
         self._init()
-        self._cancel_color_revert()
-        self._color_preview = None
-        self._color.set_calibration(scope, appid, **sanitize_calibration(calibration))
+        if not self._color_context_is_current(scope, appid, context_appid):
+            return await self._offload_call(self._color_state)
+        target_appid = str(appid) if scope == "game" and appid is not None else None
+        if (
+            self._color_preview is not None
+            and self._color_preview_target is not None
+            and self._color_preview_target != (scope, target_appid)
+        ):
+            return await self._offload_call(self._color_state)
+        self._drop_color_preview()
+        if context_appid is _RPC_CONTEXT_UNSET:
+            self._color.set_calibration(scope, appid, **sanitize_calibration(calibration))
+        else:
+            self._color.set_color(scope, calibration, appid=appid)
         self._reapply_color()
         return await self._offload_call(self._color_state)
 
@@ -5750,12 +5825,19 @@ class Plugin:
             asyncio.get_running_loop()
         except RuntimeError:
             return  # no event loop (tests) — the FE countdown still guards the UI
+        self._color_revert_deadline = time.monotonic() + self._COLOR_REVERT_SECS
         self._color_revert_task = asyncio.create_task(self._color_revert_after())
 
     def _cancel_color_revert(self) -> None:
         if self._color_revert_task is not None:
             self._color_revert_task.cancel()
             self._color_revert_task = None
+        self._color_revert_deadline = None
+
+    def _drop_color_preview(self) -> None:
+        self._cancel_color_revert()
+        self._color_preview = None
+        self._color_preview_target = None
 
     async def _color_revert_after(self) -> None:
         try:
@@ -5767,25 +5849,66 @@ class Plugin:
     def _do_color_revert(self) -> None:
         """Drop the unconfirmed preview and re-apply the saved color."""
         self._color_preview = None
+        self._color_preview_target = None
         self._color_revert_task = None
+        self._color_revert_deadline = None
         self._reapply_color()
 
-    async def apply_oled_look(self, scope: str = "global", appid=None) -> dict:
+    async def discard_calibration(
+        self, context_appid=_RPC_CONTEXT_UNSET
+    ) -> dict:
+        self._init()
+        if not self._color_context_is_current("global", None, context_appid):
+            return await self._offload_call(self._color_state)
+        self._drop_color_preview()
+        self._reapply_color()
+        return await self._offload_call(self._color_state)
+
+    async def apply_oled_look(
+        self, scope: str = "global", appid=None,
+        context_appid=_RPC_CONTEXT_UNSET,
+    ) -> dict:
         """One-tap: apply this model's OLED-look preset (calibration + saturation) to the
         given scope. No-op on OLED panels (no preset). Saved directly."""
         self._init()
-        self._cancel_color_revert()
-        self._color_preview = None
+        if not self._color_context_is_current(scope, appid, context_appid):
+            return await self._offload_call(self._color_state)
+        self._drop_color_preview()
         look = oled_look_for(self._device)
         if look is not None:
             self._color.apply_preset(scope, look, appid=appid)
             self._reapply_color()
         return await self._offload_call(self._color_state)
 
-    async def reset_color(self) -> dict:
+    async def preview_oled_look(
+        self, scope: str, appid=None, context_appid=_RPC_CONTEXT_UNSET
+    ) -> dict:
         self._init()
-        self._cancel_color_revert()
-        self._color_preview = None
+        if not self._color_context_is_current(scope, appid, context_appid):
+            return await self._offload_call(self._color_state)
+        look = oled_look_for(self._device)
+        if look is None:
+            return await self._offload_call(self._color_state)
+        return await self.preview_calibration(
+            self._color._clean_global(look), scope, appid, context_appid
+        )
+
+    async def reset_color(
+        self, scope="global", appid=None, context_appid=_RPC_CONTEXT_UNSET
+    ) -> dict:
+        self._init()
+        if scope not in ("global", "game"):
+            context_appid = scope
+            scope = "global"
+            if not self._color_context_is_current(scope, appid, context_appid):
+                return await self._offload_call(self._color_state)
+        elif context_appid is not _RPC_CONTEXT_UNSET:
+            if not self._color_context_is_current(scope, appid, context_appid):
+                return await self._offload_call(self._color_state)
+            return await self.preview_calibration(
+                dict(COLOR_NATIVE), scope, appid, context_appid
+            )
+        self._drop_color_preview()
         self._color.reset()
         self._reapply_color()
         return await self._offload_call(self._color_state)

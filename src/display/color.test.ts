@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   isNativeColor,
   isCalibrated,
-  pickCalibration,
   NEUTRAL as NATIVE,
 } from "./color";
 
@@ -16,7 +15,7 @@ describe("isNativeColor", () => {
 });
 
 describe("isCalibrated", () => {
-  it("ignores saturation (that's the per-game hero, not calibration)", () => {
+  it("ignores saturation", () => {
     expect(isCalibrated({ ...NATIVE, saturation: 160 })).toBe(false);
   });
 
@@ -27,15 +26,5 @@ describe("isCalibrated", () => {
     expect(isCalibrated({ ...NATIVE, hue: -10 })).toBe(true);
     expect(isCalibrated({ ...NATIVE, gain_r: 120 })).toBe(true);
     expect(isCalibrated({ ...NATIVE, vibrance: 40 })).toBe(true);
-  });
-});
-
-describe("pickCalibration", () => {
-  it("returns every calibration field and drops saturation", () => {
-    const cal = pickCalibration({ ...NATIVE, saturation: 160, gamma: 20, gain_b: 130 });
-    expect(cal).not.toHaveProperty("saturation");
-    expect(cal.gamma).toBe(20);
-    expect(cal.gain_b).toBe(130);
-    expect(cal.temperature).toBe(0);
   });
 });
