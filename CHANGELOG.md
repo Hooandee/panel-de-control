@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## [0.37.8](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.7...panel-de-control-v0.37.8) (2026-08-18)
+
 ### Español
 
 * **QAM:** Corrige el acceso directo que podía quedar obsoleto al actualizar desde 0.37.5 a 0.37.6 con Decky 3.2.6 y abrir la lista de Decky en lugar de Panel de Control. La entrada estándar permanece siempre disponible, el icono vuelve a mostrar el panel directamente y el contenido completo solo se monta en la entrada visible. Ajustes solicita reiniciar Decky si no puede limpiar un registro obsoleto. ([#478](https://github.com/Hooandee/panel-de-control/issues/478)) ([#480](https://github.com/Hooandee/panel-de-control/issues/480))
@@ -13,13 +15,6 @@
 ### Italiano
 
 * **QAM:** Corregge il collegamento diretto che poteva restare obsoleto aggiornando dalla 0.37.5 alla 0.37.6 con Decky 3.2.6 e aprire l'elenco dei plugin Decky invece di Panel de Control. La voce standard resta sempre disponibile, l'icona mostra nuovamente il pannello direttamente e il contenuto completo viene montato solo nella voce visibile. Impostazioni richiede il riavvio di Decky se non riesce a rimuovere una registrazione obsoleta. ([#478](https://github.com/Hooandee/panel-de-control/issues/478)) ([#480](https://github.com/Hooandee/panel-de-control/issues/480))
-
-## [0.37.8](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.7...panel-de-control-v0.37.8) (2026-08-18)
-
-
-### Bug Fixes
-
-* corrige el acceso a Panel de Control desde el QAM ([#485](https://github.com/Hooandee/panel-de-control/issues/485)) ([eb6f7b8](https://github.com/Hooandee/panel-de-control/commit/eb6f7b83fc7f4845d921c1a4a6454e869af1c1a8))
 
 ## [0.37.7](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.6...panel-de-control-v0.37.7) (2026-08-17)
 
