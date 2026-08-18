@@ -1,6 +1,8 @@
 import dataclasses
 import os
 
+import pytest
+
 from device_profiles import DEVICE_TABLE, GENERIC
 from tdp import factory
 from tdp.backend import NullBackend
@@ -117,13 +119,15 @@ def test_only_exact_legion_go_s_83n6_gets_measured_rail_floors(tmp_path):
     assert getattr(nearby, "_rail_floors", None) == {}
 
 
-def test_exact_legion_go_s_83l3_waits_for_async_firmware_readback(
+@pytest.mark.parametrize("product_name", ("83L3", "83N6"))
+def test_exact_legion_go_s_waits_for_async_firmware_readback(
     tmp_path,
     monkeypatch,
+    product_name,
 ):
     root = str(tmp_path)
     _mk_fw(root, "lenovo-wmi-other-0")
-    _mk_dmi(root, "LENOVO", "83L3")
+    _mk_dmi(root, "LENOVO", product_name)
     backend = select_backend(
         _p("legion_go_s"),
         root=root,
@@ -131,18 +135,20 @@ def test_exact_legion_go_s_83l3_waits_for_async_firmware_readback(
     )
     stale = _observation(backend, 15, 15, 15)
     original_observe = backend.observe
-    observations = iter((stale,))
+    observations = iter((stale, stale, stale))
 
     def observe_after_firmware_settles():
         return next(observations, None) or original_observe()
 
+    sleeps = []
     monkeypatch.setattr(backend, "observe", observe_after_firmware_settles)
-    monkeypatch.setattr("tdp.firmware_attr.time.sleep", lambda _delay: None)
+    monkeypatch.setattr("tdp.firmware_attr.time.sleep", sleeps.append)
 
     result = backend.set_levels(20, 20, 20, ac=True)
 
     assert result.ok is True
     assert result.applied_w == 20
+    assert sleeps == [0.05, 0.10, 0.20]
     assert backend.diagnostics()["readback_settle_ms"] == 750
 
 
@@ -224,7 +230,7 @@ def test_exact_legion_go_s_83n6_diagnostics_keep_reported_sentinel_max(tmp_path)
     assert backend.diagnostics() == {
         "boost_capped_to_active": True,
         "ignored_live_maxes": {"pl1": 15, "pl2": 15, "pl3": 20},
-        "readback_settle_ms": 0,
+        "readback_settle_ms": 750,
         "reported_live_bounds": {
             "pl1": {"min": 5, "max": 15},
             "pl2": {"min": 5, "max": 15},

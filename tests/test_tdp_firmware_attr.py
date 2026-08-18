@@ -149,6 +149,37 @@ def test_set_levels_keeps_failure_when_async_readback_never_converges(
     assert f"{b.name}/pl1=35" in result.detail
 
 
+def test_set_levels_never_succeeds_when_primary_readback_disappears(
+    tmp_path,
+    monkeypatch,
+):
+    root = str(tmp_path)
+    b = _settling_backend(root, 0)
+    unavailable = TdpObservation(readable=False)
+    monkeypatch.setattr(b, "observe", lambda: unavailable)
+
+    result = b.set_levels(20, 20, 20, ac=True)
+
+    assert result.ok is False
+    assert result.applied_w is None
+    assert f"{b.name}/pl1=unavailable" in result.detail
+
+
+def test_set_levels_never_succeeds_when_primary_sysfs_disappears_after_probe(
+    tmp_path,
+):
+    root = str(tmp_path)
+    b = _settling_backend(root, 0)
+    for attr in ("ppt_pl1_spl", "ppt_pl2_sppt", "ppt_pl3_fppt"):
+        os.remove(b._attr(attr))
+
+    result = b.set_levels(20, 20, 20, ac=True)
+
+    assert result.ok is False
+    assert result.applied_w is None
+    assert f"{b.name}/pl1=unavailable" in result.detail
+
+
 def test_set_levels_does_not_wait_after_a_write_error(tmp_path, monkeypatch):
     root = str(tmp_path)
     b = _settling_backend(root, 0)
@@ -286,6 +317,41 @@ def test_legacy_interface_absent_is_a_clean_noop(tmp_path):
     b = FirmwareAttrBackend("asus-armoury", fb, root=root)
     res = b.set_levels(20, 24, 28, ac=True)
     assert res.ok is True and res.applied_w == 20
+
+
+def test_legacy_only_boost_rails_do_not_require_primary_readback(tmp_path):
+    root = str(tmp_path)
+    _mk_attr(root, "asus-armoury", "ppt_pl1_spl", 20, 7, 35)
+    _mk_legacy(root, pl1="20", pl2="24", fppt="28")
+    fb = TdpLimits(min_w=7, default_w=17, max_w=25, max_ac_w=35)
+    b = FirmwareAttrBackend("asus-armoury", fb, root=root)
+
+    result = b.set_levels(20, 24, 28, ac=True)
+
+    assert result.ok is True
+    assert result.applied_w == 20
+
+
+def test_set_levels_fails_if_legacy_readback_disappears_after_write(
+    tmp_path,
+    monkeypatch,
+):
+    root = str(tmp_path)
+    _mk_full(root, "asus-armoury")
+    _mk_legacy(root)
+    b = FirmwareAttrBackend("asus-armoury", FALLBACK, root=root)
+    original_observe = b.observe
+
+    def observe_after_legacy_disappears():
+        os.remove(b._legacy["pl2"])
+        return original_observe()
+
+    monkeypatch.setattr(b, "observe", observe_after_legacy_disappears)
+
+    result = b.set_levels(20, 24, 28, ac=True)
+
+    assert result.ok is False
+    assert "asus-nb-wmi/pl2=unavailable" in result.detail
 
 
 def test_observe_reads_every_primary_rail_and_live_bound(tmp_path):
