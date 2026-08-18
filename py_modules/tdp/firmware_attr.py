@@ -90,10 +90,15 @@ class FirmwareAttrBackend(TDPBackend):
         self._pp_dir = self._find_profile_dir()  # static, resolved once
         self._pp_choices = None                  # parsed lazily, then cached
         self._legacy = self._find_legacy_nodes(driver_prefix)  # ASUS dual-interface
-        self._rails = tuple(
+        self._primary_rails = tuple(
             rail
             for rail, attr in _RAIL_ATTRS
-            if os.path.exists(self._attr(attr)) or rail in self._legacy
+            if os.path.exists(self._attr(attr))
+        )
+        self._rails = tuple(
+            rail
+            for rail, _attr in _RAIL_ATTRS
+            if rail in self._primary_rails or rail in self._legacy
         )
         self.supports_levels = any(rail != "pl1" for rail in self._rails)
 
@@ -365,12 +370,19 @@ class FirmwareAttrBackend(TDPBackend):
             "reported_live_bounds": reported,
         }
 
-    @staticmethod
-    def _observation_mismatches(observation, targets):
+    def _observation_mismatches(self, observation, targets):
         bad = []
-        for surface, rails in observation.surfaces.items():
-            for rail, reading in rails.items():
-                target = targets.get(rail)
-                if target is not None and reading.applied_w != target:
+        for surface, rails in (
+            (self.name, self._primary_rails),
+            ("asus-nb-wmi", self._legacy),
+        ):
+            observed = observation.surfaces.get(surface, {})
+            for rail in rails:
+                if rail not in targets:
+                    continue
+                reading = observed.get(rail)
+                if reading is None or reading.applied_w is None:
+                    bad.append(f"{surface}/{rail}=unavailable")
+                elif reading.applied_w != targets[rail]:
                     bad.append(f"{surface}/{rail}={reading.applied_w}")
         return bad

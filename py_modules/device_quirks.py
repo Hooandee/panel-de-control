@@ -47,4 +47,5 @@ def legion_go_s_83n6_firmware_attr_quirks(device, root: str = "/") -> dict:
     return {
         "ignored_live_maxes": {"pl1": 15, "pl2": 15, "pl3": 20},
         "cap_boost_to_active": True,
+        "readback_settle_delays": (0.05, 0.10, 0.20, 0.40),
     }
