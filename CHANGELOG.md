@@ -4,10 +4,17 @@
 
 ## [0.37.9](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.8...panel-de-control-v0.37.9) (2026-08-18)
 
+### Español
 
-### Bug Fixes
+* **TDP:** Evita falsos rechazos del TDP manual en Lenovo Legion Go S 83N6 cuando el firmware tarda unos instantes en actualizar PL1, PL2 y PL3. Panel de Control espera durante una ventana acotada a que los tres límites confirmen el cambio sin repetir escrituras. Si una lectura deja de estar disponible o los valores no convergen, informa del fallo real en lugar de confirmar el cambio por error. Los equipos ASUS que combinan la interfaz principal y la heredada siguen comprobando todas las rutas configuradas.
 
-* **tdp:** confirm delayed firmware readback ([#490](https://github.com/Hooandee/panel-de-control/issues/490)) ([2590942](https://github.com/Hooandee/panel-de-control/commit/25909420680917f3c7c8afc68323d8baed8dbe12))
+### English
+
+* **TDP:** Prevents false manual TDP rejections on Lenovo Legion Go S 83N6 when the firmware takes a moment to update PL1, PL2, and PL3. Panel de Control waits for all three limits to confirm within a bounded window without repeating writes. If a readback becomes unavailable or the values do not converge, it reports the real failure instead of confirming the change by mistake. ASUS systems combining primary and legacy interfaces continue to verify every configured path.
+
+### Italiano
+
+* **TDP:** Evita falsi rifiuti del TDP manuale su Lenovo Legion Go S 83N6 quando il firmware impiega qualche istante ad aggiornare PL1, PL2 e PL3. Panel de Control attende per un intervallo limitato la conferma di tutti e tre i limiti senza ripetere le scritture. Se una lettura non è più disponibile o i valori non convergono, segnala l'errore reale invece di confermare per sbaglio la modifica. I sistemi ASUS che combinano l'interfaccia principale e quella legacy continuano a verificare tutti i percorsi configurati.
 
 ## [0.37.8](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.7...panel-de-control-v0.37.8) (2026-08-18)
 
