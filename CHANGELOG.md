@@ -5,9 +5,17 @@
 ## [0.37.11](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.10...panel-de-control-v0.37.11) (2026-08-19)
 
 
-### Bug Fixes
+### Español
 
-* **updater:** show all notes since installed version ([#502](https://github.com/Hooandee/panel-de-control/issues/502)) ([6f233ae](https://github.com/Hooandee/panel-de-control/commit/6f233aeb84bbf3bd47dfea77f6f06cca3d74f1fd))
+* **Actualizador:** Al actualizar desde una versión anterior, muestra en un único historial todas las notas de las versiones estables posteriores a la instalada hasta la más reciente y enseña solo el idioma seleccionado. Los historiales largos se pueden recorrer con el mando y, al llegar al final, el foco pasa a la acción de instalación. La comprobación y la instalación se ejecutan sin bloquear Decky y se coordinan para evitar descargas o estados duplicados. ([#502](https://github.com/Hooandee/panel-de-control/pull/502)) ([6f233ae](https://github.com/Hooandee/panel-de-control/commit/6f233aeb84bbf3bd47dfea77f6f06cca3d74f1fd))
+
+### English
+
+* **Updater:** When updating from an earlier version, shows a single history containing every stable release note after the installed version through the latest release, displaying only the selected language. Long histories can be scrolled with the controller, and focus moves to the install action upon reaching the end. Update checks and installation run without blocking Decky and are coordinated to prevent duplicate downloads or state. ([#502](https://github.com/Hooandee/panel-de-control/pull/502)) ([6f233ae](https://github.com/Hooandee/panel-de-control/commit/6f233aeb84bbf3bd47dfea77f6f06cca3d74f1fd))
+
+### Italiano
+
+* **Aggiornamento:** Durante l'aggiornamento da una versione precedente, mostra in un'unica cronologia tutte le note delle versioni stabili successive a quella installata fino alla più recente e visualizza solo la lingua selezionata. Le cronologie lunghe possono essere scorse con il controller e, una volta raggiunta la fine, il focus passa all'azione di installazione. Il controllo e l'installazione vengono eseguiti senza bloccare Decky e sono coordinati per evitare download o stati duplicati. ([#502](https://github.com/Hooandee/panel-de-control/pull/502)) ([6f233ae](https://github.com/Hooandee/panel-de-control/commit/6f233aeb84bbf3bd47dfea77f6f06cca3d74f1fd))
 
 ## [0.37.10](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.9...panel-de-control-v0.37.10) (2026-08-19)
 
