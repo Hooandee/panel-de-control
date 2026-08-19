@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.37.11](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.10...panel-de-control-v0.37.11) (2026-08-19)
+
+
+### Bug Fixes
+
+* **updater:** show all notes since installed version ([#502](https://github.com/Hooandee/panel-de-control/issues/502)) ([6f233ae](https://github.com/Hooandee/panel-de-control/commit/6f233aeb84bbf3bd47dfea77f6f06cca3d74f1fd))
+
 ## [0.37.10](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.9...panel-de-control-v0.37.10) (2026-08-19)
 
 ### Español
