@@ -16,6 +16,7 @@ import os
 import re
 import shutil
 import tempfile
+import threading
 import urllib.error
 import urllib.request
 import zipfile
@@ -31,6 +32,7 @@ _UA = "decky-self-updater"
 
 # Session cache: only hit GitHub once per Steam session (force=True bypasses it).
 _cache: dict | None = None
+_operation_lock = threading.RLock()
 
 
 def _plugin_dir() -> Path:
@@ -106,36 +108,82 @@ def _shape(data: dict, current: str) -> dict:
     }
 
 
+def _release_notes(data: list[dict], current: str, latest: str) -> str:
+    releases: dict[str, dict] = {}
+    for release in data:
+        if not isinstance(release, dict) or release.get("draft") or release.get("prerelease"):
+            continue
+        version = _extract_semver(str(release.get("tag_name", "")))
+        if (
+            version
+            and _is_newer(version, current)
+            and not _is_newer(version, latest)
+        ):
+            releases.setdefault(version, release)
+
+    notes: list[str] = []
+    for version in sorted(releases, key=_norm, reverse=True):
+        release = releases[version]
+        body = str(release.get("body", "") or "").strip()
+        notes.append(f"## v{version}" + (f"\n\n{body}" if body else ""))
+    return "\n\n".join(notes)
+
+
+def _fetch_releases(slug: str) -> list[dict]:
+    releases: list[dict] = []
+    page = 1
+    while True:
+        api = (
+            f"https://api.github.com/repos/{_GITHUB_OWNER}/{slug}/releases"
+            f"?per_page=100&page={page}"
+        )
+        batch = json.loads(_http_get(api, "application/vnd.github+json"))
+        if not isinstance(batch, list):
+            raise ValueError("unexpected releases response")
+        releases.extend(batch)
+        if len(batch) < 100:
+            return releases
+        page += 1
+
+
 def check(force: bool = False) -> dict:
     global _cache
-    if _cache is not None and not force:
-        return _cache
-    current = read_version()
-    result = {
-        "current": current,
-        "latest": current,
-        "has_update": False,
-        "notes": "",
-        "download_url": "",
-        "error": "",
-    }
-    try:
-        slug = _repo_slug()
-        api = f"https://api.github.com/repos/{_GITHUB_OWNER}/{slug}/releases/latest"
-        data = json.loads(_http_get(api, "application/vnd.github+json"))
-        result = _shape(data, current)
-    except urllib.error.HTTPError as e:
-        # 404 = no published release yet → benign "up to date", not an error.
-        if e.code == 404:
-            decky.logger.info("[updater] no published release yet")
-        else:
+    with _operation_lock:
+        if _cache is not None and not force:
+            return _cache
+        current = read_version()
+        empty = {
+            "current": current,
+            "latest": current,
+            "has_update": False,
+            "notes": "",
+            "download_url": "",
+            "error": "",
+        }
+        result = empty
+        latest_loaded = False
+        try:
+            slug = _repo_slug()
+            latest_api = f"https://api.github.com/repos/{_GITHUB_OWNER}/{slug}/releases/latest"
+            latest_data = json.loads(_http_get(latest_api, "application/vnd.github+json"))
+            latest_loaded = True
+            result = _shape(latest_data, current)
+            if result["has_update"]:
+                releases = [latest_data, *_fetch_releases(slug)]
+                result["notes"] = _release_notes(
+                    releases, current, result["latest"]
+                )
+        except urllib.error.HTTPError as e:
+            if e.code == 404 and not latest_loaded:
+                decky.logger.info("[updater] no published release yet")
+            else:
+                decky.logger.warning(f"[updater] check failed: {e}")
+                result = {**empty, "error": "network"}
+        except Exception as e:  # noqa: BLE001 — must never propagate to the UI
             decky.logger.warning(f"[updater] check failed: {e}")
-            result["error"] = "network"
-    except Exception as e:  # noqa: BLE001 — must never propagate to the UI
-        decky.logger.warning(f"[updater] check failed: {e}")
-        result["error"] = "network"
-    _cache = result
-    return result
+            result = {**empty, "error": "network"}
+        _cache = result
+        return result
 
 
 def _extract_zip(zf: zipfile.ZipFile, dest: Path) -> None:
@@ -156,41 +204,43 @@ def install() -> dict:
 
     Returns {ok, needs_restart, message}. Never raises.
     """
-    info = check()
-    url = str(info.get("download_url") or "")
-    if not url:
-        return {"ok": False, "needs_restart": False, "message": "no_asset"}
-    try:
-        plugin_dir = _plugin_dir()
-        name = _plugin_name()
-        blob = _http_get(url, "application/octet-stream")
-        with tempfile.TemporaryDirectory() as tmp:
-            tmpd = Path(tmp)
-            zpath = tmpd / "update.zip"
-            zpath.write_bytes(blob)
-            extract = tmpd / "x"
-            with zipfile.ZipFile(zpath) as zf:
-                _extract_zip(zf, extract)
-            src = extract / name  # top folder == plugin.json name
-            if not src.is_dir():
-                subdirs = [p for p in extract.iterdir() if p.is_dir()]
-                if len(subdirs) == 1:
-                    src = subdirs[0]
-            if not src.is_dir():
-                return {"ok": False, "needs_restart": False, "message": "bad_zip"}
-            # Copy over the installed plugin dir. User settings live in
-            # DECKY_PLUGIN_SETTINGS_DIR (outside this dir) and are untouched.
-            for item in src.iterdir():
-                dest = plugin_dir / item.name
-                if item.is_dir():
-                    shutil.copytree(item, dest, dirs_exist_ok=True)
-                else:
-                    shutil.copy2(item, dest)
-        _mark_installed()
-        return {"ok": True, "needs_restart": True, "message": "installed"}
-    except Exception as e:  # noqa: BLE001
-        decky.logger.error(f"[updater] install failed: {e}")
-        return {"ok": False, "needs_restart": False, "message": "install_failed"}
+    with _operation_lock:
+        info = check()
+        url = str(info.get("download_url") or "")
+        if not info.get("has_update") or not url:
+            return {"ok": False, "needs_restart": False, "message": "no_asset"}
+        try:
+            plugin_dir = _plugin_dir()
+            name = _plugin_name()
+            blob = _http_get(url, "application/octet-stream")
+            with tempfile.TemporaryDirectory() as tmp:
+                tmpd = Path(tmp)
+                zpath = tmpd / "update.zip"
+                zpath.write_bytes(blob)
+                extract = tmpd / "x"
+                with zipfile.ZipFile(zpath) as zf:
+                    _extract_zip(zf, extract)
+                src = extract / name  # top folder == plugin.json name
+                if not src.is_dir():
+                    subdirs = [p for p in extract.iterdir() if p.is_dir()]
+                    if len(subdirs) == 1:
+                        src = subdirs[0]
+                if not src.is_dir():
+                    return {"ok": False, "needs_restart": False, "message": "bad_zip"}
+                # Copy over the installed plugin dir. User settings live in
+                # DECKY_PLUGIN_SETTINGS_DIR (outside this dir) and are untouched.
+                for item in src.iterdir():
+                    dest = plugin_dir / item.name
+                    if item.is_dir():
+                        shutil.copytree(item, dest, dirs_exist_ok=True)
+                    else:
+                        shutil.copy2(item, dest)
+            read_version.cache_clear()
+            _mark_installed()
+            return {"ok": True, "needs_restart": True, "message": "installed"}
+        except Exception as e:  # noqa: BLE001
+            decky.logger.error(f"[updater] install failed: {e}")
+            return {"ok": False, "needs_restart": False, "message": "install_failed"}
 
 
 def restart_loader() -> None:

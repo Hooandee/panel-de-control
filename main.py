@@ -761,11 +761,11 @@ class Plugin:
 
     async def check_update(self, force: bool = False) -> dict:
         self._init()
-        return self_updater.check(force)
+        return await asyncio.to_thread(self_updater.check, force)
 
     async def install_update(self) -> dict:
         self._init()
-        return self_updater.install()
+        return await asyncio.to_thread(self_updater.install)
 
     async def restart_loader(self) -> None:
         # Fire-and-forget: restarts Decky to load the just-installed files.
