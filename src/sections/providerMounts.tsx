@@ -1,5 +1,5 @@
 import { FC, ReactNode, useCallback, useEffect, useRef } from "react";
-import { Focusable, PanelSectionRow } from "@decky/ui";
+import { PanelSectionRow } from "@decky/ui";
 
 import { setSeenTdpConflictTakeover } from "../api";
 import { useI18n } from "../i18n";
@@ -18,6 +18,7 @@ import { useModules, setModuleDisabled } from "../customize/modules";
 import { effectiveEnabled } from "../customize/moduleLogic";
 import { TdpConflictCard } from "../components/TdpConflictCard";
 import { openTdpConflictModal } from "../components/TdpConflictModal";
+import { ColorPreviewConfirm } from "../components/ColorPreviewConfirm";
 
 // A section's shared hooks + context in one instance, shared by the section and any
 // custom view hosting its blocks. Machinery-bound safety chrome travels with the
@@ -26,41 +27,12 @@ import { openTdpConflictModal } from "../components/TdpConflictModal";
 export const PantallaProviderMount: FC<{ children: ReactNode }> = ({ children }) => {
   const { t } = useI18n();
   const color = useColor();
-  const { state, revertIn, confirmCalibration } = color;
+  const { state, revertIn, saving, confirmCalibration, discardCalibration } = color;
   const hdr = useHdr(color.scope, color.game?.appid ?? null);
   const night = useNight();
   const active = !!state && !isNativeColor(state);
   return (
     <PantallaProvider value={{ color, hdr, night }}>
-      {revertIn !== null && (
-        <PanelSectionRow>
-          <div style={{
-            display: "flex", alignItems: "center", gap: theme.space.sm,
-            borderRadius: theme.radius.md, padding: theme.space.md, marginBottom: theme.space.card,
-            background: "rgba(255,180,84,0.14)", boxShadow: `inset 0 0 0 1px ${theme.color.warn}`,
-          }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: theme.font.body, fontWeight: 700, color: theme.color.textPrimary }}>
-                {t("display.confirm.title")}
-              </div>
-              <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
-                {t("display.confirm.desc", { s: revertIn })}
-              </div>
-            </div>
-            <Focusable
-              style={{
-                display: "flex", alignItems: "center", justifyContent: "center",
-                padding: "8px 14px", borderRadius: theme.radius.sm,
-                background: theme.color.accent, color: "#ffffff", fontWeight: 700,
-                fontSize: theme.font.body, cursor: "pointer", whiteSpace: "nowrap",
-              }}
-              onActivate={confirmCalibration} onClick={confirmCalibration}
-            >
-              {t("display.confirm.save")}
-            </Focusable>
-          </div>
-        </PanelSectionRow>
-      )}
       {state?.perf_cost && active && (
         <PanelSectionRow>
           <div style={{
@@ -73,6 +45,14 @@ export const PantallaProviderMount: FC<{ children: ReactNode }> = ({ children })
         </PanelSectionRow>
       )}
       {children}
+      {revertIn !== null && (
+        <ColorPreviewConfirm
+          seconds={revertIn}
+          saving={saving}
+          onSave={confirmCalibration}
+          onDiscard={discardCalibration}
+        />
+      )}
     </PantallaProvider>
   );
 };

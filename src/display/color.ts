@@ -15,15 +15,14 @@ export function isNativeColor(p: ColorPreset): boolean {
   return p.saturation === NEUTRAL.saturation && !isCalibrated(p);
 }
 
-/** True when any CALIBRATION field (everything but the per-game saturation) deviates
+/** True when any calibration field (everything but saturation) deviates
  *  from neutral. Drives the "Avanzado" block's "Personalizado" summary + reset. */
 export function isCalibrated(p: ColorPreset): boolean {
   return CALIBRATION_KEYS.some((k) => p[k] !== NEUTRAL[k]);
 }
 
-/** The calibration subset of a preset — what preview/set_calibration send. */
-export function pickCalibration(p: ColorPreset): Calibration {
-  const out = {} as Calibration;
-  for (const k of CALIBRATION_KEYS) out[k] = p[k];
+export function pickColor(p: ColorPreset): ColorPreset {
+  const out = {} as ColorPreset;
+  for (const key of Object.keys(NEUTRAL) as (keyof ColorPreset)[]) out[key] = p[key];
   return out;
 }

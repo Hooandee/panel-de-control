@@ -1,6 +1,6 @@
 """Balanced full-color "looks" tuned per panel type. Each sets saturation + the
 aesthetic calibration fields together (hue and the per-channel gains stay neutral —
-those are white-balance corrections). Applied globally via ColorStore.apply_preset.
+those are white-balance corrections). Applied to a ColorStore profile.
 A device may override via DeviceProfile.color_presets; else the per-panel set is used."""
 
 from display.const import is_oled
