@@ -14,6 +14,13 @@
 
 * **Schermo:** Tutte le azioni sul colore —saturazione, preset, Aspetto OLED, ritorno all'aspetto nativo e regolazioni avanzate— condividono ora un'anteprima sicura di 15 secondi con un avviso fisso per salvare o annullare. Alla scadenza, il rollback viene confermato con il backend affinché l'interfaccia e lo schermo non restino desincronizzati. Le operazioni restano legate al gioco attivo e i controlli verificano nuovamente per un periodo limitato la disponibilità di Gamescope durante l'avvio. ([#452](https://github.com/Hooandee/panel-de-control/issues/452)) ([#426](https://github.com/Hooandee/panel-de-control/issues/426)) ([#407](https://github.com/Hooandee/panel-de-control/issues/407)) ([#220](https://github.com/Hooandee/panel-de-control/issues/220)) ([#193](https://github.com/Hooandee/panel-de-control/issues/193)) ([#434](https://github.com/Hooandee/panel-de-control/issues/434))
 
+## [0.37.10](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.9...panel-de-control-v0.37.10) (2026-08-19)
+
+
+### Bug Fixes
+
+* **display:** make color previews explicit and context-safe ([#493](https://github.com/Hooandee/panel-de-control/issues/493)) ([dc59e1b](https://github.com/Hooandee/panel-de-control/commit/dc59e1b5ea6d9b26603ca6370f64a7445f3758a5))
+
 ## [0.37.9](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.8...panel-de-control-v0.37.9) (2026-08-18)
 
 ### Español
