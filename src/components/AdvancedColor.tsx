@@ -17,8 +17,6 @@ interface Props {
 
 type Key = keyof Calibration;
 
-/** The "Avanzado" color lab: light/tone + colour balance (with a manual per-channel
- *  RGB sub-group). All global calibration; previewed live with the auto-revert. */
 export const AdvancedColor: FC<Props> = ({ state, onChange }) => {
   const { t } = useI18n();
   const [rgbOpen, setRgbOpen] = useState(false);

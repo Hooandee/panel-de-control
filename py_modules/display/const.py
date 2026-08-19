@@ -1,6 +1,6 @@
 """Color model constants: the field set and its neutral baseline, shared by the store
 and the LUT math so they can't drift. Missing fields read as neutral, so older saved
-files load safe. saturation is per-game; everything else is global calibration."""
+files load safely."""
 
 NATIVE = {
     "saturation": 100,  # unipolar, 100 = neutral

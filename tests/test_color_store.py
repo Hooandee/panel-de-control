@@ -2,8 +2,6 @@ import json
 
 from display.color_store import ColorStore
 
-# Native/neutral: saturation 100 (%, per-game); every other field is global panel
-# calibration at its neutral (bipolar 0, or gain 100 = 1.0).
 NATIVE = {
     "saturation": 100, "temperature": 0, "contrast": 0, "gamma": 0, "hue": 0, "black": 0,
     "gain_r": 100, "gain_g": 100, "gain_b": 100, "vibrance": 0,
@@ -57,13 +55,20 @@ def test_saturation_is_per_game_over_global(tmp_path):
     assert s.has_game("123") is True
 
 
-def test_calibration_is_global_only(tmp_path):
-    s = _store(tmp_path)
+def test_calibration_is_distinct_per_scope_and_persists(tmp_path):
+    path = str(tmp_path / "color.json")
+    s = ColorStore(path)
     s.set_calibration("global", temperature=-40, contrast=25)
-    s.set_saturation("game", 160, appid="123")
-    eff = s.effective("123")
-    assert eff["temperature"] == -40 and eff["contrast"] == 25
-    assert eff["saturation"] == 160  # game override still applies
+    s.set_calibration("game", "123", temperature=10, contrast=40)
+
+    assert s.effective(None)["temperature"] == -40
+    assert s.effective(None)["contrast"] == 25
+    assert s.effective("123")["temperature"] == 10
+    assert s.effective("123")["contrast"] == 40
+
+    restored = ColorStore(path)
+    assert restored.effective("123")["temperature"] == 10
+    assert restored.effective("123")["contrast"] == 40
 
 
 def test_set_calibration_clamps_bipolar(tmp_path):
@@ -74,14 +79,16 @@ def test_set_calibration_clamps_bipolar(tmp_path):
     assert eff["contrast"] == -60       # floored so the panel never goes illegible
 
 
-def test_advanced_calibration_fields_are_global(tmp_path):
+def test_advanced_calibration_fields_are_distinct_per_scope(tmp_path):
     s = _store(tmp_path)
     s.set_calibration("global", gamma=40, hue=-20, gain_r=120, gain_g=90, gain_b=110, vibrance=60)
-    s.set_saturation("game", 160, appid="123")
-    eff = s.effective("123")
-    assert eff["gamma"] == 40 and eff["hue"] == -20 and eff["vibrance"] == 60
-    assert eff["gain_r"] == 120 and eff["gain_g"] == 90 and eff["gain_b"] == 110
-    assert eff["saturation"] == 160  # game override untouched
+    s.set_calibration("game", "123", gamma=-10, hue=15, gain_r=90, gain_g=105, gain_b=115, vibrance=20)
+
+    glob = s.effective(None)
+    game = s.effective("123")
+    assert glob["gamma"] == 40 and glob["hue"] == -20 and glob["vibrance"] == 60
+    assert game["gamma"] == -10 and game["hue"] == 15 and game["vibrance"] == 20
+    assert game["gain_r"] == 90 and game["gain_g"] == 105 and game["gain_b"] == 115
 
 
 def test_advanced_calibration_clamps(tmp_path):
@@ -172,6 +179,31 @@ def test_apply_preset_keeps_hdr_game(tmp_path):
     s.set_hdr("game", True, appid="7")
     s.apply_preset("game", {"saturation": 130}, appid="7")
     assert s.hdr("7") is True
+
+
+def test_set_color_updates_full_scope_once_without_losing_hdr(tmp_path):
+    s = _store(tmp_path)
+    s.set_hdr("global", True)
+
+    s.set_color("global", {"saturation": 145, "contrast": 20, "temperature": 10})
+
+    assert s.effective(None)["saturation"] == 145
+    assert s.effective(None)["contrast"] == 20
+    assert s.effective(None)["temperature"] == 10
+    assert s.hdr(None) is True
+
+
+def test_set_color_keeps_game_hdr_and_global_color(tmp_path):
+    s = _store(tmp_path)
+    s.set_saturation("global", 120)
+    s.set_hdr("game", True, appid="7")
+
+    s.set_color("game", {"saturation": 145, "contrast": 20}, appid="7")
+
+    assert s.effective("7")["saturation"] == 145
+    assert s.effective("7")["contrast"] == 20
+    assert s.hdr("7") is True
+    assert s.effective(None)["saturation"] == 120
 
 
 def test_reset_keeps_hdr(tmp_path):

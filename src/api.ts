@@ -548,23 +548,19 @@ export const installUpdate = callable<[], InstallResult>("install_update");
 export const restartLoader = callable<[], void>("restart_loader");
 
 // ---- Pantalla (panel color via gamescope) ---------------------------------
-// Saturation is PER-GAME (global + per-appid); every other field is panel-level
-// calibration → GLOBAL. See ColorPreset for ranges.
 export interface ColorPreset {
-  saturation: number;   // 0..200, 100 neutral (per-game)
-  temperature: number;  // -100 cool .. +100 warm, 0 neutral (global)
-  contrast: number;     // -100 flat .. +100 punchy, 0 neutral (global)
-  gamma: number;        // -100 dark .. +100 bright midtones, 0 neutral (global)
-  hue: number;          // -100 .. +100 tint rotation, 0 neutral (global)
-  black: number;        // -100 deepen .. +100 lift black point, 0 neutral (global)
-  gain_r: number;       // 50..150, 100 = 1.0 — manual white balance (global)
+  saturation: number;   // 0..200, 100 neutral
+  temperature: number;  // -100 cool .. +100 warm, 0 neutral
+  contrast: number;     // -100 flat .. +100 punchy, 0 neutral
+  gamma: number;        // -100 dark .. +100 bright midtones, 0 neutral
+  hue: number;          // -100 .. +100 tint rotation, 0 neutral
+  black: number;        // -100 deepen .. +100 lift black point, 0 neutral
+  gain_r: number;       // 50..150, 100 = 1.0
   gain_g: number;
   gain_b: number;
-  vibrance: number;     // -100 mute .. +100 boost (spares vivid pixels), 0 neutral (global)
+  vibrance: number;     // -100 mute .. +100 boost, 0 neutral
 }
 
-// Calibration = a ColorPreset minus the per-game saturation. The key list lives in
-// display/color.ts (kept free of this module's @decky/api import).
 export type Calibration = Omit<ColorPreset, "saturation">;
 
 export interface ColorState extends ColorPreset {
@@ -572,22 +568,24 @@ export interface ColorState extends ColorPreset {
   supported: boolean;
   global_saturation: number;
   has_game_profile: boolean;
-  // True when this game applies the global saturation (no own, or toggled to follow).
   follows_global: boolean;
   appid: string | null;
   // The one-tap per-model "OLED look" preset, or null on a real OLED panel.
   oled_look: ColorPreset | null;
   panel: string; // "lcd" | "oled"
-  // A calibration change is previewed live but pending confirmation — it
+  // A color change is previewed live but pending confirmation — it
   // auto-reverts to the saved value after `revert_seconds` unless confirmed.
   preview: boolean;
   revert_seconds: number;
+  revert_remaining?: number | null;
+  preview_scope?: Scope | null;
+  preview_appid?: string | null;
   // True when an active look costs a bit of extra power on this device (Intel forces
   // gamescope composition so the look shows in-game) → the UI notes it (by name).
   perf_cost: boolean;
   device_name: string;
-  // One-tap balanced looks available on this panel (native first) + the one the global
-  // color currently matches (null = a custom look).
+  // One-tap balanced looks available on this panel (native first) and the one the
+  // active scope currently matches (null = a custom look).
   presets: string[];
   active_preset: string | null;
 }
@@ -621,20 +619,24 @@ export const setGpuFollowGlobal =
 
 export const getColorState = callable<[], ColorState>("get_color_state");
 export const setSaturation =
-  callable<[value: number, scope: Scope, appid: string | null], ColorState>("set_saturation");
+  callable<[value: number, scope: Scope, appid: string | null, contextAppid: string | null], ColorState>("set_saturation");
 export const setColorFollowGlobal =
-  callable<[follow: boolean, appid: string | null], ColorState>("set_color_follow_global");
-// Preview calibration live (arms the backend auto-revert); confirm with setCalibration.
-// Both take the full calibration object (backend picks the known fields + clamps).
+  callable<[follow: boolean, appid: string | null, contextAppid: string | null], ColorState>("set_color_follow_global");
 export const previewCalibration =
-  callable<[calibration: Calibration], ColorState>("preview_calibration");
+  callable<[color: ColorPreset, scope: Scope, appid: string | null, contextAppid: string | null], ColorState>("preview_calibration");
 export const setCalibration =
-  callable<[calibration: Calibration, scope: Scope, appid: string | null], ColorState>("set_calibration");
-export const applyOledLook = callable<[scope: Scope, appid: string | null], ColorState>("apply_oled_look");
-export const resetColor = callable<[], ColorState>("reset_color");
+  callable<[color: ColorPreset, scope: Scope, appid: string | null, contextAppid: string | null], ColorState>("set_calibration");
+export const discardCalibration =
+  callable<[contextAppid: string | null], ColorState>("discard_calibration");
+export const applyOledLook = callable<[scope: Scope, appid: string | null, contextAppid: string | null], ColorState>("apply_oled_look");
+export const previewOledLook = callable<[scope: Scope, appid: string | null, contextAppid: string | null], ColorState>("preview_oled_look");
+export const resetColor =
+  callable<[scope: Scope, appid: string | null, contextAppid: string | null], ColorState>("reset_color");
 // Apply a balanced full-color look to a scope ("native" = back to the panel's own look).
 export const applyColorPreset =
-  callable<[key: string, scope: Scope, appid: string | null], ColorState>("apply_color_preset");
+  callable<[key: string, scope: Scope, appid: string | null, contextAppid: string | null], ColorState>("apply_color_preset");
+export const previewColorPreset =
+  callable<[key: string, scope: Scope, appid: string | null, contextAppid: string | null], ColorState>("preview_color_preset");
 
 // ---- Night mode (scheduled warm shift) ------------------------------------
 export interface NightState {
