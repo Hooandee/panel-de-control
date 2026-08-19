@@ -96,7 +96,7 @@ DEVICE_TABLE = (
                   5, 20, 45, 54, match_names=("ONEXPLAYER APEX",), experimental=True),
     DeviceProfile("onexplayer_superx", "OneXPlayer Super X",
                   "AMD Ryzen AI Max+ 395", "amd",
-                  15, 30, 55, 75, match_names=("ONEXPLAYER SUPER X",), experimental=True),   
+                  15, 30, 55, 75, match_names=("ONEXPLAYER SUPER X",), experimental=True), charger_only_extra=True,   
     DeviceProfile("aokzoe_a1x", "AOKZOE A1X", "AMD Ryzen AI 9 HX 370", "amd",
                   4, 18, 30, 30, match_names=("AOKZOE A1X",), experimental=True,
                   tdp_presets=(12, 18, 30, 30)),
