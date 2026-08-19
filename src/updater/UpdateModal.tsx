@@ -1,10 +1,18 @@
-import { DialogButton, ModalRoot } from "@decky/ui";
+import {
+  DialogButton,
+  Focusable,
+  GamepadButton,
+  getFocusNavController,
+  ModalRoot,
+  type GamepadEvent,
+} from "@decky/ui";
 import { FocusRoot } from "../components/FocusRoot";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useRef, useState } from "react";
 import type { InstallResult } from "../api";
 import { useUpdate } from "./useUpdate";
 import type { Lang } from "../i18n";
 import { getUpdaterStrings } from "./strings";
+import { releaseNotesForLanguage } from "./releaseNotes";
 
 const MONO = "ui-monospace, SFMono-Regular, Menlo, monospace";
 
@@ -48,6 +56,8 @@ function renderMarkdown(md: string): ReactNode[] {
       out.push(
         <div
           key={i}
+          role="heading"
+          aria-level={heading[1].length}
           style={{ fontSize: heading[1].length <= 2 ? 16 : 13, fontWeight: 700, margin: "12px 0 4px" }}
         >
           {renderInline(heading[2])}
@@ -88,8 +98,33 @@ export function UpdateModal({
   const t = getUpdaterStrings(lang).modal;
   const { install, restart, status } = useUpdate(lang);
   const [result, setResult] = useState<InstallResult | null>(null);
+  const notesRef = useRef<HTMLDivElement>(null);
+  const actionRef = useRef<HTMLDivElement>(null);
   const installing = status === "installing";
   const done = status === "done";
+  const visibleNotes = releaseNotesForLanguage(notes, lang);
+
+  const scrollNotes = (event: GamepadEvent) => {
+    const viewport = notesRef.current;
+    if (!viewport) return;
+    const direction = event.detail.button === GamepadButton.DIR_DOWN
+      ? 1
+      : event.detail.button === GamepadButton.DIR_UP
+        ? -1
+        : 0;
+    const atEdge = direction < 0
+      ? viewport.scrollTop <= 0
+      : viewport.scrollTop + viewport.clientHeight >= viewport.scrollHeight - 1;
+    if (!direction) return;
+    if (direction > 0 && atEdge) {
+      getFocusNavController()?.FocusElement(actionRef.current);
+      return;
+    }
+    if (atEdge) return;
+    event.preventDefault();
+    event.stopPropagation();
+    viewport.scrollBy({ top: direction * viewport.clientHeight * 0.8 });
+  };
 
   return (
     <ModalRoot onCancel={closeModal} onEscKeypress={closeModal}>
@@ -97,18 +132,32 @@ export function UpdateModal({
         <div style={{ fontSize: 20, fontWeight: 700 }}>
           {t.title} v{latest}
         </div>
-        <div style={{ maxHeight: 340, overflowY: "auto", paddingRight: 8 }}>
-          {notes ? renderMarkdown(notes) : <div style={{ opacity: 0.7 }}>{t.noNotes}</div>}
-        </div>
+        {visibleNotes ? (
+          <Focusable onActivate={() => {}} onGamepadDirection={scrollNotes} noFocusRing>
+            <div
+              ref={notesRef}
+              data-testid="notes-scroll"
+              style={{ maxHeight: 340, overflowY: "auto", paddingRight: 8 }}
+            >
+              {renderMarkdown(visibleNotes)}
+            </div>
+          </Focusable>
+        ) : (
+          <div style={{ opacity: 0.7 }}>{t.noNotes}</div>
+        )}
         {done ? (
           <>
             <div style={{ fontSize: 13 }}>
               {t.installed} {t.restartNote}
             </div>
-            <DialogButton onClick={() => restart()}>{t.restart}</DialogButton>
+            <DialogButton ref={actionRef} onClick={() => restart()}>{t.restart}</DialogButton>
           </>
         ) : (
-          <DialogButton disabled={installing} onClick={() => void install().then(setResult)}>
+          <DialogButton
+            ref={actionRef}
+            disabled={installing}
+            onClick={() => void install().then(setResult)}
+          >
             {installing ? t.installing : t.install}
           </DialogButton>
         )}
