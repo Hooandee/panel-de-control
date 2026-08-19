@@ -2,17 +2,19 @@
 
 ## Unreleased
 
+## [0.37.10](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.9...panel-de-control-v0.37.10) (2026-08-19)
+
 ### Español
 
-* **Pantalla:** Todas las acciones de color —saturación, presets, Aspecto OLED, volver a nativo y ajustes avanzados— comparten ahora una previsualización segura de 15 segundos con un aviso fijo para guardar o deshacer. La caducidad confirma la reversión con el backend para que la interfaz y la pantalla no puedan quedar desincronizadas. Las operaciones quedan ligadas al juego activo y los controles vuelven a comprobar temporalmente la disponibilidad de Gamescope durante el arranque. ([#452](https://github.com/Hooandee/panel-de-control/issues/452)) ([#426](https://github.com/Hooandee/panel-de-control/issues/426)) ([#407](https://github.com/Hooandee/panel-de-control/issues/407)) ([#220](https://github.com/Hooandee/panel-de-control/issues/220)) ([#193](https://github.com/Hooandee/panel-de-control/issues/193)) ([#434](https://github.com/Hooandee/panel-de-control/issues/434))
+* **Pantalla:** Todas las acciones de color —saturación, presets, Aspecto OLED, volver a nativo y ajustes avanzados— comparten ahora una previsualización segura de 15 segundos con un aviso fijo para guardar o deshacer. La caducidad confirma la reversión con el backend para que la interfaz y la pantalla no puedan quedar desincronizadas. Las operaciones quedan ligadas al juego activo y los controles vuelven a comprobar temporalmente la disponibilidad de Gamescope durante el arranque.
 
 ### English
 
-* **Display:** Every color action—saturation, presets, OLED Look, return to native, and advanced adjustments—now shares a safe 15-second preview with a fixed prompt to save or undo. Expiry confirms the rollback with the backend so the interface and display cannot remain out of sync. Operations remain bound to the active game, and the controls temporarily recheck Gamescope availability during startup. ([#452](https://github.com/Hooandee/panel-de-control/issues/452)) ([#426](https://github.com/Hooandee/panel-de-control/issues/426)) ([#407](https://github.com/Hooandee/panel-de-control/issues/407)) ([#220](https://github.com/Hooandee/panel-de-control/issues/220)) ([#193](https://github.com/Hooandee/panel-de-control/issues/193)) ([#434](https://github.com/Hooandee/panel-de-control/issues/434))
+* **Display:** Every color action—saturation, presets, OLED Look, return to native, and advanced adjustments—now shares a safe 15-second preview with a fixed prompt to save or undo. Expiry confirms the rollback with the backend so the interface and display cannot remain out of sync. Operations remain bound to the active game, and the controls temporarily recheck Gamescope availability during startup.
 
 ### Italiano
 
-* **Schermo:** Tutte le azioni sul colore —saturazione, preset, Aspetto OLED, ritorno all'aspetto nativo e regolazioni avanzate— condividono ora un'anteprima sicura di 15 secondi con un avviso fisso per salvare o annullare. Alla scadenza, il rollback viene confermato con il backend affinché l'interfaccia e lo schermo non restino desincronizzati. Le operazioni restano legate al gioco attivo e i controlli verificano nuovamente per un periodo limitato la disponibilità di Gamescope durante l'avvio. ([#452](https://github.com/Hooandee/panel-de-control/issues/452)) ([#426](https://github.com/Hooandee/panel-de-control/issues/426)) ([#407](https://github.com/Hooandee/panel-de-control/issues/407)) ([#220](https://github.com/Hooandee/panel-de-control/issues/220)) ([#193](https://github.com/Hooandee/panel-de-control/issues/193)) ([#434](https://github.com/Hooandee/panel-de-control/issues/434))
+* **Schermo:** Tutte le azioni sul colore —saturazione, preset, Aspetto OLED, ritorno all'aspetto nativo e regolazioni avanzate— condividono ora un'anteprima sicura di 15 secondi con un avviso fisso per salvare o annullare. Alla scadenza, il rollback viene confermato con il backend affinché l'interfaccia e lo schermo non restino desincronizzati. Le operazioni restano legate al gioco attivo e i controlli verificano nuovamente per un periodo limitato la disponibilità di Gamescope durante l'avvio.
 
 ## [0.37.9](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.8...panel-de-control-v0.37.9) (2026-08-18)
 
