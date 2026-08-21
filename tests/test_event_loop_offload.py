@@ -182,6 +182,38 @@ def test_offload_without_serial_executor_does_not_block_a_running_loop(
     assert results == [True]
 
 
+def test_update_check_does_not_block_the_event_loop(tmp_path, monkeypatch):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    release = threading.Event()
+    monkeypatch.setattr(
+        sys.modules["main"].self_updater,
+        "check",
+        lambda force: release.wait(0.3),
+    )
+
+    async def _run():
+        asyncio.get_running_loop().call_later(0.02, release.set)
+        return await p.check_update(True)
+
+    assert asyncio.run(_run()) is True
+
+
+def test_update_install_does_not_block_the_event_loop(tmp_path, monkeypatch):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    release = threading.Event()
+    monkeypatch.setattr(
+        sys.modules["main"].self_updater,
+        "install",
+        lambda: release.wait(0.3),
+    )
+
+    async def _run():
+        asyncio.get_running_loop().call_later(0.02, release.set)
+        return await p.install_update()
+
+    assert asyncio.run(_run()) is True
+
+
 def test_offload_call_dispatches_through_executor(tmp_path, monkeypatch):
     p, _ = _make_plugin(tmp_path, monkeypatch)
     rec = _RecordingExecutor()
