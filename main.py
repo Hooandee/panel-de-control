@@ -2842,6 +2842,15 @@ class Plugin:
         command = self._capture_tdp_command(reason, on_ac)
         self._offload(lambda: self._execute_tdp_command(command))
 
+    def _tdp_authoritative_reassert_s(self):
+        if self._current_appid is None:
+            return None
+        return getattr(
+            self._tdp_backend,
+            "authoritative_reassert_s",
+            None,
+        )
+
     def _tdp_guard_tick(self, now=None):
         now = time.monotonic() if now is None else float(now)
         if self._tdp_shutdown:
@@ -2885,8 +2894,14 @@ class Plugin:
                 "heartbeat_s",
                 None,
             ),
+            authoritative_reassert_s=self._tdp_authoritative_reassert_s(),
         )
-        action = outcome.action
+        action = (
+            "reassert"
+            if outcome.action == "apply"
+            and outcome.reason == "periodic_reassert"
+            else outcome.action
+        )
         result = None
         if command.generation != self._tdp_generation:
             return
@@ -2947,6 +2962,9 @@ class Plugin:
             due.append(ready_at)
         if memory.next_retry_at > now:
             due.append(memory.next_retry_at)
+        reassert_s = self._tdp_authoritative_reassert_s()
+        if reassert_s is not None and memory.last_write_at is not None:
+            due.append(memory.last_write_at + float(reassert_s))
         if not due:
             return interval
         return max(0.05, min(interval, min(due) - now))
@@ -6192,6 +6210,11 @@ class Plugin:
                 getattr(self._tdp_backend, "guard_interval_s", 0.0)
             ),
             "heartbeat_s": getattr(self._tdp_backend, "heartbeat_s", None),
+            "authoritative_reassert_s": getattr(
+                self._tdp_backend,
+                "authoritative_reassert_s",
+                None,
+            ),
             "read_tolerance_w": int(
                 getattr(self._tdp_backend, "read_tolerance_w", 0)
             ),
