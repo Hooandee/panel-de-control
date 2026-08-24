@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.37.12](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.11...panel-de-control-v0.37.12) (2026-08-24)
+
+
+### Bug Fixes
+
+* **tdp:** defensively reassert Xbox Ally X game limits ([#509](https://github.com/Hooandee/panel-de-control/issues/509)) ([017fbec](https://github.com/Hooandee/panel-de-control/commit/017fbeca9029d973403b5049d708123177c1bb98))
+
 ## [0.37.11](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.10...panel-de-control-v0.37.11) (2026-08-19)
 
 
