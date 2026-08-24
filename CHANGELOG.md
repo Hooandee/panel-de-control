@@ -5,9 +5,17 @@
 ## [0.37.12](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.11...panel-de-control-v0.37.12) (2026-08-24)
 
 
-### Bug Fixes
+### Español
 
-* **tdp:** defensively reassert Xbox Ally X game limits ([#509](https://github.com/Hooandee/panel-de-control/issues/509)) ([017fbec](https://github.com/Hooandee/panel-de-control/commit/017fbeca9029d973403b5049d708123177c1bb98))
+* **TDP:** En la ROG Xbox Ally X, vuelve a aplicar automáticamente durante el juego el límite de potencia guardado para recuperar los casos en los que el consumo queda por encima de lo configurado hasta volver a mover el control. La protección solo se activa en el modelo y las interfaces ASUS confirmadas; no modifica los perfiles ni se aplica a otras ROG Ally o dispositivos.
+
+### English
+
+* **TDP:** On the ROG Xbox Ally X, automatically reapplies the saved power limit during gameplay to recover cases where power remains above the configured value until the control is moved again. The safeguard activates only on the confirmed model and ASUS interfaces; it does not modify profiles or apply to other ROG Ally models or devices.
+
+### Italiano
+
+* **TDP:** Sulla ROG Xbox Ally X, riapplica automaticamente durante il gioco il limite di potenza salvato per recuperare i casi in cui il consumo resta superiore al valore configurato finché il controllo non viene spostato di nuovo. La protezione si attiva solo sulla configurazione ASUS confermata; non modifica i profili e non si applica ad altri modelli ROG Ally o dispositivi.
 
 ## [0.37.11](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.10...panel-de-control-v0.37.11) (2026-08-19)
 
