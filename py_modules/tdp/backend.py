@@ -11,6 +11,7 @@ class TDPBackend(ABC):
     readback: bool = True
     guard_interval_s: float = 2.0
     heartbeat_s: float | None = None
+    authoritative_reassert_s: float | None = None
     read_tolerance_w: int = 0
     probe_trace: tuple[dict, ...] = ()
     primary_rail: str = "pl1"

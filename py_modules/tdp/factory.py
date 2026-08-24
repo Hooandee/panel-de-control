@@ -1,4 +1,5 @@
 from device_quirks import (
+    asus_tdp_authoritative_reassert_s,
     is_gpd_win_mini_2025,
     legion_go_s_83l3_firmware_attr_quirks,
     legion_go_s_83n6_firmware_attr_quirks,
@@ -25,7 +26,16 @@ def _candidates(device, fallback, root, ryzenadj):
     generic = device.is_generic
 
     def asus():
-        return FirmwareAttrBackend("asus-armoury", fallback, root=root, is_generic=generic)
+        return FirmwareAttrBackend(
+            "asus-armoury",
+            fallback,
+            root=root,
+            is_generic=generic,
+            authoritative_reassert_s=asus_tdp_authoritative_reassert_s(
+                device,
+                root,
+            ),
+        )
 
     def lenovo():
         return FirmwareAttrBackend(

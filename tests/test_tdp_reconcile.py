@@ -70,6 +70,74 @@ def test_matching_target_is_in_sync():
     assert (out.action, out.status) == ("hold", "in_sync")
 
 
+def test_authoritative_reassert_applies_matching_target_when_due():
+    targets = build_targets({"pl1": 15}, {"pl1": {"min": 7, "max": 30}}, obs())
+    memory = ReconcileMemory(last_write_at=10.0)
+
+    before = decide(
+        targets,
+        obs(),
+        memory,
+        now=24.9,
+        tolerance=0,
+        authoritative_reassert_s=15.0,
+    )
+    due = decide(
+        targets,
+        obs(),
+        memory,
+        now=25.0,
+        tolerance=0,
+        authoritative_reassert_s=15.0,
+    )
+
+    assert before.action == "hold"
+    assert (due.action, due.status, due.reason) == (
+        "apply",
+        "in_sync",
+        "periodic_reassert",
+    )
+
+
+def test_failed_authoritative_reassert_retries_despite_matching_readback():
+    targets = build_targets({"pl1": 15}, {"pl1": {"min": 7, "max": 30}}, obs())
+    due = decide(
+        targets,
+        obs(),
+        ReconcileMemory(last_write_at=10.0),
+        now=25.0,
+        tolerance=0,
+        authoritative_reassert_s=15.0,
+    )
+    failed = after_apply(
+        targets,
+        obs(),
+        due.memory,
+        now=25.0,
+        wrote_ok=False,
+        tolerance=0,
+    )
+    before_retry = decide(
+        targets,
+        obs(),
+        failed.memory,
+        now=25.4,
+        tolerance=0,
+        authoritative_reassert_s=15.0,
+    )
+    retry = decide(
+        targets,
+        obs(),
+        failed.memory,
+        now=25.5,
+        tolerance=0,
+        authoritative_reassert_s=15.0,
+    )
+
+    assert (before_retry.action, before_retry.reason) == ("hold", "write_rejected")
+    assert (retry.action, retry.reason) == ("apply", "write_rejected")
+
+
 def test_constrained_match_is_not_drift():
     limited = obs(value=15, hi=15)
     targets = build_targets(
