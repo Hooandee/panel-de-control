@@ -17,6 +17,18 @@ def is_gpd_win_mini_2025(device, root: str = "/") -> bool:
     )
 
 
+def asus_tdp_authoritative_reassert_s(device, root: str = "/") -> float | None:
+    vendor = _read_dmi(root, "sys_vendor").casefold()
+    product = _read_dmi(root, "product_name").casefold()
+    if (
+        getattr(device, "key", None) == "rog_xbox_ally_x"
+        and vendor == "asustek computer inc."
+        and product == "rog xbox ally x rc73xa_rc73xa"
+    ):
+        return 15.0
+    return None
+
+
 def is_legion_go_s_83n6(device, root: str = "/") -> bool:
     return (
         getattr(device, "key", None) == "legion_go_s"
