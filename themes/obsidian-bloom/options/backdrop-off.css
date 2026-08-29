@@ -1,0 +1,9 @@
+:root {
+  --hob-backdrop-blur: 0px;
+  --hob-backdrop-opacity: 0;
+}
+
+#Main img[src*="/library_hero.jpg"],
+#Main img[src*="/customimages/"][src*="_hero.jpg"] {
+  visibility: hidden !important;
+}

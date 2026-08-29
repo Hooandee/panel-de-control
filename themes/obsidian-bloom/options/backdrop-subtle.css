@@ -1,0 +1,9 @@
+:root {
+  --hob-backdrop-opacity: 0.48;
+  --hob-backdrop-blur: 10px;
+}
+
+#Main img[src*="/library_hero.jpg"],
+#Main img[src*="/customimages/"][src*="_hero.jpg"] {
+  filter: blur(var(--hob-backdrop-blur)) saturate(1.08) brightness(0.34) !important;
+}

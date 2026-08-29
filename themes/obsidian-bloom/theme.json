@@ -1,0 +1,109 @@
+{
+  "name": "Hooandee Obsidian Bloom",
+  "display_name": "Obsidian Bloom",
+  "author": "Hooandee",
+  "version": "v0.3.2",
+  "description": "OLED negro, cristal ahumado y energía bioluminiscente para transformar Steam con profundidad, movimiento y foco cinematográfico.",
+  "target": "System-Wide",
+  "manifest_version": 9,
+  "inject": {
+    "tokens.css": ["bigpicture", "QuickAccess", "MainMenu", "notificationtoasts.*"],
+    "home.css": ["bigpicture"],
+    "library.css": ["bigpicture"],
+    "details.css": ["bigpicture"],
+    "settings.css": ["bigpicture"],
+    "system.css": ["bigpicture", "QuickAccess", "MainMenu", "notificationtoasts.*"]
+  },
+  "patches": {
+    "Acento bioluminiscente": {
+      "default": "Dúo",
+      "type": "dropdown",
+      "values": {
+        "Dúo": {},
+        "Cian": { "options/accent-cyan.css": ["bigpicture", "QuickAccess", "MainMenu", "notificationtoasts.*"] },
+        "Magenta": { "options/accent-magenta.css": ["bigpicture", "QuickAccess", "MainMenu", "notificationtoasts.*"] }
+      }
+    },
+    "Densidad de parrilla": {
+      "default": "Cinemática",
+      "type": "dropdown",
+      "values": {
+        "Compacta": { "options/grid-compact.css": ["bigpicture"] },
+        "Cinemática": {},
+        "Galería": { "options/grid-gallery.css": ["bigpicture"] }
+      }
+    },
+    "Animaciones de parrilla": {
+      "default": "Yes",
+      "type": "checkbox",
+      "values": {
+        "No": { "options/motion-calm.css": ["bigpicture"] },
+        "Yes": {}
+      }
+    },
+    "Intensidad de movimiento": {
+      "default": "Equilibrada",
+      "type": "slider",
+      "values": {
+        "Reducida": { "options/motion-calm.css": ["bigpicture"] },
+        "Equilibrada": {},
+        "Total": { "options/motion-full.css": ["bigpicture"] }
+      }
+    },
+    "Fondo adaptativo": {
+      "default": "Cinemático",
+      "type": "dropdown",
+      "values": {
+        "Apagado": { "options/backdrop-off.css": ["bigpicture"] },
+        "Sutil": { "options/backdrop-subtle.css": ["bigpicture"] },
+        "Cinemático": {},
+        "Inmersivo": { "options/backdrop-immersive.css": ["bigpicture"] }
+      }
+    },
+    "Escena de biblioteca": {
+      "default": "Atmosférica",
+      "type": "dropdown",
+      "values": {
+        "Esencial": { "options/library-essential.css": ["bigpicture"] },
+        "Atmosférica": {},
+        "Inmersiva": { "options/library-immersive.css": ["bigpicture"] }
+      }
+    },
+    "Escena de parrilla": {
+      "default": "Abismo orbital",
+      "type": "dropdown",
+      "values": {
+        "Directa": { "options/grid-direct.css": ["bigpicture"] },
+        "Órbita": { "options/grid-orbit.css": ["bigpicture"] },
+        "Constelación": { "options/grid-constellation.css": ["bigpicture"] },
+        "Abismo orbital": { "options/grid-abyss-fallback.css": ["bigpicture"] }
+      }
+    },
+    "Transición al detalle": {
+      "default": "Portal",
+      "type": "dropdown",
+      "values": {
+        "Ninguna": { "options/details-none.css": ["bigpicture"] },
+        "Fundido": { "options/details-fade.css": ["bigpicture"] },
+        "Portal": { "options/details-portal-fallback.css": ["bigpicture"] }
+      }
+    },
+    "Estilo de ajustes": {
+      "default": "Cometa",
+      "type": "dropdown",
+      "values": {
+        "Steam": { "options/settings-steam.css": ["bigpicture"] },
+        "Cristal": { "options/settings-glass.css": ["bigpicture"] },
+        "Cometa": { "options/settings-comet.css": ["bigpicture"] }
+      }
+    },
+    "Modo de rendimiento": {
+      "default": "No",
+      "type": "checkbox",
+      "values": {
+        "No": {},
+        "Yes": { "options/performance-mode.css": ["bigpicture", "QuickAccess", "MainMenu", "notificationtoasts.*"] }
+      }
+    }
+  }
+}

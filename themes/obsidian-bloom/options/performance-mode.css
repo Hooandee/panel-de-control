@@ -1,0 +1,16 @@
+:root {
+  --hob-backdrop-blur: 0px;
+  --hob-motion-fast: 90ms;
+  --hob-motion: 120ms;
+  --hob-settings-blur: 0px;
+}
+
+#Main [role="tablist"],
+#Main [role="button"],
+#Main .PageListColumn,
+html:root [role="dialog"],
+html:root [class*="quickaccessmenu_"] > div,
+html:root [class*="mainmenu_"] > div {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}

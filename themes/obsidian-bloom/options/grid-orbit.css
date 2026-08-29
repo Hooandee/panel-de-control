@@ -1,0 +1,11 @@
+html:root:has(#Main [role="tab"][id$="AllGames"]):has(#Main [role="tab"][id$="Soundtracks"]) #Main [role="grid"] [role="link"]:has(+ [role="link"].gpfocus),
+html:root:has(#Main [role="tab"][id$="AllGames"]):has(#Main [role="tab"][id$="Soundtracks"]) #Main [role="grid"] [role="gridcell"]:has(+ [role="gridcell"] .gpfocus) {
+  filter: brightness(0.92) saturate(1.04);
+  transform: translate3d(-7px, -3px, 0) scale(0.985) !important;
+}
+
+html:root:has(#Main [role="tab"][id$="AllGames"]):has(#Main [role="tab"][id$="Soundtracks"]) #Main [role="grid"] [role="link"].gpfocus + [role="link"],
+html:root:has(#Main [role="tab"][id$="AllGames"]):has(#Main [role="tab"][id$="Soundtracks"]) #Main [role="grid"] [role="gridcell"]:has(.gpfocus) + [role="gridcell"] {
+  filter: brightness(0.92) saturate(1.04);
+  transform: translate3d(7px, -3px, 0) scale(0.985) !important;
+}

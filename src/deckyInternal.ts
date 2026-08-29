@@ -852,12 +852,79 @@ export function registerQuickAccessTab(
   }
 }
 
+type PluginListEntry = string | { name?: string; version?: string };
+
+interface DeckyState {
+  publicState?(): Partial<Record<"installedPlugins" | "disabledPlugins", PluginListEntry[]>>;
+  setActivePlugin?(name: string): void;
+}
+
+interface DeckyHost {
+  DeckyPluginLoader?: { deckyState?: DeckyState };
+  DeckyBackend?: { call?(method: string, ...args: unknown[]): Promise<unknown> };
+}
+
 function pluginNames(kind: "installedPlugins" | "disabledPlugins"): string[] {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const st = (window as any).DeckyPluginLoader?.deckyState?.publicState?.();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return (st?.[kind] ?? []).map((p: any) => p?.name ?? p);
+    const state = (window as unknown as DeckyHost).DeckyPluginLoader?.deckyState?.publicState?.();
+    return (state?.[kind] ?? [])
+      .map((plugin) => typeof plugin === "string" ? plugin : plugin.name)
+      .filter((name): name is string => typeof name === "string");
+  } catch {
+    return [];
+  }
+}
+
+export interface DeckyPluginInfo {
+  name: string;
+  version?: string;
+  disabled: boolean;
+}
+
+function normalizePluginEntry(
+  plugin: PluginListEntry,
+  collection: "installedPlugins" | "disabledPlugins",
+  index: number,
+): Omit<DeckyPluginInfo, "disabled"> {
+  const name = typeof plugin === "string" ? plugin : plugin?.name;
+  const version = typeof plugin === "string" ? undefined : plugin?.version;
+  if (!name?.trim() || (version !== undefined && typeof version !== "string")) {
+    throw new Error(`Decky ${collection} entry ${index} is invalid`);
+  }
+  return { name, ...(version ? { version } : {}) };
+}
+
+function readPluginInventory(host: unknown): DeckyPluginInfo[] {
+  const state = (host as DeckyHost | null)?.DeckyPluginLoader?.deckyState?.publicState?.();
+  const installed = state?.installedPlugins;
+  const disabled = state?.disabledPlugins;
+  if (!Array.isArray(installed) || !Array.isArray(disabled)) {
+    throw new Error("Decky plugin inventory unavailable");
+  }
+  const byName = new Map<string, DeckyPluginInfo>();
+  for (const [index, plugin] of installed.entries()) {
+    const { name, version } = normalizePluginEntry(plugin, "installedPlugins", index);
+    byName.set(name, { name, ...(version ? { version } : {}), disabled: false });
+  }
+  for (const [index, plugin] of disabled.entries()) {
+    const { name, version } = normalizePluginEntry(plugin, "disabledPlugins", index);
+    const existing = byName.get(name);
+    byName.set(name, {
+      name,
+      ...(version ? { version } : existing?.version ? { version: existing.version } : {}),
+      disabled: true,
+    });
+  }
+  return [...byName.values()];
+}
+
+export function strictPluginInventory(host: unknown = window): DeckyPluginInfo[] {
+  return readPluginInventory(host);
+}
+
+export function pluginInventory(host: unknown = window): DeckyPluginInfo[] {
+  try {
+    return readPluginInventory(host);
   } catch {
     return [];
   }
@@ -872,15 +939,57 @@ export function disabledPlugins(): string[] {
 }
 
 export async function callBackend(method: string, ...args: unknown[]): Promise<unknown> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const backend = (window as any).DeckyBackend;
+  const backend = (window as unknown as DeckyHost).DeckyBackend;
   if (typeof backend?.call !== "function") throw new Error("DeckyBackend unavailable");
   return backend.call(method, ...args);
 }
 
+export async function callPluginBackend(
+  pluginName: string,
+  method: string,
+  args: readonly unknown[] = [],
+  host: unknown = window,
+): Promise<unknown> {
+  const backend = (host as DeckyHost | null)?.DeckyBackend;
+  if (typeof backend?.call !== "function") throw new Error("DeckyBackend unavailable");
+  return backend.call("loader/call_plugin_method", pluginName, method, ...args);
+}
+
+export async function callLegacyPluginBackend(
+  pluginName: string,
+  method: string,
+  kwargs: Readonly<Record<string, unknown>>,
+  host: unknown = window,
+): Promise<unknown> {
+  const backend = (host as DeckyHost | null)?.DeckyBackend;
+  if (typeof backend?.call !== "function") throw new Error("DeckyBackend unavailable");
+  const response = await backend.call(
+    "loader/call_legacy_plugin_method",
+    pluginName,
+    method,
+    kwargs,
+  );
+  if (
+    typeof response !== "object"
+    || response === null
+    || typeof (response as { success?: unknown }).success !== "boolean"
+    || !Object.prototype.hasOwnProperty.call(response, "result")
+  ) {
+    throw new Error("Decky returned an invalid legacy response");
+  }
+  const result = (response as { success: boolean; result: unknown }).result;
+  if (!(response as { success: boolean }).success) {
+    throw new Error(typeof result === "string" ? result : `Decky rejected ${pluginName}.${method}`);
+  }
+  return result;
+}
+
+// Make a plugin the active QAM plugin. No-op (user lands on the Decky plugin list)
+// if the setter is gone.
 export function setActivePlugin(name: string): void {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (window as any).DeckyPluginLoader?.deckyState?.setActivePlugin?.(name);
-  } catch {}
+    (window as unknown as DeckyHost).DeckyPluginLoader?.deckyState?.setActivePlugin?.(name);
+  } catch {
+    /* land on the Decky plugin list */
+  }
 }

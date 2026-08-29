@@ -1,0 +1,7 @@
+:root {
+  --hob-focus-lift: -3px !important;
+  --hob-focus-scale: 1.02 !important;
+  --hob-motion-fast: 1ms !important;
+  --hob-motion: 1ms !important;
+  --hob-details-duration: 1ms !important;
+}

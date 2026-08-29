@@ -1,0 +1,74 @@
+@font-face {
+  font-display: swap;
+  font-family: "PDC Oxanium";
+  font-style: normal;
+  font-weight: 600;
+  src: url("/themes_custom/Hooandee%20Obsidian%20Bloom/assets/fonts/Oxanium-SemiBold.ttf") format("truetype");
+}
+
+:root {
+  --hob-void: #020204;
+  --hob-surface: rgba(9, 10, 15, 0.82);
+  --hob-surface-strong: rgba(5, 6, 10, 0.94);
+  --hob-glass: rgba(16, 17, 25, 0.64);
+  --hob-glass-high: rgba(25, 27, 39, 0.76);
+  --hob-stroke: rgba(218, 239, 255, 0.16);
+  --hob-stroke-hot: rgba(121, 246, 255, 0.72);
+  --hob-text: rgba(247, 250, 255, 0.96);
+  --hob-muted: rgba(211, 220, 235, 0.62);
+  --hob-cyan: #42f5ff;
+  --hob-magenta: #ff2fb1;
+  --hob-violet: #8d61ff;
+  --hob-accent: linear-gradient(112deg, var(--hob-magenta), var(--hob-violet) 48%, var(--hob-cyan));
+  --hob-accent-solid: var(--hob-cyan);
+  --hob-cyan-glow: rgba(66, 245, 255, 0.35);
+  --hob-magenta-glow: rgba(255, 47, 177, 0.3);
+  --hob-backdrop-opacity: 0.76;
+  --hob-backdrop-blur: 18px;
+  --hob-grid-card-width: 158px;
+  --hob-grid-gap: 18px;
+  --hob-focus-lift: -9px;
+  --hob-focus-scale: 1.055;
+  --hob-motion-fast: 180ms;
+  --hob-motion: 300ms;
+  --hob-details-duration: var(--hob-motion);
+  --hob-details-start-opacity: 0.3;
+  --hob-details-start-transform: translate3d(0, 18px, 0) scale(0.99);
+  --hob-settings-blur: 20px;
+  --hob-settings-tab-shift: 5px;
+  --hob-settings-surface: rgba(17, 18, 27, 0.82);
+  --hob-ease: cubic-bezier(0.18, 0.82, 0.2, 1);
+  --hob-radius-sm: 10px;
+  --hob-radius: 18px;
+  --hob-radius-lg: 30px;
+}
+
+html:root,
+html:root body,
+html:root #GamepadUI_Full_Root {
+  background: var(--hob-void) !important;
+  color: var(--hob-text) !important;
+}
+
+html:root ::selection {
+  background: rgba(66, 245, 255, 0.28);
+  color: #fff;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --hob-motion-fast: 1ms !important;
+    --hob-motion: 1ms !important;
+    --hob-details-duration: 1ms !important;
+  }
+
+  html:root:has(#Main [role="listitem"][data-id="GoToLibrary"]) #Main *,
+  html:root:has(#Main [role="tab"][id$="AllGames"]):has(#Main [role="tab"][id$="Soundtracks"]) #Main *,
+  html:root:has(#Main [role="tab"][aria-controls$="GameInfo_Content"]) #Main *,
+  html:root:has(#Main .PageListColumn [id*="/settings/"][role="tab"]) #Main * {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 1ms !important;
+  }
+}

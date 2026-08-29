@@ -1,4 +1,4 @@
-import { ErrorBoundary, staticClasses } from "@decky/ui";
+import { ErrorBoundary, findSP, staticClasses } from "@decky/ui";
 import { definePlugin } from "@decky/api";
 import { FC } from "react";
 import { LuGauge } from "react-icons/lu";
@@ -24,6 +24,8 @@ import {
 import { shutdownUiActivity } from "./system/uiActivity";
 import { StandardDeckyContent } from "./components/StandardDeckyContent";
 import { DirectQamShortcut } from "./components/DirectQamShortcut";
+import { configureDeckyCssLoaderHost } from "./themes/deckyCssLoaderHost";
+import { startThemesRuntime } from "./themes/runtime/start";
 
 // Localized header title only; the internal plugin name / install folder stays
 // "Panel de Control" (renaming it would break existing installs and the updater).
@@ -58,6 +60,8 @@ const DirectPluginContent: FC<{
 );
 
 export default definePlugin(() => {
+  const deckyHost = window;
+  const releaseCssLoaderHost = configureDeckyCssLoaderHost(deckyHost);
   // Restore durable UI prefs into the localStorage cache at plugin scope (so the
   // QAM-closed toast uses the right language), then re-apply the healed values.
   const stopPrefsHealed = onPrefsHealed(() => {
@@ -97,6 +101,11 @@ export default definePlugin(() => {
     ),
     () => cleanupOwnedQuickAccessTabs(window),
   );
+  const stopThemesRuntime = startThemesRuntime({
+    deckyHost,
+    getSteamDocument: () => findSP()?.document ?? null,
+    signalTarget: deckyHost,
+  });
 
   return {
     name: "Panel de Control",
@@ -118,6 +127,8 @@ export default definePlugin(() => {
       stopValueToast();
       stopContextMenu();
       stopListLocalizer();
+      stopThemesRuntime();
+      releaseCssLoaderHost();
     },
   };
 });

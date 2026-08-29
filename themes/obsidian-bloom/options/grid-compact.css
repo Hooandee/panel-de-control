@@ -1,0 +1,10 @@
+:root {
+  --hob-grid-card-width: 128px;
+  --hob-grid-gap: 11px;
+  --hob-focus-scale: 1.04;
+}
+
+html:root:has(#Main [role="tab"][id$="AllGames"]):has(#Main [role="tab"][id$="Soundtracks"]) #Main [role="grid"] {
+  column-gap: var(--hob-grid-gap) !important;
+  row-gap: 12px !important;
+}

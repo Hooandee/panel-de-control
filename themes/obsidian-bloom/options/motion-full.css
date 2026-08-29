@@ -1,0 +1,11 @@
+:root {
+  --hob-focus-lift: -14px;
+  --hob-focus-scale: 1.075;
+  --hob-motion-fast: 220ms;
+  --hob-motion: 380ms;
+}
+
+#Main [role="grid"] [role="link"].gpfocus,
+#Main [role="listitem"][data-id]:not([data-id="GoToLibrary"]):is(.gpfocus, :has(.gpfocus)) > div {
+  transform: translate3d(0, var(--hob-focus-lift), 0) perspective(700px) rotateX(2deg) scale(var(--hob-focus-scale)) !important;
+}

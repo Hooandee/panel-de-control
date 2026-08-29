@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "catalogId": "hooandee-obsidian-bloom",
+  "cssLoaderName": "Hooandee Obsidian Bloom",
+  "runtime": {
+    "moduleId": "obsidian-bloom",
+    "surfaces": ["library", "library-grid", "game-details", "settings"],
+    "capabilities": ["orbital-library", "grid-motion", "adaptive-backdrop", "surface-styles", "details-transition", "settings-shell", "performance-budget"]
+  },
+  "executableContent": false
+}

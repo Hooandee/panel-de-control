@@ -1,0 +1,5 @@
+:root {
+  --hob-details-duration: 520ms;
+  --hob-details-start-opacity: 0.18;
+  --hob-details-start-transform: translate3d(0, 18px, 0) scale(0.975);
+}

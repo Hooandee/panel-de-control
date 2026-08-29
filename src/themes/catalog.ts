@@ -1,0 +1,58 @@
+import type { ThemeCatalog } from "./types";
+
+export const LOCAL_THEME_CATALOG = {
+  schemaVersion: 1,
+  themes: [
+    {
+      id: "hooandee-gallery",
+      cssLoaderName: "Hooandee Gallery",
+      name: "Hooandee Gallery",
+      descriptionKey: "themes.gallery.description",
+      author: "Hooandee",
+      version: "0.6.0",
+      cssLoaderManifestVersion: 9,
+      minimumCssLoaderBackendVersion: 9,
+      projectUrl: "https://github.com/Hooandee/hooandee-themes",
+      tags: ["library", "gallery"],
+      exclusiveGroup: "hooandee-system-theme",
+    },
+    {
+      id: "hooandee-shattered-realms",
+      cssLoaderName: "Hooandee Shattered Realms",
+      name: "Hooandee Shattered Realms",
+      descriptionKey: "themes.shattered.description",
+      author: "Hooandee",
+      version: "0.4.0",
+      cssLoaderManifestVersion: 9,
+      minimumCssLoaderBackendVersion: 9,
+      projectUrl: "https://github.com/Hooandee/hooandee-themes",
+      tags: ["library", "fantasy"],
+      exclusiveGroup: "hooandee-system-theme",
+    },
+    {
+      id: "hooandee-obsidian-bloom",
+      cssLoaderName: "Hooandee Obsidian Bloom",
+      name: "Obsidian Bloom",
+      descriptionKey: "themes.obsidian.description",
+      author: "Hooandee",
+      version: "0.3.2",
+      cssLoaderManifestVersion: 9,
+      minimumCssLoaderBackendVersion: 9,
+      tags: ["experimental", "oled", "runtime"],
+      exclusiveGroup: "hooandee-system-theme",
+      runtime: {
+        moduleId: "obsidian-bloom",
+        surfaces: ["library", "library-grid", "game-details", "settings"],
+        capabilities: [
+          "orbital-library",
+          "grid-motion",
+          "adaptive-backdrop",
+          "surface-styles",
+          "details-transition",
+          "settings-shell",
+          "performance-budget",
+        ],
+      },
+    },
+  ],
+} as const satisfies ThemeCatalog;
