@@ -141,7 +141,9 @@ _STEAM_DECK_CHARGE_LIMIT_PROFILES = frozenset({
 
 # "custom" = our TDP owns the rails, vs a named platform_profile mode.
 _CUSTOM_MODE = "custom"
-_STABLE_THEME_VERSION = re.compile(r"^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$")
+_STABLE_THEME_VERSION = re.compile(
+    r"^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$"
+)
 _SAFE_THEME_ID = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 _OFFICIAL_THEME_CHANNEL = theme_remote.OfficialThemeChannel(
     pages_base_url="https://hooandee.github.io/panel-de-control",
@@ -850,7 +852,14 @@ class Plugin:
 
         def discover() -> dict:
             service = self._remote_themes()
-            self._theme_remote_runtime = self._probe_theme_runtime()
+            try:
+                self._theme_remote_runtime = self._probe_theme_runtime()
+            except theme_runtime.ThemeRuntimeProbeError:
+                self._theme_remote_runtime = theme_remote.ThemeRuntimeVersions(
+                    panel=read_version(),
+                    css_loader="",
+                    css_loader_backend=0,
+                )
             return service.check_releases(force)
 
         try:

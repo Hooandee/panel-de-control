@@ -224,6 +224,75 @@ def test_remote_discovery_uses_the_authoritative_css_loader_runtime(theme_rpc):
     assert calls == [(False, runtime)]
 
 
+def test_remote_discovery_without_css_loader_keeps_catalog_visible(theme_rpc):
+    main, plugin, fake = theme_rpc
+    plugins = pathlib.Path(fake.DECKY_USER_HOME) / "homebrew" / "plugins"
+    assert not plugins.exists()
+    observed = []
+
+    def check_releases(force):
+        runtime = plugin._theme_remote_runtime
+        observed.append((force, runtime))
+        return {
+            "status": "published",
+            "checkedAt": 100.0,
+            "themes": [
+                {
+                    "catalogId": "example-theme",
+                    "compatibility": (
+                        "compatible"
+                        if runtime.css_loader and runtime.css_loader_backend > 0
+                        else "incompatible-css-loader"
+                    ),
+                }
+            ],
+        }
+
+    plugin._theme_remote_service = types.SimpleNamespace(
+        check_releases=check_releases
+    )
+
+    result = asyncio.run(plugin.check_theme_releases(False))
+
+    assert result["themes"] == [
+        {
+            "catalogId": "example-theme",
+            "compatibility": "incompatible-css-loader",
+        }
+    ]
+    assert observed == [
+        (
+            False,
+            main.theme_remote.ThemeRuntimeVersions(
+                panel=main.read_version(),
+                css_loader="",
+                css_loader_backend=0,
+            ),
+        )
+    ]
+
+
+def test_remote_install_without_css_loader_remains_blocked(theme_rpc):
+    _, plugin, fake = theme_rpc
+    plugins = pathlib.Path(fake.DECKY_USER_HOME) / "homebrew" / "plugins"
+    assert not plugins.exists()
+    calls = []
+    plugin._theme_remote_service = types.SimpleNamespace(
+        prepare_install=lambda *args: calls.append(args)
+    )
+
+    result = asyncio.run(
+        plugin.prepare_remote_theme_install("example-theme", "1.2.3")
+    )
+
+    assert result == {
+        "ok": False,
+        "code": "incompatible_css_loader",
+        "theme_id": "example-theme",
+    }
+    assert calls == []
+
+
 def test_remote_discovery_sanitizes_an_unexpected_service_failure(theme_rpc):
     main, plugin, _ = theme_rpc
     plugin._probe_theme_runtime = lambda: main.theme_remote.ThemeRuntimeVersions(
@@ -252,6 +321,7 @@ def test_remote_discovery_sanitizes_an_unexpected_service_failure(theme_rpc):
         ("../theme", "1.2.3", "unsupported_theme"),
         ("example-theme", "v1.2.3", "invalid_descriptor"),
         ("example-theme", "1.2.3-beta.1", "invalid_descriptor"),
+        ("example-theme", "1.1٢.3", "invalid_descriptor"),
     ],
 )
 def test_remote_prepare_rejects_invalid_identity_before_scheduling(

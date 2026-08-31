@@ -270,6 +270,42 @@ def test_keeps_incompatible_publications_visible(
     assert result["themes"][0]["compatibility"] == compatibility
 
 
+def test_runtime_versions_reject_mixed_unicode_decimal_digits() -> None:
+    published = release()
+    published["minimumVersions"] = {
+        "panel": "12.0.0",
+        "cssLoader": "2.1.0",
+        "cssLoaderBackend": 9,
+    }
+
+    result = service(
+        FakeTransport(catalog(published)),
+        versions=runtime(panel="1٢.0.0"),
+    ).check_releases()
+
+    assert result["themes"][0]["compatibility"] == "incompatible-panel"
+
+
+def test_compatibility_handles_contract_valid_large_numeric_components() -> None:
+    published = release()
+    published["minimumVersions"] = {
+        "panel": f"{'9' * 5_000}.0.0",
+        "cssLoader": "2.1.0",
+        "cssLoaderBackend": 9,
+    }
+    raw = catalog(published)
+    cache = MemoryCache()
+
+    result = service(
+        FakeTransport(raw),
+        versions=runtime(panel="1.0.0"),
+        cache=cache,
+    ).check_releases()
+
+    assert result["themes"][0]["compatibility"] == "incompatible-panel"
+    assert cache.saves == [(raw, 100.0)]
+
+
 @pytest.mark.parametrize(
     ("failure", "status", "code"),
     [
@@ -382,6 +418,44 @@ def test_cache_persistence_failure_does_not_hide_valid_live_catalog() -> None:
 
     assert result["status"] == "published"
     assert result["themes"][0]["catalogId"] == "example-theme"
+
+
+def test_post_parse_processing_failure_preserves_prior_memory_and_cache() -> None:
+    class RuntimeProbe:
+        fail = False
+
+        def __call__(self) -> ThemeRuntimeVersions:
+            if self.fail:
+                raise RuntimeError("runtime unavailable")
+            return runtime()
+
+    first = catalog(release())
+    second = catalog(
+        release("second-theme", css_loader_name="Second Theme")
+    )
+    cache = MemoryCache()
+    transport = FakeTransport(first)
+    runtime_probe = RuntimeProbe()
+    remote = ThemeRemoteService(
+        channel(),
+        transport=transport,
+        runtime_versions=runtime_probe,
+        cache=cache,
+        clock=Clock(),
+    )
+    assert remote.check_releases()["themes"][0]["catalogId"] == "example-theme"
+
+    transport.result = second
+    runtime_probe.fail = True
+    with pytest.raises(RuntimeError, match="runtime unavailable"):
+        remote.check_releases(force=True)
+
+    assert cache.saves == [(first, 100.0)]
+    runtime_probe.fail = False
+    transport.result = ThemeTransportError("offline", "offline")
+    fallback = remote.check_releases(force=True)
+    assert fallback["status"] == "cached"
+    assert fallback["themes"][0]["catalogId"] == "example-theme"
 
 
 def test_atomic_cache_store_round_trips_exact_catalog(tmp_path: Path) -> None:
@@ -499,6 +573,22 @@ def test_install_never_uses_persisted_cache_as_authority(tmp_path: Path) -> None
 
     assert error.value.code == "offline"
     assert transport.downloads == []
+
+
+def test_install_rejects_mixed_unicode_decimal_version_before_fetch(
+    tmp_path: Path,
+) -> None:
+    transport = FakeTransport(catalog(release()))
+
+    with pytest.raises(ThemeRemoteError) as error:
+        service(transport).prepare_install(
+            "example-theme",
+            "1.1٢.3",
+            tmp_path / "themes",
+        )
+
+    assert error.value.code == "invalid_descriptor"
+    assert transport.paths == []
 
 
 def test_install_fails_closed_when_live_runtime_is_incompatible(tmp_path: Path) -> None:

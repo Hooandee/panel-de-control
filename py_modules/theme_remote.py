@@ -25,12 +25,12 @@ from theme_transport import ThemeTransportError
 
 
 _RUNTIME_SEMVER = re.compile(
-    r"^(?:v)?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)"
+    r"^(?:v)?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
     r"(?:-([0-9A-Za-z.-]+))?$"
 )
 _SAFE_CATALOG_ID = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 _STABLE_SEMVER = re.compile(
-    r"^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$"
+    r"^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$"
 )
 _CACHE_SECONDS = 15 * 60
 _MAX_CATALOG_BYTES = 64 * 1024
@@ -116,18 +116,28 @@ class ThemeRemoteError(Exception):
         self.code = code
 
 
-def _parse_runtime_version(value: str) -> tuple[int, int, int, tuple[str, ...]] | None:
+def _parse_runtime_version(
+    value: str,
+) -> tuple[str, str, str, tuple[str, ...]] | None:
     if not isinstance(value, str):
         return None
     match = _RUNTIME_SEMVER.fullmatch(value)
     if match is None:
         return None
     return (
-        int(match.group(1)),
-        int(match.group(2)),
-        int(match.group(3)),
+        match.group(1),
+        match.group(2),
+        match.group(3),
         tuple(match.group(4).split(".")) if match.group(4) else (),
     )
+
+
+def _compare_numeric_component(left: str, right: str) -> int:
+    if len(left) != len(right):
+        return 1 if len(left) > len(right) else -1
+    if left == right:
+        return 0
+    return 1 if left > right else -1
 
 
 def _runtime_meets(value: str, minimum: str) -> bool:
@@ -135,8 +145,17 @@ def _runtime_meets(value: str, minimum: str) -> bool:
     required = _parse_runtime_version(minimum)
     if running is None or required is None:
         return False
-    if running[:3] != required[:3]:
-        return running[:3] > required[:3]
+    for running_component, required_component in zip(
+        running[:3],
+        required[:3],
+        strict=True,
+    ):
+        comparison = _compare_numeric_component(
+            running_component,
+            required_component,
+        )
+        if comparison:
+            return comparison > 0
     if not required[3]:
         return not running[3]
     if not running[3]:
@@ -237,12 +256,13 @@ class ThemeRemoteService:
             }
             return self._fallback_or_failure("invalid_descriptor", failure)
 
+        checked_at = float(self._clock())
+        if not math.isfinite(checked_at) or checked_at < 0:
+            checked_at = 0.0
+        result = self._success(catalog, checked_at)
         with self._lock:
             if self._stopping:
                 return self._lifecycle_failure()
-            checked_at = float(self._clock())
-            if not math.isfinite(checked_at) or checked_at < 0:
-                checked_at = 0.0
             self._memory = _CachedCatalog(catalog, checked_at)
 
         if self._cache_store is not None:
@@ -251,7 +271,7 @@ class ThemeRemoteService:
             except Exception as error:  # noqa: BLE001
                 if self._cache_error_logger is not None:
                     self._cache_error_logger(type(error).__name__)
-        return self._success(catalog, checked_at)
+        return result
 
     def prepare_install(
         self,
