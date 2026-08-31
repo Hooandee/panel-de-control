@@ -13,9 +13,11 @@ import pytest
 import theme_packages
 
 
-THEME_ID = "hooandee-gallery"
-THEME_NAME = "Hooandee Gallery"
-THEME_VERSION = "0.7.6"
+THEME_ID = "example-theme"
+THEME_NAME = "Example Theme"
+THEME_VERSION = "1.2.3"
+LEGACY_THEME_ID = "hooandee-gallery"
+LEGACY_THEME_NAME = "Hooandee Gallery"
 
 
 def _hold_theme_mutation_lock(
@@ -36,21 +38,22 @@ def _write_package(
     version: str = THEME_VERSION,
     extra_entries: dict[str, bytes] | None = None,
 ) -> tuple[Path, dict]:
-    archive = root / "gallery.zip"
+    archive = root / "example-theme.zip"
     entries = {
         f"{theme_name}/theme.json": json.dumps({
             "name": theme_name,
             "display_name": theme_name,
-            "author": "Hooandee",
+            "author": "Example Author",
             "version": version,
             "manifest_version": 9,
             "inject": {"tokens.css": ["bigpicture"]},
+            "patches": {},
         }).encode(),
         f"{theme_name}/panel-theme.json": json.dumps({
-            "schemaVersion": 1,
+            "schemaVersion": 2,
             "catalogId": catalog_id,
         }).encode(),
-        f"{theme_name}/tokens.css": b":root { --gallery-accent: #fff; }\n",
+        f"{theme_name}/tokens.css": b":root { --example-accent: #fff; }\n",
         **(extra_entries or {}),
     }
     with zipfile.ZipFile(archive, "w") as package:
@@ -59,9 +62,9 @@ def _write_package(
     blob = archive.read_bytes()
     descriptor = {
         "schemaVersion": 1,
-        "id": THEME_ID,
-        "cssLoaderName": THEME_NAME,
-        "version": THEME_VERSION,
+        "id": catalog_id,
+        "cssLoaderName": theme_name,
+        "version": version,
         "artifact": {
             "file": archive.name,
             "sha256": hashlib.sha256(blob).hexdigest(),
@@ -71,23 +74,96 @@ def _write_package(
     return archive, descriptor
 
 
-def _mark_owned(installed: Path) -> None:
+def _mark_owned(installed: Path, version: str = THEME_VERSION) -> None:
+    (installed / "theme.json").write_text(json.dumps({
+        "name": THEME_NAME,
+        "version": version,
+        "manifest_version": 9,
+        "inject": {"tokens.css": ["bigpicture"]},
+        "patches": {},
+    }), encoding="utf-8")
     (installed / "panel-theme.json").write_text(json.dumps({
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "catalogId": THEME_ID,
     }), encoding="utf-8")
 
 
-@pytest.mark.parametrize(
-    "profile",
-    [
-        theme_packages.PackageProfile.BUNDLED_COMPAT,
-        theme_packages.PackageProfile.REMOTE_V1,
-    ],
-)
+def _journal(
+    token: str,
+    *,
+    state: str,
+    had_previous: bool,
+    previous_version: str | None = None,
+) -> dict[str, object]:
+    return {
+        "schemaVersion": 2,
+        "token": token,
+        "themeId": THEME_ID,
+        "themeName": THEME_NAME,
+        "version": THEME_VERSION,
+        "hadPrevious": had_previous,
+        "previousVersion": previous_version,
+        "newReceipt": None,
+        "previousReceipt": None,
+        "state": state,
+    }
+
+
+def _write_owned_tree(path: Path, version: str) -> None:
+    path.mkdir(parents=True, exist_ok=True)
+    (path / "theme.json").write_text(json.dumps({
+        "name": THEME_NAME,
+        "version": version,
+        "manifest_version": 9,
+        "inject": {"tokens.css": ["bigpicture"]},
+        "patches": {},
+    }), encoding="utf-8")
+    (path / "panel-theme.json").write_text(json.dumps({
+        "schemaVersion": 2,
+        "catalogId": THEME_ID,
+    }), encoding="utf-8")
+    (path / "tokens.css").write_text("body {}\n", encoding="utf-8")
+
+
+def _receipts(themes_root: Path) -> Path:
+    return themes_root.parent / "settings" / "theme-extension-receipts.json"
+
+
+def _prepare_theme_archive(archive, descriptor, themes_root):
+    return theme_packages.prepare_theme_archive(
+        archive,
+        descriptor,
+        themes_root,
+        receipts_path=_receipts(Path(themes_root)),
+    )
+
+
+def _commit_theme_install(token, themes_root):
+    return theme_packages.commit_theme_install(
+        token, themes_root, receipts_path=_receipts(Path(themes_root))
+    )
+
+
+def _rollback_theme_install(token, themes_root):
+    return theme_packages.rollback_theme_install(
+        token, themes_root, receipts_path=_receipts(Path(themes_root))
+    )
+
+
+def _acknowledge_theme_rollback(token, themes_root):
+    return theme_packages.acknowledge_theme_rollback(
+        token, themes_root, receipts_path=_receipts(Path(themes_root))
+    )
+
+
+def _recover_theme_transactions(themes_root):
+    return theme_packages.recover_theme_transactions(
+        themes_root, receipts_path=_receipts(Path(themes_root))
+    )
+
+
 def test_theme_mutations_share_a_nonblocking_process_lock(
     tmp_path: Path,
-    profile: theme_packages.PackageProfile,
 ) -> None:
     archive, descriptor = _write_package(tmp_path)
     themes_root = tmp_path / "themes"
@@ -103,11 +179,10 @@ def test_theme_mutations_share_a_nonblocking_process_lock(
 
     started = time.monotonic()
     with pytest.raises(theme_packages.ThemePackageError) as error:
-        theme_packages.prepare_theme_archive(
+        _prepare_theme_archive(
             archive,
             descriptor,
             themes_root,
-            profile=profile,
         )
 
     assert error.value.code == "transaction_busy"
@@ -133,7 +208,7 @@ def test_process_lock_is_released_when_its_owner_exits(tmp_path: Path) -> None:
     process.join(timeout=2)
     assert process.exitcode == 0
 
-    result = theme_packages.prepare_theme_archive(archive, descriptor, themes_root)
+    result = _prepare_theme_archive(archive, descriptor, themes_root)
 
     assert result["code"] == "prepared"
 
@@ -170,8 +245,8 @@ def test_durable_replace_flushes_both_parent_directories(
 def _write_legacy_gallery(installed: Path, version: str = "v0.5.0") -> None:
     installed.mkdir(parents=True, exist_ok=True)
     (installed / "theme.json").write_text(json.dumps({
-        "name": THEME_NAME,
-        "display_name": THEME_NAME,
+        "name": LEGACY_THEME_NAME,
+        "display_name": LEGACY_THEME_NAME,
         "author": "Hooandee",
         "version": version,
         "target": "System-Wide",
@@ -194,7 +269,7 @@ def test_install_archive_replaces_the_owned_theme_as_one_complete_tree(tmp_path)
     (installed / "config_ROOT.json").write_bytes(css_loader_state)
     (installed / "config_USER.json").write_bytes(user_state)
 
-    result = theme_packages.prepare_theme_archive(archive, descriptor, themes_root)
+    result = _prepare_theme_archive(archive, descriptor, themes_root)
 
     assert result["ok"] is True
     assert result["code"] == "prepared"
@@ -207,7 +282,7 @@ def test_install_archive_replaces_the_owned_theme_as_one_complete_tree(tmp_path)
     assert (installed / "config_ROOT.json").read_bytes() == css_loader_state
     assert (installed / "config_USER.json").read_bytes() == user_state
 
-    committed = theme_packages.commit_theme_install(result["transaction"], themes_root)
+    committed = _commit_theme_install(result["transaction"], themes_root)
 
     assert committed == {"ok": True, "code": "committed"}
     assert not list(tmp_path.glob(".panel-theme-transaction-*"))
@@ -232,10 +307,10 @@ def test_css_loader_state_cannot_be_swapped_to_a_symlink_during_copy(tmp_path, m
 
     monkeypatch.setattr(theme_packages.shutil, "copy2", swap_then_copy)
 
-    prepared = theme_packages.prepare_theme_archive(archive, descriptor, themes_root)
+    prepared = _prepare_theme_archive(archive, descriptor, themes_root)
 
     assert (installed / "config_USER.json").read_bytes() == b'{"active": true}'
-    theme_packages.commit_theme_install(prepared["transaction"], themes_root)
+    _commit_theme_install(prepared["transaction"], themes_root)
 
 
 def test_css_loader_state_open_descriptor_survives_a_path_swap(tmp_path, monkeypatch):
@@ -262,11 +337,11 @@ def test_css_loader_state_open_descriptor_survives_a_path_swap(tmp_path, monkeyp
 
     monkeypatch.setattr(theme_packages.os, "open", open_then_swap)
 
-    prepared = theme_packages.prepare_theme_archive(archive, descriptor, themes_root)
+    prepared = _prepare_theme_archive(archive, descriptor, themes_root)
 
     assert swapped is True
     assert (installed / "config_USER.json").read_bytes() == b'{"active": true}'
-    theme_packages.commit_theme_install(prepared["transaction"], themes_root)
+    _commit_theme_install(prepared["transaction"], themes_root)
 
 
 def test_css_loader_state_rejects_an_existing_symlink(tmp_path):
@@ -280,7 +355,7 @@ def test_css_loader_state_rejects_an_existing_symlink(tmp_path):
     (installed / "config_USER.json").symlink_to(secret)
 
     with pytest.raises(theme_packages.ThemePackageError) as error:
-        theme_packages.prepare_theme_archive(archive, descriptor, themes_root)
+        _prepare_theme_archive(archive, descriptor, themes_root)
 
     assert error.value.code == "state_invalid"
     assert secret.read_bytes() == b"must-not-be-copied"
@@ -299,7 +374,7 @@ def test_install_hands_the_complete_tree_to_the_css_loader_owner(tmp_path, monke
         raising=False,
     )
 
-    theme_packages.prepare_theme_archive(archive, descriptor, themes_root)
+    _prepare_theme_archive(archive, descriptor, themes_root)
 
     assert len(handoffs) == 1
     assert handoffs[0][0].name == THEME_NAME
@@ -321,7 +396,7 @@ def test_missing_themes_root_inherits_its_parent_owner(tmp_path, monkeypatch):
 
     monkeypatch.setattr(theme_packages.os, "chown", record_chown)
 
-    theme_packages.prepare_theme_archive(archive, descriptor, themes_root)
+    _prepare_theme_archive(archive, descriptor, themes_root)
 
     assert (themes_root, owner.st_uid, owner.st_gid) in ownership_changes
 
@@ -357,20 +432,20 @@ def test_rollback_restores_the_complete_previous_theme_after_prepare(tmp_path):
     themes_root = tmp_path / "themes"
     installed = themes_root / THEME_NAME
     installed.mkdir(parents=True)
-    _mark_owned(installed)
+    _mark_owned(installed, "1.2.2")
     (installed / "old.css").write_text("old", encoding="utf-8")
 
-    prepared = theme_packages.prepare_theme_archive(archive, descriptor, themes_root)
+    prepared = _prepare_theme_archive(archive, descriptor, themes_root)
     assert not (installed / "old.css").exists()
 
-    rolled_back = theme_packages.rollback_theme_install(prepared["transaction"], themes_root)
+    rolled_back = _rollback_theme_install(prepared["transaction"], themes_root)
 
     assert rolled_back == {"ok": True, "code": "rolled_back"}
     assert (installed / "old.css").read_text(encoding="utf-8") == "old"
     assert not (installed / "tokens.css").exists()
     assert list(tmp_path.glob(".panel-theme-transaction-*"))
 
-    theme_packages.acknowledge_theme_rollback(prepared["transaction"], themes_root)
+    _acknowledge_theme_rollback(prepared["transaction"], themes_root)
     assert not list(tmp_path.glob(".panel-theme-transaction-*"))
 
 
@@ -378,25 +453,25 @@ def test_rollback_removes_a_new_theme_that_css_loader_did_not_accept(tmp_path):
     archive, descriptor = _write_package(tmp_path)
     themes_root = tmp_path / "themes"
 
-    prepared = theme_packages.prepare_theme_archive(archive, descriptor, themes_root)
+    prepared = _prepare_theme_archive(archive, descriptor, themes_root)
     assert (themes_root / THEME_NAME / "tokens.css").exists()
 
-    theme_packages.rollback_theme_install(prepared["transaction"], themes_root)
+    _rollback_theme_install(prepared["transaction"], themes_root)
 
     assert not (themes_root / THEME_NAME).exists()
-    theme_packages.acknowledge_theme_rollback(prepared["transaction"], themes_root)
+    _acknowledge_theme_rollback(prepared["transaction"], themes_root)
 
 
 def test_acknowledged_rollback_stays_terminal_when_cleanup_is_interrupted(tmp_path, monkeypatch):
     archive, descriptor = _write_package(tmp_path)
     themes_root = tmp_path / "themes"
-    prepared = theme_packages.prepare_theme_archive(archive, descriptor, themes_root)
-    theme_packages.rollback_theme_install(prepared["transaction"], themes_root)
+    prepared = _prepare_theme_archive(archive, descriptor, themes_root)
+    _rollback_theme_install(prepared["transaction"], themes_root)
     transaction = next(tmp_path.glob(".panel-theme-transaction-*"))
 
     monkeypatch.setattr(theme_packages.shutil, "rmtree", lambda *args, **kwargs: None)
 
-    acknowledged = theme_packages.acknowledge_theme_rollback(
+    acknowledged = _acknowledge_theme_rollback(
         prepared["transaction"], themes_root
     )
 
@@ -405,31 +480,31 @@ def test_acknowledged_rollback_stays_terminal_when_cleanup_is_interrupted(tmp_pa
         "state"
     ] == "acknowledged"
     assert theme_packages._active_transaction(themes_root) is False
-    assert theme_packages.recover_theme_transactions(themes_root) == []
+    assert _recover_theme_transactions(themes_root) == []
 
 
 def test_committed_install_stays_terminal_when_cleanup_is_interrupted(tmp_path, monkeypatch):
     archive, descriptor = _write_package(tmp_path)
     themes_root = tmp_path / "themes"
-    prepared = theme_packages.prepare_theme_archive(archive, descriptor, themes_root)
+    prepared = _prepare_theme_archive(archive, descriptor, themes_root)
     transaction = next(tmp_path.glob(".panel-theme-transaction-*"))
 
     monkeypatch.setattr(theme_packages.shutil, "rmtree", lambda *args, **kwargs: None)
 
-    committed = theme_packages.commit_theme_install(prepared["transaction"], themes_root)
+    committed = _commit_theme_install(prepared["transaction"], themes_root)
 
     assert committed == {"ok": True, "code": "committed"}
     assert json.loads((transaction / "transaction.json").read_text(encoding="utf-8"))[
         "state"
     ] == "committed"
     assert theme_packages._active_transaction(themes_root) is False
-    assert theme_packages.recover_theme_transactions(themes_root) == []
+    assert _recover_theme_transactions(themes_root) == []
 
 
 def test_commit_reports_success_when_only_terminal_cleanup_fails(tmp_path, monkeypatch):
     archive, descriptor = _write_package(tmp_path)
     themes_root = tmp_path / "themes"
-    prepared = theme_packages.prepare_theme_archive(archive, descriptor, themes_root)
+    prepared = _prepare_theme_archive(archive, descriptor, themes_root)
     transaction = next(tmp_path.glob(".panel-theme-transaction-*"))
 
     monkeypatch.setattr(
@@ -438,7 +513,7 @@ def test_commit_reports_success_when_only_terminal_cleanup_fails(tmp_path, monke
         lambda _path: (_ for _ in ()).throw(OSError("simulated cleanup failure")),
     )
 
-    committed = theme_packages.commit_theme_install(prepared["transaction"], themes_root)
+    committed = _commit_theme_install(prepared["transaction"], themes_root)
 
     assert committed == {"ok": True, "code": "committed"}
     assert json.loads((transaction / "transaction.json").read_text(encoding="utf-8"))[
@@ -449,8 +524,8 @@ def test_commit_reports_success_when_only_terminal_cleanup_fails(tmp_path, monke
 def test_acknowledge_reports_success_when_only_terminal_cleanup_fails(tmp_path, monkeypatch):
     archive, descriptor = _write_package(tmp_path)
     themes_root = tmp_path / "themes"
-    prepared = theme_packages.prepare_theme_archive(archive, descriptor, themes_root)
-    theme_packages.rollback_theme_install(prepared["transaction"], themes_root)
+    prepared = _prepare_theme_archive(archive, descriptor, themes_root)
+    _rollback_theme_install(prepared["transaction"], themes_root)
     transaction = next(tmp_path.glob(".panel-theme-transaction-*"))
 
     monkeypatch.setattr(
@@ -459,7 +534,7 @@ def test_acknowledge_reports_success_when_only_terminal_cleanup_fails(tmp_path, 
         lambda _path: (_ for _ in ()).throw(OSError("simulated cleanup failure")),
     )
 
-    acknowledged = theme_packages.acknowledge_theme_rollback(
+    acknowledged = _acknowledge_theme_rollback(
         prepared["transaction"], themes_root
     )
 
@@ -470,49 +545,47 @@ def test_acknowledge_reports_success_when_only_terminal_cleanup_fails(tmp_path, 
 
 
 def test_recovery_rolls_back_an_interrupted_prepared_transaction(tmp_path):
-    archive, descriptor = _write_package(tmp_path)
+    archive, descriptor = _write_package(
+        tmp_path,
+        catalog_id=LEGACY_THEME_ID,
+        theme_name=LEGACY_THEME_NAME,
+        version="0.7.9",
+    )
     themes_root = tmp_path / "themes"
-    installed = themes_root / THEME_NAME
+    installed = themes_root / LEGACY_THEME_NAME
     _write_legacy_gallery(installed)
     (installed / "old.css").write_text("old", encoding="utf-8")
-    theme_packages.prepare_theme_archive(archive, descriptor, themes_root)
+    _prepare_theme_archive(archive, descriptor, themes_root)
 
-    recovered = theme_packages.recover_theme_transactions(themes_root)
+    recovered = _recover_theme_transactions(themes_root)
 
     assert recovered == [{
         "transaction": recovered[0]["transaction"],
-        "theme_name": THEME_NAME,
+        "theme_name": LEGACY_THEME_NAME,
         "previous_version": "v0.5.0",
     }]
     assert (installed / "old.css").read_text(encoding="utf-8") == "old"
     assert list(tmp_path.glob(".panel-theme-transaction-*"))
 
-    theme_packages.acknowledge_theme_rollback(recovered[0]["transaction"], themes_root)
+    _acknowledge_theme_rollback(recovered[0]["transaction"], themes_root)
     assert not list(tmp_path.glob(".panel-theme-transaction-*"))
 
 
 def test_recovery_cleans_a_staged_journal_when_the_previous_theme_was_never_moved(tmp_path):
     themes_root = tmp_path / "themes"
     installed = themes_root / THEME_NAME
-    installed.mkdir(parents=True)
-    (installed / "theme.json").write_text(json.dumps({
-        "name": THEME_NAME,
-        "version": "0.5.0",
-    }), encoding="utf-8")
+    _write_owned_tree(installed, "0.5.0")
     token = "a" * 43
     work = tmp_path / f".panel-theme-transaction-{token}"
     work.mkdir()
-    theme_packages._write_journal(work / "transaction.json", {
-        "schemaVersion": 1,
-        "token": token,
-        "themeId": THEME_ID,
-        "themeName": THEME_NAME,
-        "version": THEME_VERSION,
-        "hadPrevious": True,
-        "state": "staged",
-    })
+    theme_packages._write_journal(work / "transaction.json", _journal(
+        token,
+        state="staged",
+        had_previous=True,
+        previous_version="0.5.0",
+    ))
 
-    assert theme_packages.recover_theme_transactions(themes_root) == []
+    assert _recover_theme_transactions(themes_root) == []
     assert (installed / "theme.json").exists()
     assert not work.exists()
 
@@ -527,17 +600,17 @@ def test_recovery_never_mutates_a_theme_not_owned_by_panel(tmp_path):
     work = tmp_path / f".panel-theme-transaction-{token}"
     work.mkdir()
     theme_packages._write_journal(work / "transaction.json", {
-        "schemaVersion": 1,
-        "token": token,
-        "themeId": THEME_ID,
+        **_journal(
+            token,
+            state="swapped",
+            had_previous=True,
+            previous_version="0.5.0",
+        ),
         "themeName": "Third Party Theme",
-        "version": THEME_VERSION,
-        "hadPrevious": True,
-        "state": "swapped",
     })
 
     with pytest.raises(theme_packages.ThemePackageError) as error:
-        theme_packages.recover_theme_transactions(themes_root)
+        _recover_theme_transactions(themes_root)
 
     assert error.value.code == "invalid_journal"
     assert marker.read_text(encoding="utf-8") == "third-party"
@@ -548,15 +621,7 @@ def test_journal_transition_ignores_a_stale_temporary_file_from_a_crash(tmp_path
     work = tmp_path / ".panel-theme-transaction-test"
     work.mkdir()
     (work / "transaction.tmp").write_text("interrupted", encoding="utf-8")
-    journal = {
-        "schemaVersion": 1,
-        "token": "a" * 43,
-        "themeId": THEME_ID,
-        "themeName": THEME_NAME,
-        "version": THEME_VERSION,
-        "hadPrevious": False,
-        "state": "staged",
-    }
+    journal = _journal("a" * 43, state="staged", had_previous=False)
 
     theme_packages._write_journal(work / "transaction.json", journal)
     theme_packages._write_journal(work / "transaction.json", {**journal, "state": "swapped"})
@@ -571,23 +636,16 @@ def test_recovery_restores_backup_if_process_stops_between_the_two_swaps(tmp_pat
     work = tmp_path / f".panel-theme-transaction-{token}"
     backup = work / "previous"
     extracted = work / "extracted" / THEME_NAME
-    backup.mkdir(parents=True)
-    extracted.mkdir(parents=True)
-    (backup / "theme.json").write_text(json.dumps({
-        "name": THEME_NAME,
-        "version": "0.5.0",
-    }), encoding="utf-8")
-    theme_packages._write_journal(work / "transaction.json", {
-        "schemaVersion": 1,
-        "token": token,
-        "themeId": THEME_ID,
-        "themeName": THEME_NAME,
-        "version": THEME_VERSION,
-        "hadPrevious": True,
-        "state": "staged",
-    })
+    _write_owned_tree(backup, "0.5.0")
+    _write_owned_tree(extracted, THEME_VERSION)
+    theme_packages._write_journal(work / "transaction.json", _journal(
+        token,
+        state="staged",
+        had_previous=True,
+        previous_version="0.5.0",
+    ))
 
-    assert theme_packages.recover_theme_transactions(themes_root) == []
+    assert _recover_theme_transactions(themes_root) == []
     assert (themes_root / THEME_NAME / "theme.json").exists()
     assert not work.exists()
 
@@ -595,30 +653,19 @@ def test_recovery_restores_backup_if_process_stops_between_the_two_swaps(tmp_pat
 def test_recovery_requires_css_loader_ack_if_process_stops_after_the_second_swap(tmp_path):
     themes_root = tmp_path / "themes"
     installed = themes_root / THEME_NAME
-    installed.mkdir(parents=True)
-    (installed / "theme.json").write_text(json.dumps({
-        "name": THEME_NAME,
-        "version": THEME_VERSION,
-    }), encoding="utf-8")
+    _write_owned_tree(installed, THEME_VERSION)
     token = "c" * 43
     work = tmp_path / f".panel-theme-transaction-{token}"
     backup = work / "previous"
-    backup.mkdir(parents=True)
-    (backup / "theme.json").write_text(json.dumps({
-        "name": THEME_NAME,
-        "version": "0.5.0",
-    }), encoding="utf-8")
-    theme_packages._write_journal(work / "transaction.json", {
-        "schemaVersion": 1,
-        "token": token,
-        "themeId": THEME_ID,
-        "themeName": THEME_NAME,
-        "version": THEME_VERSION,
-        "hadPrevious": True,
-        "state": "staged",
-    })
+    _write_owned_tree(backup, "0.5.0")
+    theme_packages._write_journal(work / "transaction.json", _journal(
+        token,
+        state="staged",
+        had_previous=True,
+        previous_version="0.5.0",
+    ))
 
-    recoveries = theme_packages.recover_theme_transactions(themes_root)
+    recoveries = _recover_theme_transactions(themes_root)
 
     assert recoveries == [{
         "transaction": token,
@@ -626,7 +673,7 @@ def test_recovery_requires_css_loader_ack_if_process_stops_after_the_second_swap
         "previous_version": "0.5.0",
     }]
     assert json.loads((installed / "theme.json").read_text(encoding="utf-8"))["version"] == "0.5.0"
-    theme_packages.acknowledge_theme_rollback(token, themes_root)
+    _acknowledge_theme_rollback(token, themes_root)
 
 
 @pytest.mark.parametrize(
@@ -651,13 +698,13 @@ def test_install_archive_rejects_unverified_packages_without_touching_existing_t
     mutate(archive, descriptor)
 
     with pytest.raises(theme_packages.ThemePackageError) as error:
-        theme_packages.prepare_theme_archive(archive, descriptor, themes_root)
+        _prepare_theme_archive(archive, descriptor, themes_root)
 
     assert error.value.code == code
     assert marker.read_text(encoding="utf-8") == "keep"
 
 
-def test_install_archive_cannot_target_a_third_party_theme_name(tmp_path):
+def test_install_archive_cannot_replace_an_unowned_theme_folder(tmp_path):
     third_party_name = "Third Party Theme"
     archive, descriptor = _write_package(tmp_path, theme_name=third_party_name)
     descriptor["cssLoaderName"] = third_party_name
@@ -668,7 +715,7 @@ def test_install_archive_cannot_target_a_third_party_theme_name(tmp_path):
     marker.write_bytes(b"third-party")
 
     with pytest.raises(theme_packages.ThemePackageError) as error:
-        theme_packages.prepare_theme_archive(archive, descriptor, themes_root)
+        _prepare_theme_archive(archive, descriptor, themes_root)
 
     assert error.value.code == "identity_mismatch"
     assert marker.read_bytes() == b"third-party"
@@ -680,13 +727,13 @@ def test_install_archive_never_replaces_an_unowned_homonymous_folder(tmp_path):
     themes_root = tmp_path / "themes"
     installed = themes_root / THEME_NAME
     installed.mkdir(parents=True)
-    original_theme = b'{"name":"Hooandee Gallery","author":"Third Party"}'
+    original_theme = b'{"name":"Example Theme","author":"Third Party"}'
     (installed / "theme.json").write_bytes(original_theme)
     marker = installed / "keep.css"
     marker.write_bytes(b"third-party")
 
     with pytest.raises(theme_packages.ThemePackageError) as error:
-        theme_packages.prepare_theme_archive(archive, descriptor, themes_root)
+        _prepare_theme_archive(archive, descriptor, themes_root)
 
     assert error.value.code == "identity_mismatch"
     assert (installed / "theme.json").read_bytes() == original_theme
@@ -704,7 +751,7 @@ def test_install_archive_rejects_path_escape_without_writing_outside_theme_root(
     themes_root = tmp_path / "themes"
 
     with pytest.raises(theme_packages.ThemePackageError) as error:
-        theme_packages.prepare_theme_archive(archive, descriptor, themes_root)
+        _prepare_theme_archive(archive, descriptor, themes_root)
 
     assert error.value.code == "unsafe_archive"
     assert not (tmp_path / "escaped.css").exists()
@@ -721,7 +768,7 @@ def test_install_archive_rejects_symlinks(tmp_path):
     descriptor["artifact"]["size"] = archive.stat().st_size
 
     with pytest.raises(theme_packages.ThemePackageError) as error:
-        theme_packages.prepare_theme_archive(archive, descriptor, tmp_path / "themes")
+        _prepare_theme_archive(archive, descriptor, tmp_path / "themes")
 
     assert error.value.code == "unsafe_archive"
 
@@ -735,7 +782,7 @@ def test_install_archive_rejects_packaged_css_loader_state(tmp_path):
     descriptor["artifact"]["size"] = archive.stat().st_size
 
     with pytest.raises(theme_packages.ThemePackageError) as error:
-        theme_packages.prepare_theme_archive(archive, descriptor, tmp_path / "themes")
+        _prepare_theme_archive(archive, descriptor, tmp_path / "themes")
 
     assert error.value.code == "unsafe_archive"
 
@@ -761,7 +808,7 @@ def test_install_archive_restores_previous_theme_when_atomic_swap_fails(tmp_path
     monkeypatch.setattr(theme_packages.os, "replace", fail_install)
 
     with pytest.raises(theme_packages.ThemePackageError) as error:
-        theme_packages.prepare_theme_archive(archive, descriptor, themes_root)
+        _prepare_theme_archive(archive, descriptor, themes_root)
 
     assert error.value.code == "install_failed"
     assert marker.read_text(encoding="utf-8") == "keep"
@@ -789,7 +836,7 @@ def test_failed_immediate_rollback_keeps_the_backup_for_startup_recovery(tmp_pat
     monkeypatch.setattr(theme_packages.os, "replace", fail_install_and_restore)
 
     with pytest.raises(theme_packages.ThemePackageError) as error:
-        theme_packages.prepare_theme_archive(archive, descriptor, themes_root)
+        _prepare_theme_archive(archive, descriptor, themes_root)
 
     assert error.value.code == "rollback_failed"
     transactions = list(tmp_path.glob(".panel-theme-transaction-*"))
@@ -797,28 +844,5 @@ def test_failed_immediate_rollback_keeps_the_backup_for_startup_recovery(tmp_pat
     assert (transactions[0] / "previous" / "keep.css").exists()
 
     monkeypatch.setattr(theme_packages.os, "replace", original_replace)
-    assert theme_packages.recover_theme_transactions(themes_root) == []
+    assert _recover_theme_transactions(themes_root) == []
     assert marker.read_text(encoding="utf-8") == "keep"
-
-
-def test_install_bundled_theme_accepts_only_registered_package_ids(tmp_path):
-    plugin_root = tmp_path / "plugin"
-    packages = plugin_root / "theme-packages"
-    packages.mkdir(parents=True)
-    archive, descriptor = _write_package(packages)
-    (packages / "gallery.json").write_text(json.dumps(descriptor), encoding="utf-8")
-
-    result = theme_packages.prepare_bundled_theme(
-        THEME_ID,
-        plugin_root=plugin_root,
-        themes_root=tmp_path / "themes",
-    )
-
-    assert result["ok"] is True
-    with pytest.raises(theme_packages.ThemePackageError) as error:
-        theme_packages.prepare_bundled_theme(
-            "third-party-theme",
-            plugin_root=plugin_root,
-            themes_root=tmp_path / "themes",
-        )
-    assert error.value.code == "unsupported_theme"

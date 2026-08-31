@@ -77,20 +77,25 @@ def test_commit_and_rollback_theme_rpcs_use_the_opaque_transaction_token(theme_r
     monkeypatch.setattr(
         main.theme_packages,
         "commit_theme_install",
-        lambda token, root: calls.append(("commit", token, root)) or {"ok": True, "code": "committed"},
+        lambda token, root, *, receipts_path: calls.append(
+            ("commit", token, root, receipts_path)
+        ) or {"ok": True, "code": "committed"},
     )
     monkeypatch.setattr(
         main.theme_packages,
         "rollback_theme_install",
-        lambda token, root: calls.append(("rollback", token, root)) or {"ok": True, "code": "rolled_back"},
+        lambda token, root, *, receipts_path: calls.append(
+            ("rollback", token, root, receipts_path)
+        ) or {"ok": True, "code": "rolled_back"},
     )
 
     assert asyncio.run(plugin.commit_theme_install("opaque-token"))["code"] == "committed"
     assert asyncio.run(plugin.rollback_theme_install("opaque-token"))["code"] == "rolled_back"
     themes_root = pathlib.Path(fake.DECKY_USER_HOME) / "homebrew" / "themes"
+    receipts_path = pathlib.Path(fake.DECKY_PLUGIN_SETTINGS_DIR) / "theme-extension-receipts.json"
     assert calls == [
-        ("commit", "opaque-token", themes_root),
-        ("rollback", "opaque-token", themes_root),
+        ("commit", "opaque-token", themes_root, receipts_path),
+        ("rollback", "opaque-token", themes_root, receipts_path),
     ]
 
 
@@ -99,6 +104,89 @@ def test_theme_root_prefers_decky_home(theme_rpc, monkeypatch):
     monkeypatch.setenv("DECKY_HOME", "/srv/decky")
 
     assert plugin._themes_root() == pathlib.Path("/srv/decky/themes")
+
+
+def test_extension_rpcs_return_the_exact_backend_contract(theme_rpc, monkeypatch):
+    main, plugin, fake = theme_rpc
+    themes_root = pathlib.Path(fake.DECKY_USER_HOME) / "homebrew" / "themes"
+    receipts_path = (
+        pathlib.Path(fake.DECKY_PLUGIN_SETTINGS_DIR)
+        / "theme-extension-receipts.json"
+    )
+    descriptor = {
+        "catalogId": "example-theme",
+        "cssLoaderName": "Example Theme",
+        "version": "1.2.3",
+        "abiVersion": 1,
+        "entrypoint": "panel-extension.js",
+        "size": 42,
+        "sha256": "a" * 64,
+    }
+    loaded = {
+        key: value for key, value in descriptor.items() if key not in ("entrypoint", "size")
+    } | {"source": "module.exports=extension"}
+    calls = []
+    monkeypatch.setattr(
+        main.theme_packages,
+        "list_theme_extensions",
+        lambda root, receipts: calls.append(("list", root, receipts)) or [descriptor],
+    )
+    monkeypatch.setattr(
+        main.theme_packages,
+        "load_theme_extension",
+        lambda catalog_id, version, root, receipts: calls.append(
+            ("load", catalog_id, version, root, receipts)
+        ) or loaded,
+    )
+
+    assert asyncio.run(plugin.list_theme_extensions()) == [descriptor]
+    assert asyncio.run(plugin.load_theme_extension("example-theme", "1.2.3")) == loaded
+    assert calls == [
+        ("list", themes_root, receipts_path),
+        ("load", "example-theme", "1.2.3", themes_root, receipts_path),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("catalog_id", "version"),
+    [
+        ("../theme", "1.2.3"),
+        ("example-theme", "v1.2.3"),
+        ("example-theme", "1.2.3-beta.1"),
+    ],
+)
+def test_load_extension_rejects_invalid_identity_before_offloading(
+    theme_rpc,
+    monkeypatch,
+    catalog_id,
+    version,
+):
+    main, plugin, _ = theme_rpc
+    monkeypatch.setattr(
+        main.theme_packages,
+        "load_theme_extension",
+        lambda *_args: pytest.fail("invalid identity reached storage"),
+    )
+
+    with pytest.raises(RuntimeError, match="extension_unavailable"):
+        asyncio.run(plugin.load_theme_extension(catalog_id, version))
+
+
+def test_load_extension_sanitizes_backend_failures(theme_rpc, monkeypatch):
+    main, plugin, _ = theme_rpc
+
+    def fail(*_args):
+        raise main.theme_packages.ThemePackageError(
+            "extension_unavailable",
+            "/private/theme/path changed",
+        )
+
+    monkeypatch.setattr(main.theme_packages, "load_theme_extension", fail)
+
+    with pytest.raises(RuntimeError) as error:
+        asyncio.run(plugin.load_theme_extension("example-theme", "1.2.3"))
+
+    assert str(error.value) == "extension_unavailable"
 
 
 def test_theme_runtime_probe_reads_css_loader_files_without_frontend_input(
@@ -280,9 +368,13 @@ def test_recovery_rpcs_keep_rollback_pending_until_css_loader_acknowledges_it(
         "theme_name": "Example Theme",
         "previous_version": "0.5.0",
     }]
-    def ack(token, root):
+    def ack(token, root, *, receipts_path):
         return {"ok": True, "code": "acknowledged"}
-    monkeypatch.setattr(main.theme_packages, "recover_theme_transactions", lambda root: pending)
+    monkeypatch.setattr(
+        main.theme_packages,
+        "recover_theme_transactions",
+        lambda root, *, receipts_path: pending,
+    )
     monkeypatch.setattr(main.theme_packages, "acknowledge_theme_rollback", ack)
 
     result = asyncio.run(plugin.get_theme_install_recoveries())
@@ -462,6 +554,8 @@ def test_remote_prepare_uses_only_the_confirmed_identity_and_version(theme_rpc):
             "example-theme",
             "1.2.3",
             pathlib.Path(fake.DECKY_USER_HOME) / "homebrew" / "themes",
+            pathlib.Path(fake.DECKY_PLUGIN_SETTINGS_DIR)
+            / "theme-extension-receipts.json",
             runtime,
         )
     ]

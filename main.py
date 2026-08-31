@@ -150,6 +150,7 @@ _OFFICIAL_THEME_CHANNEL = theme_remote.OfficialThemeChannel(
     catalog_path="themes/v1/catalog.json",
 )
 _THEME_CATALOG_CACHE_FILE = "theme-catalog-cache.json"
+_THEME_EXTENSION_RECEIPTS_FILE = "theme-extension-receipts.json"
 
 
 @dataclass(frozen=True)
@@ -800,6 +801,9 @@ class Plugin:
         user_home = getattr(decky, "DECKY_USER_HOME", None) or os.path.expanduser("~")
         return Path(user_home) / "homebrew" / "themes"
 
+    def _theme_receipts_path(self) -> Path:
+        return Path(decky.DECKY_PLUGIN_SETTINGS_DIR) / _THEME_EXTENSION_RECEIPTS_FILE
+
     def _remote_themes(self) -> theme_remote.ThemeRemoteService:
         service = getattr(self, "_theme_remote_service", None)
         if service is None:
@@ -911,6 +915,7 @@ class Plugin:
                 theme_id,
                 expected_version,
                 self._themes_root(),
+                self._theme_receipts_path(),
             )
 
         try:
@@ -930,6 +935,7 @@ class Plugin:
             return await self._offload_theme_call(lambda: theme_packages.commit_theme_install(
                 transaction,
                 self._themes_root(),
+                receipts_path=self._theme_receipts_path(),
             ))
         except theme_packages.ThemePackageError as error:
             decky.logger.warning("Theme package commit rejected (%s): %s", error.code, error)
@@ -944,6 +950,7 @@ class Plugin:
             return await self._offload_theme_call(lambda: theme_packages.rollback_theme_install(
                 transaction,
                 self._themes_root(),
+                receipts_path=self._theme_receipts_path(),
             ))
         except theme_packages.ThemePackageError as error:
             decky.logger.error("Theme package rollback rejected (%s): %s", error.code, error)
@@ -956,7 +963,10 @@ class Plugin:
         self._init()
         try:
             recoveries = await self._offload_theme_call(
-                lambda: theme_packages.recover_theme_transactions(self._themes_root())
+                lambda: theme_packages.recover_theme_transactions(
+                    self._themes_root(),
+                    receipts_path=self._theme_receipts_path(),
+                )
             )
             return {"ok": True, "code": "ready", "recoveries": recoveries}
         except theme_packages.ThemePackageError as error:
@@ -973,6 +983,7 @@ class Plugin:
                 lambda: theme_packages.acknowledge_theme_rollback(
                     transaction,
                     self._themes_root(),
+                    receipts_path=self._theme_receipts_path(),
                 )
             )
         except theme_packages.ThemePackageError as error:
@@ -981,6 +992,47 @@ class Plugin:
         except Exception as error:  # noqa: BLE001
             decky.logger.error("Theme rollback acknowledgement failed: %s", error)
             return {"ok": False, "code": "acknowledgement_failed"}
+
+    async def list_theme_extensions(self) -> list[dict]:
+        self._init()
+        try:
+            return await self._offload_theme_call(
+                lambda: theme_packages.list_theme_extensions(
+                    self._themes_root(),
+                    self._theme_receipts_path(),
+                )
+            )
+        except Exception as error:
+            decky.logger.warning(
+                "Theme extension inventory unavailable (%s)",
+                type(error).__name__,
+            )
+            raise RuntimeError("extension_unavailable") from None
+
+    async def load_theme_extension(self, catalog_id: str, version: str) -> dict:
+        self._init()
+        if (
+            not isinstance(catalog_id, str)
+            or _SAFE_THEME_ID.fullmatch(catalog_id) is None
+            or not isinstance(version, str)
+            or _STABLE_THEME_VERSION.fullmatch(version) is None
+        ):
+            raise RuntimeError("extension_unavailable")
+        try:
+            return await self._offload_theme_call(
+                lambda: theme_packages.load_theme_extension(
+                    catalog_id,
+                    version,
+                    self._themes_root(),
+                    self._theme_receipts_path(),
+                )
+            )
+        except Exception as error:
+            decky.logger.warning(
+                "Theme extension load rejected (%s)",
+                type(error).__name__,
+            )
+            raise RuntimeError("extension_unavailable") from None
 
     async def get_device(self) -> dict:
         self._init()
@@ -7148,7 +7200,10 @@ class Plugin:
         self._theme_accepting_work = True
         try:
             recovered = await self._offload_theme_call(
-                lambda: theme_packages.recover_theme_transactions(self._themes_root())
+                lambda: theme_packages.recover_theme_transactions(
+                    self._themes_root(),
+                    receipts_path=self._theme_receipts_path(),
+                )
             )
             if recovered:
                 decky.logger.warning(
@@ -7303,7 +7358,10 @@ class Plugin:
         executor = getattr(self, "_theme_executor", None)
 
         def recover() -> list[dict]:
-            return theme_packages.recover_theme_transactions(self._themes_root())
+            return theme_packages.recover_theme_transactions(
+                self._themes_root(),
+                receipts_path=self._theme_receipts_path(),
+            )
 
         try:
             recovered = executor.submit(recover).result() if executor is not None else recover()

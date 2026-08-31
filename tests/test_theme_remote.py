@@ -483,10 +483,10 @@ def test_install_fetches_a_fresh_catalog_and_uses_neutral_remote_profile(
     transport = FakeTransport(catalog(raw_release))
     artifact_path = "themes/v1/example-theme/1.2.3/theme.zip"
     transport.artifacts[artifact_path] = artifact
-    calls: list[tuple[str, dict[str, object], Path, object]] = []
+    calls: list[tuple[str, dict[str, object], Path, Path]] = []
 
-    def prepare(archive, descriptor, root, *, profile):
-        calls.append((Path(archive).name, descriptor, Path(root), profile))
+    def prepare(archive, descriptor, root, *, receipts_path):
+        calls.append((Path(archive).name, descriptor, Path(root), Path(receipts_path)))
         return {
             "ok": True,
             "code": "prepared",
@@ -502,6 +502,7 @@ def test_install_fetches_a_fresh_catalog_and_uses_neutral_remote_profile(
         "example-theme",
         "1.2.3",
         tmp_path / "themes",
+        tmp_path / "settings" / "theme-extension-receipts.json",
     )
 
     assert result["code"] == "prepared"
@@ -529,7 +530,7 @@ def test_install_fetches_a_fresh_catalog_and_uses_neutral_remote_profile(
                 },
             },
             tmp_path / "themes",
-            theme_packages.PackageProfile.REMOTE_V1,
+            tmp_path / "settings" / "theme-extension-receipts.json",
         )
     ]
 
@@ -554,6 +555,7 @@ def test_install_rejects_catalog_removal_or_version_change_before_download(
             "example-theme",
             expected_version,
             tmp_path / "themes",
+            tmp_path / "receipts.json",
         )
 
     assert error.value.code == code
@@ -569,6 +571,7 @@ def test_install_never_uses_persisted_cache_as_authority(tmp_path: Path) -> None
             "example-theme",
             "1.2.3",
             tmp_path / "themes",
+            tmp_path / "receipts.json",
         )
 
     assert error.value.code == "offline"
@@ -585,6 +588,7 @@ def test_install_rejects_mixed_unicode_decimal_version_before_fetch(
             "example-theme",
             "1.1٢.3",
             tmp_path / "themes",
+            tmp_path / "receipts.json",
         )
 
     assert error.value.code == "invalid_descriptor"
@@ -598,7 +602,12 @@ def test_install_fails_closed_when_live_runtime_is_incompatible(tmp_path: Path) 
         service(
             transport,
             versions=runtime(css_loader_backend=8),
-        ).prepare_install("example-theme", "1.2.3", tmp_path / "themes")
+        ).prepare_install(
+            "example-theme",
+            "1.2.3",
+            tmp_path / "themes",
+            tmp_path / "receipts.json",
+        )
 
     assert error.value.code == "incompatible_css_loader"
     assert transport.downloads == []
@@ -615,7 +624,12 @@ def test_close_stops_new_checks_and_installs(tmp_path: Path) -> None:
         "retryable": False,
     }
     with pytest.raises(ThemeRemoteError) as error:
-        remote.prepare_install("example-theme", "1.2.3", tmp_path / "themes")
+        remote.prepare_install(
+            "example-theme",
+            "1.2.3",
+            tmp_path / "themes",
+            tmp_path / "receipts.json",
+        )
     assert error.value.code == "lifecycle_stopping"
     assert transport.paths == []
 
@@ -660,7 +674,12 @@ def test_close_during_install_catalog_fetch_prevents_artifact_download(
 
     def prepare() -> None:
         try:
-            remote.prepare_install("example-theme", "1.2.3", tmp_path / "themes")
+            remote.prepare_install(
+                "example-theme",
+                "1.2.3",
+                tmp_path / "themes",
+                tmp_path / "receipts.json",
+            )
         except ThemeRemoteError as error:
             failures.append(error)
 

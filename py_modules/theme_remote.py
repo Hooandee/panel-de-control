@@ -278,6 +278,7 @@ class ThemeRemoteService:
         theme_id: str,
         expected_version: str,
         themes_root: str | Path,
+        receipts_path: str | Path,
     ) -> dict[str, object]:
         with self._lock:
             self._require_running()
@@ -359,7 +360,7 @@ class ThemeRemoteService:
                     archive,
                     descriptor,
                     root,
-                    profile=theme_packages.PackageProfile.REMOTE_V1,
+                    receipts_path=receipts_path,
                 )
             finally:
                 with self._lock:
