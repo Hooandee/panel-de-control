@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "themes": [
+    {
+      "schemaVersion": 1,
+      "catalogId": "hooandee-gallery",
+      "cssLoaderName": "Hooandee Gallery",
+      "version": "0.7.9",
+      "displayName": {
+        "es": "Galería Hooandee",
+        "en": "Hooandee Gallery",
+        "it": "Galleria Hooandee"
+      },
+      "description": {
+        "es": "Convierte Steam en una galería coherente, con ilustraciones dinámicas, controles refinados y acentos configurables.",
+        "en": "Turns Steam into a cohesive gallery with dynamic artwork, refined controls, and configurable accents.",
+        "it": "Trasforma Steam in una galleria coerente con illustrazioni dinamiche, controlli raffinati e accenti configurabili."
+      },
+      "author": "Hooandee",
+      "tags": [
+        "gallery",
+        "glass",
+        "customizable"
+      ],
+      "artifact": {
+        "url": "https://hooandee.github.io/panel-de-control/themes/v1/hooandee-gallery/0.7.9/theme.zip",
+        "size": 111028,
+        "sha256": "2982b4d5cb7935f2e2eaf7bdd4846953cc7a7bed6b09963cbbd54a15e428e690"
+      },
+      "minimumVersions": {
+        "panel": "0.38.0",
+        "cssLoader": "2.1.2",
+        "cssLoaderBackend": 9
+      }
+    }
+  ]
+}
