@@ -112,6 +112,86 @@ def test_theme_root_prefers_decky_home(theme_rpc, monkeypatch):
     assert plugin._themes_root() == pathlib.Path("/srv/decky/themes")
 
 
+def test_theme_runtime_probe_reads_css_loader_files_without_frontend_input(
+    theme_rpc,
+    tmp_path,
+):
+    main, _, _ = theme_rpc
+    plugins = tmp_path / "plugins"
+    css_loader = plugins / "SDH-CssLoader"
+    css_loader.mkdir(parents=True)
+    (css_loader / "package.json").write_text(
+        '{"name":"SDH-CssLoader","version":"2.1.2"}',
+        encoding="utf-8",
+    )
+    (css_loader / "css_theme.py").write_text(
+        "CSS_LOADER_VER = 9\n",
+        encoding="utf-8",
+    )
+
+    runtime = main.theme_runtime.probe_css_loader_runtime(
+        plugins,
+        panel_version="0.37.12",
+    )
+
+    assert runtime == main.theme_remote.ThemeRuntimeVersions(
+        panel="0.37.12",
+        css_loader="2.1.2",
+        css_loader_backend=9,
+    )
+
+
+def test_theme_runtime_probe_accepts_a_valid_panel_prerelease(
+    theme_rpc,
+    tmp_path,
+):
+    main, _, _ = theme_rpc
+    plugins = tmp_path / "plugins"
+    css_loader = plugins / "SDH-CssLoader"
+    css_loader.mkdir(parents=True)
+    (css_loader / "package.json").write_text(
+        '{"name":"SDH-CssLoader","version":"2.1.2"}',
+        encoding="utf-8",
+    )
+    (css_loader / "css_theme.py").write_text(
+        "CSS_LOADER_VER = 9\n",
+        encoding="utf-8",
+    )
+
+    runtime = main.theme_runtime.probe_css_loader_runtime(
+        plugins,
+        panel_version="0.37.13-dev.abcdef0",
+    )
+
+    assert runtime.panel == "0.37.13-dev.abcdef0"
+
+
+def test_theme_runtime_probe_rejects_a_symlinked_css_loader_manifest(
+    theme_rpc,
+    tmp_path,
+):
+    main, _, _ = theme_rpc
+    plugins = tmp_path / "plugins"
+    css_loader = plugins / "SDH-CssLoader"
+    css_loader.mkdir(parents=True)
+    outside = tmp_path / "outside-package.json"
+    outside.write_text(
+        '{"name":"SDH-CssLoader","version":"99.0.0"}',
+        encoding="utf-8",
+    )
+    (css_loader / "package.json").symlink_to(outside)
+    (css_loader / "css_theme.py").write_text(
+        "CSS_LOADER_VER = 9\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(main.theme_runtime.ThemeRuntimeProbeError):
+        main.theme_runtime.probe_css_loader_runtime(
+            plugins,
+            panel_version="0.37.12",
+        )
+
+
 def test_recovery_rpcs_keep_rollback_pending_until_css_loader_acknowledges_it(
     theme_rpc,
     monkeypatch,
@@ -134,42 +214,41 @@ def test_recovery_rpcs_keep_rollback_pending_until_css_loader_acknowledges_it(
     assert confirmed == {"ok": True, "code": "acknowledged"}
 
 
-def test_remote_discovery_records_only_validated_css_loader_runtime(theme_rpc):
-    _, plugin, _ = theme_rpc
+def test_remote_discovery_uses_the_authoritative_css_loader_runtime(theme_rpc):
+    main, plugin, _ = theme_rpc
     calls = []
+    runtime = main.theme_remote.ThemeRuntimeVersions(
+        panel="0.37.12",
+        css_loader="2.1.2",
+        css_loader_backend=9,
+    )
+    plugin._probe_theme_runtime = lambda: runtime
     plugin._theme_remote_service = types.SimpleNamespace(
-        check_releases=lambda force: calls.append(force) or {"status": "disabled"}
+        check_releases=lambda force: calls.append(
+            (force, plugin._theme_remote_runtime)
+        ) or {"status": "disabled"}
     )
 
-    result = asyncio.run(
-        plugin.check_theme_releases(
-            False,
-            css_loader_version="2.1.2",
-            css_loader_backend=9,
-        )
-    )
+    result = asyncio.run(plugin.check_theme_releases(False))
 
     assert result == {"status": "disabled"}
-    assert calls == [False]
-    assert plugin._theme_remote_runtime.css_loader == "2.1.2"
-    assert plugin._theme_remote_runtime.css_loader_backend == 9
+    assert calls == [(False, runtime)]
 
 
 def test_remote_discovery_sanitizes_an_unexpected_service_failure(theme_rpc):
-    _, plugin, _ = theme_rpc
+    main, plugin, _ = theme_rpc
+    plugin._probe_theme_runtime = lambda: main.theme_remote.ThemeRuntimeVersions(
+        panel="0.37.12",
+        css_loader="2.1.2",
+        css_loader_backend=9,
+    )
 
     def fail(_force):
         raise RuntimeError("private transport detail")
 
     plugin._theme_remote_service = types.SimpleNamespace(check_releases=fail)
 
-    result = asyncio.run(
-        plugin.check_theme_releases(
-            False,
-            css_loader_version="2.1.2",
-            css_loader_backend=9,
-        )
-    )
+    result = asyncio.run(plugin.check_theme_releases(False))
 
     assert result == {
         "status": "recoverable-failure",
@@ -205,7 +284,7 @@ def test_remote_prepare_rejects_invalid_identity_before_scheduling(
 
 
 def test_remote_prepare_uses_only_the_confirmed_identity_and_version(theme_rpc):
-    _, plugin, fake = theme_rpc
+    main, plugin, fake = theme_rpc
     calls = []
     prepared = {
         "ok": True,
@@ -215,9 +294,15 @@ def test_remote_prepare_uses_only_the_confirmed_identity_and_version(theme_rpc):
         "version": "0.7.9",
         "transaction": "opaque-token",
     }
-    plugin._theme_remote_service = types.SimpleNamespace(
-        prepare_install=lambda *args: calls.append(args) or prepared
+    runtime = main.theme_remote.ThemeRuntimeVersions(
+        panel="0.37.12",
+        css_loader="2.1.2",
+        css_loader_backend=9,
     )
+    plugin._probe_theme_runtime = lambda: runtime
+    plugin._theme_remote_service = types.SimpleNamespace(prepare_install=lambda *args: calls.append(
+        (*args, plugin._theme_remote_runtime)
+    ) or prepared)
 
     result = asyncio.run(
         plugin.prepare_remote_theme_install("hooandee-gallery", "0.7.9")
@@ -229,12 +314,18 @@ def test_remote_prepare_uses_only_the_confirmed_identity_and_version(theme_rpc):
             "hooandee-gallery",
             "0.7.9",
             pathlib.Path(fake.DECKY_USER_HOME) / "homebrew" / "themes",
+            runtime,
         )
     ]
 
 
 def test_remote_prepare_sanitizes_service_failures(theme_rpc):
     main, plugin, _ = theme_rpc
+    plugin._probe_theme_runtime = lambda: main.theme_remote.ThemeRuntimeVersions(
+        panel="0.37.12",
+        css_loader="2.1.2",
+        css_loader_backend=9,
+    )
 
     def fail(*_args):
         raise main.theme_remote.ThemeRemoteError("publication_changed", "private detail")

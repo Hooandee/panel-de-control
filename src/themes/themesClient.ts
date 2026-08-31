@@ -54,6 +54,7 @@ export interface ThemesDependencies {
   publication?: ThemePublicationClient;
   refreshIntervalMs?: number;
   publicationRefreshIntervalMs?: number;
+  publicationFailureRetryIntervalMs?: number;
 }
 
 export interface ThemeInstallConfirmation {
@@ -140,7 +141,7 @@ export class ThemesClient {
   private refreshPromise: Promise<void> | null = null;
   private publicationRequestSequence = 0;
   private publicationPromise: Promise<void> | null = null;
-  private publicationCheckedAtMs: number | undefined;
+  private publicationResolvedAtMs: number | undefined;
 
   constructor(readonly dependencies: ThemesDependencies) {}
 
@@ -362,20 +363,33 @@ export class ThemesClient {
       1,
       this.dependencies.publicationRefreshIntervalMs ?? 15 * 60 * 1_000,
     );
+    const failureRetryWindow = Math.max(
+      1,
+      this.dependencies.publicationFailureRetryIntervalMs ?? 30_000,
+    );
+    const retryableFailure = (
+      this.current.publication.status === "temporarily-unavailable"
+      || this.current.publication.status === "recoverable-failure"
+    ) && this.current.publication.retryable;
     if (
       !force
       && this.current.publication.status !== "unchecked"
-      && this.publicationCheckedAtMs !== undefined
-      && now - this.publicationCheckedAtMs < freshnessWindow
+      && this.publicationResolvedAtMs !== undefined
+      && now - this.publicationResolvedAtMs < (
+        retryableFailure ? failureRetryWindow : freshnessWindow
+      )
     ) return Promise.resolve();
     if (this.publicationPromise) return this.publicationPromise;
-    this.publicationCheckedAtMs = now;
     const request = ++this.publicationRequestSequence;
     this.update({ publication: { status: "checking" } });
     const running = this.dependencies.publication.check(snapshot, force).then((publication) => {
-      if (request === this.publicationRequestSequence) this.update({ publication });
+      if (request === this.publicationRequestSequence) {
+        this.publicationResolvedAtMs = Date.now();
+        this.update({ publication });
+      }
     }).catch(() => {
       if (request === this.publicationRequestSequence) {
+        this.publicationResolvedAtMs = Date.now();
         this.update({
           publication: {
             status: "recoverable-failure",

@@ -415,15 +415,20 @@ def test_unload_stops_new_tdp_writes_before_handoff(tmp_path, monkeypatch):
         events.append("handoff")
         p._schedule_tdp_apply("late-lifecycle")
 
-    async def recover_themes():
+    def recover_themes(_root):
         events.append("themes")
+        return []
 
     p._tdp_backend.set_levels = write_levels
     p._restore_fans_safe = lambda: None
     p._restore_color_safe = lambda: None
     p._restore_audio_safe = lambda: None
     p._restore_hhd_tdp = handoff
-    p._rollback_pending_theme_transactions = recover_themes
+    monkeypatch.setattr(
+        importlib.import_module("main").theme_packages,
+        "recover_theme_transactions",
+        recover_themes,
+    )
 
     asyncio.run(p._unload())
     assert events == ["handoff", "themes"]
@@ -444,6 +449,53 @@ def test_unload_completes_without_yielding_to_the_stopping_event_loop(
     unload = p._unload()
     with pytest.raises(StopIteration):
         unload.send(None)
+
+
+@pytest.mark.parametrize("method", ("_unload", "_uninstall"))
+def test_shutdown_drains_and_recovers_active_theme_work_before_first_suspend(
+    tmp_path,
+    monkeypatch,
+    method,
+):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    events = []
+    p._apply_executor = _RecordingExecutor()
+    p._restore_fans_safe = lambda: events.append("handoff")
+    p._restore_color_safe = lambda: None
+    p._restore_audio_safe = lambda: None
+    p._restore_power_handoff = lambda: True
+    p._release_cpu_controls_sync = lambda _trigger: True
+    p._release_gpu_clock_sync = lambda _trigger: True
+    monkeypatch.setattr(
+        importlib.import_module("main").fan_expose,
+        "remove_conf",
+        lambda: None,
+    )
+    started = threading.Event()
+    release = threading.Event()
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    p._theme_executor = executor
+
+    def active_transaction():
+        started.set()
+        assert release.wait(timeout=1)
+        events.append("transaction-finished")
+
+    executor.submit(active_transaction)
+    assert started.wait(timeout=1)
+    monkeypatch.setattr(
+        importlib.import_module("main").theme_packages,
+        "recover_theme_transactions",
+        lambda _root: events.append("recovered") or [],
+    )
+    threading.Timer(0.02, release.set).start()
+
+    shutdown = getattr(p, method)()
+    with pytest.raises(StopIteration):
+        shutdown.send(None)
+
+    assert events == ["handoff", "transaction-finished", "recovered"]
+    assert p._theme_executor is None
 
 
 def test_unload_deadline_handoffs_now_and_again_behind_a_blocked_worker(
@@ -679,8 +731,9 @@ def test_uninstall_stops_new_tdp_writes_before_handoff(tmp_path, monkeypatch):
         events.append("handoff")
         p._schedule_tdp_apply("late-lifecycle")
 
-    async def recover_themes():
+    def recover_themes(_root):
         events.append("themes")
+        return []
 
     p._tdp_backend.set_levels = write_levels
     p._restore_fans_safe = lambda: None
@@ -688,7 +741,11 @@ def test_uninstall_stops_new_tdp_writes_before_handoff(tmp_path, monkeypatch):
     p._restore_audio_safe = lambda: None
     p._restore_hud_safe = lambda: None
     p._restore_hhd_tdp = handoff
-    p._rollback_pending_theme_transactions = recover_themes
+    monkeypatch.setattr(
+        importlib.import_module("main").theme_packages,
+        "recover_theme_transactions",
+        recover_themes,
+    )
     monkeypatch.setattr(
         importlib.import_module("main").fan_expose,
         "remove_conf",

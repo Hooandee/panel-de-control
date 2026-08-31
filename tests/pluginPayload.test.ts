@@ -1,4 +1,5 @@
 import {
+  cpSync,
   existsSync,
   mkdtempSync,
   mkdirSync,
@@ -83,6 +84,34 @@ describe("plugin release payload", () => {
     expect(files(output).some((path) => readFileSync(resolve(output, path)).includes("/Users/")))
       .toBe(false);
     expect(existsSync(resolve(output, "py_modules/__pycache__"))).toBe(false);
+  });
+
+  it("assembles an importable authoritative theme runtime probe", () => {
+    const source = fixture();
+    rmSync(resolve(source, "py_modules"), { recursive: true, force: true });
+    cpSync(resolve(process.cwd(), "py_modules"), resolve(source, "py_modules"), {
+      recursive: true,
+    });
+    const output = resolve(workspace(), "Panel de Control");
+
+    const copied = spawnSync(process.execPath, [copier, source, output], {
+      encoding: "utf8",
+    });
+    const imported = spawnSync(
+      "python3",
+      ["-c", "import theme_runtime; assert callable(theme_runtime.probe_css_loader_runtime)"],
+      {
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          PYTHONPATH: resolve(output, "py_modules"),
+        },
+      },
+    );
+
+    expect(copied).toMatchObject({ status: 0, stderr: "" });
+    expect(imported).toMatchObject({ status: 0, stderr: "" });
+    expect(existsSync(resolve(output, "py_modules/theme_runtime.py"))).toBe(true);
   });
 
   it("rejects symlinks instead of copying content from an unreviewed target", () => {

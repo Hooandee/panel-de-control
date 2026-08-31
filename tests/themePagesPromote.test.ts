@@ -15,6 +15,10 @@ import { stageImmutableCandidate } from "../scripts/stage-theme-pages.mjs";
 
 const workspaces: string[] = [];
 const pagesBaseUrl = "https://example.invalid/panel-de-control";
+const bundledBaseline = resolve(
+  process.cwd(),
+  "themes/bundled/hooandee-gallery/0.7.8",
+);
 
 function workspace(): string {
   const path = mkdtempSync(resolve(tmpdir(), "pdc-theme-pages-promote-"));
@@ -75,23 +79,24 @@ describe("Pages theme promotion", () => {
 
   it("copies the exact staged descriptor to latest without rebuilding the artifact", async () => {
     const pages = workspace();
-    await stageSource(pages, sourceVersion("0.7.8"));
+    await stageSource(pages, sourceVersion("0.7.9"));
     const immutableDescriptor = resolve(
       pages,
-      "themes/v1/hooandee-gallery/0.7.8/gallery.json",
+      "themes/v1/hooandee-gallery/0.7.9/gallery.json",
     );
 
     const result = await promoteStagedCandidate({
       pagesDirectory: pages,
       pagesBaseUrl,
       catalogId: "hooandee-gallery",
-      version: "0.7.8",
+      version: "0.7.9",
+      initialBaselineDirectory: bundledBaseline,
     });
 
     expect(result).toEqual({
       status: "promoted",
       catalogId: "hooandee-gallery",
-      version: "0.7.8",
+      version: "0.7.9",
       previousVersion: null,
     });
     expect(readFileSync(resolve(pages, "themes/v1/hooandee-gallery/latest.json")))
@@ -100,20 +105,21 @@ describe("Pages theme promotion", () => {
 
   it("treats retrying the exact live descriptor as an idempotent no-op", async () => {
     const pages = workspace();
-    await stageSource(pages, sourceVersion("0.7.8"));
+    await stageSource(pages, sourceVersion("0.7.9"));
     const request = {
       pagesDirectory: pages,
       pagesBaseUrl,
       catalogId: "hooandee-gallery",
-      version: "0.7.8",
+      version: "0.7.9",
+      initialBaselineDirectory: bundledBaseline,
     };
     await promoteStagedCandidate(request);
 
     await expect(promoteStagedCandidate(request)).resolves.toEqual({
       status: "unchanged",
       catalogId: "hooandee-gallery",
-      version: "0.7.8",
-      previousVersion: "0.7.8",
+      version: "0.7.9",
+      previousVersion: "0.7.9",
     });
   });
 
@@ -123,7 +129,48 @@ describe("Pages theme promotion", () => {
       pagesBaseUrl,
       catalogId: "hooandee-gallery",
       version: "0.7.9",
+      initialBaselineDirectory: bundledBaseline,
     })).rejects.toThrow("staged theme version is unavailable");
+  });
+
+  it("requires an audited baseline for the first promotion", async () => {
+    const pages = workspace();
+    await stageSource(pages, sourceVersion("0.7.9"));
+
+    await expect(promoteStagedCandidate({
+      pagesDirectory: pages,
+      pagesBaseUrl,
+      catalogId: "hooandee-gallery",
+      version: "0.7.9",
+    })).rejects.toThrow("initial promotion baseline is required");
+  });
+
+  it("requires the first remote version to be newer than the bundled baseline", async () => {
+    const pages = workspace();
+    await stageSource(pages, sourceVersion("0.7.8"));
+
+    await expect(promoteStagedCandidate({
+      pagesDirectory: pages,
+      pagesBaseUrl,
+      catalogId: "hooandee-gallery",
+      version: "0.7.8",
+      initialBaselineDirectory: bundledBaseline,
+    })).rejects.toThrow("promotion version must be newer than the initial baseline");
+  });
+
+  it("checks the first promotion against the bundled patch contract", async () => {
+    const pages = workspace();
+    await stageSource(pages, sourceVersion("0.7.9", (manifest) => {
+      delete patches(manifest)[Object.keys(patches(manifest))[0]];
+    }));
+
+    await expect(promoteStagedCandidate({
+      pagesDirectory: pages,
+      pagesBaseUrl,
+      catalogId: "hooandee-gallery",
+      version: "0.7.9",
+      initialBaselineDirectory: bundledBaseline,
+    })).rejects.toThrow("published patch contract is not backward compatible");
   });
 
   it("rejects a rollback after a newer descriptor is live", async () => {
@@ -135,6 +182,7 @@ describe("Pages theme promotion", () => {
       pagesBaseUrl,
       catalogId: "hooandee-gallery",
       version: "0.7.9",
+      initialBaselineDirectory: bundledBaseline,
     });
 
     await expect(promoteStagedCandidate({
@@ -142,6 +190,7 @@ describe("Pages theme promotion", () => {
       pagesBaseUrl,
       catalogId: "hooandee-gallery",
       version: "0.7.8",
+      initialBaselineDirectory: bundledBaseline,
     })).rejects.toThrow("promotion version must be newer than latest");
   });
 
@@ -158,20 +207,21 @@ describe("Pages theme promotion", () => {
     }],
   ])("rejects a candidate with a %s", async (_label, mutate) => {
     const pages = workspace();
-    await stageSource(pages, sourceVersion("0.7.8"));
+    await stageSource(pages, sourceVersion("0.7.9"));
     await promoteStagedCandidate({
       pagesDirectory: pages,
       pagesBaseUrl,
       catalogId: "hooandee-gallery",
-      version: "0.7.8",
+      version: "0.7.9",
+      initialBaselineDirectory: bundledBaseline,
     });
-    await stageSource(pages, sourceVersion("0.7.9", mutate));
+    await stageSource(pages, sourceVersion("0.7.10", mutate));
 
     await expect(promoteStagedCandidate({
       pagesDirectory: pages,
       pagesBaseUrl,
       catalogId: "hooandee-gallery",
-      version: "0.7.9",
+      version: "0.7.10",
     })).rejects.toThrow("published patch contract is not backward compatible");
   });
 });

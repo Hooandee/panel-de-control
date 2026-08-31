@@ -95,6 +95,9 @@ describe("Gallery distribution workflow", () => {
     expect(galleryPromote).toContain("uses: ./.github/workflows/_theme-promote.yml");
     expect(galleryPromote).toContain("confirmation:");
     expect(galleryPromote).toContain("version:");
+    expect(galleryPromote).toContain(
+      "initial_baseline_directory: themes/bundled/hooandee-gallery/0.7.8",
+    );
     expect(galleryPromote).not.toMatch(/^\s+(?:push|pull_request|release):/m);
   });
 
@@ -130,6 +133,8 @@ describe("Gallery distribution workflow", () => {
     expect(reusableStage).toContain("theme-pages-publication");
 
     expect(reusablePromote).toContain("scripts/promote-theme-pages.mjs");
+    expect(reusablePromote).toContain("initial_baseline_directory:");
+    expect(reusablePromote).toContain('"${{ inputs.initial_baseline_directory }}"');
     expect(reusablePromote).toContain("scripts/verify-theme-pages.mjs");
     expect(reusablePromote).toContain(" latest");
     expect(reusablePromote).not.toContain("scripts/build-theme-publication.mjs");

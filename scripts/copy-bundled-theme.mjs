@@ -8,6 +8,7 @@ import {
   statSync,
 } from "node:fs";
 import { basename, resolve, sep } from "node:path";
+import { pathToFileURL } from "node:url";
 
 const SAFE_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const SEMVER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
@@ -83,6 +84,14 @@ function copyAtomically(source, destination) {
   }
 }
 
+export function readBundledThemePin(pinArgument) {
+  const pinDirectory = resolve(pinArgument);
+  const descriptorPath = resolve(pinDirectory, "gallery.json");
+  const descriptor = readDescriptor(descriptorPath);
+  const archivePath = validateDescriptor(descriptor, pinDirectory);
+  return { descriptor, archivePath };
+}
+
 function main() {
   const [pinArgument, outputArgument] = process.argv.slice(2);
   if (!pinArgument || !outputArgument) {
@@ -94,17 +103,18 @@ function main() {
     fail("output directory must be outside the bundled theme pin");
   }
   const descriptorPath = resolve(pinDirectory, "gallery.json");
-  const descriptor = readDescriptor(descriptorPath);
-  const archivePath = validateDescriptor(descriptor, pinDirectory);
+  const { archivePath } = readBundledThemePin(pinDirectory);
 
   mkdirSync(outputDirectory, { recursive: true });
   copyAtomically(archivePath, resolve(outputDirectory, basename(archivePath)));
   copyAtomically(descriptorPath, resolve(outputDirectory, "gallery.json"));
 }
 
-try {
-  main();
-} catch (error) {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exitCode = 1;
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+  try {
+    main();
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
+  }
 }

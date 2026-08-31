@@ -157,6 +157,36 @@ describe("useThemes", () => {
     });
   });
 
+  it("retries a temporary publication failure before the success refresh window", async () => {
+    let now = 1_000;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    const check = vi.fn(async () => ({
+      status: "temporarily-unavailable",
+      code: "offline",
+      retryable: true,
+    } satisfies ThemePublicationState));
+    const deps = dependencies({
+      publication: { check },
+      publicationRefreshIntervalMs: 15 * 60 * 1_000,
+      publicationFailureRetryIntervalMs: 30_000,
+    });
+    const client = getThemesClient(deps);
+
+    await client.refresh();
+    await settle();
+    expect(check).toHaveBeenCalledTimes(1);
+
+    now += 29_999;
+    await client.refresh();
+    await settle();
+    expect(check).toHaveBeenCalledTimes(1);
+
+    now += 1;
+    await client.refresh();
+    await settle();
+    expect(check).toHaveBeenCalledTimes(2);
+  });
+
   it("reconciles a durable backend rollback before publishing the first snapshot", async () => {
     const recovery = {
       transaction: "opaque-token",

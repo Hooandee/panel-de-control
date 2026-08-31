@@ -29,12 +29,12 @@ describe("remote publication client", () => {
     },
   );
 
-  it("passes only verified runtime fields to the configured RPC", async () => {
+  it("leaves runtime compatibility to the authoritative backend", async () => {
     const check = vi.fn(async () => ({ status: "disabled" }));
 
     const result = await createRemotePublicationClient(check).check(READY, true);
 
     expect(result).toEqual({ status: "disabled" });
-    expect(check).toHaveBeenCalledWith(true, "2.1.2", 9);
+    expect(check).toHaveBeenCalledWith(true);
   });
 });

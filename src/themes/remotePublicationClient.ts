@@ -8,11 +8,7 @@ export interface ThemePublicationClient {
   check(snapshot: CssLoaderReadySnapshot, force: boolean): Promise<ThemePublicationState>;
 }
 
-export type ThemePublicationCheckHost = (
-  force: boolean,
-  cssLoaderVersion: string,
-  cssLoaderBackend: number,
-) => Promise<unknown>;
+export type ThemePublicationCheckHost = (force: boolean) => Promise<unknown>;
 
 let configuredCheck: ThemePublicationCheckHost | undefined;
 let configuredLease: symbol | null = null;
@@ -53,11 +49,7 @@ export function createRemotePublicationClient(
       try {
         const selectedCheck = check ?? configuredCheck;
         if (!selectedCheck) throw new Error("Theme publication backend is unavailable");
-        return parseThemePublication(await selectedCheck(
-          force,
-          snapshot.pluginVersion,
-          backendVersion,
-        ));
+        return parseThemePublication(await selectedCheck(force));
       } catch {
         return {
           status: "recoverable-failure",

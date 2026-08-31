@@ -24,4 +24,5 @@ jobs:
     with:
       catalog_id: hooandee-gallery
       version: ${{ inputs.version }}
+      initial_baseline_directory: themes/bundled/hooandee-gallery/0.7.8
       confirmation: ${{ inputs.confirmation }}

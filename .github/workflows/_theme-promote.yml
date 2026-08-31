@@ -9,6 +9,9 @@ on:
       version:
         required: true
         type: string
+      initial_baseline_directory:
+        required: true
+        type: string
       confirmation:
         required: true
         type: string
@@ -114,7 +117,7 @@ jobs:
           PAGES_BASE: ${{ steps.pages-api.outputs.base }}
           VERSION: ${{ inputs.version }}
         working-directory: source
-        run: node scripts/promote-theme-pages.mjs ../pages-tree "$PAGES_BASE" "${{ inputs.catalog_id }}" "$VERSION"
+        run: node scripts/promote-theme-pages.mjs ../pages-tree "$PAGES_BASE" "${{ inputs.catalog_id }}" "$VERSION" "${{ inputs.initial_baseline_directory }}"
       - name: Commit only latest.json
         env:
           VERSION: ${{ inputs.version }}

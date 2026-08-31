@@ -10,6 +10,7 @@ import {
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
+import { readBundledThemePin } from "./copy-bundled-theme.mjs";
 import { parsePublicationDescriptor } from "./theme-publication-contract.mjs";
 
 const SAFE_CATALOG_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -108,6 +109,7 @@ export async function promoteStagedCandidate({
   pagesBaseUrl,
   catalogId,
   version,
+  initialBaselineDirectory,
 }) {
   if (!SAFE_CATALOG_ID.test(catalogId) || !STABLE_SEMVER.test(version)) {
     fail("promotion identity is invalid");
@@ -155,6 +157,23 @@ export async function promoteStagedCandidate({
       readThemeManifest(latestArchive, latest.cssLoaderName),
       readThemeManifest(candidateArchive, candidate.cssLoaderName),
     );
+  } else {
+    if (!initialBaselineDirectory) fail("initial promotion baseline is required");
+    const baseline = readBundledThemePin(initialBaselineDirectory);
+    if (
+      baseline.descriptor.id !== catalogId
+      || baseline.descriptor.cssLoaderName !== candidate.cssLoaderName
+      || !STABLE_SEMVER.test(baseline.descriptor.version)
+    ) {
+      fail("initial promotion baseline identity is invalid");
+    }
+    if (compareVersions(candidate.version, baseline.descriptor.version) <= 0) {
+      fail("promotion version must be newer than the initial baseline");
+    }
+    requireBackwardCompatiblePatches(
+      readThemeManifest(baseline.archivePath, baseline.descriptor.cssLoaderName),
+      readThemeManifest(candidateArchive, candidate.cssLoaderName),
+    );
   }
 
   const temporary = `${latestPath}.tmp-${process.pid}`;
@@ -173,15 +192,16 @@ export async function promoteStagedCandidate({
 }
 
 async function main() {
-  const [pagesDirectory, pagesBaseUrl, catalogId, version] = process.argv.slice(2);
-  if (!pagesDirectory || !pagesBaseUrl || !catalogId || !version) {
-    fail("usage: promote-theme-pages.mjs <pages-directory> <pages-base-url> <catalog-id> <version>");
+  const [pagesDirectory, pagesBaseUrl, catalogId, version, initialBaselineDirectory] = process.argv.slice(2);
+  if (!pagesDirectory || !pagesBaseUrl || !catalogId || !version || !initialBaselineDirectory) {
+    fail("usage: promote-theme-pages.mjs <pages-directory> <pages-base-url> <catalog-id> <version> <initial-baseline-directory>");
   }
   const result = await promoteStagedCandidate({
     pagesDirectory,
     pagesBaseUrl,
     catalogId,
     version,
+    initialBaselineDirectory,
   });
   process.stdout.write(`${JSON.stringify(result)}\n`);
 }

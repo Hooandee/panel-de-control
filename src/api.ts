@@ -12,11 +12,7 @@ export const prepareRemoteThemeInstall = callable<[
   themeId: string,
   expectedVersion: string,
 ], unknown>("prepare_remote_theme_install");
-export const checkThemeReleases = callable<[
-  force: boolean,
-  cssLoaderVersion: string,
-  cssLoaderBackend: number,
-], unknown>("check_theme_releases");
+export const checkThemeReleases = callable<[force: boolean], unknown>("check_theme_releases");
 export const commitThemeInstall = callable<[transaction: string], unknown>("commit_theme_install");
 export const rollbackThemeInstall = callable<[transaction: string], unknown>("rollback_theme_install");
 export const getThemeInstallRecoveries = callable<[], unknown>("get_theme_install_recoveries");
