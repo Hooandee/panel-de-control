@@ -76,6 +76,8 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
   const cssReady = controller.snapshot.status === "ready";
   const operationBusy = controller.operation !== null;
   const actionsBlocked = operationBusy || controller.recoveryBlocked || !cssReady;
+  const activationBlocked = actionsBlocked
+    || (!card.active && card.release.compatibility !== "compatible");
   const installing = controller.operation?.kind === "installing" && controller.operation.themeId === card.id;
   const activating = controller.operation?.kind === "activating" && controller.operation.themeId === card.id;
   const deactivating = controller.operation?.kind === "deactivating" && controller.operation.themeId === card.id;
@@ -106,7 +108,7 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
                 <div data-pdc-theme-action="true">
                   <ButtonItem
                     layout="below"
-                    disabled={actionsBlocked}
+                    disabled={activationBlocked}
                     onClick={() => void (card.active ? controller.deactivate(card.id) : controller.activate(card.id))}
                   >
                     {card.active ? <LuPower size={14} aria-hidden /> : <LuSparkles size={14} aria-hidden />}{" "}

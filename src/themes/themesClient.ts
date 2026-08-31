@@ -242,7 +242,8 @@ export class ThemesClient {
 
   activate = (themeId: string): Promise<boolean> => {
     const themes = this.currentPublicationThemes();
-    if (this.current.snapshot.status !== "ready" || !themes.some((theme) => theme.catalogId === themeId)) {
+    const target = themes.find((theme) => theme.catalogId === themeId);
+    if (this.current.snapshot.status !== "ready" || target?.compatibility !== "compatible") {
       return Promise.resolve(false);
     }
     return this.mutate(

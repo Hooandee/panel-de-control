@@ -133,6 +133,59 @@ describe("ThemeDetailsModal", () => {
     expect(setPatch).toHaveBeenCalledWith("example-theme", "Motion", "No");
   });
 
+  it("disables activation for an incompatible installed release", () => {
+    const base = controller();
+    const installedTheme = {
+      id: "Example Theme", name: "Example Theme", displayName: "Example Theme", version: "1.2.3",
+      author: "Example Author", enabled: false, patches: [],
+    };
+    const incompatibleRelease = {
+      ...base.cards[0].release,
+      compatibility: "incompatible-panel" as const,
+    };
+    mocks.controller = controller({
+      snapshot: { status: "ready", pluginVersion: "2.1.2", backendVersion: 9, themes: [installedTheme] },
+      cards: [{
+        ...base.cards[0], release: incompatibleRelease, installed: true,
+        installedVersion: "1.2.3", cssLoaderTheme: installedTheme, versionRelation: "unknown",
+        installable: false, targetVersion: undefined,
+      }],
+      publication: { status: "published", checkedAt: 10, themes: [incompatibleRelease] },
+    });
+    render(<ThemeDetailsModal themeId="example-theme" />);
+
+    expect((screen.getByRole("button", { name: "themes.action.activate" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("allows deactivation when an active catalog release becomes incompatible", () => {
+    const deactivate = vi.fn(async () => true);
+    const base = controller();
+    const installedTheme = {
+      id: "Example Theme", name: "Example Theme", displayName: "Example Theme", version: "1.2.3",
+      author: "Example Author", enabled: true, patches: [],
+    };
+    const incompatibleRelease = {
+      ...base.cards[0].release,
+      compatibility: "incompatible-panel" as const,
+    };
+    mocks.controller = controller({
+      snapshot: { status: "ready", pluginVersion: "2.1.2", backendVersion: 9, themes: [installedTheme] },
+      cards: [{
+        ...base.cards[0], release: incompatibleRelease, installed: true, active: true,
+        installedVersion: "1.2.3", cssLoaderTheme: installedTheme, versionRelation: "unknown",
+        installable: false, targetVersion: undefined,
+      }],
+      publication: { status: "published", checkedAt: 10, themes: [incompatibleRelease] },
+      deactivate,
+    });
+    render(<ThemeDetailsModal themeId="example-theme" />);
+
+    const button = screen.getByRole("button", { name: "themes.action.deactivate" });
+    expect((button as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(button);
+    expect(deactivate).toHaveBeenCalledWith("example-theme");
+  });
+
   it("uses Panel tokens instead of theme-owned chrome variables", () => {
     mocks.controller = controller();
     render(<ThemeDetailsModal themeId="example-theme" />);

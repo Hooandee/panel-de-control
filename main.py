@@ -996,12 +996,22 @@ class Plugin:
     async def list_theme_extensions(self) -> list[dict]:
         self._init()
         try:
-            return await self._offload_theme_call(
+            receipts = await self._offload_theme_call(
                 lambda: theme_packages.list_theme_extensions(
                     self._themes_root(),
                     self._theme_receipts_path(),
                 )
             )
+            return [
+                {
+                    "catalogId": receipt["catalogId"],
+                    "cssLoaderName": receipt["cssLoaderName"],
+                    "version": receipt["version"],
+                    "abiVersion": receipt["abiVersion"],
+                    "sha256": receipt["sha256"],
+                }
+                for receipt in receipts
+            ]
         except Exception as error:
             decky.logger.warning(
                 "Theme extension inventory unavailable (%s)",

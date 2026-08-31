@@ -150,7 +150,7 @@ export class ThemeExtensionRuntimeHost {
       this.reconcileSelection();
     }).catch(() => {
       if (this.disposed) return;
-      this.descriptors = [];
+      this.descriptors = null;
       this.invalidatePending();
       this.stop();
       this.log("extension_list_failed");

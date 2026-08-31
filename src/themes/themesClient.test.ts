@@ -93,6 +93,31 @@ describe("ThemesClient", () => {
     expect(activate).toHaveBeenCalledWith("example-theme", [RELEASE]);
   });
 
+  it("rejects activation of an incompatible catalog release without blocking deactivation", async () => {
+    const incompatibleRelease: PublishedThemeRelease = {
+      ...RELEASE,
+      compatibility: "incompatible-panel",
+    };
+    const publication: ThemePublicationState = {
+      status: "published",
+      checkedAt: 10,
+      themes: [incompatibleRelease],
+    };
+    const activate = vi.fn(async () => READY);
+    const deactivate = vi.fn(async () => READY);
+    const deps = dependencies({
+      publication: { check: vi.fn(async () => publication) },
+      activator: { activate, deactivate },
+    });
+    const client = new ThemesClient(deps);
+    await client.refresh();
+
+    await expect(client.activate("example-theme")).resolves.toBe(false);
+    await expect(client.deactivate("example-theme")).resolves.toBe(true);
+    expect(activate).not.toHaveBeenCalled();
+    expect(deactivate).toHaveBeenCalledWith("example-theme", [incompatibleRelease]);
+  });
+
   it("blocks install and activation honestly when CSS Loader is not ready", async () => {
     const deps = dependencies({
       adapter: { ...dependencies().adapter, inspect: vi.fn(async () => ({ status: "disabled" as const, themes: [] })) },

@@ -415,7 +415,8 @@ def test_unload_stops_new_tdp_writes_before_handoff(tmp_path, monkeypatch):
         events.append("handoff")
         p._schedule_tdp_apply("late-lifecycle")
 
-    def recover_themes(_root):
+    def recover_themes(_root, *, receipts_path):
+        assert receipts_path == p._theme_receipts_path()
         events.append("themes")
         return []
 
@@ -486,7 +487,11 @@ def test_shutdown_drains_and_recovers_active_theme_work_before_first_suspend(
     monkeypatch.setattr(
         importlib.import_module("main").theme_packages,
         "recover_theme_transactions",
-        lambda _root: events.append("recovered") or [],
+        lambda _root, *, receipts_path: (
+            events.append("recovered")
+            if receipts_path == p._theme_receipts_path()
+            else pytest.fail("theme recovery used the wrong receipt store")
+        ) or [],
     )
     threading.Timer(0.02, release.set).start()
 
@@ -731,7 +736,8 @@ def test_uninstall_stops_new_tdp_writes_before_handoff(tmp_path, monkeypatch):
         events.append("handoff")
         p._schedule_tdp_apply("late-lifecycle")
 
-    def recover_themes(_root):
+    def recover_themes(_root, *, receipts_path):
+        assert receipts_path == p._theme_receipts_path()
         events.append("themes")
         return []
 

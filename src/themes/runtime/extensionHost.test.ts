@@ -80,6 +80,34 @@ describe("evaluateThemeExtensionBundle", () => {
 });
 
 describe("ThemeExtensionRuntimeHost", () => {
+  it("retries a transient descriptor failure when the active inventory is unchanged", async () => {
+    const extensions = client();
+    extensions.list = vi.fn()
+      .mockRejectedValueOnce(new Error("transient RPC failure"))
+      .mockResolvedValueOnce([DESCRIPTOR]);
+    const logs: string[] = [];
+    const host = new ThemeExtensionRuntimeHost({
+      client: extensions,
+      doc: document,
+      log: (code) => logs.push(code),
+    });
+
+    host.reconcile(snapshot());
+    await settle();
+    expect(extensions.list).toHaveBeenCalledOnce();
+    expect(document.documentElement.dataset.extensionMounted).toBeUndefined();
+
+    host.reconcile(snapshot());
+    host.reconcile(snapshot());
+    await settle();
+
+    expect(extensions.list).toHaveBeenCalledTimes(2);
+    expect(extensions.load).toHaveBeenCalledOnce();
+    expect(document.documentElement.dataset.extensionMounted).toBe("1.2.3");
+    expect(logs).toEqual(["extension_list_failed"]);
+    host.dispose();
+  });
+
   it("loads lazily only for one exact active descriptor and disposes on deactivation", async () => {
     const extensions = client();
     const host = new ThemeExtensionRuntimeHost({ client: extensions, doc: document });

@@ -139,7 +139,13 @@ def test_extension_rpcs_return_the_exact_backend_contract(theme_rpc, monkeypatch
         ) or loaded,
     )
 
-    assert asyncio.run(plugin.list_theme_extensions()) == [descriptor]
+    assert asyncio.run(plugin.list_theme_extensions()) == [{
+        "catalogId": "example-theme",
+        "cssLoaderName": "Example Theme",
+        "version": "1.2.3",
+        "abiVersion": 1,
+        "sha256": "a" * 64,
+    }]
     assert asyncio.run(plugin.load_theme_extension("example-theme", "1.2.3")) == loaded
     assert calls == [
         ("list", themes_root, receipts_path),
