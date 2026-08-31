@@ -1,6 +1,7 @@
 import {
   cpSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   rmSync,
 } from "node:fs";
@@ -26,6 +27,9 @@ function fail(message) {
 
 function includePayloadPath(sourceRoot, sourcePath) {
   const path = relative(sourceRoot, sourcePath);
+  if (lstatSync(sourcePath).isSymbolicLink()) {
+    fail(`plugin payload symlink is not allowed: ${path}`);
+  }
   const segments = path.split(sep);
   if (segments.includes("__pycache__")) return false;
   if (/\.(?:pyc|pyo|map)$/.test(basename(path))) return false;
@@ -47,7 +51,6 @@ export function copyPluginPayload(sourceDirectory, outputDirectory) {
       if (!existsSync(entrySource)) fail(`plugin payload source is missing: ${entry}`);
       cpSync(entrySource, resolve(output, entry), {
         recursive: true,
-        dereference: true,
         filter: (path) => includePayloadPath(source, path),
       });
     }

@@ -1,6 +1,5 @@
 import {
   existsSync,
-  lstatSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
@@ -28,7 +27,7 @@ function write(path: string, contents = `${basename(path)}\n`): void {
   writeFileSync(path, contents);
 }
 
-function fixture(): string {
+function fixture({ symlink = false }: { symlink?: boolean } = {}): string {
   const root = workspace();
   write(resolve(root, "dist/index.js"), "plugin bundle\n");
   write(resolve(root, "dist/index.js.map"), "/Users/private/source.ts\n");
@@ -48,7 +47,7 @@ function fixture(): string {
     "/Users/private/worktree/py_modules/module.py\n",
   );
   write(resolve(root, "py_modules/module.pyo"), "compiled\n");
-  symlinkSync("tool", resolve(root, "bin/tool-link"));
+  if (symlink) symlinkSync("tool", resolve(root, "bin/tool-link"));
   return root;
 }
 
@@ -78,13 +77,22 @@ describe("plugin release payload", () => {
       "py_modules/module.py",
       "assets/icon.png",
       "bin/tool",
-      "bin/tool-link",
     ]));
     expect(files(output).some((path) => /(?:^|\/)__pycache__(?:\/|$)|\.(?:pyc|pyo|map)$/.test(path)))
       .toBe(false);
     expect(files(output).some((path) => readFileSync(resolve(output, path)).includes("/Users/")))
       .toBe(false);
     expect(existsSync(resolve(output, "py_modules/__pycache__"))).toBe(false);
-    expect(lstatSync(resolve(output, "bin/tool-link")).isSymbolicLink()).toBe(false);
+  });
+
+  it("rejects symlinks instead of copying content from an unreviewed target", () => {
+    const source = fixture({ symlink: true });
+    const output = resolve(workspace(), "Panel de Control");
+
+    const result = spawnSync(process.execPath, [copier, source, output], { encoding: "utf8" });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("plugin payload symlink is not allowed");
+    expect(existsSync(output)).toBe(false);
   });
 });
