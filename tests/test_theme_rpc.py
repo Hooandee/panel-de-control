@@ -181,6 +181,95 @@ def test_theme_runtime_probe_rejects_a_symlinked_css_loader_manifest(
         )
 
 
+def write_css_loader_runtime(
+    plugins: pathlib.Path,
+    *,
+    package_version: str = "2.1.2",
+    backend_source: str = "CSS_LOADER_VER = 9\n",
+) -> None:
+    css_loader = plugins / "SDH-CssLoader"
+    css_loader.mkdir(parents=True)
+    (css_loader / "package.json").write_text(
+        f'{{"name":"SDH-CssLoader","version":"{package_version}"}}',
+        encoding="utf-8",
+    )
+    (css_loader / "css_theme.py").write_text(backend_source, encoding="utf-8")
+
+
+def test_theme_runtime_probe_accepts_the_maximum_safe_backend_version(
+    theme_rpc,
+    tmp_path,
+):
+    main, _, _ = theme_rpc
+    plugins = tmp_path / "plugins"
+    write_css_loader_runtime(
+        plugins,
+        backend_source="CSS_LOADER_VER = 9007199254740991\n",
+    )
+
+    runtime = main.theme_runtime.probe_css_loader_runtime(
+        plugins,
+        panel_version="0.37.12",
+    )
+
+    assert runtime.css_loader_backend == 9_007_199_254_740_991
+
+
+@pytest.mark.parametrize(
+    "backend_source",
+    [
+        "CSS_LOADER_VER = 0\n",
+        "CSS_LOADER_VER = 9٢\n",
+        "CSS_LOADER_VER = 9007199254740992\n",
+        f"CSS_LOADER_VER = {'9' * 5_000}\n",
+    ],
+)
+def test_theme_runtime_probe_rejects_malformed_backend_versions_with_typed_error(
+    theme_rpc,
+    tmp_path,
+    backend_source,
+):
+    main, _, _ = theme_rpc
+    plugins = tmp_path / "plugins"
+    write_css_loader_runtime(plugins, backend_source=backend_source)
+
+    with pytest.raises(main.theme_runtime.ThemeRuntimeProbeError):
+        main.theme_runtime.probe_css_loader_runtime(
+            plugins,
+            panel_version="0.37.12",
+        )
+
+
+def test_theme_runtime_probe_rejects_unicode_digits_in_css_loader_semver(
+    theme_rpc,
+    tmp_path,
+):
+    main, _, _ = theme_rpc
+    plugins = tmp_path / "plugins"
+    write_css_loader_runtime(plugins, package_version="2.1.2١")
+
+    with pytest.raises(main.theme_runtime.ThemeRuntimeProbeError):
+        main.theme_runtime.probe_css_loader_runtime(
+            plugins,
+            panel_version="0.37.12",
+        )
+
+
+def test_theme_runtime_probe_rejects_unicode_digits_in_panel_semver(
+    theme_rpc,
+    tmp_path,
+):
+    main, _, _ = theme_rpc
+    plugins = tmp_path / "plugins"
+    write_css_loader_runtime(plugins)
+
+    with pytest.raises(main.theme_runtime.ThemeRuntimeProbeError):
+        main.theme_runtime.probe_css_loader_runtime(
+            plugins,
+            panel_version="0.37.12١",
+        )
+
+
 def test_recovery_rpcs_keep_rollback_pending_until_css_loader_acknowledges_it(
     theme_rpc,
     monkeypatch,

@@ -10,13 +10,19 @@ from typing import Any
 from theme_remote import ThemeRuntimeVersions
 
 
-_STABLE_SEMVER = re.compile(r"^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$")
+_STABLE_SEMVER = re.compile(
+    r"^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$"
+)
 _PANEL_RUNTIME_SEMVER = re.compile(
-    r"^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)"
+    r"^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)"
     r"(?:-[0-9A-Za-z.-]+)?$"
 )
-_BACKEND_VERSION = re.compile(r"^CSS_LOADER_VER\s*=\s*([1-9]\d*)\s*$", re.MULTILINE)
+_BACKEND_VERSION = re.compile(
+    r"^CSS_LOADER_VER\s*=\s*([1-9][0-9]*)\s*$",
+    re.MULTILINE,
+)
 _MAX_RUNTIME_FILE_BYTES = 64 * 1024
+_MAX_SAFE_INTEGER_TEXT = "9007199254740991"
 
 
 class ThemeRuntimeProbeError(Exception):
@@ -104,7 +110,13 @@ def probe_css_loader_runtime(
     backend_matches = _BACKEND_VERSION.findall(backend_source)
     if len(backend_matches) != 1:
         raise ThemeRuntimeProbeError("CSS Loader backend version is invalid")
-    backend_version = int(backend_matches[0])
+    backend_text = backend_matches[0]
+    if len(backend_text) > len(_MAX_SAFE_INTEGER_TEXT) or (
+        len(backend_text) == len(_MAX_SAFE_INTEGER_TEXT)
+        and backend_text > _MAX_SAFE_INTEGER_TEXT
+    ):
+        raise ThemeRuntimeProbeError("CSS Loader backend version is invalid")
+    backend_version = int(backend_text)
     return ThemeRuntimeVersions(
         panel=panel_version,
         css_loader=css_loader_version,
