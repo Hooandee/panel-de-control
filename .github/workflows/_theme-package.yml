@@ -52,6 +52,7 @@ jobs:
           tests/themeWorkflow.test.ts
           tests/themePublicationContract.test.ts
           tests/themePublicationBuild.test.ts
+          tests/themePanelMinimum.test.ts
           tests/themePagesStage.test.ts
           tests/themePagesPromote.test.ts
           tests/themePagesVerify.test.ts

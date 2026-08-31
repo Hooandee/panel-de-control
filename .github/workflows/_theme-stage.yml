@@ -91,7 +91,7 @@ jobs:
         run: |
           set -euo pipefail
           pnpm install --frozen-lockfile
-          pnpm vitest run tests/themePublicationContract.test.ts tests/themePublicationBuild.test.ts tests/themePagesStage.test.ts tests/themePagesPromote.test.ts tests/themeWorkflow.test.ts
+          pnpm vitest run tests/themePublicationContract.test.ts tests/themePublicationBuild.test.ts tests/themePanelMinimum.test.ts tests/themePagesStage.test.ts tests/themePagesPromote.test.ts tests/themeWorkflow.test.ts
       - name: Build the immutable candidate
         env:
           EXPECTED_VERSION: ${{ inputs.version }}
@@ -100,7 +100,7 @@ jobs:
         working-directory: source
         run: |
           set -euo pipefail
-          panel_version="$(node -p "require('./package.json').version")"
+          panel_version="$(node scripts/resolve-theme-panel-minimum.mjs .)"
           node scripts/build-theme-publication.mjs "$THEME_DIRECTORY" ../candidate "$PAGES_BASE" "$panel_version" 2.1.2 9
           test -f "../candidate/themes/v1/${{ inputs.catalog_id }}/$EXPECTED_VERSION/gallery.json"
       - name: Require the audited Pages history ruleset

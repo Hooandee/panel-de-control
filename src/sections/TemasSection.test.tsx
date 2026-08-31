@@ -75,6 +75,7 @@ describe("TemasSection", () => {
     render(<TemasSection />);
 
     expect(screen.getByText("themes.cssLoader.missing")).toBeTruthy();
+    expect(screen.queryAllByTestId(/^theme-card-/)).toHaveLength(0);
     fireEvent.click(screen.getByRole("button", { name: "themes.cssLoader.openStore" }));
     expect(mocks.navigate).toHaveBeenCalledWith("/decky/store");
     fireEvent.click(screen.getByRole("button", { name: "themes.retry" }));

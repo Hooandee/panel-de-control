@@ -43,6 +43,7 @@ describe("Gallery distribution workflow", () => {
     expect(gallery).toContain('"scripts/check-theme-version.mjs"');
     for (const publicationPath of [
       '"scripts/build-theme-publication.mjs"',
+      '"scripts/resolve-theme-panel-minimum.mjs"',
       '"scripts/promote-theme-pages.mjs"',
       '"scripts/stage-theme-pages.mjs"',
       '"scripts/theme-publication-contract.mjs"',
@@ -52,6 +53,7 @@ describe("Gallery distribution workflow", () => {
       '"tests/themePagesStage.test.ts"',
       '"tests/themePagesPromote.test.ts"',
       '"tests/themePagesVerify.test.ts"',
+      '"tests/themePanelMinimum.test.ts"',
     ]) {
       expect(gallery).toContain(publicationPath);
     }
@@ -89,7 +91,9 @@ describe("Gallery distribution workflow", () => {
 
   it("stages only immutable bytes and promotes only the reviewed descriptor", () => {
     expect(reusableStage).toContain("scripts/build-theme-publication.mjs");
-    expect(reusableStage).toContain("require('./package.json').version");
+    expect(reusableStage).toContain("scripts/resolve-theme-panel-minimum.mjs");
+    expect(reusableStage).toContain("tests/themePanelMinimum.test.ts");
+    expect(reusableStage).not.toContain("require('./package.json').version");
     expect(reusableStage).not.toContain(" 0.31.4 2.1.2 9");
     expect(reusableStage).toContain("scripts/stage-theme-pages.mjs");
     expect(reusableStage).toContain("scripts/verify-theme-pages.mjs");

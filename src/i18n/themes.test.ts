@@ -25,6 +25,9 @@ describe("theme translations", () => {
     ["en", "themes.state.comingSoon", "Coming soon"],
     ["it", "themes.state.comingSoon", "Prossimamente"],
     ["it", "themes.remote.retry", "Controlla aggiornamenti"],
+    ["es", "themes.cssLoader.missing", "Para instalar y usar temas necesitas CSS Loader. Instálalo desde la tienda de Decky y después pulsa «Comprobar de nuevo»."],
+    ["en", "themes.cssLoader.missing", "You need CSS Loader to install and use themes. Install it from the Decky Store, then select “Check again”."],
+    ["it", "themes.cssLoader.missing", "Per installare e usare i temi serve CSS Loader. Installalo dallo store di Decky, poi seleziona «Verifica di nuovo»."],
   ] as const)("translates %s/%s", (lang, key, expected) => {
     expect(translateForLang(lang, key)).toBe(expected);
   });

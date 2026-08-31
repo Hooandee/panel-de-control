@@ -6,6 +6,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const registeredView = vi.hoisted(() => ({ content: null as ReactNode }));
 
 vi.mock("@decky/api", () => ({ definePlugin: (factory: unknown) => factory }));
+vi.mock("./api", () => ({
+  acknowledgeThemeInstallRollback: vi.fn(),
+  checkThemeReleases: vi.fn(),
+  commitThemeInstall: vi.fn(),
+  getThemeInstallRecoveries: vi.fn(),
+  prepareBundledThemeInstall: vi.fn(),
+  prepareRemoteThemeInstall: vi.fn(),
+  rollbackThemeInstall: vi.fn(),
+}));
 vi.mock("@decky/ui", () => ({
   ErrorBoundary: ({ children }: { children: ReactNode }) => <>{children}</>,
   staticClasses: { Title: "title" },
@@ -48,6 +57,12 @@ vi.mock("./launch/gameContextMenu", () => ({ installGameContextMenu: () => () =>
 vi.mock("./pluginListLocalizer", () => ({ startPluginListLocalizer: () => () => {} }));
 vi.mock("./system/pdcStorage", () => ({ onPrefsHealed: () => () => {} }));
 vi.mock("./system/uiActivity", () => ({ shutdownUiActivity: vi.fn() }));
+vi.mock("./themes/deckyCssLoaderHost", () => ({ configureDeckyCssLoaderHost: () => () => {} }));
+vi.mock("./themes/panelThemeInstallHost", () => ({ configurePanelThemeInstallHost: () => () => {} }));
+vi.mock("./themes/remotePublicationClient", () => ({ configureThemePublicationCheckHost: () => () => {} }));
+vi.mock("./themes/runtime/start", () => ({ startThemesRuntime: () => () => {} }));
+vi.mock("./themes/themesClient", () => ({ createProductionThemesDependencies: () => ({}) }));
+vi.mock("./themes/useThemes", () => ({ getThemesClient: () => ({}) }));
 
 import createPlugin from "./index";
 
