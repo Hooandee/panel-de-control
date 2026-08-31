@@ -104,7 +104,8 @@ describe("Gallery distribution workflow", () => {
     expect(reusableStage).toContain("tests/themePanelMinimum.test.ts");
     expect(reusableStage).not.toContain("require('./package.json').version");
     expect(reusableStage).toContain("releases/tags/$release_tag");
-    expect(reusableStage).toContain('assets[] | select(.name == "Panel de Control.zip"');
+    expect(reusableStage).toContain('.name == "Panel de Control.zip"');
+    expect(reusableStage).toContain('.name == "Panel.de.Control.zip"');
     expect(reusableStage).toContain(".draft == false");
     expect(reusableStage).toContain(".prerelease == false");
     expect(reusableStage).not.toContain(" 0.31.4 2.1.2 9");

@@ -108,7 +108,10 @@ jobs:
             .tag_name == $tag and
             .draft == false and
             .prerelease == false and
-            ([.assets[] | select(.name == "Panel de Control.zip" and .state == "uploaded" and .size > 0)] | length) == 1
+            ([.assets[]
+              | select(.name == "Panel de Control.zip" or .name == "Panel.de.Control.zip")
+              | select(.state == "uploaded" and .size > 0)
+            ] | length) == 1
           ' <<<"$release_json" >/dev/null
           node scripts/build-theme-publication.mjs "$THEME_DIRECTORY" ../candidate "$PAGES_BASE" "$panel_version" 2.1.2 9
           test -f "../candidate/themes/v1/${{ inputs.catalog_id }}/$EXPECTED_VERSION/gallery.json"
