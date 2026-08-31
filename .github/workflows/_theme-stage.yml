@@ -91,44 +91,46 @@ jobs:
         run: |
           set -euo pipefail
           pnpm install --frozen-lockfile
-          pnpm vitest run tests/themePublicationContract.test.ts tests/themePublicationBuild.test.ts tests/themePanelMinimum.test.ts tests/themePagesStage.test.ts tests/themePagesPromote.test.ts tests/themeWorkflow.test.ts
+          pnpm vitest run tests/themePublicationContract.test.ts tests/themePublicationBuild.test.ts tests/themePanelMinimum.test.ts tests/themePagesStage.test.ts tests/themePagesPromote.test.ts tests/themePagesGovernance.test.ts tests/themeWorkflow.test.ts
       - name: Build the immutable candidate
         env:
           EXPECTED_VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
           PAGES_BASE: ${{ steps.pages-api.outputs.base }}
           THEME_DIRECTORY: ${{ inputs.theme_directory }}
         working-directory: source
         run: |
           set -euo pipefail
           panel_version="$(node scripts/resolve-theme-panel-minimum.mjs .)"
+          release_tag="panel-de-control-v${panel_version}"
+          release_json="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$release_tag")"
+          jq -e --arg tag "$release_tag" '
+            .tag_name == $tag and
+            .draft == false and
+            .prerelease == false and
+            ([.assets[] | select(.name == "Panel de Control.zip" and .state == "uploaded" and .size > 0)] | length) == 1
+          ' <<<"$release_json" >/dev/null
           node scripts/build-theme-publication.mjs "$THEME_DIRECTORY" ../candidate "$PAGES_BASE" "$panel_version" 2.1.2 9
           test -f "../candidate/themes/v1/${{ inputs.catalog_id }}/$EXPECTED_VERSION/gallery.json"
-      - name: Require the audited Pages history ruleset
+      - name: Require the audited Pages governance
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.THEME_PAGES_AUDIT_TOKEN }}
+          THEME_PAGES_AUDIT_TOKEN: ${{ secrets.THEME_PAGES_AUDIT_TOKEN }}
+          DEPLOY_KEY_ID: ${{ vars.THEME_PAGES_DEPLOY_KEY_ID }}
           RULESET_ID: ${{ vars.THEME_PAGES_RULESET_ID }}
           RULESET_UPDATED_AT: ${{ vars.THEME_PAGES_RULESET_UPDATED_AT }}
+        working-directory: source
         run: |
           set -euo pipefail
           case "$RULESET_ID" in ''|*[!0-9]*) exit 1 ;; esac
+          case "$DEPLOY_KEY_ID" in ''|*[!0-9]*) exit 1 ;; esac
           test -n "$RULESET_UPDATED_AT"
-          ruleset="$(gh api "repos/$GITHUB_REPOSITORY/rulesets/$RULESET_ID")"
-          jq -e --arg repository "$GITHUB_REPOSITORY" --arg updated "$RULESET_UPDATED_AT" --argjson ruleset_id "$RULESET_ID" '
-            ([.rules[].type]) as $types |
-            .id == $ruleset_id and
-            .updated_at == $updated and
-            .name == "theme-pages-immutable" and
-            .target == "branch" and
-            .source_type == "Repository" and
-            .source == $repository and
-            .enforcement == "active" and
-            .conditions.ref_name.include == ["refs/heads/gh-pages"] and
-            .conditions.ref_name.exclude == [] and
-            ($types | index("creation")) != null and
-            ($types | index("update")) != null and
-            ($types | index("deletion")) != null and
-            ($types | index("non_fast_forward")) != null
-          ' <<<"$ruleset" >/dev/null
+          test -n "$THEME_PAGES_AUDIT_TOKEN"
+          ruleset_path="$RUNNER_TEMP/theme-pages-ruleset.json"
+          keys_path="$RUNNER_TEMP/theme-pages-deploy-keys.json"
+          gh api "repos/$GITHUB_REPOSITORY/rulesets/$RULESET_ID" > "$ruleset_path"
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/keys?per_page=100" > "$keys_path"
+          node scripts/verify-theme-pages-governance.mjs "$ruleset_path" "$keys_path" "$GITHUB_REPOSITORY" "$RULESET_ID" "$RULESET_UPDATED_AT" "$DEPLOY_KEY_ID"
       - name: Require the protected Pages deploy key
         env:
           THEME_PAGES_DEPLOY_KEY: ${{ secrets.THEME_PAGES_DEPLOY_KEY }}

@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
@@ -37,33 +37,55 @@ function git(repository, args) {
 
 export function resolveThemePanelMinimum(repositoryDirectory) {
   const repository = resolve(repositoryDirectory);
-  const version = readPackageVersion(
+  readPackageVersion(
     readFileSync(resolve(repository, "package.json"), "utf8"),
     "current",
   );
-  const tag = `panel-de-control-v${version}`;
-  const taggedCommit = git(repository, [
-    "rev-parse",
-    "--verify",
-    "--quiet",
-    `refs/tags/${tag}^{commit}`,
-  ]);
-  if (taggedCommit.status !== 0) {
-    fail(`published Panel release tag is missing: ${tag}`);
-  }
-
-  const taggedPackage = git(repository, ["show", `${tag}:package.json`]);
-  if (taggedPackage.status !== 0) fail("published Panel release package is unavailable");
-  if (readPackageVersion(taggedPackage.stdout, "published") !== version) {
-    fail("published Panel release version does not match package.json");
-  }
-
   for (const path of REQUIRED_RELEASE_PATHS) {
-    if (git(repository, ["cat-file", "-e", `${tag}:${path}`]).status !== 0) {
-      fail(`published Panel release does not include remote themes: ${path}`);
+    if (!existsSync(resolve(repository, path))) {
+      fail(`current Panel source does not include remote themes: ${path}`);
     }
   }
-  return version;
+
+  const listedTags = git(repository, ["tag", "--list", "panel-de-control-v*"]);
+  if (listedTags.status !== 0) fail("Panel release tags are unavailable");
+  const candidates = listedTags.stdout
+    .split("\n")
+    .map((tag) => ({ tag, version: tag.replace(/^panel-de-control-v/, "") }))
+    .filter(({ tag, version }) => tag && STABLE_SEMVER.test(version))
+    .sort((left, right) => {
+      const a = left.version.split(".").map(Number);
+      const b = right.version.split(".").map(Number);
+      return a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
+    });
+
+  for (const { tag, version } of candidates) {
+    const taggedCommit = git(repository, [
+      "rev-parse",
+      "--verify",
+      "--quiet",
+      `refs/tags/${tag}^{commit}`,
+    ]);
+    if (taggedCommit.status !== 0) continue;
+    if (git(repository, ["merge-base", "--is-ancestor", taggedCommit.stdout.trim(), "HEAD"]).status !== 0) {
+      continue;
+    }
+    const taggedPackage = git(repository, ["show", `${tag}:package.json`]);
+    if (taggedPackage.status !== 0) continue;
+    let taggedVersion;
+    try {
+      taggedVersion = readPackageVersion(taggedPackage.stdout, "published");
+    } catch {
+      continue;
+    }
+    if (taggedVersion !== version) continue;
+    if (REQUIRED_RELEASE_PATHS.every(
+      (path) => git(repository, ["cat-file", "-e", `${tag}:${path}`]).status === 0,
+    )) {
+      return version;
+    }
+  }
+  fail("no published Panel release includes remote themes");
 }
 
 function main() {

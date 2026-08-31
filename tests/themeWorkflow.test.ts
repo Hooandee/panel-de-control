@@ -48,12 +48,14 @@ describe("Gallery distribution workflow", () => {
       '"scripts/stage-theme-pages.mjs"',
       '"scripts/theme-publication-contract.mjs"',
       '"scripts/verify-theme-pages.mjs"',
+      '"scripts/verify-theme-pages-governance.mjs"',
       '".github/workflows/_theme-stage.yml"',
       '".github/workflows/_theme-promote.yml"',
       '"tests/themePagesStage.test.ts"',
       '"tests/themePagesPromote.test.ts"',
       '"tests/themePagesVerify.test.ts"',
       '"tests/themePanelMinimum.test.ts"',
+      '"tests/themePagesGovernance.test.ts"',
     ]) {
       expect(gallery).toContain(publicationPath);
     }
@@ -61,17 +63,24 @@ describe("Gallery distribution workflow", () => {
     expect(reusable).toContain("tests/themePagesStage.test.ts");
     expect(reusable).toContain("tests/themePagesPromote.test.ts");
     expect(reusable).toContain("tests/themePagesVerify.test.ts");
+    expect(reusable).toContain("tests/themePagesGovernance.test.ts");
     expect(gallery).not.toContain('"src/index.tsx"');
   });
 
   it("packages the plugin from the immutable bundled pin instead of the live theme source", () => {
     for (const consumer of [prerelease, release, deploy]) {
+      expect(consumer).toContain("scripts/copy-plugin-payload.mjs");
       expect(consumer).toContain(
         "scripts/copy-bundled-theme.mjs themes/bundled/hooandee-gallery/0.7.8",
       );
       expect(consumer).not.toContain(
         "scripts/package-theme.mjs themes/gallery",
       );
+    }
+    for (const workflow of [prerelease, release]) {
+      expect(workflow).toContain("tests/pluginPayload.test.ts");
+      expect(workflow).not.toContain("cp -rL dist main.py");
+      expect(workflow).not.toContain("rm -f dist/*.map");
     }
   });
 
@@ -94,6 +103,10 @@ describe("Gallery distribution workflow", () => {
     expect(reusableStage).toContain("scripts/resolve-theme-panel-minimum.mjs");
     expect(reusableStage).toContain("tests/themePanelMinimum.test.ts");
     expect(reusableStage).not.toContain("require('./package.json').version");
+    expect(reusableStage).toContain("releases/tags/$release_tag");
+    expect(reusableStage).toContain('assets[] | select(.name == "Panel de Control.zip"');
+    expect(reusableStage).toContain(".draft == false");
+    expect(reusableStage).toContain(".prerelease == false");
     expect(reusableStage).not.toContain(" 0.31.4 2.1.2 9");
     expect(reusableStage).toContain("scripts/stage-theme-pages.mjs");
     expect(reusableStage).toContain("scripts/verify-theme-pages.mjs");
@@ -103,15 +116,12 @@ describe("Gallery distribution workflow", () => {
     expect(reusableStage).toContain("ref: gh-pages");
     expect(reusableStage).toContain("git/matching-refs/heads/gh-pages");
     expect(reusableStage).toContain("rulesets/$RULESET_ID");
-    expect(reusableStage).toContain("theme-pages-immutable");
     expect(reusableStage).toContain("THEME_PAGES_RULESET_ID");
     expect(reusableStage).toContain("THEME_PAGES_RULESET_UPDATED_AT");
-    expect(reusableStage).toContain(".updated_at == $updated");
-    expect(reusableStage).toContain('index("creation")');
-    expect(reusableStage).toContain('index("update")');
-    expect(reusableStage).toContain('index("deletion")');
-    expect(reusableStage).toContain('index("non_fast_forward")');
     expect(reusableStage).toContain("THEME_PAGES_DEPLOY_KEY");
+    expect(reusableStage).toContain("THEME_PAGES_AUDIT_TOKEN");
+    expect(reusableStage).toContain("THEME_PAGES_DEPLOY_KEY_ID");
+    expect(reusableStage).toContain("scripts/verify-theme-pages-governance.mjs");
     expect(reusableStage).toContain("ssh-key:");
     expect(reusableStage.indexOf("ssh-key:")).toBeGreaterThan(reusableStage.indexOf("pnpm install"));
     expect(reusableStage).toContain("git checkout --orphan gh-pages");
@@ -126,15 +136,12 @@ describe("Gallery distribution workflow", () => {
     expect(reusablePromote).toContain("environment: theme-pages-promote");
     expect(reusablePromote).toContain("ref: gh-pages");
     expect(reusablePromote).toContain("rulesets/$RULESET_ID");
-    expect(reusablePromote).toContain("theme-pages-immutable");
     expect(reusablePromote).toContain("THEME_PAGES_RULESET_ID");
     expect(reusablePromote).toContain("THEME_PAGES_RULESET_UPDATED_AT");
-    expect(reusablePromote).toContain(".updated_at == $updated");
-    expect(reusablePromote).toContain('index("creation")');
-    expect(reusablePromote).toContain('index("update")');
-    expect(reusablePromote).toContain('index("deletion")');
-    expect(reusablePromote).toContain('index("non_fast_forward")');
     expect(reusablePromote).toContain("THEME_PAGES_DEPLOY_KEY");
+    expect(reusablePromote).toContain("THEME_PAGES_AUDIT_TOKEN");
+    expect(reusablePromote).toContain("THEME_PAGES_DEPLOY_KEY_ID");
+    expect(reusablePromote).toContain("scripts/verify-theme-pages-governance.mjs");
     expect(reusablePromote).toContain("ssh-key:");
     expect(reusablePromote.indexOf("ssh-key:")).toBeGreaterThan(reusablePromote.indexOf("pnpm install"));
     const liveVerification = reusablePromote.indexOf("Verify the live immutable candidate before promotion");

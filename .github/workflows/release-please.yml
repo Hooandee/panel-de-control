@@ -122,13 +122,11 @@ jobs:
           PLUGIN_NAME: Panel de Control
         run: |
           pnpm install --frozen-lockfile
-          pnpm test:fe tests/themeBundledPin.test.ts tests/themeBundledCopy.test.ts tests/galleryPackage.test.ts
+          pnpm test:fe tests/pluginPayload.test.ts tests/themeBundledPin.test.ts tests/themeBundledCopy.test.ts tests/galleryPackage.test.ts
           pnpm build
-          rm -f dist/*.map
           staging=$(mktemp -d)
-          mkdir -p "$staging/$PLUGIN_NAME"
+          node scripts/copy-plugin-payload.mjs . "$staging/$PLUGIN_NAME"
           node scripts/copy-bundled-theme.mjs themes/bundled/hooandee-gallery/0.7.8 "$staging/$PLUGIN_NAME/theme-packages"
-          cp -rL dist main.py plugin.json package.json README.md README.en.md LICENSE py_modules assets bin "$staging/$PLUGIN_NAME"
           (cd "$staging" && zip -r "$GITHUB_WORKSPACE/$PLUGIN_NAME.zip" "$PLUGIN_NAME")
 
       # Attach the artifact first, so provenance signing can never block the release

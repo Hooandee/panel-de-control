@@ -22,20 +22,19 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 echo "==> Building frontend"
-pnpm test:fe tests/themeBundledPin.test.ts tests/themeBundledCopy.test.ts tests/galleryPackage.test.ts
+pnpm test:fe tests/pluginPayload.test.ts tests/themeBundledPin.test.ts tests/themeBundledCopy.test.ts tests/galleryPackage.test.ts
 pnpm build
 
 echo "==> Packaging plugin runtime"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 TARBALL="$WORK/plugin.tgz"
-node scripts/copy-bundled-theme.mjs themes/bundled/hooandee-gallery/0.7.8 "$WORK/theme-packages"
+PLUGIN_STAGE="$WORK/plugin"
+node scripts/copy-plugin-payload.mjs . "$PLUGIN_STAGE"
+node scripts/copy-bundled-theme.mjs themes/bundled/hooandee-gallery/0.7.8 "$PLUGIN_STAGE/theme-packages"
 # --no-xattrs avoids the macOS AppleDouble (._*) droppings on the device.
 COPYFILE_DISABLE=1 tar --no-xattrs \
-  --exclude='__pycache__' --exclude='*.pyc' \
-  -czf "$TARBALL" \
-  dist main.py py_modules plugin.json package.json assets LICENSE README.md \
-  -C "$WORK" theme-packages
+  -czf "$TARBALL" -C "$PLUGIN_STAGE" .
 
 echo "==> Copying to ${HOST}"
 scp -q "$TARBALL" "${HOST}:/tmp/pdc-plugin.tgz"

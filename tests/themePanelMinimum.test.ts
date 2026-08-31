@@ -58,7 +58,7 @@ describe("published Panel minimum for remote themes", () => {
     expect(result.stderr).toBe("");
   });
 
-  it("rejects a current tree that added theme support after the same version was released", () => {
+  it("rejects a current tree that added theme support after its only release", () => {
     const path = repository({ capabilityInRelease: false });
     writeThemeCapability(path);
     git(path, "add", ".");
@@ -67,18 +67,19 @@ describe("published Panel minimum for remote themes", () => {
     const result = resolveMinimum(path);
 
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain("published Panel release does not include remote themes");
+    expect(result.stderr).toContain("no published Panel release includes remote themes");
   });
 
-  it("rejects an unreleased package version", () => {
+  it("keeps the first compatible release as the minimum after unrelated Panel releases", () => {
     const path = repository({ capabilityInRelease: true });
     writeFileSync(resolve(path, "package.json"), '{"version":"0.39.0"}\n');
     git(path, "add", "package.json");
-    git(path, "commit", "--quiet", "-m", "start next version");
+    git(path, "commit", "--quiet", "-m", "release unrelated Panel changes");
+    git(path, "tag", "panel-de-control-v0.39.0");
 
     const result = resolveMinimum(path);
 
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain("published Panel release tag is missing");
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe("0.38.0\n");
   });
 });
