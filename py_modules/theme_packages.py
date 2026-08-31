@@ -975,6 +975,7 @@ def _read_transaction(work: Path, expected_token: str | None = None) -> dict[str
         or journal.get("schemaVersion") != 2
         or not isinstance(token, str)
         or not _TRANSACTION_TOKEN.fullmatch(token)
+        or work.name != f"{_TRANSACTION_PREFIX}{token}"
         or (expected_token is not None and token != expected_token)
         or not isinstance(theme_id, str)
         or not _SAFE_ID.fullmatch(theme_id)
@@ -993,6 +994,7 @@ def _read_transaction(work: Path, expected_token: str | None = None) -> dict[str
         or (journal["hadPrevious"] and previous_version is None)
         or (not journal["hadPrevious"] and previous_version is not None)
         or (new_receipt is not None and _validated_receipt(new_receipt) is None)
+        or (state == "created" and new_receipt is not None)
         or (previous_receipt is not None and _validated_receipt(previous_receipt) is None)
         or (
             isinstance(new_receipt, dict)
@@ -1010,7 +1012,14 @@ def _read_transaction(work: Path, expected_token: str | None = None) -> dict[str
                 or previous_receipt.get("version") != str(previous_version).removeprefix("v")
             )
         )
-        or state not in ("staged", "swapped", "rolled_back", "acknowledged", "committed")
+        or state not in (
+            "created",
+            "staged",
+            "swapped",
+            "rolled_back",
+            "acknowledged",
+            "committed",
+        )
     ):
         raise ThemePackageError("invalid_transaction", "Theme transaction journal is invalid")
     return journal
@@ -1026,7 +1035,7 @@ def _authenticate_transaction(
     work: Path,
     journal: dict[str, object],
     root: Path,
-) -> None:
+) -> dict[str, str]:
     theme_id = str(journal["themeId"])
     theme_name = str(journal["themeName"])
     new_version = str(journal["version"])
@@ -1034,9 +1043,32 @@ def _authenticate_transaction(
     previous_normalized = (
         str(previous_version).removeprefix("v") if previous_version is not None else None
     )
+    state = journal["state"]
+    destination = root / theme_name
+    if state == "created":
+        allowed = {"transaction.json", "extracted"}
+        if any(child.name not in allowed for child in work.iterdir()):
+            raise ThemePackageError("invalid_transaction", "Created transaction has unsafe files")
+        extracted = work / "extracted"
+        if extracted.exists() and (extracted.is_symlink() or not extracted.is_dir()):
+            raise ThemePackageError("invalid_transaction", "Created transaction staging is unsafe")
+        if journal["hadPrevious"]:
+            if destination.is_symlink() or not destination.is_dir():
+                raise ThemePackageError("invalid_transaction", "Previous theme is unavailable")
+            version, receipt = _installed_identity(destination, theme_id, theme_name)
+            if (
+                version.removeprefix("v") != previous_normalized
+                or receipt != journal["previousReceipt"]
+            ):
+                raise ThemePackageError("invalid_transaction", "Previous theme identity is invalid")
+            return {"destination": "previous"}
+        if destination.exists() or destination.is_symlink():
+            raise ThemePackageError("invalid_transaction", "Created transaction destination changed")
+        return {}
+
     identities: dict[str, str] = {}
     candidates = {
-        "destination": root / theme_name,
+        "destination": destination,
         "previous": work / "previous",
         "rejected": work / "rejected",
         "rejected-install": work / "rejected-install",
@@ -1047,9 +1079,22 @@ def _authenticate_transaction(
             continue
         version, receipt = _installed_identity(path, theme_id, theme_name)
         normalized = version.removeprefix("v")
-        if normalized == new_version and receipt == journal["newReceipt"]:
+        matches_new = normalized == new_version and receipt == journal["newReceipt"]
+        matches_previous = (
+            previous_normalized is not None
+            and normalized == previous_normalized
+            and receipt == journal["previousReceipt"]
+        )
+        if matches_new and matches_previous:
+            if label == "previous" or (
+                label == "destination" and candidates["rejected"].exists()
+            ):
+                identities[label] = "previous"
+            else:
+                identities[label] = "new"
+        elif matches_new:
             identities[label] = "new"
-        elif previous_normalized is not None and normalized == previous_normalized and receipt == journal["previousReceipt"]:
+        elif matches_previous:
             identities[label] = "previous"
         else:
             raise ThemePackageError(
@@ -1057,15 +1102,27 @@ def _authenticate_transaction(
             )
     if not identities:
         raise ThemePackageError("invalid_transaction", "Theme transaction has no owned files")
-    state = journal["state"]
-    if state == "swapped" and identities.get("destination") != "new":
-        raise ThemePackageError("invalid_transaction", "Prepared theme identity is invalid")
+    if state == "swapped":
+        expected_topologies = (
+            {"destination": "new", "previous": "previous"}
+            if journal["hadPrevious"]
+            else {"destination": "new"},
+            {"rejected": "new", "previous": "previous"}
+            if journal["hadPrevious"]
+            else {"rejected": "new"},
+            {"destination": "previous", "rejected": "new"}
+            if journal["hadPrevious"]
+            else {"rejected": "new"},
+        )
+        if identities not in expected_topologies:
+            raise ThemePackageError("invalid_transaction", "Prepared theme identity is invalid")
     if state == "rolled_back" and (
         journal["hadPrevious"] and identities.get("destination") != "previous"
     ):
         raise ThemePackageError("invalid_transaction", "Rolled back theme identity is invalid")
     if state == "committed" and identities.get("destination") != "new":
         raise ThemePackageError("invalid_transaction", "Committed theme identity is invalid")
+    return identities
 
 
 def _swap_theme(source: Path, destination: Path, backup: Path) -> None:
@@ -1157,13 +1214,30 @@ def prepare_theme_archive(
             raise ThemePackageError(
                 "invalid_receipts", "Installed theme receipt does not match its files"
             )
-        token = secrets.token_urlsafe(32)
-        work = Path(tempfile.mkdtemp(prefix=f"{_TRANSACTION_PREFIX}{token}-", dir=root.parent))
-        _fsync_directory(root.parent)
-        transaction_token = work.name.removeprefix(_TRANSACTION_PREFIX)
+        transaction_token = secrets.token_urlsafe(32)
+        published_work = _transaction_path(root, transaction_token)
+        while published_work.exists() or published_work.is_symlink():
+            transaction_token = secrets.token_urlsafe(32)
+            published_work = _transaction_path(root, transaction_token)
+        work = Path(tempfile.mkdtemp(prefix=".panel-theme-building-", dir=root.parent))
         prepared = False
         retain_for_recovery = False
         try:
+            created_journal = {
+                "schemaVersion": 2,
+                "token": transaction_token,
+                "themeId": theme_id,
+                "themeName": theme_name,
+                "version": version,
+                "hadPrevious": destination.exists(),
+                "previousVersion": previous_version,
+                "newReceipt": None,
+                "previousReceipt": previous_receipt,
+                "state": "created",
+            }
+            _write_journal(work / "transaction.json", created_journal)
+            _durable_replace(work, published_work)
+            work = published_work
             extracted = _extract_verified_archive(
                 archive_path,
                 work / "extracted",
@@ -1174,15 +1248,8 @@ def prepare_theme_archive(
             _set_tree_ownership(extracted, css_loader_owner.st_uid, css_loader_owner.st_gid)
             _fsync_tree(extracted)
             journal = {
-                "schemaVersion": 2,
-                "token": transaction_token,
-                "themeId": theme_id,
-                "themeName": theme_name,
-                "version": version,
-                "hadPrevious": destination.exists(),
-                "previousVersion": previous_version,
+                **created_journal,
                 "newReceipt": new_receipt,
-                "previousReceipt": previous_receipt,
                 "state": "staged",
             }
             _write_journal(work / "transaction.json", journal)
@@ -1214,20 +1281,33 @@ def _finish_rollback(
     themes_root: Path,
     receipts_path: Path,
 ) -> None:
+    _authenticate_pending_receipt(receipts_path, journal)
     destination = themes_root / str(journal["themeName"])
     backup = work / "previous"
     rejected = work / "rejected"
+    identities = _authenticate_transaction(work, journal, themes_root)
     if destination.is_symlink() or (destination.exists() and not destination.is_dir()):
         raise ThemePackageError("rollback_failed", "Installed theme path is unsafe")
     try:
-        if destination.exists():
+        if identities.get("destination") == "new":
             _durable_replace(destination, rejected)
+            identities = {
+                **{key: value for key, value in identities.items() if key != "destination"},
+                "rejected": "new",
+            }
+        elif identities.get("rejected") != "new":
+            raise OSError("Rejected theme is unavailable")
         if journal["hadPrevious"]:
-            if backup.is_symlink() or not backup.is_dir():
+            if identities.get("previous") == "previous":
+                if backup.is_symlink() or not backup.is_dir() or destination.exists():
+                    raise OSError("Previous theme backup is unavailable")
+                _durable_replace(backup, destination)
+            elif identities.get("destination") != "previous":
                 raise OSError("Previous theme backup is unavailable")
-            _durable_replace(backup, destination)
+        elif destination.exists() or destination.is_symlink():
+            raise OSError("New theme destination was not removed")
     except OSError as error:
-        if rejected.exists() and not destination.exists():
+        if rejected.exists() and not destination.exists() and backup.exists():
             try:
                 _durable_replace(rejected, destination)
             except OSError:
@@ -1242,6 +1322,34 @@ def _finish_rollback(
         journal["previousReceipt"] if isinstance(journal["previousReceipt"], dict) else None,
     )
     _write_journal(work / "transaction.json", {**journal, "state": "rolled_back"})
+
+
+def _current_receipt(
+    receipts_path: Path,
+    catalog_id: str,
+) -> dict[str, object] | None:
+    return next(
+        (
+            receipt
+            for receipt in _read_receipts(receipts_path, strict=True)
+            if receipt["catalogId"] == catalog_id
+        ),
+        None,
+    )
+
+
+def _authenticate_pending_receipt(
+    receipts_path: Path,
+    journal: dict[str, object],
+) -> None:
+    current = _current_receipt(receipts_path, str(journal["themeId"]))
+    previous = journal["previousReceipt"]
+    new = journal["newReceipt"]
+    if current != previous and current != new:
+        raise ThemePackageError(
+            "invalid_transaction",
+            "Theme transaction receipt identity is invalid",
+        )
 
 
 def _installed_version(destination: Path) -> str | None:
@@ -1332,6 +1440,21 @@ def _recover_transaction(
     if state in ("acknowledged", "committed"):
         _remove_terminal_transaction(work)
         return False
+    if state == "created":
+        previous_receipt = (
+            journal["previousReceipt"]
+            if isinstance(journal["previousReceipt"], dict)
+            else None
+        )
+        if _current_receipt(receipts_path, str(journal["themeId"])) != previous_receipt:
+            raise ThemePackageError(
+                "invalid_transaction",
+                "Created transaction receipt identity is invalid",
+            )
+        _durable_remove_tree(work)
+        return False
+    if state == "swapped":
+        _authenticate_pending_receipt(receipts_path, journal)
     if state == "rolled_back":
         _replace_receipt(
             receipts_path,

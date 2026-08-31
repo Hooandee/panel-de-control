@@ -18,6 +18,11 @@ THEME_NAME = "Example Theme"
 THEME_VERSION = "1.2.3"
 LEGACY_THEME_ID = "hooandee-gallery"
 LEGACY_THEME_NAME = "Hooandee Gallery"
+EXTENSION_SOURCE = b"module.exports=Object.freeze({abiVersion:1,mount(){return()=>{}}});\n"
+
+
+class SimulatedProcessLoss(BaseException):
+    pass
 
 
 def _hold_theme_mutation_lock(
@@ -37,8 +42,20 @@ def _write_package(
     theme_name: str = THEME_NAME,
     version: str = THEME_VERSION,
     extra_entries: dict[str, bytes] | None = None,
+    extension_source: bytes | None = None,
 ) -> tuple[Path, dict]:
     archive = root / "example-theme.zip"
+    marker: dict[str, object] = {
+        "schemaVersion": 2,
+        "catalogId": catalog_id,
+    }
+    if extension_source is not None:
+        marker["extension"] = {
+            "abiVersion": 1,
+            "entrypoint": "panel-extension.js",
+            "size": len(extension_source),
+            "sha256": hashlib.sha256(extension_source).hexdigest(),
+        }
     entries = {
         f"{theme_name}/theme.json": json.dumps({
             "name": theme_name,
@@ -49,11 +66,13 @@ def _write_package(
             "inject": {"tokens.css": ["bigpicture"]},
             "patches": {},
         }).encode(),
-        f"{theme_name}/panel-theme.json": json.dumps({
-            "schemaVersion": 2,
-            "catalogId": catalog_id,
-        }).encode(),
+        f"{theme_name}/panel-theme.json": json.dumps(marker).encode(),
         f"{theme_name}/tokens.css": b":root { --example-accent: #fff; }\n",
+        **(
+            {f"{theme_name}/panel-extension.js": extension_source}
+            if extension_source is not None
+            else {}
+        ),
         **(extra_entries or {}),
     }
     with zipfile.ZipFile(archive, "w") as package:
@@ -94,6 +113,8 @@ def _journal(
     state: str,
     had_previous: bool,
     previous_version: str | None = None,
+    new_receipt: dict[str, object] | None = None,
+    previous_receipt: dict[str, object] | None = None,
 ) -> dict[str, object]:
     return {
         "schemaVersion": 2,
@@ -103,8 +124,8 @@ def _journal(
         "version": THEME_VERSION,
         "hadPrevious": had_previous,
         "previousVersion": previous_version,
-        "newReceipt": None,
-        "previousReceipt": None,
+        "newReceipt": new_receipt,
+        "previousReceipt": previous_receipt,
         "state": state,
     }
 
@@ -240,6 +261,226 @@ def test_durable_replace_flushes_both_parent_directories(
 
     assert flushed == [source.parent, destination.parent]
     assert destination.is_dir()
+
+
+def test_transaction_directory_is_not_visible_before_its_created_journal_is_durable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    archive, descriptor = _write_package(tmp_path)
+    themes_root = tmp_path / "themes"
+    original_write_journal = theme_packages._write_journal
+    visible_at_first_journal: list[list[Path]] = []
+
+    def observe_first_journal(path: Path, journal: dict[str, object]) -> None:
+        if not visible_at_first_journal:
+            visible_at_first_journal.append(
+                list(tmp_path.glob(".panel-theme-transaction-*"))
+            )
+        original_write_journal(path, journal)
+
+    monkeypatch.setattr(theme_packages, "_write_journal", observe_first_journal)
+
+    prepared = _prepare_theme_archive(archive, descriptor, themes_root)
+
+    assert visible_at_first_journal == [[]]
+    _rollback_theme_install(prepared["transaction"], themes_root)
+    _acknowledge_theme_rollback(prepared["transaction"], themes_root)
+
+
+@pytest.mark.parametrize("had_previous_extension", [False, True])
+def test_recovery_removes_only_an_authenticated_created_transaction(
+    tmp_path: Path,
+    had_previous_extension: bool,
+) -> None:
+    themes_root = tmp_path / "themes"
+    receipt_store = _receipts(themes_root)
+    previous_version = None
+    previous_receipt = None
+    if had_previous_extension:
+        archive, descriptor = _write_package(
+            tmp_path,
+            version="1.2.2",
+            extension_source=EXTENSION_SOURCE,
+        )
+        installed = _prepare_theme_archive(archive, descriptor, themes_root)
+        _commit_theme_install(installed["transaction"], themes_root)
+        previous_version = "1.2.2"
+        previous_receipt = theme_packages._read_receipts(
+            receipt_store,
+            strict=True,
+        )[0]
+    else:
+        themes_root.mkdir()
+
+    token = "d" * 43
+    work = tmp_path / f".panel-theme-transaction-{token}"
+    (work / "extracted").mkdir(parents=True)
+    (work / "extracted" / "partial.css").write_text("partial", encoding="utf-8")
+    theme_packages._write_journal(
+        work / "transaction.json",
+        _journal(
+            token,
+            state="created",
+            had_previous=had_previous_extension,
+            previous_version=previous_version,
+            previous_receipt=previous_receipt,
+        ),
+    )
+
+    assert _recover_theme_transactions(themes_root) == []
+    assert not work.exists()
+    assert theme_packages._read_receipts(receipt_store, strict=True) == (
+        [previous_receipt] if previous_receipt is not None else []
+    )
+    if had_previous_extension:
+        assert theme_packages._installed_version(themes_root / THEME_NAME) == "1.2.2"
+    else:
+        assert not (themes_root / THEME_NAME).exists()
+
+
+def test_recovery_rejects_a_forged_created_transaction_without_deleting_it(
+    tmp_path: Path,
+) -> None:
+    themes_root = tmp_path / "themes"
+    themes_root.mkdir()
+    token = "e" * 43
+    work = tmp_path / f".panel-theme-transaction-{token}"
+    work.mkdir()
+    (work / "not-created-by-panel").write_text("keep", encoding="utf-8")
+    theme_packages._write_journal(
+        work / "transaction.json",
+        _journal(token, state="created", had_previous=False),
+    )
+
+    with pytest.raises(theme_packages.ThemePackageError) as error:
+        _recover_theme_transactions(themes_root)
+
+    assert error.value.code == "invalid_journal"
+    assert (work / "not-created-by-panel").read_text(encoding="utf-8") == "keep"
+
+
+def test_recovery_rejects_a_swapped_transaction_with_an_unrelated_receipt(
+    tmp_path: Path,
+) -> None:
+    themes_root = tmp_path / "themes"
+    receipt_store = _receipts(themes_root)
+    archive, descriptor = _write_package(
+        tmp_path,
+        version="1.2.2",
+        extension_source=EXTENSION_SOURCE + b"// previous\n",
+    )
+    previous = _prepare_theme_archive(archive, descriptor, themes_root)
+    _commit_theme_install(previous["transaction"], themes_root)
+    archive, descriptor = _write_package(
+        tmp_path,
+        extension_source=EXTENSION_SOURCE,
+    )
+    prepared = _prepare_theme_archive(archive, descriptor, themes_root)
+    transaction = tmp_path / f".panel-theme-transaction-{prepared['transaction']}"
+    forged_receipt = {
+        **theme_packages._read_receipts(receipt_store, strict=True)[0],
+        "version": "9.9.9",
+    }
+    theme_packages._write_receipts(receipt_store, [forged_receipt])
+
+    with pytest.raises(theme_packages.ThemePackageError) as error:
+        _recover_theme_transactions(themes_root)
+
+    assert error.value.code == "invalid_journal"
+    assert theme_packages._installed_version(themes_root / THEME_NAME) == THEME_VERSION
+    assert transaction.exists()
+
+
+@pytest.mark.parametrize(
+    ("had_previous", "with_extension", "crash_boundary"),
+    [
+        (True, False, "rejected"),
+        (True, False, "restored"),
+        (True, True, "receipt"),
+        (True, True, "journal"),
+        (False, False, "rejected"),
+        (False, True, "receipt"),
+        (False, False, "journal"),
+    ],
+)
+def test_recovery_finishes_rollback_after_every_durable_boundary(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    had_previous: bool,
+    with_extension: bool,
+    crash_boundary: str,
+) -> None:
+    themes_root = tmp_path / "themes"
+    receipt_store = _receipts(themes_root)
+    previous_receipts: list[dict[str, object]] = []
+    if had_previous:
+        previous_source = EXTENSION_SOURCE + b"// previous\n" if with_extension else None
+        archive, descriptor = _write_package(
+            tmp_path,
+            version="1.2.2",
+            extension_source=previous_source,
+        )
+        previous = _prepare_theme_archive(archive, descriptor, themes_root)
+        _commit_theme_install(previous["transaction"], themes_root)
+        previous_receipts = theme_packages._read_receipts(receipt_store, strict=True)
+
+    archive, descriptor = _write_package(
+        tmp_path,
+        extension_source=EXTENSION_SOURCE if with_extension else None,
+    )
+    prepared = _prepare_theme_archive(archive, descriptor, themes_root)
+    transaction = tmp_path / f".panel-theme-transaction-{prepared['transaction']}"
+    destination = themes_root / THEME_NAME
+    original_durable_replace = theme_packages._durable_replace
+    original_replace_receipt = theme_packages._replace_receipt
+    original_write_journal = theme_packages._write_journal
+
+    def crash_after_replace(source: Path, target: Path) -> None:
+        original_durable_replace(source, target)
+        if crash_boundary == "rejected" and target == transaction / "rejected":
+            raise SimulatedProcessLoss
+        if crash_boundary == "restored" and source == transaction / "previous":
+            raise SimulatedProcessLoss
+
+    def crash_after_receipt(
+        path: Path,
+        catalog_id: str,
+        receipt: dict[str, object] | None,
+    ) -> None:
+        original_replace_receipt(path, catalog_id, receipt)
+        if crash_boundary == "receipt":
+            raise SimulatedProcessLoss
+
+    def crash_after_journal(path: Path, journal: dict[str, object]) -> None:
+        original_write_journal(path, journal)
+        if crash_boundary == "journal" and journal["state"] == "rolled_back":
+            raise SimulatedProcessLoss
+
+    monkeypatch.setattr(theme_packages, "_durable_replace", crash_after_replace)
+    monkeypatch.setattr(theme_packages, "_replace_receipt", crash_after_receipt)
+    monkeypatch.setattr(theme_packages, "_write_journal", crash_after_journal)
+
+    with pytest.raises(SimulatedProcessLoss):
+        _rollback_theme_install(prepared["transaction"], themes_root)
+
+    monkeypatch.setattr(theme_packages, "_durable_replace", original_durable_replace)
+    monkeypatch.setattr(theme_packages, "_replace_receipt", original_replace_receipt)
+    monkeypatch.setattr(theme_packages, "_write_journal", original_write_journal)
+
+    pending = _recover_theme_transactions(themes_root)
+
+    assert pending == [{
+        "transaction": prepared["transaction"],
+        "theme_name": THEME_NAME,
+        "previous_version": "1.2.2" if had_previous else None,
+    }]
+    assert theme_packages._read_receipts(receipt_store, strict=True) == previous_receipts
+    if had_previous:
+        assert theme_packages._installed_version(themes_root / THEME_NAME) == "1.2.2"
+    else:
+        assert not destination.exists()
+    _acknowledge_theme_rollback(prepared["transaction"], themes_root)
 
 
 def _write_legacy_gallery(installed: Path, version: str = "v0.5.0") -> None:
@@ -796,12 +1037,9 @@ def test_install_archive_restores_previous_theme_when_atomic_swap_fails(tmp_path
     marker = installed / "keep.css"
     marker.write_text("keep", encoding="utf-8")
     original_replace = theme_packages.os.replace
-    calls = 0
 
     def fail_install(source, destination):
-        nonlocal calls
-        calls += 1
-        if calls == 2:
+        if Path(source).name == THEME_NAME and Path(destination) == installed:
             raise OSError("simulated atomic swap failure")
         return original_replace(source, destination)
 
