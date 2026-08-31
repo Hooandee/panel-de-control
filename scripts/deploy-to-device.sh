@@ -18,6 +18,10 @@ PLUGIN="${2:-Panel de Control}"
 HOST="deck@${IP}"
 SUDO_PASS="${DECK_SUDO_PASS:?set DECK_SUDO_PASS to the device sudo password}"
 
+case "$PLUGIN" in
+  ""|.|..|*/*) echo "invalid plugin name" >&2; exit 1 ;;
+esac
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
@@ -43,12 +47,13 @@ scp -q scripts/sync-plugin-payload.sh "${HOST}:/tmp/pdc-sync-plugin-payload.sh"
 echo "==> Installing into ~/homebrew/plugins/${PLUGIN} and restarting loader"
 ssh "$HOST" "PLUGIN=$(printf %q "$PLUGIN") SUDO_PASS=$(printf %q "$SUDO_PASS") bash -s" <<'REMOTE'
 set -euo pipefail
-DEST="/home/deck/homebrew/plugins/${PLUGIN}"
+PLUGIN_ROOT="/home/deck/homebrew/plugins"
+DEST="${PLUGIN_ROOT}/${PLUGIN}"
 STAGE="$(mktemp -d)"
 tar -xzf /tmp/pdc-plugin.tgz -C "$STAGE"
 sudo() { command sudo -S "$@" <<<"$SUDO_PASS"; }
 sudo mkdir -p "$DEST"
-sudo bash /tmp/pdc-sync-plugin-payload.sh "$STAGE" "$DEST"
+sudo bash /tmp/pdc-sync-plugin-payload.sh "$STAGE" "$DEST" "$PLUGIN_ROOT"
 sudo chown -R root:root "$DEST"
 sudo chmod 755 "$DEST"
 rm -rf "$STAGE" /tmp/pdc-plugin.tgz /tmp/pdc-sync-plugin-payload.sh
