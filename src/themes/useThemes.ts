@@ -46,8 +46,8 @@ export function useThemes(dependencies?: ThemesDependencies): ThemesController {
   const current = useSyncExternalStore(client.subscribe, client.getSnapshot, client.getSnapshot);
 
   const cards = useMemo(
-    () => deriveThemeCards(deps.catalog, current.snapshot, current.publication),
-    [deps.catalog, current.snapshot, current.publication],
+    () => deriveThemeCards(current.publication, current.snapshot),
+    [current.snapshot, current.publication],
   );
 
   return {

@@ -5,14 +5,16 @@ import type { LaunchTools } from "./launch/catalog";
 // Names must match the Python `async def` on the Plugin class exactly.
 export const getVersion = callable<[], string>("get_version");
 
-export const prepareBundledThemeInstall = callable<[themeId: string], unknown>(
-  "prepare_bundled_theme_install",
-);
 export const prepareRemoteThemeInstall = callable<[
   themeId: string,
   expectedVersion: string,
 ], unknown>("prepare_remote_theme_install");
 export const checkThemeReleases = callable<[force: boolean], unknown>("check_theme_releases");
+export const listThemeExtensions = callable<[], unknown>("list_theme_extensions");
+export const loadThemeExtension = callable<[
+  catalogId: string,
+  version: string,
+], unknown>("load_theme_extension");
 export const commitThemeInstall = callable<[transaction: string], unknown>("commit_theme_install");
 export const rollbackThemeInstall = callable<[transaction: string], unknown>("rollback_theme_install");
 export const getThemeInstallRecoveries = callable<[], unknown>("get_theme_install_recoveries");

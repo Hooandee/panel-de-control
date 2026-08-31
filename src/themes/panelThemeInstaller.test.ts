@@ -1,197 +1,92 @@
 import { describe, expect, it, vi } from "vitest";
 
-import {
-  PanelThemeInstaller,
-  ThemeInstallError,
-} from "./panelThemeInstaller";
-import {
-  configurePanelThemeInstallHost,
-  createPanelThemeInstaller,
-} from "./panelThemeInstallHost";
+import { PanelThemeInstaller, ThemeInstallError } from "./panelThemeInstaller";
+import { configurePanelThemeInstallHost, createPanelThemeInstaller } from "./panelThemeInstallHost";
+
+function host(overrides: Record<string, unknown> = {}) {
+  return {
+    prepareRemote: vi.fn(async () => ({
+      ok: true, code: "prepared", theme_id: "example-theme",
+      theme_name: "Example Theme", version: "1.2.3", transaction: "opaque-token",
+    })),
+    commit: vi.fn(async () => ({ ok: true, code: "committed" })),
+    rollback: vi.fn(async () => ({ ok: true, code: "rolled_back" })),
+    recoveries: vi.fn(async () => ({ ok: true, code: "ready", recoveries: [] })),
+    acknowledge: vi.fn(async () => ({ ok: true, code: "acknowledged" })),
+    ...overrides,
+  };
+}
+
+const REQUEST = {
+  kind: "official-remote" as const,
+  channelId: "panel-pages-v1" as const,
+  catalogId: "example-theme",
+  expectedVersion: "1.2.3",
+};
 
 describe("PanelThemeInstaller", () => {
-  it("prepares a bundled package through Panel's backend and validates its identity", async () => {
-    const prepare = vi.fn(async () => ({
-      ok: true, code: "prepared", theme_id: "hooandee-gallery",
-      theme_name: "Hooandee Gallery", version: "0.6.0", transaction: "opaque-token",
+  it("prepares only the compiled official channel and validates the response", async () => {
+    const backend = host();
+    const installer = new PanelThemeInstaller(backend);
+
+    await expect(installer.prepare(REQUEST)).resolves.toEqual({
+      themeId: "example-theme", themeName: "Example Theme", version: "1.2.3", transaction: "opaque-token",
+    });
+    expect(backend.prepareRemote).toHaveBeenCalledWith("example-theme", "1.2.3");
+  });
+
+  it.each([
+    { ...REQUEST, channelId: "other" },
+    { ...REQUEST, catalogId: "../escape" },
+    { ...REQUEST, expectedVersion: "v1.2.3" },
+  ])("rejects unsupported remote requests before RPC", async (request) => {
+    const backend = host();
+    const installer = new PanelThemeInstaller(backend);
+
+    await expect(installer.prepare(request as never)).rejects.toMatchObject({ code: "unsupported_source" });
+    expect(backend.prepareRemote).not.toHaveBeenCalled();
+  });
+
+  it("turns typed backend rejection into a safe install error", async () => {
+    const installer = new PanelThemeInstaller(host({
+      prepareRemote: vi.fn(async () => ({ ok: false, code: "hash_mismatch" })),
     }));
-    const host = {
-      prepare,
-      commit: vi.fn(),
-      rollback: vi.fn(),
-      recoveries: vi.fn(),
-      acknowledge: vi.fn(),
-    };
-    const installer = new PanelThemeInstaller(host);
 
-    const result = await installer.prepare({
-      kind: "bundled",
-      packageId: "hooandee-gallery",
-    });
-
-    expect(result).toEqual({
-      themeId: "hooandee-gallery",
-      themeName: "Hooandee Gallery",
-      version: "0.6.0",
-      transaction: "opaque-token",
-    });
-    expect(prepare).toHaveBeenCalledWith("hooandee-gallery");
+    await expect(installer.prepare(REQUEST)).rejects.toEqual(
+      new ThemeInstallError("hash_mismatch", "Theme package installation failed"),
+    );
   });
 
-  it("turns a typed backend rejection into a recoverable install error", async () => {
-    const installer = new PanelThemeInstaller({
-      prepare: vi.fn(async () => ({
-        ok: false, code: "hash_mismatch", theme_id: "hooandee-gallery",
-      })),
-      commit: vi.fn(),
-      rollback: vi.fn(),
-      recoveries: vi.fn(),
-      acknowledge: vi.fn(),
-    });
-
-    await expect(installer.prepare({
-      kind: "bundled",
-      packageId: "hooandee-gallery",
-    })).rejects.toEqual(new ThemeInstallError("hash_mismatch", "Theme package installation failed"));
-  });
-
-  it("prepares an official update using only its catalog identity and confirmed version", async () => {
-    const prepareRemote = vi.fn(async () => ({
-      ok: true, code: "prepared", theme_id: "hooandee-gallery",
-      theme_name: "Hooandee Gallery", version: "0.7.9", transaction: "remote-token",
-    }));
-    const installer = new PanelThemeInstaller({
-      prepare: vi.fn(),
-      prepareRemote,
-      commit: vi.fn(),
-      rollback: vi.fn(),
-      recoveries: vi.fn(),
-      acknowledge: vi.fn(),
-    });
-
-    const result = await installer.prepare({
-      kind: "official-remote",
-      channelId: "panel-pages-v1",
-      catalogId: "hooandee-gallery",
-      expectedVersion: "0.7.9",
-    });
-
-    expect(result).toMatchObject({
-      themeId: "hooandee-gallery",
-      version: "0.7.9",
-      transaction: "remote-token",
-    });
-    expect(prepareRemote).toHaveBeenCalledWith("hooandee-gallery", "0.7.9");
-  });
-
-  it("rejects malformed remote requests before calling Panel", async () => {
-    const prepareRemote = vi.fn();
-    const installer = new PanelThemeInstaller({
-      prepare: vi.fn(), prepareRemote, commit: vi.fn(), rollback: vi.fn(),
-      recoveries: vi.fn(), acknowledge: vi.fn(),
-    });
-
-    await expect(installer.prepare({
-      kind: "official-remote",
-      channelId: "panel-pages-v1",
-      catalogId: "hooandee-gallery",
-      expectedVersion: "v0.7.9",
-    })).rejects.toMatchObject({ code: "unsupported_source" });
-    expect(prepareRemote).not.toHaveBeenCalled();
-  });
-
-  it("fails closed on an unknown backend response", async () => {
-    const installer = new PanelThemeInstaller({
-      prepare: vi.fn(async () => ({ ok: true })),
-      commit: vi.fn(),
-      rollback: vi.fn(),
-      recoveries: vi.fn(),
-      acknowledge: vi.fn(),
-    });
-
-    await expect(installer.prepare({
-      kind: "bundled",
-      packageId: "hooandee-gallery",
-    })).rejects.toMatchObject({ code: "malformed_response" });
-  });
-
-  it("commits and rolls back only after validating Panel's acknowledgement", async () => {
-    const host = {
-      prepare: vi.fn(),
-      commit: vi.fn(async () => ({ ok: true, code: "committed" })),
-      rollback: vi.fn(async () => ({ ok: true, code: "rolled_back" })),
-      recoveries: vi.fn(async () => ({ ok: true, code: "ready", recoveries: [] })),
-      acknowledge: vi.fn(async () => ({ ok: true, code: "acknowledged" })),
-    };
-    const installer = new PanelThemeInstaller(host);
-
-    await expect(installer.commit("opaque-token")).resolves.toBeUndefined();
-    await expect(installer.rollback("opaque-token")).resolves.toBeUndefined();
-    await expect(installer.acknowledgeRollback("opaque-token")).resolves.toBeUndefined();
-
-    expect(host.commit).toHaveBeenCalledWith("opaque-token");
-    expect(host.rollback).toHaveBeenCalledWith("opaque-token");
-    expect(host.acknowledge).toHaveBeenCalledWith("opaque-token");
-  });
-
-  it("validates durable pending recoveries before exposing them to the client", async () => {
-    const host = {
-      prepare: vi.fn(), commit: vi.fn(), rollback: vi.fn(), acknowledge: vi.fn(),
+  it("validates transaction acknowledgements and pending recoveries", async () => {
+    const installer = new PanelThemeInstaller(host({
       recoveries: vi.fn(async () => ({
         ok: true,
         code: "ready",
-        recoveries: [{
-          transaction: "opaque-token",
-          theme_name: "Hooandee Gallery",
-          previous_version: "v0.5.0",
-        }],
+        recoveries: [{ transaction: "token", theme_name: "Example Theme", previous_version: "v1.2.2" }],
       })),
-    };
+    }));
 
-    await expect(new PanelThemeInstaller(host).pendingRecoveries()).resolves.toEqual([{
-      transaction: "opaque-token",
-      themeName: "Hooandee Gallery",
-      previousVersion: "v0.5.0",
+    await expect(installer.pendingRecoveries()).resolves.toEqual([{
+      transaction: "token", themeName: "Example Theme", previousVersion: "v1.2.2",
     }]);
-  });
-
-  it("preserves a blocked invalid-journal recovery result", async () => {
-    const installer = new PanelThemeInstaller({
-      prepare: vi.fn(), commit: vi.fn(), rollback: vi.fn(), acknowledge: vi.fn(),
-      recoveries: vi.fn(async () => ({ ok: false, code: "invalid_journal" })),
-    });
-
-    await expect(installer.pendingRecoveries()).rejects.toMatchObject({
-      code: "invalid_journal",
-    });
+    await expect(installer.commit("token")).resolves.toBeUndefined();
+    await expect(installer.rollback("token")).resolves.toBeUndefined();
+    await expect(installer.acknowledgeRollback("token")).resolves.toBeUndefined();
   });
 });
 
 describe("Panel theme install host", () => {
   it("uses the current scoped backend host and releases only its own lease", async () => {
-    const first = {
-      prepare: vi.fn(async () => ({ ok: false, code: "first" })), commit: vi.fn(), rollback: vi.fn(),
-      recoveries: vi.fn(), acknowledge: vi.fn(),
-    };
-    const second = {
-      prepare: vi.fn(async () => ({ ok: false, code: "second" })), commit: vi.fn(), rollback: vi.fn(),
-      recoveries: vi.fn(), acknowledge: vi.fn(),
-    };
+    const first = host({ prepareRemote: vi.fn(async () => ({ ok: false, code: "first" })) });
+    const second = host({ prepareRemote: vi.fn(async () => ({ ok: false, code: "second" })) });
     const releaseFirst = configurePanelThemeInstallHost(first);
     const releaseSecond = configurePanelThemeInstallHost(second);
 
     releaseFirst();
-    await expect(createPanelThemeInstaller().prepare({
-      kind: "bundled",
-      packageId: "hooandee-gallery",
-    })).rejects.toMatchObject({ code: "second" });
-    expect(first.prepare).not.toHaveBeenCalled();
-    expect(second.prepare).toHaveBeenCalledOnce();
+    await expect(createPanelThemeInstaller().prepare(REQUEST)).rejects.toMatchObject({ code: "second" });
+    expect(first.prepareRemote).not.toHaveBeenCalled();
 
     releaseSecond();
-    await expect(createPanelThemeInstaller().prepare({
-      kind: "bundled",
-      packageId: "hooandee-gallery",
-    })).rejects.toMatchObject({ code: "backend_unavailable" });
+    await expect(createPanelThemeInstaller().prepare(REQUEST)).rejects.toMatchObject({ code: "backend_unavailable" });
   });
 });

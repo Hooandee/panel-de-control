@@ -8,8 +8,7 @@ export interface ThemeInstallResult {
 }
 
 export interface ThemeInstallHost {
-  prepare(themeId: string): Promise<unknown>;
-  prepareRemote?(themeId: string, expectedVersion: string): Promise<unknown>;
+  prepareRemote(themeId: string, expectedVersion: string): Promise<unknown>;
   commit(transaction: string): Promise<unknown>;
   rollback(transaction: string): Promise<unknown>;
   recoveries(): Promise<unknown>;
@@ -41,25 +40,18 @@ export class PanelThemeInstaller {
   constructor(private readonly host: ThemeInstallHost) {}
 
   async prepare(source: ThemeInstallRequest): Promise<ThemeInstallResult> {
-    const catalogId = source.kind === "bundled" ? source.packageId : source.catalogId;
+    const catalogId = source.catalogId;
     if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(catalogId)) {
       throw new ThemeInstallError("unsupported_source", "Theme install source is not permitted");
     }
-    let response: unknown;
-    if (source.kind === "bundled") {
-      response = await this.host.prepare(source.packageId);
-    } else {
-      if (
-        source.channelId !== "panel-pages-v1"
-        || !/^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/.test(
-          source.expectedVersion,
-        )
-        || !this.host.prepareRemote
-      ) {
-        throw new ThemeInstallError("unsupported_source", "Theme install source is not permitted");
-      }
-      response = await this.host.prepareRemote(source.catalogId, source.expectedVersion);
+    if (
+      source.kind !== "official-remote"
+      || source.channelId !== "panel-pages-v1"
+      || !/^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/.test(source.expectedVersion)
+    ) {
+      throw new ThemeInstallError("unsupported_source", "Theme install source is not permitted");
     }
+    const response = await this.host.prepareRemote(source.catalogId, source.expectedVersion);
     if (!isRecord(response) || typeof response.ok !== "boolean" || !nonEmptyString(response.code)) {
       throw new ThemeInstallError("malformed_response", "Panel returned an invalid theme install result");
     }

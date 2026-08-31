@@ -1,40 +1,26 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { CssLoaderReadySnapshot } from "./cssLoaderAdapter";
 import { createRemotePublicationClient } from "./remotePublicationClient";
 
-const READY: CssLoaderReadySnapshot = {
-  status: "ready",
-  pluginVersion: "2.1.2",
-  backendVersion: 9,
-  themes: [],
-};
-
 describe("remote publication client", () => {
-  it.each(["latest", "v2.1.2", "2.1", "2.1.2-beta.1"])(
-    "fails closed before RPC for a non-stable CSS Loader version: %s",
-    async (pluginVersion) => {
-      const check = vi.fn();
-      const result = await createRemotePublicationClient(check).check(
-        { ...READY, pluginVersion },
-        false,
-      );
+  it("discovers publications without depending on a CSS Loader snapshot", async () => {
+    const check = vi.fn(async () => ({ status: "published", checkedAt: 1, themes: [] }));
 
-      expect(result).toEqual({
-        status: "recoverable-failure",
-        code: "invalid_descriptor",
-        retryable: false,
-      });
-      expect(check).not.toHaveBeenCalled();
-    },
-  );
-
-  it("leaves runtime compatibility to the authoritative backend", async () => {
-    const check = vi.fn(async () => ({ status: "disabled" }));
-
-    const result = await createRemotePublicationClient(check).check(READY, true);
-
-    expect(result).toEqual({ status: "disabled" });
+    await expect(createRemotePublicationClient(check).check(true)).resolves.toEqual({
+      status: "published", checkedAt: 1, themes: [],
+    });
     expect(check).toHaveBeenCalledWith(true);
+  });
+
+  it("fails closed when the backend response is not a sanitized publication", async () => {
+    const result = await createRemotePublicationClient(async () => ({
+      status: "published", checkedAt: 1, themes: [], transportUrl: "https://attacker.invalid",
+    })).check(false);
+
+    expect(result).toEqual({
+      status: "recoverable-failure",
+      code: "invalid_descriptor",
+      retryable: true,
+    });
   });
 });

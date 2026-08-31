@@ -1,45 +1,44 @@
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("../system/pdcStorage", () => ({
-  hydratePrefs: vi.fn(async () => {}),
-  onPrefsHealed: vi.fn(() => () => {}),
-  prefsHydrated: vi.fn(() => false),
-  readString: vi.fn(() => null),
-  writeString: vi.fn(),
+  hydratePrefs: vi.fn(async () => {}), onPrefsHealed: vi.fn(() => () => {}),
+  prefsHydrated: vi.fn(() => false), readString: vi.fn(() => null), writeString: vi.fn(),
 }));
 
-import { translateForLang } from "./index";
+import { DICTS, translateForLang } from "./index";
+
+const GENERIC_THEME_NAMESPACES = new Set([
+  "action", "catalog", "cssLoader", "details", "engine", "group", "install", "loading",
+  "operation", "patches", "recovering", "recovery", "remote", "retry", "state", "title",
+  "update", "version",
+]);
 
 describe("theme translations", () => {
   it.each([
-    ["es", "themes.gallery.name", "Hooandee"],
-    ["en", "themes.gallery.name", "Hooandee"],
-    ["it", "themes.gallery.name", "Hooandee"],
-    ["es", "themes.shattered.name", "Reinos Fragmentados"],
-    ["en", "themes.shattered.name", "Shattered Realms"],
-    ["it", "themes.shattered.name", "Regni Infranti"],
-    ["es", "themes.obsidian.name", "Flor de Obsidiana"],
-    ["en", "themes.obsidian.name", "Obsidian Bloom"],
-    ["it", "themes.obsidian.name", "Fioritura d'Ossidiana"],
-    ["es", "themes.state.comingSoon", "Próximamente"],
-    ["en", "themes.state.comingSoon", "Coming soon"],
-    ["it", "themes.state.comingSoon", "Prossimamente"],
+    ["es", "themes.catalog.empty", "Ahora mismo no hay temas publicados."],
+    ["en", "themes.catalog.empty", "There are no published themes right now."],
+    ["it", "themes.catalog.empty", "Al momento non ci sono temi pubblicati."],
+    ["es", "themes.cssLoader.openStore", "Abrir tienda de Decky"],
+    ["en", "themes.remote.cached", "Offline. Showing the last verified catalog saved on this device."],
     ["it", "themes.remote.retry", "Controlla aggiornamenti"],
-    ["es", "themes.cssLoader.missing", "Para instalar y usar temas necesitas CSS Loader. Instálalo desde la tienda de Decky y después pulsa «Comprobar de nuevo»."],
-    ["en", "themes.cssLoader.missing", "You need CSS Loader to install and use themes. Install it from the Decky Store, then select “Check again”."],
-    ["it", "themes.cssLoader.missing", "Per installare e usare i temi serve CSS Loader. Installalo dallo store di Decky, poi seleziona «Verifica di nuovo»."],
   ] as const)("translates %s/%s", (lang, key, expected) => {
     expect(translateForLang(lang, key)).toBe(expected);
   });
 
-  it("formats local and published theme versions independently", () => {
-    expect(translateForLang("es", "themes.version.installed", { version: "v0.7.8" }))
-      .toBe("Instalada: v0.7.8");
-    expect(translateForLang("en", "themes.version.published", { version: "v0.7.9" }))
-      .toBe("Published: v0.7.9");
+  it("contains only generic theme UI namespaces", () => {
+    for (const dictionary of Object.values(DICTS)) {
+      expect(Object.keys(dictionary)
+        .filter((key) => key.startsWith("themes."))
+        .map((key) => key.split(".")[1])
+        .filter((namespace) => !GENERIC_THEME_NAMESPACES.has(namespace)))
+        .toEqual([]);
+    }
   });
 
-  it("preserves the complete Italian locale outside the theme surface", () => {
-    expect(translateForLang("it", "load.retry")).toBe("Riprova");
+  it("formats installed and published versions independently", () => {
+    expect(translateForLang("es", "themes.version.installed", { version: "v1.2.2" }))
+      .toBe("Instalada: v1.2.2");
+    expect(translateForLang("en", "themes.version.published", { version: "v1.2.3" }))
+      .toBe("Published: v1.2.3");
   });
 });

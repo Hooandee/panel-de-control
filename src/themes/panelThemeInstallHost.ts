@@ -27,16 +27,13 @@ export function configurePanelThemeInstallHost(host: ThemeInstallHost): () => vo
 
 export function createPanelThemeInstaller(): PanelThemeInstaller {
   const call = (
-    operation: "prepare" | "commit" | "rollback" | "acknowledge",
+    operation: "commit" | "rollback" | "acknowledge",
     value: string,
   ): Promise<unknown> => requireConfiguredHost()[operation](value);
   return new PanelThemeInstaller({
-    prepare: (themeId) => call("prepare", themeId),
-    prepareRemote: (themeId, expectedVersion) => requireConfiguredHost().prepareRemote?.(
+    prepareRemote: (themeId, expectedVersion) => requireConfiguredHost().prepareRemote(
       themeId,
       expectedVersion,
-    ) ?? Promise.reject(
-      new ThemeInstallError("backend_unavailable", "Remote theme installer is unavailable"),
     ),
     commit: (transaction) => call("commit", transaction),
     rollback: (transaction) => call("rollback", transaction),

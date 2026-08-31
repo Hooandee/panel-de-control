@@ -8,7 +8,8 @@ import {
   checkThemeReleases,
   commitThemeInstall,
   getThemeInstallRecoveries,
-  prepareBundledThemeInstall,
+  listThemeExtensions,
+  loadThemeExtension,
   prepareRemoteThemeInstall,
   rollbackThemeInstall,
 } from "./api";
@@ -39,6 +40,7 @@ import { startThemesRuntime } from "./themes/runtime/start";
 import { createProductionThemesDependencies } from "./themes/themesClient";
 import { configureThemePublicationCheckHost } from "./themes/remotePublicationClient";
 import { getThemesClient } from "./themes/useThemes";
+import { configureThemeExtensionRpcHost } from "./themes/themeExtensionClient";
 
 // Localized header title only; the internal plugin name / install folder stays
 // "Panel de Control" (renaming it would break existing installs and the updater).
@@ -76,7 +78,6 @@ export default definePlugin(() => {
   const deckyHost = window;
   const releaseCssLoaderHost = configureDeckyCssLoaderHost(deckyHost);
   const releaseThemeInstallHost = configurePanelThemeInstallHost({
-    prepare: prepareBundledThemeInstall,
     prepareRemote: prepareRemoteThemeInstall,
     commit: commitThemeInstall,
     rollback: rollbackThemeInstall,
@@ -84,6 +85,10 @@ export default definePlugin(() => {
     acknowledge: acknowledgeThemeInstallRollback,
   });
   const releaseThemePublicationHost = configureThemePublicationCheckHost(checkThemeReleases);
+  const releaseThemeExtensionHost = configureThemeExtensionRpcHost({
+    list: listThemeExtensions,
+    load: loadThemeExtension,
+  });
   const themesClient = getThemesClient(createProductionThemesDependencies());
   // Restore durable UI prefs into the localStorage cache at plugin scope (so the
   // QAM-closed toast uses the right language), then re-apply the healed values.
@@ -152,6 +157,7 @@ export default definePlugin(() => {
       stopThemesRuntime();
       releaseThemeInstallHost();
       releaseThemePublicationHost();
+      releaseThemeExtensionHost();
       releaseCssLoaderHost();
     },
   };

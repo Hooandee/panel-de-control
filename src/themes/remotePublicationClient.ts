@@ -1,18 +1,16 @@
-import type { CssLoaderReadySnapshot } from "./cssLoaderAdapter";
 import {
   parseThemePublication,
   type ThemePublicationState,
 } from "./remotePublication";
 
 export interface ThemePublicationClient {
-  check(snapshot: CssLoaderReadySnapshot, force: boolean): Promise<ThemePublicationState>;
+  check(force: boolean): Promise<ThemePublicationState>;
 }
 
 export type ThemePublicationCheckHost = (force: boolean) => Promise<unknown>;
 
 let configuredCheck: ThemePublicationCheckHost | undefined;
 let configuredLease: symbol | null = null;
-const STABLE_VERSION = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/;
 
 export function configureThemePublicationCheckHost(
   check: ThemePublicationCheckHost,
@@ -31,21 +29,7 @@ export function createRemotePublicationClient(
   check?: ThemePublicationCheckHost,
 ): ThemePublicationClient {
   return {
-    async check(snapshot, force) {
-      const backendVersion = snapshot.backendVersion;
-      if (
-        typeof snapshot.pluginVersion !== "string"
-        || !STABLE_VERSION.test(snapshot.pluginVersion)
-        || typeof backendVersion !== "number"
-        || !Number.isSafeInteger(backendVersion)
-        || backendVersion <= 0
-      ) {
-        return {
-          status: "recoverable-failure",
-          code: "invalid_descriptor",
-          retryable: false,
-        };
-      }
+    async check(force) {
       try {
         const selectedCheck = check ?? configuredCheck;
         if (!selectedCheck) throw new Error("Theme publication backend is unavailable");

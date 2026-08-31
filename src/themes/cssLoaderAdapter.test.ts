@@ -7,11 +7,11 @@ import {
 } from "./cssLoaderAdapter";
 
 const RAW_THEME = {
-  id: "Hooandee Obsidian Bloom",
-  name: "Hooandee Obsidian Bloom",
-  display_name: "Obsidian Bloom",
+  id: "Example Theme",
+  name: "Example Theme",
+  display_name: "Example Theme",
   version: "0.1.0",
-  author: "Hooandee",
+  author: "Example Author",
   enabled: true,
   bundled: false,
   require: 9,
@@ -108,9 +108,9 @@ describe("CssLoaderAdapter.inspect", () => {
     expect(snapshot.pluginVersion).toBe("2.1.2");
     expect(snapshot.backendVersion).toBe(9);
     expect(snapshot.themes[0]).toMatchObject({
-      id: "Hooandee Obsidian Bloom",
-      name: "Hooandee Obsidian Bloom",
-      displayName: "Obsidian Bloom",
+      id: "Example Theme",
+      name: "Example Theme",
+      displayName: "Example Theme",
       version: "0.1.0",
       enabled: true,
     });
@@ -224,7 +224,7 @@ describe("CssLoaderAdapter mutations", () => {
     let version = "0.5.0";
     const call = vi.fn(async (method: string) => {
       if (method === "get_backend_version") return 9;
-      if (method === "get_themes") return [{ ...RAW_THEME, name: "Hooandee Gallery", version }];
+      if (method === "get_themes") return [{ ...RAW_THEME, version }];
       if (method === "reset") {
         version = "0.6.0";
         return { fails: [] };
@@ -234,9 +234,9 @@ describe("CssLoaderAdapter mutations", () => {
     const adapter = new CssLoaderAdapter(host({ call }));
 
     const before = await adapter.requireReady();
-    const result = await adapter.reloadTheme("Hooandee Gallery", "0.6.0", before);
+    const result = await adapter.reloadTheme("Example Theme", "0.6.0", before);
 
-    expect(result.themes.find((theme) => theme.name === "Hooandee Gallery")?.version).toBe("0.6.0");
+    expect(result.themes.find((theme) => theme.name === "Example Theme")?.version).toBe("0.6.0");
     expect(call.mock.calls.map(([method]) => method)).toEqual([
       "get_backend_version",
       "get_themes",
@@ -249,17 +249,17 @@ describe("CssLoaderAdapter mutations", () => {
   it("rejects a reload when CSS Loader reports a different installed version", async () => {
     const call = vi.fn(async (method: string) => {
       if (method === "get_backend_version") return 9;
-      if (method === "get_themes") return [{ ...RAW_THEME, name: "Hooandee Gallery", version: "0.5.0" }];
+      if (method === "get_themes") return [{ ...RAW_THEME, version: "0.5.0" }];
       if (method === "reset") return { fails: [] };
       throw new Error(`Unexpected method: ${method}`);
     });
     const adapter = new CssLoaderAdapter(host({ call }));
 
     const before = await adapter.requireReady();
-    await expect(adapter.reloadTheme("Hooandee Gallery", "0.6.0", before)).rejects.toEqual(
+    await expect(adapter.reloadTheme("Example Theme", "0.6.0", before)).rejects.toEqual(
       new CssLoaderOperationError(
         "verification_failed",
-        "CSS Loader did not register Hooandee Gallery v0.6.0",
+        "CSS Loader did not register Example Theme v0.6.0",
       ),
     );
   });
@@ -267,14 +267,14 @@ describe("CssLoaderAdapter mutations", () => {
   it("fails closed when CSS Loader returns a malformed reset result", async () => {
     const call = vi.fn(async (method: string) => {
       if (method === "get_backend_version") return 9;
-      if (method === "get_themes") return [{ ...RAW_THEME, name: "Hooandee Gallery", version: "0.6.0" }];
+      if (method === "get_themes") return [{ ...RAW_THEME, version: "0.6.0" }];
       if (method === "reset") return { success: true, message: "not the reset contract" };
       throw new Error(`Unexpected method: ${method}`);
     });
     const adapter = new CssLoaderAdapter(host({ call }));
 
     const before = await adapter.requireReady();
-    await expect(adapter.reloadTheme("Hooandee Gallery", "0.6.0", before)).rejects.toEqual(
+    await expect(adapter.reloadTheme("Example Theme", "0.6.0", before)).rejects.toEqual(
       new CssLoaderOperationError(
         "malformed_response",
         "CSS Loader returned an invalid result for reset",
@@ -285,34 +285,33 @@ describe("CssLoaderAdapter mutations", () => {
   it("rejects a reset that reports any theme load failure", async () => {
     const call = vi.fn(async (method: string) => {
       if (method === "get_backend_version") return 9;
-      if (method === "get_themes") return [{ ...RAW_THEME, name: "Hooandee Gallery", version: "0.5.0" }];
+      if (method === "get_themes") return [{ ...RAW_THEME, version: "0.5.0" }];
       if (method === "reset") return { fails: [["Third Party Theme", "invalid manifest"]] };
       throw new Error(`Unexpected method: ${method}`);
     });
     const adapter = new CssLoaderAdapter(host({ call }));
     const before = await adapter.requireReady();
 
-    await expect(adapter.reloadTheme("Hooandee Gallery", "0.6.0", before)).rejects.toMatchObject({
+    await expect(adapter.reloadTheme("Example Theme", "0.6.0", before)).rejects.toMatchObject({
       code: "mutation_failed",
       message: "CSS Loader could not reload Third Party Theme: invalid manifest",
     });
   });
 
   it("verifies that activation, compatible patches, and third-party themes survive reload", async () => {
-    const galleryBefore = {
+    const themeBefore = {
       ...RAW_THEME,
-      name: "Hooandee Gallery",
       version: "0.5.0",
       enabled: true,
       patches: [{ ...RAW_THEME.patches[0], value: "No" }],
     };
     const thirdParty = { ...RAW_THEME, id: "Other", name: "Other", version: "1.4.0", enabled: false };
-    let themes = [galleryBefore, thirdParty];
+    let themes = [themeBefore, thirdParty];
     const call = vi.fn(async (method: string) => {
       if (method === "get_backend_version") return 9;
       if (method === "get_themes") return structuredClone(themes);
       if (method === "reset") {
-        themes = [{ ...galleryBefore, version: "0.6.0" }, thirdParty];
+        themes = [{ ...themeBefore, version: "0.6.0" }, thirdParty];
         return { fails: [] };
       }
       throw new Error(`Unexpected method: ${method}`);
@@ -320,20 +319,20 @@ describe("CssLoaderAdapter mutations", () => {
     const adapter = new CssLoaderAdapter(host({ call }));
     const before = await adapter.requireReady();
 
-    await expect(adapter.reloadTheme("Hooandee Gallery", "0.6.0", before)).resolves.toMatchObject({
+    await expect(adapter.reloadTheme("Example Theme", "0.6.0", before)).resolves.toMatchObject({
       status: "ready",
     });
   });
 
-  it("fails when reload changes a third-party theme or a preserved Gallery setting", async () => {
-    const galleryBefore = { ...RAW_THEME, name: "Hooandee Gallery", version: "0.5.0", enabled: true };
+  it("fails when reload changes a third-party theme or a preserved theme setting", async () => {
+    const themeBefore = { ...RAW_THEME, version: "0.5.0", enabled: true };
     const thirdParty = { ...RAW_THEME, id: "Other", name: "Other", version: "1.4.0", enabled: false };
     let reset = false;
     const call = vi.fn(async (method: string) => {
       if (method === "get_backend_version") return 9;
       if (method === "get_themes") return reset
-        ? [{ ...galleryBefore, version: "0.6.0", enabled: false }, { ...thirdParty, enabled: true }]
-        : [galleryBefore, thirdParty];
+        ? [{ ...themeBefore, version: "0.6.0", enabled: false }, { ...thirdParty, enabled: true }]
+        : [themeBefore, thirdParty];
       if (method === "reset") {
         reset = true;
         return { fails: [] };
@@ -343,13 +342,13 @@ describe("CssLoaderAdapter mutations", () => {
     const adapter = new CssLoaderAdapter(host({ call }));
     const before = await adapter.requireReady();
 
-    await expect(adapter.reloadTheme("Hooandee Gallery", "0.6.0", before)).rejects.toMatchObject({
+    await expect(adapter.reloadTheme("Example Theme", "0.6.0", before)).rejects.toMatchObject({
       code: "verification_failed",
     });
   });
 
   it("can reset and verify the exact pre-install snapshot after rollback", async () => {
-    const original = { ...RAW_THEME, name: "Hooandee Gallery", version: "0.5.0" };
+    const original = { ...RAW_THEME, version: "0.5.0" };
     const call = vi.fn(async (method: string) => {
       if (method === "get_backend_version") return 9;
       if (method === "get_themes") return [original];
@@ -363,15 +362,15 @@ describe("CssLoaderAdapter mutations", () => {
   });
 
   it("reconciles a durable rollback after restart and protects every unrelated theme", async () => {
-    const galleryNew = { ...RAW_THEME, name: "Hooandee Gallery", version: "0.6.0" };
-    const galleryOld = { ...galleryNew, version: "0.5.0" };
+    const themeNew = { ...RAW_THEME, version: "0.6.0" };
+    const themeOld = { ...themeNew, version: "0.5.0" };
     const thirdParty = { ...RAW_THEME, id: "Other", name: "Other", version: "1.4.0" };
     let reset = false;
     const call = vi.fn(async (method: string) => {
       if (method === "get_backend_version") return 9;
       if (method === "get_themes") return reset
-        ? [galleryOld, thirdParty]
-        : [galleryNew, thirdParty];
+        ? [themeOld, thirdParty]
+        : [themeNew, thirdParty];
       if (method === "reset") {
         reset = true;
         return { fails: [] };
@@ -382,25 +381,24 @@ describe("CssLoaderAdapter mutations", () => {
     const before = await adapter.requireReady();
 
     const after = await adapter.reconcileRecoveredThemes([{
-      themeName: "Hooandee Gallery",
+      themeName: "Example Theme",
       previousVersion: "0.5.0",
     }], before);
 
-    expect(after.themes.find((theme) => theme.name === "Hooandee Gallery")?.version).toBe("0.5.0");
+    expect(after.themes.find((theme) => theme.name === "Example Theme")?.version).toBe("0.5.0");
   });
 
   it.each(["activation", "patch"] as const)(
-    "rejects durable recovery when CSS Loader changes Gallery %s state",
+    "rejects durable recovery when CSS Loader changes the theme %s state",
     async (changedState) => {
-      const galleryNew = {
+      const themeNew = {
         ...RAW_THEME,
-        name: "Hooandee Gallery",
         version: "0.6.0",
         enabled: true,
         patches: [{ ...RAW_THEME.patches[0], value: "No" }],
       };
-      const galleryOld = {
-        ...galleryNew,
+      const themeOld = {
+        ...themeNew,
         version: "0.5.0",
         ...(changedState === "activation"
           ? { enabled: false }
@@ -409,7 +407,7 @@ describe("CssLoaderAdapter mutations", () => {
       let reset = false;
       const call = vi.fn(async (method: string) => {
         if (method === "get_backend_version") return 9;
-        if (method === "get_themes") return reset ? [galleryOld] : [galleryNew];
+        if (method === "get_themes") return reset ? [themeOld] : [themeNew];
         if (method === "reset") {
           reset = true;
           return { fails: [] };
@@ -420,7 +418,7 @@ describe("CssLoaderAdapter mutations", () => {
       const before = await adapter.requireReady();
 
       await expect(adapter.reconcileRecoveredThemes([{
-        themeName: "Hooandee Gallery",
+        themeName: "Example Theme",
         previousVersion: "0.5.0",
       }], before)).rejects.toMatchObject({ code: "verification_failed" });
     },
@@ -433,7 +431,7 @@ describe("CssLoaderAdapter mutations", () => {
     const fake = mutableHost();
     const adapter = new CssLoaderAdapter(fake.host);
 
-    const snapshot = await adapter.setPatchValue("Hooandee Obsidian Bloom", patchName, value);
+    const snapshot = await adapter.setPatchValue("Example Theme", patchName, value);
 
     expect(snapshot.status).toBe("ready");
     expect(snapshot.themes[0].patches.find((patch) => patch.name === patchName)?.value).toBe(value);
@@ -451,7 +449,7 @@ describe("CssLoaderAdapter mutations", () => {
     const adapter = new CssLoaderAdapter(fake.host);
 
     await expect(adapter.setPatchValue(
-      "Hooandee Obsidian Bloom",
+      "Example Theme",
       "Motion intensity",
       "Dangerously fast",
     )).rejects.toMatchObject({
@@ -468,12 +466,12 @@ describe("CssLoaderAdapter mutations", () => {
     const fake = mutableHost();
     const adapter = new CssLoaderAdapter(fake.host);
 
-    const snapshot = await adapter.setThemeState("Hooandee Obsidian Bloom", false);
+    const snapshot = await adapter.setThemeState("Example Theme", false);
 
     expect(snapshot.themes[0].enabled).toBe(false);
     expect(fake.call).toHaveBeenCalledWith(
       "set_theme_state",
-      "Hooandee Obsidian Bloom",
+      "Example Theme",
       false,
       false,
       false,
@@ -490,10 +488,10 @@ describe("CssLoaderAdapter mutations", () => {
       }),
     }));
 
-    await expect(adapter.setThemeState("Hooandee Obsidian Bloom", false)).rejects.toEqual(
+    await expect(adapter.setThemeState("Example Theme", false)).rejects.toEqual(
       new CssLoaderOperationError(
         "verification_failed",
-        "CSS Loader did not confirm Hooandee Obsidian Bloom as disabled",
+        "CSS Loader did not confirm Example Theme as disabled",
       ),
     );
   });
@@ -509,7 +507,7 @@ describe("CssLoaderAdapter mutations", () => {
     }));
 
     await expect(adapter.setPatchValue(
-      "Hooandee Obsidian Bloom",
+      "Example Theme",
       "Animated grid",
       "No",
     )).rejects.toEqual(new CssLoaderOperationError("mutation_failed", "Patch rejected"));

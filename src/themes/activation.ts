@@ -1,5 +1,5 @@
 import type { CssLoaderSnapshot } from "./cssLoaderTypes";
-import type { ThemeCatalog, ThemeCatalogEntry } from "./types";
+import type { PublishedThemeRelease } from "./remotePublication";
 
 export interface ThemeActivationAdapter {
   inspect(): Promise<CssLoaderSnapshot>;
@@ -32,8 +32,8 @@ function requireReady(snapshot: CssLoaderSnapshot): asserts snapshot is CssLoade
   }
 }
 
-function catalogByCssLoaderName(catalog: ThemeCatalog): Map<string, ThemeCatalogEntry> {
-  return new Map(catalog.themes.map((theme) => [theme.cssLoaderName, theme]));
+function catalogByCssLoaderName(catalog: readonly PublishedThemeRelease[]): Map<string, PublishedThemeRelease> {
+  return new Map(catalog.map((theme) => [theme.cssLoaderName, theme]));
 }
 
 function statesOf(
@@ -64,32 +64,34 @@ export class ThemeActivator {
 
   constructor(
     private readonly adapter: ThemeActivationAdapter,
-    private readonly catalog: ThemeCatalog,
   ) {}
 
-  activate(themeId: string): Promise<CssLoaderSnapshot> {
+  activate(themeId: string, catalog: readonly PublishedThemeRelease[]): Promise<CssLoaderSnapshot> {
     if (this.running) {
       return Promise.reject(new ThemeActivationError("busy", "A theme activation is already running"));
     }
     this.running = true;
-    return this.runActivation(themeId).finally(() => {
+    return this.runActivation(themeId, catalog).finally(() => {
       this.running = false;
     });
   }
 
-  deactivate(themeId: string): Promise<CssLoaderSnapshot> {
+  deactivate(themeId: string, catalog: readonly PublishedThemeRelease[]): Promise<CssLoaderSnapshot> {
     if (this.running) {
       return Promise.reject(new ThemeActivationError("busy", "A theme operation is already running"));
     }
     this.running = true;
-    return this.runDeactivation(themeId).finally(() => {
+    return this.runDeactivation(themeId, catalog).finally(() => {
       this.running = false;
     });
   }
 
-  private async runActivation(themeId: string): Promise<CssLoaderSnapshot> {
-    const target = this.catalog.themes.find((theme) => theme.id === themeId);
-    if (!target) throw new ThemeActivationError("unknown_theme", `Unknown Hooandee theme: ${themeId}`);
+  private async runActivation(
+    themeId: string,
+    catalog: readonly PublishedThemeRelease[],
+  ): Promise<CssLoaderSnapshot> {
+    const target = catalog.find((theme) => theme.catalogId === themeId);
+    if (!target) throw new ThemeActivationError("unknown_theme", `Unknown published theme: ${themeId}`);
 
     const initial = await this.adapter.inspect();
     requireReady(initial);
@@ -97,9 +99,9 @@ export class ThemeActivator {
       throw new ThemeActivationError("not_installed", `${target.cssLoaderName} is not installed`);
     }
 
-    const catalogEntries = catalogByCssLoaderName(this.catalog);
+    const catalogEntries = catalogByCssLoaderName(catalog);
     const catalogNames = new Set(catalogEntries.keys());
-    const initialHooandee = statesOf(initial, catalogNames);
+    const initialManaged = statesOf(initial, catalogNames);
     const initialThirdParty = thirdPartyStates(initial, catalogNames);
     const conflicts = initial.themes.filter((theme) => {
       const entry = catalogEntries.get(theme.name);
@@ -108,34 +110,34 @@ export class ThemeActivator {
         && entry?.exclusiveGroup !== undefined
       && entry.exclusiveGroup === target.exclusiveGroup;
     });
-    const expectedHooandee = new Map(initialHooandee);
-    conflicts.forEach((conflict) => expectedHooandee.set(conflict.name, false));
-    expectedHooandee.set(target.cssLoaderName, true);
+    const expectedManaged = new Map(initialManaged);
+    conflicts.forEach((conflict) => expectedManaged.set(conflict.name, false));
+    expectedManaged.set(target.cssLoaderName, true);
 
     try {
       for (const conflict of conflicts) {
         await this.adapter.setThemeState(conflict.name, false);
       }
-      if (!initialHooandee.get(target.cssLoaderName)) {
+      if (!initialManaged.get(target.cssLoaderName)) {
         await this.adapter.setThemeState(target.cssLoaderName, true);
       }
 
       const finalSnapshot = await this.adapter.inspect();
       requireReady(finalSnapshot);
-      if (!sameStates(expectedHooandee, finalSnapshot)) {
-        throw new Error("CSS Loader did not confirm the requested Hooandee state");
+      if (!sameStates(expectedManaged, finalSnapshot)) {
+        throw new Error("CSS Loader did not confirm the requested managed theme state");
       }
       if (!sameStates(initialThirdParty, finalSnapshot)) {
-        throw new Error("A third-party theme changed during Hooandee activation");
+        throw new Error("A third-party theme changed during managed theme activation");
       }
       return finalSnapshot;
     } catch (activationError) {
       try {
-        await this.restoreCatalogStates(initialHooandee, catalogNames);
+        await this.restoreCatalogStates(initialManaged, catalogNames);
       } catch {
         throw new ThemeActivationError(
           "rollback_failed",
-          "Activation failed and the previous Hooandee state could not be restored",
+          "Activation failed and the previous managed theme state could not be restored",
           true,
         );
       }
@@ -144,9 +146,12 @@ export class ThemeActivator {
     }
   }
 
-  private async runDeactivation(themeId: string): Promise<CssLoaderSnapshot> {
-    const target = this.catalog.themes.find((theme) => theme.id === themeId);
-    if (!target) throw new ThemeActivationError("unknown_theme", `Unknown Hooandee theme: ${themeId}`);
+  private async runDeactivation(
+    themeId: string,
+    catalog: readonly PublishedThemeRelease[],
+  ): Promise<CssLoaderSnapshot> {
+    const target = catalog.find((theme) => theme.catalogId === themeId);
+    if (!target) throw new ThemeActivationError("unknown_theme", `Unknown published theme: ${themeId}`);
 
     const initial = await this.adapter.inspect();
     requireReady(initial);
@@ -154,29 +159,29 @@ export class ThemeActivator {
     if (!installed) throw new ThemeActivationError("not_installed", `${target.cssLoaderName} is not installed`);
     if (!installed.enabled) return initial;
 
-    const catalogNames = new Set(this.catalog.themes.map((theme) => theme.cssLoaderName));
-    const initialHooandee = statesOf(initial, catalogNames);
+    const catalogNames = new Set(catalog.map((theme) => theme.cssLoaderName));
+    const initialManaged = statesOf(initial, catalogNames);
     const initialThirdParty = thirdPartyStates(initial, catalogNames);
-    const expectedHooandee = new Map(initialHooandee);
-    expectedHooandee.set(target.cssLoaderName, false);
+    const expectedManaged = new Map(initialManaged);
+    expectedManaged.set(target.cssLoaderName, false);
     try {
       await this.adapter.setThemeState(target.cssLoaderName, false);
       const finalSnapshot = await this.adapter.inspect();
       requireReady(finalSnapshot);
-      if (!sameStates(expectedHooandee, finalSnapshot)) {
-        throw new Error("CSS Loader did not confirm the requested Hooandee state");
+      if (!sameStates(expectedManaged, finalSnapshot)) {
+        throw new Error("CSS Loader did not confirm the requested managed theme state");
       }
       if (!sameStates(initialThirdParty, finalSnapshot)) {
-        throw new Error("A third-party theme changed during Hooandee deactivation");
+        throw new Error("A third-party theme changed during managed theme deactivation");
       }
       return finalSnapshot;
     } catch (deactivationError) {
       try {
-        await this.restoreCatalogStates(initialHooandee, catalogNames);
+        await this.restoreCatalogStates(initialManaged, catalogNames);
       } catch {
         throw new ThemeActivationError(
           "rollback_failed",
-          "Deactivation failed and the previous Hooandee state could not be restored",
+          "Deactivation failed and the previous managed theme state could not be restored",
           true,
         );
       }
@@ -204,7 +209,7 @@ export class ThemeActivator {
     const restored = await this.adapter.inspect();
     requireReady(restored);
     if (!sameStates(expected, restored)) {
-      throw new Error("Hooandee state does not match the operation snapshot");
+      throw new Error("Managed theme state does not match the operation snapshot");
     }
   }
 }

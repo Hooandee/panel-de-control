@@ -1248,7 +1248,7 @@ describe("callPluginBackend", () => {
     const result = await callPluginBackend(
       "CSS Loader",
       "set_theme_state",
-      ["Hooandee Obsidian Bloom", true, false, false],
+      ["Example Theme", true, false, false],
       { DeckyBackend: { call } },
     );
 
@@ -1257,7 +1257,7 @@ describe("callPluginBackend", () => {
       "loader/call_plugin_method",
       "CSS Loader",
       "set_theme_state",
-      "Hooandee Obsidian Bloom",
+      "Example Theme",
       true,
       false,
       false,

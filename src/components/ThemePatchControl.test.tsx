@@ -112,7 +112,7 @@ describe("ThemePatchControl", () => {
     render(<ThemePatchControl patch={{ ...basePatch, type: "checkbox", value: "Yes", options: ["Yes"], rawType: "checkbox" }} onChange={onChange} />);
 
     expect(screen.queryByRole("button")).toBeNull();
-    expect(screen.getByText("Sí")).toBeTruthy();
+    expect(screen.getByText("Yes")).toBeTruthy();
     expect(onChange).not.toHaveBeenCalled();
   });
 

@@ -48,6 +48,30 @@ describe("createSteamRuntimeBridge", () => {
     expect(managers[1].dispose).toHaveBeenCalledOnce();
   });
 
+  it("refreshes extension receipts only when installed name/version inventory changes", async () => {
+    const refreshDescriptors = vi.fn(async () => {});
+    const bridge = createSteamRuntimeBridge(
+      () => document,
+      () => ({ reconcile: vi.fn(), refreshDescriptors, dispose: vi.fn() }),
+    );
+    const first = {
+      status: "ready" as const,
+      pluginVersion: "2.1.2",
+      backendVersion: 9,
+      themes: [{
+        id: "Example Theme", name: "Example Theme", displayName: "Example Theme",
+        version: "1.2.3", author: "Example Author", enabled: true, patches: [],
+      }],
+    };
+
+    bridge.reconcile(first);
+    bridge.reconcile({ ...first, themes: [{ ...first.themes[0], enabled: false }] });
+    expect(refreshDescriptors).not.toHaveBeenCalled();
+
+    bridge.reconcile({ ...first, themes: [{ ...first.themes[0], version: "1.2.4" }] });
+    expect(refreshDescriptors).toHaveBeenCalledOnce();
+  });
+
   it("fails closed when resolving Steam's document throws", () => {
     const createManager = vi.fn();
     const bridge = createSteamRuntimeBridge(() => { throw new Error("SP unavailable"); }, createManager);

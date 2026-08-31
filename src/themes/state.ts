@@ -1,22 +1,14 @@
 import type { CssLoaderSnapshot, CssLoaderTheme } from "./cssLoaderTypes";
-import type {
-  PublishedThemeRelease,
-  ThemePublicationCompatibility,
-  ThemePublicationState,
-} from "./remotePublication";
-import type { ThemeCatalog, ThemeCatalogEntry } from "./types";
+import type { PublishedThemeRelease, ThemePublicationState } from "./remotePublication";
 
 export interface ThemeCardModel {
   id: string;
-  catalog: ThemeCatalogEntry;
+  release: PublishedThemeRelease;
   installed: boolean;
   active: boolean;
   installedVersion?: string;
-  publishedVersion?: string;
-  publicationCompatibility?: ThemePublicationCompatibility;
-  releaseNotes?: PublishedThemeRelease["notes"];
   targetVersion?: string;
-  preferredInstallSource: "bundled" | "official-remote" | null;
+  installable: boolean;
   versionRelation: "not-installed" | "current" | "update-available" | "local-newer" | "unknown";
   updateAvailable: boolean;
   cssLoaderTheme?: CssLoaderTheme;
@@ -29,8 +21,10 @@ interface SemanticVersion {
   prerelease: string[];
 }
 
+const SEMANTIC_VERSION = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/;
+
 function parseSemanticVersion(value: string): SemanticVersion | null {
-  const match = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/.exec(value);
+  const match = SEMANTIC_VERSION.exec(value);
   if (!match) return null;
   return {
     major: BigInt(match[1]),
@@ -40,20 +34,17 @@ function parseSemanticVersion(value: string): SemanticVersion | null {
   };
 }
 
-function comparePrereleaseIdentifier(left: string, right: string): number {
-  const leftNumber = /^\d+$/.test(left) ? BigInt(left) : null;
-  const rightNumber = /^\d+$/.test(right) ? BigInt(right) : null;
-  if (leftNumber !== null && rightNumber !== null) {
-    if (leftNumber < rightNumber) return -1;
-    if (leftNumber > rightNumber) return 1;
-    return 0;
-  }
+function compareIdentifier(left: string, right: string): number {
+  const numeric = /^\d+$/;
+  const leftNumber = numeric.test(left) ? BigInt(left) : null;
+  const rightNumber = numeric.test(right) ? BigInt(right) : null;
+  if (leftNumber !== null && rightNumber !== null) return leftNumber < rightNumber ? -1 : leftNumber > rightNumber ? 1 : 0;
   if (leftNumber !== null) return -1;
   if (rightNumber !== null) return 1;
   return left.localeCompare(right, "en");
 }
 
-function compareSemanticVersions(leftValue: string, rightValue: string): number | null {
+function compareVersions(leftValue: string, rightValue: string): number | null {
   const left = parseSemanticVersion(leftValue);
   const right = parseSemanticVersion(rightValue);
   if (!left || !right) return null;
@@ -62,61 +53,36 @@ function compareSemanticVersions(leftValue: string, rightValue: string): number 
     if (left[key] > right[key]) return 1;
   }
   if (left.prerelease.length === 0 || right.prerelease.length === 0) {
-    if (left.prerelease.length === right.prerelease.length) return 0;
-    return left.prerelease.length > 0 ? -1 : 1;
+    return left.prerelease.length === right.prerelease.length ? 0 : left.prerelease.length ? -1 : 1;
   }
-  const length = Math.max(left.prerelease.length, right.prerelease.length);
-  for (let index = 0; index < length; index += 1) {
+  for (let index = 0; index < Math.max(left.prerelease.length, right.prerelease.length); index += 1) {
     if (left.prerelease[index] === undefined) return -1;
     if (right.prerelease[index] === undefined) return 1;
-    const comparison = comparePrereleaseIdentifier(left.prerelease[index], right.prerelease[index]);
+    const comparison = compareIdentifier(left.prerelease[index], right.prerelease[index]);
     if (comparison !== 0) return comparison;
   }
   return 0;
 }
 
-function publishedThemes(
-  publication: ThemePublicationState,
-): Map<string, PublishedThemeRelease> {
-  return publication.status === "published"
-    ? new Map(publication.themes.map((release) => [release.catalogId, release]))
-    : new Map();
+function usableThemes(publication: ThemePublicationState): readonly PublishedThemeRelease[] {
+  return publication.status === "published" || publication.status === "cached"
+    ? publication.themes
+    : [];
 }
 
 export function deriveThemeCards(
-  catalog: ThemeCatalog,
+  publication: ThemePublicationState,
   snapshot: CssLoaderSnapshot,
-  publication: ThemePublicationState = { status: "unchecked" },
 ): ThemeCardModel[] {
   const installed = snapshot.status === "ready"
     ? new Map(snapshot.themes.map((theme) => [theme.name, theme]))
     : new Map<string, CssLoaderTheme>();
-  const published = publishedThemes(publication);
-  return catalog.themes.map((entry) => {
-    const cssLoaderTheme = installed.get(entry.cssLoaderName);
-    const candidate = published.get(entry.id);
-    const release = candidate?.cssLoaderName === entry.cssLoaderName ? candidate : undefined;
-    const hasBundled = entry.includedVersion !== undefined
-      && entry.installSources.some((source) => source.kind === "bundled");
-    const hasCompatibleRemote = release?.compatibility === "compatible"
-      && entry.installSources.some((source) => source.kind === "official-remote");
-    let targetVersion = hasBundled ? entry.includedVersion : undefined;
-    let preferredInstallSource: ThemeCardModel["preferredInstallSource"] = hasBundled
-      ? "bundled"
-      : null;
-    if (
-      hasCompatibleRemote
-      && (cssLoaderTheme !== undefined || !hasBundled)
-      && (
-        targetVersion === undefined
-        || (compareSemanticVersions(targetVersion, release.publishedVersion) ?? -1) < 0
-      )
-    ) {
-      targetVersion = release.publishedVersion;
-      preferredInstallSource = "official-remote";
-    }
+  return usableThemes(publication).map((release) => {
+    const cssLoaderTheme = installed.get(release.cssLoaderName);
+    const installable = release.compatibility === "compatible";
+    const targetVersion = installable ? release.publishedVersion : undefined;
     const comparison = cssLoaderTheme && targetVersion
-      ? compareSemanticVersions(cssLoaderTheme.version, targetVersion)
+      ? compareVersions(cssLoaderTheme.version, targetVersion)
       : null;
     const versionRelation: ThemeCardModel["versionRelation"] = !cssLoaderTheme
       ? "not-installed"
@@ -128,23 +94,15 @@ export function deriveThemeCards(
             ? "local-newer"
             : "current";
     return {
-      id: entry.id,
-      catalog: entry,
+      id: release.catalogId,
+      release,
       installed: cssLoaderTheme !== undefined,
       active: cssLoaderTheme?.enabled ?? false,
-      ...(cssLoaderTheme ? {
-        installedVersion: cssLoaderTheme.version,
-        cssLoaderTheme,
-      } : {}),
-      ...(release ? {
-        publishedVersion: release.publishedVersion,
-        publicationCompatibility: release.compatibility,
-        releaseNotes: release.notes,
-      } : {}),
-      ...(targetVersion ? { targetVersion } : {}),
-      preferredInstallSource,
+      installable,
       versionRelation,
       updateAvailable: versionRelation === "update-available",
+      ...(cssLoaderTheme ? { installedVersion: cssLoaderTheme.version, cssLoaderTheme } : {}),
+      ...(targetVersion ? { targetVersion } : {}),
     };
   });
 }

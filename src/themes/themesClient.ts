@@ -1,17 +1,16 @@
 import { ThemeActivator } from "./activation";
-import { LOCAL_THEME_CATALOG } from "./catalog";
 import { CssLoaderAdapter, type CssLoaderReadySnapshot } from "./cssLoaderAdapter";
 import type { CssLoaderSnapshot } from "./cssLoaderTypes";
 import { createDeckyCssLoaderHost } from "./deckyCssLoaderHost";
 import { createPanelThemeInstaller } from "./panelThemeInstallHost";
 import { ThemeInstallError, type ThemeInstallResult } from "./panelThemeInstaller";
-import type { ThemePublicationState } from "./remotePublication";
+import type { PublishedThemeRelease, ThemePublicationState } from "./remotePublication";
 import {
   createRemotePublicationClient,
   type ThemePublicationClient,
 } from "./remotePublicationClient";
 import { deriveThemeCards } from "./state";
-import type { ThemeCatalog, ThemeInstallRequest } from "./types";
+import type { ThemeInstallRequest } from "./types";
 
 export interface ThemesAdapter {
   inspect(): Promise<CssLoaderSnapshot>;
@@ -42,12 +41,11 @@ export interface ThemesInstaller {
 }
 
 export interface ThemesActivator {
-  activate(themeId: string): Promise<CssLoaderSnapshot>;
-  deactivate(themeId: string): Promise<CssLoaderSnapshot>;
+  activate(themeId: string, catalog: readonly PublishedThemeRelease[]): Promise<CssLoaderSnapshot>;
+  deactivate(themeId: string, catalog: readonly PublishedThemeRelease[]): Promise<CssLoaderSnapshot>;
 }
 
 export interface ThemesDependencies {
-  catalog: ThemeCatalog;
   adapter: ThemesAdapter;
   installer: ThemesInstaller;
   activator: ThemesActivator;
@@ -59,7 +57,6 @@ export interface ThemesDependencies {
 
 export interface ThemeInstallConfirmation {
   version: string;
-  source: "bundled" | "official-remote";
 }
 
 export type ThemesOperation =
@@ -86,24 +83,17 @@ const BLOCKING_RECOVERY_CODES = new Set([
   "rollback_verification_failed",
 ]);
 
-export function requiredCssLoaderBackendVersion(catalog: ThemeCatalog): number {
-  return Math.max(
-    1,
-    ...catalog.themes
-      .filter((theme) => theme.availability === "available")
-      .map((theme) => theme.minimumCssLoaderBackendVersion),
-  );
-}
+export const REQUIRED_CSS_LOADER_BACKEND_VERSION = 9;
 
 export function createProductionThemesDependencies(): ThemesDependencies {
   if (productionDependencies) return productionDependencies;
-  const minimumBackendVersion = requiredCssLoaderBackendVersion(LOCAL_THEME_CATALOG);
-  const adapter = new CssLoaderAdapter(createDeckyCssLoaderHost(), { minimumBackendVersion });
+  const adapter = new CssLoaderAdapter(createDeckyCssLoaderHost(), {
+    minimumBackendVersion: REQUIRED_CSS_LOADER_BACKEND_VERSION,
+  });
   productionDependencies = {
-    catalog: LOCAL_THEME_CATALOG,
     adapter,
     installer: createPanelThemeInstaller(),
-    activator: new ThemeActivator(adapter, LOCAL_THEME_CATALOG),
+    activator: new ThemeActivator(adapter),
     publication: createRemotePublicationClient(),
   };
   return productionDependencies;
@@ -194,6 +184,7 @@ export class ThemesClient {
       this.update({ operation: { kind: "recovering" }, error: null });
     }
     this.activeRefreshes += 1;
+    this.startPublicationCheck(false);
     const request = ++this.requestSequence;
     let recoveryError: unknown;
     let recoveryLockReleased = false;
@@ -219,9 +210,6 @@ export class ThemesClient {
             : this.current.recoveryBlocked || blocksThemeRecovery(recoveryError),
           error: recoveryError === undefined ? null : errorMessage(recoveryError),
         });
-        if (snapshot.status === "ready") {
-          this.startPublicationCheck(snapshot as CssLoaderReadySnapshot, false);
-        }
       }
     } catch (inspectionError) {
       if (request === this.requestSequence) {
@@ -252,44 +240,44 @@ export class ThemesClient {
     }
   };
 
-  activate = (themeId: string): Promise<boolean> => this.mutate(
-    { kind: "activating", themeId },
-    () => this.dependencies.activator.activate(themeId),
-  );
+  activate = (themeId: string): Promise<boolean> => {
+    const themes = this.currentPublicationThemes();
+    if (this.current.snapshot.status !== "ready" || !themes.some((theme) => theme.catalogId === themeId)) {
+      return Promise.resolve(false);
+    }
+    return this.mutate(
+      { kind: "activating", themeId },
+      () => this.dependencies.activator.activate(themeId, themes),
+    );
+  };
 
-  deactivate = (themeId: string): Promise<boolean> => this.mutate(
-    { kind: "deactivating", themeId },
-    () => this.dependencies.activator.deactivate(themeId),
-  );
+  deactivate = (themeId: string): Promise<boolean> => {
+    const themes = this.currentPublicationThemes();
+    if (this.current.snapshot.status !== "ready" || !themes.some((theme) => theme.catalogId === themeId)) {
+      return Promise.resolve(false);
+    }
+    return this.mutate(
+      { kind: "deactivating", themeId },
+      () => this.dependencies.activator.deactivate(themeId, themes),
+    );
+  };
 
   install = (
     themeId: string,
     confirmation?: ThemeInstallConfirmation,
   ): Promise<boolean> => {
-    const entry = this.dependencies.catalog.themes.find((theme) => theme.id === themeId);
-    const card = deriveThemeCards(
-      this.dependencies.catalog,
-      this.current.snapshot,
-      this.current.publication,
-    ).find((candidate) => candidate.id === themeId);
-    if (!entry || !card?.targetVersion || !card.preferredInstallSource) {
+    const card = deriveThemeCards(this.current.publication, this.current.snapshot)
+      .find((candidate) => candidate.id === themeId);
+    if (this.current.snapshot.status !== "ready" || !card?.targetVersion || !card.installable) {
       return Promise.resolve(false);
     }
-    if (
-      confirmation
-      && (
-        confirmation.version !== card.targetVersion
-        || confirmation.source !== card.preferredInstallSource
-      )
-    ) return Promise.resolve(false);
-    const source: ThemeInstallRequest = card.preferredInstallSource === "official-remote"
-      ? {
-        kind: "official-remote",
-        channelId: "panel-pages-v1",
-        catalogId: entry.id,
-        expectedVersion: card.targetVersion,
-      }
-      : { kind: "bundled", packageId: entry.id };
+    if (confirmation && confirmation.version !== card.targetVersion) return Promise.resolve(false);
+    const source: ThemeInstallRequest = {
+      kind: "official-remote",
+      channelId: "panel-pages-v1",
+      catalogId: card.release.catalogId,
+      expectedVersion: card.targetVersion,
+    };
     const expectedVersion = card.targetVersion;
     return this.mutate(
       { kind: "installing", themeId },
@@ -299,8 +287,8 @@ export class ThemesClient {
         const installed = await this.dependencies.installer.prepare(source);
         try {
           if (
-            installed.themeId !== entry.id
-            || installed.themeName !== entry.cssLoaderName
+            installed.themeId !== card.release.catalogId
+            || installed.themeName !== card.release.cssLoaderName
             || installed.version !== expectedVersion
           ) {
             throw new ThemeInstallError(
@@ -309,7 +297,7 @@ export class ThemesClient {
             );
           }
           const verified = await this.dependencies.adapter.reloadTheme(
-            entry.cssLoaderName,
+            card.release.cssLoaderName,
             expectedVersion,
             before,
           );
@@ -344,19 +332,11 @@ export class ThemesClient {
 
   refreshPublication = (force = true): Promise<void> => {
     if (this.publicationPromise) return this.publicationPromise;
-    if (this.current.snapshot.status !== "ready" || !this.dependencies.publication) {
-      return Promise.resolve();
-    }
-    return this.startPublicationCheck(
-      this.current.snapshot as CssLoaderReadySnapshot,
-      force,
-    );
+    if (!this.dependencies.publication) return Promise.resolve();
+    return this.startPublicationCheck(force);
   };
 
-  private startPublicationCheck(
-    snapshot: CssLoaderReadySnapshot,
-    force: boolean,
-  ): Promise<void> {
+  private startPublicationCheck(force: boolean): Promise<void> {
     if (!this.dependencies.publication) return Promise.resolve();
     const now = Date.now();
     const freshnessWindow = Math.max(
@@ -370,6 +350,7 @@ export class ThemesClient {
     const retryableFailure = (
       this.current.publication.status === "temporarily-unavailable"
       || this.current.publication.status === "recoverable-failure"
+      || this.current.publication.status === "cached"
     ) && this.current.publication.retryable;
     if (
       !force
@@ -382,7 +363,7 @@ export class ThemesClient {
     if (this.publicationPromise) return this.publicationPromise;
     const request = ++this.publicationRequestSequence;
     this.update({ publication: { status: "checking" } });
-    const running = this.dependencies.publication.check(snapshot, force).then((publication) => {
+    const running = this.dependencies.publication.check(force).then((publication) => {
       if (request === this.publicationRequestSequence) {
         this.publicationResolvedAtMs = Date.now();
         this.update({ publication });
@@ -408,13 +389,19 @@ export class ThemesClient {
   }
 
   setPatch = (themeId: string, patchName: string, value: string): Promise<boolean> => {
-    const entry = this.dependencies.catalog.themes.find((theme) => theme.id === themeId);
+    const entry = this.currentPublicationThemes().find((theme) => theme.catalogId === themeId);
     if (!entry) return Promise.resolve(false);
     return this.mutate(
       { kind: "saving", themeId, patchName },
       () => this.dependencies.adapter.setPatchValue(entry.cssLoaderName, patchName, value),
     );
   };
+
+  private currentPublicationThemes(): readonly PublishedThemeRelease[] {
+    return this.current.publication.status === "published" || this.current.publication.status === "cached"
+      ? this.current.publication.themes
+      : [];
+  }
 
   private publishSnapshot(request: number, snapshot: CssLoaderSnapshot): void {
     if (request !== this.requestSequence) return;

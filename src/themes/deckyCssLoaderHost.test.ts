@@ -36,8 +36,8 @@ describe("createDeckyCssLoaderHost", () => {
       DeckyBackend: { call },
     });
 
-    await host.call("set_theme_state", "Hooandee Obsidian Bloom", true, false, false);
-    await host.call("set_patch_of_theme", "Hooandee Obsidian Bloom", "Escena de parrilla", "Abismo orbital");
+    await host.call("set_theme_state", "Example Theme", true, false, false);
+    await host.call("set_patch_of_theme", "Example Theme", "Motion", "Reduced");
     await host.call("reset");
 
     expect(call).toHaveBeenNthCalledWith(
@@ -45,14 +45,14 @@ describe("createDeckyCssLoaderHost", () => {
       "loader/call_legacy_plugin_method",
       "CSS Loader",
       "set_theme_state",
-      { name: "Hooandee Obsidian Bloom", state: true, set_deps: false, set_deps_value: false },
+      { name: "Example Theme", state: true, set_deps: false, set_deps_value: false },
     );
     expect(call).toHaveBeenNthCalledWith(
       2,
       "loader/call_legacy_plugin_method",
       "CSS Loader",
       "set_patch_of_theme",
-      { themeName: "Hooandee Obsidian Bloom", patchName: "Escena de parrilla", value: "Abismo orbital" },
+      { themeName: "Example Theme", patchName: "Motion", value: "Reduced" },
     );
     expect(call).toHaveBeenNthCalledWith(
       3,

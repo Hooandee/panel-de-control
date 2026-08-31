@@ -11,7 +11,8 @@ vi.mock("./api", () => ({
   checkThemeReleases: vi.fn(),
   commitThemeInstall: vi.fn(),
   getThemeInstallRecoveries: vi.fn(),
-  prepareBundledThemeInstall: vi.fn(),
+  listThemeExtensions: vi.fn(),
+  loadThemeExtension: vi.fn(),
   prepareRemoteThemeInstall: vi.fn(),
   rollbackThemeInstall: vi.fn(),
 }));
@@ -60,6 +61,7 @@ vi.mock("./system/uiActivity", () => ({ shutdownUiActivity: vi.fn() }));
 vi.mock("./themes/deckyCssLoaderHost", () => ({ configureDeckyCssLoaderHost: () => () => {} }));
 vi.mock("./themes/panelThemeInstallHost", () => ({ configurePanelThemeInstallHost: () => () => {} }));
 vi.mock("./themes/remotePublicationClient", () => ({ configureThemePublicationCheckHost: () => () => {} }));
+vi.mock("./themes/themeExtensionClient", () => ({ configureThemeExtensionRpcHost: () => () => {} }));
 vi.mock("./themes/runtime/start", () => ({ startThemesRuntime: () => () => {} }));
 vi.mock("./themes/themesClient", () => ({ createProductionThemesDependencies: () => ({}) }));
 vi.mock("./themes/useThemes", () => ({ getThemesClient: () => ({}) }));

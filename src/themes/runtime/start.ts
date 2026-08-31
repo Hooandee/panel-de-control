@@ -1,9 +1,10 @@
 import type { CssLoaderSnapshot } from "../cssLoaderTypes";
-import { createRegisteredRuntimeModules } from "./runtimeRegistry";
-import { ThemeRuntimeManager } from "./runtimeManager";
+import { createThemeExtensionClient } from "../themeExtensionClient";
+import { ThemeExtensionRuntimeHost } from "./extensionHost";
 
 interface RuntimeManagerLike {
   reconcile(snapshot: CssLoaderSnapshot): void;
+  refreshDescriptors?(): Promise<void>;
   dispose(): void;
 }
 
@@ -54,16 +55,25 @@ function watchCssLoaderStyles(doc: Document, onChange: () => void): () => void {
   };
 }
 
+function extensionInventoryFingerprint(snapshot: CssLoaderSnapshot): string {
+  if (snapshot.status !== "ready") return snapshot.status;
+  return JSON.stringify(snapshot.themes
+    .map((theme) => [theme.name, theme.version] as const)
+    .sort(([left], [right]) => left.localeCompare(right, "en")));
+}
+
 export function createSteamRuntimeBridge(
   getSteamDocument: () => Document | null,
-  createManager: (doc: Document) => RuntimeManagerLike = (doc) => new ThemeRuntimeManager({
-    modules: createRegisteredRuntimeModules(doc),
+  createManager: (doc: Document) => RuntimeManagerLike = (doc) => new ThemeExtensionRuntimeHost({
+    client: createThemeExtensionClient(),
+    doc,
   }),
   onCssLoaderStylesChanged?: () => void,
 ): SteamRuntimeBridge {
   let currentDocument: Document | null = null;
   let manager: RuntimeManagerLike | null = null;
   let stopStyleWatch: (() => void) | null = null;
+  let inventoryFingerprint: string | null = null;
 
   const release = () => {
     stopStyleWatch?.();
@@ -71,6 +81,7 @@ export function createSteamRuntimeBridge(
     manager?.dispose();
     manager = null;
     currentDocument = null;
+    inventoryFingerprint = null;
   };
 
   return {
@@ -97,7 +108,12 @@ export function createSteamRuntimeBridge(
           }
         }
       }
+      const nextInventoryFingerprint = extensionInventoryFingerprint(snapshot);
+      const inventoryChanged = inventoryFingerprint !== null
+        && inventoryFingerprint !== nextInventoryFingerprint;
+      inventoryFingerprint = nextInventoryFingerprint;
       manager?.reconcile(snapshot);
+      if (inventoryChanged) void manager?.refreshDescriptors?.();
     },
     dispose: release,
   };
