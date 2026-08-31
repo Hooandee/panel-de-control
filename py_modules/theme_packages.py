@@ -587,11 +587,14 @@ def _is_legacy_preview_marker(
     theme_name: str,
     panel: dict[str, Any],
 ) -> bool:
+    schema_version = panel.get("schemaVersion")
+    executable_content = panel.get("executableContent")
     return (
-        panel.get("schemaVersion") == 1
+        type(schema_version) is int
+        and schema_version == 1
         and panel.get("catalogId") == theme_id
         and panel.get("cssLoaderName", theme_name) == theme_name
-        and panel.get("executableContent") in (None, False)
+        and (executable_content is None or executable_content is False)
         and "extension" not in panel
         and not (source / "panel-extension.js").exists()
     )

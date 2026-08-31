@@ -598,6 +598,46 @@ def test_install_archive_rejects_an_active_legacy_preview_marker(tmp_path, activ
     assert not list(tmp_path.glob(".panel-theme-transaction-*"))
 
 
+@pytest.mark.parametrize(
+    "marker_override",
+    [
+        {"schemaVersion": True},
+        {"schemaVersion": 1.0},
+        {"executableContent": 0},
+    ],
+)
+def test_install_archive_rejects_a_malformed_legacy_preview_marker(
+    tmp_path,
+    marker_override,
+):
+    archive, descriptor = _write_package(
+        tmp_path,
+        catalog_id=LEGACY_THEME_ID,
+        theme_name=LEGACY_THEME_NAME,
+        version="0.7.9",
+    )
+    themes_root = tmp_path / "themes"
+    installed = themes_root / LEGACY_THEME_NAME
+    _write_legacy_gallery(installed, version="0.7.8")
+    marker = {
+        "schemaVersion": 1,
+        "catalogId": LEGACY_THEME_ID,
+        **marker_override,
+    }
+    (installed / "panel-theme.json").write_text(
+        json.dumps(marker),
+        encoding="utf-8",
+    )
+    original_manifest = (installed / "theme.json").read_bytes()
+
+    with pytest.raises(theme_packages.ThemePackageError) as error:
+        _prepare_theme_archive(archive, descriptor, themes_root)
+
+    assert error.value.code == "identity_mismatch"
+    assert (installed / "theme.json").read_bytes() == original_manifest
+    assert not list(tmp_path.glob(".panel-theme-transaction-*"))
+
+
 def test_css_loader_state_cannot_be_swapped_to_a_symlink_during_copy(tmp_path, monkeypatch):
     archive, descriptor = _write_package(tmp_path)
     themes_root = tmp_path / "themes"
