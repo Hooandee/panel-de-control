@@ -137,6 +137,31 @@ describe("CssLoaderAdapter.inspect", () => {
     });
   });
 
+  it("fails closed when CSS Loader returns ambiguous theme or patch names", async () => {
+    const duplicateTheme = new CssLoaderAdapter(host({
+      call: vi.fn(async (method: string) => method === "get_backend_version"
+        ? 9
+        : [RAW_THEME, { ...RAW_THEME, id: "duplicate-id" }]),
+    }));
+    const duplicatePatch = new CssLoaderAdapter(host({
+      call: vi.fn(async (method: string) => method === "get_backend_version"
+        ? 9
+        : [{
+          ...RAW_THEME,
+          patches: [RAW_THEME.patches[0], { ...RAW_THEME.patches[0] }],
+        }]),
+    }));
+
+    await expect(duplicateTheme.inspect()).resolves.toMatchObject({
+      status: "error",
+      error: { code: "malformed_response" },
+    });
+    await expect(duplicatePatch.inspect()).resolves.toMatchObject({
+      status: "error",
+      error: { code: "malformed_response" },
+    });
+  });
+
   it("turns transport failures into an honest error state", async () => {
     const adapter = new CssLoaderAdapter(host({
       call: vi.fn(async () => { throw new Error("backend unavailable"); }),
@@ -195,76 +220,211 @@ function mutableHost(): { host: CssLoaderHost; call: ReturnType<typeof vi.fn> } 
 }
 
 describe("CssLoaderAdapter mutations", () => {
-  it("downloads only from an HTTPS catalog source and verifies CSS Loader registered the theme", async () => {
-    let installed = false;
-    const call = vi.fn(async (method: string, ...args: unknown[]) => {
+  it("reloads CSS Loader and verifies the exact installed theme version", async () => {
+    let version = "0.5.0";
+    const call = vi.fn(async (method: string) => {
       if (method === "get_backend_version") return 9;
-      if (method === "get_themes") return installed ? [RAW_THEME] : [];
-      if (method === "download_theme_from_url") {
-        expect(args).toEqual(["obsidian-bloom", "https://themes.hooandee.example/v1/"]);
-        installed = true;
-        return { success: true, message: "" };
+      if (method === "get_themes") return [{ ...RAW_THEME, name: "Hooandee Gallery", version }];
+      if (method === "reset") {
+        version = "0.6.0";
+        return { fails: [] };
       }
       throw new Error(`Unexpected method: ${method}`);
     });
     const adapter = new CssLoaderAdapter(host({ call }));
 
-    const result = await adapter.installTheme(
-      { kind: "css-loader-api", themeId: "obsidian-bloom", baseUrl: "https://themes.hooandee.example/v1/" },
-      "Hooandee Obsidian Bloom",
-    );
+    const before = await adapter.requireReady();
+    const result = await adapter.reloadTheme("Hooandee Gallery", "0.6.0", before);
 
-    expect(result.themes.some((theme) => theme.name === "Hooandee Obsidian Bloom")).toBe(true);
+    expect(result.themes.find((theme) => theme.name === "Hooandee Gallery")?.version).toBe("0.6.0");
     expect(call.mock.calls.map(([method]) => method)).toEqual([
       "get_backend_version",
       "get_themes",
-      "download_theme_from_url",
+      "reset",
       "get_backend_version",
       "get_themes",
     ]);
   });
 
-  it("rejects a non-HTTPS install source before contacting CSS Loader", async () => {
-    const fake = mutableHost();
-    const adapter = new CssLoaderAdapter(fake.host);
+  it("rejects a reload when CSS Loader reports a different installed version", async () => {
+    const call = vi.fn(async (method: string) => {
+      if (method === "get_backend_version") return 9;
+      if (method === "get_themes") return [{ ...RAW_THEME, name: "Hooandee Gallery", version: "0.5.0" }];
+      if (method === "reset") return { fails: [] };
+      throw new Error(`Unexpected method: ${method}`);
+    });
+    const adapter = new CssLoaderAdapter(host({ call }));
 
-    await expect(adapter.installTheme(
-      { kind: "css-loader-api", themeId: "obsidian-bloom", baseUrl: "http://themes.example/" },
-      "Hooandee Obsidian Bloom",
-    )).rejects.toMatchObject({ code: "mutation_failed" });
-    expect(fake.call).not.toHaveBeenCalled();
+    const before = await adapter.requireReady();
+    await expect(adapter.reloadTheme("Hooandee Gallery", "0.6.0", before)).rejects.toEqual(
+      new CssLoaderOperationError(
+        "verification_failed",
+        "CSS Loader did not register Hooandee Gallery v0.6.0",
+      ),
+    );
   });
 
-  it("uses a dedicated bounded timeout for a theme download", async () => {
-    vi.useFakeTimers();
-    try {
-      let installed = false;
+  it("fails closed when CSS Loader returns a malformed reset result", async () => {
+    const call = vi.fn(async (method: string) => {
+      if (method === "get_backend_version") return 9;
+      if (method === "get_themes") return [{ ...RAW_THEME, name: "Hooandee Gallery", version: "0.6.0" }];
+      if (method === "reset") return { success: true, message: "not the reset contract" };
+      throw new Error(`Unexpected method: ${method}`);
+    });
+    const adapter = new CssLoaderAdapter(host({ call }));
+
+    const before = await adapter.requireReady();
+    await expect(adapter.reloadTheme("Hooandee Gallery", "0.6.0", before)).rejects.toEqual(
+      new CssLoaderOperationError(
+        "malformed_response",
+        "CSS Loader returned an invalid result for reset",
+      ),
+    );
+  });
+
+  it("rejects a reset that reports any theme load failure", async () => {
+    const call = vi.fn(async (method: string) => {
+      if (method === "get_backend_version") return 9;
+      if (method === "get_themes") return [{ ...RAW_THEME, name: "Hooandee Gallery", version: "0.5.0" }];
+      if (method === "reset") return { fails: [["Third Party Theme", "invalid manifest"]] };
+      throw new Error(`Unexpected method: ${method}`);
+    });
+    const adapter = new CssLoaderAdapter(host({ call }));
+    const before = await adapter.requireReady();
+
+    await expect(adapter.reloadTheme("Hooandee Gallery", "0.6.0", before)).rejects.toMatchObject({
+      code: "mutation_failed",
+      message: "CSS Loader could not reload Third Party Theme: invalid manifest",
+    });
+  });
+
+  it("verifies that activation, compatible patches, and third-party themes survive reload", async () => {
+    const galleryBefore = {
+      ...RAW_THEME,
+      name: "Hooandee Gallery",
+      version: "0.5.0",
+      enabled: true,
+      patches: [{ ...RAW_THEME.patches[0], value: "No" }],
+    };
+    const thirdParty = { ...RAW_THEME, id: "Other", name: "Other", version: "1.4.0", enabled: false };
+    let themes = [galleryBefore, thirdParty];
+    const call = vi.fn(async (method: string) => {
+      if (method === "get_backend_version") return 9;
+      if (method === "get_themes") return structuredClone(themes);
+      if (method === "reset") {
+        themes = [{ ...galleryBefore, version: "0.6.0" }, thirdParty];
+        return { fails: [] };
+      }
+      throw new Error(`Unexpected method: ${method}`);
+    });
+    const adapter = new CssLoaderAdapter(host({ call }));
+    const before = await adapter.requireReady();
+
+    await expect(adapter.reloadTheme("Hooandee Gallery", "0.6.0", before)).resolves.toMatchObject({
+      status: "ready",
+    });
+  });
+
+  it("fails when reload changes a third-party theme or a preserved Gallery setting", async () => {
+    const galleryBefore = { ...RAW_THEME, name: "Hooandee Gallery", version: "0.5.0", enabled: true };
+    const thirdParty = { ...RAW_THEME, id: "Other", name: "Other", version: "1.4.0", enabled: false };
+    let reset = false;
+    const call = vi.fn(async (method: string) => {
+      if (method === "get_backend_version") return 9;
+      if (method === "get_themes") return reset
+        ? [{ ...galleryBefore, version: "0.6.0", enabled: false }, { ...thirdParty, enabled: true }]
+        : [galleryBefore, thirdParty];
+      if (method === "reset") {
+        reset = true;
+        return { fails: [] };
+      }
+      throw new Error(`Unexpected method: ${method}`);
+    });
+    const adapter = new CssLoaderAdapter(host({ call }));
+    const before = await adapter.requireReady();
+
+    await expect(adapter.reloadTheme("Hooandee Gallery", "0.6.0", before)).rejects.toMatchObject({
+      code: "verification_failed",
+    });
+  });
+
+  it("can reset and verify the exact pre-install snapshot after rollback", async () => {
+    const original = { ...RAW_THEME, name: "Hooandee Gallery", version: "0.5.0" };
+    const call = vi.fn(async (method: string) => {
+      if (method === "get_backend_version") return 9;
+      if (method === "get_themes") return [original];
+      if (method === "reset") return { fails: [] };
+      throw new Error(`Unexpected method: ${method}`);
+    });
+    const adapter = new CssLoaderAdapter(host({ call }));
+    const before = await adapter.requireReady();
+
+    await expect(adapter.restoreThemeSnapshot(before)).resolves.toEqual(before);
+  });
+
+  it("reconciles a durable rollback after restart and protects every unrelated theme", async () => {
+    const galleryNew = { ...RAW_THEME, name: "Hooandee Gallery", version: "0.6.0" };
+    const galleryOld = { ...galleryNew, version: "0.5.0" };
+    const thirdParty = { ...RAW_THEME, id: "Other", name: "Other", version: "1.4.0" };
+    let reset = false;
+    const call = vi.fn(async (method: string) => {
+      if (method === "get_backend_version") return 9;
+      if (method === "get_themes") return reset
+        ? [galleryOld, thirdParty]
+        : [galleryNew, thirdParty];
+      if (method === "reset") {
+        reset = true;
+        return { fails: [] };
+      }
+      throw new Error(`Unexpected method: ${method}`);
+    });
+    const adapter = new CssLoaderAdapter(host({ call }));
+    const before = await adapter.requireReady();
+
+    const after = await adapter.reconcileRecoveredThemes([{
+      themeName: "Hooandee Gallery",
+      previousVersion: "0.5.0",
+    }], before);
+
+    expect(after.themes.find((theme) => theme.name === "Hooandee Gallery")?.version).toBe("0.5.0");
+  });
+
+  it.each(["activation", "patch"] as const)(
+    "rejects durable recovery when CSS Loader changes Gallery %s state",
+    async (changedState) => {
+      const galleryNew = {
+        ...RAW_THEME,
+        name: "Hooandee Gallery",
+        version: "0.6.0",
+        enabled: true,
+        patches: [{ ...RAW_THEME.patches[0], value: "No" }],
+      };
+      const galleryOld = {
+        ...galleryNew,
+        version: "0.5.0",
+        ...(changedState === "activation"
+          ? { enabled: false }
+          : { patches: [{ ...RAW_THEME.patches[0], value: "Yes" }] }),
+      };
+      let reset = false;
       const call = vi.fn(async (method: string) => {
         if (method === "get_backend_version") return 9;
-        if (method === "get_themes") return installed ? [RAW_THEME] : [];
-        if (method === "download_theme_from_url") {
-          await new Promise((resolve) => setTimeout(resolve, 100));
-          installed = true;
-          return { success: true, message: "" };
+        if (method === "get_themes") return reset ? [galleryOld] : [galleryNew];
+        if (method === "reset") {
+          reset = true;
+          return { fails: [] };
         }
         throw new Error(`Unexpected method: ${method}`);
       });
-      const adapter = new CssLoaderAdapter(host({ call }), {
-        timeoutMs: 50,
-        installTimeoutMs: 200,
-      });
+      const adapter = new CssLoaderAdapter(host({ call }));
+      const before = await adapter.requireReady();
 
-      const pending = adapter.installTheme(
-        { kind: "css-loader-api", themeId: "obsidian-bloom", baseUrl: "https://themes.example/" },
-        "Hooandee Obsidian Bloom",
-      );
-      await vi.advanceTimersByTimeAsync(100);
-
-      await expect(pending).resolves.toMatchObject({ status: "ready" });
-    } finally {
-      vi.useRealTimers();
-    }
-  });
+      await expect(adapter.reconcileRecoveredThemes([{
+        themeName: "Hooandee Gallery",
+        previousVersion: "0.5.0",
+      }], before)).rejects.toMatchObject({ code: "verification_failed" });
+    },
+  );
 
   it.each([
     ["Animated grid", "No"],

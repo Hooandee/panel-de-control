@@ -1,0 +1,240 @@
+name: Theme stage
+
+on:
+  workflow_call:
+    inputs:
+      catalog_id:
+        required: true
+        type: string
+      theme_directory:
+        required: true
+        type: string
+      version:
+        required: true
+        type: string
+      confirmation:
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: theme-pages-publication
+  cancel-in-progress: false
+
+jobs:
+  stage:
+    if: >-
+      github.repository == 'Hooandee/panel-de-control' &&
+      github.ref_name == github.event.repository.default_branch &&
+      inputs.confirmation == format('STAGE {0}', inputs.version)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: theme-pages-stage
+    permissions:
+      contents: read
+      pages: write
+    outputs:
+      pages_base: ${{ steps.pages-api.outputs.base }}
+    steps:
+      - name: Checkout reviewed source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          path: source
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Detect the durable Pages branch
+        id: pages-branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          refs="$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/heads/gh-pages")"
+          exact="$(jq '[.[] | select(.ref == "refs/heads/gh-pages")] | length' <<<"$refs")"
+          test "$exact" = 0 || test "$exact" = 1
+          if test "$exact" = 1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: 10
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: source/pnpm-lock.yaml
+      - name: Read the authoritative default Pages URL
+        id: pages-api
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          pages_json="$(gh api "repos/$GITHUB_REPOSITORY/pages")"
+          pages_base="$(jq -r '.html_url // empty' <<<"$pages_json")"
+          cname="$(jq -r '.cname // empty' <<<"$pages_json")"
+          test -n "$pages_base"
+          test -z "$cname"
+          case "$pages_base" in
+            https://*.github.io|https://*.github.io/*) ;;
+            *) echo "::error::Pages must use the default GitHub domain"; exit 1 ;;
+          esac
+          echo "base=${pages_base%/}" >> "$GITHUB_OUTPUT"
+      - name: Configure the existing Pages site
+        id: pages
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+        with:
+          enablement: false
+      - name: Validate source and publication tooling
+        working-directory: source
+        run: |
+          set -euo pipefail
+          pnpm install --frozen-lockfile
+          pnpm vitest run tests/themePublicationContract.test.ts tests/themePublicationBuild.test.ts tests/themePagesStage.test.ts tests/themePagesPromote.test.ts tests/themeWorkflow.test.ts
+      - name: Build the immutable candidate
+        env:
+          EXPECTED_VERSION: ${{ inputs.version }}
+          PAGES_BASE: ${{ steps.pages-api.outputs.base }}
+          THEME_DIRECTORY: ${{ inputs.theme_directory }}
+        working-directory: source
+        run: |
+          set -euo pipefail
+          panel_version="$(node -p "require('./package.json').version")"
+          node scripts/build-theme-publication.mjs "$THEME_DIRECTORY" ../candidate "$PAGES_BASE" "$panel_version" 2.1.2 9
+          test -f "../candidate/themes/v1/${{ inputs.catalog_id }}/$EXPECTED_VERSION/gallery.json"
+      - name: Require the audited Pages history ruleset
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RULESET_ID: ${{ vars.THEME_PAGES_RULESET_ID }}
+          RULESET_UPDATED_AT: ${{ vars.THEME_PAGES_RULESET_UPDATED_AT }}
+        run: |
+          set -euo pipefail
+          case "$RULESET_ID" in ''|*[!0-9]*) exit 1 ;; esac
+          test -n "$RULESET_UPDATED_AT"
+          ruleset="$(gh api "repos/$GITHUB_REPOSITORY/rulesets/$RULESET_ID")"
+          jq -e --arg repository "$GITHUB_REPOSITORY" --arg updated "$RULESET_UPDATED_AT" --argjson ruleset_id "$RULESET_ID" '
+            ([.rules[].type]) as $types |
+            .id == $ruleset_id and
+            .updated_at == $updated and
+            .name == "theme-pages-immutable" and
+            .target == "branch" and
+            .source_type == "Repository" and
+            .source == $repository and
+            .enforcement == "active" and
+            .conditions.ref_name.include == ["refs/heads/gh-pages"] and
+            .conditions.ref_name.exclude == [] and
+            ($types | index("creation")) != null and
+            ($types | index("update")) != null and
+            ($types | index("deletion")) != null and
+            ($types | index("non_fast_forward")) != null
+          ' <<<"$ruleset" >/dev/null
+      - name: Require the protected Pages deploy key
+        env:
+          THEME_PAGES_DEPLOY_KEY: ${{ secrets.THEME_PAGES_DEPLOY_KEY }}
+        run: test -n "$THEME_PAGES_DEPLOY_KEY"
+      - name: Checkout durable Pages tree
+        if: steps.pages-branch.outputs.exists == 'true'
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: gh-pages
+          path: pages-tree
+          fetch-depth: 1
+          ssh-key: ${{ secrets.THEME_PAGES_DEPLOY_KEY }}
+      - name: Checkout initial Pages workspace
+        if: steps.pages-branch.outputs.exists == 'false'
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          path: pages-tree
+          fetch-depth: 1
+          ssh-key: ${{ secrets.THEME_PAGES_DEPLOY_KEY }}
+      - name: Initialize the durable Pages branch
+        if: steps.pages-branch.outputs.exists == 'false'
+        working-directory: pages-tree
+        run: |
+          set -euo pipefail
+          git checkout --orphan gh-pages
+          git rm -rf .
+      - name: Append the candidate to the durable tree
+        env:
+          PAGES_BASE: ${{ steps.pages-api.outputs.base }}
+          VERSION: ${{ inputs.version }}
+        working-directory: source
+        run: |
+          set -euo pipefail
+          node scripts/stage-theme-pages.mjs "../candidate/themes/v1/${{ inputs.catalog_id }}/$VERSION" ../pages-tree "$PAGES_BASE"
+          test ! -e ../pages-tree/CNAME
+      - name: Commit only the immutable version path
+        env:
+          VERSION: ${{ inputs.version }}
+        working-directory: pages-tree
+        run: |
+          set -euo pipefail
+          version_path="themes/v1/${{ inputs.catalog_id }}/$VERSION"
+          git add -- "$version_path"
+          changed="$(git diff --cached --name-only)"
+          if test -z "$changed"; then
+            echo "Immutable version already staged"
+            exit 0
+          fi
+          while IFS= read -r path; do
+            case "$path" in
+              "$version_path"/*) ;;
+              *) echo "::error::unexpected staged path: $path"; exit 1 ;;
+            esac
+          done <<<"$changed"
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git commit -m "theme: stage ${{ inputs.catalog_id }} $VERSION"
+          git push origin HEAD:gh-pages
+      - name: Prepare the complete Pages artifact
+        run: |
+          set -euo pipefail
+          mkdir deploy-tree
+          rsync -a --exclude=.git pages-tree/ deploy-tree/
+      - name: Upload the complete Pages tree
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: deploy-tree
+
+  deploy:
+    needs: stage
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      actions: read
+      pages: write
+      id-token: write
+    steps:
+      - name: Deploy the complete durable tree
+        id: deployment
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
+
+  verify:
+    needs: [stage, deploy]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout verification tooling
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          path: source
+          persist-credentials: false
+      - name: Checkout the reviewed Pages tree
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: gh-pages
+          path: pages-tree
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 20
+      - name: Verify the served immutable version
+        env:
+          PAGES_BASE: ${{ needs.stage.outputs.pages_base }}
+        run: node source/scripts/verify-theme-pages.mjs "$PAGES_BASE" "${{ inputs.catalog_id }}" "${{ inputs.version }}" immutable "pages-tree/themes/v1/${{ inputs.catalog_id }}/${{ inputs.version }}"

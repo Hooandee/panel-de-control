@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "catalogId": "hooandee-gallery",
+  "runtime": {
+    "moduleId": "gallery",
+    "surfaces": [
+      "library",
+      "library-grid",
+      "game-details",
+      "settings"
+    ]
+  }
+}

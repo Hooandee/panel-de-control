@@ -1,0 +1,10 @@
+/* El escenario conserva toda su geometría y navegación. Sólo se retira la
+ * superficie decorativa que vive detrás de la parrilla. */
+:root {
+  --hdg-home-stage-content: none;
+  --hdg-home-stage-wash: var(--hdg-home-stage-wash-without-panel);
+  --hdg-home-card-shadow: 0 8px 12px rgba(0, 0, 0, 0.24);
+  --hdg-home-focused-card-shadow:
+    0 8px 12px rgba(0, 0, 0, 0.28),
+    0 0 14px var(--hdg-focus-glow);
+}

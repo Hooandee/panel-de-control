@@ -18,6 +18,13 @@ interface RuntimeManagerOptions {
   catalog?: ThemeCatalog;
 }
 
+function runtimeFingerprint(theme: CssLoaderTheme): string {
+  const patches = theme.patches
+    .map((patch) => [patch.name, patch.value] as const)
+    .sort(([left], [right]) => left.localeCompare(right, "en"));
+  return JSON.stringify({ version: theme.version, patches });
+}
+
 export class ThemeRuntimeManager {
   private readonly modules: ReadonlyMap<string, ThemeRuntimeModule>;
   private readonly catalog: ThemeCatalog;
@@ -73,10 +80,7 @@ export class ThemeRuntimeManager {
     return {
       moduleId: entry.runtime!.moduleId,
       theme,
-      fingerprint: JSON.stringify({
-        version: theme.version,
-        patches: theme.patches.map((patch) => [patch.name, patch.value]),
-      }),
+      fingerprint: runtimeFingerprint(theme),
     };
   }
 

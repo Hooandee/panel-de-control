@@ -1,0 +1,66 @@
+name: Theme · Gallery
+
+on:
+  push:
+    paths:
+      - "themes/gallery/**"
+      - "scripts/package-theme.mjs"
+      - "scripts/check-theme-version.mjs"
+      - "scripts/build-theme-publication.mjs"
+      - "scripts/promote-theme-pages.mjs"
+      - "scripts/stage-theme-pages.mjs"
+      - "scripts/theme-publication-contract.mjs"
+      - "scripts/verify-theme-pages.mjs"
+      - "tests/galleryPackage.test.ts"
+      - "tests/themePackaging.test.ts"
+      - "tests/themeVersioning.test.ts"
+      - "tests/themeWorkflow.test.ts"
+      - "tests/themePublicationContract.test.ts"
+      - "tests/themePublicationBuild.test.ts"
+      - "tests/themePagesStage.test.ts"
+      - "tests/themePagesPromote.test.ts"
+      - "tests/themePagesVerify.test.ts"
+      - ".github/workflows/_theme-package.yml"
+      - ".github/workflows/_theme-stage.yml"
+      - ".github/workflows/_theme-promote.yml"
+      - ".github/workflows/theme-gallery.yml"
+      - ".github/workflows/theme-gallery-stage.yml"
+      - ".github/workflows/theme-gallery-promote.yml"
+  pull_request:
+    paths:
+      - "themes/gallery/**"
+      - "scripts/package-theme.mjs"
+      - "scripts/check-theme-version.mjs"
+      - "scripts/build-theme-publication.mjs"
+      - "scripts/promote-theme-pages.mjs"
+      - "scripts/stage-theme-pages.mjs"
+      - "scripts/theme-publication-contract.mjs"
+      - "scripts/verify-theme-pages.mjs"
+      - "tests/galleryPackage.test.ts"
+      - "tests/themePackaging.test.ts"
+      - "tests/themeVersioning.test.ts"
+      - "tests/themeWorkflow.test.ts"
+      - "tests/themePublicationContract.test.ts"
+      - "tests/themePublicationBuild.test.ts"
+      - "tests/themePagesStage.test.ts"
+      - "tests/themePagesPromote.test.ts"
+      - "tests/themePagesVerify.test.ts"
+      - ".github/workflows/_theme-package.yml"
+      - ".github/workflows/_theme-stage.yml"
+      - ".github/workflows/_theme-promote.yml"
+      - ".github/workflows/theme-gallery.yml"
+      - ".github/workflows/theme-gallery-stage.yml"
+      - ".github/workflows/theme-gallery-promote.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    uses: ./.github/workflows/_theme-package.yml
+    with:
+      theme_id: gallery
+      theme_directory: themes/gallery
+      contract_test: tests/galleryPackage.test.ts
+      base_ref: ${{ github.event.pull_request.base.sha || github.event.before || '' }}

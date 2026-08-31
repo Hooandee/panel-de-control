@@ -1,0 +1,19 @@
+:root {
+  --hdg-accent-light: #ffe2e3;
+  --hdg-accent: #ee7478;
+  --hdg-accent-deep: #a93f49;
+  --hdg-accent-fill: linear-gradient(180deg, rgba(238, 116, 120, 0.84), rgba(169, 63, 73, 0.78));
+  --hdg-accent-stroke: rgba(255, 226, 227, 0.64);
+  --hdg-accent-glow: rgba(238, 116, 120, 0.3);
+  --hdg-focus-ring: rgba(255, 226, 227, 0.95);
+  --hdg-accent-surface-focus: rgba(238, 116, 120, 0.16);
+  --hdg-accent-fill-light-start: #b13e4c;
+  --hdg-accent-fill-light-end: #852a36;
+  --hdg-accent-fill-light: linear-gradient(180deg, var(--hdg-accent-fill-light-start), var(--hdg-accent-fill-light-end));
+  --hdg-accent-on-fill-light: #ffffff;
+  --hdg-accent-ink-light: #a03542;
+  --hdg-focus-ring-light: rgba(177, 62, 76, 0.96);
+  --hdg-accent-stroke-light: rgba(177, 62, 76, 0.58);
+  --hdg-accent-glow-light: rgba(177, 62, 76, 0.3);
+  --hdg-accent-surface-focus-light: rgba(177, 62, 76, 0.14);
+}

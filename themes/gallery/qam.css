@@ -1,0 +1,1457 @@
+html:root #QuickAccess-Menu .CSSLoader_ThemeListContainer
+  > .CSSLoader_QAM_CollapseButton_Container {
+  display: block !important;
+  margin-block: 2px 8px !important;
+}
+
+html:root #QuickAccess-Menu .CSSLoader_ThemeListContainer
+  > .CSSLoader_QAM_CollapseButton_Container
+  button {
+  align-items: center !important;
+  background:
+    linear-gradient(145deg, var(--hdg-control-highlight), transparent 58%),
+    var(--hdg-control-surface) !important;
+  border: 1px solid var(--hdg-glass-stroke) !important;
+  border-radius: 10px !important;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.08) !important;
+  color: var(--hdg-text-secondary) !important;
+  display: flex !important;
+  height: 36px !important;
+  justify-content: flex-start !important;
+  min-height: 36px !important;
+  min-width: 44px !important;
+  padding: 6px 44px 6px 14px !important;
+  position: relative !important;
+  text-align: left !important;
+}
+
+html:root #QuickAccess-Menu .CSSLoader_ThemeListContainer
+  > .CSSLoader_QAM_CollapseButton_Container
+  button::before {
+  background: transparent !important;
+  box-shadow: none !important;
+  content: "Ajustes del tema";
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  line-height: 1;
+  opacity: 1 !important;
+  position: static !important;
+}
+
+html:root #QuickAccess-Menu .CSSLoader_ThemeListContainer
+  > .CSSLoader_QAM_CollapseButton_Container
+  button.gpfocus {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.12), transparent 58%),
+    var(--hdg-accent-surface-focus) !important;
+  border-color: var(--hdg-accent-stroke) !important;
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.12),
+    0 0 0 1px var(--hdg-accent-glow),
+    0 4px 10px var(--hdg-shadow-color) !important;
+  color: var(--hdg-text-primary) !important;
+}
+
+html:root #QuickAccess-Menu .CSSLoader_ThemeListContainer
+  > .CSSLoader_QAM_CollapseButton_Container
+  .Panel.Focusable.gpfocuswithin:has(button.gpfocus) {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+html:root #QuickAccess-Menu .CSSLoader_ThemeListContainer
+  > .CSSLoader_QAM_CollapseButton_Container
+  button
+  svg {
+  font-size: 20px !important;
+  position: absolute !important;
+  right: 14px !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+}
+
+html,
+body,
+#browserview_target {
+  background: transparent !important;
+}
+
+/* El popup CEF compone cualquier transparencia exterior contra negro. La
+ * superficie vive en el root full-bleed para que no existan huecos en las
+ * esquinas; el panel conserva por encima su borde curvo de 20 px. */
+#QuickAccess-NA {
+  --hdg-qam-glass-sheen: rgba(244, 250, 255, 0.055);
+  --hdg-qam-glass-depth: rgba(1, 5, 9, 0.16);
+  --hdg-qam-contrast-open: rgba(2, 6, 10, 0.90);
+  --hdg-qam-contrast-content: rgba(2, 6, 10, 0.95);
+  -webkit-backdrop-filter: blur(calc(var(--hdg-glass-blur) + 4px)) saturate(1.16);
+  backdrop-filter: blur(calc(var(--hdg-glass-blur) + 4px)) saturate(1.16);
+  background:
+    radial-gradient(ellipse 118% 34% at 50% -10%, var(--hdg-qam-glass-sheen), transparent 62%),
+    radial-gradient(
+      circle at 14% 4%,
+      color-mix(in srgb, var(--hdg-accent) 18%, transparent),
+      transparent 34%
+    ),
+    linear-gradient(
+      90deg,
+      var(--hdg-qam-contrast-open) 0%,
+      var(--hdg-qam-contrast-open) 10%,
+      var(--hdg-qam-contrast-content) 18%,
+      var(--hdg-qam-contrast-content) 100%
+    ),
+    linear-gradient(180deg, transparent 64%, var(--hdg-qam-glass-depth)),
+    var(--hdg-qam-panel) !important;
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--hdg-qam-glass-sheen) 70%, transparent),
+    inset 0 -1px 0 var(--hdg-glass-stroke-soft) !important;
+}
+
+#QuickAccess-Menu {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: var(--hdg-glass-radius-panel) 0 0 var(--hdg-glass-radius-panel);
+  /* Tres trazos estrictamente interiores hacen visible el radio sin proyectar
+   * las cuñas exteriores que formaban los picos superior e inferior. */
+  box-shadow:
+    inset 1px 0 0 var(--hdg-glass-stroke),
+    inset 0 1px 0 var(--hdg-glass-highlight),
+    inset 0 -1px 0 var(--hdg-glass-stroke-soft) !important;
+  box-sizing: border-box;
+}
+
+/* La señal `.ingame` sólo existe en el header del QuickAccess abierto sobre
+ * un juego. Conservamos allí el mismo cristal translúcido del QAM normal: una
+ * base opaca ocultaba el frame y hacía invisible el blur que ya aplica el root. */
+#QuickAccess-NA:has(#QuickAccess-Menu #header .ingame) {
+  background:
+    radial-gradient(ellipse 118% 34% at 50% -10%, var(--hdg-qam-glass-sheen), transparent 62%),
+    radial-gradient(
+      circle at 14% 4%,
+      color-mix(in srgb, var(--hdg-accent) 18%, transparent),
+      transparent 34%
+    ),
+    linear-gradient(
+      90deg,
+      var(--hdg-qam-contrast-open) 0%,
+      var(--hdg-qam-contrast-open) 10%,
+      var(--hdg-qam-contrast-content) 18%,
+      var(--hdg-qam-contrast-content) 100%
+    ),
+    linear-gradient(180deg, transparent 64%, var(--hdg-qam-glass-depth)),
+    var(--hdg-qam-panel) !important;
+}
+
+#QuickAccess-Menu:has(#header .ingame) #header {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  background: transparent !important;
+  border-bottom: 0 !important;
+  box-shadow: none !important;
+}
+
+#QuickAccess-Menu:has(#header .ingame) #header::before {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  background: none !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  content: "" !important;
+  filter: none !important;
+}
+
+html:root #QuickAccess-Menu:has(#header .ingame) #header::after {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  background: none !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  content: "" !important;
+  filter: none !important;
+}
+
+#QuickAccess-Menu:has(#header .ingame)
+  > :has([role="tablist"][aria-orientation="vertical"])::before {
+  content: none !important;
+  display: none !important;
+}
+
+#QuickAccess-Menu [role="tablist"] {
+  border-right: 1px solid rgba(240, 248, 255, 0.1);
+}
+
+#QuickAccess-Menu [role="tab"],
+#QuickAccess-Menu :is([role="button"], [role="checkbox"], [role="combobox"]),
+#QuickAccess-Menu [role="slider"] {
+  border: 1px solid transparent !important;
+  border-radius: var(--hdg-control-radius) !important;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+/* El puntero usa un estado más suave que el foco de mando y deriva siempre
+ * del acento activo. La tinta sigue el modo para que una superficie clara no
+ * vuelva a combinarse con texto blanco. */
+html:root #QuickAccess-Menu
+  :is(button, [role="tab"], [role="button"], [role="checkbox"], [role="combobox"]):not([aria-controls^="quickaccess_content_"]):not(.gpfocus):not([role="combobox"]:is(.gpfocuswithin *)):not([aria-selected="true"]):not([aria-checked="true"]):hover {
+  background:
+    linear-gradient(145deg, var(--hdg-control-highlight), transparent 58%),
+    var(--hdg-accent-surface-focus) !important;
+  border-color: var(--hdg-accent-stroke) !important;
+  box-shadow:
+    inset 0 1px var(--hdg-glass-highlight),
+    0 0 0 1px var(--hdg-accent-glow),
+    0 4px 10px var(--hdg-shadow-color) !important;
+  color: var(--hdg-text-primary) !important;
+}
+
+html:root #QuickAccess-Menu
+  :is(button, [role="tab"], [role="button"], [role="checkbox"], [role="combobox"]):not([aria-controls^="quickaccess_content_"]):not(.gpfocus):not([role="combobox"]:is(.gpfocuswithin *)):not([aria-selected="true"]):not([aria-checked="true"]):hover
+  :is(div, span, svg, path) {
+  color: inherit !important;
+  fill: currentColor !important;
+  opacity: 1 !important;
+}
+
+#QuickAccess-Menu [role="tab"]:is([aria-selected="true"], .gpfocus),
+#QuickAccess-Menu :is([role="button"], [role="checkbox"], [role="combobox"]).gpfocus,
+#QuickAccess-Menu [role="checkbox"][aria-checked="true"] {
+  background: var(--hdg-accent-fill) !important;
+  border-color: var(--hdg-accent-stroke) !important;
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.18),
+    0 6px 18px var(--hdg-accent-glow) !important;
+  color: #fff !important;
+}
+
+#QuickAccess-Menu [role="tabpanel"] {
+  background: transparent !important;
+  box-sizing: border-box;
+  padding-bottom: 14px !important;
+  scroll-padding-block: 10px 18px;
+}
+
+/* Ayuda conserva una fila Focusable más ancha que el botón real. Steam la
+ * rellena con un rectángulo nativo; el foco ya vive en nuestro control. */
+#QuickAccess-Menu #quickaccess_content_6
+  .Panel.Focusable.gpfocuswithin:has([role="button"].gpfocus) {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+/*
+ * Steam enfoca algunos selectores mediante una placa rectangular en el padre,
+ * no en el propio combobox. Conservamos el área de navegación y trasladamos
+ * toda la señal visual al control de cristal para evitar la doble selección.
+ */
+#QuickAccess-Menu [role="tabpanel"]
+  .Panel.Focusable.gpfocuswithin:has([role="combobox"]) {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+#QuickAccess-Menu [role="tabpanel"]
+  .Panel.Focusable.gpfocuswithin
+  [role="combobox"] {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.1), transparent 56%),
+    var(--hdg-accent-surface-focus) !important;
+  border-color: var(--hdg-accent-stroke) !important;
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.12),
+    0 7px 18px var(--hdg-accent-glow) !important;
+  color: var(--hdg-text-primary) !important;
+}
+
+/* Las cabeceras nativas proyectan una franja opaca sobre el cristal del QAM. */
+#QuickAccess-Menu :is(div, h1, h2):has(+ [role="tabpanel"]) {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+#QuickAccess-Menu #quickaccess_content_999 > .Panel > :first-child,
+#QuickAccess-Menu #quickaccess_content_999 > .Panel > :first-child > div {
+  box-shadow: none !important;
+}
+
+/* Decky y las vistas internas de sus plugins usan dos toolbars distintas,
+ * pero ambas declaran el mismo contrato sticky inline. Se neutraliza su placa
+ * sin depender de los hashes de ninguna de las dos aplicaciones. */
+#QuickAccess-Menu #quickaccess_content_999
+  [style*="position: sticky"][style*="top: 0"] {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/* Cabecera de CSS Loader integrada: una toolbar compacta, no otra tarjeta.
+ * Se desplaza con los ajustes, conserva acciones táctiles de 34 px y separa
+ * el primer control con una línea tenue en lugar de una franja opaca. */
+#QuickAccess-Menu #quickaccess_content_999 {
+  scroll-padding-block: 58px 20px;
+}
+
+#QuickAccess-Menu #quickaccess_content_999 > .Panel > :first-child {
+  align-items: center !important;
+  background: transparent !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--hdg-glass-stroke-soft) !important;
+  box-sizing: border-box !important;
+  box-shadow: none !important;
+  margin: 0 10px 10px !important;
+  max-height: 48px !important;
+  min-height: 44px !important;
+  overflow: visible !important;
+  padding: 4px 4px 7px !important;
+  position: relative !important;
+  top: auto !important;
+}
+
+#QuickAccess-Menu #quickaccess_content_999 > .Panel > :first-child > div {
+  align-items: center !important;
+  background: transparent !important;
+  box-sizing: border-box !important;
+  color: var(--hdg-text-primary) !important;
+  font-size: 19px !important;
+  font-weight: 650 !important;
+  gap: 6px !important;
+  letter-spacing: -0.2px !important;
+  line-height: 1.1 !important;
+  min-height: 34px !important;
+}
+
+#QuickAccess-Menu #quickaccess_content_999 > .Panel > :first-child
+  :is(h1, h2, h3) {
+  color: var(--hdg-text-primary) !important;
+  font-size: 19px !important;
+  font-weight: 650 !important;
+  letter-spacing: -0.2px !important;
+  line-height: 1.1 !important;
+  margin: 0 !important;
+}
+
+#QuickAccess-Menu #quickaccess_content_999 > .Panel > :first-child
+  :is(button, [role="button"]) {
+  align-items: center !important;
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  border-radius: 10px !important;
+  box-shadow: none !important;
+  box-sizing: border-box !important;
+  display: flex !important;
+  height: 34px !important;
+  justify-content: center !important;
+  margin: 0 !important;
+  max-height: 34px !important;
+  max-width: 34px !important;
+  min-height: 34px !important;
+  min-width: 34px !important;
+  padding: 6px !important;
+  width: 34px !important;
+}
+
+#QuickAccess-Menu #quickaccess_content_999 > .Panel > :first-child
+  :is(button, [role="button"]).gpfocus {
+  background: var(--hdg-accent-surface-focus) !important;
+  border-color: var(--hdg-accent-stroke) !important;
+  box-shadow: 0 4px 12px var(--hdg-accent-glow) !important;
+  color: var(--hdg-text-primary) !important;
+}
+
+#QuickAccess-Menu #quickaccess_content_999 > .Panel > :first-child
+  :is(button, [role="button"])
+  :is(svg, img) {
+  display: block !important;
+  height: 18px !important;
+  margin: 0 !important;
+  max-height: 18px !important;
+  max-width: 18px !important;
+  width: 18px !important;
+}
+
+/* La lista principal de Decky dibuja sus divisores como un ::after de cada
+ * fila, no como role="separator". Se conserva el centro entre filas y el
+ * ancho nativo, pero con el mismo hairline subpíxel aprobado para los popups. */
+html:root #QuickAccess-Menu #quickaccess_content_999
+  .Panel.Focusable:has(
+    > div > div > div > button.DialogButton[role="button"]
+  )::after {
+  background:
+    linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in srgb, var(--hdg-glass-stroke-soft) 62%, transparent) 16%,
+      color-mix(in srgb, var(--hdg-glass-stroke-soft) 62%, transparent) 84%,
+      transparent 100%
+    )
+    center / 100% 0.5px no-repeat !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+/* CSS Loader sitúa "Selected Profile" justo antes del contenedor de temas y
+ * anida cada tema una capa más que la lista principal de Decky. Sólo
+ * reemplazamos los ::after que ya existen para conservar selección, foco y
+ * geometría, usando el mismo hairline aprobado en el resto de Gallery. */
+html:root #QuickAccess-Menu
+  :has(> .CSSLoader_ThemeListContainer)
+  > div
+  > .Panel.Focusable:has([role="combobox"])::after,
+html:root #QuickAccess-Menu .CSSLoader_ThemeListContainer
+  > div
+  > .Panel.Focusable
+  > .Panel.Focusable::after {
+  background:
+    linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in srgb, var(--hdg-glass-stroke-soft) 62%, transparent) 16%,
+      color-mix(in srgb, var(--hdg-glass-stroke-soft) 62%, transparent) 84%,
+      transparent 100%
+    )
+    center / 100% 0.5px no-repeat !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+#QuickAccess-Menu
+  [role="tab"][aria-controls="quickaccess_content_0"]:is([aria-selected="true"], .gpfocus) {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.12), transparent 56%),
+    var(--hdg-accent-surface-focus) !important;
+  border-color: var(--hdg-accent-stroke) !important;
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.13),
+    0 5px 15px var(--hdg-accent-glow) !important;
+  color: var(--hdg-accent-light) !important;
+}
+
+/*
+ * La pestaña mantiene toda su superficie de interacción, pero el estado visual
+ * respira dentro de la barra. El icono no crece ni conserva la inclinación
+ * nativa de navegación: la única señal de foco es la placa inset de Hooandee.
+ */
+#QuickAccess-Menu
+  [role="tablist"]
+  > [role="tab"][aria-controls^="quickaccess_content_"] {
+  position: relative;
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+#QuickAccess-Menu
+  [role="tablist"]
+  > [role="tab"][aria-controls^="quickaccess_content_"]::before {
+  content: "";
+  position: absolute;
+  inset: 4px 5px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  box-shadow: none;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 140ms ease,
+    background-color 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+#QuickAccess-Menu
+  [role="tablist"]
+  > [role="tab"][aria-controls^="quickaccess_content_"]:is(
+    [aria-selected="true"],
+    .gpfocus
+  )::before {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.14), transparent 56%),
+    var(--hdg-accent-fill);
+  border-color: var(--hdg-accent-stroke);
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.16),
+    0 4px 12px var(--hdg-accent-glow);
+  opacity: 1;
+}
+
+#QuickAccess-Menu
+  [role="tablist"]
+  > [role="tab"][aria-controls^="quickaccess_content_"]:not(.gpfocus):not([aria-selected="true"]):hover::before {
+  background:
+    linear-gradient(145deg, var(--hdg-control-highlight), transparent 58%),
+    var(--hdg-accent-surface-focus);
+  border-color: var(--hdg-accent-stroke);
+  box-shadow:
+    inset 0 1px var(--hdg-glass-highlight),
+    0 0 0 1px var(--hdg-accent-glow),
+    0 4px 10px var(--hdg-shadow-color);
+  opacity: 1;
+}
+
+#QuickAccess-Menu
+  [role="tablist"]
+  > [role="tab"][aria-controls^="quickaccess_content_"]
+  :is(svg, img) {
+  width: 24px !important;
+  height: 24px !important;
+  transform: none !important;
+}
+
+#QuickAccess-Menu
+  [role="tablist"]
+  > [role="tab"][aria-controls^="quickaccess_content_"]:is(
+    [aria-selected="true"],
+    .gpfocus
+  )
+  :is(svg, img) {
+  color: #fff !important;
+  opacity: 1 !important;
+  filter: brightness(0) invert(1) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.38)) !important;
+}
+
+#QuickAccess-Menu
+  [role="tablist"]
+  > [role="tab"][aria-controls^="quickaccess_content_"]:not(.gpfocus):not([aria-selected="true"]):hover
+  :is(svg, img) {
+  color: var(--hdg-text-primary) !important;
+  opacity: 1 !important;
+  filter: none !important;
+}
+
+#QuickAccess-Menu
+  [role="tabpanel"][aria-labelledby="quickaccess_tab_0"] {
+  background: transparent !important;
+  box-shadow: inset 1px 0 var(--hdg-glass-stroke-soft);
+  box-sizing: border-box;
+  padding: 8px 0 16px !important;
+  scroll-padding-block: 12px 20px;
+}
+
+/* El aviso de batería es una cabecera propia de Notificaciones, no un toast ni
+ * una fila interactiva. Respira dentro del panel y conserva dos estados: aviso
+ * ámbar y crítico rojo por debajo del umbral ReallyLow de Steam. */
+#QuickAccess-Menu #quickaccess_content_0
+  > :last-child
+  > :first-child:not([role]):has(> svg + div + div) {
+  align-items: center !important;
+  /* Las capas dejan intacto el color semántico nativo: ámbar en aviso y rojo
+   * en crítico. Así no necesitamos conocer ninguna clase interna de Steam. */
+  background-image:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.16), transparent 54%),
+    linear-gradient(var(--hdg-alert-overlay), var(--hdg-alert-overlay)) !important;
+  border: 1px solid var(--hdg-alert-stroke) !important;
+  border-radius: 12px !important;
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.12),
+    0 5px 14px var(--hdg-shadow-color) !important;
+  box-sizing: border-box !important;
+  color: var(--hdg-alert-ink) !important;
+  display: grid !important;
+  gap: 8px !important;
+  grid-template-columns: 22px minmax(0, 1fr) auto !important;
+  margin: 4px 8px 6px !important;
+  min-height: 44px !important;
+  overflow: hidden !important;
+  padding: 8px 11px !important;
+  width: calc(100% - 16px) !important;
+}
+
+#QuickAccess-Menu #quickaccess_content_0
+  > :last-child
+  > :first-child:not([role]):has(> svg + div + div)
+  > svg {
+  color: currentColor !important;
+  height: 22px !important;
+  width: 22px !important;
+}
+
+#QuickAccess-Menu #quickaccess_content_0
+  > :last-child
+  > :first-child:not([role]):has(> svg + div + div)
+  > svg
+  + div {
+  color: currentColor !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.025em;
+  min-width: 0;
+}
+
+#QuickAccess-Menu #quickaccess_content_0
+  > :last-child
+  > :first-child:not([role]):has(> svg + div + div)
+  > :last-child {
+  color: currentColor !important;
+  font-size: 14px !important;
+  font-variant-numeric: tabular-nums;
+  font-weight: 750 !important;
+}
+
+#QuickAccess-Menu
+  [role="tabpanel"][aria-labelledby="quickaccess_tab_0"]
+  [role="button"] {
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  border-radius: 12px !important;
+  box-sizing: border-box;
+  margin: 3px 8px !important;
+  max-width: calc(100% - 16px);
+  min-height: 38px;
+  width: calc(100% - 16px) !important;
+}
+
+#QuickAccess-Menu
+  [role="tabpanel"][aria-labelledby="quickaccess_tab_0"]
+  [role="button"].gpfocus {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.1), transparent 58%),
+    var(--hdg-accent-surface-focus) !important;
+  border-color: var(--hdg-accent-stroke) !important;
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.1),
+    0 5px 15px var(--hdg-accent-glow) !important;
+}
+
+#QuickAccess-Menu
+  [role="tabpanel"][aria-labelledby="quickaccess_tab_0"]
+  [role="button"]
+  img {
+  border-radius: 10px !important;
+  object-fit: cover;
+}
+
+/* Actividad de amigos en Notificaciones: Steam separa la foto y una barra de
+ * presencia hermana. La foto termina recta y la barra completa exactamente su
+ * altura, de modo que ambas se leen como una sola pieza continua. */
+#QuickAccess-Menu #quickaccess_content_0
+  [role="button"]
+  > div:has(> div:first-child > img):has(> div:first-child + div + div)
+  > div:first-child:has(> img) {
+  border-radius: 10px 0 0 10px !important;
+  box-shadow: none !important;
+  overflow: hidden !important;
+}
+
+#QuickAccess-Menu #quickaccess_content_0
+  [role="button"]
+  > div:has(> div:first-child > img):has(> div:first-child + div + div)
+  > div:first-child:has(> img)
+  > img {
+  border: 0 !important;
+  border-radius: 10px 0 0 10px !important;
+  box-shadow: none !important;
+  display: block !important;
+}
+
+#QuickAccess-Menu #quickaccess_content_0
+  [role="button"]
+  > div:has(> div:first-child > img):has(> div:first-child + div + div)
+  > div:first-child:has(> img)
+  + div {
+  align-self: center !important;
+  border: 0 !important;
+  border-radius: 0 2px 2px 0 !important;
+  box-shadow: none !important;
+  flex: 0 0 3px !important;
+  height: 44px !important;
+  margin: 0 !important;
+  min-height: 44px !important;
+  width: 3px !important;
+}
+
+/* Amigos y chat: dos planos de cristal integrados, sin divisor negro ni filas pesadas. */
+#QuickAccess-Menu #quickaccess_content_3 {
+  background: transparent !important;
+  padding-bottom: 14px !important;
+}
+
+#QuickAccess-Menu #quickaccess_content_3 .FriendsListAndChatsSteamDeck {
+  background: transparent !important;
+}
+
+#QuickAccess-Menu #quickaccess_content_3 .friendlist {
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  box-sizing: border-box;
+}
+
+#QuickAccess-Menu #quickaccess_content_3 .FriendsListSteamDeckTopSection {
+  background: transparent !important;
+  border-bottom: 1px solid var(--hdg-glass-stroke-soft);
+  box-shadow: none !important;
+  box-sizing: border-box;
+}
+
+#QuickAccess-Menu #quickaccess_content_3 .FriendsListTabPanelContainer {
+  box-sizing: border-box;
+  padding: 5px 5px 14px !important;
+  scroll-padding-block: 8px 18px;
+}
+
+#QuickAccess-Menu #quickaccess_content_3 .FriendsListTab {
+  align-items: center !important;
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  border-radius: 9px !important;
+  box-shadow: none !important;
+  display: flex !important;
+  height: 30px !important;
+  justify-content: center !important;
+  min-width: 26px !important;
+  padding: 0 !important;
+  width: 26px !important;
+}
+
+#QuickAccess-Menu #quickaccess_content_3 .FriendsListTab > svg,
+#QuickAccess-Menu #quickaccess_content_3 .FriendsListTab > div:has(> svg) > svg {
+  height: 20px !important;
+  margin: 0 !important;
+  width: 20px !important;
+}
+
+#QuickAccess-Menu #quickaccess_content_3 .FriendsListTab > div:has(> svg) {
+  align-items: center;
+  display: flex;
+  height: 24px;
+  justify-content: center;
+  margin: 0 !important;
+  width: 24px;
+}
+
+#QuickAccess-Menu #quickaccess_content_3 .FriendsListTab:not(.Active):not(.gpfocus) {
+  color: var(--hdg-text-secondary) !important;
+  opacity: 0.78;
+}
+
+#QuickAccess-Menu #quickaccess_content_3 .FriendsListTab:is(.Active, .gpfocus) {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.12), transparent 58%),
+    var(--hdg-accent-surface-focus) !important;
+  border-color: var(--hdg-accent-stroke) !important;
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.12),
+    0 4px 12px var(--hdg-accent-glow) !important;
+  color: var(--hdg-accent-light) !important;
+}
+
+#QuickAccess-Menu #quickaccess_content_3 .favoriteElement {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+#QuickAccess-Menu #quickaccess_content_3 :is(.friend, .ChatRoomListGroupItem, .groupName) {
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  border-radius: 12px !important;
+  box-shadow: none !important;
+  box-sizing: border-box;
+  margin: 3px 5px !important;
+  max-width: calc(100% - 10px);
+}
+
+#QuickAccess-Menu #quickaccess_content_3 .groupName {
+  color: var(--hdg-text-secondary) !important;
+}
+
+#QuickAccess-Menu #quickaccess_content_3 :is(
+    .friend.gpfocus,
+    .ChatRoomListGroupItem.gpfocus,
+    .groupName.gpfocus,
+    .favoriteElement.gpfocus > .friend
+  ) {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.1), transparent 58%),
+    var(--hdg-accent-surface-focus) !important;
+  border-color: var(--hdg-accent-stroke) !important;
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.1),
+    0 5px 14px var(--hdg-accent-glow) !important;
+}
+
+#QuickAccess-Menu #quickaccess_content_3 .friend img {
+  border-radius: 10px !important;
+}
+
+#QuickAccess-Menu #quickaccess_content_3 .friend
+  .avatarHolder:has(> .avatarStatus):has(> img.avatar) {
+  border: 0 !important;
+  border-radius: 9px 2px 2px 9px !important;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.26) !important;
+  box-sizing: border-box !important;
+  height: 31px !important;
+  overflow: hidden !important;
+  position: relative !important;
+  width: 34px !important;
+}
+
+#QuickAccess-Menu #quickaccess_content_3 .friend
+  .avatarHolder:has(> .avatarStatus):has(> img.avatar)
+  > img.avatar {
+  border: 0 !important;
+  border-radius: 9px 0 0 9px !important;
+  box-shadow: none !important;
+  height: 100% !important;
+  inset: 0 3px 0 0 !important;
+  object-fit: cover !important;
+  position: absolute !important;
+  width: calc(100% - 3px) !important;
+}
+
+#QuickAccess-Menu #quickaccess_content_3 .friend
+  .avatarHolder:has(> img.avatar)
+  > .avatarStatus {
+  border: 0 !important;
+  border-radius: 0 2px 2px 0 !important;
+  bottom: 0 !important;
+  box-shadow: none !important;
+  height: 100% !important;
+  left: auto !important;
+  right: 0 !important;
+  top: 0 !important;
+  transform: none !important;
+  width: 3px !important;
+}
+
+#QuickAccess-Menu #quickaccess_content_3 .friend
+  .avatarHolder:has(> .avatarStatus):has(> img.avatar)
+  > .avatarFrame {
+  display: none !important;
+}
+
+#QuickAccess-Menu #quickaccess_content_3 .multiChatDialog {
+  background: transparent !important;
+  border-left: 1px solid var(--hdg-glass-stroke-soft) !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  box-sizing: border-box;
+}
+
+#QuickAccess-Menu #quickaccess_content_3 .emptyChatDialogs {
+  background: transparent !important;
+  color: var(--hdg-text-secondary) !important;
+}
+
+#QuickAccess-Menu #quickaccess_content_3 .multiChatDialog > [role="button"] {
+  background: transparent !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--hdg-glass-stroke-soft) !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+#QuickAccess-Menu #quickaccess_content_3 .multiChatDialog > [role="button"].gpfocus {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.08), transparent 56%),
+    var(--hdg-accent-surface-focus) !important;
+  border-bottom-color: var(--hdg-accent-stroke) !important;
+}
+
+#QuickAccess-Menu #quickaccess_content_3 .ChatHistoryContainer {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+#QuickAccess-Menu #quickaccess_content_3 .ChatHistoryContainer.gpfocus {
+  background: rgba(255, 255, 255, 0.018) !important;
+  border-color: transparent !important;
+  box-shadow: inset 0 0 0 1px var(--hdg-accent-surface-focus) !important;
+}
+
+#QuickAccess-Menu #quickaccess_content_3 .chatEntry {
+  background:
+    linear-gradient(180deg, transparent, rgba(3, 8, 14, 0.2)) !important;
+  border-top: 1px solid var(--hdg-glass-stroke-soft) !important;
+  box-sizing: border-box;
+}
+
+#QuickAccess-Menu #quickaccess_content_3 .chatEntry textarea[role="button"] {
+  background:
+    linear-gradient(145deg, var(--hdg-control-highlight), transparent 54%),
+    var(--hdg-control-surface) !important;
+  border: 1px solid var(--hdg-glass-stroke) !important;
+  border-radius: 14px !important;
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.07),
+    inset 0 -1px rgba(0, 0, 0, 0.18) !important;
+}
+
+#QuickAccess-Menu #quickaccess_content_3 .chatEntry textarea[role="button"]:is(
+    :focus,
+    .gpfocus
+  ) {
+  border-color: var(--hdg-accent-stroke) !important;
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.1),
+    0 0 0 2px var(--hdg-accent-glow) !important;
+  outline: none !important;
+}
+
+#QuickAccess-Menu #quickaccess_content_3 .chatEntry button[role="button"] {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.09), transparent 56%),
+    var(--hdg-glass-surface-strong) !important;
+  border: 1px solid var(--hdg-glass-stroke) !important;
+  border-radius: 14px !important;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.08) !important;
+  margin-left: 8px !important;
+}
+
+#QuickAccess-Menu #quickaccess_content_3 .chatEntry button[role="button"].gpfocus {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.14), transparent 56%),
+    var(--hdg-accent-fill) !important;
+  border-color: var(--hdg-accent-stroke) !important;
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.16),
+    0 5px 14px var(--hdg-accent-glow) !important;
+}
+
+#QuickAccess-Menu #quickaccess_content_3 .inviteAnotherFriendButton {
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  border-radius: 12px !important;
+  box-shadow: none !important;
+  margin: 4px !important;
+}
+
+#QuickAccess-Menu #quickaccess_content_3 .inviteAnotherFriendButton.gpfocus {
+  background: var(--hdg-accent-surface-focus) !important;
+  border-color: var(--hdg-accent-stroke) !important;
+  box-shadow: 0 4px 12px var(--hdg-accent-glow) !important;
+}
+
+#QuickAccess-Menu #quickaccess_content_4
+  div:has(> :nth-child(2) [role="checkbox"]) {
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  border-radius: var(--hdg-control-radius) !important;
+  box-sizing: border-box;
+  margin: 0 -4px !important;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+#QuickAccess-Menu #quickaccess_content_4
+  div.gpfocuswithin:has(> :nth-child(2) [role="checkbox"].gpfocus) {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.1), transparent 56%),
+    var(--hdg-accent-surface-focus) !important;
+  border-color: var(--hdg-accent-stroke) !important;
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.12),
+    0 6px 16px var(--hdg-accent-glow) !important;
+}
+
+#QuickAccess-Menu #quickaccess_content_4
+  [role="button"]:not([aria-label]):not([aria-roledescription]) {
+  margin: 0 -4px !important;
+}
+
+#QuickAccess-Menu :is(.pdc-tabstrip, .pdc-root)
+  [role="button"][style*="background: rgb(78, 161, 255)"] {
+  background: var(--hdg-accent-fill) !important;
+  border-color: var(--hdg-accent-stroke) !important;
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.18),
+    0 6px 18px var(--hdg-accent-glow) !important;
+  color: #fff !important;
+}
+
+#QuickAccess-Menu .pdc-tabstrip
+  [role="button"][aria-current="page"] {
+  background: var(--hdg-accent-fill) !important;
+  border-color: var(--hdg-accent-stroke) !important;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.18) !important;
+  color: var(--hdg-accent-on-fill) !important;
+}
+
+#QuickAccess-Menu .pdc-tabstrip
+  [role="button"][aria-current="page"] :is(div, span, svg) {
+  color: inherit !important;
+  -webkit-text-fill-color: currentColor !important;
+}
+
+#QuickAccess-Menu .pdc-tabstrip
+  [role="button"][aria-current="page"] svg {
+  fill: currentColor !important;
+}
+
+#QuickAccess-Menu #quickaccess_content_5260355 .pdc-tabstrip {
+  box-sizing: border-box;
+  padding-right: 8px !important;
+  scroll-padding-inline: 8px;
+}
+
+#QuickAccess-Menu #quickaccess_content_999 > :nth-child(2) {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  box-sizing: content-box;
+  padding-block: 7px 9px !important;
+}
+
+#QuickAccess-Menu [role="tabpanel"]
+  :is([role="button"][aria-roledescription], [role="combobox"]) {
+  background:
+    linear-gradient(145deg, var(--hdg-control-highlight), transparent 54%),
+    var(--hdg-control-surface) !important;
+  border-color: var(--hdg-glass-stroke) !important;
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.07),
+    inset 0 -1px rgba(0, 0, 0, 0.18) !important;
+  color: var(--hdg-text-primary) !important;
+}
+
+#QuickAccess-Menu [role="tabpanel"]
+  [role="button"][aria-roledescription].gpfocus {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.1), transparent 56%),
+    var(--hdg-accent-surface-focus) !important;
+  border-color: var(--hdg-accent-stroke) !important;
+  border-radius: 12px !important;
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.12),
+    0 7px 18px var(--hdg-accent-glow) !important;
+}
+
+#QuickAccess-Menu [role="separator"] {
+  background: linear-gradient(90deg, transparent, var(--hdg-glass-stroke), transparent) !important;
+}
+
+#QuickAccess-Menu [role="slider"] {
+  background: transparent !important;
+}
+
+#QuickAccess-Menu [role="slider"].gpfocus {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+/* Los sliders viven dentro de un button SliderControlPanelGroup. No debe
+ * heredar la superficie glass de los botones: la pista y el knob ya expresan
+ * el control y su foco sin necesidad de una cápsula exterior. */
+html:root #QuickAccess-NA #QuickAccess-Menu [role="tabpanel"]
+  .SliderControlPanelGroup:has([role="slider"]) {
+  background: transparent !important;
+  border: 0 !important;
+  box-sizing: border-box;
+  box-shadow: none !important;
+  outline: none !important;
+  padding-inline: 12px !important;
+}
+
+/* Los controles del catálogo de CSS Loader comparten una columna estrecha;
+ * cuatro píxeles extra por lado evitan que pista y knob rocen la card. */
+#QuickAccess-Menu .CSSLoader_ThemeListContainer
+  .SliderControlPanelGroup:has([role="slider"]) {
+  padding-inline: 16px !important;
+}
+
+/* Steam añade otra placa rectangular a la fila mediante gpfocuswithin. Se
+ * retira solo cuando el foco real está en un slider de esa fila. */
+#QuickAccess-Menu [role="tabpanel"]
+  .Panel.Focusable.gpfocuswithin:not([role="tabpanel"]):has(
+    .SliderControlPanelGroup > [role="slider"].gpfocus
+  ),
+#QuickAccess-Menu [role="tabpanel"]
+  .Panel.Focusable.gpfocuswithin:not([role="tabpanel"]):has(
+    .SliderControlPanelGroup > [role="slider"].gpfocus
+  )::before,
+#QuickAccess-Menu [role="tabpanel"]
+  .Panel.Focusable.gpfocuswithin:not([role="tabpanel"]):has(
+    .SliderControlPanelGroup > [role="slider"].gpfocus
+  )::after {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+#QuickAccess-Menu [role="tabpanel"]
+  .Panel.Focusable.gpfocuswithin:not([role="tabpanel"]):has(
+    .SliderControlPanelGroup > [role="slider"].gpfocus
+  )::before,
+#QuickAccess-Menu [role="tabpanel"]
+  .Panel.Focusable.gpfocuswithin:not([role="tabpanel"]):has(
+    .SliderControlPanelGroup > [role="slider"].gpfocus
+  )::after {
+  content: none !important;
+}
+
+/* En CSS Loader Steam entrega el foco al wrapper-button, no al slider. Esa
+ * ruta debe retirar la misma placa nativa del ancestro. */
+#QuickAccess-Menu [role="tabpanel"]
+  .Panel.Focusable.gpfocuswithin:not([role="tabpanel"]):has(
+    .SliderControlPanelGroup.gpfocus > [role="slider"]
+  ),
+#QuickAccess-Menu [role="tabpanel"]
+  .Panel.Focusable.gpfocuswithin:not([role="tabpanel"]):has(
+    .SliderControlPanelGroup.gpfocus > [role="slider"]
+  )::before,
+#QuickAccess-Menu [role="tabpanel"]
+  .Panel.Focusable.gpfocuswithin:not([role="tabpanel"]):has(
+    .SliderControlPanelGroup.gpfocus > [role="slider"]
+  )::after {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+#QuickAccess-Menu [role="tabpanel"]
+  .Panel.Focusable.gpfocuswithin:not([role="tabpanel"]):has(
+    .SliderControlPanelGroup.gpfocus > [role="slider"]
+  )::before,
+#QuickAccess-Menu [role="tabpanel"]
+  .Panel.Focusable.gpfocuswithin:not([role="tabpanel"]):has(
+    .SliderControlPanelGroup.gpfocus > [role="slider"]
+  )::after {
+  content: none !important;
+}
+
+#QuickAccess-Menu [role="slider"] .SliderTrack {
+  background: var(--hdg-control-track) !important;
+  border: 1px solid var(--hdg-glass-stroke-soft) !important;
+  border-radius: 999px !important;
+  box-sizing: border-box;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.34) !important;
+}
+
+/* En hover la pista permanece intacta: sólo el aro de acento del knob
+ * comunica el puntero, incluso sobre cristal claro. */
+html:root #QuickAccess-Menu [role="slider"]:not(.gpfocus):hover .SliderTrack {
+  background: var(--hdg-control-track) !important;
+  border-color: var(--hdg-glass-stroke-soft) !important;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.34) !important;
+}
+
+#QuickAccess-Menu [role="slider"].gpfocus .SliderTrack {
+  border-color: var(--hdg-accent-stroke) !important;
+  box-shadow:
+    inset 0 1px 3px rgba(0, 0, 0, 0.34),
+    0 0 0 2px var(--hdg-accent-glow) !important;
+}
+
+/* En los parámetros del tema el knob ya comunica el foco. Un segundo halo
+ * alrededor de toda la pista se percibe como otra cápsula contenedora. */
+#QuickAccess-Menu .CSSLoader_ThemeListContainer
+  [role="slider"].gpfocus
+  .SliderTrack {
+  border-color: var(--hdg-glass-stroke-soft) !important;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.34) !important;
+}
+
+#QuickAccess-Menu [role="slider"] .SliderTrack::before {
+  background: var(--hdg-accent-fill) !important;
+  border-radius: 999px !important;
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.2),
+    0 0 10px var(--hdg-accent-glow) !important;
+}
+
+#QuickAccess-Menu [role="slider"] .SliderHandle {
+  background: var(--hdg-control-thumb) !important;
+  border: 1px solid var(--hdg-accent-stroke) !important;
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.42),
+    0 0 12px var(--hdg-accent-glow),
+    inset 0 1px rgba(255, 255, 255, 0.86) !important;
+  margin: 0 !important;
+  transform: translateY(-0.5px) !important;
+}
+
+html:root #QuickAccess-Menu [role="slider"]:not(.gpfocus):hover .SliderHandle,
+html:root #QuickAccess-Menu
+  .SliderControlPanelGroup.gpfocus:has(> [role="slider"])
+  > [role="slider"]
+  .SliderHandle {
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.42),
+    0 0 0 4px var(--hdg-slider-attention-ring),
+    0 0 16px var(--hdg-accent-glow),
+    inset 0 1px rgba(255, 255, 255, 0.86) !important;
+}
+
+html:root #QuickAccess-Menu [role="slider"].gpfocus .SliderHandle {
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.42),
+    0 0 0 4px var(--hdg-slider-attention-ring),
+    0 0 16px var(--hdg-accent-glow),
+    inset 0 1px rgba(255, 255, 255, 0.86) !important;
+}
+
+#QuickAccess-Menu [role="checkbox"][aria-checked="false"] {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-color: var(--hdg-glass-stroke-soft) !important;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.26) !important;
+}
+
+/* El radio genérico de controles (10 px) deja recto un switch de 24 px.
+ * La pista hereda esta cápsula y conserva exactamente la misma geometría. */
+#QuickAccess-Menu [role="checkbox"]:has(> :nth-child(2)) {
+  border-radius: 999px !important;
+}
+
+#QuickAccess-Menu [role="checkbox"]:has(> :nth-child(2)) > :first-child {
+  background: rgba(255, 255, 255, 0.11) !important;
+  border: 1px solid var(--hdg-glass-stroke-soft) !important;
+  border-radius: inherit !important;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.26) !important;
+  box-sizing: border-box;
+  transition: none !important;
+}
+
+/* La pista nativa mantiene azul en ::before incluso estando apagada. */
+#QuickAccess-Menu [role="checkbox"]:has(> :nth-child(2))
+  > :first-child::before {
+  background: transparent !important;
+  border-radius: inherit !important;
+  transition: none !important;
+}
+
+#QuickAccess-Menu [role="checkbox"][aria-checked="true"]:has(> :nth-child(2)) > :first-child {
+  background: var(--hdg-accent-fill) !important;
+  border-color: var(--hdg-accent-stroke) !important;
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.2),
+    0 0 12px var(--hdg-accent-glow) !important;
+}
+
+#QuickAccess-Menu [role="checkbox"][aria-checked="true"]:has(> :nth-child(2))
+  > :first-child::before {
+  background: var(--hdg-accent-fill) !important;
+  border-radius: inherit !important;
+}
+
+#QuickAccess-Menu [role="checkbox"]:has(> :nth-child(2)) > :nth-child(2) {
+  background: var(--hdg-control-thumb) !important;
+  border: 1px solid rgba(255, 255, 255, 0.44) !important;
+  border-radius: 999px !important;
+  box-shadow: 0 2px 7px rgba(0, 0, 0, 0.38) !important;
+  box-sizing: border-box;
+  margin: 0 !important;
+  transition: transform 140ms ease-out !important;
+}
+
+#QuickAccess-Menu [role="checkbox"] {
+  transition: none !important;
+}
+
+/* Las leyendas de los sliders de CSS Loader deben caber en 300 px. */
+#QuickAccess-Menu .CSSLoader_ThemeListContainer
+  [role="button"][aria-roledescription]
+  > [role="slider"]
+  > :last-child {
+  box-sizing: border-box;
+  display: flex;
+  justify-content: space-between;
+  min-width: 0;
+  overflow: visible;
+  padding-inline: 10px;
+  width: 100%;
+}
+
+#QuickAccess-Menu .CSSLoader_ThemeListContainer
+  [role="button"][aria-roledescription]
+  > [role="slider"]
+  > :last-child
+  > div {
+  align-items: center;
+  display: flex;
+  flex: 0 0 0;
+  flex-direction: column;
+  min-width: 0;
+  overflow: visible;
+  position: relative;
+  text-align: center;
+}
+
+#QuickAccess-Menu .CSSLoader_ThemeListContainer
+  [role="button"][aria-roledescription]
+  > [role="slider"]
+  > :last-child
+  > div
+  > :first-child {
+  background: var(--hdg-accent) !important;
+  box-shadow: 0 0 6px var(--hdg-accent-glow) !important;
+  flex: 0 0 auto;
+}
+
+#QuickAccess-Menu .CSSLoader_ThemeListContainer
+  [role="button"][aria-roledescription]
+  > [role="slider"]
+  > :last-child
+  > div
+  > :last-child {
+  box-sizing: border-box;
+  font-size: 8px !important;
+  line-height: 10px !important;
+  max-width: none;
+  overflow: visible;
+  padding-inline: 0;
+  text-overflow: clip;
+  width: max-content;
+  white-space: nowrap !important;
+}
+
+#QuickAccess-Menu .CSSLoader_ThemeListContainer
+  [role="button"][aria-roledescription]
+  > [role="slider"]
+  > :last-child:has(> :nth-child(4))
+  > div
+  > :last-child {
+  font-size: 7px !important;
+  line-height: 9px !important;
+}
+
+#QuickAccess-Menu .CSSLoader_ThemeListContainer
+  [role="button"][aria-roledescription]
+  > [role="slider"]
+  > :last-child:has(> :nth-child(6))
+  > div
+  > :last-child {
+  font-size: 6px !important;
+  letter-spacing: -0.05px;
+  line-height: 8px !important;
+}
+
+#QuickAccess-Menu input:is(
+    [type="range"],
+    [type="checkbox"],
+    [type="radio"]
+  ) {
+  accent-color: var(--hdg-accent);
+}
+
+#QuickAccess-Menu :is(
+    input[type="text"],
+    input[type="search"],
+    input[type="email"],
+    input[type="password"],
+    input[type="url"],
+    input[type="tel"],
+    input[type="number"],
+    input:not([type]),
+    textarea,
+    select
+  ) {
+  accent-color: var(--hdg-accent);
+  background-color: var(--hdg-control-surface) !important;
+  background-image: linear-gradient(145deg, var(--hdg-control-highlight), transparent 54%) !important;
+  border: 1px solid var(--hdg-glass-stroke) !important;
+  border-radius: var(--hdg-control-radius) !important;
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.07),
+    inset 0 -1px rgba(0, 0, 0, 0.18) !important;
+  caret-color: var(--hdg-accent-light) !important;
+  color: var(--hdg-text-primary) !important;
+  color-scheme: dark;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+#QuickAccess-Menu :is(input, textarea)::placeholder {
+  color: var(--hdg-text-secondary) !important;
+  opacity: 1;
+}
+
+#QuickAccess-Menu :is(
+    input[type="text"],
+    input[type="search"],
+    input[type="email"],
+    input[type="password"],
+    input[type="url"],
+    input[type="tel"],
+    input[type="number"],
+    input:not([type]),
+    textarea,
+    select
+  ):is(:focus, :focus-visible, .gpfocus) {
+  background-color: var(--hdg-control-surface-strong) !important;
+  border-color: var(--hdg-accent-stroke) !important;
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.11),
+    0 0 0 3px var(--hdg-accent-glow),
+    0 7px 18px rgba(0, 0, 0, 0.2) !important;
+  outline: none !important;
+}
+
+#QuickAccess-Menu select option {
+  background: rgb(10, 18, 26);
+  color: var(--hdg-text-primary);
+}
+
+@supports not (backdrop-filter: blur(1px)) {
+  #QuickAccess-NA {
+    background: var(--hdg-glass-panel-fallback) !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #QuickAccess-Menu [role="tab"],
+  #QuickAccess-Menu
+    [role="tablist"]
+    > [role="tab"][aria-controls^="quickaccess_content_"]::before,
+  #QuickAccess-Menu :is([role="button"], [role="checkbox"], [role="combobox"]),
+  #QuickAccess-Menu [role="slider"] {
+    transition: none;
+  }
+
+  #QuickAccess-Menu :is(input, textarea, select) {
+    transition: none;
+  }
+}
+
+#QuickAccess-Menu #quickaccess_tab_5260355:is([aria-selected="true"], .gpfocus) svg {
+  color: #fff !important;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.34)) !important;
+}
+
+/* Panel de Control trae una transición inline de color que deja el glifo gris
+   durante la navegación rápida. Conservamos el movimiento de la superficie y
+   hacemos que la tinta activa alcance su contraste completo al instante. */
+#QuickAccess-Menu #quickaccess_content_5260355 .pdc-root [role="button"] {
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease !important;
+}
+
+#QuickAccess-Menu #quickaccess_content_5260355 .pdc-root [role="button"].gpfocus,
+#QuickAccess-Menu #quickaccess_content_5260355 .pdc-root [role="button"].gpfocuswithin,
+#QuickAccess-Menu #quickaccess_content_5260355 .pdc-root [role="button"][aria-selected="true"],
+#QuickAccess-Menu #quickaccess_content_5260355 .pdc-root [role="button"][style*="background: rgb(78, 161, 255)"] {
+  color: #fff !important;
+  -webkit-text-fill-color: currentColor !important;
+}
+
+#QuickAccess-Menu #quickaccess_content_5260355 .pdc-root [role="button"].gpfocus svg,
+#QuickAccess-Menu #quickaccess_content_5260355 .pdc-root [role="button"].gpfocuswithin svg,
+#QuickAccess-Menu #quickaccess_content_5260355 .pdc-root [role="button"][aria-selected="true"] svg,
+#QuickAccess-Menu #quickaccess_content_5260355 .pdc-root [role="button"][style*="background: rgb(78, 161, 255)"] svg {
+  color: inherit !important;
+  stroke: currentColor !important;
+}

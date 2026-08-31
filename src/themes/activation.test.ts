@@ -158,6 +158,30 @@ describe("ThemeActivator", () => {
     expect(adapter.writes.every(([name]) => name.startsWith("Hooandee"))).toBe(true);
   });
 
+  it("rejects and restores an unrelated catalog theme changed during activation", async () => {
+    const adapter = new FakeActivationAdapter([
+      cssTheme("Hooandee Gallery", true),
+      cssTheme("Hooandee Shattered Realms", false),
+      cssTheme("Hooandee Obsidian Bloom", false),
+    ]);
+    adapter.afterWrite = () => {
+      const unrelated = adapter.themes.find((theme) => theme.name === "Hooandee Shattered Realms");
+      if (unrelated) unrelated.enabled = true;
+      adapter.afterWrite = undefined;
+    };
+    const activator = new ThemeActivator(adapter, LOCAL_THEME_CATALOG);
+
+    await expect(activator.activate("hooandee-obsidian-bloom")).rejects.toMatchObject({
+      code: "activation_failed",
+      restorationFailed: false,
+    });
+    expect(adapter.themes.map((theme) => [theme.name, theme.enabled])).toEqual([
+      ["Hooandee Gallery", true],
+      ["Hooandee Shattered Realms", false],
+      ["Hooandee Obsidian Bloom", false],
+    ]);
+  });
+
   it("rejects a second activation while one is still running", async () => {
     let release: (() => void) | undefined;
     const gate = new Promise<void>((resolve) => { release = resolve; });
@@ -174,5 +198,122 @@ describe("ThemeActivator", () => {
 
     release?.();
     await first;
+  });
+
+  it("deactivates only the selected catalog theme and verifies third-party state", async () => {
+    const adapter = new FakeActivationAdapter([
+      cssTheme("Hooandee Gallery", true),
+      cssTheme("Hooandee Obsidian Bloom", false),
+      cssTheme("Third Party Theme", true),
+    ]);
+    const activator = new ThemeActivator(adapter, LOCAL_THEME_CATALOG);
+    const snapshot = await activator.deactivate("hooandee-gallery");
+
+    expect(adapter.writes).toEqual([["Hooandee Gallery", false]]);
+    expect(snapshot.themes.find((theme) => theme.name === "Hooandee Gallery")?.enabled).toBe(false);
+    expect(snapshot.themes.find((theme) => theme.name === "Third Party Theme")?.enabled).toBe(true);
+  });
+
+  it("restores an active theme when deactivation fails after the write", async () => {
+    const adapter = new FakeActivationAdapter([
+      cssTheme("Hooandee Gallery", true),
+      cssTheme("Third Party Theme", true),
+    ]);
+    adapter.failAfterWrite = (name, enabled) => name === "Hooandee Gallery" && !enabled;
+    const activator = new ThemeActivator(adapter, LOCAL_THEME_CATALOG);
+
+    await expect(activator.deactivate("hooandee-gallery")).rejects.toMatchObject({
+      code: "deactivation_failed",
+      restorationFailed: false,
+    });
+    expect(adapter.writes).toEqual([
+      ["Hooandee Gallery", false],
+      ["Hooandee Gallery", true],
+    ]);
+    expect(adapter.themes.find((theme) => theme.name === "Hooandee Gallery")?.enabled).toBe(true);
+  });
+
+  it("reports when a failed deactivation cannot restore the active theme", async () => {
+    const adapter = new FakeActivationAdapter([cssTheme("Hooandee Gallery", true)]);
+    adapter.failAfterWrite = (name, enabled) => name === "Hooandee Gallery" && !enabled;
+    adapter.failOn = (name, enabled) => name === "Hooandee Gallery" && enabled;
+    const activator = new ThemeActivator(adapter, LOCAL_THEME_CATALOG);
+
+    await expect(activator.deactivate("hooandee-gallery")).rejects.toMatchObject({
+      code: "rollback_failed",
+      restorationFailed: true,
+    });
+  });
+
+  it("rolls back without writing a third-party theme changed concurrently", async () => {
+    const adapter = new FakeActivationAdapter([
+      cssTheme("Hooandee Gallery", true),
+      cssTheme("Third Party Theme", true),
+    ]);
+    adapter.afterWrite = () => {
+      const thirdParty = adapter.themes.find((theme) => theme.name === "Third Party Theme");
+      if (thirdParty) thirdParty.enabled = false;
+      adapter.afterWrite = undefined;
+    };
+    const activator = new ThemeActivator(adapter, LOCAL_THEME_CATALOG);
+
+    await expect(activator.deactivate("hooandee-gallery")).rejects.toMatchObject({
+      code: "deactivation_failed",
+    });
+    expect(adapter.writes.every(([name]) => name.startsWith("Hooandee"))).toBe(true);
+    expect(adapter.themes.find((theme) => theme.name === "Hooandee Gallery")?.enabled).toBe(true);
+  });
+
+  it("rejects and restores an unrelated catalog theme changed during deactivation", async () => {
+    const adapter = new FakeActivationAdapter([
+      cssTheme("Hooandee Gallery", true),
+      cssTheme("Hooandee Obsidian Bloom", false),
+    ]);
+    adapter.afterWrite = () => {
+      const unrelated = adapter.themes.find((theme) => theme.name === "Hooandee Obsidian Bloom");
+      if (unrelated) unrelated.enabled = true;
+      adapter.afterWrite = undefined;
+    };
+    const activator = new ThemeActivator(adapter, LOCAL_THEME_CATALOG);
+
+    await expect(activator.deactivate("hooandee-gallery")).rejects.toMatchObject({
+      code: "deactivation_failed",
+      restorationFailed: false,
+    });
+    expect(adapter.themes.map((theme) => [theme.name, theme.enabled])).toEqual([
+      ["Hooandee Gallery", true],
+      ["Hooandee Obsidian Bloom", false],
+    ]);
+  });
+
+  it("shares its busy lock between activation and deactivation", async () => {
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const adapter = new FakeActivationAdapter([
+      cssTheme("Hooandee Gallery", true),
+      cssTheme("Hooandee Obsidian Bloom", false),
+    ]);
+    adapter.beforeWrite = () => gate;
+    const activator = new ThemeActivator(adapter, LOCAL_THEME_CATALOG);
+
+    const deactivation = activator.deactivate("hooandee-gallery");
+    await Promise.resolve();
+    await expect(activator.activate("hooandee-obsidian-bloom")).rejects.toMatchObject({ code: "busy" });
+
+    release?.();
+    await deactivation;
+  });
+
+  it("does not write when the selected theme is already inactive", async () => {
+    const adapter = new FakeActivationAdapter([
+      cssTheme("Hooandee Gallery", false),
+      cssTheme("Third Party Theme", true),
+    ]);
+    const activator = new ThemeActivator(adapter, LOCAL_THEME_CATALOG);
+
+    const snapshot = await activator.deactivate("hooandee-gallery");
+
+    expect(adapter.writes).toEqual([]);
+    expect(snapshot.themes.find((theme) => theme.name === "Hooandee Gallery")?.enabled).toBe(false);
   });
 });

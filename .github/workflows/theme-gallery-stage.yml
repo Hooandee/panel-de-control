@@ -1,0 +1,28 @@
+name: Theme · Gallery · Stage
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Stable Gallery version already present in themes/gallery/theme.json
+        required: true
+        type: string
+      confirmation:
+        description: Type STAGE followed by a space and the exact version
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  stage:
+    uses: ./.github/workflows/_theme-stage.yml
+    with:
+      catalog_id: hooandee-gallery
+      theme_directory: themes/gallery
+      version: ${{ inputs.version }}
+      confirmation: ${{ inputs.confirmation }}

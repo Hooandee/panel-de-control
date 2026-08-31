@@ -12,6 +12,7 @@ export type ThemeActivationErrorCode =
   | "unknown_theme"
   | "not_installed"
   | "activation_failed"
+  | "deactivation_failed"
   | "rollback_failed";
 
 export class ThemeActivationError extends Error {
@@ -76,6 +77,16 @@ export class ThemeActivator {
     });
   }
 
+  deactivate(themeId: string): Promise<CssLoaderSnapshot> {
+    if (this.running) {
+      return Promise.reject(new ThemeActivationError("busy", "A theme operation is already running"));
+    }
+    this.running = true;
+    return this.runDeactivation(themeId).finally(() => {
+      this.running = false;
+    });
+  }
+
   private async runActivation(themeId: string): Promise<CssLoaderSnapshot> {
     const target = this.catalog.themes.find((theme) => theme.id === themeId);
     if (!target) throw new ThemeActivationError("unknown_theme", `Unknown Hooandee theme: ${themeId}`);
@@ -83,7 +94,7 @@ export class ThemeActivator {
     const initial = await this.adapter.inspect();
     requireReady(initial);
     if (!initial.themes.some((theme) => theme.name === target.cssLoaderName)) {
-      throw new ThemeActivationError("not_installed", `${target.name} is not installed`);
+      throw new ThemeActivationError("not_installed", `${target.cssLoaderName} is not installed`);
     }
 
     const catalogEntries = catalogByCssLoaderName(this.catalog);
@@ -95,8 +106,11 @@ export class ThemeActivator {
       return theme.enabled
         && theme.name !== target.cssLoaderName
         && entry?.exclusiveGroup !== undefined
-        && entry.exclusiveGroup === target.exclusiveGroup;
+      && entry.exclusiveGroup === target.exclusiveGroup;
     });
+    const expectedHooandee = new Map(initialHooandee);
+    conflicts.forEach((conflict) => expectedHooandee.set(conflict.name, false));
+    expectedHooandee.set(target.cssLoaderName, true);
 
     try {
       for (const conflict of conflicts) {
@@ -108,10 +122,7 @@ export class ThemeActivator {
 
       const finalSnapshot = await this.adapter.inspect();
       requireReady(finalSnapshot);
-      const finalTarget = finalSnapshot.themes.find((theme) => theme.name === target.cssLoaderName);
-      const conflictsRemain = conflicts.some((conflict) =>
-        finalSnapshot.themes.find((theme) => theme.name === conflict.name)?.enabled !== false);
-      if (!finalTarget?.enabled || conflictsRemain) {
+      if (!sameStates(expectedHooandee, finalSnapshot)) {
         throw new Error("CSS Loader did not confirm the requested Hooandee state");
       }
       if (!sameStates(initialThirdParty, finalSnapshot)) {
@@ -120,23 +131,7 @@ export class ThemeActivator {
       return finalSnapshot;
     } catch (activationError) {
       try {
-        let currentStates: Map<string, boolean> | null = null;
-        try {
-          const current = await this.adapter.inspect();
-          requireReady(current);
-          currentStates = statesOf(current, catalogNames);
-        } catch {}
-        const restoration = [...initialHooandee]
-          .filter(([name, enabled]) => currentStates?.get(name) !== enabled)
-          .reverse();
-        for (const [name, enabled] of restoration) {
-          await this.adapter.setThemeState(name, enabled);
-        }
-        const restored = await this.adapter.inspect();
-        requireReady(restored);
-        if (!sameStates(initialHooandee, restored)) {
-          throw new Error("Hooandee state does not match the activation snapshot");
-        }
+        await this.restoreCatalogStates(initialHooandee, catalogNames);
       } catch {
         throw new ThemeActivationError(
           "rollback_failed",
@@ -146,6 +141,70 @@ export class ThemeActivator {
       }
       const detail = activationError instanceof Error ? activationError.message : "unknown failure";
       throw new ThemeActivationError("activation_failed", `Theme activation failed: ${detail}`);
+    }
+  }
+
+  private async runDeactivation(themeId: string): Promise<CssLoaderSnapshot> {
+    const target = this.catalog.themes.find((theme) => theme.id === themeId);
+    if (!target) throw new ThemeActivationError("unknown_theme", `Unknown Hooandee theme: ${themeId}`);
+
+    const initial = await this.adapter.inspect();
+    requireReady(initial);
+    const installed = initial.themes.find((theme) => theme.name === target.cssLoaderName);
+    if (!installed) throw new ThemeActivationError("not_installed", `${target.cssLoaderName} is not installed`);
+    if (!installed.enabled) return initial;
+
+    const catalogNames = new Set(this.catalog.themes.map((theme) => theme.cssLoaderName));
+    const initialHooandee = statesOf(initial, catalogNames);
+    const initialThirdParty = thirdPartyStates(initial, catalogNames);
+    const expectedHooandee = new Map(initialHooandee);
+    expectedHooandee.set(target.cssLoaderName, false);
+    try {
+      await this.adapter.setThemeState(target.cssLoaderName, false);
+      const finalSnapshot = await this.adapter.inspect();
+      requireReady(finalSnapshot);
+      if (!sameStates(expectedHooandee, finalSnapshot)) {
+        throw new Error("CSS Loader did not confirm the requested Hooandee state");
+      }
+      if (!sameStates(initialThirdParty, finalSnapshot)) {
+        throw new Error("A third-party theme changed during Hooandee deactivation");
+      }
+      return finalSnapshot;
+    } catch (deactivationError) {
+      try {
+        await this.restoreCatalogStates(initialHooandee, catalogNames);
+      } catch {
+        throw new ThemeActivationError(
+          "rollback_failed",
+          "Deactivation failed and the previous Hooandee state could not be restored",
+          true,
+        );
+      }
+      const detail = deactivationError instanceof Error ? deactivationError.message : "unknown failure";
+      throw new ThemeActivationError("deactivation_failed", `Theme deactivation failed: ${detail}`);
+    }
+  }
+
+  private async restoreCatalogStates(
+    expected: ReadonlyMap<string, boolean>,
+    catalogNames: ReadonlySet<string>,
+  ): Promise<void> {
+    let currentStates: Map<string, boolean> | null = null;
+    try {
+      const current = await this.adapter.inspect();
+      requireReady(current);
+      currentStates = statesOf(current, catalogNames);
+    } catch {}
+    const restoration = [...expected]
+      .filter(([name, enabled]) => currentStates?.get(name) !== enabled)
+      .reverse();
+    for (const [name, enabled] of restoration) {
+      await this.adapter.setThemeState(name, enabled);
+    }
+    const restored = await this.adapter.inspect();
+    requireReady(restored);
+    if (!sameStates(expected, restored)) {
+      throw new Error("Hooandee state does not match the operation snapshot");
     }
   }
 }

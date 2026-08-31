@@ -1,0 +1,10 @@
+/* La hoja base posee la geometría. Esta opción solo cambia sus variables,
+ * de modo que también gobierna 2D, Sutil y Cover Flow sin otra pelea de
+ * especificidad ni nuevos selectores relacionales en la ruta caliente. */
+:root {
+  --hdg-home-focus-shift: var(--hdg-home-focus-shift-up);
+  --hdg-home-metadata-bottom: auto;
+  /* El shell nativo conserva 52 px para metadatos. Compensamos esa reserva
+   * para que el texto visible quede a unos 10 px de la portada enfocada. */
+  --hdg-home-metadata-top: calc(100% - var(--hdg-home-metadata-below-reserve));
+}

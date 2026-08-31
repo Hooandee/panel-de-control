@@ -1,0 +1,68 @@
+name: Theme package
+
+on:
+  workflow_call:
+    inputs:
+      theme_id:
+        required: true
+        type: string
+      theme_directory:
+        required: true
+        type: string
+      contract_test:
+        required: true
+        type: string
+      base_ref:
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: 10
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Enforce immutable theme versions
+        if: ${{ inputs.base_ref != '' }}
+        env:
+          BASE_REF: ${{ inputs.base_ref }}
+          THEME_DIRECTORY: ${{ inputs.theme_directory }}
+        run: node scripts/check-theme-version.mjs "$THEME_DIRECTORY" "$BASE_REF"
+      - name: Validate theme contract and package builder
+        env:
+          CONTRACT_TEST: ${{ inputs.contract_test }}
+        run: >-
+          pnpm test:fe
+          tests/themePackaging.test.ts
+          tests/themeVersioning.test.ts
+          tests/themeWorkflow.test.ts
+          tests/themePublicationContract.test.ts
+          tests/themePublicationBuild.test.ts
+          tests/themePagesStage.test.ts
+          tests/themePagesPromote.test.ts
+          tests/themePagesVerify.test.ts
+          "$CONTRACT_TEST"
+      - name: Build verified theme package
+        env:
+          THEME_DIRECTORY: ${{ inputs.theme_directory }}
+        run: node scripts/package-theme.mjs "$THEME_DIRECTORY" theme-package
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: theme-${{ inputs.theme_id }}-${{ github.sha }}
+          path: theme-package/
+          if-no-files-found: error
+          retention-days: 14

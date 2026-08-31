@@ -1,0 +1,17 @@
+:root {
+  --hdg-home-name-shift-down: 0px;
+  --hdg-home-name-shift-up: 0px;
+}
+
+#GamepadUI_Full_Root [role="list"].ReactVirtualized__Grid__innerScrollContainer:has(
+    > [role="listitem"][data-id="GoToLibrary"]
+  )
+  > [role="listitem"][data-id]
+  > div
+  > div:has(> div > div > [role="link"])
+  > div:last-child
+  > div
+  > div
+  > div:first-child {
+  display: none !important;
+}

@@ -1,0 +1,5 @@
+/* Oculta las ayudas del footer sin alterar su reserva de espacio. */
+
+#Footer > :first-child {
+  visibility: hidden !important;
+}

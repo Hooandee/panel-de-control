@@ -82,4 +82,37 @@ describe("ThemeRuntimeManager", () => {
       patches: [expect.objectContaining({ name: "Animaciones de parrilla", value: "No" })],
     }));
   });
+
+  it("does not remount when CSS Loader returns the same patches in another order", () => {
+    const module: ThemeRuntimeModule = {
+      id: "obsidian-bloom",
+      mount: vi.fn(() => vi.fn()),
+    };
+    const manager = new ThemeRuntimeManager({ modules: [module] });
+    const theme = snapshot("Hooandee Obsidian Bloom", "Yes");
+    if (theme.status !== "ready" || !theme.themes[0]) throw new Error("Invalid test fixture");
+    const secondPatch = {
+      ...theme.themes[0].patches[0],
+      name: "Modo claro",
+      value: "No",
+    };
+    const reordered = {
+      ...theme,
+      themes: [{
+        ...theme.themes[0],
+        patches: [secondPatch, ...theme.themes[0].patches],
+      }],
+    };
+
+    manager.reconcile({
+      ...theme,
+      themes: [{
+        ...theme.themes[0],
+        patches: [...theme.themes[0].patches, secondPatch],
+      }],
+    });
+    manager.reconcile(reordered);
+
+    expect(module.mount).toHaveBeenCalledOnce();
+  });
 });

@@ -3,6 +3,15 @@ import { definePlugin } from "@decky/api";
 import { FC } from "react";
 import { LuGauge } from "react-icons/lu";
 
+import {
+  acknowledgeThemeInstallRollback,
+  checkThemeReleases,
+  commitThemeInstall,
+  getThemeInstallRecoveries,
+  prepareBundledThemeInstall,
+  prepareRemoteThemeInstall,
+  rollbackThemeInstall,
+} from "./api";
 import { I18nProvider, translate } from "./i18n";
 import { ControlCenter } from "./components/ControlCenter";
 import { startGameWatcher } from "./tdp/gameWatcher";
@@ -25,7 +34,11 @@ import { shutdownUiActivity } from "./system/uiActivity";
 import { StandardDeckyContent } from "./components/StandardDeckyContent";
 import { DirectQamShortcut } from "./components/DirectQamShortcut";
 import { configureDeckyCssLoaderHost } from "./themes/deckyCssLoaderHost";
+import { configurePanelThemeInstallHost } from "./themes/panelThemeInstallHost";
 import { startThemesRuntime } from "./themes/runtime/start";
+import { createProductionThemesDependencies } from "./themes/themesClient";
+import { configureThemePublicationCheckHost } from "./themes/remotePublicationClient";
+import { getThemesClient } from "./themes/useThemes";
 
 // Localized header title only; the internal plugin name / install folder stays
 // "Panel de Control" (renaming it would break existing installs and the updater).
@@ -62,6 +75,16 @@ const DirectPluginContent: FC<{
 export default definePlugin(() => {
   const deckyHost = window;
   const releaseCssLoaderHost = configureDeckyCssLoaderHost(deckyHost);
+  const releaseThemeInstallHost = configurePanelThemeInstallHost({
+    prepare: prepareBundledThemeInstall,
+    prepareRemote: prepareRemoteThemeInstall,
+    commit: commitThemeInstall,
+    rollback: rollbackThemeInstall,
+    recoveries: getThemeInstallRecoveries,
+    acknowledge: acknowledgeThemeInstallRollback,
+  });
+  const releaseThemePublicationHost = configureThemePublicationCheckHost(checkThemeReleases);
+  const themesClient = getThemesClient(createProductionThemesDependencies());
   // Restore durable UI prefs into the localStorage cache at plugin scope (so the
   // QAM-closed toast uses the right language), then re-apply the healed values.
   const stopPrefsHealed = onPrefsHealed(() => {
@@ -102,9 +125,8 @@ export default definePlugin(() => {
     () => cleanupOwnedQuickAccessTabs(window),
   );
   const stopThemesRuntime = startThemesRuntime({
-    deckyHost,
+    client: themesClient,
     getSteamDocument: () => findSP()?.document ?? null,
-    signalTarget: deckyHost,
   });
 
   return {
@@ -128,6 +150,8 @@ export default definePlugin(() => {
       stopContextMenu();
       stopListLocalizer();
       stopThemesRuntime();
+      releaseThemeInstallHost();
+      releaseThemePublicationHost();
       releaseCssLoaderHost();
     },
   };

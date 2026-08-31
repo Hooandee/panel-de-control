@@ -17,11 +17,8 @@ vi.mock("@decky/ui", () => ({
       {rgOptions.map((option) => <option key={option.data} value={option.data}>{option.label}</option>)}
     </select></label>
   ),
-}));
-
-vi.mock("./ContainedSlider", () => ({
-  ContainedSlider: ({ value, onChange }: { value: number; onChange: (value: number) => void }) => (
-    <input aria-label="slider" type="range" value={value} onChange={(event) => onChange(Number(event.target.value))} />
+  SliderField: ({ value, disabled, label, onChange }: { value: number; disabled?: boolean; label?: ReactNode; onChange: (value: number) => void }) => (
+    <label>{label}<input type="range" value={value} disabled={disabled} onChange={(event) => onChange(Number(event.target.value))} /></label>
   ),
 }));
 
@@ -50,6 +47,17 @@ describe("ThemePatchControl", () => {
     expect(onChange).toHaveBeenCalledWith("No");
   });
 
+  it("gives editable controls one shared Panel surface", () => {
+    const onChange = vi.fn();
+    render(<ThemePatchControl patch={{ ...basePatch, name: "Animated grid", type: "checkbox", value: "Yes", options: ["No", "Yes"], rawType: "checkbox" }} onChange={onChange} />);
+
+    const surface = screen.getByTestId("theme-patch-control");
+    expect(surface.getAttribute("data-pdc-theme-patch-control")).toBe("true");
+    expect(surface.style.padding).toBe("10px 11px");
+    expect(surface.style.borderRadius).toBe("14px");
+    expect(surface.style.boxSizing).toBe("border-box");
+  });
+
   it("maps a dropdown back to one of CSS Loader's advertised strings", () => {
     const onChange = vi.fn();
     render(<ThemePatchControl patch={{ ...basePatch, type: "dropdown", rawType: "dropdown" }} onChange={onChange} />);
@@ -63,9 +71,21 @@ describe("ThemePatchControl", () => {
     const onChange = vi.fn();
     render(<ThemePatchControl patch={{ ...basePatch, type: "slider" }} onChange={onChange} />);
 
-    fireEvent.change(screen.getByLabelText("slider"), { target: { value: "2" } });
+    const slider = screen.getByRole("slider", { name: /Motion intensity/ });
+    fireEvent.change(slider, { target: { value: "2" } });
 
     expect(onChange).toHaveBeenCalledWith("Full");
+    expect(screen.getByTestId("theme-patch-control").getAttribute("data-pdc-theme-slider")).toBe("true");
+  });
+
+  it("makes a slider visibly and functionally disabled during any theme operation", () => {
+    const onChange = vi.fn();
+    render(<ThemePatchControl patch={{ ...basePatch, type: "slider" }} disabled onChange={onChange} />);
+
+    const slider = screen.getByRole("slider", { name: /Motion intensity/ }) as HTMLInputElement;
+    expect(slider.disabled).toBe(true);
+    fireEvent.change(slider, { target: { value: "2" } });
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   it("keeps an incoherent slider value read-only instead of inventing option zero", () => {
@@ -73,7 +93,7 @@ describe("ThemePatchControl", () => {
     render(<ThemePatchControl patch={{ ...basePatch, type: "slider", value: "Future" }} onChange={onChange} />);
 
     expect(screen.getByText("Future")).toBeTruthy();
-    expect(screen.queryByLabelText("slider")).toBeNull();
+    expect(screen.queryByRole("slider")).toBeNull();
     expect(onChange).not.toHaveBeenCalled();
   });
 
@@ -84,6 +104,24 @@ describe("ThemePatchControl", () => {
     expect(screen.getByText("Future")).toBeTruthy();
     expect(screen.queryByRole("button")).toBeNull();
     expect(screen.queryByRole("combobox")).toBeNull();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("keeps a checkbox without the exact Yes/No contract read-only", () => {
+    const onChange = vi.fn();
+    render(<ThemePatchControl patch={{ ...basePatch, type: "checkbox", value: "Yes", options: ["Yes"], rawType: "checkbox" }} onChange={onChange} />);
+
+    expect(screen.queryByRole("button")).toBeNull();
+    expect(screen.getByText("Sí")).toBeTruthy();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("keeps a slider with no alternative value read-only", () => {
+    const onChange = vi.fn();
+    render(<ThemePatchControl patch={{ ...basePatch, type: "slider", value: "Only", options: ["Only"] }} onChange={onChange} />);
+
+    expect(screen.queryByRole("slider")).toBeNull();
+    expect(screen.getByText("Only")).toBeTruthy();
     expect(onChange).not.toHaveBeenCalled();
   });
 

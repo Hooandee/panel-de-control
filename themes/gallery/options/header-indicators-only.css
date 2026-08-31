@@ -1,0 +1,25 @@
+/* Vista compacta del header: conserva únicamente los indicadores elegidos. */
+
+#header > [role="button"],
+#header > [role="link"]:has(> svg),
+#header > [role="link"]:has([role="button"]),
+#header > #header_profile {
+  display: none !important;
+}
+
+/* Conserva la búsqueda en la navegación del mando y solo la revela al recibir foco. */
+#header > :has(> input[type="search"]) {
+  display: flex !important;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    background-color 150ms ease;
+}
+
+#header > :has(> input[type="search"]):is(.gpfocuswithin, :focus-within) {
+  opacity: 1;
+  pointer-events: auto;
+}

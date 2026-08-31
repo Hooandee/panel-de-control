@@ -14,16 +14,34 @@ export const THEME_RUNTIME_CAPABILITIES = [
   "surface-styles",
   "details-transition",
   "settings-shell",
+  "surface-isolation",
   "performance-budget",
 ] as const;
 
 export type ThemeRuntimeCapability = typeof THEME_RUNTIME_CAPABILITIES[number];
 
-export interface CssLoaderApiInstallSource {
-  kind: "css-loader-api";
-  baseUrl: string;
-  themeId: string;
+export interface BundledThemeInstallSource {
+  kind: "bundled";
+  packageId: string;
 }
+
+export interface OfficialRemoteThemeInstallSource {
+  kind: "official-remote";
+  channelId: "panel-pages-v1";
+}
+
+export type ThemeInstallSource =
+  | BundledThemeInstallSource
+  | OfficialRemoteThemeInstallSource;
+
+export type ThemeInstallRequest =
+  | BundledThemeInstallSource
+  | (OfficialRemoteThemeInstallSource & {
+    catalogId: string;
+    expectedVersion: string;
+  });
+
+export type ThemeAvailability = "available" | "coming-soon";
 
 export interface ThemeRuntimeDeclaration {
   moduleId: string;
@@ -34,17 +52,18 @@ export interface ThemeRuntimeDeclaration {
 export interface ThemeCatalogEntry {
   id: string;
   cssLoaderName: string;
-  name: string;
+  nameKey: string;
   descriptionKey: string;
+  availability: ThemeAvailability;
   author: string;
-  version: string;
+  includedVersion?: string;
   cssLoaderManifestVersion: number;
   minimumCssLoaderBackendVersion: number;
   projectUrl?: string;
   tags: readonly string[];
   exclusiveGroup?: string;
   runtime?: ThemeRuntimeDeclaration;
-  installSource?: CssLoaderApiInstallSource;
+  installSources: readonly ThemeInstallSource[];
 }
 
 export interface ThemeCatalog {

@@ -9,10 +9,11 @@ const VALID_CATALOG = {
     {
       id: "hooandee-example",
       cssLoaderName: "Hooandee Example",
-      name: "Hooandee Example",
+      nameKey: "themes.example.name",
       descriptionKey: "themes.example.description",
+      availability: "available",
       author: "Hooandee",
-      version: "1.2.3",
+      includedVersion: "1.2.3",
       cssLoaderManifestVersion: 9,
       minimumCssLoaderBackendVersion: 9,
       tags: ["library"],
@@ -21,11 +22,16 @@ const VALID_CATALOG = {
         surfaces: ["library", "game-details"],
         capabilities: ["grid-motion"],
       },
-      installSource: {
-        kind: "css-loader-api",
-        baseUrl: "https://themes.example.test",
-        themeId: "hooandee-example",
-      },
+      installSources: [
+        {
+          kind: "bundled",
+          packageId: "hooandee-example",
+        },
+        {
+          kind: "official-remote",
+          channelId: "panel-pages-v1",
+        },
+      ],
     },
   ],
 };
@@ -54,26 +60,72 @@ describe("validateThemeCatalog", () => {
     });
   });
 
-  it("rejects install providers that are not HTTPS", () => {
-    const insecure = {
+  it("rejects install package ids that are not stable slugs", () => {
+    const invalid = {
       ...VALID_CATALOG,
       themes: [{
         ...VALID_CATALOG.themes[0],
-        installSource: {
-          ...VALID_CATALOG.themes[0].installSource,
-          baseUrl: "http://themes.example.test",
-        },
+        installSources: [{
+          kind: "bundled",
+          packageId: "../example",
+        }],
       }],
     };
 
-    const result = validateThemeCatalog(insecure);
+    const result = validateThemeCatalog(invalid);
 
     expect(result).toEqual({
       ok: false,
       issues: [{
-        path: "themes[0].installSource.baseUrl",
-        code: "invalid_url",
-        message: "Install source must use HTTPS",
+        path: "themes[0].installSources[0].packageId",
+        code: "invalid",
+        message: "Bundled package id must be a stable slug",
+      }],
+    });
+  });
+
+  it("rejects a bundled package registered under a different catalog id", () => {
+    const mismatch = {
+      ...VALID_CATALOG,
+      themes: [{
+        ...VALID_CATALOG.themes[0],
+        installSources: [{
+          kind: "bundled",
+          packageId: "hooandee-other",
+        }],
+      }],
+    };
+
+    expect(validateThemeCatalog(mismatch)).toEqual({
+      ok: false,
+      issues: [{
+        path: "themes[0].installSources[0].packageId",
+        code: "invalid",
+        message: "Bundled package id must match its catalog id",
+      }],
+    });
+  });
+
+  it("rejects transport fields embedded in the fixed official channel", () => {
+    const invalid = {
+      ...VALID_CATALOG,
+      themes: [{
+        ...VALID_CATALOG.themes[0],
+        installSources: [{
+          kind: "official-remote",
+          channelId: "panel-pages-v1",
+          baseUrl: "https://attacker.invalid/themes",
+        }],
+        includedVersion: undefined,
+      }],
+    };
+
+    expect(validateThemeCatalog(invalid)).toEqual({
+      ok: false,
+      issues: [{
+        path: "themes[0].installSources[0].baseUrl",
+        code: "unsupported",
+        message: "Install source contains an unsupported field: baseUrl",
       }],
     });
   });
@@ -101,6 +153,40 @@ describe("validateThemeCatalog", () => {
       ],
     });
   });
+
+  it("rejects unknown availability and contradictory coming-soon packages", () => {
+    const invalid = {
+      ...VALID_CATALOG,
+      themes: [{
+        ...VALID_CATALOG.themes[0],
+        availability: "coming-soon",
+      }, {
+        ...VALID_CATALOG.themes[0],
+        id: "hooandee-future",
+        cssLoaderName: "Hooandee Future",
+        nameKey: "themes.future.name",
+        availability: "future",
+        includedVersion: undefined,
+        installSources: [],
+      }],
+    };
+
+    expect(validateThemeCatalog(invalid)).toEqual({
+      ok: false,
+      issues: [
+        {
+          path: "themes[0].installSources",
+          code: "invalid",
+          message: "Coming-soon themes cannot declare install sources",
+        },
+        {
+          path: "themes[1].availability",
+          code: "unsupported",
+          message: "Unsupported theme availability: future",
+        },
+      ],
+    });
+  });
 });
 
 describe("LOCAL_THEME_CATALOG", () => {
@@ -115,7 +201,36 @@ describe("LOCAL_THEME_CATALOG", () => {
     ]);
   });
 
-  it("does not claim an install source before an artifact exists", () => {
-    expect(LOCAL_THEME_CATALOG.themes.every((theme) => !("installSource" in theme))).toBe(true);
+  it("exposes only Gallery as a package bundled and verified by Panel", () => {
+    expect(LOCAL_THEME_CATALOG.themes.map((theme) => [
+      theme.id,
+      theme.installSources,
+      "includedVersion" in theme ? theme.includedVersion : null,
+    ])).toEqual([
+      ["hooandee-gallery", [
+        { kind: "bundled", packageId: "hooandee-gallery" },
+        { kind: "official-remote", channelId: "panel-pages-v1" },
+      ], "0.7.8"],
+      ["hooandee-shattered-realms", [], null],
+      ["hooandee-obsidian-bloom", [], null],
+    ]);
+  });
+
+  it("exposes only Hooandee as available in Panel", () => {
+    expect(LOCAL_THEME_CATALOG.themes.map((theme) => [theme.id, theme.availability, theme.nameKey]))
+      .toEqual([
+        ["hooandee-gallery", "available", "themes.gallery.name"],
+        ["hooandee-shattered-realms", "coming-soon", "themes.shattered.name"],
+        ["hooandee-obsidian-bloom", "coming-soon", "themes.obsidian.name"],
+      ]);
+  });
+
+  it("declares Gallery's native surface isolation runtime", () => {
+    expect(LOCAL_THEME_CATALOG.themes.find((theme) => theme.id === "hooandee-gallery")?.runtime)
+      .toEqual({
+        moduleId: "gallery",
+        surfaces: ["library", "library-grid", "game-details", "settings"],
+        capabilities: ["surface-isolation", "performance-budget"],
+      });
   });
 });

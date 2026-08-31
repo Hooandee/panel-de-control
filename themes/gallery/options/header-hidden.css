@@ -1,0 +1,35 @@
+/* Oculta el contenido del header sin alterar su reserva de espacio. */
+
+#Main:has([data-rbd-droppable-context-id][role="list"]) {
+  --hdg-downloads-header-clearance: 0px;
+}
+
+#GamepadUI_Full_Root:has(#header > :has(> input[type="search"]).gpfocuswithin)
+  #Main:has([data-rbd-droppable-context-id][role="list"]) {
+  --hdg-downloads-header-clearance: 43px;
+}
+
+#header > *:not(:has(> input[type="search"])) {
+  display: none !important;
+}
+
+/* El modo oculto mantiene accesible el buscador sin pintarlo fuera de su foco. */
+#header > :has(> input[type="search"]) {
+  display: flex !important;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    background-color 150ms ease;
+}
+
+#header > :has(> input[type="search"]):is(.gpfocuswithin, :focus-within) {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+#header::after {
+  display: none !important;
+}

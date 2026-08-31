@@ -2,6 +2,7 @@ import asyncio
 import copy
 import json
 import os
+import re
 import time
 from collections import deque
 from concurrent.futures import (
@@ -11,6 +12,7 @@ from concurrent.futures import (
 )
 from dataclasses import asdict, dataclass
 from datetime import datetime
+from pathlib import Path
 from typing import Literal
 
 import decky
@@ -20,6 +22,9 @@ import auto_tdp
 import device_registry
 import osinfo
 import self_updater
+import theme_packages
+import theme_remote
+import theme_transport
 from version import read_version
 from settings_store import SettingsStore
 from tdp import factory as tdp_factory
@@ -135,6 +140,8 @@ _STEAM_DECK_CHARGE_LIMIT_PROFILES = frozenset({
 
 # "custom" = our TDP owns the rails, vs a named platform_profile mode.
 _CUSTOM_MODE = "custom"
+_STABLE_THEME_VERSION = re.compile(r"^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$")
+_OFFICIAL_THEME_CHANNEL: theme_remote.OfficialThemeChannel | None = None
 
 
 @dataclass(frozen=True)
@@ -614,6 +621,13 @@ class Plugin:
         self._launch_tools = launch_tools.detect_tools(
             home=getattr(decky, "DECKY_USER_HOME", None) or os.path.expanduser("~")
         )
+        self._theme_remote_runtime = theme_remote.ThemeRuntimeVersions(
+            panel=read_version(),
+            css_loader="",
+            css_loader_backend=0,
+        )
+        self._theme_remote_service = self._new_theme_remote_service()
+        self._theme_accepting_work = True
         self._ready = True
 
     def _save(self) -> None:
@@ -770,6 +784,185 @@ class Plugin:
     async def restart_loader(self) -> None:
         # Fire-and-forget: restarts Decky to load the just-installed files.
         self_updater.restart_loader()
+
+    def _themes_root(self) -> Path:
+        decky_home = os.environ.get("DECKY_HOME")
+        if decky_home:
+            return Path(decky_home) / "themes"
+        user_home = getattr(decky, "DECKY_USER_HOME", None) or os.path.expanduser("~")
+        return Path(user_home) / "homebrew" / "themes"
+
+    def _remote_themes(self) -> theme_remote.ThemeRemoteService:
+        service = getattr(self, "_theme_remote_service", None)
+        if service is None:
+            self._theme_remote_runtime = theme_remote.ThemeRuntimeVersions(
+                panel=read_version(),
+                css_loader="",
+                css_loader_backend=0,
+            )
+            service = self._new_theme_remote_service()
+            self._theme_remote_service = service
+        return service
+
+    def _new_theme_remote_service(self) -> theme_remote.ThemeRemoteService:
+        channel = _OFFICIAL_THEME_CHANNEL
+        transport = (
+            theme_transport.ThemeHttpTransport(channel.pages_base_url)
+            if channel is not None
+            else None
+        )
+        return theme_remote.ThemeRemoteService(
+            channel,
+            transport=transport,
+            runtime_versions=lambda: self._theme_remote_runtime,
+        )
+
+    async def check_theme_releases(
+        self,
+        force: bool = False,
+        css_loader_version: str = "",
+        css_loader_backend: int = 0,
+    ) -> dict:
+        self._init()
+        if (
+            not isinstance(force, bool)
+            or not isinstance(css_loader_version, str)
+            or _STABLE_THEME_VERSION.fullmatch(css_loader_version) is None
+            or not isinstance(css_loader_backend, int)
+            or isinstance(css_loader_backend, bool)
+            or css_loader_backend <= 0
+        ):
+            return {
+                "status": "recoverable-failure",
+                "code": "invalid_descriptor",
+                "retryable": False,
+            }
+        self._theme_remote_runtime = theme_remote.ThemeRuntimeVersions(
+            panel=read_version(),
+            css_loader=css_loader_version,
+            css_loader_backend=css_loader_backend,
+        )
+        try:
+            return await self._offload_theme_call(
+                lambda: self._remote_themes().check_releases(force)
+            )
+        except theme_packages.ThemePackageError as error:
+            return {
+                "status": "recoverable-failure",
+                "code": error.code,
+                "retryable": False,
+            }
+        except Exception as error:  # noqa: BLE001
+            decky.logger.error(
+                "Remote theme discovery failed: %s",
+                type(error).__name__,
+            )
+            return {
+                "status": "recoverable-failure",
+                "code": "invalid_descriptor",
+                "retryable": True,
+            }
+
+    async def prepare_remote_theme_install(
+        self,
+        theme_id: str,
+        expected_version: str,
+    ) -> dict:
+        self._init()
+        if theme_id != "hooandee-gallery":
+            return {"ok": False, "code": "unsupported_theme", "theme_id": theme_id}
+        if (
+            not isinstance(expected_version, str)
+            or _STABLE_THEME_VERSION.fullmatch(expected_version) is None
+        ):
+            return {"ok": False, "code": "invalid_descriptor", "theme_id": theme_id}
+        try:
+            return await self._offload_theme_call(
+                lambda: self._remote_themes().prepare_install(
+                    theme_id,
+                    expected_version,
+                    self._themes_root(),
+                )
+            )
+        except (theme_remote.ThemeRemoteError, theme_packages.ThemePackageError) as error:
+            decky.logger.warning("Remote theme prepare rejected (%s)", error.code)
+            return {"ok": False, "code": error.code, "theme_id": theme_id}
+        except Exception as error:  # noqa: BLE001
+            decky.logger.error("Remote theme prepare failed: %s", type(error).__name__)
+            return {"ok": False, "code": "install_failed", "theme_id": theme_id}
+
+    async def prepare_bundled_theme_install(self, theme_id: str) -> dict:
+        self._init()
+        try:
+            return await self._offload_theme_call(lambda: theme_packages.prepare_bundled_theme(
+                theme_id,
+                plugin_root=Path(__file__).resolve().parent,
+                themes_root=self._themes_root(),
+            ))
+        except theme_packages.ThemePackageError as error:
+            decky.logger.warning("Theme package prepare rejected (%s): %s", error.code, error)
+            return {"ok": False, "code": error.code, "theme_id": theme_id}
+        except Exception as error:  # noqa: BLE001
+            decky.logger.error("Theme package prepare failed: %s", error)
+            return {"ok": False, "code": "install_failed", "theme_id": theme_id}
+
+    async def commit_theme_install(self, transaction: str) -> dict:
+        self._init()
+        try:
+            return await self._offload_theme_call(lambda: theme_packages.commit_theme_install(
+                transaction,
+                self._themes_root(),
+            ))
+        except theme_packages.ThemePackageError as error:
+            decky.logger.warning("Theme package commit rejected (%s): %s", error.code, error)
+            return {"ok": False, "code": error.code}
+        except Exception as error:  # noqa: BLE001
+            decky.logger.error("Theme package commit failed: %s", error)
+            return {"ok": False, "code": "commit_failed"}
+
+    async def rollback_theme_install(self, transaction: str) -> dict:
+        self._init()
+        try:
+            return await self._offload_theme_call(lambda: theme_packages.rollback_theme_install(
+                transaction,
+                self._themes_root(),
+            ))
+        except theme_packages.ThemePackageError as error:
+            decky.logger.error("Theme package rollback rejected (%s): %s", error.code, error)
+            return {"ok": False, "code": error.code}
+        except Exception as error:  # noqa: BLE001
+            decky.logger.error("Theme package rollback failed: %s", error)
+            return {"ok": False, "code": "rollback_failed"}
+
+    async def get_theme_install_recoveries(self) -> dict:
+        self._init()
+        try:
+            recoveries = await self._offload_theme_call(
+                lambda: theme_packages.recover_theme_transactions(self._themes_root())
+            )
+            return {"ok": True, "code": "ready", "recoveries": recoveries}
+        except theme_packages.ThemePackageError as error:
+            decky.logger.error("Theme package recovery blocked (%s)", error.code)
+            return {"ok": False, "code": error.code}
+        except Exception as error:  # noqa: BLE001
+            decky.logger.error("Theme package recovery inspection failed: %s", error)
+            return {"ok": False, "code": "recovery_failed"}
+
+    async def acknowledge_theme_install_rollback(self, transaction: str) -> dict:
+        self._init()
+        try:
+            return await self._offload_theme_call(
+                lambda: theme_packages.acknowledge_theme_rollback(
+                    transaction,
+                    self._themes_root(),
+                )
+            )
+        except theme_packages.ThemePackageError as error:
+            decky.logger.error("Theme rollback acknowledgement rejected (%s): %s", error.code, error)
+            return {"ok": False, "code": error.code}
+        except Exception as error:  # noqa: BLE001
+            decky.logger.error("Theme rollback acknowledgement failed: %s", error)
+            return {"ok": False, "code": "acknowledgement_failed"}
 
     async def get_device(self) -> dict:
         self._init()
@@ -2474,6 +2667,29 @@ class Plugin:
         return await asyncio.wrap_future(
             self._submit_offloaded(ex, guarded_call), loop=loop
         )
+
+    async def _offload_theme_call(self, fn, *, allow_stopping: bool = False):
+        if not allow_stopping and not getattr(self, "_theme_accepting_work", True):
+            raise theme_packages.ThemePackageError(
+                "lifecycle_stopping",
+                "Theme service is stopping",
+            )
+        ex = getattr(self, "_theme_executor", None)
+        if ex is None:
+            return await asyncio.to_thread(fn)
+        return await asyncio.get_running_loop().run_in_executor(ex, fn)
+
+    async def _drain_theme_executor(self) -> None:
+        ex = getattr(self, "_theme_executor", None)
+        if ex is None:
+            return
+        await asyncio.get_running_loop().run_in_executor(ex, lambda: None)
+
+    def _begin_theme_shutdown(self) -> None:
+        self._theme_accepting_work = False
+        service = getattr(self, "_theme_remote_service", None)
+        if service is not None:
+            service.close()
 
     async def _drain_offloaded(self):
         """Wait for the queued off-loop applies to finish (a no-op runs after them on
@@ -6916,6 +7132,18 @@ class Plugin:
         # systemctl / ryzenadj) → keeps them off the event loop AND serialised.
         # Created here (not _init) so unit tests that never call _main run inline.
         self._ensure_apply_executor()
+        self._theme_executor = ThreadPoolExecutor(max_workers=1)
+        self._theme_accepting_work = True
+        try:
+            recovered = await self._offload_theme_call(
+                lambda: theme_packages.recover_theme_transactions(self._themes_root())
+            )
+            if recovered:
+                decky.logger.warning(
+                    "Rolled back %s interrupted theme transaction(s)", len(recovered)
+                )
+        except Exception as error:  # noqa: BLE001
+            decky.logger.error("Interrupted theme recovery failed: %s", error)
         decky.logger.info(
             "Panel de Control v%s loaded (euid=%s)", read_version(), os.geteuid()
         )
@@ -6956,6 +7184,9 @@ class Plugin:
         else:
             decky.logger.warning("Shutdown stage unload:drain-timeout")
             self._handoff_after_drain_timeout("unload")
+        await self._drain_theme_executor()
+        await self._rollback_pending_theme_transactions()
+        self._shutdown_theme_executor()
         decky.logger.info("Panel de Control unloaded")
 
     def _prepare_shutdown(self) -> None:
@@ -6971,6 +7202,7 @@ class Plugin:
         self._gpu_shutdown = True
         self._next_cpu_generation()
         self._next_gpu_generation()
+        self._begin_theme_shutdown()
         self._begin_tdp_shutdown()
         self._cancel_color_revert()
         wait_task = getattr(self, "_display_wait_task", None)
@@ -7055,6 +7287,23 @@ class Plugin:
                 ex.shutdown(wait=False)
             self._apply_executor = None
 
+    async def _rollback_pending_theme_transactions(self) -> None:
+        try:
+            recovered = await self._offload_theme_call(
+                lambda: theme_packages.recover_theme_transactions(self._themes_root()),
+                allow_stopping=True,
+            )
+            if recovered:
+                decky.logger.warning("Rolled back %s pending theme transaction(s)", len(recovered))
+        except Exception as error:  # noqa: BLE001
+            decky.logger.error("Pending theme rollback failed: %s", error)
+
+    def _shutdown_theme_executor(self) -> None:
+        ex = getattr(self, "_theme_executor", None)
+        if ex is not None:
+            ex.shutdown(wait=True)
+            self._theme_executor = None
+
     async def _uninstall(self) -> None:
         decky.logger.info("Shutdown stage uninstall:begin")
         self._prepare_shutdown()
@@ -7067,4 +7316,7 @@ class Plugin:
         else:
             decky.logger.warning("Shutdown stage uninstall:drain-timeout")
             self._handoff_after_drain_timeout("uninstall", remove_fan_conf=True)
+        await self._drain_theme_executor()
+        await self._rollback_pending_theme_transactions()
+        self._shutdown_theme_executor()
         decky.logger.info("Panel de Control uninstalled")

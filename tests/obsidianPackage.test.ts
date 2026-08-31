@@ -34,8 +34,9 @@ describe("Obsidian Bloom package", () => {
     const references = referencedCss({ inject: manifest.inject, patches: manifest.patches });
     expect(references.size).toBeGreaterThan(8);
     expect([...references].filter((file) => !existsSync(resolve(root, file)))).toEqual([]);
-    expect(LOCAL_THEME_CATALOG.themes.find((theme) => theme.id === "hooandee-obsidian-bloom")?.version)
-      .toBe(String(manifest.version).replace(/^v/, ""));
+    expect(LOCAL_THEME_CATALOG.themes.find((theme) => (
+      theme.id === "hooandee-obsidian-bloom"
+    ))?.installSources).toEqual([]);
   });
 
   it("ships its display font and license inside the on-demand theme package", () => {

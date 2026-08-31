@@ -1,6 +1,6 @@
 import { Focusable } from "@decky/ui";
-import { LuDownload, LuSparkles } from "react-icons/lu";
-import { useRef } from "react";
+import { LuDownload, LuLockKeyhole, LuSparkles } from "react-icons/lu";
+import { type CSSProperties, useRef } from "react";
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
@@ -51,19 +51,25 @@ function Preview({ id }: { id: string }) {
   );
 }
 
-function StatePill({ card }: { card: ThemeCardModel }) {
+function StatePill({ card, id }: { card: ThemeCardModel; id: string }) {
   const { t } = useI18n();
-  const key = card.active
-    ? "themes.state.active"
-    : card.updateAvailable
-      ? "themes.state.updateAvailable"
-      : card.installed
-        ? "themes.state.installed"
-        : "themes.state.notInstalled";
-  const color = card.active ? theme.color.ok : card.updateAvailable ? theme.color.warn : theme.color.textMuted;
+  let key = "themes.state.notInstalled";
+  let color: string = theme.color.textMuted;
+  let StateIcon = card.catalog.installSources.length > 0 ? LuDownload : LuLockKeyhole;
+  if (card.catalog.availability === "coming-soon") {
+    key = "themes.state.comingSoon";
+    StateIcon = LuLockKeyhole;
+  } else if (card.active) {
+    key = "themes.state.active";
+    color = theme.color.ok;
+    StateIcon = LuSparkles;
+  } else if (card.installed) {
+    key = "themes.state.installed";
+    StateIcon = LuSparkles;
+  }
   return (
-    <span style={{ fontSize: theme.font.caption, color, fontWeight: 700, display: "flex", alignItems: "center", gap: 4 }}>
-      {card.installed ? <LuSparkles size={12} /> : <LuDownload size={12} />}
+    <span id={id} style={{ fontSize: theme.font.caption, color, fontWeight: 700, display: "flex", alignItems: "center", gap: 4 }}>
+      <StateIcon size={12} aria-hidden />
       {t(key)}
     </span>
   );
@@ -72,41 +78,81 @@ function StatePill({ card }: { card: ThemeCardModel }) {
 export function ThemeCard({ card, operation, onOpen }: Props) {
   const { t } = useI18n();
   const activating = useRef(false);
-  const busy = operation !== null && operation.themeId === card.id;
+  const comingSoon = card.catalog.availability === "coming-soon";
+  const busy = operation !== null;
+  const nameId = `theme-card-${card.id}-name`;
+  const statusId = `theme-card-${card.id}-status`;
+  const descriptionId = `theme-card-${card.id}-description`;
   const activate = () => {
     if (busy || activating.current) return;
     activating.current = true;
+    queueMicrotask(() => { activating.current = false; });
     onOpen();
-    window.setTimeout(() => { activating.current = false; }, 0);
   };
+  const contents = (
+    <div style={{ ...theme.card, padding: theme.space.sm, opacity: busy || comingSoon ? 0.62 : 1, overflow: "hidden" }}>
+      <Preview id={card.id} />
+      <div style={{ padding: `${theme.space.sm}px ${theme.space.xs}px ${theme.space.xs}px` }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: theme.space.sm }}>
+          <span id={nameId} style={{ color: theme.color.textPrimary, fontSize: theme.font.body, fontWeight: 750, minWidth: 0, overflowWrap: "anywhere" }}>
+            {t(card.catalog.nameKey)}
+          </span>
+          <StatePill card={card} id={statusId} />
+        </div>
+        <div id={descriptionId} style={{ marginTop: 5, color: theme.color.textMuted, fontSize: theme.font.caption, lineHeight: 1.35 }}>
+          {t(card.catalog.descriptionKey)}
+        </div>
+        {(card.publishedVersion || card.updateAvailable) && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 5, color: theme.color.warn, fontSize: theme.font.caption, fontWeight: 700 }}>
+            {card.publishedVersion && (
+              <span>{t(
+                card.publicationCompatibility === "compatible"
+                  ? "themes.remote.card.available"
+                  : "themes.remote.card.incompatible",
+                { version: card.publishedVersion },
+              )}</span>
+            )}
+            {card.updateAvailable && <span>{t("themes.state.updateAvailable")}</span>}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  if (comingSoon) {
+    return (
+      <div
+        data-testid={`theme-card-${card.id}`}
+        role="group"
+        aria-labelledby={`${nameId} ${statusId}`}
+        aria-describedby={descriptionId}
+        aria-disabled="true"
+        style={{ display: "block", width: "100%", minWidth: 0 }}
+      >
+        {contents}
+      </div>
+    );
+  }
+
   return (
     <Focusable
       data-testid={`theme-card-${card.id}`}
+      data-pdc-focus-radius="true"
       role="button"
-      aria-label={card.catalog.name}
+      aria-labelledby={`${nameId} ${statusId}`}
+      aria-describedby={descriptionId}
+      aria-disabled={busy}
       onActivate={activate}
       onClick={activate}
       style={{
         display: "block",
         width: "100%",
         minWidth: 0,
-        cursor: "pointer",
-      }}
+        cursor: busy ? "default" : "pointer",
+        "--pdc-focus-radius": `${theme.radius.md}px`,
+      } as CSSProperties}
     >
-      <div style={{ ...theme.card, padding: theme.space.sm, opacity: busy ? 0.62 : 1, overflow: "hidden" }}>
-      <Preview id={card.id} />
-      <div style={{ padding: `${theme.space.sm}px ${theme.space.xs}px ${theme.space.xs}px` }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: theme.space.sm }}>
-          <span style={{ color: theme.color.textPrimary, fontSize: theme.font.body, fontWeight: 750, minWidth: 0, overflowWrap: "anywhere" }}>
-            {card.catalog.name}
-          </span>
-          <StatePill card={card} />
-        </div>
-        <div style={{ marginTop: 5, color: theme.color.textMuted, fontSize: theme.font.caption, lineHeight: 1.35 }}>
-          {t(card.catalog.descriptionKey)}
-        </div>
-      </div>
-      </div>
+      {contents}
     </Focusable>
   );
 }

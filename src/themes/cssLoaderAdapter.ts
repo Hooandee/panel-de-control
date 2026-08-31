@@ -6,7 +6,6 @@ import type {
   CssLoaderSnapshot,
   CssLoaderTheme,
 } from "./cssLoaderTypes";
-import type { CssLoaderApiInstallSource } from "./types";
 
 const CSS_LOADER_PLUGIN_NAME = "CSS Loader";
 const PATCH_TYPES = new Set(["checkbox", "dropdown", "slider", "none"]);
@@ -25,7 +24,14 @@ export interface CssLoaderHost {
 export interface CssLoaderAdapterOptions {
   minimumBackendVersion?: number;
   timeoutMs?: number;
-  installTimeoutMs?: number;
+  reloadTimeoutMs?: number;
+}
+
+export type CssLoaderReadySnapshot = CssLoaderSnapshot & { status: "ready" };
+
+export interface CssLoaderRecoveryExpectation {
+  themeName: string;
+  previousVersion: string | null;
 }
 
 export class CssLoaderOperationError extends Error {
@@ -47,6 +53,7 @@ function normalizePatch(value: unknown): CssLoaderPatch | null {
   if (!isRecord(value)) return null;
   if (
     typeof value.name !== "string"
+    || !value.name.trim()
     || typeof value.default !== "string"
     || typeof value.value !== "string"
     || typeof value.type !== "string"
@@ -73,6 +80,7 @@ function normalizeTheme(value: unknown): CssLoaderTheme | null {
   if (
     typeof value.id !== "string"
     || typeof value.name !== "string"
+    || !value.name.trim()
     || typeof value.display_name !== "string"
     || typeof value.version !== "string"
     || typeof value.author !== "string"
@@ -82,7 +90,9 @@ function normalizeTheme(value: unknown): CssLoaderTheme | null {
     return null;
   }
   const patches = value.patches.map(normalizePatch);
-  if (patches.some((patch) => patch === null)) return null;
+  if (!patches.every((patch): patch is CssLoaderPatch => patch !== null)) return null;
+  const patchNames = new Set(patches.map((patch) => patch.name));
+  if (patchNames.size !== patches.length) return null;
   return {
     id: value.id,
     name: value.name,
@@ -90,7 +100,7 @@ function normalizeTheme(value: unknown): CssLoaderTheme | null {
     version: value.version,
     author: value.author,
     enabled: value.enabled,
-    patches: patches as CssLoaderPatch[],
+    patches,
   };
 }
 
@@ -107,7 +117,7 @@ function errorInfo(error: unknown): CssLoaderErrorInfo {
 export class CssLoaderAdapter {
   private readonly minimumBackendVersion: number;
   private readonly timeoutMs: number;
-  private readonly installTimeoutMs: number;
+  private readonly reloadTimeoutMs: number;
 
   constructor(
     private readonly host: CssLoaderHost,
@@ -115,7 +125,7 @@ export class CssLoaderAdapter {
   ) {
     this.minimumBackendVersion = options.minimumBackendVersion ?? 9;
     this.timeoutMs = options.timeoutMs ?? 5_000;
-    this.installTimeoutMs = options.installTimeoutMs ?? 30_000;
+    this.reloadTimeoutMs = options.reloadTimeoutMs ?? 15_000;
   }
 
   private async callWithTimeout(
@@ -177,14 +187,16 @@ export class CssLoaderAdapter {
         );
       }
       const themes: CssLoaderTheme[] = [];
+      const themeNames = new Set<string>();
       rawThemes.forEach((rawTheme, index) => {
         const theme = normalizeTheme(rawTheme);
-        if (!theme) {
+        if (!theme || themeNames.has(theme.name)) {
           throw new CssLoaderOperationError(
             "malformed_response",
             `CSS Loader returned an invalid theme at index ${index}`,
           );
         }
+        themeNames.add(theme.name);
         themes.push(theme);
       });
       return {
@@ -204,7 +216,7 @@ export class CssLoaderAdapter {
     }
   }
 
-  private async requireReady(): Promise<CssLoaderSnapshot & { status: "ready" }> {
+  async requireReady(): Promise<CssLoaderReadySnapshot> {
     const snapshot = await this.inspect();
     if (snapshot.status !== "ready") {
       throw new CssLoaderOperationError(
@@ -212,7 +224,7 @@ export class CssLoaderAdapter {
         snapshot.error?.message ?? `CSS Loader is ${snapshot.status}`,
       );
     }
-    return snapshot as CssLoaderSnapshot & { status: "ready" };
+    return snapshot as CssLoaderReadySnapshot;
   }
 
   private async callMutation(
@@ -235,6 +247,31 @@ export class CssLoaderAdapter {
     }
   }
 
+  private async resetThemes(): Promise<void> {
+    const result = await this.callWithTimeout(this.reloadTimeoutMs, "reset");
+    if (
+      !isRecord(result)
+      || !Array.isArray(result.fails)
+      || result.fails.some((failure) => (
+        !Array.isArray(failure)
+        || failure.length !== 2
+        || failure.some((value) => typeof value !== "string")
+      ))
+    ) {
+      throw new CssLoaderOperationError(
+        "malformed_response",
+        "CSS Loader returned an invalid result for reset",
+      );
+    }
+    if (result.fails.length > 0) {
+      const [themeName, reason] = result.fails[0] as [string, string];
+      throw new CssLoaderOperationError(
+        "mutation_failed",
+        `CSS Loader could not reload ${themeName}: ${reason}`,
+      );
+    }
+  }
+
   async setThemeState(themeName: string, enabled: boolean): Promise<CssLoaderSnapshot> {
     const before = await this.requireReady();
     if (!before.themes.some((theme) => theme.name === themeName)) {
@@ -253,39 +290,102 @@ export class CssLoaderAdapter {
     return after;
   }
 
-  async installTheme(
-    source: CssLoaderApiInstallSource,
+  async reloadTheme(
     expectedThemeName: string,
-  ): Promise<CssLoaderSnapshot> {
-    let url: URL;
-    try {
-      url = new URL(source.baseUrl);
-    } catch {
-      throw new CssLoaderOperationError("mutation_failed", "Theme install source is not a valid URL");
-    }
-    if (
-      source.kind !== "css-loader-api"
-      || url.protocol !== "https:"
-      || !source.themeId.trim()
-      || !expectedThemeName.trim()
-    ) {
-      throw new CssLoaderOperationError("mutation_failed", "Theme install source is not permitted");
-    }
-
-    await this.requireReady();
-    await this.callMutation(
-      "download_theme_from_url",
-      [source.themeId, source.baseUrl],
-      this.installTimeoutMs,
-    );
+    expectedVersion: string,
+    before: CssLoaderReadySnapshot,
+  ): Promise<CssLoaderReadySnapshot> {
+    await this.resetThemes();
     const after = await this.requireReady();
-    if (!after.themes.some((theme) => theme.name === expectedThemeName)) {
+    const updated = after.themes.find((theme) => theme.name === expectedThemeName);
+    if (!updated || updated.version !== expectedVersion) {
       throw new CssLoaderOperationError(
         "verification_failed",
-        `CSS Loader did not register installed theme: ${expectedThemeName}`,
+        `CSS Loader did not register ${expectedThemeName} v${expectedVersion}`,
       );
     }
+    this.verifyInventoryState(before, after, expectedThemeName);
+    const previous = before.themes.find((theme) => theme.name === expectedThemeName);
+    if (previous) this.verifyCompatibleTargetState(previous, updated);
     return after;
+  }
+
+  async restoreThemeSnapshot(expected: CssLoaderReadySnapshot): Promise<CssLoaderReadySnapshot> {
+    await this.resetThemes();
+    const after = await this.requireReady();
+    this.verifyInventoryState(expected, after);
+    return after;
+  }
+
+  async reconcileRecoveredThemes(
+    recoveries: readonly CssLoaderRecoveryExpectation[],
+    before: CssLoaderReadySnapshot,
+  ): Promise<CssLoaderReadySnapshot> {
+    await this.resetThemes();
+    const after = await this.requireReady();
+    this.verifyInventoryState(before, after, recoveries.map((recovery) => recovery.themeName));
+    for (const recovery of recoveries) {
+      const restored = after.themes.find((theme) => theme.name === recovery.themeName);
+      if (
+        (recovery.previousVersion === null && restored)
+        || (recovery.previousVersion !== null && restored?.version !== recovery.previousVersion)
+      ) {
+        throw new CssLoaderOperationError(
+          "verification_failed",
+          `CSS Loader did not reconcile the rollback for ${recovery.themeName}`,
+        );
+      }
+      const previous = before.themes.find((theme) => theme.name === recovery.themeName);
+      if (previous && restored) this.verifyCompatibleTargetState(previous, restored);
+    }
+    return after;
+  }
+
+  private verifyInventoryState(
+    before: CssLoaderReadySnapshot,
+    after: CssLoaderReadySnapshot,
+    excludedThemeNames: string | readonly string[] = [],
+  ): void {
+    const excluded = new Set(
+      typeof excludedThemeNames === "string" ? [excludedThemeNames] : excludedThemeNames,
+    );
+    const relevant = (themes: readonly CssLoaderTheme[]) => themes
+      .filter((theme) => !excluded.has(theme.name))
+      .map((theme) => ({
+        name: theme.name,
+        version: theme.version,
+        enabled: theme.enabled,
+        patches: theme.patches.map((patch) => ({ name: patch.name, value: patch.value })),
+      }))
+      .sort((left, right) => left.name.localeCompare(right.name));
+    if (JSON.stringify(relevant(before.themes)) !== JSON.stringify(relevant(after.themes))) {
+      throw new CssLoaderOperationError(
+        "verification_failed",
+        "CSS Loader changed another theme during reload",
+      );
+    }
+  }
+
+  private verifyCompatibleTargetState(previous: CssLoaderTheme, updated: CssLoaderTheme): void {
+    if (previous.enabled !== updated.enabled) {
+      throw new CssLoaderOperationError(
+        "verification_failed",
+        "CSS Loader did not preserve the theme activation state",
+      );
+    }
+    for (const previousPatch of previous.patches) {
+      const updatedPatch = updated.patches.find((patch) => patch.name === previousPatch.name);
+      if (
+        updatedPatch
+        && updatedPatch.options.includes(previousPatch.value)
+        && updatedPatch.value !== previousPatch.value
+      ) {
+        throw new CssLoaderOperationError(
+          "verification_failed",
+          `CSS Loader did not preserve ${previousPatch.name}`,
+        );
+      }
+    }
   }
 
   async setPatchValue(themeName: string, patchName: string, value: string): Promise<CssLoaderSnapshot> {

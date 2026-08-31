@@ -38,15 +38,13 @@ function legacyArguments(method: string, args: readonly unknown[]): Readonly<Rec
   switch (method) {
     case "get_backend_version":
     case "get_themes":
+    case "reset":
       if (args.length === 0) return {};
       break;
     case "set_theme_state":
       if (args.length === 4) {
         return { name: args[0], state: args[1], set_deps: args[2], set_deps_value: args[3] };
       }
-      break;
-    case "download_theme_from_url":
-      if (args.length === 2) return { id: args[0], url: args[1] };
       break;
     case "set_patch_of_theme":
       if (args.length === 3) return { themeName: args[0], patchName: args[1], value: args[2] };

@@ -102,6 +102,7 @@ export const TabBar: FC<TabBarProps> = ({ tabs, activeId, onSelect }) => {
                 padding: active ? "6px 10px" : "6px 9px",
               }}
               aria-label={tab.label}
+              aria-current={active ? "page" : undefined}
               onActivate={() => onSelect(tab.id)}
               onClick={() => onSelect(tab.id)}
             >

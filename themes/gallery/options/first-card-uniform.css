@@ -1,0 +1,181 @@
+/* Convierte la primera pieza editorial en una portada del mismo tamaño que el
+ * resto. Cada modo de profundidad publica su geometría normal en variables,
+ * por lo que esta opción no duplica el carrusel ni añade selectores
+ * relacionales a la navegación. El artwork horizontal se recorta, nunca se
+ * deforma. */
+#GamepadUI_Full_Root#GamepadUI_Full_Root#GamepadUI_Full_Root#GamepadUI_Full_Root
+  #Main ._2_cRkGdbegoIbiRsy_-I7 [role="generic"].ReactVirtualized__Grid > [role="list"].ReactVirtualized__Grid__innerScrollContainer
+  > [role="listitem"][data-id]:first-child:not([data-id="GoToLibrary"])
+  [role="link"],
+#GamepadUI_Full_Root#GamepadUI_Full_Root#GamepadUI_Full_Root#GamepadUI_Full_Root
+  #Main ._2_cRkGdbegoIbiRsy_-I7 [role="generic"].ReactVirtualized__Grid > [role="list"].ReactVirtualized__Grid__innerScrollContainer
+  > [role="listitem"][data-id]:first-child:not([data-id="GoToLibrary"])
+  [role="link"]
+  > ._1R9r2OBCxAmtuUVrgBEUBw,
+#GamepadUI_Full_Root#GamepadUI_Full_Root#GamepadUI_Full_Root#GamepadUI_Full_Root
+  #Main ._2_cRkGdbegoIbiRsy_-I7 [role="generic"].ReactVirtualized__Grid > [role="list"].ReactVirtualized__Grid__innerScrollContainer
+  > [role="listitem"][data-id]:first-child:not([data-id="GoToLibrary"])
+  [role="link"]
+  img:first-of-type {
+  height: var(--hdg-carousel-card-height) !important;
+  max-height: var(--hdg-carousel-card-height) !important;
+  max-width: var(--hdg-carousel-card-width) !important;
+  min-height: var(--hdg-carousel-card-height) !important;
+  min-width: var(--hdg-carousel-card-width) !important;
+  width: var(--hdg-carousel-card-width) !important;
+}
+
+#GamepadUI_Full_Root#GamepadUI_Full_Root#GamepadUI_Full_Root#GamepadUI_Full_Root
+  #Main ._2_cRkGdbegoIbiRsy_-I7 [role="generic"].ReactVirtualized__Grid > [role="list"].ReactVirtualized__Grid__innerScrollContainer
+  > [role="listitem"][data-id]:first-child:not([data-id="GoToLibrary"])
+  [role="link"] {
+  margin-inline: var(--hdg-carousel-item-margin) !important;
+}
+
+#GamepadUI_Full_Root#GamepadUI_Full_Root#GamepadUI_Full_Root#GamepadUI_Full_Root
+  #Main ._2_cRkGdbegoIbiRsy_-I7 [role="generic"].ReactVirtualized__Grid > [role="list"].ReactVirtualized__Grid__innerScrollContainer
+  > [role="listitem"][data-id]:first-child:not([data-id="GoToLibrary"])
+  [role="link"]
+  > ._1R9r2OBCxAmtuUVrgBEUBw {
+  border-radius: inherit !important;
+  overflow: visible !important;
+}
+
+#GamepadUI_Full_Root#GamepadUI_Full_Root#GamepadUI_Full_Root#GamepadUI_Full_Root
+  #Main ._2_cRkGdbegoIbiRsy_-I7 [role="generic"].ReactVirtualized__Grid > [role="list"].ReactVirtualized__Grid__innerScrollContainer
+  > [role="listitem"][data-id]:first-child:not([data-id="GoToLibrary"])
+  [role="link"]
+  img:first-of-type {
+  display: block !important;
+  object-fit: cover !important;
+}
+
+#GamepadUI_Full_Root#GamepadUI_Full_Root#GamepadUI_Full_Root#GamepadUI_Full_Root
+  #Main ._2_cRkGdbegoIbiRsy_-I7 [role="generic"].ReactVirtualized__Grid > [role="list"].ReactVirtualized__Grid__innerScrollContainer
+  > [role="listitem"][data-id]:first-child:not(.gpfocuswithin):not([data-id="GoToLibrary"])
+  [role="link"] {
+  transform: var(--hdg-carousel-side-left-transform) !important;
+  transform-origin: right center !important;
+}
+
+#GamepadUI_Full_Root#GamepadUI_Full_Root#GamepadUI_Full_Root#GamepadUI_Full_Root
+  #Main ._2_cRkGdbegoIbiRsy_-I7 [role="generic"].ReactVirtualized__Grid > [role="list"].ReactVirtualized__Grid__innerScrollContainer
+  > [role="listitem"][data-id]:first-child.gpfocuswithin:not([data-id="GoToLibrary"])
+  [role="link"].gpfocus {
+  transform: var(--hdg-carousel-first-focus-transform, var(--hdg-carousel-focus-transform)) !important;
+  transform-origin: center center !important;
+}
+
+#GamepadUI_Full_Root#GamepadUI_Full_Root#GamepadUI_Full_Root#GamepadUI_Full_Root
+  #Main ._2_cRkGdbegoIbiRsy_-I7 [role="generic"].ReactVirtualized__Grid > [role="list"].ReactVirtualized__Grid__innerScrollContainer
+  > [role="listitem"][data-id]:first-child:not([data-id="GoToLibrary"]) {
+  --hdg-home-metadata-transform: var(--hdg-carousel-first-metadata-transform, var(--hdg-carousel-metadata-transform));
+}
+
+/* El avatar de amigos es hermano de la portada y Steam lo ancla al borde del
+ * slot hero panorámico. Cuando esta opción reduce la primera pieza a portada,
+ * conserva el mismo anclaje inferior derecho dentro del nuevo ancho; tamaño,
+ * escala, altura y visibilidad siguen siendo nativos. */
+#GamepadUI_Full_Root#GamepadUI_Full_Root#GamepadUI_Full_Root#GamepadUI_Full_Root
+  #Main ._2_cRkGdbegoIbiRsy_-I7 [role="generic"].ReactVirtualized__Grid > [role="list"].ReactVirtualized__Grid__innerScrollContainer
+  > [role="listitem"][data-id]:first-child:not([data-id="GoToLibrary"])
+  [role="link"] ~ ._3dncOt2dhpnFYQn-WYQ3Mb:has(.avatarHolder) {
+  left: calc(var(--hdg-carousel-card-width) - 36px) !important;
+  right: auto !important;
+}
+
+/* Steam conserva para la primera pieza el slot panorámico de 442 px aunque la
+ * portada uniforme ocupe el ancho regular. La compensación debe permanecer
+ * idéntica antes y después de transferir el foco: Steam anima su scroll antes
+ * de cambiar gpfocuswithin y una segunda corrección movería todo el grupo en
+ * sentido contrario. La compensación varía suavemente con el ancho útil: no
+ * deja de actuar de golpe en 1280/1366, pero conserva la alineación ya validada
+ * en Deck. Así no alteramos left, width, orden ni scroll nativos. */
+#GamepadUI_Full_Root#GamepadUI_Full_Root#GamepadUI_Full_Root#GamepadUI_Full_Root
+  #Main ._2_cRkGdbegoIbiRsy_-I7 [role="generic"].ReactVirtualized__Grid {
+  container-type: inline-size !important;
+}
+
+#GamepadUI_Full_Root#GamepadUI_Full_Root#GamepadUI_Full_Root#GamepadUI_Full_Root
+  #Main ._2_cRkGdbegoIbiRsy_-I7 [role="generic"].ReactVirtualized__Grid > [role="list"].ReactVirtualized__Grid__innerScrollContainer
+  > [role="listitem"]:not([data-id="GoToLibrary"]) {
+  margin-left: calc(
+    clamp(var(--hdg-carousel-collapsed-list-min, -296px), calc(15cqw - 352px), 0px)
+    + var(--hdg-carousel-uniform-stage-offset, 0px)
+    + var(--hdg-carousel-uniform-following-offset, 0px)
+  ) !important;
+}
+
+/* Entre el layout handheld y el de escritorio Steam ensancha el slot hero con
+ * mayor rapidez que las portadas. Esta rama continúa desde la compensación de
+ * 1100 px y alcanza el colapso completo al llegar a 1366, sin ningún escalón. */
+@media (min-width: 1101px) and (max-width: 1366px) and (max-height: 800px) {
+  #GamepadUI_Full_Root #Main ._2_cRkGdbegoIbiRsy_-I7
+    [role="generic"].ReactVirtualized__Grid {
+    --hdg-carousel-first-lateral-item-transform: translate3d(
+      calc(var(--hdg-carousel-first-lateral-base) + min(122px, calc(68vw - 748px))),
+      0,
+      0
+    );
+  }
+
+  #GamepadUI_Full_Root#GamepadUI_Full_Root#GamepadUI_Full_Root#GamepadUI_Full_Root
+    #Main ._2_cRkGdbegoIbiRsy_-I7 [role="generic"].ReactVirtualized__Grid > [role="list"].ReactVirtualized__Grid__innerScrollContainer
+    > [role="listitem"]:not([data-id="GoToLibrary"]) {
+    margin-left: calc(
+      clamp(var(--hdg-carousel-collapsed-list-min, -296px), calc(-46cqw + 250px), 0px)
+      + var(--hdg-carousel-uniform-stage-offset, 0px)
+      + var(--hdg-carousel-uniform-following-offset, 0px)
+    ) !important;
+  }
+}
+
+#GamepadUI_Full_Root#GamepadUI_Full_Root#GamepadUI_Full_Root#GamepadUI_Full_Root
+  #Main ._2_cRkGdbegoIbiRsy_-I7 [role="generic"].ReactVirtualized__Grid > [role="list"].ReactVirtualized__Grid__innerScrollContainer
+  > [role="listitem"][data-id]:first-child:not([data-id="GoToLibrary"]) {
+  --hdg-carousel-uniform-following-offset: 0px;
+  transform: var(--hdg-carousel-first-lateral-item-transform, var(--hdg-carousel-item-transform)) !important;
+}
+
+/* Al abandonar el foco, la primera portada ya forma parte de la pared lateral.
+ * Su bloque editorial no debe viajar con la compensación del slot hero ni
+ * competir con los metadatos de la card frontal. */
+#GamepadUI_Full_Root#GamepadUI_Full_Root#GamepadUI_Full_Root#GamepadUI_Full_Root
+  #Main ._2_cRkGdbegoIbiRsy_-I7 [role="generic"].ReactVirtualized__Grid > [role="list"].ReactVirtualized__Grid__innerScrollContainer
+  > [role="listitem"][data-id]:first-child:not(.gpfocuswithin):not([data-id="GoToLibrary"])
+  > ._3YYQ98HSj-wh5uljwl12bW
+  > ._1HIFNGSxh4-jOhPiDynR4C
+  > div:last-child:not(:only-child) {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transition: none !important;
+}
+
+/* Sin proxy, los seguidores conservan la geometría normal del modo y no
+ * heredan el desplazamiento editorial que Cover Flow reserva para el hero. */
+#GamepadUI_Full_Root#GamepadUI_Full_Root#GamepadUI_Full_Root#GamepadUI_Full_Root
+  #Main ._2_cRkGdbegoIbiRsy_-I7 [role="generic"].ReactVirtualized__Grid > [role="list"].ReactVirtualized__Grid__innerScrollContainer
+  > [role="listitem"][data-id]:first-child:not([data-id="GoToLibrary"])
+  ~ [role="listitem"][data-id]:not([data-id="GoToLibrary"]) {
+  transform: var(--hdg-carousel-item-transform) !important;
+}
+
+/* En Deck existe además un proxy de navegación de 22 px. Toda la pared lo
+ * descuenta siempre como una unidad; el proxy conserva su geometría y sigue
+ * disponible para Steam, pero su separador no se pinta encima de la portada
+ * activa ni provoca otra rama al cambiar el foco. */
+#GamepadUI_Full_Root#GamepadUI_Full_Root#GamepadUI_Full_Root#GamepadUI_Full_Root
+  #Main ._2_cRkGdbegoIbiRsy_-I7 [role="generic"].ReactVirtualized__Grid > [role="list"].ReactVirtualized__Grid__innerScrollContainer
+  > [role="listitem"][data-id]:first-child:not([data-id="GoToLibrary"])
+  + [role="listitem"][data-id="0"] * {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+#GamepadUI_Full_Root#GamepadUI_Full_Root#GamepadUI_Full_Root#GamepadUI_Full_Root
+  #Main ._2_cRkGdbegoIbiRsy_-I7 [role="generic"].ReactVirtualized__Grid > [role="list"].ReactVirtualized__Grid__innerScrollContainer
+  > [role="listitem"][data-id]:first-child:not([data-id="GoToLibrary"])
+  + [role="listitem"][data-id="0"]
+  ~ [role="listitem"][data-id]:not([data-id="GoToLibrary"]) {
+  transform: var(--hdg-carousel-spacer-following-item-transform, var(--hdg-carousel-item-transform)) !important;
+}

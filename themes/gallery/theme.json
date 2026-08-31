@@ -1,0 +1,388 @@
+{
+  "name": "Hooandee Gallery",
+  "display_name": "Hooandee Gallery",
+  "author": "Hooandee",
+  "version": "0.7.9",
+  "description": "Transforma Steam en una galería y un sistema glass coherente, con artwork dinámico, controles refinados y acentos elegantes configurables.",
+  "target": "System-Wide",
+  "manifest_version": 9,
+  "inject": {
+    "tokens.css": [
+      "bigpicture",
+      "QuickAccess",
+      "MainMenu",
+      "notificationtoasts.*"
+    ],
+    "home.css": [
+      "bigpicture"
+    ],
+    "achievements.css": [
+      "bigpicture"
+    ],
+    "system.css": [
+      "bigpicture"
+    ],
+    "downloads.css": [
+      "bigpicture"
+    ],
+    "settings.css": [
+      "bigpicture"
+    ],
+    "media.css": [
+      "bigpicture"
+    ],
+    "qam.css": [
+      "QuickAccess"
+    ],
+    "main-menu.css": [
+      "MainMenu"
+    ],
+    "notifications.css": [
+      "notificationtoasts.*"
+    ]
+  },
+  "patches": {
+    "Color de acento": {
+      "default": "Glaciar",
+      "type": "slider",
+      "values": {
+        "Glaciar": {},
+        "Champagne": {
+          "options/accent-champagne.css": [
+            "bigpicture",
+            "QuickAccess",
+            "MainMenu",
+            "notificationtoasts.*"
+          ]
+        },
+        "Salvia": {
+          "options/accent-sage.css": [
+            "bigpicture",
+            "QuickAccess",
+            "MainMenu",
+            "notificationtoasts.*"
+          ]
+        },
+        "Carmesí": {
+          "options/accent-crimson.css": [
+            "bigpicture",
+            "QuickAccess",
+            "MainMenu",
+            "notificationtoasts.*"
+          ]
+        },
+        "Rosa": {
+          "options/accent-rose.css": [
+            "bigpicture",
+            "QuickAccess",
+            "MainMenu",
+            "notificationtoasts.*"
+          ]
+        },
+        "Ambrosia": {
+          "options/accent-ambrosia.css": [
+            "bigpicture",
+            "QuickAccess",
+            "MainMenu",
+            "notificationtoasts.*"
+          ]
+        }
+      }
+    },
+    "Apariencia": {
+      "default": "Oscuro",
+      "type": "slider",
+      "values": {
+        "Oscuro": {},
+        "Claro": {
+          "options/light-mode.css": [
+            "bigpicture",
+            "QuickAccess",
+            "MainMenu",
+            "notificationtoasts.*"
+          ],
+          "options/light-window.css": [
+            "QuickAccess",
+            "MainMenu"
+          ]
+        }
+      }
+    },
+    "Posición del nombre": {
+      "default": "Arriba",
+      "type": "slider",
+      "values": {
+        "Arriba": {},
+        "Abajo": {
+          "options/game-name-bottom.css": [
+            "bigpicture"
+          ]
+        }
+      }
+    },
+    "Mostrar nombre del juego": {
+      "default": "Yes",
+      "type": "checkbox",
+      "values": {
+        "No": {
+          "options/hide-game-name.css": [
+            "bigpicture"
+          ]
+        },
+        "Yes": {}
+      }
+    },
+    "Mostrar tiempo jugado": {
+      "default": "No",
+      "type": "checkbox",
+      "values": {
+        "No": {
+          "options/hide-playtime.css": [
+            "bigpicture"
+          ]
+        },
+        "Yes": {}
+      }
+    },
+    "Vista inicial de Detalles": {
+      "default": "Cinemática",
+      "type": "slider",
+      "values": {
+        "Cinemática": {
+          "options/details-cinematic.css": [
+            "bigpicture"
+          ]
+        },
+        "Completa": {}
+      }
+    },
+    "Profundidad del carrusel": {
+      "default": "Sutil",
+      "type": "slider",
+      "values": {
+        "2D": {
+          "options/carousel-depth-2d.css": [
+            "bigpicture"
+          ]
+        },
+        "Sutil": {
+          "options/carousel-depth-subtle.css": [
+            "bigpicture"
+          ]
+        },
+        "Cover Flow": {
+          "options/carousel-depth-coverflow.css": [
+            "bigpicture"
+          ]
+        }
+      }
+    },
+    "Tamaño de galería": {
+      "default": "Predeterminado",
+      "type": "slider",
+      "values": {
+        "Pequeño": {
+          "options/gallery-size-small.css": [
+            "bigpicture"
+          ]
+        },
+        "Predeterminado": {},
+        "Grande": {
+          "options/gallery-size-large.css": [
+            "bigpicture"
+          ]
+        }
+      }
+    },
+    "Primera tarjeta": {
+      "default": "Hero horizontal",
+      "type": "slider",
+      "values": {
+        "Hero horizontal": {},
+        "Portada uniforme": {
+          "options/first-card-uniform.css": [
+            "bigpicture"
+          ]
+        }
+      }
+    },
+    "Panel de cristal de Inicio": {
+      "default": "Yes",
+      "type": "checkbox",
+      "values": {
+        "No": {
+          "options/home-stage-panel-hidden.css": [
+            "bigpicture"
+          ]
+        },
+        "Yes": {}
+      }
+    },
+    "Difuminado de parrilla": {
+      "default": "Medio",
+      "type": "slider",
+      "values": {
+        "Desactivado": {
+          "options/blur-off.css": [
+            "bigpicture"
+          ]
+        },
+        "Suave": {
+          "options/blur-soft.css": [
+            "bigpicture"
+          ]
+        },
+        "Medio": {
+          "options/blur-medium.css": [
+            "bigpicture"
+          ]
+        },
+        "Alto": {
+          "options/blur-high.css": [
+            "bigpicture"
+          ]
+        }
+      }
+    },
+    "Difuminado de detalles": {
+      "default": "Medio",
+      "type": "slider",
+      "values": {
+        "Desactivado": {
+          "options/details-blur-off.css": [
+            "bigpicture"
+          ]
+        },
+        "Suave": {
+          "options/details-blur-soft.css": [
+            "bigpicture"
+          ]
+        },
+        "Medio": {
+          "options/details-blur-medium.css": [
+            "bigpicture"
+          ]
+        },
+        "Alto": {
+          "options/details-blur-high.css": [
+            "bigpicture"
+          ]
+        }
+      }
+    },
+    "Modo de rendimiento": {
+      "default": "No",
+      "type": "checkbox",
+      "values": {
+        "No": {
+          "library.css": [
+            "bigpicture"
+          ],
+          "details.css": [
+            "bigpicture"
+          ]
+        },
+        "Yes": {
+          "options/performance-library-core.css": [
+            "bigpicture"
+          ],
+          "options/performance-details-core.css": [
+            "bigpicture"
+          ],
+          "options/performance-mode.css": [
+            "bigpicture",
+            "QuickAccess",
+            "MainMenu",
+            "notificationtoasts.*"
+          ]
+        }
+      }
+    },
+    "Contenido del header": {
+      "default": "Solo indicadores",
+      "type": "slider",
+      "values": {
+        "Completo": {},
+        "Solo indicadores": {
+          "options/header-indicators-only.css": [
+            "bigpicture",
+            "QuickAccess"
+          ]
+        },
+        "Oculto": {
+          "options/header-hidden.css": [
+            "bigpicture",
+            "QuickAccess"
+          ]
+        }
+      }
+    },
+    "Indicadores del header": {
+      "default": "Batería y hora",
+      "type": "slider",
+      "values": {
+        "Batería y hora": {},
+        "Solo batería": {
+          "options/header-only-battery.css": [
+            "bigpicture",
+            "QuickAccess"
+          ]
+        },
+        "Solo hora": {
+          "options/header-only-time.css": [
+            "bigpicture",
+            "QuickAccess"
+          ]
+        },
+        "Ninguno": {
+          "options/header-no-indicators.css": [
+            "bigpicture",
+            "QuickAccess"
+          ]
+        }
+      }
+    },
+    "Estilo de batería": {
+      "default": "Hooandee",
+      "type": "slider",
+      "values": {
+        "Hooandee": {
+          "options/battery-hooandee.css": [
+            "bigpicture",
+            "QuickAccess"
+          ]
+        },
+        "Steam": {}
+      }
+    },
+    "Contenido del footer": {
+      "default": "Esencial",
+      "type": "slider",
+      "values": {
+        "Completo": {},
+        "Esencial": {
+          "options/footer-essential.css": [
+            "bigpicture"
+          ]
+        },
+        "Oculto": {
+          "options/footer-hidden.css": [
+            "bigpicture"
+          ]
+        }
+      }
+    },
+    "Estilo de iconos del footer": {
+      "default": "Hooandee",
+      "type": "slider",
+      "values": {
+        "Hooandee": {
+          "options/footer-icons-hooandee.css": [
+            "bigpicture"
+          ]
+        },
+        "Steam": {}
+      }
+    }
+  }
+}

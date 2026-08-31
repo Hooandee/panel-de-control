@@ -1,7 +1,8 @@
+// @vitest-environment happy-dom
 import { describe, expect, it, vi } from "vitest";
 
 import type { CssLoaderSnapshot } from "../cssLoaderTypes";
-import { createSteamRuntimeBridge } from "./start";
+import { createSteamRuntimeBridge, startThemesRuntime } from "./start";
 
 const READY: CssLoaderSnapshot = { status: "ready", backendVersion: 9, themes: [] };
 
@@ -53,5 +54,68 @@ describe("createSteamRuntimeBridge", () => {
 
     expect(() => bridge.reconcile(READY)).not.toThrow();
     expect(createManager).not.toHaveBeenCalled();
+  });
+});
+
+describe("startThemesRuntime", () => {
+  it("refreshes from CSS Loader stylesheet changes only while mounted", async () => {
+    document.head.innerHTML = '<style class="css-loader-style">/* active theme */</style>';
+    const refresh = vi.fn(async () => {});
+    const unsubscribe = vi.fn();
+    const client = {
+      getSnapshot: () => ({ snapshot: READY }),
+      subscribe: vi.fn(() => unsubscribe),
+      refresh,
+    };
+    const stop = startThemesRuntime({
+      client,
+      getSteamDocument: () => document,
+      createManager: () => ({ reconcile: vi.fn(), dispose: vi.fn() }),
+    });
+
+    document.querySelector("style.css-loader-style")?.remove();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(refresh).toHaveBeenCalledOnce();
+
+    stop();
+    document.head.insertAdjacentHTML(
+      "beforeend",
+      '<style class="css-loader-style">/* restored theme */</style>',
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(refresh).toHaveBeenCalledOnce();
+  });
+
+  it("reconciles from the shared client and releases its polling lease", () => {
+    const steamDocument = { title: "SP" } as unknown as Document;
+    const reconcile = vi.fn();
+    const dispose = vi.fn();
+    const unsubscribe = vi.fn();
+    let publish!: () => void;
+    let current: CssLoaderSnapshot = READY;
+    const client = {
+      getSnapshot: () => ({ snapshot: current }),
+      subscribe: vi.fn((listener: () => void, intervalMs?: number) => {
+        publish = listener;
+        expect(intervalMs).toBe(30_000);
+        return unsubscribe;
+      }),
+      refresh: vi.fn(async () => {}),
+    };
+
+    const stop = startThemesRuntime({
+      client,
+      getSteamDocument: () => steamDocument,
+      createManager: () => ({ reconcile, dispose }),
+    });
+
+    expect(reconcile).toHaveBeenCalledWith(READY);
+    current = { status: "missing", themes: [] };
+    publish();
+    expect(reconcile).toHaveBeenLastCalledWith(current);
+
+    stop();
+    expect(unsubscribe).toHaveBeenCalledOnce();
+    expect(dispose).toHaveBeenCalledOnce();
   });
 });

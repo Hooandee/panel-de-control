@@ -75,6 +75,58 @@ describe("startSteamSurfaceSession", () => {
     stop();
   });
 
+  it("exposes route mutations before deferring full surface detection", () => {
+    document.body.innerHTML = '<div id="shell"><main id="Main"><div role="listitem" data-id="GoToLibrary"></div></main></div>';
+    const observers: FakeObserver[] = [];
+    const onBeforeRefresh = vi.fn();
+    const requestAnimationFrame = vi.fn(() => 5);
+    const stop = startSteamSurfaceSession({
+      doc: document,
+      onSurface: vi.fn(),
+      onBeforeRefresh,
+      createObserver: (callback) => {
+        const observer = { callback, observe: vi.fn(), disconnect: vi.fn() };
+        observers.push(observer);
+        return observer;
+      },
+      requestAnimationFrame,
+      cancelAnimationFrame: vi.fn(),
+    });
+    const record = { addedNodes: [], removedNodes: [] } as unknown as MutationRecord;
+
+    observers[0].callback([record], observers[0] as unknown as MutationObserver);
+
+    expect(onBeforeRefresh).toHaveBeenCalledWith([record]);
+    expect(requestAnimationFrame).toHaveBeenCalledOnce();
+    stop();
+    observers[0].callback([record], observers[0] as unknown as MutationObserver);
+    expect(onBeforeRefresh).toHaveBeenCalledOnce();
+    expect(requestAnimationFrame).toHaveBeenCalledOnce();
+  });
+
+  it("keeps surface detection alive when the immediate mutation hook fails", () => {
+    document.body.innerHTML = '<div id="shell"><main id="Main"></main></div>';
+    const observers: FakeObserver[] = [];
+    const requestAnimationFrame = vi.fn(() => 6);
+    const stop = startSteamSurfaceSession({
+      doc: document,
+      onSurface: vi.fn(),
+      onBeforeRefresh: () => { throw new Error("hook failed"); },
+      createObserver: (callback) => {
+        const observer = { callback, observe: vi.fn(), disconnect: vi.fn() };
+        observers.push(observer);
+        return observer;
+      },
+      requestAnimationFrame,
+      cancelAnimationFrame: vi.fn(),
+    });
+
+    expect(() => observers[0].callback([], observers[0] as unknown as MutationObserver))
+      .not.toThrow();
+    expect(requestAnimationFrame).toHaveBeenCalledOnce();
+    stop();
+  });
+
   it("uses a temporary discovery observer until Steam creates Main", () => {
     const observers: FakeObserver[] = [];
     let scheduled: FrameRequestCallback | undefined;

@@ -76,21 +76,56 @@ function validateInstallSource(
   source: unknown,
   path: string,
   issues: ThemeCatalogIssue[],
+  catalogId: unknown,
 ): void {
-  if (source === undefined) return;
-  if (!isRecord(source) || source.kind !== "css-loader-api") {
+  if (!isRecord(source)) {
     issues.push({ path, code: "unsupported", message: "Unsupported install source" });
     return;
   }
-  if (!isHttpsUrl(source.baseUrl)) {
-    issues.push({
-      path: `${path}.baseUrl`,
-      code: "invalid_url",
-      message: "Install source must use HTTPS",
-    });
+  if (source.kind === "official-remote") {
+    for (const field of Object.keys(source)) {
+      if (field !== "kind" && field !== "channelId") {
+        issues.push({
+          path: `${path}.${field}`,
+          code: "unsupported",
+          message: `Install source contains an unsupported field: ${field}`,
+        });
+      }
+    }
+    if (source.channelId !== "panel-pages-v1") {
+      issues.push({
+        path: `${path}.channelId`,
+        code: "unsupported",
+        message: "Unsupported official theme channel",
+      });
+    }
+    return;
   }
-  if (!nonEmptyString(source.themeId)) {
-    issues.push({ path: `${path}.themeId`, code: "invalid", message: "Install source theme id is required" });
+  if (source.kind !== "bundled") {
+    issues.push({ path, code: "unsupported", message: "Unsupported install source" });
+    return;
+  }
+  for (const field of Object.keys(source)) {
+    if (field !== "kind" && field !== "packageId") {
+      issues.push({
+        path: `${path}.${field}`,
+        code: "unsupported",
+        message: `Install source contains an unsupported field: ${field}`,
+      });
+    }
+  }
+  if (!nonEmptyString(source.packageId) || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(source.packageId)) {
+    issues.push({
+      path: `${path}.packageId`,
+      code: "invalid",
+      message: "Bundled package id must be a stable slug",
+    });
+  } else if (source.packageId !== catalogId) {
+    issues.push({
+      path: `${path}.packageId`,
+      code: "invalid",
+      message: "Bundled package id must match its catalog id",
+    });
   }
 }
 
@@ -132,13 +167,19 @@ export function validateThemeCatalog(input: unknown): ThemeCatalogValidation {
       cssLoaderNames.add(theme.cssLoaderName);
     }
 
-    for (const field of ["name", "descriptionKey", "author"] as const) {
+    for (const field of ["nameKey", "descriptionKey", "author"] as const) {
       if (!nonEmptyString(theme[field])) {
         issues.push({ path: `${path}.${field}`, code: "invalid", message: `${field} is required` });
       }
     }
-    if (!nonEmptyString(theme.version) || !SEMVER.test(theme.version)) {
-      issues.push({ path: `${path}.version`, code: "invalid", message: "Theme version must use semantic versioning" });
+    if (theme.includedVersion !== undefined && (
+      !nonEmptyString(theme.includedVersion) || !SEMVER.test(theme.includedVersion)
+    )) {
+      issues.push({
+        path: `${path}.includedVersion`,
+        code: "invalid",
+        message: "Included theme version must use semantic versioning",
+      });
     }
     if (!positiveInteger(theme.cssLoaderManifestVersion)) {
       issues.push({ path: `${path}.cssLoaderManifestVersion`, code: "invalid", message: "CSS Loader manifest version is invalid" });
@@ -155,9 +196,62 @@ export function validateThemeCatalog(input: unknown): ThemeCatalogValidation {
     if (theme.exclusiveGroup !== undefined && !nonEmptyString(theme.exclusiveGroup)) {
       issues.push({ path: `${path}.exclusiveGroup`, code: "invalid", message: "Exclusive group must be a non-empty string" });
     }
+    if (theme.availability !== "available" && theme.availability !== "coming-soon") {
+      issues.push({
+        path: `${path}.availability`,
+        code: "unsupported",
+        message: `Unsupported theme availability: ${String(theme.availability)}`,
+      });
+    }
+
+    if (!Array.isArray(theme.installSources)) {
+      issues.push({
+        path: `${path}.installSources`,
+        code: "invalid",
+        message: "Theme install sources must be an array",
+      });
+    } else {
+      const sourceKinds = new Set<string>();
+      theme.installSources.forEach((source, sourceIndex) => {
+        const sourcePath = `${path}.installSources[${sourceIndex}]`;
+        validateInstallSource(source, sourcePath, issues, theme.id);
+        if (isRecord(source) && nonEmptyString(source.kind)) {
+          if (sourceKinds.has(source.kind)) {
+            issues.push({
+              path: sourcePath,
+              code: "duplicate",
+              message: `Duplicate install source: ${source.kind}`,
+            });
+          }
+          sourceKinds.add(source.kind);
+        }
+      });
+      const hasBundledSource = theme.installSources.some((source) => (
+        isRecord(source) && source.kind === "bundled"
+      ));
+      if (hasBundledSource && theme.includedVersion === undefined) {
+        issues.push({
+          path: `${path}.includedVersion`,
+          code: "invalid",
+          message: "Bundled themes must declare their included version",
+        });
+      } else if (!hasBundledSource && theme.includedVersion !== undefined) {
+        issues.push({
+          path: `${path}.includedVersion`,
+          code: "invalid",
+          message: "Only bundled themes can declare an included version",
+        });
+      }
+      if (theme.availability === "coming-soon" && theme.installSources.length > 0) {
+        issues.push({
+          path: `${path}.installSources`,
+          code: "invalid",
+          message: "Coming-soon themes cannot declare install sources",
+        });
+      }
+    }
 
     validateRuntime(theme.runtime, `${path}.runtime`, issues);
-    validateInstallSource(theme.installSource, `${path}.installSource`, issues);
   });
 
   return issues.length > 0

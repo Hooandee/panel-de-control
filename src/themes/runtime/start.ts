@@ -1,30 +1,73 @@
-import { LOCAL_THEME_CATALOG } from "../catalog";
-import { CssLoaderAdapter } from "../cssLoaderAdapter";
-import { createDeckyCssLoaderHost } from "../deckyCssLoaderHost";
-import { createObsidianBloomRuntime } from "./obsidianBloom";
+import type { CssLoaderSnapshot } from "../cssLoaderTypes";
+import { createRegisteredRuntimeModules } from "./runtimeRegistry";
 import { ThemeRuntimeManager } from "./runtimeManager";
-import { startThemeRuntimeWatcher } from "./runtimeWatcher";
 
 interface RuntimeManagerLike {
-  reconcile(snapshot: import("../cssLoaderTypes").CssLoaderSnapshot): void;
+  reconcile(snapshot: CssLoaderSnapshot): void;
   dispose(): void;
 }
 
 export interface SteamRuntimeBridge {
-  reconcile(snapshot: import("../cssLoaderTypes").CssLoaderSnapshot): void;
+  reconcile(snapshot: CssLoaderSnapshot): void;
   dispose(): void;
+}
+
+function nodeTouchesCssLoaderStyle(node: Node): boolean {
+  if (node.nodeType === node.ELEMENT_NODE) {
+    const element = node as Element;
+    return element.matches?.("style.css-loader-style")
+      || Boolean(element.querySelector?.("style.css-loader-style"));
+  }
+  return Boolean(node.parentElement?.closest("style.css-loader-style"));
+}
+
+function watchCssLoaderStyles(doc: Document, onChange: () => void): () => void {
+  const Observer = doc.defaultView?.MutationObserver;
+  if (!Observer || !doc.head) return () => {};
+  let stopped = false;
+  const observer = new Observer((records) => {
+    if (
+      stopped
+      || !records.some((record) => (
+        nodeTouchesCssLoaderStyle(record.target)
+        || [...record.addedNodes].some(nodeTouchesCssLoaderStyle)
+        || [...record.removedNodes].some(nodeTouchesCssLoaderStyle)
+      ))
+    ) return;
+    onChange();
+  });
+  try {
+    observer.observe(doc.head, {
+      attributes: true,
+      attributeFilter: ["class", "disabled"],
+      characterData: true,
+      childList: true,
+      subtree: true,
+    });
+  } catch {
+    observer.disconnect();
+    return () => {};
+  }
+  return () => {
+    stopped = true;
+    observer.disconnect();
+  };
 }
 
 export function createSteamRuntimeBridge(
   getSteamDocument: () => Document | null,
   createManager: (doc: Document) => RuntimeManagerLike = (doc) => new ThemeRuntimeManager({
-    modules: [createObsidianBloomRuntime(doc)],
+    modules: createRegisteredRuntimeModules(doc),
   }),
+  onCssLoaderStylesChanged?: () => void,
 ): SteamRuntimeBridge {
   let currentDocument: Document | null = null;
   let manager: RuntimeManagerLike | null = null;
+  let stopStyleWatch: (() => void) | null = null;
 
   const release = () => {
+    stopStyleWatch?.();
+    stopStyleWatch = null;
     manager?.dispose();
     manager = null;
     currentDocument = null;
@@ -45,6 +88,9 @@ export function createSteamRuntimeBridge(
         if (nextDocument) {
           try {
             manager = createManager(nextDocument);
+            if (onCssLoaderStylesChanged) {
+              stopStyleWatch = watchCssLoaderStyles(nextDocument, onCssLoaderStylesChanged);
+            }
           } catch {
             currentDocument = null;
             manager = null;
@@ -57,29 +103,37 @@ export function createSteamRuntimeBridge(
   };
 }
 
+interface ThemesRuntimeClient {
+  getSnapshot(): { snapshot: CssLoaderSnapshot };
+  subscribe(listener: () => void, refreshIntervalMs?: number): () => void;
+  refresh(): Promise<void>;
+}
+
 interface ThemesRuntimeOptions {
-  deckyHost: unknown;
+  client: ThemesRuntimeClient;
   getSteamDocument(): Document | null;
-  signalTarget?: Pick<EventTarget, "addEventListener" | "removeEventListener">;
+  createManager?(doc: Document): RuntimeManagerLike;
 }
 
 export function startThemesRuntime({
-  deckyHost,
+  client,
   getSteamDocument,
-  signalTarget,
+  createManager,
 }: ThemesRuntimeOptions): () => void {
-  const minimumBackendVersion = Math.max(...LOCAL_THEME_CATALOG.themes
-    .map((theme) => theme.minimumCssLoaderBackendVersion));
-  const adapter = new CssLoaderAdapter(createDeckyCssLoaderHost(deckyHost), { minimumBackendVersion });
-  const bridge = createSteamRuntimeBridge(getSteamDocument);
-  const watcher = startThemeRuntimeWatcher({
-    inspect: () => adapter.inspect(),
-    reconcile: (snapshot) => bridge.reconcile(snapshot),
-    eventTarget: signalTarget,
-  });
+  const bridge = createSteamRuntimeBridge(
+    getSteamDocument,
+    createManager,
+    () => { void client.refresh(); },
+  );
+  const reconcile = () => bridge.reconcile(client.getSnapshot().snapshot);
+  const unsubscribe = client.subscribe(reconcile, 30_000);
+  let stopped = false;
+  reconcile();
 
   return () => {
-    watcher.dispose();
+    if (stopped) return;
+    stopped = true;
+    unsubscribe();
     bridge.dispose();
   };
 }

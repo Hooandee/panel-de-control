@@ -1,0 +1,27 @@
+name: Theme · Gallery · Promote
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Immutable Gallery version already staged and physically validated
+        required: true
+        type: string
+      confirmation:
+        description: Type PROMOTE followed by a space and the exact version
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  promote:
+    uses: ./.github/workflows/_theme-promote.yml
+    with:
+      catalog_id: hooandee-gallery
+      version: ${{ inputs.version }}
+      confirmation: ${{ inputs.confirmation }}

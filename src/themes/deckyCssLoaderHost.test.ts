@@ -38,6 +38,7 @@ describe("createDeckyCssLoaderHost", () => {
 
     await host.call("set_theme_state", "Hooandee Obsidian Bloom", true, false, false);
     await host.call("set_patch_of_theme", "Hooandee Obsidian Bloom", "Escena de parrilla", "Abismo orbital");
+    await host.call("reset");
 
     expect(call).toHaveBeenNthCalledWith(
       1,
@@ -52,6 +53,13 @@ describe("createDeckyCssLoaderHost", () => {
       "CSS Loader",
       "set_patch_of_theme",
       { themeName: "Hooandee Obsidian Bloom", patchName: "Escena de parrilla", value: "Abismo orbital" },
+    );
+    expect(call).toHaveBeenNthCalledWith(
+      3,
+      "loader/call_legacy_plugin_method",
+      "CSS Loader",
+      "reset",
+      {},
     );
   });
 

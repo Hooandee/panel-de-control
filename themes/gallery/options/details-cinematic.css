@@ -1,0 +1,212 @@
+/* Steam calcula la navegación con la geometría y el hit-testing renderizados.
+ * La vista inicial convierte el hero nativo en una escena full-bleed y solapa
+ * la bandeja de acciones sobre su franja inferior. Los paneles secundarios
+ * permanecen en el flujo; ArrowDown desplaza el scroll nativo hasta ellos. */
+html:root:has(
+    #Main ._3VQUewWB8g6Z5qB4C7dGFr
+      :is(
+        img[src*="/library_hero_blur.jpg"],
+        img[src*="/library_hero.jpg"],
+        img[src*="/customimages/"][src*="_hero.jpg"]
+      )
+  ) {
+  --hdg-details-cinematic-artwork-route: active;
+}
+
+@container style(--hdg-details-cinematic-artwork-route: active) {
+#GamepadUI_Full_Root #Main ._3VQUewWB8g6Z5qB4C7dGFr
+  div:has(> div > div > :is(img[src*="/library_hero_blur.jpg"], img[src*="/customimages/"][src*="_hero.jpg"])),
+#GamepadUI_Full_Root #Main ._3VQUewWB8g6Z5qB4C7dGFr
+  div:has(> div > :is(img[src*="/library_hero_blur.jpg"], img[src*="/customimages/"][src*="_hero.jpg"])),
+#GamepadUI_Full_Root #Main ._3VQUewWB8g6Z5qB4C7dGFr
+  div:has(> :is(img[src*="/library_hero_blur.jpg"], img[src*="/customimages/"][src*="_hero.jpg"])) {
+  background: transparent !important;
+  border-radius: 0 !important;
+  height: calc(100vh - 40px) !important;
+  min-height: calc(100vh - 40px) !important;
+}
+
+#GamepadUI_Full_Root #Main ._3VQUewWB8g6Z5qB4C7dGFr
+  :is(
+    img[src*="/library_hero_blur.jpg"],
+    img[src*="/library_hero.jpg"],
+    img[src*="/customimages/"][src*="_hero.jpg"]
+  ) {
+  border-radius: 0 !important;
+}
+
+/* El asset blur conserva la atmósfera del ajuste elegido. La capa principal
+ * usa una fracción de ese valor para que el artwork siga siendo reconocible. */
+html:root #GamepadUI_Full_Root #Main ._3VQUewWB8g6Z5qB4C7dGFr
+  :is(
+    img[src*="/library_hero.jpg"]:not([src*="_blur"]),
+    img[src*="/customimages/"][src*="_hero.jpg"]
+  ) {
+  filter:
+    blur(calc(var(--hdg-details-background-blur) * 0.1))
+    saturate(1.08)
+    brightness(var(--hdg-details-cinematic-artwork-brightness)) !important;
+}
+
+/* Al crecer el hero, Steam vuelve a anclar el logo al borde inferior del
+ * artwork. Lo elevamos dentro de la escena sin alterar ninguna caja navegable. */
+#GamepadUI_Full_Root #Main ._3VQUewWB8g6Z5qB4C7dGFr
+  :is(img[src*="/logo.png"], img[src*="/customimages/"][src*="_logo.png"]) {
+  position: relative !important;
+  top: -38px !important;
+}
+
+/* El logo del hero acompaña al artwork sin cubrirlo. La copia que Steam usa
+ * durante el lanzamiento queda fuera de este límite y conserva su escala. */
+#GamepadUI_Full_Root #Main ._3VQUewWB8g6Z5qB4C7dGFr
+  :is(img[src*="/logo.png"], img[src*="/customimages/"][src*="_logo.png"]):not(
+    ._1NEW93fLyOOBWroEFft2VT[style*="--controls-overview-height"] *
+  ) {
+  block-size: min(22.5vw, 191.25px) !important;
+  height: min(22.5vw, 191.25px) !important;
+  inline-size: min(40vw, 340px) !important;
+  max-block-size: 191.25px !important;
+  max-inline-size: 340px !important;
+  min-block-size: 0 !important;
+  object-fit: contain !important;
+}
+
+/* Steam usa un lateral a lienzo completo cuando el artwork no aporta una
+ * zona editorial para el logo. El desplazamiento cinematográfico general
+ * lo escondía bajo el header; esta variante conserva 8 px de separación
+ * sin afectar laterales colocados por el autor ni logos centrados. */
+#GamepadUI_Full_Root #Main ._3VQUewWB8g6Z5qB4C7dGFr
+  ._2Eh7Soh97QONu_grMi2m66._2levHjhEzRAVzWSj6oMXzj[style*="left: 0%"][style*="top: 0%"][style*="width: 100%"][style*="height: 100%"]
+  img[src*="/logo.png"] {
+  top: 24px !important;
+}
+
+/* La variante centrada reserva una caja 16:9 incluso para logos panorámicos.
+ * Alinear la tinta arriba usa ese aire interno sin mover ni redimensionar la
+ * caja y evita que el bitmap invada la banda de acciones. */
+#GamepadUI_Full_Root #Main ._3VQUewWB8g6Z5qB4C7dGFr
+  ._2Eh7Soh97QONu_grMi2m66._1nosIKD_xejGRDzGB0gy1v
+  img[src*="/logo.png"] {
+  object-position: 50% 0% !important;
+}
+
+/* El lanzamiento reutiliza el logo del juego dentro de su propio encabezado.
+ * Esa copia no pertenece al hero y debe permanecer en su posición natural. */
+#GamepadUI_Full_Root #Main ._3VQUewWB8g6Z5qB4C7dGFr
+  ._1NEW93fLyOOBWroEFft2VT[style*="--controls-overview-height"]
+  > :first-child:not(:has(video))
+  :is(img[src*="/logo.png"], img[src*="/customimages/"][src*="_logo.png"]) {
+  top: 0 !important;
+}
+
+html:root #GamepadUI_Full_Root #Main ._3VQUewWB8g6Z5qB4C7dGFr
+  div:has(> div:first-child > div:first-child [role="button"]):has(> div:nth-child(3)):has(
+    > div:last-child [role="tab"][aria-controls$="GameInfo_Content"]
+  ) {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  background: transparent !important;
+  border-top: 0 !important;
+  box-shadow: none !important;
+  margin-top: -83px !important;
+}
+
+/* La banda de acciones y el footer forman una sola lámina. El footer general
+ * empieza transparente para el resto del sistema; aquí esa transparencia
+ * abría una costura sobre el artwork. */
+html:root:has([role="tab"][aria-controls$="GameInfo_Content"])
+  #Footer {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  background: var(--hdg-details-cinematic-footer) !important;
+  border-top: 0 !important;
+}
+
+#GamepadUI_Full_Root #Main ._3VQUewWB8g6Z5qB4C7dGFr
+  div:has(> div:first-child > div:first-child [role="button"]):has(> div:nth-child(3)):has(
+    > div:last-child [role="tab"][aria-controls$="GameInfo_Content"]
+  )
+  > div:first-child {
+  background: var(--hdg-details-cinematic-band) !important;
+  box-sizing: border-box !important;
+  /* Conserva los 81 px de la franja y redistribuye su aire: las acciones se
+     separan del footer sin mover el pie ni las pestañas inferiores. */
+  padding-block: 21px 12px !important;
+}
+
+#GamepadUI_Full_Root #Main ._3VQUewWB8g6Z5qB4C7dGFr
+  div:has(> div:first-child > div:first-child [role="button"]):has(> div:nth-child(3)):has(
+    > div:last-child [role="tab"][aria-controls$="GameInfo_Content"]
+  )
+  > div:nth-child(2) {
+  background: var(--hdg-details-cinematic-band-base) !important;
+  opacity: 0 !important;
+  transition: opacity 160ms ease !important;
+}
+
+#GamepadUI_Full_Root #Main ._3VQUewWB8g6Z5qB4C7dGFr
+  div:has(> div:first-child > div:first-child [role="button"]):has(> div:nth-child(3)):has(
+    > div:last-child [role="tab"][aria-controls$="GameInfo_Content"]
+  )
+  > div:last-child {
+  opacity: 1 !important;
+  position: relative !important;
+  transform: none !important;
+}
+
+#GamepadUI_Full_Root #Main ._3VQUewWB8g6Z5qB4C7dGFr
+  div:has(> div:first-child > div:first-child [role="button"]):has(> div:nth-child(3)):has(
+    > div:last-child [role="tab"][aria-controls$="GameInfo_Content"]
+  )
+  > div:last-child::after {
+  background: var(--hdg-details-cinematic-veil) !important;
+  content: "" !important;
+  inset: 0 !important;
+  opacity: 1 !important;
+  pointer-events: none !important;
+  position: absolute !important;
+  transition: opacity 160ms ease !important;
+}
+
+#GamepadUI_Full_Root #Main ._3VQUewWB8g6Z5qB4C7dGFr
+  div:has(> div:first-child > div:first-child [role="button"]):has(> div:nth-child(3)):has(
+    > div:last-child [role="tab"][aria-controls$="GameInfo_Content"]
+  ):has(
+    > div:first-child ~ :is(.gpfocus, .gpfocuswithin),
+    > div:first-child ~ * :is(.gpfocus, .gpfocuswithin)
+  )
+  > div:last-child::after {
+  opacity: 0 !important;
+}
+
+#GamepadUI_Full_Root #Main ._3VQUewWB8g6Z5qB4C7dGFr
+  div:has(> div:first-child > div:first-child [role="button"]):has(> div:nth-child(3)):has(
+    > div:last-child [role="tab"][aria-controls$="GameInfo_Content"]
+  ):has(
+    > div:first-child ~ :is(.gpfocus, .gpfocuswithin),
+    > div:first-child ~ * :is(.gpfocus, .gpfocuswithin)
+  )
+  > div:nth-child(2) {
+  opacity: 1 !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #GamepadUI_Full_Root #Main ._3VQUewWB8g6Z5qB4C7dGFr
+    div:has(> div:first-child > div:first-child [role="button"]):has(> div:nth-child(3)):has(
+      > div:last-child [role="tab"][aria-controls$="GameInfo_Content"]
+    )
+    > div:last-child::after {
+    opacity: 0 !important;
+    transition: none !important;
+  }
+
+  #GamepadUI_Full_Root #Main ._3VQUewWB8g6Z5qB4C7dGFr
+    div:has(> div:first-child > div:first-child [role="button"]):has(> div:nth-child(3)):has(
+      > div:last-child [role="tab"][aria-controls$="GameInfo_Content"]
+    )
+    > div:nth-child(2) {
+    opacity: 1 !important;
+    transition: none !important;
+  }
+}
+}

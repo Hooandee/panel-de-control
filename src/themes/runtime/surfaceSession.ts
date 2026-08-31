@@ -9,6 +9,7 @@ interface ObserverLike {
 interface SteamSurfaceSessionOptions {
   doc: Document;
   onSurface(surface: ThemeRuntimeSurface | null, main: Element | null): void;
+  onBeforeRefresh?(records: readonly MutationRecord[]): void;
   createObserver?(callback: MutationCallback): ObserverLike;
   requestAnimationFrame?(callback: FrameRequestCallback): number;
   cancelAnimationFrame?(handle: number): void;
@@ -17,6 +18,7 @@ interface SteamSurfaceSessionOptions {
 export function startSteamSurfaceSession({
   doc,
   onSurface,
+  onBeforeRefresh,
   createObserver,
   requestAnimationFrame,
   cancelAnimationFrame,
@@ -91,8 +93,12 @@ export function startSteamSurfaceSession({
     }
     onSurface(activeSurface, activeMain);
   };
-  const scheduleRefresh = () => {
-    if (!stopped && !frame) frame = scheduleFrame(refresh);
+  const scheduleRefresh: MutationCallback = (records) => {
+    if (stopped) return;
+    try {
+      onBeforeRefresh?.(records);
+    } catch {}
+    if (!frame) frame = scheduleFrame(refresh);
   };
 
   try {

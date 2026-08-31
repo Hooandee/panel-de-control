@@ -8,6 +8,7 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 *.zip
+!themes/bundled/hooandee-gallery/0.7.8/gallery.zip
 *.tar.gz
 
 # Bundled binary is built in CI, never committed; keep only the placeholder.

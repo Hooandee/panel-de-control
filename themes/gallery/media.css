@@ -1,0 +1,628 @@
+/* pdc-gallery-feature: media:v1 */
+/* Galería multimedia observada: grid de filas con capturas accionables. */
+
+/* Álbumes de bandas sonoras. La firma exige una cabecera seguida por al
+   menos nueve pistas accionables, por lo que no alcanza listas generales. */
+@scope (#Main:not(:has([role="tab"][aria-controls$="GameInfo_Content"])):has(div > :first-child:not([role]) + [role="button"]):has(div > [role="button"]:nth-child(10))) {
+  :scope {
+    color: var(--hdg-text-primary) !important;
+  }
+
+  /* Conserva el artwork, sustituyendo únicamente el velo oscuro nativo. */
+  div:has(> div > div > input[type="file"] + img):has(> div + div) {
+    background: var(--hdg-ost-page-veil) !important;
+  }
+
+  div:has(> input[type="file"] + img) > img {
+    filter: var(--hdg-ost-artwork-filter) !important;
+  }
+
+  :scope img {
+    border: 1px solid var(--hdg-glass-stroke-soft) !important;
+    border-radius: 14px !important;
+    box-shadow: 0 8px 20px var(--hdg-shadow-color) !important;
+    box-sizing: border-box;
+  }
+
+  div:has(> input[type="file"] + img) > img {
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+
+  /* Lista de pistas: padding interno suficiente para que el halo nunca sea
+     recortado por el scroll, incluso junto al borde derecho. */
+  div:has(> :first-child:not([role]) + [role="button"]):has(> [role="button"]:nth-child(10)) {
+    -webkit-backdrop-filter: blur(9px) saturate(112%);
+    backdrop-filter: blur(9px) saturate(112%);
+    background:
+      linear-gradient(145deg, var(--hdg-glass-highlight), transparent 38%),
+      var(--hdg-glass-panel) !important;
+    border: 1px solid var(--hdg-glass-stroke) !important;
+    border-radius: 16px !important;
+    box-shadow:
+      inset 0 1px var(--hdg-glass-highlight),
+      0 12px 28px var(--hdg-shadow-color) !important;
+    box-sizing: border-box;
+    height: calc(100% - 10px) !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    padding: 7px 9px 46px !important;
+    scroll-padding: 48px 0 48px;
+  }
+
+  div:has(> :first-child:not([role]) + [role="button"]):has(> [role="button"]:nth-child(10))
+    > :first-child:not([role]) {
+    background: var(--hdg-control-surface-strong) !important;
+    border: 1px solid var(--hdg-glass-stroke-soft) !important;
+    border-radius: 11px !important;
+    box-sizing: border-box;
+    color: var(--hdg-text-primary) !important;
+    margin-bottom: 5px;
+    min-height: 36px;
+    padding-inline: 11px !important;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
+
+  div:has(> :first-child:not([role]) + [role="button"]):has(> [role="button"]:nth-child(10))
+    > [role="button"] {
+    align-items: center;
+    background: transparent !important;
+    border: 1px solid transparent !important;
+    border-radius: 10px !important;
+    box-shadow: none !important;
+    box-sizing: border-box;
+    color: var(--hdg-text-primary) !important;
+    display: flex;
+    margin: 4px 2px !important;
+    min-height: 35px;
+    outline: 1px solid transparent !important;
+    outline-offset: 2px;
+    overflow: visible !important;
+    padding-inline: 9px;
+    position: relative;
+    transform: none !important;
+    width: auto !important;
+  }
+
+  div:has(> :first-child:not([role]) + [role="button"]):has(> [role="button"]:nth-child(10))
+    > [role="button"]:is(.gpfocus, .gpfocuswithin) {
+    background:
+      linear-gradient(145deg, var(--hdg-control-highlight), transparent 58%),
+      var(--hdg-accent-surface-focus) !important;
+    border-color: var(--hdg-accent-stroke) !important;
+    box-shadow: 0 6px 16px var(--hdg-accent-glow) !important;
+    color: var(--hdg-text-primary) !important;
+    outline-color: var(--hdg-focus-ring) !important;
+  }
+
+  div:has(> :first-child:not([role]) + [role="button"]):has(> [role="button"]:nth-child(10))
+    > [role="button"]::before,
+  div:has(> :first-child:not([role]) + [role="button"]):has(> [role="button"]:nth-child(10))
+    > [role="button"]::after {
+    content: none !important;
+  }
+
+  /* Las acciones laterales respiran como un grupo y no como botones pegados. */
+  div:has(> div > div:has(> :first-child:not([role]) + [role="button"]):has(> [role="button"]:nth-child(10)))
+    > :first-child
+    .DialogButton {
+    margin-bottom: 7px !important;
+    min-height: 42px;
+  }
+}
+
+#Main ._2QjFE3h7KkygsFmaBJmi8X {
+  box-sizing: border-box;
+  padding-bottom: 64px;
+  scroll-padding-block: 12px 64px;
+  scroll-padding-bottom: 64px;
+}
+
+#Main ._2QjFE3h7KkygsFmaBJmi8X [role="row"] {
+  overflow: visible !important;
+}
+
+#Main ._2QjFE3h7KkygsFmaBJmi8X [role="row"] [role="button"] {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.065), transparent 48%),
+    rgba(5, 10, 16, 0.34) !important;
+  border: 0 !important;
+  border-radius: 16px !important;
+  box-shadow:
+    inset 0 0 0 1px var(--hdg-glass-stroke-soft),
+    inset 0 1px rgba(255, 255, 255, 0.06),
+    0 8px 22px rgba(0, 0, 0, 0.2) !important;
+  box-sizing: border-box;
+  outline: 1px solid transparent !important;
+  outline-offset: 4px;
+  overflow: hidden !important;
+  transition:
+    outline-color 150ms ease,
+    box-shadow 150ms ease,
+    filter 150ms ease;
+}
+
+#Main ._2QjFE3h7KkygsFmaBJmi8X [role="row"] [role="button"] > :is(img:not([src*="/play_icon"]), video, canvas),
+#Main ._2QjFE3h7KkygsFmaBJmi8X [role="row"] [role="button"] :is(img:not([src*="/play_icon"]), video, canvas):not([role="presentation"]) {
+  border-radius: 16px !important;
+  display: block;
+  height: 100% !important;
+  object-fit: cover;
+  overflow: hidden;
+  width: 100% !important;
+}
+
+#Main ._2QjFE3h7KkygsFmaBJmi8X [role="row"] [role="button"].gpfocus {
+  border: 0 !important;
+  box-shadow:
+    inset 0 0 0 1px var(--hdg-accent-stroke),
+    inset 0 1px rgba(255, 255, 255, 0.12),
+    0 10px 28px rgba(0, 0, 0, 0.3),
+    0 0 22px var(--hdg-accent-glow) !important;
+  filter: brightness(1.035) saturate(1.025);
+  outline-color: var(--hdg-focus-ring) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #Main ._2QjFE3h7KkygsFmaBJmi8X [role="row"] [role="button"] {
+    transition: none;
+  }
+
+  #Main .OpenedItemContainer div:has(> img:not([aria-label])) {
+    transition: none;
+  }
+}
+
+/* Visor: escenario seguro entre header y footer, con acciones integradas. */
+#Main .OpenedItemContainer {
+  background:
+    radial-gradient(circle at 50% 38%, var(--hdg-accent-surface-focus), transparent 48%),
+    rgba(3, 7, 12, 0.28) !important;
+}
+
+#Main .OpenedItemContainer div:has(> img:not([aria-label])) {
+  align-items: center;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.035), transparent 46%),
+    rgba(0, 0, 0, 0.3) !important;
+  box-shadow: inset 0 0 70px rgba(0, 0, 0, 0.54) !important;
+  box-sizing: border-box;
+  justify-content: center;
+  padding: 44px 24px 8px;
+  transition: padding 180ms ease;
+}
+
+/* Steam revela la información quitando `inert`. En ese estado se reserva el
+   espacio real de las dos filas, en lugar de trasladar controles sobre la foto. */
+#Main .OpenedItemContainer:has(
+    > div > div > div > div > div + div > div:not([inert])
+  ) div:has(> img:not([aria-label])) {
+  padding: 28px 24px 76px;
+}
+
+#Main .OpenedItemContainer img:not([aria-label]) {
+  border: 1px solid var(--hdg-glass-stroke-soft) !important;
+  border-radius: 18px !important;
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.08),
+    0 18px 42px rgba(0, 0, 0, 0.34),
+    0 0 20px var(--hdg-accent-surface-focus) !important;
+  box-sizing: border-box;
+  height: auto !important;
+  max-height: 100% !important;
+  max-width: 100% !important;
+  object-fit: contain;
+  overflow: hidden;
+  width: auto !important;
+}
+
+/* El overlay nativo conserva su apertura y cierre, pero sin la cortina negra. */
+#Main .OpenedItemContainer div:has(> img:not([aria-label])) + div {
+  background: transparent !important;
+}
+
+/* Metadatos discretos pero legibles en las dos apariencias. */
+#Main .OpenedItemContainer
+  div:has(> img:not([aria-label]))
+  + div
+  > div
+  > div
+  > div:not(:has([role="button"])) {
+  color: var(--hdg-text-secondary) !important;
+}
+
+#Main .OpenedItemContainer
+  div:has(> img:not([aria-label]))
+  + div
+  > div
+  > div
+  > div:not(:has([role="button"]))
+  :is(div, span, svg, path) {
+  color: inherit !important;
+}
+
+#Main .OpenedItemContainer
+  div:has(> img:not([aria-label]))
+  + div
+  > div
+  > div
+  > div:not(:has([role="button"]))
+  :is(svg, path) {
+  fill: currentColor !important;
+}
+
+/* Fila social: métricas y acciones comparten una sola bandeja de cristal. */
+#Main .OpenedItemContainer
+  div:has(> img:not([aria-label]))
+  + div
+  > div
+  > div
+  > div:has([role="button"]) {
+  -webkit-backdrop-filter: blur(10px) saturate(118%);
+  align-items: center;
+  backdrop-filter: blur(10px) saturate(118%);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.09), transparent 52%),
+    var(--hdg-glass-panel-fallback) !important;
+  border: 1px solid var(--hdg-glass-stroke) !important;
+  border-radius: 14px !important;
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.09),
+    0 8px 22px rgba(0, 0, 0, 0.26) !important;
+  box-sizing: border-box;
+  min-height: 38px;
+  overflow: hidden !important;
+  padding: 4px 6px;
+  position: relative;
+  z-index: 2;
+}
+
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  #Main .OpenedItemContainer
+    div:has(> img:not([aria-label]))
+    + div
+    > div
+    > div
+    > div:has([role="button"]) {
+    background:
+      linear-gradient(145deg, rgba(255, 255, 255, 0.09), transparent 52%),
+      var(--hdg-glass-panel) !important;
+  }
+}
+
+#Main .OpenedItemContainer
+  div:has(> img:not([aria-label]))
+  + div
+  > div
+  > div
+  > div:has([role="button"])
+  > div:has(svg):not(:has([role="button"])) {
+  color: var(--hdg-accent-ink) !important;
+}
+
+#Main .OpenedItemContainer
+  div:has(> img:not([aria-label]))
+  + div
+  > div
+  > div
+  > div:has([role="button"])
+  > div:has(svg):not(:has([role="button"]))
+  :is(svg, path, g, rect) {
+  color: inherit !important;
+  fill: currentColor !important;
+}
+
+#Main .OpenedItemContainer
+  div:has(> img:not([aria-label]))
+  + div
+  > div
+  > div
+  > div:has([role="button"])
+  > div:has(svg):not(:has([role="button"])) span {
+  color: var(--hdg-text-secondary) !important;
+}
+
+#Main .OpenedItemContainer
+  div:has(> img:not([aria-label]))
+  + div
+  > div
+  > div
+  > div:has([role="button"])
+  [role="button"] {
+  align-items: center;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.1), transparent 54%),
+    var(--hdg-control-surface) !important;
+  border: 1px solid var(--hdg-glass-stroke) !important;
+  border-radius: 10px !important;
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.08),
+    0 3px 9px rgba(0, 0, 0, 0.2) !important;
+  box-sizing: border-box;
+  color: var(--hdg-text-primary) !important;
+  height: 30px !important;
+  min-height: 30px !important;
+  padding-block: 3px !important;
+  transform: none !important;
+}
+
+#Main .OpenedItemContainer
+  div:has(> img:not([aria-label]))
+  + div
+  > div
+  > div
+  > div:has([role="button"])
+  [role="button"].gpfocus {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.14), transparent 56%),
+    var(--hdg-accent-fill) !important;
+  border-color: var(--hdg-accent-stroke) !important;
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.16),
+    0 7px 20px var(--hdg-accent-glow) !important;
+  color: #fff !important;
+}
+
+#Main .OpenedItemContainer img[aria-label$="L1"],
+#Main .OpenedItemContainer img[aria-label$="R1"] {
+  border-radius: 10px !important;
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.36));
+  opacity: 0.82;
+}
+
+/* El detalle de una captura de Comunidad vive en un modal propio, fuera de
+   `#Main`. Se identifica por la imagen UGC para no alterar otros overlays. */
+#GamepadUI_Full_Root
+  .FullModalOverlay
+  > .ModalOverlayContent.active:has(img[src*="steamusercontent.com/ugc/"])
+  > .Panel.Focusable:has(img[src*="steamusercontent.com/ugc/"]) {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  box-sizing: border-box;
+  overflow: hidden auto !important;
+  padding: 18px 20px !important;
+}
+
+#GamepadUI_Full_Root
+  .FullModalOverlay
+  > .ModalOverlayContent.active:has(img[src*="steamusercontent.com/ugc/"])
+  > .Panel.Focusable:has(img[src*="steamusercontent.com/ugc/"])
+  > .Panel.Focusable:has(img[src*="steamusercontent.com/ugc/"]) {
+  -webkit-backdrop-filter: blur(12px) saturate(116%);
+  backdrop-filter: blur(12px) saturate(116%);
+  background:
+    linear-gradient(145deg, var(--hdg-glass-highlight), transparent 48%),
+    var(--hdg-glass-panel-fallback) !important;
+  border: 1px solid var(--hdg-glass-stroke) !important;
+  border-radius: 18px !important;
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.08),
+    0 16px 36px var(--hdg-shadow-color, rgba(0, 0, 0, 0.3)) !important;
+  box-sizing: border-box;
+  color: var(--hdg-text-primary) !important;
+  overflow: auto scroll !important;
+}
+
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  #GamepadUI_Full_Root
+    .FullModalOverlay
+    > .ModalOverlayContent.active:has(img[src*="steamusercontent.com/ugc/"])
+    > .Panel.Focusable:has(img[src*="steamusercontent.com/ugc/"])
+    > .Panel.Focusable:has(img[src*="steamusercontent.com/ugc/"]) {
+    background:
+      linear-gradient(145deg, var(--hdg-glass-highlight), transparent 48%),
+      var(--hdg-glass-panel) !important;
+  }
+}
+
+#GamepadUI_Full_Root
+  .FullModalOverlay
+  > .ModalOverlayContent.active:has(img[src*="steamusercontent.com/ugc/"])
+  > .Panel.Focusable:has(img[src*="steamusercontent.com/ugc/"])
+  > .Panel.Focusable:has(img[src*="steamusercontent.com/ugc/"])
+  > div:first-child {
+  box-sizing: border-box;
+  padding: 16px 16px 18px !important;
+}
+
+#GamepadUI_Full_Root
+  .FullModalOverlay
+  > .ModalOverlayContent.active:has(img[src*="steamusercontent.com/ugc/"])
+  .Panel.Focusable:has(> img[src*="steamusercontent.com/ugc/"]) {
+  background: var(--hdg-settings-row-surface) !important;
+  border: 1px solid var(--hdg-glass-stroke-soft) !important;
+  border-radius: 16px !important;
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.07),
+    0 12px 28px rgba(0, 0, 0, 0.24) !important;
+  box-sizing: border-box;
+  overflow: hidden !important;
+}
+
+#GamepadUI_Full_Root
+  .FullModalOverlay
+  > .ModalOverlayContent.active:has(img[src*="steamusercontent.com/ugc/"])
+  img[src*="steamusercontent.com/ugc/"] {
+  border: 0 !important;
+  border-radius: 15px 15px 0 0 !important;
+  box-shadow: none !important;
+  box-sizing: border-box;
+  display: block;
+  overflow: hidden !important;
+}
+
+#GamepadUI_Full_Root
+  .FullModalOverlay
+  > .ModalOverlayContent.active:has(img[src*="steamusercontent.com/ugc/"])
+  .Panel.Focusable:has(> img[src*="steamusercontent.com/ugc/"])
+  > img
+  + div {
+  background:
+    linear-gradient(180deg, var(--hdg-glass-highlight), transparent 72%),
+    var(--hdg-settings-row-surface) !important;
+  border-top: 1px solid var(--hdg-glass-stroke-soft) !important;
+  color: var(--hdg-text-primary) !important;
+}
+
+#GamepadUI_Full_Root
+  .FullModalOverlay
+  > .ModalOverlayContent.active:has(img[src*="steamusercontent.com/ugc/"])
+  .Panel.Focusable:has(> img[src*="steamusercontent.com/ugc/"])
+  > img
+  + div
+  :is(div, span) {
+  color: inherit !important;
+  -webkit-text-fill-color: currentColor !important;
+}
+
+#GamepadUI_Full_Root
+  .FullModalOverlay
+  > .ModalOverlayContent.active:has(img[src*="steamusercontent.com/ugc/"])
+  [role="button"] {
+  border-radius: 11px !important;
+  color: var(--hdg-text-primary) !important;
+  transform: none !important;
+}
+
+/* Cerrar es una acción separada de la pieza foto+autor. El margen evita que
+   parezca adherida a la imagen y deja respirar el acceso a comentarios. */
+#GamepadUI_Full_Root
+  .FullModalOverlay
+  > .ModalOverlayContent.active:has(img[src*="steamusercontent.com/ugc/"])
+  .Panel.Focusable:has(> img[src*="steamusercontent.com/ugc/"])
+  ~ div:has(> div > [role="button"])
+  [role="button"] {
+  margin-top: 12px !important;
+}
+
+#GamepadUI_Full_Root
+  .FullModalOverlay
+  > .ModalOverlayContent.active:has(img[src*="steamusercontent.com/ugc/"])
+  .Panel.Focusable:has(> img[src*="steamusercontent.com/ugc/"])
+  ~ div:has(> div > [role="button"])
+  > div:first-child {
+  row-gap: 10px !important;
+}
+
+#GamepadUI_Full_Root
+  .FullModalOverlay
+  > .ModalOverlayContent.active:has(img[src*="steamusercontent.com/ugc/"])
+  .Panel.Focusable:has(> img[src*="steamusercontent.com/ugc/"])
+  ~ div:has(> div > [role="button"])
+  > div:not(:first-child) {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.065), transparent 56%),
+    var(--hdg-settings-row-surface) !important;
+  border: 1px solid var(--hdg-glass-stroke-soft) !important;
+  border-radius: 14px !important;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.055) !important;
+  box-sizing: border-box !important;
+  color: var(--hdg-text-primary) !important;
+  margin-top: 14px !important;
+  overflow: visible !important;
+  padding: 10px 12px !important;
+}
+
+#GamepadUI_Full_Root
+  .FullModalOverlay
+  > .ModalOverlayContent.active:has(img[src*="steamusercontent.com/ugc/"])
+  .Panel.Focusable:has(> img[src*="steamusercontent.com/ugc/"])
+  ~ div:has(> div > [role="button"])
+  > div:not(:first-child)
+  > div {
+  background: transparent !important;
+  border-radius: 12px !important;
+  color: var(--hdg-text-primary) !important;
+  padding-inline: 8px !important;
+}
+
+/* El listado de comentarios añade una placa rectangular dos niveles más
+   adentro. La superficie ya la aporta su padre de cristal. */
+#GamepadUI_Full_Root
+  .FullModalOverlay
+  > .ModalOverlayContent.active:has(img[src*="steamusercontent.com/ugc/"])
+  .Panel.Focusable:has(> img[src*="steamusercontent.com/ugc/"])
+  ~ div:has(> div > [role="button"])
+  > div:not(:first-child)
+  > div
+  > div {
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 12px !important;
+  color: var(--hdg-text-primary) !important;
+  padding: 6px 8px 24px !important;
+}
+
+#GamepadUI_Full_Root
+  .FullModalOverlay
+  > .ModalOverlayContent.active:has(img[src*="steamusercontent.com/ugc/"])
+  .Panel.Focusable:has(> img[src*="steamusercontent.com/ugc/"])
+  ~ div:has(> div > [role="button"])
+  > div:not(:first-child)
+  > div
+  > div
+  :is(div, span, a) {
+  color: var(--hdg-text-primary) !important;
+  -webkit-text-fill-color: currentColor !important;
+  opacity: 1 !important;
+}
+
+#GamepadUI_Full_Root
+  .FullModalOverlay
+  > .ModalOverlayContent.active:has(img[src*="steamusercontent.com/ugc/"])
+  .Panel.Focusable:has(> img[src*="steamusercontent.com/ugc/"])
+  ~ div:has(> div > [role="button"])
+  > div:not(:first-child)
+  :is([role="button"], .Focusable) {
+  border-radius: 10px !important;
+  color: var(--hdg-text-primary) !important;
+}
+
+#GamepadUI_Full_Root
+  .FullModalOverlay
+  > .ModalOverlayContent.active:has(img[src*="steamusercontent.com/ugc/"])
+  .Panel.Focusable:has(> img[src*="steamusercontent.com/ugc/"])
+  ~ div:has(> div > [role="button"])
+  :is(input, textarea) {
+  background: var(--hdg-control-surface) !important;
+  border: 1px solid var(--hdg-glass-stroke-soft) !important;
+  border-radius: 11px !important;
+  color: var(--hdg-text-primary) !important;
+  outline: none !important;
+}
+
+#GamepadUI_Full_Root
+  .FullModalOverlay
+  > .ModalOverlayContent.active:has(img[src*="steamusercontent.com/ugc/"])
+  [role="button"].gpfocus {
+  background: var(--hdg-accent-fill) !important;
+  border-color: var(--hdg-accent-stroke) !important;
+  color: var(--hdg-accent-on-fill) !important;
+}
+
+#GamepadUI_Full_Root
+  .FullModalOverlay
+  > .ModalOverlayContent.active:has(img[src*="steamusercontent.com/ugc/"])
+  .SVGIcon_Arrow
+  polyline {
+  stroke: var(--hdg-text-secondary) !important;
+}
+
+/* Igual que Ajustes, el reproductor de OST recibe un rectángulo móvil global
+ * como segundo foco. La firma exige la estructura de álbum y diez pistas, por
+ * lo que no alcanza a otras listas ni al carrusel de Inicio. */
+html:root
+  #GamepadUI_Full_Root:has(
+    #Main div > :first-child:not([role]) + [role="button"]
+  ):has(#Main div > [role="button"]:nth-child(10))
+  > div
+  > div[style*="left:"][style*="top:"][style*="height:"][style*="width:"] {
+  background: transparent !important;
+  box-shadow: none !important;
+  opacity: 0 !important;
+  outline: 0 !important;
+}

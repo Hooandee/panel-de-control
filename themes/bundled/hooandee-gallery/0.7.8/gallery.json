@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "hooandee-gallery",
+  "cssLoaderName": "Hooandee Gallery",
+  "version": "0.7.8",
+  "artifact": {
+    "file": "gallery.zip",
+    "sha256": "3af309363a453511d6b00a0b82ac3617bd2791026758f958aba909b877f6bbeb",
+    "size": 107697
+  }
+}
