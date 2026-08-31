@@ -31,6 +31,11 @@ _MAX_ARTIFACT_BYTES = 64 * 1024 * 1024
 _SHA256 = frozenset("0123456789abcdef")
 _CHUNK_BYTES = 64 * 1024
 _CATALOG_PATH = "themes/v1/catalog.json"
+_SYSTEM_CA_BUNDLES = (
+    Path("/etc/ssl/cert.pem"),
+    Path("/etc/ssl/certs/ca-certificates.crt"),
+    Path("/etc/pki/tls/certs/ca-bundle.crt"),
+)
 
 
 class ThemeTransportError(Exception):
@@ -59,10 +64,23 @@ class _NoRedirectHandler(HTTPRedirectHandler):
         return None
 
 
-def _default_opener() -> OpenerDirector:
-    context = ssl.create_default_context()
+def _default_ssl_context() -> ssl.SSLContext:
+    default_cafile = ssl.get_default_verify_paths().cafile
+    candidates = (
+        *((Path(default_cafile),) if default_cafile else ()),
+        *_SYSTEM_CA_BUNDLES,
+    )
+    cafile = next((path for path in candidates if path.is_file()), None)
+    context = ssl.create_default_context(
+        **({"cafile": str(cafile)} if cafile is not None else {})
+    )
     context.check_hostname = True
     context.verify_mode = ssl.CERT_REQUIRED
+    return context
+
+
+def _default_opener() -> OpenerDirector:
+    context = _default_ssl_context()
     return build_opener(
         ProxyHandler({}),
         HTTPSHandler(context=context),

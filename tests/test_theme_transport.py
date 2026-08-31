@@ -2,15 +2,44 @@ from __future__ import annotations
 
 import hashlib
 import ssl
+import types
 from pathlib import Path
 from urllib.error import URLError
 
 import pytest
 
+import theme_transport
 from theme_transport import ThemeHttpTransport, ThemeTransportError
 
 
 PAGES_BASE = "https://example.invalid/panel-de-control"
+
+
+def test_default_ssl_context_uses_an_existing_system_ca_bundle(monkeypatch) -> None:
+    captured: dict[str, str | None] = {}
+    context = types.SimpleNamespace(check_hostname=False, verify_mode=ssl.CERT_NONE)
+    monkeypatch.setattr(
+        theme_transport.ssl,
+        "get_default_verify_paths",
+        lambda: types.SimpleNamespace(cafile="/missing/embedded-cert.pem"),
+    )
+    monkeypatch.setattr(
+        theme_transport.Path,
+        "is_file",
+        lambda path: str(path) == "/etc/ssl/cert.pem",
+    )
+    monkeypatch.setattr(
+        theme_transport.ssl,
+        "create_default_context",
+        lambda *, cafile=None: captured.update(cafile=cafile) or context,
+    )
+
+    result = theme_transport._default_ssl_context()
+
+    assert result is context
+    assert captured == {"cafile": "/etc/ssl/cert.pem"}
+    assert context.check_hostname is True
+    assert context.verify_mode == ssl.CERT_REQUIRED
 
 
 class FakeResponse:
