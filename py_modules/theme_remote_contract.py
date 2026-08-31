@@ -10,11 +10,14 @@ from urllib.parse import urlsplit, urlunsplit
 
 _SAFE_CATALOG_ID = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 _STABLE_SEMVER = re.compile(
-    r"^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$"
+    r"^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$"
 )
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
+_PERCENT_ENCODED_DOT = re.compile(r"%2e", re.IGNORECASE)
+_PERCENT_ENCODED_BACKSLASH = re.compile(r"%5c", re.IGNORECASE)
 _LOCALES = frozenset({"es", "en", "it"})
 _SENSITIVE_JSON_FIELDS = frozenset({"catalogId", "cssLoaderName", "url"})
+_SENSITIVE_JSON_VALUE_FIELDS = frozenset({"catalogId", "url"})
 _MAX_CATALOG_ENTRIES = 32
 _MAX_DISPLAY_NAME_LENGTH = 80
 _MAX_DESCRIPTION_LENGTH = 400
@@ -24,6 +27,7 @@ _MAX_TAGS = 8
 _MAX_NOTE_LENGTH = 1_000
 _MAX_METADATA_BYTES = 64 * 1024
 _MAX_ARTIFACT_BYTES = 64 * 1024 * 1024
+_MAX_SAFE_INTEGER = 9_007_199_254_740_991
 
 _RELEASE_REQUIRED_FIELDS = frozenset(
     {
@@ -166,6 +170,9 @@ def _reject_escaped_sensitive_strings(value: str) -> None:
             continue
         if "\\" in raw_key[1:-1]:
             _fail(f"Escaped {key} field is invalid")
+        if key not in _SENSITIVE_JSON_VALUE_FIELDS:
+            index = end
+            continue
         cursor += 1
         while cursor < len(value) and value[cursor].isspace():
             cursor += 1
@@ -192,6 +199,8 @@ def _decode_json(payload: bytes, label: str) -> object:
 def normalize_pages_base_url(value: str) -> str:
     if not isinstance(value, str) or not value:
         _fail("Pages base URL is required")
+    if "\\" in value or _PERCENT_ENCODED_BACKSLASH.search(value):
+        _fail("Pages base URL path is unsafe")
     try:
         parsed = urlsplit(value)
         port = parsed.port
@@ -208,6 +217,10 @@ def normalize_pages_base_url(value: str) -> str:
         or parsed.fragment
     ):
         _fail("Pages base URL must be an HTTPS origin and path")
+    for segment in parsed.path.split("/"):
+        decoded_dots = _PERCENT_ENCODED_DOT.sub(".", segment)
+        if decoded_dots in {".", ".."}:
+            _fail("Pages base URL path is unsafe")
     normalized_host = hostname.lower()
     if ":" in normalized_host:
         normalized_host = f"[{normalized_host}]"
@@ -278,6 +291,7 @@ def _parse_minimum_versions(value: object) -> ThemeMinimumVersions:
         not isinstance(backend_version, int)
         or isinstance(backend_version, bool)
         or backend_version <= 0
+        or backend_version > _MAX_SAFE_INTEGER
     ):
         _fail("Minimum CSS Loader backend is invalid")
     return ThemeMinimumVersions(

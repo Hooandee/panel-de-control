@@ -9,6 +9,7 @@ from theme_remote_contract import (
     ThemeCatalog,
     ThemeCatalogRelease,
     ThemeContractError,
+    normalize_pages_base_url,
     parse_theme_catalog,
     parse_theme_release,
 )
@@ -82,6 +83,26 @@ def test_parses_the_exact_public_v1_release_as_immutable_data() -> None:
         release.version = "1.2.4"  # type: ignore[misc]
     with pytest.raises(TypeError):
         release.display_name["en"] = "Changed"  # type: ignore[index]
+
+
+def test_accepts_a_quoted_css_loader_name_from_serialized_json() -> None:
+    release = parse_theme_release(
+        payload(changed(cssLoaderName='Example "Theme"')),
+        PAGES_BASE,
+    )
+
+    assert release.css_loader_name == 'Example "Theme"'
+
+
+def test_accepts_css_loader_names_at_the_128_code_point_boundary() -> None:
+    css_loader_name = "😀" * 128
+
+    release = parse_theme_release(
+        payload(changed(cssLoaderName=css_loader_name)),
+        PAGES_BASE,
+    )
+
+    assert release.css_loader_name == css_loader_name
 
 
 def test_parses_a_catalog_with_unique_immutable_releases() -> None:
@@ -253,6 +274,86 @@ def test_rejects_invalid_minimum_versions(minimum_versions: object) -> None:
             payload(changed(minimumVersions=minimum_versions)),
             PAGES_BASE,
         )
+
+
+@pytest.mark.parametrize(
+    "invalid",
+    [
+        changed(
+            version="1.2.3١",
+            artifact={
+                **VALID_RELEASE["artifact"],
+                "url": f"{PAGES_BASE}/themes/v1/example-theme/1.2.3١/theme.zip",
+            },
+        ),
+        changed(
+            minimumVersions={
+                **VALID_RELEASE["minimumVersions"],
+                "panel": "1.0.0١",
+            }
+        ),
+        changed(
+            minimumVersions={
+                **VALID_RELEASE["minimumVersions"],
+                "cssLoader": "2.1.2١",
+            }
+        ),
+    ],
+)
+def test_rejects_non_ascii_digits_in_every_semantic_version_field(
+    invalid: object,
+) -> None:
+    with pytest.raises(ThemeContractError):
+        parse_theme_release(payload(invalid), PAGES_BASE)
+
+
+def test_accepts_the_maximum_safe_css_loader_backend_version() -> None:
+    release = parse_theme_release(
+        payload(
+            changed(
+                minimumVersions={
+                    **VALID_RELEASE["minimumVersions"],
+                    "cssLoaderBackend": 9_007_199_254_740_991,
+                }
+            )
+        ),
+        PAGES_BASE,
+    )
+
+    assert release.minimum_versions.css_loader_backend == 9_007_199_254_740_991
+
+
+def test_rejects_css_loader_backend_above_the_javascript_safe_integer_limit() -> None:
+    with pytest.raises(ThemeContractError):
+        parse_theme_release(
+            payload(
+                changed(
+                    minimumVersions={
+                        **VALID_RELEASE["minimumVersions"],
+                        "cssLoaderBackend": 9_007_199_254_740_992,
+                    }
+                )
+            ),
+            PAGES_BASE,
+        )
+
+
+@pytest.mark.parametrize(
+    "invalid_base",
+    [
+        "https://themes.example.invalid/a/../panel-de-control",
+        "https://themes.example.invalid/./panel-de-control",
+        "https://themes.example.invalid/%2e/panel-de-control",
+        "https://themes.example.invalid/a/%2E%2e/panel-de-control",
+        "https://themes.example.invalid\\panel-de-control",
+        "https://themes.example.invalid/%5c/panel-de-control",
+    ],
+)
+def test_rejects_dot_segments_and_backslashes_in_pages_base(
+    invalid_base: str,
+) -> None:
+    with pytest.raises(ThemeContractError):
+        normalize_pages_base_url(invalid_base)
 
 
 @pytest.mark.parametrize(
