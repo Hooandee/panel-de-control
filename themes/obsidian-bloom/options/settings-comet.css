@@ -1,9 +1,0 @@
-:root {
-  --hob-settings-blur: 22px;
-  --hob-settings-tab-shift: 7px;
-  --hob-settings-surface: rgba(12, 13, 22, 0.8);
-}
-
-#Main .PageListColumn [id*="/settings/"][role="tab"]:is(.gpfocus, [aria-selected="true"]) {
-  box-shadow: -12px 0 34px var(--hob-magenta-glow), 12px 0 34px var(--hob-cyan-glow), inset 0 1px rgba(255, 255, 255, 0.22) !important;
-}

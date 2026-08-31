@@ -5,7 +5,7 @@ import {
   mkdirSync,
   rmSync,
 } from "node:fs";
-import { basename, relative, resolve, sep } from "node:path";
+import { basename, extname, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const PAYLOAD_ENTRIES = [
@@ -20,6 +20,19 @@ const PAYLOAD_ENTRIES = [
   "assets",
   "bin",
 ];
+const FORBIDDEN_DIRECTORIES = new Set([
+  ".theme-private",
+  "theme-packages",
+  "themes",
+]);
+const FORBIDDEN_SUFFIXES = new Set([
+  ".css",
+  ".otf",
+  ".ttf",
+  ".woff",
+  ".woff2",
+  ".zip",
+]);
 
 function fail(message) {
   throw new Error(message);
@@ -32,6 +45,9 @@ function includePayloadPath(sourceRoot, sourcePath) {
   }
   const segments = path.split(sep);
   if (segments.includes("__pycache__")) return false;
+  if (segments.some((segment) => FORBIDDEN_DIRECTORIES.has(segment))) return false;
+  const suffix = extname(path).toLowerCase();
+  if (FORBIDDEN_SUFFIXES.has(suffix) || basename(path) === "panel-extension.js") return false;
   if (/\.(?:pyc|pyo|map)$/.test(basename(path))) return false;
   return true;
 }

@@ -6,7 +6,6 @@
   "scripts": {
     "build": "rollup -c",
     "watch": "rollup -c -w",
-    "package:theme": "node scripts/package-theme.mjs",
     "typecheck": "tsc --noEmit",
     "test:fe": "vitest run"
   },

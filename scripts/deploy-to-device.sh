@@ -26,7 +26,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 echo "==> Building frontend"
-pnpm test:fe tests/pluginPayload.test.ts tests/themeBundledPin.test.ts tests/themeBundledCopy.test.ts tests/galleryPackage.test.ts
+pnpm test:fe tests/pluginPayload.test.ts
 pnpm build
 
 echo "==> Packaging plugin runtime"
@@ -35,7 +35,6 @@ trap 'rm -rf "$WORK"' EXIT
 TARBALL="$WORK/plugin.tgz"
 PLUGIN_STAGE="$WORK/plugin"
 node scripts/copy-plugin-payload.mjs . "$PLUGIN_STAGE"
-node scripts/copy-bundled-theme.mjs themes/bundled/hooandee-gallery/0.7.8 "$PLUGIN_STAGE/theme-packages"
 # --no-xattrs avoids the macOS AppleDouble (._*) droppings on the device.
 COPYFILE_DISABLE=1 tar --no-xattrs \
   -czf "$TARBALL" -C "$PLUGIN_STAGE" .

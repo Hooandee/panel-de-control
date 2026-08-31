@@ -22,7 +22,6 @@ on:
       - "assets/**"
       - "bin/**"
       - "scripts/**"
-      - "themes/bundled/**"
 
 # No token permissions by default; the job grants only what it needs.
 permissions: {}
@@ -122,11 +121,10 @@ jobs:
           PLUGIN_NAME: Panel de Control
         run: |
           pnpm install --frozen-lockfile
-          pnpm test:fe tests/pluginPayload.test.ts tests/themeBundledPin.test.ts tests/themeBundledCopy.test.ts tests/galleryPackage.test.ts
+          pnpm test:fe tests/pluginPayload.test.ts
           pnpm build
           staging=$(mktemp -d)
           node scripts/copy-plugin-payload.mjs . "$staging/$PLUGIN_NAME"
-          node scripts/copy-bundled-theme.mjs themes/bundled/hooandee-gallery/0.7.8 "$staging/$PLUGIN_NAME/theme-packages"
           (cd "$staging" && zip -r "$GITHUB_WORKSPACE/$PLUGIN_NAME.zip" "$PLUGIN_NAME")
 
       # Attach the artifact first, so provenance signing can never block the release

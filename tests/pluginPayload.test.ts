@@ -32,6 +32,14 @@ function fixture({ symlink = false }: { symlink?: boolean } = {}): string {
   const root = workspace();
   write(resolve(root, "dist/index.js"), "plugin bundle\n");
   write(resolve(root, "dist/index.js.map"), "/Users/private/source.ts\n");
+  write(resolve(root, "assets/private.css"), "body {}\n");
+  write(resolve(root, "assets/private.woff2"), "private font\n");
+  write(resolve(root, "assets/theme.zip"), "private archive\n");
+  write(resolve(root, "assets/theme-packages/panel-extension.js"), "private runtime\n");
+  write(resolve(root, "themes/private/theme.json"), "{}\n");
+  write(resolve(root, "scripts/package-theme.mjs"), "private publisher\n");
+  write(resolve(root, ".github/workflows/stage-theme.yml"), "private workflow\n");
+  write(resolve(root, ".theme-private/source.ts"), "private source\n");
   for (const file of [
     "main.py",
     "plugin.json",
@@ -80,6 +88,14 @@ describe("plugin release payload", () => {
       "bin/tool",
     ]));
     expect(files(output).some((path) => /(?:^|\/)__pycache__(?:\/|$)|\.(?:pyc|pyo|map)$/.test(path)))
+      .toBe(false);
+    expect(files(output).some((path) =>
+      /(?:^|\/)(?:themes|theme-packages|\.theme-private)(?:\/|$)/.test(path)
+      || /\.(?:css|otf|ttf|woff2?|zip)$/.test(path)
+      || path.endsWith("panel-extension.js")))
+      .toBe(false);
+    expect(files(output).some((path) =>
+      /(?:^|\/)(?:package-theme\.mjs|stage-theme\.yml)$/.test(path)))
       .toBe(false);
     expect(files(output).some((path) => readFileSync(resolve(output, path)).includes("/Users/")))
       .toBe(false);

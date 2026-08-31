@@ -1,8 +1,0 @@
-:root {
-  --hob-backdrop-blur: 0px;
-  --hob-backdrop-opacity: 0.28;
-}
-
-html:root:has(#Main [role="listitem"][data-id="GoToLibrary"]) #Main {
-  background: var(--hob-void) !important;
-}
