@@ -67,17 +67,16 @@ def transport(opener: FakeOpener, **values: object) -> ThemeHttpTransport:
     return ThemeHttpTransport(PAGES_BASE, opener=opener, **values)
 
 
-def test_fetches_bounded_metadata_without_proxy_or_compression_headers() -> None:
-    body = b'{"schemaVersion":1}'
+def test_fetches_the_fixed_catalog_without_proxy_or_compression_headers() -> None:
+    body = b'{"schemaVersion":1,"themes":[]}'
     response = FakeResponse(body)
     opener = FakeOpener(response)
 
-    result = transport(opener, connect_timeout=2.0, read_timeout=3.0).fetch_metadata(
-        "themes/v1/hooandee-gallery/latest.json"
-    )
+    result = transport(opener, connect_timeout=2.0, read_timeout=3.0).fetch_catalog()
 
     assert result == body
     request, timeout = opener.requests[0]
+    assert request.full_url == f"{PAGES_BASE}/themes/v1/catalog.json"
     assert timeout == 2.0
     assert request.get_header("Accept-encoding") == "identity"
     assert request.get_header("Cache-control") == "no-cache"
@@ -85,21 +84,19 @@ def test_fetches_bounded_metadata_without_proxy_or_compression_headers() -> None
 
 
 def test_follows_only_bounded_redirects_inside_the_fixed_prefix() -> None:
-    target = f"{PAGES_BASE}/themes/v1/hooandee-gallery/latest.json"
+    target = f"{PAGES_BASE}/themes/v1/catalog.json"
     opener = FakeOpener(
         FakeResponse(status=302, location=target),
-        FakeResponse(b"{}"),
+        FakeResponse(b'{"schemaVersion":1,"themes":[]}'),
     )
 
-    assert transport(opener).fetch_metadata(
-        "themes/v1/hooandee-gallery/latest.json"
-    ) == b"{}"
+    assert transport(opener).fetch_catalog() == b'{"schemaVersion":1,"themes":[]}'
 
     escaped = FakeOpener(
-        FakeResponse(status=302, location="https://attacker.invalid/latest.json")
+        FakeResponse(status=302, location="https://attacker.invalid/catalog.json")
     )
     with pytest.raises(ThemeTransportError, match="redirect") as error:
-        transport(escaped).fetch_metadata("themes/v1/hooandee-gallery/latest.json")
+        transport(escaped).fetch_catalog()
     assert error.value.code == "redirect_rejected"
 
 
@@ -111,25 +108,25 @@ def test_follows_only_bounded_redirects_inside_the_fixed_prefix() -> None:
         (FakeResponse(b"{}", content_length=65 * 1024), "descriptor_too_large"),
     ],
 )
-def test_rejects_bad_metadata_status_mime_and_length(
+def test_rejects_bad_catalog_status_mime_and_length(
     response: FakeResponse,
     code: str,
 ) -> None:
     with pytest.raises(ThemeTransportError) as error:
-        transport(FakeOpener(response)).fetch_metadata(
-            "themes/v1/hooandee-gallery/latest.json"
-        )
+        transport(FakeOpener(response)).fetch_catalog()
     assert error.value.code == code
 
 
-def test_streams_and_atomically_verifies_the_artifact(tmp_path: Path) -> None:
+def test_streams_and_atomically_verifies_a_neutral_immutable_artifact(
+    tmp_path: Path,
+) -> None:
     body = b"a verified zip payload"
     digest = hashlib.sha256(body).hexdigest()
-    destination = tmp_path / "gallery.zip"
+    destination = tmp_path / "theme.zip"
     opener = FakeOpener(FakeResponse(body, content_type="application/zip"))
 
     receipt = transport(opener).download_artifact(
-        "themes/v1/hooandee-gallery/0.7.9/gallery.zip",
+        "themes/v1/example-theme/1.2.3/theme.zip",
         destination,
         expected_size=len(body),
         expected_sha256=digest,
@@ -156,9 +153,11 @@ def test_removes_partial_artifacts_after_verification_failure(
     code: str,
 ) -> None:
     with pytest.raises(ThemeTransportError) as error:
-        transport(FakeOpener(FakeResponse(b"payload", content_type="application/zip"))).download_artifact(
-            "themes/v1/hooandee-gallery/0.7.9/gallery.zip",
-            tmp_path / "gallery.zip",
+        transport(
+            FakeOpener(FakeResponse(b"payload", content_type="application/zip"))
+        ).download_artifact(
+            "themes/v1/example-theme/1.2.3/theme.zip",
+            tmp_path / "theme.zip",
             expected_size=expected_size,
             expected_sha256=expected_digest,
         )
@@ -176,7 +175,5 @@ def test_removes_partial_artifacts_after_verification_failure(
 )
 def test_maps_transport_failures_to_stable_codes(failure: Exception, code: str) -> None:
     with pytest.raises(ThemeTransportError) as error:
-        transport(FakeOpener(failure)).fetch_metadata(
-            "themes/v1/hooandee-gallery/latest.json"
-        )
+        transport(FakeOpener(failure)).fetch_catalog()
     assert error.value.code == code

@@ -30,6 +30,7 @@ _MAX_METADATA_BYTES = 64 * 1024
 _MAX_ARTIFACT_BYTES = 64 * 1024 * 1024
 _SHA256 = frozenset("0123456789abcdef")
 _CHUNK_BYTES = 64 * 1024
+_CATALOG_PATH = "themes/v1/catalog.json"
 
 
 class ThemeTransportError(Exception):
@@ -275,6 +276,9 @@ class ThemeHttpTransport:
             return b"".join(blocks)
         finally:
             response.close()
+
+    def fetch_catalog(self) -> bytes:
+        return self.fetch_metadata(_CATALOG_PATH)
 
     def download_artifact(
         self,
