@@ -30,55 +30,44 @@ def theme_rpc(tmp_path, monkeypatch):
     return main, plugin, fake
 
 
-def test_prepare_bundled_theme_rpc_uses_panels_package_and_css_loader_theme_root(
+def test_bundled_theme_prepare_rpc_is_not_exposed(theme_rpc):
+    _, plugin, _ = theme_rpc
+
+    assert not hasattr(plugin, "prepare_bundled_theme_install")
+
+
+def test_remote_service_uses_the_fixed_pages_channel_and_dedicated_cache(
     theme_rpc,
     monkeypatch,
 ):
     main, plugin, fake = theme_rpc
     captured = {}
 
-    def prepare(theme_id, *, plugin_root, themes_root):
-        captured.update(
-            theme_id=theme_id,
-            plugin_root=plugin_root,
-            themes_root=themes_root,
-        )
-        return {
-            "ok": True,
-            "code": "prepared",
-            "theme_id": "hooandee-gallery",
-            "theme_name": "Hooandee Gallery",
-            "version": "0.6.0",
-            "transaction": "opaque-token",
-        }
+    class Transport:
+        def __init__(self, pages_base_url):
+            captured["transport_url"] = pages_base_url
 
-    monkeypatch.setattr(main.theme_packages, "prepare_bundled_theme", prepare)
+    class Service:
+        def __init__(self, channel, **options):
+            captured["channel"] = channel
+            captured.update(options)
 
-    result = asyncio.run(plugin.prepare_bundled_theme_install("hooandee-gallery"))
+    monkeypatch.setattr(main.theme_transport, "ThemeHttpTransport", Transport)
+    monkeypatch.setattr(main.theme_remote, "ThemeRemoteService", Service)
 
-    assert result["ok"] is True
-    assert captured == {
-        "theme_id": "hooandee-gallery",
-        "plugin_root": ROOT,
-        "themes_root": pathlib.Path(fake.DECKY_USER_HOME) / "homebrew" / "themes",
-    }
+    plugin._new_theme_remote_service()
 
-
-def test_prepare_bundled_theme_rpc_returns_a_recoverable_typed_failure(theme_rpc, monkeypatch):
-    main, plugin, _ = theme_rpc
-
-    def fail(*args, **kwargs):
-        raise main.theme_packages.ThemePackageError("hash_mismatch", "bad archive")
-
-    monkeypatch.setattr(main.theme_packages, "prepare_bundled_theme", fail)
-
-    result = asyncio.run(plugin.prepare_bundled_theme_install("hooandee-gallery"))
-
-    assert result == {
-        "ok": False,
-        "code": "hash_mismatch",
-        "theme_id": "hooandee-gallery",
-    }
+    assert captured["transport_url"] == "https://hooandee.github.io/panel-de-control"
+    assert captured["channel"] == main.theme_remote.OfficialThemeChannel(
+        pages_base_url="https://hooandee.github.io/panel-de-control",
+        catalog_path="themes/v1/catalog.json",
+    )
+    assert isinstance(captured["cache"], main.theme_remote.ThemeCatalogCacheStore)
+    captured["cache"].save(b'{"schemaVersion":1,"themes":[]}', 25.0)
+    expected_cache = pathlib.Path(
+        fake.DECKY_PLUGIN_SETTINGS_DIR
+    ) / "theme-catalog-cache.json"
+    assert expected_cache.is_file()
 
 
 def test_commit_and_rollback_theme_rpcs_use_the_opaque_transaction_token(theme_rpc, monkeypatch):
@@ -199,7 +188,7 @@ def test_recovery_rpcs_keep_rollback_pending_until_css_loader_acknowledges_it(
     main, plugin, _ = theme_rpc
     pending = [{
         "transaction": "opaque-token",
-        "theme_name": "Hooandee Gallery",
+        "theme_name": "Example Theme",
         "previous_version": "0.5.0",
     }]
     def ack(token, root):
@@ -260,9 +249,9 @@ def test_remote_discovery_sanitizes_an_unexpected_service_failure(theme_rpc):
 @pytest.mark.parametrize(
     ("theme_id", "version", "code"),
     [
-        ("../gallery", "0.7.9", "unsupported_theme"),
-        ("hooandee-gallery", "v0.7.9", "invalid_descriptor"),
-        ("hooandee-gallery", "0.7.9-beta.1", "invalid_descriptor"),
+        ("../theme", "1.2.3", "unsupported_theme"),
+        ("example-theme", "v1.2.3", "invalid_descriptor"),
+        ("example-theme", "1.2.3-beta.1", "invalid_descriptor"),
     ],
 )
 def test_remote_prepare_rejects_invalid_identity_before_scheduling(
@@ -289,9 +278,9 @@ def test_remote_prepare_uses_only_the_confirmed_identity_and_version(theme_rpc):
     prepared = {
         "ok": True,
         "code": "prepared",
-        "theme_id": "hooandee-gallery",
-        "theme_name": "Hooandee Gallery",
-        "version": "0.7.9",
+        "theme_id": "example-theme",
+        "theme_name": "Example Theme",
+        "version": "1.2.3",
         "transaction": "opaque-token",
     }
     runtime = main.theme_remote.ThemeRuntimeVersions(
@@ -305,14 +294,14 @@ def test_remote_prepare_uses_only_the_confirmed_identity_and_version(theme_rpc):
     ) or prepared)
 
     result = asyncio.run(
-        plugin.prepare_remote_theme_install("hooandee-gallery", "0.7.9")
+        plugin.prepare_remote_theme_install("example-theme", "1.2.3")
     )
 
     assert result == prepared
     assert calls == [
         (
-            "hooandee-gallery",
-            "0.7.9",
+            "example-theme",
+            "1.2.3",
             pathlib.Path(fake.DECKY_USER_HOME) / "homebrew" / "themes",
             runtime,
         )
@@ -333,11 +322,11 @@ def test_remote_prepare_sanitizes_service_failures(theme_rpc):
     plugin._theme_remote_service = types.SimpleNamespace(prepare_install=fail)
 
     result = asyncio.run(
-        plugin.prepare_remote_theme_install("hooandee-gallery", "0.7.9")
+        plugin.prepare_remote_theme_install("example-theme", "1.2.3")
     )
 
     assert result == {
         "ok": False,
         "code": "publication_changed",
-        "theme_id": "hooandee-gallery",
+        "theme_id": "example-theme",
     }

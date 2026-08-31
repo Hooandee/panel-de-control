@@ -142,7 +142,12 @@ _STEAM_DECK_CHARGE_LIMIT_PROFILES = frozenset({
 # "custom" = our TDP owns the rails, vs a named platform_profile mode.
 _CUSTOM_MODE = "custom"
 _STABLE_THEME_VERSION = re.compile(r"^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$")
-_OFFICIAL_THEME_CHANNEL: theme_remote.OfficialThemeChannel | None = None
+_SAFE_THEME_ID = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+_OFFICIAL_THEME_CHANNEL = theme_remote.OfficialThemeChannel(
+    pages_base_url="https://hooandee.github.io/panel-de-control",
+    catalog_path="themes/v1/catalog.json",
+)
+_THEME_CATALOG_CACHE_FILE = "theme-catalog-cache.json"
 
 
 @dataclass(frozen=True)
@@ -807,15 +812,22 @@ class Plugin:
 
     def _new_theme_remote_service(self) -> theme_remote.ThemeRemoteService:
         channel = _OFFICIAL_THEME_CHANNEL
-        transport = (
-            theme_transport.ThemeHttpTransport(channel.pages_base_url)
-            if channel is not None
-            else None
+        transport = theme_transport.ThemeHttpTransport(channel.pages_base_url)
+        cache = theme_remote.ThemeCatalogCacheStore(
+            os.path.join(
+                decky.DECKY_PLUGIN_SETTINGS_DIR,
+                _THEME_CATALOG_CACHE_FILE,
+            )
         )
         return theme_remote.ThemeRemoteService(
             channel,
             transport=transport,
             runtime_versions=lambda: self._theme_remote_runtime,
+            cache=cache,
+            cache_error_logger=lambda error_name: decky.logger.warning(
+                "Theme catalog cache unavailable (%s)",
+                error_name,
+            ),
         )
 
     def _probe_theme_runtime(self) -> theme_remote.ThemeRuntimeVersions:
@@ -872,7 +884,10 @@ class Plugin:
         expected_version: str,
     ) -> dict:
         self._init()
-        if theme_id != "hooandee-gallery":
+        if (
+            not isinstance(theme_id, str)
+            or _SAFE_THEME_ID.fullmatch(theme_id) is None
+        ):
             return {"ok": False, "code": "unsupported_theme", "theme_id": theme_id}
         if (
             not isinstance(expected_version, str)
@@ -898,21 +913,6 @@ class Plugin:
             return {"ok": False, "code": error.code, "theme_id": theme_id}
         except Exception as error:  # noqa: BLE001
             decky.logger.error("Remote theme prepare failed: %s", type(error).__name__)
-            return {"ok": False, "code": "install_failed", "theme_id": theme_id}
-
-    async def prepare_bundled_theme_install(self, theme_id: str) -> dict:
-        self._init()
-        try:
-            return await self._offload_theme_call(lambda: theme_packages.prepare_bundled_theme(
-                theme_id,
-                plugin_root=Path(__file__).resolve().parent,
-                themes_root=self._themes_root(),
-            ))
-        except theme_packages.ThemePackageError as error:
-            decky.logger.warning("Theme package prepare rejected (%s): %s", error.code, error)
-            return {"ok": False, "code": error.code, "theme_id": theme_id}
-        except Exception as error:  # noqa: BLE001
-            decky.logger.error("Theme package prepare failed: %s", error)
             return {"ok": False, "code": "install_failed", "theme_id": theme_id}
 
     async def commit_theme_install(self, transaction: str) -> dict:
