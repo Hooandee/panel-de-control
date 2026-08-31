@@ -580,6 +580,22 @@ def _extension_receipt(
     }
 
 
+def _is_legacy_preview_marker(
+    source: Path,
+    theme_id: str,
+    theme_name: str,
+    panel: dict[str, Any],
+) -> bool:
+    return (
+        panel.get("schemaVersion") == 1
+        and panel.get("catalogId") == theme_id
+        and panel.get("cssLoaderName", theme_name) == theme_name
+        and panel.get("executableContent") in (None, False)
+        and "extension" not in panel
+        and not (source / "panel-extension.js").exists()
+    )
+
+
 def _validate_identity(
     source: Path,
     theme_id: str,
@@ -733,6 +749,8 @@ def _verify_owned_destination(installed: Path, theme_id: str, theme_name: str) -
             or not _SEMVER.fullmatch(version)
         ):
             raise ThemePackageError("identity_mismatch", "Existing theme marker is not Panel-owned")
+        if _is_legacy_preview_marker(installed, theme_id, theme_name, panel):
+            return
         _extension_receipt(installed, theme_id, theme_name, version, panel)
         return
 
@@ -772,12 +790,15 @@ def _installed_identity(
     if not panel_path.exists():
         return version, None
     normalized = version.removeprefix("v")
+    panel = _read_existing_manifest(panel_path)
+    if _is_legacy_preview_marker(installed, theme_id, theme_name, panel):
+        return normalized, None
     receipt = _extension_receipt(
         installed,
         theme_id,
         theme_name,
         normalized,
-        _read_existing_manifest(panel_path),
+        panel,
     )
     return normalized, receipt
 
