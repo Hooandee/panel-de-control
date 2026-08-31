@@ -10,8 +10,6 @@
         "windows",
         ".github/workflows/windows-ci.yml",
         "themes/gallery",
-        "themes/README.md",
-        "themes/REMOTE_UPDATES.md",
         "scripts/package-theme.mjs",
         "scripts/check-theme-version.mjs",
         "scripts/build-theme-publication.mjs",
