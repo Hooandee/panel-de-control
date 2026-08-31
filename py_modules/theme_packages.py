@@ -19,6 +19,7 @@ import fcntl
 
 
 _SEMVER = re.compile(r"^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$")
+_LEGACY_SEMVER = re.compile(r"^v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _SAFE_ID = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 _REMOTE_ALLOWED_SUFFIXES = {
@@ -746,11 +747,17 @@ def _verify_owned_destination(installed: Path, theme_id: str, theme_name: str) -
         if (
             theme.get("name") != theme_name
             or not isinstance(version, str)
-            or not _SEMVER.fullmatch(version)
         ):
             raise ThemePackageError("identity_mismatch", "Existing theme marker is not Panel-owned")
         if _is_legacy_preview_marker(installed, theme_id, theme_name, panel):
+            if not _LEGACY_SEMVER.fullmatch(version):
+                raise ThemePackageError(
+                    "identity_mismatch",
+                    "Existing theme marker is not Panel-owned",
+                )
             return
+        if not _SEMVER.fullmatch(version):
+            raise ThemePackageError("identity_mismatch", "Existing theme marker is not Panel-owned")
         _extension_receipt(installed, theme_id, theme_name, version, panel)
         return
 

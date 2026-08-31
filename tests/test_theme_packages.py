@@ -529,7 +529,11 @@ def test_install_archive_replaces_the_owned_theme_as_one_complete_tree(tmp_path)
     assert not list(tmp_path.glob(".panel-theme-transaction-*"))
 
 
-def test_install_archive_upgrades_a_known_legacy_gallery_preview_marker(tmp_path):
+@pytest.mark.parametrize("legacy_version", ["0.7.8", "v0.7.8"])
+def test_install_archive_upgrades_a_known_legacy_gallery_preview_marker(
+    tmp_path,
+    legacy_version,
+):
     archive, descriptor = _write_package(
         tmp_path,
         catalog_id=LEGACY_THEME_ID,
@@ -538,7 +542,7 @@ def test_install_archive_upgrades_a_known_legacy_gallery_preview_marker(tmp_path
     )
     themes_root = tmp_path / "themes"
     installed = themes_root / LEGACY_THEME_NAME
-    _write_legacy_gallery(installed, version="0.7.8")
+    _write_legacy_gallery(installed, version=legacy_version)
     preview_marker = {
         "schemaVersion": 1,
         "catalogId": LEGACY_THEME_ID,
@@ -560,7 +564,9 @@ def test_install_archive_upgrades_a_known_legacy_gallery_preview_marker(tmp_path
     assert prepared["version"] == "0.7.9"
     assert (installed / "config_USER.json").read_bytes() == css_loader_state
     _rollback_theme_install(prepared["transaction"], themes_root)
-    assert json.loads((installed / "theme.json").read_text(encoding="utf-8"))["version"] == "0.7.8"
+    assert json.loads((installed / "theme.json").read_text(encoding="utf-8"))[
+        "version"
+    ] == legacy_version
     assert json.loads((installed / "panel-theme.json").read_text(encoding="utf-8")) == preview_marker
     assert (installed / "config_USER.json").read_bytes() == css_loader_state
     _acknowledge_theme_rollback(prepared["transaction"], themes_root)
