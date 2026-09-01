@@ -5,20 +5,6 @@ import pytest
 import theme_activation
 
 
-@pytest.fixture(autouse=True)
-def css_loader_executor(monkeypatch):
-    original = theme_activation._css_loader_executor_identity
-    monkeypatch.setattr(
-        theme_activation,
-        "_css_loader_executor_identity",
-        lambda proc_root=theme_activation.Path("/proc"): (
-            "boot:100:1000"
-            if proc_root == theme_activation.Path("/proc")
-            else original(proc_root)
-        ),
-    )
-
-
 def snapshot(plugin_version="2.1.2", backend_version=9):
     return {
         "status": "ready",
@@ -120,44 +106,16 @@ def test_activation_recovery_fails_closed_on_corrupt_persistent_state(tmp_path):
     assert corrupt.value.code == "invalid_journal"
 
 
-def test_panel_restart_stays_blocked_until_css_loader_executor_changes(
-    tmp_path,
-    monkeypatch,
-):
+def test_unsettled_recovery_remains_blocked_across_restart(tmp_path):
     path = tmp_path / "activation.json"
     prepared = theme_activation.begin_theme_activation(snapshot(), path)
 
     assert theme_activation.get_theme_activation_recovery(path)["recoverable"] is False
-    monkeypatch.setattr(
-        theme_activation,
-        "_css_loader_executor_identity",
-        lambda: "boot:101:2000",
-    )
-
-    recovery = theme_activation.get_theme_activation_recovery(path)
-
-    assert recovery == {
+    assert theme_activation.get_theme_activation_recovery(path) == {
         "transaction": prepared["transaction"],
         "snapshot": snapshot(),
-        "recoverable": True,
+        "recoverable": False,
     }
-
-
-def test_css_loader_executor_identity_uses_boot_pid_and_process_start(tmp_path):
-    process = tmp_path / "74889"
-    process.mkdir()
-    boot = tmp_path / "sys/kernel/random"
-    boot.mkdir(parents=True)
-    (boot / "boot_id").write_text("boot-id\n")
-    (process / "cmdline").write_bytes(
-        b"CSS Loader (/home/deck/homebrew/plugins/SDH-CssLoader/main.py)\0"
-    )
-    tail = ["S"] + ["0"] * 18 + ["123456"] + ["0"] * 5
-    (process / "stat").write_text(f"74889 (CSS Loader) {' '.join(tail)}")
-
-    assert theme_activation._css_loader_executor_identity(tmp_path) == (
-        "boot-id:74889:123456"
-    )
 
 
 def test_activation_acknowledgement_is_idempotent_after_ambiguous_commit(
