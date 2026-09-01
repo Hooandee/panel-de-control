@@ -51,6 +51,13 @@ describe("REPORT_CATEGORIES", () => {
     expect(REPORT_CATEGORIES).toContain("hud");
     expect(toggleCategory([], "hud")).toEqual(["hud"]);
   });
+
+  it("offers themes as a unique category before the generic fallback", () => {
+    expect(REPORT_CATEGORIES.filter((id) => id === "themes")).toEqual(["themes"]);
+    expect(REPORT_CATEGORIES.indexOf("themes")).toBeLessThan(
+      REPORT_CATEGORIES.indexOf("other"),
+    );
+  });
 });
 
 describe("displayReportContext", () => {

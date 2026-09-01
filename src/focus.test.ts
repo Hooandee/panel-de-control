@@ -15,7 +15,13 @@ describe("buildFocusCss", () => {
   });
 
   it("rounds the ring so square controls don't get sharp corners", () => {
-    expect(css).toContain("border-radius");
+    expect(css).toContain("border-radius: var(--pdc-focus-radius, 10px) !important");
+  });
+
+  it("lets explicit QAM surfaces override higher-specificity theme focus radii", () => {
+    expect(css).toContain(
+      `html:root #QuickAccess-Menu .${PDC_ROOT} [data-pdc-focus-radius].gpfocus`,
+    );
   });
 
   it("uses !important so it wins over the elements' inline box-shadow", () => {

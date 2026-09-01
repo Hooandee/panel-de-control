@@ -5,6 +5,29 @@ import type { LaunchTools } from "./launch/catalog";
 // Names must match the Python `async def` on the Plugin class exactly.
 export const getVersion = callable<[], string>("get_version");
 
+export const prepareRemoteThemeInstall = callable<[
+  themeId: string,
+  expectedVersion: string,
+], unknown>("prepare_remote_theme_install");
+export const checkThemeReleases = callable<[force: boolean], unknown>("check_theme_releases");
+export const listThemeExtensions = callable<[], unknown>("list_theme_extensions");
+export const loadThemeExtension = callable<[
+  catalogId: string,
+  version: string,
+], unknown>("load_theme_extension");
+export const commitThemeInstall = callable<[transaction: string], unknown>("commit_theme_install");
+export const rollbackThemeInstall = callable<[transaction: string], unknown>("rollback_theme_install");
+export const getThemeInstallRecoveries = callable<[], unknown>("get_theme_install_recoveries");
+export const acknowledgeThemeInstallRollback = callable<[transaction: string], unknown>(
+  "acknowledge_theme_install_rollback",
+);
+export const beginThemeActivation = callable<[snapshot: unknown], unknown>("begin_theme_activation");
+export const getThemeActivationRecovery = callable<[], unknown>("get_theme_activation_recovery");
+export const settleThemeActivation = callable<[transaction: string], unknown>("settle_theme_activation");
+export const acknowledgeThemeActivation = callable<[transaction: string], unknown>(
+  "acknowledge_theme_activation",
+);
+
 // Detected host tools (lsfg/mangohud/gamemode/…) + distro for the launch-options
 // pills. LaunchTools is defined in the pure catalog module (no @decky import).
 export type { LaunchTools };

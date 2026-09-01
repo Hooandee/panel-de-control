@@ -9,6 +9,7 @@ export const REPORT_CATEGORIES = [
   "system",
   "audio",
   "launch",
+  "themes",
   "other",
 ] as const;
 

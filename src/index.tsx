@@ -1,8 +1,22 @@
-import { ErrorBoundary, staticClasses } from "@decky/ui";
+import { ErrorBoundary, findSP, staticClasses } from "@decky/ui";
 import { definePlugin } from "@decky/api";
 import { FC } from "react";
 import { LuGauge } from "react-icons/lu";
 
+import {
+  acknowledgeThemeActivation,
+  acknowledgeThemeInstallRollback,
+  beginThemeActivation,
+  checkThemeReleases,
+  commitThemeInstall,
+  getThemeInstallRecoveries,
+  getThemeActivationRecovery,
+  listThemeExtensions,
+  loadThemeExtension,
+  prepareRemoteThemeInstall,
+  rollbackThemeInstall,
+  settleThemeActivation,
+} from "./api";
 import { I18nProvider, translate } from "./i18n";
 import { ControlCenter } from "./components/ControlCenter";
 import { startGameWatcher } from "./tdp/gameWatcher";
@@ -24,6 +38,14 @@ import {
 import { shutdownUiActivity } from "./system/uiActivity";
 import { StandardDeckyContent } from "./components/StandardDeckyContent";
 import { DirectQamShortcut } from "./components/DirectQamShortcut";
+import { configureDeckyCssLoaderHost } from "./themes/deckyCssLoaderHost";
+import { configurePanelThemeInstallHost } from "./themes/panelThemeInstallHost";
+import { configurePanelThemeActivationJournalHost } from "./themes/panelThemeActivationJournal";
+import { startThemesRuntime } from "./themes/runtime/start";
+import { createProductionThemesDependencies } from "./themes/themesClient";
+import { configureThemePublicationCheckHost } from "./themes/remotePublicationClient";
+import { getThemesClient } from "./themes/useThemes";
+import { configureThemeExtensionRpcHost } from "./themes/themeExtensionClient";
 
 // Localized header title only; the internal plugin name / install folder stays
 // "Panel de Control" (renaming it would break existing installs and the updater).
@@ -58,6 +80,27 @@ const DirectPluginContent: FC<{
 );
 
 export default definePlugin(() => {
+  const deckyHost = window;
+  const releaseCssLoaderHost = configureDeckyCssLoaderHost(deckyHost);
+  const releaseThemeInstallHost = configurePanelThemeInstallHost({
+    prepareRemote: prepareRemoteThemeInstall,
+    commit: commitThemeInstall,
+    rollback: rollbackThemeInstall,
+    recoveries: getThemeInstallRecoveries,
+    acknowledge: acknowledgeThemeInstallRollback,
+  });
+  const releaseThemeActivationJournalHost = configurePanelThemeActivationJournalHost({
+    begin: beginThemeActivation,
+    pending: getThemeActivationRecovery,
+    settle: settleThemeActivation,
+    acknowledge: acknowledgeThemeActivation,
+  });
+  const releaseThemePublicationHost = configureThemePublicationCheckHost(checkThemeReleases);
+  const releaseThemeExtensionHost = configureThemeExtensionRpcHost({
+    list: listThemeExtensions,
+    load: loadThemeExtension,
+  });
+  const themesClient = getThemesClient(createProductionThemesDependencies());
   // Restore durable UI prefs into the localStorage cache at plugin scope (so the
   // QAM-closed toast uses the right language), then re-apply the healed values.
   const stopPrefsHealed = onPrefsHealed(() => {
@@ -97,6 +140,10 @@ export default definePlugin(() => {
     ),
     () => cleanupOwnedQuickAccessTabs(window),
   );
+  const stopThemesRuntime = startThemesRuntime({
+    client: themesClient,
+    getSteamDocument: () => findSP()?.document ?? null,
+  });
 
   return {
     name: "Panel de Control",
@@ -118,6 +165,12 @@ export default definePlugin(() => {
       stopValueToast();
       stopContextMenu();
       stopListLocalizer();
+      stopThemesRuntime();
+      releaseThemeInstallHost();
+      releaseThemeActivationJournalHost();
+      releaseThemePublicationHost();
+      releaseThemeExtensionHost();
+      releaseCssLoaderHost();
     },
   };
 });

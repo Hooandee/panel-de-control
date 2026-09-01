@@ -1,10 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  callLegacyPluginBackend,
   cleanupOwnedQuickAccessTabs,
   PDC_QAM_TAB_ID,
+  pluginInventory,
   quickAccessTabDiagnostics,
   registerQuickAccessTab,
+  strictPluginInventory,
 } from "./deckyInternal";
 
 type FakeTab = Record<string, unknown> & { id: number };
@@ -1171,5 +1174,102 @@ describe("quickAccessTabDiagnostics", () => {
       render_adapter_observed_arrays: 0,
       registration_reason: "hook_unavailable",
     });
+  });
+});
+
+describe("pluginInventory", () => {
+  it("preserves versions and merges Decky's disabled state", () => {
+    const inventory = pluginInventory({
+      DeckyPluginLoader: {
+        deckyState: {
+          publicState: () => ({
+            installedPlugins: [
+              { name: "CSS Loader", version: "2.1.2" },
+              { name: "Other Plugin", version: "1.0.0" },
+            ],
+            disabledPlugins: [{ name: "CSS Loader" }],
+          }),
+        },
+      },
+    });
+
+    expect(inventory).toEqual([
+      { name: "CSS Loader", version: "2.1.2", disabled: true },
+      { name: "Other Plugin", version: "1.0.0", disabled: false },
+    ]);
+  });
+
+  it("keeps a plugin that Decky exposes only in the disabled collection", () => {
+    const inventory = strictPluginInventory({
+      DeckyPluginLoader: {
+        deckyState: {
+          publicState: () => ({
+            installedPlugins: [{ name: "Other Plugin", version: "1.0.0" }],
+            disabledPlugins: [{ name: "CSS Loader", version: "2.1.2" }],
+          }),
+        },
+      },
+    });
+
+    expect(inventory).toEqual([
+      { name: "Other Plugin", version: "1.0.0", disabled: false },
+      { name: "CSS Loader", version: "2.1.2", disabled: true },
+    ]);
+  });
+
+  it("lets strict consumers distinguish an unavailable private contract from an empty inventory", () => {
+    expect(() => strictPluginInventory({})).toThrow("Decky plugin inventory unavailable");
+  });
+
+  it("fails closed when one of Decky's inventory entries is malformed", () => {
+    expect(() => strictPluginInventory({
+      DeckyPluginLoader: {
+        deckyState: {
+          publicState: () => ({
+            installedPlugins: [{ version: "2.1.2" }],
+            disabledPlugins: [],
+          }),
+        },
+      },
+    })).toThrow("Decky installedPlugins entry 0 is invalid");
+  });
+
+  it("fails closed when Decky's state shape is unavailable", () => {
+    expect(pluginInventory({})).toEqual([]);
+    expect(pluginInventory({ DeckyPluginLoader: { deckyState: { publicState: () => { throw new Error("moved"); } } } })).toEqual([]);
+  });
+});
+
+describe("callLegacyPluginBackend", () => {
+  it("uses Decky's current legacy target route and unwraps the plugin result", async () => {
+    const call = vi.fn(async () => ({ success: true, result: ["theme"] }));
+
+    await expect(callLegacyPluginBackend(
+      "CSS Loader",
+      "get_themes",
+      {},
+      { DeckyBackend: { call } },
+    )).resolves.toEqual(["theme"]);
+    expect(call).toHaveBeenCalledWith(
+      "loader/call_legacy_plugin_method",
+      "CSS Loader",
+      "get_themes",
+      {},
+    );
+  });
+
+  it("fails closed when Decky or the legacy plugin rejects the call", async () => {
+    await expect(callLegacyPluginBackend(
+      "CSS Loader",
+      "get_themes",
+      {},
+      { DeckyBackend: { call: vi.fn(async () => ({ success: false, result: "denied" })) } },
+    )).rejects.toThrow("denied");
+    await expect(callLegacyPluginBackend(
+      "CSS Loader",
+      "get_themes",
+      {},
+      { DeckyBackend: { call: vi.fn(async () => ({ unexpected: true })) } },
+    )).rejects.toThrow("invalid legacy response");
   });
 });

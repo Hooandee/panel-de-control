@@ -15,6 +15,7 @@ import time
 import types
 
 import pytest
+import theme_packages
 
 
 class _RecordingExecutor(concurrent.futures.Executor):
@@ -31,6 +32,15 @@ class _RecordingExecutor(concurrent.futures.Executor):
         except Exception as e:  # noqa: BLE001
             f.set_exception(e)
         return f
+
+
+class _ShutdownRecordingExecutor(_RecordingExecutor):
+    def __init__(self):
+        super().__init__()
+        self.shutdown_wait: bool | None = None
+
+    def shutdown(self, wait=True, *, cancel_futures=False):
+        self.shutdown_wait = wait
 
 
 class _NeverCompletingExecutor(concurrent.futures.Executor):
@@ -226,6 +236,30 @@ def test_offload_call_dispatches_through_executor(tmp_path, monkeypatch):
     assert rec.count == 1  # went THROUGH the executor, not the inline branch
 
 
+def test_theme_executor_shutdown_waits_for_completed_work(tmp_path, monkeypatch):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    executor = _ShutdownRecordingExecutor()
+    p._theme_executor = executor
+
+    p._shutdown_theme_executor()
+
+    assert executor.shutdown_wait is True
+    assert p._theme_executor is None
+
+
+def test_theme_shutdown_closes_discovery_and_rejects_new_work(tmp_path, monkeypatch):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    closed = []
+    p._theme_remote_service = types.SimpleNamespace(close=lambda: closed.append(True))
+
+    p._begin_theme_shutdown()
+
+    assert closed == [True]
+    with pytest.raises(theme_packages.ThemePackageError) as error:
+        asyncio.run(p._offload_theme_call(lambda: None))
+    assert error.value.code == "lifecycle_stopping"
+
+
 def test_gpd_fan_recovery_dispatches_through_executor(tmp_path, monkeypatch):
     p, _ = _make_plugin(tmp_path, monkeypatch)
     rec = _RecordingExecutor()
@@ -381,14 +415,24 @@ def test_unload_stops_new_tdp_writes_before_handoff(tmp_path, monkeypatch):
         events.append("handoff")
         p._schedule_tdp_apply("late-lifecycle")
 
+    def recover_themes(_root, *, receipts_path):
+        assert receipts_path == p._theme_receipts_path()
+        events.append("themes")
+        return []
+
     p._tdp_backend.set_levels = write_levels
     p._restore_fans_safe = lambda: None
     p._restore_color_safe = lambda: None
     p._restore_audio_safe = lambda: None
     p._restore_hhd_tdp = handoff
+    monkeypatch.setattr(
+        importlib.import_module("main").theme_packages,
+        "recover_theme_transactions",
+        recover_themes,
+    )
 
     asyncio.run(p._unload())
-    assert events == ["handoff"]
+    assert events == ["handoff", "themes"]
 
 
 def test_unload_completes_without_yielding_to_the_stopping_event_loop(
@@ -406,6 +450,57 @@ def test_unload_completes_without_yielding_to_the_stopping_event_loop(
     unload = p._unload()
     with pytest.raises(StopIteration):
         unload.send(None)
+
+
+@pytest.mark.parametrize("method", ("_unload", "_uninstall"))
+def test_shutdown_drains_and_recovers_active_theme_work_before_first_suspend(
+    tmp_path,
+    monkeypatch,
+    method,
+):
+    p, _ = _make_plugin(tmp_path, monkeypatch)
+    events = []
+    p._apply_executor = _RecordingExecutor()
+    p._restore_fans_safe = lambda: events.append("handoff")
+    p._restore_color_safe = lambda: None
+    p._restore_audio_safe = lambda: None
+    p._restore_power_handoff = lambda: True
+    p._release_cpu_controls_sync = lambda _trigger: True
+    p._release_gpu_clock_sync = lambda _trigger: True
+    monkeypatch.setattr(
+        importlib.import_module("main").fan_expose,
+        "remove_conf",
+        lambda: None,
+    )
+    started = threading.Event()
+    release = threading.Event()
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    p._theme_executor = executor
+
+    def active_transaction():
+        started.set()
+        assert release.wait(timeout=1)
+        events.append("transaction-finished")
+
+    executor.submit(active_transaction)
+    assert started.wait(timeout=1)
+    monkeypatch.setattr(
+        importlib.import_module("main").theme_packages,
+        "recover_theme_transactions",
+        lambda _root, *, receipts_path: (
+            events.append("recovered")
+            if receipts_path == p._theme_receipts_path()
+            else pytest.fail("theme recovery used the wrong receipt store")
+        ) or [],
+    )
+    threading.Timer(0.02, release.set).start()
+
+    shutdown = getattr(p, method)()
+    with pytest.raises(StopIteration):
+        shutdown.send(None)
+
+    assert events == ["handoff", "transaction-finished", "recovered"]
+    assert p._theme_executor is None
 
 
 def test_unload_deadline_handoffs_now_and_again_behind_a_blocked_worker(
@@ -641,6 +736,11 @@ def test_uninstall_stops_new_tdp_writes_before_handoff(tmp_path, monkeypatch):
         events.append("handoff")
         p._schedule_tdp_apply("late-lifecycle")
 
+    def recover_themes(_root, *, receipts_path):
+        assert receipts_path == p._theme_receipts_path()
+        events.append("themes")
+        return []
+
     p._tdp_backend.set_levels = write_levels
     p._restore_fans_safe = lambda: None
     p._restore_color_safe = lambda: None
@@ -648,13 +748,18 @@ def test_uninstall_stops_new_tdp_writes_before_handoff(tmp_path, monkeypatch):
     p._restore_hud_safe = lambda: None
     p._restore_hhd_tdp = handoff
     monkeypatch.setattr(
+        importlib.import_module("main").theme_packages,
+        "recover_theme_transactions",
+        recover_themes,
+    )
+    monkeypatch.setattr(
         importlib.import_module("main").fan_expose,
         "remove_conf",
         lambda: None,
     )
 
     asyncio.run(p._uninstall())
-    assert events == ["handoff"]
+    assert events == ["handoff", "themes"]
 
 
 def test_uninstall_completes_without_yielding_to_the_stopping_event_loop(

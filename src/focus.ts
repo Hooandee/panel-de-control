@@ -14,7 +14,7 @@ export function buildFocusCss(): string {
   const halo = `rgba(var(--pdc-accent-rgb, ${FALLBACK_ACCENT_RGB}), 0.55)`;
   return `
 .${PDC_ROOT} .gpfocus {
-  border-radius: 10px !important;
+  border-radius: var(--pdc-focus-radius, 10px) !important;
   box-shadow: 0 0 0 3px ${theme.color.surface},
               0 0 0 5px ${ring},
               0 0 11px 4px ${halo} !important;
@@ -31,6 +31,9 @@ export function buildFocusCss(): string {
 .${PDC_ROOT} .pdc-hud-slider > div > div {
   min-width: 0 !important;
   width: 100% !important;
+}
+html:root #QuickAccess-Menu .${PDC_ROOT} [data-pdc-focus-radius].gpfocus {
+  border-radius: var(--pdc-focus-radius, 10px) !important;
 }
 .${PDC_TABSTRIP} { scrollbar-width: none; -ms-overflow-style: none; }
 .${PDC_TABSTRIP}::-webkit-scrollbar { display: none; width: 0; height: 0; }`.trim();
