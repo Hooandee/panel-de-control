@@ -22,6 +22,17 @@ class ThemeActivationJournalError(Exception):
         self.code = code
 
 
+def _boot_id():
+    try:
+        value = Path("/proc/sys/kernel/random/boot_id").read_text().strip()
+    except OSError:
+        return None
+    try:
+        return str(uuid.UUID(value))
+    except ValueError:
+        return None
+
+
 def _text(value, *, non_empty=False):
     return (
         isinstance(value, str)
@@ -218,9 +229,11 @@ def _read_journal(path: Path):
             "schema_version",
             "transaction",
             "phase",
+            "boot_id",
             "snapshot",
         })
         or journal["phase"] not in ("mutating", "settled")
+        or not _text(journal["boot_id"], non_empty=True)
     ):
         raise ThemeActivationJournalError(
             "invalid_journal",
@@ -239,6 +252,12 @@ def _read_journal(path: Path):
 def begin_theme_activation(snapshot, journal_path):
     path = Path(journal_path)
     _validate_snapshot(snapshot)
+    boot_id = _boot_id()
+    if boot_id is None:
+        raise ThemeActivationJournalError(
+            "boot_identity_unavailable",
+            "System boot identity is unavailable",
+        )
     with _lock:
         existing = _read_journal(path)
         if existing is not None and existing["phase"] != "completed":
@@ -251,6 +270,7 @@ def begin_theme_activation(snapshot, journal_path):
             "schema_version": _SCHEMA_VERSION,
             "transaction": transaction,
             "phase": "mutating",
+            "boot_id": boot_id,
             "snapshot": snapshot,
         })
     return {"ok": True, "code": "prepared", "transaction": transaction}
@@ -261,10 +281,14 @@ def get_theme_activation_recovery(journal_path):
         journal = _read_journal(Path(journal_path))
     if journal is None or journal["phase"] == "completed":
         return None
+    boot_id = _boot_id()
     return {
         "transaction": journal["transaction"],
         "snapshot": journal["snapshot"],
-        "recoverable": journal["phase"] == "settled",
+        "recoverable": (
+            journal["phase"] == "settled"
+            or (boot_id is not None and journal["boot_id"] != boot_id)
+        ),
     }
 
 

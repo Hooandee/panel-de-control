@@ -5,6 +5,15 @@ import pytest
 import theme_activation
 
 
+@pytest.fixture(autouse=True)
+def system_boot(monkeypatch):
+    monkeypatch.setattr(
+        theme_activation,
+        "_boot_id",
+        lambda: "50ba775e-78ca-4ecc-beab-95d101619742",
+    )
+
+
 def snapshot(plugin_version="2.1.2", backend_version=9):
     return {
         "status": "ready",
@@ -115,6 +124,27 @@ def test_unsettled_recovery_remains_blocked_across_restart(tmp_path):
         "transaction": prepared["transaction"],
         "snapshot": snapshot(),
         "recoverable": False,
+    }
+
+
+def test_unsettled_recovery_becomes_safe_only_after_system_reboot(
+    tmp_path,
+    monkeypatch,
+):
+    path = tmp_path / "activation.json"
+    prepared = theme_activation.begin_theme_activation(snapshot(), path)
+    monkeypatch.setattr(
+        theme_activation,
+        "_boot_id",
+        lambda: "b825f0b5-3d51-42a6-9e4a-e0e24889e751",
+    )
+
+    recovery = theme_activation.get_theme_activation_recovery(path)
+
+    assert recovery == {
+        "transaction": prepared["transaction"],
+        "snapshot": snapshot(),
+        "recoverable": True,
     }
 
 
