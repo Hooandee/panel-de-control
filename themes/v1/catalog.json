@@ -5,27 +5,23 @@
       "schemaVersion": 1,
       "catalogId": "hooandee-gallery",
       "cssLoaderName": "Hooandee Gallery",
-      "version": "0.7.10",
+      "version": "0.7.11",
       "displayName": {
-        "es": "Galería Hooandee",
-        "en": "Hooandee Gallery",
-        "it": "Galleria Hooandee"
+        "es": "Hooandee",
+        "en": "Hooandee",
+        "it": "Hooandee"
       },
       "description": {
-        "es": "Convierte Steam en una galería coherente, con ilustraciones dinámicas, controles refinados y acentos configurables.",
-        "en": "Turns Steam into a cohesive gallery with dynamic artwork, refined controls, and configurable accents.",
-        "it": "Trasforma Steam in una galleria coerente con illustrazioni dinamiche, controlli raffinati e accenti configurabili."
+        "es": "Mi primer tema. Una versión más elegante de Steam inspirada en el cristal y las transparencias, con capas translúcidas y detalles sutiles que aportan profundidad sin perder claridad.",
+        "en": "My first theme. A more elegant take on Steam inspired by glass and transparency, with translucent layers and subtle details that add depth without sacrificing clarity.",
+        "it": "Il mio primo tema. Una versione più elegante di Steam ispirata al vetro e alle trasparenze, con strati traslucidi e dettagli discreti che aggiungono profondità senza rinunciare alla chiarezza."
       },
       "author": "Hooandee",
-      "tags": [
-        "gallery",
-        "glass",
-        "customizable"
-      ],
+      "tags": [],
       "artifact": {
-        "url": "https://hooandee.github.io/panel-de-control/themes/v1/hooandee-gallery/0.7.10/theme.zip",
-        "size": 111029,
-        "sha256": "2c6523e338b99aef936a59af139ade3b817e14d86b411cd0661431c0a58e1222"
+        "url": "https://hooandee.github.io/panel-de-control/themes/v1/hooandee-gallery/0.7.11/theme.zip",
+        "size": 111888,
+        "sha256": "2955b7de56d1f1f3077100efeec7d5e34da7f1fcb96bcf192a4807d54197350f"
       },
       "minimumVersions": {
         "panel": "0.38.0",
