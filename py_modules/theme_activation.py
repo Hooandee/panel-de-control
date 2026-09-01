@@ -233,7 +233,7 @@ def _read_journal(path: Path):
             "snapshot",
         })
         or journal["phase"] not in ("mutating", "settled")
-        or not _text(journal["boot_id"], non_empty=True)
+        or not _validate_transaction(journal["boot_id"])
     ):
         raise ThemeActivationJournalError(
             "invalid_journal",

@@ -115,6 +115,18 @@ def test_activation_recovery_fails_closed_on_corrupt_persistent_state(tmp_path):
     assert corrupt.value.code == "invalid_journal"
 
 
+def test_activation_recovery_rejects_a_forged_persisted_boot_identity(tmp_path):
+    path = tmp_path / "activation.json"
+    theme_activation.begin_theme_activation(snapshot(), path)
+    journal = json.loads(path.read_text())
+    path.write_text(json.dumps({**journal, "boot_id": "forged"}))
+
+    with pytest.raises(theme_activation.ThemeActivationJournalError) as corrupt:
+        theme_activation.get_theme_activation_recovery(path)
+
+    assert corrupt.value.code == "invalid_journal"
+
+
 def test_unsettled_recovery_remains_blocked_across_restart(tmp_path):
     path = tmp_path / "activation.json"
     prepared = theme_activation.begin_theme_activation(snapshot(), path)
