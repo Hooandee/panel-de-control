@@ -27,8 +27,6 @@ const FlagIT: FC = () => (
   </svg>
 );
 
-// Flag toggle mirroring decky-colores: Focusable flag buttons, the active one
-// at full opacity with a bright ring. Compact; the parent controls placement.
 export const LanguageToggle: FC = () => {
   const { lang, setLang, t } = useI18n();
 

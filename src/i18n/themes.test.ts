@@ -9,7 +9,7 @@ import { DICTS, translateForLang } from "./index";
 
 const GENERIC_THEME_NAMESPACES = new Set([
   "action", "catalog", "cssLoader", "details", "engine", "group", "install", "loading",
-  "operation", "patches", "recovering", "recovery", "remote", "retry", "state", "title",
+  "operation", "patches", "recovery", "remote", "retry", "state", "title",
   "update", "version",
 ]);
 

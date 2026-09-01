@@ -978,7 +978,5 @@ export async function callLegacyPluginBackend(
 export function setActivePlugin(name: string): void {
   try {
     (window as unknown as DeckyHost).DeckyPluginLoader?.deckyState?.setActivePlugin?.(name);
-  } catch {
-    /* land on the Decky plugin list */
-  }
+  } catch {}
 }
