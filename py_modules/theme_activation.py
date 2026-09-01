@@ -13,7 +13,6 @@ _MAX_THEMES = 128
 _MAX_PATCHES = 128
 _MAX_OPTIONS = 128
 _MAX_TEXT_BYTES = 4096
-_INSTANCE_TOKEN = str(uuid.uuid4())
 _lock = threading.RLock()
 
 
@@ -21,6 +20,33 @@ class ThemeActivationJournalError(Exception):
     def __init__(self, code: str, message: str):
         super().__init__(message)
         self.code = code
+
+
+def _css_loader_executor_identity(proc_root=Path("/proc")):
+    try:
+        boot_id = (proc_root / "sys/kernel/random/boot_id").read_text().strip()
+        processes = list(proc_root.iterdir())
+    except OSError:
+        return None
+    matches = []
+    for process in processes:
+        if not process.name.isdigit():
+            continue
+        try:
+            command = (process / "cmdline").read_bytes()
+            if (
+                not command.startswith(b"CSS Loader (")
+                or b"/main.py)" not in command
+            ):
+                continue
+            stat_value = (process / "stat").read_text()
+            closing = stat_value.rfind(")")
+            fields = stat_value[closing + 2:].split()
+            start_time = fields[19]
+        except (OSError, IndexError):
+            continue
+        matches.append(f"{boot_id}:{process.name}:{start_time}")
+    return matches[0] if len(matches) == 1 else None
 
 
 def _text(value, *, non_empty=False):
@@ -219,11 +245,11 @@ def _read_journal(path: Path):
             "schema_version",
             "transaction",
             "phase",
-            "owner_instance",
+            "executor_instance",
             "snapshot",
         })
         or journal["phase"] not in ("mutating", "settled")
-        or not _text(journal["owner_instance"], non_empty=True)
+        or not _text(journal["executor_instance"], non_empty=True)
     ):
         raise ThemeActivationJournalError(
             "invalid_journal",
@@ -242,6 +268,12 @@ def _read_journal(path: Path):
 def begin_theme_activation(snapshot, journal_path):
     path = Path(journal_path)
     _validate_snapshot(snapshot)
+    executor_instance = _css_loader_executor_identity()
+    if executor_instance is None:
+        raise ThemeActivationJournalError(
+            "executor_unavailable",
+            "CSS Loader mutation executor is unavailable",
+        )
     with _lock:
         existing = _read_journal(path)
         if existing is not None and existing["phase"] != "completed":
@@ -254,7 +286,7 @@ def begin_theme_activation(snapshot, journal_path):
             "schema_version": _SCHEMA_VERSION,
             "transaction": transaction,
             "phase": "mutating",
-            "owner_instance": _INSTANCE_TOKEN,
+            "executor_instance": executor_instance,
             "snapshot": snapshot,
         })
     return {"ok": True, "code": "prepared", "transaction": transaction}
@@ -265,12 +297,16 @@ def get_theme_activation_recovery(journal_path):
         journal = _read_journal(Path(journal_path))
     if journal is None or journal["phase"] == "completed":
         return None
+    executor_instance = _css_loader_executor_identity()
     return {
         "transaction": journal["transaction"],
         "snapshot": journal["snapshot"],
         "recoverable": (
             journal["phase"] == "settled"
-            or journal["owner_instance"] != _INSTANCE_TOKEN
+            or (
+                executor_instance is not None
+                and journal["executor_instance"] != executor_instance
+            )
         ),
     }
 
@@ -294,11 +330,12 @@ def mark_theme_activation_settled(transaction, journal_path):
                 "invalid_transaction",
                 "Theme activation recovery transaction does not match",
             )
-        if journal["phase"] != "settled" or journal["owner_instance"] != _INSTANCE_TOKEN:
+        executor_instance = _css_loader_executor_identity()
+        if journal["phase"] != "settled":
             _write_journal(path, {
                 **journal,
                 "phase": "settled",
-                "owner_instance": _INSTANCE_TOKEN,
+                "executor_instance": executor_instance or journal["executor_instance"],
             })
     return {"ok": True, "code": "settled"}
 
