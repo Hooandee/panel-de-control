@@ -168,6 +168,27 @@ def test_streams_and_atomically_verifies_a_neutral_immutable_artifact(
     assert list(tmp_path.glob("*.part")) == []
 
 
+def test_accepts_the_zip_content_type_served_by_github_pages(tmp_path: Path) -> None:
+    body = b"a verified GitHub Pages zip payload"
+    digest = hashlib.sha256(body).hexdigest()
+    destination = tmp_path / "theme.zip"
+    opener = FakeOpener(FakeResponse(body, content_type="application/x-zip-compressed"))
+
+    receipt = transport(opener).download_artifact(
+        "themes/v1/example-theme/1.2.3/theme.zip",
+        destination,
+        expected_size=len(body),
+        expected_sha256=digest,
+    )
+
+    assert destination.read_bytes() == body
+    assert receipt == theme_transport.DownloadReceipt(
+        path=destination,
+        size=len(body),
+        sha256=digest,
+    )
+
+
 @pytest.mark.parametrize(
     ("expected_size", "expected_digest", "code"),
     [

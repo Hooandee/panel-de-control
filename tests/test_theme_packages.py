@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import multiprocessing
+import shutil
 import stat
 import time
 import zipfile
@@ -527,6 +528,39 @@ def test_install_archive_replaces_the_owned_theme_as_one_complete_tree(tmp_path)
 
     assert committed == {"ok": True, "code": "committed"}
     assert not list(tmp_path.glob(".panel-theme-transaction-*"))
+
+
+def test_install_archive_recovers_after_css_loader_deletes_a_managed_theme(tmp_path):
+    archive, descriptor = _write_package(
+        tmp_path,
+        version="1.2.2",
+        extension_source=EXTENSION_SOURCE + b"// previous\n",
+    )
+    themes_root = tmp_path / "themes"
+    installed = _prepare_theme_archive(archive, descriptor, themes_root)
+    _commit_theme_install(installed["transaction"], themes_root)
+    shutil.rmtree(themes_root / THEME_NAME)
+
+    archive, descriptor = _write_package(
+        tmp_path,
+        extension_source=EXTENSION_SOURCE,
+    )
+    reinstalled = _prepare_theme_archive(archive, descriptor, themes_root)
+    committed = _commit_theme_install(reinstalled["transaction"], themes_root)
+
+    assert committed == {"ok": True, "code": "committed"}
+    assert theme_packages.list_theme_extensions(
+        themes_root,
+        _receipts(themes_root),
+    ) == [{
+        "abiVersion": 1,
+        "catalogId": THEME_ID,
+        "cssLoaderName": THEME_NAME,
+        "entrypoint": "panel-extension.js",
+        "sha256": hashlib.sha256(EXTENSION_SOURCE).hexdigest(),
+        "size": len(EXTENSION_SOURCE),
+        "version": THEME_VERSION,
+    }]
 
 
 @pytest.mark.parametrize("legacy_version", ["0.7.8", "v0.7.8"])

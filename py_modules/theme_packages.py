@@ -1241,6 +1241,9 @@ def prepare_theme_archive(
             (item for item in persisted_receipts if item["catalogId"] == theme_id),
             None,
         )
+        if not destination.exists() and persisted_previous is not None:
+            _replace_receipt(receipt_store, theme_id, None)
+            persisted_previous = None
         if persisted_previous != previous_receipt:
             raise ThemePackageError(
                 "invalid_receipts", "Installed theme receipt does not match its files"

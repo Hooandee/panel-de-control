@@ -31,6 +31,7 @@ _MAX_ARTIFACT_BYTES = 64 * 1024 * 1024
 _SHA256 = frozenset("0123456789abcdef")
 _CHUNK_BYTES = 64 * 1024
 _CATALOG_PATH = "themes/v1/catalog.json"
+_ZIP_CONTENT_TYPES = frozenset({"application/zip", "application/x-zip-compressed"})
 _SYSTEM_CA_BUNDLES = (
     Path("/etc/ssl/cert.pem"),
     Path("/etc/ssl/certs/ca-certificates.crt"),
@@ -258,9 +259,14 @@ class ThemeHttpTransport:
         return length
 
     @staticmethod
-    def _require_mime(response: Any, expected: str, code: str) -> None:
+    def _require_mime(
+        response: Any,
+        expected: str | frozenset[str],
+        code: str,
+    ) -> None:
         content_type = (_header(response, "Content-Type") or "").split(";", 1)[0].strip().lower()
-        if content_type != expected:
+        expected_types = frozenset({expected}) if isinstance(expected, str) else expected
+        if content_type not in expected_types:
             raise ThemeTransportError(code, "Theme response type is invalid")
 
     def fetch_metadata(self, relative_path: str) -> bytes:
@@ -325,7 +331,7 @@ class ThemeHttpTransport:
         response = self._open_final(relative_path, "application/zip", deadline)
         temporary: Path | None = None
         try:
-            self._require_mime(response, "application/zip", "invalid_archive")
+            self._require_mime(response, _ZIP_CONTENT_TYPES, "invalid_archive")
             declared_size = self._content_length(
                 response, _MAX_ARTIFACT_BYTES, "artifact_too_large"
             )
