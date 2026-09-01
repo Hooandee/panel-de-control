@@ -1,8 +1,9 @@
-import { ThemeActivator } from "./activation";
+import { ThemeActivationError, ThemeActivator } from "./activation";
 import { CssLoaderAdapter, type CssLoaderReadySnapshot } from "./cssLoaderAdapter";
 import type { CssLoaderSnapshot } from "./cssLoaderTypes";
 import { createDeckyCssLoaderHost } from "./deckyCssLoaderHost";
 import { createPanelThemeInstaller } from "./panelThemeInstallHost";
+import { createPanelThemeActivationJournal } from "./panelThemeActivationJournal";
 import { ThemeInstallError, type ThemeInstallResult } from "./panelThemeInstaller";
 import type { PublishedThemeRelease, ThemePublicationState } from "./remotePublication";
 import {
@@ -43,6 +44,7 @@ export interface ThemesInstaller {
 export interface ThemesActivator {
   activate(themeId: string, catalog: readonly PublishedThemeRelease[]): Promise<CssLoaderSnapshot>;
   deactivate(themeId: string, catalog: readonly PublishedThemeRelease[]): Promise<CssLoaderSnapshot>;
+  reconcilePendingRecovery?(): Promise<CssLoaderReadySnapshot | null>;
 }
 
 export interface ThemesDependencies {
@@ -93,7 +95,7 @@ export function createProductionThemesDependencies(): ThemesDependencies {
   productionDependencies = {
     adapter,
     installer: createPanelThemeInstaller(),
-    activator: new ThemeActivator(adapter),
+    activator: new ThemeActivator(adapter, createPanelThemeActivationJournal()),
     publication: createRemotePublicationClient(),
   };
   return productionDependencies;
@@ -104,7 +106,11 @@ function errorMessage(error: unknown): string {
 }
 
 function blocksThemeRecovery(error: unknown): boolean {
-  return error instanceof ThemeInstallError && BLOCKING_RECOVERY_CODES.has(error.code);
+  return (
+    error instanceof ThemeInstallError && BLOCKING_RECOVERY_CODES.has(error.code)
+  ) || (
+    error instanceof ThemeActivationError && error.restorationFailed
+  );
 }
 
 export class ThemesClient {
@@ -423,7 +429,6 @@ export class ThemesClient {
   }
 
   private async reconcilePendingRecovery(): Promise<CssLoaderReadySnapshot | null> {
-    if (this.recoveryChecked) return null;
     if (this.recoveryPromise) return this.recoveryPromise;
     this.recoveryPromise = this.runPendingRecovery();
     try {
@@ -434,12 +439,14 @@ export class ThemesClient {
   }
 
   private async runPendingRecovery(): Promise<CssLoaderReadySnapshot | null> {
+    const activationRecovery = await this.dependencies.activator.reconcilePendingRecovery?.() ?? null;
+    if (this.recoveryChecked) return activationRecovery;
     const recoveries = await this.dependencies.installer.pendingRecoveries();
     if (recoveries.length === 0) {
       this.recoveryChecked = true;
-      return null;
+      return activationRecovery;
     }
-    const before = await this.dependencies.adapter.requireReady();
+    const before = activationRecovery ?? await this.dependencies.adapter.requireReady();
     const reconciled = await this.dependencies.adapter.reconcileRecoveredThemes(recoveries, before);
     for (const recovery of recoveries) {
       await this.dependencies.installer.acknowledgeRollback(recovery.transaction);

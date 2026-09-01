@@ -390,6 +390,62 @@ def test_recovery_rpcs_keep_rollback_pending_until_css_loader_acknowledges_it(
     assert confirmed == {"ok": True, "code": "acknowledged"}
 
 
+def test_activation_recovery_rpcs_persist_before_mutation_and_acknowledge_exactly(
+    theme_rpc,
+    monkeypatch,
+):
+    main, plugin, fake = theme_rpc
+    path = pathlib.Path(fake.DECKY_PLUGIN_SETTINGS_DIR) / "theme-activation-recovery.json"
+    snapshot = {
+        "status": "ready",
+        "pluginVersion": "2.1.2",
+        "backendVersion": 9,
+        "themes": [],
+    }
+    calls = []
+    monkeypatch.setattr(
+        main.theme_activation,
+        "begin_theme_activation",
+        lambda value, journal_path: calls.append(("begin", value, journal_path)) or {
+            "ok": True,
+            "code": "prepared",
+            "transaction": "token",
+        },
+    )
+    monkeypatch.setattr(
+        main.theme_activation,
+        "get_theme_activation_recovery",
+        lambda journal_path: calls.append(("pending", journal_path)) or {
+            "transaction": "token",
+            "snapshot": snapshot,
+        },
+    )
+    monkeypatch.setattr(
+        main.theme_activation,
+        "acknowledge_theme_activation",
+        lambda transaction, journal_path: calls.append(
+            ("acknowledge", transaction, journal_path)
+        ) or {"ok": True, "code": "acknowledged"},
+    )
+
+    prepared = asyncio.run(plugin.begin_theme_activation(snapshot))
+    pending = asyncio.run(plugin.get_theme_activation_recovery())
+    acknowledged = asyncio.run(plugin.acknowledge_theme_activation("token"))
+
+    assert prepared == {"ok": True, "code": "prepared", "transaction": "token"}
+    assert pending == {
+        "ok": True,
+        "code": "ready",
+        "recovery": {"transaction": "token", "snapshot": snapshot},
+    }
+    assert acknowledged == {"ok": True, "code": "acknowledged"}
+    assert calls == [
+        ("begin", snapshot, path),
+        ("pending", path),
+        ("acknowledge", "token", path),
+    ]
+
+
 def test_remote_discovery_uses_the_authoritative_css_loader_runtime(theme_rpc):
     main, plugin, _ = theme_rpc
     calls = []

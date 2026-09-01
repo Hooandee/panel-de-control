@@ -40,7 +40,6 @@ _REMOTE_ALLOWED_SUFFIXES = {
 _REMOTE_REQUIRED_FILES = {"theme.json", "panel-theme.json"}
 _REMOTE_ASSET_SUFFIXES = _REMOTE_ALLOWED_SUFFIXES - {".css", ".json", ".txt"}
 _REMOTE_ASSET_SUFFIXES.discard(".js")
-_MAX_SAFE_INTEGER = 9_007_199_254_740_991
 _MAX_EXTENSION_BYTES = 2 * 1024 * 1024
 _MAX_RECEIPTS = 32
 _MAX_FILES = 2_048
@@ -51,6 +50,30 @@ _MAX_COMPRESSION_RATIO = 200
 _COMPRESSION_RATIO_MIN_BYTES = 1024 * 1024
 _MAX_CSS_LOADER_STATE_BYTES = 1024 * 1024
 _MAX_EXISTING_MANIFEST_BYTES = 1024 * 1024
+_MAX_REMOTE_MANIFEST_BYTES = 256 * 1024
+_MAX_REMOTE_PATCHES = 64
+_MAX_REMOTE_PATCH_VALUES = 64
+_MAX_REMOTE_TARGETS = 8
+_MAX_REMOTE_TEXT_BYTES = 4096
+_REMOTE_MANIFEST_VERSION = 9
+_REMOTE_MANIFEST_REQUIRED_KEYS = frozenset({
+    "name",
+    "display_name",
+    "author",
+    "version",
+    "manifest_version",
+    "inject",
+    "patches",
+})
+_REMOTE_MANIFEST_OPTIONAL_KEYS = frozenset({"description", "target"})
+_REMOTE_PATCH_KEYS = frozenset({"default", "type", "values"})
+_REMOTE_PATCH_TYPES = frozenset({"checkbox", "dropdown", "none", "slider"})
+_REMOTE_TARGET_NAMES = frozenset({
+    "bigpicture",
+    "QuickAccess",
+    "MainMenu",
+    "notificationtoasts.*",
+})
 _CSS_LOADER_STATE_FILES = {"config_ROOT.json", "config_USER.json"}
 _TRANSACTION_PREFIX = ".panel-theme-transaction-"
 _MUTATION_LOCK_NAME = ".panel-theme-install.lock"
@@ -312,7 +335,10 @@ def _manifest_targets(value: object) -> None:
     if (
         not isinstance(value, list)
         or not value
-        or any(not isinstance(target, str) or not target.strip() for target in value)
+        or len(value) > _MAX_REMOTE_TARGETS
+        or any(not isinstance(target, str) for target in value)
+        or len(set(value)) != len(value)
+        or any(target not in _REMOTE_TARGET_NAMES for target in value)
     ):
         raise ThemePackageError("unsafe_archive", "Theme manifest targets are invalid")
 
@@ -331,28 +357,62 @@ def _css_declarations(value: object) -> set[PurePosixPath]:
 def _manifest_css_paths(theme: dict[str, Any]) -> set[PurePosixPath]:
     paths = _css_declarations(theme.get("inject"))
     patches = theme.get("patches")
-    if not isinstance(patches, dict):
+    if not isinstance(patches, dict) or len(patches) > _MAX_REMOTE_PATCHES:
         raise ThemePackageError("unsafe_archive", "Theme patch declarations are invalid")
     for patch_name, patch in patches.items():
-        if not isinstance(patch_name, str) or not patch_name.strip() or not isinstance(patch, dict):
+        if (
+            not _bounded_manifest_text(patch_name)
+            or not isinstance(patch, dict)
+            or set(patch) != _REMOTE_PATCH_KEYS
+        ):
             raise ThemePackageError("unsafe_archive", "Theme patch declarations are invalid")
         default = patch.get("default")
         patch_type = patch.get("type")
         values = patch.get("values")
         if (
-            not isinstance(default, str)
-            or not isinstance(patch_type, str)
-            or not patch_type.strip()
+            not _bounded_manifest_text(default)
+            or patch_type not in _REMOTE_PATCH_TYPES
             or not isinstance(values, dict)
             or not values
+            or len(values) > _MAX_REMOTE_PATCH_VALUES
             or default not in values
         ):
             raise ThemePackageError("unsafe_archive", "Theme patch declarations are invalid")
         for label, declarations in values.items():
-            if not isinstance(label, str) or not label.strip():
+            if not _bounded_manifest_text(label):
                 raise ThemePackageError("unsafe_archive", "Theme patch declarations are invalid")
             paths.update(_css_declarations(declarations))
     return paths
+
+
+def _bounded_manifest_text(value: object, *, maximum: int = _MAX_REMOTE_TEXT_BYTES) -> bool:
+    return (
+        isinstance(value, str)
+        and bool(value.strip())
+        and len(value.encode("utf-8")) <= maximum
+    )
+
+
+def _validate_remote_manifest_profile(theme: dict[str, Any]) -> None:
+    keys = frozenset(theme)
+    if (
+        not _REMOTE_MANIFEST_REQUIRED_KEYS.issubset(keys)
+        or not keys.issubset(_REMOTE_MANIFEST_REQUIRED_KEYS | _REMOTE_MANIFEST_OPTIONAL_KEYS)
+        or not _bounded_manifest_text(theme.get("name"))
+        or not _bounded_manifest_text(theme.get("display_name"))
+        or not _bounded_manifest_text(theme.get("author"))
+        or not isinstance(theme.get("version"), str)
+        or _SEMVER.fullmatch(theme["version"]) is None
+        or type(theme.get("manifest_version")) is not int
+        or theme["manifest_version"] != _REMOTE_MANIFEST_VERSION
+    ):
+        raise ThemePackageError("unsafe_archive", "Remote theme manifest profile is invalid")
+    description = theme.get("description")
+    if description is not None and not _bounded_manifest_text(description):
+        raise ThemePackageError("unsafe_archive", "Remote theme manifest profile is invalid")
+    target = theme.get("target")
+    if target is not None and target != "System-Wide":
+        raise ThemePackageError("unsafe_archive", "Remote theme manifest profile is invalid")
 
 
 def _css_code_without_comments_or_strings(css: str) -> str:
@@ -497,16 +557,7 @@ def _validate_remote_content(
     theme_name: str,
     theme: dict[str, Any],
 ) -> None:
-    manifest_version = theme.get("manifest_version")
-    if (
-        not isinstance(manifest_version, int)
-        or isinstance(manifest_version, bool)
-        or not 0 < manifest_version <= _MAX_SAFE_INTEGER
-    ):
-        raise ThemePackageError(
-            "identity_mismatch", "Remote theme manifest backend is invalid"
-        )
-
+    _validate_remote_manifest_profile(theme)
     files = {
         PurePosixPath(path.relative_to(source).as_posix())
         for path in source.rglob("*")
@@ -606,8 +657,18 @@ def _validate_identity(
     theme_name: str,
     version: str,
 ) -> dict[str, object] | None:
-    theme = _read_json(source / "theme.json", "identity_mismatch")
-    panel = _read_json(source / "panel-theme.json", "identity_mismatch")
+    theme_path = source / "theme.json"
+    panel_path = source / "panel-theme.json"
+    try:
+        if (
+            theme_path.stat().st_size > _MAX_REMOTE_MANIFEST_BYTES
+            or panel_path.stat().st_size > _MAX_REMOTE_MANIFEST_BYTES
+        ):
+            raise ThemePackageError("unsafe_archive", "Remote theme manifest is too large")
+    except OSError as error:
+        raise ThemePackageError("identity_mismatch", "Theme package marker is unavailable") from error
+    theme = _read_json(theme_path, "identity_mismatch")
+    panel = _read_json(panel_path, "identity_mismatch")
     if (
         theme.get("name") != theme_name
         or theme.get("version") != version

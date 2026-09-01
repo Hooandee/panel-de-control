@@ -22,6 +22,7 @@ import auto_tdp
 import device_registry
 import osinfo
 import self_updater
+import theme_activation
 import theme_packages
 import theme_remote
 import theme_runtime
@@ -151,6 +152,7 @@ _OFFICIAL_THEME_CHANNEL = theme_remote.OfficialThemeChannel(
 )
 _THEME_CATALOG_CACHE_FILE = "theme-catalog-cache.json"
 _THEME_EXTENSION_RECEIPTS_FILE = "theme-extension-receipts.json"
+_THEME_ACTIVATION_RECOVERY_FILE = "theme-activation-recovery.json"
 
 
 @dataclass(frozen=True)
@@ -804,6 +806,9 @@ class Plugin:
     def _theme_receipts_path(self) -> Path:
         return Path(decky.DECKY_PLUGIN_SETTINGS_DIR) / _THEME_EXTENSION_RECEIPTS_FILE
 
+    def _theme_activation_recovery_path(self) -> Path:
+        return Path(decky.DECKY_PLUGIN_SETTINGS_DIR) / _THEME_ACTIVATION_RECOVERY_FILE
+
     def _remote_themes(self) -> theme_remote.ThemeRemoteService:
         service = getattr(self, "_theme_remote_service", None)
         if service is None:
@@ -991,6 +996,54 @@ class Plugin:
             return {"ok": False, "code": error.code}
         except Exception as error:  # noqa: BLE001
             decky.logger.error("Theme rollback acknowledgement failed: %s", error)
+            return {"ok": False, "code": "acknowledgement_failed"}
+
+    async def begin_theme_activation(self, snapshot: dict) -> dict:
+        self._init()
+        try:
+            return await self._offload_theme_call(
+                lambda: theme_activation.begin_theme_activation(
+                    snapshot,
+                    self._theme_activation_recovery_path(),
+                )
+            )
+        except theme_activation.ThemeActivationJournalError as error:
+            decky.logger.warning("Theme activation journal rejected (%s)", error.code)
+            return {"ok": False, "code": error.code}
+        except Exception as error:  # noqa: BLE001
+            decky.logger.error("Theme activation journal failed: %s", type(error).__name__)
+            return {"ok": False, "code": "journal_failed"}
+
+    async def get_theme_activation_recovery(self) -> dict:
+        self._init()
+        try:
+            recovery = await self._offload_theme_call(
+                lambda: theme_activation.get_theme_activation_recovery(
+                    self._theme_activation_recovery_path(),
+                )
+            )
+            return {"ok": True, "code": "ready", "recovery": recovery}
+        except theme_activation.ThemeActivationJournalError as error:
+            decky.logger.error("Theme activation recovery blocked (%s)", error.code)
+            return {"ok": False, "code": error.code}
+        except Exception as error:  # noqa: BLE001
+            decky.logger.error("Theme activation recovery failed: %s", type(error).__name__)
+            return {"ok": False, "code": "recovery_failed"}
+
+    async def acknowledge_theme_activation(self, transaction: str) -> dict:
+        self._init()
+        try:
+            return await self._offload_theme_call(
+                lambda: theme_activation.acknowledge_theme_activation(
+                    transaction,
+                    self._theme_activation_recovery_path(),
+                )
+            )
+        except theme_activation.ThemeActivationJournalError as error:
+            decky.logger.error("Theme activation acknowledgement rejected (%s)", error.code)
+            return {"ok": False, "code": error.code}
+        except Exception as error:  # noqa: BLE001
+            decky.logger.error("Theme activation acknowledgement failed: %s", type(error).__name__)
             return {"ok": False, "code": "acknowledgement_failed"}
 
     async def list_theme_extensions(self) -> list[dict]:

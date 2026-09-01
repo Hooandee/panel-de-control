@@ -944,17 +944,6 @@ export async function callBackend(method: string, ...args: unknown[]): Promise<u
   return backend.call(method, ...args);
 }
 
-export async function callPluginBackend(
-  pluginName: string,
-  method: string,
-  args: readonly unknown[] = [],
-  host: unknown = window,
-): Promise<unknown> {
-  const backend = (host as DeckyHost | null)?.DeckyBackend;
-  if (typeof backend?.call !== "function") throw new Error("DeckyBackend unavailable");
-  return backend.call("loader/call_plugin_method", pluginName, method, ...args);
-}
-
 export async function callLegacyPluginBackend(
   pluginName: string,
   method: string,

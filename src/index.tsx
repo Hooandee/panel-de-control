@@ -4,10 +4,13 @@ import { FC } from "react";
 import { LuGauge } from "react-icons/lu";
 
 import {
+  acknowledgeThemeActivation,
   acknowledgeThemeInstallRollback,
+  beginThemeActivation,
   checkThemeReleases,
   commitThemeInstall,
   getThemeInstallRecoveries,
+  getThemeActivationRecovery,
   listThemeExtensions,
   loadThemeExtension,
   prepareRemoteThemeInstall,
@@ -36,6 +39,7 @@ import { StandardDeckyContent } from "./components/StandardDeckyContent";
 import { DirectQamShortcut } from "./components/DirectQamShortcut";
 import { configureDeckyCssLoaderHost } from "./themes/deckyCssLoaderHost";
 import { configurePanelThemeInstallHost } from "./themes/panelThemeInstallHost";
+import { configurePanelThemeActivationJournalHost } from "./themes/panelThemeActivationJournal";
 import { startThemesRuntime } from "./themes/runtime/start";
 import { createProductionThemesDependencies } from "./themes/themesClient";
 import { configureThemePublicationCheckHost } from "./themes/remotePublicationClient";
@@ -83,6 +87,11 @@ export default definePlugin(() => {
     rollback: rollbackThemeInstall,
     recoveries: getThemeInstallRecoveries,
     acknowledge: acknowledgeThemeInstallRollback,
+  });
+  const releaseThemeActivationJournalHost = configurePanelThemeActivationJournalHost({
+    begin: beginThemeActivation,
+    pending: getThemeActivationRecovery,
+    acknowledge: acknowledgeThemeActivation,
   });
   const releaseThemePublicationHost = configureThemePublicationCheckHost(checkThemeReleases);
   const releaseThemeExtensionHost = configureThemeExtensionRpcHost({
@@ -156,6 +165,7 @@ export default definePlugin(() => {
       stopListLocalizer();
       stopThemesRuntime();
       releaseThemeInstallHost();
+      releaseThemeActivationJournalHost();
       releaseThemePublicationHost();
       releaseThemeExtensionHost();
       releaseCssLoaderHost();

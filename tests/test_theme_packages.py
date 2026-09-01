@@ -94,6 +94,19 @@ def _write_package(
     return archive, descriptor
 
 
+def _remote_manifest(**overrides: object) -> dict[str, object]:
+    return {
+        "name": THEME_NAME,
+        "display_name": THEME_NAME,
+        "author": "Example Author",
+        "version": THEME_VERSION,
+        "manifest_version": 9,
+        "inject": {"tokens.css": ["bigpicture"]},
+        "patches": {},
+        **overrides,
+    }
+
+
 def _mark_owned(installed: Path, version: str = THEME_VERSION) -> None:
     (installed / "theme.json").write_text(json.dumps({
         "name": THEME_NAME,
@@ -1169,6 +1182,77 @@ def test_install_archive_rejects_packaged_css_loader_state(tmp_path):
         _prepare_theme_archive(archive, descriptor, tmp_path / "themes")
 
     assert error.value.code == "unsafe_archive"
+
+
+@pytest.mark.parametrize(
+    "manifest",
+    [
+        _remote_manifest(dependencies={"Other Theme": "1.0.0"}),
+        _remote_manifest(inject={"tokens.css": ["future-surface"]}),
+        _remote_manifest(patches={
+            "Accent": {
+                "default": "Blue",
+                "type": "slider",
+                "values": {"Blue": {}},
+                "futureBehavior": True,
+            },
+        }),
+        _remote_manifest(patches={
+            f"Patch {index}": {
+                "default": "On",
+                "type": "checkbox",
+                "values": {"On": {}},
+            }
+            for index in range(65)
+        }),
+    ],
+)
+def test_install_archive_rejects_manifest_fields_outside_the_remote_profile(
+    tmp_path: Path,
+    manifest: dict[str, object],
+) -> None:
+    archive, descriptor = _write_package(
+        tmp_path,
+        extra_entries={
+            f"{THEME_NAME}/theme.json": json.dumps(manifest).encode(),
+        },
+    )
+
+    with pytest.raises(theme_packages.ThemePackageError) as error:
+        _prepare_theme_archive(archive, descriptor, tmp_path / "themes")
+
+    assert error.value.code == "unsafe_archive"
+
+
+def test_install_archive_accepts_the_supported_dropdown_manifest_profile(
+    tmp_path: Path,
+) -> None:
+    manifest = _remote_manifest(patches={
+        "Accent": {
+            "default": "Blue",
+            "type": "dropdown",
+            "values": {
+                "Blue": {},
+                "Red": {"accent-red.css": ["bigpicture", "QuickAccess"]},
+            },
+        },
+    })
+    archive, descriptor = _write_package(
+        tmp_path,
+        extra_entries={
+            f"{THEME_NAME}/theme.json": json.dumps(manifest).encode(),
+            f"{THEME_NAME}/accent-red.css": b":root { --accent: red; }\n",
+        },
+    )
+    themes_root = tmp_path / "themes"
+
+    prepared = _prepare_theme_archive(archive, descriptor, themes_root)
+
+    assert prepared["code"] == "prepared"
+    assert _commit_theme_install(prepared["transaction"], themes_root) == {
+        "ok": True,
+        "code": "committed",
+    }
 
 
 def test_install_archive_restores_previous_theme_when_atomic_swap_fails(tmp_path, monkeypatch):

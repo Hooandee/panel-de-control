@@ -243,6 +243,8 @@ describe("CssLoaderAdapter mutations", () => {
       "reset",
       "get_backend_version",
       "get_themes",
+      "get_backend_version",
+      "get_themes",
     ]);
   });
 
@@ -337,6 +339,9 @@ describe("CssLoaderAdapter mutations", () => {
         reset = true;
         return { fails: [] };
       }
+      if (method === "set_theme_state" || method === "set_patch_of_theme") {
+        return { success: true, message: "" };
+      }
       throw new Error(`Unexpected method: ${method}`);
     });
     const adapter = new CssLoaderAdapter(host({ call }));
@@ -359,6 +364,90 @@ describe("CssLoaderAdapter mutations", () => {
     const before = await adapter.requireReady();
 
     await expect(adapter.restoreThemeSnapshot(before)).resolves.toEqual(before);
+  });
+
+  it("restores compatible settings and unrelated activation changed by reset", async () => {
+    const original = {
+      ...RAW_THEME,
+      version: "0.5.0",
+      enabled: true,
+      patches: [{ ...RAW_THEME.patches[0], value: "No" }],
+    };
+    const thirdParty = {
+      ...RAW_THEME,
+      id: "Other",
+      name: "Other",
+      version: "1.4.0",
+      enabled: false,
+      patches: [{ ...RAW_THEME.patches[0], value: "Yes" }],
+    };
+    let themes = structuredClone([original, thirdParty]);
+    const call = vi.fn(async (method: string, ...args: unknown[]) => {
+      if (method === "get_backend_version") return 9;
+      if (method === "get_themes") return structuredClone(themes);
+      if (method === "reset") {
+        themes[0].enabled = false;
+        themes[0].patches[0].value = "Yes";
+        themes[1].enabled = true;
+        return { fails: [] };
+      }
+      if (method === "set_theme_state") {
+        const target = themes.find((theme) => theme.name === args[0]);
+        if (target) target.enabled = args[1] as boolean;
+        return { success: true, message: "" };
+      }
+      if (method === "set_patch_of_theme") {
+        const target = themes.find((theme) => theme.name === args[0]);
+        const patch = target?.patches.find((candidate) => candidate.name === args[1]);
+        if (patch) patch.value = args[2] as string;
+        return { success: true, message: "" };
+      }
+      throw new Error(`Unexpected method: ${method}`);
+    });
+    const adapter = new CssLoaderAdapter(host({ call }));
+    const before = await adapter.requireReady();
+
+    await expect(adapter.restoreThemeSnapshot(before)).resolves.toEqual(before);
+    expect(call).toHaveBeenCalledWith("set_theme_state", "Example Theme", true, false, false);
+    expect(call).toHaveBeenCalledWith("set_patch_of_theme", "Example Theme", "Animated grid", "No");
+    expect(call).toHaveBeenCalledWith("set_theme_state", "Other", false, false, false);
+  });
+
+  it("quarantines writes after a timed-out reset until the original call settles", async () => {
+    vi.useFakeTimers();
+    try {
+      let settleReset!: (value: { fails: never[] }) => void;
+      let resetCalls = 0;
+      const call = vi.fn((method: string) => {
+        if (method === "get_backend_version") return Promise.resolve(9);
+        if (method === "get_themes") return Promise.resolve([{ ...RAW_THEME, version: "0.5.0" }]);
+        if (method === "reset") {
+          resetCalls += 1;
+          if (resetCalls === 1) {
+            return new Promise<{ fails: never[] }>((done) => { settleReset = done; });
+          }
+          return Promise.resolve({ fails: [] });
+        }
+        return Promise.reject(new Error(`Unexpected method: ${method}`));
+      });
+      const adapter = new CssLoaderAdapter(host({ call }), { reloadTimeoutMs: 50 });
+      const before = await adapter.requireReady();
+
+      const reload = adapter.reloadTheme("Example Theme", "0.6.0", before);
+      const reloadFailure = expect(reload).rejects.toMatchObject({ code: "timeout" });
+      await vi.advanceTimersByTimeAsync(50);
+      await reloadFailure;
+      await expect(adapter.restoreThemeSnapshot(before)).rejects.toMatchObject({ code: "timeout" });
+      expect(resetCalls).toBe(1);
+
+      settleReset({ fails: [] });
+      await vi.advanceTimersByTimeAsync(0);
+
+      await expect(adapter.restoreThemeSnapshot(before)).resolves.toEqual(before);
+      expect(resetCalls).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("reconciles a durable rollback after restart and protects every unrelated theme", async () => {
@@ -411,6 +500,9 @@ describe("CssLoaderAdapter mutations", () => {
         if (method === "reset") {
           reset = true;
           return { fails: [] };
+        }
+        if (method === "set_theme_state" || method === "set_patch_of_theme") {
+          return { success: true, message: "" };
         }
         throw new Error(`Unexpected method: ${method}`);
       });

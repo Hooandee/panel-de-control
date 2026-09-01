@@ -118,6 +118,7 @@ export class CssLoaderAdapter {
   private readonly minimumBackendVersion: number;
   private readonly timeoutMs: number;
   private readonly reloadTimeoutMs: number;
+  private uncertainMutation: Promise<void> | null = null;
 
   constructor(
     private readonly host: CssLoaderHost,
@@ -133,6 +134,14 @@ export class CssLoaderAdapter {
     method: string,
     ...args: unknown[]
   ): Promise<unknown> {
+    return this.awaitWithTimeout(timeoutMs, method, this.host.call(method, ...args));
+  }
+
+  private async awaitWithTimeout(
+    timeoutMs: number,
+    method: string,
+    operation: Promise<unknown>,
+  ): Promise<unknown> {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(() => reject(new CssLoaderOperationError(
@@ -141,7 +150,7 @@ export class CssLoaderAdapter {
       )), timeoutMs);
     });
     try {
-      return await Promise.race([this.host.call(method, ...args), timeout]);
+      return await Promise.race([operation, timeout]);
     } finally {
       if (timer !== undefined) clearTimeout(timer);
     }
@@ -149,6 +158,46 @@ export class CssLoaderAdapter {
 
   private call(method: string, ...args: unknown[]): Promise<unknown> {
     return this.callWithTimeout(this.timeoutMs, method, ...args);
+  }
+
+  private async callMutationWithTimeout(
+    timeoutMs: number,
+    method: string,
+    ...args: unknown[]
+  ): Promise<unknown> {
+    if (this.uncertainMutation) {
+      throw new CssLoaderOperationError(
+        "timeout",
+        "CSS Loader still has a timed-out mutation pending",
+      );
+    }
+    let settled = false;
+    const operation = Promise.resolve().then(() => this.host.call(method, ...args));
+    void operation.then(
+      () => { settled = true; },
+      () => { settled = true; },
+    );
+    try {
+      return await this.awaitWithTimeout(timeoutMs, method, operation);
+    } catch (error) {
+      if (error instanceof CssLoaderOperationError && error.code === "timeout" && !settled) {
+        const pending = operation.then(() => undefined, () => undefined);
+        this.uncertainMutation = pending;
+        void pending.then(() => {
+          if (this.uncertainMutation === pending) this.uncertainMutation = null;
+        });
+      }
+      throw error;
+    }
+  }
+
+  hasPendingMutation(): boolean {
+    return this.uncertainMutation !== null;
+  }
+
+  async waitForPendingMutation(): Promise<void> {
+    const pending = this.uncertainMutation;
+    if (pending) await pending;
   }
 
   async inspect(): Promise<CssLoaderSnapshot> {
@@ -232,7 +281,7 @@ export class CssLoaderAdapter {
     args: readonly unknown[],
     timeoutMs = this.timeoutMs,
   ): Promise<void> {
-    const result = await this.callWithTimeout(timeoutMs, method, ...args);
+    const result = await this.callMutationWithTimeout(timeoutMs, method, ...args);
     if (!isRecord(result) || typeof result.success !== "boolean" || typeof result.message !== "string") {
       throw new CssLoaderOperationError(
         "malformed_response",
@@ -248,7 +297,7 @@ export class CssLoaderAdapter {
   }
 
   private async resetThemes(): Promise<void> {
-    const result = await this.callWithTimeout(this.reloadTimeoutMs, "reset");
+    const result = await this.callMutationWithTimeout(this.reloadTimeoutMs, "reset");
     if (
       !isRecord(result)
       || !Array.isArray(result.fails)
@@ -296,12 +345,20 @@ export class CssLoaderAdapter {
     before: CssLoaderReadySnapshot,
   ): Promise<CssLoaderReadySnapshot> {
     await this.resetThemes();
-    const after = await this.requireReady();
-    const updated = after.themes.find((theme) => theme.name === expectedThemeName);
+    let after = await this.requireReady();
+    let updated = after.themes.find((theme) => theme.name === expectedThemeName);
     if (!updated || updated.version !== expectedVersion) {
       throw new CssLoaderOperationError(
         "verification_failed",
         `CSS Loader did not register ${expectedThemeName} v${expectedVersion}`,
+      );
+    }
+    after = await this.restoreCompatibleSnapshotState(before, after, new Set([expectedThemeName]));
+    updated = after.themes.find((theme) => theme.name === expectedThemeName);
+    if (!updated || updated.version !== expectedVersion) {
+      throw new CssLoaderOperationError(
+        "verification_failed",
+        `CSS Loader did not preserve ${expectedThemeName} v${expectedVersion}`,
       );
     }
     this.verifyInventoryState(before, after, expectedThemeName);
@@ -312,7 +369,8 @@ export class CssLoaderAdapter {
 
   async restoreThemeSnapshot(expected: CssLoaderReadySnapshot): Promise<CssLoaderReadySnapshot> {
     await this.resetThemes();
-    const after = await this.requireReady();
+    const current = await this.requireReady();
+    const after = await this.restoreCompatibleSnapshotState(expected, current);
     this.verifyInventoryState(expected, after);
     return after;
   }
@@ -322,7 +380,9 @@ export class CssLoaderAdapter {
     before: CssLoaderReadySnapshot,
   ): Promise<CssLoaderReadySnapshot> {
     await this.resetThemes();
-    const after = await this.requireReady();
+    const current = await this.requireReady();
+    const recoveredNames = new Set(recoveries.map((recovery) => recovery.themeName));
+    const after = await this.restoreCompatibleSnapshotState(before, current, recoveredNames);
     this.verifyInventoryState(before, after, recoveries.map((recovery) => recovery.themeName));
     for (const recovery of recoveries) {
       const restored = after.themes.find((theme) => theme.name === recovery.themeName);
@@ -339,6 +399,46 @@ export class CssLoaderAdapter {
       if (previous && restored) this.verifyCompatibleTargetState(previous, restored);
     }
     return after;
+  }
+
+  private async restoreCompatibleSnapshotState(
+    expected: CssLoaderReadySnapshot,
+    current: CssLoaderReadySnapshot,
+    allowedVersionChanges: ReadonlySet<string> = new Set(),
+  ): Promise<CssLoaderReadySnapshot> {
+    for (const expectedTheme of expected.themes) {
+      const currentTheme = current.themes.find((theme) => theme.name === expectedTheme.name);
+      if (
+        !currentTheme
+        || (
+          currentTheme.version !== expectedTheme.version
+          && !allowedVersionChanges.has(expectedTheme.name)
+        )
+      ) continue;
+      for (const expectedPatch of expectedTheme.patches) {
+        const currentPatch = currentTheme.patches.find((patch) => patch.name === expectedPatch.name);
+        if (
+          currentPatch
+          && currentPatch.options.includes(expectedPatch.value)
+          && currentPatch.value !== expectedPatch.value
+        ) {
+          await this.callMutation("set_patch_of_theme", [
+            expectedTheme.name,
+            expectedPatch.name,
+            expectedPatch.value,
+          ]);
+        }
+      }
+      if (currentTheme.enabled !== expectedTheme.enabled) {
+        await this.callMutation("set_theme_state", [
+          expectedTheme.name,
+          expectedTheme.enabled,
+          false,
+          false,
+        ]);
+      }
+    }
+    return this.requireReady();
   }
 
   private verifyInventoryState(

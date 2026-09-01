@@ -40,6 +40,8 @@ def package(
     entries = {
         f"{THEME_NAME}/theme.json": json.dumps({
             "name": THEME_NAME,
+            "display_name": THEME_NAME,
+            "author": "Example Author",
             "version": version,
             "manifest_version": 9,
             "inject": {"tokens.css": ["bigpicture"]},

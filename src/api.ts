@@ -21,6 +21,11 @@ export const getThemeInstallRecoveries = callable<[], unknown>("get_theme_instal
 export const acknowledgeThemeInstallRollback = callable<[transaction: string], unknown>(
   "acknowledge_theme_install_rollback",
 );
+export const beginThemeActivation = callable<[snapshot: unknown], unknown>("begin_theme_activation");
+export const getThemeActivationRecovery = callable<[], unknown>("get_theme_activation_recovery");
+export const acknowledgeThemeActivation = callable<[transaction: string], unknown>(
+  "acknowledge_theme_activation",
+);
 
 // Detected host tools (lsfg/mangohud/gamemode/…) + distro for the launch-options
 // pills. LaunchTools is defined in the pure catalog module (no @decky import).

@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   callLegacyPluginBackend,
-  callPluginBackend,
   cleanupOwnedQuickAccessTabs,
   PDC_QAM_TAB_ID,
   pluginInventory,
@@ -1238,35 +1237,6 @@ describe("pluginInventory", () => {
   it("fails closed when Decky's state shape is unavailable", () => {
     expect(pluginInventory({})).toEqual([]);
     expect(pluginInventory({ DeckyPluginLoader: { deckyState: { publicState: () => { throw new Error("moved"); } } } })).toEqual([]);
-  });
-});
-
-describe("callPluginBackend", () => {
-  it("uses Decky's targeted plugin route without reconnecting as that plugin", async () => {
-    const call = vi.fn(async () => ({ success: true }));
-
-    const result = await callPluginBackend(
-      "CSS Loader",
-      "set_theme_state",
-      ["Example Theme", true, false, false],
-      { DeckyBackend: { call } },
-    );
-
-    expect(result).toEqual({ success: true });
-    expect(call).toHaveBeenCalledWith(
-      "loader/call_plugin_method",
-      "CSS Loader",
-      "set_theme_state",
-      "Example Theme",
-      true,
-      false,
-      false,
-    );
-  });
-
-  it("rejects when the private Decky route is unavailable", async () => {
-    await expect(callPluginBackend("CSS Loader", "get_themes", [], {}))
-      .rejects.toThrow("DeckyBackend unavailable");
   });
 });
 

@@ -1,9 +1,46 @@
-import type { CssLoaderSnapshot } from "./cssLoaderTypes";
+import type { CssLoaderReadySnapshot } from "./cssLoaderAdapter";
+import type { CssLoaderSnapshot, CssLoaderTheme } from "./cssLoaderTypes";
 import type { PublishedThemeRelease } from "./remotePublication";
 
 export interface ThemeActivationAdapter {
   inspect(): Promise<CssLoaderSnapshot>;
   setThemeState(name: string, enabled: boolean): Promise<CssLoaderSnapshot>;
+  restoreThemeSnapshot(expected: CssLoaderReadySnapshot): Promise<CssLoaderReadySnapshot>;
+  hasPendingMutation(): boolean;
+  waitForPendingMutation(): Promise<void>;
+}
+
+export interface DurableThemeActivationRecovery {
+  transaction: string;
+  snapshot: CssLoaderReadySnapshot;
+}
+
+export interface ThemeActivationJournal {
+  begin(snapshot: CssLoaderReadySnapshot): Promise<string>;
+  pending(): Promise<DurableThemeActivationRecovery | null>;
+  acknowledge(transaction: string): Promise<void>;
+}
+
+class MemoryThemeActivationJournal implements ThemeActivationJournal {
+  private recovery: DurableThemeActivationRecovery | null = null;
+
+  async begin(snapshot: CssLoaderReadySnapshot): Promise<string> {
+    if (this.recovery) throw new Error("A theme activation recovery is already pending");
+    const transaction = crypto.randomUUID();
+    this.recovery = { transaction, snapshot: structuredClone(snapshot) };
+    return transaction;
+  }
+
+  async pending(): Promise<DurableThemeActivationRecovery | null> {
+    return this.recovery ? structuredClone(this.recovery) : null;
+  }
+
+  async acknowledge(transaction: string): Promise<void> {
+    if (!this.recovery || this.recovery.transaction !== transaction) {
+      throw new Error("Theme activation recovery transaction does not match");
+    }
+    this.recovery = null;
+  }
 }
 
 export type ThemeActivationErrorCode =
@@ -36,37 +73,72 @@ function catalogByCssLoaderName(catalog: readonly PublishedThemeRelease[]): Map<
   return new Map(catalog.map((theme) => [theme.cssLoaderName, theme]));
 }
 
-function statesOf(
-  snapshot: CssLoaderSnapshot,
-  catalogNames: ReadonlySet<string>,
-): Map<string, boolean> {
-  return new Map(snapshot.themes
-    .filter((theme) => catalogNames.has(theme.name))
-    .map((theme) => [theme.name, theme.enabled]));
+function statesOf(snapshot: CssLoaderSnapshot): Map<string, boolean> {
+  return new Map(snapshot.themes.map((theme) => [theme.name, theme.enabled]));
 }
 
-function thirdPartyStates(
-  snapshot: CssLoaderSnapshot,
-  catalogNames: ReadonlySet<string>,
-): Map<string, boolean> {
-  return new Map(snapshot.themes
-    .filter((theme) => !catalogNames.has(theme.name))
-    .map((theme) => [theme.name, theme.enabled]));
+function comparableTheme(theme: CssLoaderTheme, expectedEnabled?: boolean) {
+  return {
+    id: theme.id,
+    name: theme.name,
+    displayName: theme.displayName,
+    version: theme.version,
+    author: theme.author,
+    enabled: expectedEnabled ?? theme.enabled,
+    patches: theme.patches
+      .map((patch) => ({
+        name: patch.name,
+        defaultValue: patch.defaultValue,
+        value: patch.value,
+        options: patch.options,
+        type: patch.type,
+        rawType: patch.rawType,
+      }))
+      .sort((left, right) => left.name.localeCompare(right.name)),
+  };
 }
 
-function sameStates(expected: ReadonlyMap<string, boolean>, snapshot: CssLoaderSnapshot): boolean {
-  const actual = new Map(snapshot.themes.map((theme) => [theme.name, theme.enabled]));
-  return [...expected].every(([name, enabled]) => actual.get(name) === enabled);
+function sameSnapshotState(
+  initial: CssLoaderReadySnapshot,
+  expectedStates: ReadonlyMap<string, boolean>,
+  actual: CssLoaderReadySnapshot,
+): boolean {
+  const comparable = (snapshot: CssLoaderReadySnapshot, useExpectedStates: boolean) => ({
+    themes: snapshot.themes
+      .map((theme) => comparableTheme(
+        theme,
+        useExpectedStates ? expectedStates.get(theme.name) : undefined,
+      ))
+      .sort((left, right) => left.name.localeCompare(right.name)),
+  });
+  return JSON.stringify(comparable(initial, true)) === JSON.stringify(comparable(actual, false));
+}
+
+interface ActivationRecovery {
+  transaction: string;
+  initial: CssLoaderReadySnapshot;
+  status: "needed" | "pending" | "ready";
+  snapshot?: CssLoaderReadySnapshot;
+  error?: unknown;
 }
 
 export class ThemeActivator {
   private running = false;
+  private pendingRecovery: ActivationRecovery | null = null;
 
   constructor(
     private readonly adapter: ThemeActivationAdapter,
+    private readonly journal: ThemeActivationJournal = new MemoryThemeActivationJournal(),
   ) {}
 
   activate(themeId: string, catalog: readonly PublishedThemeRelease[]): Promise<CssLoaderSnapshot> {
+    if (this.pendingRecovery) {
+      return Promise.reject(new ThemeActivationError(
+        "rollback_failed",
+        "A previous theme activation is still being recovered",
+        true,
+      ));
+    }
     if (this.running) {
       return Promise.reject(new ThemeActivationError("busy", "A theme activation is already running"));
     }
@@ -77,6 +149,13 @@ export class ThemeActivator {
   }
 
   deactivate(themeId: string, catalog: readonly PublishedThemeRelease[]): Promise<CssLoaderSnapshot> {
+    if (this.pendingRecovery) {
+      return Promise.reject(new ThemeActivationError(
+        "rollback_failed",
+        "A previous theme operation is still being recovered",
+        true,
+      ));
+    }
     if (this.running) {
       return Promise.reject(new ThemeActivationError("busy", "A theme operation is already running"));
     }
@@ -100,9 +179,7 @@ export class ThemeActivator {
     }
 
     const catalogEntries = catalogByCssLoaderName(catalog);
-    const catalogNames = new Set(catalogEntries.keys());
-    const initialManaged = statesOf(initial, catalogNames);
-    const initialThirdParty = thirdPartyStates(initial, catalogNames);
+    const initialStates = statesOf(initial);
     const conflicts = initial.themes.filter((theme) => {
       const entry = catalogEntries.get(theme.name);
       return theme.enabled
@@ -110,37 +187,28 @@ export class ThemeActivator {
         && entry?.exclusiveGroup !== undefined
       && entry.exclusiveGroup === target.exclusiveGroup;
     });
-    const expectedManaged = new Map(initialManaged);
-    conflicts.forEach((conflict) => expectedManaged.set(conflict.name, false));
-    expectedManaged.set(target.cssLoaderName, true);
+    const expectedStates = new Map(initialStates);
+    conflicts.forEach((conflict) => expectedStates.set(conflict.name, false));
+    expectedStates.set(target.cssLoaderName, true);
+    const recovery = await this.beginOperation(initial);
 
     try {
       for (const conflict of conflicts) {
         await this.adapter.setThemeState(conflict.name, false);
       }
-      if (!initialManaged.get(target.cssLoaderName)) {
+      if (!initialStates.get(target.cssLoaderName)) {
         await this.adapter.setThemeState(target.cssLoaderName, true);
       }
 
       const finalSnapshot = await this.adapter.inspect();
       requireReady(finalSnapshot);
-      if (!sameStates(expectedManaged, finalSnapshot)) {
-        throw new Error("CSS Loader did not confirm the requested managed theme state");
+      if (!sameSnapshotState(initial, expectedStates, finalSnapshot)) {
+        throw new Error("CSS Loader did not confirm the complete requested theme state");
       }
-      if (!sameStates(initialThirdParty, finalSnapshot)) {
-        throw new Error("A third-party theme changed during managed theme activation");
-      }
+      await this.completeSuccessfulOperation(recovery);
       return finalSnapshot;
     } catch (activationError) {
-      try {
-        await this.restoreCatalogStates(initialManaged, catalogNames);
-      } catch {
-        throw new ThemeActivationError(
-          "rollback_failed",
-          "Activation failed and the previous managed theme state could not be restored",
-          true,
-        );
-      }
+      await this.restoreAfterFailure(recovery, "Activation");
       const detail = activationError instanceof Error ? activationError.message : "unknown failure";
       throw new ThemeActivationError("activation_failed", `Theme activation failed: ${detail}`);
     }
@@ -159,57 +227,186 @@ export class ThemeActivator {
     if (!installed) throw new ThemeActivationError("not_installed", `${target.cssLoaderName} is not installed`);
     if (!installed.enabled) return initial;
 
-    const catalogNames = new Set(catalog.map((theme) => theme.cssLoaderName));
-    const initialManaged = statesOf(initial, catalogNames);
-    const initialThirdParty = thirdPartyStates(initial, catalogNames);
-    const expectedManaged = new Map(initialManaged);
-    expectedManaged.set(target.cssLoaderName, false);
+    const initialStates = statesOf(initial);
+    const expectedStates = new Map(initialStates);
+    expectedStates.set(target.cssLoaderName, false);
+    const recovery = await this.beginOperation(initial);
     try {
       await this.adapter.setThemeState(target.cssLoaderName, false);
       const finalSnapshot = await this.adapter.inspect();
       requireReady(finalSnapshot);
-      if (!sameStates(expectedManaged, finalSnapshot)) {
-        throw new Error("CSS Loader did not confirm the requested managed theme state");
+      if (!sameSnapshotState(initial, expectedStates, finalSnapshot)) {
+        throw new Error("CSS Loader did not confirm the complete requested theme state");
       }
-      if (!sameStates(initialThirdParty, finalSnapshot)) {
-        throw new Error("A third-party theme changed during managed theme deactivation");
-      }
+      await this.completeSuccessfulOperation(recovery);
       return finalSnapshot;
     } catch (deactivationError) {
-      try {
-        await this.restoreCatalogStates(initialManaged, catalogNames);
-      } catch {
-        throw new ThemeActivationError(
-          "rollback_failed",
-          "Deactivation failed and the previous managed theme state could not be restored",
-          true,
-        );
-      }
+      await this.restoreAfterFailure(recovery, "Deactivation");
       const detail = deactivationError instanceof Error ? deactivationError.message : "unknown failure";
       throw new ThemeActivationError("deactivation_failed", `Theme deactivation failed: ${detail}`);
     }
   }
 
-  private async restoreCatalogStates(
-    expected: ReadonlyMap<string, boolean>,
-    catalogNames: ReadonlySet<string>,
-  ): Promise<void> {
-    let currentStates: Map<string, boolean> | null = null;
-    try {
+  async reconcilePendingRecovery(): Promise<CssLoaderReadySnapshot | null> {
+    let recovery = this.pendingRecovery;
+    if (!recovery) {
+      let durable: DurableThemeActivationRecovery | null;
+      try {
+        durable = await this.journal.pending();
+      } catch (error) {
+        const detail = error instanceof Error ? `: ${error.message}` : "";
+        throw new ThemeActivationError(
+          "rollback_failed",
+          `Theme activation recovery could not be inspected${detail}`,
+          true,
+        );
+      }
+      if (!durable) return null;
+      recovery = {
+        transaction: durable.transaction,
+        initial: durable.snapshot,
+        status: "needed",
+      };
+      this.pendingRecovery = recovery;
+    }
+    if (recovery.status === "pending") {
+      throw new ThemeActivationError(
+        "rollback_failed",
+        "The previous theme state is still being restored",
+        true,
+      );
+    }
+    if (recovery.status === "ready" && recovery.snapshot) {
       const current = await this.adapter.inspect();
       requireReady(current);
-      currentStates = statesOf(current, catalogNames);
-    } catch {}
-    const restoration = [...expected]
-      .filter(([name, enabled]) => currentStates?.get(name) !== enabled)
-      .reverse();
-    for (const [name, enabled] of restoration) {
-      await this.adapter.setThemeState(name, enabled);
+      if (this.isFullyRestored(recovery.initial, current)) {
+        return this.acknowledgeRecovery(recovery, current);
+      }
+      recovery.status = "needed";
+      recovery.snapshot = undefined;
     }
-    const restored = await this.adapter.inspect();
-    requireReady(restored);
-    if (!sameStates(expected, restored)) {
-      throw new Error("Managed theme state does not match the operation snapshot");
+    try {
+      const restored = await this.attemptRecovery(recovery);
+      return await this.acknowledgeRecovery(recovery, restored);
+    } catch (error) {
+      if (this.adapter.hasPendingMutation()) this.beginDeferredRecovery(recovery);
+      const detail = error instanceof Error ? `: ${error.message}` : "";
+      throw new ThemeActivationError(
+        "rollback_failed",
+        `The previous theme state could not be restored${detail}`,
+        true,
+      );
     }
+  }
+
+  private async restoreAfterFailure(
+    recovery: ActivationRecovery,
+    operationName: "Activation" | "Deactivation",
+  ): Promise<void> {
+    if (this.adapter.hasPendingMutation()) {
+      this.beginDeferredRecovery(recovery);
+      throw new ThemeActivationError(
+        "rollback_failed",
+        `${operationName} timed out; recovery is waiting for CSS Loader to settle`,
+        true,
+      );
+    }
+    try {
+      await this.attemptRecovery(recovery);
+      await this.acknowledgeRecovery(recovery, recovery.snapshot!);
+    } catch (error) {
+      if (this.adapter.hasPendingMutation()) this.beginDeferredRecovery(recovery);
+      recovery.error = error;
+      throw new ThemeActivationError(
+        "rollback_failed",
+        `${operationName} failed and the previous theme state could not be restored`,
+        true,
+      );
+    }
+  }
+
+  private beginDeferredRecovery(recovery: ActivationRecovery): void {
+    recovery.status = "pending";
+    void this.performRecovery(recovery.initial)
+      .then(
+        (snapshot) => {
+          recovery.status = "ready";
+          recovery.snapshot = snapshot;
+          recovery.error = undefined;
+        },
+        (error: unknown) => {
+          recovery.status = "needed";
+          recovery.error = error;
+        },
+      );
+  }
+
+  private async attemptRecovery(recovery: ActivationRecovery): Promise<CssLoaderReadySnapshot> {
+    recovery.status = "pending";
+    try {
+      const snapshot = await this.performRecovery(recovery.initial);
+      recovery.status = "ready";
+      recovery.snapshot = snapshot;
+      recovery.error = undefined;
+      return snapshot;
+    } catch (error) {
+      recovery.status = "needed";
+      recovery.error = error;
+      throw error;
+    }
+  }
+
+  private async performRecovery(initial: CssLoaderReadySnapshot): Promise<CssLoaderReadySnapshot> {
+    await this.adapter.waitForPendingMutation();
+    const restored = await this.adapter.restoreThemeSnapshot(initial);
+    if (!this.isFullyRestored(initial, restored)) {
+      throw new Error("The restored CSS Loader state does not match the activation snapshot");
+    }
+    return restored;
+  }
+
+  private isFullyRestored(
+    initial: CssLoaderReadySnapshot,
+    candidate: CssLoaderReadySnapshot,
+  ): boolean {
+    return sameSnapshotState(initial, statesOf(initial), candidate);
+  }
+
+  private async beginOperation(initial: CssLoaderReadySnapshot): Promise<ActivationRecovery> {
+    try {
+      const transaction = await this.journal.begin(initial);
+      const recovery: ActivationRecovery = {
+        transaction,
+        initial: structuredClone(initial),
+        status: "needed",
+      };
+      this.pendingRecovery = recovery;
+      return recovery;
+    } catch (error) {
+      const detail = error instanceof Error ? `: ${error.message}` : "";
+      throw new ThemeActivationError(
+        "rollback_failed",
+        `Theme activation could not create a durable recovery point${detail}`,
+        true,
+      );
+    }
+  }
+
+  private async completeSuccessfulOperation(recovery: ActivationRecovery): Promise<void> {
+    await this.journal.acknowledge(recovery.transaction);
+    if (this.pendingRecovery === recovery) this.pendingRecovery = null;
+  }
+
+  private async acknowledgeRecovery(
+    recovery: ActivationRecovery,
+    snapshot: CssLoaderReadySnapshot,
+  ): Promise<CssLoaderReadySnapshot> {
+    if (!this.isFullyRestored(recovery.initial, snapshot)) {
+      recovery.status = "needed";
+      throw new Error("Theme activation recovery verification failed");
+    }
+    await this.journal.acknowledge(recovery.transaction);
+    if (this.pendingRecovery === recovery) this.pendingRecovery = null;
+    return snapshot;
   }
 }

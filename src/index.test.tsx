@@ -7,10 +7,13 @@ const registeredView = vi.hoisted(() => ({ content: null as ReactNode }));
 
 vi.mock("@decky/api", () => ({ definePlugin: (factory: unknown) => factory }));
 vi.mock("./api", () => ({
+  acknowledgeThemeActivation: vi.fn(),
   acknowledgeThemeInstallRollback: vi.fn(),
+  beginThemeActivation: vi.fn(),
   checkThemeReleases: vi.fn(),
   commitThemeInstall: vi.fn(),
   getThemeInstallRecoveries: vi.fn(),
+  getThemeActivationRecovery: vi.fn(),
   listThemeExtensions: vi.fn(),
   loadThemeExtension: vi.fn(),
   prepareRemoteThemeInstall: vi.fn(),
@@ -60,6 +63,9 @@ vi.mock("./system/pdcStorage", () => ({ onPrefsHealed: () => () => {} }));
 vi.mock("./system/uiActivity", () => ({ shutdownUiActivity: vi.fn() }));
 vi.mock("./themes/deckyCssLoaderHost", () => ({ configureDeckyCssLoaderHost: () => () => {} }));
 vi.mock("./themes/panelThemeInstallHost", () => ({ configurePanelThemeInstallHost: () => () => {} }));
+vi.mock("./themes/panelThemeActivationJournal", () => ({
+  configurePanelThemeActivationJournalHost: () => () => {},
+}));
 vi.mock("./themes/remotePublicationClient", () => ({ configureThemePublicationCheckHost: () => () => {} }));
 vi.mock("./themes/themeExtensionClient", () => ({ configureThemeExtensionRpcHost: () => () => {} }));
 vi.mock("./themes/runtime/start", () => ({ startThemesRuntime: () => () => {} }));
