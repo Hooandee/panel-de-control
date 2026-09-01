@@ -18,6 +18,7 @@ export interface DurableThemeActivationRecovery {
 export interface ThemeActivationJournal {
   begin(snapshot: CssLoaderReadySnapshot): Promise<string>;
   pending(): Promise<DurableThemeActivationRecovery | null>;
+  settle(transaction: string): Promise<void>;
   acknowledge(transaction: string): Promise<void>;
 }
 
@@ -34,6 +35,8 @@ class MemoryThemeActivationJournal implements ThemeActivationJournal {
   async pending(): Promise<DurableThemeActivationRecovery | null> {
     return this.recovery ? structuredClone(this.recovery) : null;
   }
+
+  async settle(_transaction: string): Promise<void> {}
 
   async acknowledge(transaction: string): Promise<void> {
     if (!this.recovery || this.recovery.transaction !== transaction) {
@@ -327,7 +330,7 @@ export class ThemeActivator {
 
   private beginDeferredRecovery(recovery: ActivationRecovery): void {
     recovery.status = "pending";
-    void this.performRecovery(recovery.initial)
+    void this.performRecovery(recovery)
       .then(
         (snapshot) => {
           recovery.status = "ready";
@@ -344,7 +347,7 @@ export class ThemeActivator {
   private async attemptRecovery(recovery: ActivationRecovery): Promise<CssLoaderReadySnapshot> {
     recovery.status = "pending";
     try {
-      const snapshot = await this.performRecovery(recovery.initial);
+      const snapshot = await this.performRecovery(recovery);
       recovery.status = "ready";
       recovery.snapshot = snapshot;
       recovery.error = undefined;
@@ -356,10 +359,11 @@ export class ThemeActivator {
     }
   }
 
-  private async performRecovery(initial: CssLoaderReadySnapshot): Promise<CssLoaderReadySnapshot> {
+  private async performRecovery(recovery: ActivationRecovery): Promise<CssLoaderReadySnapshot> {
     await this.adapter.waitForPendingMutation();
-    const restored = await this.adapter.restoreThemeSnapshot(initial);
-    if (!this.isFullyRestored(initial, restored)) {
+    await this.journal.settle(recovery.transaction);
+    const restored = await this.adapter.restoreThemeSnapshot(recovery.initial);
+    if (!this.isFullyRestored(recovery.initial, restored)) {
       throw new Error("The restored CSS Loader state does not match the activation snapshot");
     }
     return restored;
@@ -393,6 +397,7 @@ export class ThemeActivator {
   }
 
   private async completeSuccessfulOperation(recovery: ActivationRecovery): Promise<void> {
+    await this.journal.settle(recovery.transaction);
     await this.journal.acknowledge(recovery.transaction);
     if (this.pendingRecovery === recovery) this.pendingRecovery = null;
   }

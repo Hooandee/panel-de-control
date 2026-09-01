@@ -418,7 +418,15 @@ def test_activation_recovery_rpcs_persist_before_mutation_and_acknowledge_exactl
         lambda journal_path: calls.append(("pending", journal_path)) or {
             "transaction": "token",
             "snapshot": snapshot,
+            "recoverable": False,
         },
+    )
+    monkeypatch.setattr(
+        main.theme_activation,
+        "mark_theme_activation_settled",
+        lambda transaction, journal_path: calls.append(
+            ("settle", transaction, journal_path)
+        ) or {"ok": True, "code": "settled"},
     )
     monkeypatch.setattr(
         main.theme_activation,
@@ -430,18 +438,25 @@ def test_activation_recovery_rpcs_persist_before_mutation_and_acknowledge_exactl
 
     prepared = asyncio.run(plugin.begin_theme_activation(snapshot))
     pending = asyncio.run(plugin.get_theme_activation_recovery())
+    settled = asyncio.run(plugin.settle_theme_activation("token"))
     acknowledged = asyncio.run(plugin.acknowledge_theme_activation("token"))
 
     assert prepared == {"ok": True, "code": "prepared", "transaction": "token"}
     assert pending == {
         "ok": True,
         "code": "ready",
-        "recovery": {"transaction": "token", "snapshot": snapshot},
+        "recovery": {
+            "transaction": "token",
+            "snapshot": snapshot,
+            "recoverable": False,
+        },
     }
+    assert settled == {"ok": True, "code": "settled"}
     assert acknowledged == {"ok": True, "code": "acknowledged"}
     assert calls == [
         ("begin", snapshot, path),
         ("pending", path),
+        ("settle", "token", path),
         ("acknowledge", "token", path),
     ]
 

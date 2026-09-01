@@ -211,6 +211,9 @@ describe("ThemeActivator", () => {
 
   it("recovers a timed-out mutation after restart with a newer compatible CSS Loader", async () => {
     let durable: DurableThemeActivationRecovery | null = null;
+    let recoverable = false;
+    let releaseOldMutation!: () => void;
+    const oldMutation = new Promise<void>((resolve) => { releaseOldMutation = resolve; });
     const order: string[] = [];
     const journal: ThemeActivationJournal = {
       begin: async (snapshot) => {
@@ -218,7 +221,14 @@ describe("ThemeActivator", () => {
         durable = { transaction: "durable-token", snapshot: structuredClone(snapshot) };
         return "durable-token";
       },
-      pending: async () => durable ? structuredClone(durable) : null,
+      pending: async () => {
+        if (durable && !recoverable) throw new Error("mutation_unsettled");
+        return durable ? structuredClone(durable) : null;
+      },
+      settle: async (transaction) => {
+        if (transaction !== durable?.transaction) throw new Error("mismatch");
+        recoverable = true;
+      },
       acknowledge: async (transaction) => {
         if (transaction !== durable?.transaction) throw new Error("mismatch");
         durable = null;
@@ -238,7 +248,7 @@ describe("ThemeActivator", () => {
       },
       restoreThemeSnapshot: async () => { throw new Error("old frontend unloaded"); },
       hasPendingMutation: () => true,
-      waitForPendingMutation: () => new Promise(() => undefined),
+      waitForPendingMutation: () => oldMutation,
     };
 
     await expect(new ThemeActivator(firstAdapter, journal).activate("example-theme", CATALOG))
@@ -249,7 +259,6 @@ describe("ThemeActivator", () => {
     });
     expect(order).toEqual(["journal", "mutation"]);
 
-    themes[0].enabled = true;
     const restartedAdapter: ThemeActivationAdapter = {
       inspect: async () => ({
         status: "ready",
@@ -265,8 +274,19 @@ describe("ThemeActivator", () => {
       hasPendingMutation: () => false,
       waitForPendingMutation: async () => undefined,
     };
+    const restartedActivator = new ThemeActivator(restartedAdapter, journal);
 
-    await expect(new ThemeActivator(restartedAdapter, journal).reconcilePendingRecovery())
+    await expect(restartedActivator.reconcilePendingRecovery()).rejects.toMatchObject({
+      code: "rollback_failed",
+      restorationFailed: true,
+    });
+    expect(durable).not.toBeNull();
+
+    themes[0].enabled = true;
+    releaseOldMutation();
+    await expect.poll(() => recoverable).toBe(true);
+
+    await expect(restartedActivator.reconcilePendingRecovery())
       .resolves.toMatchObject({
         pluginVersion: "2.2.0",
         backendVersion: 10,

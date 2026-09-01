@@ -13,6 +13,7 @@ _MAX_THEMES = 128
 _MAX_PATCHES = 128
 _MAX_OPTIONS = 128
 _MAX_TEXT_BYTES = 4096
+_INSTANCE_TOKEN = str(uuid.uuid4())
 _lock = threading.RLock()
 
 
@@ -151,6 +152,11 @@ def _fsync_directory(path):
 def _write_journal(path: Path, journal):
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = json.dumps(journal, separators=(",", ":")).encode("utf-8")
+    if len(payload) > _MAX_JOURNAL_BYTES:
+        raise ThemeActivationJournalError(
+            "invalid_snapshot",
+            "Theme activation journal is too large",
+        )
     descriptor, temporary = tempfile.mkstemp(
         prefix=f".{path.name}.",
         suffix=".tmp",
@@ -191,10 +197,33 @@ def _read_journal(path: Path):
             "invalid_journal",
             "Theme activation recovery journal is invalid",
         ) from error
+    if not isinstance(journal, dict) or journal.get("schema_version") != _SCHEMA_VERSION:
+        raise ThemeActivationJournalError(
+            "invalid_journal",
+            "Theme activation recovery journal is invalid",
+        )
+    if not _validate_transaction(journal.get("transaction")):
+        raise ThemeActivationJournalError(
+            "invalid_journal",
+            "Theme activation recovery journal is invalid",
+        )
+    if journal.get("phase") == "completed":
+        if not _exact_keys(journal, {"schema_version", "transaction", "phase"}):
+            raise ThemeActivationJournalError(
+                "invalid_journal",
+                "Theme activation recovery journal is invalid",
+            )
+        return journal
     if (
-        not _exact_keys(journal, {"schema_version", "transaction", "snapshot"})
-        or journal["schema_version"] != _SCHEMA_VERSION
-        or not _validate_transaction(journal["transaction"])
+        not _exact_keys(journal, {
+            "schema_version",
+            "transaction",
+            "phase",
+            "owner_instance",
+            "snapshot",
+        })
+        or journal["phase"] not in ("mutating", "settled")
+        or not _text(journal["owner_instance"], non_empty=True)
     ):
         raise ThemeActivationJournalError(
             "invalid_journal",
@@ -214,7 +243,8 @@ def begin_theme_activation(snapshot, journal_path):
     path = Path(journal_path)
     _validate_snapshot(snapshot)
     with _lock:
-        if _read_journal(path) is not None:
+        existing = _read_journal(path)
+        if existing is not None and existing["phase"] != "completed":
             raise ThemeActivationJournalError(
                 "recovery_pending",
                 "A theme activation recovery is already pending",
@@ -223,6 +253,8 @@ def begin_theme_activation(snapshot, journal_path):
         _write_journal(path, {
             "schema_version": _SCHEMA_VERSION,
             "transaction": transaction,
+            "phase": "mutating",
+            "owner_instance": _INSTANCE_TOKEN,
             "snapshot": snapshot,
         })
     return {"ok": True, "code": "prepared", "transaction": transaction}
@@ -231,12 +263,44 @@ def begin_theme_activation(snapshot, journal_path):
 def get_theme_activation_recovery(journal_path):
     with _lock:
         journal = _read_journal(Path(journal_path))
-    if journal is None:
+    if journal is None or journal["phase"] == "completed":
         return None
     return {
         "transaction": journal["transaction"],
         "snapshot": journal["snapshot"],
+        "recoverable": (
+            journal["phase"] == "settled"
+            or journal["owner_instance"] != _INSTANCE_TOKEN
+        ),
     }
+
+
+def mark_theme_activation_settled(transaction, journal_path):
+    path = Path(journal_path)
+    with _lock:
+        journal = _read_journal(path)
+        if (
+            journal is not None
+            and journal["phase"] == "completed"
+            and journal["transaction"] == transaction
+        ):
+            return {"ok": True, "code": "settled"}
+        if (
+            journal is None
+            or journal["phase"] == "completed"
+            or journal["transaction"] != transaction
+        ):
+            raise ThemeActivationJournalError(
+                "invalid_transaction",
+                "Theme activation recovery transaction does not match",
+            )
+        if journal["phase"] != "settled" or journal["owner_instance"] != _INSTANCE_TOKEN:
+            _write_journal(path, {
+                **journal,
+                "phase": "settled",
+                "owner_instance": _INSTANCE_TOKEN,
+            })
+    return {"ok": True, "code": "settled"}
 
 
 def acknowledge_theme_activation(transaction, journal_path):
@@ -248,6 +312,16 @@ def acknowledge_theme_activation(transaction, journal_path):
                 "invalid_transaction",
                 "Theme activation recovery transaction does not match",
             )
-        path.unlink()
-        _fsync_directory(path.parent)
+        if journal["phase"] == "completed":
+            return {"ok": True, "code": "acknowledged"}
+        if journal["phase"] != "settled":
+            raise ThemeActivationJournalError(
+                "mutation_unsettled",
+                "Theme activation mutation has not settled",
+            )
+        _write_journal(path, {
+            "schema_version": _SCHEMA_VERSION,
+            "transaction": transaction,
+            "phase": "completed",
+        })
     return {"ok": True, "code": "acknowledged"}

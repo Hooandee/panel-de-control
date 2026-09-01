@@ -35,8 +35,9 @@ function host(overrides: Record<string, unknown> = {}) {
     pending: vi.fn(async () => ({
       ok: true,
       code: "ready",
-      recovery: { transaction: "token", snapshot: SNAPSHOT },
+      recovery: { transaction: "token", snapshot: SNAPSHOT, recoverable: true },
     })),
+    settle: vi.fn(async () => ({ ok: true, code: "settled" })),
     acknowledge: vi.fn(async () => ({ ok: true, code: "acknowledged" })),
     ...overrides,
   };
@@ -49,8 +50,10 @@ describe("PanelThemeActivationJournal", () => {
 
     await expect(journal.begin(SNAPSHOT)).resolves.toBe("token");
     await expect(journal.pending()).resolves.toEqual({ transaction: "token", snapshot: SNAPSHOT });
+    await expect(journal.settle("token")).resolves.toBeUndefined();
     await expect(journal.acknowledge("token")).resolves.toBeUndefined();
     expect(backend.begin).toHaveBeenCalledWith(SNAPSHOT);
+    expect(backend.settle).toHaveBeenCalledWith("token");
     expect(backend.acknowledge).toHaveBeenCalledWith("token");
   });
 
@@ -61,12 +64,27 @@ describe("PanelThemeActivationJournal", () => {
         code: "ready",
         recovery: {
           transaction: "token",
+          recoverable: true,
           snapshot: { ...SNAPSHOT, themes: [{ ...SNAPSHOT.themes[0], enabled: 1 }] },
         },
       })),
     }));
 
     await expect(journal.pending()).rejects.toMatchObject({ code: "malformed_response" });
+  });
+
+  it("does not recover or acknowledge while an old backend mutation is unsettled", async () => {
+    const backend = host({
+      pending: vi.fn(async () => ({
+        ok: true,
+        code: "ready",
+        recovery: { transaction: "token", snapshot: SNAPSHOT, recoverable: false },
+      })),
+    });
+    const journal = new PanelThemeActivationJournal(backend);
+
+    await expect(journal.pending()).rejects.toMatchObject({ code: "mutation_unsettled" });
+    expect(backend.acknowledge).not.toHaveBeenCalled();
   });
 
   it("uses only the current scoped backend host", async () => {

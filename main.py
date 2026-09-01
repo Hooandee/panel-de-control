@@ -1030,6 +1030,22 @@ class Plugin:
             decky.logger.error("Theme activation recovery failed: %s", type(error).__name__)
             return {"ok": False, "code": "recovery_failed"}
 
+    async def settle_theme_activation(self, transaction: str) -> dict:
+        self._init()
+        try:
+            return await self._offload_theme_call(
+                lambda: theme_activation.mark_theme_activation_settled(
+                    transaction,
+                    self._theme_activation_recovery_path(),
+                )
+            )
+        except theme_activation.ThemeActivationJournalError as error:
+            decky.logger.error("Theme activation settlement rejected (%s)", error.code)
+            return {"ok": False, "code": error.code}
+        except Exception as error:  # noqa: BLE001
+            decky.logger.error("Theme activation settlement failed: %s", type(error).__name__)
+            return {"ok": False, "code": "settlement_failed"}
+
     async def acknowledge_theme_activation(self, transaction: str) -> dict:
         self._init()
         try:

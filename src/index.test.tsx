@@ -18,6 +18,7 @@ vi.mock("./api", () => ({
   loadThemeExtension: vi.fn(),
   prepareRemoteThemeInstall: vi.fn(),
   rollbackThemeInstall: vi.fn(),
+  settleThemeActivation: vi.fn(),
 }));
 vi.mock("@decky/ui", () => ({
   ErrorBoundary: ({ children }: { children: ReactNode }) => <>{children}</>,

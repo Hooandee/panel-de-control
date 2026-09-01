@@ -15,6 +15,7 @@ import {
   loadThemeExtension,
   prepareRemoteThemeInstall,
   rollbackThemeInstall,
+  settleThemeActivation,
 } from "./api";
 import { I18nProvider, translate } from "./i18n";
 import { ControlCenter } from "./components/ControlCenter";
@@ -91,6 +92,7 @@ export default definePlugin(() => {
   const releaseThemeActivationJournalHost = configurePanelThemeActivationJournalHost({
     begin: beginThemeActivation,
     pending: getThemeActivationRecovery,
+    settle: settleThemeActivation,
     acknowledge: acknowledgeThemeActivation,
   });
   const releaseThemePublicationHost = configureThemePublicationCheckHost(checkThemeReleases);

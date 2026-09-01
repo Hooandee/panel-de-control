@@ -16,6 +16,7 @@ const PATCH_TYPES = new Set<CssLoaderPatchType>([
 export interface ThemeActivationJournalHost {
   begin(snapshot: CssLoaderReadySnapshot): Promise<unknown>;
   pending(): Promise<unknown>;
+  settle(transaction: string): Promise<unknown>;
   acknowledge(transaction: string): Promise<unknown>;
 }
 
@@ -151,25 +152,50 @@ export class PanelThemeActivationJournal implements ThemeActivationJournal {
       );
     }
     if (response.recovery === null) return null;
-    if (!isRecord(response.recovery) || !hasExactKeys(response.recovery, ["transaction", "snapshot"])) {
+    if (!isRecord(response.recovery) || !hasExactKeys(
+      response.recovery,
+      ["transaction", "snapshot", "recoverable"],
+    )) {
       throw new ThemeActivationJournalError("malformed_response", "Panel returned invalid activation recovery");
     }
     const snapshot = parseReadySnapshot(response.recovery.snapshot);
-    if (!nonEmptyString(response.recovery.transaction) || !snapshot) {
+    if (
+      !nonEmptyString(response.recovery.transaction)
+      || typeof response.recovery.recoverable !== "boolean"
+      || !snapshot
+    ) {
       throw new ThemeActivationJournalError("malformed_response", "Panel returned invalid activation recovery");
+    }
+    if (!response.recovery.recoverable) {
+      throw new ThemeActivationJournalError(
+        "mutation_unsettled",
+        "A previous CSS Loader mutation may still be running",
+      );
     }
     return { transaction: response.recovery.transaction, snapshot };
   }
 
+  async settle(transaction: string): Promise<void> {
+    await this.finish("settle", transaction, "settled");
+  }
+
   async acknowledge(transaction: string): Promise<void> {
+    await this.finish("acknowledge", transaction, "acknowledged");
+  }
+
+  private async finish(
+    operation: "settle" | "acknowledge",
+    transaction: string,
+    expectedCode: "settled" | "acknowledged",
+  ): Promise<void> {
     if (!nonEmptyString(transaction)) {
       throw new ThemeActivationJournalError("invalid_transaction", "Theme activation transaction is invalid");
     }
-    const response = await this.host.acknowledge(transaction);
-    if (!isRecord(response) || response.ok !== true || response.code !== "acknowledged") {
+    const response = await this.host[operation](transaction);
+    if (!isRecord(response) || response.ok !== true || response.code !== expectedCode) {
       throw new ThemeActivationJournalError(
         responseCode(response) ?? "malformed_response",
-        "Panel could not acknowledge theme activation recovery",
+        `Panel could not ${operation} theme activation recovery`,
       );
     }
   }
@@ -202,6 +228,7 @@ export function createPanelThemeActivationJournal(): PanelThemeActivationJournal
   return new PanelThemeActivationJournal({
     begin: (snapshot) => requireConfiguredHost().begin(snapshot),
     pending: () => requireConfiguredHost().pending(),
+    settle: (transaction) => requireConfiguredHost().settle(transaction),
     acknowledge: (transaction) => requireConfiguredHost().acknowledge(transaction),
   });
 }
