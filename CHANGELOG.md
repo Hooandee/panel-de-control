@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## [0.38.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.12...panel-de-control-v0.38.0) (2026-09-02)
+
+
+### Features
+
+* add installed theme removal ([#526](https://github.com/Hooandee/panel-de-control/issues/526)) ([6bb7aa6](https://github.com/Hooandee/panel-de-control/commit/6bb7aa6a1b55bfb9ce67f2cd4f68d05b47cbba13))
+* add native themes platform ([#520](https://github.com/Hooandee/panel-de-control/issues/520)) ([fb86e51](https://github.com/Hooandee/panel-de-control/commit/fb86e5164f4e2448c30d10ae8916222a6f7ea5f3))
+* refine theme gallery presentation ([#525](https://github.com/Hooandee/panel-de-control/issues/525)) ([a184ca9](https://github.com/Hooandee/panel-de-control/commit/a184ca9a8b2d8b6b2bbd986168fb7ed863b84aee))
+
 ## [0.37.12](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.11...panel-de-control-v0.37.12) (2026-08-24)
 
 

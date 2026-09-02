@@ -1,6 +1,6 @@
 {
   "name": "panel-de-control",
-  "version": "0.37.12",
+  "version": "0.38.0",
   "description": "Panel de control definitivo para PCs portátiles: TDP, ventiladores y más.",
   "type": "module",
   "scripts": {
