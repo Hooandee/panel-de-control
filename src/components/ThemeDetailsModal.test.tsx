@@ -1,18 +1,25 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import type { ReactNode } from "react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { ThemesController } from "../themes/useThemes";
 
 const mocks = vi.hoisted(() => ({ controller: null as ThemesController | null, navigate: vi.fn(), showModal: vi.fn() }));
 vi.mock("@decky/ui", () => ({
-  ModalRoot: ({ children, onCancel }: { children?: ReactNode; onCancel?: () => void }) => (
-    <div>{children}<button aria-label="modal-cancel" onClick={onCancel}>cancel</button></div>
+  ModalRoot: ({ children, onCancel, onEscKeypress, bAllowFullSize }: { children?: ReactNode; onCancel?: () => void; onEscKeypress?: () => void; bAllowFullSize?: boolean }) => (
+    <div data-testid="modal-root" data-allow-full-size={bAllowFullSize ? "true" : "false"}>
+      {children}
+      <button aria-label="modal-cancel" onClick={onCancel}>cancel</button>
+      <button aria-label="modal-escape" onClick={onEscKeypress}>escape</button>
+    </div>
   ),
   Focusable: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
   ButtonItem: ({ children, onClick, disabled }: { children?: ReactNode; onClick?: () => void; disabled?: boolean }) => (
     <button onClick={onClick} disabled={disabled}>{children}</button>
+  ),
+  DialogButton: ({ children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) => (
+    <button {...props}>{children}</button>
   ),
   Navigation: { Navigate: mocks.navigate },
   showModal: mocks.showModal,
@@ -71,14 +78,87 @@ describe("ThemeDetailsModal", () => {
     expect(mocks.navigate).toHaveBeenCalledWith("/decky/store");
   });
 
-  it("shows metadata and omits notes when the published notes object is empty", () => {
+  it("keeps only version metadata in the simplified header", () => {
     mocks.controller = controller();
     render(<ThemeDetailsModal themeId="example-theme" />);
 
-    expect(screen.getByText("Example Author")).toBeTruthy();
-    expect(screen.getByText("#dark")).toBeTruthy();
-    expect(screen.getByText("#compact")).toBeTruthy();
+    expect(screen.getByText("themes.version.published")).toBeTruthy();
+    expect(screen.queryByText("themes.details.eyebrow")).toBeNull();
+    expect(screen.queryByText("Example Author")).toBeNull();
+    expect(screen.queryByText("#dark")).toBeNull();
+    expect(screen.queryByText("#compact")).toBeNull();
     expect(screen.queryByText("themes.remote.notes")).toBeNull();
+  });
+
+  it("uses the HOOANDEE cover behind the modal title with a readability gradient", () => {
+    const base = controller();
+    const release = {
+      ...base.cards[0].release,
+      catalogId: "hooandee-gallery",
+      cssLoaderName: "Hooandee Gallery",
+      displayName: { es: "HOOANDEE", en: "HOOANDEE", it: "HOOANDEE" },
+    };
+    mocks.controller = controller({
+      cards: [{ ...base.cards[0], id: "hooandee-gallery", release }],
+      publication: { status: "published", checkedAt: 10, themes: [release] },
+    });
+
+    render(<ThemeDetailsModal themeId="hooandee-gallery" />);
+
+    expect(screen.getByRole("heading", { name: "HOOANDEE" })).toBeTruthy();
+    expect(screen.getByTestId("theme-details-cover").getAttribute("alt")).toBe("");
+    expect(screen.getByTestId("theme-details-cover").style.inset).toBe("-2px");
+    expect(screen.getByTestId("theme-details-cover").style.width).toBe("calc(100% + 4px)");
+    expect(screen.getByTestId("theme-details-cover-gradient")).toBeTruthy();
+    expect(screen.getByTestId("theme-details-cover-copy").style.textShadow).not.toBe("");
+  });
+
+  it("keeps generic themes neutral and falls back if the HOOANDEE cover fails", () => {
+    mocks.controller = controller();
+    const view = render(<ThemeDetailsModal themeId="example-theme" />);
+
+    expect(screen.queryByTestId("theme-details-cover")).toBeNull();
+
+    const base = controller();
+    const release = {
+      ...base.cards[0].release,
+      catalogId: "hooandee-gallery",
+      cssLoaderName: "Hooandee Gallery",
+    };
+    mocks.controller = controller({
+      cards: [{ ...base.cards[0], id: "hooandee-gallery", release }],
+      publication: { status: "published", checkedAt: 10, themes: [release] },
+    });
+    view.rerender(<ThemeDetailsModal themeId="hooandee-gallery" />);
+    fireEvent.error(screen.getByTestId("theme-details-cover"));
+
+    expect(screen.queryByTestId("theme-details-cover")).toBeNull();
+    expect(screen.queryByTestId("theme-details-cover-gradient")).toBeNull();
+  });
+
+  it("uses full-size layout only when installed settings need the space", () => {
+    mocks.controller = controller({
+      snapshot: { status: "ready", pluginVersion: "2.1.2", backendVersion: 9, themes: [] },
+    });
+    const view = render(<ThemeDetailsModal themeId="example-theme" />);
+
+    expect(screen.getByTestId("modal-root").getAttribute("data-allow-full-size")).toBe("false");
+
+    const base = controller();
+    const installedTheme = {
+      id: "Example Theme", name: "Example Theme", displayName: "Example Theme", version: "1.2.3",
+      author: "Example Author", enabled: false, patches: [{
+        name: "Motion", defaultValue: "Yes", value: "Yes", options: ["No", "Yes"],
+        type: "checkbox" as const, rawType: "checkbox",
+      }],
+    };
+    mocks.controller = controller({
+      snapshot: { status: "ready", pluginVersion: "2.1.2", backendVersion: 9, themes: [installedTheme] },
+      cards: [{ ...base.cards[0], installed: true, installedVersion: "1.2.3", cssLoaderTheme: installedTheme, versionRelation: "current" }],
+    });
+    view.rerender(<ThemeDetailsModal themeId="example-theme" />);
+
+    expect(screen.getByTestId("modal-root").getAttribute("data-allow-full-size")).toBe("true");
   });
 
   it("labels cached metadata as offline and retries publication", () => {
@@ -95,7 +175,7 @@ describe("ThemeDetailsModal", () => {
     expect(refreshPublication).toHaveBeenCalledOnce();
   });
 
-  it("confirms a remote install using only the exact version", () => {
+  it("replaces the ready offer with one compact, safely ordered confirmation", () => {
     const install = vi.fn(async () => true);
     mocks.controller = controller({
       snapshot: { status: "ready", pluginVersion: "2.1.2", backendVersion: 9, themes: [] },
@@ -103,9 +183,106 @@ describe("ThemeDetailsModal", () => {
     });
     render(<ThemeDetailsModal themeId="example-theme" />);
 
+    expect(screen.getByRole("group", { name: "themes.install.ready" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "themes.action.install" }));
-    fireEvent.click(screen.getByRole("button", { name: "themes.install.confirm.ok" }));
+    expect(screen.queryByRole("group", { name: "themes.install.ready" })).toBeNull();
+
+    const confirmation = screen.getByRole("group", { name: "themes.install.confirm.title" });
+    expect(within(confirmation).getByText("themes.remote.card.version")).toBeTruthy();
+    expect(within(confirmation).getAllByRole("button").map((button) => button.textContent)).toEqual([
+      "themes.install.confirm.cancel",
+      "themes.install.confirm.ok",
+    ]);
+    const primaryAction = within(confirmation).getByRole("button", { name: "themes.install.confirm.ok" });
+    expect(primaryAction.querySelector('svg[aria-hidden="true"]')).toBeTruthy();
+
+    fireEvent.click(primaryAction);
     expect(install).toHaveBeenCalledWith("example-theme", { version: "1.2.3" });
+  });
+
+  it("keeps local cancellation available if another theme operation starts", () => {
+    mocks.controller = controller({
+      snapshot: { status: "ready", pluginVersion: "2.1.2", backendVersion: 9, themes: [] },
+    });
+    const view = render(<ThemeDetailsModal themeId="example-theme" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "themes.action.install" }));
+    mocks.controller = controller({
+      snapshot: { status: "ready", pluginVersion: "2.1.2", backendVersion: 9, themes: [] },
+      operation: { kind: "activating", themeId: "another-theme" },
+    });
+    view.rerender(<ThemeDetailsModal themeId="example-theme" />);
+
+    const cancel = screen.getByRole("button", { name: "themes.install.confirm.cancel" });
+    expect((cancel as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(cancel);
+    expect(screen.getByRole("group", { name: "themes.install.ready" })).toBeTruthy();
+  });
+
+  it("uses Escape to restore the offer before closing the modal", () => {
+    const closeModal = vi.fn();
+    mocks.controller = controller({
+      snapshot: { status: "ready", pluginVersion: "2.1.2", backendVersion: 9, themes: [] },
+    });
+    render(<ThemeDetailsModal themeId="example-theme" closeModal={closeModal} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "themes.action.install" }));
+    fireEvent.click(screen.getByRole("button", { name: "modal-escape" }));
+    expect(screen.getByRole("group", { name: "themes.install.ready" })).toBeTruthy();
+    expect(closeModal).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "modal-escape" }));
+    expect(closeModal).toHaveBeenCalledOnce();
+  });
+
+  it("confirms an update with its exact published version", () => {
+    const install = vi.fn(async () => true);
+    const base = controller();
+    const installedTheme = {
+      id: "Example Theme", name: "Example Theme", displayName: "Example Theme", version: "1.2.2",
+      author: "Example Author", enabled: true, patches: [],
+    };
+    mocks.controller = controller({
+      snapshot: { status: "ready", pluginVersion: "2.1.2", backendVersion: 9, themes: [installedTheme] },
+      cards: [{
+        ...base.cards[0], installed: true, active: true, installedVersion: "1.2.2",
+        targetVersion: "1.2.3", updateAvailable: true, versionRelation: "update-available",
+        cssLoaderTheme: installedTheme,
+      }],
+      install,
+    });
+    render(<ThemeDetailsModal themeId="example-theme" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "themes.action.update" }));
+    const confirmation = screen.getByRole("group", { name: "themes.update.confirm.title" });
+    expect(within(confirmation).getByText("themes.remote.card.version")).toBeTruthy();
+    fireEvent.click(within(confirmation).getByRole("button", { name: "themes.update.confirm.ok" }));
+
+    expect(install).toHaveBeenCalledWith("example-theme", { version: "1.2.3" });
+  });
+
+  it("does not consume cancel after the confirmed version becomes stale", () => {
+    const closeModal = vi.fn();
+    mocks.controller = controller({
+      snapshot: { status: "ready", pluginVersion: "2.1.2", backendVersion: 9, themes: [] },
+    });
+    const view = render(<ThemeDetailsModal themeId="example-theme" closeModal={closeModal} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "themes.action.install" }));
+    expect(screen.getByRole("group", { name: "themes.install.confirm.title" })).toBeTruthy();
+
+    const next = controller({
+      snapshot: { status: "ready", pluginVersion: "2.1.2", backendVersion: 9, themes: [] },
+    });
+    mocks.controller = {
+      ...next,
+      cards: [{ ...next.cards[0], targetVersion: "1.2.4" }],
+    };
+    view.rerender(<ThemeDetailsModal themeId="example-theme" closeModal={closeModal} />);
+
+    expect(screen.queryByRole("group", { name: "themes.install.confirm.title" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "modal-cancel" }));
+    expect(closeModal).toHaveBeenCalledOnce();
   });
 
   it("renders installed patches and delegates activation/readback mutations", () => {
@@ -127,6 +304,8 @@ describe("ThemeDetailsModal", () => {
     });
     render(<ThemeDetailsModal themeId="example-theme" />);
 
+    expect(screen.getByText("themes.version.installed")).toBeTruthy();
+    expect(screen.getByText("themes.version.published")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "themes.action.activate" }));
     fireEvent.click(screen.getByRole("button", { name: "Motion" }));
     expect(activate).toHaveBeenCalledWith("example-theme");

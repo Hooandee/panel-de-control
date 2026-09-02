@@ -1,11 +1,12 @@
 import { Focusable } from "@decky/ui";
-import { type CSSProperties, useRef } from "react";
+import { type CSSProperties, useRef, useState } from "react";
 import { LuDownload, LuSparkles } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { localizePublishedText } from "../themes/remotePublication";
 import type { ThemeCardModel } from "../themes/state";
+import { themeCoverFor } from "../themes/themePresentation";
 import type { ThemesOperation } from "../themes/useThemes";
 
 interface Props {
@@ -15,7 +16,7 @@ interface Props {
 }
 
 const PREVIEW_STYLE: CSSProperties = {
-  height: 78,
+  height: 96,
   position: "relative",
   overflow: "hidden",
   borderRadius: theme.radius.sm,
@@ -29,7 +30,9 @@ const PREVIEW_LAYERS = [
   { left: "55%", top: 9, width: "19%", height: 55 },
 ] as const;
 
-function NeutralPreview() {
+function ThemePreview({ card }: { card: ThemeCardModel }) {
+  const cover = themeCoverFor(card.release);
+  const [failedCover, setFailedCover] = useState<string>();
   return (
     <div data-testid="theme-preview" aria-hidden style={PREVIEW_STYLE}>
       <div style={{ position: "absolute", inset: 10, borderRadius: 8, background: theme.color.surface }} />
@@ -46,6 +49,19 @@ function NeutralPreview() {
         />
       ))}
       <div style={{ position: "absolute", right: "8%", top: 15, width: "12%", height: 4, borderRadius: 4, background: theme.color.accent }} />
+      {cover && cover !== failedCover ? (
+        <img
+          data-testid="theme-preview-image"
+          src={cover}
+          alt=""
+          aria-hidden
+          draggable={false}
+          width={960}
+          height={240}
+          onError={() => setFailedCover(cover)}
+          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
+        />
+      ) : null}
     </div>
   );
 }
@@ -76,6 +92,11 @@ export function ThemeCard({ card, operation, onOpen }: Props) {
   const nameId = `theme-card-${card.id}-name`;
   const statusId = `theme-card-${card.id}-status`;
   const descriptionId = `theme-card-${card.id}-description`;
+  const versionLabel = !card.installable
+    ? "themes.remote.card.incompatible"
+    : card.updateAvailable
+      ? "themes.remote.card.update"
+      : "themes.remote.card.version";
   const activate = () => {
     if (busy || activating.current) return;
     activating.current = true;
@@ -101,7 +122,7 @@ export function ThemeCard({ card, operation, onOpen }: Props) {
       } as CSSProperties}
     >
       <div style={{ ...theme.card, padding: theme.space.sm, opacity: busy ? 0.62 : 1, overflow: "hidden" }}>
-        <NeutralPreview />
+        <ThemePreview card={card} />
         <div style={{ padding: `${theme.space.sm}px ${theme.space.xs}px ${theme.space.xs}px` }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: theme.space.sm }}>
             <span id={nameId} style={{ color: theme.color.textPrimary, fontSize: theme.font.body, fontWeight: 750, minWidth: 0, overflowWrap: "anywhere" }}>
@@ -113,8 +134,7 @@ export function ThemeCard({ card, operation, onOpen }: Props) {
             {description}
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 5, color: card.installable ? theme.color.accent : theme.color.warn, fontSize: theme.font.caption, fontWeight: 700 }}>
-            <span>{t(card.installable ? "themes.remote.card.available" : "themes.remote.card.incompatible", { version: card.release.publishedVersion })}</span>
-            {card.updateAvailable ? <span>{t("themes.state.updateAvailable")}</span> : null}
+            <span>{t(versionLabel, { version: card.release.publishedVersion })}</span>
           </div>
         </div>
       </div>
