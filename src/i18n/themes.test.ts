@@ -41,4 +41,12 @@ describe("theme translations", () => {
     expect(translateForLang("en", "themes.version.published", { version: "v1.2.3" }))
       .toBe("Published: v1.2.3");
   });
+
+  it.each([
+    ["es", "themes.remote.card.version", { version: "1.2.3" }, "Versión: v1.2.3"],
+    ["en", "themes.remote.card.update", { version: "1.2.3" }, "Update: v1.2.3"],
+    ["it", "themes.install.confirm.title", { name: "HOOANDEE" }, "Installare HOOANDEE?"],
+  ] as const)("formats simplified theme copy in %s", (lang, key, values, expected) => {
+    expect(translateForLang(lang, key, values)).toBe(expected);
+  });
 });

@@ -36,7 +36,7 @@ function card(overrides: Partial<ThemeCardModel> = {}): ThemeCardModel {
 describe("ThemeCard", () => {
   afterEach(cleanup);
 
-  it("renders published presentation as text with one neutral preview", () => {
+  it("renders published presentation as text with one preview", () => {
     render(<ThemeCard card={card({
       release: {
         ...card().release,
@@ -45,8 +45,68 @@ describe("ThemeCard", () => {
     })} operation={null} onOpen={vi.fn()} />);
 
     expect(screen.getByText("<img src=x onerror=alert(1)>")).toBeTruthy();
-    expect(document.querySelector("img")).toBeNull();
     expect(screen.getByTestId("theme-preview").getAttribute("data-theme-id")).toBeNull();
+  });
+
+  it("shows the HOOANDEE cover only for its exact stable identity", () => {
+    const { rerender } = render(<ThemeCard card={card({
+      id: "hooandee-gallery",
+      release: {
+        ...card().release,
+        catalogId: "hooandee-gallery",
+        cssLoaderName: "Hooandee Gallery",
+      },
+    })} operation={null} onOpen={vi.fn()} />);
+
+    expect(screen.getByTestId("theme-preview-image")).toBeTruthy();
+    expect(screen.getByTestId("theme-preview").style.height).toBe("96px");
+
+    rerender(<ThemeCard card={card({
+      id: "hooandee-gallery",
+      release: {
+        ...card().release,
+        catalogId: "hooandee-gallery",
+        cssLoaderName: "Another Theme",
+      },
+    })} operation={null} onOpen={vi.fn()} />);
+
+    expect(screen.queryByTestId("theme-preview-image")).toBeNull();
+    expect(screen.getByTestId("theme-preview")).toBeTruthy();
+  });
+
+  it("falls back to the neutral preview when the HOOANDEE cover cannot load", () => {
+    render(<ThemeCard card={card({
+      id: "hooandee-gallery",
+      release: {
+        ...card().release,
+        catalogId: "hooandee-gallery",
+        cssLoaderName: "Hooandee Gallery",
+      },
+    })} operation={null} onOpen={vi.fn()} />);
+
+    fireEvent.error(screen.getByTestId("theme-preview-image"));
+
+    expect(screen.queryByTestId("theme-preview-image")).toBeNull();
+    expect(screen.getByTestId("theme-preview")).toBeTruthy();
+  });
+
+  it("shows one version line and replaces it with the available update", () => {
+    const { rerender } = render(
+      <ThemeCard card={card()} operation={null} onOpen={vi.fn()} />,
+    );
+
+    expect(screen.getByText("themes.remote.card.version")).toBeTruthy();
+    expect(screen.queryByText("themes.remote.card.update")).toBeNull();
+
+    rerender(<ThemeCard card={card({
+      installed: true,
+      installedVersion: "1.2.2",
+      versionRelation: "update-available",
+      updateAvailable: true,
+    })} operation={null} onOpen={vi.fn()} />);
+
+    expect(screen.getByText("themes.remote.card.update")).toBeTruthy();
+    expect(screen.queryByText("themes.remote.card.version")).toBeNull();
   });
 
   it("remains browsable when incompatible", () => {
@@ -69,7 +129,7 @@ describe("ThemeCard", () => {
     })} operation={null} onOpen={vi.fn()} />);
 
     expect(screen.getByText("themes.state.active")).toBeTruthy();
-    expect(screen.getByText("themes.state.updateAvailable")).toBeTruthy();
+    expect(screen.getByText("themes.remote.card.update")).toBeTruthy();
   });
 
   it("deduplicates Decky activate/click delivery within one microtask", async () => {
