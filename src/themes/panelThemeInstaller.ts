@@ -10,6 +10,7 @@ export interface ThemeInstallResult {
 export interface ThemeInstallHost {
   prepareRemote(themeId: string, expectedVersion: string): Promise<unknown>;
   commit(transaction: string): Promise<unknown>;
+  discard(catalogId: string): Promise<unknown>;
   rollback(transaction: string): Promise<unknown>;
   recoveries(): Promise<unknown>;
   acknowledge(transaction: string): Promise<unknown>;
@@ -79,6 +80,25 @@ export class PanelThemeInstaller {
 
   async commit(transaction: string): Promise<void> {
     await this.finish("commit", transaction, "committed");
+  }
+
+  async discardReceipt(catalogId: string): Promise<void> {
+    const response = await this.host.discard(catalogId);
+    if (!isRecord(response) || typeof response.ok !== "boolean" || !nonEmptyString(response.code)) {
+      throw new ThemeInstallError(
+        "malformed_response",
+        "Panel returned an invalid theme receipt discard result",
+      );
+    }
+    if (!response.ok) {
+      throw new ThemeInstallError(response.code, "Theme receipt discard failed");
+    }
+    if (response.code !== "discarded" && response.code !== "absent") {
+      throw new ThemeInstallError(
+        "malformed_response",
+        "Panel returned an invalid theme receipt discard result",
+      );
+    }
   }
 
   async rollback(transaction: string): Promise<void> {

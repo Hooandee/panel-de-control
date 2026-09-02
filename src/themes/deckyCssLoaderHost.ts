@@ -46,6 +46,9 @@ function legacyArguments(method: string, args: readonly unknown[]): Readonly<Rec
         return { name: args[0], state: args[1], set_deps: args[2], set_deps_value: args[3] };
       }
       break;
+    case "delete_theme":
+      if (args.length === 1) return { themeName: args[0] };
+      break;
     case "set_patch_of_theme":
       if (args.length === 3) return { themeName: args[0], patchName: args[1], value: args[2] };
       break;

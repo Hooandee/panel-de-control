@@ -27,7 +27,7 @@ export function configurePanelThemeInstallHost(host: ThemeInstallHost): () => vo
 
 export function createPanelThemeInstaller(): PanelThemeInstaller {
   const call = (
-    operation: "commit" | "rollback" | "acknowledge",
+    operation: "commit" | "discard" | "rollback" | "acknowledge",
     value: string,
   ): Promise<unknown> => requireConfiguredHost()[operation](value);
   return new PanelThemeInstaller({
@@ -36,6 +36,7 @@ export function createPanelThemeInstaller(): PanelThemeInstaller {
       expectedVersion,
     ),
     commit: (transaction) => call("commit", transaction),
+    discard: (catalogId) => call("discard", catalogId),
     rollback: (transaction) => call("rollback", transaction),
     recoveries: () => requireConfiguredHost().recoveries(),
     acknowledge: (transaction) => call("acknowledge", transaction),

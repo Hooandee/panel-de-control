@@ -99,6 +99,80 @@ def test_commit_and_rollback_theme_rpcs_use_the_opaque_transaction_token(theme_r
     ]
 
 
+def test_discard_theme_receipt_rpc_uses_only_backend_derived_paths(theme_rpc, monkeypatch):
+    main, plugin, fake = theme_rpc
+    calls = []
+    monkeypatch.setattr(
+        main.theme_packages,
+        "discard_orphaned_theme_receipt",
+        lambda catalog_id, root, receipts_path: calls.append(
+            (catalog_id, root, receipts_path)
+        ) or {"ok": True, "code": "discarded"},
+    )
+
+    result = asyncio.run(plugin.discard_theme_extension_receipt("example-theme"))
+
+    assert result == {"ok": True, "code": "discarded"}
+    assert calls == [(
+        "example-theme",
+        pathlib.Path(fake.DECKY_USER_HOME) / "homebrew" / "themes",
+        pathlib.Path(fake.DECKY_PLUGIN_SETTINGS_DIR) / "theme-extension-receipts.json",
+    )]
+
+
+@pytest.mark.parametrize("catalog_id", ["../theme", "", None])
+def test_discard_theme_receipt_rpc_rejects_invalid_identity_before_offload(
+    theme_rpc,
+    catalog_id,
+):
+    _, plugin, _ = theme_rpc
+
+    async def fail_if_offloaded(_call):
+        pytest.fail("invalid identity reached theme offload")
+
+    plugin._offload_theme_call = fail_if_offloaded
+
+    result = asyncio.run(plugin.discard_theme_extension_receipt(catalog_id))
+
+    assert result == {"ok": False, "code": "unsupported_theme"}
+
+
+def test_discard_theme_receipt_rpc_sanitizes_typed_errors(theme_rpc, monkeypatch):
+    main, plugin, _ = theme_rpc
+
+    def fail(*_args):
+        raise main.theme_packages.ThemePackageError(
+            "theme_present",
+            "/private/theme/path is still present",
+        )
+
+    monkeypatch.setattr(main.theme_packages, "discard_orphaned_theme_receipt", fail)
+
+    result = asyncio.run(plugin.discard_theme_extension_receipt("example-theme"))
+
+    assert result == {"ok": False, "code": "theme_present"}
+
+
+def test_discard_theme_receipt_rpc_sanitizes_unexpected_errors_and_warns(
+    theme_rpc,
+    monkeypatch,
+):
+    main, plugin, fake = theme_rpc
+    warnings = []
+    fake.logger.warning = lambda *args: warnings.append(args)
+
+    def fail(*_args):
+        raise RuntimeError("/private/theme/path failed")
+
+    monkeypatch.setattr(main.theme_packages, "discard_orphaned_theme_receipt", fail)
+
+    result = asyncio.run(plugin.discard_theme_extension_receipt("example-theme"))
+
+    assert result == {"ok": False, "code": "discard_failed"}
+    assert len(warnings) == 1
+    assert "/private/theme/path" not in repr(warnings)
+
+
 def test_theme_root_prefers_decky_home(theme_rpc, monkeypatch):
     _, plugin, _ = theme_rpc
     monkeypatch.setenv("DECKY_HOME", "/srv/decky")

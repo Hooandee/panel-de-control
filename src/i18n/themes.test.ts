@@ -8,7 +8,7 @@ vi.mock("../system/pdcStorage", () => ({
 import { DICTS, translateForLang } from "./index";
 
 const GENERIC_THEME_NAMESPACES = new Set([
-  "action", "catalog", "cssLoader", "details", "engine", "group", "install", "loading",
+  "action", "catalog", "cssLoader", "delete", "details", "engine", "group", "install", "loading",
   "operation", "patches", "recovery", "remote", "retry", "state", "title",
   "update", "version",
 ]);
@@ -46,6 +46,7 @@ describe("theme translations", () => {
     ["es", "themes.remote.card.version", { version: "1.2.3" }, "Versión: v1.2.3"],
     ["en", "themes.remote.card.update", { version: "1.2.3" }, "Update: v1.2.3"],
     ["it", "themes.install.confirm.title", { name: "HOOANDEE" }, "Installare HOOANDEE?"],
+    ["it", "themes.delete.confirm.title", { name: "HOOANDEE" }, "Rimuovere HOOANDEE?"],
   ] as const)("formats simplified theme copy in %s", (lang, key, values, expected) => {
     expect(translateForLang(lang, key, values)).toBe(expected);
   });

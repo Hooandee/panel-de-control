@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { ThemeActivationError, ThemeActivator, type ThemeActivationAdapter } from "./activation";
-import type { CssLoaderReadySnapshot } from "./cssLoaderAdapter";
+import { CssLoaderOperationError, type CssLoaderReadySnapshot } from "./cssLoaderAdapter";
 import type { CssLoaderTheme } from "./cssLoaderTypes";
 import type { PublishedThemeRelease, ThemePublicationState } from "./remotePublication";
 import { ThemesClient, type ThemesDependencies } from "./themesClient";
@@ -22,6 +22,19 @@ const PUBLICATION: ThemePublicationState = { status: "published", checkedAt: 10,
 const READY: CssLoaderReadySnapshot = {
   status: "ready", pluginVersion: "2.1.2", backendVersion: 9, themes: [],
 };
+const INSTALLED_THEME: CssLoaderTheme = {
+  id: "Example Theme",
+  name: "Example Theme",
+  displayName: "Example Theme",
+  version: "1.2.3",
+  author: "Example Author",
+  enabled: true,
+  patches: [],
+};
+const INSTALLED_READY: CssLoaderReadySnapshot = {
+  ...READY,
+  themes: [INSTALLED_THEME],
+};
 
 function dependencies(overrides: Partial<ThemesDependencies> = {}): ThemesDependencies {
   const base: ThemesDependencies = {
@@ -32,12 +45,14 @@ function dependencies(overrides: Partial<ThemesDependencies> = {}): ThemesDepend
       restoreThemeSnapshot: vi.fn(async () => READY),
       reconcileRecoveredThemes: vi.fn(async () => READY),
       setPatchValue: vi.fn(async () => READY),
+      deleteTheme: vi.fn(async () => READY),
     },
     installer: {
       prepare: vi.fn(async () => ({
         themeId: "example-theme", themeName: "Example Theme", version: "1.2.3", transaction: "token",
       })),
       commit: vi.fn(async () => undefined),
+      discardReceipt: vi.fn(async () => undefined),
       rollback: vi.fn(async () => undefined),
       pendingRecoveries: vi.fn(async () => []),
       acknowledgeRollback: vi.fn(async () => undefined),
@@ -52,6 +67,143 @@ function dependencies(overrides: Partial<ThemesDependencies> = {}): ThemesDepend
 }
 
 describe("ThemesClient", () => {
+  it("publishes the confirmed snapshot after uninstalling a catalog theme", async () => {
+    const deps = dependencies();
+    deps.adapter.inspect = vi.fn(async () => INSTALLED_READY);
+    deps.adapter.deleteTheme = vi.fn(async () => READY);
+    const client = new ThemesClient(deps);
+    await client.refresh();
+
+    await expect(client.uninstall("example-theme")).resolves.toBe(true);
+
+    expect(client.getSnapshot()).toMatchObject({
+      snapshot: READY,
+      operation: null,
+      error: null,
+    });
+    expect(deps.adapter.deleteTheme).toHaveBeenCalledWith("Example Theme");
+    expect(deps.installer.discardReceipt).toHaveBeenCalledWith("example-theme");
+  });
+
+  it("waits for CSS Loader confirmation before discarding the exact receipt", async () => {
+    let confirmDeletion!: (snapshot: CssLoaderReadySnapshot) => void;
+    const order: string[] = [];
+    const deps = dependencies();
+    deps.adapter.inspect = vi.fn(async () => INSTALLED_READY);
+    deps.adapter.deleteTheme = vi.fn(() => {
+      order.push("delete");
+      return new Promise<CssLoaderReadySnapshot>((done) => { confirmDeletion = done; });
+    });
+    deps.installer.discardReceipt = vi.fn(async () => { order.push("discard"); });
+    const client = new ThemesClient(deps);
+    await client.refresh();
+
+    const uninstalling = client.uninstall("example-theme");
+    await vi.waitFor(() => expect(order).toEqual(["delete"]));
+
+    expect(deps.installer.discardReceipt).not.toHaveBeenCalled();
+    confirmDeletion(READY);
+    await expect(uninstalling).resolves.toBe(true);
+    expect(order).toEqual(["delete", "discard"]);
+    expect(deps.installer.discardReceipt).toHaveBeenCalledWith("example-theme");
+  });
+
+  it("returns false without mutations when the catalog theme is not installed", async () => {
+    const deps = dependencies();
+    const client = new ThemesClient(deps);
+    await client.refresh();
+
+    await expect(client.uninstall("example-theme")).resolves.toBe(false);
+
+    expect(deps.adapter.deleteTheme).not.toHaveBeenCalled();
+    expect(deps.installer.discardReceipt).not.toHaveBeenCalled();
+  });
+
+  it("returns false without mutations when CSS Loader is not ready", async () => {
+    const deps = dependencies();
+    deps.adapter.inspect = vi.fn(async () => ({ status: "disabled" as const, themes: [] }));
+    const client = new ThemesClient(deps);
+    await client.refresh();
+
+    await expect(client.uninstall("example-theme")).resolves.toBe(false);
+
+    expect(deps.adapter.deleteTheme).not.toHaveBeenCalled();
+    expect(deps.installer.discardReceipt).not.toHaveBeenCalled();
+  });
+
+  it("returns false without mutations while recovery is blocked", async () => {
+    const deps = dependencies();
+    deps.adapter.inspect = vi.fn(async () => INSTALLED_READY);
+    deps.activator.reconcilePendingRecovery = vi.fn(async () => {
+      throw new ThemeActivationError("rollback_failed", "still recovering", true);
+    });
+    const client = new ThemesClient(deps);
+    await client.refresh();
+    expect(client.getSnapshot().recoveryBlocked).toBe(true);
+
+    await expect(client.uninstall("example-theme")).resolves.toBe(false);
+
+    expect(deps.adapter.deleteTheme).not.toHaveBeenCalled();
+    expect(deps.installer.discardReceipt).not.toHaveBeenCalled();
+  });
+
+  it("keeps a confirmed uninstall successful when receipt cleanup fails", async () => {
+    const deps = dependencies();
+    deps.adapter.inspect = vi.fn(async () => INSTALLED_READY);
+    deps.adapter.deleteTheme = vi.fn(async () => READY);
+    deps.installer.discardReceipt = vi.fn(async () => { throw new Error("cleanup unavailable"); });
+    const client = new ThemesClient(deps);
+    await client.refresh();
+
+    await expect(client.uninstall("example-theme")).resolves.toBe(true);
+    expect(client.getSnapshot()).toMatchObject({ snapshot: READY, error: null });
+  });
+
+  it("publishes a verification failure without discarding the receipt", async () => {
+    const deps = dependencies();
+    deps.adapter.inspect = vi.fn(async () => INSTALLED_READY);
+    deps.adapter.deleteTheme = vi.fn(async () => {
+      throw new CssLoaderOperationError(
+        "verification_failed",
+        "CSS Loader did not confirm the removal of Example Theme",
+      );
+    });
+    const client = new ThemesClient(deps);
+    await client.refresh();
+
+    await expect(client.uninstall("example-theme")).resolves.toBe(false);
+
+    expect(deps.installer.discardReceipt).not.toHaveBeenCalled();
+    expect(client.getSnapshot()).toMatchObject({
+      snapshot: INSTALLED_READY,
+      error: "CSS Loader did not confirm the removal of Example Theme",
+    });
+  });
+
+  it("blocks another mutation while an uninstall is pending", async () => {
+    let confirmDeletion!: (snapshot: CssLoaderReadySnapshot) => void;
+    const deps = dependencies();
+    deps.adapter.inspect = vi.fn(async () => INSTALLED_READY);
+    deps.adapter.deleteTheme = vi.fn(() => (
+      new Promise<CssLoaderReadySnapshot>((done) => { confirmDeletion = done; })
+    ));
+    const client = new ThemesClient(deps);
+    await client.refresh();
+
+    const uninstalling = client.uninstall("example-theme");
+    await vi.waitFor(() => expect(deps.adapter.deleteTheme).toHaveBeenCalledOnce());
+
+    expect(client.getSnapshot().operation).toEqual({
+      kind: "uninstalling",
+      themeId: "example-theme",
+    });
+    await expect(client.activate("example-theme")).resolves.toBe(false);
+    expect(deps.activator.activate).not.toHaveBeenCalled();
+
+    confirmDeletion(READY);
+    await expect(uninstalling).resolves.toBe(true);
+  });
+
   it("starts and deduplicates publication discovery even when CSS Loader is missing", async () => {
     let resolve!: (value: ThemePublicationState) => void;
     const check = vi.fn(() => new Promise<ThemePublicationState>((done) => { resolve = done; }));

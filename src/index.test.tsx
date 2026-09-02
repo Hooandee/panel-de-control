@@ -4,6 +4,9 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const registeredView = vi.hoisted(() => ({ content: null as ReactNode }));
+const configuredThemeInstallHost = vi.hoisted(() => ({
+  current: null as null | Record<string, unknown>,
+}));
 
 vi.mock("@decky/api", () => ({ definePlugin: (factory: unknown) => factory }));
 vi.mock("./api", () => ({
@@ -12,6 +15,7 @@ vi.mock("./api", () => ({
   beginThemeActivation: vi.fn(),
   checkThemeReleases: vi.fn(),
   commitThemeInstall: vi.fn(),
+  discardThemeExtensionReceipt: vi.fn(),
   getThemeInstallRecoveries: vi.fn(),
   getThemeActivationRecovery: vi.fn(),
   listThemeExtensions: vi.fn(),
@@ -63,7 +67,12 @@ vi.mock("./pluginListLocalizer", () => ({ startPluginListLocalizer: () => () => 
 vi.mock("./system/pdcStorage", () => ({ onPrefsHealed: () => () => {} }));
 vi.mock("./system/uiActivity", () => ({ shutdownUiActivity: vi.fn() }));
 vi.mock("./themes/deckyCssLoaderHost", () => ({ configureDeckyCssLoaderHost: () => () => {} }));
-vi.mock("./themes/panelThemeInstallHost", () => ({ configurePanelThemeInstallHost: () => () => {} }));
+vi.mock("./themes/panelThemeInstallHost", () => ({
+  configurePanelThemeInstallHost: (host: Record<string, unknown>) => {
+    configuredThemeInstallHost.current = host;
+    return () => {};
+  },
+}));
 vi.mock("./themes/panelThemeActivationJournal", () => ({
   configurePanelThemeActivationJournalHost: () => () => {},
 }));
@@ -73,12 +82,14 @@ vi.mock("./themes/runtime/start", () => ({ startThemesRuntime: () => () => {} })
 vi.mock("./themes/themesClient", () => ({ createProductionThemesDependencies: () => ({}) }));
 vi.mock("./themes/useThemes", () => ({ getThemesClient: () => ({}) }));
 
+import { discardThemeExtensionReceipt } from "./api";
 import createPlugin from "./index";
 
 describe("QAM plugin surfaces", () => {
   afterEach(() => {
     cleanup();
     registeredView.content = null;
+    configuredThemeInstallHost.current = null;
   });
 
   it("registers a functional ControlCenter in the direct QAM entry", () => {
@@ -95,5 +106,11 @@ describe("QAM plugin surfaces", () => {
     render(<>{plugin.content}</>);
 
     expect(screen.getByTestId("control-center")).toBeTruthy();
+  });
+
+  it("wires receipt discard to the scoped theme install host", () => {
+    (createPlugin as unknown as () => { content: ReactNode })();
+
+    expect(configuredThemeInstallHost.current?.discard).toBe(discardThemeExtensionReceipt);
   });
 });

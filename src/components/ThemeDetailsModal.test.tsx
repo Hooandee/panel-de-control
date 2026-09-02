@@ -3,9 +3,15 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { theme } from "../theme";
 import type { ThemesController } from "../themes/useThemes";
 
-const mocks = vi.hoisted(() => ({ controller: null as ThemesController | null, navigate: vi.fn(), showModal: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  controller: null as ThemesController | null,
+  focusElement: vi.fn((element: HTMLElement | null) => element?.focus()),
+  navigate: vi.fn(),
+  showModal: vi.fn(),
+}));
 vi.mock("@decky/ui", () => ({
   ModalRoot: ({ children, onCancel, onEscKeypress, bAllowFullSize }: { children?: ReactNode; onCancel?: () => void; onEscKeypress?: () => void; bAllowFullSize?: boolean }) => (
     <div data-testid="modal-root" data-allow-full-size={bAllowFullSize ? "true" : "false"}>
@@ -21,6 +27,7 @@ vi.mock("@decky/ui", () => ({
   DialogButton: ({ children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) => (
     <button {...props}>{children}</button>
   ),
+  getFocusNavController: () => ({ FocusElement: mocks.focusElement }),
   Navigation: { Navigate: mocks.navigate },
   showModal: mocks.showModal,
 }));
@@ -57,11 +64,31 @@ function controller(overrides: Partial<ThemesController> = {}): ThemesController
     refresh: vi.fn(async () => {}),
     refreshPublication: vi.fn(async () => {}),
     install: vi.fn(async () => true),
+    uninstall: vi.fn(async () => true),
     activate: vi.fn(async () => true),
     deactivate: vi.fn(async () => true),
     setPatch: vi.fn(async () => true),
     ...overrides,
   };
+}
+
+function installedController(overrides: Partial<ThemesController> = {}): ThemesController {
+  const base = controller();
+  const installedTheme = {
+    id: "Example Theme", name: "Example Theme", displayName: "Example Theme", version: "1.2.3",
+    author: "Example Author", enabled: false, patches: [{
+      name: "Motion", defaultValue: "Yes", value: "Yes", options: ["No", "Yes"],
+      type: "checkbox" as const, rawType: "checkbox",
+    }],
+  };
+  return controller({
+    snapshot: { status: "ready", pluginVersion: "2.1.2", backendVersion: 9, themes: [installedTheme] },
+    cards: [{
+      ...base.cards[0], installed: true, installedVersion: "1.2.3",
+      cssLoaderTheme: installedTheme, versionRelation: "current",
+    }],
+    ...overrides,
+  });
 }
 
 describe("ThemeDetailsModal", () => {
@@ -283,6 +310,177 @@ describe("ThemeDetailsModal", () => {
     expect(screen.queryByRole("group", { name: "themes.install.confirm.title" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "modal-cancel" }));
     expect(closeModal).toHaveBeenCalledOnce();
+  });
+
+  it("does not offer install or removal while CSS Loader is not ready", () => {
+    mocks.controller = controller();
+    render(<ThemeDetailsModal themeId="example-theme" />);
+
+    expect(screen.queryByRole("button", { name: "themes.action.install" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "themes.action.delete" })).toBeNull();
+  });
+
+  it("places a muted removal action after the installed theme patches", () => {
+    mocks.controller = installedController();
+    render(<ThemeDetailsModal themeId="example-theme" />);
+
+    const patch = screen.getByRole("button", { name: "Motion" });
+    const remove = screen.getByRole("button", { name: "themes.action.delete" });
+    expect(patch.compareDocumentPosition(remove) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(remove.parentElement?.style.marginBottom).toBe(`${theme.space.sm}px`);
+    expect(remove.style.color).toBe("rgba(255, 255, 255, 0.45)");
+    expect(remove.querySelector('svg[aria-hidden="true"]')).toBeTruthy();
+  });
+
+  it("disables removal during another operation or blocked recovery", () => {
+    mocks.controller = installedController({ operation: { kind: "activating", themeId: "another-theme" } });
+    const view = render(<ThemeDetailsModal themeId="example-theme" />);
+    expect((screen.getByRole("button", { name: "themes.action.delete" }) as HTMLButtonElement).disabled).toBe(true);
+
+    mocks.controller = installedController({ recoveryBlocked: true });
+    view.rerender(<ThemeDetailsModal themeId="example-theme" />);
+    expect((screen.getByRole("button", { name: "themes.action.delete" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("shows the deleting state for the current theme", () => {
+    mocks.controller = installedController({ operation: { kind: "uninstalling", themeId: "example-theme" } });
+    render(<ThemeDetailsModal themeId="example-theme" />);
+
+    const remove = screen.getByRole("button", { name: "themes.action.deleting" });
+    expect((remove as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("replaces removal with a destructive confirmation in the same final position", () => {
+    mocks.controller = installedController();
+    render(<ThemeDetailsModal themeId="example-theme" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "themes.action.delete" }));
+
+    expect(screen.queryByRole("button", { name: "themes.action.delete" })).toBeNull();
+    const patch = screen.getByRole("button", { name: "Motion" });
+    const confirmation = screen.getByRole("group", { name: "themes.delete.confirm.title" });
+    expect(patch.compareDocumentPosition(confirmation) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const primary = within(confirmation).getByRole("button", { name: "themes.delete.confirm.ok" });
+    expect(primary.style.background).toBe(theme.color.warn);
+    expect(within(confirmation).getByRole("button", { name: "themes.install.confirm.cancel" })).toBeTruthy();
+  });
+
+  it("shows the destructive icon only inside the confirmation CTA", () => {
+    mocks.controller = installedController();
+    render(<ThemeDetailsModal themeId="example-theme" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "themes.action.delete" }));
+
+    const confirmation = screen.getByRole("group", { name: "themes.delete.confirm.title" });
+    const primary = within(confirmation).getByRole("button", { name: "themes.delete.confirm.ok" });
+    expect(confirmation.querySelectorAll("svg")).toHaveLength(1);
+    expect(primary.querySelector("svg")).toBeTruthy();
+  });
+
+  it("centers the destructive confirmation actions without the removed icon offset", () => {
+    mocks.controller = installedController();
+    render(<ThemeDetailsModal themeId="example-theme" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "themes.action.delete" }));
+
+    const confirmation = screen.getByRole("group", { name: "themes.delete.confirm.title" });
+    const primary = within(confirmation).getByRole("button", { name: "themes.delete.confirm.ok" });
+    expect(primary.parentElement?.style.marginLeft).toBe("0px");
+  });
+
+  it("uses Escape to restore removal before closing the modal", () => {
+    const closeModal = vi.fn();
+    mocks.controller = installedController();
+    render(<ThemeDetailsModal themeId="example-theme" closeModal={closeModal} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "themes.action.delete" }));
+    fireEvent.click(screen.getByRole("button", { name: "modal-escape" }));
+    expect(screen.getByRole("button", { name: "themes.action.delete" })).toBeTruthy();
+    expect(closeModal).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "modal-escape" }));
+    expect(closeModal).toHaveBeenCalledOnce();
+  });
+
+  it("confirms removal exactly once with the catalog theme id", () => {
+    const uninstall = vi.fn(async () => true);
+    mocks.controller = installedController({ uninstall });
+    render(<ThemeDetailsModal themeId="example-theme" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "themes.action.delete" }));
+    fireEvent.click(screen.getByRole("button", { name: "themes.delete.confirm.ok" }));
+
+    expect(uninstall).toHaveBeenCalledOnce();
+    expect(uninstall).toHaveBeenCalledWith("example-theme");
+  });
+
+  it("keeps the modal open and moves gamepad focus to install after removal", () => {
+    const uninstall = vi.fn(async () => true);
+    mocks.controller = installedController({ uninstall });
+    const view = render(<ThemeDetailsModal themeId="example-theme" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "themes.action.delete" }));
+    fireEvent.click(screen.getByRole("button", { name: "themes.delete.confirm.ok" }));
+    const next = controller({
+      snapshot: { status: "ready", pluginVersion: "2.1.2", backendVersion: 9, themes: [] },
+    });
+    mocks.controller = next;
+    view.rerender(<ThemeDetailsModal themeId="example-theme" />);
+
+    const install = screen.getByRole("button", { name: "themes.action.install" });
+    expect(screen.getByTestId("modal-root")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "themes.action.delete" })).toBeNull();
+    expect(mocks.focusElement).toHaveBeenLastCalledWith(install);
+    expect(document.activeElement).toBe(install);
+  });
+
+  it("moves focus to the heading without offering an incompatible theme after removal", () => {
+    const installed = installedController();
+    const incompatibleRelease = {
+      ...installed.cards[0].release,
+      compatibility: "incompatible-panel" as const,
+    };
+    mocks.controller = {
+      ...installed,
+      cards: [{
+        ...installed.cards[0], release: incompatibleRelease, installable: false,
+        targetVersion: undefined, versionRelation: "unknown",
+      }],
+      publication: { status: "published", checkedAt: 10, themes: [incompatibleRelease] },
+    };
+    const view = render(<ThemeDetailsModal themeId="example-theme" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "themes.action.delete" }));
+    fireEvent.click(screen.getByRole("button", { name: "themes.delete.confirm.ok" }));
+    const next = controller({
+      snapshot: { status: "ready", pluginVersion: "2.1.2", backendVersion: 9, themes: [] },
+      cards: [{
+        ...controller().cards[0], release: incompatibleRelease, installable: false,
+        targetVersion: undefined, versionRelation: "not-installed",
+      }],
+      publication: { status: "published", checkedAt: 10, themes: [incompatibleRelease] },
+    });
+    mocks.controller = next;
+    view.rerender(<ThemeDetailsModal themeId="example-theme" />);
+
+    const heading = screen.getByRole("heading", { name: "Example Theme" });
+    expect(screen.queryByRole("button", { name: "themes.action.install" })).toBeNull();
+    expect(mocks.focusElement).toHaveBeenLastCalledWith(heading);
+    expect(document.activeElement).toBe(heading);
+  });
+
+  it("shows the existing failure warning and restores removal", () => {
+    const uninstall = vi.fn(async () => false);
+    mocks.controller = installedController({ uninstall });
+    const view = render(<ThemeDetailsModal themeId="example-theme" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "themes.action.delete" }));
+    fireEvent.click(screen.getByRole("button", { name: "themes.delete.confirm.ok" }));
+    mocks.controller = installedController({ error: "CSS Loader did not confirm removal", uninstall });
+    view.rerender(<ThemeDetailsModal themeId="example-theme" />);
+
+    expect(screen.getByRole("alert").textContent).toContain("themes.operation.failed");
+    expect((screen.getByRole("button", { name: "themes.action.delete" }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it("renders installed patches and delegates activation/readback mutations", () => {

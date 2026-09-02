@@ -63,6 +63,41 @@ describe("createDeckyCssLoaderHost", () => {
     );
   });
 
+  it("passes delete_theme through the exact CSS Loader keyword contract", async () => {
+    const call = vi.fn(async () => ({
+      success: true,
+      result: { success: true, message: "Success" },
+    }));
+    const host = createDeckyCssLoaderHost({
+      DeckyPluginLoader: { deckyState: { publicState: () => ({ installedPlugins: [], disabledPlugins: [] }) } },
+      DeckyBackend: { call },
+    });
+
+    await expect(host.call("delete_theme", "Example Theme")).resolves.toEqual({
+      success: true,
+      message: "Success",
+    });
+    expect(call).toHaveBeenCalledWith(
+      "loader/call_legacy_plugin_method",
+      "CSS Loader",
+      "delete_theme",
+      { themeName: "Example Theme" },
+    );
+  });
+
+  it("rejects every unsupported delete_theme arity before calling Decky", () => {
+    const call = vi.fn();
+    const host = createDeckyCssLoaderHost({ DeckyBackend: { call } });
+
+    expect(() => host.call("delete_theme")).toThrow(
+      "Unsupported CSS Loader call shape: delete_theme",
+    );
+    expect(() => host.call("delete_theme", "Example Theme", "extra")).toThrow(
+      "Unsupported CSS Loader call shape: delete_theme",
+    );
+    expect(call).not.toHaveBeenCalled();
+  });
+
   it("keeps using the Decky realm captured during plugin initialization", async () => {
     const call = vi.fn(async () => ({ success: true, result: 9 }));
     const deckyRealm = {

@@ -25,6 +25,7 @@ export interface ThemesController {
   refresh(): Promise<void>;
   refreshPublication(): Promise<void>;
   install(themeId: string, confirmation?: ThemeInstallConfirmation): Promise<boolean>;
+  uninstall(themeId: string): Promise<boolean>;
   activate(themeId: string): Promise<boolean>;
   deactivate(themeId: string): Promise<boolean>;
   setPatch(themeId: string, patchName: string, value: string): Promise<boolean>;
@@ -56,6 +57,7 @@ export function useThemes(dependencies?: ThemesDependencies): ThemesController {
     refresh: client.refresh,
     refreshPublication: client.refreshPublication,
     install: client.install,
+    uninstall: client.uninstall,
     activate: client.activate,
     deactivate: client.deactivate,
     setPatch: client.setPatch,

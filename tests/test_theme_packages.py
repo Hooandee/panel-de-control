@@ -197,6 +197,14 @@ def _recover_theme_transactions(themes_root):
     )
 
 
+def _discard_theme_receipt(catalog_id: str, themes_root: Path):
+    return theme_packages.discard_orphaned_theme_receipt(
+        catalog_id,
+        themes_root,
+        _receipts(themes_root),
+    )
+
+
 def test_theme_mutations_share_a_nonblocking_process_lock(
     tmp_path: Path,
 ) -> None:
@@ -574,6 +582,103 @@ def test_install_archive_recovers_after_css_loader_deletes_a_managed_theme(tmp_p
         "size": len(EXTENSION_SOURCE),
         "version": THEME_VERSION,
     }]
+
+
+def test_discard_orphaned_theme_receipt_removes_only_the_requested_receipt(tmp_path):
+    themes_root = tmp_path / "themes"
+    archive, descriptor = _write_package(
+        tmp_path,
+        extension_source=EXTENSION_SOURCE,
+    )
+    installed = _prepare_theme_archive(archive, descriptor, themes_root)
+    _commit_theme_install(installed["transaction"], themes_root)
+
+    other_root = tmp_path / "other-package"
+    other_root.mkdir()
+    other_archive, other_descriptor = _write_package(
+        other_root,
+        catalog_id="other-theme",
+        theme_name="Other Theme",
+        extension_source=EXTENSION_SOURCE + b"\n",
+    )
+    other = _prepare_theme_archive(other_archive, other_descriptor, themes_root)
+    _commit_theme_install(other["transaction"], themes_root)
+    expected_other = next(
+        receipt
+        for receipt in theme_packages._read_receipts(_receipts(themes_root), strict=True)
+        if receipt["catalogId"] == "other-theme"
+    )
+    shutil.rmtree(themes_root / THEME_NAME)
+
+    result = _discard_theme_receipt(THEME_ID, themes_root)
+
+    assert result == {"ok": True, "code": "discarded"}
+    assert theme_packages._read_receipts(_receipts(themes_root), strict=True) == [
+        expected_other
+    ]
+
+
+@pytest.mark.parametrize("path_state", ["directory", "broken_symlink"])
+def test_discard_orphaned_theme_receipt_rejects_a_remaining_theme_path(
+    tmp_path,
+    path_state,
+):
+    themes_root = tmp_path / "themes"
+    archive, descriptor = _write_package(
+        tmp_path,
+        extension_source=EXTENSION_SOURCE,
+    )
+    installed = _prepare_theme_archive(archive, descriptor, themes_root)
+    _commit_theme_install(installed["transaction"], themes_root)
+    theme_path = themes_root / THEME_NAME
+    if path_state == "broken_symlink":
+        shutil.rmtree(theme_path)
+        theme_path.symlink_to(tmp_path / "missing-theme", target_is_directory=True)
+
+    with pytest.raises(theme_packages.ThemePackageError) as error:
+        _discard_theme_receipt(THEME_ID, themes_root)
+
+    assert error.value.code == "theme_present"
+    assert theme_packages._read_receipts(_receipts(themes_root), strict=True)[0][
+        "catalogId"
+    ] == THEME_ID
+
+
+def test_discard_orphaned_theme_receipt_rejects_an_active_transaction(tmp_path):
+    themes_root = tmp_path / "themes"
+    archive, descriptor = _write_package(
+        tmp_path,
+        extension_source=EXTENSION_SOURCE,
+    )
+    prepared = _prepare_theme_archive(archive, descriptor, themes_root)
+
+    with pytest.raises(theme_packages.ThemePackageError) as error:
+        _discard_theme_receipt(THEME_ID, themes_root)
+
+    assert error.value.code == "transaction_active"
+    _rollback_theme_install(prepared["transaction"], themes_root)
+    _acknowledge_theme_rollback(prepared["transaction"], themes_root)
+
+
+def test_discard_orphaned_theme_receipt_is_idempotent_when_receipt_is_absent(tmp_path):
+    themes_root = tmp_path / "themes"
+
+    result = _discard_theme_receipt(THEME_ID, themes_root)
+
+    assert result == {"ok": True, "code": "absent"}
+    assert not _receipts(themes_root).exists()
+
+
+def test_discard_orphaned_theme_receipt_rejects_invalid_receipts(tmp_path):
+    themes_root = tmp_path / "themes"
+    receipt_store = _receipts(themes_root)
+    receipt_store.parent.mkdir()
+    receipt_store.write_text('{"schemaVersion":1,"receipts":[null]}', encoding="utf-8")
+
+    with pytest.raises(theme_packages.ThemePackageError) as error:
+        _discard_theme_receipt(THEME_ID, themes_root)
+
+    assert error.value.code == "invalid_receipts"
 
 
 @pytest.mark.parametrize("legacy_version", ["0.7.8", "v0.7.8"])
