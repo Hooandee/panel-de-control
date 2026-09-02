@@ -949,6 +949,31 @@ class Plugin:
             decky.logger.error("Theme package commit failed: %s", error)
             return {"ok": False, "code": "commit_failed"}
 
+    async def discard_theme_extension_receipt(self, catalog_id: str) -> dict:
+        self._init()
+        if (
+            not isinstance(catalog_id, str)
+            or _SAFE_THEME_ID.fullmatch(catalog_id) is None
+        ):
+            return {"ok": False, "code": "unsupported_theme"}
+        try:
+            return await self._offload_theme_call(
+                lambda: theme_packages.discard_orphaned_theme_receipt(
+                    catalog_id,
+                    self._themes_root(),
+                    self._theme_receipts_path(),
+                )
+            )
+        except theme_packages.ThemePackageError as error:
+            decky.logger.warning("Theme receipt discard rejected (%s)", error.code)
+            return {"ok": False, "code": error.code}
+        except Exception as error:  # noqa: BLE001
+            decky.logger.warning(
+                "Theme receipt discard failed (%s)",
+                type(error).__name__,
+            )
+            return {"ok": False, "code": "discard_failed"}
+
     async def rollback_theme_install(self, transaction: str) -> dict:
         self._init()
         try:

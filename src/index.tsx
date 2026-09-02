@@ -9,6 +9,7 @@ import {
   beginThemeActivation,
   checkThemeReleases,
   commitThemeInstall,
+  discardThemeExtensionReceipt,
   getThemeInstallRecoveries,
   getThemeActivationRecovery,
   listThemeExtensions,
@@ -85,6 +86,7 @@ export default definePlugin(() => {
   const releaseThemeInstallHost = configurePanelThemeInstallHost({
     prepareRemote: prepareRemoteThemeInstall,
     commit: commitThemeInstall,
+    discard: discardThemeExtensionReceipt,
     rollback: rollbackThemeInstall,
     recoveries: getThemeInstallRecoveries,
     acknowledge: acknowledgeThemeInstallRollback,

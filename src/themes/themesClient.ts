@@ -16,6 +16,7 @@ import type { ThemeInstallRequest } from "./types";
 export interface ThemesAdapter {
   inspect(): Promise<CssLoaderSnapshot>;
   requireReady(): Promise<CssLoaderReadySnapshot>;
+  deleteTheme(themeName: string): Promise<CssLoaderReadySnapshot>;
   reloadTheme(
     expectedThemeName: string,
     expectedVersion: string,
@@ -32,6 +33,7 @@ export interface ThemesAdapter {
 export interface ThemesInstaller {
   prepare(source: ThemeInstallRequest): Promise<ThemeInstallResult>;
   commit(transaction: string): Promise<void>;
+  discardReceipt(catalogId: string): Promise<void>;
   rollback(transaction: string): Promise<void>;
   pendingRecoveries(): Promise<readonly {
     transaction: string;
@@ -64,6 +66,7 @@ export interface ThemeInstallConfirmation {
 export type ThemesOperation =
   | { kind: "recovering" }
   | { kind: "installing"; themeId: string }
+  | { kind: "uninstalling"; themeId: string }
   | { kind: "activating"; themeId: string }
   | { kind: "deactivating"; themeId: string }
   | { kind: "saving"; themeId: string; patchName: string };
@@ -333,6 +336,24 @@ export class ThemesClient {
           this.recoveryChecked = true;
           throw installError;
         }
+      },
+    );
+  };
+
+  uninstall = (themeId: string): Promise<boolean> => {
+    const card = deriveThemeCards(this.current.publication, this.current.snapshot)
+      .find((candidate) => candidate.id === themeId);
+    if (this.current.snapshot.status !== "ready" || !card?.installed) {
+      return Promise.resolve(false);
+    }
+    return this.mutate(
+      { kind: "uninstalling", themeId },
+      async () => {
+        const after = await this.dependencies.adapter.deleteTheme(card.release.cssLoaderName);
+        try {
+          await this.dependencies.installer.discardReceipt(card.release.catalogId);
+        } catch {}
+        return after;
       },
     );
   };

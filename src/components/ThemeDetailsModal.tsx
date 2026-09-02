@@ -1,6 +1,6 @@
-import { ButtonItem, DialogButton, Focusable, ModalRoot, Navigation, showModal } from "@decky/ui";
-import { type CSSProperties, useState } from "react";
-import { LuDownload, LuPaintbrush, LuPower, LuRefreshCw, LuSparkles } from "react-icons/lu";
+import { ButtonItem, DialogButton, Focusable, getFocusNavController, ModalRoot, Navigation, showModal } from "@decky/ui";
+import { type CSSProperties, useEffect, useRef, useState } from "react";
+import { LuDownload, LuPaintbrush, LuPower, LuRefreshCw, LuSparkles, LuTrash2 } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
@@ -20,6 +20,8 @@ interface ThemeOffer {
   kind: "install" | "update";
   version: string;
 }
+
+type PendingThemeConfirmation = ThemeOffer | { kind: "uninstall" };
 
 const THEME_CONTROL_RESET = `
 [data-pdc-theme-settings] { color: ${theme.color.textPrimary} !important; }
@@ -120,54 +122,101 @@ const PRIMARY_CONFIRM_STYLE: CSSProperties = {
   boxShadow: `inset 0 0 0 1px rgba(${theme.color.accentRgb},0.42), 0 7px 20px rgba(${theme.color.accentRgb},0.12)`,
 };
 
+const DESTRUCTIVE_CONFIRMATION_SURFACE_STYLE: CSSProperties = {
+  ...CONFIRMATION_SURFACE_STYLE,
+  background: theme.color.surfaceRaised,
+  boxShadow: `inset 0 0 0 1px ${theme.color.warn}, 0 14px 32px rgba(0,0,0,0.2)`,
+};
+
+const DESTRUCTIVE_CONFIRM_STYLE: CSSProperties = {
+  ...PRIMARY_CONFIRM_STYLE,
+  background: theme.color.warn,
+  color: theme.color.surface,
+  boxShadow: `inset 0 0 0 1px ${theme.color.warn}`,
+};
+
+const DELETE_ACTION_STYLE: CSSProperties = {
+  width: "100%",
+  minWidth: 0,
+  borderRadius: theme.radius.sm,
+  background: theme.color.surfaceRaised,
+  color: theme.color.textMuted,
+  boxShadow: `inset 0 0 0 1px ${theme.color.hairline}`,
+};
+
 function formatVersion(value: string): string {
   return value.toLowerCase().startsWith("v") ? value : `v${value}`;
 }
 
-interface ThemeInstallConfirmationProps {
-  offer: ThemeOffer;
+interface ThemeConfirmationProps {
+  confirmation: PendingThemeConfirmation;
   displayName: string;
   actionsBlocked: boolean;
   onCancel: () => void;
   onConfirm: () => void;
 }
 
-function ThemeInstallConfirmation({
-  offer,
+function ThemeConfirmation({
+  confirmation,
   displayName,
   actionsBlocked,
   onCancel,
   onConfirm,
-}: ThemeInstallConfirmationProps) {
+}: ThemeConfirmationProps) {
   const { t } = useI18n();
-  const updating = offer.kind === "update";
+  const destructive = confirmation.kind === "uninstall";
+  const updating = confirmation.kind === "update";
+  const titleKey = destructive
+    ? "themes.delete.confirm.title"
+    : updating
+      ? "themes.update.confirm.title"
+      : "themes.install.confirm.title";
+  const descriptionKey = destructive
+    ? "themes.delete.confirm.desc"
+    : updating
+      ? "themes.update.confirm.desc"
+      : "themes.install.confirm.desc";
+  const confirmKey = destructive
+    ? "themes.delete.confirm.ok"
+    : updating
+      ? "themes.update.confirm.ok"
+      : "themes.install.confirm.ok";
 
   return (
-    <div role="group" aria-labelledby="theme-install-confirmation-title" style={CONFIRMATION_SURFACE_STYLE}>
-      <div style={{ display: "grid", gridTemplateColumns: "42px minmax(0, 1fr) auto", alignItems: "center", gap: theme.space.md }}>
-        <span aria-hidden style={CONFIRMATION_ICON_STYLE}>
-          {updating ? <LuRefreshCw size={19} /> : <LuDownload size={19} />}
-        </span>
+    <div
+      role="group"
+      aria-labelledby="theme-confirmation-title"
+      aria-describedby="theme-confirmation-description"
+      style={destructive ? DESTRUCTIVE_CONFIRMATION_SURFACE_STYLE : CONFIRMATION_SURFACE_STYLE}
+    >
+      <div style={{ display: "grid", gridTemplateColumns: destructive ? "minmax(0, 1fr)" : "42px minmax(0, 1fr) auto", alignItems: "center", gap: theme.space.md }}>
+        {!destructive ? (
+          <span aria-hidden style={CONFIRMATION_ICON_STYLE}>
+            {updating ? <LuRefreshCw size={19} /> : <LuDownload size={19} />}
+          </span>
+        ) : null}
         <div style={{ minWidth: 0 }}>
-          <div id="theme-install-confirmation-title" style={{ fontSize: 18, lineHeight: 1.15, fontWeight: 780 }}>
-            {t(updating ? "themes.update.confirm.title" : "themes.install.confirm.title", { name: displayName })}
+          <div id="theme-confirmation-title" style={{ fontSize: 18, lineHeight: 1.15, fontWeight: 780 }}>
+            {t(titleKey, { name: displayName })}
           </div>
-          <div data-pdc-theme-muted style={{ marginTop: 5, lineHeight: 1.4 }}>
-            {t(updating ? "themes.update.confirm.desc" : "themes.install.confirm.desc")}
+          <div id="theme-confirmation-description" data-pdc-theme-muted style={{ marginTop: 5, lineHeight: 1.4 }}>
+            {t(descriptionKey)}
           </div>
         </div>
-        <span style={VERSION_PILL_STYLE}>
-          {t("themes.remote.card.version", { version: offer.version })}
-        </span>
+        {confirmation.kind !== "uninstall" ? (
+          <span style={VERSION_PILL_STYLE}>
+            {t("themes.remote.card.version", { version: confirmation.version })}
+          </span>
+        ) : null}
       </div>
-      <div style={{ display: "flex", justifyContent: "flex-end", gap: theme.space.sm, marginTop: theme.space.md, marginLeft: 54 }}>
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: theme.space.sm, marginTop: theme.space.md, marginLeft: destructive ? 0 : 54 }}>
         <DialogButton style={SECONDARY_CONFIRM_STYLE} onClick={onCancel}>
           {t("themes.install.confirm.cancel")}
         </DialogButton>
-        <DialogButton style={PRIMARY_CONFIRM_STYLE} disabled={actionsBlocked} onClick={onConfirm}>
+        <DialogButton style={destructive ? DESTRUCTIVE_CONFIRM_STYLE : PRIMARY_CONFIRM_STYLE} disabled={actionsBlocked} onClick={onConfirm}>
           <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
-            {updating ? <LuRefreshCw size={15} aria-hidden /> : <LuDownload size={15} aria-hidden />}
-            <span>{t(updating ? "themes.update.confirm.ok" : "themes.install.confirm.ok")}</span>
+            {destructive ? <LuTrash2 size={15} aria-hidden /> : updating ? <LuRefreshCw size={15} aria-hidden /> : <LuDownload size={15} aria-hidden />}
+            <span>{t(confirmKey)}</span>
           </span>
         </DialogButton>
       </div>
@@ -178,9 +227,26 @@ function ThemeInstallConfirmation({
 export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProps) {
   const { lang, t } = useI18n();
   const controller = useThemes();
-  const [confirmedVersion, setConfirmedVersion] = useState<string | null>(null);
+  const [pendingConfirmation, setPendingConfirmation] = useState<PendingThemeConfirmation | null>(null);
   const [failedCover, setFailedCover] = useState<string>();
   const card = controller.cards.find((candidate) => candidate.id === themeId);
+  const installOfferRef = useRef<HTMLDivElement>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const previousInstalledRef = useRef<boolean | undefined>(undefined);
+
+  useEffect(() => {
+    const installed = card?.installed;
+    if (previousInstalledRef.current === true && installed === false) {
+      const installAction = installOfferRef.current?.querySelector<HTMLElement>("button,[role='button'],[tabindex]");
+      const target = installAction ?? headingRef.current;
+      if (target) {
+        const focusController = getFocusNavController();
+        if (focusController?.FocusElement) focusController.FocusElement(target);
+        else target.focus();
+      }
+    }
+    previousInstalledRef.current = installed;
+  }, [card?.installed]);
 
   if (controller.loading && !card) {
     return (
@@ -203,6 +269,7 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
   const activationBlocked = actionsBlocked
     || (!card.active && card.release.compatibility !== "compatible");
   const installing = controller.operation?.kind === "installing" && controller.operation.themeId === card.id;
+  const uninstalling = controller.operation?.kind === "uninstalling" && controller.operation.themeId === card.id;
   const activating = controller.operation?.kind === "activating" && controller.operation.themeId === card.id;
   const deactivating = controller.operation?.kind === "deactivating" && controller.operation.themeId === card.id;
   const displayName = localizePublishedText(card.release.displayName, lang);
@@ -218,11 +285,18 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
     && (!card.installed || card.updateAvailable)
     ? { kind: card.installed ? "update" : "install", version: card.targetVersion }
     : null;
-  const activeConfirmation = offer
-    && confirmedVersion === offer.version
-    ? offer
+  const activeOfferConfirmation = offer
+    && pendingConfirmation?.kind === offer.kind
+    && pendingConfirmation.version === offer.version
+    ? pendingConfirmation
     : null;
-  const cancelOrClose = activeConfirmation ? () => setConfirmedVersion(null) : closeModal;
+  const activeUninstallConfirmation = pendingConfirmation?.kind === "uninstall"
+    && card.installed
+    && cssReady
+    ? pendingConfirmation
+    : null;
+  const activeConfirmation = activeOfferConfirmation ?? activeUninstallConfirmation;
+  const cancelOrClose = activeConfirmation ? () => setPendingConfirmation(null) : closeModal;
 
   return (
     <ModalRoot bAllowFullSize={fullSizeLayout} onCancel={cancelOrClose} onEscKeypress={cancelOrClose}>
@@ -291,7 +365,7 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
                 </span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: theme.space.sm }}>
-                    <h2 style={{ fontSize: fullSizeLayout ? 32 : 28, lineHeight: 1.05, margin: "1px 0 8px", letterSpacing: -0.8 }}>{displayName}</h2>
+                    <h2 ref={headingRef} tabIndex={-1} style={{ fontSize: fullSizeLayout ? 32 : 28, lineHeight: 1.05, margin: "1px 0 8px", letterSpacing: -0.8 }}>{displayName}</h2>
                     {!card.installed ? (
                       <span data-pdc-theme-muted style={{
                         flexShrink: 0,
@@ -382,19 +456,20 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
               </div>
             ) : null}
 
-            {offer ? activeConfirmation ? (
-              <ThemeInstallConfirmation
-                offer={activeConfirmation}
+            {offer ? activeOfferConfirmation ? (
+              <ThemeConfirmation
+                confirmation={activeOfferConfirmation}
                 displayName={displayName}
                 actionsBlocked={actionsBlocked}
-                onCancel={() => setConfirmedVersion(null)}
+                onCancel={() => setPendingConfirmation(null)}
                 onConfirm={() => {
-                  setConfirmedVersion(null);
-                  void controller.install(card.id, { version: activeConfirmation.version });
+                  setPendingConfirmation(null);
+                  void controller.install(card.id, { version: activeOfferConfirmation.version });
                 }}
               />
             ) : (
               <div
+                ref={installOfferRef}
                 role="group"
                 aria-labelledby="theme-install-ready-label"
                 style={{
@@ -425,7 +500,7 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
                   <span>{t(card.installed ? "themes.update.ready" : "themes.install.ready")}</span>
                 </div>
                 <div style={{ marginTop: card.installed ? theme.space.md : 0, flexShrink: 0 }}>
-                  <ButtonItem layout="below" disabled={actionsBlocked} onClick={() => setConfirmedVersion(offer.version)}>
+                  <ButtonItem layout="below" disabled={actionsBlocked} onClick={() => setPendingConfirmation(offer)}>
                     {t(installing ? card.installed ? "themes.action.updating" : "themes.action.installing" : card.installed ? "themes.action.update" : "themes.action.install")}
                   </ButtonItem>
                 </div>
@@ -452,6 +527,33 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
                     </section>
                   );
                 })}
+              </div>
+            ) : null}
+            {card.installed && cssReady ? (
+              <div style={{ marginTop: theme.space.section, marginBottom: theme.space.sm }}>
+                {activeUninstallConfirmation ? (
+                  <ThemeConfirmation
+                    confirmation={activeUninstallConfirmation}
+                    displayName={displayName}
+                    actionsBlocked={actionsBlocked}
+                    onCancel={() => setPendingConfirmation(null)}
+                    onConfirm={() => {
+                      setPendingConfirmation(null);
+                      void controller.uninstall(card.id);
+                    }}
+                  />
+                ) : (
+                  <DialogButton
+                    style={DELETE_ACTION_STYLE}
+                    disabled={actionsBlocked}
+                    onClick={() => setPendingConfirmation({ kind: "uninstall" })}
+                  >
+                    <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
+                      <LuTrash2 size={15} aria-hidden />
+                      <span>{t(uninstalling ? "themes.action.deleting" : "themes.action.delete")}</span>
+                    </span>
+                  </DialogButton>
+                )}
               </div>
             ) : null}
           </div>

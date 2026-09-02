@@ -13,6 +13,7 @@ function host(overrides: Record<string, unknown> = {}) {
     rollback: vi.fn(async () => ({ ok: true, code: "rolled_back" })),
     recoveries: vi.fn(async () => ({ ok: true, code: "ready", recoveries: [] })),
     acknowledge: vi.fn(async () => ({ ok: true, code: "acknowledged" })),
+    discard: vi.fn(async () => ({ ok: true, code: "discarded" })),
     ...overrides,
   };
 }
@@ -73,6 +74,34 @@ describe("PanelThemeInstaller", () => {
     await expect(installer.rollback("token")).resolves.toBeUndefined();
     await expect(installer.acknowledgeRollback("token")).resolves.toBeUndefined();
   });
+
+  it.each(["discarded", "absent"])("accepts the %s receipt discard result", async (code) => {
+    const installer = new PanelThemeInstaller(host({
+      discard: vi.fn(async () => ({ ok: true, code })),
+    }));
+
+    await expect(installer.discardReceipt("example-theme")).resolves.toBeUndefined();
+  });
+
+  it("turns a typed receipt discard rejection into a safe install error", async () => {
+    const installer = new PanelThemeInstaller(host({
+      discard: vi.fn(async () => ({ ok: false, code: "theme_present" })),
+    }));
+
+    await expect(installer.discardReceipt("example-theme")).rejects.toEqual(
+      new ThemeInstallError("theme_present", "Theme receipt discard failed"),
+    );
+  });
+
+  it("rejects a malformed receipt discard result", async () => {
+    const installer = new PanelThemeInstaller(host({
+      discard: vi.fn(async () => ({ ok: true, code: "committed" })),
+    }));
+
+    await expect(installer.discardReceipt("example-theme")).rejects.toMatchObject({
+      code: "malformed_response",
+    });
+  });
 });
 
 describe("Panel theme install host", () => {
@@ -88,5 +117,18 @@ describe("Panel theme install host", () => {
 
     releaseSecond();
     await expect(createPanelThemeInstaller().prepare(REQUEST)).rejects.toMatchObject({ code: "backend_unavailable" });
+  });
+
+  it("routes receipt discard through the current scoped backend host", async () => {
+    const backend = host();
+    const release = configurePanelThemeInstallHost(backend);
+
+    await expect(createPanelThemeInstaller().discardReceipt("example-theme")).resolves.toBeUndefined();
+    expect(backend.discard).toHaveBeenCalledWith("example-theme");
+
+    release();
+    await expect(createPanelThemeInstaller().discardReceipt("example-theme")).rejects.toMatchObject({
+      code: "backend_unavailable",
+    });
   });
 });

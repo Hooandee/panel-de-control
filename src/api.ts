@@ -16,6 +16,9 @@ export const loadThemeExtension = callable<[
   version: string,
 ], unknown>("load_theme_extension");
 export const commitThemeInstall = callable<[transaction: string], unknown>("commit_theme_install");
+export const discardThemeExtensionReceipt = callable<[catalogId: string], unknown>(
+  "discard_theme_extension_receipt",
+);
 export const rollbackThemeInstall = callable<[transaction: string], unknown>("rollback_theme_install");
 export const getThemeInstallRecoveries = callable<[], unknown>("get_theme_install_recoveries");
 export const acknowledgeThemeInstallRollback = callable<[transaction: string], unknown>(

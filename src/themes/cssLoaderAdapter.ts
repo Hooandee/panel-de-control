@@ -339,6 +339,24 @@ export class CssLoaderAdapter {
     return after;
   }
 
+  async deleteTheme(themeName: string): Promise<CssLoaderReadySnapshot> {
+    const before = await this.requireReady();
+    if (!before.themes.some((theme) => theme.name === themeName)) {
+      throw new CssLoaderOperationError("mutation_failed", `CSS Loader theme not found: ${themeName}`);
+    }
+
+    await this.callMutation("delete_theme", [themeName], this.reloadTimeoutMs);
+    const after = await this.requireReady();
+    if (after.themes.some((theme) => theme.name === themeName)) {
+      throw new CssLoaderOperationError(
+        "verification_failed",
+        `CSS Loader did not confirm the removal of ${themeName}`,
+      );
+    }
+    this.verifyInventoryState(before, after, themeName);
+    return after;
+  }
+
   async reloadTheme(
     expectedThemeName: string,
     expectedVersion: string,

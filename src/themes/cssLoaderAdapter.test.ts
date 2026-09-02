@@ -220,6 +220,172 @@ function mutableHost(): { host: CssLoaderHost; call: ReturnType<typeof vi.fn> } 
 }
 
 describe("CssLoaderAdapter mutations", () => {
+  it("deletes an installed theme and returns the verified remaining inventory", async () => {
+    const otherTheme = {
+      ...RAW_THEME,
+      id: "Other Theme",
+      name: "Other Theme",
+      display_name: "Other Theme",
+      enabled: false,
+    };
+    let themes = structuredClone([RAW_THEME, otherTheme]);
+    const call = vi.fn(async (method: string, ...args: unknown[]) => {
+      if (method === "get_backend_version") return 9;
+      if (method === "get_themes") return structuredClone(themes);
+      if (method === "delete_theme") {
+        themes = themes.filter((theme) => theme.name !== args[0]);
+        return { success: true, message: "Success" };
+      }
+      throw new Error(`Unexpected method: ${method}`);
+    });
+    const adapter = new CssLoaderAdapter(host({ call }));
+
+    await expect(adapter.deleteTheme("Example Theme")).resolves.toMatchObject({
+      status: "ready",
+      themes: [expect.objectContaining({ name: "Other Theme", enabled: false })],
+    });
+    expect(call).toHaveBeenCalledWith("delete_theme", "Example Theme");
+  });
+
+  it("rejects deletion before mutation when the requested theme is absent", async () => {
+    const call = vi.fn(async (method: string) => {
+      if (method === "get_backend_version") return 9;
+      if (method === "get_themes") return [RAW_THEME];
+      throw new Error(`Unexpected method: ${method}`);
+    });
+    const adapter = new CssLoaderAdapter(host({ call }));
+
+    await expect(adapter.deleteTheme("Missing Theme")).rejects.toEqual(
+      new CssLoaderOperationError(
+        "mutation_failed",
+        "CSS Loader theme not found: Missing Theme",
+      ),
+    );
+    expect(call.mock.calls.some(([method]) => method === "delete_theme")).toBe(false);
+  });
+
+  it("fails closed when delete_theme returns a malformed result", async () => {
+    const call = vi.fn(async (method: string) => {
+      if (method === "get_backend_version") return 9;
+      if (method === "get_themes") return [RAW_THEME];
+      if (method === "delete_theme") return { success: true };
+      throw new Error(`Unexpected method: ${method}`);
+    });
+    const adapter = new CssLoaderAdapter(host({ call }));
+
+    await expect(adapter.deleteTheme("Example Theme")).rejects.toEqual(
+      new CssLoaderOperationError(
+        "malformed_response",
+        "CSS Loader returned an invalid result for delete_theme",
+      ),
+    );
+  });
+
+  it("preserves CSS Loader's bundled-theme rejection", async () => {
+    const call = vi.fn(async (method: string) => {
+      if (method === "get_backend_version") return 9;
+      if (method === "get_themes") return [RAW_THEME];
+      if (method === "delete_theme") {
+        return { success: false, message: "Can't delete a bundled theme" };
+      }
+      throw new Error(`Unexpected method: ${method}`);
+    });
+    const adapter = new CssLoaderAdapter(host({ call }));
+
+    await expect(adapter.deleteTheme("Example Theme")).rejects.toEqual(
+      new CssLoaderOperationError(
+        "mutation_failed",
+        "Can't delete a bundled theme",
+      ),
+    );
+  });
+
+  it("rejects a successful delete_theme result when readback still contains the theme", async () => {
+    const call = vi.fn(async (method: string) => {
+      if (method === "get_backend_version") return 9;
+      if (method === "get_themes") return [RAW_THEME];
+      if (method === "delete_theme") return { success: true, message: "Success" };
+      throw new Error(`Unexpected method: ${method}`);
+    });
+    const adapter = new CssLoaderAdapter(host({ call }));
+
+    await expect(adapter.deleteTheme("Example Theme")).rejects.toEqual(
+      new CssLoaderOperationError(
+        "verification_failed",
+        "CSS Loader did not confirm the removal of Example Theme",
+      ),
+    );
+  });
+
+  it("rejects deletion when another theme changes during readback", async () => {
+    const otherTheme = {
+      ...RAW_THEME,
+      id: "Other Theme",
+      name: "Other Theme",
+      display_name: "Other Theme",
+      enabled: false,
+    };
+    let themes = structuredClone([RAW_THEME, otherTheme]);
+    const call = vi.fn(async (method: string) => {
+      if (method === "get_backend_version") return 9;
+      if (method === "get_themes") return structuredClone(themes);
+      if (method === "delete_theme") {
+        themes = [{ ...otherTheme, enabled: true }];
+        return { success: true, message: "Success" };
+      }
+      throw new Error(`Unexpected method: ${method}`);
+    });
+    const adapter = new CssLoaderAdapter(host({ call }));
+
+    await expect(adapter.deleteTheme("Example Theme")).rejects.toMatchObject({
+      code: "verification_failed",
+    });
+  });
+
+  it("quarantines writes after a timed-out delete until the original call settles", async () => {
+    vi.useFakeTimers();
+    try {
+      let settleDelete!: (value: { success: boolean; message: string }) => void;
+      let deleteCalls = 0;
+      let themes = structuredClone([RAW_THEME]);
+      const call = vi.fn((method: string, ...args: unknown[]) => {
+        if (method === "get_backend_version") return Promise.resolve(9);
+        if (method === "get_themes") return Promise.resolve(structuredClone(themes));
+        if (method === "delete_theme") {
+          deleteCalls += 1;
+          if (deleteCalls === 1) {
+            return new Promise<{ success: boolean; message: string }>((done) => {
+              settleDelete = done;
+            });
+          }
+          themes = themes.filter((theme) => theme.name !== args[0]);
+          return Promise.resolve({ success: true, message: "Success" });
+        }
+        return Promise.reject(new Error(`Unexpected method: ${method}`));
+      });
+      const adapter = new CssLoaderAdapter(host({ call }), { reloadTimeoutMs: 50 });
+
+      const deletion = adapter.deleteTheme("Example Theme");
+      await vi.advanceTimersByTimeAsync(0);
+      const deletionFailure = expect(deletion).rejects.toMatchObject({ code: "timeout" });
+      await vi.advanceTimersByTimeAsync(50);
+      await deletionFailure;
+      await expect(adapter.deleteTheme("Example Theme")).rejects.toMatchObject({ code: "timeout" });
+      expect(deleteCalls).toBe(1);
+
+      settleDelete({ success: false, message: "Late rejection" });
+      await vi.advanceTimersByTimeAsync(0);
+
+      await expect(adapter.deleteTheme("Example Theme")).resolves.toMatchObject({
+        status: "ready",
+        themes: [],
+      });
+      expect(deleteCalls).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("reloads CSS Loader and verifies the exact installed theme version", async () => {
     let version = "0.5.0";
     const call = vi.fn(async (method: string) => {

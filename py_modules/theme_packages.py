@@ -1264,6 +1264,39 @@ def _active_transaction(themes_root: Path) -> bool:
     return False
 
 
+def discard_orphaned_theme_receipt(
+    catalog_id: str,
+    themes_root: str | Path,
+    receipts_path: str | Path,
+) -> dict[str, object]:
+    root = Path(themes_root)
+    receipt_store = Path(receipts_path)
+    with _mutation_lock(root):
+        if _active_transaction(root):
+            raise ThemePackageError(
+                "transaction_active",
+                "A theme transaction is active",
+            )
+        receipt = next(
+            (
+                item
+                for item in _read_receipts(receipt_store, strict=True)
+                if item["catalogId"] == catalog_id
+            ),
+            None,
+        )
+        if receipt is None:
+            return {"ok": True, "code": "absent"}
+        theme_path = root / str(receipt["cssLoaderName"])
+        if theme_path.exists() or theme_path.is_symlink():
+            raise ThemePackageError(
+                "theme_present",
+                "Theme files are still present",
+            )
+        _replace_receipt(receipt_store, catalog_id, None)
+        return {"ok": True, "code": "discarded"}
+
+
 def prepare_theme_archive(
     archive: str | Path,
     descriptor: object,

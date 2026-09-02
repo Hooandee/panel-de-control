@@ -122,6 +122,19 @@ describe("ThemeExtensionRuntimeHost", () => {
     expect(document.documentElement.dataset.extensionMounted).toBeUndefined();
   });
 
+  it("cleans up a mounted extension when the theme disappears from a ready snapshot", async () => {
+    const host = new ThemeExtensionRuntimeHost({ client: client(), doc: document });
+
+    host.reconcile(snapshot());
+    await settle();
+    expect(document.documentElement.dataset.extensionMounted).toBe("1.2.3");
+
+    host.reconcile(snapshot([]));
+    await settle();
+    expect(document.documentElement.dataset.extensionMounted).toBeUndefined();
+    host.dispose();
+  });
+
   it.each([
     [[]],
     [[{ ...DESCRIPTOR, cssLoaderName: "Second Theme" }]],
