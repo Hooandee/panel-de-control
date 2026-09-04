@@ -26,9 +26,17 @@ def detect_tools(root: str = "/", home: str | None = None, which=shutil.which) -
         )
     except Exception:  # noqa: BLE001
         lsfg = False
+    # mako-run: frame generation wrapper in ~/.local/bin.
+    try:
+        mako_run = os.path.isfile(os.path.join(home, ".local", "bin", "mako-run")) and os.access(
+            os.path.join(home, ".local", "bin", "mako-run"), os.X_OK
+        )
+    except Exception:  # noqa: BLE001
+        mako_run = False
     distro = read_os_id(root=root) or "other"
     return {
         "lsfg": lsfg,
+        "makoRun": mako_run,
         "mangohud": _which(which, "mangohud"),
         "gamemode": _which(which, "gamemoderun"),
         "gamescope": _which(which, "gamescope"),
