@@ -51,6 +51,17 @@ def test_onexplayer_apex_matches_case_insensitively():
     prof = detect(product_name="OneXPlayer Apex 2025")
     assert prof.key == "onexplayer_apex"
 
+def test_onexplayer_superx_is_recognised_with_safe_limits():
+    profile = detect(product_name="ONEXPLAYER SUPER X")
+
+    assert profile.key == "onexplayer_superx"
+    assert profile.experimental is True
+    assert profile.tdp_min == 15
+    assert profile.tdp_default == 30
+    assert profile.tdp_max == 55
+    assert profile.tdp_max_charger == 75
+    assert profile.charger_only_extra is True
+
 
 def test_aokzoe_a1x_is_recognised_experimental():
     prof = detect(product_name="AOKZOE A1X")
