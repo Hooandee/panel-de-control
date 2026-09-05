@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## [0.38.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.12...panel-de-control-v0.38.0) (2026-09-02)
+
+
+### Español
+
+* **Temas:** Estrena una pestaña para descubrir, instalar y gestionar temas de Hooandee directamente desde Panel de Control con CSS Loader. Desde el detalle de cada tema puedes instalarlo o actualizarlo, activarlo, configurar las 18 opciones de Gallery y eliminarlo cuando ya no lo quieras. Panel comprueba la compatibilidad e integridad del paquete antes de instalarlo y, al eliminarlo, confirma que CSS Loader lo ha retirado correctamente antes de limpiar su registro. Si CSS Loader no está disponible o está desactivado, las opciones de instalación y eliminación no se muestran. ([#520](https://github.com/Hooandee/panel-de-control/pull/520)) ([#525](https://github.com/Hooandee/panel-de-control/pull/525)) ([#526](https://github.com/Hooandee/panel-de-control/pull/526))
+
+### English
+
+* **Themes:** Introduces a new tab for discovering, installing, and managing themes by Hooandee directly from Panel de Control with CSS Loader. From each theme’s detail view, you can install or update it, enable it, adjust Gallery’s 18 settings, or remove it when you no longer want it. Panel checks package compatibility and integrity before installation and, when removing a theme, confirms that CSS Loader has removed it correctly before cleaning up its record. If CSS Loader is unavailable or disabled, the installation and removal options are not shown. ([#520](https://github.com/Hooandee/panel-de-control/pull/520)) ([#525](https://github.com/Hooandee/panel-de-control/pull/525)) ([#526](https://github.com/Hooandee/panel-de-control/pull/526))
+
+### Italiano
+
+* **Temi:** Introduce una nuova scheda per scoprire, installare e gestire i temi di Hooandee direttamente da Panel de Control con CSS Loader. Dalla vista di dettaglio puoi installare o aggiornare un tema, attivarlo, regolare le 18 opzioni di Gallery oppure rimuoverlo quando non lo vuoi più. Panel verifica la compatibilità e l’integrità del pacchetto prima dell’installazione e, durante la rimozione, controlla che CSS Loader lo abbia eliminato correttamente prima di cancellarne il record. Se CSS Loader non è disponibile o è disattivato, le opzioni di installazione e rimozione non vengono mostrate. ([#520](https://github.com/Hooandee/panel-de-control/pull/520)) ([#525](https://github.com/Hooandee/panel-de-control/pull/525)) ([#526](https://github.com/Hooandee/panel-de-control/pull/526))
+
 ## [0.37.12](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.11...panel-de-control-v0.37.12) (2026-08-24)
 
 

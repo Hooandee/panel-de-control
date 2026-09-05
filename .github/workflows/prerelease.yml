@@ -32,11 +32,10 @@ jobs:
           node -e "const f='package.json';const p=require('./'+f);p.version=process.env.VERSION;require('fs').writeFileSync(f, JSON.stringify(p,null,2)+'\n')"
           echo "Building $PLUGIN_NAME v${VERSION} from ${BRANCH}"
           pnpm install --frozen-lockfile
+          pnpm test:fe tests/pluginPayload.test.ts
           pnpm build
-          rm -f dist/*.map
           staging=$(mktemp -d)
-          mkdir -p "$staging/$PLUGIN_NAME"
-          cp -rL dist main.py plugin.json package.json README.md README.en.md LICENSE py_modules assets bin "$staging/$PLUGIN_NAME"
+          node scripts/copy-plugin-payload.mjs . "$staging/$PLUGIN_NAME"
           (cd "$staging" && zip -r "$GITHUB_WORKSPACE/$PLUGIN_NAME.zip" "$PLUGIN_NAME")
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
 

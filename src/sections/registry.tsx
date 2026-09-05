@@ -10,7 +10,9 @@ import { SonidoSection } from "./SonidoSection";
 import { MandosSection } from "./MandosSection";
 import { HudSection } from "./HudSection";
 import { ParametrosSection } from "./ParametrosSection";
+import { TemasSection } from "./TemasSection";
 import { AjustesSection } from "./AjustesSection";
+import { buildSections } from "./registryModel";
 import { registerSystemBlocks } from "./systemBlocks";
 import { registerFanBlocks } from "./fanBlocks";
 import { registerDisplayBlocks } from "./displayBlocks";
@@ -36,6 +38,7 @@ const COMPONENTS: Record<string, FC> = {
   mandos: MandosSection,
   hud: HudSection,
   params: ParametrosSection,
+  themes: TemasSection,
   settings: AjustesSection,
 };
 
@@ -44,7 +47,4 @@ const COMPONENTS: Record<string, FC> = {
  * TabBar and the body both read from here. Built from the manifest's TABS +
  * COMPONENTS above — add a section by adding a TABS entry and a component here.
  */
-export const SECTIONS: SectionDef[] = TABS.map((tab) => ({
-  ...tab,
-  Component: COMPONENTS[tab.id],
-}));
+export const SECTIONS: SectionDef[] = buildSections(TABS, COMPONENTS);
