@@ -47,6 +47,44 @@ def test_gpd_quirk_is_false_when_dmi_is_unreadable(tmp_path):
     )
 
 
+def test_xbox_ally_x_tdp_reassert_requires_exact_rc73xa_dmi(tmp_path):
+    _write_dmi(
+        str(tmp_path),
+        "ASUSTeK COMPUTER INC.",
+        "ROG Xbox Ally X RC73XA_RC73XA",
+    )
+
+    assert device_quirks.asus_tdp_authoritative_reassert_s(
+        _profile("rog_xbox_ally_x"),
+        str(tmp_path),
+    ) == 15.0
+
+
+def test_xbox_ally_x_tdp_reassert_rejects_other_identities(tmp_path):
+    cases = (
+        ("ASUSTeK COMPUTER INC.", "ROG Ally X RC72LA", _profile("rog_ally_x")),
+        ("ASUSTeK COMPUTER INC.", "ROG Xbox Ally X", _profile("rog_xbox_ally_x")),
+        (
+            "ASUSTeK COMPUTER INC.",
+            "ROG Xbox Ally X Prototype RC73XA_RC73XA",
+            _profile("rog_xbox_ally_x"),
+        ),
+        (
+            "ASUSTeK COMPUTER INC.",
+            "ROG Xbox Ally X RC73XA_RC73XA-OTHER",
+            _profile("rog_xbox_ally_x"),
+        ),
+        ("OTHER", "ROG Xbox Ally X RC73XA", _profile("rog_xbox_ally_x")),
+    )
+
+    for vendor, product, profile in cases:
+        _write_dmi(str(tmp_path), vendor, product)
+        assert device_quirks.asus_tdp_authoritative_reassert_s(
+            profile,
+            str(tmp_path),
+        ) is None
+
+
 def test_legion_go_s_83n6_uses_measured_boost_rail_floors(tmp_path):
     assert hasattr(device_quirks, "legion_go_s_83n6_rail_floors")
     _write_dmi(str(tmp_path), "LeNoVo", "83n6")

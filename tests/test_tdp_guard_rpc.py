@@ -279,6 +279,34 @@ def test_guard_corrects_confirmed_drift_without_mutating_profile(plugin):
     assert plugin._tdp_profiles.effective(None)["pl1"] == 15
 
 
+def test_game_authoritative_reassert_rewrites_matching_persisted_target(plugin):
+    plugin._tdp_backend.authoritative_reassert_s = 15.0
+    plugin._tdp_profiles.set_pl1("global", 13)
+    plugin._current_appid = "42"
+    plugin._execute_tdp_command(plugin._capture_tdp_command("game"))
+    plugin._tdp_backend.set_levels_calls = 0
+    plugin._tdp_reconcile_memory = ReconcileMemory(last_write_at=100.0)
+
+    plugin._tdp_guard_tick(now=114.9)
+    plugin._tdp_guard_tick(now=115.0)
+
+    assert plugin._tdp_backend.set_levels_calls == 1
+    assert plugin._tdp_backend._levels == {"pl1": 13, "pl2": 15, "pl3": 15}
+    assert plugin._tdp_profiles.effective("42")["pl1"] == 13
+    assert plugin._tdp_history[-1]["action"] == "reassert"
+    assert plugin._tdp_history[-1]["write"]["ok"] is True
+
+
+def test_authoritative_reassert_is_idle_without_running_game(plugin):
+    plugin._tdp_backend.authoritative_reassert_s = 15.0
+    plugin._tdp_reconcile_memory = ReconcileMemory(last_write_at=100.0)
+    plugin._tdp_backend.set_levels_calls = 0
+
+    plugin._tdp_guard_tick(now=115.0)
+
+    assert plugin._tdp_backend.set_levels_calls == 0
+
+
 def test_guard_keeps_global_and_game_profiles_independent(plugin):
     plugin._tdp_profiles.set_pl1("global", 18)
     plugin._tdp_profiles.create_game_from_global("42")
@@ -404,6 +432,20 @@ def test_guard_delay_respects_minimum_correction_interval(
         last_write_at=99.0,
     )
     monkeypatch.setattr(main_module.time, "monotonic", lambda: 100.0)
+    assert plugin._tdp_guard_delay() == 1.0
+
+
+def test_guard_delay_wakes_when_game_authoritative_reassert_is_due(
+    plugin,
+    monkeypatch,
+):
+    import main as main_module
+
+    plugin._tdp_backend.authoritative_reassert_s = 15.0
+    plugin._current_appid = "42"
+    plugin._tdp_reconcile_memory = ReconcileMemory(last_write_at=100.0)
+    monkeypatch.setattr(main_module.time, "monotonic", lambda: 114.0)
+
     assert plugin._tdp_guard_delay() == 1.0
 
 
@@ -621,6 +663,7 @@ def test_backend_diagnostics_explain_selection_without_personal_identifiers(plug
     assert descriptor["rails"] == ["pl1", "pl2", "pl3"]
     assert descriptor["guard_interval_s"] == 2.0
     assert descriptor["read_tolerance_w"] == 0
+    assert descriptor["authoritative_reassert_s"] is None
     assert descriptor["limits"]["default"] == 15
     assert descriptor["level_limits"]["pl1"]["max"] == 35
     assert descriptor["probe_trace"][0]["candidate"] == "fake"
@@ -628,6 +671,14 @@ def test_backend_diagnostics_explain_selection_without_personal_identifiers(plug
     encoded = json.dumps(descriptor).lower()
     for forbidden in ("appid", "title", "hostname", "serial", "uuid", "/home/"):
         assert forbidden not in encoded
+
+
+def test_backend_diagnostics_publish_authoritative_reassert_cadence(plugin):
+    plugin._tdp_backend.authoritative_reassert_s = 15.0
+
+    descriptor = plugin._tdp_backend_diagnostics()
+
+    assert descriptor["authoritative_reassert_s"] == 15.0
 
 
 def test_backend_diagnostics_are_logged_once_as_compact_json(plugin):

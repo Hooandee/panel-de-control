@@ -48,6 +48,14 @@ def _mk_dmi(root, vendor, product):
             f.write(value)
 
 
+def _mk_asus_legacy(root):
+    base = os.path.join(root, "sys/devices/platform/asus-nb-wmi")
+    os.makedirs(base, exist_ok=True)
+    for name in ("ppt_pl1_spl", "ppt_pl2_sppt", "ppt_fppt"):
+        with open(os.path.join(base, name), "w") as handle:
+            handle.write("15")
+
+
 def _set_fw_max(root, rail, value):
     path = os.path.join(
         root,
@@ -86,6 +94,71 @@ def test_rog_uses_asus_armoury_firmware_attr(tmp_path):
         "supported": True,
     },)
     assert b.diagnostics()["readback_settle_ms"] == 0
+
+
+def test_only_exact_dual_interface_xbox_ally_x_gets_authoritative_reassert(tmp_path):
+    exact_root = str(tmp_path / "exact")
+    _mk_fw(exact_root, "asus-armoury")
+    _mk_asus_legacy(exact_root)
+    _mk_dmi(
+        exact_root,
+        "ASUSTeK COMPUTER INC.",
+        "ROG Xbox Ally X RC73XA_RC73XA",
+    )
+    exact = select_backend(
+        _p("rog_xbox_ally_x"),
+        root=exact_root,
+        ryzenadj_resolve=_NO_RYZENADJ,
+    )
+
+    missing_legacy_root = str(tmp_path / "missing-legacy")
+    _mk_fw(missing_legacy_root, "asus-armoury")
+    _mk_dmi(
+        missing_legacy_root,
+        "ASUSTeK COMPUTER INC.",
+        "ROG Xbox Ally X RC73XA_RC73XA",
+    )
+    missing_legacy = select_backend(
+        _p("rog_xbox_ally_x"),
+        root=missing_legacy_root,
+        ryzenadj_resolve=_NO_RYZENADJ,
+    )
+
+    partial_primary_root = str(tmp_path / "partial-primary")
+    _mk_fw(partial_primary_root, "asus-armoury")
+    _mk_asus_legacy(partial_primary_root)
+    _mk_dmi(
+        partial_primary_root,
+        "ASUSTeK COMPUTER INC.",
+        "ROG Xbox Ally X RC73XA_RC73XA",
+    )
+    partial_pl3 = os.path.join(
+        partial_primary_root,
+        "sys/class/firmware-attributes/asus-armoury/attributes/ppt_pl3_fppt",
+    )
+    for name in ("current_value", "min_value", "max_value"):
+        os.remove(os.path.join(partial_pl3, name))
+    os.rmdir(partial_pl3)
+    partial_primary = select_backend(
+        _p("rog_xbox_ally_x"),
+        root=partial_primary_root,
+        ryzenadj_resolve=_NO_RYZENADJ,
+    )
+
+    other_root = str(tmp_path / "other")
+    _mk_fw(other_root, "asus-armoury")
+    _mk_asus_legacy(other_root)
+    _mk_dmi(other_root, "ASUSTeK COMPUTER INC.", "ROG Ally X RC72LA")
+    other = select_backend(
+        _p("rog_ally_x"),
+        root=other_root,
+        ryzenadj_resolve=_NO_RYZENADJ,
+    )
+
+    assert exact.authoritative_reassert_s == 15.0
+    assert missing_legacy.authoritative_reassert_s is None
+    assert partial_primary.authoritative_reassert_s is None
+    assert other.authoritative_reassert_s is None
 
 
 def test_legion_uses_lenovo_firmware_attr(tmp_path):

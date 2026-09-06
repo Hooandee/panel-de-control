@@ -2,6 +2,51 @@
 
 ## Unreleased
 
+## [0.39.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.38.0...panel-de-control-v0.39.0) (2026-09-06)
+
+
+### Español
+
+* **Parámetros:** Añade MAKO a los parámetros de lanzamiento disponibles cuando Panel de Control detecta `mako-run`. Puedes activarlo desde la ficha de cada juego para que Steam lo inicie mediante MAKO sin reemplazar las demás opciones configuradas. ([#513](https://github.com/Hooandee/panel-de-control/pull/513)) ([f80fda7](https://github.com/Hooandee/panel-de-control/commit/f80fda788de1032e1c187c98a1f2c46dbe0f0dd7))
+
+### English
+
+* **Launch options:** Adds MAKO to the available launch options when Panel de Control detects `mako-run`. You can enable it from each game's detail view so Steam launches it through MAKO without replacing other configured options. ([#513](https://github.com/Hooandee/panel-de-control/pull/513)) ([f80fda7](https://github.com/Hooandee/panel-de-control/commit/f80fda788de1032e1c187c98a1f2c46dbe0f0dd7))
+
+### Italiano
+
+* **Opzioni di avvio:** Aggiunge MAKO alle opzioni di avvio disponibili quando Panel de Control rileva `mako-run`. Puoi attivarlo dalla scheda di ciascun gioco affinché Steam lo avvii tramite MAKO senza sostituire le altre opzioni configurate. ([#513](https://github.com/Hooandee/panel-de-control/pull/513)) ([f80fda7](https://github.com/Hooandee/panel-de-control/commit/f80fda788de1032e1c187c98a1f2c46dbe0f0dd7))
+
+## [0.38.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.12...panel-de-control-v0.38.0) (2026-09-02)
+
+
+### Español
+
+* **Temas:** Estrena una pestaña para descubrir, instalar y gestionar temas de Hooandee directamente desde Panel de Control con CSS Loader. Desde el detalle de cada tema puedes instalarlo o actualizarlo, activarlo, configurar las 18 opciones de Gallery y eliminarlo cuando ya no lo quieras. Panel comprueba la compatibilidad e integridad del paquete antes de instalarlo y, al eliminarlo, confirma que CSS Loader lo ha retirado correctamente antes de limpiar su registro. Si CSS Loader no está disponible o está desactivado, las opciones de instalación y eliminación no se muestran. ([#520](https://github.com/Hooandee/panel-de-control/pull/520)) ([#525](https://github.com/Hooandee/panel-de-control/pull/525)) ([#526](https://github.com/Hooandee/panel-de-control/pull/526))
+
+### English
+
+* **Themes:** Introduces a new tab for discovering, installing, and managing themes by Hooandee directly from Panel de Control with CSS Loader. From each theme’s detail view, you can install or update it, enable it, adjust Gallery’s 18 settings, or remove it when you no longer want it. Panel checks package compatibility and integrity before installation and, when removing a theme, confirms that CSS Loader has removed it correctly before cleaning up its record. If CSS Loader is unavailable or disabled, the installation and removal options are not shown. ([#520](https://github.com/Hooandee/panel-de-control/pull/520)) ([#525](https://github.com/Hooandee/panel-de-control/pull/525)) ([#526](https://github.com/Hooandee/panel-de-control/pull/526))
+
+### Italiano
+
+* **Temi:** Introduce una nuova scheda per scoprire, installare e gestire i temi di Hooandee direttamente da Panel de Control con CSS Loader. Dalla vista di dettaglio puoi installare o aggiornare un tema, attivarlo, regolare le 18 opzioni di Gallery oppure rimuoverlo quando non lo vuoi più. Panel verifica la compatibilità e l’integrità del pacchetto prima dell’installazione e, durante la rimozione, controlla che CSS Loader lo abbia eliminato correttamente prima di cancellarne il record. Se CSS Loader non è disponibile o è disattivato, le opzioni di installazione e rimozione non vengono mostrate. ([#520](https://github.com/Hooandee/panel-de-control/pull/520)) ([#525](https://github.com/Hooandee/panel-de-control/pull/525)) ([#526](https://github.com/Hooandee/panel-de-control/pull/526))
+
+## [0.37.12](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.11...panel-de-control-v0.37.12) (2026-08-24)
+
+
+### Español
+
+* **TDP:** En la ROG Xbox Ally X, vuelve a aplicar automáticamente durante el juego el límite de potencia guardado para recuperar los casos en los que el consumo queda por encima de lo configurado hasta volver a mover el control. La protección solo se activa en el modelo y las interfaces ASUS confirmadas; no modifica los perfiles ni se aplica a otras ROG Ally o dispositivos.
+
+### English
+
+* **TDP:** On the ROG Xbox Ally X, automatically reapplies the saved power limit during gameplay to recover cases where power remains above the configured value until the control is moved again. The safeguard activates only on the confirmed model and ASUS interfaces; it does not modify profiles or apply to other ROG Ally models or devices.
+
+### Italiano
+
+* **TDP:** Sulla ROG Xbox Ally X, riapplica automaticamente durante il gioco il limite di potenza salvato per recuperare i casi in cui il consumo resta superiore al valore configurato finché il controllo non viene spostato di nuovo. La protezione si attiva solo sulla configurazione ASUS confermata; non modifica i profili e non si applica ad altri modelli ROG Ally o dispositivi.
+
 ## [0.37.11](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.10...panel-de-control-v0.37.11) (2026-08-19)
 
 

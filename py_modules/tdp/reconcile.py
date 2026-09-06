@@ -126,6 +126,14 @@ def _heartbeat_delay(value):
     return delay if delay > 0 else UNVERIFIABLE_HEARTBEAT_S
 
 
+def _optional_delay(value):
+    try:
+        delay = float(value)
+    except (TypeError, ValueError):
+        return None
+    return delay if delay > 0 else None
+
+
 def _recent_memory(memory, now):
     recent = tuple(
         seen for seen in memory.drift_times
@@ -143,6 +151,7 @@ def decide(
     write_only=False,
     force=False,
     heartbeat_s=None,
+    authoritative_reassert_s=None,
 ):
     memory, conflict = _recent_memory(memory, now)
     heartbeat = _heartbeat_delay(heartbeat_s)
@@ -215,6 +224,7 @@ def decide(
         )
     signature = _signature(targets, observation, tolerance)
     if not signature:
+        reassert_s = _optional_delay(authoritative_reassert_s)
         status, reason = _steady_status(targets)
         clean = replace(
             memory,
@@ -223,6 +233,31 @@ def decide(
             failures=0,
             next_retry_at=0.0,
         )
+        if memory.failures and reassert_s is not None:
+            failure_status = (
+                "rejected"
+                if memory.failures > len(RETRY_S)
+                else "settling"
+            )
+            action = "apply" if now >= memory.next_retry_at else "hold"
+            return ReconcileDecision(
+                action,
+                failure_status,
+                "write_rejected",
+                memory,
+                conflict,
+            )
+        if reassert_s is not None and (
+            memory.last_write_at is None
+            or now - memory.last_write_at >= reassert_s
+        ):
+            return ReconcileDecision(
+                "apply",
+                status,
+                "periodic_reassert",
+                clean,
+                conflict,
+            )
         return ReconcileDecision("hold", status, reason, clean, conflict)
     if memory.failures and now < memory.next_retry_at:
         status = (

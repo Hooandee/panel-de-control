@@ -73,6 +73,7 @@ class FirmwareAttrBackend(TDPBackend):
         ignored_live_maxes=None,
         cap_boost_to_active=False,
         readback_settle_delays=None,
+        authoritative_reassert_s=None,
     ):
         self.name = f"firmware-attr:{driver_prefix}"
         self._fallback = fallback
@@ -101,6 +102,20 @@ class FirmwareAttrBackend(TDPBackend):
             if rail in self._primary_rails or rail in self._legacy
         )
         self.supports_levels = any(rail != "pl1" for rail in self._rails)
+        complete_primary = all(rail in self._primary_rails for rail, _attr in _RAIL_ATTRS)
+        complete_legacy = all(rail in self._legacy for rail, _attr in _RAIL_ATTRS)
+        try:
+            reassert_s = float(authoritative_reassert_s)
+        except (TypeError, ValueError):
+            reassert_s = 0.0
+        self.authoritative_reassert_s = (
+            reassert_s
+            if driver_prefix == "asus-armoury"
+            and complete_primary
+            and complete_legacy
+            and reassert_s > 0
+            else None
+        )
 
     def _live_bounds(self, attr):
         # Read live, never cache: the firmware ceiling is dynamic.
