@@ -14,7 +14,7 @@ import {
 } from "./catalog";
 
 const TOOLS: LaunchTools = {
-  lsfg: true, mangohud: true, gamemode: true, gamescope: true,
+  lsfg: true, makoRun: true, mangohud: true, gamemode: true, gamescope: true,
   distro: "bazzite", locale_reliable: true,
 };
 
@@ -45,6 +45,11 @@ describe("buildLaunchOptions", () => {
   it("orders wrappers canonically (gamemode → mangohud → lsfg)", () => {
     const out = buildLaunchOptions(parse(""), { lsfg: true, mangohud: true, gamemode: true });
     expect(out).toBe("gamemoderun mangohud ~/lsfg %command%");
+  });
+
+  it("orders wrappers with makoRun at the end (gamemode → mangohud → lsfg → makoRun)", () => {
+    const out = buildLaunchOptions(parse(""), { lsfg: true, makoRun: true, mangohud: true, gamemode: true });
+    expect(out).toBe("gamemoderun mangohud ~/lsfg ~/.local/bin/mako-run %command%");
   });
 
   it("langEs sets LANG to Spanish", () => {
@@ -226,7 +231,7 @@ describe("windowMode single-choice arg", () => {
 });
 
 describe("frequentPills", () => {
-  const tools: LaunchTools = { lsfg: true, mangohud: true, gamemode: true, gamescope: true, distro: "bazzite", locale_reliable: true };
+  const tools: LaunchTools = { lsfg: true, makoRun: true, mangohud: true, gamemode: true, gamescope: true, distro: "bazzite", locale_reliable: true };
 
   it("returns most-used available pills, most-first, capped", () => {
     const top = frequentPills({ noVideo: 5, mangohud: 9, protonLog: 1 }, tools, 2);
@@ -303,6 +308,10 @@ describe("isPillAvailable", () => {
     expect(isPillAvailable(lsfg, TOOLS)).toBe(true);
     expect(isPillAvailable(lsfg, { ...TOOLS, lsfg: false })).toBe(false);
     expect(isPillAvailable(lsfg, null)).toBe(false);
+
+    const makoRun = CATALOG.find((p) => p.id === "makoRun")!;
+    expect(isPillAvailable(makoRun, TOOLS)).toBe(true);
+    expect(isPillAvailable(makoRun, { ...TOOLS, makoRun: false })).toBe(false);
   });
 
   it("pills without a tool requirement are always available", () => {

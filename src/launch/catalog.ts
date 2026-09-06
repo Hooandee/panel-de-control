@@ -25,13 +25,14 @@ import { isCustomPillId } from "./customVars";
 
 export type PillKind = "env" | "wrapper" | "arg";
 export type Section = "common" | "advanced";
-export type ToolKey = "lsfg" | "mangohud" | "gamemode";
+export type ToolKey = "lsfg" | "mangohud" | "gamemode" | "makoRun";
 
 /** Detected host tools + distro — drives honest availability + the locale caveat. */
 export interface LaunchTools {
   lsfg: boolean;
   mangohud: boolean;
   gamemode: boolean;
+  makoRun: boolean;
   gamescope: boolean;
   distro: string; // "steamos" | "bazzite" | "cachyos" | "other"
   locale_reliable: boolean;
@@ -100,13 +101,14 @@ export const AMBIGUOUS = "__PDC_AMBIGUOUS__";
 export type Usage = Record<string, number>;
 
 // Wrappers are listed outer→inner: gamemoderun wraps mangohud wraps ~/lsfg wraps
-// the game. Added in this array order, so a newly-enabled wrapper lands in the
-// right place while any pre-existing (unknown) wrapper stays outermost.
+// ~/.local/bin/mako-run wraps the game. Added in this array order, so a newly-enabled
+// wrapper lands in the right place while any pre-existing (unknown) wrapper stays outermost.
 export const CATALOG: Pill[] = [
   // ── Común ────────────────────────────────────────────────────────────────
   { id: "mangohud", section: "common", recommended: true, subgroup: "params.sub.perf", kind: "wrapper", wrapper: "mangohud", raw: "mangohud", requires: "mangohud", labelKey: "params.pill.mangohud", descKey: "params.pill.mangohud.desc" },
   { id: "gamemode", section: "common", subgroup: "params.sub.perf", kind: "wrapper", wrapper: "gamemoderun", raw: "gamemoderun", requires: "gamemode", labelKey: "params.pill.gamemode", descKey: "params.pill.gamemode.desc" },
   { id: "lsfg", section: "common", subgroup: "params.sub.perf", kind: "wrapper", wrapper: "~/lsfg", raw: "~/lsfg", requires: "lsfg", labelKey: "params.pill.lsfg", descKey: "params.pill.lsfg.desc" },
+  { id: "makoRun", section: "common", subgroup: "params.sub.perf", kind: "wrapper", wrapper: "~/.local/bin/mako-run", raw: "~/.local/bin/mako-run", requires: "makoRun", labelKey: "params.pill.makoRun", descKey: "params.pill.makoRun.desc" },
   { id: "langEs", section: "common", subgroup: "params.sub.lang", kind: "env", envName: "LANG", envValue: "es_ES.UTF-8", raw: "LANG", labelKey: "params.pill.langEs", descKey: "params.pill.langEs.desc" },
   { id: "noVideo", section: "common", recommended: true, subgroup: "params.sub.startup", kind: "arg", arg: "-novid", raw: "-novid", labelKey: "params.pill.novid", descKey: "params.pill.novid.desc" },
 
@@ -243,7 +245,7 @@ export function updateSelection(
 
 // Wrapper chain order (outer→inner), independent of display order: gamemode wraps
 // mangohud wraps lsfg wraps the game. Newly-enabled wrappers are added in this order.
-const WRAPPER_PRECEDENCE: Record<string, number> = { gamemoderun: 0, mangohud: 1, "~/lsfg": 2 };
+const WRAPPER_PRECEDENCE: Record<string, number> = { gamemoderun: 0, mangohud: 1, "~/lsfg": 2, "~/.local/bin/mako-run": 3 };
 
 function isActive(sel: string | boolean | undefined): boolean {
   return sel !== undefined && sel !== false && sel !== AMBIGUOUS;

@@ -652,6 +652,7 @@ def capabilities_from(states: dict) -> dict:
         "controller_kind": ctl.get("kind"),
         # Launch options: tools detected + (running game) malformed string / Proton resolved.
         "launch_lsfg": bool(ltools.get("lsfg")),
+        "launch_makoRun": bool(ltools.get("makoRun")),
         "launch_mangohud": bool(ltools.get("mangohud")),
         "launch_distro": ltools.get("distro"),
         "launch_running_compat": running.get("compatTool"),

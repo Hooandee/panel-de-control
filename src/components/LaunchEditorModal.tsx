@@ -41,7 +41,7 @@ const SUBGROUP_ICONS: Record<string, ReactNode> = {
 type Editor = ReturnType<typeof useLaunchEditor>;
 
 const TOOLS_FALLBACK: LaunchTools = {
-  lsfg: false, mangohud: false, gamemode: false, gamescope: false,
+  lsfg: false, makoRun: false, mangohud: false, gamemode: false, gamescope: false,
   distro: "other", locale_reliable: true,
 };
 
