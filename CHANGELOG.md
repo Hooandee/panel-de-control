@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.40.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.39.0...panel-de-control-v0.40.0) (2026-09-06)
+
+
+### Features
+
+* add OneXPlayer Super X TDP support ([#496](https://github.com/Hooandee/panel-de-control/issues/496)) ([9017304](https://github.com/Hooandee/panel-de-control/commit/90173049d0f8683abda516ed7e58f31a9ab50029))
+
 ## [0.39.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.38.0...panel-de-control-v0.39.0) (2026-09-06)
 
 
