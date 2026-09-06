@@ -5,9 +5,17 @@
 ## [0.39.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.38.0...panel-de-control-v0.39.0) (2026-09-06)
 
 
-### Features
+### Español
 
-* added mako run launch option ([#513](https://github.com/Hooandee/panel-de-control/issues/513)) ([f80fda7](https://github.com/Hooandee/panel-de-control/commit/f80fda788de1032e1c187c98a1f2c46dbe0f0dd7))
+* **Parámetros:** Añade MAKO a los parámetros de lanzamiento disponibles cuando Panel de Control detecta `mako-run`. Puedes activarlo desde la ficha de cada juego para que Steam lo inicie mediante MAKO sin reemplazar las demás opciones configuradas. ([#513](https://github.com/Hooandee/panel-de-control/pull/513)) ([f80fda7](https://github.com/Hooandee/panel-de-control/commit/f80fda788de1032e1c187c98a1f2c46dbe0f0dd7))
+
+### English
+
+* **Launch options:** Adds MAKO to the available launch options when Panel de Control detects `mako-run`. You can enable it from each game's detail view so Steam launches it through MAKO without replacing other configured options. ([#513](https://github.com/Hooandee/panel-de-control/pull/513)) ([f80fda7](https://github.com/Hooandee/panel-de-control/commit/f80fda788de1032e1c187c98a1f2c46dbe0f0dd7))
+
+### Italiano
+
+* **Opzioni di avvio:** Aggiunge MAKO alle opzioni di avvio disponibili quando Panel de Control rileva `mako-run`. Puoi attivarlo dalla scheda di ciascun gioco affinché Steam lo avvii tramite MAKO senza sostituire le altre opzioni configurate. ([#513](https://github.com/Hooandee/panel-de-control/pull/513)) ([f80fda7](https://github.com/Hooandee/panel-de-control/commit/f80fda788de1032e1c187c98a1f2c46dbe0f0dd7))
 
 ## [0.38.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.12...panel-de-control-v0.38.0) (2026-09-02)
 
