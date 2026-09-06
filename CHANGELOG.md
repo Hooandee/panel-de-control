@@ -5,9 +5,17 @@
 ## [0.40.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.39.0...panel-de-control-v0.40.0) (2026-09-06)
 
 
-### Features
+### Español
 
-* add OneXPlayer Super X TDP support ([#496](https://github.com/Hooandee/panel-de-control/issues/496)) ([9017304](https://github.com/Hooandee/panel-de-control/commit/90173049d0f8683abda516ed7e58f31a9ab50029))
+* **OneXPlayer Super X:** Añade soporte experimental para reconocer el modelo y ajustar su TDP entre 15 y 55 W, con hasta 75 W cuando está conectado a un cargador. La pantalla AMOLED se identifica como OLED para ocultar el ajuste «Aspecto OLED». El modo Frost Bay de 120 W y HDR no se habilitan en esta primera versión. ([#496](https://github.com/Hooandee/panel-de-control/pull/496)) ([9017304](https://github.com/Hooandee/panel-de-control/commit/90173049d0f8683abda516ed7e58f31a9ab50029))
+
+### English
+
+* **OneXPlayer Super X:** Adds experimental support to recognise the model and adjust its TDP from 15 to 55 W, with up to 75 W while connected to a charger. Its AMOLED display is identified as OLED, so the “OLED Look” option is hidden. The 120 W Frost Bay mode and HDR are not enabled in this initial release. ([#496](https://github.com/Hooandee/panel-de-control/pull/496)) ([9017304](https://github.com/Hooandee/panel-de-control/commit/90173049d0f8683abda516ed7e58f31a9ab50029))
+
+### Italiano
+
+* **OneXPlayer Super X:** Aggiunge il supporto sperimentale per riconoscere il modello e regolare il TDP da 15 a 55 W, fino a 75 W quando è collegato a un alimentatore. Il display AMOLED viene identificato come OLED, quindi l’opzione «Aspetto OLED» viene nascosta. La modalità Frost Bay da 120 W e l’HDR non sono abilitati in questa prima versione. ([#496](https://github.com/Hooandee/panel-de-control/pull/496)) ([9017304](https://github.com/Hooandee/panel-de-control/commit/90173049d0f8683abda516ed7e58f31a9ab50029))
 
 ## [0.39.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.38.0...panel-de-control-v0.39.0) (2026-09-06)
 
