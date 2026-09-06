@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.39.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.38.0...panel-de-control-v0.39.0) (2026-09-06)
+
+
+### Features
+
+* added mako run launch option ([#513](https://github.com/Hooandee/panel-de-control/issues/513)) ([f80fda7](https://github.com/Hooandee/panel-de-control/commit/f80fda788de1032e1c187c98a1f2c46dbe0f0dd7))
+
 ## [0.38.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.12...panel-de-control-v0.38.0) (2026-09-02)
 
 
