@@ -14,6 +14,16 @@ from tdp.steamdeck_hwmon import SteamDeckHwmonBackend
 from tdp.types import TdpLimits
 
 
+_STRICT_RYZENADJ_KEYS = frozenset({
+    "onexplayer_superx",
+    "zotac_gaming_zone",
+    "rog_flow_z13",
+    "onexplayer_f1",
+    "gpd_win_mini_2025",
+    "ayaneo_3",
+})
+
+
 def _candidates(device, fallback, root, ryzenadj):
     """Ordered probe chain of backend factories (constructed lazily by the caller,
     so an early match costs no extra sysfs work). The detected family puts its
@@ -35,6 +45,7 @@ def _candidates(device, fallback, root, ryzenadj):
                 device,
                 root,
             ),
+            trust_live_bounds=device.key == "rog_flow_z13",
         )
 
     def lenovo():
@@ -80,6 +91,8 @@ def _candidates(device, fallback, root, ryzenadj):
         return [ryzenadj]
     if key == "onexplayer_apex":
         return [alib, ryzenadj]
+    if key in _STRICT_RYZENADJ_KEYS:
+        return [asus, lenovo, msi, ryzenadj]
     if key.startswith("rog_"):
         return [asus, lenovo, msi, *amd_tail]
     if key.startswith("legion_"):
@@ -100,6 +113,7 @@ def select_backend(device, root="/", ryzenadj_resolve=None) -> TDPBackend:
             fallback,
             write_max=device.cooler_max,
             power_only_retry=is_gpd_win_mini_2025(device, root),
+            require_readback=device.key in _STRICT_RYZENADJ_KEYS,
             **kwargs,
         )
 

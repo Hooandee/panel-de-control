@@ -74,12 +74,14 @@ class FirmwareAttrBackend(TDPBackend):
         cap_boost_to_active=False,
         readback_settle_delays=None,
         authoritative_reassert_s=None,
+        trust_live_bounds=False,
     ):
         self.name = f"firmware-attr:{driver_prefix}"
         self._fallback = fallback
         self._root = root
         self._profile_name = profile_name  # Lenovo: set this platform-profile to "custom" first
         self._is_generic = is_generic
+        self._trust_live_bounds = bool(trust_live_bounds)
         self._rail_floors = _normalise_rail_floors(rail_floors)
         self._ignored_live_maxes = _normalise_rail_values(ignored_live_maxes)
         self.cap_boost_to_active = bool(cap_boost_to_active)
@@ -122,6 +124,39 @@ class FirmwareAttrBackend(TDPBackend):
         lo = self._read_int(self._attr(attr, "min_value"))
         hi = self._read_int(self._attr(attr, "max_value"))
         return lo, hi
+
+    @staticmethod
+    def _rail_for_attr(attr):
+        return next(
+            (rail for rail, rail_attr in _RAIL_ATTRS if rail_attr == attr),
+            None,
+        )
+
+    def _static_bounds(self, attr):
+        rail = self._rail_for_attr(attr)
+        hi = self._profile_rail_max(attr)
+        lo = max(
+            self._fallback.min_w,
+            self._rail_floors.get(rail, self._fallback.min_w),
+        )
+        return min(lo, hi), hi
+
+    def _validated_live_bounds(self, attr):
+        mn, reported_max = self._live_bounds(attr)
+        rail = self._rail_for_attr(attr)
+        mx = self._effective_live_max(rail, reported_max)
+        if (
+            mn is None
+            or mx is None
+            or mn <= 0
+            or mx <= 0
+            or mn > mx
+        ):
+            return None
+        static_lo, static_hi = self._static_bounds(attr)
+        lo = max(static_lo, mn)
+        hi = min(static_hi, mx)
+        return (lo, hi) if lo <= hi else None
 
     def _find_legacy_nodes(self, driver_prefix):
         """Detect the legacy asus-nb-wmi ppt files (the second PL1 interface). ASUS only;
@@ -176,11 +211,17 @@ class FirmwareAttrBackend(TDPBackend):
     def get_limits(self):
         if not self.supported:
             return self._fallback
-        if not self._is_generic:
+        if not self._is_generic and not self._trust_live_bounds:
             # The profile is the authority for the range; the firmware's reported max
             # lies (and, cached, stranded users at 15 W). Writes still clamp live.
             return self._fallback
-        mn, mx = self._live_bounds("ppt_pl1_spl")
+        if self._trust_live_bounds:
+            live = self._validated_live_bounds("ppt_pl1_spl")
+            if live is None:
+                return self._fallback
+            mn, mx = live
+        else:
+            mn, mx = self._live_bounds("ppt_pl1_spl")
         max_ac_w = min(
             self._fallback.max_ac_w,
             mx if mx is not None else self._fallback.max_ac_w,
@@ -231,6 +272,16 @@ class FirmwareAttrBackend(TDPBackend):
         return self.read_profile() == mode
 
     def level_limits(self):
+        if self._trust_live_bounds:
+            return {
+                key: {"min": bounds[0], "max": bounds[1]}
+                for key, attr in _RAIL_ATTRS
+                if key in self._rails
+                for bounds in (
+                    self._validated_live_bounds(attr)
+                    or self._static_bounds(attr),
+                )
+            }
         if self._is_generic:
             out = {}
             for key, attr in _RAIL_ATTRS:
@@ -280,10 +331,7 @@ class FirmwareAttrBackend(TDPBackend):
     def _clamp_live(self, value, attr):
         mn, mx = self._live_bounds(attr)
         safe_hi = self._profile_rail_max(attr)
-        rail = next(
-            (rail for rail, rail_attr in _RAIL_ATTRS if rail_attr == attr),
-            None,
-        )
+        rail = self._rail_for_attr(attr)
         live_hi = self._effective_live_max(rail, mx)
         hi = min(live_hi if live_hi is not None else safe_hi, safe_hi)
         live_lo = mn if mn is not None else self._fallback.min_w
@@ -294,6 +342,12 @@ class FirmwareAttrBackend(TDPBackend):
     def set_levels(self, pl1, pl2, pl3, ac):
         if not self.supported:
             return TdpResult(pl1, None, False, "firmware-attributes path not present")
+        if self._trust_live_bounds and any(
+            self._validated_live_bounds(attr) is None
+            for rail, attr in _RAIL_ATTRS
+            if rail in self._primary_rails
+        ):
+            return TdpResult(pl1, self.read_applied(), False, "firmware live bounds invalid")
         self._set_custom_profile()
         values = {"pl1": pl1, "pl2": pl2, "pl3": pl3}
         attrs = dict(_RAIL_ATTRS)
@@ -376,7 +430,7 @@ class FirmwareAttrBackend(TDPBackend):
                 continue
             lo, hi = self._live_bounds(attr)
             reported[rail] = {"min": lo, "max": hi}
-        return {
+        diagnostics = {
             "boost_capped_to_active": self.cap_boost_to_active,
             "ignored_live_maxes": dict(self._ignored_live_maxes),
             "readback_settle_ms": round(
@@ -384,6 +438,13 @@ class FirmwareAttrBackend(TDPBackend):
             ),
             "reported_live_bounds": reported,
         }
+        if self._trust_live_bounds:
+            diagnostics["live_bounds_valid"] = {
+                rail: self._validated_live_bounds(attr) is not None
+                for rail, attr in _RAIL_ATTRS
+                if rail in self._rails
+            }
+        return diagnostics
 
     def _observation_mismatches(self, observation, targets):
         bad = []

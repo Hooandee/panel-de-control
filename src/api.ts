@@ -813,6 +813,30 @@ export interface ControllerConfig {
   mode_options?: string[];
   paddles_as?: string | null;
   paddles_options?: string[];
+  // AYANEO 3 removable controller modules. Absent on every other model.
+  magic_modules?: MagicModulesState;
+}
+
+export type ControllerAction = "eject_left" | "eject_right" | "eject_both";
+export type ControllerActionOutcome = "confirmed" | "unverifiable" | "unavailable" | "failed" | "busy";
+export type MagicModuleState = "connected" | "disconnected" | "ejecting" | "activating" | "paused" | "unknown";
+
+export interface MagicModulesState {
+  supported: boolean;
+  source: "hhd";
+  left: MagicModuleState;
+  right: MagicModuleState;
+  power?: boolean | null;
+  busy: boolean;
+}
+
+export interface ControllerActionResult {
+  action: ControllerAction;
+  outcome: ControllerActionOutcome;
+  accepted: boolean | null;
+  reason?: string;
+  modules?: MagicModulesState;
+  config: ControllerConfig;
 }
 
 // ---- Bug reporter ---------------------------------------------------------
@@ -843,6 +867,8 @@ export const setControllerSetting =
   callable<[field: string, value: string], ControllerConfig>("set_controller_setting");
 export const resetController =
   callable<[scope: Scope, appid: string | null], ControllerConfig>("reset_controller");
+export const runControllerAction =
+  callable<[action: ControllerAction], ControllerActionResult>("run_controller_action");
 
 // ---- Ajustes: per-game profile overview -----------------------------------
 // One row per game that has a stored per-game profile in any section (raw own values).

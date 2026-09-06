@@ -15,6 +15,10 @@ if "decky" not in sys.modules:
 import main
 from desktop.fan_store import DesktopFanStore
 from device_registry import detect
+from device_profiles import DEVICE_TABLE
+
+
+FREMONT = next(profile for profile in DEVICE_TABLE if profile.key == "steam_machine")
 
 
 class Coordinator:
@@ -47,7 +51,7 @@ class Coordinator:
 def _plugin(device="Fremont", manual=False):
     plugin = main.Plugin.__new__(main.Plugin)
     plugin._init = lambda: None
-    plugin._device = detect(product_name=device)
+    plugin._device = FREMONT if device == "Fremont" else detect(product_name=device)
     plugin._settings = {"desktop_mode_enabled": manual, "desktop_power_mode": "free",
                         "desktop_cpu_w": 23, "desktop_gpu_w": 80,
                         "tdp_control_enabled": False, "desktop_prev_tdp_control": None}
@@ -72,6 +76,17 @@ def test_fremont_rpc_reports_automatic_desktop_mode():
 def test_generic_rpc_is_disabled_until_manual_opt_in():
     assert asyncio.run(_plugin("Unknown PC").get_desktop_state())["enabled"] is False
     assert asyncio.run(_plugin("Unknown PC", manual=True).get_desktop_state())["enabled"] is True
+
+
+def test_recognised_device_rejects_direct_manual_desktop_activation():
+    plugin = _plugin("Galileo")
+    before = dict(plugin._settings)
+
+    state = asyncio.run(plugin.set_desktop_mode_enabled(True))
+
+    assert state["enabled"] is False
+    assert plugin._settings == before
+    assert plugin._desktop_power.calls == []
 
 
 def test_selecting_profile_persists_only_after_success():
@@ -181,6 +196,103 @@ def test_failed_desktop_restore_keeps_mode_enabled_and_handheld_tdp_released():
     assert calls == []
 
 
+def test_recognised_device_restores_generic_handoff_before_clearing_opt_in():
+    plugin = _plugin("Galileo", manual=True)
+    plugin._desktop_recognition_migration_pending = True
+    plugin._settings.update({
+        "desktop_power_mode": "custom",
+        "desktop_prev_tdp_control": True,
+        "tdp_control_enabled": False,
+        "desktop_power_handoff": {"device_key": "generic"},
+    })
+    order = []
+
+    def restore():
+        order.append("restore")
+        plugin._settings["desktop_power_handoff"] = None
+        return {"ok": True, "detail": "restored"}
+
+    plugin._desktop_power.restore = restore
+    plugin._save = lambda: order.append("save")
+
+    assert plugin._recover_recognised_desktop_migration() is True
+    assert order == ["restore", "save"]
+    assert plugin._settings["desktop_mode_enabled"] is False
+    assert plugin._settings["desktop_power_mode"] == "free"
+    assert plugin._settings["tdp_control_enabled"] is True
+    assert plugin._desktop_recognition_migration_pending is False
+
+
+def test_failed_recognised_device_restore_keeps_handoff_and_tdp_disabled():
+    plugin = _plugin("Galileo", manual=True)
+    plugin._desktop_recognition_migration_pending = True
+    plugin._settings.update({
+        "desktop_prev_tdp_control": True,
+        "tdp_control_enabled": False,
+        "desktop_power_handoff": {"device_key": "generic"},
+    })
+    plugin._desktop_power.restore = lambda: {
+        "ok": False,
+        "detail": "restore failed",
+    }
+
+    assert plugin._recover_recognised_desktop_migration() is False
+    assert plugin._settings["desktop_mode_enabled"] is True
+    assert plugin._settings["tdp_control_enabled"] is False
+    assert plugin._settings["desktop_power_handoff"] == {"device_key": "generic"}
+    assert plugin._desktop_recognition_migration_pending is True
+
+
+def test_recognised_device_migration_retry_is_throttled_then_recovers(monkeypatch):
+    plugin = _plugin("Galileo", manual=True)
+    plugin._desktop_recognition_migration_pending = True
+    plugin._desktop_recognition_migration_last_attempt = float("-inf")
+    plugin._desktop_recognition_migration_last_failure = None
+    plugin._settings.update({
+        "desktop_prev_tdp_control": True,
+        "tdp_control_enabled": False,
+        "desktop_power_handoff": {"device_key": "generic"},
+    })
+    now = [10.0]
+    monkeypatch.setattr(main.time, "monotonic", lambda: now[0])
+    calls = []
+
+    def restore():
+        calls.append(now[0])
+        if len(calls) == 1:
+            return {"ok": False, "detail": "surface unavailable"}
+        plugin._settings["desktop_power_handoff"] = None
+        return {"ok": True, "detail": "restored"}
+
+    plugin._desktop_power.restore = restore
+
+    assert plugin._recover_recognised_desktop_migration() is False
+    assert plugin._recover_recognised_desktop_migration() is False
+    assert calls == [10.0]
+    assert plugin._desktop_state()["migration_pending"] is True
+    assert plugin._desktop_state()["migration_failure"] == "surface unavailable"
+
+    now[0] += 5.0
+    assert plugin._recover_recognised_desktop_migration() is True
+    assert calls == [10.0, 15.0]
+    assert plugin._desktop_state()["migration_pending"] is False
+
+
+def test_pending_recognition_migration_blocks_handheld_tdp_enable():
+    plugin = _plugin("Galileo", manual=True)
+    plugin._desktop_recognition_migration_pending = True
+    plugin._settings["desktop_power_handoff"] = {"device_key": "generic"}
+    plugin._desktop_power.restore = lambda: {
+        "ok": False,
+        "detail": "surface unavailable",
+    }
+
+    enabled = asyncio.run(plugin.set_tdp_control_enabled(True))
+
+    assert enabled is False
+    assert plugin._settings["tdp_control_enabled"] is False
+
+
 def test_shutdown_handoff_releases_desktop_power():
     plugin = main.Plugin.__new__(main.Plugin)
     plugin._desktop_power = Coordinator()
@@ -220,7 +332,7 @@ def test_desktop_fan_state_never_fabricates_a_missing_gpu_channel():
     plugin._fan_experimental_available = False
     plugin._settings = {"fan_experimental": False}
     plugin._os_name = "Linux"
-    plugin._device = detect(product_name="Fremont")
+    plugin._device = FREMONT
     plugin._firmware_mode = lambda: "custom"
     plugin._firmware_choices = lambda: []
     plugin._desktop_mode_on = lambda: True

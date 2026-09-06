@@ -1,11 +1,12 @@
 import os
 
+import pytest
+
 from device_registry import detect
 
 
 # (product_name as it appears in /sys/class/dmi/id/product_name) -> expected key
 KNOWN = {
-    "Fremont": "steam_machine",
     "Jupiter": "steam_deck_lcd",
     "Galileo": "steam_deck_oled",
     "ROG Ally RC71L_RC71L": "rog_ally",
@@ -23,10 +24,19 @@ KNOWN = {
 }
 
 
-def test_steam_machine_is_a_validated_desktop_without_false_cpu_watt_presets():
-    prof = detect(product_name="Fremont")
+def _detect_dmi(tmp_path, product_name, sys_vendor, board_name=""):
+    dmi = tmp_path / "sys/class/dmi/id"
+    dmi.mkdir(parents=True, exist_ok=True)
+    (dmi / "product_name").write_text(product_name)
+    (dmi / "sys_vendor").write_text(sys_vendor)
+    (dmi / "board_name").write_text(board_name)
+    return detect(root=str(tmp_path))
+
+
+def test_steam_machine_is_a_validated_desktop_without_false_cpu_watt_presets(tmp_path):
+    prof = _detect_dmi(tmp_path, "Fremont", "Valve", "Fremont")
     assert prof.is_generic is False
-    assert prof.experimental is False
+    assert prof.experimental is True
     assert prof.desktop_mode is True
     assert prof.tdp_max == 30
     assert prof.tdp_presets == ()
@@ -61,17 +71,105 @@ def test_onexplayer_apex_matches_case_insensitively():
     prof = detect(product_name="OneXPlayer Apex 2025")
     assert prof.key == "onexplayer_apex"
 
-def test_onexplayer_superx_is_recognised_with_safe_limits():
-    profile = detect(product_name="ONEXPLAYER SUPER X")
+def test_onexplayer_superx_is_recognised_with_safe_limits(tmp_path):
+    profile = _detect_dmi(
+        tmp_path, "ONEXPLAYER SUPER X", "ONE-NETBOOK", "ONEXPLAYER SUPER X"
+    )
 
     assert profile.key == "onexplayer_superx"
     assert profile.experimental is True
-    assert profile.tdp_min == 15
+    assert profile.tdp_min == 10
     assert profile.tdp_default == 30
     assert profile.tdp_max == 55
-    assert profile.tdp_max_charger == 75
+    assert profile.tdp_max_charger == 80
     assert profile.charger_only_extra is True
     assert profile.panel == "oled"
+    assert profile.hdr is True
+
+
+def test_new_experimental_profiles_require_exact_dmi(tmp_path):
+    fixtures = (
+        ("ZOTAC GAMING ZONE", "ZOTAC", "G0A1W", "zotac_gaming_zone"),
+        ("ZOTAC GAMING ZONE", "zotac", "g1a1w", "zotac_gaming_zone"),
+        ("ROG Flow Z13 GZ302EA_GZ302EA", "ASUSTeK COMPUTER INC.", "GZ302EA", "rog_flow_z13"),
+        ("ONEXPLAYER F1", "ONE-NETBOOK", "ONEXPLAYER F1", "onexplayer_f1"),
+        ("AYANEO 3", "AYANEO", "AYANEO 3", "ayaneo_3"),
+    )
+    for index, (product, vendor, board, key) in enumerate(fixtures):
+        root = tmp_path / str(index)
+        assert _detect_dmi(root, product, vendor, board).key == key
+
+
+def test_new_profiles_reject_wrong_vendor_board_and_nearby_products(tmp_path):
+    fixtures = (
+        ("ONEXPLAYER SUPER X", "OTHER", "ONEXPLAYER SUPER X"),
+        ("ZOTAC GAMING ZONE", "ZOTAC", "FUTURE-BOARD"),
+        ("ROG Flow Z13 GZ302EA_GZ302EA", "ASUSTeK COMPUTER INC.", "OTHER"),
+        ("AYANEO 3 Pro", "AYANEO", "AYANEO 3"),
+        ("Fremont", "OTHER", "Fremont"),
+        ("G1617-02-L", "GPD", "G1617-02"),
+    )
+    for index, (product, vendor, board) in enumerate(fixtures):
+        root = tmp_path / str(index)
+        assert _detect_dmi(root, product, vendor, board).key == "generic"
+
+    f1_pro = _detect_dmi(
+        tmp_path / "f1pro", "ONEXPLAYER F1Pro", "ONE-NETBOOK", "ONEXPLAYER F1"
+    )
+    assert f1_pro.key == "onexplayer_f1pro"
+
+
+def test_new_profiles_publish_defensive_power_ranges(tmp_path):
+    fixtures = (
+        ("ZOTAC GAMING ZONE", "ZOTAC", "G0A1W", (8, 15, 28, 28)),
+        ("ROG Flow Z13 GZ302EA_GZ302EA", "ASUSTeK COMPUTER INC.", "GZ302EA", (5, 20, 54, 65)),
+        ("ONEXPLAYER F1", "ONE-NETBOOK", "ONEXPLAYER F1", (15, 28, 30, 30)),
+        ("AYANEO 3", "AYANEO", "AYANEO 3", (8, 15, 35, 35)),
+    )
+    for index, (product, vendor, board, limits) in enumerate(fixtures):
+        profile = _detect_dmi(tmp_path / str(index), product, vendor, board)
+        assert (
+            profile.tdp_min,
+            profile.tdp_default,
+            profile.tdp_max,
+            profile.tdp_max_charger,
+        ) == limits
+        assert profile.experimental is True
+
+
+@pytest.mark.parametrize(
+    "os_release",
+    (
+        'ID=bazzite\nPRETTY_NAME="Bazzite 43"\n',
+        'ID=bazzite\nPRETTY_NAME="Bazzite 44"\n',
+        'ID=steamos\nPRETTY_NAME="SteamOS Holo"\n',
+        'ID=cachyos\nPRETTY_NAME="CachyOS"\n',
+    ),
+)
+def test_new_machine_recognition_is_independent_of_linux_distribution(
+    tmp_path,
+    os_release,
+):
+    fixtures = (
+        ("Fremont", "Valve", "Fremont", "steam_machine"),
+        ("ONEXPLAYER SUPER X", "ONE-NETBOOK", "ONEXPLAYER SUPER X", "onexplayer_superx"),
+        ("ZOTAC GAMING ZONE", "ZOTAC", "G0A1W", "zotac_gaming_zone"),
+        ("ROG Flow Z13 GZ302EA_GZ302EA", "ASUSTeK COMPUTER INC.", "GZ302EA", "rog_flow_z13"),
+        ("ONEXPLAYER F1", "ONE-NETBOOK", "ONEXPLAYER F1", "onexplayer_f1"),
+        ("G1617-02", "GPD", "G1617-02", "gpd_win_mini_2025"),
+        ("AYANEO 3", "AYANEO", "AYANEO 3", "ayaneo_3"),
+    )
+    for index, (product, vendor, board, key) in enumerate(fixtures):
+        root = tmp_path / str(index)
+        os_release_path = root / "etc/os-release"
+        os_release_path.parent.mkdir(parents=True, exist_ok=True)
+        os_release_path.write_text(os_release)
+
+        profile = _detect_dmi(root, product, vendor, board)
+
+        assert profile.key == key
+        assert profile.is_generic is False
+        assert profile.experimental is True
 
 
 def test_aokzoe_a1x_is_recognised_experimental():
@@ -89,8 +187,8 @@ def test_aokzoe_a1x_matches_case_insensitively():
     assert prof.key == "aokzoe_a1x"
 
 
-def test_gpd_win_mini_2025_is_recognised_experimental():
-    prof = detect(product_name="G1617-02")
+def test_gpd_win_mini_2025_is_recognised_experimental(tmp_path):
+    prof = _detect_dmi(tmp_path, "G1617-02", "GPD", "G1617-02")
     assert prof.key == "gpd_win_mini_2025"
     assert prof.is_generic is False
     assert prof.experimental is True

@@ -1,4 +1,5 @@
 import os
+import subprocess
 from types import SimpleNamespace
 
 from tdp import ryzenadj
@@ -104,6 +105,134 @@ def test_set_tdp_when_readback_unavailable_assumes_applied():
     assert "readback unavailable" in res.detail
 
 
+def test_strict_backend_defers_initial_readback_until_first_offloaded_write():
+    fake = FakeRun(info=_unreadable_info())
+
+    backend = RyzenadjBackend(
+        FALLBACK,
+        resolve=lambda: "/usr/bin/ryzenadj",
+        runner=fake,
+        require_readback=True,
+    )
+
+    assert backend.supported is True
+    assert fake.calls == []
+
+    result = backend.set_tdp(20, ac=True)
+
+    assert result.ok is False
+    assert backend.supported is False
+    assert "required readback unavailable before write" in result.detail
+    assert not any("--stapm-limit" in argv for argv, _kwargs in fake.calls)
+
+
+def test_strict_probe_requires_all_power_rails_and_never_writes():
+    fake = FakeRun(info=INFO_OUTPUT)
+    backend = RyzenadjBackend(
+        FALLBACK,
+        resolve=lambda: "/usr/bin/ryzenadj",
+        runner=fake,
+        require_readback=True,
+    )
+
+    assert backend.probe() is False
+    assert backend.supported is False
+    assert not any("--stapm-limit" in argv for argv, _kwargs in fake.calls)
+
+
+def test_strict_backend_confirms_all_three_power_rails():
+    fake = ScriptedRun(
+        write_rcs=[0],
+        infos=[_snapshot_info(15), _snapshot_info(20)],
+    )
+    backend = RyzenadjBackend(
+        FALLBACK,
+        resolve=lambda: "/usr/bin/ryzenadj",
+        runner=fake,
+        require_readback=True,
+    )
+
+    result = backend.set_tdp(20, ac=True)
+
+    assert result.ok is True
+    assert result.applied_w == 20
+    assert backend.diagnostics()["readback_state"] == "ready"
+
+
+def test_strict_backend_restores_baseline_and_opens_circuit_if_readback_disappears():
+    fake = ScriptedRun(
+        write_rcs=[0, 0],
+        infos=[_snapshot_info(15), _unreadable_info(), _snapshot_info(15)],
+    )
+    backend = RyzenadjBackend(
+        FALLBACK,
+        resolve=lambda: "/usr/bin/ryzenadj",
+        runner=fake,
+        require_readback=True,
+    )
+
+    result = backend.set_tdp(20, ac=True)
+
+    assert result.ok is False
+    assert result.applied_w is None
+    assert "required readback lost" in result.detail
+    assert "baseline restore confirmed" in result.detail
+    assert backend.supported is False
+    assert len(fake.writes) == 2
+
+    second = backend.set_tdp(18, ac=True)
+
+    assert second.ok is False
+    assert "circuit open" in second.detail
+    assert len(fake.writes) == 2
+
+
+def test_strict_backend_records_unresolved_restore_when_readback_stays_missing():
+    fake = ScriptedRun(
+        write_rcs=[0, 0],
+        infos=[_snapshot_info(15), _unreadable_info(), _unreadable_info()],
+    )
+    backend = RyzenadjBackend(
+        FALLBACK,
+        resolve=lambda: "/usr/bin/ryzenadj",
+        runner=fake,
+        require_readback=True,
+    )
+
+    result = backend.set_tdp(20, ac=True)
+
+    assert result.ok is False
+    assert "baseline restore unresolved" in result.detail
+    assert backend.diagnostics()["readback_state"] == "circuit_open_unresolved"
+
+
+def test_strict_backend_restores_every_power_rail_and_never_changes_thermal_limit():
+    fake = ScriptedRun(
+        write_rcs=[0, 0],
+        infos=[
+            _snapshot_info(15, fast=20, slow=18),
+            _unreadable_info(),
+            _snapshot_info(15, fast=20, slow=18),
+        ],
+    )
+    backend = RyzenadjBackend(
+        FALLBACK,
+        resolve=lambda: "/usr/bin/ryzenadj",
+        runner=fake,
+        require_readback=True,
+    )
+
+    result = backend.set_tdp(25, ac=True)
+
+    assert result.ok is False
+    target, restore = fake.writes
+    assert "--tctl-temp" not in target
+    assert "--tctl-temp" not in restore
+    assert restore[restore.index("--stapm-limit") + 1] == "15000"
+    assert restore[restore.index("--fast-limit") + 1] == "20000"
+    assert restore[restore.index("--slow-limit") + 1] == "18000"
+
+
 def test_write_max_widens_the_write_clamp():
     base = FakeRun()
     RyzenadjBackend(FALLBACK, resolve=lambda: "/usr/bin/ryzenadj", runner=base).set_tdp(70, ac=True)
@@ -190,6 +319,16 @@ class ScriptedRun:
 
 def _stapm(watts):
     return f"| STAPM LIMIT | {watts}.000 | stapm-limit |\n"
+
+
+def _snapshot_info(stapm, *, fast=None, slow=None):
+    fast = stapm if fast is None else fast
+    slow = stapm if slow is None else slow
+    return (
+        f"| STAPM LIMIT | {stapm}.000 | stapm-limit |\n"
+        f"| PPT LIMIT FAST | {fast}.000 | fast-limit |\n"
+        f"| PPT LIMIT SLOW | {slow}.000 | slow-limit |\n"
+    )
 
 
 def _unreadable_info():
@@ -395,6 +534,64 @@ def test_gpd_power_only_mismatch_reports_real_value():
     assert result.ok is False
     assert result.applied_w == 12
     assert "readback=mismatch" in result.detail
+
+
+def test_strict_gpd_power_only_nonzero_restores_snapshot_and_opens_circuit():
+    fake = ScriptedRun(
+        write_rcs=[1, 2, 0],
+        infos=[
+            _snapshot_info(15),
+            _snapshot_info(10),
+            _snapshot_info(12),
+            _snapshot_info(15),
+        ],
+    )
+    backend = RyzenadjBackend(
+        FALLBACK,
+        resolve=lambda: "/usr/bin/ryzenadj",
+        runner=fake,
+        power_only_retry=True,
+        require_readback=True,
+    )
+
+    result = backend.set_tdp(20, ac=True)
+
+    assert result.ok is False
+    assert "exit=2" in result.detail
+    assert "baseline restore confirmed" in result.detail
+    assert backend.diagnostics()["readback_state"] == "circuit_open_restored"
+    assert len(fake.writes) == 3
+
+
+def test_strict_gpd_power_only_exception_restores_snapshot_and_opens_circuit():
+    infos = iter((_snapshot_info(15), _snapshot_info(10), _snapshot_info(15)))
+    writes = []
+
+    def run(argv, **_kwargs):
+        if "-i" in argv:
+            return SimpleNamespace(returncode=0, stdout=next(infos), stderr="")
+        writes.append(argv)
+        if len(writes) == 1:
+            return SimpleNamespace(returncode=1, stdout="", stderr="")
+        if len(writes) == 2:
+            raise subprocess.TimeoutExpired(argv, 5)
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    backend = RyzenadjBackend(
+        FALLBACK,
+        resolve=lambda: "/usr/bin/ryzenadj",
+        runner=run,
+        power_only_retry=True,
+        require_readback=True,
+    )
+
+    result = backend.set_tdp(20, ac=True)
+
+    assert result.ok is False
+    assert "power-only failed (TimeoutExpired)" in result.detail
+    assert "baseline restore confirmed" in result.detail
+    assert backend.diagnostics()["readback_state"] == "circuit_open_restored"
+    assert len(writes) == 3
 
 
 def test_set_tdp_not_ok_when_write_clamped_to_other_value():

@@ -266,6 +266,43 @@ def test_restart_reuses_durable_baseline_before_reapplying_profile():
     assert durable["value"] is None
 
 
+def test_recognised_device_can_restore_same_boot_generic_handoff_before_migration():
+    durable = {"value": {
+        "version": 1,
+        "boot_id": "boot-1",
+        "device_key": "generic",
+        "baseline": {
+            "cpu_w": 28,
+            "cpu_policy": "balanced",
+            "gpu_uw": 95_000_000,
+        },
+    }}
+
+    def persist(state):
+        durable["value"] = state
+
+    cpu, gpu, policy = Cpu(applied=15), Gpu(current=55), Policy()
+    policy.current = "low-power"
+    coordinator = DesktopPowerCoordinator(
+        cpu,
+        gpu,
+        cpu_policy=policy,
+        persisted_state=durable["value"],
+        persist_state=persist,
+        boot_id="boot-1",
+        device_key="steam_deck_lcd",
+        legacy_device_keys={"generic"},
+    )
+
+    result = coordinator.restore()
+
+    assert result["ok"] is True
+    assert cpu.applied == 28
+    assert policy.current == "balanced"
+    assert gpu.current == 95
+    assert durable["value"] is None
+
+
 def test_takeover_never_writes_without_durable_baseline():
     cpu, gpu, policy = Cpu(), Gpu(), Policy()
 

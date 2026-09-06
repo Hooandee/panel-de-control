@@ -13,6 +13,7 @@ import {
 import { useMandos } from "../mandos/mandosContext";
 import { ProfileSelector } from "../components/ProfileSelector";
 import { registerBlock } from "../customize/blocks";
+import { MagicModulesCard } from "../components/MagicModulesCard";
 
 const Card: FC<{ title: string; children: ReactNode }> = ({ title, children }) => (
   <div style={{ ...theme.card, padding: theme.space.md, overflow: "hidden" }}>
@@ -145,6 +146,19 @@ const SettingsBlock: FC = () => {
   );
 };
 
+const MagicModulesBlock: FC = () => {
+  const { config, actionPending, actionResult, onAction } = useMandos();
+  if (!config?.magic_modules) return null;
+  return (
+    <MagicModulesCard
+      modules={config.magic_modules}
+      pending={actionPending}
+      result={actionResult}
+      onAction={onAction}
+    />
+  );
+};
+
 export function registerMandosBlocks(): void {
   registerBlock("manager", { sectionId: "mandos", Component: ManagerBlock });
   registerBlock("remap", {
@@ -156,5 +170,10 @@ export function registerMandosBlocks(): void {
     sectionId: "mandos",
     Component: SettingsBlock,
     useAvailable: () => useMandos().config?.kind === "settings",
+  });
+  registerBlock("magicModules", {
+    sectionId: "mandos",
+    Component: MagicModulesBlock,
+    useAvailable: () => useMandos().config?.magic_modules != null,
   });
 }

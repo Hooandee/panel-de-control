@@ -1,12 +1,13 @@
 import os
 
-from device_registry import detect
+from device_profiles import DEVICE_TABLE
 from fans.control import select_fan_backend
 from fans.fremont import FremontFanBackend
 from fans.hwmon import FanReader
 
 
 CURVE = [(40, 0), (50, 30), (60, 60), (70, 95), (80, 135), (85, 175), (90, 215), (95, 255)]
+FREMONT = next(profile for profile in DEVICE_TABLE if profile.key == "steam_machine")
 
 
 def _write(directory, name, value):
@@ -44,7 +45,7 @@ def _machine(root):
 
 def test_factory_selects_fremont_before_steamdeck_backend(tmp_path):
     _machine(str(tmp_path))
-    backend = select_fan_backend(detect(product_name="Fremont"), root=str(tmp_path))
+    backend = select_fan_backend(FREMONT, root=str(tmp_path))
     assert isinstance(backend, FremontFanBackend)
 
 

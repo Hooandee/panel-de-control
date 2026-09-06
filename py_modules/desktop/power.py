@@ -36,6 +36,7 @@ class DesktopPowerCoordinator:
         persist_state=None,
         boot_id=None,
         device_key=None,
+        legacy_device_keys=None,
     ) -> None:
         self._cpu = cpu_backend
         self._gpu = gpu_cap
@@ -43,6 +44,9 @@ class DesktopPowerCoordinator:
         self._persist_state = persist_state
         self._boot_id = boot_id or self._read_boot_id()
         self._device_key = device_key
+        self._legacy_device_keys = frozenset(
+            key for key in (legacy_device_keys or ()) if isinstance(key, str)
+        )
         self._baseline = None
         self._durable_state_reason = None
         self._cpu_owned = False
@@ -112,12 +116,16 @@ class DesktopPowerCoordinator:
     def _load_persisted_state(self, state) -> None:
         if state is None:
             return
+        state_device_key = state.get("device_key") if isinstance(state, dict) else None
         if (
             not isinstance(state, dict)
             or state.get("version") != 1
             or not self._boot_id
             or state.get("boot_id") != self._boot_id
-            or state.get("device_key") != self._device_key
+            or (
+                state_device_key != self._device_key
+                and state_device_key not in self._legacy_device_keys
+            )
         ):
             self._durable_state_reason = "ownership_state_stale"
             self._persist_ownership(None)

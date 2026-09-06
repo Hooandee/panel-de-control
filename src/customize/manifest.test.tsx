@@ -14,6 +14,10 @@ describe("section block ownership", () => {
     expect(blockOrder("power")).not.toContain("gpu");
     expect(blockOrder("system")).toContain("gpu");
   });
+
+  it("offers AYANEO Magic Modules as a controller block", () => {
+    expect(blockOrder("mandos")).toContain("magicModules");
+  });
 });
 
 describe("theme section registration", () => {

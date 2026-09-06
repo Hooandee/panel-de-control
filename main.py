@@ -40,7 +40,7 @@ from tdp.reconcile import (
     build_targets,
     decide,
 )
-from tdp.types import RailReading, TdpObservation, TdpResult
+from tdp.types import RailReading, TdpLimits, TdpObservation, TdpResult
 from tdp_profiles import ProfileStore
 from power_presets import PowerPresetStore
 from lifecycle import LifecycleManager, read_on_ac
@@ -68,7 +68,11 @@ from gpu.clock import select_gpu_clock
 from gpu.profiles import GpuProfileStore
 from gpu.power_cap import AmdGpuPowerCap
 from power.reader import PowerReader
-from desktop.mode import effective_desktop_mode, migrate_desktop_defaults
+from desktop.mode import (
+    effective_desktop_mode,
+    migrate_desktop_defaults,
+    recognised_desktop_migration_pending,
+)
 from desktop.power import DesktopPowerCoordinator
 from desktop.fan_store import DesktopFanStore
 from desktop.cpu_policy import DesktopCpuPolicy
@@ -323,6 +327,11 @@ class Plugin:
         # Probe hardware/environment HERE, wrapped so it NEVER raises — a raise in
         # init or _main bricks plugin load (UI stuck on spinner forever).
         self._device = device_registry.detect()
+        self._desktop_recognition_migration_pending = (
+            recognised_desktop_migration_pending(self._settings, self._device)
+        )
+        self._desktop_recognition_migration_last_attempt = float("-inf")
+        self._desktop_recognition_migration_last_failure = None
         if migrate_desktop_defaults(self._settings, self._device):
             self._store.save(self._settings)
         self._tdp_profiles = ProfileStore(
@@ -395,12 +404,17 @@ class Plugin:
             persisted_state=self._settings.get("desktop_power_handoff"),
             persist_state=self._persist_desktop_power_state,
             device_key=self._device.key,
+            legacy_device_keys=(
+                {"generic"}
+                if self._desktop_recognition_migration_pending
+                else None
+            ),
         )
         self._powerstation_detector = powerstation_conflict.Detector()
         # Safety self-heal: correct any stored TDP value an older version persisted
         # outside the device's real range (a bogus firmware max could leak in) so it can
         # never be applied — not merely clamped on read.
-        _lim = self._limits()
+        _lim = self._profile_storage_limits()
         if self._tdp_profiles.sanitize(_lim.min_w, _lim.max_ac_w):
             decky.logger.info("Corrected out-of-range stored TDP profiles")
         # Which daemon owns the controller (HHD / InputPlumber / none). Detected
@@ -417,6 +431,7 @@ class Plugin:
             IpDbus(event_cb=self._log_controller_event),
             self._device,
         )
+        self._controller_action_inflight = False
         self._last_controller_overrides = None
         self._fan_reader = FanReader(
             desktop=self._desktop_mode_on(), device_key=self._device.key)
@@ -681,6 +696,43 @@ class Plugin:
         except Exception:
             self._settings["desktop_power_handoff"] = previous
             raise
+
+    def _recover_recognised_desktop_migration(self) -> bool:
+        if not getattr(self, "_desktop_recognition_migration_pending", False):
+            return True
+        now = time.monotonic()
+        last_attempt = getattr(
+            self,
+            "_desktop_recognition_migration_last_attempt",
+            float("-inf"),
+        )
+        if now - last_attempt < 5.0:
+            return False
+        self._desktop_recognition_migration_last_attempt = now
+        result = self._desktop_power.restore()
+        if not result.get("ok"):
+            self._desktop_recognition_migration_last_failure = result.get(
+                "detail",
+                "unknown",
+            )
+            decky.logger.warning(
+                "Recognised-device desktop handoff restore remains pending: %s",
+                self._desktop_recognition_migration_last_failure,
+            )
+            return False
+        if migrate_desktop_defaults(self._settings, self._device):
+            self._save()
+        self._desktop_recognition_migration_pending = False
+        self._desktop_recognition_migration_last_failure = None
+        decky.logger.info("Restored generic desktop handoff before device migration")
+        return True
+
+    async def _ensure_recognised_desktop_migration(self) -> bool:
+        if not getattr(self, "_desktop_recognition_migration_pending", False):
+            return True
+        return bool(
+            await self._offload_call(self._recover_recognised_desktop_migration)
+        )
 
     # ---- RPC methods (referenced by name from src/api.ts) -------------------
     async def get_version(self) -> str:
@@ -1199,11 +1251,20 @@ class Plugin:
             "enabled": self._desktop_mode_on(),
             "automatic": bool(getattr(self._device, "desktop_mode", False)),
             "manual_enabled": bool(self._settings.get("desktop_mode_enabled", False)),
+            "migration_pending": bool(
+                getattr(self, "_desktop_recognition_migration_pending", False)
+            ),
+            "migration_failure": getattr(
+                self,
+                "_desktop_recognition_migration_last_failure",
+                None,
+            ),
             "power": power,
         }
 
     async def get_desktop_state(self) -> dict:
         self._init()
+        await self._ensure_recognised_desktop_migration()
         state = self._desktop_state()
         reader = getattr(self, "_power_reader", None)
         state["telemetry"] = (
@@ -1222,7 +1283,11 @@ class Plugin:
         previous handheld TDP preference.
         """
         self._init()
-        if getattr(self._device, "desktop_mode", False):
+        await self._ensure_recognised_desktop_migration()
+        if (
+            getattr(self._device, "desktop_mode", False)
+            or not getattr(self._device, "is_generic", False)
+        ):
             return self._desktop_state()
         enabled = bool(enabled)
         current = bool(self._settings.get("desktop_mode_enabled", False))
@@ -1626,6 +1691,32 @@ class Plugin:
         return await self._offload_call(
             lambda: self._controller_backend.set_setting(field, value))
 
+    async def run_controller_action(self, action: str) -> dict:
+        """Run a bounded hardware action and return its independent confirmation state."""
+        self._init()
+        if getattr(self, "_controller_action_inflight", False):
+            config = await self._offload_call(
+                lambda: self._controller_backend.get_config(self._current_appid)
+            )
+            return {
+                "action": action,
+                "outcome": "busy",
+                "accepted": None,
+                "reason": "action_in_progress",
+                "config": config,
+            }
+        self._controller_action_inflight = True
+        try:
+            result = await self._offload_controller_action_call(
+                lambda: self._controller_backend.run_action(action)
+            )
+            config = await self._offload_call(
+                lambda: self._controller_backend.get_config(self._current_appid)
+            )
+            return {**result, "config": config}
+        finally:
+            self._controller_action_inflight = False
+
     async def reset_controller(self, scope: str = "global", appid=None) -> dict:
         """Reset a scope's remap to the device default (InputPlumber; no-op on others)."""
         self._init()
@@ -1883,6 +1974,23 @@ class Plugin:
         """Hand HHD's TDP module over to us (reversible), saving its previous value.
         ok only when the echo confirms it's off."""
         self._init()
+        await self._ensure_recognised_desktop_migration()
+        if getattr(self, "_desktop_recognition_migration_pending", False):
+            managing = await self._offload_call(
+                controller_hhd.current_tdp_enable
+            )
+            return {
+                "ok": False,
+                "hhd_managing": bool(managing),
+                "detail": "desktop migration pending",
+            }
+        if not await self._probe_tdp_backend(force=True):
+            prev = await self._offload_call(controller_hhd.current_tdp_enable)
+            return {
+                "ok": False,
+                "hhd_managing": bool(prev),
+                "detail": "tdp backend readback unavailable",
+            }
         # HHD's REST client is blocking urllib — keep it off the loop.
         prev = await self._offload_call(controller_hhd.current_tdp_enable)
         if prev is None:
@@ -1897,29 +2005,85 @@ class Plugin:
         applied = await self._offload_call(lambda: controller_hhd.set_tdp_enable(False))
         if applied is not False:
             return {"ok": False, "hhd_managing": bool(applied)}
-        await self._apply_tdp_now("take-control")
+        result = await self._apply_tdp_now("take-control")
+        if not result.ok:
+            restore = await self._offload_call(self._restore_hhd_tdp_status)
+            managing = restore.get("hhd_managing")
+            if managing is None:
+                managing = False
+            if restore.get("ok"):
+                detail = result.detail
+            elif restore.get("hardware_ok"):
+                detail = f"{result.detail}; HHD marker clear pending"
+            else:
+                detail = f"{result.detail}; HHD restore pending"
+            return {
+                "ok": False,
+                "hhd_managing": bool(managing),
+                "detail": detail,
+            }
         return {"ok": True, "hhd_managing": False}
 
-    def _restore_hhd_tdp(self, preserve_ownership=False) -> bool:
+    def _restore_hhd_tdp_status(self, preserve_ownership=False) -> dict:
         """Return HHD to its previous tdp_enable if we took it. Idempotent. Clears the
         marker only once the write confirms, so a failed hand-back is retried later."""
+        prev = self._settings.get("hhd_tdp_prev")
+        if prev is None:
+            return {
+                "ok": True,
+                "hardware_ok": True,
+                "hhd_managing": None,
+                "marker_cleared": True,
+            }
         try:
-            prev = self._settings.get("hhd_tdp_prev")
-            if prev is None:
-                return True
             echoed = controller_hhd.set_tdp_enable(bool(prev))
             if echoed != bool(prev):
-                return False
+                return {
+                    "ok": False,
+                    "hardware_ok": False,
+                    "hhd_managing": echoed if isinstance(echoed, bool) else None,
+                    "marker_cleared": False,
+                }
             if preserve_ownership:
-                return True
+                return {
+                    "ok": True,
+                    "hardware_ok": True,
+                    "hhd_managing": bool(echoed),
+                    "marker_cleared": False,
+                }
             self._settings["hhd_tdp_prev"] = None
-            self._save()
-            return True
+            try:
+                self._save()
+            except Exception:  # noqa: BLE001
+                self._settings["hhd_tdp_prev"] = prev
+                return {
+                    "ok": False,
+                    "hardware_ok": True,
+                    "hhd_managing": bool(echoed),
+                    "marker_cleared": False,
+                }
+            return {
+                "ok": True,
+                "hardware_ok": True,
+                "hhd_managing": bool(echoed),
+                "marker_cleared": True,
+            }
         except Exception:  # noqa: BLE001
-            return False
+            return {
+                "ok": False,
+                "hardware_ok": False,
+                "hhd_managing": None,
+                "marker_cleared": False,
+            }
+
+    def _restore_hhd_tdp(self, preserve_ownership=False) -> bool:
+        return bool(
+            self._restore_hhd_tdp_status(preserve_ownership).get("ok")
+        )
 
     async def get_tdp_control_enabled(self) -> bool:
         self._init()
+        await self._ensure_recognised_desktop_migration()
         return self._tdp_control_on()
 
     async def set_tdp_control_enabled(self, enabled: bool) -> bool:
@@ -1927,6 +2091,12 @@ class Plugin:
         our setpoint."""
         self._init()
         enabled = bool(enabled)
+        if enabled:
+            await self._ensure_recognised_desktop_migration()
+            if getattr(self, "_desktop_recognition_migration_pending", False):
+                return False
+            if not await self._probe_tdp_backend(force=True):
+                return False
         self._settings["tdp_control_enabled"] = enabled
         self._save()
         if not enabled:
@@ -2887,6 +3057,16 @@ class Plugin:
         return self._ui_active
 
     # ---- TDP helpers + RPCs -------------------------------------------------
+    def _profile_storage_limits(self):
+        """Static authorised range for durable intent; live bounds only affect apply."""
+        if self._device.key != "rog_flow_z13":
+            return self._limits()
+        limits = TdpLimits.from_profile(self._device)
+        cooler_max = self._device.cooler_max
+        if cooler_max and self._settings.get("cooler_boost", False):
+            limits = limits.with_cooler(cooler_max)
+        return limits
+
     def _limits(self):
         """Device TDP limits with the user's opt-in ceilings applied (a single
         chokepoint so every clamp/limit path honours the Ajustes toggles): the
@@ -2997,6 +3177,15 @@ class Plugin:
             self._apply_executor = executor
         return executor
 
+    def _ensure_controller_action_executor(self):
+        executor = getattr(self, "_controller_action_executor", None)
+        if executor is None:
+            if getattr(self, "_shutting_down", False):
+                raise RuntimeError("plugin_shutting_down")
+            executor = ThreadPoolExecutor(max_workers=1)
+            self._controller_action_executor = executor
+        return executor
+
     def _submit_offloaded(self, executor, fn):
         future = executor.submit(fn)
         tracked = getattr(self, "_offload_futures", None)
@@ -3068,6 +3257,22 @@ class Plugin:
 
         return await asyncio.wrap_future(
             self._submit_offloaded(ex, guarded_call), loop=loop
+        )
+
+    async def _offload_controller_action_call(self, fn):
+        if getattr(self, "_shutting_down", False):
+            raise RuntimeError("plugin_shutting_down")
+        executor = self._ensure_controller_action_executor()
+        loop = asyncio.get_running_loop()
+
+        def guarded_call():
+            if getattr(self, "_shutting_down", False):
+                raise RuntimeError("plugin_shutting_down")
+            return fn()
+
+        return await asyncio.wrap_future(
+            self._submit_offloaded(executor, guarded_call),
+            loop=loop,
         )
 
     async def _offload_theme_call(self, fn, *, allow_stopping: bool = False):
@@ -3433,6 +3638,15 @@ class Plugin:
         )
 
     async def _apply_tdp_now(self, reason, on_ac=None):
+        await self._ensure_recognised_desktop_migration()
+        if getattr(self, "_desktop_recognition_migration_pending", False):
+            requested = self._tdp_profiles.effective(self._current_appid)
+            return TdpResult(
+                int(requested["pl1"]),
+                None,
+                False,
+                "desktop migration pending",
+            )
         if self._tdp_shutdown:
             requested = self._tdp_profiles.effective(
                 self._current_appid,
@@ -3743,6 +3957,8 @@ class Plugin:
         # stale preview can't leak onto the new context (nor a dangling timer fire).
         self._reapply_generation = int(getattr(self, "_reapply_generation", 0)) + 1
         self._last_reapply_trigger = "lifecycle_or_context"
+        if getattr(self, "_desktop_recognition_migration_pending", False):
+            self._offload(self._recover_recognised_desktop_migration)
         self._drop_color_preview()
         charge_generation = self._cancel_charge_limit_reconcile(
             "reapply",
@@ -6671,6 +6887,8 @@ class Plugin:
 
     async def get_tdp_state(self) -> dict:
         self._init()
+        await self._ensure_recognised_desktop_migration()
+        await self._probe_tdp_backend()
         observation = await self._read_tdp_observation()
         return self._tdp_state(observation)
 
@@ -6772,6 +6990,16 @@ class Plugin:
             "generation": self._tdp_generation,
             "backend": self._tdp_backend.name,
             "backend_descriptor": self._tdp_backend_diagnostics(),
+            "desktop_recognition_migration": {
+                "pending": bool(
+                    getattr(self, "_desktop_recognition_migration_pending", False)
+                ),
+                "last_failure": getattr(
+                    self,
+                    "_desktop_recognition_migration_last_failure",
+                    None,
+                ),
+            },
             "history": list(self._tdp_history),
             "steamdeck_ppt": {
                 "previous": self._settings.get("steamdeck_ppt_previous"),
@@ -6782,6 +7010,18 @@ class Plugin:
                 "history": list(getattr(self, "_steamdeck_ppt_history", ())),
             },
         }
+
+    async def _probe_tdp_backend(self, *, force: bool = False) -> bool:
+        probe = getattr(self._tdp_backend, "probe", None)
+        if not callable(probe):
+            return bool(self._tdp_backend.supported)
+        if not force and not getattr(self._tdp_backend, "probe_pending", True):
+            return bool(self._tdp_backend.supported)
+        ready = bool(await self._offload_call(probe))
+        if not ready:
+            self._tdp_status = "unsupported"
+            self._tdp_reason = "readback_unavailable"
+        return ready
 
     def _tdp_backend_diagnostics(self):
         errors = {}
@@ -7551,6 +7791,8 @@ class Plugin:
         # systemctl / ryzenadj) → keeps them off the event loop AND serialised.
         # Created here (not _init) so unit tests that never call _main run inline.
         self._ensure_apply_executor()
+        await self._offload_call(self._recover_recognised_desktop_migration)
+        await self._probe_tdp_backend(force=True)
         self._theme_executor = ThreadPoolExecutor(max_workers=1)
         self._theme_accepting_work = True
         try:
@@ -7608,6 +7850,7 @@ class Plugin:
                 decky.logger.warning("Shutdown stage unload:drain-timeout")
                 self._handoff_after_drain_timeout("unload")
         finally:
+            self._shutdown_controller_action_executor()
             self._finish_theme_shutdown_sync()
         decky.logger.info("Panel de Control unloaded")
 
@@ -7714,6 +7957,15 @@ class Plugin:
             except TypeError:
                 ex.shutdown(wait=False)
             self._apply_executor = None
+
+    def _shutdown_controller_action_executor(self) -> None:
+        executor = getattr(self, "_controller_action_executor", None)
+        if executor is not None:
+            try:
+                executor.shutdown(wait=False, cancel_futures=True)
+            except TypeError:
+                executor.shutdown(wait=False)
+            self._controller_action_executor = None
 
     def _finish_theme_shutdown_sync(self) -> None:
         executor = getattr(self, "_theme_executor", None)

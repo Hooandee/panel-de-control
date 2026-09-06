@@ -3,6 +3,25 @@ from typing import Optional
 
 
 @dataclass(frozen=True)
+class DmiMatch:
+    product_name: str
+    sys_vendor: str
+    board_names: tuple = field(default_factory=tuple)
+
+    def matches(self, product_name: str, sys_vendor: str, board_name: str) -> bool:
+        def normalise(value: str) -> str:
+            return (value or "").strip().casefold()
+
+        if normalise(product_name) != normalise(self.product_name):
+            return False
+        if normalise(sys_vendor) != normalise(self.sys_vendor):
+            return False
+        return not self.board_names or normalise(board_name) in {
+            normalise(value) for value in self.board_names
+        }
+
+
+@dataclass(frozen=True)
 class DeviceProfile:
     key: str                      # stable id, e.g. "rog_ally_x"
     display_name: str             # shown in DeviceHeader, e.g. "ROG Ally X"
@@ -14,6 +33,8 @@ class DeviceProfile:
     tdp_max_charger: int          # watts when a compatible charger is connected (== tdp_max if none)
     # DMI product_name strings that identify this device (matched case-insensitively, substring)
     match_names: tuple = field(default_factory=tuple)
+    # Defensive profiles use exact DMI tuples. When present, match_names is ignored.
+    dmi_matches: tuple[DmiMatch, ...] = field(default_factory=tuple)
     is_generic: bool = False
     # When set, the UI shows the experimental marker for this recognised model.
     experimental: bool = False
@@ -66,8 +87,9 @@ GENERIC = DeviceProfile(
 # Ordered most-specific first (so "ROG Ally X" wins before "ROG Ally").
 DEVICE_TABLE = (
     DeviceProfile("steam_machine", "Steam Machine", "AMD Custom CPU 1772", "amd",
-                  4, 23, 30, 30, match_names=("Fremont",),
-                  desktop_mode=True),
+                  4, 23, 30, 30,
+                  dmi_matches=(DmiMatch("Fremont", "Valve", ("Fremont",)),),
+                  experimental=True, desktop_mode=True),
     DeviceProfile("steam_deck_lcd", "Steam Deck", "AMD Van Gogh", "amd",
                   3, 12, 15, 15, match_names=("Jupiter",)),
     DeviceProfile("steam_deck_oled", "Steam Deck OLED", "AMD Sephiroth", "amd",
@@ -103,14 +125,44 @@ DEVICE_TABLE = (
                   5, 20, 45, 54, match_names=("ONEXPLAYER APEX",), experimental=True),
     DeviceProfile("onexplayer_superx", "OneXPlayer Super X",
                   "AMD Ryzen AI Max+ 395", "amd",
-                  15, 30, 55, 75, match_names=("ONEXPLAYER SUPER X",), experimental=True,
-                  panel="oled", charger_only_extra=True),
+                  10, 30, 55, 80,
+                  dmi_matches=(DmiMatch(
+                      "ONEXPLAYER SUPER X", "ONE-NETBOOK", ("ONEXPLAYER SUPER X",)),),
+                  experimental=True, panel="oled", hdr=True, charger_only_extra=True),
+    DeviceProfile("zotac_gaming_zone", "Zotac Gaming Zone",
+                  "AMD Ryzen 7 8840U", "amd",
+                  8, 15, 28, 28,
+                  dmi_matches=(DmiMatch(
+                      "ZOTAC GAMING ZONE", "ZOTAC", ("G0A1W", "G1A1W")),),
+                  experimental=True, panel="oled", hdr=True),
+    DeviceProfile("rog_flow_z13", "ROG Flow Z13",
+                  "AMD Ryzen AI Max 390", "amd",
+                  5, 20, 54, 65,
+                  dmi_matches=(DmiMatch(
+                      "ROG Flow Z13 GZ302EA_GZ302EA",
+                      "ASUSTeK COMPUTER INC.",
+                      ("GZ302EA",),
+                  ),),
+                  experimental=True, charger_only_extra=True),
+    DeviceProfile("onexplayer_f1", "OneXPlayer F1",
+                  "AMD Ryzen 7 7840U", "amd",
+                  15, 28, 30, 30,
+                  dmi_matches=(DmiMatch(
+                      "ONEXPLAYER F1", "ONE-NETBOOK", ("ONEXPLAYER F1",)),),
+                  experimental=True),
+    DeviceProfile("ayaneo_3", "AYANEO 3",
+                  "AMD Ryzen AI 9 HX 370 / Ryzen 7 8840U", "amd",
+                  8, 15, 35, 35,
+                  dmi_matches=(DmiMatch("AYANEO 3", "AYANEO"),),
+                  experimental=True),
     DeviceProfile("aokzoe_a1x", "AOKZOE A1X", "AMD Ryzen AI 9 HX 370", "amd",
                   4, 18, 30, 30, match_names=("AOKZOE A1X",), experimental=True,
                   tdp_presets=(12, 18, 30, 30)),
     DeviceProfile("gpd_win_mini_2025", "GPD Win Mini 2025",
                   "AMD Ryzen AI 9 HX 370", "amd",
-                  5, 20, 35, 35, match_names=("G1617-02",), experimental=True,
+                  5, 20, 35, 35,
+                  dmi_matches=(DmiMatch("G1617-02", "GPD", ("G1617-02",)),),
+                  experimental=True,
                   tdp_presets=(12, 22, 32, 32)),
     DeviceProfile("msi_claw_a8", "MSI Claw A8", "AMD Ryzen Z2 Extreme", "amd",
                   6, 17, 35, 35, match_names=("Claw A8",), experimental=True,

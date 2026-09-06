@@ -23,6 +23,21 @@ def test_limits_from_profile_maps_fields():
     assert lim.max_ac_w == _profile("rog_ally_x").tdp_max_charger
 
 
+def test_experimental_machine_battery_and_charger_ceilings_are_independent():
+    expected = {
+        "onexplayer_superx": (55, 80),
+        "zotac_gaming_zone": (28, 28),
+        "rog_flow_z13": (54, 65),
+        "onexplayer_f1": (30, 30),
+        "ayaneo_3": (35, 35),
+        "gpd_win_mini_2025": (35, 35),
+    }
+    for key, (battery, charger) in expected.items():
+        limits = TdpLimits.from_profile(_profile(key))
+        assert limits.clamp(999, on_ac=False) == battery
+        assert limits.clamp(999, on_ac=True) == charger
+
+
 def test_result_fields():
     r = TdpResult(requested_w=15, applied_w=15, ok=True, detail="")
     assert r.ok and r.applied_w == 15 and r.requested_w == 15

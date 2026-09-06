@@ -2,10 +2,12 @@ import os
 import inspect
 
 from device_registry import detect
+from device_profiles import DEVICE_TABLE
 from tdp.firmware_attr import FirmwareAttrBackend
 from tdp.types import RailReading, TdpLimits, TdpObservation
 
 FALLBACK = TdpLimits(min_w=4, default_w=15, max_w=30, max_ac_w=30)
+FLOW = next(profile for profile in DEVICE_TABLE if profile.key == "rog_flow_z13")
 
 
 def _mk_attr(root, driver, attr, cur, mn, mx):
@@ -86,6 +88,96 @@ def test_recognised_get_limits_ignores_a_low_firmware_read(tmp_path):
     _mk_attr(str(tmp_path), "lenovo-wmi-other-0", "ppt_pl1_spl", 13, 5, 15)
     b = FirmwareAttrBackend("lenovo-wmi-other", FALLBACK, root=str(tmp_path))
     assert b.get_limits().max_ac_w == 30  # profile, not the bogus 15
+
+
+def test_flow_profile_can_narrow_its_published_range_to_live_firmware(tmp_path):
+    root = str(tmp_path)
+    _mk_attr(root, "asus-armoury", "ppt_pl1_spl", 20, 8, 50)
+    _mk_attr(root, "asus-armoury", "ppt_pl2_sppt", 24, 10, 58)
+    _mk_attr(root, "asus-armoury", "ppt_pl3_fppt", 28, 12, 60)
+    fallback = TdpLimits.from_profile(FLOW)
+
+    backend = FirmwareAttrBackend(
+        "asus-armoury",
+        fallback,
+        root=root,
+        trust_live_bounds=True,
+    )
+
+    assert backend.get_limits() == TdpLimits(
+        min_w=8,
+        default_w=20,
+        max_w=50,
+        max_ac_w=50,
+    )
+    assert backend.level_limits() == {
+        "pl1": {"min": 8, "max": 50},
+        "pl2": {"min": 10, "max": 58},
+        "pl3": {"min": 12, "max": 60},
+    }
+
+
+def test_flow_live_bounds_never_expand_the_static_profile(tmp_path):
+    root = str(tmp_path)
+    for attr in ("ppt_pl1_spl", "ppt_pl2_sppt", "ppt_pl3_fppt"):
+        _mk_attr(root, "asus-armoury", attr, 20, 1, 150)
+    fallback = TdpLimits.from_profile(FLOW)
+
+    backend = FirmwareAttrBackend(
+        "asus-armoury",
+        fallback,
+        root=root,
+        trust_live_bounds=True,
+    )
+
+    assert backend.get_limits() == fallback
+    levels = backend.level_limits()
+    assert (levels["pl1"]["max"], levels["pl2"]["max"], levels["pl3"]["max"]) == (
+        65,
+        round(65 * 1.2),
+        round(65 * 1.4),
+    )
+
+
+def test_flow_invalid_live_bounds_fall_back_without_publishing_impossible_limits(tmp_path):
+    fallback = TdpLimits.from_profile(FLOW)
+    cases = ((5, 0), (30, 20), (1, 4))
+
+    for index, (mn, mx) in enumerate(cases):
+        root = str(tmp_path / str(index))
+        for attr in ("ppt_pl1_spl", "ppt_pl2_sppt", "ppt_pl3_fppt"):
+            _mk_attr(root, "asus-armoury", attr, 20, mn, mx)
+        backend = FirmwareAttrBackend(
+            "asus-armoury",
+            fallback,
+            root=root,
+            trust_live_bounds=True,
+        )
+
+        assert backend.get_limits() == fallback
+        assert all(
+            limits["min"] > 0 and limits["min"] <= limits["max"]
+            for limits in backend.level_limits().values()
+        )
+
+
+def test_flow_invalid_live_bounds_reject_every_write_before_touching_sysfs(tmp_path):
+    root = str(tmp_path)
+    fallback = TdpLimits.from_profile(FLOW)
+    for attr in ("ppt_pl1_spl", "ppt_pl2_sppt", "ppt_pl3_fppt"):
+        _mk_attr(root, "asus-armoury", attr, 20, 5, 0)
+    backend = FirmwareAttrBackend(
+        "asus-armoury",
+        fallback,
+        root=root,
+        trust_live_bounds=True,
+    )
+
+    result = backend.set_tdp(20, ac=True)
+
+    assert result.ok is False
+    assert result.detail == "firmware live bounds invalid"
+    assert backend.read_applied() == 20
 
 
 def test_set_tdp_writes_pl1_and_reads_back(tmp_path):

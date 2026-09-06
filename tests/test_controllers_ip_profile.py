@@ -75,6 +75,25 @@ def test_buttons_legion_go_s_two_grips():
     ]
 
 
+def test_zotac_palettes_require_live_inputplumber_capabilities():
+    assert ip.buttons_for("zotac_gaming_zone", [
+        "Gamepad:Button:LeftPaddle1",
+        "Gamepad:Button:RightPaddle1",
+    ]) == [
+        ("LeftPaddle1", "L"),
+        ("RightPaddle1", "R"),
+    ]
+    assert ip.buttons_for("zotac_gaming_zone", []) == []
+
+
+def test_zotac_capabilities_are_never_reused_on_another_machine():
+    caps = [
+        "Gamepad:Button:LeftPaddle1",
+        "Gamepad:Button:RightPaddle1",
+    ]
+    assert ip.buttons_for("onexplayer_f1", caps) == []
+
+
 def test_buttons_rog_xbox_ally_family_two_macro_buttons():
     caps = [
         "Gamepad:Button:South",
