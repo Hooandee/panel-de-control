@@ -61,6 +61,7 @@ def test_onexplayer_superx_is_recognised_with_safe_limits():
     assert profile.tdp_max == 55
     assert profile.tdp_max_charger == 75
     assert profile.charger_only_extra is True
+    assert profile.panel == "oled"
 
 
 def test_aokzoe_a1x_is_recognised_experimental():
