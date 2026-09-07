@@ -38,9 +38,16 @@ import * as i18n from "./index";
 const DICTS = i18n.DICTS;
 const STORAGE_KEY = "panel-de-control-lang";
 const PLACEHOLDER = /\{\w+\}/g;
+const CATALOGS = i18n.SUPPORTED_LANGUAGES.map(
+  (lang) => [lang, DICTS[lang]] as const,
+);
 
 function italianCatalog(): Record<string, string> {
   return DICTS.it;
+}
+
+function germanCatalog(): Record<string, string> {
+  return DICTS.de;
 }
 
 function placeholders(value: string): string[] {
@@ -52,26 +59,50 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-describe("Italian catalog", () => {
-  it("has exactly the same keys as the Spanish catalog", () => {
-    const italian = italianCatalog();
-
-    expect(Object.keys(italian).sort()).toEqual(Object.keys(DICTS.es).sort());
+describe("Every supported translation catalog", () => {
+  it.each(CATALOGS)("%s has exactly the Spanish keys", (_lang, catalog) => {
+    expect(Object.keys(catalog).sort()).toEqual(Object.keys(DICTS.es).sort());
   });
 
-  it("preserves every interpolation placeholder", () => {
-    const italian = italianCatalog();
-    const spanish = DICTS.es;
-
-    for (const key of Object.keys(spanish)) {
-      expect(placeholders(italian[key] ?? ""), key).toEqual(placeholders(spanish[key]));
+  it.each(CATALOGS)("%s preserves every interpolation placeholder", (_lang, catalog) => {
+    for (const key of Object.keys(DICTS.es)) {
+      expect(placeholders(catalog[key] ?? ""), key).toEqual(placeholders(DICTS.es[key]));
     }
   });
 
-  it("does not use em dashes", () => {
-    expect(Object.values(italianCatalog()).some((value) => value.includes("—"))).toBe(false);
+  it.each(CATALOGS)("%s avoids em dashes in interface copy", (_lang, catalog) => {
+    expect(Object.values(catalog).some((value) => value.includes("—"))).toBe(false);
   });
 
+  it("keeps reviewed wording natural in every language", () => {
+    expect(DICTS).toMatchObject({
+      es: {
+        "hud.metric.gpu": "Carga de GPU",
+        "hud.metric.gpu_junction_temp": "Punto caliente de GPU",
+        "hud.metric.battery_time": "Autonomía",
+        "hud.metric.pdc_bat_health": "Salud de la batería",
+      },
+      en: {
+        "display.oled.desc": "Gives your screen a more vibrant, deeper OLED-like look. It changes only the color rendering, not the panel itself.",
+        "fans.experimental.resetFail": "Couldn't restart the fan control. Reboot the device if the problem persists.",
+        "settings.qamboost.desc": "Raises TDP while the quick access menu is open so it stays responsive. The displayed value applies only while the menu is open. It is adjusted again in game.",
+      },
+      it: {
+        "app.title": "Pannello di controllo",
+        "hud.metric.gpu_junction_temp": "Temperatura giunzione GPU",
+        "hud.metric.battery_time": "Autonomia batteria",
+      },
+      de: {
+        "app.title": "Kontrollzentrum",
+        "hud.metric.io_read": "E/A-Lesezugriffe",
+        "hud.elements.hint": "Ändere die Reihenfolge mit den Pfeilen. Elemente mit einem Pfeilsymbol haben eigene Einstellungen.",
+        "tdp.conflict.powerstation.disablePdc": "TDP im Kontrollzentrum deaktivieren",
+      },
+    });
+  });
+});
+
+describe("Italian catalog", () => {
   it("keeps established technical and product terms", () => {
     const values = Object.values(italianCatalog());
     const terms = [
@@ -154,6 +185,44 @@ describe("Italian catalog", () => {
   });
 });
 
+describe("German catalog", () => {
+  it("keeps established technical and product terms", () => {
+    const values = Object.values(germanCatalog());
+    for (const term of [
+      "TDP", "Auto-TDP", "FPS", "CPU", "GPU", "HDR", "RGB", "FSR", "XeSS",
+      "RDNA", "Proton", "SteamOS", "Decky", "MangoHud", "GameMode", "PowerStation",
+      "SimpleDeckyTDP", "Colores",
+    ]) {
+      expect(values.some((value) => value.includes(term)), term).toBe(true);
+    }
+  });
+
+  it("uses natural German product and safety copy", () => {
+    expect(germanCatalog()).toMatchObject({
+      "app.title": "Kontrollzentrum",
+      "lang.german": "Deutsch",
+      "display.oled.desc": "Lässt die Farben deines Bildschirms lebendiger und tiefer wirken, ähnlich wie bei einem OLED-Display. Das Display selbst wird nicht verändert, nur die Farbdarstellung.",
+      "settings.cooler": "Externe Kühlung angeschlossen",
+      "settings.cooler.desc": "Aktiviere diese Option nur, wenn das externe Kühlsystem oder der externe Akku angeschlossen ist. Dadurch steigt das TDP-Limit auf bis zu {max} W. Ohne externe Kühlung kann das Gerät überhitzen.",
+    });
+  });
+
+  it("formats profile counts without an incorrect fixed plural construction", () => {
+    window.localStorage.setItem(STORAGE_KEY, "de");
+
+    expect(i18n.translate("gameProfiles.cores", { n: 1 })).toBe("Kerne: 1");
+    expect(i18n.translate("gameProfiles.cores", { n: 2 })).toBe("Kerne: 2");
+    expect(i18n.translate("gameProfiles.buttons", { n: 1 })).toBe("Tasten: 1");
+    expect(i18n.translate("gameProfiles.buttons", { n: 2 })).toBe("Tasten: 2");
+  });
+
+  it("accepts a persisted German selection for lookup", () => {
+    window.localStorage.setItem(STORAGE_KEY, "de");
+
+    expect(i18n.translate("app.title")).toBe("Kontrollzentrum");
+  });
+});
+
 describe("LanguageToggle", () => {
   it("persists Italian when its localized selector button is pressed", () => {
     render(
@@ -167,5 +236,19 @@ describe("LanguageToggle", () => {
     fireEvent.click(screen.getByRole("button", { name: "Italiano" }));
 
     expect(window.localStorage.getItem(STORAGE_KEY)).toBe("it");
+  });
+
+  it("persists German when its localized selector button is pressed", () => {
+    render(
+      createElement(
+        i18n.I18nProvider,
+        null,
+        createElement(LanguageToggle),
+      ),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Alemán" }));
+
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBe("de");
   });
 });

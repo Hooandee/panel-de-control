@@ -26,15 +26,4 @@ describe("Italian updater strings", () => {
       availableTitle: "Aggiornamento disponibile",
     });
   });
-
-  it("avoids em dashes in Italian updater copy", () => {
-    const strings = getUpdaterStrings("it");
-    const values = [
-      ...Object.values(strings.panel),
-      ...Object.values(strings.modal),
-      strings.availableTitle,
-    ];
-
-    expect(values.some((value) => value.includes("—"))).toBe(false);
-  });
 });

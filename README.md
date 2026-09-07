@@ -23,7 +23,8 @@ Es un plugin para [Decky Loader](https://decky.xyz/). Está pensado para Steam D
 Go, MSI Claw y compañía, con una idea fija: que cada control se vea bien, muestre siempre el modelo
 real de tu equipo arriba, y nunca te mienta sobre lo que de verdad está pasando en el hardware.
 
-La interfaz viene en español por defecto y se pone defecto en inglés si tu sistema lo pide.
+La interfaz arranca en español y también está disponible en inglés, italiano y alemán. En el
+primer inicio adopta uno de esos idiomas si Steam ya lo usa.
 
 ## Vídeo
 

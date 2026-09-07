@@ -1,43 +1,39 @@
 #!/usr/bin/env python3
-"""Derive multilingual release notes from the newest CHANGELOG.md section.
-
-Modes:
-  --check         validate Spanish, English and optional Italian entries in the newest
-                  release section.
-  --release-body  print clean release notes in Spanish, English and Italian, with the
-                  PR/commit links stripped, for the in-app updater to render.
-
-The preferred format groups entries below `### Español`, `### English` and
-`### Italiano` headings. Explicit `**ES:**`, `**EN:**` and `**IT:**` labels remain
-supported, as do Release Please's unlabelled English entries. Only the top (newest)
-section is considered.
-"""
+"""Validate and render release notes for every supported interface language."""
 import pathlib
 import re
 import sys
 
 _LINK = re.compile(r"\s*\(\[[^\]]+\]\(https?://[^)]+\)\).*$")
 _LANGUAGE_LABEL = re.compile(r"^\*\*(?P<language>[A-Z]{2}):\*\*\s*(?P<text>.*)$")
-_LANGUAGES = ("ES", "EN", "IT")
+_VERSION_HEADING = re.compile(r"^##\s+(?!Unreleased\s*$).+")
 _LANGUAGE_BLOCKS = {
     "### Español": "ES",
     "### English": "EN",
     "### Italiano": "IT",
+    "### Deutsch": "DE",
 }
 _HEADINGS = {
     "ES": "### Novedades",
     "EN": "### What's new",
     "IT": "### Novità",
+    "DE": "### Neuigkeiten",
 }
+_TRANSLATIONS = {
+    "ES": ("Spanish", "### Español"),
+    "IT": ("Italian", "### Italiano"),
+    "DE": ("German", "### Deutsch"),
+}
+_LANGUAGES = tuple(_HEADINGS)
 
 
 def _top_section(text):
     lines = text.splitlines()
-    heads = [i for i, line in enumerate(lines) if line.startswith("## [")]
-    if not heads:
+    headings = [index for index, line in enumerate(lines) if _VERSION_HEADING.match(line)]
+    if not headings:
         return []
-    end = heads[1] if len(heads) > 1 else len(lines)
-    return lines[heads[0]:end]
+    end = headings[1] if len(headings) > 1 else len(lines)
+    return lines[headings[0]:end]
 
 
 def _bullets(section):
@@ -64,43 +60,48 @@ def _bullets(section):
     return entries, unsupported
 
 
+def _validate(entries, unsupported):
+    if unsupported:
+        labels = ", ".join(sorted(set(unsupported)))
+        return f"CHANGELOG.md contains unsupported language label: {labels}"
+
+    english_count = len(entries["EN"])
+    if any(entries.values()) and not english_count:
+        return "CHANGELOG.md top section has translations but no English (**EN:** or unlabelled) entries."
+
+    for language, (name, heading) in _TRANSLATIONS.items():
+        if english_count and len(entries[language]) != english_count:
+            return (
+                f"CHANGELOG.md top section has incomplete {name} (**{language}:**) translations: "
+                f"{english_count} English bullet(s) vs {len(entries[language])} {name} entries. "
+                f"Complete the '{heading}' block."
+            )
+    return None
+
+
 def main():
     mode = sys.argv[1] if len(sys.argv) > 1 else ""
     section = _top_section(pathlib.Path("CHANGELOG.md").read_text(encoding="utf-8"))
     entries, unsupported = _bullets(section)
-    spanish = entries["ES"]
-    english = entries["EN"]
-    italian = entries["IT"]
-
     if mode == "--check":
-        if unsupported:
-            labels = ", ".join(sorted(set(unsupported)))
-            print(f"::error::CHANGELOG.md contains unsupported language label: {labels}")
+        error = _validate(entries, unsupported)
+        if error:
+            print(f"::error::{error}")
             return 1
-        if english and len(spanish) != len(english):
-            print("::error::CHANGELOG.md top section is not bilingual: "
-                  f"{len(english)} English bullet(s) vs {len(spanish)} Spanish "
-                  "entry or entries below '### Español'.")
-            return 1
-        if (spanish or italian) and not english:
-            print("::error::CHANGELOG.md top section has translations but no English "
-                  "(**EN:** or unlabelled) entries.")
-            return 1
-        if italian and len(italian) != len(english):
-            print("::error::CHANGELOG.md top section is not trilingual: "
-                  f"{len(english)} English bullet(s) vs {len(italian)} Italian (**IT:**) "
-                  "entries. Complete the '### Italiano' block.")
-            return 1
-        kind = "trilingual" if italian else "bilingual"
-        print(f"CHANGELOG top section is {kind}.")
+        print("CHANGELOG top section is quadrilingual.")
         return 0
 
     if mode == "--release-body":
+        error = _validate(entries, unsupported)
+        if error:
+            print(f"::error::{error}", file=sys.stderr)
+            return 1
         parts = []
         for language in _LANGUAGES:
             if entries[language]:
-                parts += [_HEADINGS[language], ""]
-                parts += [f"- {text}" for text in entries[language]] + [""]
+                parts.extend((_HEADINGS[language], ""))
+                parts.extend([f"- {text}" for text in entries[language]])
+                parts.append("")
         sys.stdout.write("\n".join(parts).strip() + "\n")
         return 0
 

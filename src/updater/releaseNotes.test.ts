@@ -40,6 +40,22 @@ describe("releaseNotesForLanguage", () => {
     );
   });
 
+  it("selects German notes when a German translation is available", () => {
+    const notes = [
+      "## v0.38.0",
+      "### Novedades",
+      "- Cambio en español",
+      "### What's new",
+      "- English change",
+      "### Neuigkeiten",
+      "- Änderung auf Deutsch",
+    ].join("\n");
+
+    expect(releaseNotesForLanguage(notes, "de")).toBe(
+      "## v0.38.0\n- Änderung auf Deutsch",
+    );
+  });
+
   it("stops at the next heading even when its language is unknown", () => {
     const notes = [
       "## v0.36.0",

@@ -24,7 +24,8 @@ MSI Claw and friends. One idea runs through the whole thing: every control shoul
 show your machine's real model at the top, and never lie to you about what the hardware is actually
 doing.
 
-The interface ships in Spanish by default and falls back to English when your system asks for it.
+The interface starts in Spanish and is also available in English, Italian, and German. On first
+launch, it adopts one of those languages when Steam already uses it.
 
 ## Video
 

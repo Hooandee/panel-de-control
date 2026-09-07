@@ -17,6 +17,10 @@
 
 * **Temi:** Introduce una nuova scheda per scoprire, installare e gestire i temi di Hooandee direttamente da Panel de Control con CSS Loader. Dalla vista di dettaglio puoi installare o aggiornare un tema, attivarlo, regolare le 18 opzioni di Gallery oppure rimuoverlo quando non lo vuoi più. Panel verifica la compatibilità e l’integrità del pacchetto prima dell’installazione e, durante la rimozione, controlla che CSS Loader lo abbia eliminato correttamente prima di cancellarne il record. Se CSS Loader non è disponibile o è disattivato, le opzioni di installazione e rimozione non vengono mostrate. ([#520](https://github.com/Hooandee/panel-de-control/pull/520)) ([#525](https://github.com/Hooandee/panel-de-control/pull/525)) ([#526](https://github.com/Hooandee/panel-de-control/pull/526))
 
+### Deutsch
+
+* **Themes:** Führt einen neuen Tab ein, über den du Hooandee Themes mit CSS Loader direkt im Kontrollzentrum entdecken, installieren und verwalten kannst. In der Detailansicht eines Themes kannst du es installieren oder aktualisieren, aktivieren, die 18 Gallery-Einstellungen anpassen oder es wieder entfernen. Das Panel prüft vor der Installation die Kompatibilität und Integrität des Pakets. Beim Entfernen bestätigt es zuerst, dass CSS Loader das Theme korrekt gelöscht hat, bevor der Eintrag bereinigt wird. Wenn CSS Loader nicht verfügbar oder deaktiviert ist, werden die Optionen zum Installieren und Entfernen nicht angezeigt. ([#520](https://github.com/Hooandee/panel-de-control/pull/520)) ([#525](https://github.com/Hooandee/panel-de-control/pull/525)) ([#526](https://github.com/Hooandee/panel-de-control/pull/526))
+
 ## [0.37.12](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.11...panel-de-control-v0.37.12) (2026-08-24)
 
 

@@ -53,7 +53,7 @@ jobs:
           RELEASE_CREATED: ${{ steps.release.outputs.release_created }}
         run: python3 scripts/release_guard.py result
 
-      # Rewrite the release body into the clean, link-free, Spanish-first bilingual
+      # Rewrite the release body into clean, link-free, Spanish-first multilingual
       # note. Done in this job (not a separate on:release workflow) because a release
       # the bot creates with GITHUB_TOKEN does not trigger on:release workflows.
       - name: Rewrite release notes from the changelog
@@ -121,6 +121,7 @@ jobs:
           PLUGIN_NAME: Panel de Control
         run: |
           pnpm install --frozen-lockfile
+          pnpm test:i18n
           pnpm test:fe tests/pluginPayload.test.ts
           pnpm build
           staging=$(mktemp -d)

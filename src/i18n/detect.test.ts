@@ -21,8 +21,14 @@ describe("steamLangToLang (seed the default from Steam's UI language)", () => {
     expect(steamLangToLang("it")).toBe("it");
   });
 
+  it("maps German and its language code to de", () => {
+    expect(steamLangToLang("german")).toBe("de");
+    expect(steamLangToLang("German")).toBe("de");
+    expect(steamLangToLang("  GERMAN  ")).toBe("de");
+    expect(steamLangToLang("de")).toBe("de");
+  });
+
   it("maps any other language to es (our default)", () => {
-    expect(steamLangToLang("german")).toBe("es");
     expect(steamLangToLang("brazilian")).toBe("es");
     expect(steamLangToLang("schinese")).toBe("es");
   });

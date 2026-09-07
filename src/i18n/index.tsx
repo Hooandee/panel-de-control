@@ -20,8 +20,10 @@ import {
 import { steamLangToLang } from "./detect";
 import { readSteamLanguage } from "./steamLanguage";
 import { it } from "./it";
+import { de } from "./de";
 
-export type Lang = "es" | "en" | "it";
+export const SUPPORTED_LANGUAGES = ["es", "en", "it", "de"] as const;
+export type Lang = (typeof SUPPORTED_LANGUAGES)[number];
 
 const STORAGE_KEY = "panel-de-control-lang";
 
@@ -37,6 +39,7 @@ const es: Record<string, string> = {
   "lang.spanish": "Español",
   "lang.english": "Inglés",
   "lang.italian": "Italiano",
+  "lang.german": "Alemán",
   "nav.power": "Potencia",
   "nav.system": "Sistema",
   "nav.display": "Pantalla",
@@ -120,33 +123,33 @@ const es: Record<string, string> = {
   "hud.metric.frame_count": "Fotogramas totales",
   "hud.metric.show_fps_limit": "Límite de FPS",
   "hud.metric.time": "Reloj",
-  "hud.metric.gpu": "GPU carga",
-  "hud.metric.gpu_temp": "GPU temp",
-  "hud.metric.gpu_junction_temp": "GPU unión temp",
-  "hud.metric.gpu_clock": "GPU reloj",
-  "hud.metric.gpu_mem_clock": "VRAM reloj",
-  "hud.metric.gpu_mem_temp": "VRAM temp",
-  "hud.metric.gpu_power": "GPU vatios",
-  "hud.metric.gpu_voltage": "GPU voltaje",
-  "hud.metric.gpu_fan": "GPU ventilador",
-  "hud.metric.gpu_efficiency": "GPU eficiencia",
+  "hud.metric.gpu": "Carga de GPU",
+  "hud.metric.gpu_temp": "Temperatura de GPU",
+  "hud.metric.gpu_junction_temp": "Punto caliente de GPU",
+  "hud.metric.gpu_clock": "Frecuencia de GPU",
+  "hud.metric.gpu_mem_clock": "Frecuencia de VRAM",
+  "hud.metric.gpu_mem_temp": "Temperatura de VRAM",
+  "hud.metric.gpu_power": "Consumo de GPU",
+  "hud.metric.gpu_voltage": "Voltaje de GPU",
+  "hud.metric.gpu_fan": "Ventilador de GPU",
+  "hud.metric.gpu_efficiency": "Eficiencia de GPU",
   "hud.metric.vram": "VRAM",
   "hud.metric.proc_vram": "VRAM del juego",
-  "hud.metric.gpu_name": "GPU nombre",
-  "hud.metric.cpu": "CPU carga",
-  "hud.metric.cpu_temp": "CPU temp",
-  "hud.metric.cpu_clock": "CPU reloj",
-  "hud.metric.cpu_power": "CPU vatios",
-  "hud.metric.cpu_efficiency": "CPU eficiencia",
+  "hud.metric.gpu_name": "Nombre de GPU",
+  "hud.metric.cpu": "Carga de CPU",
+  "hud.metric.cpu_temp": "Temperatura de CPU",
+  "hud.metric.cpu_clock": "Frecuencia de CPU",
+  "hud.metric.cpu_power": "Consumo de CPU",
+  "hud.metric.cpu_efficiency": "Eficiencia de CPU",
   "hud.metric.cores": "Núcleos",
   "hud.metric.ram": "RAM",
   "hud.metric.procmem": "RAM del juego",
   "hud.metric.swap": "Swap",
-  "hud.metric.io_read": "E/S lectura",
-  "hud.metric.io_write": "E/S escritura",
+  "hud.metric.io_read": "Lectura de E/S",
+  "hud.metric.io_write": "Escritura de E/S",
   "hud.metric.battery": "Batería",
-  "hud.metric.battery_watt": "Batería vatios",
-  "hud.metric.battery_time": "Batería tiempo",
+  "hud.metric.battery_watt": "Consumo de batería",
+  "hud.metric.battery_time": "Autonomía",
   "hud.metric.device_battery": "Batería mando",
   "hud.metric.resolution": "Resolución",
   "hud.metric.refresh_rate": "Frecuencia de pantalla",
@@ -169,16 +172,16 @@ const es: Record<string, string> = {
   "hud.metric.pdc_tdp_learn": "Banda aprendida",
   "hud.metric.pdc_auto_tdp": "Auto-TDP",
   "hud.metric.pdc_fan": "Modo ventilador",
-  "hud.metric.pdc_fan_rpm": "Ventilador RPM",
+  "hud.metric.pdc_fan_rpm": "RPM del ventilador",
   "hud.metric.pdc_eco": "Modo Descarga",
   "hud.metric.pdc_profile": "Perfil activo",
   "hud.metric.pdc_power": "Consumo real",
   "hud.metric.pdc_charge": "Límite de carga",
-  "hud.metric.pdc_bat_health": "Salud batería",
+  "hud.metric.pdc_bat_health": "Salud de la batería",
   "hud.metric.pdc_smt": "SMT",
   "hud.metric.pdc_boost": "Boost CPU",
   "hud.metric.pdc_cores": "Núcleos activos",
-  "hud.metric.pdc_gpu_clock": "Frecuencia GPU",
+  "hud.metric.pdc_gpu_clock": "Frecuencia de GPU",
   "hud.metric.pdc_model": "Equipo",
   // Estilo general
   "hud.style": "Estilo general · todo el HUD",
@@ -963,6 +966,7 @@ const en: Record<string, string> = {
   "lang.spanish": "Spanish",
   "lang.english": "English",
   "lang.italian": "Italian",
+  "lang.german": "German",
   "nav.power": "Power",
   "nav.system": "System",
   "nav.display": "Display",
@@ -1459,7 +1463,7 @@ const en: Record<string, string> = {
   "mandos.remap.nobuttons": "No remappable buttons detected right now. If you just restarted, give it a few seconds.",
   // Display (panel color)
   "display.oled.title": "OLED look",
-  "display.oled.desc": "Nudges your screen's color toward an OLED (more vibrant, deeper). It doesn't change the panel — only the color.",
+  "display.oled.desc": "Gives your screen a more vibrant, deeper OLED-like look. It changes only the color rendering, not the panel itself.",
   "display.oled.apply": "Apply",
   "display.native": "Native",
   "display.reset": "Back to native",
@@ -1558,7 +1562,7 @@ const en: Record<string, string> = {
   "fans.experimental.resetNote": "Use this if the fan gets stuck or stops responding to the curve.",
   "fans.experimental.resetPending": "Restarting…",
   "fans.experimental.resetDone": "Fan control restarted",
-  "fans.experimental.resetFail": "Couldn't restart; reboot the device if it persists.",
+  "fans.experimental.resetFail": "Couldn't restart the fan control. Reboot the device if the problem persists.",
   "fans.firmware.title": "Firmware curve",
   "fans.firmware.note": "Showing the curve the firmware applies.",
   "fans.firmware.wip": "I'm working on controlling the fan speed safely.",
@@ -1639,9 +1643,9 @@ const en: Record<string, string> = {
   "settings.battmax": "Max power on battery",
   "settings.battmax.desc": "Allow raising TDP to the device maximum on battery too. More performance, but the battery drains much faster.",
   "settings.cooler": "External cooler attached",
-  "settings.cooler.desc": "Only if you have the external cooler or battery attached: raises the TDP ceiling to {max} W. Do not enable it without the cooler, the device would overheat.",
+  "settings.cooler.desc": "Enable this only when the external cooler or battery is connected. It raises the TDP limit to {max} W. Without the cooler, the device could overheat.",
   "settings.qamboost": "Raise TDP while the menu is open",
-  "settings.qamboost.desc": "Raises TDP while the quick access menu is open so it stays fluid. The value shown is temporary to the menu; in-game it readjusts.",
+  "settings.qamboost.desc": "Raises TDP while the quick access menu is open so it stays responsive. The displayed value applies only while the menu is open. It is adjusted again in game.",
   "settings.qamShortcut": "QAM shortcut",
   "settings.qamShortcut.desc": "Adds an optional icon next to Decky. Panel de Control always remains available inside Decky.",
   "settings.qamShortcut.restart": "Restart Decky to apply the change.",
@@ -1817,7 +1821,7 @@ const en: Record<string, string> = {
   "customize.disable": "Disable",
   "customize.disable.title": "Disable {name}?",
   "customize.disable.body": "This turns it off across the whole panel, not just here. The feature stops working until you enable it again.",
-  "customize.disable.hint": "Just don't want to see it here? Hide it instead: it keeps working, it just stops showing up here.",
+  "customize.disable.hint": "Just don't want to see it here? Hide it instead. It keeps working but no longer appears here.",
   "customize.disable.hide": "Hide here instead",
   "customize.disable.cancel": "Cancel",
   "customize.module.learning.desc": "Learns from your usage to suggest curves and TDP.",
@@ -1940,11 +1944,12 @@ export const DICTS: Record<Lang, Record<string, string>> = {
   es,
   en,
   it: { ...it, ...themeIt },
+  de,
 };
 
 function initialLang(): Lang {
   const stored = readString(STORAGE_KEY);
-  return stored === "es" || stored === "en" || stored === "it" ? stored : "es";
+  return SUPPORTED_LANGUAGES.includes(stored as Lang) ? stored as Lang : "es";
 }
 
 interface I18nValue {
