@@ -71,12 +71,12 @@ the payload into that folder before zipping:
 ```sh
 pnpm build                       # must produce dist/index.js
 node scripts/copy-plugin-payload.mjs . "$HOME/Downloads/panel-de-control"
-zip -r "Panel de Control.zip" "$HOME/Downloads/panel-de-control"
+zip -r "$HOME/Downloads/panel-de-control.zip" "$HOME/Downloads/panel-de-control"
 ```
 
 Then install it on the device via **Decky → Settings → Install from zip**. The zip
 lands in `~/homebrew/plugins/Panel de Control`; restart the loader if the plugin does
-not appear.
+not appear.  
 
 > **Gotcha:** zipping the payload files at the archive root (without the
 > `Panel de Control/` wrapper) makes Decky's zip installer fail — the top-level
