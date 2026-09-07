@@ -21,7 +21,10 @@ By participating you agree to abide by our [Code of Conduct](CODE_OF_CONDUCT.md)
 
 ## Development setup
 
-Toolchain: **pnpm 10**, **Node 20**, **Python 3.11**.
+Toolchain: **pnpm 10**, **Node 20**, **Python 3.11**. Versions are pinned in the
+repo: Node via `.node-version` (fnm/nvm), Python via `.python-version`
+(pyenv/uv), and pnpm via the `packageManager` field in `package.json` (Corepack
+picks it up automatically — `corepack enable` if your shell doesn't).
 
 ```sh
 # Frontend deps
@@ -57,6 +60,32 @@ CI runs the same checks on every push and pull request.
   raise into the UI; return a safe/empty result instead.
 - **Test the logic.** Pure logic (curve math, parsing, decision loops) is unit-tested;
   hardware access is behind small, injectable seams so it can be tested with fakes.
+
+## Building a local plugin zip for testing
+
+To test a build on a device without waiting for a release, produce the same zip the
+release pipeline ships. Decky's "Install from zip" expects the archive to contain a
+**single top-level folder named after the plugin** (`Panel de Control/…`), so stage
+the payload into that folder before zipping:
+
+```sh
+pnpm build                       # must produce dist/index.js
+staging=$(mktemp -d)
+node scripts/copy-plugin-payload.mjs . "$staging/Panel de Control"
+(cd "$staging" && zip -r "Panel de Control.zip" "Panel de Control")
+```
+
+Then install it on the device via **Decky → Settings → Install from zip**. The zip
+lands in `~/homebrew/plugins/Panel de Control`; restart the loader if the plugin does
+not appear.
+
+> **Gotcha:** zipping the payload files at the archive root (without the
+> `Panel de Control/` wrapper) makes Decky's zip installer fail — the top-level
+> folder is required.
+>
+> **pnpm ≥ 10 note:** if `pnpm install` refuses to run esbuild's postinstall
+> ("Ignored build scripts"), allow it with `pnpm approve-builds` (or a local
+> `pnpm-workspace.yaml` with `allowBuilds.esbuild: true`) before building.
 
 ## Commit messages & releases
 
