@@ -377,6 +377,12 @@ class LegionWmiFanBackend(HwmonCurveBackend):
         return {"ok": True, "detail": f"fan {fan_key} curve applied (manual mode)"}
 
 
+class ZotacFanReadOnlyBackend(NullFanBackend):
+    """Keep Gaming Zone fan ownership with firmware until physical validation."""
+
+    name = "zotac-firmware-auto"
+
+
 def _is_msi_vendor(root: str) -> bool:
     vendor = (_read(os.path.join(root, "sys/class/dmi/id/sys_vendor")) or "").lower()
     return "micro-star" in vendor or "msi" in vendor
@@ -431,6 +437,13 @@ def select_fan_backend(device, root: str = "/", temp_fn=None, ec=None, experimen
     on firmware auto until a safe ceiling is proven. ``ec`` stays for that
     backend's own tests.
     """
+    if getattr(device, "key", None) == "zotac_gaming_zone":
+        return ZotacFanReadOnlyBackend()
+    if getattr(device, "key", None) == "steam_machine":
+        from fans.fremont import FremontFanBackend
+        fremont = FremontFanBackend(temp_fn=temp_fn, root=root)
+        if fremont.supported:
+            return fremont
     for backend_cls in (AsusFanCurveBackend, MsiFanCurveBackend, LegionWmiFanBackend):
         backend = backend_cls(root=root)
         if backend.supported:

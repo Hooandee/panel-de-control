@@ -4,6 +4,7 @@ import time
 
 from sysfs import read_str
 from tdp.backend import TDPBackend
+from tdp.runtime_lock import RuntimeSafetyLock
 from tdp.types import RailReading, TdpLimits, TdpObservation, TdpResult
 
 _FW_BASE = "sys/class/firmware-attributes"
@@ -74,12 +75,16 @@ class FirmwareAttrBackend(TDPBackend):
         cap_boost_to_active=False,
         readback_settle_delays=None,
         authoritative_reassert_s=None,
+        trust_live_bounds=False,
+        safety_lock_path=None,
     ):
         self.name = f"firmware-attr:{driver_prefix}"
         self._fallback = fallback
         self._root = root
         self._profile_name = profile_name  # Lenovo: set this platform-profile to "custom" first
         self._is_generic = is_generic
+        self._trust_live_bounds = bool(trust_live_bounds)
+        self._safety_lock = RuntimeSafetyLock(safety_lock_path)
         self._rail_floors = _normalise_rail_floors(rail_floors)
         self._ignored_live_maxes = _normalise_rail_values(ignored_live_maxes)
         self.cap_boost_to_active = bool(cap_boost_to_active)
@@ -102,6 +107,13 @@ class FirmwareAttrBackend(TDPBackend):
             if rail in self._primary_rails or rail in self._legacy
         )
         self.supports_levels = any(rail != "pl1" for rail in self._rails)
+        self._runtime_lock_payload = self._safety_lock.load_payload()
+        self._write_circuit_open = (
+            self._runtime_lock_payload.get("detail")
+            or self._runtime_lock_payload.get("state")
+            if self._runtime_lock_payload
+            else None
+        )
         complete_primary = all(rail in self._primary_rails for rail, _attr in _RAIL_ATTRS)
         complete_legacy = all(rail in self._legacy for rail, _attr in _RAIL_ATTRS)
         try:
@@ -123,6 +135,39 @@ class FirmwareAttrBackend(TDPBackend):
         hi = self._read_int(self._attr(attr, "max_value"))
         return lo, hi
 
+    @staticmethod
+    def _rail_for_attr(attr):
+        return next(
+            (rail for rail, rail_attr in _RAIL_ATTRS if rail_attr == attr),
+            None,
+        )
+
+    def _static_bounds(self, attr):
+        rail = self._rail_for_attr(attr)
+        hi = self._profile_rail_max(attr)
+        lo = max(
+            self._fallback.min_w,
+            self._rail_floors.get(rail, self._fallback.min_w),
+        )
+        return min(lo, hi), hi
+
+    def _validated_live_bounds(self, attr):
+        mn, reported_max = self._live_bounds(attr)
+        rail = self._rail_for_attr(attr)
+        mx = self._effective_live_max(rail, reported_max)
+        if (
+            mn is None
+            or mx is None
+            or mn <= 0
+            or mx <= 0
+            or mn > mx
+        ):
+            return None
+        static_lo, static_hi = self._static_bounds(attr)
+        lo = max(static_lo, mn)
+        hi = min(static_hi, mx)
+        return (lo, hi) if lo <= hi else None
+
     def _find_legacy_nodes(self, driver_prefix):
         """Detect the legacy asus-nb-wmi ppt files (the second PL1 interface). ASUS only;
         empty on other vendors and on kernels that dropped the legacy nodes."""
@@ -133,13 +178,108 @@ class FirmwareAttrBackend(TDPBackend):
                 for rail, node in _LEGACY_NODES
                 if os.path.exists(os.path.join(base, node))}
 
-    def _write_legacy(self, targets):
-        failed = []
-        for rail in ("pl3", "pl2", "pl1"):
-            path = self._legacy.get(rail)
-            if path and rail in targets and not self._write(path, targets[rail]):
-                failed.append(f"asus-nb-wmi/{rail}")
-        return failed
+    def _transaction_surfaces(self, targets):
+        attrs = dict(_RAIL_ATTRS)
+        primary = [
+            (self.name, rail, self._attr(attrs[rail]))
+            for rail in reversed(self._rails)
+            if rail in self._primary_rails and rail in targets
+        ]
+        legacy = [
+            ("asus-nb-wmi", rail, self._legacy[rail])
+            for rail in ("pl3", "pl2", "pl1")
+            if rail in self._legacy and rail in targets
+        ]
+        return primary + legacy
+
+    @staticmethod
+    def _surface_label(surface, rail):
+        return f"{surface}/{rail}"
+
+    def _capture_transaction(self, surfaces):
+        snapshot = {}
+        missing = []
+        for surface, rail, path in surfaces:
+            value = self._read_int(path)
+            if value is None:
+                missing.append(f"{self._surface_label(surface, rail)}=unavailable")
+            else:
+                snapshot[path] = value
+        profile = self.read_profile() if self._pp_dir else None
+        if self._pp_dir and profile is None:
+            missing.append("platform-profile=unavailable")
+        return snapshot, profile, missing
+
+    def _snapshot_mismatches(self, surfaces, snapshot, profile):
+        mismatches = []
+        for surface, rail, path in surfaces:
+            current = self._read_int(path)
+            expected = snapshot[path]
+            if current is None:
+                mismatches.append(f"{self._surface_label(surface, rail)}=unavailable")
+            elif current != expected:
+                mismatches.append(f"{self._surface_label(surface, rail)}={current}")
+        if self._pp_dir:
+            current_profile = self.read_profile()
+            if current_profile is None:
+                mismatches.append("platform-profile=unavailable")
+            elif current_profile != profile:
+                mismatches.append(f"platform-profile={current_profile}")
+        return mismatches
+
+    def _rollback_transaction(self, surfaces, snapshot, profile):
+        write_failures = []
+        for surface, rail, path in reversed(surfaces):
+            if not self._write(path, snapshot[path]):
+                write_failures.append(self._surface_label(surface, rail))
+        if self._pp_dir and not self._write(
+            os.path.join(self._pp_dir, "profile"),
+            profile,
+        ):
+            write_failures.append("platform-profile")
+
+        mismatches = self._snapshot_mismatches(surfaces, snapshot, profile)
+        for delay in self._readback_settle_delays:
+            if not mismatches:
+                break
+            time.sleep(delay)
+            mismatches = self._snapshot_mismatches(surfaces, snapshot, profile)
+        return not mismatches, write_failures + mismatches
+
+    def recover_runtime_transaction(self):
+        payload = self._runtime_lock_payload
+        saved = payload.get("snapshot") if isinstance(payload, dict) else None
+        if not isinstance(saved, dict) or not saved:
+            return {"ok": False, "detail": "firmware recovery snapshot unavailable"}
+        surfaces = self._transaction_surfaces({rail: 0 for rail in self._rails})
+        current = {
+            self._surface_label(surface, rail): path
+            for surface, rail, path in surfaces
+        }
+        if set(saved) != set(current):
+            return {"ok": False, "detail": "firmware recovery surfaces changed"}
+        try:
+            snapshot = {current[label]: int(value) for label, value in saved.items()}
+        except (TypeError, ValueError):
+            return {"ok": False, "detail": "firmware recovery snapshot invalid"}
+        profile = payload.get("profile")
+        if self._pp_dir and not isinstance(profile, str):
+            return {"ok": False, "detail": "firmware recovery profile unavailable"}
+        recovered, problems = self._rollback_transaction(surfaces, snapshot, profile)
+        if not recovered:
+            detail = "firmware recovery failed: " + ", ".join(problems)
+            payload = {**payload, "state": "rollback_failed", "detail": detail}
+            self._runtime_lock_payload = payload
+            self._write_circuit_open = detail
+            self._safety_lock.persist_payload(payload)
+            return {"ok": False, "detail": detail}
+        if not self._safety_lock.clear():
+            detail = "firmware recovery confirmed; runtime lock clear failed"
+            self._write_circuit_open = detail
+            return {"ok": False, "detail": detail}
+        self._runtime_lock_payload = None
+        self._write_circuit_open = None
+        return {"ok": True, "detail": "firmware transaction recovered"}
 
     def reconciliation_levels(self, levels):
         return {
@@ -176,11 +316,17 @@ class FirmwareAttrBackend(TDPBackend):
     def get_limits(self):
         if not self.supported:
             return self._fallback
-        if not self._is_generic:
+        if not self._is_generic and not self._trust_live_bounds:
             # The profile is the authority for the range; the firmware's reported max
             # lies (and, cached, stranded users at 15 W). Writes still clamp live.
             return self._fallback
-        mn, mx = self._live_bounds("ppt_pl1_spl")
+        if self._trust_live_bounds:
+            live = self._validated_live_bounds("ppt_pl1_spl")
+            if live is None:
+                return self._fallback
+            mn, mx = live
+        else:
+            mn, mx = self._live_bounds("ppt_pl1_spl")
         max_ac_w = min(
             self._fallback.max_ac_w,
             mx if mx is not None else self._fallback.max_ac_w,
@@ -196,6 +342,24 @@ class FirmwareAttrBackend(TDPBackend):
             max_ac_w=max_ac_w,
         )
 
+    def ready(self):
+        if not self.supported or self._write_circuit_open is not None:
+            return False
+        if not self._trust_live_bounds:
+            return True
+        return all(
+            self._validated_live_bounds(attr) is not None
+            for rail, attr in _RAIL_ATTRS
+            if rail in self._primary_rails
+        )
+
+    @property
+    def safety_locked(self):
+        return self._write_circuit_open is not None
+
+    def probe(self):
+        return self.ready()
+
     def _find_profile_dir(self):
         if not self._profile_name:
             return None
@@ -204,10 +368,6 @@ class FirmwareAttrBackend(TDPBackend):
             if read_str(os.path.join(d, "name")) == self._profile_name:
                 return d
         return None
-
-    def _set_custom_profile(self):
-        if self._pp_dir:
-            self._write(os.path.join(self._pp_dir, "profile"), "custom")
 
     def read_profile(self):
         """Active firmware profile (e.g. 'performance', 'custom'), or None. Read live —
@@ -231,6 +391,16 @@ class FirmwareAttrBackend(TDPBackend):
         return self.read_profile() == mode
 
     def level_limits(self):
+        if self._trust_live_bounds:
+            return {
+                key: {"min": bounds[0], "max": bounds[1]}
+                for key, attr in _RAIL_ATTRS
+                if key in self._rails
+                for bounds in (
+                    self._validated_live_bounds(attr)
+                    or self._static_bounds(attr),
+                )
+            }
         if self._is_generic:
             out = {}
             for key, attr in _RAIL_ATTRS:
@@ -280,10 +450,7 @@ class FirmwareAttrBackend(TDPBackend):
     def _clamp_live(self, value, attr):
         mn, mx = self._live_bounds(attr)
         safe_hi = self._profile_rail_max(attr)
-        rail = next(
-            (rail for rail, rail_attr in _RAIL_ATTRS if rail_attr == attr),
-            None,
-        )
+        rail = self._rail_for_attr(attr)
         live_hi = self._effective_live_max(rail, mx)
         hi = min(live_hi if live_hi is not None else safe_hi, safe_hi)
         live_lo = mn if mn is not None else self._fallback.min_w
@@ -294,22 +461,72 @@ class FirmwareAttrBackend(TDPBackend):
     def set_levels(self, pl1, pl2, pl3, ac):
         if not self.supported:
             return TdpResult(pl1, None, False, "firmware-attributes path not present")
-        self._set_custom_profile()
+        if self._write_circuit_open is not None:
+            return TdpResult(
+                pl1,
+                self.read_applied(),
+                False,
+                f"firmware write circuit open: {self._write_circuit_open}",
+            )
+        if self._trust_live_bounds and any(
+            self._validated_live_bounds(attr) is None
+            for rail, attr in _RAIL_ATTRS
+            if rail in self._primary_rails
+        ):
+            return TdpResult(pl1, self.read_applied(), False, "firmware live bounds invalid")
         values = {"pl1": pl1, "pl2": pl2, "pl3": pl3}
         attrs = dict(_RAIL_ATTRS)
         targets = {
             rail: self._clamp_live(values[rail], attrs[rail])
             for rail in self._rails
         }
+        surfaces = self._transaction_surfaces(targets)
+        snapshot, previous_profile, missing = self._capture_transaction(surfaces)
+        if missing:
+            return TdpResult(
+                pl1,
+                self.read_applied(),
+                False,
+                "transaction snapshot unavailable: "
+                + ", ".join(missing)
+                + "; no writes performed",
+            )
+        lock_payload = {
+            "state": "transaction_pending",
+            "detail": "firmware transaction pending",
+            "snapshot": {
+                self._surface_label(surface, rail): snapshot[path]
+                for surface, rail, path in surfaces
+            },
+            "profile": previous_profile,
+        }
+        if not self._safety_lock.persist_payload(lock_payload):
+            return TdpResult(
+                pl1,
+                self.read_applied(),
+                False,
+                "transaction safety lock unavailable; no writes performed",
+            )
+        self._runtime_lock_payload = lock_payload
+
         failed = []
-        for rail in reversed(self._rails):
-            attr = attrs[rail]
-            if os.path.exists(self._attr(attr)) and not self._write(
-                self._attr(attr),
-                targets[rail],
-            ):
-                failed.append(f"{self.name}/{rail}")
-        failed.extend(self._write_legacy(targets))
+        if self._pp_dir:
+            profile_path = os.path.join(self._pp_dir, "profile")
+            if not self._write(profile_path, "custom"):
+                failed.append("platform-profile")
+            else:
+                current_profile = self.read_profile()
+                if current_profile != "custom":
+                    failed.append(
+                        "platform-profile="
+                        + (current_profile if current_profile is not None else "unavailable")
+                    )
+        if not failed:
+            for surface, rail, path in surfaces:
+                if not self._write(path, targets[rail]):
+                    failed.append(self._surface_label(surface, rail))
+                    break
+
         observation = self.observe()
         mismatches = self._observation_mismatches(observation, targets)
         if not failed:
@@ -325,11 +542,57 @@ class FirmwareAttrBackend(TDPBackend):
         applied = observation.surfaces.get(self.name, {}).get("pl1")
         applied_w = applied.applied_w if applied else None
         problems = failed + mismatches
+        if problems:
+            rollback_ok, rollback_problems = self._rollback_transaction(
+                surfaces,
+                snapshot,
+                previous_profile,
+            )
+            rollback_detail = "rollback confirmed"
+            if not rollback_ok:
+                rollback_detail = "rollback failed: " + ", ".join(rollback_problems)
+                self._write_circuit_open = rollback_detail
+                lock_payload = {
+                    **lock_payload,
+                    "state": "rollback_failed",
+                    "detail": rollback_detail,
+                }
+                self._runtime_lock_payload = lock_payload
+                if not self._safety_lock.persist_payload(lock_payload):
+                    self._write_circuit_open += "; runtime lock persistence failed"
+            elif not self._safety_lock.clear():
+                rollback_detail += "; runtime lock clear failed"
+                self._write_circuit_open = rollback_detail
+            else:
+                self._runtime_lock_payload = None
+            restored_applied_w = (
+                self._read_int(self._attr("ppt_pl1_spl"))
+                if applied_w is not None
+                else None
+            )
+            return TdpResult(
+                pl1,
+                restored_applied_w,
+                False,
+                "write not confirmed: "
+                + ", ".join(problems)
+                + "; "
+                + rollback_detail,
+            )
+        if not self._safety_lock.clear():
+            self._write_circuit_open = "write confirmed; runtime lock clear failed"
+            return TdpResult(
+                pl1,
+                applied_w,
+                False,
+                self._write_circuit_open,
+            )
+        self._runtime_lock_payload = None
         return TdpResult(
             pl1,
             applied_w,
-            not problems,
-            "" if not problems else "write not confirmed: " + ", ".join(problems),
+            True,
+            "",
         )
 
     def set_tdp(self, watts, ac):
@@ -376,7 +639,7 @@ class FirmwareAttrBackend(TDPBackend):
                 continue
             lo, hi = self._live_bounds(attr)
             reported[rail] = {"min": lo, "max": hi}
-        return {
+        diagnostics = {
             "boost_capped_to_active": self.cap_boost_to_active,
             "ignored_live_maxes": dict(self._ignored_live_maxes),
             "readback_settle_ms": round(
@@ -384,6 +647,15 @@ class FirmwareAttrBackend(TDPBackend):
             ),
             "reported_live_bounds": reported,
         }
+        if self._write_circuit_open is not None:
+            diagnostics["write_circuit_open"] = self._write_circuit_open
+        if self._trust_live_bounds:
+            diagnostics["live_bounds_valid"] = {
+                rail: self._validated_live_bounds(attr) is not None
+                for rail, attr in _RAIL_ATTRS
+                if rail in self._rails
+            }
+        return diagnostics
 
     def _observation_mismatches(self, observation, targets):
         bad = []

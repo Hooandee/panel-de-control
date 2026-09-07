@@ -149,16 +149,23 @@ _KERNEL_CMDS = {
 # and its own resume/re-grab. Controller failures land in ITS journal, not the
 # plugin log — so a controller report should carry it. Keyed by the manager string
 # reported by controllers.detect (values, not imported, to keep this standalone).
-_CONTROLLER_UNITS = {"hhd": "hhd.service", "inputplumber": "inputplumber.service"}
+_CONTROLLER_UNITS = {
+    "hhd": ("hhd.service", "hhd@*.service", "hhd_local@*.service"),
+    "inputplumber": ("inputplumber.service",),
+}
 
 
 def controller_daemon_cmds(manager: str | None) -> dict:
     """Extra kernel_logs command for the active controller daemon's journal, or an
     empty dict when no daemon runs the controller (nothing to capture)."""
-    unit = _CONTROLLER_UNITS.get(manager or "")
-    if not unit:
+    units = _CONTROLLER_UNITS.get(manager or "")
+    if not units:
         return {}
-    return {"controller": ["/usr/bin/journalctl", "-b", "-u", unit, "-n", "300", "--no-pager"]}
+    cmd = ["/usr/bin/journalctl", "-b"]
+    for unit in units:
+        cmd.extend(("-u", unit))
+    cmd.extend(("-n", "300", "--no-pager"))
+    return {"controller": cmd}
 
 
 def kernel_logs(
@@ -609,6 +616,7 @@ def capabilities_from(states: dict) -> dict:
     gpu = states.get("gpu") or {}
     color = states.get("color") or {}
     ctl = states.get("controller") or {}
+    magic_modules = ctl.get("magic_modules") or {}
     launch = states.get("launch") or {}
     ltools = launch.get("tools") or {}
     running = (launch.get("frontend") or {}).get("runningGame")
@@ -650,6 +658,8 @@ def capabilities_from(states: dict) -> dict:
         "color_supported": bool(color.get("supported")),
         "controller_manager": ctl.get("manager"),
         "controller_kind": ctl.get("kind"),
+        "magic_modules_supported": bool(magic_modules.get("supported")),
+        "magic_modules_source": magic_modules.get("source"),
         # Launch options: tools detected + (running game) malformed string / Proton resolved.
         "launch_lsfg": bool(ltools.get("lsfg")),
         "launch_makoRun": bool(ltools.get("makoRun")),

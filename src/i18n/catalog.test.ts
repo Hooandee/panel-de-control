@@ -132,6 +132,12 @@ describe("Italian catalog", () => {
     });
   });
 
+  it("warns that AYANEO module ejection may suspend the device", () => {
+    expect(DICTS.es["mandos.modules.confirm.desc"]).toContain("suspender");
+    expect(DICTS.en["mandos.modules.confirm.desc"]).toContain("suspend");
+    expect(DICTS.it["mandos.modules.confirm.desc"]).toContain("sospendersi");
+  });
+
   it("uses consistent Italian controller and generated-frame terminology", () => {
     expect(italianCatalog()).toMatchObject({
       "hud.metric.frame_count": "Fotogrammi totali",

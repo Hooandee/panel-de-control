@@ -70,6 +70,21 @@ def test_get_device_surfaces_experimental_flag(Plugin, monkeypatch):
     assert dev["is_generic"] is False
 
 
+def test_get_device_surfaces_experimental_ac_unlock_capability(Plugin, monkeypatch):
+    import device_registry
+    import main
+    from device_profiles import DEVICE_TABLE
+
+    mini = next(p for p in DEVICE_TABLE if p.key == "gpd_win_mini_2025")
+    monkeypatch.setattr(device_registry, "detect", lambda product_name=None: mini)
+    monkeypatch.setattr(main, "read_cpu_model", lambda: None)
+
+    dev = asyncio.run(Plugin().get_device())
+
+    assert dev["tdp_max_charger"] == 35
+    assert dev["experimental_tdp_max_ac"] == 55
+
+
 def test_telemetry_enabled_default_true(Plugin):
     p = Plugin()
     assert asyncio.run(p.get_telemetry_enabled()) is True

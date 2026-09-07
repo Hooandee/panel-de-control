@@ -27,10 +27,13 @@ export function allBlocksHidden(
   id: string,
   blocks: Record<string, ListPref>,
   presentIds?: string[] | null,
+  desktopMode = false,
 ): boolean {
-  if (!FULLY_MODULAR.has(id)) return false;
-  if (presentIds && presentIds.length === 0) return true; // renders nothing → empty
-  const ids = presentIds && presentIds.length ? presentIds : blockOrder(id);
+  if (!FULLY_MODULAR.has(id) && !(desktopMode && id === "power")) return false;
+  const declared = blockOrder(id, desktopMode);
+  const present = presentIds?.filter((blockId) => declared.includes(blockId));
+  if (presentIds && presentIds.length === 0 && !(desktopMode && id === "power")) return true;
+  const ids = present && present.length ? present : declared;
   if (!ids.length) return false;
   const hidden = new Set(blocks[id]?.hidden ?? []);
   return ids.every((b) => hidden.has(b));

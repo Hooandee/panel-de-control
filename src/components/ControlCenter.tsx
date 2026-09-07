@@ -31,6 +31,7 @@ import { theme } from "../theme";
 import { FocusRoot } from "./FocusRoot";
 import { useAccent } from "../system/useAccent";
 import { acquireUiActivity } from "../system/uiActivity";
+import { useDesktopState } from "../desktop/useDesktop";
 
 /**
  * The control-center shell: persistent chrome (device header + language flags +
@@ -44,6 +45,7 @@ export const ControlCenter: FC = () => {
   const [failed, setFailed] = useState(false);
   const layout = useLayout();
   const disabled = useModules();
+  const desktopMode = !!useDesktopState().state?.enabled;
   const views = useViews();
   usePresentVersion(); // re-evaluate tab emptiness as sections report their real blocks
   // Stable Component per view id so editing a view doesn't remount the active one.
@@ -111,11 +113,13 @@ export const ControlCenter: FC = () => {
   const orderedTabs = visibleTabIds
     .map((id) => allSections.find((s) => s.id === id))
     .filter((s): s is SectionDef => !!s)
-    .filter((s) => s.id === PINNED_TAB || s.id === POWER_TAB || isViewTabId(s.id) || (
+    .filter((s) => s.id === PINNED_TAB || isViewTabId(s.id) || (s.id === POWER_TAB ? (
+      !desktopMode || !allBlocksHidden(s.id, layout.blocks, getPresent(s.id), true)
+    ) : (
       !sectionHiddenOnDevice(device, s.id)
       && effectiveEnabled(s.id, disabled)
       && !allBlocksHidden(s.id, layout.blocks, getPresent(s.id))
-    ));
+    )));
   const active = resolveActiveSection(orderedTabs, activeId);
   const Active = active?.Component;
 

@@ -75,6 +75,7 @@ export interface DeviceInfo {
   // When true, the shell shows the experimental marker for this recognised model.
   experimental: boolean;
   cooler_max: number | null;
+  experimental_tdp_max_ac: number | null;
   // GPU generation ("rdna2"|"rdna3"|"rdna35"|"rdna4"|"intel"|"unknown") for the
   // launch-options upscaler gating (FSR4 = rdna3/rdna4).
   gpu_gen: string;
@@ -82,9 +83,62 @@ export interface DeviceInfo {
   // with the charger connected — the firmware caps the sustained limit on battery. Hide
   // the "raise on battery" toggle; the arc shows the locked charger segment instead.
   charger_only_extra: boolean;
+  desktop_mode?: boolean;
 }
 
 export const getDevice = callable<[], DeviceInfo>("get_device");
+
+export type DesktopPowerMode = "free" | "silent" | "balanced" | "performance" | "custom";
+export interface DesktopTelemetry {
+  cpu_watts: number | null;
+  gpu_watts: number | null;
+  gpu_busy: number | null;
+  gpu_clock_mhz: number | null;
+  gpu_clock_max_mhz: number | null;
+  vram_used_mb: number | null;
+  vram_total_mb: number | null;
+}
+export interface DesktopPowerState {
+  supported: boolean;
+  cpu_supported: boolean;
+  cpu_policy_supported: boolean;
+  cpu_policy: string | null;
+  gpu_supported: boolean;
+  mode: DesktopPowerMode;
+  cpu_w: number | null;
+  gpu_w: number | null;
+  cpu_min_w: number;
+  cpu_max_w: number;
+  gpu_min_w: number | null;
+  gpu_max_w: number | null;
+  presets: Record<string, {
+    cpu_w: number | null;
+    cpu_policy: string | null;
+    gpu_w: number | null;
+  }>;
+}
+export interface DesktopState {
+  enabled: boolean;
+  automatic: boolean;
+  manual_enabled: boolean;
+  migration_pending: boolean;
+  migration_failure: string | null;
+  power: DesktopPowerState;
+  telemetry: DesktopTelemetry | null;
+  cpu: Record<string, unknown> | null;
+}
+export interface DesktopApplyResult {
+  ok: boolean;
+  mode: DesktopPowerMode;
+  cpu_w: number | null;
+  gpu_w: number | null;
+  detail: string;
+}
+export const getDesktopState = callable<[], DesktopState>("get_desktop_state");
+export const retryDesktopMigration = callable<[], DesktopState>("retry_desktop_migration");
+export const setDesktopModeEnabled = callable<[enabled: boolean], DesktopState>("set_desktop_mode_enabled");
+export const setDesktopPowerMode = callable<[mode: DesktopPowerMode], DesktopApplyResult>("set_desktop_power_mode");
+export const setDesktopPowerLimits = callable<[cpuW: number, gpuW: number], DesktopApplyResult>("set_desktop_power_limits");
 
 // Generic (unrecognised) or experimental (recognised, unconfirmed): both drive the
 // header badge and the Ajustes note.
@@ -225,6 +279,8 @@ export interface FanInfo {
   label: string;
   rpm: number | null; // null = speed unknown this read (e.g. a sensor glitch)
   percent: number | null;
+  max_rpm?: number | null;
+  channel?: "system" | "gpu";
 }
 
 export interface TempInfo {
@@ -236,6 +292,8 @@ export interface FanState {
   supported: boolean;
   fans: FanInfo[];
   temps: TempInfo[];
+  desktop?: true;
+  device_key?: string | null;
 }
 
 export const getFanState = callable<[], FanState>("get_fan_state");
@@ -370,6 +428,21 @@ export interface FanCurveState {
   // a newer kernel), so control will start working once SteamOS updates. Drives an
   // honest note; meanwhile the experimental EC path is offered.
   kernel_pending?: boolean;
+  device_key?: string | null;
+  independent?: boolean;
+  channels?: DesktopFanChannel[];
+  apply_ok?: boolean;
+  rollback_ok?: boolean;
+}
+
+export interface DesktopFanChannel {
+  key: "system" | "gpu";
+  preset: Exclude<FanPreset, "adaptive">;
+  points: [number, number][] | null;
+  sensor: string | null;
+  rpm: number | null;
+  max_rpm: number | null;
+  controllable: boolean;
 }
 
 // Learning on/off (get/set_telemetry_enabled) is driven via the module editor now
@@ -391,6 +464,16 @@ export const getUnlockBatteryMax = callable<[], boolean>("get_unlock_battery_max
 export const setUnlockBatteryMax = callable<[enabled: boolean], boolean>("set_unlock_battery_max");
 export const getCoolerBoost = callable<[], boolean>("get_cooler_boost");
 export const setCoolerBoost = callable<[enabled: boolean], boolean>("set_cooler_boost");
+export const getExperimentalTdpUnlock = callable<[], boolean>("get_experimental_tdp_unlock");
+export interface ExperimentalTdpUnlockResult {
+  enabled: boolean;
+  ok: boolean;
+  detail: string;
+}
+export const setExperimentalTdpUnlock = callable<
+  [enabled: boolean],
+  ExperimentalTdpUnlockResult
+>("set_experimental_tdp_unlock");
 
 // Opt-in (default off): raise TDP while the QAM is open for a fluid menu. Off keeps
 // the auto loop showing the REAL in-game TDP (no menu-time inflation).
@@ -416,6 +499,11 @@ export const setFanAdaptive =
   callable<[scope: FanScope, appid: string | null], FanCurveState>("set_fan_adaptive");
 export const setFanAdaptiveBias =
   callable<[bias: number, scope: FanScope, appid: string | null], FanCurveState>("set_fan_adaptive_bias");
+export const setDesktopFanCurve =
+  callable<[channel: "system" | "gpu", preset: Exclude<FanPreset, "adaptive">,
+            points: [number, number][] | null, scope: FanScope, appid: string | null], FanCurveState>("set_desktop_fan_curve");
+export const setDesktopFanFollowGlobal =
+  callable<[follow: boolean, appid: string | null], FanCurveState>("set_desktop_fan_follow_global");
 
 // Fan-curve suggestion fit to a game's observed temperature band.
 export interface FanSuggestion {
@@ -739,6 +827,30 @@ export interface ControllerConfig {
   mode_options?: string[];
   paddles_as?: string | null;
   paddles_options?: string[];
+  // AYANEO 3 removable controller modules. Absent on every other model.
+  magic_modules?: MagicModulesState;
+}
+
+export type ControllerAction = "eject_left" | "eject_right" | "eject_both";
+export type ControllerActionOutcome = "confirmed" | "unverifiable" | "unavailable" | "failed" | "busy";
+export type MagicModuleState = "connected" | "disconnected" | "ejecting" | "activating" | "paused" | "unknown";
+
+export interface MagicModulesState {
+  supported: boolean;
+  source: "hhd";
+  left: MagicModuleState;
+  right: MagicModuleState;
+  power?: boolean | null;
+  busy: boolean;
+}
+
+export interface ControllerActionResult {
+  action: ControllerAction;
+  outcome: ControllerActionOutcome;
+  accepted: boolean | null;
+  reason?: string;
+  modules?: MagicModulesState;
+  config: ControllerConfig;
 }
 
 // ---- Bug reporter ---------------------------------------------------------
@@ -769,6 +881,8 @@ export const setControllerSetting =
   callable<[field: string, value: string], ControllerConfig>("set_controller_setting");
 export const resetController =
   callable<[scope: Scope, appid: string | null], ControllerConfig>("reset_controller");
+export const runControllerAction =
+  callable<[action: ControllerAction], ControllerActionResult>("run_controller_action");
 
 // ---- Ajustes: per-game profile overview -----------------------------------
 // One row per game that has a stored per-game profile in any section (raw own values).

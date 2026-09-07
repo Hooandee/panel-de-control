@@ -4,9 +4,9 @@ import os
 from cpu.info import read_cpu_model
 from device_profiles import DEVICE_TABLE, GENERIC, DeviceProfile
 
-def _read_product_name(root: str = "/") -> str:
+def _read_dmi(root: str, field: str) -> str:
     try:
-        with open(os.path.join(root, "sys/class/dmi/id/product_name")) as handle:
+        with open(os.path.join(root, "sys/class/dmi/id", field)) as handle:
             return handle.read().strip()
     except OSError:
         return ""
@@ -64,9 +64,15 @@ def detect(product_name: str | None = None, root: str = "/") -> DeviceProfile:
     """Return the DeviceProfile for this machine. Never raises. Falls back to a
     GENERIC profile carrying the host's real vendor/chip.
     `product_name`/`root` are injectable for tests; in production they read DMI."""
-    name = product_name if product_name is not None else _read_product_name(root)
+    name = product_name if product_name is not None else _read_dmi(root, "product_name")
+    sys_vendor = _read_dmi(root, "sys_vendor")
+    board_name = _read_dmi(root, "board_name")
     lname = name.lower()
     for profile in DEVICE_TABLE:
+        if profile.dmi_matches:
+            if any(match.matches(name, sys_vendor, board_name) for match in profile.dmi_matches):
+                return profile
+            continue
         for needle in profile.match_names:
             if needle.lower() in lname:
                 return profile

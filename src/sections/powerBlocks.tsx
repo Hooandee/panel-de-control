@@ -4,9 +4,15 @@ import { TdpSection } from "../components/TdpSection";
 import { AutoTdpToggle } from "../components/AutoTdpToggle";
 import { usePotencia } from "../tdp/potenciaContext";
 import { registerBlock } from "../customize/blocks";
+import { useDesktopState } from "../desktop/useDesktop";
+import { desktopUiActive } from "../desktop/presentation";
+import { DesktopPowerCard, DesktopPowerRecoveryCard } from "../components/DesktopPowerCard";
 
 const TdpCoreBlock: FC = () => {
   const c = usePotencia();
+  const desktop = useDesktopState();
+  if (desktop.error) return <DesktopPowerRecoveryCard kind="unavailable" onRetry={desktop.refresh} />;
+  if (desktopUiActive(desktop.state)) return <DesktopPowerCard />;
   // Auto-TDP module off → the loop is stopped; show manual, not the raw flag.
   const power = c.power && !c.autoTdpEnabled ? { ...c.power, auto_tdp: false } : c.power;
   return (
@@ -38,6 +44,7 @@ const AutoTdpBlock: FC = () => {
 
 export function registerPowerBlocks(): void {
   registerBlock("tdp", { sectionId: "power", Component: TdpCoreBlock });
+  registerBlock("desktopPower", { sectionId: "power", Component: DesktopPowerCard });
   // Availability = hardware capability, not the module on/off (block self-gates).
   registerBlock("autoTdp", {
     sectionId: "power",

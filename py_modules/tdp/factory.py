@@ -1,3 +1,5 @@
+import os
+
 from device_quirks import (
     asus_tdp_authoritative_reassert_s,
     is_gpd_win_mini_2025,
@@ -12,6 +14,20 @@ from tdp.intel_rapl import IntelRaplBackend
 from tdp.ryzenadj import RyzenadjBackend
 from tdp.steamdeck_hwmon import SteamDeckHwmonBackend
 from tdp.types import TdpLimits
+
+
+_STRICT_RYZENADJ_KEYS = frozenset({
+    "onexplayer_superx",
+    "zotac_gaming_zone",
+    "rog_flow_z13",
+    "onexplayer_f1",
+    "gpd_win_mini_2025",
+    "ayaneo_3",
+})
+
+
+def _runtime_lock_path(root, name):
+    return os.path.join(root, "run/panel-de-control", name)
 
 
 def _candidates(device, fallback, root, ryzenadj):
@@ -35,6 +51,11 @@ def _candidates(device, fallback, root, ryzenadj):
                 device,
                 root,
             ),
+            trust_live_bounds=device.key == "rog_flow_z13",
+            safety_lock_path=_runtime_lock_path(
+                root,
+                "firmware-asus-armoury.lock",
+            ),
         )
 
     def lenovo():
@@ -45,12 +66,25 @@ def _candidates(device, fallback, root, ryzenadj):
             profile_name="lenovo-wmi-gamezone",
             is_generic=generic,
             rail_floors=legion_go_s_83n6_rail_floors(device, root),
+            safety_lock_path=_runtime_lock_path(
+                root,
+                "firmware-lenovo-wmi-other.lock",
+            ),
             **legion_go_s_83l3_firmware_attr_quirks(device, root),
             **legion_go_s_83n6_firmware_attr_quirks(device, root),
         )
 
     def msi():
-        return FirmwareAttrBackend("msi-wmi-platform", fallback, root=root, is_generic=generic)
+        return FirmwareAttrBackend(
+            "msi-wmi-platform",
+            fallback,
+            root=root,
+            is_generic=generic,
+            safety_lock_path=_runtime_lock_path(
+                root,
+                "firmware-msi-wmi-platform.lock",
+            ),
+        )
 
     def intel():
         return IntelRaplBackend(fallback, root=root)
@@ -68,12 +102,20 @@ def _candidates(device, fallback, root, ryzenadj):
     key = device.key
     if device.vendor == "intel":
         return [msi, intel]
+    if key == "steam_machine":
+        # Fremont's AMD Custom CPU 1772 is not a Ryzen Mobile model: physical
+        # validation returns "unsupported model 124" from ryzenadj. A bundled
+        # binary is therefore not a capability. Keep future firmware-attribute
+        # paths discoverable, but never fall into write-only generic AMD methods.
+        return [asus, lenovo, msi]
     if key.startswith("steam_deck"):
         return [deck]
     if key == "msi_claw_a8":
         return [ryzenadj]
     if key == "onexplayer_apex":
         return [alib, ryzenadj]
+    if key in _STRICT_RYZENADJ_KEYS:
+        return [asus, lenovo, msi, ryzenadj]
     if key.startswith("rog_"):
         return [asus, lenovo, msi, *amd_tail]
     if key.startswith("legion_"):
@@ -93,7 +135,13 @@ def select_backend(device, root="/", ryzenadj_resolve=None) -> TDPBackend:
         return RyzenadjBackend(
             fallback,
             write_max=device.cooler_max,
+            write_max_ac=device.experimental_tdp_max_ac,
             power_only_retry=is_gpd_win_mini_2025(device, root),
+            require_readback=device.key in _STRICT_RYZENADJ_KEYS,
+            safety_lock_path=_runtime_lock_path(
+                root,
+                f"ryzenadj-{device.key}.lock",
+            ),
             **kwargs,
         )
 
@@ -115,7 +163,7 @@ def select_backend(device, root="/", ryzenadj_resolve=None) -> TDPBackend:
             "backend": backend.name,
             "supported": bool(backend.supported),
         })
-        if backend.supported:
+        if backend.supported or getattr(backend, "safety_locked", False):
             backend.probe_trace = tuple(trace)
             return backend
     backend = NullBackend(f"no supported TDP interface for {device.key}")

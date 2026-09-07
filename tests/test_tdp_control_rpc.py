@@ -10,6 +10,7 @@ import types
 
 import pytest
 
+from device_profiles import DEVICE_TABLE
 from tdp.types import TdpLimits, TdpResult
 
 
@@ -90,6 +91,30 @@ def Plugin(tmp_path, monkeypatch):
     return main.Plugin
 
 
+def test_profile_storage_limits_ignore_temporary_flow_firmware_ceiling(Plugin):
+    plugin = Plugin.__new__(Plugin)
+    plugin._device = next(
+        profile for profile in DEVICE_TABLE if profile.key == "rog_flow_z13"
+    )
+    plugin._settings = {"cooler_boost": False, "unlock_battery_max": False}
+    plugin._tdp_backend = types.SimpleNamespace(
+        get_limits=lambda: TdpLimits(5, 20, 42, 42),
+    )
+
+    assert plugin._limits().max_ac_w == 42
+    assert plugin._profile_storage_limits().max_ac_w == 65
+
+
+def test_dynamic_backend_readiness_controls_published_tdp_support(Plugin):
+    plugin = Plugin.__new__(Plugin)
+    plugin._tdp_backend = types.SimpleNamespace(supported=True, ready=lambda: False)
+
+    assert plugin._tdp_supported() is False
+
+    plugin._tdp_backend.ready = lambda: True
+    assert plugin._tdp_supported() is True
+
+
 @pytest.fixture
 def fake_hhd(monkeypatch):
     import main as main_mod
@@ -151,6 +176,135 @@ def test_take_and_restore_hands_hhd_back(Plugin, fake_hhd):
     p._restore_hhd_tdp()
     assert fake_hhd.value is True                  # restored
     assert p._settings["hhd_tdp_prev"] is None
+
+
+def test_take_never_disables_hhd_when_deferred_backend_probe_fails(Plugin, fake_hhd):
+    p = Plugin()
+    p._init()
+    probes = []
+    p._tdp_backend.probe = lambda: probes.append(True) or False
+    fake_hhd.set(True)
+
+    out = asyncio.run(p.take_tdp_control())
+
+    assert out["ok"] is False
+    assert out["hhd_managing"] is True
+    assert fake_hhd.value is True
+    assert p._settings["hhd_tdp_prev"] is None
+    assert probes == [True]
+
+
+def test_take_restores_hhd_immediately_when_first_panel_apply_fails(Plugin, fake_hhd):
+    p = Plugin()
+    p._init()
+    fake_hhd.set(True)
+
+    async def failed_apply(_reason):
+        return TdpResult(20, None, False, "probe lost")
+
+    p._apply_tdp_now = failed_apply
+
+    out = asyncio.run(p.take_tdp_control())
+
+    assert out["ok"] is False
+    assert out["hhd_managing"] is True
+    assert fake_hhd.value is True
+    assert p._settings["hhd_tdp_prev"] is None
+
+
+def test_failed_apply_reports_hhd_restored_from_an_existing_marker(Plugin, fake_hhd):
+    p = Plugin()
+    p._init()
+    p._settings["hhd_tdp_prev"] = True
+    fake_hhd.set(False)
+
+    async def failed_apply(_reason):
+        return TdpResult(20, None, False, "probe lost")
+
+    p._apply_tdp_now = failed_apply
+
+    out = asyncio.run(p.take_tdp_control())
+
+    assert out["ok"] is False
+    assert out["hhd_managing"] is True
+    assert fake_hhd.value is True
+    assert p._settings["hhd_tdp_prev"] is None
+
+
+def test_failed_marker_clear_keeps_recovery_marker_and_reports_hhd_active(
+    Plugin,
+    fake_hhd,
+):
+    p = Plugin()
+    p._init()
+    p._settings["hhd_tdp_prev"] = True
+    fake_hhd.set(False)
+    p._save = lambda: (_ for _ in ()).throw(OSError("disk full"))
+
+    async def failed_apply(_reason):
+        return TdpResult(20, None, False, "probe lost")
+
+    p._apply_tdp_now = failed_apply
+
+    out = asyncio.run(p.take_tdp_control())
+
+    assert out["ok"] is False
+    assert out["hhd_managing"] is True
+    assert "marker clear pending" in out["detail"]
+    assert fake_hhd.value is True
+    assert p._settings["hhd_tdp_prev"] is True
+
+
+def test_failed_hhd_restore_reports_last_confirmed_owner_without_guessing(
+    Plugin,
+    fake_hhd,
+    monkeypatch,
+):
+    import main as main_mod
+
+    p = Plugin()
+    p._init()
+    fake_hhd.set(True)
+    responses = iter((False, None))
+
+    def set_tdp_enable(enabled):
+        response = next(responses)
+        if response is not None:
+            fake_hhd.set(response)
+        return response
+
+    monkeypatch.setattr(main_mod.controller_hhd, "set_tdp_enable", set_tdp_enable)
+
+    async def failed_apply(_reason):
+        return TdpResult(20, None, False, "probe lost")
+
+    p._apply_tdp_now = failed_apply
+
+    out = asyncio.run(p.take_tdp_control())
+
+    assert out["ok"] is False
+    assert out["hhd_managing"] is False
+    assert "HHD restore pending" in out["detail"]
+    assert fake_hhd.value is False
+    assert p._settings["hhd_tdp_prev"] is True
+
+
+def test_take_blocked_by_desktop_migration_reports_live_hhd_owner(Plugin, fake_hhd):
+    p = Plugin()
+    p._init()
+    p._desktop_recognition_migration_pending = True
+    p._desktop_recognition_migration_last_attempt = 0.0
+    p._desktop_power.restore = lambda: {
+        "ok": False,
+        "detail": "surface unavailable",
+    }
+    fake_hhd.set(True)
+
+    out = asyncio.run(p.take_tdp_control())
+
+    assert out["ok"] is False
+    assert out["hhd_managing"] is True
+    assert out["detail"] == "desktop migration pending"
 
 
 def test_take_when_hhd_unreachable_is_honest(Plugin, monkeypatch):

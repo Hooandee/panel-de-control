@@ -25,7 +25,7 @@ def _token(root: str = "/"):
         return None
 
 
-def _get(path: str, token: str, timeout: int = 5):
+def _get(path: str, token: str, timeout: float = 5):
     req = urllib.request.Request(
         _BASE + path, headers={"Authorization": f"Bearer {token}"}
     )
@@ -33,7 +33,7 @@ def _get(path: str, token: str, timeout: int = 5):
         return json.loads(resp.read().decode())
 
 
-def _post(path: str, token: str, payload: dict, timeout: int = 5):
+def _post(path: str, token: str, payload: dict, timeout: float = 5):
     req = urllib.request.Request(
         _BASE + path,
         data=json.dumps(payload).encode(),
@@ -44,25 +44,26 @@ def _post(path: str, token: str, payload: dict, timeout: int = 5):
         return json.loads(resp.read().decode())
 
 
-def read_state(root: str = "/"):
+def read_state(root: str = "/", timeout: float = 5, language: str | None = None):
     """Full HHD live-state JSON, or None if HHD isn't reachable."""
     token = _token(root)
     if not token:
         return None
     try:
-        return _get("/state", token)
+        path = "/state?lang=en" if language == "en" else "/state"
+        return _get(path, token, timeout=timeout)
     except Exception:
         return None
 
 
-def post_state(payload: dict, root: str = "/"):
+def post_state(payload: dict, root: str = "/", timeout: float = 5):
     """POST a partial state (HHD merges it) and return the full state it echoes
     back — the honest read-back of what actually stuck. None on failure."""
     token = _token(root)
     if not token:
         return None
     try:
-        return _post("/state", token, payload)
+        return _post("/state", token, payload, timeout=timeout)
     except Exception:
         return None
 
