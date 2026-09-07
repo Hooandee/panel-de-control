@@ -5,9 +5,17 @@
 ## [0.41.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.40.0...panel-de-control-v0.41.0) (2026-09-07)
 
 
-### Features
+### Español
 
-* add Steam Machine and desktop mode support ([#413](https://github.com/Hooandee/panel-de-control/issues/413)) ([2c9cfd8](https://github.com/Hooandee/panel-de-control/commit/2c9cfd84804798f9800c0b92be2379eaa24fd815))
+* **Nuevas máquinas:** Añade soporte para Steam Machine (Fremont), OneXPlayer Super X, Zotac Gaming Zone, ROG Flow Z13, OneXPlayer F1/OneXFly, GPD Win Mini 2025 y AYANEO 3. Incluye límites de TDP adaptados a cada modelo, controles específicos cuando están disponibles y detección segura en SteamOS, Bazzite 43, Bazzite 44 y CachyOS. Las máquinas que todavía no se han podido validar físicamente se muestran como experimentales.
+
+### English
+
+* **New devices:** Adds support for Steam Machine (Fremont), OneXPlayer Super X, Zotac Gaming Zone, ROG Flow Z13, OneXPlayer F1/OneXFly, GPD Win Mini 2025, and AYANEO 3. This includes model-specific TDP limits, dedicated controls when available, and safe detection across SteamOS, Bazzite 43, Bazzite 44, and CachyOS. Machines that could not yet be physically validated are shown as experimental.
+
+### Italiano
+
+* **Nuovi dispositivi:** Aggiunge il supporto per Steam Machine (Fremont), OneXPlayer Super X, Zotac Gaming Zone, ROG Flow Z13, OneXPlayer F1/OneXFly, GPD Win Mini 2025 e AYANEO 3. Include limiti TDP specifici per ogni modello, controlli dedicati quando disponibili e un rilevamento sicuro su SteamOS, Bazzite 43, Bazzite 44 e CachyOS. Le macchine che non è stato ancora possibile convalidare fisicamente vengono indicate come sperimentali.
 
 ## [0.40.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.39.0...panel-de-control-v0.40.0) (2026-09-06)
 
