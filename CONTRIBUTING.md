@@ -70,8 +70,8 @@ the payload into that folder before zipping:
 
 ```sh
 pnpm build                       # must produce dist/index.js
-node scripts/copy-plugin-payload.mjs . "$HOME/Downloads/panel-de-control"
-zip -r "$HOME/Downloads/panel-de-control.zip" "$HOME/Downloads/panel-de-control"
+node scripts/copy-plugin-payload.mjs . "$HOME/Downloads/Panel de Control"
+cd "$HOME/Downloads"; zip -r "Panel de Control.zip" "Panel de Control"; cd -
 ```
 
 Then install it on the device via **Decky → Settings → Install from zip**. The zip
