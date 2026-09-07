@@ -76,7 +76,7 @@ def curate_fans(fans: list[dict]) -> list[dict]:
     return fans
 
 
-def curate_temps(temps: list[dict]) -> list[dict]:
+def curate_temps(temps: list[dict], desktop: bool = False, device_key: str | None = None) -> list[dict]:
     """Show only the meaningful CPU/GPU sensors with friendly labels, dropping the
     generic noise (acpitz, wifi, nvme, battery…) that clutters the monitor. If a
     device exposes no recognized CPU/GPU sensor, fall back to showing everything
@@ -84,6 +84,20 @@ def curate_temps(temps: list[dict]) -> list[dict]:
 
     def rank(t: dict) -> tuple[str, int]:
         chip = t["chip"]
+        raw_label = str(t.get("label", "")).lower()
+        if desktop:
+            if device_key == "steam_machine" and chip == "acpitz":
+                return "CPU", 0
+            if chip in ("k10temp", "coretemp"):
+                return "CPU", 0
+            if chip in ("steamdeck_hwmon", "jupiter") and "cpu" in raw_label:
+                return "CPU", 0
+            if chip == "amdgpu":
+                if "junction" in raw_label:
+                    return "GPU junction", 1
+                if "mem" in raw_label:
+                    return "VRAM", 1
+                return "GPU", 1
         if chip in _TEMP_RULES:
             return _TEMP_RULES[chip]
         if any(chip.startswith(d) for d in _TEMP_DEMOTE):
@@ -112,7 +126,7 @@ def curate_temps(temps: list[dict]) -> list[dict]:
     # A GPU sensor with no CPU sensor IS the whole APU (e.g. Steam Deck exposes only
     # amdgpu, no k10temp) — label it "APU" rather than implying discrete graphics.
     labels = {r["label"] for r in result}
-    if "GPU" in labels and "CPU" not in labels:
+    if not desktop and "GPU" in labels and "CPU" not in labels:
         for r in result:
             if r["label"] == "GPU":
                 r["label"] = "APU"
@@ -132,8 +146,13 @@ def extract_cpu_gpu_temps(fan_state: dict) -> tuple:
 class FanReader:
     """Reads fan speeds + temperatures from sysfs hwmon. Read-only. Never raises."""
 
-    def __init__(self, root: str = "/") -> None:
+    def __init__(self, root: str = "/", desktop: bool = False, device_key: str | None = None) -> None:
         self._root = root
+        self._desktop = bool(desktop)
+        self._device_key = device_key
+
+    def set_desktop(self, enabled: bool) -> None:
+        self._desktop = bool(enabled)
 
     def _chips(self) -> list[str]:
         return sorted(glob.glob(os.path.join(self._root, _HWMON, "hwmon*")))
@@ -159,7 +178,12 @@ class FanReader:
                 label = _read(os.path.join(d, f"fan{n}_label")) or f"Fan {n}"
                 pwm = _read_int(os.path.join(d, f"pwm{n}"))
                 percent = round(pwm / 255 * 100) if pwm is not None else None
-                raw_fans.append({"chip": name, "label": label, "rpm": rpm, "percent": percent})
+                max_rpm = _read_int(os.path.join(d, f"fan{n}_max"))
+                if (max_rpm is None and self._device_key == "steam_machine"
+                        and name in ("steamdeck_hwmon", "jupiter")):
+                    max_rpm = 1800
+                raw_fans.append({"chip": name, "label": label, "rpm": rpm,
+                                 "percent": percent, "max_rpm": max_rpm})
 
             for inp in sorted(glob.glob(os.path.join(d, "temp*_input"))):
                 milli = _read_int(inp)
@@ -170,9 +194,23 @@ class FanReader:
                 raw_temps.append({"chip": name, "label": label, "celsius": round(milli / 1000, 1)})
 
         fans = curate_fans(raw_fans)
-        temps = curate_temps(raw_temps)
-        return {
+        temps = curate_temps(raw_temps, desktop=self._desktop, device_key=self._device_key)
+        visible_fans = []
+        for fan in fans:
+            item = {"label": fan["label"], "rpm": fan["rpm"],
+                    "percent": fan["percent"], "max_rpm": fan.get("max_rpm")}
+            if self._desktop and self._device_key == "steam_machine":
+                if fan["chip"] in ("steamdeck_hwmon", "jupiter"):
+                    item["channel"] = "system"
+                elif fan["chip"] == "amdgpu":
+                    item["channel"] = "gpu"
+            visible_fans.append(item)
+        state = {
             "supported": len(fans) > 0,
-            "fans": [{"label": f["label"], "rpm": f["rpm"], "percent": f["percent"]} for f in fans],
+            "fans": visible_fans,
             "temps": temps,
         }
+        if self._desktop:
+            state["desktop"] = True
+            state["device_key"] = self._device_key
+        return state

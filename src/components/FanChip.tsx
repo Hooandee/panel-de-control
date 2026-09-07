@@ -13,6 +13,7 @@ interface Props {
   label: string;
   rpm: number | null; // null = speed unknown this read (sensor glitch)
   values: number[];
+  maxRpm?: number | null;
   // Layout:
   //  - "stack" (default): ring on top, label, sparkline below.
   //  - "wide": ring left, label + sparkline right (single fan fills a full card).
@@ -27,14 +28,14 @@ interface Props {
  * machine's two blowers run as one lock-step cooling system, so we don't tie a
  * fan to a CPU/GPU it doesn't independently cool.
  */
-const FanChipImpl: FC<Props> = ({ label, rpm, values, layout = "stack" }) => {
+const FanChipImpl: FC<Props> = ({ label, rpm, values, maxRpm, layout = "stack" }) => {
   const r = (SIZE - STROKE) / 2;
   const circ = 2 * Math.PI * r;
   // rpm null (glitch) → show "—" and an empty ring for this tick, honestly. The
   // fraction is only computed on the rpm != null branch, so observedMax's null
   // fallback is never exercised there — inline it.
   const observedMax = values.length ? Math.max(...values, rpm ?? 0) : (rpm ?? 0);
-  const fraction = rpm == null ? 0 : rpmFraction(rpm, observedMax, NOMINAL_MAX_RPM);
+  const fraction = rpm == null ? 0 : rpmFraction(rpm, observedMax, maxRpm ?? NOMINAL_MAX_RPM);
 
   const ring = (
     <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`} style={{ flexShrink: 0 }}>

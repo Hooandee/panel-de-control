@@ -49,6 +49,34 @@ def test_probe_parses_versions_from_fake_runner():
     assert facts["ip_version"] is None
 
 
+def test_bazzite_43_detects_templated_hhd_service():
+    def fake_run(cmd):
+        if cmd == ["systemctl", "is-active", "hhd@*.service"]:
+            return "active"
+        if cmd[0] == "hhd":
+            return "hhd 4.1.12"
+        return "inactive"
+
+    facts = detect.probe(run=fake_run)
+
+    assert facts["hhd_active"] is True
+    assert facts["hhd_version"] == "4.1.12"
+
+
+def test_bazzite_44_detects_local_templated_hhd_service():
+    def fake_run(cmd):
+        if cmd == ["systemctl", "is-active", "hhd_local@*.service"]:
+            return "active"
+        if cmd[0] == "hhd":
+            return "hhd 4.2.0"
+        return "inactive"
+
+    facts = detect.probe(run=fake_run)
+
+    assert facts["hhd_active"] is True
+    assert facts["hhd_version"] == "4.2.0"
+
+
 def test_resolve_bin_prefers_absolute_then_falls_back():
     # A ubiquitous binary resolves to an absolute path (PATH-independent).
     assert detect.resolve_bin("sh").startswith("/")

@@ -48,6 +48,19 @@ def _mk_dmi(root, vendor, product):
             f.write(value)
 
 
+def _mk_readable_ryzenadj(root):
+    path = os.path.join(root, "fake-ryzenadj")
+    with open(path, "w") as handle:
+        handle.write(
+            "#!/bin/sh\n"
+            "if [ \"$1\" = \"-i\" ]; then\n"
+            "  printf '| STAPM LIMIT | 15.000 | stapm-limit |\\n'\n"
+            "fi\n"
+        )
+    os.chmod(path, 0o755)
+    return path
+
+
 def _mk_asus_legacy(root):
     base = os.path.join(root, "sys/devices/platform/asus-nb-wmi")
     os.makedirs(base, exist_ok=True)
@@ -94,6 +107,64 @@ def test_rog_uses_asus_armoury_firmware_attr(tmp_path):
         "supported": True,
     },)
     assert b.diagnostics()["readback_settle_ms"] == 0
+
+
+def test_flow_uses_asus_armoury_and_publishes_live_narrowed_limits(tmp_path):
+    root = str(tmp_path)
+    _mk_fw(root, "asus-armoury", pl1_max=42)
+    backend = select_backend(
+        _p("rog_flow_z13"),
+        root=root,
+        ryzenadj_resolve=_NO_RYZENADJ,
+    )
+
+    assert backend.name == "firmware-attr:asus-armoury"
+    assert backend.get_limits().max_w == 42
+    assert backend.get_limits().max_ac_w == 42
+
+
+def test_flow_keeps_recoverable_firmware_backend_but_reports_invalid_bounds_unready(tmp_path):
+    root = str(tmp_path)
+    _mk_fw(root, "asus-armoury", pl1_max=0)
+
+    backend = select_backend(
+        _p("rog_flow_z13"),
+        root=root,
+        ryzenadj_resolve=lambda: "/bin/true",
+    )
+
+    assert backend.name == "firmware-attr:asus-armoury"
+    assert backend.supported is True
+    assert backend.ready() is False
+
+
+@pytest.mark.parametrize(
+    "os_release",
+    (
+        'ID=bazzite\nPRETTY_NAME="Bazzite 43"\n',
+        'ID=bazzite\nPRETTY_NAME="Bazzite 44"\n',
+        'ID=steamos\nPRETTY_NAME="SteamOS Holo"\n',
+        'ID=cachyos\nPRETTY_NAME="CachyOS"\n',
+    ),
+)
+def test_tdp_backend_selection_is_independent_of_linux_distribution(
+    tmp_path,
+    os_release,
+):
+    root = str(tmp_path)
+    os.makedirs(os.path.join(root, "etc"), exist_ok=True)
+    with open(os.path.join(root, "etc/os-release"), "w") as handle:
+        handle.write(os_release)
+    _mk_fw(root, "asus-armoury", pl1_max=42)
+
+    backend = select_backend(
+        _p("rog_flow_z13"),
+        root=root,
+        ryzenadj_resolve=_NO_RYZENADJ,
+    )
+
+    assert backend.name == "firmware-attr:asus-armoury"
+    assert backend.get_limits().max_w == 42
 
 
 def test_only_exact_dual_interface_xbox_ally_x_gets_authoritative_reassert(tmp_path):
@@ -167,6 +238,55 @@ def test_legion_uses_lenovo_firmware_attr(tmp_path):
     b = select_backend(_p("legion_go_2"), root=root, ryzenadj_resolve=_NO_RYZENADJ)
     assert b.supported and "lenovo-wmi-other" in b.name
     assert b.diagnostics()["readback_settle_ms"] == 0
+
+
+def test_new_experimental_profile_defers_ryzenadj_probe_and_rejects_before_write(tmp_path):
+    backend = select_backend(
+        _p("onexplayer_f1"),
+        root=str(tmp_path),
+        ryzenadj_resolve=lambda: "/bin/true",
+    )
+
+    assert backend.supported is True
+    assert backend.name == "ryzenadj"
+    assert [item["candidate"] for item in backend.probe_trace] == [
+        "asus",
+        "lenovo",
+        "msi",
+        "ryzenadj",
+    ]
+    result = backend.set_tdp(20, ac=True)
+    assert result.ok is False
+    assert "readback unavailable before write" in result.detail
+
+
+def test_gpd_win_mini_backend_reserves_55w_for_explicit_ac_unlock(tmp_path):
+    backend = select_backend(
+        _p("gpd_win_mini_2025"),
+        root=str(tmp_path),
+        ryzenadj_resolve=lambda: "/bin/true",
+    )
+
+    assert backend.get_limits().max_ac_w == 35
+    assert backend._write_limits.max_w == 35
+    assert backend._write_limits.max_ac_w == 55
+
+
+def test_factory_keeps_runtime_locked_gpd_backend_available_for_safe_recovery(tmp_path):
+    lock = tmp_path / "run/panel-de-control/ryzenadj-gpd_win_mini_2025.lock"
+    lock.parent.mkdir(parents=True)
+    lock.write_text("circuit_open_restored", encoding="utf-8")
+
+    backend = select_backend(
+        _p("gpd_win_mini_2025"),
+        root=str(tmp_path),
+        ryzenadj_resolve=lambda: "/bin/true",
+    )
+
+    assert backend.name == "ryzenadj"
+    assert backend.supported is False
+    assert backend.safety_locked is True
+    assert backend.recover_safe_range() is True
 
 
 def test_only_exact_legion_go_s_83n6_gets_measured_rail_floors(tmp_path):
@@ -429,6 +549,17 @@ def test_exact_steam_deck_never_falls_through_to_generic_amd_backends(tmp_path):
     assert [item["candidate"] for item in backend.probe_trace] == ["deck"]
 
 
+def test_steam_machine_does_not_claim_ryzenadj_from_binary_presence(tmp_path):
+    # Physical Fremont returns "unsupported model 124" from ryzenadj and exposes no
+    # readable CPU watts/limit. A binary on disk is not a supported CPU TDP backend.
+    backend = select_backend(
+        _p("steam_machine"), root=str(tmp_path),
+        ryzenadj_resolve=lambda: "/usr/bin/ryzenadj")
+    assert backend.supported is False
+    assert backend.name == "unsupported"
+    assert "ryzenadj" not in [item["candidate"] for item in backend.probe_trace]
+
+
 def test_falls_back_to_null_when_nothing_present(tmp_path):
     b = select_backend(_p("rog_ally_x"), root=str(tmp_path), ryzenadj_resolve=_NO_RYZENADJ)
     assert b.supported is False and b.name == "unsupported"
@@ -456,11 +587,12 @@ def test_generic_amd_uses_ryzenadj_when_present(tmp_path):
 def test_only_exact_gpd_enables_ryzenadj_power_only_retry(tmp_path):
     root = str(tmp_path)
     _mk_dmi(root, "GPD", "G1617-02")
+    binary = _mk_readable_ryzenadj(root)
 
     exact = select_backend(
         _p("gpd_win_mini_2025"),
         root=root,
-        ryzenadj_resolve=lambda: "/usr/bin/ryzenadj",
+        ryzenadj_resolve=lambda: binary,
     )
     other = select_backend(
         _p("onexplayer_f1pro"),
@@ -475,11 +607,12 @@ def test_only_exact_gpd_enables_ryzenadj_power_only_retry(tmp_path):
 def test_gpd_profile_with_different_dmi_keeps_default_ryzenadj(tmp_path):
     root = str(tmp_path)
     _mk_dmi(root, "GPD", "G1617-02-L")
+    binary = _mk_readable_ryzenadj(root)
 
     backend = select_backend(
         _p("gpd_win_mini_2025"),
         root=root,
-        ryzenadj_resolve=lambda: "/usr/bin/ryzenadj",
+        ryzenadj_resolve=lambda: binary,
     )
 
     assert backend._power_only_retry is False

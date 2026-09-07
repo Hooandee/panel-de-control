@@ -81,8 +81,18 @@ def _version_tail(text: str):
 
 def probe(run=_run) -> dict:
     """Impure: gather manager facts from the system. Never raises."""
-    hhd = run(["systemctl", "is-active", "hhd.service"]) == "active"
-    ip = run(["systemctl", "is-active", "inputplumber.service"]) == "active"
+    def active(unit):
+        return any(
+            line.strip() == "active"
+            for line in run(["systemctl", "is-active", unit]).splitlines()
+        )
+
+    hhd = any(active(unit) for unit in (
+        "hhd.service",
+        "hhd@*.service",
+        "hhd_local@*.service",
+    ))
+    ip = active("inputplumber.service")
     return {
         "hhd_active": hhd,
         "hhd_version": _version_tail(run(["hhd", "--version"])) if hhd else None,

@@ -164,8 +164,15 @@ def select_charge_limit(device, root="/"):
     the standard threshold. MSI Claw is probed via the standard path. Falls back
     to Null (honest) when nothing is present."""
     key = getattr(device, "key", "")
+    if key == "steam_machine":
+        return NullChargeLimit()
     if key.startswith("steam_deck"):
         candidates = [SteamDeckChargeLimit(root), SysfsChargeLimit(root)]
+    elif key == "zotac_gaming_zone":
+        # No upstream Zotac charge-limit ABI exists yet. Adopt only the standard
+        # power-supply percentage contract if the running kernel exposes it; never
+        # mistake an accessory Deck hwmon or unrelated Lenovo ACPI node for support.
+        candidates = [SysfsChargeLimit(root)]
     elif key.startswith("legion"):
         candidates = [SysfsChargeLimit(root), LenovoConservationMode(root)]
     else:

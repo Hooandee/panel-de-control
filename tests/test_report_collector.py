@@ -30,6 +30,8 @@ def test_kernel_logs_runner_raising_is_null():
 def test_controller_daemon_cmds_hhd():
     cmd = controller_daemon_cmds("hhd")["controller"]
     assert "journalctl" in cmd[0] and "hhd.service" in cmd
+    assert "hhd@*.service" in cmd
+    assert "hhd_local@*.service" in cmd
 
 
 def test_controller_daemon_cmds_inputplumber():
@@ -64,14 +66,20 @@ def test_capabilities_from_distils_backends():
         "battery": {"charge_limit": {"supported": True, "adjustable": False}},
         "gpu": {"supported": False},
         "color": {"supported": True},
-        "controller": {"manager": "inputplumber", "kind": "remap"},
+        "controller": {
+            "manager": "hhd",
+            "kind": "settings",
+            "magic_modules": {"supported": True, "source": "hhd"},
+        },
     })
     assert caps["tdp_backend"] == "asus-armoury"
     assert caps["fan_source"] == "asus_custom_fan_curve"
     assert caps["charge_limit_supported"] is True
     assert caps["charge_limit_adjustable"] is False
     assert caps["gpu_clock_supported"] is False
-    assert caps["controller_manager"] == "inputplumber"
+    assert caps["controller_manager"] == "hhd"
+    assert caps["magic_modules_supported"] is True
+    assert caps["magic_modules_source"] == "hhd"
 
 
 def test_capabilities_from_tolerates_missing():

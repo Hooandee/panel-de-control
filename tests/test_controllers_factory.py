@@ -71,3 +71,88 @@ def test_select_hhd_backend_is_hhd():
     assert b.manager == detect.HHD
     # IP-only op is a no-op on the HHD backend.
     assert isinstance(b.set_button("LeftPaddle1", []), dict)
+
+
+def test_bazzite_43_ayaneo_prefers_hhd_magic_modules(monkeypatch, tmp_path):
+    state = {
+        "controllers": {"ayaneo": {"controller_mode": {"mode": "uinput", "uinput": {}}}},
+        "magic_modules": {"magic_modules": {
+            "pop_left": False,
+            "pop_right": False,
+            "pop_both": False,
+            "info_left": "Cross / Joystick",
+            "info_right": r"ABXY \ Joystick",
+        }},
+    }
+    calls = []
+
+    def read_state(root="/", timeout=5, language=None):
+        calls.append((timeout, language))
+        return state
+
+    monkeypatch.setattr(factory.hhd_api, "read_state", read_state)
+
+    backend = factory.select_controller_backend(
+        {"manager": detect.HHD, "version": "4.1.12"},
+        FakeStore(),
+        FakeDbus(),
+        _device("ayaneo_3"),
+        root=str(tmp_path),
+    )
+
+    assert backend.get_config()["magic_modules"] == {
+        "supported": True,
+        "source": "hhd",
+        "left": "connected",
+        "right": "connected",
+        "busy": False,
+    }
+    assert (0.5, "en") in calls
+
+
+def test_bazzite_44_contract_without_hhd_never_exposes_direct_hid_writes(tmp_path):
+    backend = factory.select_controller_backend(
+        {"manager": detect.INPUTPLUMBER, "version": "0.79.0"},
+        FakeStore(),
+        FakeDbus(),
+        _device("ayaneo_3"),
+        root=str(tmp_path),
+    )
+
+    magic = backend.get_config()["magic_modules"]
+    assert magic["supported"] is False
+    assert magic["source"] == "hhd"
+    assert backend.run_action("eject_both")["outcome"] == "unavailable"
+
+
+def test_non_ayaneo_never_gets_magic_module_actions(tmp_path):
+    backend = factory.select_controller_backend(
+        {"manager": detect.INPUTPLUMBER, "version": "0.79.0"},
+        FakeStore(),
+        FakeDbus(),
+        _device("zotac_gaming_zone"),
+        root=str(tmp_path),
+    )
+
+    assert "magic_modules" not in backend.get_config()
+    assert backend.run_action("eject_both")["outcome"] == "unavailable"
+
+
+def test_magic_module_action_result_is_kept_for_sanitised_diagnostics():
+    class Actions:
+        def state(self):
+            return {"supported": True, "source": "hhd"}
+
+        def run(self, action):
+            return {
+                "action": action,
+                "outcome": "unverifiable",
+                "accepted": None,
+                "reason": "hhd_post_unconfirmed",
+            }
+
+    backend = factory.ControllerBackend(actions=Actions())
+
+    result = backend.run_action("eject_left")
+
+    assert backend.diagnostics()["last_action"] == result

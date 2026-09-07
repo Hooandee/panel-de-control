@@ -67,6 +67,7 @@ _MERGE = lambda baseline, overrides: "merged-yaml"  # noqa: E731 — the real on
 def test_ip_get_config_lists_device_buttons_with_silkscreen_labels(tmp_path):
     cfg = inputplumber.get_config(_store(tmp_path), FakeDbus(), CLAW)
     assert cfg["kind"] == "remap"
+    assert cfg["device_key"] == CLAW
     assert cfg["device_known"] is True
     # Per-device table order; the Claw's two grips carry real silkscreen labels.
     assert [(b["source"], b["label"]) for b in cfg["buttons"]] == [

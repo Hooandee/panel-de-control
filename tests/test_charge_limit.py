@@ -199,6 +199,41 @@ def test_select_returns_deck_backend_for_deck(tmp_path):
     assert cl.supported is True
 
 
+def test_fremont_never_claims_accessory_or_steamdeck_charge_controls(tmp_path):
+    _mk_bat(str(tmp_path), value="80")
+    _mk_deck_hwmon(str(tmp_path), value="70")
+
+    class Fremont:
+        key = "steam_machine"
+
+    cl = select_charge_limit(Fremont(), root=str(tmp_path))
+    assert isinstance(cl, NullChargeLimit)
+    assert cl.supported is False
+
+
+class _ZotacZone:
+    key = "zotac_gaming_zone"
+
+
+def test_bazzite_43_zotac_without_standard_threshold_is_honestly_unsupported(tmp_path):
+    _mk_deck_hwmon(str(tmp_path), value="70")
+    _mk_conservation(str(tmp_path), value="0")
+
+    cl = select_charge_limit(_ZotacZone(), root=str(tmp_path))
+
+    assert isinstance(cl, NullChargeLimit)
+
+
+def test_bazzite_44_zotac_adopts_standard_kernel_threshold_when_present(tmp_path):
+    _mk_bat(str(tmp_path), value="85")
+
+    cl = select_charge_limit(_ZotacZone(), root=str(tmp_path))
+
+    assert isinstance(cl, SysfsChargeLimit)
+    assert cl.set(80) is True
+    assert cl.get() == 80
+
+
 class _Generic:
     key = "generic"
 
