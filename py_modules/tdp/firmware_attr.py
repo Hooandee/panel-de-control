@@ -77,6 +77,8 @@ class FirmwareAttrBackend(TDPBackend):
         authoritative_reassert_s=None,
         trust_live_bounds=False,
         safety_lock_path=None,
+        restore_on_release=False,
+        ownership_lock_path=None,
     ):
         self.name = f"firmware-attr:{driver_prefix}"
         self._fallback = fallback
@@ -85,6 +87,8 @@ class FirmwareAttrBackend(TDPBackend):
         self._is_generic = is_generic
         self._trust_live_bounds = bool(trust_live_bounds)
         self._safety_lock = RuntimeSafetyLock(safety_lock_path)
+        self._restore_on_release = bool(restore_on_release)
+        self._ownership_lock = RuntimeSafetyLock(ownership_lock_path)
         self._rail_floors = _normalise_rail_floors(rail_floors)
         self._ignored_live_maxes = _normalise_rail_values(ignored_live_maxes)
         self.cap_boost_to_active = bool(cap_boost_to_active)
@@ -114,6 +118,13 @@ class FirmwareAttrBackend(TDPBackend):
             if self._runtime_lock_payload
             else None
         )
+        self._owned_payload = (
+            self._ownership_lock.load_payload()
+            if self._restore_on_release
+            else None
+        )
+        self._owns_state = False
+        self._ownership_recovery_pending = self._owned_payload is not None
         complete_primary = all(rail in self._primary_rails for rail, _attr in _RAIL_ATTRS)
         complete_legacy = all(rail in self._legacy for rail, _attr in _RAIL_ATTRS)
         try:
@@ -246,40 +257,87 @@ class FirmwareAttrBackend(TDPBackend):
             mismatches = self._snapshot_mismatches(surfaces, snapshot, profile)
         return not mismatches, write_failures + mismatches
 
-    def recover_runtime_transaction(self):
+    def _restore_payload(self, purpose):
         payload = self._runtime_lock_payload
+        if purpose == "ownership":
+            payload = self._owned_payload
         saved = payload.get("snapshot") if isinstance(payload, dict) else None
         if not isinstance(saved, dict) or not saved:
-            return {"ok": False, "detail": "firmware recovery snapshot unavailable"}
+            return {"ok": False, "detail": f"firmware {purpose} snapshot unavailable"}
         surfaces = self._transaction_surfaces({rail: 0 for rail in self._rails})
         current = {
             self._surface_label(surface, rail): path
             for surface, rail, path in surfaces
         }
         if set(saved) != set(current):
-            return {"ok": False, "detail": "firmware recovery surfaces changed"}
+            return {"ok": False, "detail": f"firmware {purpose} surfaces changed"}
         try:
             snapshot = {current[label]: int(value) for label, value in saved.items()}
         except (TypeError, ValueError):
-            return {"ok": False, "detail": "firmware recovery snapshot invalid"}
+            return {"ok": False, "detail": f"firmware {purpose} snapshot invalid"}
         profile = payload.get("profile")
         if self._pp_dir and not isinstance(profile, str):
-            return {"ok": False, "detail": "firmware recovery profile unavailable"}
+            return {"ok": False, "detail": f"firmware {purpose} profile unavailable"}
         recovered, problems = self._rollback_transaction(surfaces, snapshot, profile)
         if not recovered:
-            detail = "firmware recovery failed: " + ", ".join(problems)
+            detail = f"firmware {purpose} recovery failed: " + ", ".join(problems)
             payload = {**payload, "state": "rollback_failed", "detail": detail}
-            self._runtime_lock_payload = payload
             self._write_circuit_open = detail
-            self._safety_lock.persist_payload(payload)
+            if purpose == "transaction":
+                self._runtime_lock_payload = payload
+                self._safety_lock.persist_payload(payload)
+            else:
+                self._owned_payload = payload
+                self._ownership_recovery_pending = True
+                self._ownership_lock.persist_payload(payload)
             return {"ok": False, "detail": detail}
-        if not self._safety_lock.clear():
-            detail = "firmware recovery confirmed; runtime lock clear failed"
+        lock = self._safety_lock if purpose == "transaction" else self._ownership_lock
+        if not lock.clear():
+            detail = f"firmware {purpose} recovery confirmed; runtime lock clear failed"
             self._write_circuit_open = detail
             return {"ok": False, "detail": detail}
-        self._runtime_lock_payload = None
+        if purpose == "transaction":
+            self._runtime_lock_payload = None
+        else:
+            self._owned_payload = None
+            self._owns_state = False
+            self._ownership_recovery_pending = False
         self._write_circuit_open = None
-        return {"ok": True, "detail": "firmware transaction recovered"}
+        return {"ok": True, "detail": f"firmware {purpose} recovered"}
+
+    def recover_runtime_transaction(self):
+        if self._runtime_lock_payload is not None:
+            recovered = self._restore_payload(
+                "transaction",
+            )
+            if not recovered["ok"]:
+                return recovered
+        if self._ownership_recovery_pending:
+            return self._restore_payload("ownership")
+        return {"ok": True, "detail": "no firmware recovery pending"}
+
+    def relinquish_ownership(self):
+        if self._runtime_lock_payload is not None:
+            return {
+                "ok": False,
+                "detail": "firmware transaction recovery pending",
+            }
+        if not self._ownership_recovery_pending:
+            return {"ok": True, "detail": "no firmware ownership pending"}
+        if self._owned_payload is None:
+            return {
+                "ok": False,
+                "detail": "firmware ownership snapshot unavailable",
+            }
+        if not self._ownership_lock.clear():
+            return {
+                "ok": False,
+                "detail": "firmware ownership marker clear failed",
+            }
+        self._owned_payload = None
+        self._owns_state = False
+        self._ownership_recovery_pending = False
+        return {"ok": True, "detail": "firmware ownership relinquished"}
 
     def reconciliation_levels(self, levels):
         return {
@@ -343,7 +401,11 @@ class FirmwareAttrBackend(TDPBackend):
         )
 
     def ready(self):
-        if not self.supported or self._write_circuit_open is not None:
+        if (
+            not self.supported
+            or self._write_circuit_open is not None
+            or self._ownership_recovery_pending
+        ):
             return False
         if not self._trust_live_bounds:
             return True
@@ -355,7 +417,10 @@ class FirmwareAttrBackend(TDPBackend):
 
     @property
     def safety_locked(self):
-        return self._write_circuit_open is not None
+        return (
+            self._write_circuit_open is not None
+            or self._ownership_recovery_pending
+        )
 
     def probe(self):
         return self.ready()
@@ -468,6 +533,13 @@ class FirmwareAttrBackend(TDPBackend):
                 False,
                 f"firmware write circuit open: {self._write_circuit_open}",
             )
+        if self._ownership_recovery_pending:
+            return TdpResult(
+                pl1,
+                self.read_applied(),
+                False,
+                "firmware ownership recovery pending",
+            )
         if self._trust_live_bounds and any(
             self._validated_live_bounds(attr) is None
             for rail, attr in _RAIL_ATTRS
@@ -491,6 +563,25 @@ class FirmwareAttrBackend(TDPBackend):
                 + ", ".join(missing)
                 + "; no writes performed",
             )
+        first_claim = self._restore_on_release and self._owned_payload is None
+        if first_claim:
+            owned_payload = {
+                "state": "ownership_pending",
+                "detail": "firmware ownership snapshot pending",
+                "snapshot": {
+                    self._surface_label(surface, rail): snapshot[path]
+                    for surface, rail, path in surfaces
+                },
+                "profile": previous_profile,
+            }
+            if not self._ownership_lock.persist_payload(owned_payload):
+                return TdpResult(
+                    pl1,
+                    self.read_applied(),
+                    False,
+                    "ownership safety lock unavailable; no writes performed",
+                )
+            self._owned_payload = owned_payload
         lock_payload = {
             "state": "transaction_pending",
             "detail": "firmware transaction pending",
@@ -501,6 +592,12 @@ class FirmwareAttrBackend(TDPBackend):
             "profile": previous_profile,
         }
         if not self._safety_lock.persist_payload(lock_payload):
+            if first_claim:
+                if self._ownership_lock.clear():
+                    self._owned_payload = None
+                else:
+                    self._ownership_recovery_pending = True
+                    self._write_circuit_open = "ownership marker clear failed"
             return TdpResult(
                 pl1,
                 self.read_applied(),
@@ -565,6 +662,13 @@ class FirmwareAttrBackend(TDPBackend):
                 self._write_circuit_open = rollback_detail
             else:
                 self._runtime_lock_payload = None
+                if first_claim:
+                    if self._ownership_lock.clear():
+                        self._owned_payload = None
+                    else:
+                        self._ownership_recovery_pending = True
+                        self._write_circuit_open = "ownership marker clear failed"
+                        rollback_detail += "; ownership marker clear failed"
             restored_applied_w = (
                 self._read_int(self._attr("ppt_pl1_spl"))
                 if applied_w is not None
@@ -588,6 +692,8 @@ class FirmwareAttrBackend(TDPBackend):
                 self._write_circuit_open,
             )
         self._runtime_lock_payload = None
+        if self._restore_on_release:
+            self._owns_state = True
         return TdpResult(
             pl1,
             applied_w,
@@ -647,6 +753,11 @@ class FirmwareAttrBackend(TDPBackend):
             ),
             "reported_live_bounds": reported,
         }
+        if self._restore_on_release:
+            diagnostics["owns_state"] = self._owns_state
+            diagnostics["ownership_recovery_pending"] = (
+                self._ownership_recovery_pending
+            )
         if self._write_circuit_open is not None:
             diagnostics["write_circuit_open"] = self._write_circuit_open
         if self._trust_live_bounds:
@@ -656,6 +767,18 @@ class FirmwareAttrBackend(TDPBackend):
                 if rail in self._rails
             }
         return diagnostics
+
+    def release(self):
+        if not self._restore_on_release:
+            return True
+        if self._runtime_lock_payload is not None:
+            recovered = self._restore_payload("transaction")
+            if not recovered["ok"]:
+                return False
+        if self._owned_payload is None:
+            return not self._ownership_recovery_pending
+        restored = self._restore_payload("ownership")
+        return bool(restored["ok"])
 
     def _observation_mismatches(self, observation, targets):
         bad = []

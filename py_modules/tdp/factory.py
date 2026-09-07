@@ -8,9 +8,12 @@ from device_quirks import (
     legion_go_s_83n6_rail_floors,
 )
 from tdp.alib import AlibBackend
+from tdp.amd_dptc import AmdDptcBackend
+from tdp.asus_nb_wmi import AsusNbWmiBackend
 from tdp.backend import NullBackend, TDPBackend
 from tdp.firmware_attr import FirmwareAttrBackend
 from tdp.intel_rapl import IntelRaplBackend
+from tdp.msi_claw_a8 import MsiClawA8FirmwareBackend
 from tdp.ryzenadj import RyzenadjBackend
 from tdp.steamdeck_hwmon import SteamDeckHwmonBackend
 from tdp.types import TdpLimits
@@ -30,7 +33,7 @@ def _runtime_lock_path(root, name):
     return os.path.join(root, "run/panel-de-control", name)
 
 
-def _candidates(device, fallback, root, ryzenadj):
+def _candidates(device, fallback, root, ryzenadj, os_id=None):
     """Ordered probe chain of backend factories (constructed lazily by the caller,
     so an early match costs no extra sysfs work). The detected family puts its
     known-good backend first, then falls through to every other known path by
@@ -55,6 +58,11 @@ def _candidates(device, fallback, root, ryzenadj):
             safety_lock_path=_runtime_lock_path(
                 root,
                 "firmware-asus-armoury.lock",
+            ),
+            restore_on_release=os_id == "anatase",
+            ownership_lock_path=_runtime_lock_path(
+                root,
+                "ownership-asus-armoury.lock",
             ),
         )
 
@@ -92,6 +100,33 @@ def _candidates(device, fallback, root, ryzenadj):
     def deck():
         return SteamDeckHwmonBackend(fallback, device.key, root=root)
 
+    def asus_nb_wmi():
+        return AsusNbWmiBackend(
+            fallback,
+            root=root,
+            ownership_lock_path=_runtime_lock_path(
+                root,
+                "ownership-asus-nb-wmi.lock",
+            ),
+        )
+
+    def dptc():
+        return AmdDptcBackend(
+            fallback,
+            root=root,
+            write_max=device.cooler_max,
+            safety_lock_path=_runtime_lock_path(root, "firmware-amd-dptc.lock"),
+            ownership_lock_path=_runtime_lock_path(root, "ownership-amd-dptc.lock"),
+        )
+
+    def msi_a8():
+        return MsiClawA8FirmwareBackend(
+            fallback,
+            root=root,
+            safety_lock_path=_runtime_lock_path(root, "firmware-msi-claw-a8.lock"),
+            ownership_lock_path=_runtime_lock_path(root, "ownership-msi-claw-a8.lock"),
+        )
+
     def alib():
         return AlibBackend(fallback, root=root, write_max=device.cooler_max)
 
@@ -110,23 +145,36 @@ def _candidates(device, fallback, root, ryzenadj):
         return [asus, lenovo, msi]
     if key.startswith("steam_deck"):
         return [deck]
-    if key == "msi_claw_a8":
-        return [ryzenadj]
-    if key == "onexplayer_apex":
-        return [alib, ryzenadj]
-    if key in _STRICT_RYZENADJ_KEYS:
-        return [asus, lenovo, msi, ryzenadj]
-    if key.startswith("rog_"):
+    if os_id != "anatase":
+        if key == "msi_claw_a8":
+            return [ryzenadj]
+        if key == "onexplayer_apex":
+            return [alib, ryzenadj]
+        if key in _STRICT_RYZENADJ_KEYS:
+            return [asus, lenovo, msi, ryzenadj]
+        if key.startswith("rog_"):
+            return [asus, lenovo, msi, *amd_tail]
+        if key.startswith("legion_"):
+            return [lenovo, asus, msi, *amd_tail]
         return [asus, lenovo, msi, *amd_tail]
+
+    if key == "msi_claw_a8":
+        return [msi_a8, ryzenadj]
+    if key == "onexplayer_apex":
+        return [dptc, alib, ryzenadj]
+    if key in _STRICT_RYZENADJ_KEYS:
+        return [dptc, asus, lenovo, msi, ryzenadj]
+    if key.startswith("rog_"):
+        return [asus, asus_nb_wmi, *amd_tail]
     if key.startswith("legion_"):
         return [lenovo, asus, msi, *amd_tail]
     # generic / other AMD. intel-rapl excluded (AMD RAPL can confirm a write without
     # changing real TDP); deck excluded (steamdeck-hwmon matches any power*_cap chip,
     # incl. amdgpu's GPU cap — wrong rail).
-    return [asus, lenovo, msi, *amd_tail]
+    return [dptc, asus, lenovo, msi, *amd_tail]
 
 
-def select_backend(device, root="/", ryzenadj_resolve=None) -> TDPBackend:
+def select_backend(device, root="/", ryzenadj_resolve=None, os_id=None) -> TDPBackend:
     """Pick the first supported TDP strategy for the detected device; else NullBackend."""
     fallback = TdpLimits.from_profile(device)
 
@@ -146,7 +194,7 @@ def select_backend(device, root="/", ryzenadj_resolve=None) -> TDPBackend:
         )
 
     trace = []
-    for make in _candidates(device, fallback, root, ryzenadj):
+    for make in _candidates(device, fallback, root, ryzenadj, os_id):
         candidate = make.__name__
         try:
             backend = make()
