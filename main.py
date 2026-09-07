@@ -21,6 +21,7 @@ import decky
 import auto_tdp
 import device_registry
 import osinfo
+import pdc_platform as platform_support
 import self_updater
 import theme_activation
 import theme_packages
@@ -327,6 +328,14 @@ class Plugin:
             os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "state.json")
         )
         self._settings = self._store.load(DEFAULTS)
+        self._os_id = osinfo.read_os_id()
+        self._os_name = osinfo.read_os_name()
+        self._platform = platform_support.describe(self._os_id)
+        self._hhd_tdp_client = platform_support.select_hhd_tdp_client(
+            self._os_id,
+            controller_hhd,
+        )
+        self._tdp_external_owner = None if self._os_id == "anatase" else False
         desktop_settings_changed = normalize_desktop_settings(self._settings)
         # Probe hardware/environment HERE, wrapped so it NEVER raises — a raise in
         # init or _main bricks plugin load (UI stuck on spinner forever).
@@ -389,7 +398,10 @@ class Plugin:
             self._tdp_profiles.drop_legacy_gpu_clocks()
             self._settings["_gpu_scope_migrated"] = True
             self._store.save(self._settings)
-        self._tdp_backend = tdp_factory.select_backend(self._device)
+        self._tdp_backend = tdp_factory.select_backend(
+            self._device,
+            os_id=self._os_id,
+        )
         self._steamdeck_ppt_history = deque(maxlen=32)
         self._steamdeck_ppt_last_failure = None
         self._steamdeck_ppt_recovery_blocked = False
@@ -598,7 +610,6 @@ class Plugin:
         # Real silicon name (static) shown in the DeviceHeader instead of the hardcoded
         # table chip; read once here like _cpu_info. None on generic or when unreadable.
         self._chip = read_cpu_model() if not self._device.is_generic else None
-        self._os_name = osinfo.read_os_name()
         self._current_appid = None
         self._current_game_name = None  # display name of the running game (for the HUD)
         # HUD (MangoHud) plugin-state metrics: the presets.conf path + the shown pdc
@@ -1259,13 +1270,18 @@ class Plugin:
         backend = getattr(self, "_controller_backend", None)
         if getattr(backend, "manager", None) != controller_detect.HHD:
             return True
+        hhd_client = getattr(self, "_hhd_tdp_client", controller_hhd)
         try:
-            current = controller_hhd.current_tdp_enable()
+            current = hhd_client.current_tdp_enable()
         except Exception:  # noqa: BLE001
             return False
         if current is False:
+            if getattr(self, "_os_id", None) == "anatase":
+                self._tdp_external_owner = False
             return True
         if current is not True:
+            if getattr(self, "_os_id", None) == "anatase":
+                self._tdp_external_owner = True
             return False
         previous = self._settings.get("hhd_tdp_prev")
         if previous is None:
@@ -1276,8 +1292,13 @@ class Plugin:
                 self._settings["hhd_tdp_prev"] = None
                 return False
         try:
-            return controller_hhd.set_tdp_enable(False) is False
+            released = hhd_client.set_tdp_enable(False) is False
+            if getattr(self, "_os_id", None) == "anatase":
+                self._tdp_external_owner = not released
+            return released
         except Exception:  # noqa: BLE001
+            if getattr(self, "_os_id", None) == "anatase":
+                self._tdp_external_owner = True
             return False
 
     def _suspend_handheld_tdp_for_desktop(self) -> None:
@@ -1717,6 +1738,7 @@ class Plugin:
             "product_family": read_str("/sys/class/dmi/id/product_family"),
             "board_name": read_str("/sys/class/dmi/id/board_name"),
             "os": os_name,
+            "platform": dict(self._platform),
             "kernel": kernel,
         }
 
@@ -1936,7 +1958,7 @@ class Plugin:
         self._init()
         hhd_present = self._controller_backend.manager == controller_detect.HHD
         # Only read HHD state when HHD is the active manager (its API is local).
-        state = controller_hhd.read_state() if hhd_present else None
+        state = self._hhd_tdp_client.read_state() if hhd_present else None
         out = controller_conflict.assess(state, self._tdp_supported())
         out["hhd_present"] = hhd_present
         return out
@@ -2043,13 +2065,23 @@ class Plugin:
                 return failure.get("reason", "restore_failed")
         return None
 
-    def _restore_power_handoff(self, preserve_ownership=False) -> bool:
-        ppt_released = (
+    def _release_tdp_hardware(self, preserve_ownership=False) -> bool:
+        backend = getattr(self, "_tdp_backend", None)
+        release = getattr(backend, "release", None)
+        try:
+            backend_released = bool(release()) if callable(release) else True
+        except Exception:  # noqa: BLE001
+            backend_released = False
+        if not backend_released:
+            return False
+        return (
             self._restore_steamdeck_ppt(preserve_ownership=True)
             if preserve_ownership
             else self._restore_steamdeck_ppt()
         )
-        if not ppt_released:
+
+    def _restore_power_handoff(self, preserve_ownership=False) -> bool:
+        if not self._release_tdp_hardware(preserve_ownership):
             return False
         return (
             self._restore_hhd_tdp(preserve_ownership=True)
@@ -2058,12 +2090,69 @@ class Plugin:
         )
 
     # ---- TDP conflict + master switch --------------------------------------
+    def _tdp_write_authorized(self) -> bool:
+        return (
+            getattr(self, "_os_id", None) != "anatase"
+            or self._tdp_external_owner is False
+        )
+
+    async def _prime_tdp_ownership(self) -> bool | None:
+        if self._os_id != "anatase":
+            return False
+        hhd_present = self._controller_backend.manager == controller_detect.HHD
+        if not hhd_present:
+            self._tdp_external_owner = False
+            return False
+        managing = await self._offload_call(
+            self._hhd_tdp_client.current_tdp_enable
+        )
+        self._tdp_external_owner = managing is not False
+        return managing
+
+    async def _recover_tdp_startup_state(self) -> bool:
+        managing = await self._prime_tdp_ownership()
+        if self._os_id != "anatase" or managing is False:
+            return await self._offload_call(self._recover_tdp_runtime_transaction)
+        if not getattr(self._tdp_backend, "safety_locked", False):
+            return True
+        if managing is True:
+            relinquish = getattr(self._tdp_backend, "relinquish_ownership", None)
+            if callable(relinquish):
+                try:
+                    result = await self._offload_call(relinquish)
+                except Exception as error:  # noqa: BLE001
+                    decky.logger.warning(
+                        "Interrupted TDP ownership relinquish failed: %s",
+                        type(error).__name__,
+                    )
+                else:
+                    ok = bool(isinstance(result, dict) and result.get("ok"))
+                    detail = (
+                        result.get("detail")
+                        if isinstance(result, dict)
+                        else "invalid response"
+                    )
+                    log = decky.logger.info if ok else decky.logger.warning
+                    log("Interrupted TDP ownership relinquish: %s", detail)
+                    if ok and not getattr(
+                        self._tdp_backend,
+                        "safety_locked",
+                        False,
+                    ):
+                        return True
+        reason = "external owner" if managing is True else "ownership unconfirmed"
+        decky.logger.warning(
+            "Interrupted TDP transaction recovery deferred: %s",
+            reason,
+        )
+        return False
+
     async def get_tdp_conflict(self) -> dict:
         """Which external managers can currently write the power rails."""
         self._init()
         hhd_present = self._controller_backend.manager == controller_detect.HHD
         hhd_call = (
-            self._offload_call(controller_hhd.current_tdp_enable)
+            self._offload_call(self._hhd_tdp_client.current_tdp_enable)
             if hhd_present
             else asyncio.sleep(0, result=False)
         )
@@ -2071,6 +2160,10 @@ class Plugin:
             hhd_call,
             self._offload_call(self._powerstation_detector.tdp_active),
         )
+        if self._os_id == "anatase":
+            self._tdp_external_owner = (
+                managing is not False if hhd_present else False
+            )
         return {
             "hhd_present": hhd_present,
             "hhd_managing": bool(managing),
@@ -2084,7 +2177,7 @@ class Plugin:
         await self._ensure_recognised_desktop_migration()
         if getattr(self, "_desktop_recognition_migration_pending", False):
             managing = await self._offload_call(
-                controller_hhd.current_tdp_enable
+                self._hhd_tdp_client.current_tdp_enable
             )
             return {
                 "ok": False,
@@ -2092,15 +2185,19 @@ class Plugin:
                 "detail": "desktop migration pending",
             }
         if not await self._probe_tdp_backend(force=True):
-            prev = await self._offload_call(controller_hhd.current_tdp_enable)
+            prev = await self._offload_call(
+                self._hhd_tdp_client.current_tdp_enable
+            )
             return {
                 "ok": False,
                 "hhd_managing": bool(prev),
                 "detail": "tdp backend readback unavailable",
             }
         # HHD's REST client is blocking urllib — keep it off the loop.
-        prev = await self._offload_call(controller_hhd.current_tdp_enable)
+        prev = await self._offload_call(self._hhd_tdp_client.current_tdp_enable)
         if prev is None:
+            if self._os_id == "anatase":
+                self._tdp_external_owner = True
             return {"ok": False, "hhd_managing": False}
         if prev and self._settings.get("hhd_tdp_prev") is None:
             self._settings["hhd_tdp_prev"] = True
@@ -2109,11 +2206,26 @@ class Plugin:
             except Exception:  # noqa: BLE001
                 self._settings["hhd_tdp_prev"] = None
                 return {"ok": False, "hhd_managing": True}
-        applied = await self._offload_call(lambda: controller_hhd.set_tdp_enable(False))
+        applied = await self._offload_call(
+            lambda: self._hhd_tdp_client.set_tdp_enable(False)
+        )
         if applied is not False:
+            if self._os_id == "anatase":
+                self._tdp_external_owner = True
             return {"ok": False, "hhd_managing": bool(applied)}
+        if self._os_id == "anatase":
+            self._tdp_external_owner = False
         result = await self._apply_tdp_now("take-control")
         if not result.ok:
+            hardware_released = await self._offload_call(
+                self._release_tdp_hardware
+            )
+            if not hardware_released:
+                return {
+                    "ok": False,
+                    "hhd_managing": False,
+                    "detail": f"{result.detail}; hardware restore pending",
+                }
             restore = await self._offload_call(self._restore_hhd_tdp_status)
             managing = restore.get("hhd_managing")
             if managing is None:
@@ -2143,14 +2255,19 @@ class Plugin:
                 "marker_cleared": True,
             }
         try:
-            echoed = controller_hhd.set_tdp_enable(bool(prev))
+            hhd_client = getattr(self, "_hhd_tdp_client", controller_hhd)
+            echoed = hhd_client.set_tdp_enable(bool(prev))
             if echoed != bool(prev):
+                if getattr(self, "_os_id", None) == "anatase":
+                    self._tdp_external_owner = True
                 return {
                     "ok": False,
                     "hardware_ok": False,
                     "hhd_managing": echoed if isinstance(echoed, bool) else None,
                     "marker_cleared": False,
                 }
+            if getattr(self, "_os_id", None) == "anatase":
+                self._tdp_external_owner = bool(prev)
             if preserve_ownership:
                 return {
                     "ok": True,
@@ -3732,6 +3849,25 @@ class Plugin:
                 True,
                 "tdp-control-disabled",
             )
+        if not self._tdp_write_authorized():
+            self._tdp_status = "unverifiable"
+            self._tdp_reason = "external_owner"
+            self._tdp_targets = None
+            self._remember_tdp_observation(self._observe_tdp_sync())
+            result = TdpResult(
+                logical_watts,
+                self._tdp_backend.read_applied(),
+                False,
+                "tdp-ownership-unconfirmed",
+            )
+            self._record_tdp_transition(
+                command.reason,
+                action="blocked",
+                result=result,
+                on_ac=command.on_ac,
+                requested=command.requested,
+            )
+            return result
         mode = self._firmware_mode()
         if mode != _CUSTOM_MODE:
             if not self._tdp_backend.set_profile(mode):
@@ -3901,6 +4037,13 @@ class Plugin:
             self._tdp_status = "unverifiable"
             self._tdp_reason = "control_disabled"
             self._tdp_reconcile_memory = ReconcileMemory()
+            return
+        if not self._tdp_write_authorized():
+            self._tdp_status = "unverifiable"
+            self._tdp_reason = "external_owner"
+            self._tdp_targets = None
+            self._tdp_reconcile_memory = ReconcileMemory()
+            self._remember_tdp_observation(self._observe_tdp_sync())
             return
         if self._firmware_mode() != _CUSTOM_MODE:
             self._tdp_status = "unverifiable"
@@ -7200,6 +7343,8 @@ class Plugin:
             "surfaces": observation.as_dict()["surfaces"],
             "conflict_persistent": self._tdp_conflict_persistent,
             "failures": self._tdp_reconcile_memory.failures,
+            "handoff_required": self._os_id == "anatase",
+            "external_owner": self._tdp_external_owner,
         }
 
     def _tdp_diagnostics(self):
@@ -8103,7 +8248,7 @@ class Plugin:
         # Created here (not _init) so unit tests that never call _main run inline.
         self._ensure_apply_executor()
         await self._offload_call(self._recover_recognised_desktop_migration)
-        await self._offload_call(self._recover_tdp_runtime_transaction)
+        await self._recover_tdp_startup_state()
         await self._probe_tdp_backend(force=True)
         self._theme_executor = ThreadPoolExecutor(max_workers=1)
         self._theme_accepting_work = True
@@ -8130,6 +8275,7 @@ class Plugin:
             decky.logger.info("Legion fan sensor exposed (lenovo_wmi_other)")
         await self._recover_gpd_fan()
         await self._offload_call(self._recover_fremont_fan_handoff)
+        await self._prime_tdp_ownership()
         try:
             if self._settings.get("steamdeck_ppt_previous") is not None:
                 await self._offload_call(self._restore_steamdeck_ppt)
