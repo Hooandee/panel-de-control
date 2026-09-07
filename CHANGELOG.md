@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.42.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.41.0...panel-de-control-v0.42.0) (2026-09-07)
+
+
+### Features
+
+* add first-class Anatase support ([#578](https://github.com/Hooandee/panel-de-control/issues/578)) ([8437f70](https://github.com/Hooandee/panel-de-control/commit/8437f707547f94eb7fa46c85496f76aed898ed29))
+
 ## [0.41.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.40.0...panel-de-control-v0.41.0) (2026-09-07)
 
 
