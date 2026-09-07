@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.41.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.40.0...panel-de-control-v0.41.0) (2026-09-07)
+
+
+### Features
+
+* add Steam Machine and desktop mode support ([#413](https://github.com/Hooandee/panel-de-control/issues/413)) ([2c9cfd8](https://github.com/Hooandee/panel-de-control/commit/2c9cfd84804798f9800c0b92be2379eaa24fd815))
+
 ## [0.40.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.39.0...panel-de-control-v0.40.0) (2026-09-06)
 
 
