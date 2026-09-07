@@ -501,11 +501,29 @@ def test_cooler_boost_raises_ceiling_on_win5(Plugin):
     p = Plugin()
     p._init()
     p._device = detect(product_name="G1618-05")  # gpd_win5, cooler_max=75
-    assert p._limits().max_w == 20 and p._limits().max_ac_w == 60  # cooler off
+    p._tdp_backend.get_limits = lambda: TdpLimits(5, 25, 55, 55)
+    p._tdp_backend.level_limits = lambda: {
+        "pl1": {"min": 5, "max": 75},
+        "pl2": {"min": 5, "max": 75},
+        "pl3": {"min": 5, "max": 75},
+    }
+    p._tdp_backend.cap_boost_to_active = True
+
+    assert p._limits().max_w == 55 and p._limits().max_ac_w == 55
+    assert asyncio.run(p.get_tdp_state())["level_limits"] == {
+        "pl1": {"min": 5, "max": 55},
+        "pl2": {"min": 5, "max": 55},
+        "pl3": {"min": 5, "max": 55},
+    }
     asyncio.run(p.set_cooler_boost(True))
     assert p._limits().max_w == 75 and p._limits().max_ac_w == 75  # cooler on
+    assert asyncio.run(p.get_tdp_state())["level_limits"] == {
+        "pl1": {"min": 5, "max": 75},
+        "pl2": {"min": 5, "max": 75},
+        "pl3": {"min": 5, "max": 75},
+    }
     asyncio.run(p.set_cooler_boost(False))
-    assert p._limits().max_w == 20
+    assert p._limits().max_w == 55
 
 
 def test_cooler_boost_ignored_when_device_has_no_cooler(Plugin):

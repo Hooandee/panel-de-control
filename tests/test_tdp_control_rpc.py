@@ -21,6 +21,8 @@ class FakeBackend:
 
     def __init__(self):
         self.set_levels_calls = 0
+        self.release_calls = 0
+        self.release_ok = True
         self._applied = None
 
     def get_limits(self):
@@ -36,6 +38,10 @@ class FakeBackend:
 
     def read_applied(self):
         return self._applied
+
+    def release(self):
+        self.release_calls += 1
+        return self.release_ok
 
 
 class FakeFan:
@@ -142,6 +148,187 @@ def test_conflict_reports_hhd_managing(Plugin, fake_hhd):
     }
 
 
+def _anatase_plugin(Plugin, monkeypatch):
+    import main as main_mod
+
+    monkeypatch.setattr(main_mod.osinfo, "read_os_id", lambda: "anatase")
+    monkeypatch.setattr(main_mod.osinfo, "read_os_name", lambda: "Anatase")
+    plugin = Plugin()
+    plugin._init()
+    return plugin, main_mod
+
+
+def test_anatase_selects_isolated_hhd_power_client_and_reports_platform(
+    Plugin,
+    monkeypatch,
+):
+    from pdc_platform import anatase_hhd
+
+    plugin, _main_mod = _anatase_plugin(Plugin, monkeypatch)
+
+    assert plugin._hhd_tdp_client is anatase_hhd
+    assert plugin._report_environment()["platform"] == {
+        "id": "anatase",
+        "support_tier": "first-class",
+    }
+
+
+def test_anatase_blocks_tdp_until_hhd_ownership_is_known(Plugin, monkeypatch):
+    plugin, _main_mod = _anatase_plugin(Plugin, monkeypatch)
+    plugin._tdp_backend.set_levels_calls = 0
+
+    result = plugin._reapply_tdp()
+
+    assert result.ok is False
+    assert result.detail == "tdp-ownership-unconfirmed"
+    assert plugin._tdp_backend.set_levels_calls == 0
+
+
+def test_anatase_hhd_owner_blocks_tdp_writes(Plugin, monkeypatch):
+    plugin, main_mod = _anatase_plugin(Plugin, monkeypatch)
+    plugin._controller_backend.manager = main_mod.controller_detect.HHD
+    plugin._hhd_tdp_client = FakeHHD(True)
+
+    asyncio.run(plugin._prime_tdp_ownership())
+    plugin._tdp_backend.set_levels_calls = 0
+    result = plugin._reapply_tdp()
+
+    assert plugin._tdp_external_owner is True
+    assert result.detail == "tdp-ownership-unconfirmed"
+    assert plugin._tdp_backend.set_levels_calls == 0
+
+
+def test_anatase_without_hhd_allows_direct_backend(Plugin, monkeypatch):
+    plugin, _main_mod = _anatase_plugin(Plugin, monkeypatch)
+
+    asyncio.run(plugin._prime_tdp_ownership())
+    plugin._tdp_backend.set_levels_calls = 0
+    result = plugin._reapply_tdp()
+
+    assert plugin._tdp_external_owner is False
+    assert result.ok is True
+    assert plugin._tdp_backend.set_levels_calls == 1
+
+
+def test_anatase_startup_relinquishes_stale_ownership_without_recovery_write(
+    Plugin,
+    monkeypatch,
+):
+    plugin, main_mod = _anatase_plugin(Plugin, monkeypatch)
+    plugin._controller_backend.manager = main_mod.controller_detect.HHD
+    plugin._hhd_tdp_client = FakeHHD(True)
+    events = []
+    backend = types.SimpleNamespace(
+        safety_locked=True,
+        recover_runtime_transaction=lambda: events.append("recover")
+        or {"ok": True, "detail": "recovered"},
+    )
+
+    def relinquish():
+        events.append("relinquish")
+        backend.safety_locked = False
+        return {"ok": True, "detail": "stale ownership relinquished"}
+
+    backend.relinquish_ownership = relinquish
+    plugin._tdp_backend = backend
+
+    async def direct(fn):
+        return fn()
+
+    plugin._offload_call = direct
+
+    assert asyncio.run(plugin._recover_tdp_startup_state()) is True
+    assert plugin._tdp_external_owner is True
+    assert events == ["relinquish"]
+
+
+def test_anatase_startup_keeps_recovery_locked_when_hhd_is_unreadable(
+    Plugin,
+    monkeypatch,
+):
+    plugin, main_mod = _anatase_plugin(Plugin, monkeypatch)
+    plugin._controller_backend.manager = main_mod.controller_detect.HHD
+    plugin._hhd_tdp_client = FakeHHD(None)
+    events = []
+    plugin._tdp_backend = types.SimpleNamespace(
+        safety_locked=True,
+        relinquish_ownership=lambda: events.append("relinquish"),
+        recover_runtime_transaction=lambda: events.append("recover"),
+    )
+
+    async def direct(fn):
+        return fn()
+
+    plugin._offload_call = direct
+
+    assert asyncio.run(plugin._recover_tdp_startup_state()) is False
+    assert plugin._tdp_external_owner is True
+    assert events == []
+
+
+def test_anatase_startup_recovers_when_hhd_confirms_disabled(
+    Plugin,
+    monkeypatch,
+):
+    plugin, main_mod = _anatase_plugin(Plugin, monkeypatch)
+    plugin._controller_backend.manager = main_mod.controller_detect.HHD
+    plugin._hhd_tdp_client = FakeHHD(False)
+    events = []
+    plugin._tdp_backend = types.SimpleNamespace(
+        safety_locked=True,
+        recover_runtime_transaction=lambda: events.append("recover")
+        or {"ok": True, "detail": "recovered"},
+    )
+
+    async def direct(fn):
+        return fn()
+
+    plugin._offload_call = direct
+
+    assert asyncio.run(plugin._recover_tdp_startup_state()) is True
+    assert plugin._tdp_external_owner is False
+    assert events == ["recover"]
+
+
+def test_non_anatase_startup_preserves_runtime_recovery(Plugin):
+    plugin = Plugin()
+    plugin._init()
+    plugin._os_id = "bazzite"
+    events = []
+    plugin._tdp_backend = types.SimpleNamespace(
+        safety_locked=True,
+        recover_runtime_transaction=lambda: events.append("recover")
+        or {"ok": True, "detail": "recovered"},
+    )
+
+    async def direct(fn):
+        return fn()
+
+    plugin._offload_call = direct
+
+    assert asyncio.run(plugin._recover_tdp_startup_state()) is True
+    assert events == ["recover"]
+
+
+def test_anatase_takeover_unlocks_tdp_only_after_hhd_confirms(
+    Plugin,
+    monkeypatch,
+):
+    plugin, main_mod = _anatase_plugin(Plugin, monkeypatch)
+    plugin._controller_backend.manager = main_mod.controller_detect.HHD
+    hhd = FakeHHD(True)
+    plugin._hhd_tdp_client = hhd
+    asyncio.run(plugin._prime_tdp_ownership())
+    plugin._tdp_backend.set_levels_calls = 0
+
+    result = asyncio.run(plugin.take_tdp_control())
+
+    assert result == {"ok": True, "hhd_managing": False}
+    assert plugin._tdp_external_owner is False
+    assert hhd.value is False
+    assert plugin._tdp_backend.set_levels_calls == 1
+
+
 def test_conflict_no_hhd_present(Plugin, fake_hhd):
     p = Plugin()
     p._init()
@@ -210,6 +397,27 @@ def test_take_restores_hhd_immediately_when_first_panel_apply_fails(Plugin, fake
     assert out["hhd_managing"] is True
     assert fake_hhd.value is True
     assert p._settings["hhd_tdp_prev"] is None
+
+
+def test_failed_take_keeps_hhd_off_until_backend_release_succeeds(Plugin, fake_hhd):
+    p = Plugin()
+    p._init()
+    p._tdp_backend.release_ok = False
+    fake_hhd.set(True)
+
+    async def failed_apply(_reason):
+        return TdpResult(20, None, False, "firmware transaction pending")
+
+    p._apply_tdp_now = failed_apply
+
+    out = asyncio.run(p.take_tdp_control())
+
+    assert out["ok"] is False
+    assert out["hhd_managing"] is False
+    assert "hardware restore pending" in out["detail"]
+    assert fake_hhd.value is False
+    assert p._settings["hhd_tdp_prev"] is True
+    assert p._tdp_backend.release_calls == 1
 
 
 def test_failed_apply_reports_hhd_restored_from_an_existing_marker(Plugin, fake_hhd):
@@ -387,6 +595,39 @@ def test_restore_noop_when_never_taken(Plugin, fake_hhd):
     p._restore_hhd_tdp()
     assert fake_hhd.value is True          # untouched — nothing to restore
     assert p._settings["hhd_tdp_prev"] is None
+
+
+def test_power_handoff_releases_backend_before_external_owners(Plugin):
+    plugin = Plugin()
+    plugin._init()
+    events = []
+    plugin._tdp_backend.release = lambda: events.append("backend") or True
+    plugin._restore_steamdeck_ppt = lambda preserve_ownership=False: (
+        events.append("steamdeck") or True
+    )
+    plugin._restore_hhd_tdp = lambda preserve_ownership=False: (
+        events.append("hhd") or True
+    )
+
+    assert plugin._restore_power_handoff() is True
+    assert events == ["backend", "steamdeck", "hhd"]
+
+
+def test_power_handoff_stops_before_hhd_if_backend_restore_fails(Plugin):
+    plugin = Plugin()
+    plugin._init()
+    external = []
+    plugin._tdp_backend.release_ok = False
+    plugin._restore_steamdeck_ppt = lambda preserve_ownership=False: (
+        external.append("steamdeck") or True
+    )
+    plugin._restore_hhd_tdp = lambda preserve_ownership=False: (
+        external.append("hhd") or True
+    )
+
+    assert plugin._restore_power_handoff() is False
+    assert plugin._tdp_backend.release_calls == 1
+    assert external == []
 
 
 # ---------------------------------------------------------------------------

@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## [0.42.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.41.0...panel-de-control-v0.42.0) (2026-09-07)
+
+
+### Español
+
+* **Anatase y TDP:** Convierte Anatase en una plataforma de primera clase y elige en cada máquina el backend de TDP disponible. En ROG Ally coordina la propiedad con HHD para que nunca escriban ambos a la vez, restaura exactamente los límites al devolver el control y se recupera de reinicios sin tocar el hardware si HHD sigue al mando. Añade rutas específicas para interfaces ASUS, AMD DPTC y MSI Claw A8 sin cambiar las rutas existentes de SteamOS, Bazzite y CachyOS. Validado físicamente en ROG Ally RC71L; AMD DPTC y MSI Claw A8 permanecen experimentales. ([#578](https://github.com/Hooandee/panel-de-control/pull/578))
+
+### English
+
+* **Anatase and TDP:** Makes Anatase a first-class platform and selects the available TDP backend for each device. On ROG Ally, ownership is coordinated with HHD so both never write at the same time, limits are restored exactly when control is returned, and restarts recover without touching the hardware while HHD remains in charge. Dedicated routes are added for ASUS interfaces, AMD DPTC, and MSI Claw A8 without changing the existing SteamOS, Bazzite, or CachyOS routes. Physically validated on ROG Ally RC71L; AMD DPTC and MSI Claw A8 remain experimental. ([#578](https://github.com/Hooandee/panel-de-control/pull/578))
+
+### Italiano
+
+* **Anatase e TDP:** Rende Anatase una piattaforma di prima classe e seleziona per ogni dispositivo il backend TDP disponibile. Su ROG Ally coordina la proprietà con HHD affinché non scrivano mai entrambi contemporaneamente, ripristina esattamente i limiti quando restituisce il controllo e recupera dopo un riavvio senza toccare l’hardware se HHD è ancora responsabile. Aggiunge percorsi dedicati per le interfacce ASUS, AMD DPTC e MSI Claw A8 senza modificare quelli esistenti di SteamOS, Bazzite e CachyOS. Convalidato fisicamente su ROG Ally RC71L; AMD DPTC e MSI Claw A8 restano sperimentali. ([#578](https://github.com/Hooandee/panel-de-control/pull/578))
+
 ## [0.41.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.40.0...panel-de-control-v0.41.0) (2026-09-07)
 
 
