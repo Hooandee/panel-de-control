@@ -105,6 +105,16 @@ def test_profile_storage_limits_ignore_temporary_flow_firmware_ceiling(Plugin):
     assert plugin._profile_storage_limits().max_ac_w == 65
 
 
+def test_dynamic_backend_readiness_controls_published_tdp_support(Plugin):
+    plugin = Plugin.__new__(Plugin)
+    plugin._tdp_backend = types.SimpleNamespace(supported=True, ready=lambda: False)
+
+    assert plugin._tdp_supported() is False
+
+    plugin._tdp_backend.ready = lambda: True
+    assert plugin._tdp_supported() is True
+
+
 @pytest.fixture
 def fake_hhd(monkeypatch):
     import main as main_mod

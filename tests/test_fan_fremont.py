@@ -1,3 +1,4 @@
+import asyncio
 import os
 
 from device_profiles import DEVICE_TABLE
@@ -85,6 +86,80 @@ def test_auto_restores_each_channel_without_starting_services(tmp_path):
     assert backend.set_auto("gpu")["ok"] is True
     assert open(os.path.join(gpu, "pwm1_enable")).read() == "2"
     assert open(os.path.join(gpu, "pwm1")).read() == "0"
+
+
+def test_failed_first_curve_does_not_claim_the_fan_or_start_a_loop(tmp_path, monkeypatch):
+    _machine(str(tmp_path))
+    backend = FremontFanBackend(root=str(tmp_path))
+    starts = []
+    monkeypatch.setattr(backend, "_apply_channel", lambda _key: False)
+    monkeypatch.setattr(backend, "start", lambda: starts.append(True))
+
+    result = backend.set_curve("system", CURVE)
+
+    assert result["ok"] is False
+    assert backend._owns_fan is False
+    assert backend.read_state()["fans"][0]["points"] is None
+    assert starts == []
+
+
+def test_failed_release_keeps_ownership_visible_until_confirmed(tmp_path, monkeypatch):
+    _machine(str(tmp_path))
+    backend = FremontFanBackend(root=str(tmp_path))
+    assert backend.set_curve("system", CURVE)["ok"] is True
+    monkeypatch.setattr(backend, "_release", lambda _key: False)
+
+    result = backend.set_auto("system")
+    system = backend.read_state()["fans"][0]
+
+    assert result["ok"] is False
+    assert backend._owns_fan is True
+    assert system["enable"] == 1
+    assert system["release_pending"] is True
+    assert system["points"] is not None
+
+
+def test_loop_retries_a_failed_release_until_zero_is_confirmed(tmp_path, monkeypatch):
+    system, _gpu = _machine(str(tmp_path))
+    attempts = 0
+
+    async def exercise():
+        nonlocal attempts
+        backend = FremontFanBackend(root=str(tmp_path))
+        assert backend.set_curve("system", CURVE)["ok"] is True
+        real_release = backend._release
+
+        def flaky_release(key):
+            nonlocal attempts
+            attempts += 1
+            return attempts > 1 and real_release(key)
+
+        monkeypatch.setattr(backend, "_release", flaky_release)
+        assert backend.set_auto("system")["ok"] is False
+        task = backend._task
+        assert task is not None
+        await asyncio.wait_for(task, timeout=0.2)
+        return backend
+
+    monkeypatch.setattr("fans.fremont._INTERVAL", 0)
+    backend = asyncio.run(exercise())
+
+    assert attempts == 2
+    assert open(os.path.join(system, "fan1_target")).read() == "0"
+    assert backend._owns_fan is False
+    assert backend.read_state()["fans"][0]["release_pending"] is False
+
+
+def test_fresh_backend_forces_pending_handoff_recovery(tmp_path):
+    system, _gpu = _machine(str(tmp_path))
+    open(os.path.join(system, "fan1_target"), "w").write("1200")
+    backend = FremontFanBackend(root=str(tmp_path))
+
+    result = backend.recover_pending_release()
+
+    assert result["ok"] is True
+    assert open(os.path.join(system, "fan1_target")).read() == "0"
+    assert backend.handoff_required is False
 
 
 def test_desktop_temperature_monitor_keeps_cpu_gpu_junction_and_vram_separate(tmp_path):

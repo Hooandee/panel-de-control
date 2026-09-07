@@ -1,6 +1,6 @@
 import { CSSProperties, FC, ReactNode, useEffect, useRef, useState } from "react";
 import { Focusable, PanelSectionRow } from "@decky/ui";
-import { LuGauge, LuRefreshCw, LuScale, LuVolumeX, LuZap } from "react-icons/lu";
+import { LuGauge, LuRefreshCw, LuScale, LuTriangleAlert, LuVolumeX, LuZap } from "react-icons/lu";
 
 import { DesktopPowerMode } from "../api";
 import { clockText, metricText, vramView } from "../desktop/presentation";
@@ -49,6 +49,35 @@ const Metric: FC<{ label: string; value: string; wide?: boolean; progress?: numb
   </div>
 );
 
+export const DesktopPowerRecoveryCard: FC<{
+  kind: "migration" | "unavailable";
+  onRetry: () => void;
+}> = ({ kind, onRetry }) => {
+  const { t } = useI18n();
+  return (
+    <PanelSectionRow>
+      <div style={{ ...theme.card, padding: theme.space.md, display: "flex", flexDirection: "column", gap: theme.space.sm }}>
+        <div style={{ display: "flex", alignItems: "center", gap: theme.space.sm }}>
+          <LuTriangleAlert size={18} color={theme.color.warn} />
+          <span style={{ fontSize: theme.font.body, fontWeight: 650, color: theme.color.textPrimary }}>
+            {t(`desktop.${kind}.title`)}
+          </span>
+        </div>
+        <span style={{ fontSize: theme.font.caption, lineHeight: 1.4, color: theme.color.textMuted }}>
+          {t(`desktop.${kind}.desc`)}
+        </span>
+        <Focusable
+          onActivate={onRetry}
+          onClick={onRetry}
+          style={{ ...segmentItemStyle(false), minHeight: 36, color: theme.color.textPrimary }}
+        >
+          <LuRefreshCw size={14} /> {t("desktop.recovery.retry")}
+        </Focusable>
+      </div>
+    </PanelSectionRow>
+  );
+};
+
 export const DesktopPowerCard: FC = () => {
   const { t } = useI18n();
   const control = useDesktopState(true);
@@ -64,6 +93,10 @@ export const DesktopPowerCard: FC = () => {
   }, [power?.cpu_w, power?.gpu_w]);
   useEffect(() => () => { if (commit.current != null) window.clearTimeout(commit.current); }, []);
 
+  if (control.error) return <DesktopPowerRecoveryCard kind="unavailable" onRetry={control.refresh} />;
+  if (state?.migration_pending) {
+    return <DesktopPowerRecoveryCard kind="migration" onRetry={control.retryMigration} />;
+  }
   if (!state?.enabled) return null;
 
   const queue = (nextCpu: number, nextGpu: number) => {

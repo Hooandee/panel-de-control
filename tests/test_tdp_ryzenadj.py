@@ -140,6 +140,23 @@ def test_strict_probe_requires_all_power_rails_and_never_writes():
     assert not any("--stapm-limit" in argv for argv, _kwargs in fake.calls)
 
 
+def test_strict_probe_recovers_from_a_transient_incomplete_read_without_writing():
+    fake = ScriptedRun(
+        write_rcs=[],
+        infos=[_unreadable_info(), _snapshot_info(20)],
+    )
+    backend = RyzenadjBackend(
+        FALLBACK,
+        resolve=lambda: "/usr/bin/ryzenadj",
+        runner=fake,
+        require_readback=True,
+    )
+
+    assert backend.probe() is True
+    assert backend.supported is True
+    assert not fake.writes
+
+
 def test_strict_backend_confirms_all_three_power_rails():
     fake = ScriptedRun(
         write_rcs=[0],
@@ -244,6 +261,296 @@ def test_write_max_widens_the_write_clamp():
     argv = next(c for c in boosted.calls if "--stapm-limit" in c[0])[0]
     assert "70000" in argv
     assert b.get_limits().max_ac_w == 30
+
+
+def test_experimental_ac_write_max_never_widens_battery_clamp():
+    limits = TdpLimits(min_w=20, default_w=20, max_w=35, max_ac_w=35)
+    on_battery = FakeRun()
+    backend = RyzenadjBackend(
+        limits,
+        resolve=lambda: "/usr/bin/ryzenadj",
+        runner=on_battery,
+        write_max_ac=55,
+    )
+
+    backend.set_tdp(55, ac=False)
+
+    argv = next(call for call in on_battery.calls if "--stapm-limit" in call[0])[0]
+    assert argv[argv.index("--stapm-limit") + 1] == "35000"
+
+    on_ac = FakeRun()
+    backend = RyzenadjBackend(
+        limits,
+        resolve=lambda: "/usr/bin/ryzenadj",
+        runner=on_ac,
+        write_max_ac=55,
+    )
+    backend.set_tdp(55, ac=True)
+    argv = next(call for call in on_ac.calls if "--stapm-limit" in call[0])[0]
+    assert argv[argv.index("--stapm-limit") + 1] == "55000"
+
+
+def test_rejected_experimental_ceiling_opens_until_explicit_safe_recovery():
+    limits = TdpLimits(min_w=20, default_w=20, max_w=35, max_ac_w=35)
+    fake = ScriptedRun(
+        write_rcs=[0, 0, 0, 0],
+        infos=[
+            _snapshot_info(35),
+            _snapshot_info(35),
+            _snapshot_info(35),
+            _snapshot_info(35),
+            _snapshot_info(35),
+            _snapshot_info(35),
+        ],
+    )
+    backend = RyzenadjBackend(
+        limits,
+        resolve=lambda: "/usr/bin/ryzenadj",
+        runner=fake,
+        write_max_ac=55,
+        require_readback=True,
+    )
+
+    rejected = backend.set_tdp(55, ac=True)
+
+    assert rejected.ok is False
+    assert backend.supported is False
+    assert backend.diagnostics()["readback_state"] == "circuit_open_restored"
+    writes_after_rejection = len(fake.writes)
+    assert backend.set_tdp(55, ac=True).ok is False
+    assert len(fake.writes) == writes_after_rejection
+
+    assert backend.recover_safe_range() is True
+    assert backend.diagnostics()["readback_state"] == "recovery_pending"
+    safe = backend.set_tdp(35, ac=True)
+
+    assert safe.ok is True
+    assert backend.diagnostics()["readback_state"] == "ready"
+    assert len(fake.writes) == writes_after_rejection + 1
+
+
+def test_failed_safe_recovery_keeps_experimental_writes_circuit_broken():
+    limits = TdpLimits(min_w=20, default_w=20, max_w=35, max_ac_w=35)
+    fake = ScriptedRun(
+        write_rcs=[0, 0, 0, 0, 0, 0],
+        infos=[
+            _snapshot_info(35),
+            _snapshot_info(35),
+            _snapshot_info(35),
+            _snapshot_info(35),
+            _snapshot_info(35),
+            _snapshot_info(30),
+            _snapshot_info(30),
+            _snapshot_info(35),
+        ],
+    )
+    backend = RyzenadjBackend(
+        limits,
+        resolve=lambda: "/usr/bin/ryzenadj",
+        runner=fake,
+        write_max_ac=55,
+        require_readback=True,
+    )
+
+    assert backend.set_tdp(55, ac=True).ok is False
+    assert backend.recover_safe_range() is True
+    assert backend.diagnostics()["readback_state"] == "recovery_pending"
+
+    safe = backend.set_tdp(35, ac=True)
+
+    assert safe.ok is False
+    assert backend.supported is False
+    assert backend.diagnostics()["readback_state"] == "circuit_open_restored"
+    writes_after_safe_failure = len(fake.writes)
+    assert backend.set_tdp(55, ac=True).ok is False
+    assert len(fake.writes) == writes_after_safe_failure
+
+
+def test_experimental_circuit_survives_reload_until_confirmed_safe_recovery(tmp_path):
+    limits = TdpLimits(min_w=20, default_w=20, max_w=35, max_ac_w=35)
+    safety_lock_path = str(tmp_path / "run" / "ryzenadj-tdp.lock")
+    rejected_run = ScriptedRun(
+        write_rcs=[0, 0, 0],
+        infos=[
+            _snapshot_info(35),
+            _snapshot_info(35),
+            _snapshot_info(35),
+            _snapshot_info(35),
+        ],
+    )
+    rejected = RyzenadjBackend(
+        limits,
+        resolve=lambda: "/usr/bin/ryzenadj",
+        runner=rejected_run,
+        write_max_ac=55,
+        require_readback=True,
+        safety_lock_path=safety_lock_path,
+    )
+
+    assert rejected.set_tdp(55, ac=True).ok is False
+    assert os.path.exists(safety_lock_path)
+
+    recovery_run = ScriptedRun(
+        write_rcs=[0],
+        infos=[_snapshot_info(35), _snapshot_info(35)],
+    )
+    reloaded = RyzenadjBackend(
+        limits,
+        resolve=lambda: "/usr/bin/ryzenadj",
+        runner=recovery_run,
+        write_max_ac=55,
+        require_readback=True,
+        safety_lock_path=safety_lock_path,
+    )
+    assert reloaded.supported is False
+    assert reloaded.diagnostics()["readback_state"] == "circuit_open_restored"
+    assert reloaded.set_tdp(55, ac=True).ok is False
+    assert recovery_run.writes == []
+
+    assert reloaded.recover_safe_range() is True
+    assert reloaded.set_tdp(35, ac=True).ok is True
+    assert not os.path.exists(safety_lock_path)
+
+
+def test_transaction_lock_is_armed_before_ryzenadj_write_and_cleared_on_success(
+    tmp_path,
+):
+    safety_lock_path = str(tmp_path / "run" / "ryzenadj-tdp.lock")
+    scripted = ScriptedRun(
+        write_rcs=[0],
+        infos=[_snapshot_info(15), _snapshot_info(20)],
+    )
+    lock_seen = []
+
+    def runner(argv, **kwargs):
+        if "--stapm-limit" in argv:
+            lock_seen.append(os.path.exists(safety_lock_path))
+        return scripted(argv, **kwargs)
+
+    backend = RyzenadjBackend(
+        FALLBACK,
+        resolve=lambda: "/usr/bin/ryzenadj",
+        runner=runner,
+        require_readback=True,
+        safety_lock_path=safety_lock_path,
+    )
+
+    result = backend.set_tdp(20, ac=True)
+
+    assert result.ok is True
+    assert lock_seen == [True]
+    assert not os.path.exists(safety_lock_path)
+
+
+def test_ryzenadj_write_is_blocked_when_transaction_lock_cannot_be_armed(tmp_path):
+    blocked_parent = tmp_path / "not-a-directory"
+    blocked_parent.write_text("x", encoding="utf-8")
+    scripted = ScriptedRun(write_rcs=[], infos=[_snapshot_info(15)])
+    backend = RyzenadjBackend(
+        FALLBACK,
+        resolve=lambda: "/usr/bin/ryzenadj",
+        runner=scripted,
+        require_readback=True,
+        safety_lock_path=str(blocked_parent / "ryzenadj-tdp.lock"),
+    )
+
+    result = backend.set_tdp(20, ac=True)
+
+    assert result.ok is False
+    assert "no writes performed" in result.detail
+    assert scripted.writes == []
+
+
+def test_reload_recovers_prewrite_ryzenadj_snapshot_before_rearming(
+    tmp_path,
+    monkeypatch,
+):
+    safety_lock_path = str(tmp_path / "run" / "ryzenadj-tdp.lock")
+    initial_run = ScriptedRun(
+        write_rcs=[0],
+        infos=[_snapshot_info(15), _snapshot_info(20)],
+    )
+    backend = RyzenadjBackend(
+        FALLBACK,
+        resolve=lambda: "/usr/bin/ryzenadj",
+        runner=initial_run,
+        require_readback=True,
+        safety_lock_path=safety_lock_path,
+    )
+    monkeypatch.setattr(backend._safety_lock, "clear", lambda: False)
+
+    interrupted = backend.set_tdp(20, ac=True)
+
+    assert interrupted.ok is True
+    assert os.path.exists(safety_lock_path)
+    recovery_run = ScriptedRun(
+        write_rcs=[0],
+        infos=[_snapshot_info(15)],
+    )
+    reloaded = RyzenadjBackend(
+        FALLBACK,
+        resolve=lambda: "/usr/bin/ryzenadj",
+        runner=recovery_run,
+        require_readback=True,
+        safety_lock_path=safety_lock_path,
+    )
+    assert reloaded.supported is False
+
+    recovered = reloaded.recover_runtime_transaction()
+
+    assert recovered["ok"] is True
+    assert reloaded.supported is True
+    assert reloaded.diagnostics()["readback_state"] == "ready"
+    assert not os.path.exists(safety_lock_path)
+
+
+def test_interrupted_experimental_write_restores_baseline_but_stays_locked(
+    tmp_path,
+    monkeypatch,
+):
+    limits = TdpLimits(min_w=20, default_w=20, max_w=35, max_ac_w=35)
+    safety_lock_path = str(tmp_path / "run" / "ryzenadj-tdp.lock")
+    initial_run = ScriptedRun(
+        write_rcs=[0],
+        infos=[_snapshot_info(35), _snapshot_info(55)],
+    )
+    backend = RyzenadjBackend(
+        limits,
+        resolve=lambda: "/usr/bin/ryzenadj",
+        runner=initial_run,
+        write_max_ac=55,
+        require_readback=True,
+        safety_lock_path=safety_lock_path,
+    )
+    monkeypatch.setattr(backend._safety_lock, "clear", lambda: False)
+    assert backend.set_tdp(55, ac=True).ok is True
+
+    recovery_run = ScriptedRun(
+        write_rcs=[0, 0],
+        infos=[
+            _snapshot_info(35),
+            _snapshot_info(35),
+            _snapshot_info(35),
+        ],
+    )
+    reloaded = RyzenadjBackend(
+        limits,
+        resolve=lambda: "/usr/bin/ryzenadj",
+        runner=recovery_run,
+        write_max_ac=55,
+        require_readback=True,
+        safety_lock_path=safety_lock_path,
+    )
+
+    recovered = reloaded.recover_runtime_transaction()
+
+    assert recovered["ok"] is True
+    assert reloaded.supported is False
+    assert reloaded.diagnostics()["readback_state"] == "circuit_open_restored"
+    assert os.path.exists(safety_lock_path)
+    assert reloaded.recover_safe_range() is True
+    assert reloaded.set_tdp(35, ac=True).ok is True
+    assert not os.path.exists(safety_lock_path)
 
 
 class StickyRun:

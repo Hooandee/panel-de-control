@@ -7,7 +7,7 @@ import { openCustomizeModal } from "../components/CustomizeModal";
 import { openGameProfilesModal } from "../components/GameProfilesModal";
 import { openGlossaryModal } from "../components/GlossaryModal";
 import { openReportModal } from "../components/ReportModal";
-import { getUnlockBatteryMax, setUnlockBatteryMax, getCoolerBoost, setCoolerBoost, getQamTdpBoost, setQamTdpBoost, resetTelemetry, getVersion, getDevice, getLearningStatus, DeviceInfo, isUnvalidated } from "../api";
+import { getUnlockBatteryMax, setUnlockBatteryMax, getCoolerBoost, setCoolerBoost, getExperimentalTdpUnlock, setExperimentalTdpUnlock, getQamTdpBoost, setQamTdpBoost, resetTelemetry, getVersion, getDevice, getLearningStatus, DeviceInfo, isUnvalidated } from "../api";
 import { useModules, setModuleDisabled } from "../customize/modules";
 import { effectiveEnabled } from "../customize/moduleLogic";
 import { isValueToastEnabled, setValueToastEnabled } from "../system/valueToast";
@@ -15,15 +15,17 @@ import { UpdatePanel } from "../updater/UpdatePanel";
 import { theme } from "../theme";
 import { useDesktopState } from "../desktop/useDesktop";
 import { QamShortcutSetting } from "../components/QamShortcutSetting";
+import { ExperimentalTdpUnlock } from "../components/ExperimentalTdpUnlock";
+import { desktopUiActive } from "../desktop/presentation";
 
 const AUTHOR = "Hooandee";
 const CHANNEL_URL = "https://www.youtube.com/@Hooandee";
 
-/** A persisted boolean setting: fetch on mount, optimistic update on toggle.
+/** A persisted boolean setting: fetch on mount and reconcile every write result.
  *  Returns null until the first read lands (so the UI can hide the control). */
 function useToggleSetting(
   getter: () => Promise<boolean>,
-  setter: (v: boolean) => Promise<unknown>,
+  setter: (v: boolean) => Promise<boolean>,
   fallback: boolean,
 ): [boolean | null, (next: boolean) => void] {
   const [value, setValue] = useState<boolean | null>(null);
@@ -31,8 +33,10 @@ function useToggleSetting(
     getter().then(setValue).catch(() => setValue(fallback));
   }, []);
   const onToggle = (next: boolean) => {
-    setValue(next); // optimistic
-    setter(next).catch(() => {});
+    setValue(next);
+    setter(next)
+      .then(setValue)
+      .catch(() => getter().then(setValue).catch(() => setValue(fallback)));
   };
   return [value, onToggle];
 }
@@ -42,8 +46,31 @@ export const AjustesSection: FC = () => {
   const { t, lang } = useI18n();
   const [battMax, onToggleBattMax] = useToggleSetting(getUnlockBatteryMax, setUnlockBatteryMax, false);
   const [coolerBoost, onToggleCoolerBoost] = useToggleSetting(getCoolerBoost, setCoolerBoost, false);
+  const [experimentalTdp, setExperimentalTdp] = useState<boolean | null>(null);
+  const [experimentalTdpFailed, setExperimentalTdpFailed] = useState(false);
+  useEffect(() => {
+    getExperimentalTdpUnlock()
+      .then(setExperimentalTdp)
+      .catch(() => setExperimentalTdp(false));
+  }, []);
+  const onToggleExperimentalTdp = (next: boolean) => {
+    setExperimentalTdp(next);
+    setExperimentalTdpFailed(false);
+    setExperimentalTdpUnlock(next)
+      .then((result) => {
+        setExperimentalTdp(result.enabled);
+        setExperimentalTdpFailed(!result.ok);
+      })
+      .catch(() => {
+        setExperimentalTdpFailed(true);
+        getExperimentalTdpUnlock()
+          .then(setExperimentalTdp)
+          .catch(() => setExperimentalTdp(false));
+      });
+  };
   const [qamBoost, onToggleQamBoost] = useToggleSetting(getQamTdpBoost, setQamTdpBoost, false);
   const desktop = useDesktopState();
+  const desktopActive = desktopUiActive(desktop.state);
 
   // Master TDP switch via the power module (shared with the layout editor): off hands
   // control back. Shown only on TDP-capable devices.
@@ -117,7 +144,7 @@ export const AjustesSection: FC = () => {
           />
         )}
 
-        {tdpSupported && !desktop.state?.enabled && (
+        {tdpSupported && !desktopActive && (
           <ToggleField
             label={t("settings.tdpcontrol")}
             description={t("settings.tdpcontrol.desc")}
@@ -127,7 +154,7 @@ export const AjustesSection: FC = () => {
           />
         )}
 
-        {!desktop.state?.enabled && battMax !== null && device &&
+        {!desktopActive && battMax !== null && device &&
           device.tdp_max_charger > device.tdp_max && !device.charger_only_extra && (
           <ToggleField
             label={t("settings.battmax")}
@@ -138,7 +165,7 @@ export const AjustesSection: FC = () => {
           />
         )}
 
-        {!desktop.state?.enabled && coolerBoost !== null && device?.cooler_max != null && (
+        {!desktopActive && coolerBoost !== null && device?.cooler_max != null && (
           <ToggleField
             label={t("settings.cooler")}
             description={t("settings.cooler.desc", { max: device.cooler_max })}
@@ -148,7 +175,17 @@ export const AjustesSection: FC = () => {
           />
         )}
 
-        {!desktop.state?.enabled && qamBoost !== null && (
+        {!desktopActive && experimentalTdp !== null && device?.experimental_tdp_max_ac != null && (
+          <ExperimentalTdpUnlock
+            enabled={experimentalTdp}
+            failed={experimentalTdpFailed}
+            maxWatts={device.experimental_tdp_max_ac}
+            safeMaxWatts={device.tdp_max_charger}
+            onToggle={onToggleExperimentalTdp}
+          />
+        )}
+
+        {!desktopActive && qamBoost !== null && (
           <ToggleField
             label={t("settings.qamboost")}
             description={t("settings.qamboost.desc")}

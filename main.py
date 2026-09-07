@@ -71,6 +71,7 @@ from power.reader import PowerReader
 from desktop.mode import (
     effective_desktop_mode,
     migrate_desktop_defaults,
+    normalize_desktop_settings,
     recognised_desktop_migration_pending,
 )
 from desktop.power import DesktopPowerCoordinator
@@ -230,6 +231,7 @@ DEFAULTS = {
     "desktop_gpu_w": 80,
     "desktop_prev_tdp_control": None,
     "desktop_power_handoff": None,
+    "fremont_fan_handoff_pending": False,
     "auto_tdp": False,
     # Learn from usage (local-only telemetry powering fan-curve suggestions). Opt-out:
     # when False the sampler never runs — nothing is read or written during play.
@@ -239,6 +241,7 @@ DEFAULTS = {
     # the drain when enabling. The firmware itself allows the same max either way.
     "unlock_battery_max": False,
     "cooler_boost": False,
+    "experimental_tdp_unlock": False,
     # Opt-in: while the QAM/plugin UI is open, raise PL1 to a responsive floor so the
     # CPU-bound menu render stays fluid. Default OFF for honesty — raising TDP behind
     # the menu would show an inflated number vs the REAL in-game TDP the user wants to
@@ -324,6 +327,7 @@ class Plugin:
             os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "state.json")
         )
         self._settings = self._store.load(DEFAULTS)
+        desktop_settings_changed = normalize_desktop_settings(self._settings)
         # Probe hardware/environment HERE, wrapped so it NEVER raises — a raise in
         # init or _main bricks plugin load (UI stuck on spinner forever).
         self._device = device_registry.detect()
@@ -332,7 +336,7 @@ class Plugin:
         )
         self._desktop_recognition_migration_last_attempt = float("-inf")
         self._desktop_recognition_migration_last_failure = None
-        if migrate_desktop_defaults(self._settings, self._device):
+        if migrate_desktop_defaults(self._settings, self._device) or desktop_settings_changed:
             self._store.save(self._settings)
         self._tdp_profiles = ProfileStore(
             os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "tdp_profiles.json"),
@@ -625,7 +629,7 @@ class Plugin:
         self._tdp_observation_at = float("-inf")
         self._tdp_reconcile_memory = ReconcileMemory()
         self._tdp_status = (
-            "settling" if self._tdp_backend.supported else "unsupported"
+            "settling" if self._tdp_supported() else "unsupported"
         )
         self._tdp_reason = ""
         self._tdp_conflict_persistent = False
@@ -1243,14 +1247,64 @@ class Plugin:
 
     def _desktop_mode_on(self) -> bool:
         return effective_desktop_mode(
-            self._device, bool(self._settings.get("desktop_mode_enabled", False)))
+            self._device, self._settings.get("desktop_mode_enabled") is True)
+
+    def _desktop_power_active(self) -> bool:
+        return bool(
+            self._desktop_mode_on()
+            and self._settings.get("desktop_power_mode") != "free"
+        )
+
+    def _ensure_desktop_tdp_ownership(self) -> bool:
+        backend = getattr(self, "_controller_backend", None)
+        if getattr(backend, "manager", None) != controller_detect.HHD:
+            return True
+        try:
+            current = controller_hhd.current_tdp_enable()
+        except Exception:  # noqa: BLE001
+            return False
+        if current is False:
+            return True
+        if current is not True:
+            return False
+        previous = self._settings.get("hhd_tdp_prev")
+        if previous is None:
+            self._settings["hhd_tdp_prev"] = True
+            try:
+                self._save()
+            except Exception:  # noqa: BLE001
+                self._settings["hhd_tdp_prev"] = None
+                return False
+        try:
+            return controller_hhd.set_tdp_enable(False) is False
+        except Exception:  # noqa: BLE001
+            return False
+
+    def _suspend_handheld_tdp_for_desktop(self) -> None:
+        requested = (
+            dict(self._tdp_targets.requested)
+            if getattr(self, "_tdp_targets", None) is not None
+            else {}
+        )
+        self._settings["tdp_control_enabled"] = False
+        self._advance_tdp_generation()
+        self._tdp_targets = None
+        self._tdp_status = "unverifiable"
+        self._tdp_reason = "desktop_mode"
+        record = getattr(self, "_record_tdp_transition", None)
+        if callable(record):
+            record(
+                "desktop-mode",
+                action="release",
+                requested=requested,
+            )
 
     def _desktop_state(self) -> dict:
         power = self._desktop_power.state()
         return {
             "enabled": self._desktop_mode_on(),
             "automatic": bool(getattr(self._device, "desktop_mode", False)),
-            "manual_enabled": bool(self._settings.get("desktop_mode_enabled", False)),
+            "manual_enabled": self._settings.get("desktop_mode_enabled") is True,
             "migration_pending": bool(
                 getattr(self, "_desktop_recognition_migration_pending", False)
             ),
@@ -1275,6 +1329,12 @@ class Plugin:
         state["cpu"] = dict(cpu_info) if isinstance(cpu_info, dict) else None
         return state
 
+    async def retry_desktop_migration(self) -> dict:
+        self._init()
+        self._desktop_recognition_migration_last_attempt = float("-inf")
+        await self._ensure_recognised_desktop_migration()
+        return await self.get_desktop_state()
+
     async def set_desktop_mode_enabled(self, enabled: bool) -> dict:
         """Opt a generic Linux PC into the desktop topology, reversibly.
 
@@ -1289,52 +1349,98 @@ class Plugin:
             or not getattr(self._device, "is_generic", False)
         ):
             return self._desktop_state()
-        enabled = bool(enabled)
-        current = bool(self._settings.get("desktop_mode_enabled", False))
+        enabled = enabled is True
+        current = self._settings.get("desktop_mode_enabled") is True
         if enabled == current:
             return self._desktop_state()
         if enabled:
-            self._settings["desktop_prev_tdp_control"] = bool(
-                self._settings.get("tdp_control_enabled", True))
-            await self.set_tdp_control_enabled(False)
+            previous_settings = copy.deepcopy(self._settings)
+            self._settings["desktop_prev_tdp_control"] = self._tdp_control_on()
             self._settings["desktop_power_mode"] = "free"
             self._settings["desktop_mode_enabled"] = True
+            self._suspend_handheld_tdp_for_desktop()
+            try:
+                self._save()
+            except Exception:  # noqa: BLE001
+                self._settings.clear()
+                self._settings.update(previous_settings)
+                return self._desktop_state()
+            await self._offload_call(self._restore_power_handoff)
         else:
             restored = await self._offload_call(self._desktop_power.restore)
             if not restored.get("ok"):
                 return self._desktop_state()
+            previous_settings = copy.deepcopy(self._settings)
             self._settings["desktop_power_mode"] = "free"
             self._settings["desktop_mode_enabled"] = False
             previous = self._settings.get("desktop_prev_tdp_control")
             self._settings["desktop_prev_tdp_control"] = None
             if isinstance(previous, bool):
-                await self.set_tdp_control_enabled(previous)
+                applied = await self.set_tdp_control_enabled(previous)
+                if applied is not previous:
+                    self._settings.clear()
+                    self._settings.update(previous_settings)
+                    self._save()
+                    return self._desktop_state()
+            else:
+                self._save()
+                await self._offload_call(self._restore_power_handoff)
         fan_reader = getattr(self, "_fan_reader", None)
         if fan_reader is not None:
             fan_reader.set_desktop(self._desktop_mode_on())
+        if enabled:
+            return self._desktop_state()
         self._save()
         return self._desktop_state()
 
     async def set_desktop_power_mode(self, mode: str) -> dict:
         self._init()
+        await self._ensure_recognised_desktop_migration()
+        if getattr(self, "_desktop_recognition_migration_pending", False):
+            return {"ok": False, "mode": "free", "cpu_w": None, "gpu_w": None,
+                    "detail": "desktop migration pending"}
         if not self._desktop_mode_on():
             return {"ok": False, "mode": "free", "cpu_w": None, "gpu_w": None,
                     "detail": "desktop mode disabled"}
         mode = str(mode)
+        if mode != "free" and not await self._offload_call(
+            self._ensure_desktop_tdp_ownership
+        ):
+            return {"ok": False, "mode": "free", "cpu_w": None, "gpu_w": None,
+                    "detail": "desktop TDP ownership unavailable"}
         result = await self._offload_call(lambda: self._desktop_power.apply(mode))
         if result.get("ok"):
             self._settings["desktop_power_mode"] = mode
             self._settings["tdp_control_enabled"] = False
             self._save()
+            if mode == "free" and not await self._offload_call(
+                self._restore_power_handoff
+            ):
+                return {**result, "ok": False, "detail": "desktop handoff pending"}
         return result
 
     async def set_desktop_power_limits(self, cpu_w: int, gpu_w: int) -> dict:
         self._init()
+        await self._ensure_recognised_desktop_migration()
+        if getattr(self, "_desktop_recognition_migration_pending", False):
+            return {"ok": False, "mode": "free", "cpu_w": None, "gpu_w": None,
+                    "detail": "desktop migration pending"}
         if not self._desktop_mode_on():
             return {"ok": False, "mode": "free", "cpu_w": None, "gpu_w": None,
                     "detail": "desktop mode disabled"}
+        if (
+            isinstance(cpu_w, bool)
+            or not isinstance(cpu_w, int)
+            or isinstance(gpu_w, bool)
+            or not isinstance(gpu_w, int)
+        ):
+            return {"ok": False, "mode": "free", "cpu_w": None, "gpu_w": None,
+                    "detail": "invalid desktop power limits"}
+        if not await self._offload_call(self._ensure_desktop_tdp_ownership):
+            return {"ok": False, "mode": "free", "cpu_w": None, "gpu_w": None,
+                    "detail": "desktop TDP ownership unavailable"}
         result = await self._offload_call(
-            lambda: self._desktop_power.apply_custom(int(cpu_w), int(gpu_w)))
+            lambda: self._desktop_power.apply_custom(cpu_w, gpu_w))
         if result.get("ok"):
             applied_cpu = result.get("cpu_w")
             applied_gpu = result.get("gpu_w")
@@ -1635,6 +1741,7 @@ class Plugin:
             "tdp_profiles": _rj("tdp_profiles.json"),
             "gpu_profiles": _rj("gpu_profiles.json"),
             "fan_curves": _rj("fan_curves.json"),
+            "desktop_fans": _rj("desktop_fans.json"),
             "color": _rj("color.json"),
             "audio": _rj("audio.json"),
             "controller_remap": _rj("controller_remap.json"),
@@ -1830,7 +1937,7 @@ class Plugin:
         hhd_present = self._controller_backend.manager == controller_detect.HHD
         # Only read HHD state when HHD is the active manager (its API is local).
         state = controller_hhd.read_state() if hhd_present else None
-        out = controller_conflict.assess(state, self._tdp_backend.supported)
+        out = controller_conflict.assess(state, self._tdp_supported())
         out["hhd_present"] = hhd_present
         return out
 
@@ -2263,9 +2370,9 @@ class Plugin:
         """
         if not self._module_enabled("fanControl"):
             # Fan control disabled: hand the fans back to firmware auto, never drive.
-            self._restore_fans_safe()
+            released = self._restore_fans_safe()
             self._fan_apply_confirmed = False
-            return True
+            return released
         try:
             hw_state = self._fan_ctrl.read_state()
             if self._desktop_mode_on() and hw_state.get("independent"):
@@ -2280,9 +2387,12 @@ class Plugin:
                     if channel_profile["preset"] == "auto" or not channel_profile["points"]:
                         result = self._fan_ctrl.set_auto(channel)
                     else:
+                        if not self._arm_fremont_fan_handoff_marker():
+                            ok = False
+                            continue
                         result = self._fan_ctrl.set_curve(channel, channel_profile["points"])
                     ok = bool(result.get("ok")) and ok
-                return ok
+                return ok and self._sync_fremont_fan_handoff_marker()
             profile = self._fan_curves.effective(self._current_appid)
             preset = profile["preset"]
             if preset == "adaptive":
@@ -2290,18 +2400,23 @@ class Plugin:
                 if points is None:
                     res = self._fan_ctrl.set_auto(None)  # not enough data → firmware auto
                 else:
+                    if not self._arm_fremont_fan_handoff_marker():
+                        return False
                     res = self._fan_ctrl.apply_curve_all(points)
             elif preset == "auto" or not profile["points"]:
                 res = self._fan_ctrl.set_auto(None)
             else:
+                if not self._arm_fremont_fan_handoff_marker():
+                    return False
                 res = self._fan_ctrl.apply_curve_all(profile["points"])
             # A malformed response (None / {} / no "ok") is not success, so reset_ok
             # can't ride a bad re-apply.
             confirmed = bool(res.get("ok")) if isinstance(res, dict) else False
             self._fan_apply_confirmed = confirmed
-            return confirmed
+            return confirmed and self._sync_fremont_fan_handoff_marker()
         except Exception:  # noqa: BLE001
             self._fan_apply_confirmed = False
+            self._sync_fremont_fan_handoff_marker()
             return False
 
     def _adaptive_curve_points(self, appid):
@@ -2808,7 +2923,7 @@ class Plugin:
         self._init()
         return {
             "telemetry_enabled": bool(self._settings.get("telemetry_enabled", True)),
-            "tdp_supported": bool(self._tdp_backend.supported),
+            "tdp_supported": self._tdp_supported(),
             "fan_supported": bool(self._fan_ctrl.supported),
         }
 
@@ -2839,6 +2954,74 @@ class Plugin:
         self._save()
         await self._apply_tdp_now("cooler-ceiling")
         return enabled
+
+    async def get_experimental_tdp_unlock(self) -> bool:
+        self._init()
+        return bool(
+            self._device.experimental_tdp_max_ac
+            and self._settings.get("experimental_tdp_unlock") is True
+        )
+
+    async def set_experimental_tdp_unlock(self, enabled: bool) -> dict:
+        """Opt into a charger-only ceiling above the manufacturer range."""
+        self._init()
+        previous = await self.get_experimental_tdp_unlock()
+        enabled = bool(enabled is True and self._device.experimental_tdp_max_ac)
+        if enabled == previous:
+            return {"enabled": previous, "ok": True, "detail": "unchanged"}
+        if previous and not enabled and not self._tdp_control_on():
+            return {
+                "enabled": True,
+                "ok": False,
+                "detail": "TDP control disabled",
+            }
+        if enabled:
+            self._settings["experimental_tdp_unlock"] = True
+            try:
+                self._save()
+            except Exception as error:  # noqa: BLE001
+                self._settings["experimental_tdp_unlock"] = previous
+                return {
+                    "enabled": previous,
+                    "ok": False,
+                    "detail": f"persist failed: {type(error).__name__}",
+                }
+        else:
+            self._settings["experimental_tdp_unlock"] = False
+            backend_was_supported = bool(self._tdp_backend.supported)
+            recover = getattr(self._tdp_backend, "recover_safe_range", None)
+            if callable(recover):
+                recover()
+        result = await self._apply_tdp_now("experimental-ac-ceiling")
+        if result.ok:
+            if not enabled:
+                try:
+                    self._save()
+                except Exception as error:  # noqa: BLE001
+                    self._settings["experimental_tdp_unlock"] = previous
+                    return {
+                        "enabled": previous,
+                        "ok": False,
+                        "detail": f"persist failed: {type(error).__name__}",
+                    }
+                if not backend_was_supported and self._tdp_backend.supported:
+                    self._start_tdp_guard_loop()
+            return {"enabled": enabled, "ok": True, "detail": result.detail}
+        self._settings["experimental_tdp_unlock"] = previous
+        if enabled:
+            try:
+                self._save()
+            except Exception as error:  # noqa: BLE001
+                self._settings["experimental_tdp_unlock"] = True
+                return {
+                    "enabled": True,
+                    "ok": False,
+                    "detail": (
+                        f"{result.detail}; rollback persist failed: "
+                        f"{type(error).__name__}"
+                    ),
+                }
+        return {"enabled": previous, "ok": False, "detail": result.detail}
 
     def _qam_boost_active(self) -> bool:
         """The QAM-open responsive floor applies ONLY when its opt-in setting is on
@@ -2945,9 +3128,11 @@ class Plugin:
                 # read() sub-samples gpu_busy over a short blocking burst -> off
                 # the event loop so it can't stall other Decky RPC handling.
                 pr = await asyncio.to_thread(self._power_reader.read)
-                levels, active, _ac = self._effective_levels(self._current_appid)
-                cur = self._auto_control_pl1(levels["pl1"])
-                lim = self._limits()
+                levels, _active, ac = self._effective_levels(self._current_appid)
+                lim = self._automatic_limits()
+                active = self._active_max(lim, ac)
+                requested = self._auto_control_pl1(levels["pl1"])
+                cur = min(requested, active)
 
                 self._gpu_window.append(pr.get("gpu_busy"))
                 del self._gpu_window[:-_AUTO_WINDOW]
@@ -2955,7 +3140,7 @@ class Plugin:
                 floor = auto_tdp.effective_floor(lim.min_w, self._qam_boost_active())
                 nxt, self._slack_ticks = auto_tdp.decide(
                     cur, self._gpu_window, self._slack_ticks, floor, active)
-                if nxt != cur:
+                if nxt != requested:
                     self._tdp_profiles.set_pl1(self._auto_scope(), nxt, appid=self._current_appid)
                     await self._apply_tdp_now("auto-step")
                     # PL1 changed → drop the now-stale window (samples taken at the
@@ -3059,6 +3244,14 @@ class Plugin:
     # ---- TDP helpers + RPCs -------------------------------------------------
     def _profile_storage_limits(self):
         """Static authorised range for durable intent; live bounds only affect apply."""
+        if self._device.key == "gpd_win_mini_2025":
+            limits = self._limits()
+            return TdpLimits(
+                5,
+                limits.default_w,
+                limits.max_w,
+                limits.max_ac_w,
+            )
         if self._device.key != "rog_flow_z13":
             return self._limits()
         limits = TdpLimits.from_profile(self._device)
@@ -3080,7 +3273,26 @@ class Plugin:
         cooler_max = self._device.cooler_max
         if cooler_max and self._settings.get("cooler_boost", False):
             lim = lim.with_cooler(cooler_max)
+        experimental_max = self._device.experimental_tdp_max_ac
+        if experimental_max and self._settings.get("experimental_tdp_unlock") is True:
+            lim = lim.with_ac_max(experimental_max)
         return lim
+
+    def _automatic_limits(self):
+        """Limits for automatic control and presets, excluding unsafe opt-ins."""
+        limits = self._limits()
+        if not (
+            self._device.experimental_tdp_max_ac
+            and self._settings.get("experimental_tdp_unlock") is True
+        ):
+            return limits
+        max_ac = max(limits.max_w, min(limits.max_ac_w, self._device.tdp_max_charger))
+        return TdpLimits(
+            limits.min_w,
+            limits.default_w,
+            limits.max_w,
+            max_ac,
+        )
 
     def _effective_levels(self, appid=None, on_ac=None):
         """Clamped {pl1,pl2,pl3} for a scope at the active (on_ac) ceiling, plus the
@@ -3495,7 +3707,7 @@ class Plugin:
                 False,
                 "stale-generation",
             )
-        if not self._tdp_backend.supported:
+        if not self._tdp_supported():
             self._tdp_status, self._tdp_reason = "unsupported", ""
             result = TdpResult(
                 logical_watts,
@@ -3681,7 +3893,7 @@ class Plugin:
         now = time.monotonic() if now is None else float(now)
         if self._tdp_shutdown:
             return
-        if not self._tdp_backend.supported:
+        if not self._tdp_supported():
             self._tdp_status, self._tdp_reason = "unsupported", ""
             self._tdp_reconcile_memory = ReconcileMemory()
             return
@@ -3992,7 +4204,7 @@ class Plugin:
         if self._desktop_mode_on():
             self._offload(self._reapply_desktop_power)
         # Stepped aside: retry a pending HHD hand-back (no-op while we control / no marker).
-        if not self._tdp_control_on():
+        if not self._tdp_control_on() and not self._desktop_power_active():
             self._offload(self._restore_power_handoff)
         self._reapply_fans()   # self-offloading
         # HDR before color: switching the HDR mode can drop the loaded LUT, so re-assert
@@ -4006,14 +4218,19 @@ class Plugin:
 
     def _reapply_desktop_power(self) -> None:
         mode = str(self._settings.get("desktop_power_mode", "free"))
+        if mode == "free":
+            self._desktop_power.apply("free")
+            self._restore_power_handoff()
+            return
+        if not self._ensure_desktop_tdp_ownership():
+            decky.logger.warning("Desktop power reapply blocked: HHD still owns TDP")
+            return
         if mode == "custom":
             self._desktop_power.apply_custom(
-                int(self._settings.get("desktop_cpu_w", 23)),
-                int(self._settings.get("desktop_gpu_w", 80)))
+                self._settings.get("desktop_cpu_w", 23),
+                self._settings.get("desktop_gpu_w", 80))
         elif mode in ("silent", "balanced", "performance"):
             self._desktop_power.apply(mode)
-        else:
-            self._desktop_power.apply("free")
 
     # ---- Battery + charge limit --------------------------------------------
     def _record_charge_limit_apply(self, action, requested, ok, attempts) -> None:
@@ -5044,7 +5261,7 @@ class Plugin:
                     )
                 ),
             )
-        if "pdc_tdp" in active and self._tdp_backend.supported:
+        if "pdc_tdp" in active and self._tdp_supported():
             if getattr(self._tdp_backend, "blocking", False):
                 observation = self._tdp_observation
                 src["tdp"] = TimedValue(
@@ -5080,7 +5297,7 @@ class Plugin:
         extras = extras or {}
         appid = self._current_appid
         snap = {}
-        if self._tdp_backend.supported:
+        if self._tdp_supported():
             if "pdc_eco" in active_ids:
                 snap["eco"] = bool(self._settings.get("eco_enabled"))
             if "pdc_tdp" in active_ids:
@@ -6917,7 +7134,7 @@ class Plugin:
                 },
             }
         return {
-            "supported": self._tdp_backend.supported,
+            "supported": self._tdp_supported(),
             "backend": self._tdp_backend.name,
             "limits": {"min": limits.min_w, "default": limits.default_w,
                        "max": limits.max_w, "max_ac": limits.max_ac_w},
@@ -6943,7 +7160,7 @@ class Plugin:
             # The battery↔performance dial that picks a value inside it is now LOCAL UI
             # state — applying it is a fixed manual setpoint, not a loop parameter.
             "learned": self._tdp_learned_info(self._current_appid),
-            "presets": self._tdp_presets(limits),
+            "presets": self._tdp_presets(self._automatic_limits()),
             # Selectable firmware performance modes; empty on devices without them.
             "firmware_modes": self._firmware_choices(),
             "firmware_mode": self._firmware_mode(),
@@ -7023,6 +7240,37 @@ class Plugin:
             self._tdp_reason = "readback_unavailable"
         return ready
 
+    def _recover_tdp_runtime_transaction(self) -> bool:
+        if not getattr(self._tdp_backend, "safety_locked", False):
+            return True
+        recover = getattr(self._tdp_backend, "recover_runtime_transaction", None)
+        if not callable(recover):
+            return True
+        try:
+            result = recover()
+        except Exception as error:  # noqa: BLE001
+            decky.logger.error(
+                "Interrupted TDP transaction recovery failed: %s",
+                type(error).__name__,
+            )
+            return False
+        ok = bool(isinstance(result, dict) and result.get("ok"))
+        log = decky.logger.info if ok else decky.logger.warning
+        detail = result.get("detail") if isinstance(result, dict) else "invalid response"
+        log("Interrupted TDP transaction recovery: %s", detail)
+        return ok
+
+    def _tdp_supported(self) -> bool:
+        if not self._tdp_backend.supported:
+            return False
+        ready = getattr(self._tdp_backend, "ready", None)
+        if not callable(ready):
+            return True
+        try:
+            return bool(ready())
+        except Exception:  # noqa: BLE001
+            return False
+
     def _tdp_backend_diagnostics(self):
         errors = {}
         try:
@@ -7067,7 +7315,7 @@ class Plugin:
             "generic": bool(self._device.is_generic),
             "vendor": self._device.vendor,
             "backend": self._tdp_backend.name,
-            "supported": bool(self._tdp_backend.supported),
+            "supported": self._tdp_supported(),
             "readback": bool(getattr(self._tdp_backend, "readback", True)),
             "primary_rail": getattr(self._tdp_backend, "primary_rail", "pl1"),
             "rails": rails,
@@ -7260,7 +7508,7 @@ class Plugin:
         return self._tdp_state(await self._read_tdp_observation())
 
     def _preset_wclamp(self):
-        lim = self._limits()
+        lim = self._automatic_limits()
         return lim.min_w, lim.max_ac_w
 
     async def get_power_presets(self) -> dict:
@@ -7311,7 +7559,7 @@ class Plugin:
                     "detail": f"unknown scope: {scope}"}
         self._clear_eco()
         self._exit_firmware_mode()
-        limits = self._limits()
+        limits = self._automatic_limits()
         self._tdp_profiles.apply_preset(resolved, limits.clamp(watts, read_on_ac()), boost, appid=appid)
         res = await self._apply_tdp_now("preset")
         return self._apply_result(res)
@@ -7350,12 +7598,75 @@ class Plugin:
         await self._drain_offloaded()
         return await self.get_tdp_state()
 
-    def _restore_fans_safe(self) -> None:
+    def _sync_fremont_fan_handoff_marker(self) -> bool:
+        if getattr(getattr(self, "_device", None), "key", None) != "steam_machine":
+            return True
+        required = bool(getattr(self._fan_ctrl, "handoff_required", False))
+        previous = self._settings.get("fremont_fan_handoff_pending") is True
+        if required == previous:
+            return True
+        self._settings["fremont_fan_handoff_pending"] = required
+        try:
+            self._save()
+            return True
+        except Exception:  # noqa: BLE001
+            self._settings["fremont_fan_handoff_pending"] = previous
+            return False
+
+    def _arm_fremont_fan_handoff_marker(self) -> bool:
+        if getattr(getattr(self, "_device", None), "key", None) != "steam_machine":
+            return True
+        if self._settings.get("fremont_fan_handoff_pending") is True:
+            return True
+        self._settings["fremont_fan_handoff_pending"] = True
+        try:
+            self._save()
+            return True
+        except Exception:  # noqa: BLE001
+            self._settings["fremont_fan_handoff_pending"] = False
+            return False
+
+    def _recover_fremont_fan_handoff(self) -> bool:
+        if (
+            getattr(getattr(self, "_device", None), "key", None) != "steam_machine"
+            or self._settings.get("fremont_fan_handoff_pending") is not True
+        ):
+            return True
+        recover = getattr(self._fan_ctrl, "recover_pending_release", None)
+        if not callable(recover):
+            return False
+        try:
+            result = recover()
+        except Exception:  # noqa: BLE001
+            return False
+        if not isinstance(result, dict) or not result.get("ok"):
+            return False
+        previous = self._settings["fremont_fan_handoff_pending"]
+        self._settings["fremont_fan_handoff_pending"] = False
+        try:
+            self._save()
+            return True
+        except Exception:  # noqa: BLE001
+            self._settings["fremont_fan_handoff_pending"] = previous
+            return False
+
+    def _restore_fans_safe(self) -> bool:
+        if (
+            getattr(getattr(self, "_device", None), "key", None) == "steam_machine"
+            and self._settings.get("fremont_fan_handoff_pending") is True
+        ):
+            return self._recover_fremont_fan_handoff()
+        released = True
         try:
             if getattr(self, "_fan_ctrl", None) is not None:
-                self._fan_ctrl.restore_auto()
+                result = self._fan_ctrl.restore_auto()
+                released = bool(
+                    isinstance(result, dict) and result.get("ok")
+                )
         except Exception:  # noqa: BLE001
-            pass
+            released = False
+        marker_saved = self._sync_fremont_fan_handoff_marker()
+        return released and marker_saved
 
     def _restore_desktop_power_safe(self) -> bool:
         try:
@@ -7792,6 +8103,7 @@ class Plugin:
         # Created here (not _init) so unit tests that never call _main run inline.
         self._ensure_apply_executor()
         await self._offload_call(self._recover_recognised_desktop_migration)
+        await self._offload_call(self._recover_tdp_runtime_transaction)
         await self._probe_tdp_backend(force=True)
         self._theme_executor = ThreadPoolExecutor(max_workers=1)
         self._theme_accepting_work = True
@@ -7817,6 +8129,7 @@ class Plugin:
         if fan_expose.ensure_fan_sensor():
             decky.logger.info("Legion fan sensor exposed (lenovo_wmi_other)")
         await self._recover_gpd_fan()
+        await self._offload_call(self._recover_fremont_fan_handoff)
         try:
             if self._settings.get("steamdeck_ppt_previous") is not None:
                 await self._offload_call(self._restore_steamdeck_ppt)
@@ -7887,11 +8200,16 @@ class Plugin:
     def _perform_shutdown_handoff(
         self, stage: str, preserve_recovery=False
     ) -> None:
-        self._restore_fans_safe()
+        fans_released = self._restore_fans_safe()
         desktop_power_released = self._restore_desktop_power_safe()
         self._restore_color_safe()
         self._restore_audio_safe()
         decky.logger.info("Shutdown stage %s:peripheral-handoff-attempted", stage)
+        decky.logger.info(
+            "Shutdown stage %s:fan-handoff ok=%s",
+            stage,
+            fans_released,
+        )
         decky.logger.info(
             "Shutdown stage %s:desktop-power-handoff ok=%s",
             stage,

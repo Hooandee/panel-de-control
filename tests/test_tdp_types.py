@@ -25,7 +25,7 @@ def test_limits_from_profile_maps_fields():
 
 def test_experimental_machine_battery_and_charger_ceilings_are_independent():
     expected = {
-        "onexplayer_superx": (55, 80),
+        "onexplayer_superx": (55, 75),
         "zotac_gaming_zone": (28, 28),
         "rog_flow_z13": (54, 65),
         "onexplayer_f1": (30, 30),
@@ -55,6 +55,17 @@ def test_with_cooler_noop_when_not_higher():
     lim = TdpLimits(min_w=5, default_w=25, max_w=55, max_ac_w=55)
     assert lim.with_cooler(50) is lim
     assert lim.with_cooler(55) is lim
+
+
+def test_with_experimental_ac_max_never_raises_battery_ceiling():
+    lim = TdpLimits(min_w=20, default_w=20, max_w=35, max_ac_w=35)
+
+    unlocked = lim.with_ac_max(55)
+
+    assert unlocked.max_w == 35
+    assert unlocked.max_ac_w == 55
+    assert unlocked.clamp(55, on_ac=False) == 35
+    assert unlocked.clamp(55, on_ac=True) == 55
 
 
 def test_observation_serializes_surfaces_and_bounds():

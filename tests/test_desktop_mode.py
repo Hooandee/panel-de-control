@@ -1,4 +1,8 @@
-from desktop.mode import effective_desktop_mode, migrate_desktop_defaults
+from desktop.mode import (
+    effective_desktop_mode,
+    migrate_desktop_defaults,
+    normalize_desktop_settings,
+)
 from device_registry import detect
 from device_profiles import DEVICE_TABLE
 
@@ -14,6 +18,51 @@ def test_generic_linux_requires_manual_opt_in():
     generic = detect(product_name="Unknown Linux PC")
     assert effective_desktop_mode(generic, False) is False
     assert effective_desktop_mode(generic, True) is True
+
+
+def test_corrupt_desktop_settings_fail_closed_and_clamp_numeric_values():
+    settings = {
+        "desktop_mode_enabled": "false",
+        "desktop_power_mode": "overdrive",
+        "desktop_cpu_w": 999,
+        "desktop_gpu_w": "120",
+        "desktop_prev_tdp_control": "true",
+        "_desktop_defaults_migrated": "false",
+        "fremont_fan_handoff_pending": "true",
+    }
+
+    changed = normalize_desktop_settings(settings)
+
+    assert changed is True
+    assert settings == {
+        "desktop_mode_enabled": False,
+        "desktop_power_mode": "free",
+        "desktop_cpu_w": 30,
+        "desktop_gpu_w": 80,
+        "desktop_prev_tdp_control": None,
+        "_desktop_defaults_migrated": False,
+        "fremont_fan_handoff_pending": True,
+    }
+
+
+def test_corrupt_fremont_migration_marker_cannot_leave_handheld_tdp_enabled():
+    settings = {
+        "_desktop_defaults_migrated": "false",
+        "desktop_mode_enabled": False,
+        "desktop_power_mode": "balanced",
+        "desktop_cpu_w": 23,
+        "desktop_gpu_w": 80,
+        "desktop_prev_tdp_control": None,
+        "tdp_control_enabled": True,
+    }
+
+    normalize_desktop_settings(settings)
+    changed = migrate_desktop_defaults(settings, FREMONT)
+
+    assert changed is True
+    assert settings["_desktop_defaults_migrated"] is True
+    assert settings["desktop_power_mode"] == "free"
+    assert settings["tdp_control_enabled"] is False
 
 
 def test_recognised_handheld_cannot_inherit_stale_manual_desktop_opt_in():

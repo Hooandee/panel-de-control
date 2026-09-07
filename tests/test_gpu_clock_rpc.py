@@ -535,6 +535,19 @@ def test_report_bundle_includes_independent_gpu_profiles(tmp_path, monkeypatch):
     }
 
 
+def test_report_bundle_includes_desktop_fan_profiles(tmp_path, monkeypatch):
+    plugin, _ = _make_plugin(tmp_path, monkeypatch)
+    plugin._init()
+    path = tmp_path / "desktop_fans.json"
+    path.write_text('{"global":{"system":{"preset":"balanced"}}}')
+
+    stores = plugin._report_stores()
+
+    assert stores["desktop_fans"] == {
+        "global": {"system": {"preset": "balanced"}},
+    }
+
+
 def test_report_bundle_omits_private_cpu_handoff_snapshot(tmp_path, monkeypatch):
     plugin, _ = _make_plugin(tmp_path, monkeypatch)
     plugin._init()

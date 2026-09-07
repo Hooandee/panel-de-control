@@ -1,3 +1,5 @@
+import os
+
 from device_quirks import (
     asus_tdp_authoritative_reassert_s,
     is_gpd_win_mini_2025,
@@ -24,6 +26,10 @@ _STRICT_RYZENADJ_KEYS = frozenset({
 })
 
 
+def _runtime_lock_path(root, name):
+    return os.path.join(root, "run/panel-de-control", name)
+
+
 def _candidates(device, fallback, root, ryzenadj):
     """Ordered probe chain of backend factories (constructed lazily by the caller,
     so an early match costs no extra sysfs work). The detected family puts its
@@ -46,6 +52,10 @@ def _candidates(device, fallback, root, ryzenadj):
                 root,
             ),
             trust_live_bounds=device.key == "rog_flow_z13",
+            safety_lock_path=_runtime_lock_path(
+                root,
+                "firmware-asus-armoury.lock",
+            ),
         )
 
     def lenovo():
@@ -56,12 +66,25 @@ def _candidates(device, fallback, root, ryzenadj):
             profile_name="lenovo-wmi-gamezone",
             is_generic=generic,
             rail_floors=legion_go_s_83n6_rail_floors(device, root),
+            safety_lock_path=_runtime_lock_path(
+                root,
+                "firmware-lenovo-wmi-other.lock",
+            ),
             **legion_go_s_83l3_firmware_attr_quirks(device, root),
             **legion_go_s_83n6_firmware_attr_quirks(device, root),
         )
 
     def msi():
-        return FirmwareAttrBackend("msi-wmi-platform", fallback, root=root, is_generic=generic)
+        return FirmwareAttrBackend(
+            "msi-wmi-platform",
+            fallback,
+            root=root,
+            is_generic=generic,
+            safety_lock_path=_runtime_lock_path(
+                root,
+                "firmware-msi-wmi-platform.lock",
+            ),
+        )
 
     def intel():
         return IntelRaplBackend(fallback, root=root)
@@ -112,8 +135,13 @@ def select_backend(device, root="/", ryzenadj_resolve=None) -> TDPBackend:
         return RyzenadjBackend(
             fallback,
             write_max=device.cooler_max,
+            write_max_ac=device.experimental_tdp_max_ac,
             power_only_retry=is_gpd_win_mini_2025(device, root),
             require_readback=device.key in _STRICT_RYZENADJ_KEYS,
+            safety_lock_path=_runtime_lock_path(
+                root,
+                f"ryzenadj-{device.key}.lock",
+            ),
             **kwargs,
         )
 
@@ -135,7 +163,7 @@ def select_backend(device, root="/", ryzenadj_resolve=None) -> TDPBackend:
             "backend": backend.name,
             "supported": bool(backend.supported),
         })
-        if backend.supported:
+        if backend.supported or getattr(backend, "safety_locked", False):
             backend.probe_trace = tuple(trace)
             return backend
     backend = NullBackend(f"no supported TDP interface for {device.key}")

@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { clockText, dialFraction, metricText, vramView } from "./presentation";
+import { clockText, desktopUiActive, dialFraction, metricText, vramView } from "./presentation";
 
 describe("desktop presentation", () => {
+  it("keeps the recovery surface mounted when migration disables the old mode", () => {
+    expect(desktopUiActive(null)).toBe(false);
+    expect(desktopUiActive({ enabled: false, migration_pending: true } as any)).toBe(true);
+  });
   it("clamps the TGP dial to the validated range", () => {
     expect(dialFraction(55, 55, 110)).toBe(0);
     expect(dialFraction(82.5, 55, 110)).toBe(0.5);

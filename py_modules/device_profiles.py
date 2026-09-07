@@ -4,7 +4,7 @@ from typing import Optional
 
 @dataclass(frozen=True)
 class DmiMatch:
-    product_name: str
+    product_name: Optional[str]
     sys_vendor: str
     board_names: tuple = field(default_factory=tuple)
 
@@ -12,7 +12,7 @@ class DmiMatch:
         def normalise(value: str) -> str:
             return (value or "").strip().casefold()
 
-        if normalise(product_name) != normalise(self.product_name):
+        if self.product_name is not None and normalise(product_name) != normalise(self.product_name):
             return False
         if normalise(sys_vendor) != normalise(self.sys_vendor):
             return False
@@ -52,6 +52,9 @@ class DeviceProfile:
     tdp_presets: tuple = field(default_factory=tuple)
     # Ceiling unlocked when the user confirms the external cooler is attached (Win 5).
     cooler_max: Optional[int] = None
+    # Unsupported-by-OEM ceiling exposed only after an explicit warning. This never
+    # raises the battery, preset, or Auto-TDP ceilings.
+    experimental_tdp_max_ac: Optional[int] = None
     # Expose the firmware performance modes (platform_profile) as selectable presets.
     # Only for models where we can't drive the fan curve and the modes are the sole
     # fan lever (Legion Go original); models with real curve control keep custom TDP.
@@ -125,21 +128,20 @@ DEVICE_TABLE = (
                   5, 20, 45, 54, match_names=("ONEXPLAYER APEX",), experimental=True),
     DeviceProfile("onexplayer_superx", "OneXPlayer Super X",
                   "AMD Ryzen AI Max+ 395", "amd",
-                  10, 30, 55, 80,
+                  10, 30, 55, 75,
                   dmi_matches=(DmiMatch(
                       "ONEXPLAYER SUPER X", "ONE-NETBOOK", ("ONEXPLAYER SUPER X",)),),
                   experimental=True, panel="oled", hdr=True, charger_only_extra=True),
     DeviceProfile("zotac_gaming_zone", "Zotac Gaming Zone",
                   "AMD Ryzen 7 8840U", "amd",
                   8, 15, 28, 28,
-                  dmi_matches=(DmiMatch(
-                      "ZOTAC GAMING ZONE", "ZOTAC", ("G0A1W", "G1A1W")),),
+                  dmi_matches=(DmiMatch(None, "ZOTAC", ("G0A1W", "G1A1W")),),
                   experimental=True, panel="oled", hdr=True),
     DeviceProfile("rog_flow_z13", "ROG Flow Z13",
                   "AMD Ryzen AI Max 390", "amd",
                   5, 20, 54, 65,
                   dmi_matches=(DmiMatch(
-                      "ROG Flow Z13 GZ302EA_GZ302EA",
+                      None,
                       "ASUSTeK COMPUTER INC.",
                       ("GZ302EA",),
                   ),),
@@ -147,8 +149,15 @@ DEVICE_TABLE = (
     DeviceProfile("onexplayer_f1", "OneXPlayer F1",
                   "AMD Ryzen 7 7840U", "amd",
                   15, 28, 30, 30,
-                  dmi_matches=(DmiMatch(
-                      "ONEXPLAYER F1", "ONE-NETBOOK", ("ONEXPLAYER F1",)),),
+                  dmi_matches=tuple(
+                      DmiMatch(product, "ONE-NETBOOK")
+                      for product in (
+                          "ONEXPLAYER F1",
+                          "ONEXPLAYER F1 EVA-01",
+                          "ONEXPLAYER F1 EVA-02",
+                          "ONEXPLAYER F1 OLED",
+                      )
+                  ),
                   experimental=True),
     DeviceProfile("ayaneo_3", "AYANEO 3",
                   "AMD Ryzen AI 9 HX 370 / Ryzen 7 8840U", "amd",
@@ -160,10 +169,13 @@ DEVICE_TABLE = (
                   tdp_presets=(12, 18, 30, 30)),
     DeviceProfile("gpd_win_mini_2025", "GPD Win Mini 2025",
                   "AMD Ryzen AI 9 HX 370", "amd",
-                  5, 20, 35, 35,
-                  dmi_matches=(DmiMatch("G1617-02", "GPD", ("G1617-02",)),),
+                  20, 20, 35, 35,
+                  dmi_matches=(
+                      DmiMatch("G1617-02", "GPD"),
+                      DmiMatch("G1617-02-L", "GPD"),
+                  ),
                   experimental=True,
-                  tdp_presets=(12, 22, 32, 32)),
+                  tdp_presets=(20, 25, 30, 35), experimental_tdp_max_ac=55),
     DeviceProfile("msi_claw_a8", "MSI Claw A8", "AMD Ryzen Z2 Extreme", "amd",
                   6, 17, 35, 35, match_names=("Claw A8",), experimental=True,
                   tdp_presets=(10, 20, 33, 33)),

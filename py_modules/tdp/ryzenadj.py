@@ -2,8 +2,10 @@ import os
 import re
 import shutil
 import subprocess
+import time
 
 from tdp.backend import TDPBackend
+from tdp.runtime_lock import RuntimeSafetyLock
 from tdp.types import TdpLimits, TdpResult
 
 # The sustained (STAPM) limit line of `ryzenadj -i`.
@@ -101,30 +103,49 @@ class RyzenadjBackend(TDPBackend):
     read_tolerance_w = _READBACK_TOLERANCE_W
 
     def __init__(self, fallback: TdpLimits, resolve=_default_resolve, runner=subprocess.run,
-                 write_max: int | None = None, power_only_retry: bool = False,
-                 require_readback: bool = False):
+                 write_max: int | None = None, write_max_ac: int | None = None,
+                 power_only_retry: bool = False,
+                 require_readback: bool = False,
+                 safety_lock_path: str | None = None):
         self._fallback = fallback
-        # Writes clamp to the absolute ceiling (cooler_max); get_limits keeps the base.
-        self._write_limits = fallback.with_cooler(write_max)
+        self._write_limits = fallback.with_cooler(write_max).with_ac_max(write_max_ac)
         self._runner = runner
         self._bin = resolve()
         self._power_only_retry = power_only_retry
         self._require_readback = bool(require_readback)
+        self._safety_lock = RuntimeSafetyLock(safety_lock_path)
         self.supported = self._bin is not None
-        self._readback_state = (
-            "pending"
-            if self.supported and self._require_readback
-            else "not_required" if self.supported else "binary_missing"
+        self._runtime_lock_payload = (
+            self._safety_lock.load_payload() if self._require_readback else None
         )
-        self._last_readback_failure = None
+        durable_lock = (
+            self._runtime_lock_payload.get("state")
+            if self._runtime_lock_payload
+            else None
+        )
+        if durable_lock and self.supported:
+            self._readback_state = durable_lock
+            self._last_readback_failure = "ryzenadj runtime safety lock active"
+            self.supported = False
+        else:
+            self._readback_state = (
+                "pending"
+                if self.supported and self._require_readback
+                else "not_required" if self.supported else "binary_missing"
+            )
+            self._last_readback_failure = None
 
     def get_limits(self) -> TdpLimits:
         return self._fallback
 
-    def _required_snapshot(self):
+    def _required_snapshot(self, retry_initial=False):
         if not self.supported or self._readback_state.startswith("circuit_open"):
             return None
+        recovery_pending = self._readback_state == "recovery_pending"
         snapshot = self._read_snapshot(require_zero_exit=True)
+        if snapshot is None and retry_initial and self._readback_state == "pending":
+            time.sleep(0.05)
+            snapshot = self._read_snapshot(require_zero_exit=True)
         if snapshot is None:
             self._readback_state = "circuit_open_initial"
             self._last_readback_failure = (
@@ -132,26 +153,60 @@ class RyzenadjBackend(TDPBackend):
             )
             self.supported = False
             return None
-        self._readback_state = "ready"
+        if not recovery_pending:
+            self._readback_state = "ready"
         return snapshot
 
     def probe(self) -> bool:
         if not self._require_readback:
             return bool(self.supported)
-        return self._required_snapshot() is not None
+        return self._required_snapshot(retry_initial=True) is not None
 
     @property
     def probe_pending(self) -> bool:
         return self._readback_state == "pending"
 
+    @property
+    def safety_locked(self) -> bool:
+        return (
+            self._runtime_lock_payload is not None
+            or self._readback_state.startswith("circuit_open")
+        )
+
     def set_tdp(self, watts: int, ac: bool) -> TdpResult:
         if not self.supported:
             detail = self._last_readback_failure or "ryzenadj binary not found"
             return TdpResult(watts, None, False, detail)
+        target = self._write_limits.clamp(watts, on_ac=ac)
+        if (
+            self._readback_state == "recovery_pending"
+            and target > self._fallback.max_ac_w
+        ):
+            return TdpResult(
+                watts,
+                None,
+                False,
+                "ryzenadj safe-range recovery pending",
+            )
         baseline = self._required_snapshot() if self._require_readback else None
         if self._require_readback and baseline is None:
             return TdpResult(watts, None, False, self._last_readback_failure)
-        target = self._write_limits.clamp(watts)
+        lock_payload = {
+            "state": "circuit_open_transaction",
+            "detail": "ryzenadj transaction pending",
+            "baseline": baseline,
+            "target": target,
+            "experimental": target > self._fallback.max_ac_w,
+        }
+        if self._require_readback and not self._safety_lock.persist_payload(lock_payload):
+            return TdpResult(
+                watts,
+                baseline["stapm"],
+                False,
+                "ryzenadj transaction safety lock unavailable; no writes performed",
+            )
+        if self._require_readback:
+            self._runtime_lock_payload = lock_payload
         # amd_pmf (and the firmware on some Z2 handhelds) can silently clobber a single
         # write, so the limit "doesn't always apply". Write, read back, and re-assert
         # once. Then classify honestly:
@@ -202,11 +257,11 @@ class RyzenadjBackend(TDPBackend):
                 else self._read_applied()
             )
             if strict_snapshot is not None and _snapshot_matches(strict_snapshot, target):
-                return TdpResult(watts, applied, True, "")
+                return self._confirmed_result(watts, applied, target, "")
             if _unreadable(applied):
                 continue  # re-assert once, then treat as unconfirmed
             if strict_snapshot is None and _matches(applied, target):
-                return TdpResult(watts, applied, True, "")
+                return self._confirmed_result(watts, applied, target, "")
         if _unreadable(applied):
             if self._require_readback:
                 return TdpResult(
@@ -228,7 +283,7 @@ class RyzenadjBackend(TDPBackend):
                 watts,
                 baseline,
                 mismatch,
-                open_circuit=False,
+                open_circuit=target > self._fallback.max_ac_w,
             )
         return TdpResult(watts, applied, False, mismatch)
 
@@ -257,10 +312,10 @@ class RyzenadjBackend(TDPBackend):
             else self._read_applied(require_zero_exit=True)
         )
         if strict_snapshot is not None and _snapshot_matches(strict_snapshot, target):
-            return TdpResult(
+            return self._confirmed_result(
                 watts,
                 applied,
-                True,
+                target,
                 _gpd_detail(
                     variant="primary",
                     primary_exit=primary_exit,
@@ -269,10 +324,10 @@ class RyzenadjBackend(TDPBackend):
                 ),
             )
         if strict_snapshot is None and _matches(applied, target):
-            return TdpResult(
+            return self._confirmed_result(
                 watts,
                 applied,
-                True,
+                target,
                 _gpd_detail(
                     variant="primary",
                     primary_exit=primary_exit,
@@ -348,9 +403,32 @@ class RyzenadjBackend(TDPBackend):
                 watts,
                 baseline,
                 detail,
-                open_circuit=False,
+                open_circuit=target > self._fallback.max_ac_w,
             )
-        return TdpResult(watts, applied, confirmed, detail)
+        if confirmed:
+            return self._confirmed_result(watts, applied, target, detail)
+        return TdpResult(watts, applied, False, detail)
+
+    def _confirmed_result(
+        self,
+        watts: int,
+        applied: int | None,
+        target: int,
+        detail: str,
+    ) -> TdpResult:
+        if (
+            self._readback_state == "recovery_pending"
+            and target <= self._fallback.max_ac_w
+        ):
+            self._readback_state = "ready"
+        if self._require_readback:
+            if self._safety_lock.clear():
+                self._runtime_lock_payload = None
+            else:
+                detail = f"{detail}; runtime lock clear failed" if detail else (
+                    "runtime lock clear failed"
+                )
+        return TdpResult(watts, applied, True, detail)
 
     def _handle_strict_failure(
         self,
@@ -360,6 +438,7 @@ class RyzenadjBackend(TDPBackend):
         *,
         open_circuit: bool,
     ) -> TdpResult:
+        open_circuit = open_circuit or self._readback_state == "recovery_pending"
         restore = self._restore_snapshot(baseline)
         if open_circuit or restore != "confirmed":
             self._readback_state = (
@@ -369,9 +448,24 @@ class RyzenadjBackend(TDPBackend):
             )
             self.supported = False
             suffix = "; circuit open"
+            payload = {
+                **(self._runtime_lock_payload or {}),
+                "state": self._readback_state,
+                "detail": f"{detail}; baseline restore {restore}",
+                "baseline": baseline,
+            }
+            self._runtime_lock_payload = payload
+            if not self._safety_lock.persist_payload(payload):
+                suffix += "; runtime lock persistence failed"
         else:
-            self._readback_state = "ready"
-            suffix = ""
+            if self._safety_lock.clear():
+                self._readback_state = "ready"
+                self._runtime_lock_payload = None
+                suffix = ""
+            else:
+                self._readback_state = "circuit_open_restored"
+                self.supported = False
+                suffix = "; circuit open; runtime lock clear failed"
         self._last_readback_failure = f"{detail}; baseline restore {restore}{suffix}"
         return TdpResult(watts, None, False, self._last_readback_failure)
 
@@ -421,6 +515,59 @@ class RyzenadjBackend(TDPBackend):
             "readback_state": self._readback_state,
             "last_readback_failure": self._last_readback_failure,
         }
+
+    def recover_safe_range(self) -> bool:
+        if self._readback_state != "circuit_open_restored" or self._bin is None:
+            return bool(self.supported)
+        self.supported = True
+        self._readback_state = "recovery_pending"
+        return True
+
+    def recover_runtime_transaction(self) -> dict:
+        payload = self._runtime_lock_payload
+        if (
+            not isinstance(payload, dict)
+            or payload.get("state") != "circuit_open_transaction"
+        ):
+            return {"ok": False, "detail": "ryzenadj recovery snapshot unavailable"}
+        baseline = payload.get("baseline")
+        if not isinstance(baseline, dict) or self._bin is None:
+            return {"ok": False, "detail": "ryzenadj recovery snapshot invalid"}
+        self.supported = True
+        restore = self._restore_snapshot(baseline)
+        if restore != "confirmed":
+            self._readback_state = "circuit_open_unresolved"
+            self.supported = False
+            payload = {
+                **payload,
+                "state": self._readback_state,
+                "detail": "ryzenadj interrupted transaction recovery failed",
+            }
+            self._runtime_lock_payload = payload
+            self._safety_lock.persist_payload(payload)
+            return {"ok": False, "detail": payload["detail"]}
+        if payload.get("experimental") is True:
+            self._readback_state = "circuit_open_restored"
+            self.supported = False
+            payload = {
+                **payload,
+                "state": self._readback_state,
+                "detail": "ryzenadj experimental transaction restored safely",
+            }
+            self._runtime_lock_payload = payload
+            self._safety_lock.persist_payload(payload)
+            return {"ok": True, "detail": payload["detail"]}
+        if not self._safety_lock.clear():
+            self._readback_state = "circuit_open_restored"
+            self.supported = False
+            return {
+                "ok": False,
+                "detail": "ryzenadj recovery confirmed; runtime lock clear failed",
+            }
+        self._runtime_lock_payload = None
+        self._readback_state = "ready"
+        self.supported = True
+        return {"ok": True, "detail": "ryzenadj transaction recovered"}
 
     def _read_applied(self, *, require_zero_exit: bool = False) -> int | None:
         if not self.supported:

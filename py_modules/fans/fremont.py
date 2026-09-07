@@ -21,6 +21,7 @@ class FremontFanBackend:
         self._gpu = self._find("amdgpu", "pwm1_enable")
         self._cpu_sensor = self._find("acpitz", "temp1_input")
         self._points = {"system": None, "gpu": None}
+        self._release_pending = set()
         self._lock = threading.RLock()
         self._task = None
 
@@ -37,7 +38,11 @@ class FremontFanBackend:
 
     @property
     def _owns_fan(self) -> bool:
-        return any(self._points.values())
+        return any(self._points.values()) or bool(self._release_pending)
+
+    @property
+    def handoff_required(self) -> bool:
+        return self._owns_fan
 
     def _temp(self, key):
         if key == "system":
@@ -84,17 +89,20 @@ class FremontFanBackend:
                 {"key": "system", "label": "System fan", "sensor": "CPU / GPU / VRAM",
                  "rpm": _read_int(os.path.join(self._system, "fan1_input")),
                  "max_rpm": 1800, "enable": 1 if self._points["system"] else 2,
-                 "points": self._points["system"], "controllable": True},
+                 "points": self._points["system"], "controllable": True,
+                 "release_pending": "system" in self._release_pending},
                 {"key": "gpu", "label": "GPU fan", "sensor": "GPU junction",
                  "rpm": _read_int(os.path.join(self._gpu, "fan1_input")),
                  "max_rpm": _read_int(os.path.join(self._gpu, "fan1_max")),
                  "enable": _read_int(os.path.join(self._gpu, "pwm1_enable")),
-                 "points": None, "controllable": False},
+                 "points": None, "controllable": False,
+                 "release_pending": "gpu" in self._release_pending},
             ] if self._gpu else [
                 {"key": "system", "label": "System fan", "sensor": "CPU / GPU / VRAM",
                  "rpm": _read_int(os.path.join(self._system, "fan1_input")),
                  "max_rpm": 1800, "enable": 1 if self._points["system"] else 2,
-                 "points": self._points["system"], "controllable": True},
+                 "points": self._points["system"], "controllable": True,
+                 "release_pending": "system" in self._release_pending},
             ],
         }
 
@@ -104,9 +112,14 @@ class FremontFanBackend:
         if fan_key == "gpu":
             return {"ok": False, "detail": "Fremont GPU firmware rejects manual fan control"}
         with self._lock:
+            first_acquisition = self._points[fan_key] is None and fan_key not in self._release_pending
             self._points[fan_key] = [list(point) for point in sanitize_curve(points)]
+            self._release_pending.discard(fan_key)
             ok = self._apply_channel(fan_key)
-        self.start()
+            if not ok and first_acquisition:
+                self._points[fan_key] = None
+        if self._owns_fan:
+            self.start()
         return {"ok": ok, "detail": f"{fan_key} curve applied" if ok else f"{fan_key} curve readback failed"}
 
     def apply_curve_all(self, points: list) -> dict:
@@ -119,14 +132,29 @@ class FremontFanBackend:
         with self._lock:
             ok = True
             for key in keys:
-                owned = self._points[key] is not None
-                self._points[key] = None
+                owned = self._points[key] is not None or key in self._release_pending
                 if owned:
-                    ok = self._release(key) and ok
-        return {"ok": ok, "detail": "channel(s) returned to previous owner"}
+                    self._release_pending.add(key)
+                    released = self._release(key)
+                    if released:
+                        self._points[key] = None
+                        self._release_pending.discard(key)
+                    ok = released and ok
+        if self._owns_fan:
+            self.start()
+        detail = ("channel(s) returned to previous owner" if ok
+                  else "channel release pending recovery")
+        return {"ok": ok, "detail": detail}
 
     def restore_auto(self) -> dict:
         return self.set_auto(None)
+
+    def recover_pending_release(self) -> dict:
+        if not self.supported:
+            return {"ok": False, "detail": "Fremont fan channel unavailable"}
+        with self._lock:
+            self._release_pending.add("system")
+        return self.set_auto("system")
 
     def start(self) -> None:
         if self._task is not None or not self._owns_fan:
@@ -142,7 +170,11 @@ class FremontFanBackend:
                 await asyncio.sleep(_INTERVAL)
                 with self._lock:
                     for key in ("system",):
-                        if self._points[key]:
+                        if key in self._release_pending:
+                            if self._release(key):
+                                self._points[key] = None
+                                self._release_pending.discard(key)
+                        elif self._points[key]:
                             self._apply_channel(key)
         except asyncio.CancelledError:
             pass

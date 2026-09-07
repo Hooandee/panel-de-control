@@ -81,7 +81,7 @@ def test_onexplayer_superx_is_recognised_with_safe_limits(tmp_path):
     assert profile.tdp_min == 10
     assert profile.tdp_default == 30
     assert profile.tdp_max == 55
-    assert profile.tdp_max_charger == 80
+    assert profile.tdp_max_charger == 75
     assert profile.charger_only_extra is True
     assert profile.panel == "oled"
     assert profile.hdr is True
@@ -100,6 +100,20 @@ def test_new_experimental_profiles_require_exact_dmi(tmp_path):
         assert _detect_dmi(root, product, vendor, board).key == key
 
 
+def test_verified_family_variants_do_not_depend_on_unstable_dmi_fields(tmp_path):
+    fixtures = (
+        ("Default string", "ZOTAC", "G0A1W", "zotac_gaming_zone"),
+        ("GZ302EA-RU520WS", "ASUSTeK COMPUTER INC.", "GZ302EA", "rog_flow_z13"),
+        ("ONEXPLAYER F1 EVA-01", "ONE-NETBOOK", "Default string", "onexplayer_f1"),
+        ("ONEXPLAYER F1 EVA-02", "ONE-NETBOOK", "Default string", "onexplayer_f1"),
+        ("ONEXPLAYER F1 OLED", "ONE-NETBOOK", "Default string", "onexplayer_f1"),
+        ("G1617-02-L", "GPD", "Default string", "gpd_win_mini_2025"),
+    )
+    for index, (product, vendor, board, key) in enumerate(fixtures):
+        root = tmp_path / f"variant-{index}"
+        assert _detect_dmi(root, product, vendor, board).key == key
+
+
 def test_new_profiles_reject_wrong_vendor_board_and_nearby_products(tmp_path):
     fixtures = (
         ("ONEXPLAYER SUPER X", "OTHER", "ONEXPLAYER SUPER X"),
@@ -107,7 +121,7 @@ def test_new_profiles_reject_wrong_vendor_board_and_nearby_products(tmp_path):
         ("ROG Flow Z13 GZ302EA_GZ302EA", "ASUSTeK COMPUTER INC.", "OTHER"),
         ("AYANEO 3 Pro", "AYANEO", "AYANEO 3"),
         ("Fremont", "OTHER", "Fremont"),
-        ("G1617-02-L", "GPD", "G1617-02"),
+        ("G1617-02-L", "OTHER", "G1617-02-L"),
     )
     for index, (product, vendor, board) in enumerate(fixtures):
         root = tmp_path / str(index)
@@ -193,8 +207,12 @@ def test_gpd_win_mini_2025_is_recognised_experimental(tmp_path):
     assert prof.is_generic is False
     assert prof.experimental is True
     assert prof.vendor == "amd"
+    assert prof.tdp_min == 20
+    assert prof.tdp_default == 20
     assert prof.tdp_max == 35
-    assert prof.tdp_presets == (12, 22, 32, 32)
+    assert prof.tdp_max_charger == 35
+    assert prof.experimental_tdp_max_ac == 55
+    assert prof.tdp_presets == (20, 25, 30, 35)
 
 
 def test_msi_claw_a8_is_recognised_experimental():
@@ -247,6 +265,7 @@ def test_gpd_win5_is_recognised_experimental():
 def test_only_win5_has_cooler_max():
     assert detect(product_name="G1619-05").cooler_max is None  # GPD Win Max 2
     assert detect(product_name="ONEXPLAYER F1Pro").cooler_max is None
+    assert detect(product_name="ONEXPLAYER SUPER X").cooler_max is None
     assert detect(product_name="Some Random Laptop").cooler_max is None
 
 

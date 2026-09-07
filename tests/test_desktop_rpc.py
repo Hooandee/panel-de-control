@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import sys
 import types
 
@@ -58,6 +59,8 @@ def _plugin(device="Fremont", manual=False):
     plugin._desktop_power = Coordinator()
     plugin._save = lambda: None
     plugin._advance_tdp_generation = lambda: None
+    plugin._record_tdp_transition = lambda *_args, **_kwargs: None
+    plugin._restore_power_handoff = lambda *_args, **_kwargs: True
 
     async def offload(fn):
         return fn()
@@ -142,17 +145,75 @@ def test_enabling_generic_desktop_releases_tdp_through_the_handoff_path():
     plugin._settings["tdp_control_enabled"] = True
     calls = []
 
-    async def set_tdp(enabled):
-        calls.append(enabled)
-        plugin._settings["tdp_control_enabled"] = enabled
-        return enabled
-
-    plugin.set_tdp_control_enabled = set_tdp
+    plugin._advance_tdp_generation = lambda: calls.append(False)
     state = asyncio.run(plugin.set_desktop_mode_enabled(True))
 
     assert calls == [False]
     assert plugin._settings["desktop_prev_tdp_control"] is True
     assert state["enabled"] is True
+
+
+def test_enabling_generic_desktop_never_persists_both_modes_disabled():
+    plugin = _plugin("Unknown PC")
+    plugin._settings["tdp_control_enabled"] = True
+    snapshots = []
+    plugin._save = lambda: snapshots.append(copy.deepcopy(plugin._settings))
+
+    state = asyncio.run(plugin.set_desktop_mode_enabled(True))
+
+    assert state["enabled"] is True
+    assert snapshots
+    assert all(
+        snapshot["desktop_mode_enabled"] is True
+        or snapshot["tdp_control_enabled"] is True
+        for snapshot in snapshots
+    )
+
+
+def test_desktop_power_takes_exclusive_hhd_ownership_on_bazzite_43_and_44(
+    monkeypatch,
+):
+    for os_name in ("Bazzite Linux 43", "Bazzite Linux 44"):
+        plugin = _plugin("Unknown PC", manual=True)
+        plugin._os_name = os_name
+        plugin._controller_backend = types.SimpleNamespace(
+            manager=main.controller_detect.HHD
+        )
+        hhd = {"enabled": True}
+        monkeypatch.setattr(
+            main.controller_hhd,
+            "current_tdp_enable",
+            lambda: hhd["enabled"],
+        )
+
+        def set_hhd(enabled):
+            hhd["enabled"] = enabled
+            return enabled
+
+        monkeypatch.setattr(main.controller_hhd, "set_tdp_enable", set_hhd)
+
+        result = asyncio.run(plugin.set_desktop_power_mode("balanced"))
+
+        assert result["ok"] is True
+        assert hhd["enabled"] is False
+        assert plugin._settings["hhd_tdp_prev"] is True
+
+
+def test_desktop_power_never_writes_when_hhd_ownership_cannot_be_confirmed(
+    monkeypatch,
+):
+    plugin = _plugin("Unknown PC", manual=True)
+    plugin._controller_backend = types.SimpleNamespace(
+        manager=main.controller_detect.HHD
+    )
+    monkeypatch.setattr(main.controller_hhd, "current_tdp_enable", lambda: True)
+    monkeypatch.setattr(main.controller_hhd, "set_tdp_enable", lambda _enabled: True)
+
+    result = asyncio.run(plugin.set_desktop_power_mode("balanced"))
+
+    assert result["ok"] is False
+    assert result["detail"] == "desktop TDP ownership unavailable"
+    assert plugin._desktop_power.calls == []
 
 
 def test_disabling_generic_desktop_restores_previous_tdp_through_apply_path():
@@ -278,6 +339,44 @@ def test_recognised_device_migration_retry_is_throttled_then_recovers(monkeypatc
     assert plugin._desktop_state()["migration_pending"] is False
 
 
+def test_explicit_migration_retry_bypasses_background_throttle(monkeypatch):
+    plugin = _plugin("Galileo", manual=True)
+    plugin._desktop_recognition_migration_pending = True
+    plugin._desktop_recognition_migration_last_attempt = 10.0
+    plugin._desktop_recognition_migration_last_failure = "surface unavailable"
+    plugin._settings["desktop_power_handoff"] = {"device_key": "generic"}
+    monkeypatch.setattr(main.time, "monotonic", lambda: 12.0)
+    plugin._desktop_power.restore = lambda: {
+        "ok": True,
+        "mode": "free",
+        "detail": "restored",
+    }
+
+    state = asyncio.run(plugin.retry_desktop_migration())
+
+    assert state["migration_pending"] is False
+    assert state["migration_failure"] is None
+
+
+def test_pending_migration_blocks_new_desktop_power_writes():
+    plugin = _plugin()
+    plugin._desktop_recognition_migration_pending = True
+    plugin._desktop_recognition_migration_last_attempt = 10.0
+    plugin._desktop_recognition_migration_last_failure = "surface unavailable"
+    plugin._settings["desktop_power_handoff"] = {"device_key": "generic"}
+    plugin._desktop_power.restore = lambda: {
+        "ok": False,
+        "detail": "surface unavailable",
+    }
+
+    mode = asyncio.run(plugin.set_desktop_power_mode("performance"))
+    custom = asyncio.run(plugin.set_desktop_power_limits(23, 80))
+
+    assert mode["ok"] is False and mode["detail"] == "desktop migration pending"
+    assert custom["ok"] is False and custom["detail"] == "desktop migration pending"
+    assert plugin._desktop_power.calls == []
+
+
 def test_pending_recognition_migration_blocks_handheld_tdp_enable():
     plugin = _plugin("Galileo", manual=True)
     plugin._desktop_recognition_migration_pending = True
@@ -306,6 +405,129 @@ def test_shutdown_handoff_releases_desktop_power():
     plugin._perform_shutdown_handoff("test")
 
     assert plugin._desktop_power.calls == [("restore",)]
+
+
+def test_failed_fremont_fan_handoff_stays_durable_for_next_start():
+    plugin = main.Plugin.__new__(main.Plugin)
+    plugin._device = FREMONT
+    plugin._settings = {"fremont_fan_handoff_pending": True}
+    plugin._save = lambda: None
+    plugin._fan_ctrl = types.SimpleNamespace(
+        handoff_required=True,
+        restore_auto=lambda: {"ok": False},
+    )
+
+    assert plugin._restore_fans_safe() is False
+    assert plugin._settings["fremont_fan_handoff_pending"] is True
+
+
+def test_pending_fremont_fan_handoff_is_confirmed_before_marker_clear():
+    plugin = main.Plugin.__new__(main.Plugin)
+    plugin._device = FREMONT
+    plugin._settings = {"fremont_fan_handoff_pending": True}
+    saves = []
+    plugin._save = lambda: saves.append(dict(plugin._settings))
+    plugin._fan_ctrl = types.SimpleNamespace(
+        recover_pending_release=lambda: {"ok": True},
+    )
+
+    assert plugin._recover_fremont_fan_handoff() is True
+    assert plugin._settings["fremont_fan_handoff_pending"] is False
+    assert saves[-1]["fremont_fan_handoff_pending"] is False
+
+
+def test_shutdown_with_pending_marker_forces_recovery_on_a_fresh_backend():
+    plugin = main.Plugin.__new__(main.Plugin)
+    plugin._device = FREMONT
+    plugin._settings = {"fremont_fan_handoff_pending": True}
+    plugin._save = lambda: None
+    calls = []
+    plugin._fan_ctrl = types.SimpleNamespace(
+        handoff_required=False,
+        restore_auto=lambda: calls.append("auto") or {"ok": True},
+        recover_pending_release=lambda: calls.append("recover") or {"ok": True},
+    )
+
+    assert plugin._restore_fans_safe() is True
+    assert calls == ["recover"]
+    assert plugin._settings["fremont_fan_handoff_pending"] is False
+
+
+def test_corrupt_fremont_handoff_marker_forces_confirmed_recovery():
+    plugin = main.Plugin.__new__(main.Plugin)
+    plugin._device = FREMONT
+    plugin._settings = {
+        "fremont_fan_handoff_pending": "true",
+        "_desktop_defaults_migrated": True,
+        "desktop_mode_enabled": False,
+        "desktop_power_mode": "free",
+        "desktop_cpu_w": 23,
+        "desktop_gpu_w": 80,
+        "desktop_prev_tdp_control": None,
+    }
+    main.normalize_desktop_settings(plugin._settings)
+    calls = []
+    plugin._save = lambda: None
+    plugin._fan_ctrl = types.SimpleNamespace(
+        recover_pending_release=lambda: calls.append("recover") or {"ok": True},
+    )
+
+    assert plugin._recover_fremont_fan_handoff() is True
+    assert calls == ["recover"]
+    assert plugin._settings["fremont_fan_handoff_pending"] is False
+
+
+def test_fremont_handoff_marker_is_saved_before_first_manual_fan_write():
+    events = []
+    plugin = main.Plugin.__new__(main.Plugin)
+    plugin._device = FREMONT
+    plugin._settings = {"fremont_fan_handoff_pending": False}
+    plugin._save = lambda: events.append("save")
+    plugin._module_enabled = lambda _module: True
+    plugin._desktop_mode_on = lambda: True
+    plugin._current_appid = None
+    plugin._desktop_fans = types.SimpleNamespace(effective=lambda _appid: {
+        "system": {"preset": "custom", "points": [[40, 0], [95, 255]]},
+        "gpu": {"preset": "auto", "points": None},
+    })
+    plugin._fan_ctrl = types.SimpleNamespace(
+        handoff_required=True,
+        read_state=lambda: {
+            "independent": True,
+            "fans": [{"key": "system", "controllable": True}],
+        },
+        set_curve=lambda _channel, _points: events.append("write") or {"ok": True},
+    )
+
+    assert plugin._reapply_fans_sync() is True
+    assert events == ["save", "write"]
+
+
+def test_fremont_manual_fan_write_is_blocked_if_marker_cannot_be_saved():
+    writes = []
+    plugin = main.Plugin.__new__(main.Plugin)
+    plugin._device = FREMONT
+    plugin._settings = {"fremont_fan_handoff_pending": False}
+    plugin._save = lambda: (_ for _ in ()).throw(OSError("read-only"))
+    plugin._module_enabled = lambda _module: True
+    plugin._desktop_mode_on = lambda: True
+    plugin._current_appid = None
+    plugin._desktop_fans = types.SimpleNamespace(effective=lambda _appid: {
+        "system": {"preset": "custom", "points": [[40, 0], [95, 255]]},
+        "gpu": {"preset": "auto", "points": None},
+    })
+    plugin._fan_ctrl = types.SimpleNamespace(
+        handoff_required=False,
+        read_state=lambda: {
+            "independent": True,
+            "fans": [{"key": "system", "controllable": True}],
+        },
+        set_curve=lambda *_args: writes.append(True) or {"ok": True},
+    )
+
+    assert plugin._reapply_fans_sync() is False
+    assert writes == []
+    assert plugin._settings["fremont_fan_handoff_pending"] is False
 
 
 def test_free_profile_reapply_recovers_pending_durable_handoff():

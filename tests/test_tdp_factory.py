@@ -123,6 +123,21 @@ def test_flow_uses_asus_armoury_and_publishes_live_narrowed_limits(tmp_path):
     assert backend.get_limits().max_ac_w == 42
 
 
+def test_flow_keeps_recoverable_firmware_backend_but_reports_invalid_bounds_unready(tmp_path):
+    root = str(tmp_path)
+    _mk_fw(root, "asus-armoury", pl1_max=0)
+
+    backend = select_backend(
+        _p("rog_flow_z13"),
+        root=root,
+        ryzenadj_resolve=lambda: "/bin/true",
+    )
+
+    assert backend.name == "firmware-attr:asus-armoury"
+    assert backend.supported is True
+    assert backend.ready() is False
+
+
 @pytest.mark.parametrize(
     "os_release",
     (
@@ -243,6 +258,35 @@ def test_new_experimental_profile_defers_ryzenadj_probe_and_rejects_before_write
     result = backend.set_tdp(20, ac=True)
     assert result.ok is False
     assert "readback unavailable before write" in result.detail
+
+
+def test_gpd_win_mini_backend_reserves_55w_for_explicit_ac_unlock(tmp_path):
+    backend = select_backend(
+        _p("gpd_win_mini_2025"),
+        root=str(tmp_path),
+        ryzenadj_resolve=lambda: "/bin/true",
+    )
+
+    assert backend.get_limits().max_ac_w == 35
+    assert backend._write_limits.max_w == 35
+    assert backend._write_limits.max_ac_w == 55
+
+
+def test_factory_keeps_runtime_locked_gpd_backend_available_for_safe_recovery(tmp_path):
+    lock = tmp_path / "run/panel-de-control/ryzenadj-gpd_win_mini_2025.lock"
+    lock.parent.mkdir(parents=True)
+    lock.write_text("circuit_open_restored", encoding="utf-8")
+
+    backend = select_backend(
+        _p("gpd_win_mini_2025"),
+        root=str(tmp_path),
+        ryzenadj_resolve=lambda: "/bin/true",
+    )
+
+    assert backend.name == "ryzenadj"
+    assert backend.supported is False
+    assert backend.safety_locked is True
+    assert backend.recover_safe_range() is True
 
 
 def test_only_exact_legion_go_s_83n6_gets_measured_rail_floors(tmp_path):

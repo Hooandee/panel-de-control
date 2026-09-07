@@ -16,12 +16,16 @@ vi.mock("@decky/ui", () => ({
 }));
 
 vi.mock("../i18n", () => ({
-  useI18n: () => ({ t: (key: string) => key }),
+  useI18n: () => ({
+    t: (key: string) => key === "mandos.modules.confirm.desc"
+      ? "La máquina puede suspenderse si HHD no dispone del control directo."
+      : key,
+  }),
 }));
 
 vi.mock("./ConfirmDialog", () => ({
-  ConfirmDialog: ({ onConfirm }: { onConfirm: () => void }) => (
-    <button onClick={onConfirm}>confirm-action</button>
+  ConfirmDialog: ({ desc, onConfirm }: { desc: string; onConfirm: () => void }) => (
+    <div><span>{desc}</span><button onClick={onConfirm}>confirm-action</button></div>
   ),
 }));
 
@@ -64,6 +68,7 @@ describe("MagicModulesCard", () => {
     expect(decky.showCount).toBe(1);
     expect(onAction).not.toHaveBeenCalled();
     render(decky.modal as ReactNode);
+    expect(screen.getByText(/puede suspenderse/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "confirm-action" }));
     expect(onAction).toHaveBeenCalledWith("eject_left");
   });

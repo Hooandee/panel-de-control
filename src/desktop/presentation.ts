@@ -1,7 +1,13 @@
+import type { DesktopState } from "../api";
+
 export interface VramView {
   value: string;
   total: string;
   fraction: number;
+}
+
+export function desktopUiActive(state: DesktopState | null): boolean {
+  return !!(state?.enabled || state?.migration_pending);
 }
 
 export function dialFraction(

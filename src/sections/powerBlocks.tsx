@@ -5,12 +5,14 @@ import { AutoTdpToggle } from "../components/AutoTdpToggle";
 import { usePotencia } from "../tdp/potenciaContext";
 import { registerBlock } from "../customize/blocks";
 import { useDesktopState } from "../desktop/useDesktop";
-import { DesktopPowerCard } from "../components/DesktopPowerCard";
+import { desktopUiActive } from "../desktop/presentation";
+import { DesktopPowerCard, DesktopPowerRecoveryCard } from "../components/DesktopPowerCard";
 
 const TdpCoreBlock: FC = () => {
   const c = usePotencia();
   const desktop = useDesktopState();
-  if (desktop.state?.enabled) return <DesktopPowerCard />;
+  if (desktop.error) return <DesktopPowerRecoveryCard kind="unavailable" onRetry={desktop.refresh} />;
+  if (desktopUiActive(desktop.state)) return <DesktopPowerCard />;
   // Auto-TDP module off → the loop is stopped; show manual, not the raw flag.
   const power = c.power && !c.autoTdpEnabled ? { ...c.power, auto_tdp: false } : c.power;
   return (

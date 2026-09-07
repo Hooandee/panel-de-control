@@ -31,7 +31,16 @@ class AmdGpuPowerCap:
     def _find(self):
         if self._device_key not in (None, "steam_machine"):
             return None
+        drm_devices = {
+            os.path.realpath(path)
+            for path in glob.glob(
+                os.path.join(self._root, "sys/class/drm/card*/device")
+            )
+            if os.path.exists(path)
+            and os.path.basename(os.path.dirname(path))[4:].isdigit()
+        }
         pattern = os.path.join(self._root, "sys/class/hwmon/hwmon*")
+        candidates = []
         for directory in sorted(glob.glob(pattern)):
             try:
                 with open(os.path.join(directory, "name")) as handle:
@@ -39,9 +48,18 @@ class AmdGpuPowerCap:
             except OSError:
                 continue
             required = ("power1_cap", "power1_cap_min", "power1_cap_max")
-            if name == "amdgpu" and all(os.path.exists(os.path.join(directory, leaf)) for leaf in required):
-                return directory
-        return None
+            device = os.path.join(directory, "device")
+            if (
+                name == "amdgpu"
+                and all(
+                    os.path.exists(os.path.join(directory, leaf))
+                    for leaf in required
+                )
+                and os.path.exists(device)
+                and os.path.realpath(device) in drm_devices
+            ):
+                candidates.append(directory)
+        return candidates[0] if len(candidates) == 1 else None
 
     @property
     def supported(self) -> bool:

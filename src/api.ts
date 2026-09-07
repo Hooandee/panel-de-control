@@ -75,6 +75,7 @@ export interface DeviceInfo {
   // When true, the shell shows the experimental marker for this recognised model.
   experimental: boolean;
   cooler_max: number | null;
+  experimental_tdp_max_ac: number | null;
   // GPU generation ("rdna2"|"rdna3"|"rdna35"|"rdna4"|"intel"|"unknown") for the
   // launch-options upscaler gating (FSR4 = rdna3/rdna4).
   gpu_gen: string;
@@ -120,6 +121,8 @@ export interface DesktopState {
   enabled: boolean;
   automatic: boolean;
   manual_enabled: boolean;
+  migration_pending: boolean;
+  migration_failure: string | null;
   power: DesktopPowerState;
   telemetry: DesktopTelemetry | null;
   cpu: Record<string, unknown> | null;
@@ -132,6 +135,7 @@ export interface DesktopApplyResult {
   detail: string;
 }
 export const getDesktopState = callable<[], DesktopState>("get_desktop_state");
+export const retryDesktopMigration = callable<[], DesktopState>("retry_desktop_migration");
 export const setDesktopModeEnabled = callable<[enabled: boolean], DesktopState>("set_desktop_mode_enabled");
 export const setDesktopPowerMode = callable<[mode: DesktopPowerMode], DesktopApplyResult>("set_desktop_power_mode");
 export const setDesktopPowerLimits = callable<[cpuW: number, gpuW: number], DesktopApplyResult>("set_desktop_power_limits");
@@ -460,6 +464,16 @@ export const getUnlockBatteryMax = callable<[], boolean>("get_unlock_battery_max
 export const setUnlockBatteryMax = callable<[enabled: boolean], boolean>("set_unlock_battery_max");
 export const getCoolerBoost = callable<[], boolean>("get_cooler_boost");
 export const setCoolerBoost = callable<[enabled: boolean], boolean>("set_cooler_boost");
+export const getExperimentalTdpUnlock = callable<[], boolean>("get_experimental_tdp_unlock");
+export interface ExperimentalTdpUnlockResult {
+  enabled: boolean;
+  ok: boolean;
+  detail: string;
+}
+export const setExperimentalTdpUnlock = callable<
+  [enabled: boolean],
+  ExperimentalTdpUnlockResult
+>("set_experimental_tdp_unlock");
 
 // Opt-in (default off): raise TDP while the QAM is open for a fluid menu. Off keeps
 // the auto loop showing the REAL in-game TDP (no menu-time inflation).
