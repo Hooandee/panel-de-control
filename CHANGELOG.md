@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.44.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.44.0...panel-de-control-v0.44.1) (2026-09-08)
+
+
+### Bug Fixes
+
+* recover from unusable TDP routes ([#596](https://github.com/Hooandee/panel-de-control/issues/596)) ([4785257](https://github.com/Hooandee/panel-de-control/commit/47852576b67b7e722d8520461e324cfdfe0f8253))
+
 ## [0.44.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.43.0...panel-de-control-v0.44.0) (2026-09-08)
 
 
