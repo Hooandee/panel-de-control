@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.44.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.43.0...panel-de-control-v0.44.0) (2026-09-08)
+
+
+### Features
+
+* allow 3 W TDP requests ([#592](https://github.com/Hooandee/panel-de-control/issues/592)) ([d2001f1](https://github.com/Hooandee/panel-de-control/commit/d2001f1d0d57eb8952a0f3fdc40c07578f9b09b6))
+
 ## [0.43.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.42.0...panel-de-control-v0.43.0) (2026-09-08)
 
 
