@@ -36,8 +36,11 @@ jobs:
           filters: |
             backend:
               - ".github/workflows/ci.yml"
+              - ".github/workflows/release-please.yml"
               - "main.py"
               - "py_modules/**"
+              - "scripts/*.py"
+              - "scripts/**/*.py"
               - "tests/*.py"
               - "tests/**/*.py"
               - "conftest.py"
@@ -50,10 +53,13 @@ jobs:
               - "CHANGELOG.md"
             frontend:
               - ".github/workflows/ci.yml"
+              - ".github/workflows/prerelease.yml"
               - "src/**"
               - "tests/*.ts"
               - "tests/**/*.ts"
-              - "scripts/**"
+              - "scripts/*.mjs"
+              - "scripts/**/*.mjs"
+              - "scripts/sync-plugin-payload.sh"
               - "shared/**"
               - "package.json"
               - "pnpm-lock.yaml"

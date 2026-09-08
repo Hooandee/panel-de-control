@@ -728,8 +728,11 @@ class WorkflowIsolationTests(unittest.TestCase):
             backend_paths,
             [
                 ".github/workflows/ci.yml",
+                ".github/workflows/release-please.yml",
                 "main.py",
                 "py_modules/**",
+                "scripts/*.py",
+                "scripts/**/*.py",
                 "tests/*.py",
                 "tests/**/*.py",
                 "conftest.py",
@@ -746,10 +749,13 @@ class WorkflowIsolationTests(unittest.TestCase):
             frontend_paths,
             [
                 ".github/workflows/ci.yml",
+                ".github/workflows/prerelease.yml",
                 "src/**",
                 "tests/*.ts",
                 "tests/**/*.ts",
-                "scripts/**",
+                "scripts/*.mjs",
+                "scripts/**/*.mjs",
+                "scripts/sync-plugin-payload.sh",
                 "shared/**",
                 "package.json",
                 "pnpm-lock.yaml",
@@ -791,6 +797,8 @@ class WorkflowIsolationTests(unittest.TestCase):
             (["src/index.tsx"], False, True),
             (["tests/pluginPayload.test.ts"], False, True),
             (["scripts/copy-plugin-payload.mjs"], False, True),
+            (["scripts/sync-plugin-payload.sh"], False, True),
+            (["scripts/release_guard.py"], True, False),
             (["opengamepadui/plugin.gd", "src/index.tsx"], False, True),
             (["windows/PanelDeControl.sln", "main.py"], True, False),
             (["shared/fixtures/auto_tdp.json"], True, True),
@@ -799,6 +807,8 @@ class WorkflowIsolationTests(unittest.TestCase):
             (["README.md"], False, False),
             (["future-root-config.toml"], False, False),
             ([".github/workflows/ci.yml"], True, True),
+            ([".github/workflows/release-please.yml"], True, False),
+            ([".github/workflows/prerelease.yml"], False, True),
         )
         for changed_paths, expected_backend, expected_frontend in cases:
             with self.subTest(changed_paths=changed_paths):
