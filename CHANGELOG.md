@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+## [0.43.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.42.0...panel-de-control-v0.43.0) (2026-09-08)
+
+
+### Español
+
+* **Idiomas:** Añade alemán como idioma completo de Panel de Control y mantiene el español como predeterminado. El selector, la detección del idioma de Steam, la preferencia guardada, el glosario, el actualizador y las notas de versión pasan a cubrir español, inglés, italiano y alemán.
+
+### English
+
+* **Languages:** Adds German as a fully supported language in Panel de Control while keeping Spanish as the default. The language selector, Steam language detection, saved preference, glossary, updater, and release notes now cover Spanish, English, Italian, and German.
+
+### Italiano
+
+* **Lingue:** Aggiunge il tedesco tra le lingue pienamente supportate da Panel de Control e mantiene lo spagnolo come predefinito. Il selettore, il rilevamento della lingua di Steam, la preferenza salvata, il glossario, il sistema di aggiornamento e le note di versione ora coprono spagnolo, inglese, italiano e tedesco.
+
+### Deutsch
+
+* **Sprachen:** Fügt Deutsch als vollständig unterstützte Sprache im Kontrollzentrum hinzu. Spanisch bleibt die Standardsprache. Sprachauswahl, Erkennung der Steam-Sprache, gespeicherte Spracheinstellung, Glossar, Update-Funktion und Versionshinweise unterstützen jetzt Spanisch, Englisch, Italienisch und Deutsch.
+
 ## [0.42.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.41.0...panel-de-control-v0.42.0) (2026-09-07)
 
 
