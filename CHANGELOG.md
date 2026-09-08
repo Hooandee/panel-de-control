@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.43.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.42.0...panel-de-control-v0.43.0) (2026-09-08)
+
+
+### Features
+
+* add German localization ([#584](https://github.com/Hooandee/panel-de-control/issues/584)) ([e53bf51](https://github.com/Hooandee/panel-de-control/commit/e53bf516e0506fd4ba138bb8dabc36666066addb))
+
 ## [0.42.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.41.0...panel-de-control-v0.42.0) (2026-09-07)
 
 
