@@ -782,6 +782,8 @@ class WorkflowIsolationTests(unittest.TestCase):
                 _matches(".github/workflows/windows-ci.yml", windows_paths)
             )
 
+        self.assertIn("branches: [main]", _event_body(decky, "push"))
+
         self.assertRegex(
             windows,
             r"python -m unittest\s+"
