@@ -7,27 +7,21 @@ import { theme } from "../theme";
 import { FocusRoot } from "./FocusRoot";
 import { IconAction } from "./IconAction";
 import { IconPickerGrid } from "./IconPickerGrid";
-import { TABS, PICKABLE_BLOCKS, blockOrder, CATEGORY_IDS } from "../customize/manifest";
+import { TABS, PICKABLE_BLOCKS, pickableBlocksForSection, CATEGORY_IDS } from "../customize/manifest";
 import { move } from "../customize/layout";
 import { getPresent } from "../customize/present";
 import { useViews, renameView, setViewIcon, setViewBlocks, deleteView } from "../customize/viewStore";
 import { VIEW_ICON_KEYS, ViewIconKey } from "../customize/views";
 import { viewIconNode } from "../customize/viewIcons";
+import { useDesktopState } from "../desktop/useDesktop";
 
 const META = new Map(
   Object.values(PICKABLE_BLOCKS).flat().map((b) => [b.id, b] as const),
 );
 
-function pickableIds(cat: string): string[] {
-  const base = getPresent(cat) ?? blockOrder(cat);
-  const extras = (PICKABLE_BLOCKS[cat] ?? [])
-    .map((b) => b.id)
-    .filter((id) => !blockOrder(cat).includes(id));
-  return [...extras, ...base];
-}
-
 const ViewEditorBody: FC<{ viewId: string; closeModal?: () => void }> = ({ viewId, closeModal }) => {
   const { t } = useI18n();
+  const desktopMode = !!useDesktopState().state?.enabled;
   const view = useViews().find((v) => v.id === viewId);
   const [confirmDel, setConfirmDel] = useState(false);
   if (!view) return null;
@@ -93,7 +87,9 @@ const ViewEditorBody: FC<{ viewId: string; closeModal?: () => void }> = ({ viewI
         <span style={{ fontSize: theme.font.body, color: theme.color.textPrimary }}>{t("customize.views.add")}</span>
         {CATEGORY_IDS.map((cat) => {
           const meta = TABS.find((x) => x.id === cat)!;
-          const avail = pickableIds(cat).filter((id) => !blocks.includes(id) && META.has(id));
+          const avail = pickableBlocksForSection(cat, desktopMode, getPresent(cat))
+            .map((block) => block.id)
+            .filter((id) => !blocks.includes(id) && META.has(id));
           if (avail.length === 0) return null;
           return (
             <Fragment key={cat}>

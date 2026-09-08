@@ -2,10 +2,12 @@ import os
 import inspect
 
 from device_registry import detect
+from device_profiles import DEVICE_TABLE
 from tdp.firmware_attr import FirmwareAttrBackend
 from tdp.types import RailReading, TdpLimits, TdpObservation
 
 FALLBACK = TdpLimits(min_w=4, default_w=15, max_w=30, max_ac_w=30)
+FLOW = next(profile for profile in DEVICE_TABLE if profile.key == "rog_flow_z13")
 
 
 def _mk_attr(root, driver, attr, cur, mn, mx):
@@ -22,13 +24,14 @@ def _mk_full(root, driver="lenovo-wmi-other-0"):
     _mk_attr(root, driver, "ppt_pl3_fppt", 45, 5, 45)
 
 
-def _settling_backend(root, *delays):
+def _settling_backend(root, *delays, safety_lock_path=None):
     _mk_full(root)
     return FirmwareAttrBackend(
         "lenovo-wmi-other",
         FALLBACK,
         root=root,
         readback_settle_delays=delays,
+        safety_lock_path=safety_lock_path,
     )
 
 
@@ -88,6 +91,109 @@ def test_recognised_get_limits_ignores_a_low_firmware_read(tmp_path):
     assert b.get_limits().max_ac_w == 30  # profile, not the bogus 15
 
 
+def test_flow_profile_can_narrow_its_published_range_to_live_firmware(tmp_path):
+    root = str(tmp_path)
+    _mk_attr(root, "asus-armoury", "ppt_pl1_spl", 20, 8, 50)
+    _mk_attr(root, "asus-armoury", "ppt_pl2_sppt", 24, 10, 58)
+    _mk_attr(root, "asus-armoury", "ppt_pl3_fppt", 28, 12, 60)
+    fallback = TdpLimits.from_profile(FLOW)
+
+    backend = FirmwareAttrBackend(
+        "asus-armoury",
+        fallback,
+        root=root,
+        trust_live_bounds=True,
+    )
+
+    assert backend.get_limits() == TdpLimits(
+        min_w=8,
+        default_w=20,
+        max_w=50,
+        max_ac_w=50,
+    )
+    assert backend.level_limits() == {
+        "pl1": {"min": 8, "max": 50},
+        "pl2": {"min": 10, "max": 58},
+        "pl3": {"min": 12, "max": 60},
+    }
+
+
+def test_flow_live_bounds_never_expand_the_static_profile(tmp_path):
+    root = str(tmp_path)
+    for attr in ("ppt_pl1_spl", "ppt_pl2_sppt", "ppt_pl3_fppt"):
+        _mk_attr(root, "asus-armoury", attr, 20, 1, 150)
+    fallback = TdpLimits.from_profile(FLOW)
+
+    backend = FirmwareAttrBackend(
+        "asus-armoury",
+        fallback,
+        root=root,
+        trust_live_bounds=True,
+    )
+
+    assert backend.get_limits() == fallback
+    levels = backend.level_limits()
+    assert (levels["pl1"]["max"], levels["pl2"]["max"], levels["pl3"]["max"]) == (
+        65,
+        round(65 * 1.2),
+        round(65 * 1.4),
+    )
+
+
+def test_flow_invalid_live_bounds_fall_back_without_publishing_impossible_limits(tmp_path):
+    fallback = TdpLimits.from_profile(FLOW)
+    cases = ((5, 0), (30, 20), (1, 4))
+
+    for index, (mn, mx) in enumerate(cases):
+        root = str(tmp_path / str(index))
+        for attr in ("ppt_pl1_spl", "ppt_pl2_sppt", "ppt_pl3_fppt"):
+            _mk_attr(root, "asus-armoury", attr, 20, mn, mx)
+        backend = FirmwareAttrBackend(
+            "asus-armoury",
+            fallback,
+            root=root,
+            trust_live_bounds=True,
+        )
+
+        assert backend.get_limits() == fallback
+        assert all(
+            limits["min"] > 0 and limits["min"] <= limits["max"]
+            for limits in backend.level_limits().values()
+        )
+
+
+def test_flow_invalid_live_bounds_reject_every_write_before_touching_sysfs(tmp_path):
+    root = str(tmp_path)
+    fallback = TdpLimits.from_profile(FLOW)
+    for attr in ("ppt_pl1_spl", "ppt_pl2_sppt", "ppt_pl3_fppt"):
+        _mk_attr(root, "asus-armoury", attr, 20, 5, 0)
+    backend = FirmwareAttrBackend(
+        "asus-armoury",
+        fallback,
+        root=root,
+        trust_live_bounds=True,
+    )
+
+    result = backend.set_tdp(20, ac=True)
+
+    assert result.ok is False
+    assert result.detail == "firmware live bounds invalid"
+    assert backend.read_applied() == 20
+    assert backend.ready() is False
+
+    for attr in ("ppt_pl1_spl", "ppt_pl2_sppt", "ppt_pl3_fppt"):
+        path = os.path.join(
+            root,
+            "sys/class/firmware-attributes/asus-armoury/attributes",
+            attr,
+            "max_value",
+        )
+        with open(path, "w") as handle:
+            handle.write("50")
+
+    assert backend.ready() is True
+
+
 def test_set_tdp_writes_pl1_and_reads_back(tmp_path):
     root = str(tmp_path)
     _mk_full(root)
@@ -133,6 +239,102 @@ def test_set_levels_rechecks_async_readback_without_rewriting(
     ] == [20, 20, 20]
 
 
+def test_set_levels_writes_nothing_when_primary_snapshot_is_unavailable(
+    tmp_path,
+    monkeypatch,
+):
+    root = str(tmp_path)
+    b = _legion(root)
+    pl2_path = b._attr("ppt_pl2_sppt")
+    with open(pl2_path, "w") as f:
+        f.write("invalid")
+    writes = []
+    original_write = b._write
+
+    def record_write(path, value):
+        writes.append((path, value))
+        return original_write(path, value)
+
+    monkeypatch.setattr(b, "_write", record_write)
+
+    result = b.set_levels(20, 20, 20, ac=True)
+
+    assert result.ok is False
+    assert writes == []
+    assert b.read_profile() == "performance"
+    assert b._read_int(b._attr("ppt_pl1_spl")) == 35
+    assert b._read_int(b._attr("ppt_pl3_fppt")) == 45
+    assert "transaction snapshot unavailable" in result.detail
+    assert f"{b.name}/pl2" in result.detail
+    assert "no writes performed" in result.detail
+
+
+def test_set_levels_writes_nothing_when_profile_snapshot_is_unavailable(
+    tmp_path,
+    monkeypatch,
+):
+    root = str(tmp_path)
+    _mk_full(root)
+    profile_path = _mk_profile(root, cur="performance")
+    b = FirmwareAttrBackend(
+        "lenovo-wmi-other",
+        FALLBACK,
+        root=root,
+        profile_name="lenovo-wmi-gamezone",
+    )
+    os.remove(profile_path)
+    writes = []
+    original_write = b._write
+
+    def record_write(path, value):
+        writes.append((path, value))
+        return original_write(path, value)
+
+    monkeypatch.setattr(b, "_write", record_write)
+
+    result = b.set_levels(20, 20, 20, ac=True)
+
+    assert result.ok is False
+    assert writes == []
+    assert not os.path.exists(profile_path)
+    assert b._read_int(b._attr("ppt_pl1_spl")) == 35
+    assert b._read_int(b._attr("ppt_pl2_sppt")) == 37
+    assert b._read_int(b._attr("ppt_pl3_fppt")) == 45
+    assert "transaction snapshot unavailable" in result.detail
+    assert "platform-profile" in result.detail
+    assert "no writes performed" in result.detail
+
+
+def test_set_levels_rolls_back_primary_rails_and_profile_after_write_error(
+    tmp_path,
+    monkeypatch,
+):
+    root = str(tmp_path)
+    b = _legion(root)
+    pl2_path = b._attr("ppt_pl2_sppt")
+    original_write = b._write
+    rejected_target = False
+
+    def reject_target_pl2_once(path, value):
+        nonlocal rejected_target
+        if path == pl2_path and value == 20 and not rejected_target:
+            rejected_target = True
+            return False
+        return original_write(path, value)
+
+    monkeypatch.setattr(b, "_write", reject_target_pl2_once)
+
+    result = b.set_levels(20, 20, 20, ac=True)
+
+    assert result.ok is False
+    assert b._read_int(b._attr("ppt_pl1_spl")) == 35
+    assert b._read_int(b._attr("ppt_pl2_sppt")) == 37
+    assert b._read_int(b._attr("ppt_pl3_fppt")) == 45
+    assert b.read_profile() == "performance"
+    assert f"{b.name}/pl2" in result.detail
+    assert "rollback confirmed" in result.detail
+
+
 def test_set_levels_keeps_failure_when_async_readback_never_converges(
     tmp_path,
     monkeypatch,
@@ -147,6 +349,10 @@ def test_set_levels_keeps_failure_when_async_readback_never_converges(
     assert result.ok is False
     assert result.applied_w == 35
     assert f"{b.name}/pl1=35" in result.detail
+    assert b._read_int(b._attr("ppt_pl1_spl")) == 35
+    assert b._read_int(b._attr("ppt_pl2_sppt")) == 37
+    assert b._read_int(b._attr("ppt_pl3_fppt")) == 45
+    assert "rollback confirmed" in result.detail
 
 
 def test_set_levels_never_succeeds_when_primary_readback_disappears(
@@ -205,6 +411,129 @@ def test_set_levels_does_not_wait_after_a_write_error(tmp_path, monkeypatch):
     assert result.ok is False
     assert observations == 1
     assert f"{b.name}/pl2" in result.detail
+
+
+def test_set_levels_reports_failed_rollback_when_a_rail_cannot_be_restored(
+    tmp_path,
+    monkeypatch,
+):
+    root = str(tmp_path)
+    safety_lock_path = str(tmp_path / "run" / "firmware-tdp.lock")
+    b = _settling_backend(root, safety_lock_path=safety_lock_path)
+    pl2_path = b._attr("ppt_pl2_sppt")
+    pl3_path = b._attr("ppt_pl3_fppt")
+    original_write = b._write
+
+    writes = []
+
+    def reject_target_and_restore(path, value):
+        writes.append((path, value))
+        if path == pl2_path and value == 20:
+            return False
+        if path == pl3_path and value == 45:
+            return False
+        return original_write(path, value)
+
+    monkeypatch.setattr(b, "_write", reject_target_and_restore)
+
+    result = b.set_levels(20, 20, 20, ac=True)
+
+    assert result.ok is False
+    assert b._read_int(pl3_path) == 20
+    assert "rollback failed" in result.detail
+    assert f"{b.name}/pl3=20" in result.detail
+    assert b.ready() is False
+    assert "rollback failed" in b.diagnostics()["write_circuit_open"]
+    assert os.path.exists(safety_lock_path)
+
+    writes_after_failure = len(writes)
+    second = b.set_levels(15, 15, 15, ac=True)
+
+    assert second.ok is False
+    assert "circuit open" in second.detail
+    assert len(writes) == writes_after_failure
+
+    reloaded = FirmwareAttrBackend(
+        "lenovo-wmi-other",
+        FALLBACK,
+        root=root,
+        safety_lock_path=safety_lock_path,
+    )
+    assert reloaded.ready() is False
+    assert "rollback failed" in reloaded.diagnostics()["write_circuit_open"]
+    assert "circuit open" in reloaded.set_tdp(15, ac=True).detail
+
+
+def test_transaction_lock_is_armed_before_firmware_write_and_cleared_on_success(
+    tmp_path,
+    monkeypatch,
+):
+    root = str(tmp_path)
+    safety_lock_path = str(tmp_path / "run" / "firmware-tdp.lock")
+    backend = _settling_backend(root, safety_lock_path=safety_lock_path)
+    original_write = backend._write
+    lock_seen = []
+
+    def observe_lock(path, value):
+        lock_seen.append(os.path.exists(safety_lock_path))
+        return original_write(path, value)
+
+    monkeypatch.setattr(backend, "_write", observe_lock)
+
+    result = backend.set_levels(20, 20, 20, ac=True)
+
+    assert result.ok is True
+    assert lock_seen and all(lock_seen)
+    assert not os.path.exists(safety_lock_path)
+
+
+def test_firmware_write_is_blocked_when_transaction_lock_cannot_be_armed(
+    tmp_path,
+    monkeypatch,
+):
+    root = str(tmp_path)
+    blocked_parent = tmp_path / "not-a-directory"
+    blocked_parent.write_text("x", encoding="utf-8")
+    backend = _settling_backend(
+        root,
+        safety_lock_path=str(blocked_parent / "firmware-tdp.lock"),
+    )
+    writes = []
+    monkeypatch.setattr(backend, "_write", lambda *_args: writes.append(True) or True)
+
+    result = backend.set_levels(20, 20, 20, ac=True)
+
+    assert result.ok is False
+    assert "no writes performed" in result.detail
+    assert writes == []
+
+
+def test_reload_recovers_prewrite_firmware_snapshot_before_rearming(tmp_path, monkeypatch):
+    root = str(tmp_path)
+    safety_lock_path = str(tmp_path / "run" / "firmware-tdp.lock")
+    backend = _settling_backend(root, safety_lock_path=safety_lock_path)
+    monkeypatch.setattr(backend._safety_lock, "clear", lambda: False)
+
+    interrupted = backend.set_levels(20, 20, 20, ac=True)
+
+    assert interrupted.ok is False
+    assert os.path.exists(safety_lock_path)
+    reloaded = FirmwareAttrBackend(
+        "lenovo-wmi-other",
+        FALLBACK,
+        root=root,
+        safety_lock_path=safety_lock_path,
+    )
+    assert reloaded.ready() is False
+
+    recovered = reloaded.recover_runtime_transaction()
+
+    assert recovered["ok"] is True
+    assert reloaded.ready() is True
+    assert reloaded._read_int(reloaded._attr("ppt_pl1_spl")) == 35
+    assert reloaded._read_int(reloaded._attr("ppt_pl2_sppt")) == 37
+    assert reloaded._read_int(reloaded._attr("ppt_pl3_fppt")) == 45
+    assert not os.path.exists(safety_lock_path)
 
 
 def test_set_tdp_clamps_to_profile_then_live_firmware(tmp_path):
@@ -411,6 +740,48 @@ def test_set_levels_fails_if_one_legacy_rail_does_not_stick(
     res = b.set_levels(20, 24, 28, ac=True)
     assert res.ok is False
     assert "asus-nb-wmi/pl2" in res.detail
+
+
+def test_set_levels_rolls_back_primary_and_legacy_surfaces_after_legacy_error(
+    tmp_path,
+    monkeypatch,
+):
+    root = str(tmp_path)
+    _mk_full(root, "asus-armoury")
+    legacy = _mk_legacy(root)
+    b = FirmwareAttrBackend("asus-armoury", FALLBACK, root=root)
+    legacy_pl2 = os.path.join(legacy, "ppt_pl2_sppt")
+    original_write = b._write
+    rejected_target = False
+
+    def reject_target_legacy_pl2_once(path, value):
+        nonlocal rejected_target
+        if path == legacy_pl2 and value == 18 and not rejected_target:
+            rejected_target = True
+            return False
+        return original_write(path, value)
+
+    monkeypatch.setattr(b, "_write", reject_target_legacy_pl2_once)
+
+    result = b.set_levels(15, 18, 21, ac=True)
+
+    assert result.ok is False
+    assert result.applied_w == 35
+    assert {
+        rail: b._read_int(b._attr(attr))
+        for rail, attr in (
+            ("pl1", "ppt_pl1_spl"),
+            ("pl2", "ppt_pl2_sppt"),
+            ("pl3", "ppt_pl3_fppt"),
+        )
+    } == {"pl1": 35, "pl2": 37, "pl3": 45}
+    assert {
+        "pl1": b._read_int(os.path.join(legacy, "ppt_pl1_spl")),
+        "pl2": b._read_int(legacy_pl2),
+        "pl3": b._read_int(os.path.join(legacy, "ppt_fppt")),
+    } == {"pl1": 20, "pl2": 24, "pl3": 28}
+    assert "asus-nb-wmi/pl2" in result.detail
+    assert "rollback confirmed" in result.detail
 
 
 def test_lenovo_profile_prestep_sets_custom(tmp_path):

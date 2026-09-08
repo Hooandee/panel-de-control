@@ -12,6 +12,7 @@ from controllers import hhd as hhd_api
 from controllers import hhd_config
 from controllers import inputplumber as ip
 from controllers import ip_profile
+from controllers.ayaneo3 import HhdMagicModules, UnavailableMagicModules
 
 
 class ControllerBackend:
@@ -19,13 +20,17 @@ class ControllerBackend:
 
     manager = detect.NONE
 
-    def __init__(self, version=None):
+    def __init__(self, version=None, actions=None):
         self._version = version
+        self._actions = actions
+        self._last_action = None
 
     def _stamp(self, cfg: dict) -> dict:
         cfg["manager"] = self.manager
         cfg["manager_version"] = self._version
         cfg["supported"] = cfg.get("kind", "none") != "none"
+        if self._actions is not None:
+            cfg["magic_modules"] = self._actions.state()
         return cfg
 
     def get_config(self, appid=None) -> dict:
@@ -39,6 +44,19 @@ class ControllerBackend:
 
     def reset(self, scope="global", appid=None) -> dict:
         return self.get_config()
+
+    def run_action(self, action: str) -> dict:
+        if self._actions is not None:
+            result = self._actions.run(action)
+        else:
+            result = {
+                "action": action,
+                "outcome": "unavailable",
+                "accepted": None,
+                "reason": "controller_action_not_supported",
+            }
+        self._last_action = dict(result)
+        return result
 
     # Per-game scope: only InputPlumber (we own its remap store). No-ops elsewhere so
     # main.py can call uniformly. `effective_overrides` returning None means "not a
@@ -74,10 +92,14 @@ class ControllerBackend:
         return False
 
     def diagnostics(self) -> dict:
-        return {
+        diagnostics = {
             "manager": self.manager,
             "manager_version": self._version,
         }
+        if self._actions is not None:
+            diagnostics["magic_modules"] = self._actions.state()
+            diagnostics["last_action"] = self._last_action
+        return diagnostics
 
 
 class IpBackend(ControllerBackend):
@@ -85,8 +107,8 @@ class IpBackend(ControllerBackend):
 
     manager = detect.INPUTPLUMBER
 
-    def __init__(self, store, dbus, version=None, device_key=None):
-        super().__init__(version)
+    def __init__(self, store, dbus, version=None, device_key=None, actions=None):
+        super().__init__(version, actions)
         self._store = store
         self._dbus = dbus
         self._device_key = device_key
@@ -154,26 +176,53 @@ class HhdBackend(ControllerBackend):
 
     manager = detect.HHD
 
+    def __init__(self, version=None, actions=None, root="/"):
+        super().__init__(version, actions)
+        self._root = root
+
     def get_config(self, appid=None) -> dict:
-        return self._stamp(hhd_config.get_config(hhd_api.read_state()))
+        return self._stamp(hhd_config.get_config(hhd_api.read_state(self._root)))
 
     def set_setting(self, field: str, value: str) -> dict:
-        payload = hhd_config.apply_setting(hhd_api.read_state(), field, value)
+        payload = hhd_config.apply_setting(hhd_api.read_state(self._root), field, value)
         if payload:
-            echoed = hhd_api.post_state(payload)  # POST echoes the full merged state
+            echoed = hhd_api.post_state(payload, self._root)  # POST echoes the full merged state
             if echoed is not None:
                 return self._stamp(hhd_config.get_config(echoed))
         return self.get_config()
 
 
-def select_controller_backend(detected: dict, store, dbus, device=None) -> ControllerBackend:
+def select_controller_backend(
+    detected: dict,
+    store,
+    dbus,
+    device=None,
+    root="/",
+) -> ControllerBackend:
     """Pick the backend for the detected manager; NullBackend-equivalent otherwise.
     Takes the whole DeviceProfile (like select_fan_backend / select_charge_limit /
     tdp select_backend); the device key drives InputPlumber's per-device button table."""
     mgr = detected.get("manager")
     version = detected.get("version")
+    device_key = getattr(device, "key", None)
+    actions = None
+    if device_key == "ayaneo_3":
+        actions = UnavailableMagicModules()
+        if mgr == detect.HHD:
+            actions = HhdMagicModules(
+                read_state=lambda: hhd_api.read_state(
+                    root,
+                    timeout=0.5,
+                    language="en",
+                ),
+                post_state=lambda payload: hhd_api.post_state(
+                    payload,
+                    root,
+                    timeout=0.5,
+                ),
+            )
     if mgr == detect.INPUTPLUMBER:
-        return IpBackend(store, dbus, version, getattr(device, "key", None))
+        return IpBackend(store, dbus, version, device_key, actions)
     if mgr == detect.HHD:
-        return HhdBackend(version)
-    return ControllerBackend(version)
+        return HhdBackend(version, actions, root)
+    return ControllerBackend(version, actions)

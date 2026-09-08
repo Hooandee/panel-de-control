@@ -29,6 +29,12 @@ class TdpLimits:
             return self
         return TdpLimits(self.min_w, self.default_w, ceiling, ceiling)
 
+    def with_ac_max(self, ceiling: int | None) -> "TdpLimits":
+        """Raise only the charger ceiling, leaving the battery limit unchanged."""
+        if not ceiling or ceiling <= self.max_ac_w:
+            return self
+        return TdpLimits(self.min_w, self.default_w, self.max_w, ceiling)
+
     @classmethod
     def from_profile(cls, device) -> "TdpLimits":
         return cls(

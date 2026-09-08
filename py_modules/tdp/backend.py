@@ -68,6 +68,10 @@ class TDPBackend(ABC):
     def set_profile(self, mode: str) -> bool:
         return False
 
+    def release(self) -> bool:
+        """Return hardware owned by this backend to its pre-control state."""
+        return True
+
 
 class NullBackend(TDPBackend):
     supported = False

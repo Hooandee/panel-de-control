@@ -26,6 +26,7 @@ def get_config(store, dbus, device_key, appid=None, caps=None) -> dict:
     overrides = store.effective_overrides(appid)
     return {
         "kind": "remap",
+        "device_key": device_key,
         "device_known": ip_profile.is_known_device(device_key),
         "buttons": [
             {"source": cap, "label": label, "target": overrides.get(cap)}

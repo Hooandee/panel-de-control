@@ -2,6 +2,23 @@
 from controllers import hhd
 
 
+def test_read_state_only_requests_english_action_status_when_explicit(monkeypatch):
+    paths = []
+    monkeypatch.setattr(hhd, "_token", lambda root="/": "token")
+    monkeypatch.setattr(
+        hhd,
+        "_get",
+        lambda path, token, timeout=5: paths.append((path, token, timeout)) or {},
+    )
+
+    assert hhd.read_state() == {}
+    assert hhd.read_state(language="en", timeout=0.5) == {}
+    assert paths == [
+        ("/state", "token", 5),
+        ("/state?lang=en", "token", 0.5),
+    ]
+
+
 class _FakeHHD:
     def __init__(self):
         self.state = {"hhd": {"settings": {"tdp_enable": True}}}

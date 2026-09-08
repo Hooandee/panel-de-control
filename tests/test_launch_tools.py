@@ -41,6 +41,31 @@ def test_lsfg_absent(tmp_path):
     assert t["lsfg"] is False
 
 
+def test_mako_run_detected(tmp_path):
+    bin_dir = os.path.join(str(tmp_path), ".local", "bin")
+    os.makedirs(bin_dir)
+    path = os.path.join(bin_dir, "mako-run")
+    with open(path, "w") as f:
+        f.write("#!/bin/sh\n")
+    os.chmod(path, 0o755)
+    t = detect_tools(root=str(tmp_path), home=str(tmp_path), which=_fake_which(set()))
+    assert t["makoRun"] is True
+
+
+def test_mako_run_not_executable(tmp_path):
+    bin_dir = os.path.join(str(tmp_path), ".local", "bin")
+    os.makedirs(bin_dir)
+    with open(os.path.join(bin_dir, "mako-run"), "w") as f:
+        f.write("#!/bin/sh\n")
+    t = detect_tools(root=str(tmp_path), home=str(tmp_path), which=_fake_which(set()))
+    assert t["makoRun"] is False
+
+
+def test_mako_run_absent(tmp_path):
+    t = detect_tools(root=str(tmp_path), home=str(tmp_path), which=_fake_which(set()))
+    assert t["makoRun"] is False
+
+
 def test_steamos_locale_unreliable(tmp_path):
     _write_os_release(str(tmp_path), 'ID=steamos\nPRETTY_NAME="SteamOS Holo"\n')
     t = detect_tools(root=str(tmp_path), home=str(tmp_path), which=_fake_which(set()))

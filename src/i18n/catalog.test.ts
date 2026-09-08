@@ -94,8 +94,18 @@ describe("Every supported translation catalog", () => {
       },
       de: {
         "app.title": "Kontrollzentrum",
+        "params.pill.makoRun.help": "Erzeugt mit Mako Zwischenbilder für flüssigere Bewegungen. Das Skript ~/.local/bin/mako-run muss ausführbar sein.",
         "hud.metric.io_read": "E/A-Lesezugriffe",
         "hud.elements.hint": "Ändere die Reihenfolge mit den Pfeilen. Elemente mit einem Pfeilsymbol haben eigene Einstellungen.",
+        "mandos.modules.unavailable": "HHD stellt die erforderliche Schnittstelle nicht bereit. Es wird kein Befehl gesendet.",
+        "mandos.modules.confirm.desc": "Halte das Gerät fest und achte darauf, dass die Module Platz haben. Kann HHD die Stromversorgung der Controller nicht direkt abschalten, wird das Gerät möglicherweise in den Standby versetzt, um das Auswerfen abzuschließen.",
+        "settings.desktop.desc": "Aktiviert getrennte Regler für CPU, dedizierte GPU und Lüfter auf diesem Linux-PC. Der Modus startet mit „Frei“ und ändert nichts, bis du einen anderen Modus auswählst.",
+        "settings.experimentalTdp.confirm.desc": "Damit sind am Netzteil bis zu {max} W möglich und somit mehr als die von GPD angegebenen {safe} W. Behalte die Temperaturen im Blick und deaktiviere die Option, wenn das Gerät sie nicht unter Kontrolle halten kann. Auto-TDP und Voreinstellungen bleiben auf {safe} W begrenzt.",
+        "desktop.power.available": "GPU-Leistungslimit",
+        "desktop.cpu.draw": "CPU-Leistungsaufnahme",
+        "desktop.power.partial": "Es werden nur Regler angezeigt, deren Lese- und Schreibzugriffe das System bestätigt.",
+        "desktop.fan.auto.note": "„Automatisch“ gibt diesen Lüfter an die zuvor zuständige Steuerung oder die Firmware zurück.",
+        "desktop.fan.firmwareOnly": "Diese Firmware lehnt den manuellen Modus für den GPU-Lüfter ab. Er wird weiterhin überwacht und bleibt automatisch geregelt.",
         "tdp.conflict.powerstation.disablePdc": "TDP im Kontrollzentrum deaktivieren",
       },
     });
@@ -161,6 +171,12 @@ describe("Italian catalog", () => {
       "settings.cooler": "Sistema di raffreddamento esterno collegato",
       "settings.cooler.desc": "Attivalo solo se hai collegato il sistema di raffreddamento esterno o la batteria esterna: aumenta il limite TDP fino a {max} W. Non attivarlo senza il sistema di raffreddamento esterno, perché il dispositivo potrebbe surriscaldarsi.",
     });
+  });
+
+  it("warns that AYANEO module ejection may suspend the device", () => {
+    expect(DICTS.es["mandos.modules.confirm.desc"]).toContain("suspender");
+    expect(DICTS.en["mandos.modules.confirm.desc"]).toContain("suspend");
+    expect(DICTS.it["mandos.modules.confirm.desc"]).toContain("sospendersi");
   });
 
   it("uses consistent Italian controller and generated-frame terminology", () => {

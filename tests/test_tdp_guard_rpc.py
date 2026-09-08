@@ -171,6 +171,21 @@ def test_stale_generation_never_writes(plugin):
     assert result.detail == "stale-generation"
 
 
+def test_anatase_external_owner_blocks_guard_correction(plugin):
+    plugin._os_id = "anatase"
+    plugin._tdp_external_owner = True
+    plugin._tdp_profiles.set_pl1("global", 25)
+    plugin._tdp_backend.set_levels_calls = 0
+
+    plugin._tdp_guard_tick(now=10.0)
+    plugin._tdp_guard_tick(now=10.75)
+
+    assert plugin._tdp_backend.set_levels_calls == 0
+    assert plugin._tdp_targets is None
+    assert plugin._tdp_status == "unverifiable"
+    assert plugin._tdp_reason == "external_owner"
+
+
 def test_command_preserves_requested_but_applies_live_target(plugin):
     plugin._tdp_profiles.set_pl1("global", 25)
     plugin._tdp_backend.live_max = 15

@@ -2,6 +2,82 @@
 
 ## Unreleased
 
+## [0.42.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.41.0...panel-de-control-v0.42.0) (2026-09-07)
+
+
+### Español
+
+* **Anatase y TDP:** Convierte Anatase en una plataforma de primera clase y elige en cada máquina el backend de TDP disponible. En ROG Ally coordina la propiedad con HHD para que nunca escriban ambos a la vez, restaura exactamente los límites al devolver el control y se recupera de reinicios sin tocar el hardware si HHD sigue al mando. Añade rutas específicas para interfaces ASUS, AMD DPTC y MSI Claw A8 sin cambiar las rutas existentes de SteamOS, Bazzite y CachyOS. Validado físicamente en ROG Ally RC71L; AMD DPTC y MSI Claw A8 permanecen experimentales. ([#578](https://github.com/Hooandee/panel-de-control/pull/578))
+
+### English
+
+* **Anatase and TDP:** Makes Anatase a first-class platform and selects the available TDP backend for each device. On ROG Ally, ownership is coordinated with HHD so both never write at the same time, limits are restored exactly when control is returned, and restarts recover without touching the hardware while HHD remains in charge. Dedicated routes are added for ASUS interfaces, AMD DPTC, and MSI Claw A8 without changing the existing SteamOS, Bazzite, or CachyOS routes. Physically validated on ROG Ally RC71L; AMD DPTC and MSI Claw A8 remain experimental. ([#578](https://github.com/Hooandee/panel-de-control/pull/578))
+
+### Italiano
+
+* **Anatase e TDP:** Rende Anatase una piattaforma di prima classe e seleziona per ogni dispositivo il backend TDP disponibile. Su ROG Ally coordina la proprietà con HHD affinché non scrivano mai entrambi contemporaneamente, ripristina esattamente i limiti quando restituisce il controllo e recupera dopo un riavvio senza toccare l’hardware se HHD è ancora responsabile. Aggiunge percorsi dedicati per le interfacce ASUS, AMD DPTC e MSI Claw A8 senza modificare quelli esistenti di SteamOS, Bazzite e CachyOS. Convalidato fisicamente su ROG Ally RC71L; AMD DPTC e MSI Claw A8 restano sperimentali. ([#578](https://github.com/Hooandee/panel-de-control/pull/578))
+
+### Deutsch
+
+* **Anatase und TDP:** Macht Anatase zu einer vollständig unterstützten Plattform und wählt für jedes Gerät das verfügbare TDP-Backend. Auf der ROG Ally wird die Zuständigkeit mit HHD abgestimmt, damit nie beide gleichzeitig schreiben. Bei der Rückgabe der Steuerung werden die Grenzwerte exakt wiederhergestellt, und nach Neustarts erholt sich das System, ohne die Hardware anzutasten, solange HHD weiterhin zuständig ist. Fügt eigene Pfade für ASUS-Schnittstellen, AMD DPTC und MSI Claw A8 hinzu, ohne die bestehenden Pfade für SteamOS, Bazzite oder CachyOS zu verändern. Physisch auf der ROG Ally RC71L validiert; AMD DPTC und MSI Claw A8 bleiben experimentell. ([#578](https://github.com/Hooandee/panel-de-control/pull/578))
+
+## [0.41.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.40.0...panel-de-control-v0.41.0) (2026-09-07)
+
+
+### Español
+
+* **Nuevas máquinas:** Añade soporte para Steam Machine (Fremont), OneXPlayer Super X, Zotac Gaming Zone, ROG Flow Z13, OneXPlayer F1/OneXFly, GPD Win Mini 2025 y AYANEO 3. Incluye límites de TDP adaptados a cada modelo, controles específicos cuando están disponibles y detección segura en SteamOS, Bazzite 43, Bazzite 44 y CachyOS. Las máquinas que todavía no se han podido validar físicamente se muestran como experimentales.
+
+### English
+
+* **New devices:** Adds support for Steam Machine (Fremont), OneXPlayer Super X, Zotac Gaming Zone, ROG Flow Z13, OneXPlayer F1/OneXFly, GPD Win Mini 2025, and AYANEO 3. This includes model-specific TDP limits, dedicated controls when available, and safe detection across SteamOS, Bazzite 43, Bazzite 44, and CachyOS. Machines that could not yet be physically validated are shown as experimental.
+
+### Italiano
+
+* **Nuovi dispositivi:** Aggiunge il supporto per Steam Machine (Fremont), OneXPlayer Super X, Zotac Gaming Zone, ROG Flow Z13, OneXPlayer F1/OneXFly, GPD Win Mini 2025 e AYANEO 3. Include limiti TDP specifici per ogni modello, controlli dedicati quando disponibili e un rilevamento sicuro su SteamOS, Bazzite 43, Bazzite 44 e CachyOS. Le macchine che non è stato ancora possibile convalidare fisicamente vengono indicate come sperimentali.
+
+### Deutsch
+
+* **Neue Geräte:** Unterstützt jetzt Steam Machine (Fremont), OneXPlayer Super X, Zotac Gaming Zone, ROG Flow Z13, OneXPlayer F1/OneXFly, GPD Win Mini 2025 und AYANEO 3. Dazu gehören modellspezifische TDP-Grenzwerte, eigene Bedienelemente, sofern verfügbar, sowie eine sichere Erkennung unter SteamOS, Bazzite 43, Bazzite 44 und CachyOS. Geräte, die noch nicht physisch validiert werden konnten, sind als experimentell gekennzeichnet.
+
+## [0.40.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.39.0...panel-de-control-v0.40.0) (2026-09-06)
+
+
+### Español
+
+* **OneXPlayer Super X:** Añade soporte experimental para reconocer el modelo y ajustar su TDP entre 15 y 55 W, con hasta 75 W cuando está conectado a un cargador. La pantalla AMOLED se identifica como OLED para ocultar el ajuste «Aspecto OLED». El modo Frost Bay de 120 W y HDR no se habilitan en esta primera versión. ([#496](https://github.com/Hooandee/panel-de-control/pull/496)) ([9017304](https://github.com/Hooandee/panel-de-control/commit/90173049d0f8683abda516ed7e58f31a9ab50029))
+
+### English
+
+* **OneXPlayer Super X:** Adds experimental support to recognise the model and adjust its TDP from 15 to 55 W, with up to 75 W while connected to a charger. Its AMOLED display is identified as OLED, so the “OLED Look” option is hidden. The 120 W Frost Bay mode and HDR are not enabled in this initial release. ([#496](https://github.com/Hooandee/panel-de-control/pull/496)) ([9017304](https://github.com/Hooandee/panel-de-control/commit/90173049d0f8683abda516ed7e58f31a9ab50029))
+
+### Italiano
+
+* **OneXPlayer Super X:** Aggiunge il supporto sperimentale per riconoscere il modello e regolare il TDP da 15 a 55 W, fino a 75 W quando è collegato a un alimentatore. Il display AMOLED viene identificato come OLED, quindi l’opzione «Aspetto OLED» viene nascosta. La modalità Frost Bay da 120 W e l’HDR non sono abilitati in questa prima versione. ([#496](https://github.com/Hooandee/panel-de-control/pull/496)) ([9017304](https://github.com/Hooandee/panel-de-control/commit/90173049d0f8683abda516ed7e58f31a9ab50029))
+
+### Deutsch
+
+* **OneXPlayer Super X:** Fügt experimentelle Unterstützung hinzu, um das Modell zu erkennen und seine TDP zwischen 15 und 55 W einzustellen. Mit angeschlossenem Netzteil sind bis zu 75 W möglich. Das AMOLED-Display wird als OLED erkannt, sodass die Einstellung „OLED-Look“ ausgeblendet bleibt. Der 120-W-Modus Frost Bay und HDR sind in dieser ersten Version noch nicht aktiviert. ([#496](https://github.com/Hooandee/panel-de-control/pull/496)) ([9017304](https://github.com/Hooandee/panel-de-control/commit/90173049d0f8683abda516ed7e58f31a9ab50029))
+
+## [0.39.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.38.0...panel-de-control-v0.39.0) (2026-09-06)
+
+
+### Español
+
+* **Parámetros:** Añade MAKO a los parámetros de lanzamiento disponibles cuando Panel de Control detecta `mako-run`. Puedes activarlo desde la ficha de cada juego para que Steam lo inicie mediante MAKO sin reemplazar las demás opciones configuradas. ([#513](https://github.com/Hooandee/panel-de-control/pull/513)) ([f80fda7](https://github.com/Hooandee/panel-de-control/commit/f80fda788de1032e1c187c98a1f2c46dbe0f0dd7))
+
+### English
+
+* **Launch options:** Adds MAKO to the available launch options when Panel de Control detects `mako-run`. You can enable it from each game's detail view so Steam launches it through MAKO without replacing other configured options. ([#513](https://github.com/Hooandee/panel-de-control/pull/513)) ([f80fda7](https://github.com/Hooandee/panel-de-control/commit/f80fda788de1032e1c187c98a1f2c46dbe0f0dd7))
+
+### Italiano
+
+* **Opzioni di avvio:** Aggiunge MAKO alle opzioni di avvio disponibili quando Panel de Control rileva `mako-run`. Puoi attivarlo dalla scheda di ciascun gioco affinché Steam lo avvii tramite MAKO senza sostituire le altre opzioni configurate. ([#513](https://github.com/Hooandee/panel-de-control/pull/513)) ([f80fda7](https://github.com/Hooandee/panel-de-control/commit/f80fda788de1032e1c187c98a1f2c46dbe0f0dd7))
+
+### Deutsch
+
+* **Startoptionen:** Fügt MAKO zu den verfügbaren Startoptionen hinzu, sobald das Kontrollzentrum `mako-run` erkennt. Du kannst es in der Detailansicht eines Spiels aktivieren, damit Steam das Spiel über MAKO startet, ohne die übrigen Startoptionen zu ersetzen. ([#513](https://github.com/Hooandee/panel-de-control/pull/513)) ([f80fda7](https://github.com/Hooandee/panel-de-control/commit/f80fda788de1032e1c187c98a1f2c46dbe0f0dd7))
+
 ## [0.38.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.12...panel-de-control-v0.38.0) (2026-09-02)
 
 

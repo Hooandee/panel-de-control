@@ -51,6 +51,9 @@ DEVICE_BUTTONS = {
     "msi_claw_a8": [
         ("RightPaddle1", "M1"), ("LeftPaddle1", "M2"),
     ],
+    "zotac_gaming_zone": [
+        ("LeftPaddle1", "L"), ("RightPaddle1", "R"),
+    ],
 }
 
 # InputPlumber changed the normalized Xbox Ally paddle capabilities between shipped
