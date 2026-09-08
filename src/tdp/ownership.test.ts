@@ -46,6 +46,75 @@ describe("ownershipView", () => {
     }).show).toBe(false);
   });
 
+  it.each(["safe_min", "live_min"])(
+    "hides the stable %s sustained-floor constraint covered by the inline firmware notice",
+    (reason) => {
+      expect(ownershipView({
+        ...base,
+        status: "constrained",
+        reason,
+        requested: { pl1: 3, pl2: 3, pl3: 3 },
+        target: { pl1: 5, pl2: 15, pl3: 20 },
+        applied: { pl1: 5, pl2: 15, pl3: 20 },
+      }, 5).show).toBe(false);
+    },
+  );
+
+  it("shows a dynamic minimum above the physical floor because the inline notice is absent", () => {
+    expect(ownershipView({
+      ...base,
+      status: "constrained",
+      reason: "live_min",
+      requested: { pl1: 6, pl2: 15, pl3: 20 },
+      target: { pl1: 10, pl2: 15, pl3: 20 },
+      applied: { pl1: 10, pl2: 15, pl3: 20 },
+    }, 5).show).toBe(true);
+  });
+
+  it("shows a dynamic floor above the physical minimum alongside the inline notice", () => {
+    expect(ownershipView({
+      ...base,
+      status: "constrained",
+      reason: "live_min",
+      requested: { pl1: 3, pl2: 15, pl3: 20 },
+      target: { pl1: 10, pl2: 15, pl3: 20 },
+      applied: { pl1: 10, pl2: 15, pl3: 20 },
+    }, 5).show).toBe(true);
+  });
+
+  it("shows a secondary ceiling while the sustained rail is at the physical floor", () => {
+    expect(ownershipView({
+      ...base,
+      status: "constrained",
+      reason: "safe_min",
+      requested: { pl1: 3, pl2: 3, pl3: 100 },
+      target: { pl1: 5, pl2: 15, pl3: 49 },
+      applied: { pl1: 5, pl2: 15, pl3: 49 },
+    }, 5).show).toBe(true);
+  });
+
+  it("shows a minimum constraint until every target rail is confirmed", () => {
+    expect(ownershipView({
+      ...base,
+      status: "constrained",
+      reason: "live_min",
+      requested: { pl1: 3, pl2: 3, pl3: 3 },
+      target: { pl1: 5, pl2: 15, pl3: 20 },
+      applied: { pl1: 5, pl2: 14, pl3: 20 },
+    }, 5).show).toBe(true);
+  });
+
+  it("keeps showing a sustained-floor constraint until the target is confirmed", () => {
+    expect(ownershipView({
+      ...base,
+      status: "constrained",
+      reason: "live_min",
+      requested: { pl1: 3, pl2: 3, pl3: 3 },
+      target: { pl1: 5, pl2: 15, pl3: 20 },
+      applied: { pl1: 4, pl2: 15, pl3: 20 },
+    }, 5).show).toBe(true);
+  });
+
   it("shows a persistent conflict despite a secondary-rail constraint", () => {
     const view = ownershipView({
       ...base,

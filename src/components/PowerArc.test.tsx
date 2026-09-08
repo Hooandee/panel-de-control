@@ -62,4 +62,18 @@ describe("PowerArc Steam Deck PPT scale", () => {
     expect(screen.getByText("15W")).toBeTruthy();
     expect(screen.queryByText(/Fast/)).toBeNull();
   });
+
+  it("does not overlap the requested marker with the identical minimum label", () => {
+    render(
+      <PowerArc
+        watts={3}
+        limits={{ min: 3, default: 15, max: 33, max_ac: 40 }}
+        onAc
+        appliedWatts={5}
+      />,
+    );
+
+    expect(screen.getByText("5")).toBeTruthy();
+    expect(screen.getAllByText("3W")).toHaveLength(1);
+  });
 });

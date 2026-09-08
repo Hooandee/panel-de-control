@@ -108,8 +108,11 @@ def test_get_tdp_state_shape(Plugin):
     st = asyncio.run(Plugin().get_tdp_state())
     assert st["supported"] is True and st["backend"] == "fake"
     assert st["limits"] == {"min": 5, "default": 15, "max": 20, "max_ac": 60}
+    assert st["request_min"] == 3
     assert "on_ac" in st and "watts" in st and "applied_w" in st
     assert "global_watts" in st and isinstance(st["global_watts"], int)
+    assert st["requested_levels"] == {"pl1": 10, "pl2": 10, "pl3": 10}
+    assert st["global_requested_levels"] == {"pl1": 10, "pl2": 10, "pl3": 10}
     # Presets fall back to the rail limits when the profile carries none, clamped
     # to [min, max_ac].
     assert st["presets"] == {"quiet": 5, "balanced": 15, "turbo": 20, "turbo_ac": 60}
@@ -144,6 +147,40 @@ def test_set_tdp_watts_global_clamps_persists_applies(Plugin):
     assert st["watts"] == 60
     # survives reload (persisted)
     assert asyncio.run(Plugin().get_tdp_state())["watts"] == 60
+
+
+def test_manual_request_below_hardware_min_is_preserved_and_constrained(Plugin):
+    p = Plugin()
+
+    result = asyncio.run(p.set_tdp_watts(3, "global"))
+    state = asyncio.run(p.get_tdp_state())
+
+    assert result == {"requested_w": 3, "applied_w": 5, "ok": True, "detail": ""}
+    assert state["global_watts"] == 3
+    assert state["global_requested_levels"] == {"pl1": 3, "pl2": 3, "pl3": 3}
+    assert state["global_levels"] == {"pl1": 5, "pl2": 5, "pl3": 5}
+    assert state["ownership"]["requested"]["pl1"] == 3
+    assert state["ownership"]["target"]["pl1"] == 5
+    assert state["ownership"]["applied"]["pl1"] == 5
+    assert state["ownership"]["status"] == "constrained"
+
+
+def test_manual_request_below_policy_floor_is_normalized_to_three(Plugin):
+    p = Plugin()
+
+    result = asyncio.run(p.set_tdp_watts(1, "global"))
+
+    assert result["requested_w"] == 3
+    assert asyncio.run(p.get_tdp_state())["global_watts"] == 3
+
+
+def test_manual_request_below_hardware_min_survives_reload(Plugin):
+    p = Plugin()
+    asyncio.run(p.set_tdp_watts(3, "global"))
+
+    reloaded = Plugin()
+
+    assert asyncio.run(reloaded.get_tdp_state())["global_watts"] == 3
 
 
 def test_per_game_profile_overrides_global(Plugin):
@@ -316,6 +353,26 @@ def test_battery_ceiling_caps_pl1_not_boost_rails(Plugin, monkeypatch):
     # movable above PL1 (the bug: at PL1=max they collapsed to a 0-width range).
     assert st["level_limits"]["pl2"]["max"] == 40
     assert st["level_limits"]["pl3"]["max"] == 50
+
+
+def test_battery_state_caps_requested_rails_to_their_current_bounds(Plugin, monkeypatch):
+    import main as main_module
+
+    on_ac = True
+    monkeypatch.setattr(main_module, "read_on_ac", lambda root="/": on_ac)
+    p = Plugin()
+    asyncio.run(p.set_tdp_watts(60, "global"))
+    asyncio.run(p.set_tdp_levels(25, 25, "global"))
+
+    on_ac = False
+    state = asyncio.run(p.get_tdp_state())
+
+    assert state["global_watts"] == 20
+    assert state["global_requested_levels"] == {
+        "pl1": 20,
+        "pl2": 40,
+        "pl3": 50,
+    }
 
 
 # --- auto-TDP RPC tests -------------------------------------------------------
@@ -720,7 +777,7 @@ def test_gpd_win_mini_automation_and_presets_remain_capped_at_35w(Plugin, monkey
 
     assert p._limits() == TdpLimits(20, 20, 35, 55)
     assert p._automatic_limits() == TdpLimits(20, 20, 35, 35)
-    assert p._preset_wclamp() == (20, 35)
+    assert p._preset_wclamp() == (3, 35)
     assert max(p._tdp_presets(p._automatic_limits()).values()) == 35
 
     monkeypatch.setattr(main, "read_on_ac", lambda: True)

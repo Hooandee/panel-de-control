@@ -79,12 +79,12 @@ def test_get_power_presets_fresh_shape(Plugin):
 
 def test_create_clamps_watts_to_active_ceiling(Plugin):
     p = Plugin()
-    st = asyncio.run(p.create_power_preset(999, "bolt", None))  # on charger, max_ac=60
+    st = asyncio.run(p.create_power_preset(999, "bolt", None))
     cid = st["order"][-1]
     assert st["custom"][cid]["watts"] == 60
-    st = asyncio.run(p.create_power_preset(1, "leaf", None))    # below min 5
+    st = asyncio.run(p.create_power_preset(1, "leaf", None))
     cid = st["order"][-1]
-    assert st["custom"][cid]["watts"] == 5
+    assert st["custom"][cid]["watts"] == 3
 
 
 def test_crud_and_hide_roundtrip_persists(Plugin):
@@ -109,6 +109,17 @@ def test_apply_power_preset_sets_watts_on_scope(Plugin):
     res = asyncio.run(p.apply_power_preset(18, "global", None, None))
     assert res["ok"] is True and res["applied_w"] == 18
     assert asyncio.run(p.get_tdp_state())["global_watts"] == 18
+
+
+def test_apply_three_watt_preset_preserves_request_and_applies_safe_minimum(Plugin):
+    p = Plugin()
+
+    result = asyncio.run(p.apply_power_preset(3, "global", None, None))
+
+    assert result == {"requested_w": 3, "applied_w": 5, "ok": True, "detail": ""}
+    state = asyncio.run(p.get_tdp_state())
+    assert state["global_watts"] == 3
+    assert state["global_levels"]["pl1"] == 5
 
 
 def test_apply_power_preset_with_boost_sets_custom_rails(Plugin):

@@ -9,7 +9,7 @@ export interface OwnershipView {
   persistent: boolean;
 }
 
-export function ownershipView(ownership: TdpOwnership): OwnershipView {
+export function ownershipView(ownership: TdpOwnership, physicalMin?: number): OwnershipView {
   const persistent = ownership.conflict_persistent;
   const inactive = ["control_disabled", "firmware_mode"].includes(ownership.reason);
   const requested = ownership.requested.pl1 ?? null;
@@ -22,6 +22,15 @@ export function ownershipView(ownership: TdpOwnership): OwnershipView {
       ? [railTarget - railRequested]
       : [];
   });
+  const secondaryMinimumConfirmed = (["pl2", "pl3"] as const).every((rail) => {
+    const railTarget = ownership.target[rail];
+    if (typeof railTarget !== "number") return true;
+    const railRequested = ownership.requested[rail];
+    const railApplied = ownership.applied[rail];
+    return typeof railRequested === "number"
+      && railTarget >= railRequested
+      && railApplied === railTarget;
+  });
   const onlyRaisedSecondary = secondaryChanges.some((change) => change > 0)
     && secondaryChanges.every((change) => change >= 0);
   const secondaryOnlyConstraint = ownership.status === "constrained"
@@ -29,7 +38,17 @@ export function ownershipView(ownership: TdpOwnership): OwnershipView {
     && requested !== null
     && requested === target
     && target === applied
-    && onlyRaisedSecondary;
+    && onlyRaisedSecondary
+    && secondaryMinimumConfirmed;
+  const confirmedMinimumConstraint = ownership.status === "constrained"
+    && ["safe_min", "live_min"].includes(ownership.reason)
+    && requested !== null
+    && target !== null
+    && physicalMin !== undefined
+    && requested < physicalMin
+    && target === physicalMin
+    && target === applied
+    && secondaryMinimumConfirmed;
   let kind: OwnershipView["kind"];
   if (persistent) {
     kind = "conflict";
@@ -46,6 +65,7 @@ export function ownershipView(ownership: TdpOwnership): OwnershipView {
     show: !inactive && (
       persistent || (
         !secondaryOnlyConstraint
+        && !confirmedMinimumConstraint
         && !["in_sync", "unsupported"].includes(ownership.status)
       )
     ),

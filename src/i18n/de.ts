@@ -764,6 +764,7 @@ export const de: Record<string, string> = {
   "tdp.auto.ui_floor": "TDP für ein flüssiges Menü erhöht · wird im Spiel neu eingestellt",
   "tdp.ceiling.battery": "Maximum im Akkubetrieb: {max} W. Schließe das Netzteil an, um den Wert weiter zu erhöhen.",
   "tdp.ceiling.charger": "Gerätemaximum: {max} W.",
+  "tdp.minimum.notice": "Die Firmware unterstützt ab {min} W. Wir speichern {requested} W für später.",
   "tdp.ownership.constrained": "Angefordert: {requested} W · derzeit von der Firmware erlaubt: {applied} W",
   "tdp.ownership.settling": "Leistungslimit wird angewendet und überprüft…",
   "tdp.ownership.rejected": "Die Firmware hat {target} W nicht akzeptiert · {applied} W bleiben aktiv",

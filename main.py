@@ -41,7 +41,13 @@ from tdp.reconcile import (
     build_targets,
     decide,
 )
-from tdp.types import RailReading, TdpLimits, TdpObservation, TdpResult
+from tdp.types import (
+    TDP_REQUEST_MIN_W,
+    RailReading,
+    TdpLimits,
+    TdpObservation,
+    TdpResult,
+)
 from tdp_profiles import ProfileStore
 from power_presets import PowerPresetStore
 from lifecycle import LifecycleManager, read_on_ac
@@ -431,7 +437,7 @@ class Plugin:
         # outside the device's real range (a bogus firmware max could leak in) so it can
         # never be applied — not merely clamped on read.
         _lim = self._profile_storage_limits()
-        if self._tdp_profiles.sanitize(_lim.min_w, _lim.max_ac_w):
+        if self._tdp_profiles.sanitize(TDP_REQUEST_MIN_W, _lim.max_ac_w):
             decky.logger.info("Corrected out-of-range stored TDP profiles")
         # Which daemon owns the controller (HHD / InputPlumber / none). Detected
         # once — the resident daemon doesn't change at runtime. Probe never raises.
@@ -3454,6 +3460,18 @@ class Plugin:
 
     def _active_max(self, limits, ac: bool) -> int:
         return limits.max_ac_w if ac else limits.max_w
+
+    @staticmethod
+    def _clamp_tdp_request(watts, active_max: int) -> int:
+        return max(TDP_REQUEST_MIN_W, min(int(watts), int(active_max)))
+
+    @staticmethod
+    def _clamp_requested_levels(effective: dict, active_max: int, level_limits: dict) -> dict:
+        def clamp(rail):
+            ceiling = level_limits.get(rail, {}).get("max", active_max)
+            return max(TDP_REQUEST_MIN_W, min(int(effective[rail]), int(ceiling)))
+
+        return {rail: clamp(rail) for rail in ("pl1", "pl2", "pl3")}
 
     # ---- Learned TDP band ---------------------------------------------------
     def _tdp_learned_info(self, appid=None) -> dict:
@@ -7259,6 +7277,8 @@ class Plugin:
         ll = self._cap_level_limits(self._tdp_backend.level_limits(), active)
         eff = self._tdp_profiles.effective(self._current_appid)
         geff = self._tdp_profiles.effective(None)
+        requested_levels = self._clamp_requested_levels(eff, active, ll)
+        global_requested_levels = self._clamp_requested_levels(geff, active, ll)
         primary = observation.surfaces.get(self._tdp_backend.name, {})
         primary_rail = getattr(self._tdp_backend, "primary_rail", "pl1")
         primary_reading = primary.get(primary_rail)
@@ -7279,6 +7299,7 @@ class Plugin:
         return {
             "supported": self._tdp_supported(),
             "backend": self._tdp_backend.name,
+            "request_min": TDP_REQUEST_MIN_W,
             "limits": {"min": limits.min_w, "default": limits.default_w,
                        "max": limits.max_w, "max_ac": limits.max_ac_w},
             "on_ac": ac,
@@ -7288,16 +7309,18 @@ class Plugin:
             # Whether this game is applying the global profile (no own value, or its own
             # is toggled to follow global). Powers the "usa el global / usa el propio" UI.
             "follows_global": self._tdp_profiles.is_following_global(self._current_appid),
-            "watts": limits.clamp(eff["watts"], ac),
-            "global_watts": limits.clamp(geff["watts"], ac),
+            "watts": self._clamp_tdp_request(eff["watts"], active),
+            "global_watts": self._clamp_tdp_request(geff["watts"], active),
             "applied_w": applied_w,
             "primary_rail": primary_rail,
             "ppt": ppt,
             "supports_advanced": ("pl2" in ll or "pl3" in ll),
             "level_limits": ll,
             "levels": levels,
+            "requested_levels": requested_levels,
             "boost_mode": eff["mode"],
             "global_levels": global_levels,
+            "global_requested_levels": global_requested_levels,
             "global_boost_mode": geff["mode"],
             # The learned band for this game (powers the separate TDP suggestion card).
             # The battery↔performance dial that picks a value inside it is now LOCAL UI
@@ -7553,7 +7576,8 @@ class Plugin:
         self._clear_eco()  # manual TDP change exits download mode (after scope is valid)
         self._exit_firmware_mode()  # moving the slider means "I want custom"
         limits = self._limits()
-        clamped = limits.clamp(watts, read_on_ac())
+        active = self._active_max(limits, read_on_ac())
+        clamped = self._clamp_tdp_request(watts, active)
         self._tdp_profiles.set_pl1(resolved, clamped, appid=appid)
         res = await self._apply_tdp_now("manual-watts")
         return self._apply_result(res)
@@ -7654,7 +7678,7 @@ class Plugin:
 
     def _preset_wclamp(self):
         lim = self._automatic_limits()
-        return lim.min_w, lim.max_ac_w
+        return TDP_REQUEST_MIN_W, lim.max_ac_w
 
     async def get_power_presets(self) -> dict:
         self._init()
@@ -7705,7 +7729,9 @@ class Plugin:
         self._clear_eco()
         self._exit_firmware_mode()
         limits = self._automatic_limits()
-        self._tdp_profiles.apply_preset(resolved, limits.clamp(watts, read_on_ac()), boost, appid=appid)
+        active = self._active_max(limits, read_on_ac())
+        requested = self._clamp_tdp_request(watts, active)
+        self._tdp_profiles.apply_preset(resolved, requested, boost, appid=appid)
         res = await self._apply_tdp_now("preset")
         return self._apply_result(res)
 
