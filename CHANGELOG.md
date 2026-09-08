@@ -5,9 +5,25 @@
 ## [0.44.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.43.0...panel-de-control-v0.44.0) (2026-09-08)
 
 
-### Features
+### Español
 
-* allow 3 W TDP requests ([#592](https://github.com/Hooandee/panel-de-control/issues/592)) ([d2001f1](https://github.com/Hooandee/panel-de-control/commit/d2001f1d0d57eb8952a0f3fdc40c07578f9b09b6))
+* **TDP de bajo consumo:** Permite solicitar desde 3 W aunque el firmware de la máquina indique un mínimo superior. En ese caso conserva el valor elegido para cuando esté disponible, muestra una nota breve y sigue reflejando el límite real aplicado por el dispositivo. ([#592](https://github.com/Hooandee/panel-de-control/pull/592))
+* **Legion Go 2 y Bazzite:** Recupera de forma segura el control de TDP cuando la interfaz Lenovo aparece tarde tras una actualización o un reinicio. Espera a que estén disponibles todos los límites y el perfil antes de restaurarlos, sin escribir estados incompletos, y conserva RyzenAdj como fallback cuando no existe la interfaz de firmware. Corrección defensiva basada en reportes históricos y pruebas de regresión; no validada físicamente en Legion Go 2. ([#591](https://github.com/Hooandee/panel-de-control/issues/591))
+
+### English
+
+* **Low-power TDP:** Allows requests from 3 W even when the device firmware reports a higher minimum. In that case, the selected value is retained for when it becomes available, a short notice is shown, and the UI continues to reflect the real limit applied by the device. ([#592](https://github.com/Hooandee/panel-de-control/pull/592))
+* **Legion Go 2 and Bazzite:** Safely recovers TDP control when the Lenovo interface appears late after an update or restart. It waits for every power limit and the platform profile before restoring them, never writes an incomplete state, and keeps RyzenAdj as the fallback when no firmware interface exists. This is a defensive fix backed by historical reports and regression tests; it has not been physically validated on a Legion Go 2. ([#591](https://github.com/Hooandee/panel-de-control/issues/591))
+
+### Italiano
+
+* **TDP a basso consumo:** Consente richieste a partire da 3 W anche quando il firmware del dispositivo indica un minimo superiore. In tal caso conserva il valore scelto per quando sarà disponibile, mostra un breve avviso e continua a indicare il limite reale applicato dal dispositivo. ([#592](https://github.com/Hooandee/panel-de-control/pull/592))
+* **Legion Go 2 e Bazzite:** Ripristina in sicurezza il controllo TDP quando l’interfaccia Lenovo compare in ritardo dopo un aggiornamento o un riavvio. Attende che tutti i limiti di potenza e il profilo della piattaforma siano disponibili prima di ripristinarli, non scrive mai uno stato incompleto e mantiene RyzenAdj come fallback quando l’interfaccia firmware non esiste. È una correzione difensiva basata su segnalazioni storiche e test di regressione; non è stata convalidata fisicamente su Legion Go 2. ([#591](https://github.com/Hooandee/panel-de-control/issues/591))
+
+### Deutsch
+
+* **Niedrige TDP:** Erlaubt Anforderungen ab 3 W, auch wenn die Gerätefirmware einen höheren Mindestwert meldet. In diesem Fall wird der gewählte Wert für eine spätere Verfügbarkeit gespeichert, ein kurzer Hinweis angezeigt und weiterhin der tatsächlich vom Gerät angewendete Grenzwert dargestellt. ([#592](https://github.com/Hooandee/panel-de-control/pull/592))
+* **Legion Go 2 und Bazzite:** Stellt die TDP-Steuerung sicher wieder her, wenn die Lenovo-Schnittstelle nach einem Update oder Neustart verspätet erscheint. Die Wiederherstellung wartet auf alle Leistungsgrenzen und das Plattformprofil, schreibt keinen unvollständigen Zustand und behält RyzenAdj als Fallback bei, wenn keine Firmware-Schnittstelle vorhanden ist. Diese defensive Korrektur stützt sich auf frühere Berichte und Regressionstests; sie wurde nicht physisch auf einer Legion Go 2 validiert. ([#591](https://github.com/Hooandee/panel-de-control/issues/591))
 
 ## [0.43.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.42.0...panel-de-control-v0.43.0) (2026-09-08)
 
