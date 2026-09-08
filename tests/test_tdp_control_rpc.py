@@ -124,6 +124,14 @@ def test_dynamic_backend_readiness_controls_published_tdp_support(Plugin):
     assert plugin._tdp_supported() is True
 
 
+def _plugin_with_unready_backend(Plugin):
+    plugin = Plugin()
+    plugin._init()
+    backend = plugin._tdp_backend
+    backend.probe = lambda: False
+    return plugin, backend
+
+
 def test_backend_probe_errors_are_reported_without_escaping(Plugin):
     backend = FakeBackend()
 
@@ -141,10 +149,7 @@ def test_backend_probe_errors_are_reported_without_escaping(Plugin):
 def test_force_probe_reselects_safe_backend_atomically(Plugin, monkeypatch):
     import main as main_mod
 
-    plugin = Plugin()
-    plugin._init()
-    failed = plugin._tdp_backend
-    failed.probe = lambda: False
+    plugin, failed = _plugin_with_unready_backend(Plugin)
     failed.reselection_safe_after_use = True
     plugin._tdp_backend_used = True
     plugin._tdp_status = "applied"
@@ -197,6 +202,7 @@ def test_force_probe_reselects_safe_backend_atomically(Plugin, monkeypatch):
         ("recovery", "recovery_pending", "unsupported"),
         ("temporary", "temporarily_unready", "unsupported"),
         ("desktop", "desktop_power_owned", "unverifiable"),
+        ("release", "release_failed", "rejected"),
     ),
 )
 def test_force_probe_keeps_backend_when_reselection_is_unsafe(
@@ -208,10 +214,7 @@ def test_force_probe_keeps_backend_when_reselection_is_unsafe(
 ):
     import main as main_mod
 
-    plugin = Plugin()
-    plugin._init()
-    backend = plugin._tdp_backend
-    backend.probe = lambda: False
+    plugin, backend = _plugin_with_unready_backend(Plugin)
     if condition == "recovery":
         backend.safety_locked = True
         backend.recover_runtime_transaction = lambda: {
@@ -222,6 +225,11 @@ def test_force_probe_keeps_backend_when_reselection_is_unsafe(
         backend.selection_ready = lambda: True
     elif condition == "desktop":
         plugin._desktop_power._active = True
+    else:
+        def broken_release():
+            raise OSError("restore failed")
+
+        backend.release = broken_release
     selections = []
     monkeypatch.setattr(
         main_mod.tdp_factory,
@@ -237,31 +245,32 @@ def test_force_probe_keeps_backend_when_reselection_is_unsafe(
     assert plugin._tdp_status == status
 
 
-def test_unrestorable_route_loss_returns_previous_hhd_owner(
+@pytest.mark.parametrize("reselection_safe", (False, True))
+def test_route_loss_returns_previous_hhd_owner_without_double_writer(
     Plugin,
     fake_hhd,
     monkeypatch,
+    reselection_safe,
 ):
     import main as main_mod
 
-    plugin = Plugin()
-    plugin._init()
-    backend = plugin._tdp_backend
-    backend.probe = lambda: False
+    plugin, backend = _plugin_with_unready_backend(Plugin)
+    backend.reselection_safe_after_use = reselection_safe
     plugin._tdp_backend_used = True
     plugin._settings["hhd_tdp_prev"] = True
     plugin._settings["tdp_control_enabled"] = True
     fake_hhd.set(False)
     selections = []
+    replacement = NullBackend("no viable route")
     monkeypatch.setattr(
         main_mod.tdp_factory,
         "select_backend",
-        lambda *_args, **_kwargs: selections.append(True) or FakeBackend(),
+        lambda *_args, **_kwargs: selections.append(True) or replacement,
     )
 
     assert asyncio.run(plugin._probe_tdp_backend(force=True)) is False
-    assert plugin._tdp_backend is backend
-    assert selections == []
+    assert plugin._tdp_backend is (replacement if reselection_safe else backend)
+    assert len(selections) == int(reselection_safe)
     assert plugin._settings["tdp_control_enabled"] is False
     assert plugin._settings["hhd_tdp_prev"] is None
     assert fake_hhd.value is True
@@ -275,9 +284,7 @@ def test_locked_replacement_keeps_hhd_disabled_until_recovery(
 ):
     import main as main_mod
 
-    plugin = Plugin()
-    plugin._init()
-    plugin._tdp_backend.probe = lambda: False
+    plugin, _failed = _plugin_with_unready_backend(Plugin)
     plugin._settings["hhd_tdp_prev"] = True
     fake_hhd.set(False)
     replacement = FakeBackend()
@@ -306,10 +313,7 @@ def test_selection_failure_installs_diagnostic_null_backend(
 ):
     import main as main_mod
 
-    plugin = Plugin()
-    plugin._init()
-    failed = plugin._tdp_backend
-    failed.probe = lambda: False
+    plugin, failed = _plugin_with_unready_backend(Plugin)
 
     def fail_selection(*_args, **_kwargs):
         raise OSError("factory failed")
@@ -333,10 +337,7 @@ def test_selection_failure_installs_diagnostic_null_backend(
 def test_concurrent_backend_probes_perform_one_reselection(Plugin, monkeypatch):
     import main as main_mod
 
-    plugin = Plugin()
-    plugin._init()
-    failed = plugin._tdp_backend
-    failed.probe = lambda: False
+    plugin, failed = _plugin_with_unready_backend(Plugin)
     replacement = FakeBackend()
     replacement.name = "fallback"
     selections = []
@@ -369,9 +370,7 @@ def test_backend_guard_follows_route_loss_and_autonomous_recovery(
 ):
     import main as main_mod
 
-    plugin = Plugin()
-    plugin._init()
-    plugin._tdp_backend.probe = lambda: False
+    plugin, _failed = _plugin_with_unready_backend(Plugin)
     plugin._lifecycle._task = object()
     replacement = FakeBackend()
     replacement.name = "fallback"
@@ -398,31 +397,6 @@ def test_backend_guard_follows_route_loss_and_autonomous_recovery(
     assert asyncio.run(wait_for_recovery()) is True
 
 
-def test_force_probe_does_not_select_when_release_raises(Plugin, monkeypatch):
-    import main as main_mod
-
-    plugin = Plugin()
-    plugin._init()
-    failed = plugin._tdp_backend
-    failed.probe = lambda: False
-
-    def broken_release():
-        raise OSError("restore failed")
-
-    failed.release = broken_release
-    selections = []
-    monkeypatch.setattr(
-        main_mod.tdp_factory,
-        "select_backend",
-        lambda *_args, **_kwargs: selections.append(True) or FakeBackend(),
-    )
-
-    assert asyncio.run(plugin._probe_tdp_backend(force=True)) is False
-    assert plugin._tdp_backend is failed
-    assert plugin._tdp_reason == "release_failed"
-    assert selections == []
-
-
 def test_unavailable_backend_reselection_is_rate_limited(Plugin, monkeypatch):
     import main as main_mod
 
@@ -447,34 +421,6 @@ def test_unavailable_backend_reselection_is_rate_limited(Plugin, monkeypatch):
 
     assert asyncio.run(plugin._probe_tdp_backend()) is False
     assert len(selections) == 2
-
-
-def test_route_loss_hands_hhd_back_and_disables_control(
-    Plugin,
-    fake_hhd,
-    monkeypatch,
-):
-    import main as main_mod
-
-    plugin = Plugin()
-    plugin._init()
-    plugin._tdp_backend.probe = lambda: False
-    plugin._tdp_backend.reselection_safe_after_use = True
-    plugin._tdp_backend_used = True
-    plugin._settings["hhd_tdp_prev"] = True
-    plugin._settings["tdp_control_enabled"] = True
-    fake_hhd.set(False)
-    monkeypatch.setattr(
-        main_mod.tdp_factory,
-        "select_backend",
-        lambda *_args, **_kwargs: NullBackend("no viable route"),
-    )
-
-    assert asyncio.run(plugin._probe_tdp_backend(force=True)) is False
-    assert fake_hhd.value is True
-    assert plugin._settings["hhd_tdp_prev"] is None
-    assert plugin._settings["tdp_control_enabled"] is False
-    assert plugin._tdp_backend_history[-1]["handoff"]["ok"] is True
 
 
 def test_bazzite_legion_go_2_recovers_a_startup_lock_after_sysfs_appears(
