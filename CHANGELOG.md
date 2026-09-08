@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+## [0.44.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.43.0...panel-de-control-v0.44.0) (2026-09-08)
+
+
+### Español
+
+* **TDP de bajo consumo:** Permite elegir desde 3 W y conserva el valor solicitado aunque el firmware aplique temporalmente un mínimo superior.
+* **Legion Go 2 y Bazzite:** Recupera el control de TDP cuando deja de aparecer después de actualizar o reiniciar.
+
+### English
+
+* **Low-power TDP:** Allows values from 3 W and keeps the requested value even when the firmware temporarily applies a higher minimum.
+* **Legion Go 2 and Bazzite:** Restores TDP control when it disappears after an update or restart.
+
+### Italiano
+
+* **TDP a basso consumo:** Consente valori a partire da 3 W e conserva quello richiesto anche quando il firmware applica temporaneamente un minimo superiore.
+* **Legion Go 2 e Bazzite:** Ripristina il controllo TDP quando scompare dopo un aggiornamento o un riavvio.
+
+### Deutsch
+
+* **Niedrige TDP:** Erlaubt Werte ab 3 W und behält den gewünschten Wert bei, auch wenn die Firmware vorübergehend einen höheren Mindestwert anwendet.
+* **Legion Go 2 und Bazzite:** Stellt die TDP-Steuerung wieder her, wenn sie nach einem Update oder Neustart nicht mehr angezeigt wird.
+
 ## [0.43.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.42.0...panel-de-control-v0.43.0) (2026-09-08)
 
 
