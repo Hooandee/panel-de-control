@@ -181,4 +181,26 @@ describe("useTdp game context", () => {
       pl3: 15,
     });
   });
+
+  it("backs off long enough to recover capabilities published after ten seconds", async () => {
+    const availableAt = Date.now() + 10_000;
+    mocks.getTdpState.mockImplementation(async () => ({
+      ...TDP_STATE,
+      supported: Date.now() >= availableAt,
+      recovery_pending: Date.now() < availableAt,
+    }));
+
+    const { result } = renderHook(() => useTdp());
+    await settle();
+
+    expect(result.current.tdp?.recovery_pending).toBe(true);
+
+    await act(async () => vi.advanceTimersByTimeAsync(14_000));
+    await settle();
+
+    expect(result.current.tdp?.supported).toBe(true);
+    expect(result.current.tdp?.recovery_pending).toBe(false);
+    expect(mocks.getTdpState).toHaveBeenCalledTimes(4);
+  });
+
 });

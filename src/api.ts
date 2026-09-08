@@ -207,6 +207,7 @@ export interface SteamDeckPptState {
 export interface TdpState {
   supported: boolean;
   backend: string;
+  recovery_pending?: boolean;
   request_min?: number;
   limits: TdpLimits;
   on_ac: boolean;

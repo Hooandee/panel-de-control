@@ -10,6 +10,8 @@ import { openAutoTdpNoticeModal } from "../components/AutoTdpNoticeModal";
 import { useRunningGame } from "./useRunningGame";
 import { useScopeSync } from "../useScopeSync";
 
+const RECOVERY_RETRY_DELAYS_MS = [2000, 4000, 8000] as const;
+
 export interface TdpControl {
   tdp: TdpState | null;
   power: PowerDraw | null;
@@ -57,6 +59,33 @@ export function useTdp(): TdpControl {
   useEffect(() => {
     refreshPresets();
   }, [refreshPresets]);
+  useEffect(() => {
+    if (!tdp?.recovery_pending) return;
+    let cancelled = false;
+    let attempts = 0;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const retry = () => {
+      const delay = RECOVERY_RETRY_DELAYS_MS[attempts];
+      if (delay === undefined) return;
+      timer = setTimeout(() => {
+        attempts += 1;
+        getTdpState()
+          .then((next) => {
+            if (cancelled) return;
+            setTdp(next);
+            if (next.recovery_pending) retry();
+          })
+          .catch(() => {
+            if (!cancelled) retry();
+          });
+      }, delay);
+    };
+    retry();
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [tdp?.recovery_pending]);
 
   // Re-fetch TDP on a charger flip so the ceiling (battery vs charger) updates.
   const lastAc = useRef<boolean | null>(null);

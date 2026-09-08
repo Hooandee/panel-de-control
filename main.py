@@ -7266,6 +7266,7 @@ class Plugin:
     async def get_tdp_state(self) -> dict:
         self._init()
         await self._ensure_recognised_desktop_migration()
+        await self._retry_delayed_tdp_recovery()
         await self._probe_tdp_backend()
         observation = await self._read_tdp_observation()
         return self._tdp_state(observation)
@@ -7299,6 +7300,7 @@ class Plugin:
         return {
             "supported": self._tdp_supported(),
             "backend": self._tdp_backend.name,
+            "recovery_pending": self._tdp_delayed_recovery_pending(),
             "request_min": TDP_REQUEST_MIN_W,
             "limits": {"min": limits.min_w, "default": limits.default_w,
                        "max": limits.max_w, "max_ac": limits.max_ac_w},
@@ -7407,6 +7409,28 @@ class Plugin:
             self._tdp_status = "unsupported"
             self._tdp_reason = "readback_unavailable"
         return ready
+
+    def _tdp_delayed_recovery_pending(self) -> bool:
+        return bool(
+            self._os_id == "bazzite"
+            and self._device.key == "legion_go_2"
+            and self._tdp_backend.name == "firmware-attr:lenovo-wmi-other"
+            and getattr(self._tdp_backend, "safety_locked", False)
+        )
+
+    async def _retry_delayed_tdp_recovery(self) -> bool:
+        if not self._tdp_delayed_recovery_pending():
+            return False
+        recovered = bool(
+            await self._offload_call(self._recover_tdp_runtime_transaction)
+        )
+        if recovered:
+            self._advance_tdp_generation()
+            self._tdp_targets = None
+            self._tdp_status = "settling"
+            self._tdp_reason = ""
+            self._start_tdp_guard_loop()
+        return recovered
 
     def _recover_tdp_runtime_transaction(self) -> bool:
         if not getattr(self._tdp_backend, "safety_locked", False):

@@ -5,12 +5,14 @@ value), the master switch gating every TDP write, and restoring HHD on release
 """
 import asyncio
 import importlib
+import json
 import sys
 import types
 
 import pytest
 
 from device_profiles import DEVICE_TABLE
+from tdp.factory import select_backend as real_select_backend
 from tdp.types import TdpLimits, TdpResult
 
 
@@ -119,6 +121,109 @@ def test_dynamic_backend_readiness_controls_published_tdp_support(Plugin):
 
     plugin._tdp_backend.ready = lambda: True
     assert plugin._tdp_supported() is True
+
+
+def test_bazzite_legion_go_2_recovers_a_startup_lock_after_sysfs_appears(
+    Plugin,
+    tmp_path,
+):
+    lock_path = (
+        tmp_path
+        / "run/panel-de-control/firmware-lenovo-wmi-other.lock"
+    )
+    lock_path.parent.mkdir(parents=True)
+    lock_path.write_text(
+        json.dumps({
+            "state": "transaction_pending",
+            "detail": "firmware transaction pending",
+            "snapshot": {
+                "firmware-attr:lenovo-wmi-other/pl1": 12,
+                "firmware-attr:lenovo-wmi-other/pl2": 18,
+                "firmware-attr:lenovo-wmi-other/pl3": 24,
+            },
+            "profile": "balanced",
+        }),
+        encoding="utf-8",
+    )
+    device = next(
+        profile for profile in DEVICE_TABLE if profile.key == "legion_go_2"
+    )
+    backend = real_select_backend(
+        device,
+        root=str(tmp_path),
+        ryzenadj_resolve=lambda: "/bin/true",
+        os_id="bazzite",
+    )
+    assert backend.name == "firmware-attr:lenovo-wmi-other"
+    assert backend.supported is False
+    assert backend.safety_locked is True
+
+    plugin = Plugin()
+    plugin._init()
+    plugin._device = device
+    plugin._os_id = "bazzite"
+    plugin._tdp_backend = backend
+    assert plugin._recover_tdp_runtime_transaction() is False
+
+    attributes = (
+        tmp_path
+        / "sys/class/firmware-attributes/lenovo-wmi-other-0/attributes"
+    )
+    for name in ("ppt_pl1_spl",):
+        path = attributes / name
+        path.mkdir(parents=True)
+        (path / "current_value").write_text("30", encoding="utf-8")
+        (path / "min_value").write_text("5", encoding="utf-8")
+        (path / "max_value").write_text("35", encoding="utf-8")
+
+    first_state = asyncio.run(plugin.get_tdp_state())
+    assert first_state["supported"] is False
+    assert first_state["recovery_pending"] is True
+    assert lock_path.exists()
+    assert (attributes / "ppt_pl1_spl/current_value").read_text() == "30"
+
+    for name in ("ppt_pl2_sppt", "ppt_pl3_fppt"):
+        path = attributes / name
+        path.mkdir(parents=True)
+        (path / "current_value").write_text("30", encoding="utf-8")
+        (path / "min_value").write_text("5", encoding="utf-8")
+        (path / "max_value").write_text("35", encoding="utf-8")
+
+    second_state = asyncio.run(plugin.get_tdp_state())
+    assert second_state["supported"] is False
+    assert second_state["recovery_pending"] is True
+    assert lock_path.exists()
+    for name in ("ppt_pl1_spl", "ppt_pl2_sppt", "ppt_pl3_fppt"):
+        assert (attributes / name / "current_value").read_text() == "30"
+
+    profile_dir = (
+        tmp_path
+        / "sys/class/platform-profile/platform-profile-0"
+    )
+    profile_dir.mkdir(parents=True)
+    (profile_dir / "name").write_text(
+        "lenovo-wmi-gamezone",
+        encoding="utf-8",
+    )
+    (profile_dir / "profile").write_text("performance", encoding="utf-8")
+
+    async def recover():
+        state = await plugin.get_tdp_state()
+        guard_started = plugin._tdp_guard_task is not None
+        plugin._stop_tdp_guard_loop()
+        return state, guard_started
+
+    state, guard_started = asyncio.run(recover())
+
+    assert state["supported"] is True
+    assert state["backend"] == "firmware-attr:lenovo-wmi-other"
+    assert state["recovery_pending"] is False
+    assert guard_started is True
+    assert not lock_path.exists()
+    assert (attributes / "ppt_pl1_spl/current_value").read_text() == "12\n"
+    assert (attributes / "ppt_pl2_sppt/current_value").read_text() == "18\n"
+    assert (attributes / "ppt_pl3_fppt/current_value").read_text() == "24\n"
+    assert (profile_dir / "profile").read_text() == "balanced\n"
 
 
 @pytest.fixture

@@ -142,6 +142,7 @@ def test_dptc_does_not_change_steam_deck_legion_msi_or_rog(tmp_path):
         "steam_deck_oled",
         "rog_ally",
         "legion_go",
+        "legion_go_2",
         "msi_claw_8_ai_plus",
         "msi_claw_a8",
     )
@@ -236,6 +237,38 @@ def test_non_anatase_keeps_historical_rog_fallback_chain(tmp_path):
         "msi",
         "ryzenadj",
         "alib",
+    ]
+
+
+def test_bazzite_legion_go_2_prefers_lenovo_firmware(tmp_path):
+    root = str(tmp_path)
+    _mk_firmware(root, "lenovo-wmi-other-0")
+
+    backend = select_backend(
+        _profile("legion_go_2"),
+        root=root,
+        ryzenadj_resolve=lambda: "/usr/bin/ryzenadj",
+        os_id="bazzite",
+    )
+
+    assert backend.name == "firmware-attr:lenovo-wmi-other"
+    assert [item["candidate"] for item in backend.probe_trace] == ["lenovo"]
+
+
+def test_bazzite_legion_go_2_keeps_ryzenadj_fallback(tmp_path):
+    backend = select_backend(
+        _profile("legion_go_2"),
+        root=str(tmp_path),
+        ryzenadj_resolve=lambda: "/usr/bin/ryzenadj",
+        os_id="bazzite",
+    )
+
+    assert backend.name == "ryzenadj"
+    assert [item["candidate"] for item in backend.probe_trace] == [
+        "lenovo",
+        "asus",
+        "msi",
+        "ryzenadj",
     ]
 
 
