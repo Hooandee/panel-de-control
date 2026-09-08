@@ -9,6 +9,7 @@ __pycache__/
 .ruff_cache/
 *.zip
 *.tar.gz
+docs/
 
 # Bundled binary is built in CI, never committed; keep only the placeholder.
 bin/*
