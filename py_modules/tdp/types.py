@@ -1,6 +1,9 @@
 from dataclasses import dataclass, field
 
 
+TDP_REQUEST_MIN_W = 3
+
+
 @dataclass(frozen=True)
 class TdpLimits:
     min_w: int

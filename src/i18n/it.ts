@@ -702,6 +702,7 @@ export const it: Record<string, string> = {
   "tdp.auto.ui_floor": "TDP aumentato per mantenere fluido il menu · verrà regolato di nuovo nel gioco",
   "tdp.ceiling.battery": "Massimo a batteria: {max} W. Collega il caricatore per aumentarlo.",
   "tdp.ceiling.charger": "Massimo del dispositivo: {max} W.",
+  "tdp.minimum.notice": "Il firmware supporta da {min} W in su. Salveremo {requested} W per quando sarà disponibile.",
   "tdp.ownership.constrained": "Hai richiesto {requested} W · il firmware ora consente {applied} W",
   "tdp.ownership.settling": "Applicazione e verifica del limite di potenza…",
   "tdp.ownership.rejected": "Il firmware non ha accettato {target} W · mantiene {applied} W",

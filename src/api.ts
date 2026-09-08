@@ -207,6 +207,8 @@ export interface SteamDeckPptState {
 export interface TdpState {
   supported: boolean;
   backend: string;
+  recovery_pending?: boolean;
+  request_min?: number;
   limits: TdpLimits;
   on_ac: boolean;
   appid: string | null;
@@ -222,8 +224,10 @@ export interface TdpState {
   supports_advanced: boolean;
   level_limits: { pl1?: LevelBound; pl2?: LevelBound; pl3?: LevelBound };
   levels: Levels;
+  requested_levels?: Levels;
   boost_mode: BoostMode;
   global_levels: Levels;
+  global_requested_levels?: Levels;
   global_boost_mode: BoostMode;
   // The learned TDP band for the current game (honest reasons when not enough data).
   // Powers the separate "Aprendí…" suggestion (apply a fixed value); auto-TDP itself

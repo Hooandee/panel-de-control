@@ -10,6 +10,8 @@ import { openAutoTdpNoticeModal } from "../components/AutoTdpNoticeModal";
 import { useRunningGame } from "./useRunningGame";
 import { useScopeSync } from "../useScopeSync";
 
+const RECOVERY_RETRY_DELAYS_MS = [2000, 4000, 8000] as const;
+
 export interface TdpControl {
   tdp: TdpState | null;
   power: PowerDraw | null;
@@ -27,6 +29,16 @@ export interface TdpControl {
   presets: PowerPresetState | null;
   refreshPresets: () => void;
   onApplyPreset: (item: PresetItem) => void;
+}
+
+function levelsAtWatts(levels: TdpState["levels"], watts: number, mode: BoostMode): TdpState["levels"] {
+  if (mode === "estable") return { pl1: watts, pl2: watts, pl3: watts };
+  if (mode === "auto") {
+    return { pl1: watts, pl2: Math.round(watts * 1.2), pl3: Math.round(watts * 1.4) };
+  }
+  const off2 = Math.max(0, levels.pl2 - levels.pl1);
+  const off3 = Math.max(0, levels.pl3 - levels.pl2);
+  return { pl1: watts, pl2: watts + off2, pl3: watts + off2 + off3 };
 }
 
 export function useTdp(): TdpControl {
@@ -47,6 +59,33 @@ export function useTdp(): TdpControl {
   useEffect(() => {
     refreshPresets();
   }, [refreshPresets]);
+  useEffect(() => {
+    if (!tdp?.recovery_pending) return;
+    let cancelled = false;
+    let attempts = 0;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const retry = () => {
+      const delay = RECOVERY_RETRY_DELAYS_MS[attempts];
+      if (delay === undefined) return;
+      timer = setTimeout(() => {
+        attempts += 1;
+        getTdpState()
+          .then((next) => {
+            if (cancelled) return;
+            setTdp(next);
+            if (next.recovery_pending) retry();
+          })
+          .catch(() => {
+            if (!cancelled) retry();
+          });
+      }, delay);
+    };
+    retry();
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [tdp?.recovery_pending]);
 
   // Re-fetch TDP on a charger flip so the ceiling (battery vs charger) updates.
   const lastAc = useRef<boolean | null>(null);
@@ -105,9 +144,23 @@ export function useTdp(): TdpControl {
   const onWatts = useCallback(
     (w: number) => {
       const { target, sc, context } = resolveTarget();
-      setTdp((cur) =>
-        cur ? { ...cur, watts: sc === "game" ? w : cur.watts, global_watts: sc === "global" ? w : cur.global_watts } : cur,
-      );
+      setTdp((cur) => {
+        if (!cur) return cur;
+        if (sc === "global") {
+          const levels = cur.global_requested_levels ?? cur.global_levels;
+          return {
+            ...cur,
+            global_watts: w,
+            global_requested_levels: levelsAtWatts(levels, w, cur.global_boost_mode),
+          };
+        }
+        const levels = cur.requested_levels ?? cur.levels;
+        return {
+          ...cur,
+          watts: w,
+          requested_levels: levelsAtWatts(levels, w, cur.boost_mode),
+        };
+      });
       if (commitTimerWatts.current) clearTimeout(commitTimerWatts.current);
       commitTimerWatts.current = setTimeout(() => {
         setTdpWatts(w, sc, target, context).then(() => refresh()).catch(() => {});
@@ -121,11 +174,13 @@ export function useTdp(): TdpControl {
       const { target, sc, context } = resolveTarget();
       setTdp((cur) => {
         if (!cur) return cur;
-        const base = sc === "global" ? cur.global_levels : cur.levels;
+        const base = sc === "global"
+          ? (cur.global_requested_levels ?? cur.global_levels)
+          : (cur.requested_levels ?? cur.levels);
         const nl = { pl1: base.pl1, pl2: base.pl1 + off2, pl3: base.pl1 + off2 + off3 };
         return sc === "global"
-          ? { ...cur, global_levels: nl, global_boost_mode: "custom" }
-          : { ...cur, levels: nl, boost_mode: "custom" };
+          ? { ...cur, global_requested_levels: nl, global_boost_mode: "custom" }
+          : { ...cur, requested_levels: nl, boost_mode: "custom" };
       });
       if (commitTimerLevels.current) clearTimeout(commitTimerLevels.current);
       commitTimerLevels.current = setTimeout(() => {
