@@ -17,6 +17,10 @@
 
 * **Anatase e TDP:** Rende Anatase una piattaforma di prima classe e seleziona per ogni dispositivo il backend TDP disponibile. Su ROG Ally coordina la proprietà con HHD affinché non scrivano mai entrambi contemporaneamente, ripristina esattamente i limiti quando restituisce il controllo e recupera dopo un riavvio senza toccare l’hardware se HHD è ancora responsabile. Aggiunge percorsi dedicati per le interfacce ASUS, AMD DPTC e MSI Claw A8 senza modificare quelli esistenti di SteamOS, Bazzite e CachyOS. Convalidato fisicamente su ROG Ally RC71L; AMD DPTC e MSI Claw A8 restano sperimentali. ([#578](https://github.com/Hooandee/panel-de-control/pull/578))
 
+### Deutsch
+
+* **Anatase und TDP:** Macht Anatase zu einer vollständig unterstützten Plattform und wählt für jedes Gerät das verfügbare TDP-Backend. Auf der ROG Ally wird die Zuständigkeit mit HHD abgestimmt, damit nie beide gleichzeitig schreiben. Bei der Rückgabe der Steuerung werden die Grenzwerte exakt wiederhergestellt, und nach Neustarts erholt sich das System, ohne die Hardware anzutasten, solange HHD weiterhin zuständig ist. Fügt eigene Pfade für ASUS-Schnittstellen, AMD DPTC und MSI Claw A8 hinzu, ohne die bestehenden Pfade für SteamOS, Bazzite oder CachyOS zu verändern. Physisch auf der ROG Ally RC71L validiert; AMD DPTC und MSI Claw A8 bleiben experimentell. ([#578](https://github.com/Hooandee/panel-de-control/pull/578))
+
 ## [0.41.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.40.0...panel-de-control-v0.41.0) (2026-09-07)
 
 
@@ -31,6 +35,10 @@
 ### Italiano
 
 * **Nuovi dispositivi:** Aggiunge il supporto per Steam Machine (Fremont), OneXPlayer Super X, Zotac Gaming Zone, ROG Flow Z13, OneXPlayer F1/OneXFly, GPD Win Mini 2025 e AYANEO 3. Include limiti TDP specifici per ogni modello, controlli dedicati quando disponibili e un rilevamento sicuro su SteamOS, Bazzite 43, Bazzite 44 e CachyOS. Le macchine che non è stato ancora possibile convalidare fisicamente vengono indicate come sperimentali.
+
+### Deutsch
+
+* **Neue Geräte:** Unterstützt jetzt Steam Machine (Fremont), OneXPlayer Super X, Zotac Gaming Zone, ROG Flow Z13, OneXPlayer F1/OneXFly, GPD Win Mini 2025 und AYANEO 3. Dazu gehören modellspezifische TDP-Grenzwerte, eigene Bedienelemente, sofern verfügbar, sowie eine sichere Erkennung unter SteamOS, Bazzite 43, Bazzite 44 und CachyOS. Geräte, die noch nicht physisch validiert werden konnten, sind als experimentell gekennzeichnet.
 
 ## [0.40.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.39.0...panel-de-control-v0.40.0) (2026-09-06)
 
@@ -47,6 +55,10 @@
 
 * **OneXPlayer Super X:** Aggiunge il supporto sperimentale per riconoscere il modello e regolare il TDP da 15 a 55 W, fino a 75 W quando è collegato a un alimentatore. Il display AMOLED viene identificato come OLED, quindi l’opzione «Aspetto OLED» viene nascosta. La modalità Frost Bay da 120 W e l’HDR non sono abilitati in questa prima versione. ([#496](https://github.com/Hooandee/panel-de-control/pull/496)) ([9017304](https://github.com/Hooandee/panel-de-control/commit/90173049d0f8683abda516ed7e58f31a9ab50029))
 
+### Deutsch
+
+* **OneXPlayer Super X:** Fügt experimentelle Unterstützung hinzu, um das Modell zu erkennen und seine TDP zwischen 15 und 55 W einzustellen. Mit angeschlossenem Netzteil sind bis zu 75 W möglich. Das AMOLED-Display wird als OLED erkannt, sodass die Einstellung „OLED-Look“ ausgeblendet bleibt. Der 120-W-Modus Frost Bay und HDR sind in dieser ersten Version noch nicht aktiviert. ([#496](https://github.com/Hooandee/panel-de-control/pull/496)) ([9017304](https://github.com/Hooandee/panel-de-control/commit/90173049d0f8683abda516ed7e58f31a9ab50029))
+
 ## [0.39.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.38.0...panel-de-control-v0.39.0) (2026-09-06)
 
 
@@ -62,6 +74,10 @@
 
 * **Opzioni di avvio:** Aggiunge MAKO alle opzioni di avvio disponibili quando Panel de Control rileva `mako-run`. Puoi attivarlo dalla scheda di ciascun gioco affinché Steam lo avvii tramite MAKO senza sostituire le altre opzioni configurate. ([#513](https://github.com/Hooandee/panel-de-control/pull/513)) ([f80fda7](https://github.com/Hooandee/panel-de-control/commit/f80fda788de1032e1c187c98a1f2c46dbe0f0dd7))
 
+### Deutsch
+
+* **Startoptionen:** Fügt MAKO zu den verfügbaren Startoptionen hinzu, sobald das Kontrollzentrum `mako-run` erkennt. Du kannst es in der Detailansicht eines Spiels aktivieren, damit Steam das Spiel über MAKO startet, ohne die übrigen Startoptionen zu ersetzen. ([#513](https://github.com/Hooandee/panel-de-control/pull/513)) ([f80fda7](https://github.com/Hooandee/panel-de-control/commit/f80fda788de1032e1c187c98a1f2c46dbe0f0dd7))
+
 ## [0.38.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.12...panel-de-control-v0.38.0) (2026-09-02)
 
 
@@ -76,6 +92,10 @@
 ### Italiano
 
 * **Temi:** Introduce una nuova scheda per scoprire, installare e gestire i temi di Hooandee direttamente da Panel de Control con CSS Loader. Dalla vista di dettaglio puoi installare o aggiornare un tema, attivarlo, regolare le 18 opzioni di Gallery oppure rimuoverlo quando non lo vuoi più. Panel verifica la compatibilità e l’integrità del pacchetto prima dell’installazione e, durante la rimozione, controlla che CSS Loader lo abbia eliminato correttamente prima di cancellarne il record. Se CSS Loader non è disponibile o è disattivato, le opzioni di installazione e rimozione non vengono mostrate. ([#520](https://github.com/Hooandee/panel-de-control/pull/520)) ([#525](https://github.com/Hooandee/panel-de-control/pull/525)) ([#526](https://github.com/Hooandee/panel-de-control/pull/526))
+
+### Deutsch
+
+* **Themes:** Führt einen neuen Tab ein, über den du Hooandee Themes mit CSS Loader direkt im Kontrollzentrum entdecken, installieren und verwalten kannst. In der Detailansicht eines Themes kannst du es installieren oder aktualisieren, aktivieren, die 18 Gallery-Einstellungen anpassen oder es wieder entfernen. Das Panel prüft vor der Installation die Kompatibilität und Integrität des Pakets. Beim Entfernen bestätigt es zuerst, dass CSS Loader das Theme korrekt gelöscht hat, bevor der Eintrag bereinigt wird. Wenn CSS Loader nicht verfügbar oder deaktiviert ist, werden die Optionen zum Installieren und Entfernen nicht angezeigt. ([#520](https://github.com/Hooandee/panel-de-control/pull/520)) ([#525](https://github.com/Hooandee/panel-de-control/pull/525)) ([#526](https://github.com/Hooandee/panel-de-control/pull/526))
 
 ## [0.37.12](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.37.11...panel-de-control-v0.37.12) (2026-08-24)
 

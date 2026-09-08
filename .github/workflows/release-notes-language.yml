@@ -1,8 +1,8 @@
 name: release-notes-language
 
 # The in-app updater shows the GitHub release body verbatim. The release-please job
-# rewrites it into both languages right after publish; this is the safety net that fails
-# loudly if an edited release ever ends up missing either language section. Runs on
+# rewrites it into every supported language right after publish; this safety net fails
+# loudly if an edited release ever ends up missing a language section. Runs on
 # edited (not published) so it validates the rewritten body, not the raw English one.
 
 on:
@@ -13,10 +13,10 @@ permissions:
   contents: read
 
 jobs:
-  check-bilingual:
+  check-multilingual:
     runs-on: ubuntu-latest
     steps:
-      - name: Require both language sections
+      - name: Require every language section
         env:
           BODY: ${{ github.event.release.body }}
         run: |
@@ -24,9 +24,11 @@ jobs:
           missing=""
           printf '%s' "$BODY" | grep -qF "### Novedades" || missing="$missing '### Novedades' (español)"
           printf '%s' "$BODY" | grep -qF "### What's new" || missing="$missing '### What's new' (English)"
+          printf '%s' "$BODY" | grep -qF "### Novità" || missing="$missing '### Novità' (italiano)"
+          printf '%s' "$BODY" | grep -qF "### Neuigkeiten" || missing="$missing '### Neuigkeiten' (Deutsch)"
           if [ -n "$missing" ]; then
-            echo "::error::Release notes must be bilingual. Missing section(s):$missing"
-            echo "Edit the release body so it has a '### Novedades' section (Spanish) and a '### What's new' section (English)."
+            echo "::error::Release notes must include every supported language. Missing section(s):$missing"
+            echo "Edit the release body so it includes Spanish, English, Italian and German sections."
             exit 1
           fi
-          echo "Release notes include both languages."
+          echo "Release notes include every supported language."

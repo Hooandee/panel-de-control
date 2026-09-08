@@ -32,6 +32,7 @@ jobs:
           node -e "const f='package.json';const p=require('./'+f);p.version=process.env.VERSION;require('fs').writeFileSync(f, JSON.stringify(p,null,2)+'\n')"
           echo "Building $PLUGIN_NAME v${VERSION} from ${BRANCH}"
           pnpm install --frozen-lockfile
+          pnpm test:i18n
           pnpm test:fe tests/pluginPayload.test.ts
           pnpm build
           staging=$(mktemp -d)

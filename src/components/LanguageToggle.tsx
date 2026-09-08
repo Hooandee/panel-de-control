@@ -1,6 +1,6 @@
 import { CSSProperties, FC } from "react";
 import { Focusable } from "@decky/ui";
-import { useI18n } from "../i18n";
+import { type Lang, useI18n } from "../i18n";
 
 const FlagES: FC = () => (
   <svg width={20} height={14} viewBox="0 0 20 14" xmlns="http://www.w3.org/2000/svg">
@@ -27,50 +27,52 @@ const FlagIT: FC = () => (
   </svg>
 );
 
+const FlagDE: FC = () => (
+  <svg width={20} height={14} viewBox="0 0 20 14" xmlns="http://www.w3.org/2000/svg">
+    <rect width={20} height={14 / 3} fill="#000" />
+    <rect y={14 / 3} width={20} height={14 / 3} fill="#dd0000" />
+    <rect y={(14 / 3) * 2} width={20} height={14 / 3} fill="#ffce00" />
+  </svg>
+);
+
+const LANGUAGE_OPTIONS = [
+  { lang: "es", label: "lang.spanish", Flag: FlagES },
+  { lang: "en", label: "lang.english", Flag: FlagEN },
+  { lang: "it", label: "lang.italian", Flag: FlagIT },
+  { lang: "de", label: "lang.german", Flag: FlagDE },
+] satisfies ReadonlyArray<{ lang: Lang; label: string; Flag: FC }>;
+
+const buttonStyle = (active: boolean): CSSProperties => ({
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: 28,
+  height: 20,
+  borderRadius: 5,
+  cursor: "pointer",
+  opacity: active ? 1 : 0.4,
+  boxShadow: active ? "0 0 0 1.5px rgba(255,255,255,0.85)" : "0 0 0 1px rgba(255,255,255,0.15)",
+  transition: "opacity 120ms ease, box-shadow 120ms ease",
+});
+
 export const LanguageToggle: FC = () => {
   const { lang, setLang, t } = useI18n();
-
-  const buttonStyle = (active: boolean): CSSProperties => ({
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    width: 28,
-    height: 20,
-    borderRadius: 5,
-    cursor: "pointer",
-    opacity: active ? 1 : 0.4,
-    boxShadow: active ? "0 0 0 1.5px rgba(255,255,255,0.85)" : "0 0 0 1px rgba(255,255,255,0.15)",
-    transition: "opacity 120ms ease, box-shadow 120ms ease",
-  });
 
   return (
     <Focusable
       style={{ display: "flex", gap: 6, justifyContent: "flex-end", padding: "0 2px" }}
     >
-      <Focusable
-        onActivate={() => setLang("es")}
-        onClick={() => setLang("es")}
-        aria-label={t("lang.spanish")}
-        style={buttonStyle(lang === "es")}
-      >
-        <FlagES />
-      </Focusable>
-      <Focusable
-        onActivate={() => setLang("en")}
-        onClick={() => setLang("en")}
-        aria-label={t("lang.english")}
-        style={buttonStyle(lang === "en")}
-      >
-        <FlagEN />
-      </Focusable>
-      <Focusable
-        onActivate={() => setLang("it")}
-        onClick={() => setLang("it")}
-        aria-label={t("lang.italian")}
-        style={buttonStyle(lang === "it")}
-      >
-        <FlagIT />
-      </Focusable>
+      {LANGUAGE_OPTIONS.map(({ lang: option, label, Flag }) => (
+        <Focusable
+          key={option}
+          onActivate={() => setLang(option)}
+          onClick={() => setLang(option)}
+          aria-label={t(label)}
+          style={buttonStyle(lang === option)}
+        >
+          <Flag />
+        </Focusable>
+      ))}
     </Focusable>
   );
 };
