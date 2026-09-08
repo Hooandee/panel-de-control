@@ -31,6 +31,7 @@ import theme_transport
 from version import read_version
 from settings_store import SettingsStore
 from tdp import factory as tdp_factory
+from tdp.backend import NullBackend
 from tdp import powerstation as powerstation_conflict
 from tdp import suggest as tdp_suggest
 from tdp.reconcile import (
@@ -145,6 +146,7 @@ _monotonic = time.monotonic
 _HUD_OBSERVATION_MAX_AGE_S = 3.0
 _MIN_HUD_REFRESH_S = 1.0
 _HUD_RELOAD_MAX_ATTEMPTS = 4
+_TDP_BACKEND_REPROBE_S = 30.0
 _CHARGE_LIMIT_VERIFY_DELAYS = (2.0, 8.0, 20.0)
 _ROG_CHARGE_LIMIT_PROFILES = frozenset({
     "rog_ally",
@@ -175,6 +177,7 @@ _THEME_ACTIVATION_RECOVERY_FILE = "theme-activation-recovery.json"
 @dataclass(frozen=True)
 class _TdpCommand:
     generation: int
+    backend: object
     reason: str
     logical_requested: dict
     requested: dict
@@ -649,6 +652,10 @@ class Plugin:
             "settling" if self._tdp_supported() else "unsupported"
         )
         self._tdp_reason = ""
+        self._tdp_reprobe_at = 0.0
+        self._tdp_probe_lock = asyncio.Lock()
+        self._tdp_backend_used = False
+        self._tdp_backend_history = deque(maxlen=8)
         self._tdp_conflict_persistent = False
         self._tdp_history = deque(maxlen=32)
         self._tdp_guard_task = None
@@ -2311,6 +2318,23 @@ class Plugin:
             self._restore_hhd_tdp_status(preserve_ownership).get("ok")
         )
 
+    def _restore_hhd_after_tdp_route_loss(self):
+        if self._settings.get("hhd_tdp_prev") is None:
+            return None
+        previous = self._settings.get("tdp_control_enabled", True)
+        self._settings["tdp_control_enabled"] = False
+        try:
+            self._save()
+        except Exception as error:  # noqa: BLE001
+            self._settings["tdp_control_enabled"] = previous
+            return {
+                "ok": False,
+                "hardware_ok": False,
+                "marker_cleared": False,
+                "error": type(error).__name__,
+            }
+        return self._restore_hhd_tdp_status()
+
     async def get_tdp_control_enabled(self) -> bool:
         self._init()
         await self._ensure_recognised_desktop_migration()
@@ -3737,6 +3761,7 @@ class Plugin:
         return out
 
     def _capture_tdp_command(self, reason, on_ac=None, bump=True):
+        backend = self._tdp_backend
         ac = read_on_ac() if on_ac is None else bool(on_ac)
         limits = self._limits()
         active = self._active_max(limits, ac)
@@ -3750,13 +3775,13 @@ class Plugin:
                 "mode": "estable",
             }
         select_levels = getattr(
-            self._tdp_backend,
+            backend,
             "physical_levels",
             None,
         )
         if callable(select_levels):
             requested = select_levels(logical_requested)
-        elif getattr(self._tdp_backend, "supports_levels", False):
+        elif getattr(backend, "supports_levels", False):
             requested = {
                 rail: int(logical_requested[rail])
                 for rail in ("pl1", "pl2", "pl3")
@@ -3764,7 +3789,7 @@ class Plugin:
         else:
             requested = {"pl1": int(logical_requested["pl1"])}
         safe = self._cap_level_limits(
-            self._tdp_backend.level_limits(),
+            backend.level_limits(),
             active,
         )
         for rail in requested:
@@ -3776,6 +3801,7 @@ class Plugin:
             self._advance_tdp_generation()
         return _TdpCommand(
             generation=self._tdp_generation,
+            backend=backend,
             reason=str(reason),
             logical_requested={
                 rail: int(logical_requested[rail])
@@ -3786,7 +3812,7 @@ class Plugin:
                 for rail in requested
             },
             safe_bounds=safe,
-            primary_rail=getattr(self._tdp_backend, "primary_rail", "pl1"),
+            primary_rail=getattr(backend, "primary_rail", "pl1"),
             on_ac=ac,
         )
 
@@ -3814,6 +3840,7 @@ class Plugin:
         return observation
 
     def _apply_tdp_targets(self, target, on_ac):
+        self._tdp_backend_used = True
         apply_targets = getattr(self._tdp_backend, "apply_targets", None)
         if callable(apply_targets):
             return apply_targets(target, on_ac)
@@ -3841,6 +3868,13 @@ class Plugin:
                 None,
                 False,
                 "stale-generation",
+            )
+        if command.backend is not self._tdp_backend:
+            return TdpResult(
+                logical_watts,
+                None,
+                False,
+                "stale-backend",
             )
         if not self._tdp_supported():
             self._tdp_status, self._tdp_reason = "unsupported", ""
@@ -3888,6 +3922,7 @@ class Plugin:
             return result
         mode = self._firmware_mode()
         if mode != _CUSTOM_MODE:
+            self._tdp_backend_used = True
             if not self._tdp_backend.set_profile(mode):
                 self._tdp_status = "rejected"
                 self._tdp_reason = "firmware_mode_rejected"
@@ -4145,9 +4180,12 @@ class Plugin:
         )
 
     def _tdp_guard_delay(self):
+        if not self._tdp_backend.supported:
+            return _TDP_BACKEND_REPROBE_S
         now = time.monotonic()
-        interval = float(
-            getattr(self._tdp_backend, "guard_interval_s", 2.0)
+        interval = max(
+            0.05,
+            float(getattr(self._tdp_backend, "guard_interval_s", 2.0)),
         )
         due = []
         memory = self._tdp_reconcile_memory
@@ -4172,17 +4210,23 @@ class Plugin:
         while True:
             try:
                 await asyncio.sleep(self._tdp_guard_delay())
+                if not self._tdp_backend.supported:
+                    await self._probe_tdp_backend()
+                    continue
                 await self._offload_call(self._tdp_guard_tick)
+                if not self._tdp_supported():
+                    await self._probe_tdp_backend()
             except asyncio.CancelledError:
                 return
             except Exception:
                 decky.logger.exception("TDP guard tick failed")
 
     def _start_tdp_guard_loop(self):
+        lifecycle = getattr(self, "_lifecycle", None)
         if (
             self._tdp_shutdown
-            or not self._tdp_backend.supported
             or self._tdp_guard_task is not None
+            or getattr(lifecycle, "_task", None) is None
         ):
             return
         self._tdp_guard_task = asyncio.create_task(
@@ -7377,6 +7421,7 @@ class Plugin:
             "generation": self._tdp_generation,
             "backend": self._tdp_backend.name,
             "backend_descriptor": self._tdp_backend_diagnostics(),
+            "backend_history": list(self._tdp_backend_history),
             "desktop_recognition_migration": {
                 "pending": bool(
                     getattr(self, "_desktop_recognition_migration_pending", False)
@@ -7398,17 +7443,260 @@ class Plugin:
             },
         }
 
-    async def _probe_tdp_backend(self, *, force: bool = False) -> bool:
-        probe = getattr(self._tdp_backend, "probe", None)
+    @staticmethod
+    def _probe_tdp_candidate(candidate) -> dict:
+        probe = getattr(candidate, "probe", None)
         if not callable(probe):
-            return bool(self._tdp_backend.supported)
-        if not force and not getattr(self._tdp_backend, "probe_pending", True):
-            return bool(self._tdp_backend.supported)
-        ready = bool(await self._offload_call(probe))
-        if not ready:
+            return {"ready": bool(candidate.supported), "error": None}
+        try:
+            return {"ready": bool(probe()), "error": None}
+        except Exception as error:  # noqa: BLE001
+            decky.logger.warning(
+                "TDP backend probe failed (%s): %s",
+                candidate.name,
+                type(error).__name__,
+            )
+            return {"ready": False, "error": type(error).__name__}
+
+    def _record_tdp_backend_transition(
+        self,
+        previous,
+        probe,
+        release,
+        replacement,
+        replacement_probe,
+        outcome,
+        handoff=None,
+    ) -> None:
+        event = {
+            "at": round(time.monotonic(), 3),
+            "previous": previous.name,
+            "probe": dict(probe),
+            "release": release,
+            "selected": replacement.name if replacement is not None else None,
+            "selection_trace": [
+                dict(item)
+                for item in getattr(replacement, "probe_trace", ())
+            ],
+            "replacement_probe": replacement_probe,
+            "outcome": outcome,
+            "handoff": handoff,
+        }
+        self._tdp_backend_history.append(event)
+        log = decky.logger.info if outcome == "reselected" else decky.logger.warning
+        log(
+            "TDP backend transition %s",
+            json.dumps(event, sort_keys=True, separators=(",", ":")),
+        )
+
+    def _replace_unviable_tdp_backend(self, previous, probe) -> bool:
+        if getattr(previous, "safety_locked", False):
+            recovered = self._recover_tdp_backend_if_owned()
+            if recovered:
+                retry = self._probe_tdp_candidate(previous)
+                if retry["ready"]:
+                    self._tdp_status = "settling"
+                    self._tdp_reason = ""
+                    self._record_tdp_backend_transition(
+                        previous,
+                        retry,
+                        None,
+                        previous,
+                        retry,
+                        "recovered",
+                    )
+                    return True
             self._tdp_status = "unsupported"
-            self._tdp_reason = "readback_unavailable"
+            self._tdp_reason = "recovery_pending"
+            self._record_tdp_backend_transition(
+                previous, probe, None, None, None, "recovery_pending"
+            )
+            return False
+        selection_ready = getattr(previous, "selection_ready", None)
+        if callable(selection_ready):
+            try:
+                route_viable = bool(selection_ready())
+            except Exception as error:  # noqa: BLE001
+                route_viable = False
+                decky.logger.warning(
+                    "TDP route viability check failed (%s): %s",
+                    previous.name,
+                    type(error).__name__,
+                )
+            if route_viable:
+                self._tdp_status = "unsupported"
+                self._tdp_reason = "temporarily_unready"
+                self._record_tdp_backend_transition(
+                    previous,
+                    probe,
+                    None,
+                    None,
+                    None,
+                    "temporarily_unready",
+                )
+                return False
+        if self._tdp_backend_used and not getattr(
+            previous,
+            "reselection_safe_after_use",
+            False,
+        ):
+            self._tdp_status = "unsupported"
+            self._tdp_reason = "backend_in_use"
+            handoff = self._restore_hhd_after_tdp_route_loss()
+            if handoff is not None and not handoff.get("ok"):
+                self._tdp_status = "rejected"
+                self._tdp_reason = "handoff_failed"
+            self._record_tdp_backend_transition(
+                previous,
+                probe,
+                None,
+                None,
+                None,
+                "backend_in_use",
+                handoff,
+            )
+            return False
+        if not self._desktop_power.can_replace_cpu_backend():
+            self._tdp_status = "unverifiable"
+            self._tdp_reason = "desktop_power_owned"
+            self._record_tdp_backend_transition(
+                previous, probe, None, None, None, "desktop_power_owned"
+            )
+            return False
+        release = getattr(previous, "release", None)
+        released = True
+        release_error = None
+        if callable(release):
+            try:
+                released = bool(release())
+            except Exception as error:  # noqa: BLE001
+                released = False
+                release_error = type(error).__name__
+                decky.logger.warning(
+                    "TDP backend release failed (%s): %s",
+                    previous.name,
+                    release_error,
+                )
+        release_result = {"ok": released}
+        if release_error is not None:
+            release_result["error"] = release_error
+        if not released:
+            self._tdp_status = "rejected"
+            self._tdp_reason = "release_failed"
+            self._record_tdp_backend_transition(
+                previous,
+                probe,
+                release_result,
+                None,
+                None,
+                "release_failed",
+            )
+            return False
+        self._tdp_backend_used = False
+        self._advance_tdp_generation()
+        self._tdp_targets = None
+        self._tdp_observation = TdpObservation(
+            readable=bool(getattr(previous, "readback", True)),
+        )
+        self._tdp_observation_at = float("-inf")
+        self._tdp_conflict_persistent = False
+        selection_error = None
+        try:
+            replacement = tdp_factory.select_backend(
+                self._device,
+                os_id=self._os_id,
+            )
+        except Exception as error:  # noqa: BLE001
+            selection_error = type(error).__name__
+            decky.logger.warning(
+                "TDP backend selection failed: %s",
+                selection_error,
+            )
+            replacement = NullBackend("backend selection failed")
+            replacement.probe_trace = ({
+                "candidate": "factory",
+                "backend": None,
+                "supported": False,
+                "error": selection_error,
+            },)
+        self._desktop_power.replace_cpu_backend(replacement)
+        self._tdp_backend = replacement
+        self._tdp_observation = TdpObservation(
+            readable=bool(getattr(replacement, "readback", True)),
+        )
+        self._tdp_observation_at = float("-inf")
+        self._tdp_conflict_persistent = False
+        if not self._recover_tdp_backend_if_owned():
+            self._tdp_status = "unsupported"
+            self._tdp_reason = "recovery_pending"
+            self._record_tdp_backend_transition(
+                previous,
+                probe,
+                release_result,
+                replacement,
+                None,
+                "recovery_pending",
+            )
+            return False
+        replacement_probe = self._probe_tdp_candidate(replacement)
+        ready = replacement_probe["ready"]
+        if ready:
+            self._tdp_status = "settling"
+            self._tdp_reason = ""
+            outcome = "reselected"
+        else:
+            self._tdp_status = "unsupported"
+            if selection_error is not None:
+                self._tdp_reason = "selection_failed"
+                outcome = "selection_failed"
+            else:
+                self._tdp_reason = "readback_unavailable"
+                outcome = "replacement_unready"
+        handoff = None if ready else self._restore_hhd_after_tdp_route_loss()
+        if handoff is not None and not handoff.get("ok"):
+            self._tdp_status = "rejected"
+            self._tdp_reason = "handoff_failed"
+        self._record_tdp_backend_transition(
+            previous,
+            probe,
+            release_result,
+            replacement,
+            replacement_probe,
+            outcome,
+            handoff,
+        )
         return ready
+
+    async def _probe_tdp_backend(self, *, force: bool = False) -> bool:
+        async with self._tdp_probe_lock:
+            backend = self._tdp_backend
+            now = _monotonic()
+            if not force and now < self._tdp_reprobe_at:
+                return False
+            probe = getattr(backend, "probe", None)
+            if (
+                callable(probe)
+                and not force
+                and not getattr(backend, "probe_pending", True)
+            ):
+                return bool(backend.supported)
+            probe_result = await self._offload_call(
+                lambda: self._probe_tdp_candidate(backend)
+            )
+            if probe_result["ready"]:
+                self._tdp_reprobe_at = 0.0
+                return True
+            ready = bool(await self._offload_call(
+                lambda: self._replace_unviable_tdp_backend(
+                    backend,
+                    probe_result,
+                )
+            ))
+            self._tdp_reprobe_at = (
+                0.0 if ready else now + _TDP_BACKEND_REPROBE_S
+            )
+            self._start_tdp_guard_loop()
+            return ready
 
     def _tdp_delayed_recovery_pending(self) -> bool:
         return bool(
@@ -7451,6 +7739,13 @@ class Plugin:
         detail = result.get("detail") if isinstance(result, dict) else "invalid response"
         log("Interrupted TDP transaction recovery: %s", detail)
         return ok
+
+    def _recover_tdp_backend_if_owned(self) -> bool:
+        if not getattr(self._tdp_backend, "safety_locked", False):
+            return True
+        if not self._tdp_write_authorized():
+            return False
+        return self._recover_tdp_runtime_transaction()
 
     def _tdp_supported(self) -> bool:
         if not self._tdp_backend.supported:

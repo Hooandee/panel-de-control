@@ -121,6 +121,25 @@ def test_free_mode_performs_no_writes_on_fresh_coordinator():
     assert cpu.read_calls == 0
 
 
+def test_cpu_backend_can_be_replaced_while_coordinator_is_free():
+    original, replacement = Cpu(applied=30), Cpu(applied=18)
+    coordinator = DesktopPowerCoordinator(original, UnsupportedGpu())
+
+    assert coordinator.can_replace_cpu_backend() is True
+    assert coordinator.replace_cpu_backend(replacement) is True
+    assert coordinator.state()["cpu_w"] == 18
+
+
+def test_cpu_backend_cannot_be_replaced_while_coordinator_owns_state():
+    original, replacement = Cpu(applied=30), Cpu(applied=18)
+    coordinator = DesktopPowerCoordinator(original, UnsupportedGpu())
+    assert coordinator.apply("silent")["ok"] is True
+
+    assert coordinator.can_replace_cpu_backend() is False
+    assert coordinator.replace_cpu_backend(replacement) is False
+    assert coordinator._cpu is original
+
+
 def test_performance_coordinates_cpu_30_and_gpu_110():
     cpu, gpu = Cpu(), Gpu()
     result = DesktopPowerCoordinator(cpu, gpu).apply("performance")

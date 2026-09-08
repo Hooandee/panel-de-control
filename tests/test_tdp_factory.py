@@ -565,6 +565,7 @@ def test_falls_back_to_null_when_nothing_present(tmp_path):
     assert b.supported is False and b.name == "unsupported"
     assert [item["candidate"] for item in b.probe_trace] == [
         "asus",
+        "asus_nb_wmi",
         "lenovo",
         "msi",
         "ryzenadj",
@@ -665,6 +666,55 @@ def test_backend_probe_failure_is_recorded_and_falls_through(tmp_path, monkeypat
             "supported": True,
         },
     )
+
+
+def test_factory_continues_after_a_present_candidate_is_not_ready(
+    tmp_path,
+    monkeypatch,
+):
+    calls = []
+
+    def unavailable():
+        calls.append("unavailable")
+
+        class Unavailable(NullBackend):
+            supported = True
+            name = "unavailable"
+
+            def selection_ready(self):
+                return False
+
+        return Unavailable("x")
+
+    def working():
+        calls.append("working")
+
+        class Working(NullBackend):
+            supported = True
+            name = "working"
+
+        return Working("x")
+
+    monkeypatch.setattr(
+        factory,
+        "_candidates",
+        lambda *args: [unavailable, working],
+    )
+
+    backend = select_backend(
+        GENERIC,
+        root=str(tmp_path),
+        ryzenadj_resolve=_NO_RYZENADJ,
+    )
+
+    assert backend.name == "working"
+    assert calls == ["unavailable", "working"]
+    assert backend.probe_trace[0] == {
+        "candidate": "unavailable",
+        "backend": "unavailable",
+        "supported": True,
+        "ready": False,
+    }
 
 
 def _mk_rapl(root):

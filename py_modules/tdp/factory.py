@@ -153,7 +153,7 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None):
         if key in _STRICT_RYZENADJ_KEYS:
             return [asus, lenovo, msi, ryzenadj]
         if key.startswith("rog_"):
-            return [asus, lenovo, msi, *amd_tail]
+            return [asus, asus_nb_wmi, lenovo, msi, *amd_tail]
         if key.startswith("legion_"):
             return [lenovo, asus, msi, *amd_tail]
         return [asus, lenovo, msi, *amd_tail]
@@ -206,12 +206,30 @@ def select_backend(device, root="/", ryzenadj_resolve=None, os_id=None) -> TDPBa
                 "error": type(exc).__name__,
             })
             continue
-        trace.append({
+        trace_item = {
             "candidate": candidate,
             "backend": backend.name,
             "supported": bool(backend.supported),
-        })
-        if backend.supported or getattr(backend, "safety_locked", False):
+        }
+        safety_locked = bool(getattr(backend, "safety_locked", False))
+        ready = bool(backend.supported)
+        if ready and not safety_locked:
+            try:
+                ready = bool(backend.selection_ready())
+            except Exception as exc:  # noqa: BLE001
+                ready = False
+                trace_item["error"] = type(exc).__name__
+        if backend.supported and not ready:
+            trace_item["ready"] = False
+            try:
+                details = backend.selection_diagnostics()
+            except Exception as exc:  # noqa: BLE001
+                details = {}
+                trace_item["diagnostics_error"] = type(exc).__name__
+            if isinstance(details, dict):
+                trace_item.update(details)
+        trace.append(trace_item)
+        if ready or safety_locked:
             backend.probe_trace = tuple(trace)
             return backend
     backend = NullBackend(f"no supported TDP interface for {device.key}")

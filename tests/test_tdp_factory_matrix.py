@@ -37,6 +37,15 @@ def _mk_firmware(root, provider):
         _write(os.path.join(path, "max_value"), maximum)
 
 
+def _mk_unreadable_firmware(root, provider):
+    base = os.path.join(root, "sys/class/firmware-attributes", provider, "attributes")
+    for attr in ("ppt_pl1_spl", "ppt_pl2_sppt", "ppt_pl3_fppt"):
+        path = os.path.join(base, attr)
+        _write(os.path.join(path, "current_value"), "")
+        _write(os.path.join(path, "min_value"), "")
+        _write(os.path.join(path, "max_value"), "")
+
+
 def _mk_dptc(root):
     _mk_firmware(root, "amd-dptc")
     base = os.path.join(root, "sys/class/platform-profile/platform-profile-0")
@@ -74,6 +83,40 @@ def test_rog_ally_selects_standalone_legacy_backend(tmp_path):
     ]
 
 
+def test_bazzite_rog_xbox_ally_skips_unreadable_armoury_and_uses_legacy(
+    tmp_path,
+):
+    root = str(tmp_path)
+    _mk_unreadable_firmware(root, "asus-armoury")
+    _mk_legacy_asus(root)
+
+    backend = select_backend(
+        _profile("rog_xbox_ally"),
+        root=root,
+        ryzenadj_resolve=_no_ryzenadj,
+        os_id="bazzite",
+    )
+
+    assert backend.name == "asus-nb-wmi"
+    assert backend.probe_trace == (
+        {
+            "candidate": "asus",
+            "backend": "firmware-attr:asus-armoury",
+            "supported": True,
+            "ready": False,
+            "unready_reason": "snapshot_unavailable",
+            "unavailable": [
+                "firmware-attr:asus-armoury/pl3=unavailable",
+                "firmware-attr:asus-armoury/pl2=unavailable",
+                "firmware-attr:asus-armoury/pl1=unavailable",
+            ],
+        },
+        {
+            "candidate": "asus_nb_wmi",
+            "backend": "asus-nb-wmi",
+            "supported": True,
+        },
+    )
 def test_rog_with_armoury_and_legacy_keeps_coordinated_backend(tmp_path):
     root = str(tmp_path)
     _mk_firmware(root, "asus-armoury")
@@ -218,7 +261,7 @@ def test_generic_amd_prefers_complete_dptc_with_conservative_profile(tmp_path):
     assert backend.get_limits().max_ac_w == GENERIC.tdp_max_charger
 
 
-def test_non_anatase_keeps_historical_rog_fallback_chain(tmp_path):
+def test_non_anatase_rog_uses_viable_legacy_before_generic_fallbacks(tmp_path):
     root = str(tmp_path)
     _mk_legacy_asus(root)
     _mk_dptc(root)
@@ -230,13 +273,10 @@ def test_non_anatase_keeps_historical_rog_fallback_chain(tmp_path):
         os_id="bazzite",
     )
 
-    assert backend.supported is False
+    assert backend.name == "asus-nb-wmi"
     assert [item["candidate"] for item in backend.probe_trace] == [
         "asus",
-        "lenovo",
-        "msi",
-        "ryzenadj",
-        "alib",
+        "asus_nb_wmi",
     ]
 
 
