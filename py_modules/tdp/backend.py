@@ -13,6 +13,7 @@ class TDPBackend(ABC):
     heartbeat_s: float | None = None
     authoritative_reassert_s: float | None = None
     read_tolerance_w: int = 0
+    reselection_safe_after_use: bool = False
     probe_trace: tuple[dict, ...] = ()
     primary_rail: str = "pl1"
 
@@ -49,6 +50,13 @@ class TDPBackend(ABC):
 
     def physical_levels(self, levels: dict) -> dict[str, int]:
         return self.reconciliation_levels(levels)
+
+    def selection_ready(self) -> bool:
+        """Whether this candidate is usable without performing a hardware write."""
+        return bool(self.supported)
+
+    def selection_diagnostics(self) -> dict:
+        return {}
 
     def apply_targets(self, targets: dict[str, int], ac: bool) -> TdpResult:
         primary = int(targets[self.primary_rail])

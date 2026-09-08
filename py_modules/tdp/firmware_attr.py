@@ -89,6 +89,7 @@ class FirmwareAttrBackend(TDPBackend):
         self._trust_live_bounds = bool(trust_live_bounds)
         self._safety_lock = RuntimeSafetyLock(safety_lock_path)
         self._restore_on_release = bool(restore_on_release)
+        self.reselection_safe_after_use = self._restore_on_release
         self._ownership_lock = RuntimeSafetyLock(ownership_lock_path)
         self._rail_floors = _normalise_rail_floors(rail_floors)
         self._ignored_live_maxes = _normalise_rail_values(ignored_live_maxes)
@@ -126,6 +127,7 @@ class FirmwareAttrBackend(TDPBackend):
         )
         self._owns_state = False
         self._ownership_recovery_pending = self._owned_payload is not None
+        self._selection_failure = {}
         complete_primary = all(rail in self._primary_rails for rail, _attr in _RAIL_ATTRS)
         complete_legacy = all(rail in self._legacy for rail, _attr in _RAIL_ATTRS)
         try:
@@ -425,11 +427,7 @@ class FirmwareAttrBackend(TDPBackend):
         )
 
     def ready(self):
-        if (
-            not self.supported
-            or self._write_circuit_open is not None
-            or self._ownership_recovery_pending
-        ):
+        if not self.selection_ready():
             return False
         if not self._trust_live_bounds:
             return True
@@ -448,6 +446,33 @@ class FirmwareAttrBackend(TDPBackend):
 
     def probe(self):
         return self.ready()
+
+    def selection_ready(self):
+        self._selection_failure = {}
+        if not self.supported:
+            self._selection_failure = {"unready_reason": "not_present"}
+            return False
+        if self._write_circuit_open is not None:
+            self._selection_failure = {"unready_reason": "transaction_locked"}
+            return False
+        if self._ownership_recovery_pending:
+            self._selection_failure = {"unready_reason": "ownership_recovery"}
+            return False
+        surfaces = self._transaction_surfaces({rail: 0 for rail in self._rails})
+        _snapshot, _profile, missing = self._capture_transaction(surfaces)
+        if not surfaces:
+            self._selection_failure = {"unready_reason": "no_transaction_surface"}
+            return False
+        if missing:
+            self._selection_failure = {
+                "unready_reason": "snapshot_unavailable",
+                "unavailable": list(missing),
+            }
+            return False
+        return True
+
+    def selection_diagnostics(self):
+        return dict(self._selection_failure)
 
     def _find_profile_dir(self):
         if not self._profile_name:
@@ -790,6 +815,8 @@ class FirmwareAttrBackend(TDPBackend):
                 for rail, attr in _RAIL_ATTRS
                 if rail in self._rails
             }
+        if self._selection_failure:
+            diagnostics["selection_failure"] = dict(self._selection_failure)
         return diagnostics
 
     def release(self):

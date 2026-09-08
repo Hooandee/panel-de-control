@@ -56,6 +56,15 @@ class DesktopPowerCoordinator:
         self._mode = "free"
         self._load_persisted_state(persisted_state)
 
+    def can_replace_cpu_backend(self) -> bool:
+        return not self._active
+
+    def replace_cpu_backend(self, backend) -> bool:
+        if not self.can_replace_cpu_backend():
+            return False
+        self._cpu = backend
+        return True
+
     @staticmethod
     def _read_boot_id():
         try:

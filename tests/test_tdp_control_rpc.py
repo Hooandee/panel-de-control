@@ -12,6 +12,7 @@ import types
 import pytest
 
 from device_profiles import DEVICE_TABLE
+from tdp.backend import NullBackend
 from tdp.factory import select_backend as real_select_backend
 from tdp.types import TdpLimits, TdpResult
 
@@ -123,6 +124,359 @@ def test_dynamic_backend_readiness_controls_published_tdp_support(Plugin):
     assert plugin._tdp_supported() is True
 
 
+def test_backend_probe_errors_are_reported_without_escaping(Plugin):
+    backend = FakeBackend()
+
+    def broken_probe():
+        raise OSError("sysfs disappeared")
+
+    backend.probe = broken_probe
+
+    assert Plugin._probe_tdp_candidate(backend) == {
+        "ready": False,
+        "error": "OSError",
+    }
+
+
+def test_force_probe_reselects_safe_backend_atomically(Plugin, monkeypatch):
+    import main as main_mod
+
+    plugin = Plugin()
+    plugin._init()
+    failed = plugin._tdp_backend
+    failed.probe = lambda: False
+    failed.reselection_safe_after_use = True
+    plugin._tdp_backend_used = True
+    plugin._tdp_status = "applied"
+    plugin._tdp_reason = "old-route"
+    replacement = FakeBackend()
+    replacement.name = "fallback"
+    queued = plugin._capture_tdp_command("queued-before-reselection")
+    queued_result = []
+    during_selection = []
+    calls = []
+    selections = []
+
+    async def controlled_offload(fn):
+        result = fn()
+        calls.append(True)
+        if len(calls) == 2:
+            queued_result.append(plugin._execute_tdp_command(queued))
+        return result
+
+    def select_replacement(device, **kwargs):
+        assert failed.release_calls == 1
+        during_selection.append(
+            plugin._capture_tdp_command("during-reselection")
+        )
+        selections.append((device.key, kwargs))
+        return replacement
+
+    plugin._offload_call = controlled_offload
+    monkeypatch.setattr(main_mod.tdp_factory, "select_backend", select_replacement)
+    assert asyncio.run(plugin._probe_tdp_backend(force=True)) is True
+    assert plugin._tdp_backend is replacement
+    assert plugin._desktop_power._cpu is replacement
+    assert failed.release_calls == 1
+    assert failed.set_levels_calls == 0
+    assert queued_result[0].detail == "stale-generation"
+    assert plugin._execute_tdp_command(during_selection[0]).detail == "stale-backend"
+    assert selections == [(plugin._device.key, {"os_id": plugin._os_id})]
+    assert plugin._tdp_status == "settling"
+    assert plugin._tdp_reason == ""
+    assert plugin._tdp_targets is None
+    transition = plugin._tdp_backend_history[-1]
+    assert transition["selected"] == "fallback"
+    assert transition["outcome"] == "reselected"
+    assert transition["release"] == {"ok": True}
+
+
+@pytest.mark.parametrize(
+    ("condition", "reason", "status"),
+    (
+        ("recovery", "recovery_pending", "unsupported"),
+        ("temporary", "temporarily_unready", "unsupported"),
+        ("desktop", "desktop_power_owned", "unverifiable"),
+    ),
+)
+def test_force_probe_keeps_backend_when_reselection_is_unsafe(
+    Plugin,
+    monkeypatch,
+    condition,
+    reason,
+    status,
+):
+    import main as main_mod
+
+    plugin = Plugin()
+    plugin._init()
+    backend = plugin._tdp_backend
+    backend.probe = lambda: False
+    if condition == "recovery":
+        backend.safety_locked = True
+        backend.recover_runtime_transaction = lambda: {
+            "ok": False,
+            "detail": "still locked",
+        }
+    elif condition == "temporary":
+        backend.selection_ready = lambda: True
+    elif condition == "desktop":
+        plugin._desktop_power._active = True
+    selections = []
+    monkeypatch.setattr(
+        main_mod.tdp_factory,
+        "select_backend",
+        lambda *_args, **_kwargs: selections.append(True) or FakeBackend(),
+    )
+
+    assert asyncio.run(plugin._probe_tdp_backend(force=True)) is False
+    assert plugin._tdp_backend is backend
+    assert backend.release_calls == 0
+    assert selections == []
+    assert plugin._tdp_reason == reason
+    assert plugin._tdp_status == status
+
+
+def test_unrestorable_route_loss_returns_previous_hhd_owner(
+    Plugin,
+    fake_hhd,
+    monkeypatch,
+):
+    import main as main_mod
+
+    plugin = Plugin()
+    plugin._init()
+    backend = plugin._tdp_backend
+    backend.probe = lambda: False
+    plugin._tdp_backend_used = True
+    plugin._settings["hhd_tdp_prev"] = True
+    plugin._settings["tdp_control_enabled"] = True
+    fake_hhd.set(False)
+    selections = []
+    monkeypatch.setattr(
+        main_mod.tdp_factory,
+        "select_backend",
+        lambda *_args, **_kwargs: selections.append(True) or FakeBackend(),
+    )
+
+    assert asyncio.run(plugin._probe_tdp_backend(force=True)) is False
+    assert plugin._tdp_backend is backend
+    assert selections == []
+    assert plugin._settings["tdp_control_enabled"] is False
+    assert plugin._settings["hhd_tdp_prev"] is None
+    assert fake_hhd.value is True
+    assert plugin._tdp_backend_history[-1]["handoff"]["ok"] is True
+
+
+def test_locked_replacement_keeps_hhd_disabled_until_recovery(
+    Plugin,
+    fake_hhd,
+    monkeypatch,
+):
+    import main as main_mod
+
+    plugin = Plugin()
+    plugin._init()
+    plugin._tdp_backend.probe = lambda: False
+    plugin._settings["hhd_tdp_prev"] = True
+    fake_hhd.set(False)
+    replacement = FakeBackend()
+    replacement.safety_locked = True
+    replacement.probe = lambda: False
+    replacement.recover_runtime_transaction = lambda: {
+        "ok": False,
+        "detail": "still locked",
+    }
+    monkeypatch.setattr(
+        main_mod.tdp_factory,
+        "select_backend",
+        lambda *_args, **_kwargs: replacement,
+    )
+
+    assert asyncio.run(plugin._probe_tdp_backend(force=True)) is False
+    assert plugin._tdp_backend is replacement
+    assert plugin._tdp_reason == "recovery_pending"
+    assert plugin._settings["hhd_tdp_prev"] is True
+    assert fake_hhd.value is False
+
+
+def test_selection_failure_installs_diagnostic_null_backend(
+    Plugin,
+    monkeypatch,
+):
+    import main as main_mod
+
+    plugin = Plugin()
+    plugin._init()
+    failed = plugin._tdp_backend
+    failed.probe = lambda: False
+
+    def fail_selection(*_args, **_kwargs):
+        raise OSError("factory failed")
+
+    monkeypatch.setattr(main_mod.tdp_factory, "select_backend", fail_selection)
+
+    assert asyncio.run(plugin._probe_tdp_backend(force=True)) is False
+    assert failed.release_calls == 1
+    assert isinstance(plugin._tdp_backend, NullBackend)
+    assert plugin._desktop_power._cpu is plugin._tdp_backend
+    assert plugin._tdp_reason == "selection_failed"
+    assert plugin._tdp_backend_history[-1]["outcome"] == "selection_failed"
+    assert plugin._tdp_backend_history[-1]["selection_trace"] == [{
+        "candidate": "factory",
+        "backend": None,
+        "supported": False,
+        "error": "OSError",
+    }]
+
+
+def test_concurrent_backend_probes_perform_one_reselection(Plugin, monkeypatch):
+    import main as main_mod
+
+    plugin = Plugin()
+    plugin._init()
+    failed = plugin._tdp_backend
+    failed.probe = lambda: False
+    replacement = FakeBackend()
+    replacement.name = "fallback"
+    selections = []
+
+    async def yielding_offload(fn):
+        await asyncio.sleep(0)
+        return fn()
+
+    plugin._offload_call = yielding_offload
+    monkeypatch.setattr(
+        main_mod.tdp_factory,
+        "select_backend",
+        lambda *_args, **_kwargs: selections.append(True) or replacement,
+    )
+
+    async def probe_twice():
+        return await asyncio.gather(
+            plugin._probe_tdp_backend(force=True),
+            plugin._probe_tdp_backend(force=True),
+        )
+
+    assert asyncio.run(probe_twice()) == [True, True]
+    assert failed.release_calls == 1
+    assert len(selections) == 1
+
+
+def test_backend_guard_follows_route_loss_and_autonomous_recovery(
+    Plugin,
+    monkeypatch,
+):
+    import main as main_mod
+
+    plugin = Plugin()
+    plugin._init()
+    plugin._tdp_backend.probe = lambda: False
+    plugin._lifecycle._task = object()
+    replacement = FakeBackend()
+    replacement.name = "fallback"
+    replacements = iter((NullBackend("not ready yet"), replacement))
+    monkeypatch.setattr(main_mod, "_TDP_BACKEND_REPROBE_S", 0.001)
+    monkeypatch.setattr(
+        main_mod.tdp_factory,
+        "select_backend",
+        lambda *_args, **_kwargs: next(replacements),
+    )
+
+    async def wait_for_recovery():
+        assert await plugin._probe_tdp_backend(force=True) is False
+        guard = plugin._tdp_guard_task
+        assert guard is not None
+        for _ in range(50):
+            if plugin._tdp_backend is replacement:
+                same_guard = plugin._tdp_guard_task is guard
+                plugin._stop_tdp_guard_loop()
+                return same_guard
+            await asyncio.sleep(0.005)
+        return False
+
+    assert asyncio.run(wait_for_recovery()) is True
+
+
+def test_force_probe_does_not_select_when_release_raises(Plugin, monkeypatch):
+    import main as main_mod
+
+    plugin = Plugin()
+    plugin._init()
+    failed = plugin._tdp_backend
+    failed.probe = lambda: False
+
+    def broken_release():
+        raise OSError("restore failed")
+
+    failed.release = broken_release
+    selections = []
+    monkeypatch.setattr(
+        main_mod.tdp_factory,
+        "select_backend",
+        lambda *_args, **_kwargs: selections.append(True) or FakeBackend(),
+    )
+
+    assert asyncio.run(plugin._probe_tdp_backend(force=True)) is False
+    assert plugin._tdp_backend is failed
+    assert plugin._tdp_reason == "release_failed"
+    assert selections == []
+
+
+def test_unavailable_backend_reselection_is_rate_limited(Plugin, monkeypatch):
+    import main as main_mod
+
+    plugin = Plugin()
+    plugin._init()
+    plugin._tdp_backend = NullBackend("no viable route")
+    now = [100.0]
+    selections = []
+    monkeypatch.setattr(main_mod, "_monotonic", lambda: now[0])
+    monkeypatch.setattr(
+        main_mod.tdp_factory,
+        "select_backend",
+        lambda *_args, **_kwargs: selections.append(True)
+        or NullBackend("still unavailable"),
+    )
+
+    assert asyncio.run(plugin._probe_tdp_backend()) is False
+    assert asyncio.run(plugin._probe_tdp_backend()) is False
+    assert len(selections) == 1
+
+    now[0] += 30.0
+
+    assert asyncio.run(plugin._probe_tdp_backend()) is False
+    assert len(selections) == 2
+
+
+def test_route_loss_hands_hhd_back_and_disables_control(
+    Plugin,
+    fake_hhd,
+    monkeypatch,
+):
+    import main as main_mod
+
+    plugin = Plugin()
+    plugin._init()
+    plugin._tdp_backend.probe = lambda: False
+    plugin._tdp_backend.reselection_safe_after_use = True
+    plugin._tdp_backend_used = True
+    plugin._settings["hhd_tdp_prev"] = True
+    plugin._settings["tdp_control_enabled"] = True
+    fake_hhd.set(False)
+    monkeypatch.setattr(
+        main_mod.tdp_factory,
+        "select_backend",
+        lambda *_args, **_kwargs: NullBackend("no viable route"),
+    )
+
+    assert asyncio.run(plugin._probe_tdp_backend(force=True)) is False
+    assert fake_hhd.value is True
+    assert plugin._settings["hhd_tdp_prev"] is None
+    assert plugin._settings["tdp_control_enabled"] is False
+    assert plugin._tdp_backend_history[-1]["handoff"]["ok"] is True
+
+
 def test_bazzite_legion_go_2_recovers_a_startup_lock_after_sysfs_appears(
     Plugin,
     tmp_path,
@@ -206,6 +560,7 @@ def test_bazzite_legion_go_2_recovers_a_startup_lock_after_sysfs_appears(
         encoding="utf-8",
     )
     (profile_dir / "profile").write_text("performance", encoding="utf-8")
+    plugin._lifecycle._task = object()
 
     async def recover():
         state = await plugin.get_tdp_state()
@@ -356,7 +711,10 @@ def test_anatase_startup_keeps_recovery_locked_when_hhd_is_unreadable(
     plugin._hhd_tdp_client = FakeHHD(None)
     events = []
     plugin._tdp_backend = types.SimpleNamespace(
+        name="locked",
+        supported=True,
         safety_locked=True,
+        probe=lambda: False,
         relinquish_ownership=lambda: events.append("relinquish"),
         recover_runtime_transaction=lambda: events.append("recover"),
     )
@@ -367,6 +725,7 @@ def test_anatase_startup_keeps_recovery_locked_when_hhd_is_unreadable(
     plugin._offload_call = direct
 
     assert asyncio.run(plugin._recover_tdp_startup_state()) is False
+    assert asyncio.run(plugin._probe_tdp_backend(force=True)) is False
     assert plugin._tdp_external_owner is True
     assert events == []
 
@@ -470,11 +829,22 @@ def test_take_and_restore_hands_hhd_back(Plugin, fake_hhd):
     assert p._settings["hhd_tdp_prev"] is None
 
 
-def test_take_never_disables_hhd_when_deferred_backend_probe_fails(Plugin, fake_hhd):
+def test_take_never_disables_hhd_when_no_viable_backend_remains(
+    Plugin,
+    fake_hhd,
+    monkeypatch,
+):
+    import main as main_mod
+
     p = Plugin()
     p._init()
     probes = []
     p._tdp_backend.probe = lambda: probes.append(True) or False
+    monkeypatch.setattr(
+        main_mod.tdp_factory,
+        "select_backend",
+        lambda *_args, **_kwargs: NullBackend("no viable route"),
+    )
     fake_hhd.set(True)
 
     out = asyncio.run(p.take_tdp_control())
