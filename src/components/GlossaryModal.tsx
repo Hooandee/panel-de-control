@@ -6,10 +6,7 @@ import { theme } from "../theme";
 import { CATEGORIES, pick, pickTerm } from "../glossary/data";
 import { FocusRoot } from "./FocusRoot";
 
-// Full-screen glossary. Content lives in ../glossary/data (bulky bilingual
-// prose); this component is pure presentation. useI18n degrades gracefully
-// outside the provider (showModal renders in its own React root), so the
-// active language still resolves.
+// showModal uses its own React root, so useI18n preserves the active language outside the provider.
 const GlossaryBody: FC = () => {
   const { t, lang } = useI18n();
   return (

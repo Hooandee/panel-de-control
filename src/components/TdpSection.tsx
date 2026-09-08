@@ -1,5 +1,6 @@
 import { PanelSectionRow, SliderField, Focusable } from "@decky/ui";
 import { FC, useCallback, useMemo } from "react";
+import { LuInfo } from "react-icons/lu";
 
 import { TdpState, TdpScope, PowerDraw, BoostMode, PowerPresetState } from "../api";
 import { resetWatts, offsetOf } from "../tdp/logic";
@@ -55,7 +56,9 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
     const lib = presets ?? { order: [...BUILTIN_IDS], hidden: [], custom: {} };
     const ceiling = tdp.on_ac ? tdp.limits.max_ac : tdp.limits.max;
     const w = scope === "global" ? tdp.global_watts : tdp.watts;
-    const lv = scope === "global" ? tdp.global_levels : tdp.levels;
+    const lv = scope === "global"
+      ? (tdp.global_requested_levels ?? tdp.global_levels)
+      : (tdp.requested_levels ?? tdp.levels);
     const mode = scope === "global" ? tdp.global_boost_mode : tdp.boost_mode;
     const liveBoost = { mode, off2: offsetOf(lv.pl2, lv.pl1), off3: offsetOf(lv.pl3, lv.pl2) };
     return resolveItems(lib, tdp.presets, tdp.on_ac, w, ceiling, liveBoost);
@@ -69,7 +72,7 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
       builtinWatts: tdp.presets,
       onAc: tdp.on_ac,
       currentWatts: scope === "global" ? tdp.global_watts : tdp.watts,
-      min: tdp.limits.min,
+      min: tdp.request_min ?? tdp.limits.min,
       max: tdp.limits.max_ac,
       supportsAdvanced: tdp.supports_advanced,
       // Absolute rail ceilings; the editor bounds each margin against the preset's own PL1
@@ -92,12 +95,14 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
 
   const view =
     scope === "global"
-      ? { watts: tdp.global_watts, levels: tdp.global_levels, mode: tdp.global_boost_mode }
-      : { watts: tdp.watts, levels: tdp.levels, mode: tdp.boost_mode };
+      ? { watts: tdp.global_watts, levels: tdp.global_requested_levels ?? tdp.global_levels, mode: tdp.global_boost_mode }
+      : { watts: tdp.watts, levels: tdp.requested_levels ?? tdp.levels, mode: tdp.boost_mode };
+  const requestMin = tdp.request_min ?? tdp.limits.min;
   // Active ceiling: on battery the device-aware cap (max), on charger max_ac.
   // Never offer more than the current power source can deliver.
   const activeMax = tdp.on_ac ? tdp.limits.max_ac : tdp.limits.max;
   const isAutoOn = power?.auto_tdp ?? false;
+  const visualLimits = { ...tdp.limits, min: isAutoOn ? tdp.limits.min : requestMin };
   const atCeiling = Math.min(view.watts, activeMax) >= activeMax;
   // Reference watts clamped to the active ceiling; the reset link shows only when
   // the current value differs from it.
@@ -109,7 +114,7 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
   const hasFwModes = fwModes.length > 0;
   const inFwMode = hasFwModes && tdp.firmware_mode !== "custom";
   const shownWatts = inFwMode ? (tdp.applied_w ?? view.watts) : view.watts;
-  const ownership = ownershipView(tdp.ownership);
+  const ownership = ownershipView(tdp.ownership, tdp.limits.min);
   const deckPptActive = Boolean(tdp.ppt?.supported && view.mode !== "estable");
   const arcTarget = deckPptActive ? (tdp.ppt?.requested.slow ?? shownWatts) : shownWatts;
   const arcApplied = deckPptActive ? (tdp.ppt?.applied.slow ?? null) : (power?.applied ?? null);
@@ -127,7 +132,7 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
         <PanelSectionRow>
           <PowerArc
             watts={arcTarget}
-            limits={tdp.limits}
+            limits={visualLimits}
             onAc={tdp.on_ac}
             actualWatts={power?.watts ?? null}
             gpuBusy={power?.gpu_busy ?? null}
@@ -163,7 +168,7 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
       <PanelSectionRow>
         <PowerArc
           watts={arcTarget}
-          limits={tdp.limits}
+          limits={visualLimits}
           onAc={tdp.on_ac}
           actualWatts={power?.watts ?? null}
           gpuBusy={power?.gpu_busy ?? null}
@@ -215,13 +220,27 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
           <PanelSectionRow>
             <SliderField
               value={Math.min(shownWatts, activeMax)}
-              min={tdp.limits.min}
+              min={requestMin}
               max={activeMax}
               step={1}
               showValue
               onChange={onWatts}
             />
           </PanelSectionRow>
+          {!inFwMode && view.watts < tdp.limits.min && (
+            <PanelSectionRow>
+              <div style={{
+                display: "flex",
+                alignItems: "flex-start",
+                gap: theme.space.xs,
+                color: theme.color.textMuted,
+                fontSize: theme.font.caption,
+              }}>
+                <LuInfo size={13} aria-hidden style={{ flexShrink: 0, marginTop: 1 }} />
+                <span>{t("tdp.minimum.notice", { min: tdp.limits.min, requested: view.watts })}</span>
+              </div>
+            </PanelSectionRow>
+          )}
           {atCeiling && (
             <PanelSectionRow>
               <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>

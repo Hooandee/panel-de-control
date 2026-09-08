@@ -101,6 +101,9 @@ export const PowerArc: FC<PowerArcProps> = ({
   const [tx1, ty1] = polarAt(tickDeg, R - SW / 2 - 1);
   const [tx2, ty2] = polarAt(tickDeg, R + SW / 2 + 1);
   const targetDiverged = Math.round(markerWatts) !== Math.round(heroWatts);
+  const showTargetLabel = targetDiverged || baseMarkerWatts !== null;
+  const targetLabelAtMinimum = showTargetLabel
+    && Math.round(markerWatts) === Math.round(limits.min);
   const [lx, ly] = polarAt(tickDeg, R + SW / 2 + 10);
   const slowFraction = slowMarkerWatts === null ? null : fraction(slowMarkerWatts, limits.min, scaleMax);
   const slowDeg = slowFraction === null ? null : START + slowFraction * SWEEP;
@@ -165,7 +168,7 @@ export const PowerArc: FC<PowerArcProps> = ({
           strokeWidth={2.5}
           strokeLinecap="round"
         />
-        {(targetDiverged || baseMarkerWatts !== null) && (
+        {showTargetLabel && (
           <text x={lx} y={ly + 3} fill="rgba(255,255,255,0.90)" fontSize="9" fontWeight={700} textAnchor="middle">
             {Math.round(markerWatts)}W
           </text>
@@ -186,7 +189,9 @@ export const PowerArc: FC<PowerArcProps> = ({
             </text>
           </>
         )}
-        <text x={sx} y={sy + 16} fill={theme.color.textMuted} fontSize="10" textAnchor="middle">{limits.min}W</text>
+        {!targetLabelAtMinimum && (
+          <text x={sx} y={sy + 16} fill={theme.color.textMuted} fontSize="10" textAnchor="middle">{limits.min}W</text>
+        )}
         <text x={ex} y={ey + 16} fill={theme.color.textMuted} fontSize="10" textAnchor="middle">{scaleMax}W{chargerHeadroom ? " ⚡" : ""}</text>
       </svg>
       <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>

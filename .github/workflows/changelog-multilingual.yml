@@ -1,9 +1,8 @@
 name: changelog-multilingual
 
-# Blocks a PR whose newest CHANGELOG.md section lacks a Spanish entry for every
-# English entry or contains an incomplete Italian translation. Separate Español,
-# English and Italiano blocks are preferred; Release Please's unlabelled English
-# bullets and explicit ES, EN and IT labels remain compatible.
+# Blocks release PRs whose newest CHANGELOG.md section is not complete in every
+# supported interface language. This validates structure; catalog wording and
+# terminology are reviewed by the translation-content tests in the main CI.
 on:
   pull_request:
     types: [opened, edited, reopened, synchronize]
@@ -24,4 +23,5 @@ jobs:
           RELEASE_PR_TITLE: ${{ github.event.pull_request.title }}
           RELEASE_PR_BODY: ${{ github.event.pull_request.body }}
         run: python3 scripts/release_guard.py pr
-      - run: python3 scripts/changelog_notes.py --check
+      - name: Require every supported language
+        run: python3 scripts/changelog_notes.py --check

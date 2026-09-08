@@ -16,6 +16,8 @@ const TDP_STATE = {
   global_watts: 15,
   levels: { pl1: 15, pl2: 15, pl3: 15 },
   global_levels: { pl1: 15, pl2: 15, pl3: 15 },
+  requested_levels: { pl1: 15, pl2: 15, pl3: 15 },
+  global_requested_levels: { pl1: 15, pl2: 15, pl3: 15 },
   boost_mode: "estable",
   global_boost_mode: "estable",
   seen_autotdp_notice: true,
@@ -137,4 +139,68 @@ describe("useTdp game context", () => {
       "100",
     );
   });
+
+  it("keeps requested boost rails in sync during an optimistic level edit", async () => {
+    const { result } = renderHook(() => useTdp());
+    await settle();
+
+    act(() => result.current.onSetLevels(2, 3));
+
+    expect(result.current.tdp?.global_requested_levels).toEqual({
+      pl1: 15,
+      pl2: 17,
+      pl3: 20,
+    });
+    expect(result.current.tdp?.global_levels).toEqual({
+      pl1: 15,
+      pl2: 15,
+      pl3: 15,
+    });
+  });
+
+  it("moves requested custom boost rails with an optimistic watts edit", async () => {
+    mocks.getTdpState.mockResolvedValue({
+      ...TDP_STATE,
+      global_boost_mode: "custom",
+      global_requested_levels: { pl1: 15, pl2: 17, pl3: 20 },
+    });
+    const { result } = renderHook(() => useTdp());
+    await settle();
+
+    act(() => result.current.onWatts(10));
+
+    expect(result.current.tdp?.global_watts).toBe(10);
+    expect(result.current.tdp?.global_requested_levels).toEqual({
+      pl1: 10,
+      pl2: 12,
+      pl3: 15,
+    });
+    expect(result.current.tdp?.global_levels).toEqual({
+      pl1: 15,
+      pl2: 15,
+      pl3: 15,
+    });
+  });
+
+  it("backs off long enough to recover capabilities published after ten seconds", async () => {
+    const availableAt = Date.now() + 10_000;
+    mocks.getTdpState.mockImplementation(async () => ({
+      ...TDP_STATE,
+      supported: Date.now() >= availableAt,
+      recovery_pending: Date.now() < availableAt,
+    }));
+
+    const { result } = renderHook(() => useTdp());
+    await settle();
+
+    expect(result.current.tdp?.recovery_pending).toBe(true);
+
+    await act(async () => vi.advanceTimersByTimeAsync(14_000));
+    await settle();
+
+    expect(result.current.tdp?.supported).toBe(true);
+    expect(result.current.tdp?.recovery_pending).toBe(false);
+    expect(mocks.getTdpState).toHaveBeenCalledTimes(4);
+  });
+
 });

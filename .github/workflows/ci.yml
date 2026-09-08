@@ -103,11 +103,17 @@ jobs:
           cache: pnpm
       - if: needs.changes.outputs.decky == 'true'
         run: pnpm install --frozen-lockfile
-      - if: needs.changes.outputs.decky == 'true'
+      - name: Type-check the frontend
+        if: needs.changes.outputs.decky == 'true'
         run: pnpm typecheck
-      - if: needs.changes.outputs.decky == 'true'
+      - name: Validate translation content and terminology
+        if: needs.changes.outputs.decky == 'true'
+        run: pnpm test:i18n
+      - name: Run the frontend test suite
+        if: needs.changes.outputs.decky == 'true'
         run: pnpm test:fe
-      - if: needs.changes.outputs.decky == 'true'
+      - name: Build the frontend
+        if: needs.changes.outputs.decky == 'true'
         run: pnpm build
       - name: Verify build output exists
         if: needs.changes.outputs.decky == 'true'

@@ -81,6 +81,7 @@ class FirmwareAttrBackend(TDPBackend):
         ownership_lock_path=None,
     ):
         self.name = f"firmware-attr:{driver_prefix}"
+        self._driver_prefix = driver_prefix
         self._fallback = fallback
         self._root = root
         self._profile_name = profile_name  # Lenovo: set this platform-profile to "custom" first
@@ -276,6 +277,8 @@ class FirmwareAttrBackend(TDPBackend):
         except (TypeError, ValueError):
             return {"ok": False, "detail": f"firmware {purpose} snapshot invalid"}
         profile = payload.get("profile")
+        if isinstance(profile, str) and not self._pp_dir:
+            return {"ok": False, "detail": f"firmware {purpose} profile unavailable"}
         if self._pp_dir and not isinstance(profile, str):
             return {"ok": False, "detail": f"firmware {purpose} profile unavailable"}
         recovered, problems = self._rollback_transaction(surfaces, snapshot, profile)
@@ -307,6 +310,7 @@ class FirmwareAttrBackend(TDPBackend):
 
     def recover_runtime_transaction(self):
         if self._runtime_lock_payload is not None:
+            self._refresh_recovery_capabilities()
             recovered = self._restore_payload(
                 "transaction",
             )
@@ -352,6 +356,26 @@ class FirmwareAttrBackend(TDPBackend):
             if os.path.isdir(os.path.join(d, "attributes")):
                 return d
         return None
+
+    def _refresh_recovery_capabilities(self):
+        self._dir = self._find_driver_dir(self._driver_prefix)
+        self.supported = self._dir is not None and os.path.exists(
+            self._attr("ppt_pl1_spl")
+        )
+        self._pp_dir = self._find_profile_dir()
+        self._pp_choices = None
+        self._legacy = self._find_legacy_nodes(self._driver_prefix)
+        self._primary_rails = tuple(
+            rail
+            for rail, attr in _RAIL_ATTRS
+            if os.path.exists(self._attr(attr))
+        )
+        self._rails = tuple(
+            rail
+            for rail, _attr in _RAIL_ATTRS
+            if rail in self._primary_rails or rail in self._legacy
+        )
+        self.supports_levels = any(rail != "pl1" for rail in self._rails)
 
     def _attr(self, name, leaf="current_value"):
         return os.path.join(self._dir or "", "attributes", name, leaf)

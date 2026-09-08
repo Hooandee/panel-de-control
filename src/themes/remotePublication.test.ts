@@ -99,4 +99,8 @@ describe("localizePublishedText", () => {
     expect(localizePublishedText({ es: "ES", en: "", it: "IT" }, "en")).toBe("ES");
     expect(localizePublishedText({ es: "", en: "", it: "IT" }, "es")).toBe("IT");
   });
+
+  it("falls back to English for German when a published theme has no German text", () => {
+    expect(localizePublishedText({ es: "ES", en: "EN", it: "IT" }, "de")).toBe("EN");
+  });
 });

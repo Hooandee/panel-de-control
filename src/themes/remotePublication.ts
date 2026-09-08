@@ -5,7 +5,8 @@ export type ThemePublicationCompatibility =
   | "incompatible-panel"
   | "incompatible-css-loader";
 
-export type PublishedLocalizedText = Readonly<Record<Lang, string>>;
+type PublishedLocale = "es" | "en" | "it";
+export type PublishedLocalizedText = Readonly<Record<PublishedLocale, string>>;
 export type PublishedNotes = PublishedLocalizedText | Readonly<{
   es?: never;
   en?: never;

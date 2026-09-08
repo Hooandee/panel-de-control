@@ -26,6 +26,10 @@ describe("glossary data", () => {
     const italianNames = terms.map((t) => t.termIt);
     expect(italianNames.every(Boolean)).toBe(true);
     expect(new Set(italianNames).size).toBe(italianNames.length);
+
+    const germanNames = terms.map((t) => t.termDe);
+    expect(germanNames.every(Boolean)).toBe(true);
+    expect(new Set(germanNames).size).toBe(germanNames.length);
   });
 
   it("has non-empty text in every language for each category title", () => {
@@ -33,6 +37,7 @@ describe("glossary data", () => {
       expect(c.es.trim()).not.toBe("");
       expect(c.en.trim()).not.toBe("");
       expect(c.it.trim()).not.toBe("");
+      expect(c.de.trim()).not.toBe("");
     }
   });
 
@@ -42,6 +47,7 @@ describe("glossary data", () => {
       expect(t.es.trim()).not.toBe("");
       expect(t.en.trim()).not.toBe("");
       expect(t.it.trim()).not.toBe("");
+      expect(t.de.trim()).not.toBe("");
     }
   });
 
@@ -68,14 +74,24 @@ describe("glossary data", () => {
 
     expect(batteryHealth?.termIt).toBe("Stato di salute della batteria");
   });
+
+  it("uses natural German terminology for generated frames and battery health", () => {
+    expect(terms.find((term) => term.id === "frame-gen")).toMatchObject({
+      termDe: "Frame-Generierung",
+      de: "Das Gerät berechnet zusätzliche Bilder und fügt sie zwischen den echten Frames ein, damit Bewegungen flüssiger wirken. Das Ergebnis kann sehr gut aussehen, benötigt aber einen Teil der Grafikleistung und kann die Eingabeverzögerung leicht erhöhen.",
+    });
+    expect(terms.find((term) => term.id === "battery-health")?.termDe)
+      .toBe("Akkuzustand");
+  });
 });
 
 describe("pick", () => {
   it("returns the matching language", () => {
-    const entry = { es: "hola", en: "hi", it: "ciao" };
+    const entry = { es: "hola", en: "hi", it: "ciao", de: "hallo" };
     expect(pick(entry, "es")).toBe("hola");
     expect(pick(entry, "en")).toBe("hi");
     expect(pick(entry, "it")).toBe("ciao");
+    expect(pick(entry, "de")).toBe("hallo");
   });
 
   it("uses the Italian display term without changing Spanish or English", () => {
@@ -83,13 +99,16 @@ describe("pick", () => {
       id: "battery",
       term: "Salud de la batería",
       termIt: "Stato di salute della batteria",
+      termDe: "Akkuzustand",
       es: "estado",
       en: "health",
       it: "stato",
+      de: "Zustand",
     };
 
     expect(pickTerm(entry, "es")).toBe("Salud de la batería");
     expect(pickTerm(entry, "en")).toBe("Salud de la batería");
     expect(pickTerm(entry, "it")).toBe("Stato di salute della batteria");
+    expect(pickTerm(entry, "de")).toBe("Akkuzustand");
   });
 });
