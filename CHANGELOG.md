@@ -5,9 +5,21 @@
 ## [0.44.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.44.0...panel-de-control-v0.44.1) (2026-09-08)
 
 
-### Bug Fixes
+### Español
 
-* recover from unusable TDP routes ([#596](https://github.com/Hooandee/panel-de-control/issues/596)) ([4785257](https://github.com/Hooandee/panel-de-control/commit/47852576b67b7e722d8520461e324cfdfe0f8253))
+* **TDP:** Recupera el control de TDP en ROG Xbox Ally con Bazzite.
+
+### English
+
+* **TDP:** Restores TDP control on ROG Xbox Ally with Bazzite.
+
+### Italiano
+
+* **TDP:** Ripristina il controllo del TDP su ROG Xbox Ally con Bazzite.
+
+### Deutsch
+
+* **TDP:** Stellt die TDP-Steuerung auf der ROG Xbox Ally mit Bazzite wieder her.
 
 ## [0.44.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.43.0...panel-de-control-v0.44.0) (2026-09-08)
 
