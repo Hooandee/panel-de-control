@@ -17,6 +17,7 @@ class AsusNbWmiBackend(TDPBackend):
     """Standalone legacy ASUS TDP ABI used when asus-armoury is absent."""
 
     name = "asus-nb-wmi"
+    reselection_safe_after_use = True
 
     def __init__(
         self,
@@ -46,6 +47,7 @@ class AsusNbWmiBackend(TDPBackend):
         )
         self._ownership_recovery_pending = payload is not None
         self._recovery_blocked = False
+        self._selection_failure = {}
 
     @property
     def safety_locked(self) -> bool:
@@ -147,6 +149,36 @@ class AsusNbWmiBackend(TDPBackend):
             if rail in levels
         }
 
+    def ready(self) -> bool:
+        return self.selection_ready()
+
+    def probe(self) -> bool:
+        return self.ready()
+
+    def selection_ready(self) -> bool:
+        self._selection_failure = {}
+        if not self.supported:
+            self._selection_failure = {"unready_reason": "not_present"}
+            return False
+        if self.safety_locked:
+            self._selection_failure = {"unready_reason": "ownership_recovery"}
+            return False
+        unavailable = [
+            f"{self.name}/{rail}=unavailable"
+            for rail, path in self._paths.items()
+            if self._read_int(path) is None
+        ]
+        if unavailable:
+            self._selection_failure = {
+                "unready_reason": "snapshot_unavailable",
+                "unavailable": unavailable,
+            }
+            return False
+        return True
+
+    def selection_diagnostics(self) -> dict:
+        return dict(self._selection_failure)
+
     def release(self) -> bool:
         if self._owned_snapshot is None:
             return not self.safety_locked
@@ -189,12 +221,15 @@ class AsusNbWmiBackend(TDPBackend):
         return {"ok": True, "detail": "ASUS legacy ownership relinquished"}
 
     def diagnostics(self) -> dict:
-        return {
+        diagnostics = {
             "rails": list(self._rails),
             "transactional": True,
             "owns_state": self._owned_snapshot is not None,
             "recovery_blocked": self.safety_locked,
         }
+        if self._selection_failure:
+            diagnostics["selection_failure"] = dict(self._selection_failure)
+        return diagnostics
 
     def _rail_max(self, rail: str) -> int:
         if rail == "pl2":

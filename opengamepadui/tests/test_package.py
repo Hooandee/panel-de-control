@@ -133,15 +133,6 @@ def _matches(path: str, patterns: list[str]) -> bool:
     return False
 
 
-def _matches_every(path: str, patterns: list[str]) -> bool:
-    return all(
-        not _matches(path, [pattern[1:]])
-        if pattern.startswith("!")
-        else _matches(path, [pattern])
-        for pattern in patterns
-    )
-
-
 class ConfigureExportTests(unittest.TestCase):
     def test_adds_limited_linux_preset_without_changing_existing_preset(self) -> None:
         existing = """[preset.0]
@@ -724,23 +715,55 @@ class BuildContractTests(unittest.TestCase):
 
 
 class WorkflowIsolationTests(unittest.TestCase):
-    def test_decky_classifier_routes_platform_and_mixed_changes(self) -> None:
+    def test_decky_classifier_routes_product_surfaces_and_platform_changes(
+        self,
+    ) -> None:
         decky = DECKY_WORKFLOW.read_text(encoding="utf-8")
         ogui = OGUI_WORKFLOW.read_text(encoding="utf-8")
         windows = WINDOWS_WORKFLOW.read_text(encoding="utf-8")
-        decky_paths = _filter_paths(decky, "decky")
+        backend_paths = _filter_paths(decky, "backend")
+        frontend_paths = _filter_paths(decky, "frontend")
 
         self.assertEqual(
-            decky_paths,
+            backend_paths,
             [
-                "**",
-                "!opengamepadui/**",
-                "!.github/workflows/opengamepadui-ci.yml",
-                "!windows/**",
-                "!.github/workflows/windows-ci.yml",
+                ".github/workflows/ci.yml",
+                ".github/workflows/release-please.yml",
+                "main.py",
+                "py_modules/**",
+                "scripts/*.py",
+                "scripts/**/*.py",
+                "tests/*.py",
+                "tests/**/*.py",
+                "conftest.py",
+                "requirements-dev.txt",
+                "ruff.toml",
+                "shared/**",
+                "plugin.json",
+                ".release-please-manifest.json",
+                "release-please-config.json",
+                "CHANGELOG.md",
             ],
         )
-        self.assertIn("predicate-quantifier: every", decky)
+        self.assertEqual(
+            frontend_paths,
+            [
+                ".github/workflows/ci.yml",
+                ".github/workflows/prerelease.yml",
+                "src/**",
+                "tests/*.ts",
+                "tests/**/*.ts",
+                "scripts/*.mjs",
+                "scripts/**/*.mjs",
+                "scripts/sync-plugin-payload.sh",
+                "shared/**",
+                "package.json",
+                "pnpm-lock.yaml",
+                "rollup.config.js",
+                "tsconfig.json",
+                "vitest.config.ts",
+            ],
+        )
 
         for event in ("push", "pull_request"):
             ogui_paths = _event_paths(ogui, event)
@@ -759,6 +782,8 @@ class WorkflowIsolationTests(unittest.TestCase):
                 _matches(".github/workflows/windows-ci.yml", windows_paths)
             )
 
+        self.assertIn("branches: [main]", _event_body(decky, "push"))
+
         self.assertRegex(
             windows,
             r"python -m unittest\s+"
@@ -766,29 +791,36 @@ class WorkflowIsolationTests(unittest.TestCase):
         )
 
         cases = (
-            (["opengamepadui/plugin.gd"], False),
-            (["opengamepadui/plugin.json"], False),
-            ([".github/workflows/opengamepadui-ci.yml"], False),
-            (["windows/PanelDeControl.sln"], False),
-            ([".github/workflows/windows-ci.yml"], False),
-            (["src/index.tsx"], True),
-            (["opengamepadui/plugin.gd", "src/index.tsx"], True),
-            (["windows/PanelDeControl.sln", "src/index.tsx"], True),
-            (["shared/fixtures/auto_tdp.json"], True),
-            (["conftest.py"], True),
-            (["plugin.json"], True),
-            (["release-please-config.json"], True),
-            ([".github/workflows/release-please.yml"], True),
-            ([".github/workflows/prerelease.yml"], True),
-            (["README.md"], True),
-            (["future-root-config.toml"], True),
-            ([".github/workflows/ci.yml"], True),
+            (["opengamepadui/plugin.gd"], False, False),
+            (["windows/PanelDeControl.sln"], False, False),
+            (["main.py"], True, False),
+            (["py_modules/tdp/factory.py"], True, False),
+            (["tests/test_tdp_factory.py"], True, False),
+            (["src/index.tsx"], False, True),
+            (["tests/pluginPayload.test.ts"], False, True),
+            (["scripts/copy-plugin-payload.mjs"], False, True),
+            (["scripts/sync-plugin-payload.sh"], False, True),
+            (["scripts/release_guard.py"], True, False),
+            (["opengamepadui/plugin.gd", "src/index.tsx"], False, True),
+            (["windows/PanelDeControl.sln", "main.py"], True, False),
+            (["shared/fixtures/auto_tdp.json"], True, True),
+            (["plugin.json"], True, False),
+            (["release-please-config.json"], True, False),
+            (["README.md"], False, False),
+            (["future-root-config.toml"], False, False),
+            ([".github/workflows/ci.yml"], True, True),
+            ([".github/workflows/release-please.yml"], True, False),
+            ([".github/workflows/prerelease.yml"], False, True),
         )
-        for changed_paths, expected_decky in cases:
+        for changed_paths, expected_backend, expected_frontend in cases:
             with self.subTest(changed_paths=changed_paths):
                 self.assertEqual(
-                    any(_matches_every(path, decky_paths) for path in changed_paths),
-                    expected_decky,
+                    any(_matches(path, backend_paths) for path in changed_paths),
+                    expected_backend,
+                )
+                self.assertEqual(
+                    any(_matches(path, frontend_paths) for path in changed_paths),
+                    expected_frontend,
                 )
 
     def test_decky_required_jobs_report_without_running_expensive_ogui_steps(
@@ -797,9 +829,13 @@ class WorkflowIsolationTests(unittest.TestCase):
         workflow = DECKY_WORKFLOW.read_text(encoding="utf-8")
 
         changes = _job_body(workflow, "changes")
-        self.assertIn("decky: ${{ steps.filter.outputs.decky }}", changes)
+        self.assertIn("backend: ${{ steps.filter.outputs.backend }}", changes)
+        self.assertIn("frontend: ${{ steps.filter.outputs.frontend }}", changes)
 
-        for job_name in ("backend-tests", "frontend-build"):
+        for job_name, output in (
+            ("backend-tests", "backend"),
+            ("frontend-build", "frontend"),
+        ):
             job = _job_body(workflow, job_name)
             header = job.split("steps:", maxsplit=1)[0]
             self.assertIn("needs: changes", header)
@@ -811,30 +847,30 @@ class WorkflowIsolationTests(unittest.TestCase):
                 for step in steps
                 if "Require successful path classification" in step
             ]
-            skipped = [step for step in steps if "Decky paths unchanged" in step]
+            skipped = [step for step in steps if "paths unchanged" in step]
             expensive = [
                 step for step in steps if step not in guards and step not in skipped
             ]
             self.assertEqual(len(guards), 1)
             self.assertIn("needs.changes.result != 'success'", guards[0])
             self.assertIn(
-                "needs.changes.outputs.decky != 'true'",
+                f"needs.changes.outputs.{output} != 'true'",
                 guards[0],
             )
             self.assertIn(
-                "needs.changes.outputs.decky != 'false'",
+                f"needs.changes.outputs.{output} != 'false'",
                 guards[0],
             )
             self.assertRegex(guards[0], r"(?m)^\s*exit 1$")
             self.assertEqual(len(skipped), 1)
             self.assertIn(
-                "if: needs.changes.outputs.decky == 'false'",
+                f"if: needs.changes.outputs.{output} == 'false'",
                 skipped[0],
             )
             self.assertGreater(len(expensive), 0)
             for step in expensive:
                 self.assertIn(
-                    "if: needs.changes.outputs.decky == 'true'",
+                    f"if: needs.changes.outputs.{output} == 'true'",
                     step,
                 )
 

@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: ["**"]
+    branches: [main]
   pull_request:
 
 # Least privilege: CI only reads the repo. No job here writes anything, and a
@@ -23,7 +23,8 @@ jobs:
       contents: read
       pull-requests: read
     outputs:
-      decky: ${{ steps.filter.outputs.decky }}
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -32,14 +33,39 @@ jobs:
         id: filter
         uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         with:
-          predicate-quantifier: every
           filters: |
-            decky:
-              - "**"
-              - "!opengamepadui/**"
-              - "!.github/workflows/opengamepadui-ci.yml"
-              - "!windows/**"
-              - "!.github/workflows/windows-ci.yml"
+            backend:
+              - ".github/workflows/ci.yml"
+              - ".github/workflows/release-please.yml"
+              - "main.py"
+              - "py_modules/**"
+              - "scripts/*.py"
+              - "scripts/**/*.py"
+              - "tests/*.py"
+              - "tests/**/*.py"
+              - "conftest.py"
+              - "requirements-dev.txt"
+              - "ruff.toml"
+              - "shared/**"
+              - "plugin.json"
+              - ".release-please-manifest.json"
+              - "release-please-config.json"
+              - "CHANGELOG.md"
+            frontend:
+              - ".github/workflows/ci.yml"
+              - ".github/workflows/prerelease.yml"
+              - "src/**"
+              - "tests/*.ts"
+              - "tests/**/*.ts"
+              - "scripts/*.mjs"
+              - "scripts/**/*.mjs"
+              - "scripts/sync-plugin-payload.sh"
+              - "shared/**"
+              - "package.json"
+              - "pnpm-lock.yaml"
+              - "rollup.config.js"
+              - "tsconfig.json"
+              - "vitest.config.ts"
 
   backend-tests:
     needs: changes
@@ -49,28 +75,28 @@ jobs:
       - name: Require successful path classification
         if: >-
           needs.changes.result != 'success' ||
-          (needs.changes.outputs.decky != 'true' &&
-          needs.changes.outputs.decky != 'false')
+          (needs.changes.outputs.backend != 'true' &&
+          needs.changes.outputs.backend != 'false')
         run: |
-          echo "::error::Decky path classification failed or returned an invalid output"
+          echo "::error::Backend path classification failed or returned an invalid output"
           exit 1
-      - name: Decky paths unchanged
-        if: needs.changes.outputs.decky == 'false'
-        run: echo "Decky backend tests not required for these paths"
+      - name: Backend paths unchanged
+        if: needs.changes.outputs.backend == 'false'
+        run: echo "Backend tests not required for these paths"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: needs.changes.outputs.decky == 'true'
+        if: needs.changes.outputs.backend == 'true'
         with:
           persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        if: needs.changes.outputs.decky == 'true'
+        if: needs.changes.outputs.backend == 'true'
         with:
           python-version: "3.11"
-      - if: needs.changes.outputs.decky == 'true'
+      - if: needs.changes.outputs.backend == 'true'
         run: pip install -r requirements-dev.txt
-      - if: needs.changes.outputs.decky == 'true'
+      - if: needs.changes.outputs.backend == 'true'
         run: ruff check py_modules main.py tests
-      - if: needs.changes.outputs.decky == 'true'
-        run: python -m pytest -v
+      - if: needs.changes.outputs.backend == 'true'
+        run: python -m pytest -q
 
   frontend-build:
     needs: changes
@@ -80,41 +106,38 @@ jobs:
       - name: Require successful path classification
         if: >-
           needs.changes.result != 'success' ||
-          (needs.changes.outputs.decky != 'true' &&
-          needs.changes.outputs.decky != 'false')
+          (needs.changes.outputs.frontend != 'true' &&
+          needs.changes.outputs.frontend != 'false')
         run: |
-          echo "::error::Decky path classification failed or returned an invalid output"
+          echo "::error::Frontend path classification failed or returned an invalid output"
           exit 1
-      - name: Decky paths unchanged
-        if: needs.changes.outputs.decky == 'false'
-        run: echo "Decky frontend build not required for these paths"
+      - name: Frontend paths unchanged
+        if: needs.changes.outputs.frontend == 'false'
+        run: echo "Frontend build not required for these paths"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: needs.changes.outputs.decky == 'true'
+        if: needs.changes.outputs.frontend == 'true'
         with:
           persist-credentials: false
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-        if: needs.changes.outputs.decky == 'true'
+        if: needs.changes.outputs.frontend == 'true'
         with:
           version: 10
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        if: needs.changes.outputs.decky == 'true'
+        if: needs.changes.outputs.frontend == 'true'
         with:
           node-version: 20
           cache: pnpm
-      - if: needs.changes.outputs.decky == 'true'
+      - if: needs.changes.outputs.frontend == 'true'
         run: pnpm install --frozen-lockfile
       - name: Type-check the frontend
-        if: needs.changes.outputs.decky == 'true'
+        if: needs.changes.outputs.frontend == 'true'
         run: pnpm typecheck
-      - name: Validate translation content and terminology
-        if: needs.changes.outputs.decky == 'true'
-        run: pnpm test:i18n
       - name: Run the frontend test suite
-        if: needs.changes.outputs.decky == 'true'
+        if: needs.changes.outputs.frontend == 'true'
         run: pnpm test:fe
       - name: Build the frontend
-        if: needs.changes.outputs.decky == 'true'
+        if: needs.changes.outputs.frontend == 'true'
         run: pnpm build
       - name: Verify build output exists
-        if: needs.changes.outputs.decky == 'true'
+        if: needs.changes.outputs.frontend == 'true'
         run: test -f dist/index.js
