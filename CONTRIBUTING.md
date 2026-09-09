@@ -77,15 +77,17 @@ naturalness.
 To test a build on a device without waiting for a release, produce the same zip the
 release pipeline ships. Decky's "Install from zip" expects the archive to contain a
 **single top-level folder named after the plugin** (`Panel de Control/…`), so stage
-the payload into that folder before zipping:
+the payload into that folder before zipping. The helper script
+`scripts/build-test-plugin-build.sh` does all of this for you:
 
 ```sh
-pnpm build                       # must produce dist/index.js
-set STAGING_DIR (mktemp -d)
-node scripts/copy-plugin-payload.mjs . "$STAGING_DIR/Panel de Control"
-cd $STAGING_DIR; zip -r "Panel de Control.zip" "Panel de Control"; cd -
-mv "$STAGING_DIR/Panel de Control.zip" "./Panel de Control.zip"
+./scripts/build-test-plugin-build.sh            # zip lands in the current directory
+./scripts/build-test-plugin-build.sh /some/dir  # zip lands in /some/dir
 ```
+
+The script runs `pnpm build`, stages the payload, zips it, and writes
+`Panel de Control.zip` to the given output directory (defaults to the current
+directory). It is a portable bash script, so it works from any shell.
 
 Then install it on the device via **Decky → Settings → Install from zip**. The zip
 lands in `~/homebrew/plugins/Panel de Control`; restart the loader if the plugin does
