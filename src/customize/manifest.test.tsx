@@ -6,6 +6,7 @@ import {
   CATEGORY_IDS,
   customizationBlocks,
   PINNED_TAB,
+  subitemsFor,
   TABS,
 } from "./manifest";
 
@@ -41,5 +42,13 @@ describe("desktop-only customization blocks", () => {
   it("keeps the desktop core visible with a stale handheld presence cache", () => {
     expect(customizationBlocks("power", true, ["autoTdp"]).map((block) => block.id))
       .toEqual(["desktopPower"]);
+  });
+});
+
+describe("battery customization", () => {
+  it("offers charge-limit ownership only when the backend supports it", () => {
+    expect(subitemsFor("battery", false).map((item) => item.id)).toEqual(["health"]);
+    expect(subitemsFor("battery", true).map((item) => item.id)).toEqual(["health", "limit"]);
+    expect(subitemsFor("battery", true).find((item) => item.id === "limit")?.moduleId).toBe("chargeLimit");
   });
 });

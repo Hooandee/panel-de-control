@@ -835,18 +835,24 @@ class Plugin:
         return {"disabled": self._user_disabled_all()}
 
     async def set_ui_module(self, module_id: str, disabled: bool) -> dict:
-        """Enable/disable a module durably, then re-apply everything honestly so the
-        newly-off machinery is released (fans→auto, TDP rails freed, loops idle)."""
+        """Persist a module state and reconcile affected runtime ownership."""
         self._init()
         disabled = bool(disabled)
+        charge_generation = None
         if module_id in self._MODULE_SETTING:
-            self._cancel_charge_limit_reconcile(
-                "module_changed", preserve_candidate=True
+            charge_generation = self._cancel_charge_limit_reconcile(
+                "module_changed",
+                preserve_candidate=not (
+                    disabled and module_id in ("system", "chargeLimit")
+                ),
             )
             self._settings[self._MODULE_SETTING[module_id]] = not disabled
         elif module_id in self._GENERIC_MODULES:
-            self._cancel_charge_limit_reconcile(
-                "module_changed", preserve_candidate=True
+            charge_generation = self._cancel_charge_limit_reconcile(
+                "module_changed",
+                preserve_candidate=not (
+                    disabled and module_id in ("system", "chargeLimit")
+                ),
             )
             cur = set(self._disabled_modules())
             cur.add(module_id) if disabled else cur.discard(module_id)
@@ -861,11 +867,21 @@ class Plugin:
             else {}
         )
         self._save()
-        self._reapply_all()   # already dispatches its subprocess work off-loop
+        if module_id == "chargeLimit":
+            if not self._module_enabled("chargeLimit"):
+                self._publish_charge_limit_handoff(charge_generation)
+                await self._drain_charge_limit_writes()
+            else:
+                await self._apply_charge_limit_intent(charge_generation)
+            self._sync_sampler()
+            return {"disabled": self._user_disabled_all()}
+        self._reapply_all()
+        if module_id == "system" and disabled:
+            self._publish_charge_limit_handoff(self._charge_limit_generation)
+            await self._release_gpu_clock("module-disabled")
+            await self._drain_charge_limit_writes()
         # Turning the power module off = stepping aside; hand HHD's TDP back, same
         # as set_tdp_control_enabled(False). Otherwise no manager drives the TDP.
-        if module_id == "system" and disabled:
-            await self._release_gpu_clock("module-disabled")
         if module_id == "power" and disabled:
             released = bool(
                 await self._offload_call(self._restore_power_handoff)
@@ -3719,9 +3735,18 @@ class Plugin:
     _MODULE_REQUIRES = {
         "autoTdp": ("all", ("power",)),
         "fanControl": ("all", ("fans",)),
+        "chargeLimit": ("all", ("system",)),
         "learning": ("any", ("power", "fans")),
     }
-    _GENERIC_MODULES = ("system", "display", "fans", "mandos", "autoTdp", "fanControl")
+    _GENERIC_MODULES = (
+        "system",
+        "display",
+        "fans",
+        "mandos",
+        "autoTdp",
+        "fanControl",
+        "chargeLimit",
+    )
     # Modules backed by a pre-existing boolean setting instead of disabled_modules
     # (setting True = module enabled). Single source of truth per concept.
     _MODULE_SETTING = {"power": "tdp_control_enabled", "learning": "telemetry_enabled"}
@@ -4384,6 +4409,7 @@ class Plugin:
         charge_limit_candidate_pending = (
             getattr(self, "_charge_limit_candidate", None) is not None
         )
+        charge_limit_managed = self._module_enabled("chargeLimit")
 
         def apply_charge_limit():
             if self._charge_limit_intent_current(charge_generation):
@@ -4394,14 +4420,20 @@ class Plugin:
                 self._schedule_charge_limit_reconcile("reapply_all")
 
         if (
-            bool(getattr(self._charge_limit, "supported", False))
-            or charge_limit_candidate_pending
+            charge_limit_managed
+            and (
+                bool(getattr(self._charge_limit, "supported", False))
+                or charge_limit_candidate_pending
+            )
         ):
             self._offload(
                 apply_charge_limit,
                 done=schedule_charge_limit_reconcile,
             )
-        elif self._charge_limit_late_probe_eligible():
+        elif (
+            charge_limit_managed
+            and self._charge_limit_late_probe_eligible()
+        ):
             schedule_charge_limit_reconcile()
         self._apply_cpu()
         self._apply_gpu_clock()
@@ -4475,13 +4507,19 @@ class Plugin:
 
     def _charge_limit_apply_current(self, generation) -> bool:
         return (
-            generation is None
-            or self._charge_limit_intent_current(generation)
+            self._module_enabled("chargeLimit")
+            and not getattr(self, "_shutting_down", False)
+            and (
+                generation is None
+                or generation == self._charge_limit_generation
+            )
         )
 
     def _apply_charge_limit_operation(
         self, action, requested, operation, generation=None
     ) -> None:
+        if not self._charge_limit_apply_current(generation):
+            return
         attempts = 1
         result = operation()
         if not self._charge_limit_apply_current(generation):
@@ -4499,12 +4537,12 @@ class Plugin:
         )
 
     def _apply_charge_limit(self, generation=None) -> None:
+        if not self._charge_limit_apply_current(generation):
+            return
         self._apply_selected_charge_limit(generation)
         self._apply_pending_charge_limit_candidate(generation)
 
     def _charge_limit_operation_for(self, backend):
-        if not self._module_enabled("system"):
-            return "disable_module", None, backend.disable
         if bool(self._settings.get("charge_limit_enabled", False)):
             requested = int(self._settings.get("charge_limit_percent", 80))
             return "set", requested, lambda: backend.set(requested)
@@ -4528,18 +4566,19 @@ class Plugin:
         candidate = getattr(self, "_charge_limit_candidate", None)
         if candidate is None:
             return
-        if (
-            generation is not None
-            and not self._charge_limit_intent_current(generation)
-        ):
+        if not self._charge_limit_apply_current(generation):
+            if (
+                not self._module_enabled("chargeLimit")
+                and self._charge_limit_candidate is candidate
+            ):
+                self._charge_limit_candidate = None
             return
         try:
-            backend = candidate
-            if backend is self._charge_limit:
+            if candidate is self._charge_limit:
                 return
-            if not getattr(backend, "supported", False):
+            if not getattr(candidate, "supported", False):
                 return
-            _, _, operation = self._charge_limit_operation_for(backend)
+            _, _, operation = self._charge_limit_operation_for(candidate)
             applied = operation()
             if (
                 applied is False
@@ -4547,12 +4586,8 @@ class Plugin:
             ):
                 operation()
         finally:
-            generation_current = (
-                generation is None
-                or self._charge_limit_intent_current(generation)
-            )
             if (
-                generation_current
+                self._charge_limit_apply_current(generation)
                 and self._charge_limit_candidate is candidate
             ):
                 self._charge_limit_candidate = None
@@ -4560,7 +4595,6 @@ class Plugin:
     def _charge_limit_generation_current(self, generation) -> bool:
         return (
             self._charge_limit_intent_current(generation)
-            and self._module_enabled("system")
             and bool(self._settings.get("charge_limit_enabled", False))
         )
 
@@ -4568,6 +4602,7 @@ class Plugin:
         return (
             generation == self._charge_limit_generation
             and not getattr(self, "_shutting_down", False)
+            and self._module_enabled("chargeLimit")
         )
 
     def _charge_limit_late_probe_eligible(self) -> bool:
@@ -4621,10 +4656,26 @@ class Plugin:
             "history": list(getattr(self, "_charge_limit_history", ())),
         }
 
+    def _publish_charge_limit_handoff(self, generation) -> None:
+        self._charge_limit_candidate = None
+        self._publish_charge_limit_reconciliation(
+            generation,
+            None,
+            "idle",
+            0,
+            0,
+            None,
+            "module_disabled",
+        )
+
+    async def _drain_charge_limit_writes(self) -> None:
+        # The serial barrier guarantees no PdC charge write after the handoff RPC returns.
+        await self._offload_call(lambda: None)
+
     def _schedule_charge_limit_reconcile(self, trigger) -> None:
         generation = self._cancel_charge_limit_reconcile("rescheduled")
         active = (
-            self._module_enabled("system")
+            self._module_enabled("chargeLimit")
             and bool(self._settings.get("charge_limit_enabled", False))
         )
         if (
@@ -4874,17 +4925,20 @@ class Plugin:
 
     def _charge_limit_state(self) -> dict:
         lo, hi = self._charge_limit.range()
+        supported = bool(self._charge_limit.supported)
+        managed = self._module_enabled("chargeLimit") and supported
         enabled = bool(self._settings.get("charge_limit_enabled", False))
         percent = int(self._settings.get("charge_limit_percent", 80))
         applied_percent = None
-        if enabled and self._charge_limit.supported:
+        if managed and enabled:
             actual = self._charge_limit.get()
             if actual is not None:
                 applied_percent = actual
         return {
             "backend": getattr(self._charge_limit, "name", "unsupported"),
-            "supported": self._charge_limit.supported,
+            "supported": supported,
             "adjustable": self._charge_limit.adjustable,
+            "managed": managed,
             "enabled": enabled,
             "percent": percent,
             "applied_percent": applied_percent,
@@ -6833,6 +6887,9 @@ class Plugin:
         self._settings["charge_limit_enabled"] = bool(enabled)
         self._settings["charge_limit_percent"] = percent
         self._save()
+        if not self._module_enabled("chargeLimit"):
+            self._publish_charge_limit_handoff(generation)
+            return self._charge_limit_state()
         apply_task = asyncio.create_task(
             self._apply_charge_limit_intent(generation)
         )

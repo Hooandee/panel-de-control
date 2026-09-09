@@ -923,6 +923,7 @@ export const de: Record<string, string> = {
   "customize.disable": "Deaktivieren",
   "customize.disable.title": "{name} deaktivieren?",
   "customize.disable.body": "Wird im gesamten Panel deaktiviert, nicht nur hier. Die Funktion bleibt aus, bis du sie wieder aktivierst.",
+  "customize.disable.chargeLimit.body": "Panel de Control verwaltet das Ladelimit nicht mehr und gibt die Kontrolle an das System zurück. Deine Einstellung bleibt gespeichert und wird beim erneuten Aktivieren wiederhergestellt.",
   "customize.disable.hint": "Möchtest du die Funktion nur an dieser Stelle nicht sehen? Blende sie stattdessen aus. Sie funktioniert weiter und wird hier lediglich nicht mehr angezeigt.",
   "customize.disable.hide": "Stattdessen hier ausblenden",
   "customize.disable.cancel": "Abbrechen",

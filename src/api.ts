@@ -550,6 +550,7 @@ export interface ChargeLimit {
   supported: boolean;
   // false = firmware-controlled on/off cap (no slider — e.g. Lenovo conservation)
   adjustable: boolean;
+  managed: boolean;
   enabled: boolean;
   percent: number;
   applied_percent: number | null;

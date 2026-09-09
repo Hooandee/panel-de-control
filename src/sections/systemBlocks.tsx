@@ -50,6 +50,7 @@ const BatteryBlock: FC = () => {
         state={battery.state}
         onSetLimit={battery.setLimit}
         hideHealth={subitemHidden(layout.subitems, "battery", "health")}
+        hideLimitControl={subitemHidden(layout.subitems, "battery", "limit")}
       />
     </Collapsible>
   );
