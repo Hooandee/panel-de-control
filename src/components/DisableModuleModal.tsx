@@ -1,4 +1,4 @@
-import { FC } from "react";
+import { FC, ReactNode } from "react";
 import { ModalRoot, showModal, Focusable, DialogButton } from "@decky/ui";
 import { LuPower, LuEyeOff } from "react-icons/lu";
 
@@ -8,11 +8,12 @@ import { FocusRoot } from "./FocusRoot";
 
 interface Opts {
   moduleName: string;
+  body?: ReactNode;
   onDisable: () => void;
   onHideInstead?: () => void;
 }
 
-const Body: FC<Opts & { closeModal?: () => void }> = ({ moduleName, onDisable, onHideInstead, closeModal }) => {
+const Body: FC<Opts & { closeModal?: () => void }> = ({ moduleName, body, onDisable, onHideInstead, closeModal }) => {
   const { t } = useI18n();
   const close = () => closeModal?.();
   return (
@@ -27,7 +28,7 @@ const Body: FC<Opts & { closeModal?: () => void }> = ({ moduleName, onDisable, o
       </div>
 
       <div style={{ fontSize: theme.font.body, color: theme.color.textPrimary, lineHeight: 1.45, textAlign: "center" }}>
-        {t("customize.disable.body")}
+        {body ?? t("customize.disable.body")}
       </div>
 
       {onHideInstead && (

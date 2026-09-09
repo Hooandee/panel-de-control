@@ -17,6 +17,11 @@ describe("effectiveEnabled", () => {
   it("fanControl cascades from fans", () => {
     expect(effectiveEnabled("fanControl", S("fans"))).toBe(false);
   });
+  it("chargeLimit cascades from system", () => {
+    expect(effectiveEnabled("chargeLimit", S("system"))).toBe(false);
+    expect(effectiveEnabled("chargeLimit", S("chargeLimit"))).toBe(false);
+    expect(effectiveEnabled("chargeLimit", S())).toBe(true);
+  });
   it("learning needs power OR fans", () => {
     expect(effectiveEnabled("learning", S("power", "fans"))).toBe(false);
     expect(effectiveEnabled("learning", S("fans"))).toBe(true);

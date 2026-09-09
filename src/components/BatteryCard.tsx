@@ -11,12 +11,10 @@ import { ContainedSlider } from "./ContainedSlider";
 interface Props {
   state: BatteryState;
   onSetLimit: (enabled: boolean, percent: number) => void;
-  /** Optionally hide the whole health group: bar + cycles + capacity. */
   hideHealth?: boolean;
+  hideLimitControl?: boolean;
 }
 
-/** Horizontal battery glyph that fills with the charge %, colored by state, with
- *  an optional threshold marker when a charge limit is active. */
 const BatteryGlyph: FC<{ percent: number; charging: boolean; limit: number | null }> = ({
   percent,
   charging,
@@ -32,16 +30,12 @@ const BatteryGlyph: FC<{ percent: number; charging: boolean; limit: number | nul
   const limitX = limit !== null ? pad + (limit / 100) * inner : null;
   return (
     <svg width={W + 8} height={H} viewBox={`0 0 ${W + 8} ${H}`} style={{ flexShrink: 0 }}>
-      {/* shell */}
       <rect x={1} y={1} width={W - 2} height={H - 2} rx={R} ry={R}
         fill="none" stroke={theme.color.hairline} strokeWidth={2} />
-      {/* terminal nub */}
       <rect x={W} y={H / 2 - 7} width={6} height={14} rx={2} fill={theme.color.hairline} />
-      {/* fill */}
       <rect x={pad} y={pad} width={fill} height={H - pad * 2} rx={R - 2} ry={R - 2} fill={color} />
-      {/* charge-limit marker */}
       {limitX !== null && (
-        <line x1={limitX} y1={2} x2={limitX} y2={H - 2}
+        <line data-pdc-charge-limit-marker="true" x1={limitX} y1={2} x2={limitX} y2={H - 2}
           stroke={theme.color.textPrimary} strokeWidth={2} strokeDasharray="3 2" />
       )}
     </svg>
@@ -59,9 +53,15 @@ const Chip: FC<{ icon: React.ReactNode; label: string; value: string; grow?: num
   </div>
 );
 
-export const BatteryCard: FC<Props> = ({ state, onSetLimit, hideHealth = false }) => {
+export const BatteryCard: FC<Props> = ({
+  state,
+  onSetLimit,
+  hideHealth = false,
+  hideLimitControl = false,
+}) => {
   const { t } = useI18n();
   const { battery: b, charge_limit: cl } = state;
+  const managed = cl.managed && cl.supported;
 
   if (!b.present) {
     return (
@@ -75,7 +75,6 @@ export const BatteryCard: FC<Props> = ({ state, onSetLimit, hideHealth = false }
   const charging = b.status === "Charging";
   const statusKey = batteryStatusKey(b.status, b.ac_online);
 
-  // Status line: charging / discharging (+eta) / connected.
   let statusText: string;
   let statusIcon: React.ReactNode;
   if (statusKey === "charging") {
@@ -93,10 +92,8 @@ export const BatteryCard: FC<Props> = ({ state, onSetLimit, hideHealth = false }
 
   return (
       <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm, overflow: "hidden" }}>
-        {/* Hero: glyph + big %, then the status on its own full-width row so a
-            long "Discharging · 2h 33m" never wraps mid-phrase. */}
         <div style={{ display: "flex", alignItems: "center", gap: theme.space.md }}>
-          <BatteryGlyph percent={percent} charging={charging} limit={cl.supported && cl.enabled && cl.adjustable ? cl.percent : null} />
+          <BatteryGlyph percent={percent} charging={charging} limit={managed && cl.enabled && cl.adjustable ? cl.percent : null} />
           <span style={{ fontSize: theme.font.value, fontWeight: 700, lineHeight: 1, color: theme.color.textPrimary, fontVariantNumeric: "tabular-nums" }}>
             {b.percent === null ? "—" : `${percent}%`}
           </span>
@@ -105,7 +102,6 @@ export const BatteryCard: FC<Props> = ({ state, onSetLimit, hideHealth = false }
           {statusIcon} {statusText}
         </div>
 
-        {/* Health bar */}
         {!hideHealth && b.health_percent !== null && (
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: theme.font.caption, color: theme.color.textMuted }}>
@@ -120,7 +116,6 @@ export const BatteryCard: FC<Props> = ({ state, onSetLimit, hideHealth = false }
           </div>
         )}
 
-        {/* Stat chips (cycles + capacity) — part of the hideable health group. */}
         {!hideHealth && (b.cycle_count !== null || b.energy_full_mwh !== null) && (
           <div style={{ display: "flex", gap: theme.space.sm }}>
             {b.cycle_count !== null && (
@@ -137,9 +132,7 @@ export const BatteryCard: FC<Props> = ({ state, onSetLimit, hideHealth = false }
           </div>
         )}
 
-        {/* Charge limit — hidden entirely on devices that can't cap charge
-            (never show a dead/disabled control). */}
-        {cl.supported && (
+        {managed && !hideLimitControl && (
           <div style={{ borderTop: `1px solid ${theme.color.hairline}`, paddingTop: theme.space.xs }}>
             <ToggleField
               label={t("system.battery.limit")}

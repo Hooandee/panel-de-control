@@ -1,10 +1,11 @@
 import { ReactNode } from "react";
 import {
   LuGauge, LuSlidersHorizontal, LuFan, LuSettings,
-  LuLeaf, LuBatteryFull, LuCpu, LuSun, LuVolume2, LuWind, LuThermometer, LuChartSpline,
+  LuLeaf, LuBatteryCharging, LuBatteryFull, LuCpu, LuSun, LuVolume2, LuWind, LuThermometer, LuChartSpline,
   LuLightbulb, LuPalette, LuGamepad2, LuMemoryStick, LuActivity, LuHeartPulse, LuAudioLines,
   LuSparkles, LuMoon, LuReplace, LuSlidersVertical, LuRocket, LuLayoutDashboard, LuPaintbrush, LuPuzzle,
 } from "react-icons/lu";
+import type { ModuleId } from "./moduleLogic";
 
 /** Presentation metadata shared by a tab and a configurable block. */
 export interface ItemMeta {
@@ -15,6 +16,10 @@ export interface ItemMeta {
 export interface BlockDef extends ItemMeta {
   desktopOnly?: boolean;
   handheldOnly?: boolean;
+}
+export interface SubitemMeta extends ItemMeta {
+  moduleId?: ModuleId;
+  capability?: "chargeLimit";
 }
 
 /** The tab that can never be hidden — the escape hatch back to the customization
@@ -101,11 +106,24 @@ export function customizationBlocks(
  * fixed part of their block, not reorderable). Keyed by block id. Section render
  * code drops them with subitemHidden(layout.subitems, <block>, <sub-item id>).
  */
-export const SUBITEMS: Record<string, ItemMeta[]> = {
+export const SUBITEMS: Record<string, SubitemMeta[]> = {
   battery: [
     { id: "health", labelKey: "system.battery.healthGroup", icon: <LuHeartPulse size={ICON} /> },
+    {
+      id: "limit",
+      labelKey: "system.battery.limit",
+      icon: <LuBatteryCharging size={ICON} />,
+      moduleId: "chargeLimit",
+      capability: "chargeLimit",
+    },
   ],
 };
+
+export function subitemsFor(blockId: string, chargeLimitSupported: boolean): SubitemMeta[] {
+  return (SUBITEMS[blockId] ?? []).filter(
+    (item) => item.capability !== "chargeLimit" || chargeLimitSupported,
+  );
+}
 
 /** Default block-id order for a section (empty for sections without blocks). */
 export function blockOrder(sectionId: string, desktopMode = false): string[] {

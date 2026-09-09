@@ -225,6 +225,124 @@ def test_set_charge_limit_enables_and_applies(tmp_path, monkeypatch):
     assert cl_backend.value == 70  # applied to hardware
 
 
+def test_set_charge_limit_only_saves_intent_while_module_is_disabled(
+    tmp_path, monkeypatch
+):
+    backend = _RecordingChargeLimit()
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=backend)
+    p._init()
+    p._settings["disabled_modules"] = ["chargeLimit"]
+
+    result = asyncio.run(p.set_charge_limit(True, 70))
+
+    assert p._settings["charge_limit_enabled"] is True
+    assert p._settings["charge_limit_percent"] == 70
+    assert backend.set_requests == []
+    assert backend.value == 100
+    assert result["managed"] is False
+
+
+def test_reenabling_charge_limit_reapplies_the_saved_intent(tmp_path, monkeypatch):
+    backend = _RecordingChargeLimit()
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=backend)
+    p._init()
+    p._settings["disabled_modules"] = ["chargeLimit"]
+    p._settings["charge_limit_enabled"] = True
+    p._settings["charge_limit_percent"] = 65
+
+    asyncio.run(p.set_ui_module("chargeLimit", False))
+
+    assert "chargeLimit" not in p._settings["disabled_modules"]
+    assert backend.set_requests == [65]
+    assert backend.value == 65
+
+
+def test_enabling_charge_limit_while_system_is_off_keeps_handoff_diagnostics(
+    tmp_path, monkeypatch
+):
+    backend = _BlockingFailedWriteChargeLimit()
+    candidate = _BlockingFailedWriteChargeLimit()
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=backend)
+    p._init()
+    p._settings["disabled_modules"] = ["system", "chargeLimit"]
+    p._charge_limit_candidate = candidate
+
+    asyncio.run(p.set_ui_module("chargeLimit", False))
+
+    assert p._settings["disabled_modules"] == ["system"]
+    assert backend.writes == []
+    assert candidate.writes == []
+    assert p._charge_limit_candidate is None
+    assert p._charge_limit_reconciliation["status"] == "idle"
+    assert p._charge_limit_reconciliation["reason"] == "module_disabled"
+    assert p._charge_limit_reconciliation["writes"] == 0
+
+
+def test_disabling_charge_limit_waits_for_inflight_write_and_prevents_retry(
+    tmp_path, monkeypatch
+):
+    backend = _BlockingFailedWriteChargeLimit()
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=backend)
+    p._init()
+    p._reapply_all = lambda on_ac=None: None
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    p._apply_executor = executor
+
+    async def scenario():
+        applying = asyncio.create_task(p.set_charge_limit(True, 80))
+        while not backend.write_started.is_set():
+            await asyncio.sleep(0)
+
+        disabling = asyncio.create_task(p.set_ui_module("chargeLimit", True))
+        await asyncio.sleep(0)
+        assert disabling.done() is False
+
+        backend.release_write.set()
+        await asyncio.gather(applying, disabling)
+
+    try:
+        asyncio.run(scenario())
+    finally:
+        backend.release_write.set()
+        executor.shutdown(wait=True)
+
+    assert backend.writes == [80]
+    assert "chargeLimit" in p._settings["disabled_modules"]
+
+
+def test_disabling_system_waits_for_inflight_charge_write_and_prevents_retry(
+    tmp_path, monkeypatch
+):
+    backend = _BlockingFailedWriteChargeLimit()
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=backend)
+    p._init()
+    p._reapply_all = lambda on_ac=None: None
+    p._release_gpu_clock = lambda *_: asyncio.sleep(0)
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    p._apply_executor = executor
+
+    async def scenario():
+        applying = asyncio.create_task(p.set_charge_limit(True, 80))
+        while not backend.write_started.is_set():
+            await asyncio.sleep(0)
+
+        disabling = asyncio.create_task(p.set_ui_module("system", True))
+        await asyncio.sleep(0)
+        assert disabling.done() is False
+
+        backend.release_write.set()
+        await asyncio.gather(applying, disabling)
+
+    try:
+        asyncio.run(scenario())
+    finally:
+        backend.release_write.set()
+        executor.shutdown(wait=True)
+
+    assert backend.writes == [80]
+    assert "system" in p._settings["disabled_modules"]
+
+
 def test_battery_state_keeps_saved_intent_separate_from_readback(tmp_path, monkeypatch):
     backend = _FakeChargeLimit()
     p = _make_plugin(tmp_path, monkeypatch, charge_limit=backend)
@@ -318,6 +436,7 @@ def test_unsupported_charge_limit_degrades(tmp_path, monkeypatch):
     p = _make_plugin(tmp_path, monkeypatch, charge_limit=_FakeChargeLimit(supported=False))
     result = asyncio.run(p.set_charge_limit(True, 70))
     assert result["supported"] is False
+    assert result["managed"] is False
 
 
 def test_reconcile_restores_saved_limit_after_external_reset(tmp_path, monkeypatch):

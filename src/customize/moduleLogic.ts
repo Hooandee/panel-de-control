@@ -3,7 +3,7 @@
 
 export type ModuleId =
   | "power" | "system" | "display" | "fans" | "mandos"
-  | "autoTdp" | "fanControl" | "learning";
+  | "autoTdp" | "fanControl" | "chargeLimit" | "learning";
 
 interface Requirement {
   mode: "all" | "any";
@@ -23,6 +23,7 @@ export function sectionModuleDisabled(id: string, disabled: Set<string>, desktop
 export const REQUIRES: Partial<Record<ModuleId, Requirement>> = {
   autoTdp: { mode: "all", ids: ["power"] },
   fanControl: { mode: "all", ids: ["fans"] },
+  chargeLimit: { mode: "all", ids: ["system"] },
   learning: { mode: "any", ids: ["power", "fans"] },
 };
 
