@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.45.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.44.1...panel-de-control-v0.45.0) (2026-09-09)
+
+
+### Features
+
+* return battery charge-limit control to the system ([#602](https://github.com/Hooandee/panel-de-control/issues/602)) ([7b12ca2](https://github.com/Hooandee/panel-de-control/commit/7b12ca251c1e1a24e1fa0190b21a70b8677a58ff))
+
 ## [0.44.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.44.0...panel-de-control-v0.44.1) (2026-09-08)
 
 
