@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+## [0.45.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.44.1...panel-de-control-v0.45.0) (2026-09-09)
+
+
+### Español
+
+* **Límite de carga:** Añade controles independientes para ocultarlo o desactivarlo desde Personalizar > Sistema > Batería. Al desactivar este control o el módulo Sistema, Panel de Control deja de gestionar el límite para que el sistema recupere el control. Tu ajuste queda guardado y se restaura cuando vuelves a activarlo.
+
+### English
+
+* **Charge limit:** Adds independent controls to hide or disable it under Customize > System > Battery. Disabling this control or the System module makes Panel de Control stop managing the limit so the system regains control. Your setting remains saved and is restored when you enable it again.
+
+### Italiano
+
+* **Limite di carica:** Aggiunge controlli separati per nasconderlo o disattivarlo in Personalizza > Sistema > Batteria. Disattivando questo controllo o il modulo Sistema, Panel de Control smette di gestire il limite e restituisce il controllo al sistema. L’impostazione resta salvata e viene ripristinata quando lo riattivi.
+
+### Deutsch
+
+* **Ladelimit:** Fügt unter Anpassen > System > Akku separate Bedienelemente zum Ausblenden und Deaktivieren hinzu. Wenn du diese Steuerung oder das Systemmodul deaktivierst, verwaltet Panel de Control das Ladelimit nicht mehr und gibt die Kontrolle an das System zurück. Deine Einstellung bleibt gespeichert und wird beim erneuten Aktivieren wiederhergestellt.
+
 ## [0.44.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.44.0...panel-de-control-v0.44.1) (2026-09-08)
 
 

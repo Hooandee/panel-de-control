@@ -51,6 +51,12 @@ def test_fancontrol_cascades_from_fans():
     assert _plugin(disabled=["fans"])._module_enabled("fanControl") is False
 
 
+def test_charge_limit_cascades_from_system():
+    assert _plugin()._module_enabled("chargeLimit") is True
+    assert _plugin(disabled=["chargeLimit"])._module_enabled("chargeLimit") is False
+    assert _plugin(disabled=["system"])._module_enabled("chargeLimit") is False
+
+
 def test_learning_requires_power_or_fans():
     p = _plugin(disabled=["fans"], tdp_control=False, telemetry=True)
     assert p._module_enabled("learning") is False

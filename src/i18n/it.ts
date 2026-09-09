@@ -818,6 +818,7 @@ export const it: Record<string, string> = {
   "customize.disable": "Disattiva",
   "customize.disable.title": "Disattivare {name}?",
   "customize.disable.body": "Verrà disattivato in tutto il pannello, non solo qui. La funzione smetterà di funzionare finché non la riattiverai.",
+  "customize.disable.chargeLimit.body": "Panel de Control smetterà di gestire il limite e restituirà il controllo al sistema. L'impostazione resterà salvata e verrà ripristinata quando riattiverai il modulo.",
   "customize.disable.hint": "Vuoi solo non vederlo qui? Nascondilo invece di disattivarlo: continuerà a funzionare, ma non verrà mostrato in questa posizione.",
   "customize.disable.hide": "Nascondi solo qui",
   "customize.disable.cancel": "Annulla",

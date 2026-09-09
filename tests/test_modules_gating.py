@@ -62,11 +62,27 @@ def _plugin_cl(disabled=None):
     return p
 
 
-def test_charge_limit_released_when_system_disabled():
-    # Disabling the System module steps aside: release the cap, don't keep limiting.
+def test_charge_limit_never_writes_when_system_disabled():
     p = _plugin_cl(disabled=["system"])
     p._apply_charge_limit()
-    assert p._charge_limit.calls == [("disable",)]
+    assert p._charge_limit.calls == []
+
+
+def test_charge_limit_never_writes_when_its_module_is_disabled():
+    p = _plugin_cl(disabled=["chargeLimit"])
+    p._apply_charge_limit()
+    assert p._charge_limit.calls == []
+
+
+def test_pending_charge_limit_candidate_never_writes_when_module_is_disabled():
+    p = _plugin_cl(disabled=["chargeLimit"])
+    candidate = _FakeChargeLimit()
+    p._charge_limit_candidate = candidate
+
+    p._apply_pending_charge_limit_candidate()
+
+    assert candidate.calls == []
+    assert p._charge_limit_candidate is None
 
 
 def test_charge_limit_applied_when_system_enabled():
@@ -75,7 +91,7 @@ def test_charge_limit_applied_when_system_enabled():
     assert ("set", 80) in p._charge_limit.calls
 
 
-def test_disabling_system_invalidates_old_charge_limit_reconcile():
+def test_disabling_system_invalidates_old_charge_limit_reconcile_without_writing():
     import asyncio
 
     p = _plugin_cl()
@@ -83,7 +99,9 @@ def test_disabling_system_invalidates_old_charge_limit_reconcile():
     p._save = lambda: None
     p._sync_sampler = lambda: None
     p._release_gpu_clock = lambda *_: asyncio.sleep(0)
-    p._reapply_all = p._apply_charge_limit
+    p._reapply_all = lambda on_ac=None: p._cancel_charge_limit_reconcile(
+        "reapply", preserve_candidate=True
+    )
     p._charge_limit_generation = 1
     p._charge_limit_reconcile_task = None
     p._charge_limit_history = []
@@ -98,7 +116,60 @@ def test_disabling_system_invalidates_old_charge_limit_reconcile():
     asyncio.run(scenario())
 
     assert p._charge_limit_generation > old_generation
-    assert p._charge_limit.calls == [("disable",)]
+    assert p._charge_limit.calls == []
+    assert p._charge_limit_reconciliation["status"] == "idle"
+    assert p._charge_limit_reconciliation["reason"] == "module_disabled"
+    assert p._charge_limit_reconciliation["writes"] == 0
+
+
+def test_stale_system_disable_does_not_overwrite_new_charge_limit_generation():
+    import asyncio
+
+    p = _plugin_cl()
+    p._init = lambda: None
+    p._save = lambda: None
+    p._sync_sampler = lambda: None
+    p._charge_limit_generation = 0
+    p._charge_limit_reconcile_task = None
+    p._charge_limit_history = []
+    p._charge_limit_reconciliation = {}
+    release_started = asyncio.Event()
+    release_gpu = asyncio.Event()
+
+    async def blocked_release(*_):
+        release_started.set()
+        await release_gpu.wait()
+
+    p._release_gpu_clock = blocked_release
+    p._reapply_all = lambda on_ac=None: p._cancel_charge_limit_reconcile(
+        "reapply", preserve_candidate=True
+    )
+
+    async def scenario():
+        stale_disable = asyncio.create_task(p.set_ui_module("system", True))
+        await release_started.wait()
+        await p.set_ui_module("system", False)
+        current_candidate = _FakeChargeLimit()
+        p._charge_limit_candidate = current_candidate
+        p._publish_charge_limit_reconciliation(
+            p._charge_limit_generation,
+            "new_generation",
+            "scheduled",
+            0,
+            0,
+            None,
+            "verification_pending",
+        )
+        release_gpu.set()
+        await stale_disable
+        return current_candidate
+
+    current_candidate = asyncio.run(scenario())
+
+    assert p._module_enabled("chargeLimit") is True
+    assert p._charge_limit_candidate is current_candidate
+    assert p._charge_limit_reconciliation["trigger"] == "new_generation"
+    assert p._charge_limit_reconciliation["status"] == "scheduled"
 
 
 class _FakeToggle:

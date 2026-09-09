@@ -4,7 +4,7 @@ import { LuChevronUp, LuChevronDown, LuEye, LuEyeOff, LuPower, LuPencil, LuCheck
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
-import { TABS, SUBITEMS, customizationBlocks, blockOrder, PINNED_TAB, CATEGORY_IDS } from "../customize/manifest";
+import { TABS, customizationBlocks, blockOrder, subitemsFor, PINNED_TAB, CATEGORY_IDS } from "../customize/manifest";
 import { iconBtn, IconAction } from "./IconAction";
 import { orderIds, move, toggle, ensure, Layout } from "../customize/layout";
 import { useLayout, saveLayout, resetLayout } from "../customize/store";
@@ -13,7 +13,7 @@ import { moduleState, isDisableableSection, sectionModuleDisabled } from "../cus
 import { FocusRoot } from "./FocusRoot";
 import { ACCENTS } from "../system/accentColor";
 import { useAccent, setAccent } from "../system/useAccent";
-import { getDevice, DeviceInfo } from "../api";
+import { getBatteryState, getDevice, DeviceInfo } from "../api";
 import { sectionHiddenOnDevice, allBlocksHidden } from "../sections/availability";
 import { getPresent, usePresentVersion } from "../customize/present";
 import { useViews, createView } from "../customize/viewStore";
@@ -108,7 +108,19 @@ const CustomizeBody: FC = () => {
   // Device (one-time) so we don't list a category this machine can't use (e.g.
   // Mandos on the Steam Deck) — mirrors the shell's tab gating.
   const [device, setDevice] = useState<DeviceInfo | null>(null);
+  const [chargeLimitSupported, setChargeLimitSupported] = useState(false);
   useEffect(() => { getDevice().then(setDevice).catch(() => {}); }, []);
+  useEffect(() => {
+    let alive = true;
+    getBatteryState()
+      .then(({ charge_limit }) => {
+        if (alive) setChargeLimitSupported(charge_limit.supported);
+      })
+      .catch(() => {
+        if (alive) setChargeLimitSupported(false);
+      });
+    return () => { alive = false; };
+  }, []);
 
   const views = useViews();
   const viewOf = (tabId: string) => views.find((v) => viewTabId(v.id) === tabId);
@@ -146,6 +158,8 @@ const CustomizeBody: FC = () => {
     const pref = layout.blocks[cat] ?? { order: [], hidden: [] };
     save({ ...layout, blocks: { ...layout.blocks, [cat]: { ...pref, hidden: ensure(pref.hidden ?? [], block) } } });
   };
+  const hideSubitem = (block: string, sub: string) =>
+    save({ ...layout, subitems: { ...layout.subitems, [block]: ensure(layout.subitems[block] ?? [], sub) } });
 
   const catMeta = (id: string) => TABS.find((x) => x.id === id)!;
   const learningState = moduleState("learning", disabled, false, false);
@@ -153,7 +167,12 @@ const CustomizeBody: FC = () => {
   // Enabling is immediate; disabling is global → confirm first.
   const toggleModule = (id: string, name: string, off: boolean, onHideInstead?: () => void) => {
     if (off) { setModuleDisabled(id, false); return; }
-    openDisableModuleModal({ moduleName: name, onDisable: () => setModuleDisabled(id, true), onHideInstead });
+    openDisableModuleModal({
+      moduleName: name,
+      body: id === "chargeLimit" ? t("customize.disable.chargeLimit.body") : undefined,
+      onDisable: () => setModuleDisabled(id, true),
+      onHideInstead,
+    });
   };
   // Create once per press (Focusable can fire both onActivate and onClick).
   const creating = useRef(false);
@@ -324,9 +343,31 @@ const CustomizeBody: FC = () => {
                           off={mOff}
                           onToggleOff={modId ? () => toggleModule(modId, t(b.labelKey), !!mOff, () => hideBlock(id, bid)) : undefined}
                         />
-                        {(SUBITEMS[bid] ?? []).map((s) => (
-                          <ExpansionRow key={s.id} label={t(s.labelKey)} icon={s.icon} indent={theme.space.lg} hidden={(layout.subitems[bid] ?? []).includes(s.id)} onToggleHide={() => setSubitemHidden(bid, s.id)} />
-                        ))}
+                        {subitemsFor(bid, chargeLimitSupported).map((subitem) => {
+                          const moduleId = subitem.moduleId;
+                          const off = moduleId
+                            ? moduleState(moduleId, disabled, false, false) === "disabled"
+                            : undefined;
+                          return (
+                            <ExpansionRow
+                              key={subitem.id}
+                              label={t(subitem.labelKey)}
+                              icon={subitem.icon}
+                              indent={theme.space.lg}
+                              hidden={(layout.subitems[bid] ?? []).includes(subitem.id)}
+                              onToggleHide={() => setSubitemHidden(bid, subitem.id)}
+                              off={off}
+                              onToggleOff={moduleId
+                                ? () => toggleModule(
+                                  moduleId,
+                                  t(subitem.labelKey),
+                                  !!off,
+                                  () => hideSubitem(bid, subitem.id),
+                                )
+                                : undefined}
+                            />
+                          );
+                        })}
                       </Fragment>
                     );
                   })}
