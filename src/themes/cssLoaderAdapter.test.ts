@@ -49,9 +49,8 @@ const RAW_THEME = {
 
 function host(overrides: Partial<CssLoaderHost> = {}): CssLoaderHost {
   return {
-    inventory: () => [{ name: "CSS Loader", version: "2.1.2", disabled: false }],
+    inventory: () => [{ name: "CSS Loader", disabled: false }],
     call: vi.fn(async (method: string) => {
-      if (method === "get_backend_version") return 9;
       if (method === "get_themes") return [RAW_THEME];
       throw new Error(`Unexpected method: ${method}`);
     }),
@@ -73,30 +72,31 @@ describe("CssLoaderAdapter.inspect", () => {
   it("reports disabled without calling a disabled backend", async () => {
     const call = vi.fn();
     const adapter = new CssLoaderAdapter(host({
-      inventory: () => [{ name: "CSS Loader", version: "2.1.2", disabled: true }],
+      inventory: () => [{ name: "CSS Loader", disabled: true }],
       call,
     }));
 
     const snapshot = await adapter.inspect();
 
-    expect(snapshot).toEqual({ status: "disabled", pluginVersion: "2.1.2", themes: [] });
+    expect(snapshot).toEqual({ status: "disabled", themes: [] });
     expect(call).not.toHaveBeenCalled();
   });
 
-  it("reports incompatible before reading themes", async () => {
-    const call = vi.fn(async () => 8);
-    const adapter = new CssLoaderAdapter(host({ call }), { minimumBackendVersion: 9 });
+  it("does not require a backend version call when CSS Loader can list themes", async () => {
+    const call = vi.fn(async (method: string) => {
+      if (method === "get_themes") return [RAW_THEME];
+      throw new Error(`Unexpected method: ${method}`);
+    });
+    const adapter = new CssLoaderAdapter(host({ call }));
 
     const snapshot = await adapter.inspect();
 
     expect(snapshot).toEqual({
-      status: "incompatible",
-      pluginVersion: "2.1.2",
-      backendVersion: 8,
-      requiredBackendVersion: 9,
-      themes: [],
+      status: "ready",
+      themes: [expect.objectContaining({ name: "Example Theme" })],
     });
     expect(call).toHaveBeenCalledOnce();
+    expect(call).toHaveBeenCalledWith("get_themes");
   });
 
   it("normalizes ready themes and keeps unknown patch types read-only", async () => {
@@ -105,8 +105,6 @@ describe("CssLoaderAdapter.inspect", () => {
     const snapshot = await adapter.inspect();
 
     expect(snapshot.status).toBe("ready");
-    expect(snapshot.pluginVersion).toBe("2.1.2");
-    expect(snapshot.backendVersion).toBe(9);
     expect(snapshot.themes[0]).toMatchObject({
       id: "Example Theme",
       name: "Example Theme",
@@ -123,15 +121,13 @@ describe("CssLoaderAdapter.inspect", () => {
 
   it("fails closed when CSS Loader returns malformed themes", async () => {
     const adapter = new CssLoaderAdapter(host({
-      call: vi.fn(async (method: string) => method === "get_backend_version" ? 9 : [{ name: 42 }]),
+      call: vi.fn(async () => [{ name: 42 }]),
     }));
 
     const snapshot = await adapter.inspect();
 
     expect(snapshot).toEqual({
       status: "error",
-      pluginVersion: "2.1.2",
-      backendVersion: 9,
       themes: [],
       error: { code: "malformed_response", message: "CSS Loader returned an invalid theme at index 0" },
     });
@@ -139,17 +135,13 @@ describe("CssLoaderAdapter.inspect", () => {
 
   it("fails closed when CSS Loader returns ambiguous theme or patch names", async () => {
     const duplicateTheme = new CssLoaderAdapter(host({
-      call: vi.fn(async (method: string) => method === "get_backend_version"
-        ? 9
-        : [RAW_THEME, { ...RAW_THEME, id: "duplicate-id" }]),
+      call: vi.fn(async () => [RAW_THEME, { ...RAW_THEME, id: "duplicate-id" }]),
     }));
     const duplicatePatch = new CssLoaderAdapter(host({
-      call: vi.fn(async (method: string) => method === "get_backend_version"
-        ? 9
-        : [{
-          ...RAW_THEME,
-          patches: [RAW_THEME.patches[0], { ...RAW_THEME.patches[0] }],
-        }]),
+      call: vi.fn(async () => [{
+        ...RAW_THEME,
+        patches: [RAW_THEME.patches[0], { ...RAW_THEME.patches[0] }],
+      }]),
     }));
 
     await expect(duplicateTheme.inspect()).resolves.toMatchObject({
@@ -171,7 +163,6 @@ describe("CssLoaderAdapter.inspect", () => {
 
     expect(snapshot).toEqual({
       status: "error",
-      pluginVersion: "2.1.2",
       themes: [],
       error: { code: "transport", message: "backend unavailable" },
     });
@@ -189,9 +180,8 @@ describe("CssLoaderAdapter.inspect", () => {
 
       await expect(pending).resolves.toEqual({
         status: "error",
-        pluginVersion: "2.1.2",
         themes: [],
-        error: { code: "timeout", message: "CSS Loader get_backend_version timed out" },
+        error: { code: "timeout", message: "CSS Loader get_themes timed out" },
       });
     } finally {
       vi.useRealTimers();
@@ -202,7 +192,6 @@ describe("CssLoaderAdapter.inspect", () => {
 function mutableHost(): { host: CssLoaderHost; call: ReturnType<typeof vi.fn> } {
   let theme = structuredClone(RAW_THEME);
   const call = vi.fn(async (method: string, ...args: unknown[]) => {
-    if (method === "get_backend_version") return 9;
     if (method === "get_themes") return [structuredClone(theme)];
     if (method === "set_patch_of_theme") {
       const [, patchName, value] = args;
@@ -230,7 +219,6 @@ describe("CssLoaderAdapter mutations", () => {
     };
     let themes = structuredClone([RAW_THEME, otherTheme]);
     const call = vi.fn(async (method: string, ...args: unknown[]) => {
-      if (method === "get_backend_version") return 9;
       if (method === "get_themes") return structuredClone(themes);
       if (method === "delete_theme") {
         themes = themes.filter((theme) => theme.name !== args[0]);
@@ -249,7 +237,6 @@ describe("CssLoaderAdapter mutations", () => {
 
   it("rejects deletion before mutation when the requested theme is absent", async () => {
     const call = vi.fn(async (method: string) => {
-      if (method === "get_backend_version") return 9;
       if (method === "get_themes") return [RAW_THEME];
       throw new Error(`Unexpected method: ${method}`);
     });
@@ -266,7 +253,6 @@ describe("CssLoaderAdapter mutations", () => {
 
   it("fails closed when delete_theme returns a malformed result", async () => {
     const call = vi.fn(async (method: string) => {
-      if (method === "get_backend_version") return 9;
       if (method === "get_themes") return [RAW_THEME];
       if (method === "delete_theme") return { success: true };
       throw new Error(`Unexpected method: ${method}`);
@@ -283,7 +269,6 @@ describe("CssLoaderAdapter mutations", () => {
 
   it("preserves CSS Loader's bundled-theme rejection", async () => {
     const call = vi.fn(async (method: string) => {
-      if (method === "get_backend_version") return 9;
       if (method === "get_themes") return [RAW_THEME];
       if (method === "delete_theme") {
         return { success: false, message: "Can't delete a bundled theme" };
@@ -302,7 +287,6 @@ describe("CssLoaderAdapter mutations", () => {
 
   it("rejects a successful delete_theme result when readback still contains the theme", async () => {
     const call = vi.fn(async (method: string) => {
-      if (method === "get_backend_version") return 9;
       if (method === "get_themes") return [RAW_THEME];
       if (method === "delete_theme") return { success: true, message: "Success" };
       throw new Error(`Unexpected method: ${method}`);
@@ -327,7 +311,6 @@ describe("CssLoaderAdapter mutations", () => {
     };
     let themes = structuredClone([RAW_THEME, otherTheme]);
     const call = vi.fn(async (method: string) => {
-      if (method === "get_backend_version") return 9;
       if (method === "get_themes") return structuredClone(themes);
       if (method === "delete_theme") {
         themes = [{ ...otherTheme, enabled: true }];
@@ -349,7 +332,6 @@ describe("CssLoaderAdapter mutations", () => {
       let deleteCalls = 0;
       let themes = structuredClone([RAW_THEME]);
       const call = vi.fn((method: string, ...args: unknown[]) => {
-        if (method === "get_backend_version") return Promise.resolve(9);
         if (method === "get_themes") return Promise.resolve(structuredClone(themes));
         if (method === "delete_theme") {
           deleteCalls += 1;
@@ -389,7 +371,6 @@ describe("CssLoaderAdapter mutations", () => {
   it("reloads CSS Loader and verifies the exact installed theme version", async () => {
     let version = "0.5.0";
     const call = vi.fn(async (method: string) => {
-      if (method === "get_backend_version") return 9;
       if (method === "get_themes") return [{ ...RAW_THEME, version }];
       if (method === "reset") {
         version = "0.6.0";
@@ -404,19 +385,15 @@ describe("CssLoaderAdapter mutations", () => {
 
     expect(result.themes.find((theme) => theme.name === "Example Theme")?.version).toBe("0.6.0");
     expect(call.mock.calls.map(([method]) => method)).toEqual([
-      "get_backend_version",
       "get_themes",
       "reset",
-      "get_backend_version",
       "get_themes",
-      "get_backend_version",
       "get_themes",
     ]);
   });
 
   it("rejects a reload when CSS Loader reports a different installed version", async () => {
     const call = vi.fn(async (method: string) => {
-      if (method === "get_backend_version") return 9;
       if (method === "get_themes") return [{ ...RAW_THEME, version: "0.5.0" }];
       if (method === "reset") return { fails: [] };
       throw new Error(`Unexpected method: ${method}`);
@@ -434,7 +411,6 @@ describe("CssLoaderAdapter mutations", () => {
 
   it("fails closed when CSS Loader returns a malformed reset result", async () => {
     const call = vi.fn(async (method: string) => {
-      if (method === "get_backend_version") return 9;
       if (method === "get_themes") return [{ ...RAW_THEME, version: "0.6.0" }];
       if (method === "reset") return { success: true, message: "not the reset contract" };
       throw new Error(`Unexpected method: ${method}`);
@@ -452,7 +428,6 @@ describe("CssLoaderAdapter mutations", () => {
 
   it("rejects a reset that reports any theme load failure", async () => {
     const call = vi.fn(async (method: string) => {
-      if (method === "get_backend_version") return 9;
       if (method === "get_themes") return [{ ...RAW_THEME, version: "0.5.0" }];
       if (method === "reset") return { fails: [["Third Party Theme", "invalid manifest"]] };
       throw new Error(`Unexpected method: ${method}`);
@@ -476,7 +451,6 @@ describe("CssLoaderAdapter mutations", () => {
     const thirdParty = { ...RAW_THEME, id: "Other", name: "Other", version: "1.4.0", enabled: false };
     let themes = [themeBefore, thirdParty];
     const call = vi.fn(async (method: string) => {
-      if (method === "get_backend_version") return 9;
       if (method === "get_themes") return structuredClone(themes);
       if (method === "reset") {
         themes = [{ ...themeBefore, version: "0.6.0" }, thirdParty];
@@ -497,7 +471,6 @@ describe("CssLoaderAdapter mutations", () => {
     const thirdParty = { ...RAW_THEME, id: "Other", name: "Other", version: "1.4.0", enabled: false };
     let reset = false;
     const call = vi.fn(async (method: string) => {
-      if (method === "get_backend_version") return 9;
       if (method === "get_themes") return reset
         ? [{ ...themeBefore, version: "0.6.0", enabled: false }, { ...thirdParty, enabled: true }]
         : [themeBefore, thirdParty];
@@ -521,7 +494,6 @@ describe("CssLoaderAdapter mutations", () => {
   it("can reset and verify the exact pre-install snapshot after rollback", async () => {
     const original = { ...RAW_THEME, version: "0.5.0" };
     const call = vi.fn(async (method: string) => {
-      if (method === "get_backend_version") return 9;
       if (method === "get_themes") return [original];
       if (method === "reset") return { fails: [] };
       throw new Error(`Unexpected method: ${method}`);
@@ -549,7 +521,6 @@ describe("CssLoaderAdapter mutations", () => {
     };
     let themes = structuredClone([original, thirdParty]);
     const call = vi.fn(async (method: string, ...args: unknown[]) => {
-      if (method === "get_backend_version") return 9;
       if (method === "get_themes") return structuredClone(themes);
       if (method === "reset") {
         themes[0].enabled = false;
@@ -585,7 +556,6 @@ describe("CssLoaderAdapter mutations", () => {
       let settleReset!: (value: { fails: never[] }) => void;
       let resetCalls = 0;
       const call = vi.fn((method: string) => {
-        if (method === "get_backend_version") return Promise.resolve(9);
         if (method === "get_themes") return Promise.resolve([{ ...RAW_THEME, version: "0.5.0" }]);
         if (method === "reset") {
           resetCalls += 1;
@@ -622,7 +592,6 @@ describe("CssLoaderAdapter mutations", () => {
     const thirdParty = { ...RAW_THEME, id: "Other", name: "Other", version: "1.4.0" };
     let reset = false;
     const call = vi.fn(async (method: string) => {
-      if (method === "get_backend_version") return 9;
       if (method === "get_themes") return reset
         ? [themeOld, thirdParty]
         : [themeNew, thirdParty];
@@ -661,7 +630,6 @@ describe("CssLoaderAdapter mutations", () => {
       };
       let reset = false;
       const call = vi.fn(async (method: string) => {
-        if (method === "get_backend_version") return 9;
         if (method === "get_themes") return reset ? [themeOld] : [themeNew];
         if (method === "reset") {
           reset = true;
@@ -694,10 +662,8 @@ describe("CssLoaderAdapter mutations", () => {
     expect(snapshot.status).toBe("ready");
     expect(snapshot.themes[0].patches.find((patch) => patch.name === patchName)?.value).toBe(value);
     expect(fake.call.mock.calls.map(([method]) => method)).toEqual([
-      "get_backend_version",
       "get_themes",
       "set_patch_of_theme",
-      "get_backend_version",
       "get_themes",
     ]);
   });
@@ -715,7 +681,6 @@ describe("CssLoaderAdapter mutations", () => {
       message: "CSS Loader did not advertise value Dangerously fast for Motion intensity",
     });
     expect(fake.call.mock.calls.map(([method]) => method)).toEqual([
-      "get_backend_version",
       "get_themes",
     ]);
   });
@@ -739,7 +704,6 @@ describe("CssLoaderAdapter mutations", () => {
   it("rejects a successful mutation call when refetch contradicts it", async () => {
     const adapter = new CssLoaderAdapter(host({
       call: vi.fn(async (method: string) => {
-        if (method === "get_backend_version") return 9;
         if (method === "get_themes") return [RAW_THEME];
         if (method === "set_theme_state") return { success: true, message: "" };
         throw new Error(`Unexpected method: ${method}`);
@@ -757,7 +721,6 @@ describe("CssLoaderAdapter mutations", () => {
   it("preserves a typed CSS Loader mutation failure", async () => {
     const adapter = new CssLoaderAdapter(host({
       call: vi.fn(async (method: string) => {
-        if (method === "get_backend_version") return 9;
         if (method === "get_themes") return [RAW_THEME];
         if (method === "set_patch_of_theme") return { success: false, message: "Patch rejected" };
         throw new Error(`Unexpected method: ${method}`);

@@ -35,14 +35,6 @@ export function TemasSection() {
             <div role="status" aria-live="polite" style={{ color: controller.snapshot.status === "error" ? theme.color.warn : theme.color.textPrimary, fontWeight: 700 }}>
               {t(`themes.cssLoader.${controller.snapshot.status}`)}
             </div>
-            {controller.snapshot.status === "incompatible" ? (
-              <div style={{ color: theme.color.textMuted, fontSize: theme.font.caption, marginTop: theme.space.xs }}>
-                {t("themes.cssLoader.version", {
-                  detected: controller.snapshot.backendVersion ?? "—",
-                  required: controller.snapshot.requiredBackendVersion ?? "—",
-                })}
-              </div>
-            ) : null}
             <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm, marginTop: theme.space.md }}>
               {controller.snapshot.status === "missing" ? (
                 <ButtonItem layout="below" onClick={() => Navigation.Navigate("/decky/store")}>{t("themes.cssLoader.openStore")}</ButtonItem>

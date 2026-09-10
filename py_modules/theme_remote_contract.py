@@ -27,7 +27,6 @@ _MAX_TAGS = 8
 _MAX_NOTE_LENGTH = 1_000
 _MAX_METADATA_BYTES = 64 * 1024
 _MAX_ARTIFACT_BYTES = 64 * 1024 * 1024
-_MAX_SAFE_INTEGER = 9_007_199_254_740_991
 
 _RELEASE_REQUIRED_FIELDS = frozenset(
     {
@@ -60,8 +59,6 @@ class ThemeArtifact:
 @dataclass(frozen=True, slots=True)
 class ThemeMinimumVersions:
     panel: str
-    css_loader: str
-    css_loader_backend: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -278,27 +275,12 @@ def _parse_minimum_versions(value: object) -> ThemeMinimumVersions:
     minimum = _object(value, "Minimum versions")
     _exact_fields(
         minimum,
-        required=frozenset({"panel", "cssLoader", "cssLoaderBackend"}),
+        required=frozenset({"panel"}),
+        optional=frozenset({"cssLoader", "cssLoaderBackend"}),
         label="Minimum versions",
     )
     panel_version = _stable_version(minimum["panel"], "Minimum Panel version")
-    css_loader_version = _stable_version(
-        minimum["cssLoader"],
-        "Minimum CSS Loader version",
-    )
-    backend_version = minimum["cssLoaderBackend"]
-    if (
-        not isinstance(backend_version, int)
-        or isinstance(backend_version, bool)
-        or backend_version <= 0
-        or backend_version > _MAX_SAFE_INTEGER
-    ):
-        _fail("Minimum CSS Loader backend is invalid")
-    return ThemeMinimumVersions(
-        panel=panel_version,
-        css_loader=css_loader_version,
-        css_loader_backend=backend_version,
-    )
+    return ThemeMinimumVersions(panel=panel_version)
 
 
 def _parse_release_value(value: object, pages_base_url: str) -> ThemeCatalogRelease:

@@ -147,11 +147,7 @@ def channel() -> OfficialThemeChannel:
 
 def runtime(**values: object) -> ThemeRuntimeVersions:
     return replace(
-        ThemeRuntimeVersions(
-            panel="1.0.0",
-            css_loader="2.1.0",
-            css_loader_backend=9,
-        ),
+        ThemeRuntimeVersions(panel="1.0.0"),
         **values,
     )
 
@@ -253,9 +249,6 @@ def test_reuses_only_successful_catalog_for_fifteen_minutes_and_force_bypasses_i
     ("versions", "compatibility"),
     [
         (runtime(panel="0.9.9"), "incompatible-panel"),
-        (runtime(css_loader="2.0.9"), "incompatible-css-loader"),
-        (runtime(css_loader_backend=8), "incompatible-css-loader"),
-        (runtime(css_loader="", css_loader_backend=0), "incompatible-css-loader"),
     ],
 )
 def test_keeps_incompatible_publications_visible(
@@ -268,6 +261,20 @@ def test_keeps_incompatible_publications_visible(
     ).check_releases()
 
     assert result["themes"][0]["compatibility"] == compatibility
+
+
+def test_css_loader_minimum_versions_do_not_block_publications() -> None:
+    published = release()
+    published["minimumVersions"] = {
+        "panel": "1.0.0",
+        "cssLoader": "999.0.0",
+        "cssLoaderBackend": 999,
+    }
+    result = service(
+        FakeTransport(catalog(published)),
+    ).check_releases()
+
+    assert result["themes"][0]["compatibility"] == "compatible"
 
 
 def test_runtime_versions_reject_mixed_unicode_decimal_digits() -> None:
@@ -595,22 +602,40 @@ def test_install_rejects_mixed_unicode_decimal_version_before_fetch(
     assert transport.paths == []
 
 
-def test_install_fails_closed_when_live_runtime_is_incompatible(tmp_path: Path) -> None:
-    transport = FakeTransport(catalog(release()))
+def test_install_accepts_an_older_css_loader_runtime(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    published = release()
+    artifact = b"theme archive"
+    published["artifact"] = {
+        "url": f"{PAGES_BASE}/themes/v1/example-theme/1.2.3/theme.zip",
+        "size": len(artifact),
+        "sha256": hashlib.sha256(artifact).hexdigest(),
+    }
+    transport = FakeTransport(catalog(published))
+    artifact_path = "themes/v1/example-theme/1.2.3/theme.zip"
+    transport.artifacts[artifact_path] = artifact
+    monkeypatch.setattr(
+        theme_packages,
+        "prepare_theme_archive",
+        lambda *_args, **_kwargs: {
+            "ok": True,
+            "code": "prepared",
+            "theme_id": "example-theme",
+            "version": "1.2.3",
+        },
+    )
 
-    with pytest.raises(ThemeRemoteError) as error:
-        service(
-            transport,
-            versions=runtime(css_loader_backend=8),
-        ).prepare_install(
-            "example-theme",
-            "1.2.3",
-            tmp_path / "themes",
-            tmp_path / "receipts.json",
-        )
+    result = service(transport).prepare_install(
+        "example-theme",
+        "1.2.3",
+        tmp_path / "themes",
+        tmp_path / "receipts.json",
+    )
 
-    assert error.value.code == "incompatible_css_loader"
-    assert transport.downloads == []
+    assert result["code"] == "prepared"
+    assert len(transport.downloads) == 1
 
 
 def test_close_stops_new_checks_and_installs(tmp_path: Path) -> None:

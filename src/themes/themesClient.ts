@@ -88,13 +88,9 @@ const BLOCKING_RECOVERY_CODES = new Set([
   "rollback_verification_failed",
 ]);
 
-export const REQUIRED_CSS_LOADER_BACKEND_VERSION = 9;
-
 export function createProductionThemesDependencies(): ThemesDependencies {
   if (productionDependencies) return productionDependencies;
-  const adapter = new CssLoaderAdapter(createDeckyCssLoaderHost(), {
-    minimumBackendVersion: REQUIRED_CSS_LOADER_BACKEND_VERSION,
-  });
+  const adapter = new CssLoaderAdapter(createDeckyCssLoaderHost());
   productionDependencies = {
     adapter,
     installer: createPanelThemeInstaller(),

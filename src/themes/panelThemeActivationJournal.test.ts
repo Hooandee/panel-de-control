@@ -9,8 +9,6 @@ import {
 
 const SNAPSHOT: CssLoaderReadySnapshot = {
   status: "ready",
-  pluginVersion: "2.1.2",
-  backendVersion: 9,
   themes: [{
     id: "example",
     name: "Example Theme",
@@ -55,6 +53,23 @@ describe("PanelThemeActivationJournal", () => {
     expect(backend.begin).toHaveBeenCalledWith(SNAPSHOT);
     expect(backend.settle).toHaveBeenCalledWith("token");
     expect(backend.acknowledge).toHaveBeenCalledWith("token");
+  });
+
+  it("ignores legacy CSS Loader version metadata while loading recovery", async () => {
+    const legacySnapshot = {
+      ...SNAPSHOT,
+      pluginVersion: { legacy: true },
+      backendVersion: "legacy",
+    };
+    const journal = new PanelThemeActivationJournal(host({
+      pending: vi.fn(async () => ({
+        ok: true,
+        code: "ready",
+        recovery: { transaction: "token", snapshot: legacySnapshot, recoverable: true },
+      })),
+    }));
+
+    await expect(journal.pending()).resolves.toEqual({ transaction: "token", snapshot: SNAPSHOT });
   });
 
   it("fails closed on a malformed durable snapshot", async () => {

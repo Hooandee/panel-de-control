@@ -2,8 +2,7 @@ import type { Lang } from "../i18n";
 
 export type ThemePublicationCompatibility =
   | "compatible"
-  | "incompatible-panel"
-  | "incompatible-css-loader";
+  | "incompatible-panel";
 
 type PublishedLocale = "es" | "en" | "it";
 export type PublishedLocalizedText = Readonly<Record<PublishedLocale, string>>;
@@ -60,7 +59,7 @@ const ERROR_CODES = new Set<ThemePublicationErrorCode>([
   "http_status", "invalid_descriptor", "descriptor_too_large", "lifecycle_stopping",
 ]);
 const COMPATIBILITY = new Set<ThemePublicationCompatibility>([
-  "compatible", "incompatible-panel", "incompatible-css-loader",
+  "compatible", "incompatible-panel",
 ]);
 const LOCALES = ["es", "en", "it"] as const;
 const STABLE_VERSION = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/;

@@ -44,8 +44,6 @@ describe("useThemes", () => {
     };
     const after = {
       status: "ready" as const,
-      pluginVersion: "2.1.2",
-      backendVersion: 9,
       themes: [],
     };
     const deleteTheme = vi.fn(async () => after);

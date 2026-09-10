@@ -66,7 +66,7 @@ describe("TemasSection", () => {
 
   it("renders a deliberate empty state for a valid empty publication", () => {
     mocks.controller = controller({
-      snapshot: { status: "ready", pluginVersion: "2.1.2", backendVersion: 9, themes: [] },
+      snapshot: { status: "ready", themes: [] },
       publication: { status: "published", checkedAt: 10, themes: [] },
       cards: [],
     });
