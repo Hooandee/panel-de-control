@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+## [0.46.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.46.0...panel-de-control-v0.46.1) (2026-09-10)
+
+
+### Español
+
+* **Temas:** Permite instalar temas sin exigir una versión concreta de CSS Loader, siempre que esté instalado, habilitado y pueda gestionar temas correctamente. Evita bloqueos falsos cuando su versión no puede identificarse.
+
+### English
+
+* **Themes:** Allows themes to be installed without requiring a specific CSS Loader version, provided it is installed, enabled, and can manage themes correctly. Prevents false compatibility blocks when its version cannot be identified.
+
+### Italiano
+
+* **Temi:** Consente di installare i temi senza richiedere una versione specifica di CSS Loader, purché sia installato, abilitato e possa gestire correttamente i temi. Evita falsi blocchi di compatibilità quando la versione non può essere identificata.
+
+### Deutsch
+
+* **Themes:** Ermöglicht die Installation von Themes, ohne eine bestimmte CSS-Loader-Version vorauszusetzen, sofern CSS Loader installiert und aktiviert ist und Themes korrekt verwalten kann. Verhindert fälschliche Kompatibilitätssperren, wenn seine Version nicht erkannt werden kann.
+
 ## [0.46.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.45.0...panel-de-control-v0.46.0) (2026-09-10)
 
 
