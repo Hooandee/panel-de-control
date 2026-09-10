@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+## [0.46.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.45.0...panel-de-control-v0.46.0) (2026-09-10)
+
+
+### Español
+
+* **Reportes:** Permite elegir entre «Un problema» y «Una petición o idea» antes de enviar un reporte. Cada tipo adapta las preguntas y el texto de ayuda para que puedas explicar mejor qué falla o qué te gustaría añadir.
+* **Legion Go S:** Evita que el control de TDP quede bloqueado en el modelo 83L3 cuando el firmware reajusta los límites al restaurar un perfil de energía.
+
+### English
+
+* **Reports:** Lets you choose between “A problem” and “A request or idea” before submitting a report. Each type adapts the questions and guidance so you can better explain what is broken or what you would like added.
+* **Legion Go S:** Prevents TDP control from remaining locked on model 83L3 when the firmware recalculates the limits while restoring a power profile.
+
+### Italiano
+
+* **Segnalazioni:** Permette di scegliere tra «Un problema» e «Una richiesta o un'idea» prima di inviare una segnalazione. Ogni tipo adatta le domande e il testo di aiuto per spiegare meglio cosa non funziona o cosa vorresti aggiungere.
+* **Legion Go S:** Evita che il controllo del TDP rimanga bloccato sul modello 83L3 quando il firmware ricalcola i limiti durante il ripristino di un profilo energetico.
+
+### Deutsch
+
+* **Berichte:** Du kannst vor dem Senden zwischen „Ein Problem“ und „Einen Wunsch oder eine Idee“ wählen. Fragen und Hilfetexte passen sich an, damit du genauer beschreiben kannst, was nicht funktioniert oder was du dir zusätzlich wünschst.
+* **Legion Go S:** Verhindert, dass die TDP-Steuerung beim Modell 83L3 gesperrt bleibt, wenn die Firmware beim Wiederherstellen eines Energieprofils die Grenzwerte neu berechnet.
+
 ## [0.45.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.44.1...panel-de-control-v0.45.0) (2026-09-09)
 
 
