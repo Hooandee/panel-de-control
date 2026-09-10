@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.46.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.46.0...panel-de-control-v0.46.1) (2026-09-10)
+
+
+### Bug Fixes
+
+* **themes:** require CSS Loader capabilities only ([#616](https://github.com/Hooandee/panel-de-control/issues/616)) ([ff43e29](https://github.com/Hooandee/panel-de-control/commit/ff43e29adbd075fb5a9dbdf80776b43faad7e375))
+
 ## [0.46.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.45.0...panel-de-control-v0.46.0) (2026-09-10)
 
 
