@@ -118,3 +118,25 @@ def test_legion_go_s_rail_floors_are_empty_without_dmi(tmp_path):
         _profile("legion_go_s"),
         str(tmp_path),
     ) == {}
+
+
+def test_legion_go_s_83l3_named_profile_recovery_requires_exact_identity(tmp_path):
+    cases = (
+        ("LENOVO", "83L3", _profile("legion_go_s"), True),
+        ("OTHER", "83L3", _profile("legion_go_s"), False),
+        ("LENOVO", "83L3-S", _profile("legion_go_s"), False),
+        ("LENOVO", "83N6", _profile("legion_go_s"), False),
+        ("LENOVO", "83L3", _profile("legion_go_2"), False),
+        ("LENOVO", "83L3", GENERIC, False),
+    )
+
+    for vendor, product, device, expected in cases:
+        _write_dmi(str(tmp_path), vendor, product)
+        quirks = device_quirks.legion_go_s_83l3_firmware_attr_quirks(
+            device,
+            str(tmp_path),
+        )
+        assert quirks.get(
+            "named_profile_owns_rails",
+            False,
+        ) is expected

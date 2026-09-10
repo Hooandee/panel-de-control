@@ -44,7 +44,10 @@ def legion_go_s_83l3_firmware_attr_quirks(device, root: str = "/") -> dict:
         or _read_dmi(root, "product_name").casefold() != "83l3"
     ):
         return {}
-    return {"readback_settle_delays": (0.05, 0.10, 0.20, 0.40)}
+    return {
+        "readback_settle_delays": (0.05, 0.10, 0.20, 0.40),
+        "named_profile_owns_rails": True,
+    }
 
 
 def legion_go_s_83n6_rail_floors(device, root: str = "/") -> dict[str, int]:

@@ -1,4 +1,5 @@
 import dataclasses
+import json
 import os
 
 import pytest
@@ -48,6 +49,18 @@ def _mk_dmi(root, vendor, product):
             f.write(value)
 
 
+def _mk_platform_profile(root, current="balanced"):
+    base = os.path.join(root, "sys/class/platform-profile/platform-profile-0")
+    os.makedirs(base, exist_ok=True)
+    for name, value in (
+        ("name", "lenovo-wmi-gamezone"),
+        ("profile", current),
+        ("choices", "low-power balanced performance custom"),
+    ):
+        with open(os.path.join(base, name), "w") as handle:
+            handle.write(value)
+
+
 def _mk_readable_ryzenadj(root):
     path = os.path.join(root, "fake-ryzenadj")
     with open(path, "w") as handle:
@@ -78,6 +91,72 @@ def _set_fw_max(root, rail, value):
     )
     with open(path, "w") as handle:
         handle.write(str(value))
+
+
+def _set_fw_current(root, rail, value):
+    path = os.path.join(
+        root,
+        "sys/class/firmware-attributes/lenovo-wmi-other-0/attributes",
+        rail,
+        "current_value",
+    )
+    with open(path, "w") as handle:
+        handle.write(str(value))
+
+
+def _mk_legion_firmware(root, product_name, profile, current=(21, 17, 36)):
+    _mk_fw(root, "lenovo-wmi-other-0")
+    _mk_dmi(root, "LENOVO", product_name)
+    _mk_platform_profile(root, current=profile)
+    for attr, value in zip(
+        ("ppt_pl1_spl", "ppt_pl2_sppt", "ppt_pl3_fppt"),
+        current,
+    ):
+        _set_fw_current(root, attr, value)
+
+
+def _arm_lenovo_transaction_lock(root, profile, snapshot=None):
+    lock_path = os.path.join(
+        root,
+        "run/panel-de-control/firmware-lenovo-wmi-other.lock",
+    )
+    os.makedirs(os.path.dirname(lock_path), exist_ok=True)
+    with open(lock_path, "w") as handle:
+        json.dump(
+            {
+                "state": "rollback_failed",
+                "detail": "firmware transaction recovery failed",
+                "snapshot": snapshot or {
+                    "firmware-attr:lenovo-wmi-other/pl1": 25,
+                    "firmware-attr:lenovo-wmi-other/pl2": 25,
+                    "firmware-attr:lenovo-wmi-other/pl3": 25,
+                },
+                "profile": profile,
+            },
+            handle,
+        )
+    return lock_path
+
+
+def _locked_legion_backend(
+    root,
+    product_name="83L3",
+    current_profile="low-power",
+    saved_profile=None,
+    snapshot=None,
+):
+    _mk_legion_firmware(root, product_name, current_profile)
+    lock_path = _arm_lenovo_transaction_lock(
+        root,
+        saved_profile or current_profile,
+        snapshot=snapshot,
+    )
+    backend = select_backend(
+        _p("legion_go_s"),
+        root=root,
+        ryzenadj_resolve=_NO_RYZENADJ,
+    )
+    return backend, lock_path
 
 
 def _observation(backend, pl1, pl2, pl3):
@@ -310,6 +389,167 @@ def test_only_exact_legion_go_s_83n6_gets_measured_rail_floors(tmp_path):
 
     assert getattr(exact, "_rail_floors", None) == {"pl2": 15, "pl3": 20}
     assert getattr(nearby, "_rail_floors", None) == {}
+
+
+@pytest.mark.parametrize("profile", ("low-power", "balanced", "performance"))
+def test_exact_legion_go_s_83l3_recovers_named_profile_without_restoring_rails(
+    tmp_path,
+    monkeypatch,
+    profile,
+):
+    root = str(tmp_path)
+    backend, lock_path = _locked_legion_backend(root, current_profile=profile)
+    original_write = backend._write
+
+    def firmware_owns_rails(path, value):
+        if path.endswith("current_value"):
+            return False
+        return original_write(path, value)
+
+    monkeypatch.setattr(backend, "_write", firmware_owns_rails)
+
+    recovered = backend.recover_runtime_transaction()
+
+    assert recovered["ok"] is True
+    assert backend.read_profile() == profile
+    assert backend.read_applied() == 21
+    assert not os.path.exists(lock_path)
+
+
+def test_exact_legion_go_s_83l3_confirms_named_profile_rollback_with_live_rails(
+    tmp_path,
+    monkeypatch,
+):
+    root = str(tmp_path)
+    _mk_legion_firmware(root, "83L3", "low-power", current=(25, 25, 25))
+    backend = select_backend(
+        _p("legion_go_s"),
+        root=root,
+        ryzenadj_resolve=_NO_RYZENADJ,
+    )
+    profile_path = os.path.join(
+        root,
+        "sys/class/platform-profile/platform-profile-0/profile",
+    )
+    original_write = backend._write
+
+    def recalculate_named_profile_rails(path, value):
+        if path.endswith("ppt_pl3_fppt/current_value") and value == 15:
+            return original_write(path, 20)
+        written = original_write(path, value)
+        if path == profile_path and value == "low-power":
+            _set_fw_current(root, "ppt_pl1_spl", 21)
+            _set_fw_current(root, "ppt_pl2_sppt", 17)
+            _set_fw_current(root, "ppt_pl3_fppt", 36)
+        return written
+
+    monkeypatch.setattr(backend, "_write", recalculate_named_profile_rails)
+
+    result = backend.set_levels(15, 15, 15, ac=False)
+
+    assert result.ok is False
+    assert result.applied_w == 21
+    assert "rollback confirmed" in result.detail
+    assert backend.read_profile() == "low-power"
+    assert backend.safety_locked is False
+    assert backend.ready() is True
+
+
+@pytest.mark.parametrize(
+    ("product_name", "profile"),
+    (("83L3", "custom"), ("83N6", "low-power")),
+)
+def test_legion_go_s_keeps_strict_recovery_outside_83l3_named_profiles(
+    tmp_path,
+    monkeypatch,
+    product_name,
+    profile,
+):
+    root = str(tmp_path)
+    backend, lock_path = _locked_legion_backend(
+        root,
+        product_name=product_name,
+        current_profile=profile,
+    )
+    original_write = backend._write
+
+    def reject_rail_restore(path, value):
+        if path.endswith("current_value"):
+            return False
+        return original_write(path, value)
+
+    monkeypatch.setattr(backend, "_write", reject_rail_restore)
+
+    recovered = backend.recover_runtime_transaction()
+
+    assert recovered["ok"] is False
+    assert backend.safety_locked is True
+    assert os.path.exists(lock_path)
+
+
+def test_exact_legion_go_s_83l3_without_platform_profile_recovers_strictly(tmp_path):
+    root = str(tmp_path)
+    _mk_fw(root, "lenovo-wmi-other-0")
+    _mk_dmi(root, "LENOVO", "83L3")
+    for attr, value in zip(
+        ("ppt_pl1_spl", "ppt_pl2_sppt", "ppt_pl3_fppt"),
+        (21, 17, 36),
+    ):
+        _set_fw_current(root, attr, value)
+    lock_path = _arm_lenovo_transaction_lock(root, None)
+    backend = select_backend(
+        _p("legion_go_s"),
+        root=root,
+        ryzenadj_resolve=_NO_RYZENADJ,
+    )
+
+    recovered = backend.recover_runtime_transaction()
+
+    assert recovered["ok"] is True
+    assert backend.read_applied() == 25
+    assert not os.path.exists(lock_path)
+
+
+@pytest.mark.parametrize(
+    ("failure", "expected_detail"),
+    (
+        ("profile-unreadable", "platform-profile=unavailable"),
+        ("lock-clear", "runtime lock clear failed"),
+        ("unknown-profile", "firmware transaction profile invalid"),
+        ("surface-changed", "firmware transaction surfaces changed"),
+        ("rail-unreadable", "pl2=unavailable"),
+    ),
+)
+def test_exact_legion_go_s_83l3_named_recovery_fails_closed(
+    tmp_path,
+    monkeypatch,
+    failure,
+    expected_detail,
+):
+    root = str(tmp_path)
+    backend, lock_path = _locked_legion_backend(
+        root,
+        saved_profile="turbo" if failure == "unknown-profile" else None,
+        snapshot=(
+            {"firmware-attr:lenovo-wmi-other/pl1": 25}
+            if failure == "surface-changed"
+            else None
+        ),
+    )
+    if failure == "profile-unreadable":
+        monkeypatch.setattr(backend, "read_profile", lambda: None)
+        monkeypatch.setattr("tdp.firmware_attr.time.sleep", lambda _delay: None)
+    elif failure == "lock-clear":
+        monkeypatch.setattr(backend._safety_lock, "clear", lambda: False)
+    elif failure == "rail-unreadable":
+        _set_fw_current(root, "ppt_pl2_sppt", "invalid")
+
+    recovered = backend.recover_runtime_transaction()
+
+    assert recovered["ok"] is False
+    assert expected_detail in recovered["detail"]
+    assert backend.safety_locked is True
+    assert os.path.exists(lock_path)
 
 
 @pytest.mark.parametrize("product_name", ("83L3", "83N6"))
