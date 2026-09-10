@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { CssLoaderSnapshot } from "../cssLoaderTypes";
 import { createSteamRuntimeBridge, startThemesRuntime } from "./start";
 
-const READY: CssLoaderSnapshot = { status: "ready", backendVersion: 9, themes: [] };
+const READY: CssLoaderSnapshot = { status: "ready", themes: [] };
 
 describe("createSteamRuntimeBridge", () => {
   it("mounts modules in Steam's Big Picture document instead of Decky's shared realm", () => {
@@ -56,8 +56,6 @@ describe("createSteamRuntimeBridge", () => {
     );
     const first = {
       status: "ready" as const,
-      pluginVersion: "2.1.2",
-      backendVersion: 9,
       themes: [{
         id: "Example Theme", name: "Example Theme", displayName: "Example Theme",
         version: "1.2.3", author: "Example Author", enabled: true, patches: [],

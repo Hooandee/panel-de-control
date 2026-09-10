@@ -38,7 +38,7 @@ function theme(overrides: Partial<CssLoaderTheme> = {}): CssLoaderTheme {
 }
 
 function snapshot(themes: CssLoaderTheme[] = [theme()]): CssLoaderSnapshot {
-  return { status: "ready", pluginVersion: "2.1.2", backendVersion: 9, themes };
+  return { status: "ready", themes };
 }
 
 function client(

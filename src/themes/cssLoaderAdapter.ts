@@ -12,7 +12,6 @@ const PATCH_TYPES = new Set(["checkbox", "dropdown", "slider", "none"]);
 
 export interface CssLoaderPluginInventoryEntry {
   name: string;
-  version?: string;
   disabled: boolean;
 }
 
@@ -22,7 +21,6 @@ export interface CssLoaderHost {
 }
 
 export interface CssLoaderAdapterOptions {
-  minimumBackendVersion?: number;
   timeoutMs?: number;
   reloadTimeoutMs?: number;
 }
@@ -115,7 +113,6 @@ function errorInfo(error: unknown): CssLoaderErrorInfo {
 }
 
 export class CssLoaderAdapter {
-  private readonly minimumBackendVersion: number;
   private readonly timeoutMs: number;
   private readonly reloadTimeoutMs: number;
   private uncertainMutation: Promise<void> | null = null;
@@ -124,7 +121,6 @@ export class CssLoaderAdapter {
     private readonly host: CssLoaderHost,
     options: CssLoaderAdapterOptions = {},
   ) {
-    this.minimumBackendVersion = options.minimumBackendVersion ?? 9;
     this.timeoutMs = options.timeoutMs ?? 5_000;
     this.reloadTimeoutMs = options.reloadTimeoutMs ?? 15_000;
   }
@@ -201,32 +197,10 @@ export class CssLoaderAdapter {
   }
 
   async inspect(): Promise<CssLoaderSnapshot> {
-    let plugin: CssLoaderPluginInventoryEntry | undefined;
-    let detectedBackendVersion: number | undefined;
     try {
-      plugin = this.host.inventory().find((entry) => entry.name === CSS_LOADER_PLUGIN_NAME);
+      const plugin = this.host.inventory().find((entry) => entry.name === CSS_LOADER_PLUGIN_NAME);
       if (!plugin) return { status: "missing", themes: [] };
-      if (plugin.disabled) {
-        return { status: "disabled", pluginVersion: plugin.version, themes: [] };
-      }
-
-      const backendVersion = await this.call("get_backend_version");
-      if (!Number.isInteger(backendVersion) || (backendVersion as number) < 0) {
-        throw new CssLoaderOperationError(
-          "malformed_response",
-          "CSS Loader returned an invalid backend version",
-        );
-      }
-      detectedBackendVersion = backendVersion as number;
-      if ((backendVersion as number) < this.minimumBackendVersion) {
-        return {
-          status: "incompatible",
-          pluginVersion: plugin.version,
-          backendVersion: backendVersion as number,
-          requiredBackendVersion: this.minimumBackendVersion,
-          themes: [],
-        };
-      }
+      if (plugin.disabled) return { status: "disabled", themes: [] };
 
       const rawThemes = await this.call("get_themes");
       if (!Array.isArray(rawThemes)) {
@@ -250,15 +224,11 @@ export class CssLoaderAdapter {
       });
       return {
         status: "ready",
-        pluginVersion: plugin.version,
-        backendVersion: backendVersion as number,
         themes,
       };
     } catch (error) {
       return {
         status: "error",
-        pluginVersion: plugin?.version,
-        backendVersion: detectedBackendVersion,
         themes: [],
         error: errorInfo(error),
       };

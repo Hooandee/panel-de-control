@@ -99,27 +99,22 @@ def _valid_theme(value):
     return len(patch_names) == len(set(patch_names))
 
 
-def _validate_snapshot(snapshot):
-    if not _exact_keys(
-        snapshot,
-        {"status", "backendVersion", "themes"},
-        {"pluginVersion"},
+def _parse_snapshot(snapshot):
+    snapshot_keys = set(snapshot) if isinstance(snapshot, dict) else set()
+    if (
+        not isinstance(snapshot, dict)
+        or not {"status", "themes"}.issubset(snapshot_keys)
+        or not snapshot_keys.issubset(
+            {"status", "themes", "pluginVersion", "backendVersion"}
+        )
     ):
         raise ThemeActivationJournalError(
             "invalid_snapshot",
             "Theme activation snapshot has an invalid shape",
         )
     themes = snapshot["themes"]
-    backend_version = snapshot["backendVersion"]
     if (
         snapshot["status"] != "ready"
-        or not isinstance(backend_version, int)
-        or isinstance(backend_version, bool)
-        or backend_version < 9
-        or (
-            "pluginVersion" in snapshot
-            and not _text(snapshot["pluginVersion"])
-        )
         or not isinstance(themes, list)
         or len(themes) > _MAX_THEMES
         or not all(_valid_theme(theme) for theme in themes)
@@ -134,12 +129,14 @@ def _validate_snapshot(snapshot):
             "invalid_snapshot",
             "Theme activation snapshot contains duplicate themes",
         )
-    encoded = json.dumps(snapshot, separators=(",", ":")).encode("utf-8")
+    normalized = {"status": "ready", "themes": themes}
+    encoded = json.dumps(normalized, separators=(",", ":")).encode("utf-8")
     if len(encoded) > _MAX_JOURNAL_BYTES:
         raise ThemeActivationJournalError(
             "invalid_snapshot",
             "Theme activation snapshot is too large",
         )
+    return normalized
 
 
 def _validate_transaction(transaction):
@@ -240,7 +237,7 @@ def _read_journal(path: Path):
             "Theme activation recovery journal is invalid",
         )
     try:
-        _validate_snapshot(journal["snapshot"])
+        journal["snapshot"] = _parse_snapshot(journal["snapshot"])
     except ThemeActivationJournalError as error:
         raise ThemeActivationJournalError(
             "invalid_journal",
@@ -251,7 +248,7 @@ def _read_journal(path: Path):
 
 def begin_theme_activation(snapshot, journal_path):
     path = Path(journal_path)
-    _validate_snapshot(snapshot)
+    snapshot = _parse_snapshot(snapshot)
     boot_id = _boot_id()
     if boot_id is None:
         raise ThemeActivationJournalError(

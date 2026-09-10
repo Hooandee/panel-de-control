@@ -56,7 +56,7 @@ class Adapter implements ThemeActivationAdapter {
     ) => void,
   ) {}
   async inspect(): Promise<CssLoaderSnapshot> {
-    return { status: "ready", pluginVersion: "2.1.2", backendVersion: 9, themes: structuredClone(this.themes) };
+    return { status: "ready", themes: structuredClone(this.themes) };
   }
   async setThemeState(name: string, enabled: boolean): Promise<CssLoaderSnapshot> {
     this.writes.push([name, enabled]);
@@ -238,8 +238,6 @@ describe("ThemeActivator", () => {
     const firstAdapter: ThemeActivationAdapter = {
       inspect: async () => ({
         status: "ready",
-        pluginVersion: "2.1.2",
-        backendVersion: 9,
         themes: structuredClone(themes),
       }),
       setThemeState: async () => {
@@ -262,8 +260,6 @@ describe("ThemeActivator", () => {
     const restartedAdapter: ThemeActivationAdapter = {
       inspect: async () => ({
         status: "ready",
-        pluginVersion: "2.2.0",
-        backendVersion: 10,
         themes: structuredClone(themes),
       }),
       setThemeState: async () => restartedAdapter.inspect(),
@@ -288,8 +284,6 @@ describe("ThemeActivator", () => {
 
     await expect(restartedActivator.reconcilePendingRecovery())
       .resolves.toMatchObject({
-        pluginVersion: "2.2.0",
-        backendVersion: 10,
         themes: [expect.objectContaining({ enabled: false })],
       });
     expect(durable).toBeNull();
@@ -315,9 +309,8 @@ describe("ThemeActivator", () => {
     let releaseLateMutation: (() => void) | undefined;
     let deferStateMutation = true;
     const adapter = new CssLoaderAdapter({
-      inventory: () => [{ name: "CSS Loader", version: "2.1.2", disabled: false }],
+      inventory: () => [{ name: "CSS Loader", disabled: false }],
       call: async (method, ...args) => {
-        if (method === "get_backend_version") return 9;
         if (method === "get_themes") return structuredClone(rawThemes);
         if (method === "reset") return { fails: [] };
         if (method === "set_patch_of_theme") {

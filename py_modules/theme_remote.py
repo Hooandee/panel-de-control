@@ -47,8 +47,6 @@ class OfficialThemeChannel:
 @dataclass(frozen=True)
 class ThemeRuntimeVersions:
     panel: str
-    css_loader: str
-    css_loader_backend: int
 
 
 class ThemeMetadataTransport(Protocol):
@@ -170,13 +168,6 @@ def _compatibility(
     minimum = release.minimum_versions
     if not _runtime_meets(runtime.panel, minimum.panel):
         return "incompatible-panel"
-    if (
-        not _runtime_meets(runtime.css_loader, minimum.css_loader)
-        or not isinstance(runtime.css_loader_backend, int)
-        or isinstance(runtime.css_loader_backend, bool)
-        or runtime.css_loader_backend < minimum.css_loader_backend
-    ):
-        return "incompatible-css-loader"
     return "compatible"
 
 
