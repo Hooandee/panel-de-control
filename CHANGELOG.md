@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## [0.46.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.45.0...panel-de-control-v0.46.0) (2026-09-10)
+
+
+### Features
+
+* add feature request reports ([#614](https://github.com/Hooandee/panel-de-control/issues/614)) ([f7d923a](https://github.com/Hooandee/panel-de-control/commit/f7d923a5eacaaa389e580c395b16c640cb8ba4e5))
+
+
+### Bug Fixes
+
+* recover Legion Go S firmware transactions ([#612](https://github.com/Hooandee/panel-de-control/issues/612)) ([e7a3b08](https://github.com/Hooandee/panel-de-control/commit/e7a3b089cb852e6ec43b0acfa43413d95667710c))
+
 ## [0.45.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.44.1...panel-de-control-v0.45.0) (2026-09-09)
 
 
