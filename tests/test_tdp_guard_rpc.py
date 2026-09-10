@@ -542,9 +542,11 @@ def test_report_contains_tdp_transition_history(plugin, monkeypatch):
                     "rendered_count": 8,
                     "rendered_unique_count": 7,
                 },
+                "report_kind": "feature",
             },
         )
     )
+    assert bundle["kind"] == "feature"
     history = bundle["state"]["tdp_diagnostics"]["history"]
     assert history
     last = history[-1]
@@ -585,6 +587,36 @@ def test_report_contains_tdp_transition_history(plugin, monkeypatch):
     }
     hud = bundle["state"]["hud_diagnostics"]
     assert hud["capability"] == "inactive"
+
+
+def test_incomplete_feature_report_keeps_its_kind(plugin, monkeypatch):
+    import main as main_module
+
+    async def fail_bundle(*_args, **_kwargs):
+        raise RuntimeError("incomplete")
+
+    captured = {}
+
+    def build_bundle(**kwargs):
+        captured.update(kwargs)
+        return kwargs
+
+    monkeypatch.setattr(plugin, "_build_report_bundle", fail_bundle)
+    monkeypatch.setattr(main_module.report_collector, "build_bundle", build_bundle)
+    monkeypatch.setattr(
+        main_module.report_client,
+        "submit",
+        lambda *_args, **_kwargs: {"ok": True, "code": "PDC-TEST"},
+    )
+
+    result = asyncio.run(plugin.submit_report(
+        ["themes"],
+        "please add this",
+        {"report_kind": "feature"},
+    ))
+
+    assert result["ok"] is True
+    assert captured["kind"] == "feature"
 
 
 def test_cpu_gpu_diagnostics_allowlist_drops_app_identity(plugin):

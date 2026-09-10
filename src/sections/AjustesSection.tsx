@@ -226,7 +226,7 @@ export const AjustesSection: FC = () => {
           </div>
         )}
 
-        {/* Open the full-screen "report a problem" flow. */}
+        {/* Open the full-screen report flow. */}
         <ButtonItem layout="below" description={t("report.button.desc")} onClick={() => openReportModal()}>
           {t("report.button")}
         </ButtonItem>

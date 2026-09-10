@@ -7,6 +7,7 @@ import { getDevice, submitReport, DeviceInfo, ReportResult } from "../api";
 import {
   REPORT_CATEGORIES,
   ReportCategory,
+  ReportKind,
   buildReportContext,
   canSubmit,
   toggleCategory,
@@ -18,12 +19,20 @@ import { getQamDocument } from "../qamDocument";
 
 type Phase = "form" | "sending" | "done" | "error";
 
-const CategoryChip: FC<{ label: string; on: boolean; onClick: () => void }> = ({
+const SelectionChip: FC<{
+  label: string;
+  on: boolean;
+  onClick: () => void;
+  radio?: boolean;
+}> = ({
   label,
   on,
   onClick,
+  radio = false,
 }) => (
   <Focusable
+    role={radio ? "radio" : undefined}
+    aria-checked={radio ? on : undefined}
     onActivate={onClick}
     onClick={onClick}
     noFocusRing
@@ -42,6 +51,7 @@ const CategoryChip: FC<{ label: string; on: boolean; onClick: () => void }> = ({
     }}
   >
     <div
+      aria-hidden="true"
       style={{
         width: 18,
         height: 18,
@@ -64,6 +74,7 @@ const CategoryChip: FC<{ label: string; on: boolean; onClick: () => void }> = ({
 const ReportBody: FC<{ closeModal?: () => void }> = ({ closeModal }) => {
   const { t } = useI18n();
   const [device, setDevice] = useState<DeviceInfo | null>(null);
+  const [kind, setKind] = useState<ReportKind>("bug");
   const [selected, setSelected] = useState<ReportCategory[]>([]);
   const [text, setText] = useState("");
   const [phase, setPhase] = useState<Phase>("form");
@@ -86,6 +97,7 @@ const ReportBody: FC<{ closeModal?: () => void }> = ({ closeModal }) => {
       steamDisplay,
       launchContext,
       quickAccessTabDiagnostics(window, getQamDocument()),
+      kind,
     );
     submitReport(selected, text, context)
       .then((r) => {
@@ -126,6 +138,7 @@ const ReportBody: FC<{ closeModal?: () => void }> = ({ closeModal }) => {
       {children}
     </div>
   );
+  const copyKey = (key: string) => kind === "feature" ? `${key}.feature` : key;
 
   if (phase === "sending") {
     return wrap(
@@ -143,7 +156,7 @@ const ReportBody: FC<{ closeModal?: () => void }> = ({ closeModal }) => {
           {t("report.done.title")}
         </div>
         <div style={{ fontSize: theme.font.body, color: theme.color.textMuted }}>
-          {t("report.done.thanks")}
+          {t(copyKey("report.done.thanks"))}
         </div>
         <div style={{ ...theme.card, padding: theme.space.md, minWidth: 220 }}>
           <div style={theme.sectionLabel}>{t("report.code.label")}</div>
@@ -152,7 +165,7 @@ const ReportBody: FC<{ closeModal?: () => void }> = ({ closeModal }) => {
           </div>
         </div>
         <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted, maxWidth: 340 }}>
-          {t("report.code.hint")}
+          {t(copyKey("report.code.hint"))}
         </div>
         <Focusable style={{ display: "flex", gap: theme.space.sm }}>
           <DialogButton onClick={copy}>
@@ -186,16 +199,35 @@ const ReportBody: FC<{ closeModal?: () => void }> = ({ closeModal }) => {
   return wrap(
     <>
       <div style={{ fontSize: theme.font.body, color: theme.color.textMuted }}>
-        {t("report.intro")}
+        {t(copyKey("report.intro"))}
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
-        <div style={theme.sectionLabel}>{t("report.section.what")}</div>
+        <div style={theme.sectionLabel}>{t("report.section.kind")}</div>
+        <div
+          role="radiogroup"
+          aria-label={t("report.section.kind")}
+          style={{ display: "flex", gap: theme.space.sm }}
+        >
+          {(["bug", "feature"] as const).map((id) => (
+            <SelectionChip
+              key={id}
+              label={t(`report.kind.${id}`)}
+              on={kind === id}
+              onClick={() => setKind(id)}
+              radio
+            />
+          ))}
+        </div>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
+        <div style={theme.sectionLabel}>{t(copyKey("report.section.what"))}</div>
         {/* Each chip is its own Focusable, so the gamepad reaches them without a
             wrapping Focusable; a plain flex row keeps them wrapping. */}
         <div style={{ display: "flex", flexWrap: "wrap", gap: theme.space.sm }}>
           {REPORT_CATEGORIES.map((id) => (
-            <CategoryChip
+            <SelectionChip
               key={id}
               label={t(`report.cat.${id}`)}
               on={selected.includes(id)}
@@ -206,14 +238,14 @@ const ReportBody: FC<{ closeModal?: () => void }> = ({ closeModal }) => {
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
-        <div style={theme.sectionLabel}>{t("report.section.describe")}</div>
+        <div style={theme.sectionLabel}>{t(copyKey("report.section.describe"))}</div>
         <TextField
           value={text}
           onChange={(e) => setText(e.target.value)}
         />
         {text.trim().length === 0 && (
           <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
-            {t("report.describe.hint")}
+            {t(copyKey("report.describe.hint"))}
           </div>
         )}
       </div>
