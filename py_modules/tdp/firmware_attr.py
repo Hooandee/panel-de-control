@@ -79,6 +79,7 @@ class FirmwareAttrBackend(TDPBackend):
         safety_lock_path=None,
         restore_on_release=False,
         ownership_lock_path=None,
+        named_profile_owns_rails=False,
     ):
         self.name = f"firmware-attr:{driver_prefix}"
         self._driver_prefix = driver_prefix
@@ -91,6 +92,7 @@ class FirmwareAttrBackend(TDPBackend):
         self._restore_on_release = bool(restore_on_release)
         self.reselection_safe_after_use = self._restore_on_release
         self._ownership_lock = RuntimeSafetyLock(ownership_lock_path)
+        self._named_profile_owns_rails = bool(named_profile_owns_rails)
         self._rail_floors = _normalise_rail_floors(rail_floors)
         self._ignored_live_maxes = _normalise_rail_values(ignored_live_maxes)
         self.cap_boost_to_active = bool(cap_boost_to_active)
@@ -99,8 +101,8 @@ class FirmwareAttrBackend(TDPBackend):
         )
         self._dir = self._find_driver_dir(driver_prefix)
         self.supported = self._dir is not None and os.path.exists(self._attr("ppt_pl1_spl"))
-        self._pp_dir = self._find_profile_dir()  # static, resolved once
-        self._pp_choices = None                  # parsed lazily, then cached
+        self._pp_dir = self._find_profile_dir()
+        self._pp_choices = None
         self._legacy = self._find_legacy_nodes(driver_prefix)  # ASUS dual-interface
         self._primary_rails = tuple(
             rail
@@ -224,14 +226,20 @@ class FirmwareAttrBackend(TDPBackend):
             missing.append("platform-profile=unavailable")
         return snapshot, profile, missing
 
-    def _snapshot_mismatches(self, surfaces, snapshot, profile):
+    def _snapshot_mismatches(
+        self,
+        surfaces,
+        snapshot,
+        profile,
+        compare_values=True,
+    ):
         mismatches = []
         for surface, rail, path in surfaces:
             current = self._read_int(path)
             expected = snapshot[path]
             if current is None:
                 mismatches.append(f"{self._surface_label(surface, rail)}=unavailable")
-            elif current != expected:
+            elif compare_values and current != expected:
                 mismatches.append(f"{self._surface_label(surface, rail)}={current}")
         if self._pp_dir:
             current_profile = self.read_profile()
@@ -241,23 +249,49 @@ class FirmwareAttrBackend(TDPBackend):
                 mismatches.append(f"platform-profile={current_profile}")
         return mismatches
 
-    def _rollback_transaction(self, surfaces, snapshot, profile):
+    def _named_profile_owns_transaction_rails(self, purpose, profile):
+        return (
+            purpose == "transaction"
+            and self._named_profile_owns_rails
+            and isinstance(profile, str)
+            and profile != "custom"
+            and profile in self.profile_choices()
+        )
+
+    def _rollback_transaction(
+        self,
+        surfaces,
+        snapshot,
+        profile,
+        restore_rails=True,
+    ):
         write_failures = []
-        for surface, rail, path in reversed(surfaces):
-            if not self._write(path, snapshot[path]):
-                write_failures.append(self._surface_label(surface, rail))
+        if restore_rails:
+            for surface, rail, path in reversed(surfaces):
+                if not self._write(path, snapshot[path]):
+                    write_failures.append(self._surface_label(surface, rail))
         if self._pp_dir and not self._write(
             os.path.join(self._pp_dir, "profile"),
             profile,
         ):
             write_failures.append("platform-profile")
 
-        mismatches = self._snapshot_mismatches(surfaces, snapshot, profile)
+        mismatches = self._snapshot_mismatches(
+            surfaces,
+            snapshot,
+            profile,
+            compare_values=restore_rails,
+        )
         for delay in self._readback_settle_delays:
             if not mismatches:
                 break
             time.sleep(delay)
-            mismatches = self._snapshot_mismatches(surfaces, snapshot, profile)
+            mismatches = self._snapshot_mismatches(
+                surfaces,
+                snapshot,
+                profile,
+                compare_values=restore_rails,
+            )
         return not mismatches, write_failures + mismatches
 
     def _restore_payload(self, purpose):
@@ -283,7 +317,24 @@ class FirmwareAttrBackend(TDPBackend):
             return {"ok": False, "detail": f"firmware {purpose} profile unavailable"}
         if self._pp_dir and not isinstance(profile, str):
             return {"ok": False, "detail": f"firmware {purpose} profile unavailable"}
-        recovered, problems = self._rollback_transaction(surfaces, snapshot, profile)
+        if (
+            purpose == "transaction"
+            and self._named_profile_owns_rails
+            and isinstance(profile, str)
+            and profile != "custom"
+            and profile not in self.profile_choices()
+        ):
+            return {"ok": False, "detail": "firmware transaction profile invalid"}
+        profile_owns_rails = self._named_profile_owns_transaction_rails(
+            purpose,
+            profile,
+        )
+        recovered, problems = self._rollback_transaction(
+            surfaces,
+            snapshot,
+            profile,
+            restore_rails=not profile_owns_rails,
+        )
         if not recovered:
             detail = f"firmware {purpose} recovery failed: " + ", ".join(problems)
             payload = {**payload, "state": "rollback_failed", "detail": detail}
@@ -693,6 +744,9 @@ class FirmwareAttrBackend(TDPBackend):
                 surfaces,
                 snapshot,
                 previous_profile,
+                restore_rails=not self._named_profile_owns_transaction_rails(
+                    "transaction", previous_profile
+                ),
             )
             rollback_detail = "rollback confirmed"
             if not rollback_ok:
