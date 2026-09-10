@@ -243,12 +243,33 @@ def test_build_bundle_shape_and_redaction():
         stores={"profiles": {}},
         logs=[{"name": "x.log", "text": "boom"}],
     )
-    assert b["schema"] == 2
+    assert b["schema"] == 3
     assert b["app"] == "panel-de-control"
+    assert b["kind"] == "bug"
     assert b["categories"] == ["tdp", "fans"]
     assert b["text"] == "falla ~/thing"  # path redacted in free text too
     assert b["environment"]["product_serial"] == "[redacted]"
     assert b["capabilities"]["tdp"] == "asus-armoury"
+
+
+def test_build_bundle_marks_feature_without_changing_logs():
+    logs = [{"name": "x.log", "text": "context"}]
+    common = {
+        "app": "panel-de-control",
+        "categories": ["themes"],
+        "text": "please add this",
+        "environment": {},
+        "capabilities": {},
+        "state": {},
+        "stores": {},
+        "logs": logs,
+    }
+
+    feature = build_bundle(**common, kind="feature")
+    bug = build_bundle(**common, kind="bug")
+
+    assert feature["kind"] == "feature"
+    assert feature["logs"] == bug["logs"] == logs
 
 
 def test_build_bundle_truncates_long_text():

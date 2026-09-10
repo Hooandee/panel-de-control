@@ -858,7 +858,7 @@ export interface ControllerActionResult {
   config: ControllerConfig;
 }
 
-// ---- Bug reporter ---------------------------------------------------------
+// ---- Report collector ----------------------------------------------------
 // Write-only: the plugin can only SEND a report. On success the backend returns a
 // short code the user can quote; on failure it saved the bundle locally.
 export interface ReportResult {

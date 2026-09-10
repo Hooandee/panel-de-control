@@ -123,7 +123,7 @@ from mangohud.observations import TimedValue, fresh_value
 from report import collector as report_collector
 from report import client as report_client
 
-# Bug reporter: the app slug (routes to the right GitHub repo, server-side) and the
+# Report collector: the app slug (routes to the right GitHub repo, server-side) and the
 # collector endpoint. The URL is set to the deployed Vercel service; overridable via
 # env for testing. The plugin only POSTs here; it can never read a report back.
 _REPORT_APP = "panel-de-control"
@@ -1503,7 +1503,7 @@ class Plugin:
             self._save()
         return result
 
-    # ---- Bug reporter ------------------------------------------------------
+    # ---- Report collector -------------------------------------------------
     async def submit_report(self, categories=None, text: str = "", context=None) -> dict:
         """Collect a redacted diagnostic bundle and send it to the collector
         service. Write-only: the plugin can never read a report back. `context` is
@@ -1512,6 +1512,7 @@ class Plugin:
         Returns {ok, code, issue_url} or {ok:false, error, saved_path}."""
         self._init()
         home, hostname = self._redact_ids()
+        report_kind = self._report_kind(context)
         try:
             bundle = await self._build_report_bundle(categories, text, home, hostname, context)
         except Exception as e:  # noqa: BLE001
@@ -1519,6 +1520,7 @@ class Plugin:
             bundle = report_collector.build_bundle(
                 app=_REPORT_APP, categories=categories, text=text,
                 environment={}, capabilities={}, state={}, stores={}, logs=[],
+                kind=report_kind,
                 home=home, hostname=hostname,
             )
             bundle["error"] = "bundle_incomplete"
@@ -1537,6 +1539,12 @@ class Plugin:
             "report send failed (%s); saved to %s", res.get("error"), path
         )
         return {"ok": False, "error": res.get("error", "unknown"), "saved_path": path}
+
+    @staticmethod
+    def _report_kind(context) -> str:
+        if isinstance(context, dict) and context.get("report_kind") == "feature":
+            return "feature"
+        return "bug"
 
     def _redact_ids(self):
         """(home, hostname) used to scrub PII from the bundle. Guarded."""
@@ -1618,6 +1626,7 @@ class Plugin:
             app=_REPORT_APP,
             categories=categories,
             text=text,
+            kind=self._report_kind(context),
             environment=self._report_environment(),
             capabilities=report_collector.capabilities_from(states),
             state=states,

@@ -14,6 +14,7 @@ export const REPORT_CATEGORIES = [
 ] as const;
 
 export type ReportCategory = (typeof REPORT_CATEGORIES)[number];
+export type ReportKind = "bug" | "feature";
 
 export function toggleCategory(
   selected: ReportCategory[],
@@ -55,10 +56,12 @@ export function buildReportContext(
   display: unknown,
   launch: Record<string, unknown>,
   qam: object,
+  kind: ReportKind = "bug",
 ): Record<string, unknown> {
   return {
     ...launch,
     ...displayReportContext(selected, display),
     qam,
+    report_kind: kind,
   };
 }

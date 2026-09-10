@@ -1,4 +1,4 @@
-"""Assemble a diagnostic bug-report bundle and scrub PII from it.
+"""Assemble a diagnostic report bundle and scrub PII from it.
 
 Split so the tricky parts are pure and unit-testable:
   - redact_text / redact_obj  - strip home paths, hostname, serial-like values
@@ -22,7 +22,7 @@ import re
 from sysfs import read_str
 
 # Bump when the bundle shape changes so consumers can adapt.
-SCHEMA = 2
+SCHEMA = 3
 
 _MAX_TEXT = 4000  # user free-text cap (defensive; the UI also limits it)
 
@@ -681,6 +681,7 @@ def build_bundle(
     state: dict,
     stores: dict,
     logs: list,
+    kind: str = "bug",
     kernel: dict | None = None,
     sysfs: dict | None = None,
     home: str | None = None,
@@ -691,6 +692,7 @@ def build_bundle(
     bundle = {
         "schema": SCHEMA,
         "app": app,
+        "kind": "feature" if kind == "feature" else "bug",
         "categories": list(categories or []),
         "text": (text or "")[:_MAX_TEXT],
         "environment": environment or {},
