@@ -1,4 +1,4 @@
-export type CssLoaderStatus = "missing" | "disabled" | "incompatible" | "ready" | "error";
+export type CssLoaderStatus = "missing" | "disabled" | "ready" | "error";
 export type CssLoaderPatchType = "checkbox" | "dropdown" | "slider" | "none" | "unsupported";
 
 export interface CssLoaderPatch {
@@ -34,9 +34,6 @@ export interface CssLoaderErrorInfo {
 
 export interface CssLoaderSnapshot {
   status: CssLoaderStatus;
-  pluginVersion?: string;
-  backendVersion?: number;
-  requiredBackendVersion?: number;
   themes: readonly CssLoaderTheme[];
   error?: CssLoaderErrorInfo;
 }

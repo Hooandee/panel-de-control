@@ -4,7 +4,7 @@ import { configureDeckyCssLoaderHost, createDeckyCssLoaderHost } from "./deckyCs
 
 describe("createDeckyCssLoaderHost", () => {
   it("binds inventory and calls to the CSS Loader plugin identity", async () => {
-    const call = vi.fn(async () => ({ success: true, result: 9 }));
+    const call = vi.fn(async () => ({ success: true, result: [] }));
     const host = createDeckyCssLoaderHost({
       DeckyPluginLoader: {
         deckyState: {
@@ -18,15 +18,54 @@ describe("createDeckyCssLoaderHost", () => {
     });
 
     expect(host.inventory()).toEqual([
-      { name: "CSS Loader", version: "2.1.2", disabled: false },
+      { name: "CSS Loader", disabled: false },
     ]);
-    await expect(host.call("get_backend_version")).resolves.toBe(9);
+    await expect(host.call("get_themes")).resolves.toEqual([]);
     expect(call).toHaveBeenCalledWith(
       "loader/call_legacy_plugin_method",
       "CSS Loader",
-      "get_backend_version",
+      "get_themes",
       {},
     );
+  });
+
+  it("ignores CSS Loader version metadata when discovering the plugin", async () => {
+    const call = vi.fn(async () => ({ success: true, result: [] }));
+    const host = createDeckyCssLoaderHost({
+      DeckyPluginLoader: {
+        deckyState: {
+          publicState: () => ({
+            installedPlugins: [{ name: "CSS Loader", version: 2 }],
+            disabledPlugins: [],
+          }),
+        },
+      },
+      DeckyBackend: { call },
+    });
+
+    expect(host.inventory()).toEqual([{ name: "CSS Loader", disabled: false }]);
+    await expect(host.call("get_themes")).resolves.toEqual([]);
+  });
+
+  it("ignores malformed metadata from unrelated plugins", async () => {
+    const call = vi.fn(async () => ({ success: true, result: [] }));
+    const host = createDeckyCssLoaderHost({
+      DeckyPluginLoader: {
+        deckyState: {
+          publicState: () => ({
+            installedPlugins: [
+              { name: "Other Plugin", version: 7 },
+              { name: "CSS Loader", version: "2.1.2" },
+            ],
+            disabledPlugins: [],
+          }),
+        },
+      },
+      DeckyBackend: { call },
+    });
+
+    expect(host.inventory()).toEqual([{ name: "CSS Loader", disabled: false }]);
+    await expect(host.call("get_themes")).resolves.toEqual([]);
   });
 
   it("translates the adapter's typed operations into CSS Loader's legacy keyword contract", async () => {
@@ -99,7 +138,7 @@ describe("createDeckyCssLoaderHost", () => {
   });
 
   it("keeps using the Decky realm captured during plugin initialization", async () => {
-    const call = vi.fn(async () => ({ success: true, result: 9 }));
+    const call = vi.fn(async () => ({ success: true, result: [] }));
     const deckyRealm = {
       DeckyPluginLoader: {
         deckyState: {
@@ -116,17 +155,27 @@ describe("createDeckyCssLoaderHost", () => {
     try {
       const host = createDeckyCssLoaderHost();
       expect(host.inventory()).toEqual([
-        { name: "CSS Loader", version: "2.1.2", disabled: false },
+        { name: "CSS Loader", disabled: false },
       ]);
-      await host.call("get_backend_version");
+      await host.call("get_themes");
       expect(call).toHaveBeenCalledWith(
         "loader/call_legacy_plugin_method",
         "CSS Loader",
-        "get_backend_version",
+        "get_themes",
         {},
       );
     } finally {
       release();
     }
+  });
+
+  it("does not expose CSS Loader version metadata", () => {
+    const call = vi.fn();
+    const host = createDeckyCssLoaderHost({ DeckyBackend: { call } });
+
+    expect(() => host.call("get_backend_version")).toThrow(
+      "Unsupported CSS Loader call shape: get_backend_version",
+    );
+    expect(call).not.toHaveBeenCalled();
   });
 });

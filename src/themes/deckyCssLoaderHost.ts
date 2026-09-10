@@ -1,10 +1,40 @@
-import { callLegacyPluginBackend, strictPluginInventory } from "../deckyInternal";
-import type { CssLoaderHost } from "./cssLoaderAdapter";
+import { callLegacyPluginBackend } from "../deckyInternal";
+import type { CssLoaderHost, CssLoaderPluginInventoryEntry } from "./cssLoaderAdapter";
 
 const CSS_LOADER_PLUGIN_NAME = "CSS Loader";
 
 let configuredHost: unknown;
 let configuredLease: symbol | null = null;
+
+interface DeckyPluginState {
+  publicState?(): {
+    installedPlugins?: unknown;
+    disabledPlugins?: unknown;
+  };
+}
+
+interface DeckyPluginHost {
+  DeckyPluginLoader?: { deckyState?: DeckyPluginState };
+}
+
+function isCssLoaderEntry(value: unknown): boolean {
+  if (typeof value === "string") return value === CSS_LOADER_PLUGIN_NAME;
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  return (value as { name?: unknown }).name === CSS_LOADER_PLUGIN_NAME;
+}
+
+function cssLoaderPluginInventory(host: unknown): CssLoaderPluginInventoryEntry[] {
+  const state = (host as DeckyPluginHost | null)?.DeckyPluginLoader?.deckyState?.publicState?.();
+  const installed = state?.installedPlugins;
+  const disabled = state?.disabledPlugins;
+  if (!Array.isArray(installed) || !Array.isArray(disabled)) {
+    throw new Error("Decky plugin inventory unavailable");
+  }
+  const installedCssLoader = installed.some(isCssLoaderEntry);
+  const disabledCssLoader = disabled.some(isCssLoaderEntry);
+  if (!installedCssLoader && !disabledCssLoader) return [];
+  return [{ name: CSS_LOADER_PLUGIN_NAME, disabled: disabledCssLoader }];
+}
 
 export function configureDeckyCssLoaderHost(host: unknown): () => void {
   const lease = Symbol("decky-css-loader-host");
@@ -24,7 +54,7 @@ export function createDeckyCssLoaderHost(host?: unknown): CssLoaderHost {
       : window
     : host;
   return {
-    inventory: () => strictPluginInventory(selectedHost),
+    inventory: () => cssLoaderPluginInventory(selectedHost),
     call: (method, ...args) => callLegacyPluginBackend(
       CSS_LOADER_PLUGIN_NAME,
       method,
@@ -36,7 +66,6 @@ export function createDeckyCssLoaderHost(host?: unknown): CssLoaderHost {
 
 function legacyArguments(method: string, args: readonly unknown[]): Readonly<Record<string, unknown>> {
   switch (method) {
-    case "get_backend_version":
     case "get_themes":
     case "reset":
       if (args.length === 0) return {};

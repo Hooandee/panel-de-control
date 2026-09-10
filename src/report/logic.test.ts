@@ -94,6 +94,20 @@ describe("displayReportContext", () => {
 });
 
 describe("buildReportContext", () => {
+  it("marks a feature request without replacing its diagnostic context", () => {
+    expect(buildReportContext(
+      ["themes"],
+      {},
+      { runningGame: { appid: "123" }, report_kind: "bug" },
+      { rendered_count: 1, rendered_unique_count: 1 },
+      "feature",
+    )).toEqual({
+      runningGame: { appid: "123" },
+      qam: { rendered_count: 1, rendered_unique_count: 1 },
+      report_kind: "feature",
+    });
+  });
+
   it("includes bounded QAM diagnostics with the existing frontend context", () => {
     expect(buildReportContext(
       ["other"],
@@ -103,6 +117,7 @@ describe("buildReportContext", () => {
     )).toEqual({
       runningGame: { appid: "123" },
       qam: { rendered_count: 9, rendered_unique_count: 8 },
+      report_kind: "bug",
     });
   });
 });

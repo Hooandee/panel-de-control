@@ -409,14 +409,6 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
             {!cssReady ? (
               <div data-pdc-theme-status-surface="true" style={STATUS_SURFACE}>
                 <div role="status" aria-live="polite">{t(`themes.cssLoader.${controller.snapshot.status}`)}</div>
-                {controller.snapshot.status === "incompatible" ? (
-                  <div data-pdc-theme-muted style={{ marginTop: theme.space.xs }}>
-                    {t("themes.cssLoader.version", {
-                      detected: controller.snapshot.backendVersion ?? "—",
-                      required: controller.snapshot.requiredBackendVersion ?? "—",
-                    })}
-                  </div>
-                ) : null}
                 <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm, marginTop: theme.space.md }}>
                   {controller.snapshot.status === "missing" ? (
                     <ButtonItem layout="below" onClick={() => Navigation.Navigate("/decky/store")}>{t("themes.cssLoader.openStore")}</ButtonItem>

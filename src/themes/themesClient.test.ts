@@ -20,7 +20,7 @@ const RELEASE: PublishedThemeRelease = {
 };
 const PUBLICATION: ThemePublicationState = { status: "published", checkedAt: 10, themes: [RELEASE] };
 const READY: CssLoaderReadySnapshot = {
-  status: "ready", pluginVersion: "2.1.2", backendVersion: 9, themes: [],
+  status: "ready", themes: [],
 };
 const INSTALLED_THEME: CssLoaderTheme = {
   id: "Example Theme",
@@ -393,8 +393,6 @@ describe("ThemesClient", () => {
     const activationAdapter: ThemeActivationAdapter = {
       inspect: async () => ({
         status: "ready",
-        pluginVersion: "2.1.2",
-        backendVersion: 9,
         themes: structuredClone(themes),
       }),
       setThemeState: async (_name, enabled) => {

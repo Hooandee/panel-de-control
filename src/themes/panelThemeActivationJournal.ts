@@ -99,14 +99,11 @@ function parseTheme(value: unknown): CssLoaderTheme | null {
 function parseReadySnapshot(value: unknown): CssLoaderReadySnapshot | null {
   if (!isRecord(value) || !hasExactKeys(
     value,
-    ["status", "backendVersion", "themes"],
-    ["pluginVersion"],
+    ["status", "themes"],
+    ["pluginVersion", "backendVersion"],
   )) return null;
   if (
     value.status !== "ready"
-    || !Number.isInteger(value.backendVersion)
-    || (value.backendVersion as number) < 9
-    || (value.pluginVersion !== undefined && typeof value.pluginVersion !== "string")
     || !Array.isArray(value.themes)
   ) return null;
   const themes = value.themes.map(parseTheme);
@@ -114,8 +111,6 @@ function parseReadySnapshot(value: unknown): CssLoaderReadySnapshot | null {
   if (new Set(themes.map((theme) => theme.name)).size !== themes.length) return null;
   return {
     status: "ready",
-    ...(value.pluginVersion === undefined ? {} : { pluginVersion: value.pluginVersion }),
-    backendVersion: value.backendVersion as number,
     themes,
   };
 }

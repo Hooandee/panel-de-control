@@ -31,7 +31,7 @@ function installed(name: string, version: string, enabled = false): CssLoaderThe
 }
 
 function ready(themes: CssLoaderTheme[]): CssLoaderSnapshot {
-  return { status: "ready", pluginVersion: "2.1.2", backendVersion: 9, themes };
+  return { status: "ready", themes };
 }
 
 describe("deriveThemeCards", () => {
@@ -71,12 +71,12 @@ describe("deriveThemeCards", () => {
     });
   });
 
-  it("keeps incompatible releases visible but not installable", () => {
+  it("keeps releases for a newer Panel visible but not installable", () => {
     const state = publication();
     if (state.status !== "published") throw new Error("fixture");
     const cards = deriveThemeCards({
       ...state,
-      themes: [{ ...RELEASE, compatibility: "incompatible-css-loader" }],
+      themes: [{ ...RELEASE, compatibility: "incompatible-panel" }],
     }, ready([]));
 
     expect(cards[0]).toMatchObject({ installed: false, installable: false });

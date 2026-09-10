@@ -26,7 +26,6 @@ import self_updater
 import theme_activation
 import theme_packages
 import theme_remote
-import theme_runtime
 import theme_transport
 from version import read_version
 from settings_store import SettingsStore
@@ -123,7 +122,7 @@ from mangohud.observations import TimedValue, fresh_value
 from report import collector as report_collector
 from report import client as report_client
 
-# Bug reporter: the app slug (routes to the right GitHub repo, server-side) and the
+# Report collector: the app slug (routes to the right GitHub repo, server-side) and the
 # collector endpoint. The URL is set to the deployed Vercel service; overridable via
 # env for testing. The plugin only POSTs here; it can never read a report back.
 _REPORT_APP = "panel-de-control"
@@ -704,11 +703,6 @@ class Plugin:
         self._launch_tools = launch_tools.detect_tools(
             home=getattr(decky, "DECKY_USER_HOME", None) or os.path.expanduser("~")
         )
-        self._theme_remote_runtime = theme_remote.ThemeRuntimeVersions(
-            panel=read_version(),
-            css_loader="",
-            css_loader_backend=0,
-        )
         self._theme_remote_service = self._new_theme_remote_service()
         self._theme_accepting_work = True
         self._ready = True
@@ -946,11 +940,6 @@ class Plugin:
     def _remote_themes(self) -> theme_remote.ThemeRemoteService:
         service = getattr(self, "_theme_remote_service", None)
         if service is None:
-            self._theme_remote_runtime = theme_remote.ThemeRuntimeVersions(
-                panel=read_version(),
-                css_loader="",
-                css_loader_backend=0,
-            )
             service = self._new_theme_remote_service()
             self._theme_remote_service = service
         return service
@@ -967,18 +956,14 @@ class Plugin:
         return theme_remote.ThemeRemoteService(
             channel,
             transport=transport,
-            runtime_versions=lambda: self._theme_remote_runtime,
+            runtime_versions=lambda: theme_remote.ThemeRuntimeVersions(
+                panel=read_version(),
+            ),
             cache=cache,
             cache_error_logger=lambda error_name: decky.logger.warning(
                 "Theme catalog cache unavailable (%s)",
                 error_name,
             ),
-        )
-
-    def _probe_theme_runtime(self) -> theme_remote.ThemeRuntimeVersions:
-        return theme_runtime.probe_css_loader_runtime(
-            self._themes_root().parent / "plugins",
-            panel_version=read_version(),
         )
 
     async def check_theme_releases(
@@ -994,25 +979,10 @@ class Plugin:
             }
 
         def discover() -> dict:
-            service = self._remote_themes()
-            try:
-                self._theme_remote_runtime = self._probe_theme_runtime()
-            except theme_runtime.ThemeRuntimeProbeError:
-                self._theme_remote_runtime = theme_remote.ThemeRuntimeVersions(
-                    panel=read_version(),
-                    css_loader="",
-                    css_loader_backend=0,
-                )
-            return service.check_releases(force)
+            return self._remote_themes().check_releases(force)
 
         try:
             return await self._offload_theme_call(discover)
-        except theme_runtime.ThemeRuntimeProbeError:
-            return {
-                "status": "recoverable-failure",
-                "code": "invalid_descriptor",
-                "retryable": False,
-            }
         except theme_packages.ThemePackageError as error:
             return {
                 "status": "recoverable-failure",
@@ -1049,7 +1019,6 @@ class Plugin:
 
         def prepare() -> dict:
             service = self._remote_themes()
-            self._theme_remote_runtime = self._probe_theme_runtime()
             return service.prepare_install(
                 theme_id,
                 expected_version,
@@ -1059,8 +1028,6 @@ class Plugin:
 
         try:
             return await self._offload_theme_call(prepare)
-        except theme_runtime.ThemeRuntimeProbeError:
-            return {"ok": False, "code": "incompatible_css_loader", "theme_id": theme_id}
         except (theme_remote.ThemeRemoteError, theme_packages.ThemePackageError) as error:
             decky.logger.warning("Remote theme prepare rejected (%s)", error.code)
             return {"ok": False, "code": error.code, "theme_id": theme_id}
@@ -1503,7 +1470,7 @@ class Plugin:
             self._save()
         return result
 
-    # ---- Bug reporter ------------------------------------------------------
+    # ---- Report collector -------------------------------------------------
     async def submit_report(self, categories=None, text: str = "", context=None) -> dict:
         """Collect a redacted diagnostic bundle and send it to the collector
         service. Write-only: the plugin can never read a report back. `context` is
@@ -1512,6 +1479,7 @@ class Plugin:
         Returns {ok, code, issue_url} or {ok:false, error, saved_path}."""
         self._init()
         home, hostname = self._redact_ids()
+        report_kind = self._report_kind(context)
         try:
             bundle = await self._build_report_bundle(categories, text, home, hostname, context)
         except Exception as e:  # noqa: BLE001
@@ -1519,6 +1487,7 @@ class Plugin:
             bundle = report_collector.build_bundle(
                 app=_REPORT_APP, categories=categories, text=text,
                 environment={}, capabilities={}, state={}, stores={}, logs=[],
+                kind=report_kind,
                 home=home, hostname=hostname,
             )
             bundle["error"] = "bundle_incomplete"
@@ -1537,6 +1506,12 @@ class Plugin:
             "report send failed (%s); saved to %s", res.get("error"), path
         )
         return {"ok": False, "error": res.get("error", "unknown"), "saved_path": path}
+
+    @staticmethod
+    def _report_kind(context) -> str:
+        if isinstance(context, dict) and context.get("report_kind") == "feature":
+            return "feature"
+        return "bug"
 
     def _redact_ids(self):
         """(home, hostname) used to scrub PII from the bundle. Guarded."""
@@ -1618,6 +1593,7 @@ class Plugin:
             app=_REPORT_APP,
             categories=categories,
             text=text,
+            kind=self._report_kind(context),
             environment=self._report_environment(),
             capabilities=report_collector.capabilities_from(states),
             state=states,

@@ -77,7 +77,7 @@ def test_parses_the_exact_public_v1_release_as_immutable_data() -> None:
     assert release.tags == ("minimal", "dark-mode")
     assert release.exclusive_group == "color-system"
     assert release.artifact.size == 12_345
-    assert release.minimum_versions.css_loader_backend == 9
+    assert release.minimum_versions.panel == "1.0.0"
     assert dict(release.notes) == VALID_RELEASE["notes"]
     with pytest.raises(FrozenInstanceError):
         release.version = "1.2.4"  # type: ignore[misc]
@@ -263,9 +263,6 @@ def test_rejects_artifacts_outside_the_exact_immutable_path(
     [
         {**VALID_RELEASE["minimumVersions"], "unexpected": True},
         {**VALID_RELEASE["minimumVersions"], "panel": "v1.0.0"},
-        {**VALID_RELEASE["minimumVersions"], "cssLoader": "2.1.2-beta.1"},
-        {**VALID_RELEASE["minimumVersions"], "cssLoaderBackend": True},
-        {**VALID_RELEASE["minimumVersions"], "cssLoaderBackend": 0},
     ],
 )
 def test_rejects_invalid_minimum_versions(minimum_versions: object) -> None:
@@ -292,12 +289,6 @@ def test_rejects_invalid_minimum_versions(minimum_versions: object) -> None:
                 "panel": "1.0.0١",
             }
         ),
-        changed(
-            minimumVersions={
-                **VALID_RELEASE["minimumVersions"],
-                "cssLoader": "2.1.2١",
-            }
-        ),
     ],
 )
 def test_rejects_non_ascii_digits_in_every_semantic_version_field(
@@ -307,35 +298,22 @@ def test_rejects_non_ascii_digits_in_every_semantic_version_field(
         parse_theme_release(payload(invalid), PAGES_BASE)
 
 
-def test_accepts_the_maximum_safe_css_loader_backend_version() -> None:
+@pytest.mark.parametrize(
+    "minimum_versions",
+    [
+        {"panel": "1.0.0"},
+        {"panel": "1.0.0", "cssLoader": None, "cssLoaderBackend": False},
+    ],
+)
+def test_ignores_legacy_css_loader_minimum_versions(
+    minimum_versions: object,
+) -> None:
     release = parse_theme_release(
-        payload(
-            changed(
-                minimumVersions={
-                    **VALID_RELEASE["minimumVersions"],
-                    "cssLoaderBackend": 9_007_199_254_740_991,
-                }
-            )
-        ),
+        payload(changed(minimumVersions=minimum_versions)),
         PAGES_BASE,
     )
 
-    assert release.minimum_versions.css_loader_backend == 9_007_199_254_740_991
-
-
-def test_rejects_css_loader_backend_above_the_javascript_safe_integer_limit() -> None:
-    with pytest.raises(ThemeContractError):
-        parse_theme_release(
-            payload(
-                changed(
-                    minimumVersions={
-                        **VALID_RELEASE["minimumVersions"],
-                        "cssLoaderBackend": 9_007_199_254_740_992,
-                    }
-                )
-            ),
-            PAGES_BASE,
-        )
+    assert release.minimum_versions.panel == "1.0.0"
 
 
 @pytest.mark.parametrize(

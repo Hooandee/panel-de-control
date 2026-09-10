@@ -14,11 +14,9 @@ def system_boot(monkeypatch):
     )
 
 
-def snapshot(plugin_version="2.1.2", backend_version=9):
+def snapshot():
     return {
         "status": "ready",
-        "pluginVersion": plugin_version,
-        "backendVersion": backend_version,
         "themes": [{
             "id": "example",
             "name": "Example Theme",
@@ -75,6 +73,23 @@ def test_activation_recovery_survives_restart_until_exact_acknowledgement(tmp_pa
     ) == {"ok": True, "code": "settled"}
 
 
+def test_activation_recovery_ignores_legacy_css_loader_version_metadata(tmp_path):
+    value = snapshot()
+    value.update(
+        pluginVersion={"legacy": True},
+        backendVersion="legacy",
+    )
+    path = tmp_path / "activation.json"
+
+    prepared = theme_activation.begin_theme_activation(
+        value,
+        path,
+    )
+
+    assert prepared["code"] == "prepared"
+    assert theme_activation.get_theme_activation_recovery(path)["snapshot"] == snapshot()
+
+
 def test_activation_recovery_rejects_overwriting_a_pending_transaction(tmp_path):
     path = tmp_path / "activation.json"
     theme_activation.begin_theme_activation(snapshot(), path)
@@ -89,7 +104,6 @@ def test_activation_recovery_rejects_overwriting_a_pending_transaction(tmp_path)
     "mutate",
     [
         lambda value: value.update(status="missing"),
-        lambda value: value.update(backendVersion=True),
         lambda value: value["themes"][0].update(enabled=1),
         lambda value: value["themes"][0]["patches"][0].update(options=["ok", 1]),
         lambda value: value["themes"][0].update(extra="hidden"),

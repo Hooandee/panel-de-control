@@ -82,7 +82,7 @@ function installedController(overrides: Partial<ThemesController> = {}): ThemesC
     }],
   };
   return controller({
-    snapshot: { status: "ready", pluginVersion: "2.1.2", backendVersion: 9, themes: [installedTheme] },
+    snapshot: { status: "ready", themes: [installedTheme] },
     cards: [{
       ...base.cards[0], installed: true, installedVersion: "1.2.3",
       cssLoaderTheme: installedTheme, versionRelation: "current",
@@ -165,7 +165,7 @@ describe("ThemeDetailsModal", () => {
 
   it("uses full-size layout only when installed settings need the space", () => {
     mocks.controller = controller({
-      snapshot: { status: "ready", pluginVersion: "2.1.2", backendVersion: 9, themes: [] },
+      snapshot: { status: "ready", themes: [] },
     });
     const view = render(<ThemeDetailsModal themeId="example-theme" />);
 
@@ -180,7 +180,7 @@ describe("ThemeDetailsModal", () => {
       }],
     };
     mocks.controller = controller({
-      snapshot: { status: "ready", pluginVersion: "2.1.2", backendVersion: 9, themes: [installedTheme] },
+      snapshot: { status: "ready", themes: [installedTheme] },
       cards: [{ ...base.cards[0], installed: true, installedVersion: "1.2.3", cssLoaderTheme: installedTheme, versionRelation: "current" }],
     });
     view.rerender(<ThemeDetailsModal themeId="example-theme" />);
@@ -205,7 +205,7 @@ describe("ThemeDetailsModal", () => {
   it("replaces the ready offer with one compact, safely ordered confirmation", () => {
     const install = vi.fn(async () => true);
     mocks.controller = controller({
-      snapshot: { status: "ready", pluginVersion: "2.1.2", backendVersion: 9, themes: [] },
+      snapshot: { status: "ready", themes: [] },
       install,
     });
     render(<ThemeDetailsModal themeId="example-theme" />);
@@ -229,13 +229,13 @@ describe("ThemeDetailsModal", () => {
 
   it("keeps local cancellation available if another theme operation starts", () => {
     mocks.controller = controller({
-      snapshot: { status: "ready", pluginVersion: "2.1.2", backendVersion: 9, themes: [] },
+      snapshot: { status: "ready", themes: [] },
     });
     const view = render(<ThemeDetailsModal themeId="example-theme" />);
 
     fireEvent.click(screen.getByRole("button", { name: "themes.action.install" }));
     mocks.controller = controller({
-      snapshot: { status: "ready", pluginVersion: "2.1.2", backendVersion: 9, themes: [] },
+      snapshot: { status: "ready", themes: [] },
       operation: { kind: "activating", themeId: "another-theme" },
     });
     view.rerender(<ThemeDetailsModal themeId="example-theme" />);
@@ -249,7 +249,7 @@ describe("ThemeDetailsModal", () => {
   it("uses Escape to restore the offer before closing the modal", () => {
     const closeModal = vi.fn();
     mocks.controller = controller({
-      snapshot: { status: "ready", pluginVersion: "2.1.2", backendVersion: 9, themes: [] },
+      snapshot: { status: "ready", themes: [] },
     });
     render(<ThemeDetailsModal themeId="example-theme" closeModal={closeModal} />);
 
@@ -270,7 +270,7 @@ describe("ThemeDetailsModal", () => {
       author: "Example Author", enabled: true, patches: [],
     };
     mocks.controller = controller({
-      snapshot: { status: "ready", pluginVersion: "2.1.2", backendVersion: 9, themes: [installedTheme] },
+      snapshot: { status: "ready", themes: [installedTheme] },
       cards: [{
         ...base.cards[0], installed: true, active: true, installedVersion: "1.2.2",
         targetVersion: "1.2.3", updateAvailable: true, versionRelation: "update-available",
@@ -291,7 +291,7 @@ describe("ThemeDetailsModal", () => {
   it("does not consume cancel after the confirmed version becomes stale", () => {
     const closeModal = vi.fn();
     mocks.controller = controller({
-      snapshot: { status: "ready", pluginVersion: "2.1.2", backendVersion: 9, themes: [] },
+      snapshot: { status: "ready", themes: [] },
     });
     const view = render(<ThemeDetailsModal themeId="example-theme" closeModal={closeModal} />);
 
@@ -299,7 +299,7 @@ describe("ThemeDetailsModal", () => {
     expect(screen.getByRole("group", { name: "themes.install.confirm.title" })).toBeTruthy();
 
     const next = controller({
-      snapshot: { status: "ready", pluginVersion: "2.1.2", backendVersion: 9, themes: [] },
+      snapshot: { status: "ready", themes: [] },
     });
     mocks.controller = {
       ...next,
@@ -422,7 +422,7 @@ describe("ThemeDetailsModal", () => {
     fireEvent.click(screen.getByRole("button", { name: "themes.action.delete" }));
     fireEvent.click(screen.getByRole("button", { name: "themes.delete.confirm.ok" }));
     const next = controller({
-      snapshot: { status: "ready", pluginVersion: "2.1.2", backendVersion: 9, themes: [] },
+      snapshot: { status: "ready", themes: [] },
     });
     mocks.controller = next;
     view.rerender(<ThemeDetailsModal themeId="example-theme" />);
@@ -453,7 +453,7 @@ describe("ThemeDetailsModal", () => {
     fireEvent.click(screen.getByRole("button", { name: "themes.action.delete" }));
     fireEvent.click(screen.getByRole("button", { name: "themes.delete.confirm.ok" }));
     const next = controller({
-      snapshot: { status: "ready", pluginVersion: "2.1.2", backendVersion: 9, themes: [] },
+      snapshot: { status: "ready", themes: [] },
       cards: [{
         ...controller().cards[0], release: incompatibleRelease, installable: false,
         targetVersion: undefined, versionRelation: "not-installed",
@@ -495,7 +495,7 @@ describe("ThemeDetailsModal", () => {
       }],
     };
     mocks.controller = controller({
-      snapshot: { status: "ready", pluginVersion: "2.1.2", backendVersion: 9, themes: [installedTheme] },
+      snapshot: { status: "ready", themes: [installedTheme] },
       cards: [{ ...base.cards[0], installed: true, installedVersion: "1.2.3", cssLoaderTheme: installedTheme, versionRelation: "current" }],
       activate,
       setPatch,
@@ -521,7 +521,7 @@ describe("ThemeDetailsModal", () => {
       compatibility: "incompatible-panel" as const,
     };
     mocks.controller = controller({
-      snapshot: { status: "ready", pluginVersion: "2.1.2", backendVersion: 9, themes: [installedTheme] },
+      snapshot: { status: "ready", themes: [installedTheme] },
       cards: [{
         ...base.cards[0], release: incompatibleRelease, installed: true,
         installedVersion: "1.2.3", cssLoaderTheme: installedTheme, versionRelation: "unknown",
@@ -546,7 +546,7 @@ describe("ThemeDetailsModal", () => {
       compatibility: "incompatible-panel" as const,
     };
     mocks.controller = controller({
-      snapshot: { status: "ready", pluginVersion: "2.1.2", backendVersion: 9, themes: [installedTheme] },
+      snapshot: { status: "ready", themes: [installedTheme] },
       cards: [{
         ...base.cards[0], release: incompatibleRelease, installed: true, active: true,
         installedVersion: "1.2.3", cssLoaderTheme: installedTheme, versionRelation: "unknown",
