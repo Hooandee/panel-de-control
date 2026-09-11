@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## [0.46.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.46.2...panel-de-control-v0.46.3) (2026-09-11)
+
 ### Español
 
 * **Legion Go 2:** Recupera el control de TDP en el modelo 83N0 cuando el firmware tarda en reflejar los nuevos límites o una transacción anterior lo dejó bloqueado.
