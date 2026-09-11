@@ -3,6 +3,7 @@ import os
 from device_quirks import (
     asus_tdp_authoritative_reassert_s,
     is_gpd_win_mini_2025_tdp_recovery,
+    is_legion_go_s_83n6,
     legion_go_2_83n0_firmware_attr_quirks,
     legion_go_s_83l3_firmware_attr_quirks,
     legion_go_s_83n6_firmware_attr_quirks,
@@ -70,7 +71,8 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None):
         )
 
     def lenovo():
-        return FirmwareAttrBackend(
+        go_s_83l3 = legion_go_s_83l3_firmware_attr_quirks(device, root)
+        backend = FirmwareAttrBackend(
             "lenovo-wmi-other",
             fallback,
             root=root,
@@ -82,9 +84,12 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None):
                 "firmware-lenovo-wmi-other.lock",
             ),
             **legion_go_2_83n0_firmware_attr_quirks(device, root),
-            **legion_go_s_83l3_firmware_attr_quirks(device, root),
+            **go_s_83l3,
             **legion_go_s_83n6_firmware_attr_quirks(device, root),
         )
+        if go_s_83l3:
+            backend.low_battery_hold_strategy = None
+        return backend
 
     def msi():
         return FirmwareAttrBackend(
@@ -244,4 +249,29 @@ def select_backend(device, root="/", ryzenadj_resolve=None, os_id=None) -> TDPBa
             return backend
     backend = NullBackend(f"no supported TDP interface for {device.key}")
     backend.probe_trace = tuple(trace)
+    return backend
+
+
+def select_low_battery_hold_backend(
+    device,
+    root="/",
+    ryzenadj_resolve=None,
+) -> RyzenadjBackend | None:
+    if not is_legion_go_s_83n6(device, root):
+        return None
+    fallback = TdpLimits.from_profile(device)
+    kwargs = {"resolve": ryzenadj_resolve} if ryzenadj_resolve is not None else {}
+    backend = RyzenadjBackend(
+        fallback,
+        allow_unverified_hold=True,
+        unverified_hold_restore={"pl1": 15, "pl2": 15, "pl3": 20},
+        hold_rail_floors=legion_go_s_83n6_rail_floors(device, root),
+        safety_lock_path=_runtime_lock_path(
+            root,
+            "low-battery-hold-legion-go-s-83n6.lock",
+        ),
+        **kwargs,
+    )
+    backend.name = "ryzenadj-low-battery-hold"
+    backend.low_battery_hold_strategy = "legion-go-s-83n6"
     return backend

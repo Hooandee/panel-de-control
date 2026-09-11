@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   getTdpState, setTdpWatts, setTdpLevels, setTdpBoostMode, setTdpFirmwareMode,
   getPowerDraw, setAutoTdp, setTdpFollowGlobal, setSeenAutotdpNotice,
+  setLowBatteryTdpHold,
   getPowerPresets, applyPowerPreset,
   TdpState, TdpScope, PowerDraw, BoostMode, PowerPresetState,
 } from "../api";
@@ -24,6 +25,7 @@ export interface TdpControl {
   onSetMode: (mode: BoostMode) => void;
   onAutoTdpToggle: (enabled: boolean) => void;
   onFirmwareMode: (mode: string) => void;
+  onLowBatteryHold: (enabled: boolean) => void;
   onApplySuggestion: (w: number) => void;
   // Custom power-preset library (order/hidden/custom); built-in watts come from `tdp`.
   presets: PowerPresetState | null;
@@ -225,6 +227,10 @@ export function useTdp(): TdpControl {
     setTdpFirmwareMode(mode).then(setTdp).catch(() => {});
   }, []);
 
+  const onLowBatteryHold = useCallback((enabled: boolean) => {
+    return setLowBatteryTdpHold(enabled).then(setTdp).catch(() => {});
+  }, []);
+
   // Apply a preset chip: sustained watts (+ optional boost) to the current scope,
   // atomically server-side, then refresh so the arc/slider reflect it. Cancel any pending
   // debounced slider/levels write first, or its stale value would land after and override.
@@ -250,5 +256,5 @@ export function useTdp(): TdpControl {
     [resolveTarget, refresh],
   );
 
-  return { tdp, power, scope, game, refresh, onScope, onWatts, onSetLevels, onSetMode, onAutoTdpToggle, onFirmwareMode, onApplySuggestion, presets, refreshPresets, onApplyPreset };
+  return { tdp, power, scope, game, refresh, onScope, onWatts, onSetLevels, onSetMode, onAutoTdpToggle, onFirmwareMode, onLowBatteryHold, onApplySuggestion, presets, refreshPresets, onApplyPreset };
 }

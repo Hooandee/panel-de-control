@@ -27,6 +27,7 @@ const TdpCoreBlock: FC = () => {
       onSetMode={c.onSetMode}
       onApplySuggestion={c.onApplySuggestion}
       onFirmwareMode={c.onFirmwareMode}
+      onLowBatteryHold={c.onLowBatteryHold}
       monitorOnly={c.monitorOnly}
       onReactivate={c.onReactivate}
       presets={c.presets}
