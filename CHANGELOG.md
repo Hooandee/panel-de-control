@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.46.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.46.1...panel-de-control-v0.46.2) (2026-09-11)
+
+
+### Bug Fixes
+
+* **tdp:** restore GPD Win Mini 2025 control ([#620](https://github.com/Hooandee/panel-de-control/issues/620)) ([7f1a872](https://github.com/Hooandee/panel-de-control/commit/7f1a8727c996d9f0072bf3d9081020fcbdcd3d7a))
+
 ## [0.46.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.46.0...panel-de-control-v0.46.1) (2026-09-10)
 
 
