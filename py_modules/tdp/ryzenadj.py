@@ -113,10 +113,15 @@ class RyzenadjBackend(TDPBackend):
         self._bin = resolve()
         self._power_only_retry = power_only_retry
         self._require_readback = bool(require_readback)
+        self.auto_tdp_supported = not (
+            self._power_only_retry and not self._require_readback
+        )
         self._safety_lock = RuntimeSafetyLock(safety_lock_path)
         self.supported = self._bin is not None
         self._runtime_lock_payload = (
-            self._safety_lock.load_payload() if self._require_readback else None
+            self._safety_lock.load_payload()
+            if self._require_readback or self._power_only_retry
+            else None
         )
         durable_lock = (
             self._runtime_lock_payload.get("state")
@@ -416,12 +421,15 @@ class RyzenadjBackend(TDPBackend):
         target: int,
         detail: str,
     ) -> TdpResult:
-        if (
+        safe_recovery_confirmed = (
             self._readback_state == "recovery_pending"
+            and applied is not None
+            and self._fallback.min_w <= applied <= self._fallback.max_ac_w
             and target <= self._fallback.max_ac_w
-        ):
+        )
+        if safe_recovery_confirmed:
             self._readback_state = "ready"
-        if self._require_readback:
+        if self._require_readback or safe_recovery_confirmed:
             if self._safety_lock.clear():
                 self._runtime_lock_payload = None
             else:
@@ -517,7 +525,15 @@ class RyzenadjBackend(TDPBackend):
         }
 
     def recover_safe_range(self) -> bool:
-        if self._readback_state != "circuit_open_restored" or self._bin is None:
+        degraded_recovery = (
+            self._power_only_retry
+            and not self._require_readback
+            and self._readback_state.startswith("circuit_open")
+        )
+        if (
+            self._readback_state != "circuit_open_restored"
+            and not degraded_recovery
+        ) or self._bin is None:
             return bool(self.supported)
         self.supported = True
         self._readback_state = "recovery_pending"
@@ -525,6 +541,14 @@ class RyzenadjBackend(TDPBackend):
 
     def recover_runtime_transaction(self) -> dict:
         payload = self._runtime_lock_payload
+        if (
+            isinstance(payload, dict)
+            and str(payload.get("state", "")).startswith("circuit_open")
+            and self._power_only_retry
+            and not self._require_readback
+            and self.recover_safe_range()
+        ):
+            return {"ok": True, "detail": "ryzenadj safe-range recovery pending"}
         if (
             not isinstance(payload, dict)
             or payload.get("state") != "circuit_open_transaction"

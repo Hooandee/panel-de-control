@@ -74,6 +74,37 @@ def _mk_readable_ryzenadj(root):
     return path
 
 
+def _mk_gpd_partial_readback_ryzenadj(root, initial_w=20, readback_offset=0):
+    state = os.path.join(root, "gpd-ryzenadj-state")
+    with open(state, "w") as handle:
+        handle.write(str(initial_w))
+    path = os.path.join(root, "gpd-ryzenadj")
+    with open(path, "w") as handle:
+        handle.write(
+            "#!/bin/sh\n"
+            f"state='{state}'\n"
+            "if [ \"$1\" = \"-i\" ]; then\n"
+            "  raw=$(cat \"$state\")\n"
+            f"  watts=$((raw + {readback_offset}))\n"
+            "  printf '| STAPM LIMIT | %s.000 | stapm-limit |\\n' \"$watts\"\n"
+            "  exit 0\n"
+            "fi\n"
+            "target=\n"
+            "with_temp=0\n"
+            "while [ \"$#\" -gt 0 ]; do\n"
+            "  case \"$1\" in\n"
+            "    --stapm-limit) shift; target=$1 ;;\n"
+            "    --tctl-temp) with_temp=1 ;;\n"
+            "  esac\n"
+            "  shift\n"
+            "done\n"
+            "if [ \"$with_temp\" -eq 1 ]; then exit 1; fi\n"
+            "echo $((target / 1000)) > \"$state\"\n"
+        )
+    os.chmod(path, 0o755)
+    return path, state
+
+
 def _mk_asus_legacy(root):
     base = os.path.join(root, "sys/devices/platform/asus-nb-wmi")
     os.makedirs(base, exist_ok=True)
@@ -339,33 +370,76 @@ def test_new_experimental_profile_defers_ryzenadj_probe_and_rejects_before_write
     assert "readback unavailable before write" in result.detail
 
 
-def test_gpd_win_mini_backend_reserves_55w_for_explicit_ac_unlock(tmp_path):
-    backend = select_backend(
-        _p("gpd_win_mini_2025"),
-        root=str(tmp_path),
-        ryzenadj_resolve=lambda: "/bin/true",
-    )
-
-    assert backend.get_limits().max_ac_w == 35
-    assert backend._write_limits.max_w == 35
-    assert backend._write_limits.max_ac_w == 55
-
-
-def test_factory_keeps_runtime_locked_gpd_backend_available_for_safe_recovery(tmp_path):
+@pytest.mark.parametrize(
+    "payload",
+    (
+        "circuit_open_restored",
+        "circuit_open_unresolved",
+        json.dumps({
+            "state": "circuit_open_transaction",
+            "baseline": {"stapm": 55, "fast": 55, "slow": 55},
+            "experimental": True,
+        }),
+    ),
+)
+def test_factory_keeps_runtime_locked_gpd_backend_available_for_safe_recovery(
+    tmp_path,
+    payload,
+):
+    _mk_dmi(str(tmp_path), "GPD", "G1617-02")
+    binary, _state = _mk_gpd_partial_readback_ryzenadj(str(tmp_path))
     lock = tmp_path / "run/panel-de-control/ryzenadj-gpd_win_mini_2025.lock"
     lock.parent.mkdir(parents=True)
-    lock.write_text("circuit_open_restored", encoding="utf-8")
+    lock.write_text(payload, encoding="utf-8")
 
     backend = select_backend(
         _p("gpd_win_mini_2025"),
         root=str(tmp_path),
-        ryzenadj_resolve=lambda: "/bin/true",
+        ryzenadj_resolve=lambda: binary,
     )
 
     assert backend.name == "ryzenadj"
     assert backend.supported is False
     assert backend.safety_locked is True
-    assert backend.recover_safe_range() is True
+    assert backend.recover_runtime_transaction() == {
+        "ok": True,
+        "detail": "ryzenadj safe-range recovery pending",
+    }
+
+    result = backend.set_tdp(25, ac=True)
+
+    assert result.ok is True
+    assert result.applied_w == 25
+    assert backend.safety_locked is False
+    assert lock.exists() is False
+
+
+def test_gpd_recovery_keeps_lock_when_tolerated_readback_exceeds_oem_ceiling(
+    tmp_path,
+):
+    root = str(tmp_path)
+    _mk_dmi(root, "GPD", "G1617-02")
+    binary, _state = _mk_gpd_partial_readback_ryzenadj(
+        root,
+        readback_offset=2,
+    )
+    lock = tmp_path / "run/panel-de-control/ryzenadj-gpd_win_mini_2025.lock"
+    lock.parent.mkdir(parents=True)
+    lock.write_text("circuit_open_restored", encoding="utf-8")
+    backend = select_backend(
+        _p("gpd_win_mini_2025"),
+        root=root,
+        ryzenadj_resolve=lambda: binary,
+    )
+
+    assert backend.recover_runtime_transaction()["ok"] is True
+
+    result = backend.set_tdp(35, ac=True)
+
+    assert result.ok is True
+    assert result.applied_w == 37
+    assert backend.safety_locked is True
+    assert lock.exists() is True
 
 
 def test_only_exact_legion_go_s_83n6_gets_measured_rail_floors(tmp_path):
@@ -845,9 +919,9 @@ def test_only_exact_gpd_enables_ryzenadj_power_only_retry(tmp_path):
     assert other._power_only_retry is False
 
 
-def test_gpd_profile_with_different_dmi_keeps_default_ryzenadj(tmp_path):
+def test_gpd_profile_with_unrecognised_dmi_keeps_default_ryzenadj(tmp_path):
     root = str(tmp_path)
-    _mk_dmi(root, "GPD", "G1617-02-L")
+    _mk_dmi(root, "GPD", "G1617-03")
     binary = _mk_readable_ryzenadj(root)
 
     backend = select_backend(
@@ -857,6 +931,64 @@ def test_gpd_profile_with_different_dmi_keeps_default_ryzenadj(tmp_path):
     )
 
     assert backend._power_only_retry is False
+
+
+@pytest.mark.parametrize("product", ("G1617-02", "G1617-02-L"))
+def test_gpd_safe_range_survives_partial_readback_and_temperature_rejection(
+    tmp_path,
+    product,
+):
+    root = str(tmp_path)
+    _mk_dmi(root, "GPD", product)
+    binary, _state = _mk_gpd_partial_readback_ryzenadj(root)
+    backend = select_backend(
+        _p("gpd_win_mini_2025"),
+        root=root,
+        ryzenadj_resolve=lambda: binary,
+    )
+
+    result = backend.set_tdp(25, ac=True)
+
+    assert backend.name == "ryzenadj"
+    assert result.ok is True
+    assert result.applied_w == 25
+    assert "variant=power-only" in result.detail
+
+
+def test_gpd_partial_readback_route_disables_auto_tdp(tmp_path):
+    root = str(tmp_path)
+    _mk_dmi(root, "GPD", "G1617-02")
+    binary, _state = _mk_gpd_partial_readback_ryzenadj(root)
+
+    backend = select_backend(
+        _p("gpd_win_mini_2025"),
+        root=root,
+        ryzenadj_resolve=lambda: binary,
+    )
+
+    assert backend.auto_tdp_supported is False
+
+
+def test_gpd_unvalidated_55w_request_stays_within_oem_ceiling(tmp_path):
+    root = str(tmp_path)
+    _mk_dmi(root, "GPD", "G1617-02")
+    binary, state = _mk_gpd_partial_readback_ryzenadj(root)
+    device = dataclasses.replace(
+        _p("gpd_win_mini_2025"),
+        experimental_tdp_max_ac=55,
+    )
+    backend = select_backend(
+        device,
+        root=root,
+        ryzenadj_resolve=lambda: binary,
+    )
+
+    result = backend.set_tdp(55, ac=True)
+
+    assert result.ok is True
+    assert result.applied_w == 35
+    with open(state) as handle:
+        assert handle.read().strip() == "35"
 
 
 def test_backend_probe_failure_is_recorded_and_falls_through(tmp_path, monkeypatch):

@@ -49,6 +49,9 @@ export function registerPowerBlocks(): void {
   registerBlock("autoTdp", {
     sectionId: "power",
     Component: AutoTdpBlock,
-    useAvailable: () => !!usePotencia().tdp?.supported,
+    useAvailable: () => {
+      const tdp = usePotencia().tdp;
+      return !!tdp?.supported && tdp.supports_auto_tdp;
+    },
   });
 }

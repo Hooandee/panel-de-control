@@ -70,7 +70,7 @@ def test_get_device_surfaces_experimental_flag(Plugin, monkeypatch):
     assert dev["is_generic"] is False
 
 
-def test_get_device_surfaces_experimental_ac_unlock_capability(Plugin, monkeypatch):
+def test_get_device_hides_unvalidated_experimental_ac_unlock(Plugin, monkeypatch):
     import device_registry
     import main
     from device_profiles import DEVICE_TABLE
@@ -82,7 +82,7 @@ def test_get_device_surfaces_experimental_ac_unlock_capability(Plugin, monkeypat
     dev = asyncio.run(Plugin().get_device())
 
     assert dev["tdp_max_charger"] == 35
-    assert dev["experimental_tdp_max_ac"] == 55
+    assert dev["experimental_tdp_max_ac"] is None
 
 
 def test_telemetry_enabled_default_true(Plugin):
