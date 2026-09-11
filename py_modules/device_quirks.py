@@ -38,6 +38,16 @@ def asus_tdp_authoritative_reassert_s(device, root: str = "/") -> float | None:
     return None
 
 
+def legion_go_2_83n0_firmware_attr_quirks(device, root: str = "/") -> dict:
+    if (
+        getattr(device, "key", None) != "legion_go_2"
+        or _read_dmi(root, "sys_vendor").casefold() != "lenovo"
+        or _read_dmi(root, "product_name").casefold() != "83n0"
+    ):
+        return {}
+    return {"readback_settle_delays": (0.25, 0.50, 1.0, 2.0)}
+
+
 def is_legion_go_s_83n6(device, root: str = "/") -> bool:
     return (
         getattr(device, "key", None) == "legion_go_s"
