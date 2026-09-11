@@ -350,6 +350,122 @@ def test_legion_uses_lenovo_firmware_attr(tmp_path):
     assert b.diagnostics()["readback_settle_ms"] == 0
 
 
+def test_exact_legion_go_2_83n0_waits_for_async_readback_before_rollback(
+    tmp_path,
+    monkeypatch,
+):
+    root = str(tmp_path)
+    _mk_legion_firmware(root, "83N0", "custom", current=(21, 17, 36))
+    backend = select_backend(
+        _p("legion_go_2"),
+        root=root,
+        ryzenadj_resolve=_NO_RYZENADJ,
+    )
+    lock_path = os.path.join(
+        root,
+        "run/panel-de-control/firmware-lenovo-wmi-other.lock",
+    )
+    original_write = backend._write
+    target_writes = []
+    settle_delays = []
+    settled = False
+
+    def delayed_firmware_write(path, value):
+        if path.endswith("current_value") and value == 8:
+            target_writes.append(path)
+            if len(target_writes) == 3:
+                for attr, transient in zip(
+                    ("ppt_pl1_spl", "ppt_pl2_sppt", "ppt_pl3_fppt"),
+                    (25, 25, 30),
+                ):
+                    _set_fw_current(root, attr, transient)
+            return True
+        if target_writes and path.endswith("current_value") and not settled:
+            return False
+        return original_write(path, value)
+
+    def finish_delayed_write(delay):
+        nonlocal settled
+        settle_delays.append(delay)
+        if len(settle_delays) < 4:
+            return
+        settled = True
+        for attr in ("ppt_pl1_spl", "ppt_pl2_sppt", "ppt_pl3_fppt"):
+            _set_fw_current(root, attr, 8)
+
+    monkeypatch.setattr(backend, "_write", delayed_firmware_write)
+    monkeypatch.setattr("tdp.firmware_attr.time.sleep", finish_delayed_write)
+
+    result = backend.set_levels(8, 8, 8, ac=False)
+
+    assert result.ok is True
+    assert result.applied_w == 8
+    assert backend.safety_locked is False
+    assert not os.path.exists(lock_path)
+    assert settle_delays == [0.25, 0.5, 1.0, 2.0]
+    assert backend.diagnostics()["readback_settle_ms"] == 3750
+
+
+def test_exact_legion_go_2_83n0_recovers_delayed_persisted_transaction(
+    tmp_path,
+    monkeypatch,
+):
+    root = str(tmp_path)
+    _mk_legion_firmware(root, "83N0", "custom", current=(25, 25, 30))
+    lock_path = _arm_lenovo_transaction_lock(
+        root,
+        "custom",
+        snapshot={
+            "firmware-attr:lenovo-wmi-other/pl1": 8,
+            "firmware-attr:lenovo-wmi-other/pl2": 8,
+            "firmware-attr:lenovo-wmi-other/pl3": 8,
+        },
+    )
+    backend = select_backend(
+        _p("legion_go_2"),
+        root=root,
+        ryzenadj_resolve=_NO_RYZENADJ,
+    )
+    original_write = backend._write
+    settle_delays = []
+
+    def accept_delayed_restore(path, value):
+        if path.endswith("current_value"):
+            return True
+        return original_write(path, value)
+
+    def finish_delayed_restore(delay):
+        settle_delays.append(delay)
+        if len(settle_delays) < 4:
+            return
+        for attr in ("ppt_pl1_spl", "ppt_pl2_sppt", "ppt_pl3_fppt"):
+            _set_fw_current(root, attr, 8)
+
+    monkeypatch.setattr(backend, "_write", accept_delayed_restore)
+    monkeypatch.setattr("tdp.firmware_attr.time.sleep", finish_delayed_restore)
+
+    recovered = backend.recover_runtime_transaction()
+
+    assert recovered == {"ok": True, "detail": "no firmware recovery pending"}
+    assert backend.read_applied() == 8
+    assert backend.safety_locked is False
+    assert not os.path.exists(lock_path)
+    assert settle_delays == [0.25, 0.5, 1.0, 2.0]
+
+
+def test_legion_go_2_83n1_keeps_existing_strict_readback(tmp_path):
+    root = str(tmp_path)
+    _mk_legion_firmware(root, "83N1", "custom")
+
+    backend = select_backend(
+        _p("legion_go_2"),
+        root=root,
+        ryzenadj_resolve=_NO_RYZENADJ,
+    )
+
+    assert backend.diagnostics()["readback_settle_ms"] == 0
+
+
 def test_new_experimental_profile_defers_ryzenadj_probe_and_rejects_before_write(tmp_path):
     backend = select_backend(
         _p("onexplayer_f1"),

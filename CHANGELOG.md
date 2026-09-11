@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### Español
+
+* **Legion Go 2:** Recupera el control de TDP en el modelo 83N0 cuando el firmware tarda en reflejar los nuevos límites o una transacción anterior lo dejó bloqueado.
+
+### English
+
+* **Legion Go 2:** Restores TDP control on model 83N0 when firmware takes time to reflect new limits or a previous transaction left it locked.
+
+### Italiano
+
+* **Legion Go 2:** Ripristina il controllo del TDP sul modello 83N0 quando il firmware tarda a mostrare i nuovi limiti o una transazione precedente lo ha lasciato bloccato.
+
+### Deutsch
+
+* **Legion Go 2:** Stellt die TDP-Steuerung beim Modell 83N0 wieder her, wenn die Firmware neue Grenzwerte verzögert anzeigt oder eine frühere Transaktion sie gesperrt hat.
+
 ## [0.46.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.46.1...panel-de-control-v0.46.2) (2026-09-11)
 
 
