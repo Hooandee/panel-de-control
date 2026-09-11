@@ -211,7 +211,7 @@ def test_gpd_win_mini_2025_is_recognised_experimental(tmp_path):
     assert prof.tdp_default == 20
     assert prof.tdp_max == 35
     assert prof.tdp_max_charger == 35
-    assert prof.experimental_tdp_max_ac == 55
+    assert prof.experimental_tdp_max_ac is None
     assert prof.tdp_presets == (20, 25, 30, 35)
 
 

@@ -140,3 +140,26 @@ def test_legion_go_s_83l3_named_profile_recovery_requires_exact_identity(tmp_pat
             "named_profile_owns_rails",
             False,
         ) is expected
+
+
+def test_legion_go_2_83n0_async_readback_requires_exact_identity(tmp_path):
+    assert hasattr(
+        device_quirks,
+        "legion_go_2_83n0_firmware_attr_quirks",
+    )
+    cases = (
+        ("LENOVO", "83N0", _profile("legion_go_2"), True),
+        ("OTHER", "83N0", _profile("legion_go_2"), False),
+        ("LENOVO", "83N1", _profile("legion_go_2"), False),
+        ("LENOVO", "83N0-X", _profile("legion_go_2"), False),
+        ("LENOVO", "83N0", _profile("legion_go"), False),
+        ("LENOVO", "83N0", GENERIC, False),
+    )
+
+    for vendor, product, device, expected in cases:
+        _write_dmi(str(tmp_path), vendor, product)
+        quirks = device_quirks.legion_go_2_83n0_firmware_attr_quirks(
+            device,
+            str(tmp_path),
+        )
+        assert bool(quirks.get("readback_settle_delays")) is expected

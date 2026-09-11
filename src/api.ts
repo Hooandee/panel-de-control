@@ -221,6 +221,7 @@ export interface TdpState {
   applied_w: number | null;
   primary_rail?: "pl1" | "pl2" | "pl3";
   ppt?: SteamDeckPptState | null;
+  supports_auto_tdp: boolean;
   supports_advanced: boolean;
   level_limits: { pl1?: LevelBound; pl2?: LevelBound; pl3?: LevelBound };
   levels: Levels;

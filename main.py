@@ -861,6 +861,17 @@ class Plugin:
             else {}
         )
         self._save()
+        if (
+            module_id == "power"
+            and not disabled
+            and self._retired_experimental_tdp_unlock()
+        ):
+            activated = await self.set_tdp_control_enabled(True)
+            if not activated:
+                if self._tdp_control_on():
+                    await self.set_tdp_control_enabled(False)
+                self._sync_sampler()
+                return {"disabled": self._user_disabled_all()}
         if module_id == "chargeLimit":
             if not self._module_enabled("chargeLimit"):
                 self._publish_charge_limit_handoff(charge_generation)
@@ -2371,7 +2382,12 @@ class Plugin:
                 requested=requested,
             )
         else:
-            await self._apply_tdp_now("control-enabled")
+            if self._retired_experimental_tdp_unlock():
+                retired = await self._retire_experimental_tdp_unlock_or_disable()
+                if not retired.get("ok"):
+                    return False
+            else:
+                await self._apply_tdp_now("control-enabled")
         return enabled
 
     async def set_seen_autotdp_notice(self, seen: bool) -> bool:
@@ -3101,10 +3117,20 @@ class Plugin:
             and self._settings.get("experimental_tdp_unlock") is True
         )
 
+    def _retired_experimental_tdp_unlock(self) -> bool:
+        return bool(
+            self._device.key == "gpd_win_mini_2025"
+            and self._device.experimental_tdp_max_ac is None
+            and self._settings.get("experimental_tdp_unlock") is True
+        )
+
     async def set_experimental_tdp_unlock(self, enabled: bool) -> dict:
         """Opt into a charger-only ceiling above the manufacturer range."""
         self._init()
-        previous = await self.get_experimental_tdp_unlock()
+        previous = (
+            await self.get_experimental_tdp_unlock()
+            or self._retired_experimental_tdp_unlock()
+        )
         enabled = bool(enabled is True and self._device.experimental_tdp_max_ac)
         if enabled == previous:
             return {"enabled": previous, "ok": True, "detail": "unchanged"}
@@ -3132,7 +3158,12 @@ class Plugin:
             if callable(recover):
                 recover()
         result = await self._apply_tdp_now("experimental-ac-ceiling")
-        if result.ok:
+        safe_reclamp_confirmed = bool(
+            result.ok
+            and result.applied_w is not None
+            and self._limits().min_w <= result.applied_w <= self._limits().max_ac_w
+        )
+        if result.ok and (enabled or safe_reclamp_confirmed):
             if not enabled:
                 try:
                     self._save()
@@ -3160,7 +3191,20 @@ class Plugin:
                         f"{type(error).__name__}"
                     ),
                 }
-        return {"enabled": previous, "ok": False, "detail": result.detail}
+        detail = result.detail
+        if not enabled and result.ok:
+            detail = (
+                f"{detail}; safe ceiling unconfirmed"
+                if detail
+                else "safe ceiling unconfirmed"
+            )
+        return {"enabled": previous, "ok": False, "detail": detail}
+
+    async def _retire_experimental_tdp_unlock_or_disable(self) -> dict:
+        result = await self.set_experimental_tdp_unlock(False)
+        if not result.get("ok"):
+            await self.set_tdp_control_enabled(False)
+        return result
 
     def _qam_boost_active(self) -> bool:
         """The QAM-open responsive floor applies ONLY when its opt-in setting is on
@@ -3258,6 +3302,9 @@ class Plugin:
                 if not self._module_enabled("autoTdp"):
                     self._reset_auto_windows()
                     continue
+                if not self._auto_tdp_supported():
+                    self._reset_auto_windows()
+                    continue
                 # Hold when auto-TDP is off for THIS game (per-game, own or global) or a
                 # named firmware mode owns the rails — either way we don't drive PL1.
                 if (not self._tdp_profiles.auto_tdp(self._current_appid)
@@ -3298,7 +3345,8 @@ class Plugin:
         game already demands >= the responsive floor (the number IS the in-game one),
         or when not auto / no game / UI closed. Don't claim a raise that
         isn't happening."""
-        if not (self._qam_boost_active() and self._current_appid is not None
+        if not (self._auto_tdp_supported()
+                and self._qam_boost_active() and self._current_appid is not None
                 and self._tdp_profiles.auto_tdp(self._current_appid)):
             return False
         lim = self._limits()
@@ -3313,7 +3361,10 @@ class Plugin:
     async def get_power_draw(self) -> dict:
         self._init()
         pr = await asyncio.to_thread(self._power_reader.read)
-        auto = self._tdp_profiles.auto_tdp(self._current_appid)
+        auto = (
+            self._auto_tdp_supported()
+            and self._tdp_profiles.auto_tdp(self._current_appid)
+        )
         ac = read_on_ac()
         setpoint = self._effective_levels(self._current_appid, ac)[0]["pl1"]
         if getattr(self._tdp_backend, "blocking", False):
@@ -3345,13 +3396,20 @@ class Plugin:
         context_appid=_RPC_CONTEXT_UNSET,
     ) -> dict:
         self._init()
+        auto_tdp = (
+            self._auto_tdp_supported()
+            and self._tdp_profiles.auto_tdp(self._current_appid)
+        )
         if (
             context_appid is not _RPC_CONTEXT_UNSET
             and not self._scope_context_is_current(scope, appid, context_appid)
         ):
-            return {"auto_tdp": self._tdp_profiles.auto_tdp(self._current_appid)}
+            return {"auto_tdp": auto_tdp}
+        if not self._auto_tdp_supported():
+            self._tdp_profiles.set_auto_tdp(scope, False, appid=appid)
+            return {"auto_tdp": False}
         if not self._tdp_control_on():
-            return {"auto_tdp": self._tdp_profiles.auto_tdp(self._current_appid)}
+            return {"auto_tdp": auto_tdp}
         self._clear_eco()
         self._tdp_profiles.set_auto_tdp(scope, bool(enabled), appid=appid)
         await self._apply_tdp_now("auto-toggle")
@@ -3367,7 +3425,8 @@ class Plugin:
         the REAL in-game TDP. Only affects AUTO mode + a running game."""
         self._init()
         self._ui_active = bool(enabled)
-        if (self._qam_boost_active() and self._current_appid is not None
+        if (self._auto_tdp_supported()
+                and self._qam_boost_active() and self._current_appid is not None
                 and self._tdp_profiles.auto_tdp(self._current_appid)
                 and self._firmware_mode() == _CUSTOM_MODE):
             lim = self._limits()
@@ -5536,7 +5595,10 @@ class Plugin:
             if "pdc_eco" in active_ids:
                 snap["eco"] = bool(self._settings.get("eco_enabled"))
             if "pdc_tdp" in active_ids:
-                snap["auto"] = self._tdp_profiles.auto_tdp(appid)
+                snap["auto"] = (
+                    self._auto_tdp_supported()
+                    and self._tdp_profiles.auto_tdp(appid)
+                )
                 observation = self._fresh_pdc_source(
                     extras,
                     "tdp",
@@ -5551,7 +5613,10 @@ class Plugin:
                 reading = primary.get(primary_rail)
                 snap["applied"] = reading.applied_w if reading is not None else None
             if "pdc_auto_tdp" in active_ids:
-                snap["auto_tdp"] = self._tdp_profiles.auto_tdp(appid)
+                snap["auto_tdp"] = (
+                    self._auto_tdp_supported()
+                    and self._tdp_profiles.auto_tdp(appid)
+                )
             if "pdc_tdp_learn" in active_ids:
                 snap["learn"] = self._tdp_learned_info(appid)
         if self._fan_ctrl.supported and "pdc_fan" in active_ids:
@@ -7393,6 +7458,7 @@ class Plugin:
             "applied_w": applied_w,
             "primary_rail": primary_rail,
             "ppt": ppt,
+            "supports_auto_tdp": self._auto_tdp_supported(),
             "supports_advanced": ("pl2" in ll or "pl3" in ll),
             "level_limits": ll,
             "levels": levels,
@@ -7790,6 +7856,9 @@ class Plugin:
             return bool(ready())
         except Exception:  # noqa: BLE001
             return False
+
+    def _auto_tdp_supported(self) -> bool:
+        return bool(getattr(self._tdp_backend, "auto_tdp_supported", True))
 
     def _tdp_backend_diagnostics(self):
         errors = {}
@@ -8628,6 +8697,13 @@ class Plugin:
         await self._offload_call(self._recover_recognised_desktop_migration)
         await self._recover_tdp_startup_state()
         await self._probe_tdp_backend(force=True)
+        if self._tdp_control_on() and self._retired_experimental_tdp_unlock():
+            retired = await self._retire_experimental_tdp_unlock_or_disable()
+            if not retired.get("ok"):
+                decky.logger.warning(
+                    "Retired experimental TDP ceiling remains pending: %s",
+                    retired.get("detail"),
+                )
         self._theme_executor = ThreadPoolExecutor(max_workers=1)
         self._theme_accepting_work = True
         try:

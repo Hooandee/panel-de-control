@@ -2,7 +2,8 @@ import os
 
 from device_quirks import (
     asus_tdp_authoritative_reassert_s,
-    is_gpd_win_mini_2025,
+    is_gpd_win_mini_2025_tdp_recovery,
+    legion_go_2_83n0_firmware_attr_quirks,
     legion_go_s_83l3_firmware_attr_quirks,
     legion_go_s_83n6_firmware_attr_quirks,
     legion_go_s_83n6_rail_floors,
@@ -19,7 +20,7 @@ from tdp.steamdeck_hwmon import SteamDeckHwmonBackend
 from tdp.types import TdpLimits
 
 
-_STRICT_RYZENADJ_KEYS = frozenset({
+_RYZENADJ_ONLY_KEYS = frozenset({
     "onexplayer_superx",
     "zotac_gaming_zone",
     "rog_flow_z13",
@@ -27,6 +28,8 @@ _STRICT_RYZENADJ_KEYS = frozenset({
     "gpd_win_mini_2025",
     "ayaneo_3",
 })
+
+_STRICT_RYZENADJ_KEYS = _RYZENADJ_ONLY_KEYS - {"gpd_win_mini_2025"}
 
 
 def _runtime_lock_path(root, name):
@@ -78,6 +81,7 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None):
                 root,
                 "firmware-lenovo-wmi-other.lock",
             ),
+            **legion_go_2_83n0_firmware_attr_quirks(device, root),
             **legion_go_s_83l3_firmware_attr_quirks(device, root),
             **legion_go_s_83n6_firmware_attr_quirks(device, root),
         )
@@ -150,7 +154,7 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None):
             return [ryzenadj]
         if key == "onexplayer_apex":
             return [alib, ryzenadj]
-        if key in _STRICT_RYZENADJ_KEYS:
+        if key in _RYZENADJ_ONLY_KEYS:
             return [asus, lenovo, msi, ryzenadj]
         if key.startswith("rog_"):
             return [asus, asus_nb_wmi, lenovo, msi, *amd_tail]
@@ -162,7 +166,7 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None):
         return [msi_a8, ryzenadj]
     if key == "onexplayer_apex":
         return [dptc, alib, ryzenadj]
-    if key in _STRICT_RYZENADJ_KEYS:
+    if key in _RYZENADJ_ONLY_KEYS:
         return [dptc, asus, lenovo, msi, ryzenadj]
     if key.startswith("rog_"):
         return [asus, asus_nb_wmi, *amd_tail]
@@ -180,12 +184,18 @@ def select_backend(device, root="/", ryzenadj_resolve=None, os_id=None) -> TDPBa
 
     def ryzenadj():
         kwargs = {"resolve": ryzenadj_resolve} if ryzenadj_resolve is not None else {}
+        gpd_recovery = is_gpd_win_mini_2025_tdp_recovery(device, root)
+        strict_readback = device.key in _STRICT_RYZENADJ_KEYS or (
+            device.key == "gpd_win_mini_2025" and not gpd_recovery
+        )
         return RyzenadjBackend(
             fallback,
             write_max=device.cooler_max,
-            write_max_ac=device.experimental_tdp_max_ac,
-            power_only_retry=is_gpd_win_mini_2025(device, root),
-            require_readback=device.key in _STRICT_RYZENADJ_KEYS,
+            write_max_ac=(
+                None if gpd_recovery else device.experimental_tdp_max_ac
+            ),
+            power_only_retry=gpd_recovery,
+            require_readback=strict_readback,
             safety_lock_path=_runtime_lock_path(
                 root,
                 f"ryzenadj-{device.key}.lock",

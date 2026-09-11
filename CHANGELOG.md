@@ -2,6 +2,43 @@
 
 ## Unreleased
 
+## [0.46.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.46.2...panel-de-control-v0.46.3) (2026-09-11)
+
+### Español
+
+* **Legion Go 2:** Recupera el control de TDP en el modelo 83N0 cuando el firmware tarda en reflejar los nuevos límites o una transacción anterior lo dejó bloqueado.
+
+### English
+
+* **Legion Go 2:** Restores TDP control on model 83N0 when firmware takes time to reflect new limits or a previous transaction left it locked.
+
+### Italiano
+
+* **Legion Go 2:** Ripristina il controllo del TDP sul modello 83N0 quando il firmware tarda a mostrare i nuovi limiti o una transazione precedente lo ha lasciato bloccato.
+
+### Deutsch
+
+* **Legion Go 2:** Stellt die TDP-Steuerung beim Modell 83N0 wieder her, wenn die Firmware neue Grenzwerte verzögert anzeigt oder eine frühere Transaktion sie gesperrt hat.
+
+## [0.46.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.46.1...panel-de-control-v0.46.2) (2026-09-11)
+
+
+### Español
+
+* **GPD Win Mini 2025:** Recupera el control manual de TDP entre 20 y 35 W cuando el firmware solo permite leer el límite sostenido. Auto-TDP y el límite experimental de 55 W permanecen desactivados en esta ruta.
+
+### English
+
+* **GPD Win Mini 2025:** Restores manual TDP control between 20 and 35 W when the firmware only exposes the sustained-limit readback. Auto-TDP and the experimental 55 W limit remain disabled on this path.
+
+### Italiano
+
+* **GPD Win Mini 2025:** Ripristina il controllo manuale del TDP tra 20 e 35 W quando il firmware consente di leggere solo il limite sostenuto. Auto-TDP e il limite sperimentale di 55 W restano disattivati in questo percorso.
+
+### Deutsch
+
+* **GPD Win Mini 2025:** Stellt die manuelle TDP-Steuerung zwischen 20 und 35 W wieder her, wenn die Firmware nur den dauerhaften Grenzwert auslesen lässt. Auto-TDP und das experimentelle 55-W-Limit bleiben auf diesem Pfad deaktiviert.
+
 ## [0.46.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.46.0...panel-de-control-v0.46.1) (2026-09-10)
 
 

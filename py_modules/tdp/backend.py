@@ -5,6 +5,7 @@ from tdp.types import RailReading, TdpLimits, TdpObservation, TdpResult
 
 class TDPBackend(ABC):
     supported: bool = True
+    auto_tdp_supported: bool = True
     supports_levels: bool = False
     blocking: bool = False
     name: str = "base"
