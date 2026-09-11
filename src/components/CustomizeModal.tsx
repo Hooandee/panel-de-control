@@ -8,6 +8,7 @@ import { TABS, customizationBlocks, blockOrder, subitemsFor, PINNED_TAB, CATEGOR
 import { iconBtn, IconAction } from "./IconAction";
 import { orderIds, move, toggle, ensure, Layout } from "../customize/layout";
 import { useLayout, saveLayout, resetLayout } from "../customize/store";
+import { resetHomeMode, updateShowHome } from "../customize/homePreference";
 import { useModules, setModuleDisabled, resetModules } from "../customize/modules";
 import { moduleState, isDisableableSection, sectionModuleDisabled } from "../customize/moduleLogic";
 import { FocusRoot } from "./FocusRoot";
@@ -22,6 +23,7 @@ import { viewIconNode } from "../customize/viewIcons";
 import { openViewEditorModal } from "./ViewEditor";
 import { openDisableModuleModal } from "./DisableModuleModal";
 import { useDesktopState } from "../desktop/useDesktop";
+import { HomeVisibilitySetting } from "./HomeVisibilitySetting";
 
 // Blocks that are actually backend MODULES (get the on/off power control) rather
 // than cosmetic cards (which get the show/hide eye). Everything else is cosmetic.
@@ -204,6 +206,13 @@ const CustomizeBody: FC = () => {
         </Focusable>
       </div>
 
+      <HomeVisibilitySetting
+        value={layout.showHome}
+        onChange={(showHome) => updateShowHome(layout, showHome)}
+        deviceHeaderValue={layout.showDeviceHeader}
+        onDeviceHeaderChange={(showDeviceHeader) => save({ ...layout, showDeviceHeader })}
+      />
+
       <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
         {tabOrder.map((id, i) => {
           if (isViewTabId(id)) {
@@ -276,7 +285,7 @@ const CustomizeBody: FC = () => {
                   onActivate={() => expandable && setOpenId(open ? null : id)}
                   onClick={() => expandable && setOpenId(open ? null : id)}
                 >
-                  <span style={iconSquare(!off)}>{meta?.icon}</span>
+                  <span style={iconSquare(!off)}>{meta?.icon(16)}</span>
                   <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
                     <span style={{ fontSize: theme.font.body, color: theme.color.textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {t(meta.labelKey)}
@@ -423,7 +432,7 @@ const CustomizeBody: FC = () => {
 
           <div style={theme.sectionLabel}>{t("customize.appearance")}</div>
           <AccentPicker />
-          <ButtonItem layout="below" onClick={() => { resetLayout(); resetModules(); }}>
+          <ButtonItem layout="below" onClick={() => { resetLayout(); resetModules(); resetHomeMode(); }}>
             {t("customize.reset")}
           </ButtonItem>
         </>

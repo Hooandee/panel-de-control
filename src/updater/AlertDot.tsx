@@ -1,4 +1,5 @@
-// Small red alert dot to render next to a tab label when an update is available.
+import { theme } from "../theme";
+
 export function AlertDot({ show }: { show: boolean }) {
   if (!show) return null;
   return (
@@ -9,7 +10,7 @@ export function AlertDot({ show }: { show: boolean }) {
         height: 8,
         borderRadius: "50%",
         background: "#ff4d4f",
-        marginLeft: 6,
+        boxShadow: `0 0 0 2px ${theme.color.surface}`,
         verticalAlign: "middle",
         flexShrink: 0,
       }}

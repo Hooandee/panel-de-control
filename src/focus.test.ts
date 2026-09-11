@@ -36,10 +36,23 @@ describe("buildFocusCss", () => {
     expect(css).toContain("min-width: 0 !important");
     expect(css).toContain("width: 100% !important");
   });
+
+  it("replaces Steam's Dashboard gradient with the section colour and restrained motion", () => {
+    expect(css).toContain(".pdc-dashboard-card-focused");
+    expect(css).toContain(
+      `html:root #QuickAccess-Menu .${PDC_ROOT} .pdc-dashboard-card-focused`,
+    );
+    expect(css).toContain("background: transparent !important");
+    expect(css).toContain("background-image: none !important");
+    expect(css).toContain(".pdc-dashboard-card-surface");
+    expect(css).toContain("var(--pdc-card-accent)");
+    expect(css).toContain("translateY(-2px)");
+    expect(css).toContain("@media (prefers-reduced-motion: reduce)");
+  });
 });
 
 // Minimal document stub (no jsdom) — just the surface ensureFocusStyles touches.
-function fakeDoc() {
+function fakeDoc(existingText?: string) {
   const store: Record<string, unknown> = {};
   const head = {
     children: [] as unknown[],
@@ -49,6 +62,11 @@ function fakeDoc() {
       if (withId.id) store[withId.id] = el;
     },
   };
+  if (existingText !== undefined) {
+    const existing = { id: FOCUS_STYLE_ID, textContent: existingText };
+    head.children.push(existing);
+    store[FOCUS_STYLE_ID] = existing;
+  }
   return {
     appended: () => head.children.length,
     doc: {
@@ -71,6 +89,15 @@ describe("ensureFocusStyles", () => {
     ensureFocusStyles(doc as unknown as Document);
     ensureFocusStyles(doc as unknown as Document);
     expect(appended()).toBe(1);
+  });
+
+  it("refreshes a surviving stylesheet after a plugin upgrade", () => {
+    const { doc, appended } = fakeDoc("stale focus css");
+
+    ensureFocusStyles(doc as unknown as Document);
+
+    expect(appended()).toBe(1);
+    expect((doc.getElementById(FOCUS_STYLE_ID) as { textContent: string }).textContent).toBe(buildFocusCss());
   });
 
   it("tags the injected element with the stable id", () => {

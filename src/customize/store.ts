@@ -3,11 +3,11 @@
 // module store + subscribe is what lets a save there re-render the shell and
 // sections live. Never throws; degrades to defaults if storage is unavailable.
 import { useSyncExternalStore } from "react";
-import { Layout, coerceLayout } from "./layout";
+import { Layout, coerceLayout, createDefaultLayout } from "./layout";
 import { readString, writeString, removeString } from "../system/pdcStorage";
 
 const KEY = "pdc:layout";
-const EMPTY: Layout = { tabs: { order: [], hidden: [] }, blocks: {}, subitems: {} };
+const EMPTY: Layout = createDefaultLayout();
 
 // Layout is treated as IMMUTABLE: saveLayout/resetLayout always assign a fresh
 // object (never mutate in place), so useSyncExternalStore sees a new reference

@@ -13,6 +13,8 @@ export interface ListPref {
 
 /** The whole saved layout: tab prefs + per-section block prefs. */
 export interface Layout {
+  showHome: boolean;
+  showDeviceHeader: boolean;
   tabs: ListPref;
   blocks: Record<string, ListPref>;
   /**
@@ -22,6 +24,14 @@ export interface Layout {
    */
   subitems: Record<string, string[]>;
 }
+
+export const createDefaultLayout = (): Layout => ({
+  showHome: true,
+  showDeviceHeader: true,
+  tabs: { order: [], hidden: [] },
+  blocks: {},
+  subitems: {},
+});
 
 /**
  * Resolve the full ordered id list from a stored order against the current
@@ -138,9 +148,9 @@ function migrateMovedGpuBlock(blocks: Record<string, ListPref>): Record<string, 
  */
 export function coerceLayout(parsed: unknown): Layout {
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    return { tabs: { order: [], hidden: [] }, blocks: {}, subitems: {} };
+    return createDefaultLayout();
   }
-  const p = parsed as { tabs?: unknown; blocks?: unknown; subitems?: unknown };
+  const p = parsed as { showHome?: unknown; showDeviceHeader?: unknown; tabs?: unknown; blocks?: unknown; subitems?: unknown };
   const asRecordOf = <T>(v: unknown, mapVal: (x: unknown) => T): Record<string, T> => {
     const out: Record<string, T> = {};
     if (v && typeof v === "object" && !Array.isArray(v)) {
@@ -150,6 +160,8 @@ export function coerceLayout(parsed: unknown): Layout {
   };
   const blocks = asRecordOf(p.blocks, asPref);
   return {
+    showHome: p.showHome !== false,
+    showDeviceHeader: p.showDeviceHeader !== false,
     tabs: asPref(p.tabs),
     blocks: migrateMovedGpuBlock(blocks),
     subitems: asRecordOf(p.subitems, strArray),

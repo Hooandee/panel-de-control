@@ -1,25 +1,20 @@
-import { PanelSection, PanelSectionRow, ErrorBoundary } from "@decky/ui";
+import { PanelSection, PanelSectionRow } from "@decky/ui";
 import { FC, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { getDevice, DeviceInfo } from "../api";
 import { useI18n } from "../i18n";
-import { DeviceHeader } from "./DeviceHeader";
+import { ControlCenterShell } from "./ControlCenterShell";
 import { Loading } from "./Loading";
-import { LearningBanner } from "./LearningBanner";
-import { TabBar } from "./TabBar";
 import { SECTIONS } from "../sections/registry";
 import { SectionDef } from "../sections/types";
 import { CustomView } from "../sections/CustomView";
 import { useViews } from "../customize/viewStore";
-import { viewTabId, isViewTabId } from "../customize/views";
+import { viewTabId, isViewTabId, learningTagsForViewBlocks } from "../customize/views";
 import { viewIconNode } from "../customize/viewIcons";
-import { resolveActiveSection } from "../sections/nav";
-import { useShoulderNav } from "../sections/useShoulderNav";
 import { readActiveTab, writeActiveTab } from "../sections/activeTab";
 import { useRunningGame } from "../tdp/useRunningGame";
 import { useLearningStatus } from "../learning/useLearningStatus";
 import { useUpdate } from "../updater/useUpdate";
-import { AlertDot } from "../updater/AlertDot";
 import { useLayout } from "../customize/store";
 import { useModules } from "../customize/modules";
 import { effectiveEnabled } from "../customize/moduleLogic";
@@ -27,18 +22,10 @@ import { visibleIds, pinnedLast } from "../customize/layout";
 import { PINNED_TAB, POWER_TAB } from "../customize/manifest";
 import { sectionHiddenOnDevice, allBlocksHidden } from "../sections/availability";
 import { getPresent, usePresentVersion } from "../customize/present";
-import { theme } from "../theme";
-import { FocusRoot } from "./FocusRoot";
 import { useAccent } from "../system/useAccent";
 import { acquireUiActivity } from "../system/uiActivity";
 import { useDesktopState } from "../desktop/useDesktop";
 
-/**
- * The control-center shell: persistent chrome (device header + language flags +
- * tab bar) wrapping the active section. Loads the device once; each section owns
- * its own state. A per-section ErrorBoundary keeps one section's crash from
- * blanking the whole panel.
- */
 export const ControlCenter: FC = () => {
   const { t, lang } = useI18n();
   const [device, setDevice] = useState<DeviceInfo | null>(null);
@@ -50,7 +37,6 @@ export const ControlCenter: FC = () => {
   usePresentVersion(); // re-evaluate tab emptiness as sections report their real blocks
   // Stable Component per view id so editing a view doesn't remount the active one.
   const viewComponents = useRef(new Map<string, FC>());
-  // Default sections + one virtual section per custom view, before pinned Settings.
   const allSections = useMemo<SectionDef[]>(() => {
     const cache = viewComponents.current;
     const viewSections: SectionDef[] = views.map((v) => {
@@ -59,14 +45,21 @@ export const ControlCenter: FC = () => {
         Component = () => <CustomView viewId={v.id} />;
         cache.set(v.id, Component);
       }
-      return { id: viewTabId(v.id), icon: viewIconNode(v.icon), labelKey: "customize.views.namePlaceholder", label: v.name, Component };
+      return {
+        id: viewTabId(v.id),
+        icon: (size) => viewIconNode(v.icon, size),
+        labelKey: "customize.views.namePlaceholder",
+        descriptionKey: "customize.views.cardDesc",
+        accent: "#586b78",
+        label: v.name,
+        learningTags: learningTagsForViewBlocks(v.blocks, desktopMode),
+        Component,
+      };
     });
     const base = SECTIONS.filter((s) => s.id !== PINNED_TAB);
     const pinned = SECTIONS.filter((s) => s.id === PINNED_TAB);
     return [...base, ...viewSections, ...pinned];
-  }, [views]);
-  // The user's visible tabs in their saved order (Settings always kept). One
-  // memoized computation feeds both the initial-tab pick and the rendered tab list.
+  }, [views, desktopMode]);
   const visibleTabIds = useMemo(
     () => pinnedLast(visibleIds(allSections.map((s) => s.id), layout.tabs, [PINNED_TAB]), PINNED_TAB),
     [layout, allSections],
@@ -120,12 +113,6 @@ export const ControlCenter: FC = () => {
       && effectiveEnabled(s.id, disabled)
       && !allBlocksHidden(s.id, layout.blocks, getPresent(s.id))
     )));
-  const active = resolveActiveSection(orderedTabs, activeId);
-  const Active = active?.Component;
-
-  // L1/R1 cycle the visible tabs (previous/next), wrapping around.
-  useShoulderNav(orderedTabs.map((s) => s.id), active?.id ?? activeId, setActiveId);
-
   if (failed) {
     return (
       <PanelSection>
@@ -136,39 +123,16 @@ export const ControlCenter: FC = () => {
   if (!device) return <Loading />;
 
   return (
-    <PanelSection>
-      <FocusRoot publishDocument>
-      {/* Shell chrome grouped in one row with an explicit gap so the three cards
-          (device / learning / tabs) breathe instead of touching. A null
-          LearningBanner collapses its slot — no double gap. */}
-      <PanelSectionRow>
-        <div style={{ display: "flex", flexDirection: "column", gap: theme.space.section, marginBottom: theme.space.card }}>
-          <DeviceHeader device={device} />
-          <LearningBanner
-            gameName={game?.name ?? null}
-            status={learning}
-            onOpenSettings={() => setActiveId("settings")}
-          />
-          <TabBar
-            tabs={orderedTabs.map((s) => ({
-              id: s.id,
-              icon: s.icon,
-              label: s.label || t(s.labelKey),
-              // Red dot on the tab that leads to the updater (Ajustes) when an
-              // update is available.
-              badge: s.id === PINNED_TAB ? <AlertDot show={hasUpdate} /> : undefined,
-            }))}
-            activeId={active?.id ?? activeId}
-            onSelect={setActiveId}
-          />
-        </div>
-      </PanelSectionRow>
-      {Active && (
-        <ErrorBoundary>
-          <Active />
-        </ErrorBoundary>
-      )}
-      </FocusRoot>
-    </PanelSection>
+    <ControlCenterShell
+      device={device}
+      gameName={game?.name ?? null}
+      learning={learning}
+      sections={orderedTabs}
+      activeId={activeId}
+      showHome={layout.showHome}
+      showDeviceHeader={layout.showDeviceHeader}
+      hasUpdate={hasUpdate}
+      onSelectSection={setActiveId}
+    />
   );
 };
