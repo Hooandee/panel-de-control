@@ -18,6 +18,13 @@
 
 * **Legion Go 2:** Stellt die TDP-Steuerung beim Modell 83N0 wieder her, wenn die Firmware neue Grenzwerte verzögert anzeigt oder eine frühere Transaktion sie gesperrt hat.
 
+## [0.46.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.46.2...panel-de-control-v0.46.3) (2026-09-11)
+
+
+### Bug Fixes
+
+* **tdp:** recover delayed Legion Go 2 firmware ([#623](https://github.com/Hooandee/panel-de-control/issues/623)) ([10c9e8d](https://github.com/Hooandee/panel-de-control/commit/10c9e8d198ebff4eb2570a9e508007ffdf9a224c))
+
 ## [0.46.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.46.1...panel-de-control-v0.46.2) (2026-09-11)
 
 
