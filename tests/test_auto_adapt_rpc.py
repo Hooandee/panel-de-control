@@ -299,6 +299,20 @@ def test_loop_does_not_touch_global_when_no_game(Plugin, monkeypatch):
     assert p._tdp_profiles.effective(None)["pl1"] == 20  # global untouched
 
 
+def test_loop_never_writes_when_backend_disables_auto_tdp(Plugin, monkeypatch):
+    p = Plugin()
+    p._init()
+    p._tdp_backend.auto_tdp_supported = False
+    p._current_appid = "g"
+    p._tdp_profiles.set_pl1("game", 20, appid="g")
+    reads = [{"gpu_busy": 99} for _ in range(4)]
+
+    _run_loop_ticks(p, reads, monkeypatch)
+
+    assert p._tdp_profiles.effective("g")["pl1"] == 20
+    assert p._tdp_backend._levels is None
+
+
 def test_loop_clears_gpu_window_on_pl1_change(Plugin, monkeypatch):
     # A PL1 change must clear the GPU% window so it stays HOMOGENEOUS (only samples
     # taken at the CURRENT PL1). Otherwise decide averages GPU% across different PL1s.

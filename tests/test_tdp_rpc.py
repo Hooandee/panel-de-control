@@ -1,4 +1,5 @@
 import asyncio
+import dataclasses
 import importlib
 import sys
 import types
@@ -8,6 +9,15 @@ import pytest
 from tdp.types import RailReading, TdpLimits, TdpObservation, TdpResult
 
 _FAKE_POWER = {"watts": 13.1, "gpu_busy": 49}
+
+
+def _device_with_experimental_tdp_unlock():
+    from device_profiles import DEVICE_TABLE
+
+    device = next(
+        profile for profile in DEVICE_TABLE if profile.key == "gpd_win_mini_2025"
+    )
+    return dataclasses.replace(device, experimental_tdp_max_ac=55)
 
 
 class FakeBackend:
@@ -590,7 +600,7 @@ def test_cooler_boost_ignored_when_device_has_no_cooler(Plugin):
     assert p._limits().max_w == 20  # unchanged
 
 
-def test_gpd_win_mini_experimental_ceiling_is_opt_in_and_ac_only(Plugin):
+def test_gpd_win_mini_does_not_offer_unvalidated_experimental_ceiling(Plugin):
     from device_profiles import DEVICE_TABLE
 
     p = Plugin()
@@ -603,13 +613,202 @@ def test_gpd_win_mini_experimental_ceiling_is_opt_in_and_ac_only(Plugin):
     assert p._limits() == TdpLimits(20, 20, 35, 35)
     assert asyncio.run(p.get_experimental_tdp_unlock()) is False
 
-    assert asyncio.run(p.set_experimental_tdp_unlock(True))["enabled"] is True
-    assert p._limits() == TdpLimits(20, 20, 35, 55)
-    assert p._limits().clamp(55, on_ac=False) == 35
-    assert p._limits().clamp(55, on_ac=True) == 55
+    result = asyncio.run(p.set_experimental_tdp_unlock(True))
 
-    assert asyncio.run(p.set_experimental_tdp_unlock(False))["enabled"] is False
+    assert result == {"enabled": False, "ok": True, "detail": "unchanged"}
     assert p._limits() == TdpLimits(20, 20, 35, 35)
+
+
+def test_retired_gpd_unlock_is_not_forgotten_while_control_is_disabled(Plugin):
+    from device_profiles import DEVICE_TABLE
+
+    p = Plugin()
+    p._init()
+    p._device = next(
+        profile for profile in DEVICE_TABLE if profile.key == "gpd_win_mini_2025"
+    )
+    p._settings["experimental_tdp_unlock"] = True
+    p._settings["tdp_control_enabled"] = False
+
+    result = asyncio.run(p.set_experimental_tdp_unlock(False))
+
+    assert result == {
+        "enabled": True,
+        "ok": False,
+        "detail": "TDP control disabled",
+    }
+    assert p._settings["experimental_tdp_unlock"] is True
+
+
+def test_retired_gpd_unlock_is_cleared_only_after_safe_reapply(Plugin, monkeypatch):
+    from device_profiles import DEVICE_TABLE
+
+    p = Plugin()
+    p._init()
+    p._device = next(
+        profile for profile in DEVICE_TABLE if profile.key == "gpd_win_mini_2025"
+    )
+    p._settings["experimental_tdp_unlock"] = True
+    saves = []
+    monkeypatch.setattr(p, "_save", lambda: saves.append(True))
+
+    async def apply_safe(*_args, **_kwargs):
+        return TdpResult(35, 35, True, "confirmed")
+
+    monkeypatch.setattr(p, "_apply_tdp_now", apply_safe)
+
+    result = asyncio.run(p.set_experimental_tdp_unlock(False))
+
+    assert result == {"enabled": False, "ok": True, "detail": "confirmed"}
+    assert p._settings["experimental_tdp_unlock"] is False
+    assert saves == [True]
+
+
+def test_retired_gpd_unlock_survives_unconfirmed_safe_reapply(Plugin, monkeypatch):
+    from device_profiles import DEVICE_TABLE
+
+    p = Plugin()
+    p._init()
+    p._device = next(
+        profile for profile in DEVICE_TABLE if profile.key == "gpd_win_mini_2025"
+    )
+    p._settings["experimental_tdp_unlock"] = True
+
+    async def apply_unconfirmed(*_args, **_kwargs):
+        return TdpResult(35, None, True, "applied (limit readback unavailable)")
+
+    monkeypatch.setattr(p, "_apply_tdp_now", apply_unconfirmed)
+
+    result = asyncio.run(p.set_experimental_tdp_unlock(False))
+
+    assert result["enabled"] is True
+    assert result["ok"] is False
+    assert "safe ceiling unconfirmed" in result["detail"]
+    assert p._settings["experimental_tdp_unlock"] is True
+
+
+def test_enabling_control_retires_gpd_unlock_after_safe_reapply(Plugin, monkeypatch):
+    from device_profiles import DEVICE_TABLE
+
+    p = Plugin()
+    p._init()
+    p._device = next(
+        profile for profile in DEVICE_TABLE if profile.key == "gpd_win_mini_2025"
+    )
+    p._settings["experimental_tdp_unlock"] = True
+    p._settings["tdp_control_enabled"] = False
+
+    async def probe(*_args, **_kwargs):
+        return True
+
+    async def apply_safe(*_args, **_kwargs):
+        return TdpResult(35, 35, True, "confirmed")
+
+    monkeypatch.setattr(p, "_probe_tdp_backend", probe)
+    monkeypatch.setattr(p, "_apply_tdp_now", apply_safe)
+
+    assert asyncio.run(p.set_tdp_control_enabled(True)) is True
+    assert p._settings["experimental_tdp_unlock"] is False
+
+
+def test_enabling_control_rolls_back_when_gpd_reclamp_is_unconfirmed(
+    Plugin,
+    monkeypatch,
+):
+    from device_profiles import DEVICE_TABLE
+
+    p = Plugin()
+    p._init()
+    p._device = next(
+        profile for profile in DEVICE_TABLE if profile.key == "gpd_win_mini_2025"
+    )
+    p._settings["experimental_tdp_unlock"] = True
+    p._settings["tdp_control_enabled"] = False
+
+    async def probe(*_args, **_kwargs):
+        return True
+
+    async def apply_unconfirmed(*_args, **_kwargs):
+        return TdpResult(35, None, True, "applied (limit readback unavailable)")
+
+    monkeypatch.setattr(p, "_probe_tdp_backend", probe)
+    monkeypatch.setattr(p, "_apply_tdp_now", apply_unconfirmed)
+    monkeypatch.setattr(p, "_restore_power_handoff", lambda: True)
+
+    assert asyncio.run(p.set_tdp_control_enabled(True)) is False
+    assert p._settings["tdp_control_enabled"] is False
+    assert p._settings["experimental_tdp_unlock"] is True
+
+
+def test_ui_power_activation_uses_guarded_gpd_reclamp(Plugin, monkeypatch):
+    from device_profiles import DEVICE_TABLE
+
+    p = Plugin()
+    p._init()
+    p._device = next(
+        profile for profile in DEVICE_TABLE if profile.key == "gpd_win_mini_2025"
+    )
+    p._settings["experimental_tdp_unlock"] = True
+    p._settings["tdp_control_enabled"] = False
+
+    async def probe(*_args, **_kwargs):
+        return True
+
+    async def apply_unconfirmed(*_args, **_kwargs):
+        return TdpResult(35, None, True, "applied (limit readback unavailable)")
+
+    monkeypatch.setattr(p, "_probe_tdp_backend", probe)
+    monkeypatch.setattr(p, "_apply_tdp_now", apply_unconfirmed)
+    monkeypatch.setattr(p, "_restore_power_handoff", lambda: True)
+
+    state = asyncio.run(p.set_ui_module("power", False))
+
+    assert "power" in state["disabled"]
+    assert p._settings["tdp_control_enabled"] is False
+    assert p._settings["experimental_tdp_unlock"] is True
+
+
+def test_ui_power_activation_stays_off_when_gpd_backend_is_not_ready(
+    Plugin,
+    monkeypatch,
+):
+    from device_profiles import DEVICE_TABLE
+
+    p = Plugin()
+    p._init()
+    p._device = next(
+        profile for profile in DEVICE_TABLE if profile.key == "gpd_win_mini_2025"
+    )
+    p._settings["experimental_tdp_unlock"] = True
+    p._settings["tdp_control_enabled"] = False
+
+    async def probe(*_args, **_kwargs):
+        return False
+
+    monkeypatch.setattr(p, "_probe_tdp_backend", probe)
+    monkeypatch.setattr(p, "_restore_power_handoff", lambda: True)
+
+    state = asyncio.run(p.set_ui_module("power", False))
+
+    assert "power" in state["disabled"]
+    assert p._settings["tdp_control_enabled"] is False
+    assert p._settings["experimental_tdp_unlock"] is True
+
+
+def test_backend_without_auto_tdp_rejects_and_clears_stored_auto(PluginWithPower):
+    p = PluginWithPower()
+    p._init()
+    p._tdp_backend.auto_tdp_supported = False
+    p._tdp_profiles.set_auto_tdp("global", True)
+
+    result = asyncio.run(p.set_auto_tdp(True))
+    state = asyncio.run(p.get_tdp_state())
+    power = asyncio.run(p.get_power_draw())
+
+    assert result == {"auto_tdp": False}
+    assert p._tdp_profiles.auto_tdp(None) is False
+    assert state["supports_auto_tdp"] is False
+    assert power["auto_tdp"] is False
 
 
 def test_gpd_win_mini_corrupt_string_false_never_unlocks_55w(Plugin):
@@ -648,14 +847,10 @@ def test_gpd_win_mini_upgrade_preserves_legacy_low_profile_intent(Plugin):
     assert p._effective_levels(None, on_ac=True)[0]["pl1"] == 20
 
 
-def test_failed_55w_disable_keeps_unlock_visibly_active(Plugin, monkeypatch):
-    from device_profiles import DEVICE_TABLE
-
+def test_failed_experimental_disable_keeps_unlock_visibly_active(Plugin, monkeypatch):
     p = Plugin()
     p._init()
-    p._device = next(
-        profile for profile in DEVICE_TABLE if profile.key == "gpd_win_mini_2025"
-    )
+    p._device = _device_with_experimental_tdp_unlock()
     p._settings["experimental_tdp_unlock"] = True
     saves = []
     monkeypatch.setattr(p, "_save", lambda: saves.append(True))
@@ -676,17 +871,13 @@ def test_failed_55w_disable_keeps_unlock_visibly_active(Plugin, monkeypatch):
     assert saves == []
 
 
-def test_successful_55w_disable_restarts_guard_after_runtime_lock_recovery(
+def test_successful_experimental_disable_restarts_guard_after_runtime_lock_recovery(
     Plugin,
     monkeypatch,
 ):
-    from device_profiles import DEVICE_TABLE
-
     p = Plugin()
     p._init()
-    p._device = next(
-        profile for profile in DEVICE_TABLE if profile.key == "gpd_win_mini_2025"
-    )
+    p._device = _device_with_experimental_tdp_unlock()
     p._settings["experimental_tdp_unlock"] = True
     p._tdp_backend.supported = False
     p._tdp_backend.recover_safe_range = lambda: setattr(
@@ -709,17 +900,13 @@ def test_successful_55w_disable_restarts_guard_after_runtime_lock_recovery(
     assert starts == [True]
 
 
-def test_failed_55w_enable_reports_durable_unlock_if_rollback_save_fails(
+def test_failed_experimental_enable_reports_durable_unlock_if_rollback_save_fails(
     Plugin,
     monkeypatch,
 ):
-    from device_profiles import DEVICE_TABLE
-
     p = Plugin()
     p._init()
-    p._device = next(
-        profile for profile in DEVICE_TABLE if profile.key == "gpd_win_mini_2025"
-    )
+    p._device = _device_with_experimental_tdp_unlock()
     saves = 0
 
     def save():
@@ -742,14 +929,10 @@ def test_failed_55w_enable_reports_durable_unlock_if_rollback_save_fails(
     assert p._settings["experimental_tdp_unlock"] is True
 
 
-def test_55w_disable_requires_panel_ownership_to_confirm_safe_ceiling(Plugin):
-    from device_profiles import DEVICE_TABLE
-
+def test_experimental_disable_requires_panel_ownership_to_confirm_safe_ceiling(Plugin):
     p = Plugin()
     p._init()
-    p._device = next(
-        profile for profile in DEVICE_TABLE if profile.key == "gpd_win_mini_2025"
-    )
+    p._device = _device_with_experimental_tdp_unlock()
     p._settings["experimental_tdp_unlock"] = True
     p._settings["tdp_control_enabled"] = False
 
@@ -763,15 +946,15 @@ def test_55w_disable_requires_panel_ownership_to_confirm_safe_ceiling(Plugin):
     assert p._settings["experimental_tdp_unlock"] is True
 
 
-def test_gpd_win_mini_automation_and_presets_remain_capped_at_35w(Plugin, monkeypatch):
+def test_experimental_unlock_keeps_automation_and_presets_at_base_ceiling(
+    Plugin,
+    monkeypatch,
+):
     import main
-    from device_profiles import DEVICE_TABLE
 
     p = Plugin()
     p._init()
-    p._device = next(
-        profile for profile in DEVICE_TABLE if profile.key == "gpd_win_mini_2025"
-    )
+    p._device = _device_with_experimental_tdp_unlock()
     p._tdp_backend.get_limits = lambda: TdpLimits(20, 20, 35, 35)
     p._settings["experimental_tdp_unlock"] = True
 
@@ -786,15 +969,12 @@ def test_gpd_win_mini_automation_and_presets_remain_capped_at_35w(Plugin, monkey
     assert p._tdp_profiles.effective(None)["pl1"] == 35
 
 
-def test_gpd_win_mini_manual_55w_request_requires_ac(Plugin, monkeypatch):
+def test_manual_experimental_request_requires_ac(Plugin, monkeypatch):
     import main
-    from device_profiles import DEVICE_TABLE
 
     p = Plugin()
     p._init()
-    p._device = next(
-        profile for profile in DEVICE_TABLE if profile.key == "gpd_win_mini_2025"
-    )
+    p._device = _device_with_experimental_tdp_unlock()
     p._tdp_backend.get_limits = lambda: TdpLimits(20, 20, 35, 35)
     p._settings["experimental_tdp_unlock"] = True
 

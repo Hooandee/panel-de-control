@@ -48,6 +48,7 @@ const deckState = {
   global_watts: 15,
   applied_w: 15,
   supports_advanced: true,
+  supports_auto_tdp: true,
   level_limits: {},
   levels: { pl1: 15, pl2: 22, pl3: 28 },
   requested_levels: { pl1: 15, pl2: 22, pl3: 28 },

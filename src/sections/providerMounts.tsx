@@ -70,7 +70,8 @@ export const PotenciaProviderMount: FC<{ children: ReactNode }> = ({ children })
   const { tdp, refresh } = tdpCtl;
   const conflict = useTdpConflict(tdp?.supported ?? false, tdp?.tdp_control_enabled ?? true);
   const disabled = useModules();
-  const autoTdpEnabled = effectiveEnabled("autoTdp", disabled);
+  const autoTdpEnabled = effectiveEnabled("autoTdp", disabled)
+    && tdp?.supports_auto_tdp !== false;
 
   // Re-enable the power module (master switch on) via the editor's path, then re-pull
   // the TDP state so the monitor view clears. Returns the promise for the button guard.

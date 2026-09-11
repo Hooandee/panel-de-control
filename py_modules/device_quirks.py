@@ -17,6 +17,15 @@ def is_gpd_win_mini_2025(device, root: str = "/") -> bool:
     )
 
 
+def is_gpd_win_mini_2025_tdp_recovery(device, root: str = "/") -> bool:
+    return (
+        getattr(device, "key", None) == "gpd_win_mini_2025"
+        and _read_dmi(root, "sys_vendor").casefold() == "gpd"
+        and _read_dmi(root, "product_name").casefold()
+        in {"g1617-02", "g1617-02-l"}
+    )
+
+
 def asus_tdp_authoritative_reassert_s(device, root: str = "/") -> float | None:
     vendor = _read_dmi(root, "sys_vendor").casefold()
     product = _read_dmi(root, "product_name").casefold()

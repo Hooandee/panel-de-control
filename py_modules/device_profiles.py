@@ -175,7 +175,7 @@ DEVICE_TABLE = (
                       DmiMatch("G1617-02-L", "GPD"),
                   ),
                   experimental=True,
-                  tdp_presets=(20, 25, 30, 35), experimental_tdp_max_ac=55),
+                  tdp_presets=(20, 25, 30, 35)),
     DeviceProfile("msi_claw_a8", "MSI Claw A8", "AMD Ryzen Z2 Extreme", "amd",
                   6, 17, 35, 35, match_names=("Claw A8",), experimental=True,
                   tdp_presets=(10, 20, 33, 33)),
