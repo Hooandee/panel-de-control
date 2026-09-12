@@ -147,6 +147,7 @@ _HUD_OBSERVATION_MAX_AGE_S = 3.0
 _MIN_HUD_REFRESH_S = 1.0
 _HUD_RELOAD_MAX_ATTEMPTS = 4
 _TDP_BACKEND_REPROBE_S = 30.0
+_TDP_STORAGE_MIGRATION_RETRY_S = 30.0
 _CHARGE_LIMIT_VERIFY_DELAYS = (2.0, 8.0, 20.0)
 _ROG_CHARGE_LIMIT_PROFILES = frozenset({
     "rog_ally",
@@ -456,12 +457,15 @@ class Plugin:
             ),
         )
         self._powerstation_detector = powerstation_conflict.Detector()
-        # Safety self-heal: correct any stored TDP value an older version persisted
-        # outside the device's real range (a bogus firmware max could leak in) so it can
-        # never be applied — not merely clamped on read.
+        # Keep durable TDP intent inside the device-authorised range.
         _lim = self._profile_storage_limits()
-        if self._tdp_profiles.sanitize(TDP_REQUEST_MIN_W, _lim.max_ac_w):
-            decky.logger.info("Corrected out-of-range stored TDP profiles")
+        _request_min = self._tdp_request_min()
+        self._tdp_profile_sanitize_pending = False
+        self._power_preset_sanitize_pending = False
+        self._tdp_storage_migration_retry_at = 0.0
+        self._sanitize_tdp_profiles(_request_min, _lim.max_ac_w)
+        if _request_min > TDP_REQUEST_MIN_W:
+            self._sanitize_power_presets(_request_min, _lim.max_ac_w)
         # Which daemon owns the controller (HHD / InputPlumber / none). Detected
         # once — the resident daemon doesn't change at runtime. Probe never raises.
         self._controller = controller_detect.detect()
@@ -3545,13 +3549,7 @@ class Plugin:
     def _profile_storage_limits(self):
         """Static authorised range for durable intent; live bounds only affect apply."""
         if self._device.key == "gpd_win_mini_2025":
-            limits = self._limits()
-            return TdpLimits(
-                5,
-                limits.default_w,
-                limits.max_w,
-                limits.max_ac_w,
-            )
+            return TdpLimits.from_profile(self._device)
         if self._device.key != "rog_flow_z13":
             return self._limits()
         limits = TdpLimits.from_profile(self._device)
@@ -3559,6 +3557,64 @@ class Plugin:
         if cooler_max and self._settings.get("cooler_boost", False):
             limits = limits.with_cooler(cooler_max)
         return limits
+
+    def _sanitize_tdp_profiles(self, min_w: int, max_w: int) -> None:
+        try:
+            changed = self._tdp_profiles.sanitize(min_w, max_w)
+        except OSError:
+            self._tdp_profile_sanitize_pending = True
+            self._tdp_storage_migration_retry_at = max(
+                self._tdp_storage_migration_retry_at,
+                _monotonic() + _TDP_STORAGE_MIGRATION_RETRY_S,
+            )
+            decky.logger.warning(
+                "Stored TDP profile correction deferred after write failure"
+            )
+            return
+        self._tdp_profile_sanitize_pending = False
+        if changed:
+            decky.logger.info("Corrected out-of-range stored TDP profiles")
+
+    def _sanitize_power_presets(self, min_w: int, max_w: int) -> None:
+        try:
+            changed = self._power_presets.sanitize(min_w, max_w)
+        except OSError:
+            self._power_preset_sanitize_pending = True
+            self._tdp_storage_migration_retry_at = max(
+                self._tdp_storage_migration_retry_at,
+                _monotonic() + _TDP_STORAGE_MIGRATION_RETRY_S,
+            )
+            decky.logger.warning(
+                "Stored power preset correction deferred after write failure"
+            )
+            return
+        self._power_preset_sanitize_pending = False
+        if changed:
+            decky.logger.info("Corrected out-of-range stored power presets")
+
+    def _retry_tdp_storage_migrations(self) -> None:
+        if not (
+            self._tdp_profile_sanitize_pending
+            or self._power_preset_sanitize_pending
+        ):
+            self._tdp_storage_migration_retry_at = 0.0
+            return
+        if _monotonic() < self._tdp_storage_migration_retry_at:
+            return
+        limits = self._profile_storage_limits()
+        request_min = self._tdp_request_min()
+        if self._tdp_profile_sanitize_pending:
+            self._sanitize_tdp_profiles(request_min, limits.max_ac_w)
+        if (
+            self._power_preset_sanitize_pending
+            and request_min > TDP_REQUEST_MIN_W
+        ):
+            self._sanitize_power_presets(request_min, limits.max_ac_w)
+        if not (
+            self._tdp_profile_sanitize_pending
+            or self._power_preset_sanitize_pending
+        ):
+            self._tdp_storage_migration_retry_at = 0.0
 
     def _limits(self):
         """Device TDP limits with the user's opt-in ceilings applied (a single
@@ -3638,15 +3694,28 @@ class Plugin:
     def _active_max(self, limits, ac: bool) -> int:
         return limits.max_ac_w if ac else limits.max_w
 
-    @staticmethod
-    def _clamp_tdp_request(watts, active_max: int) -> int:
-        return max(TDP_REQUEST_MIN_W, min(int(watts), int(active_max)))
+    def _tdp_request_min(self) -> int:
+        if self._device.key == "gpd_win_mini_2025":
+            return int(self._device.tdp_min)
+        return TDP_REQUEST_MIN_W
 
-    @staticmethod
-    def _clamp_requested_levels(effective: dict, active_max: int, level_limits: dict) -> dict:
+    def _clamp_tdp_request(self, watts, active_max: int) -> int:
+        return max(
+            self._tdp_request_min(),
+            min(int(watts), int(active_max)),
+        )
+
+    def _clamp_requested_levels(
+        self,
+        effective: dict,
+        active_max: int,
+        level_limits: dict,
+    ) -> dict:
+        request_min = self._tdp_request_min()
+
         def clamp(rail):
             ceiling = level_limits.get(rail, {}).get("max", active_max)
-            return max(TDP_REQUEST_MIN_W, min(int(effective[rail]), int(ceiling)))
+            return max(request_min, min(int(effective[rail]), int(ceiling)))
 
         return {rail: clamp(rail) for rail in ("pl1", "pl2", "pl3")}
 
@@ -7819,6 +7888,7 @@ class Plugin:
 
     async def get_tdp_state(self) -> dict:
         self._init()
+        self._retry_tdp_storage_migrations()
         await self._ensure_recognised_desktop_migration()
         await self._retry_delayed_tdp_recovery()
         await self._probe_tdp_backend()
@@ -7864,8 +7934,13 @@ class Plugin:
         ll = self._cap_level_limits(self._tdp_backend.level_limits(), active)
         eff = self._tdp_profiles.effective(self._current_appid)
         geff = self._tdp_profiles.effective(None)
+        request_min = self._tdp_request_min()
         requested_levels = self._clamp_requested_levels(eff, active, ll)
-        global_requested_levels = self._clamp_requested_levels(geff, active, ll)
+        global_requested_levels = self._clamp_requested_levels(
+            geff,
+            active,
+            ll,
+        )
         observation_backend = self._tdp_observation_backend()
         primary = observation.surfaces.get(observation_backend.name, {})
         primary_rail = getattr(observation_backend, "primary_rail", "pl1")
@@ -7912,7 +7987,7 @@ class Plugin:
                 self._tdp_delayed_recovery_pending()
                 or self._low_battery_hold_recovery_pending
             ),
-            "request_min": TDP_REQUEST_MIN_W,
+            "request_min": request_min,
             "limits": {"min": limits.min_w, "default": limits.default_w,
                        "max": limits.max_w, "max_ac": limits.max_ac_w},
             "on_ac": ac,
@@ -7923,7 +7998,10 @@ class Plugin:
             # is toggled to follow global). Powers the "usa el global / usa el propio" UI.
             "follows_global": self._tdp_profiles.is_following_global(self._current_appid),
             "watts": self._clamp_tdp_request(eff["watts"], active),
-            "global_watts": self._clamp_tdp_request(geff["watts"], active),
+            "global_watts": self._clamp_tdp_request(
+                geff["watts"],
+                active,
+            ),
             "applied_w": applied_w,
             "primary_rail": primary_rail,
             "ppt": ppt,
@@ -8632,33 +8710,47 @@ class Plugin:
         return await self._read_tdp_state()
 
     def _preset_wclamp(self):
-        lim = self._automatic_limits()
-        return TDP_REQUEST_MIN_W, lim.max_ac_w
+        lim = (
+            self._profile_storage_limits()
+            if self._device.key == "gpd_win_mini_2025"
+            else self._automatic_limits()
+        )
+        return self._tdp_request_min(), lim.max_ac_w
 
     async def get_power_presets(self) -> dict:
         self._init()
+        self._retry_tdp_storage_migrations()
         return self._power_presets.state()
 
     async def create_power_preset(self, watts: int, icon: str, boost=None, name="") -> dict:
         self._init()
+        self._retry_tdp_storage_migrations()
         lo, hi = self._preset_wclamp()
-        return self._power_presets.create(watts, icon, boost, name=name, min_w=lo, max_w=hi)
+        return self._power_presets.create(
+            watts, icon, boost, name=name, min_w=lo, max_w=hi
+        )
 
     async def update_power_preset(self, cid: str, watts: int, icon: str, boost=None, name="") -> dict:
         self._init()
+        self._retry_tdp_storage_migrations()
         lo, hi = self._preset_wclamp()
-        return self._power_presets.update(cid, watts, icon, boost, name=name, min_w=lo, max_w=hi)
+        return self._power_presets.update(
+            cid, watts, icon, boost, name=name, min_w=lo, max_w=hi
+        )
 
     async def delete_power_preset(self, cid: str) -> dict:
         self._init()
+        self._retry_tdp_storage_migrations()
         return self._power_presets.delete(cid)
 
     async def move_power_preset(self, cid: str, direction: int) -> dict:
         self._init()
+        self._retry_tdp_storage_migrations()
         return self._power_presets.move(cid, direction)
 
     async def set_power_preset_hidden(self, cid: str, hidden: bool) -> dict:
         self._init()
+        self._retry_tdp_storage_migrations()
         return self._power_presets.set_hidden(cid, bool(hidden))
 
     async def apply_power_preset(

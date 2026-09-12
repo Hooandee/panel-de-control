@@ -41,6 +41,7 @@ class ProfileStore(ScopedProfileStore):
 
     def __init__(self, path, default_watts):
         self._default = int(default_watts)
+        self._sanitize_pending = False
         super().__init__(path)
 
     def _profile_dict(self, pl1, mode=_DEFAULT_MODE, off2=0, off3=0):
@@ -112,8 +113,13 @@ class ProfileStore(ScopedProfileStore):
         dirty = fix(self._data["global"])
         for g in self._data["games"].values():
             dirty = fix(g) or dirty
-        if dirty:
-            self._save()
+        if dirty or self._sanitize_pending:
+            try:
+                self._save()
+            except OSError:
+                self._sanitize_pending = True
+                raise
+            self._sanitize_pending = False
         return dirty
 
     # Auto-TDP and GPU-clock are part of the Potencia profile: per-scope, gated by the
