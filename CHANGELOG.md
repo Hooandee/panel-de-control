@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.47.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.46.3...panel-de-control-v0.47.0) (2026-09-12)
+
+
+### Features
+
+* **tdp:** keep selected power on low battery ([#628](https://github.com/Hooandee/panel-de-control/issues/628)) ([d30c8ef](https://github.com/Hooandee/panel-de-control/commit/d30c8ef688c37adbcf2aad03aa8dec2b3ff560e2))
+
 ## [0.46.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.46.2...panel-de-control-v0.46.3) (2026-09-11)
 
 ### Español
