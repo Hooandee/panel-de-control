@@ -52,7 +52,7 @@ class TdpLimits:
 class TdpResult:
     requested_w: int
     applied_w: int | None   # read back after writing (None if unreadable)
-    ok: bool                # did the write stick / succeed
+    ok: bool                # command succeeded and available verification passed
     detail: str             # detail surfaced to UI/log on failure
 
 

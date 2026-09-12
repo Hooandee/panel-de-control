@@ -21,6 +21,7 @@ class IntelRaplBackend(TDPBackend):
     name = "intel-rapl"
     supports_levels = False
     read_tolerance_w = 1
+    low_battery_hold_strategy = "primary"
 
     def __init__(self, fallback: TdpLimits, root: str = "/") -> None:
         self._fallback = fallback

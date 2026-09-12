@@ -1,4 +1,4 @@
-import { PanelSectionRow, SliderField, Focusable } from "@decky/ui";
+import { PanelSectionRow, SliderField, Focusable, ToggleField } from "@decky/ui";
 import { FC, useCallback, useMemo } from "react";
 import { LuInfo } from "react-icons/lu";
 
@@ -36,6 +36,7 @@ export interface TdpSectionProps {
   onApplySuggestion: (watts: number) => void;
   // Select a firmware performance mode (Legion Go original); "custom" via the slider.
   onFirmwareMode: (mode: string) => void;
+  onLowBatteryHold: (enabled: boolean) => void;
   // Master switch off: show only the live arc + a notice, hide write controls.
   monitorOnly?: boolean;
   // Flip the master switch back on from the monitor notice.
@@ -46,7 +47,7 @@ export interface TdpSectionProps {
   onApplyPreset: (item: PresetItem) => void;
 }
 
-export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onScope, onWatts, onSetLevels, onSetMode, onApplySuggestion, onFirmwareMode, monitorOnly, onReactivate, presets, refreshPresets, onApplyPreset }) => {
+export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onScope, onWatts, onSetLevels, onSetMode, onApplySuggestion, onFirmwareMode, onLowBatteryHold, monitorOnly, onReactivate, presets, refreshPresets, onApplyPreset }) => {
   const { t } = useI18n();
 
   // Memoized (and above the early returns) so re-renders don't rebuild the chip list.
@@ -227,6 +228,32 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
               onChange={onWatts}
             />
           </PanelSectionRow>
+          {!inFwMode && tdp.low_battery_hold?.available && (
+            <PanelSectionRow>
+              <ToggleField
+                label={(
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    {t("tdp.lowBatteryHold.title")}
+                    <span
+                      style={{
+                        fontSize: 10,
+                        padding: "1px 5px",
+                        borderRadius: 999,
+                        color: theme.color.warn,
+                        boxShadow: `inset 0 0 0 1px ${theme.color.warn}`,
+                      }}
+                    >
+                      {t("tdp.lowBatteryHold.experimental")}
+                    </span>
+                  </span>
+                )}
+                description={t("tdp.lowBatteryHold.hint")}
+                checked={tdp.low_battery_hold.enabled}
+                onChange={onLowBatteryHold}
+                bottomSeparator="none"
+              />
+            </PanelSectionRow>
+          )}
           {!inFwMode && view.watts < tdp.limits.min && (
             <PanelSectionRow>
               <div style={{

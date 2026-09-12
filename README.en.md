@@ -55,6 +55,8 @@ save a global profile or a per-game one.
 - **Boost.** If your firmware allows it, you choose how the SPPT and FPPT rails behave: Stable
   (what you set is what it draws, the default), Auto (a managed boost margin) or Custom (tune the
   margins by hand).
+- **Low-battery TDP (experimental).** Keeps the value you selected when the battery reaches 20% or
+  less. Off by default.
 - **GPU clock.** Set the minimum and maximum graphics clock.
 
 ### System (Sistema)
@@ -148,21 +150,22 @@ so you never need the touchscreen.
 
 Panel de Control knows nine models and, for anything else, tries to work by probing the real
 capabilities of the hardware. This table is honest about what's **verified on each device** and what
-isn't yet: I'd rather show you "unconfirmed" than a false "yes". Differences come from what each
+isn't yet: I'd rather show you "not tested" than a false "yes". Differences come from what each
 vendor lets you touch in firmware and from each distro's kernel.
 
-Legend: **✅** verified on that device · **⚠️** limited or default only · **❌** not available · **❔**
-supported in code but not confirmed on that device yet
+Legend: **✅** verified on that device · **⚠️** limited or default only · **❌** not available · **—**
+not tested on that device yet
 
 | Feature | Steam Deck LCD | Steam Deck OLED | ROG Ally | ROG Ally X | ROG Xbox Ally X | Legion Go | Legion Go S | Legion Go 2 | MSI Claw 8 AI+ |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
 | TDP limit | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Keep TDP on low battery (experimental) | — | — | ✅ [¹⁸](#notes) | — | — | — | ✅ [¹⁸](#notes) | — | — |
 | Boost (SPPT/FPPT) | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹](#notes) |
 | Auto-TDP by GPU load | ✅ [²](#notes) | ✅ [²](#notes) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [³](#notes) |
-| GPU clock | ❔ [⁴](#notes) | ❔ [⁴](#notes) | ❔ [⁴](#notes) | ❔ [⁴](#notes) | ❔ [⁴](#notes) | ❔ [⁴](#notes) | ❔ [⁴](#notes) | ❔ [⁴](#notes) | ❔ [⁴](#notes) |
+| GPU clock | — [⁴](#notes) | — [⁴](#notes) | — [⁴](#notes) | — [⁴](#notes) | — [⁴](#notes) | — [⁴](#notes) | — [⁴](#notes) | — [⁴](#notes) | — [⁴](#notes) |
 | Battery: state and health | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Battery cycle count | ❌ [⁵](#notes) | ❌ [⁵](#notes) | ❌ [⁵](#notes) | ❌ [⁵](#notes) | ❌ [⁵](#notes) | ✅ | ✅ | ✅ | ❌ [⁵](#notes) |
-| Charge limit | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [⁶](#notes) | ❔ | ⚠️ [⁷](#notes) | ✅ |
+| Charge limit | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [⁶](#notes) | — | ⚠️ [⁷](#notes) | ✅ |
 | CPU: turbo boost | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | CPU: multithreading (SMT) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [⁸](#notes) |
 | CPU: active cores | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
@@ -170,9 +173,9 @@ supported in code but not confirmed on that device yet
 | Sound equalizer | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ [¹⁷](#notes) |
 | Download Mode | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Temperature monitor | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ [⁹](#notes) |
-| Fan RPM monitor | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹⁰](#notes) | ✅ [⁹](#notes) |
-| Fan curves | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ [¹¹](#notes) | ⚠️ [¹²](#notes) | ❔ [¹⁰](#notes) | ⚠️ [⁹](#notes) |
-| Learned per-game curves | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ [¹¹](#notes) | ❌ [¹²](#notes) | ❔ [¹⁰](#notes) | ❌ [⁹](#notes) |
+| Fan RPM monitor | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — [¹⁰](#notes) | ✅ [⁹](#notes) |
+| Fan curves | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ [¹¹](#notes) | ⚠️ [¹²](#notes) | — [¹⁰](#notes) | ⚠️ [⁹](#notes) |
+| Learned per-game curves | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ [¹¹](#notes) | ❌ [¹²](#notes) | — [¹⁰](#notes) | ❌ [⁹](#notes) |
 | Firmware modes (profiles) | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ [¹¹](#notes) | ❌ | ❌ | ❌ |
 | Color calibration | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ [¹³](#notes) |
 | "OLED look" preset | ✅ | ❌ [¹⁴](#notes) | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹⁴](#notes) | ✅ |
@@ -215,8 +218,8 @@ from the Settings tab are what confirm how it really behaves.
    before deciding.
 3. Power profiling on Intel (RAPL / i915) isn't implemented yet, so GPU-based auto-TDP isn't
    available on the Claw. The rest of the TDP control works.
-4. GPU-clock writing is implemented per device, but it hasn't been confirmed with a live change on
-   any machine yet. Marked as unconfirmed until validated.
+4. GPU-clock writing is implemented per device, but it hasn't been tested with a live change on any
+   machine yet.
 5. The cycle counter is only populated by Lenovo firmware; on ASUS, Steam Deck and MSI the node
    reports a fake 0, so it's hidden instead of showing an invented zero.
 6. The original Legion Go (83E1) doesn't expose `conservation_mode`, so it offers no charge limit.
@@ -228,9 +231,8 @@ from the Settings tab are what confirm how it really behaves.
    at low temperatures they sit at 0 in silent mode), but its kernel can't write the curve. The curve
    the firmware applies is read over the EC and shown read-only; editing is in progress (fan-speed
    control will be enabled safely).
-10. The Legion Go 2 exposes no writable hwmon fan; RPM would have to be read over the EC, and on the
-    current build it isn't showing up in the monitor. Marked as not available / unconfirmed until I
-    can review it.
+10. The Legion Go 2 exposes no writable hwmon fan; RPM would have to be read over the EC, and that
+    route has not yet been validated on the device.
 11. The original Legion Go drives its fan curve through the `legion_wmi_fan` kernel driver, which ships
     on some kernels and turns on by itself when present. Where it's absent (current SteamOS and some
     kernels), the fan is governed by the **firmware modes** (Quiet/Balanced/Performance) from the Power
@@ -250,8 +252,10 @@ from the Settings tab are what confirm how it really behaves.
 17. The equalizer uses PipeWire's filter-chain (available on SteamOS and Bazzite). The bass enhancer
     and volume leveling need the system's CAPS plugin; if it isn't installed the equalizer still
     works, just without those two extras.
+18. Low-battery TDP persistence is experimental, off by default, and has been tested on ROG Ally and
+    Legion Go S. `—` means we have not tested it on that model yet, not that it is incompatible.
 
-> Cells marked **❔** are the ones I haven't confirmed on that specific device. If you have the
+> Cells marked **—** are the ones I haven't tested on that specific device. If you have the
 > hardware in front of you and see something works (or doesn't), tell me and I'll fix it: this table
 > should reflect reality, not what the code tries to do.
 

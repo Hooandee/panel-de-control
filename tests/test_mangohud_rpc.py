@@ -724,6 +724,28 @@ def test_pdc_tdp_uses_the_backends_primary_rail(tmp_path, monkeypatch):
     assert snapshot["applied"] == 17
 
 
+def test_pdc_tdp_uses_active_low_battery_sidecar_readback(tmp_path, monkeypatch):
+    main, p = _make_plugin(tmp_path, monkeypatch)
+    p._init()
+    sidecar = types.SimpleNamespace(
+        name="ryzenadj-low-battery-hold",
+        primary_rail="pl1",
+        diagnostics=lambda: {"low_battery_hold_active": True},
+    )
+    p._low_battery_hold_backend = sidecar
+    observation = main.TdpObservation(
+        readable=True,
+        surfaces={sidecar.name: {"pl1": main.RailReading(19)}},
+    )
+
+    snapshot = p._pdc_snapshot(
+        ["pdc_tdp"],
+        {"tdp": main.TimedValue(observation, main._monotonic(), True)},
+    )
+
+    assert snapshot["applied"] == 19
+
+
 def test_blocking_tdp_backend_reuses_reconciler_observation(tmp_path, monkeypatch):
     main, p = _make_plugin(tmp_path, monkeypatch)
     p._init()

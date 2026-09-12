@@ -217,6 +217,7 @@ def test_rog_uses_asus_armoury_firmware_attr(tmp_path):
         "supported": True,
     },)
     assert b.diagnostics()["readback_settle_ms"] == 0
+    assert b.low_battery_hold_strategy == "primary"
 
 
 def test_flow_uses_asus_armoury_and_publishes_live_narrowed_limits(tmp_path):
@@ -348,6 +349,7 @@ def test_legion_uses_lenovo_firmware_attr(tmp_path):
     b = select_backend(_p("legion_go_2"), root=root, ryzenadj_resolve=_NO_RYZENADJ)
     assert b.supported and "lenovo-wmi-other" in b.name
     assert b.diagnostics()["readback_settle_ms"] == 0
+    assert b.low_battery_hold_strategy == "primary"
 
 
 def test_exact_legion_go_2_83n0_waits_for_async_readback_before_rollback(
@@ -475,6 +477,7 @@ def test_new_experimental_profile_defers_ryzenadj_probe_and_rejects_before_write
 
     assert backend.supported is True
     assert backend.name == "ryzenadj"
+    assert backend.low_battery_hold_strategy == "primary"
     assert [item["candidate"] for item in backend.probe_trace] == [
         "asus",
         "lenovo",
@@ -579,6 +582,51 @@ def test_only_exact_legion_go_s_83n6_gets_measured_rail_floors(tmp_path):
 
     assert getattr(exact, "_rail_floors", None) == {"pl2": 15, "pl3": 20}
     assert getattr(nearby, "_rail_floors", None) == {}
+    assert nearby.low_battery_hold_strategy is None
+
+
+def test_only_exact_legion_go_s_83n6_gets_the_unverified_low_battery_route(tmp_path):
+    exact_root = str(tmp_path / "exact")
+    _mk_dmi(exact_root, "LENOVO", "83N6")
+    exact = factory.select_low_battery_hold_backend(
+        _p("legion_go_s"),
+        root=exact_root,
+        ryzenadj_resolve=lambda: "/usr/bin/ryzenadj",
+    )
+
+    nearby_root = str(tmp_path / "nearby")
+    _mk_dmi(nearby_root, "LENOVO", "83L3")
+    nearby = factory.select_low_battery_hold_backend(
+        _p("legion_go_s"),
+        root=nearby_root,
+        ryzenadj_resolve=lambda: "/usr/bin/ryzenadj",
+    )
+
+    generic_root = str(tmp_path / "generic")
+    _mk_dmi(generic_root, "LENOVO", "83N6")
+    generic = factory.select_low_battery_hold_backend(
+        GENERIC,
+        root=generic_root,
+        ryzenadj_resolve=lambda: "/usr/bin/ryzenadj",
+    )
+
+    assert exact is not None
+    assert exact.name == "ryzenadj-low-battery-hold"
+    assert exact.low_battery_hold_strategy == "legion-go-s-83n6"
+    assert exact.low_battery_level_limits() == {
+        "pl1": {"min": 5, "max": 33},
+        "pl2": {"min": 15, "max": 33},
+        "pl3": {"min": 20, "max": 33},
+    }
+    assert exact.diagnostics()["readback_required"] is False
+    assert exact.diagnostics()["unverified_hold_allowed"] is True
+    assert exact.diagnostics()["unverified_hold_restore"] == {
+        "pl1": 15,
+        "pl2": 15,
+        "pl3": 20,
+    }
+    assert nearby is None
+    assert generic is None
 
 
 @pytest.mark.parametrize("profile", ("low-power", "balanced", "performance"))
@@ -930,6 +978,7 @@ def test_msi_uses_msi_firmware_attr(tmp_path):
     _mk_fw(root, "msi-wmi-platform")
     b = select_backend(_p("msi_claw_8_ai_plus"), root=root, ryzenadj_resolve=_NO_RYZENADJ)
     assert b.supported and "msi-wmi-platform" in b.name
+    assert b.low_battery_hold_strategy == "primary"
 
 
 def test_msi_claw_a8_never_uses_intel_msi_firmware_attr(tmp_path):
@@ -966,6 +1015,7 @@ def test_steam_deck_uses_hwmon(tmp_path):
     _mk_hwmon(root)
     b = select_backend(_p("steam_deck_oled"), root=root, ryzenadj_resolve=_NO_RYZENADJ)
     assert b.supported and b.name == "steamdeck-hwmon"
+    assert b.low_battery_hold_strategy == "primary"
 
 
 def test_exact_steam_deck_never_falls_through_to_generic_amd_backends(tmp_path):
@@ -1237,6 +1287,7 @@ def test_generic_intel_uses_rapl_and_not_ryzenadj(tmp_path):
     intel = dataclasses.replace(GENERIC, vendor="intel")
     b = select_backend(intel, root=root, ryzenadj_resolve=lambda: "/usr/bin/ryzenadj")
     assert b.supported and b.name == "intel-rapl"
+    assert b.low_battery_hold_strategy == "primary"
 
 
 def test_generic_intel_never_uses_ryzenadj(tmp_path):
@@ -1253,6 +1304,7 @@ def test_known_rog_falls_through_to_ryzenadj(tmp_path):
     _mk_rapl(root)
     b = select_backend(_p("rog_ally_x"), root=root, ryzenadj_resolve=lambda: "/usr/bin/ryzenadj")
     assert b.supported and b.name == "ryzenadj"
+    assert b.low_battery_hold_strategy is None
 
 
 def test_amd_never_uses_intel_rapl(tmp_path):
@@ -1277,6 +1329,7 @@ def test_generic_amd_uses_alib_when_acpi_call_present(tmp_path):
     _mk_acpi_call(root)
     b = select_backend(GENERIC, root=root, ryzenadj_resolve=_NO_RYZENADJ)
     assert b.supported and b.name == "acpi-alib"
+    assert b.low_battery_hold_strategy is None
 
 
 def test_ryzenadj_precedes_alib(tmp_path):

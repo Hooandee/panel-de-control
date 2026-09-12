@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TdpState } from "../api";
 
@@ -15,6 +15,11 @@ vi.mock("@decky/ui", () => ({
     captured.slider = props;
     return <div />;
   },
+  ToggleField: ({ label, description, checked, onChange }: any) => (
+    <button onClick={() => onChange(!checked)}>
+      {label} · {description}
+    </button>
+  ),
 }));
 
 vi.mock("../i18n", () => ({ useI18n: () => ({ t: (key: string) => key }) }));
@@ -58,6 +63,15 @@ const deckState = {
   global_boost_mode: "custom",
   firmware_modes: [],
   firmware_mode: "custom",
+  low_battery_hold: {
+    available: true,
+    enabled: false,
+    active: false,
+    verified: false,
+    status: "inactive" as const,
+    applied_w: null,
+    reason: "disabled",
+  },
   presets: {},
   learned: { enough: false, reason: "disabled" },
   ownership: {
@@ -101,6 +115,7 @@ describe("TdpSection Steam Deck PPT arc", () => {
         onSetMode={vi.fn()}
         onApplySuggestion={vi.fn()}
         onFirmwareMode={vi.fn()}
+        onLowBatteryHold={vi.fn()}
         monitorOnly
         presets={null}
         refreshPresets={vi.fn()}
@@ -144,6 +159,7 @@ describe("TdpSection Steam Deck PPT arc", () => {
         onSetMode={vi.fn()}
         onApplySuggestion={vi.fn()}
         onFirmwareMode={vi.fn()}
+        onLowBatteryHold={vi.fn()}
         presets={null}
         refreshPresets={vi.fn()}
         onApplyPreset={vi.fn()}
@@ -182,6 +198,7 @@ describe("TdpSection Steam Deck PPT arc", () => {
         onSetMode={vi.fn()}
         onApplySuggestion={vi.fn()}
         onFirmwareMode={vi.fn()}
+        onLowBatteryHold={vi.fn()}
         presets={null}
         refreshPresets={vi.fn()}
         onApplyPreset={vi.fn()}
@@ -213,6 +230,7 @@ describe("TdpSection Steam Deck PPT arc", () => {
         onSetMode={vi.fn()}
         onApplySuggestion={vi.fn()}
         onFirmwareMode={vi.fn()}
+        onLowBatteryHold={vi.fn()}
         presets={null}
         refreshPresets={vi.fn()}
         onApplyPreset={vi.fn()}
@@ -222,5 +240,68 @@ describe("TdpSection Steam Deck PPT arc", () => {
     expect(captured.arc).toMatchObject({
       limits: { min: 20, default: 25, max: 35, max_ac: 35 },
     });
+  });
+
+  it("marks the low-battery switch as experimental and forwards the requested value", () => {
+    const onLowBatteryHold = vi.fn();
+
+    render(
+      <TdpSection
+        tdp={deckState}
+        scope="global"
+        game={null}
+        power={null}
+        onScope={vi.fn()}
+        onWatts={vi.fn()}
+        onSetLevels={vi.fn()}
+        onSetMode={vi.fn()}
+        onApplySuggestion={vi.fn()}
+        onFirmwareMode={vi.fn()}
+        onLowBatteryHold={onLowBatteryHold}
+        presets={null}
+        refreshPresets={vi.fn()}
+        onApplyPreset={vi.fn()}
+      />,
+    );
+
+    const toggle = screen.getByText(/tdp.lowBatteryHold.title/).closest("button")!;
+    expect(toggle.textContent).toContain("tdp.lowBatteryHold.experimental");
+    expect(toggle.textContent).toContain("tdp.lowBatteryHold.hint");
+    fireEvent.click(toggle);
+    expect(onLowBatteryHold).toHaveBeenCalledWith(true);
+  });
+
+  it("hides the switch when the active backend does not advertise support", () => {
+    render(
+      <TdpSection
+        tdp={{
+          ...deckState,
+          low_battery_hold: {
+            available: false,
+            enabled: false,
+            active: false,
+            verified: false,
+            status: "inactive",
+            applied_w: null,
+            reason: "unsupported",
+          },
+        }}
+        scope="global"
+        game={null}
+        power={null}
+        onScope={vi.fn()}
+        onWatts={vi.fn()}
+        onSetLevels={vi.fn()}
+        onSetMode={vi.fn()}
+        onApplySuggestion={vi.fn()}
+        onFirmwareMode={vi.fn()}
+        onLowBatteryHold={vi.fn()}
+        presets={null}
+        refreshPresets={vi.fn()}
+        onApplyPreset={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByText(/tdp.lowBatteryHold.title/)).toBeNull();
   });
 });
