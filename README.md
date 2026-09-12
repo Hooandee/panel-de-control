@@ -55,6 +55,8 @@ a pantalla completa, además de guardar un perfil global o uno propio por juego.
 - **Boost.** Si tu firmware lo permite, eliges cómo se comportan los raíles SPPT y FPPT: Estable
   (lo que fijas es lo que gasta, el modo por defecto), Auto (un margen de boost gestionado) o
   Personalizado (ajustas los márgenes a mano).
+- **TDP con batería baja (experimental).** Mantiene el valor que hayas elegido cuando la batería
+  llega al 20 % o menos. Viene desactivado.
 - **Frecuencia de GPU.** Fija el reloj mínimo y máximo de la gráfica.
 
 ### Sistema
@@ -150,21 +152,22 @@ borde de acento claro, así que no hace falta la pantalla táctil.
 
 Panel de Control conoce nueve modelos y, para cualquier otro, intenta funcionar sondeando las
 capacidades reales del hardware. Esta tabla es honesta sobre qué está **comprobado en cada equipo**
-y qué todavía no: prefiero enseñarte un "sin confirmar" antes que un "sí" falso. Las diferencias
+y qué todavía no: prefiero enseñarte un "no probado" antes que un "sí" falso. Las diferencias
 vienen de lo que cada fabricante deja tocar por firmware y del kernel de cada distro.
 
 Leyenda: **✅** comprobado en ese equipo · **⚠️** limitado o solo por defecto · **❌** no disponible
-· **❔** el código lo soporta pero aún no está confirmado en ese equipo
+· **—** todavía no probado en ese equipo
 
 | Característica | Steam Deck LCD | Steam Deck OLED | ROG Ally | ROG Ally X | ROG Xbox Ally X | Legion Go | Legion Go S | Legion Go 2 | MSI Claw 8 AI+ |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
 | Límite de TDP | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Mantener TDP con batería baja (experimental) | — | — | ✅ [¹⁸](#notas) | — | — | — | ✅ [¹⁸](#notas) | — | — |
 | Boost (SPPT/FPPT) | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹](#notas) |
 | Auto-TDP por carga de GPU | ✅ [²](#notas) | ✅ [²](#notas) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [³](#notas) |
-| Frecuencia de GPU | ❔ [⁴](#notas) | ❔ [⁴](#notas) | ❔ [⁴](#notas) | ❔ [⁴](#notas) | ❔ [⁴](#notas) | ❔ [⁴](#notas) | ❔ [⁴](#notas) | ❔ [⁴](#notas) | ❔ [⁴](#notas) |
+| Frecuencia de GPU | — [⁴](#notas) | — [⁴](#notas) | — [⁴](#notas) | — [⁴](#notas) | — [⁴](#notas) | — [⁴](#notas) | — [⁴](#notas) | — [⁴](#notas) | — [⁴](#notas) |
 | Batería: estado y salud | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Ciclos de batería | ❌ [⁵](#notas) | ❌ [⁵](#notas) | ❌ [⁵](#notas) | ❌ [⁵](#notas) | ❌ [⁵](#notas) | ✅ | ✅ | ✅ | ❌ [⁵](#notas) |
-| Límite de carga | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [⁶](#notas) | ❔ | ⚠️ [⁷](#notas) | ✅ |
+| Límite de carga | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [⁶](#notas) | — | ⚠️ [⁷](#notas) | ✅ |
 | CPU: turbo boost | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | CPU: multihilo (SMT) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [⁸](#notas) |
 | CPU: núcleos activos | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
@@ -172,9 +175,9 @@ Leyenda: **✅** comprobado en ese equipo · **⚠️** limitado o solo por defe
 | Ecualizador de sonido | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ [¹⁷](#notas) |
 | Modo Descarga | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Monitor de temperaturas | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ [⁹](#notas) |
-| Monitor de RPM de ventilador | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹⁰](#notas) | ✅ [⁹](#notas) |
-| Curvas de ventilador | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ [¹¹](#notas) | ⚠️ [¹²](#notas) | ❔ [¹⁰](#notas) | ⚠️ [⁹](#notas) |
-| Curvas aprendidas por juego | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ [¹¹](#notas) | ❌ [¹²](#notas) | ❔ [¹⁰](#notas) | ❌ [⁹](#notas) |
+| Monitor de RPM de ventilador | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — [¹⁰](#notas) | ✅ [⁹](#notas) |
+| Curvas de ventilador | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ [¹¹](#notas) | ⚠️ [¹²](#notas) | — [¹⁰](#notas) | ⚠️ [⁹](#notas) |
+| Curvas aprendidas por juego | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ [¹¹](#notas) | ❌ [¹²](#notas) | — [¹⁰](#notas) | ❌ [⁹](#notas) |
 | Modos de firmware (perfiles) | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ [¹¹](#notas) | ❌ | ❌ | ❌ |
 | Calibración de color | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ [¹³](#notas) |
 | Preset "Aspecto OLED" | ✅ | ❌ [¹⁴](#notas) | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ [¹⁴](#notas) | ✅ |
@@ -218,8 +221,8 @@ tenemos en mano, los reportes desde Ajustes son los que confirman lo que respond
    antes de decidir.
 3. El perfilado de consumo en Intel (RAPL / i915) todavía no está implementado, así que el auto-TDP
    por GPU no está disponible en el Claw. El resto del control de TDP sí funciona.
-4. La escritura de frecuencia de GPU está implementada por dispositivo, pero aún no se ha confirmado
-   con un cambio en vivo en ningún equipo. Marcado como sin confirmar hasta validarlo.
+4. La escritura de frecuencia de GPU está implementada por dispositivo, pero aún no se ha probado
+   con un cambio en vivo en ningún equipo.
 5. El contador de ciclos solo lo rellena el firmware de Lenovo; en ASUS, Steam Deck y MSI el nodo da
    un 0 falso, así que se oculta en vez de mostrar un cero inventado.
 6. La Legion Go original (83E1) no expone `conservation_mode`, así que no ofrece límite de carga.
@@ -232,8 +235,7 @@ tenemos en mano, los reportes desde Ajustes son los que confirman lo que respond
    escribir la curva. La curva que aplica el firmware se lee por el EC y se muestra en modo solo
    lectura; la edición está en desarrollo (el control de velocidad se ajustará de forma segura).
 10. La Legion Go 2 no expone un ventilador escribible por hwmon; el RPM tendría que leerse por el EC
-    y en la build actual no está apareciendo en el monitor. Por eso lo marco como no disponible / sin
-    confirmar hasta que pueda revisarlo.
+    y todavía no se ha validado esa ruta en el equipo.
 11. La Legion Go original controla la curva de ventilador por el driver de kernel `legion_wmi_fan`, que
     va en los kernels que lo incluyen y se enciende solo cuando está presente. Donde no está (SteamOS
     actual y algunos kernels), el ventilador lo gobiernan los **modos de firmware**
@@ -254,8 +256,11 @@ tenemos en mano, los reportes desde Ajustes son los que confirman lo que respond
 17. El ecualizador usa el filter-chain de PipeWire (disponible en SteamOS y Bazzite). El realce de
     graves y el nivelado de volumen necesitan el plugin CAPS del sistema; si no está instalado, el
     ecualizador funciona igual pero sin esos dos extras.
+18. La persistencia del TDP con batería baja es experimental, viene desactivada y se ha probado en
+    ROG Ally y Legion Go S. `—` indica que aún no la hemos probado en ese modelo, no que sea
+    incompatible.
 
-> Las celdas marcadas **❔** son las que aún no he confirmado en ese equipo concreto. Si tienes el
+> Las celdas marcadas **—** son las que aún no he probado en ese equipo concreto. Si tienes el
 > hardware delante y ves que algo va (o no va), dímelo y lo corrijo: la idea es que esta tabla
 > refleje la realidad, no lo que el código intenta hacer.
 

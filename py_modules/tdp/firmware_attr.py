@@ -63,6 +63,8 @@ class FirmwareAttrBackend(TDPBackend):
     (lenovo-wmi-other), MSI (msi-wmi-platform): ppt_pl1_spl/ppt_pl2_sppt/ppt_pl3_fppt
     with current_value (watts) + min_value/max_value. Never raises."""
 
+    low_battery_hold_strategy = "primary"
+
     def __init__(
         self,
         driver_prefix,

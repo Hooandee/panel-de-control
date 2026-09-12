@@ -31,6 +31,7 @@ from version import read_version
 from settings_store import SettingsStore
 from tdp import factory as tdp_factory
 from tdp.backend import NullBackend
+from tdp.low_battery_hold import decide_hold
 from tdp import powerstation as powerstation_conflict
 from tdp import suggest as tdp_suggest
 from tdp.reconcile import (
@@ -259,6 +260,7 @@ DEFAULTS = {
     # Master switch: when False we stop writing the TDP rails and Potencia drops to
     # monitor-only, handing TDP to another tool.
     "tdp_control_enabled": True,
+    "low_battery_tdp_hold": False,
     # Modules the user turned off in the customization editor (generic ids only;
     # power/learning are folded from tdp_control_enabled/telemetry_enabled).
     "disabled_modules": [],
@@ -345,6 +347,12 @@ class Plugin:
         )
         self._tdp_external_owner = None if self._os_id == "anatase" else False
         desktop_settings_changed = normalize_desktop_settings(self._settings)
+        low_battery_setting_changed = not isinstance(
+            self._settings.get("low_battery_tdp_hold"),
+            bool,
+        )
+        if low_battery_setting_changed:
+            self._settings["low_battery_tdp_hold"] = False
         # Probe hardware/environment HERE, wrapped so it NEVER raises — a raise in
         # init or _main bricks plugin load (UI stuck on spinner forever).
         self._device = device_registry.detect()
@@ -353,7 +361,11 @@ class Plugin:
         )
         self._desktop_recognition_migration_last_attempt = float("-inf")
         self._desktop_recognition_migration_last_failure = None
-        if migrate_desktop_defaults(self._settings, self._device) or desktop_settings_changed:
+        if (
+            migrate_desktop_defaults(self._settings, self._device)
+            or desktop_settings_changed
+            or low_battery_setting_changed
+        ):
             self._store.save(self._settings)
         self._tdp_profiles = ProfileStore(
             os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "tdp_profiles.json"),
@@ -409,6 +421,15 @@ class Plugin:
         self._tdp_backend = tdp_factory.select_backend(
             self._device,
             os_id=self._os_id,
+        )
+        self._low_battery_hold_backend = (
+            tdp_factory.select_low_battery_hold_backend(self._device)
+        )
+        self._low_battery_hold_last_write_at = None
+        self._low_battery_hold_cached_reassert_s = None
+        self._low_battery_hold_last_failure = None
+        self._low_battery_hold_recovery_pending = bool(
+            getattr(self._low_battery_hold_backend, "safety_locked", False)
         )
         self._steamdeck_ppt_history = deque(maxlen=32)
         self._steamdeck_ppt_last_failure = None
@@ -2081,7 +2102,15 @@ class Plugin:
                 return failure.get("reason", "restore_failed")
         return None
 
-    def _release_tdp_hardware(self, preserve_ownership=False) -> bool:
+    def _release_tdp_hardware(self, preserve_ownership=False) -> bool | None:
+        sidecar = getattr(self, "_low_battery_hold_backend", None)
+        if preserve_ownership and sidecar is not None and (
+            self._low_battery_sidecar_active()
+            or getattr(sidecar, "safety_locked", False)
+        ):
+            return None
+        if not self._release_low_battery_hold():
+            return False
         backend = getattr(self, "_tdp_backend", None)
         release = getattr(backend, "release", None)
         try:
@@ -2096,9 +2125,10 @@ class Plugin:
             else self._restore_steamdeck_ppt()
         )
 
-    def _restore_power_handoff(self, preserve_ownership=False) -> bool:
-        if not self._release_tdp_hardware(preserve_ownership):
-            return False
+    def _restore_power_handoff(self, preserve_ownership=False) -> bool | None:
+        hardware_released = self._release_tdp_hardware(preserve_ownership)
+        if hardware_released is not True:
+            return hardware_released
         return (
             self._restore_hhd_tdp(preserve_ownership=True)
             if preserve_ownership
@@ -2127,8 +2157,30 @@ class Plugin:
 
     async def _recover_tdp_startup_state(self) -> bool:
         managing = await self._prime_tdp_ownership()
+        sidecar = getattr(self, "_low_battery_hold_backend", None)
+        sidecar_locked = bool(getattr(sidecar, "safety_locked", False))
+        if sidecar_locked:
+            if self._os_id == "anatase" and managing is not False:
+                self._low_battery_hold_recovery_pending = True
+                self._low_battery_hold_last_failure = "external_owner"
+                decky.logger.warning(
+                    "Interrupted low-battery TDP hold recovery deferred: external owner"
+                )
+                return False
+            sidecar_recovered = await self._offload_call(
+                self._recover_low_battery_hold_transaction
+            )
+            self._low_battery_hold_recovery_pending = not sidecar_recovered
+            self._low_battery_hold_last_failure = (
+                None if sidecar_recovered else "restore_failed"
+            )
+            if not sidecar_recovered:
+                return False
         if self._os_id != "anatase" or managing is False:
-            return await self._offload_call(self._recover_tdp_runtime_transaction)
+            primary_recovered = await self._offload_call(
+                self._recover_tdp_runtime_transaction
+            )
+            return primary_recovered
         if not getattr(self._tdp_backend, "safety_locked", False):
             return True
         if managing is True:
@@ -2162,6 +2214,27 @@ class Plugin:
             reason,
         )
         return False
+
+    def _recover_low_battery_hold_transaction(self) -> bool:
+        backend = getattr(self, "_low_battery_hold_backend", None)
+        if backend is None or not getattr(backend, "safety_locked", False):
+            return True
+        recover = getattr(backend, "recover_runtime_transaction", None)
+        if not callable(recover):
+            return False
+        try:
+            result = recover()
+        except Exception as error:  # noqa: BLE001
+            decky.logger.error(
+                "Interrupted low-battery TDP hold recovery failed: %s",
+                type(error).__name__,
+            )
+            return False
+        ok = bool(isinstance(result, dict) and result.get("ok"))
+        detail = result.get("detail") if isinstance(result, dict) else "invalid response"
+        log = decky.logger.info if ok else decky.logger.warning
+        log("Interrupted low-battery TDP hold recovery: %s", detail)
+        return ok
 
     async def get_tdp_conflict(self) -> dict:
         """Which external managers can currently write the power rails."""
@@ -2231,7 +2304,26 @@ class Plugin:
             return {"ok": False, "hhd_managing": bool(applied)}
         if self._os_id == "anatase":
             self._tdp_external_owner = False
-        result = await self._apply_tdp_now("take-control")
+        if self._low_battery_hold_recovery_pending:
+            recovered = await self._offload_call(
+                self._recover_low_battery_hold_transaction
+            )
+            self._low_battery_hold_recovery_pending = not recovered
+            self._low_battery_hold_last_failure = (
+                None if recovered else "restore_failed"
+            )
+        else:
+            recovered = True
+        result = (
+            await self._apply_tdp_now("take-control")
+            if recovered
+            else TdpResult(
+                self._tdp_profiles.effective(self._current_appid)["pl1"],
+                None,
+                False,
+                "low-battery-hold-recovery-failed",
+            )
+        )
         if not result.ok:
             hardware_released = await self._offload_call(
                 self._release_tdp_hardware
@@ -2354,6 +2446,18 @@ class Plugin:
                 return False
             if not await self._probe_tdp_backend(force=True):
                 return False
+            if self._low_battery_hold_recovery_pending:
+                if not self._tdp_write_authorized():
+                    return False
+                recovered = await self._offload_call(
+                    self._recover_low_battery_hold_transaction
+                )
+                self._low_battery_hold_recovery_pending = not recovered
+                self._low_battery_hold_last_failure = (
+                    None if recovered else "restore_failed"
+                )
+                if not recovered:
+                    return False
         self._settings["tdp_control_enabled"] = enabled
         self._save()
         if not enabled:
@@ -3367,15 +3471,13 @@ class Plugin:
         )
         ac = read_on_ac()
         setpoint = self._effective_levels(self._current_appid, ac)[0]["pl1"]
-        if getattr(self._tdp_backend, "blocking", False):
+        observation_backend = self._tdp_observation_backend()
+        if getattr(observation_backend, "blocking", False):
             observation = self._tdp_observation
             applied = None
         else:
             observation = self._observe_tdp_sync()
-            primary = observation.surfaces.get(
-                self._tdp_backend.name,
-                {},
-            )
+            primary = observation.surfaces.get(observation_backend.name, {})
             pl1 = primary.get("pl1")
             applied = pl1.applied_w if pl1 is not None else None
         return {
@@ -3883,6 +3985,10 @@ class Plugin:
         )
 
     def _observe_tdp_sync(self):
+        sidecar = getattr(self, "_low_battery_hold_backend", None)
+        observe_hold = getattr(sidecar, "observe_hold", None)
+        if self._low_battery_sidecar_active() and callable(observe_hold):
+            return observe_hold()
         observe = getattr(self._tdp_backend, "observe", None)
         if callable(observe):
             return observe()
@@ -3893,6 +3999,10 @@ class Plugin:
                 "pl1": RailReading(applied),
             }
         return TdpObservation(readable=True, surfaces=surfaces)
+
+    def _tdp_observation_backend(self):
+        sidecar = getattr(self, "_low_battery_hold_backend", None)
+        return sidecar if self._low_battery_sidecar_active() else self._tdp_backend
 
     def _remember_tdp_observation(self, observation):
         self._tdp_observation = observation
@@ -3935,6 +4045,15 @@ class Plugin:
                 None,
                 False,
                 "stale-backend",
+            )
+        if self._low_battery_hold_recovery_pending:
+            self._tdp_status = "rejected"
+            self._tdp_reason = "low_battery_hold_recovery_pending"
+            return TdpResult(
+                logical_watts,
+                None,
+                False,
+                "low-battery-hold-recovery-pending",
             )
         if not self._tdp_supported():
             self._tdp_status, self._tdp_reason = "unsupported", ""
@@ -3980,8 +4099,18 @@ class Plugin:
                 requested=command.requested,
             )
             return result
+        sidecar = getattr(self, "_low_battery_hold_backend", None)
         mode = self._firmware_mode()
         if mode != _CUSTOM_MODE:
+            if sidecar is not None and not self._release_low_battery_hold():
+                self._tdp_status = "rejected"
+                self._tdp_reason = "low_battery_hold_restore_failed"
+                return TdpResult(
+                    logical_watts,
+                    None,
+                    False,
+                    "low-battery-hold-restore-failed",
+                )
             self._tdp_backend_used = True
             if not self._tdp_backend.set_profile(mode):
                 self._tdp_status = "rejected"
@@ -4020,6 +4149,35 @@ class Plugin:
                 requested=command.requested,
             )
             return result
+        if sidecar is not None:
+            hold = self._low_battery_hold_decision(command.on_ac)
+            if hold.active:
+                result = self._apply_low_battery_sidecar(
+                    command,
+                    time.monotonic(),
+                )
+                if command.generation != self._tdp_generation:
+                    return TdpResult(
+                        logical_watts,
+                        result.applied_w,
+                        False,
+                        "stale-generation",
+                    )
+                return TdpResult(
+                    logical_watts,
+                    result.applied_w,
+                    result.ok,
+                    result.detail,
+                )
+            if not self._release_low_battery_hold():
+                self._tdp_status = "rejected"
+                self._tdp_reason = "low_battery_hold_restore_failed"
+                return TdpResult(
+                    logical_watts,
+                    None,
+                    False,
+                    "low-battery-hold-restore-failed",
+                )
         ppt_failure = self._prepare_steamdeck_ppt(command)
         if ppt_failure is not None:
             self._tdp_status = "rejected"
@@ -4038,6 +4196,11 @@ class Plugin:
                 requested=command.requested,
             )
             return result
+        common_hold = (
+            self._low_battery_hold_decision(command.on_ac)
+            if sidecar is None
+            else None
+        )
         before = self._observe_tdp_sync()
         if command.generation != self._tdp_generation:
             return TdpResult(
@@ -4084,6 +4247,7 @@ class Plugin:
         self._tdp_status = outcome.status
         self._tdp_reason = outcome.reason
         self._tdp_conflict_persistent = outcome.conflict_persistent
+        self._remember_low_battery_primary_result(common_hold, result)
         self._record_tdp_transition(
             command.reason,
             action="apply",
@@ -4129,22 +4293,251 @@ class Plugin:
         command = self._capture_tdp_command(reason, on_ac)
         self._offload(lambda: self._execute_tdp_command(command))
 
-    def _tdp_authoritative_reassert_s(self):
-        if self._current_appid is None:
+    def _low_battery_hold_strategy(self):
+        sidecar = getattr(self, "_low_battery_hold_backend", None)
+        if sidecar is not None:
+            active = self._low_battery_sidecar_active()
+            if self._low_battery_hold_recovery_pending or not sidecar.supported or (
+                getattr(sidecar, "safety_locked", False) and not active
+            ):
+                return None
+            return getattr(sidecar, "low_battery_hold_strategy", None)
+        backend = self._tdp_backend
+        strategy = getattr(backend, "low_battery_hold_strategy", None)
+        if not strategy or not backend.supported or not getattr(backend, "readback", True):
             return None
-        return getattr(
-            self._tdp_backend,
-            "authoritative_reassert_s",
-            None,
+        if getattr(backend, "safety_locked", False):
+            return None
+        ready = getattr(backend, "ready", None)
+        if callable(ready):
+            try:
+                if not ready():
+                    return None
+            except Exception:  # noqa: BLE001
+                return None
+        return strategy
+
+    def _low_battery_hold_capability_strategy(self):
+        sidecar = getattr(self, "_low_battery_hold_backend", None)
+        if sidecar is not None:
+            configured = getattr(sidecar, "low_battery_hold_strategy", None)
+            if configured and (
+                getattr(sidecar, "low_battery_hold_capable", False)
+                or getattr(sidecar, "supported", False)
+                or getattr(sidecar, "safety_locked", False)
+            ):
+                return configured
+            return None
+        backend = self._tdp_backend
+        configured = getattr(backend, "low_battery_hold_strategy", None)
+        if (
+            configured
+            and backend.supported
+            and getattr(backend, "readback", True)
+        ):
+            return configured
+        return None
+
+    def _low_battery_hold_decision(self, on_ac=None):
+        enabled = self._settings.get("low_battery_tdp_hold") is True
+        strategy = (
+            self._low_battery_hold_strategy()
+            if enabled
+            else self._low_battery_hold_capability_strategy()
         )
+        ac = read_on_ac() if on_ac is None else bool(on_ac)
+        battery = self._battery.read() if enabled and strategy and not ac else {}
+        return decide_hold(
+            strategy=strategy,
+            enabled=enabled,
+            battery=battery,
+            on_ac=ac,
+            control_enabled=self._tdp_control_on(),
+            write_authorized=self._tdp_write_authorized(),
+            custom_mode=self._firmware_mode() == _CUSTOM_MODE,
+            auto_tdp=self._tdp_profiles.auto_tdp(self._current_appid),
+        )
+
+    def _remember_low_battery_primary_result(self, hold, result):
+        if hold is None:
+            return
+        if not hold.active:
+            self._low_battery_hold_last_failure = None
+            return
+        if result is None:
+            return
+        self._low_battery_hold_cached_reassert_s = hold.reassert_s
+        self._low_battery_hold_last_failure = None if result.ok else (
+            result.detail or "write_rejected"
+        )
+
+    def _low_battery_sidecar_active(self):
+        backend = getattr(self, "_low_battery_hold_backend", None)
+        diagnostics = getattr(backend, "diagnostics", None)
+        if not callable(diagnostics):
+            return False
+        try:
+            return bool(diagnostics().get("low_battery_hold_active"))
+        except Exception:  # noqa: BLE001
+            return False
+
+    def _release_low_battery_hold(self):
+        backend = getattr(self, "_low_battery_hold_backend", None)
+        needs_release = backend is not None and (
+            self._low_battery_sidecar_active()
+            or getattr(backend, "safety_locked", False)
+        )
+        if not needs_release:
+            self._low_battery_hold_last_write_at = None
+            return True
+        if not self._tdp_write_authorized():
+            self._low_battery_hold_recovery_pending = True
+            self._low_battery_hold_last_failure = "external_owner"
+            return False
+        release = getattr(backend, "release_hold", None)
+        try:
+            restored = bool(release()) if callable(release) else False
+        except Exception:  # noqa: BLE001
+            restored = False
+        if restored:
+            self._low_battery_hold_last_write_at = None
+            self._low_battery_hold_recovery_pending = False
+            self._low_battery_hold_last_failure = None
+        else:
+            self._low_battery_hold_recovery_pending = True
+            self._low_battery_hold_last_failure = "restore_failed"
+        return restored
+
+    def _guard_low_battery_sidecar(self, command, hold, now):
+        sidecar = getattr(self, "_low_battery_hold_backend", None)
+        if sidecar is None:
+            return False
+        if not hold.active:
+            if self._low_battery_sidecar_active():
+                decky.logger.info(
+                    "Low-battery TDP hold releasing reason=%s battery=%s",
+                    hold.reason,
+                    hold.battery_percent,
+                )
+            if not self._release_low_battery_hold():
+                self._tdp_status = "rejected"
+                self._tdp_reason = "low_battery_hold_restore_failed"
+                return True
+            return False
+        last_write = self._low_battery_hold_last_write_at
+        if last_write is not None and now - last_write < float(hold.reassert_s):
+            return True
+        self._apply_low_battery_sidecar(command, now)
+        return True
+
+    def _apply_low_battery_sidecar(self, command, now):
+        sidecar = self._low_battery_hold_backend
+        current = self._low_battery_hold_decision()
+        self._low_battery_hold_cached_reassert_s = current.reassert_s
+        if not current.active:
+            restored = self._release_low_battery_hold()
+            self._tdp_status = "unverifiable" if restored else "rejected"
+            self._tdp_reason = (
+                "low_battery_hold_condition_changed"
+                if restored
+                else "low_battery_hold_restore_failed"
+            )
+            return TdpResult(
+                command.logical_requested["pl1"],
+                None,
+                False,
+                "low-battery-hold-condition-changed",
+            )
+        self._low_battery_hold_last_write_at = now
+        sidecar_limits = getattr(sidecar, "low_battery_level_limits", None)
+        limits = self._limits()
+        active_max = self._active_max(limits, False)
+        bounds = (
+            sidecar_limits(active_max)
+            if callable(sidecar_limits)
+            else {}
+        )
+        for rail in ("pl1", "pl2", "pl3"):
+            bounds.setdefault(
+                rail,
+                command.safe_bounds.get(
+                    rail,
+                    {"min": limits.min_w, "max": limits.max_w},
+                ),
+            )
+        targets = build_targets(
+            command.logical_requested,
+            bounds,
+            TdpObservation(readable=False),
+        )
+        result = sidecar.hold_levels(targets.target)
+        self._tdp_targets = targets
+        if result.ok:
+            observe_hold = getattr(sidecar, "observe_hold", None)
+            observation = (
+                observe_hold()
+                if callable(observe_hold)
+                else TdpObservation(readable=False)
+            )
+            self._remember_tdp_observation(observation)
+            self._tdp_reconcile_memory = ReconcileMemory(last_write_at=now)
+            self._low_battery_hold_recovery_pending = False
+            self._low_battery_hold_last_failure = None
+        else:
+            self._low_battery_hold_recovery_pending = bool(
+                getattr(sidecar, "safety_locked", False)
+            )
+            self._low_battery_hold_last_failure = result.detail
+            self._remember_tdp_observation(self._observe_tdp_sync())
+        if result.ok and observation.readable:
+            self._tdp_status = "in_sync"
+            self._tdp_reason = "low_battery_hold"
+        elif result.ok:
+            self._tdp_status = "unverifiable"
+            self._tdp_reason = "low_battery_hold_unverified"
+        else:
+            self._tdp_status = "rejected"
+            self._tdp_reason = "low_battery_hold_failed"
+        self._record_tdp_transition(
+            "low-battery-hold",
+            action="reassert",
+            result=result,
+            on_ac=command.on_ac,
+            requested=command.logical_requested,
+        )
+        return result
+
+    def _tdp_authoritative_reassert_s(self, hold=None):
+        cadences = []
+        if self._current_appid is not None:
+            cadence = getattr(
+                self._tdp_backend,
+                "authoritative_reassert_s",
+                None,
+            )
+            if cadence is not None:
+                cadences.append(float(cadence))
+        if hold is not None and hold.reassert_s is not None:
+            cadences.append(float(hold.reassert_s))
+        return min(cadences) if cadences else None
 
     def _tdp_guard_tick(self, now=None):
         now = time.monotonic() if now is None else float(now)
         if self._tdp_shutdown:
             return
+        if self._low_battery_hold_recovery_pending:
+            self._tdp_status = "rejected"
+            self._tdp_reason = "low_battery_hold_recovery_pending"
+            self._tdp_reconcile_memory = ReconcileMemory()
+            return
         if not self._tdp_supported():
             self._tdp_status, self._tdp_reason = "unsupported", ""
             self._tdp_reconcile_memory = ReconcileMemory()
+            return
+        command = self._capture_tdp_command("guard", bump=False)
+        hold = self._low_battery_hold_decision()
+        self._low_battery_hold_cached_reassert_s = hold.reassert_s
+        if self._guard_low_battery_sidecar(command, hold, now):
             return
         if not self._tdp_control_on():
             self._tdp_status = "unverifiable"
@@ -4163,7 +4556,6 @@ class Plugin:
             self._tdp_reason = "firmware_mode"
             self._tdp_reconcile_memory = ReconcileMemory()
             return
-        command = self._capture_tdp_command("guard", bump=False)
         observation = self._observe_tdp_sync()
         if command.generation != self._tdp_generation:
             return
@@ -4188,7 +4580,7 @@ class Plugin:
                 "heartbeat_s",
                 None,
             ),
-            authoritative_reassert_s=self._tdp_authoritative_reassert_s(),
+            authoritative_reassert_s=self._tdp_authoritative_reassert_s(hold),
         )
         action = (
             "reassert"
@@ -4231,6 +4623,7 @@ class Plugin:
         self._tdp_status = outcome.status
         self._tdp_reason = outcome.reason
         self._tdp_conflict_persistent = outcome.conflict_persistent
+        self._remember_low_battery_primary_result(hold, result)
         self._record_tdp_transition(
             "guard",
             action=action,
@@ -4259,7 +4652,19 @@ class Plugin:
             due.append(ready_at)
         if memory.next_retry_at > now:
             due.append(memory.next_retry_at)
-        reassert_s = self._tdp_authoritative_reassert_s()
+        reassert_s = self._low_battery_hold_cached_reassert_s
+        if self._current_appid is not None:
+            primary_reassert = getattr(
+                self._tdp_backend,
+                "authoritative_reassert_s",
+                None,
+            )
+            if primary_reassert is not None:
+                reassert_s = (
+                    float(primary_reassert)
+                    if reassert_s is None
+                    else min(float(primary_reassert), float(reassert_s))
+                )
         if reassert_s is not None and memory.last_write_at is not None:
             due.append(memory.last_write_at + float(reassert_s))
         if not due:
@@ -5604,12 +6009,13 @@ class Plugin:
                     "tdp",
                     lambda: None,
                 )
+                observation_backend = self._tdp_observation_backend()
                 primary = (
-                    observation.surfaces.get(self._tdp_backend.name, {})
+                    observation.surfaces.get(observation_backend.name, {})
                     if getattr(observation, "readable", False)
                     else {}
                 )
-                primary_rail = getattr(self._tdp_backend, "primary_rail", "pl1")
+                primary_rail = getattr(observation_backend, "primary_rail", "pl1")
                 reading = primary.get(primary_rail)
                 snap["applied"] = reading.applied_w if reading is not None else None
             if "pdc_auto_tdp" in active_ids:
@@ -7405,13 +7811,51 @@ class Plugin:
             await self._offload_call(self._observe_tdp_sync)
         )
 
+    async def _read_tdp_state(self):
+        observation = await self._read_tdp_observation()
+        return await self._offload_call(
+            lambda: self._tdp_state(observation)
+        )
+
     async def get_tdp_state(self) -> dict:
         self._init()
         await self._ensure_recognised_desktop_migration()
         await self._retry_delayed_tdp_recovery()
         await self._probe_tdp_backend()
-        observation = await self._read_tdp_observation()
-        return self._tdp_state(observation)
+        return await self._read_tdp_state()
+
+    async def set_low_battery_tdp_hold(self, enabled: bool) -> dict:
+        self._init()
+        available = bool(self._low_battery_hold_capability_strategy())
+        self._settings["low_battery_tdp_hold"] = bool(enabled) and available
+        self._save()
+        if self._settings["low_battery_tdp_hold"]:
+            await self._apply_tdp_now("low-battery-hold-toggle")
+            await self._offload_call(self._tdp_guard_tick)
+        else:
+            restored = await self._offload_call(self._release_low_battery_hold)
+            if not restored:
+                self._tdp_status = "rejected"
+                self._tdp_reason = "low_battery_hold_restore_failed"
+            elif self._low_battery_hold_backend is not None:
+                await self._apply_tdp_now("low-battery-hold-toggle-off")
+            else:
+                self._low_battery_hold_last_failure = None
+                self._low_battery_hold_cached_reassert_s = None
+        return await self._read_tdp_state()
+
+    def _tdp_targets_match_observation(self, observation, backend) -> bool:
+        targets = self._tdp_targets
+        if targets is None or self._tdp_status != "in_sync":
+            return False
+        readings = observation.surfaces.get(backend.name, {})
+        tolerance = int(getattr(backend, "read_tolerance_w", 0))
+        for rail, target in targets.target.items():
+            reading = readings.get(rail)
+            applied = reading.applied_w if reading is not None else None
+            if applied is None or abs(int(applied) - int(target)) > tolerance:
+                return False
+        return bool(targets.target)
 
     def _tdp_state(self, observation) -> dict:
         levels, active, ac = self._effective_levels(self._current_appid)
@@ -7422,8 +7866,9 @@ class Plugin:
         geff = self._tdp_profiles.effective(None)
         requested_levels = self._clamp_requested_levels(eff, active, ll)
         global_requested_levels = self._clamp_requested_levels(geff, active, ll)
-        primary = observation.surfaces.get(self._tdp_backend.name, {})
-        primary_rail = getattr(self._tdp_backend, "primary_rail", "pl1")
+        observation_backend = self._tdp_observation_backend()
+        primary = observation.surfaces.get(observation_backend.name, {})
+        primary_rail = getattr(observation_backend, "primary_rail", "pl1")
         primary_reading = primary.get(primary_rail)
         applied_w = primary_reading.applied_w if primary_reading is not None else None
         ppt_capability = getattr(self._tdp_backend, "ppt_capability", None)
@@ -7439,10 +7884,34 @@ class Plugin:
                     "fast": fast.applied_w if fast is not None else None,
                 },
             }
+        low_battery_hold = self._low_battery_hold_decision(ac)
+        hold_available = bool(self._low_battery_hold_capability_strategy())
+        hold_enabled = (
+            self._settings.get("low_battery_tdp_hold") is True
+            and hold_available
+        )
+        sidecar_active = self._low_battery_sidecar_active()
+        hold_verified = self._tdp_targets_match_observation(
+            observation,
+            observation_backend,
+        )
+        hold_active = (
+            low_battery_hold.active
+            and not self._low_battery_hold_recovery_pending
+            and (
+                sidecar_active
+                and not self._low_battery_hold_last_failure
+                if self._low_battery_hold_backend is not None
+                else hold_verified
+            )
+        )
         return {
             "supported": self._tdp_supported(),
             "backend": self._tdp_backend.name,
-            "recovery_pending": self._tdp_delayed_recovery_pending(),
+            "recovery_pending": (
+                self._tdp_delayed_recovery_pending()
+                or self._low_battery_hold_recovery_pending
+            ),
             "request_min": TDP_REQUEST_MIN_W,
             "limits": {"min": limits.min_w, "default": limits.default_w,
                        "max": limits.max_w, "max_ac": limits.max_ac_w},
@@ -7475,6 +7944,31 @@ class Plugin:
             # Selectable firmware performance modes; empty on devices without them.
             "firmware_modes": self._firmware_choices(),
             "firmware_mode": self._firmware_mode(),
+            "low_battery_hold": {
+                "available": hold_available,
+                "enabled": hold_enabled,
+                "active": hold_active,
+                "verified": hold_active and hold_verified,
+                "status": (
+                    "recovery_pending"
+                    if self._low_battery_hold_recovery_pending
+                    else "verified" if hold_active and hold_verified
+                    else "unverified" if hold_active
+                    else "failed" if (
+                        self._low_battery_hold_last_failure
+                        and (
+                            self._low_battery_hold_backend is not None
+                            or low_battery_hold.active
+                        )
+                    ) or (
+                        low_battery_hold.active
+                        and self._tdp_status == "rejected"
+                    )
+                    else "inactive"
+                ),
+                "applied_w": applied_w if hold_active and hold_verified else None,
+                "reason": self._low_battery_hold_last_failure or low_battery_hold.reason,
+            },
             "ownership": self._tdp_ownership_state(observation),
             # Master switch + one-time-notice flags (durable across reboot; the
             # frontend gates monitor-only mode + the first-run modals off these).
@@ -7496,10 +7990,8 @@ class Plugin:
             else {}
         )
         applied = {}
-        primary = observation.surfaces.get(
-            self._tdp_backend.name,
-            {},
-        )
+        observation_backend = self._tdp_observation_backend()
+        primary = observation.surfaces.get(observation_backend.name, {})
         for rail, reading in primary.items():
             applied[rail] = reading.applied_w
         return {
@@ -7847,6 +8339,8 @@ class Plugin:
         return self._recover_tdp_runtime_transaction()
 
     def _tdp_supported(self) -> bool:
+        if getattr(self, "_low_battery_hold_recovery_pending", False):
+            return False
         if not self._tdp_backend.supported:
             return False
         ready = getattr(self._tdp_backend, "ready", None)
@@ -7899,6 +8393,36 @@ class Plugin:
         except Exception as exc:  # noqa: BLE001
             errors["rails"] = type(exc).__name__
             rails = []
+        hold = self._low_battery_hold_decision()
+        sidecar = getattr(self, "_low_battery_hold_backend", None)
+        sidecar_diagnostics = getattr(sidecar, "diagnostics", None)
+        if sidecar is None:
+            sidecar_detail = None
+        else:
+            try:
+                details = sidecar_diagnostics() if callable(sidecar_diagnostics) else {}
+            except Exception as exc:  # noqa: BLE001
+                details = {"diagnostics_error": type(exc).__name__}
+            sidecar_detail = {
+                "backend": getattr(sidecar, "name", "unknown"),
+                "supported": bool(getattr(sidecar, "supported", False)),
+                **details,
+            }
+        observation_backend = sidecar if sidecar is not None else self._tdp_backend
+        hold_verified = self._tdp_targets_match_observation(
+            self._tdp_observation,
+            observation_backend,
+        )
+        hold_active = (
+            hold.active
+            and not self._low_battery_hold_recovery_pending
+            and (
+                self._low_battery_sidecar_active()
+                and not self._low_battery_hold_last_failure
+                if sidecar is not None
+                else hold_verified
+            )
+        )
         return {
             "device_key": self._device.key,
             "generic": bool(self._device.is_generic),
@@ -7917,6 +8441,16 @@ class Plugin:
                 "authoritative_reassert_s",
                 None,
             ),
+            "low_battery_hold": {
+                "strategy": self._low_battery_hold_capability_strategy(),
+                "enabled": self._settings.get("low_battery_tdp_hold") is True,
+                "active": hold_active,
+                "verified": hold_active and hold_verified,
+                "recovery_pending": self._low_battery_hold_recovery_pending,
+                "reason": self._low_battery_hold_last_failure or hold.reason,
+                "battery_percent": hold.battery_percent,
+                "sidecar": sidecar_detail,
+            },
             "read_tolerance_w": int(
                 getattr(self._tdp_backend, "read_tolerance_w", 0)
             ),
@@ -8015,7 +8549,7 @@ class Plugin:
                 "game", appid, context_appid
             )
         ):
-            return self._tdp_state(await self._read_tdp_observation())
+            return await self._read_tdp_state()
         if appid is not None:
             self._clear_eco()
             appid = str(appid)
@@ -8026,7 +8560,7 @@ class Plugin:
                 self._tdp_profiles.create_game_from_global(appid)
             self._tdp_profiles.set_follow_global(appid, bool(follow))
             await self._apply_tdp_now("follow-global")
-        return self._tdp_state(await self._read_tdp_observation())
+        return await self._read_tdp_state()
 
     async def set_tdp_firmware_mode(self, mode: str) -> dict:
         """Select a firmware performance mode (Legion Go original). 'low-power' /
@@ -8089,13 +8623,13 @@ class Plugin:
             context_appid is not _RPC_CONTEXT_UNSET
             and not self._scope_context_is_current(scope, appid, context_appid)
         ):
-            return self._tdp_state(await self._read_tdp_observation())
+            return await self._read_tdp_state()
         resolved = self._resolve_scope(scope, appid)
         if resolved is not None:  # invalid scope → no-op (never from the UI)
             self._clear_eco()
             self._tdp_profiles.set_boost_mode(resolved, mode, appid=appid)
             await self._apply_tdp_now("boost-mode")
-        return self._tdp_state(await self._read_tdp_observation())
+        return await self._read_tdp_state()
 
     def _preset_wclamp(self):
         lim = self._automatic_limits()
@@ -8834,7 +9368,16 @@ class Plugin:
             if preserve_recovery
             else self._restore_power_handoff()
         )
-        decky.logger.info(f"Shutdown stage {stage}:power-handoff ok=%s", power_released)
+        power_status = (
+            "deferred"
+            if power_released is None
+            else "complete" if power_released
+            else "failed"
+        )
+        decky.logger.info(
+            f"Shutdown stage {stage}:power-handoff status=%s",
+            power_status,
+        )
 
     def _defer_shutdown_handoff(self, stage: str, remove_fan_conf: bool = False) -> bool:
         executor = getattr(self, "_apply_executor", None)

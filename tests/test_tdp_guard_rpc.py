@@ -16,6 +16,7 @@ class FakeBackend(TDPBackend):
     supported = True
     supports_levels = True
     name = "fake"
+    low_battery_hold_strategy = "primary"
 
     def __init__(self):
         self.set_levels_calls = 0
@@ -117,6 +118,53 @@ class FakeFan:
 
     def restore_auto(self):
         pass
+
+
+class FakeLowBatteryHoldBackend:
+    supported = True
+    low_battery_hold_capable = True
+    low_battery_hold_strategy = "legion-go-s-83n6"
+    name = "ryzenadj-low-battery-hold"
+    safety_locked = False
+
+    def __init__(self):
+        self.calls = []
+        self.active = False
+        self.releases = 0
+        self.release_ok = True
+
+    def low_battery_level_limits(self, maximum=None):
+        maximum = 35 if maximum is None else int(maximum)
+        return {
+            "pl1": {"min": 5, "max": maximum},
+            "pl2": {"min": 15, "max": maximum},
+            "pl3": {"min": 20, "max": maximum},
+        }
+
+    def hold_levels(self, levels):
+        self.calls.append(dict(levels))
+        self.active = True
+        self.safety_locked = True
+        return TdpResult(
+            levels["pl1"],
+            None,
+            True,
+            "command accepted (limit readback unavailable)",
+        )
+
+    def release_hold(self):
+        self.releases += 1
+        if not self.release_ok:
+            return False
+        self.active = False
+        self.safety_locked = False
+        return True
+
+    def observe_hold(self):
+        return TdpObservation(readable=False)
+
+    def diagnostics(self):
+        return {"low_battery_hold_active": self.active}
 
 
 @pytest.fixture
@@ -248,6 +296,56 @@ def test_named_firmware_mode_does_not_write_rails(plugin):
     assert plugin._tdp_history[-1]["firmware_mode"] == "performance"
 
 
+def test_named_firmware_mode_releases_active_sidecar_before_applying_profile(
+    plugin,
+    monkeypatch,
+):
+    plugin._device = replace(plugin._device, firmware_modes=True)
+    plugin._settings["firmware_mode"] = "performance"
+    sidecar = FakeLowBatteryHoldBackend()
+    sidecar.active = True
+    sidecar.safety_locked = True
+    plugin._low_battery_hold_backend = sidecar
+    order = []
+    original_release = sidecar.release_hold
+
+    monkeypatch.setattr(
+        sidecar,
+        "release_hold",
+        lambda: order.append("release") or original_release(),
+    )
+    monkeypatch.setattr(
+        plugin._tdp_backend,
+        "set_profile",
+        lambda mode: order.append(f"profile:{mode}") or True,
+    )
+
+    result = plugin._execute_tdp_command(
+        plugin._capture_tdp_command("firmware-mode")
+    )
+
+    assert result.ok is True
+    assert order == ["release", "profile:performance"]
+
+
+def test_named_firmware_mode_stops_when_active_sidecar_cannot_release(plugin):
+    plugin._device = replace(plugin._device, firmware_modes=True)
+    plugin._settings["firmware_mode"] = "performance"
+    sidecar = FakeLowBatteryHoldBackend()
+    sidecar.active = True
+    sidecar.safety_locked = True
+    sidecar.release_ok = False
+    plugin._low_battery_hold_backend = sidecar
+
+    result = plugin._execute_tdp_command(
+        plugin._capture_tdp_command("firmware-mode")
+    )
+
+    assert result.ok is False
+    assert plugin._tdp_backend._profile == "custom"
+    assert plugin._tdp_reason == "low_battery_hold_restore_failed"
+
+
 def test_rejected_firmware_mode_is_reported_and_not_persisted(
     plugin,
     monkeypatch,
@@ -318,6 +416,502 @@ def test_authoritative_reassert_is_idle_without_running_game(plugin):
     plugin._tdp_backend.set_levels_calls = 0
 
     plugin._tdp_guard_tick(now=115.0)
+
+    assert plugin._tdp_backend.set_levels_calls == 0
+
+
+def test_low_battery_hold_reasserts_the_selected_global_tdp(plugin, monkeypatch):
+    import main as main_module
+
+    monkeypatch.setattr(main_module, "read_on_ac", lambda root="/": False)
+    monkeypatch.setattr(
+        plugin._battery,
+        "read",
+        lambda: {"present": True, "percent": 20, "status": "Discharging"},
+    )
+    plugin._settings["low_battery_tdp_hold"] = True
+    plugin._tdp_profiles.set_levels("global", 19, 23, 27)
+    plugin._execute_tdp_command(plugin._capture_tdp_command("initial"))
+    plugin._tdp_backend.set_levels_calls = 0
+    plugin._tdp_reconcile_memory = ReconcileMemory(last_write_at=100.0)
+
+    plugin._tdp_guard_tick(now=114.9)
+    plugin._tdp_guard_tick(now=115.0)
+
+    assert plugin._tdp_backend.set_levels_calls == 1
+    assert plugin._tdp_backend._levels == {"pl1": 19, "pl2": 23, "pl3": 27}
+    assert plugin._tdp_profiles.effective(None)["pl1"] == 19
+
+
+def test_primary_hold_is_not_verified_from_a_stale_in_sync_status(
+    plugin,
+    monkeypatch,
+):
+    import main as main_module
+
+    monkeypatch.setattr(main_module, "read_on_ac", lambda root="/": False)
+    monkeypatch.setattr(
+        plugin._battery,
+        "read",
+        lambda: {"present": True, "percent": 20, "status": "Discharging"},
+    )
+    plugin._settings["low_battery_tdp_hold"] = True
+    plugin._tdp_profiles.set_levels("global", 20, 23, 27)
+    plugin._execute_tdp_command(plugin._capture_tdp_command("initial"))
+    assert plugin._tdp_status == "in_sync"
+    plugin._tdp_backend._levels = {"pl1": 15, "pl2": 15, "pl3": 20}
+
+    state = plugin._tdp_state(plugin._tdp_backend.observe())
+
+    assert state["low_battery_hold"]["active"] is False
+    assert state["low_battery_hold"]["verified"] is False
+
+
+def test_low_battery_hold_off_does_not_read_battery_or_add_writes(plugin, monkeypatch):
+    import main as main_module
+
+    monkeypatch.setattr(main_module, "read_on_ac", lambda root="/": False)
+    monkeypatch.setattr(
+        plugin._battery,
+        "read",
+        lambda: (_ for _ in ()).throw(AssertionError("battery read while disabled")),
+    )
+    plugin._settings["low_battery_tdp_hold"] = False
+    plugin._tdp_reconcile_memory = ReconcileMemory(last_write_at=100.0)
+    plugin._tdp_backend.set_levels_calls = 0
+
+    plugin._tdp_guard_tick(now=115.0)
+
+    assert plugin._tdp_backend.set_levels_calls == 0
+
+
+def test_low_battery_hold_setting_is_persisted_and_returned(plugin, monkeypatch):
+    monkeypatch.setattr(
+        plugin._battery,
+        "read",
+        lambda: {"present": True, "percent": 42, "status": "Discharging"},
+    )
+
+    state = asyncio.run(plugin.set_low_battery_tdp_hold(True))
+
+    assert plugin._settings["low_battery_tdp_hold"] is True
+    assert state["low_battery_hold"] == {
+        "available": True,
+        "enabled": True,
+        "active": False,
+        "verified": False,
+        "status": "inactive",
+        "applied_w": None,
+        "reason": "on_ac",
+    }
+
+
+def test_legion_go_s_hold_uses_requested_rails_without_the_firmware_cap(
+    plugin,
+    monkeypatch,
+):
+    import main as main_module
+
+    sidecar = FakeLowBatteryHoldBackend()
+    plugin._low_battery_hold_backend = sidecar
+    monkeypatch.setattr(main_module, "read_on_ac", lambda root="/": False)
+    monkeypatch.setattr(
+        plugin._battery,
+        "read",
+        lambda: {"present": True, "percent": 19, "status": "Discharging"},
+    )
+    plugin._settings["low_battery_tdp_hold"] = True
+    plugin._tdp_profiles.set_levels("global", 19, 23, 27)
+    plugin._tdp_backend.live_max = 15
+    plugin._tdp_backend.set_levels_calls = 0
+
+    plugin._tdp_guard_tick(now=10.0)
+    plugin._tdp_guard_tick(now=11.9)
+    plugin._tdp_guard_tick(now=12.0)
+
+    assert sidecar.calls == [
+        {"pl1": 19, "pl2": 23, "pl3": 27},
+        {"pl1": 19, "pl2": 23, "pl3": 27},
+    ]
+    assert plugin._tdp_backend.set_levels_calls == 0
+
+
+def test_legion_go_s_manual_change_uses_the_hold_route_immediately(
+    plugin,
+    monkeypatch,
+):
+    import main as main_module
+
+    sidecar = FakeLowBatteryHoldBackend()
+    plugin._low_battery_hold_backend = sidecar
+    monkeypatch.setattr(main_module, "read_on_ac", lambda root="/": False)
+    monkeypatch.setattr(
+        plugin._battery,
+        "read",
+        lambda: {"present": True, "percent": 18, "status": "Discharging"},
+    )
+    plugin._settings["low_battery_tdp_hold"] = True
+    plugin._tdp_profiles.set_levels("global", 18, 22, 26)
+    plugin._tdp_backend.live_max = 15
+    plugin._tdp_backend.set_levels_calls = 0
+
+    result = plugin._execute_tdp_command(
+        plugin._capture_tdp_command("manual")
+    )
+
+    assert result.ok is True
+    assert sidecar.calls == [{"pl1": 18, "pl2": 22, "pl3": 26}]
+    assert plugin._tdp_backend.set_levels_calls == 0
+
+
+def test_legion_go_s_hold_respects_boost_rail_floors(
+    plugin,
+    monkeypatch,
+):
+    import main as main_module
+
+    sidecar = FakeLowBatteryHoldBackend()
+    plugin._low_battery_hold_backend = sidecar
+    monkeypatch.setattr(main_module, "read_on_ac", lambda root="/": False)
+    monkeypatch.setattr(
+        plugin._battery,
+        "read",
+        lambda: {"present": True, "percent": 18, "status": "Discharging"},
+    )
+    monkeypatch.setattr(
+        plugin._tdp_backend,
+        "level_limits",
+        lambda: {
+            "pl1": {"min": 5, "max": 35},
+            "pl2": {"min": 15, "max": 35},
+            "pl3": {"min": 20, "max": 35},
+        },
+    )
+    plugin._settings["low_battery_tdp_hold"] = True
+    plugin._tdp_profiles.set_levels("global", 5, 5, 5)
+
+    plugin._execute_tdp_command(plugin._capture_tdp_command("manual"))
+
+    assert sidecar.calls == [{"pl1": 5, "pl2": 15, "pl3": 20}]
+
+
+def test_legion_go_s_hold_builds_all_rails_when_primary_only_has_pl1(
+    plugin,
+    monkeypatch,
+):
+    import main as main_module
+
+    sidecar = FakeLowBatteryHoldBackend()
+    plugin._low_battery_hold_backend = sidecar
+    plugin._tdp_backend.supports_levels = False
+    monkeypatch.setattr(main_module, "read_on_ac", lambda root="/": False)
+    monkeypatch.setattr(
+        plugin._battery,
+        "read",
+        lambda: {"present": True, "percent": 18, "status": "Discharging"},
+    )
+    plugin._settings["low_battery_tdp_hold"] = True
+    plugin._tdp_profiles.set_levels("global", 5, 5, 5)
+
+    plugin._execute_tdp_command(plugin._capture_tdp_command("manual"))
+
+    assert sidecar.calls == [{"pl1": 5, "pl2": 15, "pl3": 20}]
+
+
+def test_legion_go_s_hold_honours_the_existing_battery_ceiling_opt_in(
+    plugin,
+    monkeypatch,
+):
+    import main as main_module
+
+    sidecar = FakeLowBatteryHoldBackend()
+    plugin._low_battery_hold_backend = sidecar
+    monkeypatch.setattr(
+        plugin._tdp_backend,
+        "get_limits",
+        lambda: TdpLimits(min_w=5, default_w=15, max_w=33, max_ac_w=40),
+    )
+    monkeypatch.setattr(main_module, "read_on_ac", lambda root="/": False)
+    monkeypatch.setattr(
+        plugin._battery,
+        "read",
+        lambda: {"present": True, "percent": 18, "status": "Discharging"},
+    )
+    plugin._settings["unlock_battery_max"] = True
+    plugin._settings["low_battery_tdp_hold"] = True
+    plugin._tdp_profiles.set_levels("global", 38, 38, 38)
+
+    plugin._execute_tdp_command(plugin._capture_tdp_command("manual"))
+
+    assert sidecar.calls == [{"pl1": 38, "pl2": 38, "pl3": 38}]
+
+
+def test_legion_go_s_write_only_hold_is_active_without_claiming_verification(
+    plugin,
+    monkeypatch,
+):
+    import main as main_module
+
+    sidecar = FakeLowBatteryHoldBackend()
+    plugin._low_battery_hold_backend = sidecar
+    monkeypatch.setattr(main_module, "read_on_ac", lambda root="/": False)
+    monkeypatch.setattr(
+        plugin._battery,
+        "read",
+        lambda: {"present": True, "percent": 18, "status": "Discharging"},
+    )
+    plugin._settings["low_battery_tdp_hold"] = True
+    plugin._tdp_profiles.set_levels("global", 19, 23, 27)
+
+    plugin._execute_tdp_command(plugin._capture_tdp_command("manual"))
+    state = plugin._tdp_state(plugin._tdp_observation)
+
+    assert state["low_battery_hold"]["active"] is True
+    assert state["low_battery_hold"]["verified"] is False
+    assert state["low_battery_hold"]["status"] == "unverified"
+    assert state["low_battery_hold"]["applied_w"] is None
+    assert state["ownership"]["status"] == "unverifiable"
+
+
+def test_legion_go_s_ac_reapply_restores_hold_before_using_primary(
+    plugin,
+    monkeypatch,
+):
+    sidecar = FakeLowBatteryHoldBackend()
+    sidecar.active = True
+    plugin._low_battery_hold_backend = sidecar
+    monkeypatch.setattr(
+        plugin._battery,
+        "read",
+        lambda: {"present": True, "percent": 18, "status": "Charging"},
+    )
+    plugin._settings["low_battery_tdp_hold"] = True
+    plugin._tdp_backend.set_levels_calls = 0
+
+    result = plugin._execute_tdp_command(
+        plugin._capture_tdp_command("ac-change", on_ac=True)
+    )
+
+    assert result.ok is True
+    assert sidecar.releases == 1
+    assert plugin._tdp_backend.set_levels_calls == 1
+
+
+def test_legion_go_s_hold_restores_its_snapshot_when_battery_recovers(
+    plugin,
+    monkeypatch,
+):
+    import main as main_module
+
+    sidecar = FakeLowBatteryHoldBackend()
+    sidecar.active = True
+    plugin._low_battery_hold_backend = sidecar
+    monkeypatch.setattr(main_module, "read_on_ac", lambda root="/": False)
+    monkeypatch.setattr(
+        plugin._battery,
+        "read",
+        lambda: {"present": True, "percent": 21, "status": "Discharging"},
+    )
+    plugin._settings["low_battery_tdp_hold"] = True
+
+    plugin._tdp_guard_tick(now=10.0)
+
+    assert sidecar.releases == 1
+    assert sidecar.active is False
+
+
+def test_failed_sidecar_restore_blocks_the_primary_guard(plugin, monkeypatch):
+    import main as main_module
+
+    sidecar = FakeLowBatteryHoldBackend()
+    sidecar.active = True
+    sidecar.safety_locked = True
+    sidecar.release_ok = False
+    plugin._low_battery_hold_backend = sidecar
+    monkeypatch.setattr(main_module, "read_on_ac", lambda root="/": False)
+    monkeypatch.setattr(
+        plugin._battery,
+        "read",
+        lambda: {"present": True, "percent": 21, "status": "Discharging"},
+    )
+    plugin._settings["low_battery_tdp_hold"] = True
+    plugin._tdp_backend.set_levels_calls = 0
+
+    plugin._tdp_guard_tick(now=10.0)
+
+    assert sidecar.releases == 1
+    assert plugin._tdp_backend.set_levels_calls == 0
+    assert plugin._tdp_status == "rejected"
+    assert plugin._tdp_reason == "low_battery_hold_restore_failed"
+    assert plugin._low_battery_hold_recovery_pending is True
+
+
+def test_failed_sidecar_restore_is_reported_when_toggle_is_disabled(
+    plugin,
+    monkeypatch,
+):
+    sidecar = FakeLowBatteryHoldBackend()
+    sidecar.active = True
+    sidecar.safety_locked = True
+    sidecar.release_ok = False
+    plugin._low_battery_hold_backend = sidecar
+    plugin._settings["low_battery_tdp_hold"] = True
+
+    state = asyncio.run(plugin.set_low_battery_tdp_hold(False))
+
+    assert plugin._settings["low_battery_tdp_hold"] is False
+    assert state["supported"] is False
+    assert state["low_battery_hold"]["enabled"] is False
+    assert state["low_battery_hold"]["active"] is False
+    assert state["low_battery_hold"]["status"] == "recovery_pending"
+    assert state["low_battery_hold"]["verified"] is False
+
+
+def test_disabling_sidecar_reapplies_the_primary_backend_after_restore(plugin):
+    sidecar = FakeLowBatteryHoldBackend()
+    sidecar.active = True
+    sidecar.safety_locked = True
+    plugin._low_battery_hold_backend = sidecar
+    plugin._settings["low_battery_tdp_hold"] = True
+    plugin._tdp_backend.set_levels_calls = 0
+
+    state = asyncio.run(plugin.set_low_battery_tdp_hold(False))
+
+    assert sidecar.releases == 1
+    assert plugin._tdp_backend.set_levels_calls == 1
+    assert state["low_battery_hold"]["enabled"] is False
+
+
+def test_emergency_handoff_defers_all_power_writers_until_serial_worker(
+    plugin,
+    monkeypatch,
+):
+    sidecar = FakeLowBatteryHoldBackend()
+    sidecar.active = True
+    sidecar.safety_locked = True
+    plugin._low_battery_hold_backend = sidecar
+    handoffs = []
+    monkeypatch.setattr(
+        plugin,
+        "_restore_hhd_tdp",
+        lambda preserve_ownership=False: handoffs.append(preserve_ownership) or True,
+    )
+
+    assert plugin._restore_power_handoff(preserve_ownership=True) is None
+    assert sidecar.releases == 0
+    assert handoffs == []
+
+
+def test_power_draw_does_not_publish_cached_primary_blocking_readback(plugin):
+    plugin._tdp_backend.blocking = True
+    plugin._tdp_observation = plugin._tdp_backend.observe()
+
+    power = asyncio.run(plugin.get_power_draw())
+
+    assert power["applied"] is None
+
+
+def test_failed_common_hold_is_never_reported_as_active(plugin, monkeypatch):
+    import main as main_module
+
+    monkeypatch.setattr(main_module, "read_on_ac", lambda root="/": False)
+    monkeypatch.setattr(
+        plugin._battery,
+        "read",
+        lambda: {"present": True, "percent": 18, "status": "Discharging"},
+    )
+    monkeypatch.setattr(
+        plugin._tdp_backend,
+        "set_levels",
+        lambda pl1, pl2, pl3, ac: TdpResult(pl1, None, False, "rejected"),
+    )
+    plugin._settings["low_battery_tdp_hold"] = True
+
+    plugin._execute_tdp_command(plugin._capture_tdp_command("manual"))
+    state = plugin._tdp_state(plugin._tdp_observation)
+
+    assert state["low_battery_hold"]["active"] is False
+    assert state["low_battery_hold"]["verified"] is False
+    assert state["low_battery_hold"]["status"] == "failed"
+
+
+def test_sidecar_rechecks_ac_immediately_before_writing(plugin, monkeypatch):
+    import main as main_module
+
+    sidecar = FakeLowBatteryHoldBackend()
+    plugin._low_battery_hold_backend = sidecar
+    monkeypatch.setattr(main_module, "read_on_ac", lambda root="/": True)
+    monkeypatch.setattr(
+        plugin._battery,
+        "read",
+        lambda: {"present": True, "percent": 18, "status": "Discharging"},
+    )
+    plugin._settings["low_battery_tdp_hold"] = True
+    command = plugin._capture_tdp_command("manual", on_ac=False)
+
+    result = plugin._execute_tdp_command(command)
+
+    assert sidecar.calls == []
+    assert result.detail == "low-battery-hold-condition-changed"
+
+
+def test_startup_recovers_an_interrupted_low_battery_hold(plugin, monkeypatch):
+    recovered = []
+    plugin._low_battery_hold_backend = types.SimpleNamespace(
+        safety_locked=True,
+        recover_runtime_transaction=lambda: recovered.append(True) or {
+            "ok": True,
+            "detail": "restored",
+        },
+    )
+
+    async def ownership_is_free():
+        return False
+
+    monkeypatch.setattr(plugin, "_prime_tdp_ownership", ownership_is_free)
+    monkeypatch.setattr(plugin, "_recover_tdp_runtime_transaction", lambda: True)
+
+    assert asyncio.run(plugin._recover_tdp_startup_state()) is True
+    assert recovered == [True]
+
+
+def test_anatase_defers_sidecar_recovery_while_hhd_owns_tdp(plugin, monkeypatch):
+    recovered = []
+    plugin._os_id = "anatase"
+    plugin._low_battery_hold_backend = types.SimpleNamespace(
+        safety_locked=True,
+        recover_runtime_transaction=lambda: recovered.append(True) or {
+            "ok": True,
+            "detail": "restored",
+        },
+    )
+    plugin._low_battery_hold_recovery_pending = True
+
+    async def ownership_is_external():
+        plugin._tdp_external_owner = True
+        return True
+
+    monkeypatch.setattr(plugin, "_prime_tdp_ownership", ownership_is_external)
+
+    assert asyncio.run(plugin._recover_tdp_startup_state()) is False
+    assert recovered == []
+    assert plugin._low_battery_hold_recovery_pending is True
+    assert plugin._tdp_supported() is False
+
+
+def test_string_false_does_not_enable_low_battery_hold(plugin, monkeypatch):
+    import main as main_module
+
+    monkeypatch.setattr(main_module, "read_on_ac", lambda root="/": False)
+    monkeypatch.setattr(
+        plugin._battery,
+        "read",
+        lambda: (_ for _ in ()).throw(AssertionError("invalid bool read battery")),
+    )
+    plugin._settings["low_battery_tdp_hold"] = "false"
+    plugin._tdp_backend.set_levels_calls = 0
+
+    plugin._tdp_guard_tick(now=15.0)
 
     assert plugin._tdp_backend.set_levels_calls == 0
 
@@ -711,6 +1305,16 @@ def test_backend_diagnostics_explain_selection_without_personal_identifiers(plug
     assert descriptor["guard_interval_s"] == 2.0
     assert descriptor["read_tolerance_w"] == 0
     assert descriptor["authoritative_reassert_s"] is None
+    assert descriptor["low_battery_hold"] == {
+        "strategy": "primary",
+        "enabled": False,
+        "active": False,
+        "verified": False,
+        "recovery_pending": False,
+        "reason": "disabled",
+        "battery_percent": None,
+        "sidecar": None,
+    }
     assert descriptor["limits"]["default"] == 15
     assert descriptor["level_limits"]["pl1"]["max"] == 35
     assert descriptor["probe_trace"][0]["candidate"] == "fake"
@@ -726,6 +1330,30 @@ def test_backend_diagnostics_publish_authoritative_reassert_cadence(plugin):
     descriptor = plugin._tdp_backend_diagnostics()
 
     assert descriptor["authoritative_reassert_s"] == 15.0
+
+
+def test_backend_diagnostics_keep_write_only_sidecar_active_but_unverified(
+    plugin,
+    monkeypatch,
+):
+    import main as main_module
+
+    sidecar = FakeLowBatteryHoldBackend()
+    plugin._low_battery_hold_backend = sidecar
+    monkeypatch.setattr(main_module, "read_on_ac", lambda root="/": False)
+    monkeypatch.setattr(
+        plugin._battery,
+        "read",
+        lambda: {"present": True, "percent": 18, "status": "Discharging"},
+    )
+    plugin._settings["low_battery_tdp_hold"] = True
+    plugin._tdp_profiles.set_levels("global", 20, 20, 20)
+    plugin._execute_tdp_command(plugin._capture_tdp_command("manual"))
+
+    descriptor = plugin._tdp_backend_diagnostics()
+
+    assert descriptor["low_battery_hold"]["active"] is True
+    assert descriptor["low_battery_hold"]["verified"] is False
 
 
 def test_backend_diagnostics_are_logged_once_as_compact_json(plugin):

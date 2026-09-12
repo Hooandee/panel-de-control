@@ -204,6 +204,16 @@ export interface SteamDeckPptState {
   applied: { slow: number | null; fast: number | null };
 }
 
+export interface LowBatteryTdpHoldState {
+  available: boolean;
+  enabled: boolean;
+  active: boolean;
+  verified: boolean;
+  status: "inactive" | "verified" | "unverified" | "failed" | "recovery_pending";
+  applied_w: number | null;
+  reason: string;
+}
+
 export interface TdpState {
   supported: boolean;
   backend: string;
@@ -240,6 +250,7 @@ export interface TdpState {
   // hides the selector. firmware_mode is the active one ("custom" = our TDP slider).
   firmware_modes: string[];
   firmware_mode: string;
+  low_battery_hold: LowBatteryTdpHoldState;
   ownership: TdpOwnership;
   // Master switch: when false we stop writing rails → Potencia drops to monitor-only.
   tdp_control_enabled: boolean;
@@ -304,6 +315,9 @@ export interface FanState {
 export const getFanState = callable<[], FanState>("get_fan_state");
 
 export const getTdpState = callable<[], TdpState>("get_tdp_state");
+export const setLowBatteryTdpHold = callable<[enabled: boolean], TdpState>(
+  "set_low_battery_tdp_hold",
+);
 export const setTdpWatts = callable<[watts: number, scope: TdpScope, appid: string | null, contextAppid: string | null], TdpApplyResult>("set_tdp_watts");
 export const createGameProfile = callable<[appid: string], void>("create_game_profile");
 export const setCurrentGame = callable<[appid: string | null, name?: string | null], TdpState>("set_current_game");

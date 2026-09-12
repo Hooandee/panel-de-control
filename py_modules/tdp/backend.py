@@ -13,6 +13,7 @@ class TDPBackend(ABC):
     guard_interval_s: float = 2.0
     heartbeat_s: float | None = None
     authoritative_reassert_s: float | None = None
+    low_battery_hold_strategy: str | None = None
     read_tolerance_w: int = 0
     reselection_safe_after_use: bool = False
     probe_trace: tuple[dict, ...] = ()

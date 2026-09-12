@@ -720,7 +720,10 @@ def test_unload_handoff_logs_report_actual_results(tmp_path, monkeypatch):
 
     assert ("Shutdown stage unload:cpu-handoff ok=%s", (False,)) in messages
     assert ("Shutdown stage unload:gpu-handoff ok=%s", (True,)) in messages
-    assert ("Shutdown stage unload:power-handoff ok=%s", (False,)) in messages
+    assert (
+        "Shutdown stage unload:power-handoff status=%s",
+        ("failed",),
+    ) in messages
 
 
 def test_uninstall_stops_new_tdp_writes_before_handoff(tmp_path, monkeypatch):
