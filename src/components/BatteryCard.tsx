@@ -11,6 +11,7 @@ import { ContainedSlider } from "./ContainedSlider";
 interface Props {
   state: BatteryState;
   onSetLimit: (enabled: boolean, percent: number) => void;
+  onSetFullChargeOnce: (enabled: boolean) => void;
   hideHealth?: boolean;
   hideLimitControl?: boolean;
 }
@@ -56,6 +57,7 @@ const Chip: FC<{ icon: React.ReactNode; label: string; value: string; grow?: num
 export const BatteryCard: FC<Props> = ({
   state,
   onSetLimit,
+  onSetFullChargeOnce,
   hideHealth = false,
   hideLimitControl = false,
 }) => {
@@ -150,6 +152,7 @@ export const BatteryCard: FC<Props> = ({
                     max={cl.max}
                     step={5}
                     showValue={false}
+                    disabled={cl.full_charge_once.active}
                     onChange={(v) => onSetLimit(true, clampThreshold(v, cl.min, cl.max))}
                   />
                 </div>
@@ -162,6 +165,22 @@ export const BatteryCard: FC<Props> = ({
               <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
                 {t("system.battery.limit.fixed", { percent: cl.applied_percent })}
               </div>
+            )}
+            {cl.full_charge_once.available && (
+              <ToggleField
+                label={t("system.battery.fullOnce.title")}
+                description={t(
+                  cl.full_charge_once.status === "failed"
+                    ? "system.battery.fullOnce.failed"
+                    : cl.full_charge_once.active
+                      ? "system.battery.fullOnce.active"
+                      : "system.battery.fullOnce.ready",
+                  { percent: cl.percent },
+                )}
+                checked={cl.full_charge_once.active}
+                onChange={onSetFullChargeOnce}
+                bottomSeparator="none"
+              />
             )}
           </div>
         )}
