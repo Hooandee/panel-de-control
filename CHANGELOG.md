@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.47.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.47.0...panel-de-control-v0.47.1) (2026-09-12)
+
+
+### Bug Fixes
+
+* **tdp:** respect GPD Win Mini firmware floor ([#632](https://github.com/Hooandee/panel-de-control/issues/632)) ([99f05d4](https://github.com/Hooandee/panel-de-control/commit/99f05d4073134b6add6ddcec660d5d48fb5b39ad))
+
 ## [0.47.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.46.3...panel-de-control-v0.47.0) (2026-09-12)
 
 ### Español
