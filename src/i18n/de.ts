@@ -765,6 +765,7 @@ export const de: Record<string, string> = {
   "tdp.ceiling.battery": "Maximum im Akkubetrieb: {max} W. Schließe das Netzteil an, um den Wert weiter zu erhöhen.",
   "tdp.ceiling.charger": "Gerätemaximum: {max} W.",
   "tdp.minimum.notice": "Die Firmware unterstützt ab {min} W. Wir speichern {requested} W für später.",
+  "tdp.minimum.floor": "Die Firmware dieses Geräts lässt weniger als {min} W nicht zu.",
   "tdp.ownership.constrained": "Angefordert: {requested} W · derzeit von der Firmware erlaubt: {applied} W",
   "tdp.ownership.settling": "Leistungslimit wird angewendet und überprüft…",
   "tdp.ownership.rejected": "Die Firmware hat {target} W nicht akzeptiert · {applied} W bleiben aktiv",
