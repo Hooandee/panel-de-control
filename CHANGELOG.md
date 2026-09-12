@@ -5,9 +5,21 @@
 ## [0.47.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.47.0...panel-de-control-v0.47.1) (2026-09-12)
 
 
-### Bug Fixes
+### Español
 
-* **tdp:** respect GPD Win Mini firmware floor ([#632](https://github.com/Hooandee/panel-de-control/issues/632)) ([99f05d4](https://github.com/Hooandee/panel-de-control/commit/99f05d4073134b6add6ddcec660d5d48fb5b39ad))
+* **GPD Win Mini 2025:** Evita que el TDP parezca subir solo al elegir menos de 20 W. Como el firmware de este modelo no admite valores inferiores, Panel de Control limita el ajuste, los perfiles y los presets personalizados al rango real de 20–35 W, corrige automáticamente los valores antiguos al actualizar y muestra un aviso breve al llegar al mínimo. Las demás máquinas conservan sus límites anteriores. ([#632](https://github.com/Hooandee/panel-de-control/pull/632))
+
+### English
+
+* **GPD Win Mini 2025:** Prevents the TDP from appearing to rise on its own when selecting less than 20 W. Because this model's firmware does not accept lower values, Panel de Control limits the setting, profiles and custom presets to the actual 20–35 W range, automatically corrects older values during an update and shows a brief notice at the minimum. Other devices keep their previous limits. ([#632](https://github.com/Hooandee/panel-de-control/pull/632))
+
+### Italiano
+
+* **GPD Win Mini 2025:** Evita che il TDP sembri aumentare da solo quando si seleziona meno di 20 W. Poiché il firmware di questo modello non accetta valori inferiori, Panel de Control limita l'impostazione, i profili e i preset personalizzati all'intervallo reale di 20–35 W, corregge automaticamente i valori precedenti durante l'aggiornamento e mostra un breve avviso quando si raggiunge il minimo. Gli altri dispositivi mantengono i limiti precedenti. ([#632](https://github.com/Hooandee/panel-de-control/pull/632))
+
+### Deutsch
+
+* **GPD Win Mini 2025:** Verhindert, dass der TDP scheinbar von selbst ansteigt, wenn weniger als 20 W ausgewählt werden. Da die Firmware dieses Modells niedrigere Werte nicht zulässt, begrenzt Panel de Control die Einstellung, Profile und benutzerdefinierten Presets auf den tatsächlichen Bereich von 20–35 W, korrigiert ältere Werte beim Aktualisieren automatisch und zeigt am Minimum einen kurzen Hinweis an. Die Grenzwerte anderer Geräte bleiben unverändert. ([#632](https://github.com/Hooandee/panel-de-control/pull/632))
 
 ## [0.47.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.46.3...panel-de-control-v0.47.0) (2026-09-12)
 
