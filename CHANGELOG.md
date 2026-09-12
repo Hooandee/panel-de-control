@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+## [0.47.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.46.3...panel-de-control-v0.47.0) (2026-09-12)
+
+### Español
+
+* **TDP:** Añade una opción experimental para mantener el valor elegido cuando la batería baja al 20 % o menos. Viene desactivada y solo aparece en equipos compatibles.
+
+### English
+
+* **TDP:** Adds an experimental option to keep the selected value when the battery drops to 20% or less. It is off by default and only appears on compatible devices.
+
+### Italiano
+
+* **TDP:** Aggiunge un'opzione sperimentale per mantenere il valore scelto quando la batteria scende al 20% o meno. È disattivata per impostazione predefinita e appare solo sui dispositivi compatibili.
+
+### Deutsch
+
+* **TDP:** Fügt eine experimentelle Option hinzu, die den gewählten Wert beibehält, wenn der Akkustand auf 20 % oder weniger fällt. Sie ist standardmäßig deaktiviert und wird nur auf kompatiblen Geräten angezeigt.
+
 ## [0.46.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.46.2...panel-de-control-v0.46.3) (2026-09-11)
 
 ### Español
