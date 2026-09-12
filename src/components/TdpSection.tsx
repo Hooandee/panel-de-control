@@ -114,6 +114,13 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
   const fwModes = tdp.firmware_modes ?? [];
   const hasFwModes = fwModes.length > 0;
   const inFwMode = hasFwModes && tdp.firmware_mode !== "custom";
+  const minimumMessage = isAutoOn || inFwMode
+    ? null
+    : view.watts < tdp.limits.min
+      ? t("tdp.minimum.notice", { min: tdp.limits.min, requested: view.watts })
+      : requestMin > 3 && view.watts === requestMin
+        ? t("tdp.minimum.floor", { min: requestMin })
+        : null;
   const shownWatts = inFwMode ? (tdp.applied_w ?? view.watts) : view.watts;
   const ownership = ownershipView(tdp.ownership, tdp.limits.min);
   const deckPptActive = Boolean(tdp.ppt?.supported && view.mode !== "estable");
@@ -254,7 +261,7 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
               />
             </PanelSectionRow>
           )}
-          {!inFwMode && view.watts < tdp.limits.min && (
+          {minimumMessage && (
             <PanelSectionRow>
               <div style={{
                 display: "flex",
@@ -264,7 +271,7 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
                 fontSize: theme.font.caption,
               }}>
                 <LuInfo size={13} aria-hidden style={{ flexShrink: 0, marginTop: 1 }} />
-                <span>{t("tdp.minimum.notice", { min: tdp.limits.min, requested: view.watts })}</span>
+                <span>{minimumMessage}</span>
               </div>
             </PanelSectionRow>
           )}

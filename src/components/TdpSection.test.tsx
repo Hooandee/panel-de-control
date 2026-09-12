@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { TdpState } from "../api";
+import { PowerDraw, TdpState } from "../api";
 
 const captured = vi.hoisted(() => ({
   arc: null as Record<string, unknown> | null,
@@ -94,6 +94,47 @@ const deckState = {
     applied: { slow: 18, fast: 27 },
   },
 } as unknown as TdpState;
+
+const elevatedFloorState = {
+  ...deckState,
+  limits: { min: 20, default: 25, max: 35, max_ac: 35 },
+  request_min: 20,
+  watts: 20,
+  global_watts: 20,
+  levels: { pl1: 20, pl2: 20, pl3: 20 },
+  global_levels: { pl1: 20, pl2: 20, pl3: 20 },
+  requested_levels: { pl1: 20, pl2: 20, pl3: 20 },
+  global_requested_levels: { pl1: 20, pl2: 20, pl3: 20 },
+  ppt: null,
+} as unknown as TdpState;
+
+function renderTdpSection(
+  tdp: TdpState,
+  { power = null, monitorOnly = false }: {
+    power?: PowerDraw | null;
+    monitorOnly?: boolean;
+  } = {},
+) {
+  return render(
+    <TdpSection
+      tdp={tdp}
+      scope="global"
+      game={null}
+      power={power}
+      onScope={vi.fn()}
+      onWatts={vi.fn()}
+      onSetLevels={vi.fn()}
+      onSetMode={vi.fn()}
+      onApplySuggestion={vi.fn()}
+      onFirmwareMode={vi.fn()}
+      onLowBatteryHold={vi.fn()}
+      monitorOnly={monitorOnly}
+      presets={null}
+      refreshPresets={vi.fn()}
+      onApplyPreset={vi.fn()}
+    />,
+  );
+}
 
 describe("TdpSection Steam Deck PPT arc", () => {
   afterEach(() => {
@@ -206,6 +247,31 @@ describe("TdpSection Steam Deck PPT arc", () => {
     );
 
     expect(screen.queryByText("tdp.minimum.notice")).toBeNull();
+  });
+
+  it("explains an elevated firmware floor while that minimum is selected", () => {
+    renderTdpSection(elevatedFloorState);
+
+    expect(captured.slider).toMatchObject({ min: 20, value: 20 });
+    expect(screen.getByText("tdp.minimum.floor")).toBeTruthy();
+  });
+
+  const hiddenFirmwareFloorCases: Array<[
+    string,
+    TdpState,
+    { power?: PowerDraw; monitorOnly?: boolean },
+  ]> = [
+    ["the selected value is above it", { ...elevatedFloorState, watts: 25, global_watts: 25 }, {}],
+    ["the device uses the universal floor", { ...elevatedFloorState, limits: { min: 3, default: 12, max: 15, max_ac: 15 }, request_min: 3, watts: 3, global_watts: 3 }, {}],
+    ["automatic TDP owns the control", elevatedFloorState, { power: { auto_tdp: true } as PowerDraw }],
+    ["a firmware mode owns the control", { ...elevatedFloorState, firmware_modes: ["balanced"], firmware_mode: "balanced" }, {}],
+    ["the section is monitor-only", elevatedFloorState, { monitorOnly: true }],
+  ];
+
+  it.each(hiddenFirmwareFloorCases)("hides the elevated firmware-floor explanation when %s", (_case, state, options) => {
+    renderTdpSection(state, options);
+
+    expect(screen.queryByText("tdp.minimum.floor")).toBeNull();
   });
 
   it("keeps the physical minimum on the automatic TDP scale", () => {

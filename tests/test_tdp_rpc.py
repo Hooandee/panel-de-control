@@ -114,6 +114,23 @@ def Plugin(tmp_path, monkeypatch):
     return main.Plugin
 
 
+def _use_gpd_win_mini(monkeypatch):
+    import main as main_module
+    from device_profiles import DEVICE_TABLE
+
+    device = next(
+        profile for profile in DEVICE_TABLE if profile.key == "gpd_win_mini_2025"
+    )
+    monkeypatch.setattr(main_module.device_registry, "detect", lambda *_a, **_k: device)
+    monkeypatch.setattr(
+        FakeBackend,
+        "get_limits",
+        lambda _self: TdpLimits(20, 20, 35, 35),
+    )
+    monkeypatch.setattr(FakeBackend, "level_limits", lambda _self: {})
+    return main_module
+
+
 def test_get_tdp_state_shape(Plugin):
     st = asyncio.run(Plugin().get_tdp_state())
     assert st["supported"] is True and st["backend"] == "fake"
@@ -173,6 +190,98 @@ def test_manual_request_below_hardware_min_is_preserved_and_constrained(Plugin):
     assert state["ownership"]["target"]["pl1"] == 5
     assert state["ownership"]["applied"]["pl1"] == 5
     assert state["ownership"]["status"] == "constrained"
+
+
+def test_gpd_win_mini_normalizes_low_request_to_physical_floor(
+    Plugin,
+    monkeypatch,
+):
+    _use_gpd_win_mini(monkeypatch)
+    p = Plugin()
+
+    result = asyncio.run(p.set_tdp_watts(3, "global"))
+    state = asyncio.run(p.get_tdp_state())
+
+    assert result == {"requested_w": 20, "applied_w": 20, "ok": True, "detail": ""}
+    assert state["request_min"] == 20
+    assert state["global_watts"] == 20
+    assert state["global_requested_levels"] == {"pl1": 20, "pl2": 20, "pl3": 20}
+    assert state["ownership"]["status"] == "in_sync"
+
+
+def test_gpd_win_mini_migrates_persisted_low_request(Plugin, monkeypatch):
+    legacy = Plugin()
+    asyncio.run(legacy.set_tdp_watts(3, "global"))
+    _use_gpd_win_mini(monkeypatch)
+
+    migrated = Plugin()
+    state = asyncio.run(migrated.get_tdp_state())
+
+    assert state["request_min"] == 20
+    assert state["global_watts"] == 20
+    assert migrated._tdp_profiles.effective(None)["pl1"] == 20
+
+
+def test_gpd_win_mini_keeps_durable_limits_when_backend_is_unavailable(
+    Plugin,
+    monkeypatch,
+):
+    from tdp.backend import NullBackend
+
+    legacy = Plugin()
+    legacy._init()
+    legacy._tdp_profiles.set_levels("global", 35, 35, 35)
+    legacy._tdp_profiles.set_levels("game", 3, 3, 3, appid="low")
+    main_module = _use_gpd_win_mini(monkeypatch)
+    monkeypatch.setattr(
+        main_module.tdp_factory,
+        "select_backend",
+        lambda *_a, **_k: NullBackend("temporarily unavailable"),
+    )
+
+    migrated = Plugin()
+    migrated._init()
+
+    assert migrated._profile_storage_limits() == TdpLimits(20, 20, 35, 35)
+    assert migrated._tdp_request_min() == 20
+    assert migrated._tdp_profiles.effective(None)["pl1"] == 35
+    assert migrated._tdp_profiles.game_profile("low")["pl1"] == 20
+
+
+def test_gpd_win_mini_profile_migration_retries_after_write_failure(
+    Plugin,
+    monkeypatch,
+):
+    import scoped_store
+
+    legacy = Plugin()
+    asyncio.run(legacy.set_tdp_watts(3, "global"))
+    main_module = _use_gpd_win_mini(monkeypatch)
+    original_save = scoped_store.atomic_json_save
+    blocked = True
+    clock = [0.0]
+
+    monkeypatch.setattr(main_module, "_monotonic", lambda: clock[0])
+
+    def flaky_save(path, data):
+        if blocked and path.endswith("tdp_profiles.json"):
+            raise OSError("disk unavailable")
+        return original_save(path, data)
+
+    monkeypatch.setattr(scoped_store, "atomic_json_save", flaky_save)
+    migrated = Plugin()
+    migrated._init()
+    assert migrated._tdp_profiles.effective(None)["pl1"] == 20
+    blocked_state = asyncio.run(migrated.get_tdp_state())
+    assert blocked_state["global_watts"] == 20
+
+    blocked = False
+    clock[0] += main_module._TDP_STORAGE_MIGRATION_RETRY_S
+    asyncio.run(migrated.get_tdp_state())
+
+    reloaded = Plugin()
+    reloaded._init()
+    assert reloaded._tdp_profiles.effective(None)["pl1"] == 20
 
 
 def test_manual_request_below_policy_floor_is_normalized_to_three(Plugin):
@@ -826,7 +935,7 @@ def test_gpd_win_mini_corrupt_string_false_never_unlocks_55w(Plugin):
     assert p._limits() == TdpLimits(20, 20, 35, 35)
 
 
-def test_gpd_win_mini_upgrade_preserves_legacy_low_profile_intent(Plugin):
+def test_gpd_win_mini_upgrade_normalizes_legacy_low_profile_intent(Plugin):
     from device_profiles import DEVICE_TABLE
 
     p = Plugin()
@@ -841,9 +950,9 @@ def test_gpd_win_mini_upgrade_preserves_legacy_low_profile_intent(Plugin):
     storage = p._profile_storage_limits()
     changed = p._tdp_profiles.sanitize(storage.min_w, storage.max_ac_w)
 
-    assert storage.min_w == 5
-    assert changed is False
-    assert p._tdp_profiles.effective(None)["pl1"] == 10
+    assert storage.min_w == 20
+    assert changed is True
+    assert p._tdp_profiles.effective(None)["pl1"] == 20
     assert p._effective_levels(None, on_ac=True)[0]["pl1"] == 20
 
 
@@ -960,7 +1069,7 @@ def test_experimental_unlock_keeps_automation_and_presets_at_base_ceiling(
 
     assert p._limits() == TdpLimits(20, 20, 35, 55)
     assert p._automatic_limits() == TdpLimits(20, 20, 35, 35)
-    assert p._preset_wclamp() == (3, 35)
+    assert p._preset_wclamp() == (20, 35)
     assert max(p._tdp_presets(p._automatic_limits()).values()) == 35
 
     monkeypatch.setattr(main, "read_on_ac", lambda: True)
