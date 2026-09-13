@@ -571,6 +571,12 @@ export interface ChargeLimit {
   applied_percent: number | null;
   min: number;
   max: number;
+  full_charge_once: {
+    available: boolean;
+    active: boolean;
+    status: "inactive" | "pending" | "active" | "failed";
+    expires_at: number | null;
+  };
 }
 
 export interface BatteryState {
@@ -581,6 +587,8 @@ export interface BatteryState {
 export const getBatteryState = callable<[], BatteryState>("get_battery_state");
 export const setChargeLimit =
   callable<[enabled: boolean, percent: number], ChargeLimit>("set_charge_limit");
+export const setChargeLimitFullOnce =
+  callable<[enabled: boolean], ChargeLimit>("set_charge_limit_full_once");
 
 // ---- CPU (Sistema) --------------------------------------------------------
 export interface CpuToggle {

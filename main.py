@@ -1,6 +1,7 @@
 import asyncio
 import copy
 import json
+import math
 import os
 import re
 import time
@@ -149,6 +150,8 @@ _HUD_RELOAD_MAX_ATTEMPTS = 4
 _TDP_BACKEND_REPROBE_S = 30.0
 _TDP_STORAGE_MIGRATION_RETRY_S = 30.0
 _CHARGE_LIMIT_VERIFY_DELAYS = (2.0, 8.0, 20.0)
+_FULL_CHARGE_ONCE_SECONDS = 24 * 60 * 60
+_FULL_CHARGE_ONCE_POLL_S = 30.0
 _ROG_CHARGE_LIMIT_PROFILES = frozenset({
     "rog_ally",
     "rog_ally_x",
@@ -277,6 +280,8 @@ DEFAULTS = {
     # (protects battery longevity). Disabled → firmware default (100%).
     "charge_limit_enabled": False,
     "charge_limit_percent": 80,
+    "charge_limit_full_once_until": None,
+    "charge_limit_full_once_restore_pending": False,
     # CPU controls default to full performance (SMT + boost on) — the stock state.
     "smt_enabled": True,
     "boost_enabled": True,
@@ -584,6 +589,12 @@ class Plugin:
         self._charge_limit_reconcile_task = None
         self._charge_limit_apply_tasks = set()
         self._charge_limit_candidate = None
+        self._charge_limit_full_once_task = None
+        self._charge_limit_full_once_status = (
+            "pending"
+            if self._charge_limit_full_once_deadline() is not None
+            else "inactive"
+        )
         self._charge_limit_history = deque(maxlen=8)
         self._charge_limit_reconciliation = {
             "generation": 0,
@@ -878,6 +889,8 @@ class Plugin:
             self._settings["disabled_modules"] = sorted(cur)
         else:
             return {"disabled": self._user_disabled_all()}  # unknown id → no-op
+        if disabled and module_id in ("system", "chargeLimit"):
+            self._clear_charge_limit_full_once()
         release_requested = (
             dict(targets.requested)
             if module_id == "power"
@@ -4993,6 +5006,10 @@ class Plugin:
         }
         previous = getattr(self, "_charge_limit_last_apply", None)
         self._charge_limit_last_apply = event
+        if action == "full_once":
+            self._charge_limit_full_once_status = (
+                "active" if ok else "failed"
+            )
         if ok:
             self._charge_limit_failures = 0
             if event != previous:
@@ -5052,10 +5069,238 @@ class Plugin:
         self._apply_pending_charge_limit_candidate(generation)
 
     def _charge_limit_operation_for(self, backend):
+        if self._charge_limit_full_once_lifting():
+            if bool(getattr(backend, "adjustable", True)):
+                _, maximum = backend.range()
+                return (
+                    "full_once",
+                    maximum,
+                    lambda: backend.set(maximum),
+                )
+            return "full_once", None, backend.disable
         if bool(self._settings.get("charge_limit_enabled", False)):
-            requested = int(self._settings.get("charge_limit_percent", 80))
+            requested = self._charge_limit_requested_percent()
             return "set", requested, lambda: backend.set(requested)
         return "disable", None, backend.disable
+
+    def _charge_limit_full_once_deadline(self) -> float | None:
+        raw = self._settings.get("charge_limit_full_once_until")
+        if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+            return None
+        deadline = float(raw)
+        return deadline if math.isfinite(deadline) and deadline > 0 else None
+
+    def _charge_limit_full_once_available(self) -> bool:
+        backend = self._charge_limit
+        if not (
+            self._module_enabled("chargeLimit")
+            and bool(getattr(backend, "supported", False))
+            and bool(self._settings.get("charge_limit_enabled", False))
+        ):
+            return False
+        if not bool(getattr(backend, "adjustable", True)):
+            return True
+        _, maximum = backend.range()
+        return maximum >= 100
+
+    def _charge_limit_full_once_active(self) -> bool:
+        return (
+            self._charge_limit_full_once_deadline() is not None
+            and self._charge_limit_full_once_available()
+        )
+
+    def _charge_limit_full_once_restore_pending(self) -> bool:
+        return (
+            self._charge_limit_full_once_deadline() is not None
+            and bool(self._settings.get("charge_limit_full_once_restore_pending"))
+        )
+
+    def _charge_limit_full_once_lifting(self) -> bool:
+        deadline = self._charge_limit_full_once_deadline()
+        return (
+            deadline is not None
+            and deadline > time.time()
+            and not self._charge_limit_full_once_restore_pending()
+        )
+
+    def _stop_charge_limit_full_once_monitor(self) -> None:
+        task = getattr(self, "_charge_limit_full_once_task", None)
+        self._charge_limit_full_once_task = None
+        if task is None or task.done():
+            return
+        try:
+            current = asyncio.current_task()
+        except RuntimeError:
+            current = None
+        if task is not current:
+            task.cancel()
+
+    def _clear_charge_limit_full_once(self) -> None:
+        self._settings["charge_limit_full_once_until"] = None
+        self._settings["charge_limit_full_once_restore_pending"] = False
+        self._charge_limit_full_once_status = "inactive"
+        self._stop_charge_limit_full_once_monitor()
+
+    def _complete_charge_limit_full_once(self, reason: str) -> None:
+        self._clear_charge_limit_full_once()
+        self._save()
+        decky.logger.info("Full charge once finished: %s", reason)
+
+    def _charge_limit_requested_percent(self) -> int:
+        if self._charge_limit_full_once_lifting():
+            _, maximum = self._charge_limit.range()
+            return int(maximum)
+        return int(self._settings.get("charge_limit_percent", 80))
+
+    async def _finish_charge_limit_full_once(
+        self,
+        reason: str,
+        expected_deadline: float | None = None,
+    ) -> None:
+        deadline = self._charge_limit_full_once_deadline()
+        if deadline is None or (
+            expected_deadline is not None and deadline != expected_deadline
+        ):
+            return
+        generation = self._cancel_charge_limit_reconcile(reason)
+        self._settings["charge_limit_full_once_restore_pending"] = True
+        self._charge_limit_full_once_status = "pending"
+        self._save()
+        if not (
+            self._module_enabled("chargeLimit")
+            and bool(self._settings.get("charge_limit_enabled", False))
+        ):
+            self._clear_charge_limit_full_once()
+            self._save()
+            return
+        previous_apply = getattr(self, "_charge_limit_last_apply", None)
+        await self._apply_charge_limit_intent(generation)
+        if self._charge_limit_full_once_deadline() != deadline:
+            return
+        last_apply = getattr(self, "_charge_limit_last_apply", None)
+        restored = (
+            last_apply is not previous_apply
+            and isinstance(last_apply, dict)
+            and last_apply.get("action") == "set"
+            and bool(last_apply.get("ok"))
+        )
+        if restored:
+            self._complete_charge_limit_full_once(reason)
+            return
+        self._charge_limit_full_once_status = "failed"
+        self._save()
+        self._start_charge_limit_full_once_monitor()
+
+    async def _check_charge_limit_full_once(self) -> None:
+        deadline = self._charge_limit_full_once_deadline()
+        if deadline is None:
+            return
+        if self._charge_limit_full_once_restore_pending():
+            await self._finish_charge_limit_full_once(
+                "full_once_restore_retry",
+                deadline,
+            )
+            return
+        if deadline <= time.time():
+            await self._finish_charge_limit_full_once(
+                "full_once_expired",
+                deadline,
+            )
+            return
+        battery = await self._offload_call(self._battery.read)
+        if self._charge_limit_full_once_deadline() != deadline:
+            return
+        percent = battery.get("percent") if isinstance(battery, dict) else None
+        status = (
+            str(battery.get("status", "")).strip().lower()
+            if isinstance(battery, dict)
+            else ""
+        )
+        numeric_percent = (
+            float(percent)
+            if isinstance(percent, (int, float)) and not isinstance(percent, bool)
+            else None
+        )
+        full = numeric_percent is not None and numeric_percent >= 100
+        full = full or (
+            status == "full"
+            and (numeric_percent is None or numeric_percent >= 99)
+        )
+        if full:
+            await self._finish_charge_limit_full_once(
+                "full_once_complete",
+                deadline,
+            )
+            return
+        if getattr(self, "_charge_limit_full_once_status", None) == "failed":
+            generation = self._cancel_charge_limit_reconcile(
+                "full_once_retry"
+            )
+            await self._apply_charge_limit_intent(generation)
+
+    async def _charge_limit_full_once_loop(self, deadline: float) -> None:
+        failures = 0
+        first_check = True
+        while self._charge_limit_full_once_deadline() == deadline:
+            restore_pending = self._charge_limit_full_once_restore_pending()
+            remaining = deadline - time.time()
+            if not (first_check and restore_pending) and (
+                restore_pending or remaining > 0
+            ):
+                await asyncio.sleep(
+                    _FULL_CHARGE_ONCE_POLL_S
+                    if restore_pending
+                    else min(_FULL_CHARGE_ONCE_POLL_S, remaining)
+                )
+            first_check = False
+            try:
+                await self._check_charge_limit_full_once()
+                failures = 0
+            except asyncio.CancelledError:
+                raise
+            except Exception as error:  # noqa: BLE001
+                failures += 1
+                if failures & (failures - 1) == 0:
+                    decky.logger.warning(
+                        "Full charge once battery poll failed: %s",
+                        error,
+                    )
+
+    def _start_charge_limit_full_once_monitor(self) -> None:
+        raw_deadline = self._settings.get("charge_limit_full_once_until")
+        deadline = self._charge_limit_full_once_deadline()
+        if deadline is None:
+            if raw_deadline is not None:
+                self._clear_charge_limit_full_once()
+                self._save()
+            return
+        if not self._charge_limit_full_once_available():
+            if (
+                self._module_enabled("chargeLimit")
+                and bool(self._settings.get("charge_limit_enabled", False))
+                and self._charge_limit_late_probe_eligible()
+            ):
+                return
+            self._clear_charge_limit_full_once()
+            self._save()
+            return
+        task = getattr(self, "_charge_limit_full_once_task", None)
+        if task is not None and not task.done():
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        task = loop.create_task(self._charge_limit_full_once_loop(deadline))
+        self._charge_limit_full_once_task = task
+
+        def finished(done):
+            if self._charge_limit_full_once_task is done:
+                self._charge_limit_full_once_task = None
+            if not done.cancelled():
+                done.exception()
+
+        task.add_done_callback(finished)
 
     def _apply_selected_charge_limit(self, generation=None) -> None:
         backend = self._charge_limit
@@ -5338,6 +5583,7 @@ class Plugin:
                 readback,
             )
         self._charge_limit = candidate
+        self._start_charge_limit_full_once_monitor()
         return result
 
     async def _reconcile_charge_limit(self, generation, trigger) -> None:
@@ -5355,7 +5601,7 @@ class Plugin:
                 await asyncio.sleep(remaining)
             if not self._charge_limit_generation_current(generation):
                 return
-            requested = int(self._settings.get("charge_limit_percent", 80))
+            requested = self._charge_limit_requested_percent()
             readback = await self._offload_call(self._charge_limit.get)
             if not self._charge_limit_generation_current(generation):
                 return
@@ -5411,6 +5657,15 @@ class Plugin:
             elif readback is not None:
                 status = "confirmed"
                 reason = "matched"
+            if self._charge_limit_full_once_active():
+                if ok and self._charge_limit_full_once_restore_pending():
+                    self._complete_charge_limit_full_once(
+                        "full_once_restore_reconciled"
+                    )
+                else:
+                    self._charge_limit_full_once_status = (
+                        "active" if ok else "failed"
+                    )
             event = {
                 "trigger": trigger,
                 "check": check,
@@ -5443,6 +5698,7 @@ class Plugin:
             actual = self._charge_limit.get()
             if actual is not None:
                 applied_percent = actual
+        full_charge_once_active = self._charge_limit_full_once_active()
         return {
             "backend": getattr(self._charge_limit, "name", "unsupported"),
             "supported": supported,
@@ -5459,6 +5715,24 @@ class Plugin:
                 else None
             ),
             "reconciliation": dict(self._charge_limit_reconciliation),
+            "full_charge_once": {
+                "available": self._charge_limit_full_once_available(),
+                "active": full_charge_once_active,
+                "status": (
+                    getattr(
+                        self,
+                        "_charge_limit_full_once_status",
+                        "pending",
+                    )
+                    if full_charge_once_active
+                    else "inactive"
+                ),
+                "expires_at": (
+                    self._charge_limit_full_once_deadline()
+                    if full_charge_once_active
+                    else None
+                ),
+            },
         }
 
     async def get_battery_state(self) -> dict:
@@ -7394,6 +7668,7 @@ class Plugin:
         """Enable/disable the charge cap and set its threshold. Persists, applies via
         readback, and returns the resulting charge_limit block."""
         self._init()
+        self._clear_charge_limit_full_once()
         generation = self._cancel_charge_limit_reconcile(
             "new_intent",
             preserve_candidate=not getattr(self, "_shutting_down", False),
@@ -7418,6 +7693,31 @@ class Plugin:
 
         apply_task.add_done_callback(finished)
         await asyncio.shield(apply_task)
+        return await self._offload_call(self._charge_limit_state)
+
+    async def set_charge_limit_full_once(self, enabled: bool) -> dict:
+        self._init()
+        if not bool(enabled):
+            deadline = self._charge_limit_full_once_deadline()
+            if deadline is not None:
+                await self._finish_charge_limit_full_once(
+                    "full_once_cancelled",
+                    deadline,
+                )
+            return await self._offload_call(self._charge_limit_state)
+        if not self._charge_limit_full_once_available():
+            return await self._offload_call(self._charge_limit_state)
+
+        self._stop_charge_limit_full_once_monitor()
+        self._settings["charge_limit_full_once_until"] = (
+            time.time() + _FULL_CHARGE_ONCE_SECONDS
+        )
+        self._settings["charge_limit_full_once_restore_pending"] = False
+        self._charge_limit_full_once_status = "pending"
+        self._save()
+        generation = self._cancel_charge_limit_reconcile("full_once_started")
+        await self._apply_charge_limit_intent(generation)
+        self._start_charge_limit_full_once_monitor()
         return await self._offload_call(self._charge_limit_state)
 
     async def _apply_charge_limit_intent(self, generation) -> None:
@@ -9360,6 +9660,7 @@ class Plugin:
             if self._settings.get("steamdeck_ppt_previous") is not None:
                 await self._offload_call(self._restore_steamdeck_ppt)
             self._reapply_all()
+            self._start_charge_limit_full_once_monitor()
             self._lifecycle.start()
             self._start_tdp_guard_loop()
             self._start_night_loop()
@@ -9395,6 +9696,7 @@ class Plugin:
 
     def _prepare_shutdown(self) -> None:
         self._cancel_charge_limit_reconcile("shutdown")
+        self._stop_charge_limit_full_once_monitor()
         self._shutting_down = True
         if not getattr(self, "_hud_shutdown", False):
             self._hud_shutdown = True
