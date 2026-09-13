@@ -341,6 +341,24 @@ describe("German catalog", () => {
 });
 
 describe("LanguageToggle", () => {
+  it("notifies separate roots when the language changes", () => {
+    const listener = vi.fn();
+    const unsubscribe = i18n.subscribeLanguage(listener);
+    render(
+      createElement(
+        i18n.I18nProvider,
+        null,
+        createElement(LanguageToggle),
+      ),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Italiano" }));
+
+    expect(listener).toHaveBeenCalled();
+    expect(i18n.getCurrentLanguage()).toBe("it");
+    unsubscribe();
+  });
+
   it("persists Italian when its localized selector button is pressed", () => {
     render(
       createElement(

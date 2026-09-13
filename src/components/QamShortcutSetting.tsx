@@ -1,48 +1,43 @@
-import { ButtonItem, Navigation, ToggleField } from "@decky/ui";
-import { FC, useSyncExternalStore } from "react";
+import { ButtonItem } from "@decky/ui";
+import { type FC, useSyncExternalStore } from "react";
 
-import { restartLoader } from "../api";
 import { useI18n } from "../i18n";
-import {
-  getQamShortcutSnapshot,
-  setQamShortcutEnabled,
-  subscribeQamShortcut,
-} from "../system/qamShortcut";
+import { getQamRuntimeSnapshot, subscribeQamRuntime } from "../qam/runtime";
 import { theme } from "../theme";
+import { openCustomizeModal } from "./CustomizeModal";
+import { reloadDeckyAfterClosingMenus } from "../system/reloadDecky";
 
 export const QamShortcutSetting: FC = () => {
   const { t } = useI18n();
   const state = useSyncExternalStore(
-    subscribeQamShortcut,
-    getQamShortcutSnapshot,
-    getQamShortcutSnapshot,
+    subscribeQamRuntime,
+    getQamRuntimeSnapshot,
+    getQamRuntimeSnapshot,
   );
-  const restartDecky = () => {
-    Navigation.CloseSideMenus();
-    window.setTimeout(() => { void restartLoader(); }, 500);
-  };
-
   return (
     <>
-      <ToggleField
-        label={t("settings.qamShortcut")}
+      <ButtonItem
+        layout="below"
         description={t("settings.qamShortcut.desc")}
-        checked={state.enabled}
-        onChange={setQamShortcutEnabled}
-        bottomSeparator="none"
-      />
+        onClick={openCustomizeModal}
+      >
+        {t("settings.qamShortcut")}
+      </ButtonItem>
       {state.restartRequired && (
         <ButtonItem
           layout="below"
-          description={t("settings.qamShortcut.restart")}
-          onClick={restartDecky}
+          description={t("customize.qam.restart")}
+          onClick={reloadDeckyAfterClosingMenus}
         >
-          {t("settings.qamShortcut.restartButton")}
+          {t("customize.qam.restartButton")}
         </ButtonItem>
       )}
-      {state.enabled && state.initialized && !state.registered && !state.restartRequired && (
+      {state.initialized
+        && !state.applied
+        && !state.restartRequired
+        && state.reason !== "awaiting_render" && (
         <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
-          {t("settings.qamShortcut.fallback")}
+          {t("customize.qam.unavailable")}
         </div>
       )}
     </>

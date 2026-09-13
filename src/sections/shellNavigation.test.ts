@@ -20,6 +20,10 @@ describe("resolveShellState", () => {
     expect(resolveShellState("home", "system", ids, false)).toEqual({ mode: "tabs", activeId: "system" });
   });
 
+  it("keeps a direct detail view when Home is hidden", () => {
+    expect(resolveShellState("detail", "system", ids, false)).toEqual({ mode: "detail", activeId: "system" });
+  });
+
   it("uses the first valid tab when Home is hidden and the id is stale", () => {
     expect(resolveShellState("detail", "missing", ids, false)).toEqual({ mode: "tabs", activeId: "power" });
   });

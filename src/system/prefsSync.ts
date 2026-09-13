@@ -1,7 +1,6 @@
-// Pure policy for mirroring frontend UI preferences to the durable backend.
 
 const LANG_KEY = "panel-de-control-lang"; // predates the pdc: namespace
-const EPHEMERAL = new Set<string>(["pdc:activeTab", "pdc:shellMode"]); // not persisted across reboots
+const EPHEMERAL = new Set<string>(["pdc:activeTab", "pdc:shellMode"]);
 
 export function isDurableKey(key: string): boolean {
   if (EPHEMERAL.has(key)) return false;

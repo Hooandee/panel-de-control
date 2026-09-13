@@ -27,6 +27,7 @@ type FocusableProps = HTMLAttributes<HTMLDivElement> & {
 };
 
 const boundaries = vi.hoisted(() => ({ nextId: 0 }));
+const focusNavigation = vi.hoisted(() => ({ focus: vi.fn(), available: true }));
 const controller = vi.hoisted(() => ({
   callback: null as ControllerInputCallback | null,
   register: vi.fn(),
@@ -34,6 +35,7 @@ const controller = vi.hoisted(() => ({
 }));
 
 vi.mock("@decky/ui", () => ({
+  getFocusNavController: () => focusNavigation.available ? { FocusElement: focusNavigation.focus } : undefined,
   NavEntryPositionPreferences: { PREFERRED_CHILD: 4 },
   Focusable: forwardRef<HTMLDivElement, FocusableProps>(function Focusable(
     {
@@ -50,6 +52,7 @@ vi.mock("@decky/ui", () => ({
     return (
       <div
         ref={ref}
+        tabIndex={0}
         data-has-on-cancel={onCancel ? "true" : undefined}
         data-nav-entry-prefer-position={navEntryPreferPosition}
         data-preferred-focus={preferredFocus ? "true" : undefined}
@@ -80,7 +83,7 @@ import { getQamDocument } from "../qamDocument";
 import { getShellMode, setShellMode } from "../sections/shellMode";
 import { ControlCenterShell, type ControlCenterShellProps } from "./ControlCenterShell";
 
-const Power = () => <div data-testid="power-body">power</div>;
+const Power = () => <div data-testid="power-body">power<button>Power control</button></div>;
 const Settings = () => <div data-testid="settings-body">settings</div>;
 const testIcon = () => <span data-testid="test-section-icon" aria-hidden="true" />;
 const testSections: SectionDef[] = [
@@ -162,6 +165,9 @@ describe("ControlCenterShell", () => {
     window.localStorage.setItem("panel-de-control-lang", "es");
     setShellMode("home");
     boundaries.nextId = 0;
+    focusNavigation.available = true;
+    focusNavigation.focus.mockReset();
+    focusNavigation.focus.mockImplementation((element: HTMLElement) => element.focus());
     controller.callback = null;
     controller.register.mockReset();
     controller.unregister.mockReset();
@@ -202,14 +208,20 @@ describe("ControlCenterShell", () => {
   it("hides device identification when the user disables it", () => {
     renderShell({ showDeviceHeader: false });
 
-    expect(screen.queryByText("Test Device")).toBeNull();
-    expect(screen.queryByText("Test APU")).toBeNull();
+    expect(screen.queryByTestId("device-pill")).toBeNull();
+
+    act(() => setShellMode("tabs"));
+    expect(screen.queryByTestId("device-pill")).toBeNull();
+
+    act(() => setShellMode("detail"));
+    expect(screen.queryByTestId("device-pill")).toBeNull();
   });
 
   it("keeps a compact device pill before the navigation in every view", () => {
     renderShell();
 
     const dashboardPill = screen.getByTestId("device-pill");
+    expect(within(dashboardPill).getByText("Test APU")).toBeTruthy();
     expect(dashboardPill.style.width).toBe("fit-content");
     expect(dashboardPill.closest('[data-testid="tabs-back-row"]')).toBeNull();
     expect(dashboardPill.closest('[data-testid="detail-back-row"]')).toBeNull();
@@ -218,12 +230,14 @@ describe("ControlCenterShell", () => {
     act(() => setShellMode("tabs"));
 
     const tabsPill = screen.getByTestId("device-pill");
+    expect(within(tabsPill).queryByText("Test APU")).toBeNull();
     expect(within(screen.getByTestId("tabs-back-row")).getByTestId("device-pill")).toBe(tabsPill);
     expect(tabsPill.compareDocumentPosition(screen.getByTestId("tabs-carousel")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
     act(() => setShellMode("detail"));
 
     const detailPill = screen.getByTestId("device-pill");
+    expect(within(detailPill).queryByText("Test APU")).toBeNull();
     expect(within(screen.getByTestId("detail-back-row")).getByTestId("device-pill")).toBe(detailPill);
   });
 
@@ -238,6 +252,86 @@ describe("ControlCenterShell", () => {
     expect(screen.getByRole("button", { name: "Inicio" })).toBeTruthy();
     expect(screen.queryByRole("group", { name: "Cambiar sección" })).toBeNull();
     expect(screen.queryByText("Potencia")).toBeNull();
+  });
+
+  describe("focus after a local navigation action", () => {
+    let frames: FrameRequestCallback[];
+    const flushFrames = () => act(() => frames.splice(0).forEach((callback) => callback(0)));
+
+    beforeEach(() => {
+      frames = [];
+      vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+        frames.push(callback);
+        return frames.length;
+      });
+      vi.spyOn(HTMLElement.prototype, "getClientRects").mockImplementation(() => [new DOMRect(0, 0, 100, 30)] as unknown as DOMRectList);
+    });
+
+    it("transfers active focus into Detail and back so the next activation opens immediately", () => {
+      renderShell();
+      fireEvent.click(screen.getByRole("button", { name: /Potencia/ }));
+      flushFrames();
+      expect(document.activeElement).toBe(screen.getByRole("button", { name: "Power control" }));
+
+      fireEvent.contextMenu(screen.getByTestId("shell-surface"));
+      flushFrames();
+      expect(document.activeElement).toBe(screen.getByRole("button", { name: /Potencia/ }));
+      fireEvent.click(document.activeElement!);
+      expect(screen.getByTestId("power-body")).toBeTruthy();
+    });
+
+    it("uses the return action when a section has no actionable controls", () => {
+      renderShell({ activeId: "settings" });
+      fireEvent.click(screen.getByRole("button", { name: /Ajustes/ }));
+      flushFrames();
+      expect(document.activeElement).toBe(screen.getByRole("button", { name: "Inicio" }));
+    });
+
+    it("does not claim focus for initial rendering or external mode changes", () => {
+      renderShell();
+      flushFrames();
+      act(() => setShellMode("detail"));
+      flushFrames();
+      expect(focusNavigation.focus).not.toHaveBeenCalled();
+    });
+
+    it("does not focus a destination after the shell unmounts", () => {
+      const view = renderShell();
+      fireEvent.click(screen.getByRole("button", { name: /Potencia/ }));
+      view.unmount();
+      flushFrames();
+      expect(focusNavigation.focus).not.toHaveBeenCalled();
+    });
+
+    it("preserves a new focus owner outside the shell", () => {
+      renderShell();
+      fireEvent.click(screen.getByRole("button", { name: /Potencia/ }));
+      const otherSurface = document.createElement("button");
+      otherSurface.className = "gpfocus";
+      document.body.append(otherSurface);
+      otherSurface.focus();
+      flushFrames();
+      expect(document.activeElement).toBe(otherSurface);
+      expect(focusNavigation.focus).not.toHaveBeenCalled();
+      otherSurface.remove();
+    });
+
+    it("retains keyboard focus when the Steam focus controller is unavailable", () => {
+      focusNavigation.available = false;
+      renderShell();
+      fireEvent.click(screen.getByRole("button", { name: /Potencia/ }));
+      flushFrames();
+      expect(document.activeElement).toBe(screen.getByRole("button", { name: "Power control" }));
+    });
+  });
+
+  it("uses a full-width device identification in Tabs without Home", () => {
+    renderShell({ showHome: false });
+    const pill = screen.getByTestId("device-pill");
+    expect(within(pill).getByText("Test Device")).toBeTruthy();
+    expect(within(pill).getByText("Test APU")).toBeTruthy();
+    expect(pill.style.width).toBe("100%");
+    expect(screen.queryByTestId("tabs-back-row")).toBeNull();
   });
 
   it("resets the QAM scroll when opening a Dashboard destination", () => {
@@ -570,6 +664,69 @@ describe("ControlCenterShell", () => {
     act(() => controller.callback?.(0, 31, true));
 
     expect(onSelectSection).toHaveBeenCalledWith("settings");
+  });
+
+  it("uses a direct QAM destination only as the initial view", () => {
+    const onSelectSection = vi.fn();
+    setShellMode("home");
+    renderShell({ initialMode: "detail", onSelectSection });
+
+    expect(screen.getByTestId("power-body")).toBeTruthy();
+    expect(screen.queryByTestId("dashboard")).toBeNull();
+    act(() => controller.callback?.(0, 31, true));
+
+    expect(onSelectSection).toHaveBeenCalledWith("settings");
+    expect(getShellMode()).toBe("detail");
+  });
+
+  it("uses Inicio as the initial view even when another mode was stored", () => {
+    setShellMode("tabs");
+
+    renderShell({ initialMode: "home" });
+
+    expect(screen.getByTestId("dashboard")).toBeTruthy();
+    expect(getShellMode()).toBe("home");
+  });
+
+  it("returns a direct detail to Tabs when Home is hidden", () => {
+    setShellMode("home");
+    renderShell({ initialMode: "detail", showHome: false });
+
+    fireEvent.click(screen.getByRole("button", { name: "Pestañas" }));
+
+    expect(screen.getByTestId("tabs-carousel")).toBeTruthy();
+    expect(getShellMode()).toBe("tabs");
+  });
+
+  it("returns a direct detail to Tabs with B when Home is hidden, then releases B to Steam", () => {
+    const bubbled = vi.fn();
+    setShellMode("home");
+    render(
+      <div onContextMenu={bubbled}>
+        <ControlCenterShell
+          device={testDevice}
+          gameName={null}
+          learning={null}
+          sections={testSections}
+          activeId="power"
+          initialMode="detail"
+          showHome={false}
+          showDeviceHeader
+          hasUpdate={false}
+          onSelectSection={vi.fn()}
+        />
+      </div>,
+    );
+
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Power control" }));
+
+    expect(screen.getByTestId("tabs-carousel")).toBeTruthy();
+    expect(getShellMode()).toBe("tabs");
+    expect(bubbled).not.toHaveBeenCalled();
+
+    fireEvent.contextMenu(screen.getByTestId("shell-surface"));
+
+    expect(bubbled).toHaveBeenCalledOnce();
   });
 
   it("keeps Tabs navigable by direct selection when controller input is unavailable", () => {

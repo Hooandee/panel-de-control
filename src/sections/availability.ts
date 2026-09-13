@@ -2,8 +2,9 @@
 // customization editor, so a section the user can't actually use never shows up
 // in either place.
 import { DeviceInfo } from "../api";
-import { ListPref } from "../customize/layout";
-import { blockOrder } from "../customize/manifest";
+import { Layout, ListPref } from "../customize/layout";
+import { blockOrder, POWER_TAB } from "../customize/manifest";
+import { effectiveEnabled } from "../customize/moduleLogic";
 
 // Sections whose whole content is blocks (no fixed core): hiding every block
 // leaves an empty tab, so the tab itself disappears. Potencia is excluded — it
@@ -13,9 +14,33 @@ const FULLY_MODULAR = new Set(["system", "display", "fans", "mandos"]);
 /** A section the device can't use at all → never list it (shell nor editor).
  *  Controller management isn't offered on the Steam Deck (native gamepad +
  *  Steam Input own it). */
-export function sectionHiddenOnDevice(device: DeviceInfo | null, id: string): boolean {
+export function sectionHiddenOnDevice(
+  device: Pick<DeviceInfo, "key"> | null,
+  id: string,
+): boolean {
   if (id === "mandos") return !!device && device.key.startsWith("steam_deck");
   return false;
+}
+
+export interface SectionAvailability {
+  device: Pick<DeviceInfo, "key"> | null;
+  disabled: Set<string>;
+  layout: Pick<Layout, "blocks">;
+  desktopMode: boolean;
+  present(id: string): string[] | null;
+}
+
+export function sectionAvailable(
+  id: string,
+  { device, disabled, layout, desktopMode, present }: SectionAvailability,
+): boolean {
+  if (sectionHiddenOnDevice(device, id)) return false;
+  if (id === POWER_TAB) {
+    return !desktopMode
+      || !allBlocksHidden(id, layout.blocks, present(id), true);
+  }
+  return effectiveEnabled(id, disabled)
+    && !allBlocksHidden(id, layout.blocks, present(id));
 }
 
 /** True when a fully-modular section has nothing left to show → hide the parent

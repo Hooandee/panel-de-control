@@ -3,7 +3,11 @@ import { DeviceInfo, isUnvalidated } from "../api";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 
-export const DeviceHeader: FC<{ device: DeviceInfo }> = ({ device }) => {
+export const DeviceHeader: FC<{
+  device: DeviceInfo;
+  presentation?: "full" | "compact";
+  fullWidth?: boolean;
+}> = ({ device, presentation = "full", fullWidth = false }) => {
   const { t } = useI18n();
   return (
     <div
@@ -13,7 +17,7 @@ export const DeviceHeader: FC<{ device: DeviceInfo }> = ({ device }) => {
         alignItems: "center",
         alignSelf: "flex-start",
         gap: 6,
-        width: "fit-content",
+        width: fullWidth ? "100%" : "fit-content",
         maxWidth: "100%",
         minHeight: 24,
         padding: "3px 8px",
@@ -36,20 +40,24 @@ export const DeviceHeader: FC<{ device: DeviceInfo }> = ({ device }) => {
       >
         {t("device.detected", { name: device.display_name })}
       </span>
-      <span aria-hidden="true" style={{ color: theme.color.textMuted, fontSize: 9 }}>•</span>
-      <span
-        style={{
-          flexShrink: 0,
-          color: theme.color.textMuted,
-          fontSize: 9,
-          fontWeight: 650,
-          letterSpacing: "0.05em",
-          textTransform: "uppercase",
-          whiteSpace: "nowrap",
-        }}
-      >
-        {device.chip}
-      </span>
+      {presentation === "full" ? (
+        <>
+          <span aria-hidden="true" style={{ color: theme.color.textMuted, fontSize: 9 }}>•</span>
+          <span
+            style={{
+              flexShrink: 0,
+              color: theme.color.textMuted,
+              fontSize: 9,
+              fontWeight: 650,
+              letterSpacing: "0.05em",
+              textTransform: "uppercase",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {device.chip}
+          </span>
+        </>
+      ) : null}
       {isUnvalidated(device) && (
         <span
           role="img"

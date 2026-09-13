@@ -2,8 +2,8 @@ import { type ReactNode } from "react";
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
-import { CompactBackAction } from "./CompactBackAction";
 import { QamAction } from "./QamAction";
+import { ShellHeader } from "./ShellHeader";
 
 export interface TabsModeItem {
   id: string;
@@ -136,23 +136,7 @@ export function TabsModeHeader({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
       {showBack ? (
-        <div
-          data-testid="tabs-back-row"
-          style={{
-            minHeight: 28,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: theme.space.sm,
-          }}
-        >
-          <CompactBackAction onBack={onBack} />
-          {trailing ? (
-            <div style={{ minWidth: 0, flex: "1 1 auto", display: "flex", justifyContent: "flex-end" }}>
-              {trailing}
-            </div>
-          ) : null}
-        </div>
+        <ShellHeader onBack={onBack} trailing={trailing} testId="tabs-back-row" />
       ) : trailing ? (
         <div
           data-testid="tabs-device-row"
@@ -193,14 +177,35 @@ export function TabsModeHeader({
             <span
               style={{
                 minWidth: 0,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-                fontSize: theme.font.body,
-                fontWeight: 750,
+                position: "relative",
+                display: "flex",
               }}
             >
-              {active.label}
+              <span
+                style={{
+                  minWidth: 0,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                  fontSize: theme.font.body,
+                  fontWeight: 750,
+                }}
+              >
+                {active.label}
+              </span>
+              <span
+                aria-hidden="true"
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  right: 0,
+                  bottom: -4,
+                  height: 2,
+                  borderRadius: 1,
+                  background: active.accent,
+                  pointerEvents: "none",
+                }}
+              />
             </span>
           </div>
           {next ? <SideSection item={next} side="right" onSelect={onSelect} /> : <span />}

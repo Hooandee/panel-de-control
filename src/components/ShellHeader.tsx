@@ -4,13 +4,20 @@ import { CompactBackAction } from "./CompactBackAction";
 
 export interface ShellHeaderProps {
   onBack: () => void;
+  backLabel?: string;
   trailing?: ReactNode;
+  testId?: string;
 }
 
-export function ShellHeader({ onBack, trailing }: ShellHeaderProps) {
+export function ShellHeader({
+  onBack,
+  backLabel,
+  trailing,
+  testId = "detail-back-row",
+}: ShellHeaderProps) {
   return (
     <div
-      data-testid="detail-back-row"
+      data-testid={testId}
       style={{
         display: "flex",
         alignItems: "center",
@@ -19,7 +26,7 @@ export function ShellHeader({ onBack, trailing }: ShellHeaderProps) {
         minHeight: 28,
       }}
     >
-      <CompactBackAction onBack={onBack} />
+      <CompactBackAction onBack={onBack} label={backLabel} />
       {trailing ? (
         <div style={{ minWidth: 0, flex: "1 1 auto", display: "flex", justifyContent: "flex-end" }}>
           {trailing}

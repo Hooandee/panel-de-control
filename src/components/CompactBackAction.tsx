@@ -7,10 +7,12 @@ import { theme } from "../theme";
 
 export interface CompactBackActionProps {
   onBack: () => void;
+  label?: string;
 }
 
-export function CompactBackAction({ onBack }: CompactBackActionProps) {
+export function CompactBackAction({ onBack, label }: CompactBackActionProps) {
   const { t } = useI18n();
+  const text = label ?? t("home.back");
   const locked = useRef(false);
   const goBack = () => {
     if (locked.current) return;
@@ -25,7 +27,7 @@ export function CompactBackAction({ onBack }: CompactBackActionProps) {
   return (
     <Focusable
       role="button"
-      aria-label={t("home.back")}
+      aria-label={text}
       onActivate={goBack}
       onClick={goBack}
       style={{
@@ -40,7 +42,7 @@ export function CompactBackAction({ onBack }: CompactBackActionProps) {
       }}
     >
       <LuChevronLeft size={18} aria-hidden="true" />
-      <span style={{ fontSize: theme.font.caption, fontWeight: 600 }}>{t("home.back")}</span>
+      <span style={{ fontSize: theme.font.caption, fontWeight: 600 }}>{text}</span>
     </Focusable>
   );
 }

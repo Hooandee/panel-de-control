@@ -1,4 +1,4 @@
-import { FC, Fragment, ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { FC, Fragment, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ModalRoot, showModal, Focusable, ButtonItem } from "@decky/ui";
 import { LuChevronUp, LuChevronDown, LuEye, LuEyeOff, LuPower, LuPencil, LuCheck, LuBrain, LuPlus } from "react-icons/lu";
 
@@ -14,7 +14,7 @@ import { moduleState, isDisableableSection, sectionModuleDisabled } from "../cus
 import { FocusRoot } from "./FocusRoot";
 import { ACCENTS } from "../system/accentColor";
 import { useAccent, setAccent } from "../system/useAccent";
-import { getBatteryState, getDevice, DeviceInfo } from "../api";
+import { getBatteryState } from "../api";
 import { sectionHiddenOnDevice, allBlocksHidden } from "../sections/availability";
 import { getPresent, usePresentVersion } from "../customize/present";
 import { useViews, createView } from "../customize/viewStore";
@@ -24,6 +24,9 @@ import { openViewEditorModal } from "./ViewEditor";
 import { openDisableModuleModal } from "./DisableModuleModal";
 import { useDesktopState } from "../desktop/useDesktop";
 import { HomeVisibilitySetting } from "./HomeVisibilitySetting";
+import { QamLayoutEditor } from "./QamLayoutEditor";
+import { useDevice } from "../system/useDevice";
+import { buildPanelQamCatalog } from "../qam/panelCatalog";
 
 // Blocks that are actually backend MODULES (get the on/off power control) rather
 // than cosmetic cards (which get the show/hide eye). Everything else is cosmetic.
@@ -104,14 +107,13 @@ const CustomizeBody: FC = () => {
   const disabled = useModules();
   const desktopMode = !!useDesktopState().state?.enabled;
   useAccent(); // re-render the whole modal live when the accent changes (separate root)
-  usePresentVersion(); // reflect which blocks each machine actually has
+  const presentVersion = usePresentVersion();
   const [editing, setEditing] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   // Device (one-time) so we don't list a category this machine can't use (e.g.
   // Mandos on the Steam Deck) — mirrors the shell's tab gating.
-  const [device, setDevice] = useState<DeviceInfo | null>(null);
+  const device = useDevice();
   const [chargeLimitSupported, setChargeLimitSupported] = useState(false);
-  useEffect(() => { getDevice().then(setDevice).catch(() => {}); }, []);
   useEffect(() => {
     let alive = true;
     getBatteryState()
@@ -125,6 +127,13 @@ const CustomizeBody: FC = () => {
   }, []);
 
   const views = useViews();
+  const qamCatalog = useMemo(() => buildPanelQamCatalog(views, {
+    device,
+    disabled,
+    layout,
+    desktopMode,
+    present: getPresent,
+  }), [views, device, disabled, layout, desktopMode, presentVersion]);
   const viewOf = (tabId: string) => views.find((v) => viewTabId(v.id) === tabId);
   const tabOrder = orderIds([...CATEGORY_IDS, ...views.map((v) => viewTabId(v.id))], layout.tabs.order)
     .filter((id) => isViewTabId(id) || (CATEGORY_IDS.includes(id) && !sectionHiddenOnDevice(device, id)));
@@ -212,6 +221,13 @@ const CustomizeBody: FC = () => {
         deviceHeaderValue={layout.showDeviceHeader}
         onDeviceHeaderChange={(showDeviceHeader) => save({ ...layout, showDeviceHeader })}
       />
+
+      {!editing && (
+        <>
+          <div style={theme.sectionLabel}>{t("customize.qam.title")}</div>
+          <QamLayoutEditor catalog={qamCatalog} />
+        </>
+      )}
 
       <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
         {tabOrder.map((id, i) => {

@@ -9,7 +9,6 @@ import type { SectionIcon } from "../sections/types";
 import type { LearningTag } from "../learning/logic";
 import type { ModuleId } from "./moduleLogic";
 
-/** Presentation metadata shared by a tab and a configurable block. */
 export interface ItemMeta {
   id: string;
   labelKey: string;
@@ -60,7 +59,6 @@ export const TABS: TabMeta[] = [
   { id: "settings", labelKey: "nav.settings", descriptionKey: "nav.settings.desc", accent: "#626b73", icon: (size) => <LuSettings size={size} /> },
 ];
 
-/** Category (section) ids the editor lists: the tabs minus the pinned Settings. */
 export const CATEGORY_IDS = TABS.map((t) => t.id).filter((id) => id !== PINNED_TAB);
 
 export const SECTION_BLOCKS: Record<string, BlockDef[]> = {

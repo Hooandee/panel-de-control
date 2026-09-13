@@ -39,4 +39,21 @@ describe("DeviceHeader", () => {
 
     expect(screen.getByRole("img", { name: label })).toBeTruthy();
   });
+
+  it("omits processor details in the compact presentation", () => {
+    render(<DeviceHeader device={device} presentation="compact" />);
+
+    expect(screen.getByText("Test Device")).toBeTruthy();
+    expect(screen.queryByText("Test APU")).toBeNull();
+    expect(screen.queryByText("•")).toBeNull();
+  });
+
+  it.each([
+    [{ ...device, is_generic: true }, /Dispositivo no reconocido/],
+    [{ ...device, experimental: true }, /Modelo reconocido/],
+  ] as const)("keeps the accessible status in compact presentation", (unvalidated, label) => {
+    render(<DeviceHeader device={unvalidated} presentation="compact" />);
+
+    expect(screen.getByRole("img", { name: label })).toBeTruthy();
+  });
 });

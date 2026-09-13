@@ -26,6 +26,7 @@ export const SUPPORTED_LANGUAGES = ["es", "en", "it", "de"] as const;
 export type Lang = (typeof SUPPORTED_LANGUAGES)[number];
 
 const STORAGE_KEY = "panel-de-control-lang";
+const languageListeners = new Set<() => void>();
 
 // Spanish first - we value Spanish-speaking users. English is the fallback.
 const es: Record<string, string> = {
@@ -689,16 +690,13 @@ const es: Record<string, string> = {
   "fans.suggest.msg.learning": "Sigue jugando ~{left} min más para desbloquear la curva. Los puntos verdes son lo que ya he observado.",
   "fans.suggest.msg.empty": "Empieza a jugar para que aprenda el patrón térmico de este juego.",
   "fans.suggest.msg.nogame": "Entra a un juego para que aprenda su patrón.",
-  // Comunica que el aprendizaje es CONTINUO (no de una sola vez).
   "fans.suggest.continuous": "Afino la curva cada ~30 min con tu uso reciente.",
-  // A2 — tope de temperatura + escala con significado.
   "fans.suggest.peak.title": "Temperatura máxima",
   "fans.suggest.peak.value": "{peak} °C",
   "fans.suggest.zone.cool": "Fresco",
   "fans.suggest.zone.warm": "Templado",
   "fans.suggest.zone.hot": "Caliente",
   "fans.suggest.zone.limit": "Al límite",
-  // A3 — tono del dial en lenguaje llano.
   "fans.suggest.tone.quiet": "Prioriza el silencio",
   "fans.suggest.tone.balanced": "Fresco y silencioso",
   "fans.suggest.tone.cool": "Prioriza el frescor",
@@ -772,11 +770,8 @@ const es: Record<string, string> = {
   "settings.experimentalTdp.confirm.cancel": "Cancelar",
   "settings.qamboost": "Subir TDP con el menú abierto",
   "settings.qamboost.desc": "Sube el TDP mientras el menú de acceso rápido está abierto para que vaya fluido. El valor mostrado es temporal del menú; dentro del juego se reajusta.",
-  "settings.qamShortcut": "Acceso directo en el QAM",
-  "settings.qamShortcut.desc": "Añade un icono opcional junto a Decky. Panel de Control siempre sigue disponible dentro de Decky.",
-  "settings.qamShortcut.restart": "Reinicia Decky para aplicar el cambio.",
-  "settings.qamShortcut.restartButton": "Reiniciar Decky",
-  "settings.qamShortcut.fallback": "No se ha podido añadir el icono directo. Panel de Control sigue disponible dentro de Decky.",
+  "settings.qamShortcut": "Configurar el QAM",
+  "settings.qamShortcut.desc": "Elige qué entradas de Steam mostrar y qué vistas completas de Panel de Control anclar.",
   "settings.valueToast": "Mostrar valor al cambiar volumen o brillo",
   "settings.valueToast.desc": "Muestra el número en pantalla al ajustar con los botones, sin abrir el panel.",
   "valueToast.volume": "Volumen",
@@ -960,6 +955,26 @@ const es: Record<string, string> = {
   "customize.home.tabs": "Pestañas",
   "customize.deviceHeader": "Mostrar información del dispositivo",
   "customize.deviceHeader.desc": "Muestra una identificación compacta del dispositivo bajo el título.",
+  "customize.qam.title": "Accesos del QAM",
+  "customize.qam.desc": "Mezcla, reordena y oculta entradas de Steam o ancla vistas completas de Panel de Control. Decky siempre permanece disponible.",
+  "customize.qam.native": "Steam",
+  "customize.qam.native.friends": "Amigos",
+  "customize.qam.native.soundtracks": "Bandas sonoras",
+  "customize.qam.native.help": "Ayuda",
+  "customize.qam.native.notifications": "Notificaciones",
+  "customize.qam.native.performance": "Rendimiento",
+  "customize.qam.native.quickSettings": "Ajustes rápidos",
+  "customize.qam.decky": "Decky",
+  "customize.qam.protected": "Siempre disponible",
+  "customize.qam.pin": "Anclar",
+  "customize.qam.unpin": "Desanclar",
+  "customize.qam.applied": "Aplicado al instante",
+  "customize.qam.restart": "Recarga Decky para aplicar los cambios guardados.",
+  "customize.qam.restartButton": "Recargar Decky",
+  "customize.qam.unavailable": "No se pudo modificar el QAM. Panel de Control sigue disponible dentro de Decky.",
+  "customize.qam.destinationUnavailable": "Esta vista ya no está disponible con la configuración actual.",
+  "customize.qam.loading": "Leyendo las entradas actuales del QAM…",
+  "customize.qam.reset": "Restaurar QAM",
   "customize.accent": "Color de acento",
   "accent.blue": "Azul",
   "accent.sky": "Cielo",
@@ -1809,11 +1824,8 @@ const en: Record<string, string> = {
   "settings.experimentalTdp.confirm.cancel": "Cancel",
   "settings.qamboost": "Raise TDP while the menu is open",
   "settings.qamboost.desc": "Raises TDP while the quick access menu is open so it stays responsive. The displayed value applies only while the menu is open. It is adjusted again in game.",
-  "settings.qamShortcut": "QAM shortcut",
-  "settings.qamShortcut.desc": "Adds an optional icon next to Decky. Panel de Control always remains available inside Decky.",
-  "settings.qamShortcut.restart": "Restart Decky to apply the change.",
-  "settings.qamShortcut.restartButton": "Restart Decky",
-  "settings.qamShortcut.fallback": "The direct icon could not be added. Panel de Control remains available inside Decky.",
+  "settings.qamShortcut": "Configure the QAM",
+  "settings.qamShortcut.desc": "Choose which Steam entries to show and which full Panel de Control views to pin.",
   "settings.valueToast": "Show value when changing volume or brightness",
   "settings.valueToast.desc": "Shows the number on screen when you adjust with the buttons, without opening the panel.",
   "valueToast.volume": "Volume",
@@ -1997,6 +2009,26 @@ const en: Record<string, string> = {
   "customize.home.tabs": "Tabs",
   "customize.deviceHeader": "Show device information",
   "customize.deviceHeader.desc": "Shows a compact device identifier below the title.",
+  "customize.qam.title": "QAM shortcuts",
+  "customize.qam.desc": "Mix, reorder, and hide Steam entries or pin full Panel de Control views. Decky always remains available.",
+  "customize.qam.native": "Steam",
+  "customize.qam.native.friends": "Friends",
+  "customize.qam.native.soundtracks": "Soundtracks",
+  "customize.qam.native.help": "Help",
+  "customize.qam.native.notifications": "Notifications",
+  "customize.qam.native.performance": "Performance",
+  "customize.qam.native.quickSettings": "Quick settings",
+  "customize.qam.decky": "Decky",
+  "customize.qam.protected": "Always available",
+  "customize.qam.pin": "Pin",
+  "customize.qam.unpin": "Unpin",
+  "customize.qam.applied": "Applied instantly",
+  "customize.qam.restart": "Reload Decky to apply the saved changes.",
+  "customize.qam.restartButton": "Reload Decky",
+  "customize.qam.unavailable": "The QAM could not be changed. Panel de Control remains available inside Decky.",
+  "customize.qam.destinationUnavailable": "This view is no longer available with the current configuration.",
+  "customize.qam.loading": "Reading the current QAM entries…",
+  "customize.qam.reset": "Restore QAM",
   "customize.accent": "Accent color",
   "accent.blue": "Blue",
   "accent.sky": "Sky",
@@ -2173,6 +2205,21 @@ function initialLang(): Lang {
   return SUPPORTED_LANGUAGES.includes(stored as Lang) ? stored as Lang : "es";
 }
 
+export function getCurrentLanguage(): Lang {
+  return initialLang();
+}
+
+export function subscribeLanguage(listener: () => void): () => void {
+  languageListeners.add(listener);
+  return () => languageListeners.delete(listener);
+}
+
+function notifyLanguage(): void {
+  languageListeners.forEach((listener) => listener());
+}
+
+onPrefsHealed(notifyLanguage);
+
 interface I18nValue {
   lang: Lang;
   setLang: (l: Lang) => void;
@@ -2184,6 +2231,8 @@ const I18nContext = createContext<I18nValue | null>(null);
 export const I18nProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const [lang, setLangState] = useState<Lang>(initialLang);
   const seeded = useRef(false);
+
+  useEffect(() => subscribeLanguage(() => setLangState(initialLang())), []);
 
   // On first run only (no saved language), seed the default from Steam's UI
   // language once the cache is genuinely healed — never overriding a saved choice.
@@ -2201,6 +2250,7 @@ export const I18nProvider: FC<{ children: ReactNode }> = ({ children }) => {
       const seed = steamLangToLang(raw);
       setLangState(seed);
       writeString(STORAGE_KEY, seed);
+      notifyLanguage();
     };
     const off = onPrefsHealed(() => {
       if (cancelled) return;
@@ -2223,6 +2273,7 @@ export const I18nProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const setLang = useCallback((l: Lang) => {
     setLangState(l);
     writeString(STORAGE_KEY, l);
+    notifyLanguage();
   }, []);
 
   const t = useCallback(

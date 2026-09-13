@@ -1,11 +1,11 @@
-import { ErrorBoundary, Focusable, PanelSection, PanelSectionRow } from "@decky/ui";
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { ErrorBoundary, Focusable, getFocusNavController, PanelSection, PanelSectionRow } from "@decky/ui";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import type { DeviceInfo, LearningStatus } from "../api";
 import { PINNED_TAB } from "../customize/manifest";
 import { useI18n } from "../i18n";
 import { resolveShellState } from "../sections/shellNavigation";
-import { setShellMode, useShellMode } from "../sections/shellMode";
+import { setShellMode, type ShellMode, useShellMode } from "../sections/shellMode";
 import type { SectionDef } from "../sections/types";
 import { useShoulderNav } from "../sections/useShoulderNav";
 import { theme } from "../theme";
@@ -26,6 +26,7 @@ export interface ControlCenterShellProps {
   showHome: boolean;
   showDeviceHeader: boolean;
   hasUpdate: boolean;
+  initialMode?: ShellMode;
   onSelectSection: (id: string) => void;
 }
 
@@ -47,6 +48,30 @@ function resetNearestVerticalScroller(element: HTMLElement | null): void {
   }
 }
 
+function focusShellDestination(surface: HTMLElement, mode: ShellMode, activeId: string | null): void {
+  const controls = 'button,input,select,textarea,[role="button"],[tabindex="0"]';
+  const eligible = (element: HTMLElement) => element.getClientRects().length > 0
+    && !element.closest('[hidden],[aria-hidden="true"],[aria-disabled="true"],:disabled')
+    && (!element.matches('[tabindex="0"]') || element.matches('button,input,select,textarea,[role="button"]') || !element.querySelector(controls));
+  const cards = Array.from(surface.querySelectorAll<HTMLElement>('[data-testid="dashboard-card"]')).filter(eligible);
+  const body = surface.querySelector('[data-testid="section-body"]');
+  const firstControl = (root: Element | null) => Array.from(root?.querySelectorAll<HTMLElement>(controls) ?? []).find(eligible);
+  const target = mode === "home"
+    ? cards.find((card) => card.dataset.sectionId === activeId) ?? cards[0]
+    : firstControl(body) ?? firstControl(surface);
+  if (!target) return;
+  try {
+    const controller = getFocusNavController();
+    if (typeof controller?.FocusElement === "function") {
+      controller.FocusElement(target);
+      return;
+    }
+  } catch {
+    // Steam's focus controller can disappear while the QAM is reconciling.
+  }
+  target.focus({ preventScroll: true });
+}
+
 export function ControlCenterShell({
   device,
   gameName,
@@ -56,18 +81,27 @@ export function ControlCenterShell({
   showHome,
   showDeviceHeader,
   hasUpdate,
+  initialMode,
   onSelectSection,
 }: ControlCenterShellProps) {
   const { t } = useI18n();
   const shellSurface = useRef<HTMLDivElement>(null);
+  const pendingFocus = useRef<{ mode: ShellMode; previousFocus: Element | null } | null>(null);
   const storedMode = useShellMode();
+  const [entryMode, setEntryMode] = useState<ShellMode | undefined>(initialMode);
   const ids = sections.map((section) => section.id);
-  const resolved = resolveShellState(storedMode, activeId, ids, showHome);
+  const resolved = resolveShellState(entryMode ?? storedMode, activeId, ids, showHome);
   const active = resolved.activeId
     ? sections.find((section) => section.id === resolved.activeId)
     : undefined;
   const Active = active?.Component;
   const learningScope = resolved.mode === "home" ? [] : active?.learningTags ?? [];
+
+  useLayoutEffect(() => {
+    if (!entryMode) return;
+    if (storedMode !== entryMode) setShellMode(entryMode);
+    setEntryMode(undefined);
+  }, [entryMode, storedMode]);
 
   useEffect(() => {
     if (storedMode !== resolved.mode) setShellMode(resolved.mode);
@@ -81,19 +115,31 @@ export function ControlCenterShell({
     : `${resolved.mode}:${resolved.activeId ?? ""}`;
 
   useLayoutEffect(() => {
-    if (!sectionViewKey) return;
+    const request = pendingFocus.current?.mode === resolved.mode ? pendingFocus.current : null;
+    if (!sectionViewKey && !request) return;
+    pendingFocus.current = null;
     const surface = shellSurface.current;
-    if (!surface) return;
-    const view = surface.ownerDocument.defaultView;
+    const doc = surface?.ownerDocument;
+    const view = doc?.defaultView;
+    if (!surface || !doc || !view) return;
     const reset = () => {
-      if (surface.isConnected) resetNearestVerticalScroller(surface);
+      if (sectionViewKey && surface.isConnected) resetNearestVerticalScroller(surface);
     };
     reset();
-    const frame = view?.requestAnimationFrame(reset);
+    let cancelled = false;
+    const frame = view.requestAnimationFrame(() => {
+      if (cancelled || !surface.isConnected) return;
+      reset();
+      if (!request || doc.visibilityState === "hidden") return;
+      const currentFocus = doc.querySelector(".gpfocus");
+      if (currentFocus && currentFocus !== request.previousFocus && !surface.contains(currentFocus)) return;
+      focusShellDestination(surface, resolved.mode, resolved.activeId);
+    });
     return () => {
-      if (frame !== undefined) view?.cancelAnimationFrame(frame);
+      cancelled = true;
+      view.cancelAnimationFrame(frame);
     };
-  }, [sectionViewKey]);
+  }, [sectionViewKey, resolved.mode, resolved.activeId]);
 
   useShoulderNav(
     resolved.mode === "home" ? [] : ids,
@@ -101,14 +147,19 @@ export function ControlCenterShell({
     onSelectSection,
   );
 
-  const goHome = () => setShellMode("home");
+  const navigate = (mode: ShellMode) => {
+    pendingFocus.current = { mode, previousFocus: shellSurface.current?.ownerDocument.querySelector(".gpfocus") ?? null };
+    setShellMode(mode);
+  };
+  const goHome = () => navigate("home");
+  const leaveDetail = () => navigate(showHome ? "home" : "tabs");
   const openDetail = (id: string) => {
     onSelectSection(id);
-    setShellMode("detail");
+    navigate("detail");
   };
   const openSettings = () => {
     onSelectSection(PINNED_TAB);
-    if (resolved.mode === "home") setShellMode("detail");
+    if (resolved.mode === "home") navigate("detail");
   };
   const tabsModeItems = sections.map((section) => ({
     id: section.id,
@@ -124,9 +175,9 @@ export function ControlCenterShell({
         <Focusable
           ref={shellSurface}
           data-testid="shell-surface"
-          onCancel={showHome && resolved.mode !== "home" ? (event) => {
+          onCancel={resolved.mode === "detail" || (showHome && resolved.mode === "tabs") ? (event) => {
             event.stopPropagation();
-            goHome();
+            leaveDetail();
           } : undefined}
         >
           <PanelSectionRow>
@@ -146,13 +197,14 @@ export function ControlCenterShell({
                   showBack={showHome}
                   onBack={goHome}
                   onSelect={onSelectSection}
-                  trailing={showDeviceHeader ? <DeviceHeader device={device} /> : undefined}
+                  trailing={showDeviceHeader ? <DeviceHeader device={device} presentation={showHome ? "compact" : "full"} fullWidth={!showHome} /> : undefined}
                 />
               ) : null}
               {resolved.mode === "detail" ? (
                 <ShellHeader
-                  onBack={goHome}
-                  trailing={showDeviceHeader ? <DeviceHeader device={device} /> : undefined}
+                  onBack={leaveDetail}
+                  backLabel={showHome ? undefined : t("customize.home.tabs")}
+                  trailing={showDeviceHeader ? <DeviceHeader device={device} presentation="compact" /> : undefined}
                 />
               ) : null}
               <LearningBanner
