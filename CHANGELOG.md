@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+## [0.48.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.47.1...panel-de-control-v0.48.0) (2026-09-13)
+
+
+### Español
+
+* **Batería:** Añade «Carga completa temporal» para cargar una vez hasta el 100 % sin perder el límite habitual. Al completarse la carga, al apagar la opción o tras 24 horas, Panel de Control restaura automáticamente el límite guardado. Solo aparece en equipos compatibles.
+
+### English
+
+* **Battery:** Adds “Temporary full charge” to charge once to 100% without losing the usual limit. When charging completes, the option is turned off or 24 hours pass, Panel de Control automatically restores the saved limit. It only appears on compatible devices.
+
+### Italiano
+
+* **Batteria:** Aggiunge «Carica completa temporanea» per caricare una volta fino al 100% senza perdere il limite abituale. Al termine della ricarica, quando l'opzione viene disattivata o dopo 24 ore, Panel de Control ripristina automaticamente il limite salvato. Appare solo sui dispositivi compatibili.
+
+### Deutsch
+
+* **Akku:** Fügt „Temporäre Vollladung“ hinzu, um einmal bis 100 % zu laden, ohne das übliche Ladelimit zu verlieren. Wenn der Akku voll ist, die Option ausgeschaltet wird oder 24 Stunden verstrichen sind, stellt Panel de Control das gespeicherte Limit automatisch wieder her. Die Option erscheint nur auf kompatiblen Geräten.
+
 ## [0.47.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.47.0...panel-de-control-v0.47.1) (2026-09-12)
 
 
