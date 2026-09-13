@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.48.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.47.1...panel-de-control-v0.48.0) (2026-09-13)
+
+
+### Features
+
+* **battery:** add temporary full charge mode ([#634](https://github.com/Hooandee/panel-de-control/issues/634)) ([14c086b](https://github.com/Hooandee/panel-de-control/commit/14c086b5a5c5b3d90cf9ea0631bdca9ad8bdc131))
+
 ## [0.47.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.47.0...panel-de-control-v0.47.1) (2026-09-12)
 
 
