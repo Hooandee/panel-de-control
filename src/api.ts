@@ -1,9 +1,20 @@
 import { callable } from "@decky/api";
 import type { LaunchTools } from "./launch/catalog";
+import type { CleanerPlan, CleanerResult, CleanerState } from "./cleaner/types";
 
 // callable<[arg types], ReturnType>("exact_backend_method_name")
 // Names must match the Python `async def` on the Plugin class exactly.
 export const getVersion = callable<[], string>("get_version");
+
+export const getSteamCleanerState = callable<[], CleanerState>("get_steam_cleaner_state");
+export const scanSteamCleaner = callable<[], CleanerState>("scan_steam_cleaner");
+export const prepareSteamCleaner = callable<[
+  scanId: string, entryIds: string[],
+], CleanerPlan>("prepare_steam_cleaner");
+export const executeSteamCleaner = callable<[
+  planId: string, confirmCompatdata: boolean,
+], CleanerResult>("execute_steam_cleaner");
+export const cancelSteamCleaner = callable<[], CleanerState>("cancel_steam_cleaner");
 
 export const prepareRemoteThemeInstall = callable<[
   themeId: string,

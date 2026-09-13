@@ -606,6 +606,29 @@ def sysfs_snapshot(
     return result
 
 
+def steam_cleaner_snapshot(diagnostics) -> dict:
+    if not isinstance(diagnostics, dict):
+        return {"error": "diagnostics_unavailable"}
+    snapshot = {
+        key: diagnostics[key]
+        for key in (
+            "schema_version", "phase", "last_operation_id", "interrupted",
+            "persistence_error",
+        )
+        if key in diagnostics
+    }
+    events = diagnostics.get("events")
+    snapshot["events"] = list(events[-120:]) if isinstance(events, list) else []
+    try:
+        while len(json.dumps(snapshot).encode("utf-8")) > 48_000:
+            if not snapshot["events"]:
+                return {"error": "diagnostics_unavailable"}
+            snapshot["events"].pop(0)
+    except (TypeError, ValueError):
+        return {"error": "diagnostics_unavailable"}
+    return snapshot
+
+
 def capabilities_from(states: dict) -> dict:
     """Distil the per-subsystem detected backends + supported flags from the live
     state dicts. This is the single most useful section for triage: many reports
