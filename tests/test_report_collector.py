@@ -120,12 +120,20 @@ def test_capabilities_from_includes_hud_summary():
             "capability": "ready",
             "apply_status": "reload_requested",
             "enabled": True,
+            "steam_overlay": {
+                "master_enabled": False,
+                "read_available": True,
+                "last_activation": {"outcome": "readback_timeout"},
+            },
         }
     })
 
     assert caps["hud_capability"] == "ready"
     assert caps["hud_apply_status"] == "reload_requested"
     assert caps["hud_enabled"] is True
+    assert caps["hud_steam_overlay_master_enabled"] is False
+    assert caps["hud_steam_overlay_read_available"] is True
+    assert caps["hud_steam_overlay_last_activation"] == "readback_timeout"
 
 
 # ---- redact_text ----------------------------------------------------------
@@ -243,7 +251,7 @@ def test_build_bundle_shape_and_redaction():
         stores={"profiles": {}},
         logs=[{"name": "x.log", "text": "boom"}],
     )
-    assert b["schema"] == 3
+    assert b["schema"] == 4
     assert b["app"] == "panel-de-control"
     assert b["kind"] == "bug"
     assert b["categories"] == ["tdp", "fans"]
