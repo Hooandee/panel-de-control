@@ -1,6 +1,11 @@
 import type { CleanerMetadata } from "./model";
 
-interface Overview { appid?: number; display_name?: string }
+interface Overview {
+  appid?: number;
+  display_name?: string;
+  app_type?: number;
+  local_per_client_data?: { installed?: boolean };
+}
 interface SteamVisualWindow {
   collectionStore?: { allAppsCollection?: { allApps?: Overview[] } };
   appStore?: {
@@ -30,4 +35,36 @@ export function readCleanerMetadata(): Map<string, CleanerMetadata> {
     }
   } catch { /* Steam stores can be absent while the QAM is mounting. */ }
   return result;
+}
+
+export function readInstalledCleanerMetadata(metadata = readCleanerMetadata()): Array<CleanerMetadata & { appid: string }> {
+  if (typeof window === "undefined") return [];
+  try {
+    const overviews = (window as unknown as SteamVisualWindow).collectionStore?.allAppsCollection?.allApps;
+    if (!Array.isArray(overviews)) return [];
+    return overviews.flatMap((overview) => {
+      if (!Number.isSafeInteger(overview.appid) || overview.app_type === 4 || overview.local_per_client_data?.installed !== true) return [];
+      const visual = metadata.get(String(overview.appid));
+      return visual ? [{ appid: String(overview.appid), ...visual }] : [];
+    });
+  } catch {
+    return [];
+  }
+}
+
+export function readInstalledProtonMetadata(): Array<{ appid: string; name: string }> {
+  if (typeof window === "undefined") return [];
+  try {
+    const overviews = (window as unknown as SteamVisualWindow).collectionStore?.allAppsCollection?.allApps;
+    if (!Array.isArray(overviews)) return [];
+    return overviews.flatMap((overview) => {
+      const name = typeof overview.display_name === "string" ? overview.display_name.trim() : "";
+      const isProton = name.toLocaleLowerCase().includes("proton");
+      const isRuntime = name.toLocaleLowerCase().includes("steam linux runtime");
+      if (!Number.isSafeInteger(overview.appid) || overview.app_type !== 4 || overview.local_per_client_data?.installed !== true || (!isProton && !isRuntime)) return [];
+      return [{ appid: String(overview.appid), name }];
+    });
+  } catch {
+    return [];
+  }
 }

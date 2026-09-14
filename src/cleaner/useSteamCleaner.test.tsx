@@ -33,6 +33,18 @@ describe("Steam Cleaner controller", () => {
     expect(result.current.state?.scan_id).toBe("new-scan");
   });
 
+  it("cancels a manually started analysis when Limpieza closes", async () => {
+    const scanning = deferred<CleanerState>();
+    api.scan.mockReturnValue(scanning.promise);
+    const { result, unmount } = renderHook(useSteamCleaner);
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    act(() => { void result.current.scan(); });
+    await waitFor(() => expect(result.current.busy).toBe(true));
+    unmount();
+    expect(api.cancel).toHaveBeenCalledOnce();
+    scanning.resolve(state({ scan_id: "fresh" }));
+  });
+
   it("keeps a dismissed result hidden through refresh and scan, then shows a new cleanup", async () => {
     api.state.mockResolvedValue(state({ last_result: outcome }));
     api.scan.mockResolvedValue(state({ last_result: outcome }));

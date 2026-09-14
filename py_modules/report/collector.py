@@ -609,21 +609,42 @@ def sysfs_snapshot(
 def steam_cleaner_snapshot(diagnostics) -> dict:
     if not isinstance(diagnostics, dict):
         return {"error": "diagnostics_unavailable"}
-    snapshot = {
-        key: diagnostics[key]
-        for key in (
-            "schema_version", "phase", "last_operation_id", "interrupted",
-            "persistence_error",
-        )
-        if key in diagnostics
+
+    safe_event_keys = {
+        "event", "operation_id", "phase", "at", "reason", "source",
+        "system_error", "library_id", "entry_id", "plan_id", "scan_id", "count", "complete",
+        "readback", "kind", "time",
     }
-    events = diagnostics.get("events")
-    snapshot["events"] = list(events[-120:]) if isinstance(events, list) else []
+
+    def bounded(value):
+        snapshot = {
+            key: value[key]
+            for key in (
+                "schema_version", "phase", "last_operation_id", "interrupted",
+                "persistence_error",
+            )
+            if key in value
+        }
+        events = value.get("events")
+        snapshot["events"] = [
+            {key: event[key] for key in safe_event_keys if key in event}
+            for event in events[-120:]
+            if isinstance(event, dict)
+        ] if isinstance(events, list) else []
+        return snapshot
+
+    snapshot = bounded(diagnostics)
+    if isinstance(diagnostics.get("proton"), dict):
+        snapshot["proton"] = bounded(diagnostics["proton"])
     try:
         while len(json.dumps(snapshot).encode("utf-8")) > 48_000:
-            if not snapshot["events"]:
+            candidates = [snapshot["events"]]
+            if isinstance(snapshot.get("proton"), dict):
+                candidates.append(snapshot["proton"]["events"])
+            longest = max(candidates, key=len)
+            if not longest:
                 return {"error": "diagnostics_unavailable"}
-            snapshot["events"].pop(0)
+            longest.pop(0)
     except (TypeError, ValueError):
         return {"error": "diagnostics_unavailable"}
     return snapshot

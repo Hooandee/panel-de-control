@@ -11,15 +11,33 @@ vi.mock("@decky/ui", () => ({
   TextField: ({ label, value, onChange }: { label: string; value: string; onChange: (event: unknown) => void }) => <label>{label}<input value={value} onChange={onChange} /></label>,
 }));
 vi.mock("../i18n", () => ({ useI18n: () => ({ lang: "en", t: (key: string, values?: Record<string, unknown>) => `${key}${values ? ` ${Object.values(values).join(" ")}` : ""}` }) }));
-vi.mock("./steamMetadata", () => ({ readCleanerMetadata: () => new Map() }));
+vi.mock("../system/pdcStorage", () => ({
+  readFlag: (key: string) => localStorage.getItem(key) === "1",
+  writeFlag: (key: string, value: boolean) => localStorage.setItem(key, value ? "1" : "0"),
+  onPrefsHealed: () => () => {},
+}));
+vi.mock("./steamMetadata", () => ({
+  readCleanerMetadata: () => new Map(),
+  readInstalledCleanerMetadata: () => [{ appid: "42", name: "Installed Game", coverUrls: [] }],
+}));
 import { SteamCleanerView } from "./SteamCleanerView";
 
 const entry = (id: string, overrides: Partial<CleanerEntry> = {}): CleanerEntry => ({ id, game_id: "game", appid: "10", name: "Game", kind: "shadercache", library_id: "library", library_label: "Internal drive", bytes: 1_000_000, installation: "installed", blocked_reason: null, warnings: [], ...overrides });
 const state = (overrides: Partial<CleanerState> = {}): CleanerState => ({ schema_version: 1, available: true, status: "ready", scan_id: "scan", coverage_complete: true, entries: [entry("cache"), entry("prefix", { kind: "compatdata" })], libraries: [{ id: "library", label: "Internal drive", available: true, reason: null }], totals: { shadercache: 1_000_000, compatdata: 1_000_000, unknown: 0 }, progress: { processed: 0, total: null }, error: null, last_result: null, ...overrides });
 const controller = (overrides: Partial<CleanerController> = {}): CleanerController => ({ state: state(), plan: null, result: null, error: null, loading: false, pending: null, busy: false, cancelling: false, scan: vi.fn(async () => {}), prepare: vi.fn(async () => {}), execute: vi.fn(async () => {}), cancel: vi.fn(async () => {}), refresh: vi.fn(async () => {}), dismissPlan: vi.fn(), dismissResult: vi.fn(), ...overrides });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  localStorage.clear();
+});
 
 describe("Steam Cleaner interface", () => {
+  it("shows installed games immediately while their cleanup sizes are calculated", () => {
+    render(<SteamCleanerView embedded controller={controller({ state: null, loading: true })} />);
+    expect(screen.getByText("Installed Game")).toBeTruthy();
+    expect(screen.getByText("cleaner.calculating")).toBeTruthy();
+    expect(screen.queryByRole("checkbox", { name: /Installed Game/ })).toBeNull();
+  });
+
   it("does not claim Steam is unavailable before the first scan", () => {
     render(<SteamCleanerView controller={controller({ state: state({ available: false, status: "idle", scan_id: null, entries: [], libraries: [] }) })} />);
     expect(screen.queryByText("cleaner.unavailable")).toBeNull();
@@ -39,6 +57,57 @@ describe("Steam Cleaner interface", () => {
     fireEvent.click(prefix);
     fireEvent.click(screen.getByRole("button", { name: "cleaner.cleanSelection" }));
     expect(c.prepare).toHaveBeenLastCalledWith(["cache", "prefix"]);
+  });
+
+  it("shows a mixed game indicator until every available option is selected", () => {
+    render(<SteamCleanerView controller={controller()} />);
+    const game = screen.getByRole("checkbox", { name: "cleaner.selectGameCaches Game" });
+    fireEvent.click(screen.getByRole("button", { name: "cleaner.gameDetails Game" }));
+    const cache = screen.getByRole("checkbox", { name: "cleaner.kind.shadercache · Internal drive" });
+    const prefix = screen.getByRole("checkbox", { name: "cleaner.kind.compatdata · Internal drive" });
+
+    fireEvent.click(prefix);
+    expect(game.getAttribute("aria-checked")).toBe("mixed");
+    fireEvent.click(cache);
+    expect(game.getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(prefix);
+    expect(game.getAttribute("aria-checked")).toBe("mixed");
+    fireEvent.click(cache);
+    expect(game.getAttribute("aria-checked")).toBe("false");
+  });
+
+  it("shows the storage explanation once and makes the recommended filter explicit", () => {
+    render(<SteamCleanerView controller={controller({ state: state({ entries: [
+      entry("installed", { game_id: "installed", name: "Installed" }),
+      entry("recommended", { game_id: "recommended", name: "Recommended", installation: "not_installed" }),
+      entry("prefix", { game_id: "installed", name: "Installed", kind: "compatdata" }),
+    ] }) })} />);
+
+    expect(screen.getAllByText("cleaner.cacheHint")).toHaveLength(1);
+    expect(screen.getAllByText("cleaner.prefixHint")).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "cleaner.filterLabel" }));
+    expect(screen.getByText("cleaner.filter.cleanable")).toBeTruthy();
+    expect(screen.getByText("Installed")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "cleaner.filterLabel" }));
+    expect(screen.getByText("Recommended")).toBeTruthy();
+    expect(screen.queryByText("Installed")).toBeNull();
+  });
+
+  it("keeps the storage explanation dismissed across mounts", () => {
+    const view = render(<SteamCleanerView controller={controller()} />);
+    fireEvent.click(screen.getByRole("button", { name: "cleaner.help.dismiss" }));
+    expect(screen.queryByText("cleaner.cacheHint")).toBeNull();
+    view.unmount();
+    render(<SteamCleanerView controller={controller()} />);
+    expect(screen.queryByText("cleaner.cacheHint")).toBeNull();
+  });
+
+  it("explains when there are no recommended games", () => {
+    render(<SteamCleanerView controller={controller()} />);
+    fireEvent.click(screen.getByRole("button", { name: "cleaner.filterLabel" }));
+    fireEvent.click(screen.getByRole("button", { name: "cleaner.filterLabel" }));
+    expect(screen.getByText("cleaner.noRecommendations")).toBeTruthy();
+    expect(screen.queryByText("cleaner.noMatch")).toBeNull();
   });
 
   it("confirms prefixes inline while keeping the game list visible and selection locked", () => {
@@ -112,6 +181,7 @@ describe("Steam Cleaner interface", () => {
     expect(cache.getAttribute("aria-disabled")).toBe("false");
     fireEvent.click(cache);
     expect(cache.getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByText(/cleaner.recommendation.game_not_installed/)).toBeTruthy();
   });
 
   it.each([

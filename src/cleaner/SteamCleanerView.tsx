@@ -1,19 +1,21 @@
 import { CSSProperties, FC, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Focusable, PanelSectionRow, TextField } from "@decky/ui";
-import { LuArrowDownUp, LuCheck, LuChevronDown, LuChevronRight, LuCircleAlert, LuCircleCheck, LuFilter, LuHardDrive, LuRefreshCw, LuSearch, LuShieldCheck, LuSquare, LuSquareCheck, LuTrash2, LuX } from "react-icons/lu";
+import { LuArrowDownUp, LuCheck, LuChevronDown, LuChevronRight, LuCircleAlert, LuCircleCheck, LuFilter, LuHardDrive, LuInfo, LuRefreshCw, LuSearch, LuShieldCheck, LuSquare, LuSquareCheck, LuSquareMinus, LuTrash2, LuX } from "react-icons/lu";
 import { GameCover } from "../components/GameCover";
 import { CleanerActionTray } from "./CleanerActionTray";
 import { useI18n } from "../i18n";
+import { onPrefsHealed, readFlag, writeFlag } from "../system/pdcStorage";
 import { theme } from "../theme";
 import { cleanerReasonKey } from "./errors";
 import { CleanerFilter, CleanerGame, CleanerSort, eligibleCaches, filterGames, formatBytes, groupEntries, toggleCaches, toggleEntry } from "./model";
-import { readCleanerMetadata } from "./steamMetadata";
+import { readCleanerMetadata, readInstalledCleanerMetadata } from "./steamMetadata";
 import type { CleanerController } from "./useSteamCleaner";
 import type { CleanerEntry } from "./types";
 
 const column: CSSProperties = { display: "flex", flexDirection: "column", gap: theme.space.sm, minWidth: 0 };
 const caption: CSSProperties = { fontSize: theme.font.caption, color: theme.color.textMuted, lineHeight: 1.5 };
-const FILTERS: CleanerFilter[] = ["all", "not_installed", "selected"];
+const FILTERS: CleanerFilter[] = ["all", "cleanable", "not_installed", "selected"];
+const HELP_DISMISSED_KEY = "pdc:cleanerHelpDismissed";
 
 function libraryLabel(entry: Pick<CleanerEntry, "library_label" | "library_internal">, internalStorage: string): string {
   return entry.library_internal === true ? internalStorage : entry.library_label;
@@ -21,7 +23,7 @@ function libraryLabel(entry: Pick<CleanerEntry, "library_label" | "library_inter
 
 const CleanerAction: FC<{
   label: string; children: ReactNode; onActivate: () => void; disabled?: boolean;
-  checked?: boolean; primary?: boolean; danger?: boolean; style?: CSSProperties;
+  checked?: boolean | "mixed"; primary?: boolean; danger?: boolean; style?: CSSProperties;
 }> = ({ label, children, onActivate, disabled, checked, primary, danger, style }) => {
   const activate = () => { if (!disabled) onActivate(); };
   return (
@@ -78,24 +80,27 @@ const GameRow: FC<{ game: CleanerGame; selected: ReadonlySet<string>; disabled: 
   const [open, setOpen] = useState(false);
   const name = game.name || t("cleaner.unknownGame");
   const caches = eligibleCaches(game.entries);
+  const selectable = game.entries.filter((entry) => !entry.blocked_reason);
   const selectedCount = game.entries.filter((entry) => selected.has(entry.id)).length;
   const selectedKinds = [...new Set(game.entries.filter((entry) => selected.has(entry.id)).map((entry) => entry.kind))];
-  const cachesSelected = caches.length > 0 && caches.every((entry) => selected.has(entry.id));
-  const Check = cachesSelected ? LuSquareCheck : LuSquare;
+  const allSelected = selectable.length > 0 && selectable.every((entry) => selected.has(entry.id));
+  const partiallySelected = selectedCount > 0 && !allSelected;
+  const Check = allSelected ? LuSquareCheck : partiallySelected ? LuSquareMinus : LuSquare;
   const Chevron = open ? LuChevronDown : LuChevronRight;
   const installation = game.entries[0].installation;
   return (
     <div style={{ ...theme.card, ...column, gap: 0, padding: 6 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <CleanerAction label={t("cleaner.selectGameCaches", { name })} checked={cachesSelected} disabled={disabled || caches.length === 0} onActivate={onCaches} style={{ background: "transparent", boxShadow: "none", padding: "6px", textAlign: "left", justifyContent: "flex-start" }}>
+          <CleanerAction label={t("cleaner.selectGameCaches", { name })} checked={allSelected ? true : partiallySelected ? "mixed" : false} disabled={disabled || caches.length === 0} onActivate={onCaches} style={{ background: "transparent", boxShadow: "none", padding: "6px", textAlign: "left", justifyContent: "flex-start" }}>
             <GameCover urls={game.coverUrls} name={name} width={38} />
             <span style={{ flex: 1, minWidth: 0 }}>
               <span style={{ display: "block", fontSize: theme.font.body, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
               {(game.name || installation !== "unknown") && <span style={{ ...caption, display: "block" }}>{t(`cleaner.installation.${installation}`)}</span>}
+              {installation === "not_installed" && <span style={{ ...caption, display: "block", color: theme.color.accent }}>{t("cleaner.recommended")} · {t("cleaner.recommendation.game_not_installed")}</span>}
               <span style={{ display: "block", marginTop: 3, fontSize: theme.font.caption, fontVariantNumeric: "tabular-nums", color: theme.color.accent }}>{game.entries.every((entry) => entry.bytes === null) ? t("cleaner.sizeUnknown") : `${formatBytes(game.bytes, lang)}${game.sizeUnknown ? ` · ${t("cleaner.partialSize")}` : ""}`}</span>
             </span>
-            <Check size={18} color={cachesSelected ? theme.color.accent : theme.color.textMuted} style={{ flexShrink: 0 }} />
+            <Check size={18} color={selectedCount > 0 ? theme.color.accent : theme.color.textMuted} style={{ flexShrink: 0 }} />
           </CleanerAction>
         </div>
         <div style={{ width: 36, flexShrink: 0 }}>
@@ -106,14 +111,21 @@ const GameRow: FC<{ game: CleanerGame; selected: ReadonlySet<string>; disabled: 
       {open && <div style={{ ...column, padding: "6px" }}>
         {!game.name && <div style={caption}>{t("cleaner.steamIdentifier", { id: game.entries[0].appid })}</div>}
         {game.entries.map((entry) => <EntryChoice key={entry.id} entry={entry} selected={selected.has(entry.id)} disabled={disabled} onToggle={() => onEntry(entry)} />)}
-        {game.entries.some((entry) => entry.kind === "shadercache") && <div style={caption}>{t("cleaner.cacheHint")}</div>}
-        {game.entries.some((entry) => entry.kind === "compatdata") && <div style={caption}>{t("cleaner.prefixHint")}</div>}
       </div>}
     </div>
   );
 };
 
-export const SteamCleanerView: FC<{ controller: CleanerController }> = ({ controller }) => {
+const LoadingGameRow: FC<{ game: ReturnType<typeof readInstalledCleanerMetadata>[number] }> = ({ game }) => {
+  const { t } = useI18n();
+  return <div style={{ ...theme.card, display: "flex", alignItems: "center", gap: 10, padding: 12 }}>
+    <GameCover urls={game.coverUrls} name={game.name} width={38} />
+    <span style={{ flex: 1, minWidth: 0, fontSize: theme.font.body, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{game.name}</span>
+    <span style={{ ...caption, color: theme.color.textPrimary, whiteSpace: "nowrap" }}>{t("cleaner.calculating")}</span>
+  </div>;
+};
+
+export const SteamCleanerView: FC<{ controller: CleanerController; embedded?: boolean }> = ({ controller, embedded = false }) => {
   const { t, lang } = useI18n();
   const { state, plan, result, error, loading, busy, pending } = controller;
   const [selected, setSelected] = useState(new Set<string>());
@@ -122,8 +134,10 @@ export const SteamCleanerView: FC<{ controller: CleanerController }> = ({ contro
   const [sort, setSort] = useState<CleanerSort>("size");
   const [filter, setFilter] = useState<CleanerFilter>("all");
   const [resultsOpen, setResultsOpen] = useState(false);
+  const [helpVisible, setHelpVisible] = useState(() => !readFlag(HELP_DISMISSED_KEY));
   const labels = useRef(new Map<string, CleanerEntry>());
   const metadata = useMemo(readCleanerMetadata, [state?.scan_id]);
+  const installedMetadata = useMemo(() => readInstalledCleanerMetadata(metadata), [metadata]);
   const games = useMemo(() => groupEntries(state?.entries ?? [], metadata), [state?.entries, metadata]);
   const shown = useMemo(() => filterGames(games, query, filter, sort, selected), [games, query, filter, sort, selected]);
   const chosen = (state?.entries ?? []).filter((entry) => selected.has(entry.id) && !entry.blocked_reason);
@@ -135,9 +149,11 @@ export const SteamCleanerView: FC<{ controller: CleanerController }> = ({ contro
   const scanId = state?.scan_id;
   const hasScanData = !!state && (!!scanId || state.libraries.length > 0);
   const selectionDisabled = busy || !!plan || !scanId;
+  const calculatingGames = embedded && (loading || pending === "scan" || state?.status === "scanning");
 
   useEffect(() => { setSelected(new Set()); }, [scanId]);
   useEffect(() => { setResultsOpen(false); }, [result?.operation_id]);
+  useEffect(() => onPrefsHealed(() => setHelpVisible(!readFlag(HELP_DISMISSED_KEY))), []);
   useEffect(() => {
     if (!entries) return;
     for (const entry of entries) labels.current.set(entry.id, entry);
@@ -154,7 +170,7 @@ export const SteamCleanerView: FC<{ controller: CleanerController }> = ({ contro
   return (
     <PanelSectionRow>
       <div style={column}>
-        <div style={{ ...theme.card, padding: 14 }}>
+        {!embedded && <div style={{ ...theme.card, padding: 14 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <LuHardDrive size={17} color={theme.color.accent} /><span style={{ flex: 1, fontSize: 15, fontWeight: 650 }}>{t("cleaner.title")}</span>
             {hasScanData && <div style={{ width: 32 }}><CleanerAction label={t("cleaner.scanAgain")} disabled={busy || loading || !!plan} onActivate={() => { setSelected(new Set()); void controller.scan(); }} style={{ padding: 6, minHeight: 30, background: "transparent", boxShadow: "none" }}><LuRefreshCw size={15} /></CleanerAction></div>}
@@ -175,7 +191,7 @@ export const SteamCleanerView: FC<{ controller: CleanerController }> = ({ contro
           </div>
           <div style={{ ...caption, marginTop: 9 }}>{t("cleaner.summaryHint")}</div>
           {!!state?.totals.unknown && <div style={{ ...caption, color: theme.color.warn }}>{t("cleaner.unknownSizes")}</div>}
-        </div>
+        </div>}
         {failedNotice}
         {loading ? <div role="status" style={{ ...caption, padding: 12 }}>{t("cleaner.loading")}</div> : busy ? <div style={{ ...theme.card, ...column, padding: 12 }}>
           <div role="status" aria-live="polite" style={{ fontSize: theme.font.body }}>{t(pending === "prepare" ? "cleaner.preparing" : state?.status === "cleaning" || pending === "execute" ? "cleaner.cleaning" : "cleaner.scanning")}</div>
@@ -183,6 +199,7 @@ export const SteamCleanerView: FC<{ controller: CleanerController }> = ({ contro
           {pending !== "prepare" && <CleanerAction label={t("cleaner.cancel")} disabled={controller.cancelling} onActivate={() => void controller.cancel()}><LuX size={15} />{t(controller.cancelling ? "cleaner.cancelling" : "cleaner.cancel")}</CleanerAction>}
           <div style={caption}>{t("cleaner.cancelHint")}</div>
         </div> : !hasScanData ? <CleanerAction label={t("cleaner.scan")} primary onActivate={() => { setSelected(new Set()); void controller.scan(); }}><LuRefreshCw size={16} />{t("cleaner.scan")}</CleanerAction> : null}
+        {calculatingGames && installedMetadata.map((game) => <LoadingGameRow key={game.appid} game={game} />)}
         {state?.scan_id && !state.coverage_complete && <Notice warning>{t("cleaner.coverageIncomplete")}</Notice>}
         {state?.libraries.filter((library) => !library.available).map((library) => <Notice key={library.id} warning>{library.label} · {t(cleanerReasonKey(library.reason))}</Notice>)}
         {state && state.status !== "idle" && !loading && !busy && !state.available && <Notice>{t("cleaner.unavailable")}</Notice>}
@@ -207,19 +224,29 @@ export const SteamCleanerView: FC<{ controller: CleanerController }> = ({ contro
           })}
         </div>}
         {hasScanData && !scanId && !busy && <CleanerAction label={t("cleaner.scanAfterCleanup")} primary onActivate={() => void controller.scan()}><LuRefreshCw size={16} />{t("cleaner.scanAfterCleanup")}</CleanerAction>}
-        {hasScanData && <>
+        {hasScanData && !calculatingGames && <>
           <div style={{ display: "flex", gap: 8 }}>
             <div style={{ flex: 1, minWidth: 0 }}><CleanerAction label={t("cleaner.filterLabel")} onActivate={() => setFilter((value) => FILTERS[(FILTERS.indexOf(value) + 1) % FILTERS.length])} style={{ justifyContent: "flex-start", paddingInline: 9 }}><LuFilter size={14} style={{ flexShrink: 0 }} /><span>{t(`cleaner.filter.${filter}`)}</span><span style={{ ...caption, marginLeft: "auto" }}>{shown.length}</span></CleanerAction></div>
             <div style={{ width: 36, flexShrink: 0 }}><CleanerAction label={`${t("cleaner.sortLabel")}: ${t(`cleaner.sort.${sort}`)}`} onActivate={() => setSort((value) => value === "size" ? "name" : "size")} style={{ padding: 8 }}><LuArrowDownUp size={15} /></CleanerAction></div>
             <div style={{ width: 42, flexShrink: 0 }}><CleanerAction label={t("cleaner.search")} onActivate={() => { setSearchOpen((value) => !value); setQuery(""); }} style={{ padding: 10 }}><LuSearch size={16} color={searchOpen ? theme.color.accent : undefined} /></CleanerAction></div>
           </div>
           {searchOpen && <TextField label={t("cleaner.search")} value={query} onChange={(event) => setQuery(event.target.value)} />}
+          {helpVisible && <div style={{ ...theme.card, ...column, gap: 6, padding: "9px 10px" }}>
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+              <LuInfo size={15} color={theme.color.accent} style={{ flexShrink: 0, marginTop: 1 }} />
+              <div style={{ ...caption, display: "flex", flexDirection: "column", gap: 3 }}>
+                <span>{t("cleaner.cacheHint")}</span>
+                <span>{t("cleaner.prefixHint")}</span>
+              </div>
+            </div>
+            <CleanerAction label={t("cleaner.help.dismiss")} onActivate={() => { writeFlag(HELP_DISMISSED_KEY, true); setHelpVisible(false); }} style={{ minHeight: 28, padding: "5px 8px", background: "transparent", boxShadow: "none", color: theme.color.accent }}>{t("cleaner.help.dismiss")}</CleanerAction>
+          </div>}
           <div style={{ display: "flex", gap: 8 }}>
             <CleanerAction label={t(allShownCachesSelected ? "cleaner.deselectCaches" : "cleaner.selectCaches")} disabled={selectionDisabled || shownCaches.length === 0} onActivate={() => setSelected((value) => toggleCaches(shownEntries, value))} style={{ padding: "5px 3px", minHeight: 30, background: "transparent", boxShadow: "none", justifyContent: "flex-start", color: theme.color.textMuted }}><LuCheck size={15} style={{ flexShrink: 0 }} /><span>{t(allShownCachesSelected ? "cleaner.deselectCaches" : "cleaner.selectCaches")}</span></CleanerAction>
             {selected.size > 0 && <div style={{ width: 32, flexShrink: 0 }}><CleanerAction label={t("cleaner.clearSelection")} disabled={selectionDisabled} onActivate={() => setSelected(new Set())} style={{ padding: 6, minHeight: 30, background: "transparent", boxShadow: "none" }}><LuX size={15} /></CleanerAction></div>}
           </div>
           {shown.map((game) => <GameRow key={game.id} game={game} selected={selected} disabled={selectionDisabled} onCaches={() => setSelected((value) => toggleCaches(game.entries, value))} onEntry={(entry) => setSelected((value) => toggleEntry(entry, value))} />)}
-          {shown.length === 0 && <div style={{ ...caption, padding: 12 }}>{t(games.length === 0 ? "cleaner.empty" : "cleaner.noMatch")}</div>}
+          {shown.length === 0 && <div style={{ ...caption, padding: 12 }}>{t(games.length === 0 ? "cleaner.empty" : filter === "cleanable" && !query ? "cleaner.noCleanable" : filter === "not_installed" && !query ? "cleaner.noRecommendations" : "cleaner.noMatch")}</div>}
           {(plan || chosen.length > 0) && <CleanerActionTray>
             {plan ? <Focusable flow-children="column" onCancel={(event) => { event.stopPropagation(); controller.dismissPlan(); }} style={column}>
               <div style={{ fontSize: theme.font.body, fontWeight: 600 }}>{t("cleaner.confirm.title")}</div>

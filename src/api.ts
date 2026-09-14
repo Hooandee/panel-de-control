@@ -1,6 +1,7 @@
 import { callable } from "@decky/api";
 import type { LaunchTools } from "./launch/catalog";
 import type { CleanerPlan, CleanerResult, CleanerState } from "./cleaner/types";
+import type { ProtonPlan, ProtonResult, ProtonState } from "./cleaner/protonTypes";
 
 // callable<[arg types], ReturnType>("exact_backend_method_name")
 // Names must match the Python `async def` on the Plugin class exactly.
@@ -15,6 +16,22 @@ export const executeSteamCleaner = callable<[
   planId: string, confirmCompatdata: boolean,
 ], CleanerResult>("execute_steam_cleaner");
 export const cancelSteamCleaner = callable<[], CleanerState>("cancel_steam_cleaner");
+export const measureSteamScreenshotPaths = callable<[
+  paths: string[],
+], Record<string, number | null>>("measure_steam_screenshot_paths");
+export type SteamMediaEvent = "scan_started" | "scan_completed" | "scan_failed" | "scan_cancelled" | "cleanup_started" | "cleanup_completed" | "cleanup_failed";
+export type SteamMediaSource = "none" | "screenshots" | "recordings" | "clips" | "measurement";
+export const recordSteamMediaEvent = callable<[
+  event: SteamMediaEvent, count: number, errors: number, source: SteamMediaSource,
+], boolean>("record_steam_media_event");
+export const getProtonCleanerState = callable<[], ProtonState>("get_proton_cleaner_state");
+export const scanProtonCleaner = callable<[], ProtonState>("scan_proton_cleaner");
+export const prepareProtonCleaner = callable<[
+  scanId: string, entryIds: string[],
+], ProtonPlan>("prepare_proton_cleaner");
+export const executeProtonCleaner = callable<[
+  planId: string,
+], ProtonResult>("execute_proton_cleaner");
 
 export const prepareRemoteThemeInstall = callable<[
   themeId: string,

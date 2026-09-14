@@ -35,11 +35,12 @@ describe("Steam Cleaner selection", () => {
   });
 
   it("groups locations by backend identity and filters without changing selection", () => {
-    const entries = [entry("a"), entry("b", { library_id: "second" }), entry("c", { game_id: "other", name: "Another", bytes: 999, installation: "not_installed" })];
+    const entries = [entry("a"), entry("b", { library_id: "second" }), entry("c", { game_id: "other", name: "Another", bytes: 999, installation: "not_installed" }), entry("d", { game_id: "blocked", name: "Blocked", blocked_reason: "game_running" })];
     const groups = groupEntries(entries, new Map());
     const selected = new Set(["b"]);
-    expect(groups).toHaveLength(2);
+    expect(groups).toHaveLength(3);
     expect(filterGames(groups, "GAME", "all", "size", selected).map((g) => g.id)).toEqual(["game"]);
+    expect(filterGames(groups, "", "cleanable", "size", selected).map((g) => g.id)).toEqual(["other", "game"]);
     expect(filterGames(groups, "", "not_installed", "size", selected).map((g) => g.id)).toEqual(["other"]);
     expect(filterGames(groups, "", "selected", "size", selected).map((g) => g.id)).toEqual(["game"]);
     expect([...selected]).toEqual(["b"]);

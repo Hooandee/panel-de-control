@@ -152,6 +152,35 @@ def test_rpc_preserves_safe_service_error_code(plugin):
         asyncio.run(plugin.execute_steam_cleaner("plan-1", False))
 
 
+def test_proton_rpcs_share_the_cleaner_worker_and_forward_only_ids(plugin):
+    service = install_service(plugin, BlockingService())
+    calls = []
+    service.get_proton_state = lambda: {"status": "ready", "entries": []}
+    service.inventory_proton = lambda: {"status": "ready", "scan_id": "proton-scan"}
+    service.prepare_proton = lambda scan_id, entry_ids: calls.append((scan_id, entry_ids)) or {"id": "proton-plan"}
+    service.execute_proton = lambda plan_id: calls.append(plan_id) or {"items": []}
+
+    assert asyncio.run(plugin.get_proton_cleaner_state())["status"] == "ready"
+    assert asyncio.run(plugin.scan_proton_cleaner())["scan_id"] == "proton-scan"
+    assert asyncio.run(plugin.prepare_proton_cleaner("proton-scan", ["opaque-entry"])) == {"id": "proton-plan"}
+    assert asyncio.run(plugin.execute_proton_cleaner("proton-plan")) == {"items": []}
+    assert calls == [("proton-scan", ["opaque-entry"]), "proton-plan"]
+
+
+def test_media_events_log_only_bounded_diagnostic_counts(plugin, monkeypatch):
+    messages = []
+    monkeypatch.setattr(main.decky.logger, "info", lambda message: messages.append(message))
+
+    assert asyncio.run(plugin.record_steam_media_event("cleanup_completed", 4, 1)) is True
+    assert asyncio.run(plugin.record_steam_media_event("unknown", 4, 1)) is False
+    assert asyncio.run(plugin.record_steam_media_event("scan_completed", 100_001, 0)) is False
+
+    assert len(messages) == 1
+    assert '"event":"cleanup_completed"' in messages[0]
+    assert '"count":4' in messages[0]
+    assert "/" not in messages[0]
+
+
 def test_shutdown_drains_constructor_that_has_not_published_service(plugin, monkeypatch):
     service = BlockingService()
     constructing = threading.Event()
@@ -269,6 +298,23 @@ def test_report_includes_bounded_redacted_cleaner_snapshot_without_scan(plugin, 
     assert len(json.dumps(snapshot).encode()) <= 48_000
     assert "/home/player" not in json.dumps(snapshot)
     assert snapshot["phase"] == "ready"
+
+
+def test_report_keeps_bounded_proton_diagnostics_without_paths():
+    diagnostics = {
+        "schema_version": 1,
+        "phase": "idle",
+        "events": [],
+        "proton": {
+            "schema_version": 1,
+            "phase": "scan",
+            "events": [{"event": "error", "reason": "io_error", "private": "/home/deck/tool"}] * 200,
+        },
+    }
+    snapshot = main.report_collector.steam_cleaner_snapshot(diagnostics)
+    assert snapshot["proton"]["phase"] == "scan"
+    assert len(snapshot["proton"]["events"]) <= 120
+    assert "/home/deck" not in json.dumps(snapshot)
 
 
 def test_first_report_recovers_journal_without_opening_cleaner(plugin, monkeypatch):

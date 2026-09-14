@@ -31,6 +31,7 @@ REASONS = {
     "stale_scan", "invalid_plan", "expired_plan", "prefix_confirmation_required",
     "internal_error",
     "permission_denied", "not_found", "disk_full", "interrupted", "partial_delete", "unknown_identity", "active_download", "malformed_data",
+    "managed_by_steam", "protected_tool", "tool_in_use", "media_unavailable", "media_incomplete", "media_delete_failed",
 }
 EVENTS = {"started", "completed", "prepared", "deleted", "skipped", "error", "interrupted"}
 PHASES = {"idle", "scan", "prepare", "execute"}
@@ -82,6 +83,8 @@ class SteamCleanerService:
             "schema_version": 1, "phase": "idle", "last_operation_id": None,
             "interrupted": False, "events": [], "persistence_error": None,
         }
+        from .proton import ProtonCleanerService
+        self._proton = ProtonCleanerService(home, logger=logger, state_dir=self._state_dir, activity_provider=activity_provider)
         self._load_history()
 
     def get_state(self):
@@ -90,10 +93,13 @@ class SteamCleanerService:
 
     def diagnostics(self):
         with self._state_lock:
-            return copy.deepcopy(self._diagnostic)
+            result = copy.deepcopy(self._diagnostic)
+        result["proton"] = self._proton.diagnostics()
+        return result
 
     def cancel(self):
         self._cancelled.set()
+        self._proton.cancel()
         with self._state_lock:
             self._plans.clear()
         return self.get_state()
@@ -103,8 +109,21 @@ class SteamCleanerService:
             self._closed = True
             self._cancelled.set()
             self._plans.clear()
+        self._proton.close()
         with self._operation_lock:
             pass
+
+    def get_proton_state(self):
+        return self._proton.get_state()
+
+    def inventory_proton(self):
+        return self._proton.inventory()
+
+    def prepare_proton(self, scan_id, entry_ids):
+        return self._proton.prepare(scan_id, entry_ids)
+
+    def execute_proton(self, plan_id):
+        return self._proton.execute(plan_id)
 
     @contextmanager
     def _operation(self, phase):

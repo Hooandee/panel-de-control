@@ -40,7 +40,12 @@ export function useSteamCleaner() {
   useEffect(() => {
     mounted.current = true;
     void refresh();
-    return () => { mounted.current = false; epoch.current += 1; };
+    return () => {
+      const shouldCancel = inflight.current !== null;
+      mounted.current = false;
+      epoch.current += 1;
+      if (shouldCancel) void cancelSteamCleaner().catch(() => undefined);
+    };
   }, [refresh]);
 
   const serverBusy = state?.status === "scanning" || state?.status === "cleaning";

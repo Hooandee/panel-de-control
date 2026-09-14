@@ -2,7 +2,7 @@ import type { CleanerEntry } from "./types";
 
 export interface CleanerMetadata { name: string; coverUrls: string[] }
 export interface CleanerGame extends CleanerMetadata { id: string; entries: CleanerEntry[]; bytes: number; sizeUnknown: boolean }
-export type CleanerFilter = "all" | "not_installed" | "selected";
+export type CleanerFilter = "all" | "cleanable" | "not_installed" | "selected";
 export type CleanerSort = "size" | "name";
 
 export function groupEntries(entries: CleanerEntry[], metadata: ReadonlyMap<string, CleanerMetadata>): CleanerGame[] {
@@ -25,6 +25,7 @@ export function filterGames(games: CleanerGame[], query: string, filter: Cleaner
   const needle = query.trim().toLocaleLowerCase();
   return games.filter((game) =>
     (!needle || game.name.toLocaleLowerCase().includes(needle) || game.entries.some((entry) => entry.appid.includes(needle)))
+    && (filter !== "cleanable" || game.entries.some((entry) => !entry.blocked_reason))
     && (filter !== "not_installed" || game.entries.some((entry) => entry.installation === "not_installed"))
     && (filter !== "selected" || game.entries.some((entry) => selected.has(entry.id))))
     .sort((a, b) => (sort === "size" ? b.bytes - a.bytes : 0) || a.name.localeCompare(b.name));

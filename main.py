@@ -124,6 +124,7 @@ from mangohud.observations import TimedValue, fresh_value
 from report import collector as report_collector
 from report import client as report_client
 from steam_cleaner import SteamCleanerError, SteamCleanerService
+from steam_cleaner.media import measure_screenshot_paths
 
 # Report collector: the app slug (routes to the right GitHub repo, server-side) and the
 # collector endpoint. The URL is set to the deployed Vercel service; overridable via
@@ -876,6 +877,50 @@ class Plugin:
         self._init()
         service = await self._get_steam_cleaner()
         return self._invoke_steam_cleaner(service.cancel)
+
+    async def get_proton_cleaner_state(self) -> dict:
+        self._init()
+        service = await self._get_steam_cleaner()
+        return self._invoke_steam_cleaner(service.get_proton_state)
+
+    async def scan_proton_cleaner(self) -> dict:
+        self._init()
+        return await self._offload_steam_cleaner("inventory_proton")
+
+    async def prepare_proton_cleaner(self, scan_id: str, entry_ids: list[str]) -> dict:
+        self._init()
+        return await self._offload_steam_cleaner("prepare_proton", scan_id, entry_ids)
+
+    async def execute_proton_cleaner(self, plan_id: str) -> dict:
+        self._init()
+        return await self._offload_steam_cleaner("execute_proton", plan_id)
+
+    async def measure_steam_screenshot_paths(self, paths: list[str]) -> dict:
+        self._init()
+        home = getattr(decky, "DECKY_USER_HOME", None)
+        if not isinstance(home, str) or not os.path.isabs(home):
+            return {}
+        return await asyncio.get_running_loop().run_in_executor(
+            None,
+            measure_screenshot_paths,
+            home,
+            paths,
+        )
+
+    async def record_steam_media_event(self, event: str, count: int = 0, errors: int = 0, source: str = "none") -> bool:
+        self._init()
+        allowed = {
+            "scan_started", "scan_completed", "scan_failed", "scan_cancelled",
+            "cleanup_started", "cleanup_completed", "cleanup_failed",
+        }
+        if event not in allowed or source not in {"none", "screenshots", "recordings", "clips", "measurement"} or type(count) is not int or type(errors) is not int:
+            return False
+        if not 0 <= count <= 10_000 or not 0 <= errors <= 10_000:
+            return False
+        decky.logger.info("steam_media " + json.dumps({
+            "event": event, "source": source, "count": count, "errors": errors, "at": int(time.time()),
+        }, separators=(",", ":")))
+        return True
 
     async def _steam_cleaner_diagnostics(self) -> dict:
         try:
