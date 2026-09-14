@@ -5,7 +5,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   setModel: vi.fn(),
+  setEnabled: vi.fn(),
   resolveConflict: vi.fn(),
+  ensureFullHudVisible: vi.fn(async () => ({})),
+  cancelActivation: vi.fn(),
+  hudEnabled: false,
+  steamMasterEnabled: true as boolean | null,
   uniformTextSize: false,
   conflict: null as null | {
     path: string;
@@ -71,6 +76,7 @@ vi.mock("../mangohud/useHud", async () => {
         conflict: mocks.conflict,
         model: {
           ...DEFAULT_MODEL,
+          enabled: mocks.hudEnabled,
           noSmallFont: mocks.uniformTextSize,
           fontSizeSecondary: mocks.uniformTextSize
             ? DEFAULT_MODEL.fontSize
@@ -87,7 +93,7 @@ vi.mock("../mangohud/useHud", async () => {
         values: {},
       },
       setModel: mocks.setModel,
-      setEnabled: vi.fn(),
+      setEnabled: mocks.setEnabled,
       reload: vi.fn(),
       reloadStatus: "idle",
       saveStatus: "idle",
@@ -101,6 +107,14 @@ vi.mock("../mangohud/useHud", async () => {
 vi.mock("../system/collapseState", () => ({
   isCollapsed: () => true,
   setCollapsed: vi.fn(),
+}));
+
+vi.mock("../mangohud/steamOverlay", () => ({
+  steamOverlay: {
+    diagnostics: () => ({ master_enabled: mocks.steamMasterEnabled }),
+    ensureFullHudVisible: mocks.ensureFullHudVisible,
+    cancelActivation: mocks.cancelActivation,
+  },
 }));
 
 vi.mock("../components/HudPreview", () => ({
@@ -121,8 +135,11 @@ import { DEFAULT_MODEL } from "../mangohud/model";
 describe("HudSection QAM composition", () => {
   afterEach(() => {
     cleanup();
+    vi.useRealTimers();
     vi.clearAllMocks();
     mocks.conflict = null;
+    mocks.hudEnabled = false;
+    mocks.steamMasterEnabled = true;
     mocks.uniformTextSize = false;
   });
 
@@ -149,6 +166,37 @@ describe("HudSection QAM composition", () => {
     const position = badge.compareDocumentPosition(preview);
 
     expect(position & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+  });
+
+  it("activates Steam when the user enables the HUD", () => {
+    render(<HudSection />);
+
+    fireEvent.click(screen.getByText("copy:hud.show"));
+
+    expect(mocks.setEnabled).toHaveBeenCalledWith(true);
+    expect(mocks.ensureFullHudVisible).toHaveBeenCalledOnce();
+  });
+
+  it("does not change Steam when the user disables the HUD", () => {
+    mocks.hudEnabled = true;
+    render(<HudSection />);
+
+    fireEvent.click(screen.getByText("copy:hud.show"));
+
+    expect(mocks.setEnabled).toHaveBeenCalledWith(false);
+    expect(mocks.cancelActivation).toHaveBeenCalledOnce();
+    expect(mocks.ensureFullHudVisible).not.toHaveBeenCalled();
+  });
+
+  it("offers recovery when PdC is enabled but Steam is hidden", () => {
+    mocks.hudEnabled = true;
+    mocks.steamMasterEnabled = false;
+    render(<HudSection />);
+
+    expect(screen.getByText("copy:hud.steam.hidden")).toBeTruthy();
+    fireEvent.click(screen.getByText("copy:hud.steam.activate"));
+
+    expect(mocks.ensureFullHudVisible).toHaveBeenCalledOnce();
   });
 
   it("offers explicit choices when external MangoHud configuration changed", () => {

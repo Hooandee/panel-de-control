@@ -1587,7 +1587,7 @@ class Plugin:
 
         hud_diagnostics = await _safe(
             self._hud_call(
-                lambda: self._hud_report_diagnostics(self._hud_state())
+                lambda: self._hud_report_diagnostics(self._hud_state(), context)
             )
         )
         states = {
@@ -1654,7 +1654,73 @@ class Plugin:
             hostname=hostname,
         )
 
-    def _hud_report_diagnostics(self, state) -> dict:
+    @staticmethod
+    def _hud_steam_overlay_diagnostics(context) -> dict | None:
+        if not isinstance(context, dict):
+            return None
+        hud = context.get("hud")
+        overlay = hud.get("steam_overlay") if isinstance(hud, dict) else None
+        if not isinstance(overlay, dict):
+            return None
+
+        def level(value):
+            return (
+                value
+                if isinstance(value, int)
+                and not isinstance(value, bool)
+                and 0 <= value <= 4
+                else None
+            )
+
+        raw_level = level(overlay.get("raw_level"))
+        raw_to_ui = {0: 0, 4: 1, 1: 2, 2: 3, 3: 4}
+        resolver = overlay.get("resolver")
+        if resolver not in {"global", "module", "unavailable"}:
+            resolver = "unavailable"
+        service_state = overlay.get("service_state")
+        if (
+            not isinstance(service_state, int)
+            or isinstance(service_state, bool)
+            or service_state not in {0, 1, 2}
+        ):
+            service_state = None
+        show_over_steam = overlay.get("show_over_steam")
+        if not isinstance(show_over_steam, bool):
+            show_over_steam = None
+
+        activation = overlay.get("last_activation")
+        activation = activation if isinstance(activation, dict) else {}
+        outcome = activation.get("outcome")
+        if outcome not in {
+            "not_attempted",
+            "already_visible",
+            "confirmed",
+            "unavailable",
+            "exception",
+            "readback_timeout",
+            "readback_mismatch",
+        }:
+            outcome = "unavailable"
+        return {
+            "snapshot_status": "available" if raw_level is not None else "unavailable",
+            "resolver": resolver,
+            "settings_available": overlay.get("settings_available") is True,
+            "read_available": raw_level is not None,
+            "write_available": overlay.get("write_available") is True,
+            "raw_level": raw_level,
+            "ui_level": raw_to_ui.get(raw_level),
+            "master_enabled": None if raw_level is None else raw_level != 0,
+            "service_state": service_state,
+            "show_over_steam": show_over_steam,
+            "last_activation": {
+                "outcome": outcome,
+                "before_level": level(activation.get("before_level")),
+                "requested_level": level(activation.get("requested_level")),
+                "observed_level": level(activation.get("observed_level")),
+            },
+        }
+
+    def _hud_report_diagnostics(self, state, context=None) -> dict:
         state = state if isinstance(state, dict) else {}
         model = state.get("model")
         model = model if isinstance(model, dict) else {}
@@ -1674,7 +1740,7 @@ class Plugin:
         values = values if isinstance(values, dict) else {}
         conflict = getattr(self, "_hud_conflict", None)
         conflict = conflict if isinstance(conflict, dict) else {}
-        return {
+        diagnostics = {
             "capability": state.get("capability"),
             "apply_status": state.get("applyStatus"),
             "enabled": bool(model.get("enabled")),
@@ -1706,6 +1772,10 @@ class Plugin:
             "conflict_reason": conflict.get("reason"),
             "shutdown": bool(getattr(self, "_hud_shutdown", False)),
         }
+        steam_overlay = self._hud_steam_overlay_diagnostics(context)
+        if steam_overlay is not None:
+            diagnostics["steam_overlay"] = steam_overlay
+        return diagnostics
 
     def _display_diagnostics(self, context) -> dict:
         diagnostics = getattr(self._color_backend, "diagnostics", None)
@@ -1744,11 +1814,13 @@ class Plugin:
             n_custom = len(launch_custom_vars.coerce_custom_vars(self._settings.get("custom_launch_vars")))
         except Exception:  # noqa: BLE001
             n_custom = 0
+        frontend = dict(context) if isinstance(context, dict) else {}
+        frontend.pop("hud", None)
         return {
             "tools": tools,
             "current_appid": self._current_appid,
             "custom_var_count": n_custom,
-            "frontend": context if isinstance(context, dict) else {},
+            "frontend": frontend,
         }
 
     def _safe_controller_config(self) -> dict:
