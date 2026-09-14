@@ -22,7 +22,7 @@ import re
 from sysfs import read_str
 
 # Bump when the bundle shape changes so consumers can adapt.
-SCHEMA = 3
+SCHEMA = 4
 
 _MAX_TEXT = 4000  # user free-text cap (defensive; the UI also limits it)
 
@@ -623,6 +623,8 @@ def capabilities_from(states: dict) -> dict:
     running = running if isinstance(running, dict) else {}
     cpu_gpu = states.get("cpu_gpu_diagnostics") or {}
     hud = states.get("hud_diagnostics") or {}
+    hud_steam_overlay = hud.get("steam_overlay") or {}
+    hud_last_activation = hud_steam_overlay.get("last_activation") or {}
     cpu_frequency = cpu_gpu.get("cpu") or {}
     gpu_frequency = cpu_gpu.get("gpu") or {}
     deck_ppt = cpu_gpu.get("steamdeck_ppt") or {}
@@ -655,6 +657,11 @@ def capabilities_from(states: dict) -> dict:
         "hud_capability": hud.get("capability"),
         "hud_apply_status": hud.get("apply_status"),
         "hud_enabled": bool(hud.get("enabled")),
+        "hud_steam_overlay_master_enabled": hud_steam_overlay.get("master_enabled"),
+        "hud_steam_overlay_read_available": bool(
+            hud_steam_overlay.get("read_available")
+        ),
+        "hud_steam_overlay_last_activation": hud_last_activation.get("outcome"),
         "color_supported": bool(color.get("supported")),
         "controller_manager": ctl.get("manager"),
         "controller_kind": ctl.get("kind"),

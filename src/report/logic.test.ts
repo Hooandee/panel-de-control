@@ -120,4 +120,38 @@ describe("buildReportContext", () => {
       report_kind: "bug",
     });
   });
+
+  it("keeps the HUD Steam state beside the existing report context", () => {
+    const steamOverlay = {
+      snapshot_status: "unavailable",
+      resolver: "unavailable",
+      settings_available: false,
+      read_available: false,
+      write_available: false,
+      raw_level: null,
+      ui_level: null,
+      master_enabled: null,
+      service_state: null,
+      show_over_steam: null,
+      last_activation: {
+        outcome: "unavailable",
+        before_level: null,
+        requested_level: null,
+        observed_level: null,
+      },
+    } as const;
+
+    expect(buildReportContext(
+      ["hud"],
+      {},
+      {},
+      { rendered_count: 1 },
+      "bug",
+      steamOverlay,
+    )).toEqual({
+      hud: { steam_overlay: steamOverlay },
+      qam: { rendered_count: 1 },
+      report_kind: "bug",
+    });
+  });
 });
