@@ -13,6 +13,10 @@ describe("isDurableKey", () => {
     expect(isDurableKey("pdc:activeTab")).toBe(false);
     expect(isDurableKey("some-other-key")).toBe(false);
   });
+  it("keeps shell navigation local", () => {
+    expect(isDurableKey("pdc:activeTab")).toBe(false);
+    expect(isDurableKey("pdc:shellMode")).toBe(false);
+  });
 });
 
 describe("planPrefsSync", () => {

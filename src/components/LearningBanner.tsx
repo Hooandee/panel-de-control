@@ -10,12 +10,10 @@ import { useModules } from "../customize/modules";
 import { effectiveEnabled } from "../customize/moduleLogic";
 
 interface Props {
-  /** Foreground game name (null when Steam/desktop is in front). */
   gameName: string | null;
-  /** Capability + opt-in snapshot; null until the first RPC lands. */
   status: LearningStatus | null;
-  /** Jump to the Ajustes tab (paused-state CTA). */
   onOpenSettings: () => void;
+  scope: readonly LearningTag[];
 }
 
 const TAG_KEY: Record<LearningTag, string> = {
@@ -23,25 +21,17 @@ const TAG_KEY: Record<LearningTag, string> = {
   fans: "learning.tag.fans",
 };
 
-/**
- * Thin persistent banner under the DeviceHeader. Makes learning VISIBLE from any
- * tab the moment the plugin opens: green "learning from {game}" with subsystem
- * chips, or a dimmed "paused" row with a CTA to re-enable telemetry. Renders
- * nothing when there's nothing to say (no game, or this device can't learn).
- */
-export const LearningBanner: FC<Props> = ({ gameName, status, onOpenSettings }) => {
+export const LearningBanner: FC<Props> = ({ gameName, status, onOpenSettings, scope }) => {
   const { t } = useI18n();
-  const disabled = useModules();
+  const disabledModules = useModules();
   if (!status) return null;
 
-  // Fold in the live module state so the banner is honest and updates the moment a
-  // module is toggled: learning only runs with the learning module on, and a
-  // subsystem is only being learned while its own module (Power/Fans) is enabled.
   const { state, tags } = learningBadge({
     inGame: gameName !== null,
-    telemetryOn: status.telemetry_enabled && effectiveEnabled("learning", disabled),
-    tdpSupported: status.tdp_supported && effectiveEnabled("power", disabled),
-    fanSupported: status.fan_supported && effectiveEnabled("fans", disabled),
+    telemetryOn: status.telemetry_enabled && effectiveEnabled("learning", disabledModules),
+    tdpSupported: status.tdp_supported && effectiveEnabled("power", disabledModules),
+    fanSupported: status.fan_supported && effectiveEnabled("fans", disabledModules),
+    scope,
   });
 
   if (state === "hidden") return null;

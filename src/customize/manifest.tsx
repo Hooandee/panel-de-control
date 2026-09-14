@@ -5,13 +5,22 @@ import {
   LuLightbulb, LuPalette, LuGamepad2, LuMemoryStick, LuActivity, LuHeartPulse, LuAudioLines,
   LuSparkles, LuMoon, LuReplace, LuSlidersVertical, LuRocket, LuLayoutDashboard, LuPaintbrush, LuPuzzle,
 } from "react-icons/lu";
+import type { SectionIcon } from "../sections/types";
+import type { LearningTag } from "../learning/logic";
 import type { ModuleId } from "./moduleLogic";
 
-/** Presentation metadata shared by a tab and a configurable block. */
 export interface ItemMeta {
   id: string;
   labelKey: string;
   icon: ReactNode;
+}
+export interface TabMeta {
+  id: string;
+  labelKey: string;
+  descriptionKey: string;
+  accent: string;
+  icon: SectionIcon;
+  learningTags?: readonly LearningTag[];
 }
 export interface BlockDef extends ItemMeta {
   desktopOnly?: boolean;
@@ -37,20 +46,19 @@ const ICON = 15;
  * section Components in registry.tsx — so both the registry AND the customization
  * editor read the same tab metadata without a circular import.
  */
-export const TABS: ItemMeta[] = [
-  { id: "power", labelKey: "nav.power", icon: <LuGauge size={ICON} /> },
-  { id: "system", labelKey: "nav.system", icon: <LuSlidersHorizontal size={ICON} /> },
-  { id: "display", labelKey: "nav.display", icon: <LuPalette size={ICON} /> },
-  { id: "fans", labelKey: "nav.fans", icon: <LuFan size={ICON} /> },
-  { id: "audio", labelKey: "nav.audio", icon: <LuAudioLines size={ICON} /> },
-  { id: "mandos", labelKey: "nav.mandos", icon: <LuGamepad2 size={ICON} /> },
-  { id: "hud", labelKey: "nav.hud", icon: <LuLayoutDashboard size={ICON} /> },
-  { id: "params", labelKey: "nav.params", icon: <LuRocket size={ICON} /> },
-  { id: "themes", labelKey: "nav.themes", icon: <LuPaintbrush size={ICON} /> },
-  { id: "settings", labelKey: "nav.settings", icon: <LuSettings size={ICON} /> },
+export const TABS: TabMeta[] = [
+  { id: "power", labelKey: "nav.power", descriptionKey: "nav.power.desc", accent: "#287d8c", icon: (size) => <LuGauge size={size} />, learningTags: ["tdp"] },
+  { id: "system", labelKey: "nav.system", descriptionKey: "nav.system.desc", accent: "#647084", icon: (size) => <LuSlidersHorizontal size={size} /> },
+  { id: "display", labelKey: "nav.display", descriptionKey: "nav.display.desc", accent: "#a05f79", icon: (size) => <LuPalette size={size} /> },
+  { id: "fans", labelKey: "nav.fans", descriptionKey: "nav.fans.desc", accent: "#39796e", icon: (size) => <LuFan size={size} />, learningTags: ["fans"] },
+  { id: "audio", labelKey: "nav.audio", descriptionKey: "nav.audio.desc", accent: "#96713e", icon: (size) => <LuAudioLines size={size} /> },
+  { id: "mandos", labelKey: "nav.mandos", descriptionKey: "nav.mandos.desc", accent: "#64609b", icon: (size) => <LuGamepad2 size={size} /> },
+  { id: "hud", labelKey: "nav.hud", descriptionKey: "nav.hud.desc", accent: "#3e7e5e", icon: (size) => <LuLayoutDashboard size={size} /> },
+  { id: "params", labelKey: "nav.params", descriptionKey: "nav.params.desc", accent: "#955e44", icon: (size) => <LuRocket size={size} /> },
+  { id: "themes", labelKey: "nav.themes", descriptionKey: "nav.themes.desc", accent: "#925783", icon: (size) => <LuPaintbrush size={size} /> },
+  { id: "settings", labelKey: "nav.settings", descriptionKey: "nav.settings.desc", accent: "#626b73", icon: (size) => <LuSettings size={size} /> },
 ];
 
-/** Category (section) ids the editor lists: the tabs minus the pinned Settings. */
 export const CATEGORY_IDS = TABS.map((t) => t.id).filter((id) => id !== PINNED_TAB);
 
 export const SECTION_BLOCKS: Record<string, BlockDef[]> = {

@@ -60,6 +60,107 @@ afterEach(() => {
 });
 
 describe("Every supported translation catalog", () => {
+  it("provides dashboard copy in every supported language", () => {
+    expect(DICTS).toMatchObject({
+      es: {
+        "home.title": "Inicio",
+        "home.subtitle": "Elige una herramienta",
+        "home.tabs": "Vista de pestañas",
+        "home.back": "Inicio",
+        "home.changeSection": "Cambiar sección",
+        "customize.home": "Vista principal",
+        "customize.home.desc": "Elige cómo navegar por Panel de Control.",
+        "customize.home.dashboard": "Dashboard",
+        "customize.home.tabs": "Pestañas",
+        "customize.deviceHeader": "Mostrar información del dispositivo",
+        "customize.deviceHeader.desc": "Muestra una identificación compacta del dispositivo bajo el título.",
+        "customize.views.cardDesc": "Vista personalizada",
+        "nav.power.desc": "Rendimiento y consumo del dispositivo.",
+        "nav.system.desc": "Controles y estado general del sistema.",
+        "nav.display.desc": "Ajustes disponibles de imagen y pantalla.",
+        "nav.fans.desc": "Estado térmico y opciones de ventilación.",
+        "nav.audio.desc": "Controles disponibles de sonido.",
+        "nav.mandos.desc": "Estado y opciones disponibles del mando.",
+        "nav.hud.desc": "Información y diseño de la interfaz en juego.",
+        "nav.params.desc": "Inicio y compatibilidad de los juegos.",
+        "nav.themes.desc": "Apariencia del Panel de Control.",
+        "nav.settings.desc": "Personalización, actualizaciones e información.",
+      },
+      en: {
+        "home.title": "Home",
+        "home.subtitle": "Choose a tool",
+        "home.tabs": "Tab view",
+        "home.back": "Home",
+        "home.changeSection": "Change section",
+        "customize.home": "Main view",
+        "customize.home.desc": "Choose how to navigate Control Center.",
+        "customize.home.dashboard": "Dashboard",
+        "customize.home.tabs": "Tabs",
+        "customize.deviceHeader": "Show device information",
+        "customize.deviceHeader.desc": "Shows a compact device identifier below the title.",
+        "customize.views.cardDesc": "Custom view",
+        "nav.power.desc": "Device performance and power use.",
+        "nav.system.desc": "General system controls and status.",
+        "nav.display.desc": "Available image and display settings.",
+        "nav.fans.desc": "Thermal status and available fan options.",
+        "nav.audio.desc": "Available sound controls.",
+        "nav.mandos.desc": "Controller status and available options.",
+        "nav.hud.desc": "In-game overlay information and layout.",
+        "nav.params.desc": "Game startup and compatibility.",
+        "nav.themes.desc": "Control Center appearance.",
+        "nav.settings.desc": "Customization, updates, and information.",
+      },
+      it: {
+        "home.title": "Home",
+        "home.subtitle": "Scegli uno strumento",
+        "home.tabs": "Vista a schede",
+        "home.back": "Home",
+        "home.changeSection": "Cambia sezione",
+        "customize.home": "Vista principale",
+        "customize.home.desc": "Scegli come navigare nel Pannello di controllo.",
+        "customize.home.dashboard": "Dashboard",
+        "customize.home.tabs": "Schede",
+        "customize.deviceHeader": "Mostra informazioni sul dispositivo",
+        "customize.deviceHeader.desc": "Mostra un identificatore compatto del dispositivo sotto il titolo.",
+        "customize.views.cardDesc": "Vista personalizzata",
+        "nav.power.desc": "Prestazioni e consumi del dispositivo.",
+        "nav.system.desc": "Controlli e stato generale del sistema.",
+        "nav.display.desc": "Impostazioni disponibili per immagine e schermo.",
+        "nav.fans.desc": "Stato termico e opzioni di ventilazione.",
+        "nav.audio.desc": "Controlli audio disponibili.",
+        "nav.mandos.desc": "Stato e opzioni disponibili del controller.",
+        "nav.hud.desc": "Informazioni e disposizione dell'interfaccia in gioco.",
+        "nav.params.desc": "Avvio e compatibilità dei giochi.",
+        "nav.themes.desc": "Aspetto di Pannello di controllo.",
+        "nav.settings.desc": "Personalizzazione, aggiornamenti e informazioni.",
+      },
+      de: {
+        "home.title": "Start",
+        "home.subtitle": "Wähle ein Werkzeug",
+        "home.tabs": "Tab-Ansicht",
+        "home.back": "Start",
+        "home.changeSection": "Bereich wechseln",
+        "customize.home": "Hauptansicht",
+        "customize.home.desc": "Wähle, wie du durch das Kontrollzentrum navigierst.",
+        "customize.home.dashboard": "Dashboard",
+        "customize.home.tabs": "Tabs",
+        "customize.deviceHeader": "Geräteinformationen anzeigen",
+        "customize.deviceHeader.desc": "Zeigt eine kompakte Gerätekennung unter dem Titel.",
+        "customize.views.cardDesc": "Benutzerdefinierte Ansicht",
+        "nav.power.desc": "Leistung und Energieverbrauch des Geräts.",
+        "nav.system.desc": "Allgemeine Systemsteuerung und Status.",
+        "nav.display.desc": "Verfügbare Bild- und Anzeigeeinstellungen.",
+        "nav.fans.desc": "Temperaturstatus und verfügbare Lüfteroptionen.",
+        "nav.audio.desc": "Verfügbare Audiosteuerung.",
+        "nav.mandos.desc": "Controllerstatus und verfügbare Optionen.",
+        "nav.hud.desc": "Informationen und Layout der Spielanzeige.",
+        "nav.params.desc": "Spielstart und Kompatibilität.",
+        "nav.themes.desc": "Erscheinungsbild des Kontrollzentrums.",
+        "nav.settings.desc": "Anpassung, Updates und Informationen.",
+      },
+    });
+  });
+
   it.each(CATALOGS)("%s has exactly the Spanish keys", (_lang, catalog) => {
     expect(Object.keys(catalog).sort()).toEqual(Object.keys(DICTS.es).sort());
   });
@@ -240,6 +341,24 @@ describe("German catalog", () => {
 });
 
 describe("LanguageToggle", () => {
+  it("notifies separate roots when the language changes", () => {
+    const listener = vi.fn();
+    const unsubscribe = i18n.subscribeLanguage(listener);
+    render(
+      createElement(
+        i18n.I18nProvider,
+        null,
+        createElement(LanguageToggle),
+      ),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Italiano" }));
+
+    expect(listener).toHaveBeenCalled();
+    expect(i18n.getCurrentLanguage()).toBe("it");
+    unsubscribe();
+  });
+
   it("persists Italian when its localized selector button is pressed", () => {
     render(
       createElement(

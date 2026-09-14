@@ -10,7 +10,7 @@ export const StandardDeckyContent: FC<StandardDeckyContentProps> = ({
   children,
   lifecycle,
 }) => (
-  <QamPanelGate lifecycle={lifecycle} fallback={children}>
+  <QamPanelGate surfaceId="pdc:standard" lifecycle={lifecycle} fallback={children}>
     {children}
   </QamPanelGate>
 );

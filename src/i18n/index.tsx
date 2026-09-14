@@ -26,6 +26,7 @@ export const SUPPORTED_LANGUAGES = ["es", "en", "it", "de"] as const;
 export type Lang = (typeof SUPPORTED_LANGUAGES)[number];
 
 const STORAGE_KEY = "panel-de-control-lang";
+const languageListeners = new Set<() => void>();
 
 // Spanish first - we value Spanish-speaking users. English is the fallback.
 const es: Record<string, string> = {
@@ -41,12 +42,24 @@ const es: Record<string, string> = {
   "lang.italian": "Italiano",
   "lang.german": "Alemán",
   "nav.power": "Potencia",
+  "nav.power.desc": "Rendimiento y consumo del dispositivo.",
   "nav.system": "Sistema",
+  "nav.system.desc": "Controles y estado general del sistema.",
   "nav.display": "Pantalla",
+  "nav.display.desc": "Ajustes disponibles de imagen y pantalla.",
   "nav.fans": "Ventiladores",
+  "nav.fans.desc": "Estado térmico y opciones de ventilación.",
   "nav.audio": "Sonido",
+  "nav.audio.desc": "Controles disponibles de sonido.",
   "nav.mandos": "Mandos",
+  "nav.mandos.desc": "Estado y opciones disponibles del mando.",
   "nav.hud": "HUD",
+  "nav.hud.desc": "Información y diseño de la interfaz en juego.",
+  "home.title": "Inicio",
+  "home.subtitle": "Elige una herramienta",
+  "home.tabs": "Vista de pestañas",
+  "home.back": "Inicio",
+  "home.changeSection": "Cambiar sección",
   // HUD (overlay de rendimiento MangoHud)
   "hud.title": "HUD de rendimiento",
   "hud.loading": "Cargando…",
@@ -247,8 +260,11 @@ const es: Record<string, string> = {
   "hud.reset.confirm.desc": "Se sustituirán los elementos y el estilo actuales por los valores predeterminados.",
   "hud.reset.cancel": "Cancelar",
   "nav.params": "Parámetros",
+  "nav.params.desc": "Inicio y compatibilidad de los juegos.",
   "nav.themes": "Temas",
+  "nav.themes.desc": "Apariencia del Panel de Control.",
   "nav.settings": "Ajustes",
+  "nav.settings.desc": "Personalización, actualizaciones e información.",
   "themes.title": "Temas Hooandee",
   "themes.loading": "Comprobando CSS Loader…",
   "themes.recovery.blocked": "La recuperación de temas está bloqueada. No se aplicarán cambios hasta que la comprobación termine correctamente.",
@@ -677,16 +693,13 @@ const es: Record<string, string> = {
   "fans.suggest.msg.learning": "Sigue jugando ~{left} min más para desbloquear la curva. Los puntos verdes son lo que ya he observado.",
   "fans.suggest.msg.empty": "Empieza a jugar para que aprenda el patrón térmico de este juego.",
   "fans.suggest.msg.nogame": "Entra a un juego para que aprenda su patrón.",
-  // Comunica que el aprendizaje es CONTINUO (no de una sola vez).
   "fans.suggest.continuous": "Afino la curva cada ~30 min con tu uso reciente.",
-  // A2 — tope de temperatura + escala con significado.
   "fans.suggest.peak.title": "Temperatura máxima",
   "fans.suggest.peak.value": "{peak} °C",
   "fans.suggest.zone.cool": "Fresco",
   "fans.suggest.zone.warm": "Templado",
   "fans.suggest.zone.hot": "Caliente",
   "fans.suggest.zone.limit": "Al límite",
-  // A3 — tono del dial en lenguaje llano.
   "fans.suggest.tone.quiet": "Prioriza el silencio",
   "fans.suggest.tone.balanced": "Fresco y silencioso",
   "fans.suggest.tone.cool": "Prioriza el frescor",
@@ -764,11 +777,8 @@ const es: Record<string, string> = {
   "settings.experimentalTdp.confirm.cancel": "Cancelar",
   "settings.qamboost": "Subir TDP con el menú abierto",
   "settings.qamboost.desc": "Sube el TDP mientras el menú de acceso rápido está abierto para que vaya fluido. El valor mostrado es temporal del menú; dentro del juego se reajusta.",
-  "settings.qamShortcut": "Acceso directo en el QAM",
-  "settings.qamShortcut.desc": "Añade un icono opcional junto a Decky. Panel de Control siempre sigue disponible dentro de Decky.",
-  "settings.qamShortcut.restart": "Reinicia Decky para aplicar el cambio.",
-  "settings.qamShortcut.restartButton": "Reiniciar Decky",
-  "settings.qamShortcut.fallback": "No se ha podido añadir el icono directo. Panel de Control sigue disponible dentro de Decky.",
+  "settings.qamShortcut": "Configurar el QAM",
+  "settings.qamShortcut.desc": "Elige qué entradas de Steam mostrar y qué vistas completas de Panel de Control anclar.",
   "settings.valueToast": "Mostrar valor al cambiar volumen o brillo",
   "settings.valueToast.desc": "Muestra el número en pantalla al ajustar con los botones, sin abrir el panel.",
   "valueToast.volume": "Volumen",
@@ -950,6 +960,32 @@ const es: Record<string, string> = {
   "gameProfiles.cores": "{n} núcleos",
   "gameProfiles.buttons": "{n} botones",
   "customize.title": "Personalizar",
+  "customize.home": "Vista principal",
+  "customize.home.desc": "Elige cómo navegar por Panel de Control.",
+  "customize.home.dashboard": "Dashboard",
+  "customize.home.tabs": "Pestañas",
+  "customize.deviceHeader": "Mostrar información del dispositivo",
+  "customize.deviceHeader.desc": "Muestra una identificación compacta del dispositivo bajo el título.",
+  "customize.qam.title": "Accesos del QAM",
+  "customize.qam.desc": "Mezcla, reordena y oculta entradas de Steam o ancla vistas completas de Panel de Control. Decky siempre permanece disponible.",
+  "customize.qam.native": "Steam",
+  "customize.qam.native.friends": "Amigos",
+  "customize.qam.native.soundtracks": "Bandas sonoras",
+  "customize.qam.native.help": "Ayuda",
+  "customize.qam.native.notifications": "Notificaciones",
+  "customize.qam.native.performance": "Rendimiento",
+  "customize.qam.native.quickSettings": "Ajustes rápidos",
+  "customize.qam.decky": "Decky",
+  "customize.qam.protected": "Siempre disponible",
+  "customize.qam.pin": "Anclar",
+  "customize.qam.unpin": "Desanclar",
+  "customize.qam.applied": "Aplicado al instante",
+  "customize.qam.restart": "Recarga Decky para aplicar los cambios guardados.",
+  "customize.qam.restartButton": "Recargar Decky",
+  "customize.qam.unavailable": "No se pudo modificar el QAM. Panel de Control sigue disponible dentro de Decky.",
+  "customize.qam.destinationUnavailable": "Esta vista ya no está disponible con la configuración actual.",
+  "customize.qam.loading": "Leyendo las entradas actuales del QAM…",
+  "customize.qam.reset": "Restaurar QAM",
   "customize.accent": "Color de acento",
   "accent.blue": "Azul",
   "accent.sky": "Cielo",
@@ -994,6 +1030,7 @@ const es: Record<string, string> = {
   "customize.module.learning.desc": "Aprende de tu uso para sugerir curvas y TDP.",
   "customize.module.learning.blocked": "Activa Potencia o Ventiladores para poder aprender.",
   "customize.views.title": "Vistas personalizadas",
+  "customize.views.cardDesc": "Vista personalizada",
   "customize.views.new": "Nueva vista",
   "customize.views.none": "Crea tu propia pestaña con los bloques que quieras.",
   "customize.views.reorderHint": "Ordena y oculta tus vistas junto al resto de pestañas, arriba.",
@@ -1069,12 +1106,24 @@ const en: Record<string, string> = {
   "lang.italian": "Italian",
   "lang.german": "German",
   "nav.power": "Power",
+  "nav.power.desc": "Device performance and power use.",
   "nav.system": "System",
+  "nav.system.desc": "General system controls and status.",
   "nav.display": "Display",
+  "nav.display.desc": "Available image and display settings.",
   "nav.fans": "Fans",
+  "nav.fans.desc": "Thermal status and available fan options.",
   "nav.audio": "Sound",
+  "nav.audio.desc": "Available sound controls.",
   "nav.mandos": "Controllers",
+  "nav.mandos.desc": "Controller status and available options.",
   "nav.hud": "HUD",
+  "nav.hud.desc": "In-game overlay information and layout.",
+  "home.title": "Home",
+  "home.subtitle": "Choose a tool",
+  "home.tabs": "Tab view",
+  "home.back": "Home",
+  "home.changeSection": "Change section",
   // HUD (MangoHud performance overlay)
   "hud.title": "Performance HUD",
   "hud.loading": "Loading…",
@@ -1275,8 +1324,11 @@ const en: Record<string, string> = {
   "hud.reset.confirm.desc": "The current elements and style will be replaced with their defaults.",
   "hud.reset.cancel": "Cancel",
   "nav.params": "Parameters",
+  "nav.params.desc": "Game startup and compatibility.",
   "nav.themes": "Themes",
+  "nav.themes.desc": "Control Center appearance.",
   "nav.settings": "Settings",
+  "nav.settings.desc": "Customization, updates, and information.",
   "themes.title": "Hooandee Themes",
   "themes.loading": "Checking CSS Loader…",
   "themes.recovery.blocked": "Theme recovery is blocked. No changes will be applied until the check completes successfully.",
@@ -1790,11 +1842,8 @@ const en: Record<string, string> = {
   "settings.experimentalTdp.confirm.cancel": "Cancel",
   "settings.qamboost": "Raise TDP while the menu is open",
   "settings.qamboost.desc": "Raises TDP while the quick access menu is open so it stays responsive. The displayed value applies only while the menu is open. It is adjusted again in game.",
-  "settings.qamShortcut": "QAM shortcut",
-  "settings.qamShortcut.desc": "Adds an optional icon next to Decky. Panel de Control always remains available inside Decky.",
-  "settings.qamShortcut.restart": "Restart Decky to apply the change.",
-  "settings.qamShortcut.restartButton": "Restart Decky",
-  "settings.qamShortcut.fallback": "The direct icon could not be added. Panel de Control remains available inside Decky.",
+  "settings.qamShortcut": "Configure the QAM",
+  "settings.qamShortcut.desc": "Choose which Steam entries to show and which full Panel de Control views to pin.",
   "settings.valueToast": "Show value when changing volume or brightness",
   "settings.valueToast.desc": "Shows the number on screen when you adjust with the buttons, without opening the panel.",
   "valueToast.volume": "Volume",
@@ -1976,6 +2025,32 @@ const en: Record<string, string> = {
   "gameProfiles.buttons": "{n} buttons",
   "customize.button.desc": "Reorder or hide tabs and blocks to your taste.",
   "customize.title": "Customize",
+  "customize.home": "Main view",
+  "customize.home.desc": "Choose how to navigate Control Center.",
+  "customize.home.dashboard": "Dashboard",
+  "customize.home.tabs": "Tabs",
+  "customize.deviceHeader": "Show device information",
+  "customize.deviceHeader.desc": "Shows a compact device identifier below the title.",
+  "customize.qam.title": "QAM shortcuts",
+  "customize.qam.desc": "Mix, reorder, and hide Steam entries or pin full Panel de Control views. Decky always remains available.",
+  "customize.qam.native": "Steam",
+  "customize.qam.native.friends": "Friends",
+  "customize.qam.native.soundtracks": "Soundtracks",
+  "customize.qam.native.help": "Help",
+  "customize.qam.native.notifications": "Notifications",
+  "customize.qam.native.performance": "Performance",
+  "customize.qam.native.quickSettings": "Quick settings",
+  "customize.qam.decky": "Decky",
+  "customize.qam.protected": "Always available",
+  "customize.qam.pin": "Pin",
+  "customize.qam.unpin": "Unpin",
+  "customize.qam.applied": "Applied instantly",
+  "customize.qam.restart": "Reload Decky to apply the saved changes.",
+  "customize.qam.restartButton": "Reload Decky",
+  "customize.qam.unavailable": "The QAM could not be changed. Panel de Control remains available inside Decky.",
+  "customize.qam.destinationUnavailable": "This view is no longer available with the current configuration.",
+  "customize.qam.loading": "Reading the current QAM entries…",
+  "customize.qam.reset": "Restore QAM",
   "customize.accent": "Accent color",
   "accent.blue": "Blue",
   "accent.sky": "Sky",
@@ -2020,6 +2095,7 @@ const en: Record<string, string> = {
   "customize.module.learning.desc": "Learns from your usage to suggest curves and TDP.",
   "customize.module.learning.blocked": "Enable Power or Fans so it has something to learn.",
   "customize.views.title": "Custom views",
+  "customize.views.cardDesc": "Custom view",
   "customize.views.new": "New view",
   "customize.views.none": "Build your own tab with whichever blocks you want.",
   "customize.views.reorderHint": "Reorder and hide your views alongside the other tabs, above.",
@@ -2151,6 +2227,21 @@ function initialLang(): Lang {
   return SUPPORTED_LANGUAGES.includes(stored as Lang) ? stored as Lang : "es";
 }
 
+export function getCurrentLanguage(): Lang {
+  return initialLang();
+}
+
+export function subscribeLanguage(listener: () => void): () => void {
+  languageListeners.add(listener);
+  return () => languageListeners.delete(listener);
+}
+
+function notifyLanguage(): void {
+  languageListeners.forEach((listener) => listener());
+}
+
+onPrefsHealed(notifyLanguage);
+
 interface I18nValue {
   lang: Lang;
   setLang: (l: Lang) => void;
@@ -2162,6 +2253,8 @@ const I18nContext = createContext<I18nValue | null>(null);
 export const I18nProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const [lang, setLangState] = useState<Lang>(initialLang);
   const seeded = useRef(false);
+
+  useEffect(() => subscribeLanguage(() => setLangState(initialLang())), []);
 
   // On first run only (no saved language), seed the default from Steam's UI
   // language once the cache is genuinely healed — never overriding a saved choice.
@@ -2179,6 +2272,7 @@ export const I18nProvider: FC<{ children: ReactNode }> = ({ children }) => {
       const seed = steamLangToLang(raw);
       setLangState(seed);
       writeString(STORAGE_KEY, seed);
+      notifyLanguage();
     };
     const off = onPrefsHealed(() => {
       if (cancelled) return;
@@ -2201,6 +2295,7 @@ export const I18nProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const setLang = useCallback((l: Lang) => {
     setLangState(l);
     writeString(STORAGE_KEY, l);
+    notifyLanguage();
   }, []);
 
   const t = useCallback(
