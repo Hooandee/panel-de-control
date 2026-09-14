@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.48.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.48.0...panel-de-control-v0.48.1) (2026-09-14)
+
+
+### Bug Fixes
+
+* **hud:** activate Steam overlay when showing HUD ([#654](https://github.com/Hooandee/panel-de-control/issues/654)) ([d964d22](https://github.com/Hooandee/panel-de-control/commit/d964d22a0dbd3ff6f82674f28cc56646a87d854e))
+
 ## [0.48.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.47.1...panel-de-control-v0.48.0) (2026-09-13)
 
 
