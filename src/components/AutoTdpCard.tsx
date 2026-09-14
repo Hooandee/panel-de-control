@@ -113,8 +113,21 @@ export const AutoTdpCard: FC<Props> = ({
       <div style={{ ...theme.card, padding: theme.space.md, marginBottom: theme.space.card }}>
         <div style={{ display: "flex", alignItems: "center", gap: theme.space.sm, marginBottom: theme.space.sm }}>
           <LuGauge size={18} color={theme.color.accent} aria-hidden />
-          <div style={{ flex: 1, minWidth: 0, color: theme.color.textPrimary, fontWeight: 700 }}>
-            {t("tdp.auto.title")}
+          <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", flexWrap: "wrap", gap: theme.space.xs }}>
+            <span style={{ color: theme.color.textPrimary, fontWeight: 700 }}>
+              {t("tdp.auto.title")}
+            </span>
+            <span style={{
+              padding: "1px 5px",
+              borderRadius: 999,
+              color: theme.color.warn,
+              boxShadow: `inset 0 0 0 1px ${theme.color.warn}`,
+              fontSize: 10,
+              fontWeight: 700,
+              flexShrink: 0,
+            }}>
+              {t("tdp.auto.experimental")}
+            </span>
           </div>
           <div style={{
             padding: "2px 7px",

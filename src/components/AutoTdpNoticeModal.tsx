@@ -63,6 +63,18 @@ const AutoTdpNoticeBody: FC<Props> = ({ onConfirm, onCancel, closeModal }) => {
         <div style={{ fontSize: theme.font.value, fontWeight: 700, color: theme.color.textPrimary }}>
           {t("tdp.autotdp.title")}
         </div>
+        <span
+          style={{
+            padding: "2px 8px",
+            borderRadius: 999,
+            color: theme.color.warn,
+            boxShadow: `inset 0 0 0 1px ${theme.color.warn}`,
+            fontSize: theme.font.caption,
+            fontWeight: 700,
+          }}
+        >
+          {t("tdp.auto.experimental")}
+        </span>
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: theme.space.md }}>

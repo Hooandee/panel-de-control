@@ -80,6 +80,27 @@ describe("AutoTdpCard", () => {
     expect(screen.queryByText(/tdp\.auto\.status\.recovering/)).toBeNull();
   });
 
+  it("keeps the experimental status visible on the automatic controls", () => {
+    render(
+      <AutoTdpCard
+        config={config}
+        scope="global"
+        limits={{ min: 5, default: 15, max: 35, max_ac: 40 }}
+        requestLimits={{ min: 3, default: 15, max: 35, max_ac: 40 }}
+        onAc
+        live={null}
+        liveApplies={false}
+        onToggle={vi.fn()}
+        onTargetFps={vi.fn()}
+        onInitialTdp={vi.fn()}
+        onMinTdp={vi.fn()}
+        onMaxTdp={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("tdp.auto.experimental")).toBeTruthy();
+  });
+
   it("allows any whole FPS target with direct editing and one-step controller input", () => {
     const onTargetFps = vi.fn();
     render(

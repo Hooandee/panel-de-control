@@ -745,6 +745,7 @@ export const it: Record<string, string> = {
   "tdp.conflict.disable": "Disattiva",
   "tdp.conflict.cede": "Lascia il controllo a PdC",
   "tdp.auto.title": "Auto‑TDP",
+  "tdp.auto.experimental": "Sperimentale",
   "tdp.auto.toggle": "Regolazione automatica",
   "tdp.auto.hint": "Mantiene gli FPS con la potenza necessaria e senza variazioni brusche.",
   "tdp.auto.scope.global": "Globale",

@@ -804,6 +804,7 @@ export const de: Record<string, string> = {
   "tdp.conflict.disable": "Deaktivieren",
   "tdp.conflict.cede": "An das Kontrollzentrum übergeben",
   "tdp.auto.title": "Auto‑TDP",
+  "tdp.auto.experimental": "Experimentell",
   "tdp.auto.toggle": "Automatische Anpassung",
   "tdp.auto.hint": "Hält die FPS mit passender Leistung und ohne abrupte Änderungen.",
   "tdp.auto.scope.global": "Global",
