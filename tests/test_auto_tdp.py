@@ -263,6 +263,47 @@ def test_stale_recovery_needs_a_confirmed_low_fps_sample():
     assert result.reason == "fps_stale"
 
 
+def test_short_stale_gap_preserves_progress_toward_probe():
+    control = controller(
+        initial=20,
+        warmup_s=0,
+        stable_s=8,
+        qualification_s=0,
+    )
+
+    step(control, fps=40, gpu=70)
+    stale = step(
+        control,
+        fps=None,
+        reason="fps_stale",
+        gpu=70,
+        after=6,
+    )
+    probe = step(control, fps=40, gpu=70, after=2.5)
+
+    assert (stale.setpoint, stale.state, stale.reason) == (
+        20,
+        "paused",
+        "fps_stale",
+    )
+    assert (probe.setpoint, probe.reason) == (19, "probe_down")
+
+
+def test_long_stale_gap_restarts_stability():
+    control = controller(
+        initial=20,
+        warmup_s=0,
+        stable_s=8,
+        qualification_s=0,
+    )
+
+    step(control, fps=40, gpu=70)
+    step(control, fps=None, reason="fps_stale", gpu=70, after=6)
+    result = step(control, fps=40, gpu=70, after=6.1)
+
+    assert (result.setpoint, result.reason) == (20, "building_stability")
+
+
 def test_stable_fps_only_probes_down_one_watt_after_full_duration():
     control = controller(initial=20, warmup_s=0, stable_s=20)
 

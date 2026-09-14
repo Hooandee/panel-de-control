@@ -787,6 +787,157 @@ def test_ui_floor_uses_device_default_within_requested_range(Plugin, minimum, ma
     assert p._tdp_history[-1]["reason"] == "auto-ui-floor"
 
 
+def test_steam_focus_applies_ui_floor_without_changing_auto_setpoint(Plugin):
+    p = Plugin()
+    p._init()
+    p._current_appid = "g"
+    p._tdp_profiles.set_auto_tdp("game", True, appid="g")
+    p._tdp_profiles.set_auto_config("game", 30, 5, appid="g")
+    p._ensure_auto_session(on_ac=True)
+    p._tdp_backend._applied = 5
+    p._tdp_backend._levels = (5, 5, 5)
+    p._power_reader.read = lambda: {"watts": 6.0, "gpu_busy": 50.0}
+    p._gamescope_stats.start = lambda: None
+    reading = {
+        "fps": None,
+        "focus": "steam",
+        "age_s": None,
+        "sample_at": None,
+        "available": False,
+        "reason": "no_game_focus",
+    }
+    p._gamescope_stats.read = lambda: reading
+
+    status = asyncio.run(p._auto_tick())
+
+    assert p._tdp_backend._levels == (15, 15, 15)
+    assert p._auto_setpoint == 5
+    assert status["reason"] == "no_game_focus"
+    assert status["held_watts"] == 15
+    assert p._tdp_history[-1]["reason"] == "auto-focus-floor"
+
+    reading.update({
+        "fps": 30.0,
+        "focus": "g",
+        "age_s": 0.0,
+        "sample_at": 1.0,
+        "available": True,
+        "reason": "ok",
+    })
+    status = asyncio.run(p._auto_tick())
+
+    assert p._tdp_backend._levels == (5, 5, 5)
+    assert p._auto_setpoint == 5
+    assert status["held_watts"] is None
+
+
+def test_missing_focus_applies_responsive_floor_while_auto_is_active(Plugin):
+    p = Plugin()
+    p._init()
+    p._current_appid = "g"
+    p._tdp_profiles.set_auto_tdp("game", True, appid="g")
+    p._tdp_profiles.set_auto_config("game", 30, 5, appid="g")
+    p._ensure_auto_session(on_ac=True)
+    p._tdp_backend._applied = 5
+    p._tdp_backend._levels = (5, 5, 5)
+    p._power_reader.read = lambda: {"watts": 6.0, "gpu_busy": 50.0}
+    p._gamescope_stats.start = lambda: None
+    p._gamescope_stats.read = lambda: {
+        "fps": None,
+        "focus": None,
+        "age_s": None,
+        "sample_at": None,
+        "available": False,
+        "reason": "no_game_focus",
+    }
+
+    status = asyncio.run(p._auto_tick())
+
+    assert p._tdp_backend._levels == (15, 15, 15)
+    assert status["reason"] == "no_game_focus"
+    assert status["held_watts"] == 15
+
+
+def test_failed_focus_floor_respects_auto_apply_backoff(Plugin):
+    p = Plugin()
+    p._init()
+    p._current_appid = "g"
+    p._tdp_profiles.set_auto_tdp("game", True, appid="g")
+    p._tdp_profiles.set_auto_config("game", 30, 5, appid="g")
+    p._ensure_auto_session(on_ac=True)
+    p._tdp_backend._applied = 5
+    p._tdp_backend._levels = (5, 5, 5)
+    p._power_reader.read = lambda: {"watts": 6.0, "gpu_busy": 50.0}
+    p._gamescope_stats.start = lambda: None
+    p._gamescope_stats.read = lambda: {
+        "fps": None,
+        "focus": "steam",
+        "age_s": None,
+        "sample_at": None,
+        "available": False,
+        "reason": "no_game_focus",
+    }
+    writes = []
+
+    def reject(pl1, pl2, pl3, ac):
+        writes.append((pl1, pl2, pl3, ac))
+        return TdpResult(pl1, None, False, "rejected")
+
+    p._tdp_backend.set_levels = reject
+
+    asyncio.run(p._auto_tick())
+    asyncio.run(p._auto_tick())
+
+    assert len(writes) == 1
+    assert p._auto_status["held_watts"] is None
+
+
+def test_focus_change_during_floor_restores_auto_setpoint_on_next_tick(Plugin):
+    p = Plugin()
+    p._init()
+    p._current_appid = "g"
+    p._tdp_profiles.set_auto_tdp("game", True, appid="g")
+    p._tdp_profiles.set_auto_config("game", 30, 5, appid="g")
+    p._ensure_auto_session(on_ac=True)
+    p._tdp_backend._applied = 5
+    p._tdp_backend._levels = (5, 5, 5)
+    p._power_reader.read = lambda: {"watts": 6.0, "gpu_busy": 50.0}
+    p._gamescope_stats.start = lambda: None
+    reading = {
+        "fps": None,
+        "focus": "steam",
+        "age_s": None,
+        "sample_at": None,
+        "available": False,
+        "reason": "no_game_focus",
+    }
+    p._gamescope_stats.read = lambda: reading
+    original_set_levels = p._tdp_backend.set_levels
+
+    def apply_then_focus_game(pl1, pl2, pl3, ac):
+        result = original_set_levels(pl1, pl2, pl3, ac)
+        reading.update({
+            "fps": 30.0,
+            "focus": "g",
+            "age_s": 0.0,
+            "sample_at": 1.0,
+            "available": True,
+            "reason": "ok",
+        })
+        return result
+
+    p._tdp_backend.set_levels = apply_then_focus_game
+
+    asyncio.run(p._auto_tick())
+    assert p._tdp_backend._levels == (15, 15, 15)
+    assert p._auto_status["held_watts"] is None
+
+    asyncio.run(p._auto_tick())
+
+    assert p._tdp_backend._levels == (5, 5, 5)
+    assert p._auto_setpoint == 5
+
+
 @pytest.mark.parametrize("maximum, expected", [(None, 15), (10, 10)])
 def test_game_exit_keeps_global_auto_grid_floor_and_restores_manual_on_disable(Plugin, maximum, expected):
     p = Plugin()

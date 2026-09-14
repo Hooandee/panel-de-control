@@ -389,6 +389,64 @@ def test_guard_does_not_reconcile_auto_setpoint_while_ui_is_active(plugin):
     assert plugin._tdp_backend._levels["pl1"] == 15
 
 
+def test_guard_does_not_reconcile_auto_setpoint_while_steam_has_focus(plugin):
+    _enable_auto_session(plugin)
+    plugin._tdp_backend._levels = {"pl1": 5, "pl2": 5, "pl3": 5}
+    queued = plugin._capture_tdp_command("settle-retry")
+    plugin._power_reader.read = lambda: {"watts": 6.0, "gpu_busy": 50.0}
+    plugin._gamescope_stats.start = lambda: None
+    plugin._gamescope_stats.read = lambda: {
+        "fps": None,
+        "focus": "steam",
+        "age_s": None,
+        "sample_at": None,
+        "available": False,
+        "reason": "no_game_focus",
+    }
+
+    asyncio.run(plugin._auto_tick())
+    plugin._tdp_backend.set_levels_calls = 0
+    stale = plugin._execute_tdp_command(queued)
+    lifecycle = plugin._execute_tdp_command(
+        plugin._capture_tdp_command("lifecycle")
+    )
+    plugin._tdp_guard_tick(now=10.0)
+    plugin._tdp_guard_tick(now=10.75)
+
+    assert stale.detail == "stale-generation"
+    assert lifecycle.detail == "auto-ui-active"
+    assert plugin._tdp_backend.set_levels_calls == 0
+    assert plugin._tdp_backend._levels["pl1"] == 15
+
+
+def test_focus_floor_repairs_drift_on_a_secondary_surface(plugin):
+    _enable_auto_session(plugin)
+    plugin._tdp_backend._levels = {"pl1": 5, "pl2": 5, "pl3": 5}
+    plugin._tdp_backend._legacy_levels = {"pl1": 5, "pl2": 5, "pl3": 5}
+    plugin._power_reader.read = lambda: {"watts": 6.0, "gpu_busy": 50.0}
+    plugin._gamescope_stats.start = lambda: None
+    plugin._gamescope_stats.read = lambda: {
+        "fps": None,
+        "focus": "steam",
+        "age_s": None,
+        "sample_at": None,
+        "available": False,
+        "reason": "no_game_focus",
+    }
+
+    asyncio.run(plugin._auto_tick())
+    plugin._tdp_backend._legacy_levels["pl2"] = 14
+    plugin._tdp_backend.set_levels_calls = 0
+    asyncio.run(plugin._auto_tick())
+
+    assert plugin._tdp_backend.set_levels_calls == 1
+    assert plugin._tdp_backend._legacy_levels == {
+        "pl1": 15,
+        "pl2": 15,
+        "pl3": 15,
+    }
+
+
 def test_auto_guard_rechecks_power_source_after_observation(plugin, monkeypatch):
     import main as main_module
 

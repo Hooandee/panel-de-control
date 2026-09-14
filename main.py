@@ -714,6 +714,7 @@ class Plugin:
         self._auto_apply_retry_at = 0.0
         self._auto_apply_exhausted = False
         self._auto_ui_hold_watts = None
+        self._auto_focus_hold_active = False
         self._auto_status = {
             "state": "paused",
             "reason": "no_game",
@@ -3105,6 +3106,8 @@ class Plugin:
         """
         if not self._learning_active():
             return None
+        if self._ui_active or self._auto_focus_hold_active:
+            return None
         try:
             # Snapshot the appid once: this method now runs on a worker thread
             # (via asyncio.to_thread) and spans a ~120 ms gpu_busy burst + fan
@@ -3443,6 +3446,7 @@ class Plugin:
         self._auto_apply_attempts = 0
         self._auto_apply_retry_at = 0.0
         self._auto_apply_exhausted = False
+        self._auto_focus_hold_active = False
         if reason != "config_changed":
             self._auto_ui_hold_watts = None
         config = self._auto_config(self._current_appid)
@@ -3544,14 +3548,15 @@ class Plugin:
 
     def _auto_ui_blocks_tdp_write(self, reason):
         reason = str(reason)
-        if reason == "auto-ui-floor":
+        if reason in ("auto-ui-floor", "auto-focus-floor"):
             return False
+        responsive_hold = self._ui_active or self._auto_focus_hold_active
         return bool(
-            self._ui_active
+            responsive_hold
             and (
                 reason.startswith("auto-")
                 or (
-                    reason in ("guard", "settle-retry")
+                    reason in ("guard", "settle-retry", "lifecycle", "reapply")
                     and (
                         self._auto_runtime_active()
                         or (
@@ -3600,12 +3605,39 @@ class Plugin:
                 return bool(confirm(observation, setpoint, tolerance))
             except Exception:  # noqa: BLE001
                 return False
-        primary = observation.surfaces.get(self._tdp_backend.name, {})
-        rail = getattr(self._tdp_backend, "primary_rail", "pl1")
-        reading = primary.get(rail)
-        if reading is None or reading.applied_w is None:
+        if not callable(getattr(self._tdp_backend, "observe", None)):
+            primary = observation.surfaces.get(self._tdp_backend.name, {})
+            reading = primary.get(getattr(self._tdp_backend, "primary_rail", "pl1"))
+            return bool(
+                reading is not None
+                and reading.applied_w is not None
+                and abs(int(reading.applied_w) - int(setpoint)) <= tolerance
+            )
+        command = self._capture_tdp_command(
+            "auto-confirm",
+            bump=False,
+            auto_watts=setpoint,
+        )
+        targets = build_targets(
+            command.requested,
+            command.safe_bounds,
+            observation,
+        )
+        seen = set()
+        for rails in observation.surfaces.values():
+            for rail, reading in rails.items():
+                expected = targets.target.get(rail)
+                if expected is None:
+                    continue
+                if (
+                    reading.applied_w is None
+                    or abs(int(reading.applied_w) - expected) > tolerance
+                ):
+                    return False
+                seen.add(rail)
+        if set(targets.target) - seen:
             return False
-        return abs(int(reading.applied_w) - int(setpoint)) <= tolerance
+        return True
 
     def _auto_observed_primary_watts(self, observation):
         primary = observation.surfaces.get(self._tdp_backend.name, {})
@@ -3637,6 +3669,9 @@ class Plugin:
         controller.confirm_apply()
         self._auto_setpoint = controller.setpoint
         self._auto_applied = True
+        self._clear_auto_apply_failure()
+
+    def _clear_auto_apply_failure(self):
         self._auto_apply_blocked = False
         self._auto_apply_attempts = 0
         self._auto_apply_retry_at = 0.0
@@ -3782,7 +3817,9 @@ class Plugin:
             "seed_source": self._auto_seed_source,
             "seed_watts": self._auto_seed_watts,
             "held_watts": (
-                self._auto_ui_hold_watts if self._ui_active else None
+                self._auto_ui_hold_watts
+                if self._ui_active or self._auto_focus_hold_active
+                else None
             ),
         }
         previous = getattr(self, "_auto_status", None)
@@ -3886,6 +3923,30 @@ class Plugin:
         reading = self._gamescope_stats.read()
         if self._ui_active:
             return self._hold_auto_session("ui_active", reading)
+        focus_lost = (
+            reading.get("reason") == "no_game_focus"
+            and reading.get("focus") in (None, "steam")
+        )
+        if focus_lost:
+            if not self._auto_focus_hold_active:
+                self._set_auto_focus_hold(True)
+            decision = controller.step(
+                fps=None,
+                signal_reason="no_game_focus",
+                gpu_busy=power.get("gpu_busy"),
+            )
+            self._auto_setpoint = decision.setpoint
+            self._record_auto_status(decision, reading)
+            if (
+                self._auto_apply_blocked
+                and _monotonic() < self._auto_apply_retry_at
+            ):
+                return self._auto_status
+            await self._apply_auto_responsive_floor("no_game_focus", reading)
+            return self._auto_status
+        if self._auto_focus_hold_active:
+            self._set_auto_focus_hold(False)
+        self._auto_ui_hold_watts = None
         sample_at = reading.get("sample_at")
         if self._auto_apply_blocked:
             await self._recover_auto_apply(
@@ -4159,48 +4220,106 @@ class Plugin:
                 await self._apply_tdp_now("auto-ui-floor")
         return self._tdp_state(await self._read_tdp_observation())
 
-    async def _apply_auto_ui_floor(self):
-        if not self._ui_active or not self._auto_runtime_active():
+    def _auto_responsive_hold_active(self, reason, reading=None):
+        if reason == "ui_active":
+            return self._ui_active
+        if reason == "no_game_focus":
+            current = reading if reading is not None else self._gamescope_stats.read()
+            return bool(
+                self._auto_focus_hold_active
+                and current.get("reason") == reason
+                and current.get("focus") in (None, "steam")
+            )
+        return False
+
+    def _set_auto_focus_hold(self, active):
+        active = bool(active)
+        if active == self._auto_focus_hold_active:
             return
-        self._hold_auto_session("ui_active")
+        self._auto_focus_hold_active = active
+        if not active:
+            self._auto_ui_hold_watts = None
+        self._advance_tdp_generation()
+
+    async def _apply_auto_responsive_floor(self, reason, reading=None):
+        if (
+            not self._auto_responsive_hold_active(reason, reading)
+            or not self._auto_runtime_active()
+        ):
+            return
+        if reason == "ui_active":
+            self._hold_auto_session(reason, reading)
         controller = self._auto_controller
         context = self._auto_context
         appid = self._current_appid
         generation = self._tdp_generation
+        self._auto_applied = False
         observation = await self._read_tdp_observation()
         if (
-            not self._ui_active
+            not self._auto_responsive_hold_active(reason)
             or generation != self._tdp_generation
             or not self._auto_context_is_current(controller, context, appid)
             or not self._auto_runtime_active()
         ):
             return
         observed = self._auto_observed_primary_watts(observation)
-        self._auto_ui_hold_watts = observed
         floor = self._auto_responsive_floor(appid, read_on_ac(), observation)
         _minimum, maximum = self._auto_effective_range(appid, read_on_ac(), observation)
-        current = int(observed) if observed is not None else int(controller.setpoint)
-        if current < floor or current > maximum:
-            auto_setpoint = self._auto_setpoint
-            self._auto_setpoint = floor
-            try:
-                result = await self._apply_tdp_now(
-                    "auto-ui-floor",
-                    auto_guard=(controller, context, appid),
-                )
-            finally:
-                if self._auto_identity_is_current(controller, context, appid):
-                    self._auto_setpoint = auto_setpoint
+        if observed is None:
+            self._auto_ui_hold_watts = None
+            if reason == "ui_active":
+                self._hold_auto_session(reason, reading)
+            else:
+                self._record_auto_status(controller.snapshot(), reading or {})
+            return
+        current = max(
+            int(controller.setpoint),
+            int(observed) if observed is not None else int(controller.setpoint),
+        )
+        hold_watts = max(floor, min(current, maximum))
+        confirmed = self._auto_observation_confirmed(observation, hold_watts)
+        self._auto_ui_hold_watts = hold_watts if confirmed else None
+        if not confirmed:
+            apply_reason = (
+                "auto-focus-floor"
+                if reason == "no_game_focus"
+                else "auto-ui-floor"
+            )
+            result = await self._apply_tdp_now(
+                apply_reason,
+                auto_guard=(controller, context, appid),
+                auto_watts=hold_watts,
+            )
             if (
-                not self._ui_active
+                not self._auto_responsive_hold_active(reason)
                 or not self._auto_context_is_current(controller, context, appid)
                 or not self._auto_runtime_active()
             ):
+                if reason == "no_game_focus":
+                    self._set_auto_focus_hold(False)
                 return
-            if result.ok and result.applied_w is not None:
-                self._auto_ui_hold_watts = int(result.applied_w)
-            self._auto_applied = False
-        self._hold_auto_session("ui_active")
+            confirmed = bool(
+                result.ok
+                and self._auto_observation_confirmed(
+                    self._tdp_observation,
+                    hold_watts,
+                )
+            )
+            if confirmed:
+                self._auto_ui_hold_watts = hold_watts
+                self._clear_auto_apply_failure()
+            else:
+                self._auto_ui_hold_watts = None
+                self._schedule_auto_apply_retry()
+        elif confirmed:
+            self._clear_auto_apply_failure()
+        if reason == "ui_active":
+            self._hold_auto_session(reason, reading)
+        else:
+            self._record_auto_status(controller.snapshot(), reading or {})
+
+    async def _apply_auto_ui_floor(self):
+        await self._apply_auto_responsive_floor("ui_active")
 
     async def set_ui_active(self, enabled: bool) -> bool:
         self._init()
@@ -4212,7 +4331,7 @@ class Plugin:
             await self._apply_auto_ui_floor()
         elif activated:
             self._auto_ui_hold_watts = None
-        elif not active:
+        elif not active and not self._auto_focus_hold_active:
             self._auto_ui_hold_watts = None
             if self._auto_status.get("held_watts") is not None:
                 self._auto_status = {**self._auto_status, "held_watts": None}
@@ -4709,25 +4828,37 @@ class Plugin:
                 out.append(mid)
         return out
 
-    def _capture_tdp_command(self, reason, on_ac=None, bump=True):
+    def _capture_tdp_command(
+        self,
+        reason,
+        on_ac=None,
+        bump=True,
+        auto_watts=None,
+    ):
         backend = self._tdp_backend
         ac = read_on_ac() if on_ac is None else bool(on_ac)
         limits = self._limits()
         active = self._active_max(limits, ac)
         logical_requested = self._tdp_profiles.effective(self._current_appid)
-        auto_watts = None
-        if self._auto_runtime_active():
-            auto_watts = int(self._auto_setpoint)
+        requested_auto_watts = None
+        if auto_watts is not None and self._auto_runtime_active():
+            requested_auto_watts = int(auto_watts)
+        elif self._auto_runtime_active():
+            requested_auto_watts = int(self._auto_setpoint)
         elif self._current_appid is None and self._auto_control_active():
-            auto_watts = self._auto_responsive_floor(None, ac, self._tdp_observation)
-        if auto_watts is not None:
+            requested_auto_watts = self._auto_responsive_floor(
+                None,
+                ac,
+                self._tdp_observation,
+            )
+        if requested_auto_watts is not None:
             logical_requested = {
-                "pl1": auto_watts,
-                "pl2": auto_watts,
-                "pl3": auto_watts,
+                "pl1": requested_auto_watts,
+                "pl2": requested_auto_watts,
+                "pl3": requested_auto_watts,
                 "mode": "estable",
             }
-        auto_active = auto_watts is not None
+        auto_active = requested_auto_watts is not None
         if self._settings.get("eco_enabled"):
             minimum = limits.min_w
             logical_requested = {
@@ -5100,8 +5231,14 @@ class Plugin:
             result.detail,
         )
 
-    async def _apply_tdp_now(self, reason, on_ac=None, auto_guard=None):
-        ui_floor = reason == "auto-ui-floor"
+    async def _apply_tdp_now(
+        self,
+        reason,
+        on_ac=None,
+        auto_guard=None,
+        auto_watts=None,
+    ):
+        ui_floor = reason in ("auto-ui-floor", "auto-focus-floor")
         if auto_guard is not None and self._ui_active and not ui_floor:
             return TdpResult(
                 int(getattr(self, "_auto_setpoint", 0) or 0),
@@ -5149,7 +5286,11 @@ class Plugin:
                 False,
                 "stale-auto-context",
             )
-        command = self._capture_tdp_command(reason, on_ac)
+        command = self._capture_tdp_command(
+            reason,
+            on_ac,
+            auto_watts=auto_watts,
+        )
         return await self._offload_call(
             lambda: self._execute_tdp_command(command)
         )

@@ -92,6 +92,7 @@ class AutoTdpController:
         stale_recovery_s=11.0,
         stale_recovery_gpu=90.0,
         recovery_interval_s=2.0,
+        stale_progress_s=11.0,
     ):
         self.min_w = int(min_w)
         self.max_w = max(self.min_w, int(max_w))
@@ -114,6 +115,7 @@ class AutoTdpController:
         self._stale_recovery_s = max(0.0, float(stale_recovery_s))
         self._stale_recovery_gpu = max(0.0, float(stale_recovery_gpu))
         self._recovery_interval_s = max(0.0, float(recovery_interval_s))
+        self._stale_progress_s = max(0.0, float(stale_progress_s))
         self._active_since = None
         self._stable_since = None
         self._qualification_since = None
@@ -132,6 +134,8 @@ class AutoTdpController:
         self._pending_apply_from = None
         self._last_low_fps_at = None
         self._last_recovery_at = None
+        self._last_fresh_at = None
+        self._stale_pending = False
         self._fps_window = deque(maxlen=32)
         self.state = "warming"
         self.reason = "starting"
@@ -192,6 +196,8 @@ class AutoTdpController:
         self._reset_probe_settlement()
         self._cooldown_until = 0.0
         self._clear_recovery_evidence()
+        self._last_fresh_at = None
+        self._stale_pending = False
         return self._result("paused", reason, previous)
 
     def _hold(self, reason, previous):
@@ -340,6 +346,8 @@ class AutoTdpController:
             or not math.isfinite(self.fps)
             or self.fps <= 0
         ):
+            if signal_reason == "fps_stale":
+                self._stale_pending = True
             if self._has_recent_low_fps_evidence(signal_reason, gpu, now):
                 if self._recovery_step_due(now):
                     return self._recover(previous, now, "fps_stale_recovery")
@@ -349,7 +357,24 @@ class AutoTdpController:
                     previous,
                 )
             reason = signal_reason if signal_reason != "ok" else "fps_unavailable"
+            if reason == "fps_stale" and self._probe_from is None:
+                return self._result("paused", reason, previous)
             return self._pause(reason, previous)
+
+        bridged_stale = self._stale_pending
+        if (
+            bridged_stale
+            and self._last_fresh_at is not None
+            and now - self._last_fresh_at > self._stale_progress_s
+        ):
+            self._reset_stability()
+            self._reset_qualification_candidates()
+            self._gameplay_qualified = False
+            self._low_load_qualified = False
+            self._gameplay_gpu_baseline = None
+            self._active_since = None
+        self._stale_pending = False
+        self._last_fresh_at = now
 
         if self._load_increased(gpu):
             self._clear_recovery_evidence()
@@ -410,7 +435,12 @@ class AutoTdpController:
             return self._result("holding", "cooldown", previous)
 
         self._fps_window.append((now, min(self.fps, float(self.target_fps))))
-        while self._fps_window and now - self._fps_window[0][0] > self._stable_s:
+        window_s = (
+            max(self._stable_s, self._stale_progress_s)
+            if bridged_stale
+            else self._stable_s
+        )
+        while self._fps_window and now - self._fps_window[0][0] > window_s:
             self._fps_window.popleft()
         values = [sample for _at, sample in self._fps_window]
         sample_stable = (

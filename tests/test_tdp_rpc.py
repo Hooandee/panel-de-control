@@ -702,6 +702,17 @@ def test_collect_sample_discards_auto_setpoint_change_during_sensor_io(Plugin):
     assert result == [None]
 
 
+def test_collect_sample_skips_auto_focus_floor(Plugin):
+    p = Plugin()
+    p._init()
+    p._current_appid = "42"
+    p._tdp_profiles.set_auto_tdp("game", True, appid="42")
+    p._ensure_auto_session(on_ac=True)
+    p._auto_focus_hold_active = True
+
+    assert p._collect_sample() is None
+
+
 def test_get_telemetry_aggregates_after_collect(Plugin, monkeypatch):
     import main as main_module
     import types
