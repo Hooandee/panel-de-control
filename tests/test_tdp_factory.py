@@ -218,6 +218,7 @@ def test_rog_uses_asus_armoury_firmware_attr(tmp_path):
     },)
     assert b.diagnostics()["readback_settle_ms"] == 0
     assert b.low_battery_hold_strategy == "primary"
+    assert b.auto_tdp_safe is True
 
 
 def test_flow_uses_asus_armoury_and_publishes_live_narrowed_limits(tmp_path):
@@ -1016,6 +1017,117 @@ def test_steam_deck_uses_hwmon(tmp_path):
     b = select_backend(_p("steam_deck_oled"), root=root, ryzenadj_resolve=_NO_RYZENADJ)
     assert b.supported and b.name == "steamdeck-hwmon"
     assert b.low_battery_hold_strategy == "primary"
+    assert b.auto_tdp_safe is True
+
+
+def test_steam_deck_without_fast_ppt_keeps_manual_tdp_but_disables_auto(tmp_path):
+    root = str(tmp_path)
+    _mk_hwmon(root)
+    os.remove(os.path.join(root, "sys/class/hwmon/hwmon0/power2_cap"))
+
+    backend = select_backend(
+        _p("steam_deck_oled"),
+        root=root,
+        ryzenadj_resolve=_NO_RYZENADJ,
+    )
+
+    result = backend.set_tdp(20, ac=True)
+
+    assert result.ok is True
+    assert backend.auto_tdp_safe is False
+
+
+@pytest.mark.parametrize("fast_ppt_state", ("unreadable", "unwritable"))
+def test_steam_deck_unverifiable_fast_ppt_keeps_manual_tdp_but_disables_auto(
+    tmp_path,
+    monkeypatch,
+    fast_ppt_state,
+):
+    root = str(tmp_path)
+    _mk_hwmon(root)
+    fast_ppt = os.path.join(root, "sys/class/hwmon/hwmon0/power2_cap")
+    assert os.path.exists(fast_ppt)
+
+    import tdp.steamdeck_hwmon as steamdeck_hwmon
+
+    if fast_ppt_state == "unreadable":
+        original_read = steamdeck_hwmon.read_int
+        monkeypatch.setattr(
+            steamdeck_hwmon,
+            "read_int",
+            lambda path: None if path == fast_ppt else original_read(path),
+        )
+    else:
+        original_access = steamdeck_hwmon.os.access
+        monkeypatch.setattr(
+            steamdeck_hwmon.os,
+            "access",
+            lambda path, mode: (
+                False if path == fast_ppt else original_access(path, mode)
+            ),
+        )
+
+    backend = select_backend(
+        _p("steam_deck_oled"),
+        root=root,
+        ryzenadj_resolve=_NO_RYZENADJ,
+    )
+
+    result = backend.set_tdp(20, ac=True)
+
+    assert result.ok is True
+    assert backend.auto_tdp_safe is False
+
+
+def test_firmware_partial_primary_rails_keep_manual_tdp_but_disable_auto(tmp_path):
+    root = str(tmp_path)
+    _mk_fw(root, "asus-armoury")
+    _mk_asus_legacy(root)
+    rail_dir = os.path.join(
+        root,
+        "sys/class/firmware-attributes/asus-armoury/attributes/ppt_pl3_fppt",
+    )
+    for leaf in ("current_value", "min_value", "max_value"):
+        os.remove(os.path.join(rail_dir, leaf))
+    os.rmdir(rail_dir)
+
+    backend = select_backend(GENERIC, root=root, ryzenadj_resolve=_NO_RYZENADJ)
+
+    result = backend.set_tdp(20, ac=True)
+
+    assert result.ok is True
+    assert backend.auto_tdp_safe is False
+
+
+def test_asus_legacy_partial_rails_keep_manual_tdp_but_disable_auto(tmp_path):
+    root = str(tmp_path)
+    _mk_asus_legacy(root)
+    os.remove(os.path.join(root, "sys/devices/platform/asus-nb-wmi/ppt_fppt"))
+
+    backend = select_backend(
+        _p("rog_ally_x"),
+        root=root,
+        ryzenadj_resolve=_NO_RYZENADJ,
+    )
+
+    result = backend.set_tdp(20, ac=True)
+
+    assert result.ok is True
+    assert backend.auto_tdp_safe is False
+
+
+def test_asus_legacy_complete_rails_enable_auto_tdp(tmp_path):
+    root = str(tmp_path)
+    _mk_asus_legacy(root)
+
+    backend = select_backend(
+        _p("rog_ally_x"),
+        root=root,
+        ryzenadj_resolve=_NO_RYZENADJ,
+    )
+
+    assert backend.name == "asus-nb-wmi"
+    assert backend.auto_tdp_safe is True
 
 
 def test_exact_steam_deck_never_falls_through_to_generic_amd_backends(tmp_path):
@@ -1255,10 +1367,17 @@ def test_factory_continues_after_a_present_candidate_is_not_ready(
     }
 
 
-def _mk_rapl(root):
-    d = os.path.join(root, "sys/devices/virtual/powercap/intel-rapl-mmio/intel-rapl-mmio:0")
+def _mk_rapl(root, base="intel-rapl-mmio/intel-rapl-mmio:0"):
+    d = os.path.join(root, "sys/devices/virtual/powercap", base)
     os.makedirs(d, exist_ok=True)
-    for i, uw in ((0, 30_000_000), (1, 37_000_000)):
+    with open(os.path.join(d, "name"), "w") as f:
+        f.write("package-0")
+    for i, name, uw in (
+        (0, "long_term", 30_000_000),
+        (1, "short_term", 37_000_000),
+    ):
+        with open(os.path.join(d, f"constraint_{i}_name"), "w") as f:
+            f.write(name)
         with open(os.path.join(d, f"constraint_{i}_power_limit_uw"), "w") as f:
             f.write(str(uw))
 
@@ -1288,6 +1407,35 @@ def test_generic_intel_uses_rapl_and_not_ryzenadj(tmp_path):
     b = select_backend(intel, root=root, ryzenadj_resolve=lambda: "/usr/bin/ryzenadj")
     assert b.supported and b.name == "intel-rapl"
     assert b.low_battery_hold_strategy == "primary"
+
+
+def test_only_msi_claw_enables_dual_surface_rapl_auto_tdp(tmp_path):
+    root = str(tmp_path)
+    _mk_rapl(root)
+    _mk_rapl(root, "intel-rapl/intel-rapl:0")
+    _mk_dmi(root, "Micro-Star International Co., Ltd.", "Claw 8 AI+ A2VM")
+
+    claw = select_backend(
+        _p("msi_claw_8_ai_plus"),
+        root=root,
+        ryzenadj_resolve=_NO_RYZENADJ,
+    )
+    generic = select_backend(
+        dataclasses.replace(GENERIC, vendor="intel"),
+        root=root,
+        ryzenadj_resolve=_NO_RYZENADJ,
+    )
+
+    assert claw.auto_tdp_safe is True
+    assert claw._safety_lock._path == os.path.join(
+        root,
+        "run/panel-de-control/intel-rapl-transaction.lock",
+    )
+    assert claw._ownership_lock._path == os.path.join(
+        root,
+        "run/panel-de-control/ownership-intel-rapl.lock",
+    )
+    assert generic.auto_tdp_safe is False
 
 
 def test_generic_intel_never_uses_ryzenadj(tmp_path):

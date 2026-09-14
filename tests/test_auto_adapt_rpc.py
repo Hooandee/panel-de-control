@@ -5,11 +5,13 @@ test_tdp_suggest / test_auto_tdp / test_fans_suggest; this locks the glue in mai
 import asyncio
 import importlib
 import sys
+import threading
 import types
 
 import pytest
 
-from tdp.types import TdpLimits, TdpResult
+from gamescope_stats import GamescopeStats
+from tdp.types import RailReading, TdpLimits, TdpObservation, TdpResult
 
 
 class FakeBackend:
@@ -165,125 +167,116 @@ def test_entering_game_does_not_seed_pl1_from_band(Plugin):
 # Auto loop: exploration cadence + recovery (the band-cage breaker glue)
 # ---------------------------------------------------------------------------
 
-def _run_loop_ticks(p, reads, monkeypatch):
-    """Drive _auto_loop for len(reads) ticks with a stubbed power reader + no real
-    sleep, then stop. *reads* is a list of {"watts","gpu_busy"} dicts (one per tick)."""
-    import main as main_mod
+def _run_loop_ticks(p, reads, _monkeypatch):
+    samples = iter(reads)
+    current = {"fps": None, "gpu_busy": None, "watts": None, "reason": "fps_unavailable"}
+    sample_at = 0.0
+    original_controller = sys.modules["main"].auto_tdp.AutoTdpController
 
-    import itertools
+    def timed_controller(*args, **kwargs):
+        kwargs["clock"] = lambda: sample_at
+        return original_controller(*args, **kwargs)
 
-    # Pad the reader so it never StopIterations (which the loop would swallow and spin);
-    # the counting decide is the deterministic stop after exactly len(reads) ticks.
-    seq = itertools.chain(reads, itertools.repeat(reads[-1]))
-    p._power_reader.read = lambda: next(seq)
-    p._reset_auto_windows()
-    # Auto-TDP is per-game now; these tests exercise the control law, so enable it for
-    # whichever scope is active.
-    _scope = "game" if p._current_appid is not None else "global"
-    p._tdp_profiles.set_auto_tdp(_scope, True, appid=p._current_appid)
+    _monkeypatch.setattr(
+        sys.modules["main"].auto_tdp,
+        "AutoTdpController",
+        timed_controller,
+    )
 
-    state = {"n": 0, "sleeps": 0}
-    real_decide = main_mod.auto_tdp.decide
+    def power_read():
+        nonlocal current, sample_at
+        current = next(samples)
+        sample_at += 5.0
+        return {"gpu_busy": current.get("gpu_busy"), "watts": current.get("watts")}
 
-    async def fake_sleep(_):
-        # Safety stop independent of decide (the loop may `continue` before decide,
-        # e.g. the no-game guard) so the test can't spin. Counts loop iterations and
-        # caps a couple ticks past the read count; in the normal (game-running) path
-        # counting_decide fires first, preserving its exact tick accounting.
-        state["sleeps"] += 1
-        if state["sleeps"] > len(reads) + 2:
-            raise asyncio.CancelledError
-        return None
+    def fps_read(expected_appid=None):
+        fps = current.get("fps")
+        reason = current.get("reason", "ok" if fps is not None else "fps_unavailable")
+        return {
+            "fps": fps,
+            "focus": expected_appid,
+            "age_s": 0.0 if fps is not None else None,
+            "sample_at": sample_at if fps is not None else None,
+            "available": reason == "ok",
+            "reason": reason,
+        }
 
-    def counting_decide(*a, **k):
-        state["n"] += 1
-        if state["n"] > len(reads):
-            raise asyncio.CancelledError
-        return real_decide(*a, **k)
-
-    monkeypatch.setattr(main_mod.auto_tdp, "decide", counting_decide)
-    monkeypatch.setattr(main_mod.asyncio, "sleep", fake_sleep)
-    asyncio.run(p._auto_loop())
+    p._power_reader.read = power_read
+    p._gamescope_stats.read = fps_read
+    p._reset_auto_session("test")
+    scope = "game" if p._current_appid is not None else "global"
+    p._tdp_profiles.set_auto_tdp(scope, True, appid=p._current_appid)
+    for _ in reads:
+        asyncio.run(p._auto_tick())
 
 
-def test_loop_holds_at_knee_no_sawtooth(Plugin, monkeypatch):
-    # GPU ~92% (in the 88..97 dead-band = the knee) → the loop HOLDS, never the old
-    # probe-down-every-tick sawtooth. (device active max = 35)
+def test_loop_warmup_holds_without_sawtooth(Plugin, monkeypatch):
     p = Plugin()
     p._init()
     p._current_appid = "g"  # per-game control needs a running game
     p._tdp_profiles.set_pl1("game", 22, appid="g")
-    reads = [{"gpu_busy": 92} for _ in range(8)]
+    reads = [{"fps": 40, "gpu_busy": 92, "watts": 20} for _ in range(2)]
     _run_loop_ticks(p, reads, monkeypatch)
-    assert p._tdp_profiles.effective("g")["pl1"] == 22  # held — no sawtooth
+    assert p._auto_setpoint == 22
+    assert p._tdp_profiles.effective("g")["pl1"] == 22
 
 
-def test_loop_power_limited_at_max_probes_down(Plugin, monkeypatch):
-    # The power-limited case: pl1 at max (35), GPU stable 80% (below the 88 knee) → there
-    # IS margin, so after the sustained-headroom gate it steps DOWN off the cap
-    # (proportional to the gap), instead of holding at max forever like the old
-    # watts model did (draw pinned the cap → "no headroom" → stuck).
+def test_loop_probes_down_only_one_watt_after_stable_fps(Plugin, monkeypatch):
     p = Plugin()
     p._init()
     p._current_appid = "g"
     cap = p._effective_levels("g")[1]  # active max ceiling
     p._tdp_profiles.set_pl1("game", cap, appid="g")
     assert p._effective_levels("g")[0]["pl1"] == cap  # start pinned at the cap
-    reads = [{"gpu_busy": 80} for _ in range(8)]
+    reads = [{"fps": 40, "gpu_busy": 80, "watts": 34} for _ in range(12)]
     _run_loop_ticks(p, reads, monkeypatch)
-    assert p._effective_levels("g")[0]["pl1"] < cap  # dropped off the cap
+    assert p._auto_setpoint == cap - 1
+    assert p._tdp_profiles.effective("g")["pl1"] == cap
 
 
-def test_loop_drops_after_sustained_headroom(Plugin, monkeypatch):
-    # GPU 40% (light) sustained past the gate → one proportional step down (gap
-    # 88-40=48 → bounded to max_down_step 5): 22 → 17, then it re-observes.
+def test_loop_never_persists_its_dynamic_drop(Plugin, monkeypatch):
     p = Plugin()
     p._init()
     p._current_appid = "g"
     p._tdp_profiles.set_pl1("game", 22, appid="g")
-    reads = [{"gpu_busy": 40} for _ in range(8)]
+    reads = [{"fps": 40, "gpu_busy": 70, "watts": 20} for _ in range(12)]
     _run_loop_ticks(p, reads, monkeypatch)
-    assert p._tdp_profiles.effective("g")["pl1"] == 17  # -max_down_step(5)
+    assert p._auto_setpoint == 21
+    assert p._tdp_profiles.effective("g")["pl1"] == 22
 
 
-def test_loop_steps_up_when_saturated(Plugin, monkeypatch):
-    # A saturating game (GPU 99%) ramps PL1 up to protect FPS.
+def test_loop_steps_up_when_fps_is_below_target(Plugin, monkeypatch):
     p = Plugin()
     p._init()
     p._current_appid = "g"
     p._tdp_profiles.set_pl1("game", 20, appid="g")
-    reads = [{"gpu_busy": 99} for _ in range(4)]
+    reads = [{"fps": 35, "gpu_busy": 40, "watts": 18} for _ in range(4)]
     _run_loop_ticks(p, reads, monkeypatch)
-    assert p._tdp_profiles.effective("g")["pl1"] == 28  # +2 W each of 4 ticks
+    assert p._auto_setpoint == 28
+    assert p._tdp_profiles.effective("g")["pl1"] == 20
 
 
-def test_loop_uses_constrained_target_as_control_baseline(Plugin, monkeypatch):
-    from tdp.reconcile import TargetSet
-
+def test_loop_clamps_recovery_to_automatic_device_max(Plugin, monkeypatch):
     p = Plugin()
     p._init()
     p._current_appid = "g"
-    p._tdp_profiles.set_pl1("game", 25, appid="g")
-    p._tdp_targets = TargetSet(
-        requested={"pl1": 25},
-        target={"pl1": 15},
-        reasons={"pl1": "live_max"},
-    )
-    p._tdp_status = "constrained"
-    reads = [{"gpu_busy": 99}]
+    p._tdp_profiles.set_pl1("game", 35, appid="g")
+    reads = [{"fps": 20, "gpu_busy": 99, "watts": 35}]
     _run_loop_ticks(p, reads, monkeypatch)
-    assert p._tdp_profiles.effective("g")["pl1"] == 17
+    assert p._auto_setpoint == 35
+    assert p._auto_status["reason"] == "at_maximum"
 
 
 def test_loop_holds_with_no_signal(Plugin, monkeypatch):
-    # Level 4 (Claw today): no gpu_busy → hold, never thrash.
     p = Plugin()
     p._init()
     p._current_appid = "g"
     p._tdp_profiles.set_pl1("game", 20, appid="g")
-    reads = [{} for _ in range(8)]
+    reads = [{"reason": "fps_unavailable"} for _ in range(8)]
     _run_loop_ticks(p, reads, monkeypatch)
-    assert p._tdp_profiles.effective("g")["pl1"] == 20  # unchanged
+    assert p._auto_setpoint == 20
+    assert p._auto_status["state"] == "paused"
+    assert p._tdp_profiles.effective("g")["pl1"] == 20
 
 
 def test_loop_does_not_touch_global_when_no_game(Plugin, monkeypatch):
@@ -313,180 +306,795 @@ def test_loop_never_writes_when_backend_disables_auto_tdp(Plugin, monkeypatch):
     assert p._tdp_backend._levels is None
 
 
-def test_loop_clears_gpu_window_on_pl1_change(Plugin, monkeypatch):
-    # A PL1 change must clear the GPU% window so it stays HOMOGENEOUS (only samples
-    # taken at the CURRENT PL1). Otherwise decide averages GPU% across different PL1s.
-    # During a continuous UP ramp (GPU 99 → +2/tick) every tick applies a change, so
-    # after the last tick the window holds only THIS tick's single sample.
+def test_loop_reports_recovery_state_after_pl1_change(Plugin, monkeypatch):
     p = Plugin()
     p._init()
     p._current_appid = "g"
     p._tdp_profiles.set_pl1("game", 20, appid="g")
-    reads = [{"gpu_busy": 99} for _ in range(4)]
+    reads = [{"fps": 35, "gpu_busy": 99, "watts": 20}]
     _run_loop_ticks(p, reads, monkeypatch)
-    assert len(p._gpu_window) == 1
+    assert p._auto_status["state"] == "recovering"
+    assert p._auto_status["setpoint"] == 22
 
 
-def test_loop_gpu_window_grows_while_holding(Plugin, monkeypatch):
-    # When NOT changing PL1 (stable hold in the dead-band), the GPU% window must
-    # ACCUMULATE homogeneous samples (real history for the headroom gate). No clear.
+def test_signal_loss_during_protected_cooldown_reapplies_last_stable_tdp(
+    Plugin, monkeypatch
+):
+    p = Plugin()
+    p._init()
+    p._current_appid = "g"
+    p._tdp_profiles.set_pl1("game", 20, appid="g")
+    reads = [
+        {"fps": 40, "gpu_busy": 80, "watts": 18} for _ in range(8)
+    ] + [{"reason": "fps_stale", "gpu_busy": 0, "watts": 0}]
+
+    _run_loop_ticks(p, reads, monkeypatch)
+
+    assert p._auto_setpoint == 20
+    assert p._tdp_backend._applied == 20
+    assert p._auto_status["state"] == "paused"
+    assert p._auto_status["reason"] == "fps_stale"
+
+
+def test_unconfirmed_probe_is_rolled_back_and_never_learned(
+    Plugin, monkeypatch
+):
+    p = Plugin()
+    p._init()
+    p._current_appid = "g"
+    p._tdp_profiles.set_pl1("game", 20, appid="g")
+    original_set_levels = p._tdp_backend.set_levels
+    calls = 0
+
+    def set_levels(pl1, pl2, pl3, ac):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            return TdpResult(pl1, None, True, "unconfirmed")
+        return original_set_levels(pl1, pl2, pl3, ac)
+
+    p._tdp_backend.set_levels = set_levels
+    learned = []
+    p._auto_learning.record = lambda *_args, **_kwargs: learned.append(True)
+    reads = [{"fps": 40, "gpu_busy": 80, "watts": 18} for _ in range(6)]
+
+    _run_loop_ticks(p, reads, monkeypatch)
+
+    assert p._auto_setpoint == 20
+    assert p._tdp_backend._applied == 20
+    assert p._auto_status["state"] == "paused"
+    assert p._auto_status["reason"] == "apply_unconfirmed"
+    assert learned == []
+
+
+def test_loop_does_not_learn_probe_before_protected_cooldown_finishes(
+    Plugin, monkeypatch
+):
+    p = Plugin()
+    p._init()
+    p._current_appid = "g"
+    cap = p._effective_levels("g")[1]
+    p._tdp_profiles.set_pl1("game", cap, appid="g")
+    learned = []
+
+    def record(_appid, _target_fps, _on_ac, setpoint, *, stable):
+        learned.append((setpoint, stable))
+        return True
+
+    p._auto_learning.record = record
+    reads = [{"fps": 40, "gpu_busy": 80, "watts": 18} for _ in range(10)]
+
+    _run_loop_ticks(p, reads, monkeypatch)
+
+    assert p._auto_setpoint == cap - 1
+    assert p._auto_status["reason"] == "cooldown"
+    assert learned == []
+
+
+def test_failed_hardware_rollback_keeps_retry_aimed_at_safe_setpoint(
+    Plugin, monkeypatch
+):
+    main = sys.modules["main"]
+    now = {"value": 100.0}
+    monkeypatch.setattr(main, "_monotonic", lambda: now["value"])
+    p = Plugin()
+    p._init()
+    p._current_appid = "g"
+    p._tdp_profiles.set_pl1("game", 6, appid="g")
+    original_set_levels = p._tdp_backend.set_levels
+    writes = []
+
+    def set_levels(pl1, pl2, pl3, ac):
+        writes.append(pl1)
+        if len(writes) == 3:
+            return TdpResult(pl1, None, False, "rollback-failed")
+        return original_set_levels(pl1, pl2, pl3, ac)
+
+    p._tdp_backend.set_levels = set_levels
+    reads = [
+        {"fps": 40, "gpu_busy": 80, "watts": 6} for _ in range(8)
+    ] + [{"fps": 39, "gpu_busy": 80, "watts": 5}]
+
+    _run_loop_ticks(p, reads, monkeypatch)
+
+    assert writes == [6, 5, 6]
+    assert p._auto_setpoint == 6
+    assert p._auto_apply_blocked is True
+    assert p._auto_status["reason"] == "apply_failed"
+
+    p._power_reader.read = lambda: {"fps": 40, "gpu_busy": 80, "watts": 5}
+    p._gamescope_stats.read = lambda expected_appid=None: {
+        "fps": 40,
+        "focus": expected_appid,
+        "age_s": 0,
+        "sample_at": 50,
+        "available": True,
+        "reason": "ok",
+    }
+    now["value"] += 2
+    asyncio.run(p._auto_tick())
+
+    assert writes == [6, 5, 6, 6]
+    assert p._tdp_backend._applied == 6
+    assert p._auto_apply_blocked is False
+
+
+def test_loop_keeps_bounded_status_history_while_holding(Plugin, monkeypatch):
     p = Plugin()
     p._init()
     p._current_appid = "g"
     p._tdp_profiles.set_pl1("game", 22, appid="g")
-    reads = [{"gpu_busy": 92} for _ in range(5)]  # dead-band → hold
+    reads = [{"fps": 40, "gpu_busy": 92, "watts": 20} for _ in range(48)]
     _run_loop_ticks(p, reads, monkeypatch)
-    assert p._tdp_profiles.effective("g")["pl1"] == 22  # held
-    # The harness appends one extra sample on the final (cancelling) tick before
-    # decide raises, so 5 held ticks accumulate to 6 samples — the point is they
-    # ACCUMULATE (were not cleared), unlike the change case.
-    assert len(p._gpu_window) == 6
+    assert len(p._auto_history) <= 32
+    assert p._tdp_profiles.effective("g")["pl1"] == 22
 
 
-# ---------------------------------------------------------------------------
-# QAM-open responsive floor (OPT-IN via qam_tdp_boost, default OFF): while the plugin
-# UI is open AND the setting is on, the GPU-only loop uses a higher floor so the
-# CPU-bound menu render stays fluid. set_ui_active bumps PL1 up to that floor
-# immediately (only if below), and ui_floor_engaged is honest (True only when the
-# floor is really holding PL1 above the loop's parked value). With the setting OFF
-# (default) opening the QAM changes NOTHING — the loop shows the REAL in-game TDP.
-# ---------------------------------------------------------------------------
-
-def test_set_ui_active_bumps_pl1_up_when_below_floor(Plugin):
+def test_tick_abandons_a_decision_when_game_changes_during_power_read(
+    Plugin, monkeypatch
+):
     p = Plugin()
     p._init()
-    p._settings["auto_tdp"] = True
-    p._settings["qam_tdp_boost"] = True
+    p._set_current_appid("42")
+    p._tdp_profiles.set_auto_tdp("global", True)
+    started = threading.Event()
+    release = threading.Event()
+
+    def blocked_power_read():
+        started.set()
+        release.wait(timeout=2)
+        return {"gpu_busy": 99, "watts": 20}
+
+    p._power_reader.read = blocked_power_read
+    p._gamescope_stats.read = lambda expected_appid=None: {
+        "fps": 20,
+        "focus": expected_appid,
+        "age_s": 0,
+        "sample_at": 1,
+        "available": True,
+        "reason": "ok",
+    }
+    p._tdp_backend.set_levels_calls = 0
+
+    async def run_race():
+        task = asyncio.create_task(p._auto_tick())
+        await asyncio.to_thread(started.wait, 1)
+        p._set_current_appid("99")
+        release.set()
+        await task
+
+    asyncio.run(run_race())
+
+    assert p._current_appid == "99"
+    assert p._tdp_backend.set_levels_calls == 0
+    assert p._auto_status["reason"] == "context_changed"
+
+
+def test_tick_abandons_ac_setpoint_when_power_source_changes_during_read(
+    Plugin, monkeypatch
+):
+    main = sys.modules["main"]
+    on_ac = {"value": True}
+    monkeypatch.setattr(main, "read_on_ac", lambda root="/": on_ac["value"])
+    p = Plugin()
+    p._init()
+    p._set_current_appid("42")
+    p._tdp_profiles.set_auto_config("global", 40, 30)
+    p._tdp_profiles.set_auto_tdp("global", True)
+    started = threading.Event()
+    release = threading.Event()
+    writes = []
+
+    def blocked_power_read():
+        started.set()
+        release.wait(timeout=2)
+        return {"gpu_busy": 99, "watts": 30}
+
+    original_set_levels = p._tdp_backend.set_levels
+
+    def record_set_levels(pl1, pl2, pl3, ac):
+        writes.append((pl1, ac))
+        return original_set_levels(pl1, pl2, pl3, ac)
+
+    p._power_reader.read = blocked_power_read
+    p._tdp_backend.set_levels = record_set_levels
+    p._gamescope_stats.read = lambda expected_appid=None: {
+        "fps": 20,
+        "focus": expected_appid,
+        "age_s": 0,
+        "sample_at": 1,
+        "available": True,
+        "reason": "ok",
+    }
+
+    async def run_race():
+        task = asyncio.create_task(p._auto_tick())
+        await asyncio.to_thread(started.wait, 1)
+        on_ac["value"] = False
+        release.set()
+        await task
+
+    asyncio.run(run_race())
+
+    assert writes == []
+    assert p._auto_context[3] is False
+    assert p._auto_controller.max_w == 35
+
+
+def test_queued_ac_command_is_rejected_if_unplugged_before_worker_runs(
+    Plugin, monkeypatch
+):
+    main = sys.modules["main"]
+    on_ac = {"value": True}
+    monkeypatch.setattr(main, "read_on_ac", lambda root="/": on_ac["value"])
+    p = Plugin()
+    p._init()
+    p._set_current_appid("42")
+    p._tdp_profiles.set_auto_config("global", 40, 30)
+    p._tdp_profiles.set_auto_tdp("global", True)
+    p._ensure_auto_session(on_ac=True)
+    command = p._capture_tdp_command("auto-step", on_ac=True)
+    writes = []
+    p._tdp_backend.set_levels = (
+        lambda pl1, pl2, pl3, ac: writes.append((pl1, ac))
+    )
+
+    on_ac["value"] = False
+    result = p._execute_tdp_command(command)
+
+    assert result.ok is False
+    assert result.detail == "stale-power-source"
+    assert writes == []
+
+
+def test_queued_ac_command_is_rejected_if_unplugged_during_worker_readback(
+    Plugin, monkeypatch
+):
+    main = sys.modules["main"]
+    on_ac = {"value": True}
+    monkeypatch.setattr(main, "read_on_ac", lambda root="/": on_ac["value"])
+    p = Plugin()
+    p._init()
+    p._set_current_appid("42")
+    command = p._capture_tdp_command("auto-step", on_ac=True)
+    original_observe = p._observe_tdp_sync
+    writes = []
+
+    def unplug_during_observe():
+        observation = original_observe()
+        on_ac["value"] = False
+        return observation
+
+    p._observe_tdp_sync = unplug_during_observe
+    p._tdp_backend.set_levels = (
+        lambda pl1, pl2, pl3, ac: writes.append((pl1, ac))
+    )
+
+    result = p._execute_tdp_command(command)
+
+    assert result.ok is False
+    assert result.detail == "stale-power-source"
+    assert writes == []
+
+
+def test_live_primary_limit_clamps_auto_session_and_accepts_constrained_seed(
+    Plugin,
+):
+    p = Plugin()
+    p._init()
+    p._set_current_appid("42")
+    p._tdp_profiles.set_auto_config("global", 40, 30)
+    p._tdp_profiles.set_auto_tdp("global", True)
+    applied = {"watts": 20}
+
+    def observe():
+        return TdpObservation(
+            readable=True,
+            surfaces={
+                "fake": {
+                    rail: RailReading(applied["watts"], 5, 25)
+                    for rail in ("pl1", "pl2", "pl3")
+                },
+            },
+        )
+
+    def set_levels(pl1, pl2, pl3, ac):
+        applied["watts"] = min(pl1, 25)
+        p._tdp_backend._applied = applied["watts"]
+        return TdpResult(pl1, applied["watts"], True, "")
+
+    p._tdp_backend.observe = observe
+    p._tdp_backend.set_levels = set_levels
+    p._ensure_auto_session(on_ac=True)
+
+    asyncio.run(p._apply_auto_seed("test", on_ac=True))
+
+    assert p._auto_controller.max_w == 25
+    assert p._auto_setpoint == 25
+    assert p._auto_applied is True
+    assert p._auto_apply_blocked is False
+
+
+def test_unconfirmed_apply_recovers_with_confirmed_retry_after_backoff(
+    Plugin, monkeypatch
+):
+    main = sys.modules["main"]
+    now = {"value": 100.0}
+    monkeypatch.setattr(main, "_monotonic", lambda: now["value"])
+    p = Plugin()
+    p._init()
+    p._set_current_appid("42")
+    p._tdp_profiles.set_auto_config("global", 40, 16)
+    p._tdp_profiles.set_auto_tdp("global", True)
+    p._gamescope_stats.read = lambda expected_appid=None: {
+        "fps": 40.0,
+        "focus": "42",
+        "age_s": 0,
+        "sample_at": 100,
+        "available": True,
+        "reason": "ok",
+    }
+    p._power_reader.read = lambda: {"watts": 16.0, "gpu_busy": 80.0}
+    original_set_levels = p._tdp_backend.set_levels
+    calls = []
+
+    def flaky_set_levels(pl1, pl2, pl3, ac):
+        calls.append(pl1)
+        if len(calls) == 1:
+            return TdpResult(pl1, None, True, "unconfirmed")
+        return original_set_levels(pl1, pl2, pl3, ac)
+
+    p._tdp_backend.set_levels = flaky_set_levels
+
+    asyncio.run(p._auto_tick())
+    assert p._auto_apply_blocked is True
+    asyncio.run(p._auto_tick())
+    assert calls == [16]
+
+    now["value"] += 2.0
+    asyncio.run(p._auto_tick())
+
+    assert calls == [16, 16]
+    assert p._auto_apply_blocked is False
+    assert p._auto_applied is True
+    assert p._auto_status["reason"] == "apply_recovered"
+
+
+def test_unconfirmed_apply_stops_writing_after_three_spaced_retries(
+    Plugin, monkeypatch
+):
+    main = sys.modules["main"]
+    now = {"value": 100.0}
+    monkeypatch.setattr(main, "_monotonic", lambda: now["value"])
+    p = Plugin()
+    p._init()
+    p._set_current_appid("42")
+    p._tdp_profiles.set_auto_config("global", 40, 16)
+    p._tdp_profiles.set_auto_tdp("global", True)
+    p._gamescope_stats.read = lambda expected_appid=None: {
+        "fps": 40.0,
+        "focus": "42",
+        "age_s": 0,
+        "sample_at": now["value"],
+        "available": True,
+        "reason": "ok",
+    }
+    p._power_reader.read = lambda: {"watts": 16.0, "gpu_busy": 80.0}
+    writes = []
+
+    def unconfirmed(pl1, pl2, pl3, ac):
+        writes.append(pl1)
+        return TdpResult(pl1, None, True, "unconfirmed")
+
+    p._tdp_backend.set_levels = unconfirmed
+
+    asyncio.run(p._auto_tick())
+    for delay in (2.0, 8.0, 30.0):
+        now["value"] += delay
+        asyncio.run(p._auto_tick())
+    assert writes == [16, 16, 16, 16]
+
+    now["value"] += 30.0
+    asyncio.run(p._auto_tick())
+    now["value"] += 30.0
+    asyncio.run(p._auto_tick())
+
+    assert writes == [16, 16, 16, 16]
+    assert p._auto_apply_exhausted is True
+
+
+def test_set_ui_active_pauses_auto_without_changing_power(Plugin):
+    p = Plugin()
+    p._init()
     p._current_appid = "g"
-    p._tdp_profiles.set_pl1("game", 7, appid="g")  # sunk to device min
+    p._tdp_profiles.set_pl1("game", 17, appid="g")
     p._tdp_profiles.set_auto_tdp("game", True, appid="g")
+    p._tdp_profiles.set_auto_config("game", 40, 17, appid="g")
+    p._ensure_auto_session(on_ac=True)
+    before = (p._tdp_backend._applied, p._tdp_backend._levels)
+
     assert asyncio.run(p.set_ui_active(True)) is True
-    from auto_tdp import RESPONSIVE_FLOOR_W
-    assert p._effective_levels("g")[0]["pl1"] == RESPONSIVE_FLOOR_W  # bumped up
+
+    assert p._auto_setpoint == 17
+    assert p._auto_status["state"] == "paused"
+    assert p._auto_status["reason"] == "ui_active"
+    assert (p._tdp_backend._applied, p._tdp_backend._levels) == before
 
 
-def test_set_ui_active_does_not_lower_a_demanding_game(Plugin):
+def test_set_ui_active_raises_a_reduced_auto_session_to_its_initial_tdp(Plugin):
     p = Plugin()
     p._init()
-    p._settings["auto_tdp"] = True
-    p._settings["qam_tdp_boost"] = True
     p._current_appid = "g"
-    p._tdp_profiles.set_pl1("game", 30, appid="g")  # already above the floor
-    asyncio.run(p.set_ui_active(True))
-    assert p._effective_levels("g")[0]["pl1"] == 30  # untouched
-
-
-def test_set_ui_active_noop_when_auto_off(Plugin):
-    p = Plugin()
-    p._init()
-    p._settings["auto_tdp"] = False
-    p._settings["qam_tdp_boost"] = True
-    p._current_appid = "g"
-    p._tdp_profiles.set_pl1("game", 7, appid="g")
-    asyncio.run(p.set_ui_active(True))
-    assert p._effective_levels("g")[0]["pl1"] == 7  # manual mode untouched
-
-
-def test_set_ui_active_noop_when_qam_boost_off(Plugin):
-    # DEFAULT: the boost setting is off → opening the QAM must NOT raise PL1, so the
-    # user sees the REAL in-game TDP (honesty over fluidity).
-    p = Plugin()
-    p._init()
-    p._settings["auto_tdp"] = True
-    assert p._settings.get("qam_tdp_boost") is False  # default off
-    p._current_appid = "g"
-    p._tdp_profiles.set_pl1("game", 7, appid="g")  # sunk to device min
-    asyncio.run(p.set_ui_active(True))
-    assert p._effective_levels("g")[0]["pl1"] == 7  # unchanged, no silent boost
-
-
-def test_ui_floor_engaged_true_only_when_raising(Plugin):
-    p = Plugin()
-    p._init()
-    p._settings["auto_tdp"] = True
-    p._settings["qam_tdp_boost"] = True
-    p._current_appid = "g"
-    p._tdp_profiles.set_pl1("game", 7, appid="g")
     p._tdp_profiles.set_auto_tdp("game", True, appid="g")
-    asyncio.run(p.set_ui_active(True))  # bumps to the floor
-    assert asyncio.run(p.get_power_draw())["ui_floor_engaged"] is True
-    # A demanding game parked above the floor → the number IS the in-game one.
-    p._tdp_profiles.set_pl1("game", 30, appid="g")
-    assert asyncio.run(p.get_power_draw())["ui_floor_engaged"] is False
+    p._tdp_profiles.set_auto_config("game", 40, 15, appid="g")
+    controller, _created = p._ensure_auto_session(on_ac=True)
+    controller.setpoint = 5
+    p._auto_setpoint = 5
+    p._auto_applied = True
+    p._tdp_backend._applied = 5
+    p._tdp_backend._levels = (5, 5, 5)
+
+    assert asyncio.run(p.set_ui_active(True)) is True
+
+    assert p._tdp_backend._applied == 15
+    assert p._tdp_backend._levels == (15, 15, 15)
+    assert p._auto_status["reason"] == "ui_active"
+    assert p._auto_status["held_watts"] == 15
 
 
-def test_ui_floor_engaged_false_when_qam_boost_off(Plugin):
-    # DEFAULT: with the setting off there is no raise → engaged is always False even
-    # with the UI open and PL1 at the device min (never claim a raise that isn't real).
+@pytest.mark.parametrize("minimum, maximum, expected", [
+    (None, None, 15),
+    (None, 10, 10),
+    (20, 25, 20),
+])
+def test_ui_floor_uses_device_default_within_requested_range(Plugin, minimum, maximum, expected):
     p = Plugin()
     p._init()
-    p._settings["auto_tdp"] = True
     p._current_appid = "g"
-    p._ui_active = True
-    p._tdp_profiles.set_pl1("game", 7, appid="g")
-    assert asyncio.run(p.get_power_draw())["ui_floor_engaged"] is False
+    p._tdp_profiles.set_auto_tdp("game", True, appid="g")
+    p._tdp_profiles.set_auto_config("game", 40, 5, appid="g", min_tdp=minimum, max_tdp=maximum)
+    controller, _ = p._ensure_auto_session(True)
+    p._tdp_backend._applied = 5
+    p._tdp_backend._levels = (5, 5, 5)
+    setpoint = controller.setpoint
+
+    asyncio.run(p.set_ui_active(True))
+
+    assert p._tdp_backend._levels == (expected, expected, expected)
+    assert p._auto_status["held_watts"] == expected
+    assert p._auto_setpoint == setpoint
+    assert p._tdp_profiles.auto_config("g")["initial_tdp"] == 5
+    assert p._tdp_history[-1]["reason"] == "auto-ui-floor"
 
 
-def test_ui_floor_engaged_false_when_ui_closed(Plugin):
+@pytest.mark.parametrize("maximum, expected", [(None, 15), (10, 10)])
+def test_game_exit_keeps_global_auto_grid_floor_and_restores_manual_on_disable(Plugin, maximum, expected):
     p = Plugin()
     p._init()
-    p._settings["auto_tdp"] = True
-    p._settings["qam_tdp_boost"] = True
+    p._tdp_profiles.set_pl1("global", 5)
+    p._tdp_profiles.set_offsets("global", 3, 4)
+    p._tdp_profiles.set_auto_config("global", 40, 5, max_tdp=maximum)
+    p._tdp_profiles.set_auto_tdp("global", True)
+    asyncio.run(p.set_current_game("42"))
+
+    asyncio.run(p.set_current_game(None))
+
+    assert p._tdp_backend._levels == (expected, expected, expected)
+    assert p._auto_controller is None
+    assert p._auto_setpoint is None
+    assert p._tdp_profiles.effective(None)["pl1"] == 5
+    asyncio.run(p.set_auto_tdp(False))
+    assert p._tdp_backend._levels == (5, 8, 12)
+
+
+@pytest.mark.parametrize("gate", ["auto", "safe", "control", "eco", "module", "firmware", "owner"])
+def test_grid_floor_requires_global_auto_and_all_control_gates(Plugin, monkeypatch, gate):
+    p = Plugin()
+    p._init()
+    p._tdp_profiles.set_pl1("global", 5)
+    p._tdp_profiles.set_auto_tdp("global", True)
+    if gate == "auto":
+        p._tdp_profiles.set_auto_tdp("global", False)
+    elif gate == "safe":
+        p._tdp_backend.auto_tdp_safe = False
+    elif gate == "control":
+        p._settings["tdp_control_enabled"] = False
+    elif gate == "eco":
+        p._settings["eco_enabled"] = True
+    elif gate == "module":
+        monkeypatch.setattr(p, "_module_enabled", lambda _mid: False)
+    elif gate == "firmware":
+        monkeypatch.setattr(p, "_firmware_mode", lambda: "performance")
+    else:
+        monkeypatch.setattr(p, "_tdp_write_authorized", lambda: False)
+
+    command = p._capture_tdp_command("reapply")
+
+    assert command.logical_requested == {"pl1": 5, "pl2": 5, "pl3": 5}
+    assert p._auto_controller is None
+
+
+def test_ui_floor_discards_observation_when_game_changes_during_read(Plugin, monkeypatch):
+    p = Plugin()
+    p._init()
+    p._set_current_appid("old")
+    p._tdp_profiles.set_auto_config("global", 40, 5)
+    p._tdp_profiles.set_auto_tdp("global", True)
+    p._ensure_auto_session(True)
+    p._tdp_backend._applied = 5
+    p._tdp_backend._levels = (5, 5, 5)
+
+    async def switch_game_during_read():
+        observation = p._observe_tdp_sync()
+        p._set_current_appid("new")
+        p._ensure_auto_session(True)
+        return observation
+
+    monkeypatch.setattr(p, "_read_tdp_observation", switch_game_during_read)
+    asyncio.run(p.set_ui_active(True))
+
+    assert p._current_appid == "new"
+    assert p._tdp_backend._levels == (5, 5, 5)
+    assert p._auto_ui_hold_watts is None
+
+
+def test_grid_auto_toggle_applies_while_menu_is_open(Plugin):
+    p = Plugin()
+    p._init()
+    p._tdp_profiles.set_pl1("global", 5)
+    asyncio.run(p.set_ui_active(True))
+
+    asyncio.run(p.set_auto_tdp(True))
+    assert p._tdp_backend._levels == (15, 15, 15)
+    assert p._auto_controller is None
+
+
+def test_game_auto_toggle_applies_ui_floor_when_menu_is_already_open(Plugin):
+    p = Plugin()
+    p._init()
+    p._set_current_appid("42")
+    p._tdp_profiles.set_pl1("game", 5, appid="42")
+    p._tdp_profiles.set_auto_config("game", 40, 5, appid="42")
+    p._tdp_backend._applied = 5
+    p._tdp_backend._levels = (5, 5, 5)
+    asyncio.run(p.set_ui_active(True))
+
+    asyncio.run(p.set_auto_tdp(True, "game", "42", "42"))
+
+    assert p._tdp_backend._levels == (15, 15, 15)
+    assert p._auto_status["state"] == "paused"
+    assert p._auto_status["reason"] == "ui_active"
+    assert p._auto_status["held_watts"] == 15
+
+
+def test_grid_auto_range_edit_applies_while_menu_is_open(Plugin):
+    p = Plugin()
+    p._init()
+    p._tdp_profiles.set_auto_tdp("global", True)
+    p._tdp_backend._levels = (15, 15, 15)
+    p._tdp_backend._applied = 15
+    asyncio.run(p.set_ui_active(True))
+    asyncio.run(p.set_auto_tdp_config(40, 5, "global", None, None, None, 10))
+    assert p._tdp_backend._levels == (10, 10, 10)
+    assert p._auto_controller is None
+
+
+def test_grid_auto_disable_restores_manual_while_menu_is_open(Plugin):
+    p = Plugin()
+    p._init()
+    p._tdp_profiles.set_pl1("global", 5)
+    p._tdp_profiles.set_auto_tdp("global", True)
+    p._tdp_backend._levels = (15, 15, 15)
+    p._tdp_backend._applied = 15
+    asyncio.run(p.set_ui_active(True))
+    asyncio.run(p.set_auto_tdp(False))
+    assert p._tdp_backend._levels == (5, 5, 5)
+    assert p._auto_controller is None
+
+
+@pytest.mark.parametrize("minimum, maximum, expected, bounds", [
+    (None, 10, 10, (5, 10)),
+    (20, None, 20, (20, 35)),
+])
+def test_game_range_edit_rebounds_open_qam_hold_immediately(
+    Plugin, minimum, maximum, expected, bounds,
+):
+    p = Plugin()
+    p._init()
+    p._set_current_appid("42")
+    p._tdp_profiles.set_auto_config("global", 40, 5)
+    p._tdp_profiles.set_auto_tdp("global", True)
+    p._ensure_auto_session(True)
+    p._tdp_backend._applied = 5
+    p._tdp_backend._levels = (5, 5, 5)
+    asyncio.run(p.set_ui_active(True))
+    assert p._auto_status["held_watts"] == 15
+
+    asyncio.run(p.set_auto_tdp_config(40, 5, "global", None, "42", minimum, maximum))
+
+    assert p._tdp_backend._levels == (expected, expected, expected)
+    assert p._auto_status["held_watts"] == expected
+    assert p._ui_active is True
+    assert (p._auto_controller.min_w, p._auto_controller.max_w) == bounds
+    assert p._auto_setpoint == bounds[0]
+    assert p._tdp_profiles.auto_config(None)["initial_tdp"] == 5
+    assert p._tdp_history[-1]["reason"] == "auto-ui-floor"
+
+
+@pytest.mark.parametrize("boundary", ["observation", "apply"])
+def test_game_range_edit_discards_stale_ui_floor_on_context_change(Plugin, monkeypatch, boundary):
+    p = Plugin()
+    p._init()
+    p._set_current_appid("42")
+    p._tdp_profiles.set_auto_config("global", 40, 5)
+    p._tdp_profiles.set_auto_tdp("global", True)
+    p._ensure_auto_session(True)
+    p._tdp_backend._applied = 5
+    p._tdp_backend._levels = (5, 5, 5)
+    asyncio.run(p.set_ui_active(True))
+    reached_boundary = []
+
+    def switch_context():
+        reached_boundary.append(True)
+        p._set_current_appid("new")
+        p._ensure_auto_session(True)
+
+    if boundary == "observation":
+        original = p._read_tdp_observation
+
+        async def change_during_read():
+            observation = await original()
+            if not reached_boundary:
+                switch_context()
+            return observation
+
+        monkeypatch.setattr(p, "_read_tdp_observation", change_during_read)
+    else:
+        async def change_before_command():
+            switch_context()
+
+        monkeypatch.setattr(p, "_ensure_recognised_desktop_migration", change_before_command)
+
+    asyncio.run(p.set_auto_tdp_config(40, 5, "global", None, "42", None, 10))
+
+    assert reached_boundary
+    assert p._current_appid == "new"
+    assert p._tdp_backend._levels == (15, 15, 15)
+    assert p._auto_setpoint == 5
+    assert p._auto_ui_hold_watts is None
+
+
+def test_leaving_ui_reapplies_the_auto_setpoint_on_the_next_fps_sample(Plugin):
+    p = Plugin()
+    p._init()
     p._current_appid = "g"
-    p._tdp_profiles.set_pl1("game", 7, appid="g")
-    assert asyncio.run(p.get_power_draw())["ui_floor_engaged"] is False
+    p._tdp_profiles.set_auto_tdp("game", True, appid="g")
+    p._tdp_profiles.set_auto_config("game", 40, 15, appid="g")
+    controller, _created = p._ensure_auto_session(on_ac=True)
+    controller.setpoint = 5
+    p._auto_setpoint = 5
+    p._auto_applied = True
+    p._tdp_backend._applied = 5
+    p._tdp_backend._levels = (5, 5, 5)
+
+    asyncio.run(p.set_ui_active(True))
+    assert p._tdp_backend._applied == 15
+    asyncio.run(p.set_ui_active(False))
+    p._power_reader.read = lambda: {"watts": 6.0, "gpu_busy": 50.0}
+    stats = GamescopeStats(clock=lambda: 100.0)
+    stats._apply_line("fps=40")
+    stats._apply_line("focus=42")
+    stats.start = lambda: None
+    p._gamescope_stats = stats
+
+    asyncio.run(p._auto_tick())
+
+    assert p._tdp_backend._applied == 5
+    assert p._tdp_backend._levels == (5, 5, 5)
 
 
-def test_ui_floor_engaged_false_when_no_game(Plugin):
+def test_non_steam_profile_uses_fresh_fps_from_its_rendering_process(
+    Plugin,
+):
     p = Plugin()
     p._init()
-    p._settings["auto_tdp"] = True
-    p._settings["qam_tdp_boost"] = True
-    p._current_appid = None
-    p._ui_active = True
-    assert asyncio.run(p.get_power_draw())["ui_floor_engaged"] is False
+    p._current_appid = "ns:pokémon blue"
+    p._tdp_profiles.set_auto_config("global", 40, 15)
+    p._tdp_profiles.set_auto_tdp("global", True)
+    p._power_reader.read = lambda: {"watts": 11.0, "gpu_busy": 70.0}
+    stats = GamescopeStats(clock=lambda: 100.0)
+    stats._apply_line("fps=39.5")
+    stats._apply_line("focus=-479910431")
+    stats.start = lambda: None
+    p._gamescope_stats = stats
+
+    status = asyncio.run(p._auto_tick())
+
+    assert status["reason"] == "awaiting_gameplay"
+    assert status["fps"] == 39.5
+    assert status["focus"] == "-479910431"
 
 
-def test_loop_respects_responsive_floor_while_ui_open(Plugin, monkeypatch):
-    # With the setting ON and the UI open the loop must NOT sink below the responsive
-    # floor even on a sustained GPU-light game (would starve the CPU-bound render).
-    from auto_tdp import RESPONSIVE_FLOOR_W
+def test_game_context_change_discards_the_previous_renderers_fps(Plugin):
     p = Plugin()
     p._init()
-    p._settings["qam_tdp_boost"] = True
+    stats = GamescopeStats(clock=lambda: 100.0)
+    stats._apply_line("fps=60")
+    stats._apply_line("focus=42")
+    p._gamescope_stats = stats
+
+    p._set_current_appid("new-game")
+
+    assert stats.read()["reason"] == "no_game_focus"
+
+
+def test_ui_pause_keeps_reporting_physical_hold_across_config_changes(Plugin):
+    p = Plugin()
+    p._init()
     p._current_appid = "g"
-    p._ui_active = True
-    p._tdp_profiles.set_pl1("game", RESPONSIVE_FLOOR_W, appid="g")
-    reads = [{"gpu_busy": 40} for _ in range(12)]  # sustained headroom
+    p._tdp_profiles.set_pl1("game", 17, appid="g")
+    p._tdp_profiles.set_auto_tdp("game", True, appid="g")
+    p._tdp_profiles.set_auto_config("game", 40, 17, appid="g")
+    p._ensure_auto_session(on_ac=True)
+    p._tdp_backend._applied = 19
+    p._tdp_backend._levels = (19, 19, 19)
+    writes = []
+
+    def record_write(pl1, pl2, pl3, ac):
+        writes.append((pl1, pl2, pl3, ac))
+        p._tdp_backend._applied = pl1
+        p._tdp_backend._levels = (pl1, pl2, pl3)
+        return TdpResult(pl1, pl1, True, "")
+
+    p._tdp_backend.set_levels = record_write
+
+    assert asyncio.run(p.set_ui_active(True)) is True
+    assert p._auto_status["held_watts"] == 19
+
+    asyncio.run(p.set_auto_tdp_config(40, 5, "game", "g", "g"))
+
+    assert p._auto_status["state"] == "paused"
+    assert p._auto_status["reason"] == "ui_active"
+    assert p._auto_status["setpoint"] == 5
+    assert p._auto_status["held_watts"] == 19
+    assert p._tdp_backend._applied == 19
+    assert writes == []
+
+    assert asyncio.run(p.set_ui_active(False)) is False
+    assert p._auto_status["held_watts"] is None
+
+
+def test_loop_optimizes_low_demand_workload_after_qualification(
+    Plugin,
+    monkeypatch,
+):
+    p = Plugin()
+    p._init()
+    p._current_appid = "g"
+    p._tdp_profiles.set_pl1("game", 13, appid="g")
+    reads = [{"fps": 60, "gpu_busy": 8, "watts": 6} for _ in range(13)]
     _run_loop_ticks(p, reads, monkeypatch)
-    assert p._effective_levels("g")[0]["pl1"] == RESPONSIVE_FLOOR_W  # floored
-
-
-def test_loop_sinks_below_floor_when_qam_boost_off(Plugin, monkeypatch):
-    # DEFAULT: setting off + UI open → the loop is free to drop below the responsive
-    # floor to the device min (shows the real in-game TDP, no menu-time inflation).
-    from auto_tdp import RESPONSIVE_FLOOR_W
-    p = Plugin()
-    p._init()
-    p._current_appid = "g"
-    p._ui_active = True  # UI open but boost setting off (default)
-    p._tdp_profiles.set_pl1("game", RESPONSIVE_FLOOR_W, appid="g")
-    reads = [{"gpu_busy": 40} for _ in range(12)]
-    _run_loop_ticks(p, reads, monkeypatch)
-    assert p._effective_levels("g")[0]["pl1"] < RESPONSIVE_FLOOR_W  # dropped lower
-
-
-def test_loop_sinks_below_floor_when_ui_closed(Plugin, monkeypatch):
-    # Same game, UI closed → the loop is free to drop to device min for battery.
-    from auto_tdp import RESPONSIVE_FLOOR_W
-    p = Plugin()
-    p._init()
-    p._current_appid = "g"
-    p._ui_active = False
-    p._tdp_profiles.set_pl1("game", RESPONSIVE_FLOOR_W, appid="g")
-    reads = [{"gpu_busy": 40} for _ in range(12)]
-    _run_loop_ticks(p, reads, monkeypatch)
-    assert p._effective_levels("g")[0]["pl1"] < RESPONSIVE_FLOOR_W  # dropped lower
+    assert p._auto_setpoint == 12
 
 
 # ---------------------------------------------------------------------------
@@ -719,6 +1327,68 @@ def test_game_profiles_overview_lists_and_resets(Plugin):
     assert all(r["appid"] != "g" for r in rows2)
     assert p._tdp_profiles.has_game("g") is False
     assert p._cpu_profiles.has_game("g") is False
+
+
+def test_game_profiles_overview_includes_the_full_auto_configuration(Plugin):
+    p = Plugin()
+    p._init()
+    p._tdp_profiles.set_auto_config(
+        "game",
+        55,
+        8,
+        appid="g",
+        min_tdp=5,
+        max_tdp=14,
+    )
+    p._tdp_profiles.set_auto_tdp("game", True, appid="g")
+
+    rows = asyncio.run(p.list_game_profiles())
+    row = next(r for r in rows if r["appid"] == "g")
+
+    assert row["tdp"] == {
+        "pl1": 10,
+        "auto": True,
+        "target_fps": 55,
+        "initial_tdp": 8,
+        "min_tdp": 5,
+        "max_tdp": 14,
+        "follows_global": False,
+    }
+
+
+def test_game_profiles_overview_keeps_own_auto_values_while_following_global(Plugin):
+    p = Plugin()
+    p._init()
+    p._tdp_profiles.set_auto_config(
+        "global",
+        40,
+        15,
+        min_tdp=6,
+        max_tdp=25,
+    )
+    p._tdp_profiles.set_auto_config(
+        "game",
+        55,
+        8,
+        appid="g",
+        min_tdp=5,
+        max_tdp=14,
+    )
+    p._tdp_profiles.set_auto_tdp("game", True, appid="g")
+    p._tdp_profiles.set_follow_global("g", True)
+
+    rows = asyncio.run(p.list_game_profiles())
+    row = next(r for r in rows if r["appid"] == "g")
+
+    assert row["tdp"] == {
+        "pl1": 10,
+        "auto": True,
+        "target_fps": 55,
+        "initial_tdp": 8,
+        "min_tdp": 5,
+        "max_tdp": 14,
+        "follows_global": True,
+    }
 
 
 def test_overview_skips_tab_flip_with_no_real_change(Plugin):

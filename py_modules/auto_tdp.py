@@ -1,119 +1,470 @@
-"""Auto-TDP control law — GPU-utilisation driven, dead-band + temporal hysteresis.
+from collections import deque
+from dataclasses import dataclass
+import math
+import time
 
-Converges on the "knee" (the least sustained PL1 that keeps the GPU just below
-saturation) and HOLDS there. Deliberately does NOT use real watts or boost: when a
-game is power-limited the draw simply follows PL1 (it eats the whole budget across
-CPU+GPU), so EVERY draw-derived signal — boost magnitude, boost frequency, watts
-headroom — is confounded and can't tell "has margin" from "needs it": a power-limited
-game pinned at max PL1 draws the full budget with the GPU stable at ~80%, which the
-watts/boost model reads as "no headroom" and holds at max forever — yet 80% GPU means
-there IS margin. GPU utilisation is the only honest "can it go lower?" signal.
-
-Signals kept: GPU% only. Watts/boost are dropped from the control decision.
-
-Three states:
-  - UP    (fast, wins over all): a recent GPU peak (last few samples) >= _UP_GPU.
-    Saturated = the game needs more NOW → +up_step. Over-giving briefly is cheap;
-    starving the GPU tanks FPS.
-  - HOLD:  mean GPU in the dead-band (_DOWN_GPU..._UP_GPU) = the knee → stay put.
-    The dead-band + the temporal gate below are exactly what the old GPU-only
-    tracker lacked → no sawtooth.
-  - DOWN  (agile, gated): mean GPU SUSTAINED at/below _DOWN_GPU for _SLACK_HOLD
-    ticks → step down, PROPORTIONAL to how far the GPU is below the knee (a light
-    scene at 55% drops fast; 85% just below the knee drops by one), bounded to
-    [down_step, max_down_step]. Then observe: the GPU rises; if it saturates, UP
-    recovers it. This probe-and-observe resolves the "starved at low PL1 vs real
-    headroom" ambiguity on its own and never sinks to min on a GPU-margin game.
-
-Degradation:
-  - GPU% available (AMD Ally/Legion, Steam Deck): the model above.
-  - No GPU% (Intel Claw today: no gpu_busy): HOLD — can't optimise blind.
-"""
-
-# Responsive floor (watts) applied ONLY while the QAM / plugin UI is open. The loop
-# is GPU-only, so a GPU-light game can sink PL1 to the device minimum (correct for
-# the GPU) — but rendering the QAM is CPU-bound (steamwebhelper/CEF) and a starved
-# PL1 makes the menu lag. Raising the loop's floor while the UI is open keeps
-# interacting fluid; on close it drops back to device_min for battery. Device-aware
-# (never below device_min). Tunable (~13 W: lower lags the menu, higher wastes battery).
-RESPONSIVE_FLOOR_W = 13
-
-_UP_GPU = 97       # a recent GPU% peak at/above this = saturated → step up (safety)
-_DOWN_GPU = 88     # mean GPU% at/below this = headroom → the knee's lower edge
-_RECENT = 2        # newest samples that define "recent" for the up trigger
-_SLACK_HOLD = 6    # ticks of SUSTAINED headroom before a down move (~12 s @ 2 s)
-# Watts of down-step per 1% the GPU sits below the knee. Makes the down move agile
-# on a light scene (GPU far below the knee) and gentle near the knee, WITHOUT any
-# watts reading — the step size comes from the GPU gap, then we observe the result.
-_DOWN_GAIN = 1 / 3.0
-
-# Boost detection: a sample "was boosting" when real draw exceeds PL1 by more than
-# this many W. NOT used by the control loop any more (confounded on power-limited
-# games); kept only for the telemetry boost metric / display, and for tdp/suggest
-# to reason about *learned* history when it wants a draw-based hint.
 BOOST_DEADBAND_W = 1
-
-
-def _mean(xs):
-    return sum(xs) / len(xs)
-
-
-def effective_floor(device_min, ui_active, responsive_floor=RESPONSIVE_FLOOR_W):
-    """The lower bound the loop passes to :func:`decide`.
-
-    While the QAM / plugin UI is open (*ui_active*) raise it to *responsive_floor*
-    so the CPU-bound menu render stays fluid; otherwise it is the device minimum.
-    Device-aware: never below *device_min* (a device whose min already exceeds the
-    responsive floor keeps its own min). Only the AUTO loop consults this.
-    """
-    if not ui_active:
-        return device_min
-    return max(device_min, responsive_floor)
+_LEGACY_UP_GPU = 97
+_LEGACY_DOWN_GPU = 88
+_LEGACY_RECENT = 2
+_LEGACY_SLACK_HOLD = 6
+_LEGACY_DOWN_GAIN = 1 / 3.0
 
 
 def is_boosting(watts, pl1):
-    """Was the chip boosting? ``draw > PL1 + deadband``. None when watts is
-    unavailable. Retained for the telemetry boost metric / arc display — the
-    control loop no longer consults it (draw is confounded on power-limited
-    games)."""
     if watts is None:
         return None
     return round(watts) > round(pl1) + BOOST_DEADBAND_W
 
 
-def decide(current_pl1, gpu_window, slack_ticks, min_w, max_w,
-           *, up_step=2, down_step=1, max_down_step=5):
-    """Next sustained PL1 and slack counter: ``(next_pl1, next_slack_ticks)``.
+def decide(
+    current_pl1,
+    gpu_window,
+    slack_ticks,
+    min_w,
+    max_w,
+    *,
+    up_step=2,
+    down_step=1,
+    max_down_step=5,
+):
+    """Compatibility contract for the existing Windows/shared-fixture brain.
 
-    *gpu_window* holds recent GPU% samples (newest-last), may contain None.
-    *slack_ticks* is the running count of consecutive headroom ticks (the caller
-    persists it between ticks). No GPU sample → hold (never guess).
+    The SteamOS runtime uses :class:`AutoTdpController`; this pure function remains
+    available until the independently shipped Windows implementation is redesigned.
     """
-    cur = max(min_w, min(int(current_pl1), max_w))
-    gpu = [x for x in gpu_window if x is not None]
-
+    current = max(min_w, min(int(current_pl1), max_w))
+    gpu = [sample for sample in gpu_window if sample is not None]
     if not gpu:
-        return cur, slack_ticks  # no signal → hold, preserve the counter
-
-    # ---- UP (fast, wins) — a saturated GPU needs more power now --------------
-    if max(gpu[-_RECENT:]) >= _UP_GPU:
-        return max(min_w, min(cur + up_step, max_w)), 0
-
-    avg = _mean(gpu)
-
-    # ---- HOLD — mean GPU in the dead-band (the knee) -------------------------
-    if avg > _DOWN_GPU:
-        return cur, 0  # working near saturation, no headroom → hold, reset slack
-
-    # ---- Sustained headroom: accumulate; at the gate, ONE proportional step --
+        return current, slack_ticks
+    if max(gpu[-_LEGACY_RECENT:]) >= _LEGACY_UP_GPU:
+        return max(min_w, min(current + up_step, max_w)), 0
+    average = sum(gpu) / len(gpu)
+    if average > _LEGACY_DOWN_GPU:
+        return current, 0
     slack = slack_ticks + 1
-    if slack < _SLACK_HOLD:
-        return cur, slack  # not yet — hold, keep counting
+    if slack < _LEGACY_SLACK_HOLD:
+        return current, slack
+    gap = _LEGACY_DOWN_GPU - average
+    step_size = round(gap * _LEGACY_DOWN_GAIN)
+    step_size = max(down_step, min(step_size, max_down_step))
+    return max(min_w, current - step_size), 0
 
-    # Gate met. Step down, sized by how far the GPU is below the knee (agile on a
-    # light scene, gentle near the knee), bounded. Never below min.
-    gap = _DOWN_GPU - avg
-    step = round(gap * _DOWN_GAIN)
-    step = max(down_step, min(step, max_down_step))
-    nxt = max(min_w, cur - step)
-    return nxt, 0
+
+@dataclass(frozen=True)
+class AutoTdpDecision:
+    setpoint: int
+    state: str
+    reason: str
+    changed: bool
+    fps: float | None
+    target_fps: int
+
+    def as_dict(self):
+        return {
+            "setpoint": self.setpoint,
+            "state": self.state,
+            "reason": self.reason,
+            "changed": self.changed,
+            "fps": self.fps,
+            "target_fps": self.target_fps,
+        }
+
+
+class AutoTdpController:
+    def __init__(
+        self,
+        initial_w,
+        min_w,
+        max_w,
+        target_fps,
+        *,
+        clock=time.monotonic,
+        warmup_s=4.0,
+        stable_s=8.0,
+        settle_s=6.0,
+        cooldown_s=12.0,
+        qualification_s=8.0,
+        qualification_gpu=35.0,
+        low_load_qualification_s=12.0,
+        load_shift_ratio=0.55,
+        failed_probe_retry_s=120.0,
+        stale_recovery_s=11.0,
+        stale_recovery_gpu=90.0,
+        recovery_interval_s=2.0,
+    ):
+        self.min_w = int(min_w)
+        self.max_w = max(self.min_w, int(max_w))
+        self.target_fps = max(1, int(target_fps))
+        self.setpoint = self._clamp(initial_w)
+        self._starting_w = self.setpoint
+        self._clock = clock
+        self._warmup_s = max(0.0, float(warmup_s))
+        self._stable_s = max(0.0, float(stable_s))
+        self._settle_s = max(0.0, float(settle_s))
+        self._cooldown_s = max(0.0, float(cooldown_s))
+        self._qualification_s = max(0.0, float(qualification_s))
+        self._qualification_gpu = max(0.0, float(qualification_gpu))
+        self._low_load_qualification_s = max(
+            self._qualification_s,
+            float(low_load_qualification_s),
+        )
+        self._load_shift_ratio = max(0.0, min(float(load_shift_ratio), 1.0))
+        self._failed_probe_retry_s = max(0.0, float(failed_probe_retry_s))
+        self._stale_recovery_s = max(0.0, float(stale_recovery_s))
+        self._stale_recovery_gpu = max(0.0, float(stale_recovery_gpu))
+        self._recovery_interval_s = max(0.0, float(recovery_interval_s))
+        self._active_since = None
+        self._stable_since = None
+        self._qualification_since = None
+        self._qualification_samples = deque(maxlen=32)
+        self._low_load_since = None
+        self._low_load_samples = deque(maxlen=64)
+        self._gameplay_qualified = False
+        self._low_load_qualified = False
+        self._gameplay_gpu_baseline = None
+        self._settle_since = None
+        self._settle_samples = 0
+        self._cooldown_until = 0.0
+        self._probe_retry_at = 0.0
+        self._probe_from = None
+        self._probe_baseline_fps = None
+        self._pending_apply_from = None
+        self._last_low_fps_at = None
+        self._last_recovery_at = None
+        self._fps_window = deque(maxlen=32)
+        self.state = "warming"
+        self.reason = "starting"
+        self.fps = None
+
+    def _clamp(self, watts):
+        return max(self.min_w, min(int(watts), self.max_w))
+
+    def _result(self, state, reason, previous):
+        self.state = state
+        self.reason = reason
+        return AutoTdpDecision(
+            setpoint=self.setpoint,
+            state=state,
+            reason=reason,
+            changed=self.setpoint != previous,
+            fps=self.fps,
+            target_fps=self.target_fps,
+        )
+
+    def _reset_qualification_candidates(self):
+        self._qualification_since = None
+        self._qualification_samples.clear()
+        self._low_load_since = None
+        self._low_load_samples.clear()
+
+    def _reset_stability(self):
+        self._fps_window.clear()
+        self._stable_since = None
+
+    def _reset_probe_settlement(self):
+        self._settle_since = None
+        self._settle_samples = 0
+
+    def _clear_probe(self):
+        self._probe_from = None
+        self._probe_baseline_fps = None
+
+    def _clear_recovery_evidence(self):
+        self._last_low_fps_at = None
+        self._last_recovery_at = None
+
+    def _pause(self, reason, previous):
+        self._reset_stability()
+        if self._probe_from is not None:
+            self.setpoint = self._clamp(self._probe_from)
+            self._probe_retry_at = max(
+                self._probe_retry_at,
+                self._clock() + self._failed_probe_retry_s,
+            )
+        self._clear_probe()
+        self._pending_apply_from = None
+        self._active_since = None
+        self._reset_qualification_candidates()
+        self._gameplay_qualified = False
+        self._low_load_qualified = False
+        self._gameplay_gpu_baseline = None
+        self._reset_probe_settlement()
+        self._cooldown_until = 0.0
+        self._clear_recovery_evidence()
+        return self._result("paused", reason, previous)
+
+    def _hold(self, reason, previous):
+        self._reset_stability()
+        self._reset_qualification_candidates()
+        self._reset_probe_settlement()
+        if self._probe_from is not None:
+            self._cooldown_until = 0.0
+        if self._pending_apply_from is not None:
+            self.setpoint = self._clamp(self._pending_apply_from)
+            self._pending_apply_from = None
+            if self._probe_from == self.setpoint:
+                self._clear_probe()
+        self._clear_recovery_evidence()
+        return self._result("paused", reason, previous)
+
+    def _recover(self, previous, now, reason="fps_below_target"):
+        self._reset_stability()
+        self._reset_qualification_candidates()
+        self._reset_probe_settlement()
+        self._cooldown_until = now + self._cooldown_s
+        self._last_recovery_at = now
+        if self._probe_from is not None:
+            self.setpoint = self._clamp(self._probe_from)
+            self._clear_probe()
+            self._probe_retry_at = now + self._failed_probe_retry_s
+            self._pending_apply_from = None
+            return self._result("recovering", "probe_regressed", previous)
+        self.setpoint = self._clamp(self.setpoint + 2)
+        if self.setpoint == previous:
+            return self._result("recovering", "at_maximum", previous)
+        self._pending_apply_from = previous
+        return self._result("recovering", reason, previous)
+
+    def _has_recent_low_fps_evidence(self, signal_reason, gpu_busy, now):
+        return bool(
+            signal_reason == "fps_stale"
+            and self._last_low_fps_at is not None
+            and now - self._last_low_fps_at <= self._stale_recovery_s
+            and gpu_busy is not None
+            and gpu_busy >= self._stale_recovery_gpu
+        )
+
+    def _recovery_step_due(self, now):
+        return bool(
+            self._last_recovery_at is None
+            or now - self._last_recovery_at >= self._recovery_interval_s
+        )
+
+    def _gpu_value(self, gpu_busy):
+        if gpu_busy is None:
+            return None
+        try:
+            value = float(gpu_busy)
+        except (TypeError, ValueError, OverflowError):
+            return None
+        if not math.isfinite(value) or value < 0:
+            return None
+        return value
+
+    def _qualify_gameplay(self, gpu_busy, now):
+        if self._gameplay_qualified:
+            return True
+        if gpu_busy is None:
+            self._reset_qualification_candidates()
+            return False
+        if gpu_busy >= self._qualification_gpu:
+            self._low_load_since = None
+            self._low_load_samples.clear()
+            if self._qualification_since is None:
+                self._qualification_since = now
+            self._qualification_samples.append(gpu_busy)
+            if now - self._qualification_since < self._qualification_s:
+                return False
+            baseline = self._qualification_samples
+            self._low_load_qualified = False
+        else:
+            self._qualification_since = None
+            self._qualification_samples.clear()
+            if self.fps < self.target_fps - 0.5:
+                self._low_load_since = None
+                self._low_load_samples.clear()
+                return False
+            if self._low_load_since is None:
+                self._low_load_since = now
+            self._low_load_samples.append(gpu_busy)
+            if now - self._low_load_since < self._low_load_qualification_s:
+                return False
+            baseline = self._low_load_samples
+            self._low_load_qualified = True
+        self._gameplay_qualified = True
+        self._gameplay_gpu_baseline = sum(baseline) / len(baseline)
+        self._reset_qualification_candidates()
+        return True
+
+    def _load_shifted(self, gpu_busy):
+        return bool(
+            self._gameplay_qualified
+            and gpu_busy is not None
+            and self._gameplay_gpu_baseline is not None
+            and gpu_busy < self._gameplay_gpu_baseline * self._load_shift_ratio
+        )
+
+    def _load_increased(self, gpu_busy):
+        return bool(
+            self._gameplay_qualified
+            and self._low_load_qualified
+            and gpu_busy is not None
+            and self._gameplay_gpu_baseline is not None
+            and gpu_busy >= max(
+                self._qualification_gpu,
+                self._gameplay_gpu_baseline / max(self._load_shift_ratio, 0.1),
+            )
+        )
+
+    def _restore_starting_tdp(self, previous, now):
+        self._reset_stability()
+        self._reset_probe_settlement()
+        self._cooldown_until = now + self._cooldown_s
+        self._clear_probe()
+        self._gameplay_qualified = False
+        self._low_load_qualified = False
+        self._gameplay_gpu_baseline = None
+        self.setpoint = self._clamp(max(self.setpoint, self._starting_w))
+        self._pending_apply_from = previous if self.setpoint != previous else None
+        return self._result("recovering", "load_increase", previous)
+
+    def _update_gameplay_baseline(self, gpu_busy):
+        if gpu_busy is None or self._gameplay_gpu_baseline is None:
+            return
+        self._gameplay_gpu_baseline = (
+            self._gameplay_gpu_baseline * 0.9 + gpu_busy * 0.1
+        )
+
+    def step(self, *, fps, signal_reason, gpu_busy=None):
+        previous = self.setpoint
+        now = self._clock()
+        gpu = self._gpu_value(gpu_busy)
+        try:
+            self.fps = float(fps) if fps is not None else None
+        except (TypeError, ValueError, OverflowError):
+            self.fps = None
+        if (
+            signal_reason != "ok"
+            or self.fps is None
+            or not math.isfinite(self.fps)
+            or self.fps <= 0
+        ):
+            if self._has_recent_low_fps_evidence(signal_reason, gpu, now):
+                if self._recovery_step_due(now):
+                    return self._recover(previous, now, "fps_stale_recovery")
+                return self._result(
+                    "recovering",
+                    "fps_stale_recovery_wait",
+                    previous,
+                )
+            reason = signal_reason if signal_reason != "ok" else "fps_unavailable"
+            return self._pause(reason, previous)
+
+        if self._load_increased(gpu):
+            self._clear_recovery_evidence()
+            return self._restore_starting_tdp(previous, now)
+
+        if self.fps < self.target_fps - 2.0:
+            self._last_low_fps_at = now
+            return self._recover(previous, now)
+
+        self._clear_recovery_evidence()
+
+        if self._load_shifted(gpu):
+            return self._hold("load_shift", previous)
+
+        if not self._qualify_gameplay(gpu, now):
+            self._reset_stability()
+            return self._result("holding", "awaiting_gameplay", previous)
+        self._update_gameplay_baseline(gpu)
+
+        if self._probe_from is not None:
+            regressed = (
+                self.fps < self.target_fps - 0.5
+                or (
+                    self._probe_baseline_fps is not None
+                    and self.fps < self._probe_baseline_fps - 1.0
+                )
+            )
+            if regressed:
+                return self._recover(previous, now)
+            if self._settle_since is None:
+                self._settle_since = now
+                self._settle_samples = 0
+            self._settle_samples += 1
+            if (
+                now - self._settle_since < self._settle_s
+                or self._settle_samples < 2
+            ):
+                return self._result("optimizing", "settling_probe", previous)
+            if self._cooldown_until <= 0.0:
+                self._cooldown_until = now + self._cooldown_s
+            if now < self._cooldown_until:
+                return self._result("holding", "cooldown", previous)
+            self._clear_probe()
+            self._reset_probe_settlement()
+            self._cooldown_until = 0.0
+            self._reset_stability()
+            return self._result("holding", "probe_stable", previous)
+
+        if self._active_since is None:
+            self._active_since = now
+        if now - self._active_since < self._warmup_s:
+            return self._result("warming", "warming", previous)
+
+        if now < self._probe_retry_at:
+            return self._result("holding", "cooldown", previous)
+
+        if now < self._cooldown_until:
+            return self._result("holding", "cooldown", previous)
+
+        self._fps_window.append((now, min(self.fps, float(self.target_fps))))
+        while self._fps_window and now - self._fps_window[0][0] > self._stable_s:
+            self._fps_window.popleft()
+        values = [sample for _at, sample in self._fps_window]
+        sample_stable = (
+            self.fps >= self.target_fps - 0.5
+            and (not values or max(values) - min(values) <= 2.0)
+        )
+        if not sample_stable:
+            self._reset_stability()
+            return self._result("holding", "building_stability", previous)
+        if self._stable_since is None:
+            self._stable_since = now
+        stable = (
+            now - self._stable_since >= self._stable_s
+            and len(self._fps_window) >= 2
+            and min(values) >= self.target_fps - 0.5
+            and max(values) - min(values) <= 2.0
+        )
+        if not stable:
+            return self._result("holding", "building_stability", previous)
+
+        self._reset_stability()
+        if self.setpoint <= self.min_w:
+            return self._result("holding", "at_minimum", previous)
+        self._probe_from = self.setpoint
+        self._probe_baseline_fps = sum(values) / len(values)
+        self.setpoint = self._clamp(self.setpoint - 1)
+        self._settle_since = now
+        self._settle_samples = 0
+        self._cooldown_until = 0.0
+        self._probe_retry_at = 0.0
+        self._pending_apply_from = previous
+        return self._result("optimizing", "probe_down", previous)
+
+    def confirm_apply(self):
+        self._pending_apply_from = None
+
+    def reject_apply(self, reason="apply_unconfirmed"):
+        previous = self.setpoint
+        if self._pending_apply_from is not None:
+            self.setpoint = self._clamp(self._pending_apply_from)
+        return self._pause(reason, previous)
+
+    def pause(self, reason):
+        return self._pause(reason, self.setpoint)
+
+    def hold(self, reason):
+        return self._hold(reason, self.setpoint)
+
+    def snapshot(self):
+        return AutoTdpDecision(
+            setpoint=self.setpoint,
+            state=self.state,
+            reason=self.reason,
+            changed=False,
+            fps=self.fps,
+            target_fps=self.target_fps,
+        )

@@ -41,6 +41,9 @@ class DeviceProfile:
     # Panel technology. "oled" hides the "OLED look" color preset (a real OLED has
     # nothing to emulate). A wrong guess only shows/hides a cosmetic button.
     panel: str = "lcd"
+    # Known maximum refresh of the built-in panel. None keeps every common Auto-TDP
+    # target available for desktops, external displays and unverified panels.
+    display_refresh_hz: Optional[int] = None
     # True on panels that support HDR output (gamescope can drive them in HDR). Gates
     # the HDR sub-tab; on a non-HDR panel the toggle would be a no-op, so it's hidden.
     hdr: bool = False
@@ -94,9 +97,10 @@ DEVICE_TABLE = (
                   dmi_matches=(DmiMatch("Fremont", "Valve", ("Fremont",)),),
                   experimental=True, desktop_mode=True),
     DeviceProfile("steam_deck_lcd", "Steam Deck", "AMD Van Gogh", "amd",
-                  3, 12, 15, 15, match_names=("Jupiter",)),
+                  3, 12, 15, 15, match_names=("Jupiter",), display_refresh_hz=60),
     DeviceProfile("steam_deck_oled", "Steam Deck OLED", "AMD Sephiroth", "amd",
-                  3, 12, 15, 15, match_names=("Galileo",), panel="oled", hdr=True),
+                  3, 12, 15, 15, match_names=("Galileo",), panel="oled", hdr=True,
+                  display_refresh_hz=90),
     DeviceProfile("rog_xbox_ally_x", "ROG Xbox Ally X", "AMD Ryzen AI Z2 Extreme", "amd",
                   7, 17, 25, 35, match_names=("ROG Xbox Ally X",),
                   tdp_presets=(13, 17, 25, 30)),

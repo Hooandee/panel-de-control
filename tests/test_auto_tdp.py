@@ -1,186 +1,670 @@
-from auto_tdp import decide, effective_floor
+import pytest
 
-# decide — GPU-UTILISATION driven control with a dead-band + temporal hysteresis
-# + proportional (observed) down-step. Watts/boost are NOT used: on a power-limited
-# game the draw follows PL1, so ANY draw-derived signal (boost magnitude, boost
-# frequency, watts headroom) is confounded — it can't tell "has margin" from "needs
-# it". GPU utilisation is the only honest "can it go lower?" signal (80% busy at the
-# cap = not saturated = there IS margin).
-#
-#   Signature: decide(cur, gpu_window, slack_ticks, min_w, max_w,
-#                      *, up_step=2, down_step=1, max_down_step=5)
-#   Returns:   (next_pl1, next_slack_ticks)
-#
-#   UP:   recent GPU peak >= _UP_GPU (97) → +up_step (saturated → needs more).
-#   DOWN: mean GPU SUSTAINED <= _DOWN_GPU (88) for _SLACK_HOLD ticks → step down,
-#         proportional to how far GPU is below the knee (agile for light scenes,
-#         gentle near the knee), bounded [down_step, max_down_step].
-#   HOLD: mean GPU in the dead-band (88..97) = the knee → stable (kills sawtooth).
-#   Level 4 (no GPU sample): HOLD.
-# Probe-and-observe: after a down step the GPU rises; if it saturates, UP recovers
-# → never sinks to min on a game with GPU margin, converges on the knee (~90-95%).
-
-_SLACK_HOLD = 6   # ticks of sustained GPU headroom before a down move (~12 s @ 2 s)
+from auto_tdp import AutoTdpController
 
 
-def g(*s):
-    return list(s)
+class Clock:
+    def __init__(self):
+        self.now = 0.0
+
+    def __call__(self):
+        return self.now
+
+    def advance(self, seconds):
+        self.now += seconds
 
 
-# ===========================================================================
-# UP — recent GPU saturation (protect FPS)
-# ===========================================================================
-
-def test_gpu_peak_steps_up():
-    nxt, slack = decide(20, g(95, 96, 97, 96, 97), 0, 5, 35)
-    assert nxt == 22 and slack == 0  # +up_step(2), slack reset
-
-
-def test_recent_peak_ignores_single_dip():
-    # last 2 = [97, 80] → peak 97 → still saturated → up
-    nxt, _ = decide(20, g(90, 90, 90, 97, 80), 0, 5, 35)
-    assert nxt == 22
-
-
-def test_up_clamps_at_max():
-    nxt, _ = decide(34, g(99, 99, 99), 0, 5, 35)
-    assert nxt == 35
-
-
-# ===========================================================================
-# HOLD — dead-band (knee) + power-limited-at-max case
-# ===========================================================================
-
-def test_deadband_holds():
-    # GPU ~92% (in 88..97 dead-band) = the knee → hold, no sawtooth
-    nxt, slack = decide(25, g(91, 92, 93, 92, 91), 3, 5, 35)
-    assert nxt == 25 and slack == 0  # not headroom → reset, hold
+def controller(initial=15, minimum=5, maximum=35, target=40, **timing):
+    clock = timing.pop("clock", Clock())
+    control = AutoTdpController(
+        initial_w=initial,
+        min_w=minimum,
+        max_w=maximum,
+        target_fps=target,
+        clock=clock,
+        warmup_s=timing.get("warmup_s", 10),
+        stable_s=timing.get("stable_s", 20),
+        settle_s=timing.get("settle_s", 8),
+        cooldown_s=timing.get("cooldown_s", 30),
+        qualification_s=timing.get("qualification_s", 0),
+        low_load_qualification_s=timing.get("low_load_qualification_s", 60),
+    )
+    control.test_clock = clock
+    return control
 
 
-def test_power_limited_at_max_still_probes_down():
-    # The power-limited case: pl1=35 (max), GPU stable 80% (below _DOWN_GPU) → there IS
-    # margin (not saturated) even though draw pinned the cap. Must accumulate slack
-    # and eventually step down — NOT hold forever at max.
-    nxt, slack = decide(35, g(80, 81, 80, 81, 80), _SLACK_HOLD - 1, 5, 35)
-    assert nxt < 35 and slack == 0  # stepped down off the cap
+def step(control, fps=40.0, reason="ok", gpu=70.0, after=0):
+    control.test_clock.advance(after)
+    return control.step(
+        fps=fps,
+        signal_reason=reason,
+        gpu_busy=gpu,
+    )
 
 
-# ===========================================================================
-# DOWN — sustained GPU headroom gate (temporal hysteresis) + proportional step
-# ===========================================================================
-
-def test_headroom_below_gate_accumulates():
-    nxt, slack = decide(25, g(80, 80, 80), 2, 5, 35)
-    assert nxt == 25 and slack == 3  # accumulate, hold
+def reach_probe(control, interval=10):
+    step(control, fps=40.0)
+    return step(control, fps=40.1, after=interval)
 
 
-def test_headroom_reaches_gate_steps_down():
-    nxt, slack = decide(25, g(84, 85, 84), _SLACK_HOLD - 1, 5, 35)
-    assert nxt < 25 and slack == 0  # gentle step (GPU near knee)
+def test_warmup_holds_user_initial_tdp_for_elapsed_time():
+    control = controller(initial=18, warmup_s=10)
+
+    first = step(control)
+    second = step(control, after=9)
+    ready = step(control, after=1)
+
+    assert (first.setpoint, first.state, first.changed) == (18, "warming", False)
+    assert (second.setpoint, second.state, second.changed) == (18, "warming", False)
+    assert ready.state == "holding"
 
 
-def test_proportional_step_gentle_near_knee():
-    # GPU 85 (gap 3 below knee) → round(3/3)=1 → -1 (gentle near the knee)
-    nxt, _ = decide(25, g(85, 85, 85), _SLACK_HOLD - 1, 5, 35)
-    assert nxt == 24
+def test_default_cadence_probes_at_twenty_seconds_then_protects_each_drop():
+    clock = Clock()
+    control = AutoTdpController(
+        initial_w=15,
+        min_w=3,
+        max_w=15,
+        target_fps=60,
+        clock=clock,
+    )
+
+    control.step(fps=90, signal_reason="ok", gpu_busy=60)
+    clock.advance(8)
+    control.step(fps=90, signal_reason="ok", gpu_busy=60)
+    clock.advance(4)
+    control.step(fps=90, signal_reason="ok", gpu_busy=60)
+    clock.advance(7)
+    before_first_probe = control.step(
+        fps=90,
+        signal_reason="ok",
+        gpu_busy=60,
+    )
+    clock.advance(1)
+    first_probe = control.step(fps=90, signal_reason="ok", gpu_busy=60)
+
+    assert before_first_probe.setpoint == 15
+    assert (first_probe.setpoint, first_probe.reason) == (14, "probe_down")
+
+    control.confirm_apply()
+    clock.advance(2)
+    control.step(fps=90, signal_reason="ok", gpu_busy=60)
+    clock.advance(4)
+    control.step(fps=90, signal_reason="ok", gpu_busy=60)
+    clock.advance(12)
+    control.step(fps=90, signal_reason="ok", gpu_busy=60)
+    clock.advance(7)
+    before_second_probe = control.step(
+        fps=90,
+        signal_reason="ok",
+        gpu_busy=60,
+    )
+    clock.advance(8)
+    second_probe = control.step(fps=90, signal_reason="ok", gpu_busy=60)
+
+    assert before_second_probe.setpoint == 14
+    assert (second_probe.setpoint, second_probe.reason) == (13, "probe_down")
 
 
-def test_proportional_step_aggressive_when_light():
-    # GPU 55 (gap 33, light scene) → round(11) → bounded to max_down_step(5)
-    nxt, _ = decide(25, g(55, 55, 55), _SLACK_HOLD - 1, 5, 35)
-    assert nxt == 20  # agile down on a light scene
+def test_default_low_demand_cadence_reaches_first_probe_in_twenty_four_seconds():
+    clock = Clock()
+    control = AutoTdpController(
+        initial_w=15,
+        min_w=3,
+        max_w=15,
+        target_fps=60,
+        clock=clock,
+    )
+
+    control.step(fps=60, signal_reason="ok", gpu_busy=8)
+    clock.advance(12)
+    control.step(fps=60, signal_reason="ok", gpu_busy=8)
+    clock.advance(4)
+    control.step(fps=60, signal_reason="ok", gpu_busy=8)
+    clock.advance(7)
+    before_probe = control.step(fps=60, signal_reason="ok", gpu_busy=8)
+    clock.advance(1)
+    probe = control.step(fps=60, signal_reason="ok", gpu_busy=8)
+
+    assert before_probe.setpoint == 15
+    assert (probe.setpoint, probe.reason) == (14, "probe_down")
 
 
-def test_down_step_bounded_by_max():
-    # GPU 5 (extreme) → still capped at max_down_step, never a wild jump
-    nxt, _ = decide(30, g(5, 5, 5), _SLACK_HOLD - 1, 5, 35)
-    assert nxt == 25  # -5, bounded
+@pytest.mark.parametrize(
+    "reason",
+    ["fps_unavailable", "fps_stale", "focus_mismatch", "no_game_focus"],
+)
+def test_unreliable_fps_pauses_without_changing_tdp(reason):
+    control = controller(initial=17)
+
+    result = step(control, fps=None, reason=reason)
+
+    assert (result.setpoint, result.state, result.changed) == (17, "paused", False)
+    assert result.reason == reason
 
 
-def test_down_floors_at_min():
-    nxt, _ = decide(7, g(30, 30, 30), _SLACK_HOLD - 1, 5, 35)
-    assert nxt == 5  # -5 would be 2, floored to min
+def test_fps_deficit_recovers_two_watts_without_waiting_for_warmup():
+    control = controller(initial=15, maximum=30)
+
+    result = step(control, fps=36.5)
+
+    assert (result.setpoint, result.state, result.changed) == (17, "recovering", True)
+    assert result.reason == "fps_below_target"
 
 
-def test_transient_headroom_dip_does_not_drop():
-    # one headroom tick then dead-band activity → slack resets, never reaches gate
-    nxt1, s1 = decide(25, g(80, 80, 80), 0, 5, 35)
-    assert nxt1 == 25 and s1 == 1
-    nxt2, s2 = decide(25, g(92, 92, 92), s1, 5, 35)
-    assert nxt2 == 25 and s2 == 0  # dead-band resets
+def test_recent_low_fps_keeps_recovering_through_a_short_stale_gap():
+    control = controller(initial=5, maximum=30)
+
+    fresh = step(control, fps=36, gpu=99)
+    first_stale = step(
+        control,
+        fps=None,
+        reason="fps_stale",
+        gpu=99,
+        after=6,
+    )
+    second_stale = step(
+        control,
+        fps=None,
+        reason="fps_stale",
+        gpu=99,
+        after=2,
+    )
+    third_stale = step(
+        control,
+        fps=None,
+        reason="fps_stale",
+        gpu=99,
+        after=2,
+    )
+
+    assert [
+        (decision.setpoint, decision.state, decision.reason)
+        for decision in (fresh, first_stale, second_stale, third_stale)
+    ] == [
+        (7, "recovering", "fps_below_target"),
+        (9, "recovering", "fps_stale_recovery"),
+        (11, "recovering", "fps_stale_recovery"),
+        (13, "recovering", "fps_stale_recovery"),
+    ]
 
 
-# ===========================================================================
-# Level 4 — no GPU signal (Claw today): HOLD, never thrash
-# ===========================================================================
+def test_stale_recovery_expires_and_never_uses_low_gpu_load():
+    expired = controller(initial=5, maximum=30)
+    low_load = controller(initial=5, maximum=30)
 
-def test_no_gpu_holds():
-    nxt, slack = decide(18, g(), 4, 5, 35)
-    assert nxt == 18 and slack == 4  # no signal → hold, preserve slack
+    step(expired, fps=36, gpu=99)
+    expired_result = step(
+        expired,
+        fps=None,
+        reason="fps_stale",
+        gpu=99,
+        after=11.1,
+    )
+    step(low_load, fps=36, gpu=99)
+    low_load_result = step(
+        low_load,
+        fps=None,
+        reason="fps_stale",
+        gpu=89,
+        after=2,
+    )
 
-
-def test_all_none_holds():
-    nxt, _ = decide(18, g(None, None), 0, 5, 35)
-    assert nxt == 18
-
-
-def test_clamps_current_into_range():
-    nxt, _ = decide(50, g(), 0, 5, 35)
-    assert nxt == 35
-    nxt, _ = decide(0, g(), 0, 5, 35)
-    assert nxt == 5
-
-
-# ===========================================================================
-# None-safety in the window
-# ===========================================================================
-
-def test_none_samples_ignored_in_peak():
-    nxt, _ = decide(20, g(None, 80, None, 97, 96), 0, 5, 35)
-    assert nxt == 22  # real last-2 = [97, 96] → up
+    assert (expired_result.setpoint, expired_result.state) == (7, "paused")
+    assert expired_result.reason == "fps_stale"
+    assert (low_load_result.setpoint, low_load_result.state) == (7, "paused")
+    assert low_load_result.reason == "fps_stale"
 
 
-def test_none_samples_ignored_in_mean():
-    # real samples are all headroom (80) → at the gate → step down
-    nxt, _ = decide(25, g(None, 80, None, 80), _SLACK_HOLD - 1, 5, 35)
-    assert nxt < 25
+def test_stale_recovery_waits_for_its_two_second_step_interval():
+    control = controller(initial=5, maximum=30)
+
+    step(control, fps=36, gpu=99)
+    waiting = step(
+        control,
+        fps=None,
+        reason="fps_stale",
+        gpu=99,
+        after=1,
+    )
+    recovered = step(
+        control,
+        fps=None,
+        reason="fps_stale",
+        gpu=99,
+        after=1,
+    )
+
+    assert (waiting.setpoint, waiting.state, waiting.changed) == (
+        7,
+        "recovering",
+        False,
+    )
+    assert waiting.reason == "fps_stale_recovery_wait"
+    assert (recovered.setpoint, recovered.reason) == (9, "fps_stale_recovery")
 
 
-# ===========================================================================
-# Tunable steps
-# ===========================================================================
+def test_stale_recovery_needs_a_confirmed_low_fps_sample():
+    control = controller(initial=15, maximum=30)
 
-def test_custom_up_step():
-    nxt, _ = decide(20, g(99, 99), 0, 5, 35, up_step=5)
-    assert nxt == 25
+    result = step(
+        control,
+        fps=None,
+        reason="fps_stale",
+        gpu=99,
+        after=2,
+    )
 
-
-def test_custom_max_down_step():
-    nxt, _ = decide(30, g(50, 50, 50), _SLACK_HOLD - 1, 5, 35, max_down_step=3)
-    assert nxt == 27  # bounded to 3 instead of 5
-
-
-# ===========================================================================
-# effective_floor — QAM-open responsive floor (CPU-bound blind-spot fix)
-# ===========================================================================
-# The auto loop is GPU-only, so a GPU-light game can sink PL1 to device_min (7 W)
-# — correct for the GPU, but rendering the QAM is CPU-bound (steamwebhelper/CEF)
-# and PL1=7 starves it → the QAM lags. While the QAM/UI is OPEN we raise the floor
-# the loop passes to decide to a responsive floor so interacting stays fluid; on
-# close it drops back to device_min so the loop can go low again for battery.
-
-def test_floor_is_device_min_when_ui_closed():
-    assert effective_floor(7, False, 13) == 7
+    assert (result.setpoint, result.state, result.changed) == (
+        15,
+        "paused",
+        False,
+    )
+    assert result.reason == "fps_stale"
 
 
-def test_floor_rises_to_responsive_when_ui_open():
-    assert effective_floor(7, True, 13) == 13
+def test_stable_fps_only_probes_down_one_watt_after_full_duration():
+    control = controller(initial=20, warmup_s=0, stable_s=20)
+
+    assert step(control, fps=40.2).setpoint == 20
+    assert step(control, fps=40.1, after=19).setpoint == 20
+    result = step(control, fps=40.0, after=1)
+
+    assert (result.setpoint, result.state, result.changed) == (19, "optimizing", True)
+    assert result.reason == "probe_down"
 
 
-def test_floor_never_below_device_min_when_ui_open():
-    # A device whose min already exceeds the responsive floor keeps its own min.
-    assert effective_floor(15, True, 13) == 15
+def test_probe_cadence_depends_on_elapsed_time_not_sample_count():
+    fast = controller(initial=20, warmup_s=0, stable_s=20)
+    slow = controller(initial=20, warmup_s=0, stable_s=20)
+
+    for _ in range(21):
+        fast_result = step(fast, after=1)
+    for _ in range(3):
+        slow_result = step(slow, after=10)
+
+    assert fast_result.reason == "probe_down"
+    assert slow_result.reason == "probe_down"
+    assert fast_result.setpoint == slow_result.setpoint == 19
 
 
-def test_responsive_floor_below_device_min_is_ignored():
-    assert effective_floor(10, True, 8) == 10
+def test_sixty_hz_menu_holds_initial_until_gameplay_is_qualified():
+    control = controller(
+        initial=20,
+        target=60,
+        warmup_s=0,
+        stable_s=2,
+        qualification_s=10,
+    )
+
+    for _ in range(8):
+        result = step(control, fps=60, gpu=8, after=5)
+
+    assert (result.setpoint, result.state, result.changed) == (20, "holding", False)
+    assert result.reason == "awaiting_gameplay"
+
+
+def test_low_demand_game_qualifies_slowly_then_probes_one_watt():
+    control = controller(
+        initial=15,
+        target=60,
+        warmup_s=0,
+        stable_s=2,
+        qualification_s=10,
+        low_load_qualification_s=60,
+    )
+
+    assert step(control, fps=60, gpu=8).reason == "awaiting_gameplay"
+    assert step(control, fps=60, gpu=9, after=59).reason == "awaiting_gameplay"
+    qualified = step(control, fps=60, gpu=8, after=1)
+    probe = step(control, fps=60, gpu=9, after=2)
+
+    assert qualified.reason == "building_stability"
+    assert (probe.setpoint, probe.reason, probe.changed) == (14, "probe_down", True)
+
+
+def test_low_load_qualification_restarts_after_an_fps_deficit():
+    control = controller(
+        initial=15,
+        target=60,
+        warmup_s=0,
+        low_load_qualification_s=60,
+    )
+    step(control, fps=60, gpu=8)
+    step(control, fps=60, gpu=9, after=59)
+    step(control, fps=40, gpu=9, after=1)
+    control.confirm_apply()
+
+    resumed = step(control, fps=60, gpu=8, after=1)
+
+    assert resumed.reason == "awaiting_gameplay"
+
+
+def test_fps_far_above_target_probes_down_after_stable_demand():
+    control = controller(
+        initial=20,
+        target=40,
+        warmup_s=0,
+        stable_s=2,
+        qualification_s=0,
+    )
+
+    step(control, fps=60, gpu=80)
+    result = step(control, fps=65, gpu=80, after=2)
+
+    assert (result.setpoint, result.state, result.changed) == (19, "optimizing", True)
+    assert result.reason == "probe_down"
+
+
+def test_relative_load_collapse_freezes_an_active_probe():
+    control = controller(
+        initial=20,
+        target=60,
+        warmup_s=0,
+        stable_s=2,
+        settle_s=2,
+        qualification_s=0,
+    )
+
+    assert step(control, fps=60, gpu=75).setpoint == 20
+    probe = step(control, fps=60, gpu=72, after=2)
+    assert probe.setpoint == 19
+    control.confirm_apply()
+
+    menu = step(control, fps=60, gpu=8, after=1)
+
+    assert (menu.setpoint, menu.state, menu.changed) == (19, "paused", False)
+    assert menu.reason == "load_shift"
+
+
+def test_low_fps_recovers_even_when_secondary_signals_look_like_low_demand():
+    control = controller(initial=20, warmup_s=0)
+
+    result = step(control, fps=12, gpu=8)
+
+    assert (result.setpoint, result.state, result.changed) == (22, "recovering", True)
+    assert result.reason == "fps_below_target"
+
+
+def test_qualified_load_collapse_recovers_for_a_low_fps_sample():
+    control = controller(initial=20, target=60, warmup_s=0, qualification_s=0)
+    step(control, fps=60, gpu=75)
+
+    menu = step(control, fps=20, gpu=8, after=1)
+
+    assert (menu.setpoint, menu.state, menu.changed) == (22, "recovering", True)
+    assert menu.reason == "fps_below_target"
+
+
+def test_low_load_session_restores_its_starting_tdp_when_demand_returns():
+    control = controller(
+        initial=15,
+        target=60,
+        warmup_s=0,
+        stable_s=0,
+        low_load_qualification_s=0,
+    )
+    step(control, fps=60, gpu=8)
+    probe = step(control, fps=60, gpu=9)
+    assert probe.setpoint == 14
+    control.confirm_apply()
+
+    gameplay = step(control, fps=25, gpu=55, after=1)
+
+    assert (gameplay.setpoint, gameplay.state, gameplay.changed) == (
+        15,
+        "recovering",
+        True,
+    )
+    assert gameplay.reason == "load_increase"
+
+
+def test_failed_probe_rolls_back_immediately_to_last_stable_tdp():
+    control = controller(initial=15, warmup_s=0, stable_s=10)
+    probe = reach_probe(control)
+    assert probe.setpoint == 14
+    control.confirm_apply()
+
+    rollback = step(control, fps=36.0, after=5)
+
+    assert (rollback.setpoint, rollback.state, rollback.changed) == (
+        15,
+        "recovering",
+        True,
+    )
+    assert rollback.reason == "probe_regressed"
+
+
+def test_probe_rolls_back_on_small_regression_before_large_deficit():
+    control = controller(initial=15, warmup_s=0, stable_s=10)
+    reach_probe(control)
+    control.confirm_apply()
+
+    rollback = step(control, fps=38.2, after=5)
+
+    assert rollback.setpoint == 15
+    assert rollback.reason == "probe_regressed"
+
+
+@pytest.mark.parametrize(
+    "reason",
+    ["fps_stale", "focus_mismatch", "no_game_focus"],
+)
+def test_signal_loss_during_probe_restores_last_stable_tdp(reason):
+    control = controller(initial=15, warmup_s=0, stable_s=10)
+    probe = reach_probe(control)
+    assert probe.setpoint == 14
+    control.confirm_apply()
+
+    paused = step(control, fps=None, reason=reason, after=1)
+
+    assert (paused.setpoint, paused.state, paused.changed) == (15, "paused", True)
+    assert paused.reason == reason
+
+
+def test_rejected_probe_apply_restores_previous_setpoint_and_pauses():
+    control = controller(initial=15, warmup_s=0, stable_s=10)
+    reach_probe(control)
+
+    rejected = control.reject_apply("apply_unconfirmed")
+
+    assert (rejected.setpoint, rejected.state, rejected.changed) == (
+        15,
+        "paused",
+        True,
+    )
+    assert rejected.reason == "apply_unconfirmed"
+
+
+def test_successful_probe_stays_protected_through_cooldown():
+    control = controller(
+        initial=15,
+        warmup_s=0,
+        stable_s=10,
+        settle_s=8,
+        cooldown_s=30,
+    )
+    probe = reach_probe(control)
+    assert probe.setpoint == 14
+    control.confirm_apply()
+
+    settling = step(control, fps=40.0, after=4)
+    guarded = step(control, fps=40.1, after=4)
+    cooldown = step(control, fps=40.0, after=29)
+    accepted = step(control, fps=40.0, after=1)
+
+    assert (settling.state, settling.setpoint) == ("optimizing", 14)
+    assert (guarded.state, guarded.reason, guarded.setpoint) == (
+        "holding",
+        "cooldown",
+        14,
+    )
+    assert (cooldown.state, cooldown.reason, cooldown.setpoint) == (
+        "holding",
+        "cooldown",
+        14,
+    )
+    assert (accepted.state, accepted.reason, accepted.setpoint) == (
+        "holding",
+        "probe_stable",
+        14,
+    )
+
+
+def test_probe_remains_reversible_until_cooldown_finishes():
+    control = controller(
+        initial=6,
+        minimum=3,
+        maximum=15,
+        target=60,
+        warmup_s=0,
+        stable_s=1,
+        settle_s=6,
+        cooldown_s=12,
+        qualification_s=0,
+    )
+    step(control, fps=60, gpu=70)
+    probe = step(control, fps=60, gpu=70, after=1)
+    assert (probe.setpoint, probe.reason) == (5, "probe_down")
+    control.confirm_apply()
+
+    step(control, fps=60, gpu=70, after=5)
+    guarded = step(control, fps=60, gpu=70, after=1)
+    regression = step(control, fps=59, gpu=70, after=1)
+
+    assert (guarded.setpoint, guarded.reason) == (5, "cooldown")
+    assert (regression.setpoint, regression.reason) == (6, "probe_regressed")
+
+
+def test_failed_safe_rollback_keeps_safe_setpoint_for_retry():
+    control = controller(
+        initial=6,
+        minimum=3,
+        maximum=15,
+        target=60,
+        warmup_s=0,
+        stable_s=1,
+        qualification_s=0,
+    )
+    step(control, fps=60, gpu=70)
+    step(control, fps=60, gpu=70, after=1)
+    control.confirm_apply()
+    rollback = step(control, fps=59, gpu=70, after=1)
+
+    rejected = control.reject_apply("apply_failed")
+
+    assert (rollback.setpoint, rollback.reason) == (6, "probe_regressed")
+    assert (rejected.setpoint, rejected.state, rejected.changed) == (
+        6,
+        "paused",
+        False,
+    )
+    assert rejected.reason == "apply_failed"
+
+
+def test_general_recovery_resumes_after_probe_cooldown_finishes():
+    control = controller(
+        initial=6,
+        minimum=3,
+        maximum=15,
+        target=60,
+        warmup_s=0,
+        stable_s=1,
+        settle_s=6,
+        cooldown_s=12,
+        qualification_s=0,
+    )
+    step(control, fps=60, gpu=70)
+    step(control, fps=60, gpu=70, after=1)
+    control.confirm_apply()
+    step(control, fps=60, gpu=70, after=5)
+    step(control, fps=60, gpu=70, after=1)
+
+    accepted = step(control, fps=60, gpu=70, after=12)
+    deficit = step(control, fps=55, gpu=70, after=2)
+
+    assert accepted.reason == "probe_stable"
+    assert (deficit.setpoint, deficit.reason) == (7, "fps_below_target")
+
+
+def test_failed_probe_waits_two_minutes_before_trying_lower_again():
+    control = controller(
+        initial=6,
+        minimum=3,
+        maximum=15,
+        target=60,
+        warmup_s=0,
+        stable_s=1,
+        settle_s=0,
+        cooldown_s=0,
+        qualification_s=0,
+    )
+    step(control, fps=60, gpu=70)
+    step(control, fps=60, gpu=70, after=1)
+    control.confirm_apply()
+    rollback = step(control, fps=59, gpu=70, after=1)
+    control.confirm_apply()
+
+    step(control, fps=60, gpu=70, after=60)
+    held = step(control, fps=60, gpu=70, after=1)
+    step(control, fps=60, gpu=70, after=59)
+    retry = step(control, fps=60, gpu=70, after=1)
+
+    assert (rollback.setpoint, rollback.reason) == (6, "probe_regressed")
+    assert (held.setpoint, held.reason) == (6, "cooldown")
+    assert (retry.setpoint, retry.reason) == (5, "probe_down")
+
+
+def test_failed_probe_backoff_never_delays_recovery():
+    control = controller(
+        initial=6,
+        minimum=3,
+        maximum=15,
+        target=60,
+        warmup_s=0,
+        stable_s=1,
+        settle_s=0,
+        cooldown_s=0,
+        qualification_s=0,
+    )
+    step(control, fps=60, gpu=70)
+    step(control, fps=60, gpu=70, after=1)
+    control.confirm_apply()
+    step(control, fps=59, gpu=70, after=1)
+    control.confirm_apply()
+
+    recovery = step(control, fps=55, gpu=100, after=2)
+
+    assert (recovery.setpoint, recovery.reason) == (8, "fps_below_target")
+
+
+def test_recovery_and_probe_are_clamped_to_device_limits():
+    upper = controller(initial=34, maximum=35, warmup_s=0)
+    lower = controller(initial=5, minimum=5, warmup_s=0, stable_s=0)
+
+    assert step(upper, fps=20).setpoint == 35
+    upper.confirm_apply()
+    at_max = step(upper, fps=20)
+    assert (at_max.setpoint, at_max.changed, at_max.reason) == (
+        35,
+        False,
+        "at_maximum",
+    )
+    step(lower, fps=40)
+    at_min = step(lower, fps=40)
+    assert (at_min.setpoint, at_min.changed, at_min.reason) == (
+        5,
+        False,
+        "at_minimum",
+    )
+
+
+def test_resume_after_pause_restarts_warmup_before_optimizing():
+    control = controller(initial=16, warmup_s=10, stable_s=0)
+    step(control, fps=None, reason="fps_stale")
+
+    first = step(control, fps=40)
+    second = step(control, fps=40, after=9)
+
+    assert first.state == "warming" and first.setpoint == 16
+    assert second.state == "warming" and second.setpoint == 16

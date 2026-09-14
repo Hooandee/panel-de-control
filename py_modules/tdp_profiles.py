@@ -11,6 +11,10 @@ _AUTO_PL3_RATIO = 1.4
 #   custom   — explicit additive margins off2/off3 stacked above PL1.
 _MODES = ("estable", "auto", "custom")
 _DEFAULT_MODE = "estable"
+_DEFAULT_AUTO_TARGET_FPS = 40
+_MIN_AUTO_TARGET_FPS = 20
+_MAX_AUTO_TARGET_FPS = 240
+AUTO_RANGE_UNSET = object()
 
 
 def _derive(pl1):
@@ -26,6 +30,28 @@ def _int0(v):
         return int(v)
     except (TypeError, ValueError, OverflowError):
         return 0
+
+
+def _auto_target_fps(value):
+    parsed = _int0(value)
+    if parsed <= 0:
+        return _DEFAULT_AUTO_TARGET_FPS
+    return max(_MIN_AUTO_TARGET_FPS, min(parsed, _MAX_AUTO_TARGET_FPS))
+
+
+def _auto_initial_tdp(value, fallback):
+    parsed = _int0(value)
+    return parsed if parsed > 0 else int(fallback)
+
+
+def _auto_range(minimum, maximum):
+    minimum = _int0(minimum)
+    maximum = _int0(maximum)
+    minimum = minimum if minimum > 0 else None
+    maximum = maximum if maximum > 0 else None
+    if minimum is not None and maximum is not None and minimum > maximum:
+        minimum, maximum = maximum, minimum
+    return minimum, maximum
 
 
 class ProfileStore(ScopedProfileStore):
@@ -47,18 +73,40 @@ class ProfileStore(ScopedProfileStore):
     def _profile_dict(self, pl1, mode=_DEFAULT_MODE, off2=0, off3=0):
         # off2/off3 coerced None-safe: _clean is the shape-validator and must never
         # raise on a malformed/partial persisted profile (a raise here bricks the panel).
-        return {"pl1": int(pl1), "mode": _norm_mode(mode),
-                "off2": max(0, int(off2 or 0)), "off3": max(0, int(off3 or 0))}
+        pl1 = int(pl1)
+        return {
+            "pl1": pl1,
+            "mode": _norm_mode(mode),
+            "off2": max(0, int(off2 or 0)),
+            "off3": max(0, int(off3 or 0)),
+            "auto_target_fps": _DEFAULT_AUTO_TARGET_FPS,
+            "auto_initial_tdp": pl1,
+            "auto_min_tdp": None,
+            "auto_max_tdp": None,
+        }
 
     def _clean_global(self, raw):
         base = self._clean_values(raw)
         if isinstance(raw, dict):
             if raw.get("auto_tdp"):
                 base["auto_tdp"] = True
+            base["auto_target_fps"] = _auto_target_fps(
+                raw.get("auto_target_fps")
+            )
+            base["auto_initial_tdp"] = _auto_initial_tdp(
+                raw.get("auto_initial_tdp"),
+                base["pl1"],
+            )
+            base["auto_min_tdp"], base["auto_max_tdp"] = _auto_range(
+                raw.get("auto_min_tdp"), raw.get("auto_max_tdp")
+            )
             g = raw.get("gpu")
             if isinstance(g, dict):
                 base["gpu"] = {"manual": bool(g.get("manual")),
                                "min": g.get("min"), "max": g.get("max")}
+        else:
+            base["auto_target_fps"] = _DEFAULT_AUTO_TARGET_FPS
+            base["auto_initial_tdp"] = base["pl1"]
         return base
 
     def _clean_values(self, raw):
@@ -108,6 +156,21 @@ class ProfileStore(ScopedProfileStore):
                 if cv != v:
                     prof[k] = cv
                     changed = True
+            initial = _auto_initial_tdp(
+                prof.get("auto_initial_tdp"),
+                prof["pl1"],
+            )
+            capped_initial = max(min_w, min(initial, max_w))
+            if capped_initial != prof.get("auto_initial_tdp"):
+                prof["auto_initial_tdp"] = capped_initial
+                changed = True
+            for key in ("auto_min_tdp", "auto_max_tdp"):
+                value = prof.get(key)
+                if value is not None:
+                    capped = max(min_w, min(value, max_w))
+                    if capped != value:
+                        prof[key] = capped
+                        changed = True
             return changed
 
         dirty = fix(self._data["global"])
@@ -127,8 +190,37 @@ class ProfileStore(ScopedProfileStore):
     def auto_tdp(self, appid):
         return bool(self._effective_prof(appid).get("auto_tdp", False))
 
+    def auto_config(self, appid):
+        prof = self._effective_prof(appid)
+        return {
+            "enabled": bool(prof.get("auto_tdp", False)),
+            "target_fps": _auto_target_fps(prof.get("auto_target_fps")),
+            "initial_tdp": _auto_initial_tdp(
+                prof.get("auto_initial_tdp"),
+                prof["pl1"],
+            ),
+            "min_tdp": prof.get("auto_min_tdp"),
+            "max_tdp": prof.get("auto_max_tdp"),
+        }
+
     def set_auto_tdp(self, scope, enabled, appid=None):
         self._target(scope, appid)["auto_tdp"] = bool(enabled)
+        self._save()
+
+    def set_auto_config(
+        self, scope, target_fps, initial_tdp, appid=None,
+        min_tdp=AUTO_RANGE_UNSET, max_tdp=AUTO_RANGE_UNSET,
+    ):
+        prof = self._target(scope, appid)
+        prof["auto_target_fps"] = _auto_target_fps(target_fps)
+        prof["auto_initial_tdp"] = _auto_initial_tdp(
+            initial_tdp,
+            prof["pl1"],
+        )
+        prof["auto_min_tdp"], prof["auto_max_tdp"] = _auto_range(
+            prof.get("auto_min_tdp") if min_tdp is AUTO_RANGE_UNSET else min_tdp,
+            prof.get("auto_max_tdp") if max_tdp is AUTO_RANGE_UNSET else max_tdp,
+        )
         self._save()
 
     def gpu_clock(self, appid):
@@ -147,9 +239,8 @@ class ProfileStore(ScopedProfileStore):
         if changed:
             self._save()
 
-    def effective(self, appid):
-        prof = self._effective_prof(appid)
-        pl1 = prof["pl1"]
+    def _effective_from_profile(self, prof, pl1):
+        pl1 = int(pl1)
         mode = prof.get("mode", _DEFAULT_MODE)
         if mode == "auto":
             pl2, pl3 = _derive(pl1)
@@ -159,6 +250,13 @@ class ProfileStore(ScopedProfileStore):
         else:  # estable (flat)
             pl2 = pl3 = pl1
         return {"pl1": pl1, "pl2": pl2, "pl3": pl3, "watts": pl1, "mode": mode}
+
+    def effective(self, appid):
+        prof = self._effective_prof(appid)
+        return self._effective_from_profile(prof, prof["pl1"])
+
+    def effective_at(self, appid, pl1):
+        return self._effective_from_profile(self._effective_prof(appid), pl1)
 
     def set_pl1(self, scope, pl1, appid=None):
         """Set sustained watts, keeping the boost mode + margins intact.

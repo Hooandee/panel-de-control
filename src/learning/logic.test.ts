@@ -20,6 +20,18 @@ describe("learningBadge", () => {
     ).toEqual({ state: "learning", tags: ["fans"] });
   });
 
+  it("keeps generic TDP learning out of the banner while AutoTDP owns the game", () => {
+    expect(
+      learningBadge({
+        inGame: true,
+        telemetryOn: true,
+        tdpSupported: true,
+        fanSupported: true,
+        autoTdpActive: true,
+      }),
+    ).toEqual({ state: "learning", tags: ["fans"] });
+  });
+
   it("telemetry off (with capability, in-game) → paused, keeps tags", () => {
     expect(
       learningBadge({ inGame: true, telemetryOn: false, tdpSupported: true, fanSupported: true }),

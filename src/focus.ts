@@ -32,6 +32,13 @@ export function buildFocusCss(): string {
   min-width: 0 !important;
   width: 100% !important;
 }
+.${PDC_ROOT} .pdc-contained-slider {
+  margin-inline: 0 !important;
+}
+.${PDC_ROOT} .pdc-contained-slider > div > div {
+  min-width: 0 !important;
+  width: 100% !important;
+}
 html:root #QuickAccess-Menu .${PDC_ROOT} [data-pdc-focus-radius].gpfocus {
   border-radius: var(--pdc-focus-radius, 10px) !important;
 }

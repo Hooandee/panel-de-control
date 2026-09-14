@@ -55,6 +55,23 @@ def test_unsupported_when_binary_missing():
     assert b.set_tdp(15, ac=True).ok is False
 
 
+def test_auto_tdp_requires_strict_three_rail_readback():
+    normal = RyzenadjBackend(
+        FALLBACK,
+        resolve=lambda: "/usr/bin/ryzenadj",
+        runner=FakeRun(),
+    )
+    strict = RyzenadjBackend(
+        FALLBACK,
+        resolve=lambda: "/usr/bin/ryzenadj",
+        runner=FakeRun(),
+        require_readback=True,
+    )
+
+    assert normal.auto_tdp_safe is False
+    assert strict.auto_tdp_safe is True
+
+
 def test_set_tdp_sends_milliwatts_to_all_three_limits():
     fake = FakeRun()
     b = RyzenadjBackend(FALLBACK, resolve=lambda: "/usr/bin/ryzenadj", runner=fake)

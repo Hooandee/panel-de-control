@@ -4,6 +4,7 @@ from device_quirks import (
     asus_tdp_authoritative_reassert_s,
     is_gpd_win_mini_2025_tdp_recovery,
     is_legion_go_s_83n6,
+    is_msi_claw_8_ai_plus_a2vm,
     legion_go_2_83n0_firmware_attr_quirks,
     legion_go_s_83l3_firmware_attr_quirks,
     legion_go_s_83n6_firmware_attr_quirks,
@@ -104,7 +105,19 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None):
         )
 
     def intel():
-        return IntelRaplBackend(fallback, root=root)
+        return IntelRaplBackend(
+            fallback,
+            root=root,
+            safety_lock_path=_runtime_lock_path(
+                root,
+                "intel-rapl-transaction.lock",
+            ),
+            ownership_lock_path=_runtime_lock_path(
+                root,
+                "ownership-intel-rapl.lock",
+            ),
+            auto_tdp_allowed=is_msi_claw_8_ai_plus_a2vm(device, root),
+        )
 
     def deck():
         return SteamDeckHwmonBackend(fallback, device.key, root=root)

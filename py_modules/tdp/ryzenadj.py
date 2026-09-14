@@ -136,6 +136,7 @@ class RyzenadjBackend(TDPBackend):
         self.low_battery_hold_strategy = (
             "primary" if self._require_readback else None
         )
+        self.auto_tdp_safe = self._require_readback
         self._safety_lock = RuntimeSafetyLock(safety_lock_path)
         self.supported = self._bin is not None
         self._runtime_lock_payload = (

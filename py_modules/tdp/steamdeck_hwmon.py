@@ -48,6 +48,18 @@ class SteamDeckHwmonBackend(TDPBackend):
         surface = self._discover()
         self.supported = surface is not None
         self.supports_levels = bool(self.ppt_capability()["supported"])
+        self.auto_tdp_safe = self._auto_tdp_rails_ready()
+
+    def _auto_tdp_rails_ready(self):
+        capability, _ = self._capability()
+        if capability is None:
+            return False
+        surface = capability["surface"]
+        return (
+            self._read_pair(surface) is not None
+            and os.access(surface["slow"], os.W_OK)
+            and os.access(surface["fast"], os.W_OK)
+        )
 
     def _surfaces(self):
         if self._device_key not in _DECK_KEYS:

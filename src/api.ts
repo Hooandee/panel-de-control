@@ -83,6 +83,7 @@ export interface DeviceInfo {
   // with the charger connected — the firmware caps the sustained limit on battery. Hide
   // the "raise on battery" toggle; the arc shows the locked charger segment instead.
   charger_only_extra: boolean;
+  display_refresh_hz?: number | null;
   desktop_mode?: boolean;
 }
 
@@ -151,6 +152,29 @@ export interface TdpLimits {
   max_ac: number;
 }
 
+export interface AutoTdpConfig {
+  enabled: boolean;
+  target_fps: number;
+  initial_tdp: number;
+  min_tdp: number | null;
+  max_tdp: number | null;
+}
+
+export type AutoTdpMode = "warming" | "holding" | "optimizing" | "recovering" | "paused";
+
+export interface AutoTdpLive {
+  state: AutoTdpMode;
+  reason: string;
+  setpoint: number | null;
+  fps: number | null;
+  target_fps: number | null;
+  signal_age_s: number | null;
+  focus: string | null;
+  seed_source: "initial" | "learned" | null;
+  seed_watts: number | null;
+  held_watts: number | null;
+}
+
 export interface LevelBound {
   min: number;
   max: number;
@@ -216,10 +240,13 @@ export interface LowBatteryTdpHoldState {
 
 export interface TdpState {
   supported: boolean;
+  auto_supported?: boolean;
   backend: string;
   recovery_pending?: boolean;
   request_min?: number;
   limits: TdpLimits;
+  auto_limits: TdpLimits;
+  auto_request_limits: TdpLimits;
   on_ac: boolean;
   appid: string | null;
   has_game_profile: boolean;
@@ -240,9 +267,10 @@ export interface TdpState {
   global_levels: Levels;
   global_requested_levels?: Levels;
   global_boost_mode: BoostMode;
+  auto_config: AutoTdpConfig;
+  global_auto_config: AutoTdpConfig;
+  auto_target_max_fps?: number | null;
   // The learned TDP band for the current game (honest reasons when not enough data).
-  // Powers the separate "Aprendí…" suggestion (apply a fixed value); auto-TDP itself
-  // is parameter-free and decoupled from this band.
   learned: TdpLearned;
   // Quick-preset watts for the arc buttons (curated per-model or derived from limits).
   presets: TdpPresets;
@@ -361,19 +389,26 @@ export interface PowerDraw {
   // Live PL1 the firmware actually holds (reflects download mode + external HHD/Steam
   // changes + chip clamp). null when the backend can't read it back.
   applied: number | null;
-  // True only while the QAM-open responsive floor is REALLY raising PL1 above where
-  // the auto loop would park it → the arc shows a menu-temporary value, so say so.
-  ui_floor_engaged: boolean;
   // Live charger state, polled every second so the UI can refresh the slider ceiling
   // (battery vs charger) the instant the charger is plugged or unplugged.
   on_ac: boolean;
   ownership: TdpOwnership;
+  auto: AutoTdpLive;
 }
 
 export const getPowerDraw = callable<[], PowerDraw>("get_power_draw");
 export const setAutoTdp = callable<[enabled: boolean, scope: TdpScope, appid: string | null, contextAppid: string | null], { auto_tdp: boolean }>("set_auto_tdp");
-// Signals the QAM panel opened/closed so the auto loop can raise its floor (and bump
-// PL1 immediately) to keep the CPU-bound menu render fluid.
+export const setAutoTdpConfig = callable<[
+  targetFps: number,
+  initialTdp: number,
+  scope: TdpScope,
+  appid: string | null,
+  contextAppid: string | null,
+  minTdp?: number | null,
+  maxTdp?: number | null,
+], TdpState>("set_auto_tdp_config");
+// Signals Steam/QAM visibility so Auto-TDP can hold its controller setpoint while
+// temporarily applying the device default within the user's automatic range.
 export const setUiActive = callable<[enabled: boolean], boolean>("set_ui_active");
 
 // ---- TDP control / conflict take-over -------------------------------------
@@ -475,6 +510,7 @@ export interface LearningStatus {
   telemetry_enabled: boolean;
   tdp_supported: boolean;
   fan_supported: boolean;
+  auto_tdp_active?: boolean;
 }
 
 export const getLearningStatus = callable<[], LearningStatus>("get_learning_status");
@@ -493,11 +529,6 @@ export const setExperimentalTdpUnlock = callable<
   [enabled: boolean],
   ExperimentalTdpUnlockResult
 >("set_experimental_tdp_unlock");
-
-// Opt-in (default off): raise TDP while the QAM is open for a fluid menu. Off keeps
-// the auto loop showing the REAL in-game TDP (no menu-time inflation).
-export const getQamTdpBoost = callable<[], boolean>("get_qam_tdp_boost");
-export const setQamTdpBoost = callable<[enabled: boolean], boolean>("set_qam_tdp_boost");
 
 export const getFanCurveState = callable<[], FanCurveState>("get_fan_curve_state");
 // Opt in/out of experimental EC fan control (Legion Go S). Returns the fresh state.
@@ -916,7 +947,15 @@ export const runControllerAction =
 // One row per game that has a stored per-game profile in any section (raw own values).
 export interface GameProfileRow {
   appid: string;
-  tdp?: { pl1: number; auto: boolean; follows_global: boolean };
+  tdp?: {
+    pl1: number;
+    auto: boolean;
+    target_fps: number;
+    initial_tdp: number;
+    min_tdp: number | null;
+    max_tdp: number | null;
+    follows_global: boolean;
+  };
   fan?: { preset: string; follows_global: boolean };
   color?: { saturation: number; calibrated: boolean; hdr: boolean; follows_global: boolean };
   cpu?: {
