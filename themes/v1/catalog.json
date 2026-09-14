@@ -5,7 +5,7 @@
       "schemaVersion": 1,
       "catalogId": "hooandee-gallery",
       "cssLoaderName": "Hooandee Gallery",
-      "version": "0.7.13",
+      "version": "0.7.14",
       "displayName": {
         "es": "Hooandee",
         "en": "Hooandee",
@@ -19,14 +19,19 @@
       "author": "Hooandee",
       "tags": [],
       "artifact": {
-        "url": "https://hooandee.github.io/panel-de-control/themes/v1/hooandee-gallery/0.7.13/theme.zip",
-        "size": 118929,
-        "sha256": "093c7b5369d9b7332754d85354f5bf32d25ad9bbed7b26a0f787e44326278e1e"
+        "url": "https://hooandee.github.io/panel-de-control/themes/v1/hooandee-gallery/0.7.14/theme.zip",
+        "size": 118964,
+        "sha256": "29d33fad411e06be32045304c92d3107ad843e068828e559eddeb57df2968648"
       },
       "minimumVersions": {
         "panel": "0.38.0",
         "cssLoader": "2.1.2",
         "cssLoaderBackend": 9
+      },
+      "notes": {
+        "es": "Ya puedes deslizarte por la galería y bajar a Novedades, Amigos y Recomendados usando la pantalla táctil.",
+        "en": "You can now swipe through the gallery and scroll down to What's New, Friends, and Recommended using the touchscreen.",
+        "it": "Ora puoi scorrere la galleria e raggiungere Novità, Amici e Consigliati usando il touchscreen."
       }
     }
   ]
