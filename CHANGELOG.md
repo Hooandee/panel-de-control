@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+## [0.48.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.48.0...panel-de-control-v0.48.1) (2026-09-14)
+
+
+### Español
+
+* **HUD:** Al mostrar el HUD, Panel de Control activa automáticamente la superposición de rendimiento de Steam si estaba apagada y confirma que el cambio se ha aplicado. Conserva cualquier nivel de detalle que ya estuviera activo y, si Steam vuelve a ocultar la superposición, ofrece una acción para recuperarla y añade su estado a los reportes para facilitar el diagnóstico.
+
+### English
+
+* **HUD:** When showing the HUD, Panel de Control automatically enables Steam's performance overlay if it was off and confirms that the change was applied. It preserves any overlay detail level that was already active and, if Steam hides the overlay again, offers an action to restore it and adds its state to reports for easier diagnosis.
+
+### Italiano
+
+* **HUD:** Quando mostra l'HUD, Panel de Control attiva automaticamente l'overlay delle prestazioni di Steam se era disattivato e conferma che la modifica è stata applicata. Mantiene invariato qualsiasi livello di dettaglio già attivo e, se Steam nasconde nuovamente l'overlay, offre un'azione per ripristinarlo e aggiunge il suo stato ai report per facilitare la diagnosi.
+
+### Deutsch
+
+* **HUD:** Beim Einblenden des HUD aktiviert Panel de Control automatisch das Leistungs-Overlay von Steam, falls es ausgeschaltet war, und bestätigt die erfolgreiche Änderung. Eine bereits aktive Detailstufe bleibt erhalten. Falls Steam das Overlay erneut ausblendet, bietet Panel de Control eine Aktion zur Wiederherstellung an und fügt den Status zur einfacheren Diagnose den Berichten hinzu.
+
 ## [0.48.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.47.1...panel-de-control-v0.48.0) (2026-09-13)
 
 
