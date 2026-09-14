@@ -76,6 +76,15 @@ describe("Steam Cleaner interface", () => {
     expect(game.getAttribute("aria-checked")).toBe("false");
   });
 
+  it("keeps a prefix-only game active and opens its available data", () => {
+    render(<SteamCleanerView controller={controller({ state: state({ entries: [entry("prefix", { kind: "compatdata" })] }) })} />);
+    const game = screen.getByRole("button", { name: "cleaner.chooseGameData Game" });
+    expect(game.getAttribute("aria-disabled")).toBe("false");
+    expect((game.firstElementChild as HTMLElement).style.opacity).toBe("1");
+    fireEvent.click(game);
+    expect(screen.getByRole("checkbox", { name: "cleaner.kind.compatdata · Internal drive" })).toBeTruthy();
+  });
+
   it("shows the storage explanation once and makes the recommended filter explicit", () => {
     render(<SteamCleanerView controller={controller({ state: state({ entries: [
       entry("installed", { game_id: "installed", name: "Installed" }),
@@ -161,7 +170,8 @@ describe("Steam Cleaner interface", () => {
 
   it("does not present unmeasured or unidentified game data as zero bytes or an AppID title", () => {
     render(<SteamCleanerView controller={controller({ state: state({ entries: [entry("unknown", { name: null, bytes: null, installation: "unknown", blocked_reason: "unknown_identity" })], totals: { shadercache: 0, compatdata: 0, unknown: 1 } }) })} />);
-    const game = screen.getByRole("checkbox", { name: "cleaner.selectGameCaches cleaner.unknownGame" });
+    const game = screen.getByRole("button", { name: "cleaner.chooseGameData cleaner.unknownGame" });
+    expect(game.getAttribute("aria-disabled")).toBe("true");
     expect(within(game).getByText("cleaner.sizeUnknown")).toBeTruthy();
     expect(within(game).queryByText("0 B")).toBeNull();
     expect(screen.queryByText("AppID 10")).toBeNull();

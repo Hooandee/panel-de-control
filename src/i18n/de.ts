@@ -295,6 +295,7 @@ export const de: Record<string, string> = {
   "cleaner.deselectCaches": "Shader Cache abwählen",
   "cleaner.clearSelection": "Auswahl leeren",
   "cleaner.selectGameCaches": "Shader Cache von {name} auswählen",
+  "cleaner.chooseGameData": "Daten von {name} auswählen",
   "cleaner.gameDetails": "Daten von {name}",
   "cleaner.installation.installed": "Installiert",
   "cleaner.installation.not_installed": "Nicht installiert",

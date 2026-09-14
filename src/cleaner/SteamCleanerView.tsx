@@ -86,13 +86,14 @@ const GameRow: FC<{ game: CleanerGame; selected: ReadonlySet<string>; disabled: 
   const allSelected = selectable.length > 0 && selectable.every((entry) => selected.has(entry.id));
   const partiallySelected = selectedCount > 0 && !allSelected;
   const Check = allSelected ? LuSquareCheck : partiallySelected ? LuSquareMinus : LuSquare;
+  const canSelectCaches = caches.length > 0;
   const Chevron = open ? LuChevronDown : LuChevronRight;
   const installation = game.entries[0].installation;
   return (
     <div style={{ ...theme.card, ...column, gap: 0, padding: 6 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <CleanerAction label={t("cleaner.selectGameCaches", { name })} checked={allSelected ? true : partiallySelected ? "mixed" : false} disabled={disabled || caches.length === 0} onActivate={onCaches} style={{ background: "transparent", boxShadow: "none", padding: "6px", textAlign: "left", justifyContent: "flex-start" }}>
+          <CleanerAction label={t(canSelectCaches ? "cleaner.selectGameCaches" : "cleaner.chooseGameData", { name })} checked={canSelectCaches ? allSelected ? true : partiallySelected ? "mixed" : false : undefined} disabled={disabled || selectable.length === 0} onActivate={canSelectCaches ? onCaches : () => setOpen(true)} style={{ background: "transparent", boxShadow: "none", padding: "6px", textAlign: "left", justifyContent: "flex-start" }}>
             <GameCover urls={game.coverUrls} name={name} width={38} />
             <span style={{ flex: 1, minWidth: 0 }}>
               <span style={{ display: "block", fontSize: theme.font.body, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
