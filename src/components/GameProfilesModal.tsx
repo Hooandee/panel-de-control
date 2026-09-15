@@ -6,12 +6,10 @@ import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { Loading } from "./Loading";
 import { GameProfileRow, listGameProfiles, resetGameProfiles } from "../api";
-import { configuredSections, SectionId } from "../system/gameProfiles";
+import { configuredSections } from "../system/gameProfiles";
+import { sectionLine, SectionLine } from "../system/gameProfileSummary";
 import { isNonSteamKey, nonSteamName } from "../tdp/gameIdentity";
 import { FocusRoot } from "./FocusRoot";
-
-type T = (key: string, params?: Record<string, string | number>) => string;
-type SectionLine = { label: string; text: string; dim: boolean };
 
 /** Resolve a stored appid to a display name. Steam games via the app store (missing =
  *  uninstalled); non-Steam shortcuts carry their name in the "ns:" key. */
@@ -26,46 +24,6 @@ function resolveName(appid: string): { name: string; installed: boolean } {
     /* ignore */
   }
   return { name: appid, installed: false };
-}
-
-/** One translated summary line per configured section: a label + a short value. */
-function sectionLine(section: SectionId, row: GameProfileRow, t: T): SectionLine | null {
-  if (section === "tdp" && row.tdp) {
-    const extra = [row.tdp.auto ? t("gameProfiles.auto") : ""].filter(Boolean);
-    return { label: t("gameProfiles.sec.tdp"), text: [`${row.tdp.pl1} W`, ...extra].join(" · "), dim: row.tdp.follows_global };
-  }
-  if (section === "fan" && row.fan) {
-    return { label: t("gameProfiles.sec.fan"), text: t(`fans.preset.${row.fan.preset}`), dim: row.fan.follows_global };
-  }
-  if (section === "color" && row.color) {
-    const extra = [row.color.calibrated ? t("gameProfiles.calibrated") : "", row.color.hdr ? "HDR" : ""].filter(Boolean);
-    return { label: t("gameProfiles.sec.color"), text: [t("gameProfiles.sat", { v: row.color.saturation }), ...extra].join(" · "), dim: row.color.follows_global };
-  }
-  if (section === "cpu" && row.cpu) {
-    const parts = [
-      `SMT ${row.cpu.smt ? "on" : "off"}`,
-      `${t("gameProfiles.boost")} ${row.cpu.boost ? "on" : "off"}`,
-    ];
-    if (row.cpu.cores != null) parts.push(t("gameProfiles.cores", { n: row.cpu.cores }));
-    const frequency = row.cpu.frequency;
-    if (frequency?.manual && frequency.min_khz != null && frequency.max_khz != null) {
-      parts.push(`${(frequency.min_khz / 1_000_000).toFixed(2)}–${(frequency.max_khz / 1_000_000).toFixed(2)} GHz`);
-    }
-    return { label: t("gameProfiles.sec.cpu"), text: parts.join(" · "), dim: row.cpu.follows_global };
-  }
-  if (section === "gpu" && row.gpu) {
-    const window = row.gpu.manual && row.gpu.min != null && row.gpu.max != null
-      ? `${row.gpu.min}–${row.gpu.max} MHz`
-      : t("gameProfiles.auto");
-    return { label: t("gameProfiles.sec.gpu"), text: window, dim: row.gpu.follows_global };
-  }
-  if (section === "mandos" && row.mandos) {
-    return { label: t("gameProfiles.sec.mandos"), text: t("gameProfiles.buttons", { n: row.mandos.count }), dim: row.mandos.follows_global };
-  }
-  if (section === "audio" && row.audio) {
-    return { label: t("gameProfiles.sec.audio"), text: t("gameProfiles.audioCustom"), dim: row.audio.follows_global };
-  }
-  return null;
 }
 
 const GameRow: FC<{ row: GameProfileRow; onReset: (appid: string) => void }> = ({ row, onReset }) => {

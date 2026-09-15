@@ -36,6 +36,14 @@ describe("buildFocusCss", () => {
     expect(css).toContain("min-width: 0 !important");
     expect(css).toContain("width: 100% !important");
   });
+
+  it("keeps nested card sliders inside their available width", () => {
+    expect(css).toContain(".pdc-contained-slider");
+    expect(css).toContain(".pdc-contained-slider > div > div");
+    expect(css).toContain("margin-inline: 0 !important");
+    expect(css).toContain("min-width: 0 !important");
+    expect(css).toContain("width: 100% !important");
+  });
 });
 
 // Minimal document stub (no jsdom) — just the surface ensureFocusStyles touches.

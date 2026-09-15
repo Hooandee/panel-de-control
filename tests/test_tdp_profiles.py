@@ -234,6 +234,136 @@ def test_auto_tdp_per_scope_follows_global(tmp_path):
     assert s.auto_tdp("42") is True
 
 
+def test_auto_config_defaults_to_profile_tdp(tmp_path):
+    s = _store(tmp_path, default=15)
+
+    assert s.auto_config(None) == {
+        "enabled": False,
+        "target_fps": 40,
+        "initial_tdp": 15,
+        "min_tdp": None,
+        "max_tdp": None,
+    }
+
+
+def test_auto_config_persists_atomically_per_scope(tmp_path):
+    path = str(tmp_path / "p.json")
+    s1 = ProfileStore(path, default_watts=15)
+    s1.set_auto_config("global", target_fps=57, initial_tdp=18)
+    s1.set_auto_tdp("global", True)
+    s1.set_auto_config("game", target_fps=72, initial_tdp=22, appid="42")
+
+    s2 = ProfileStore(path, default_watts=15)
+    assert s2.auto_config(None) == {
+        "enabled": True,
+        "target_fps": 57,
+        "initial_tdp": 18,
+        "min_tdp": None,
+        "max_tdp": None,
+    }
+    assert s2.auto_config("42") == {
+        "enabled": True,
+        "target_fps": 72,
+        "initial_tdp": 22,
+        "min_tdp": None,
+        "max_tdp": None,
+    }
+
+
+def test_editing_auto_config_activates_game_profile_without_changing_global(tmp_path):
+    s = _store(tmp_path)
+    s.set_auto_config("global", target_fps=57, initial_tdp=19)
+
+    assert s.auto_config("42") == {
+        "enabled": False,
+        "target_fps": 57,
+        "initial_tdp": 19,
+        "min_tdp": None,
+        "max_tdp": None,
+    }
+    s.set_auto_config("game", target_fps=72, initial_tdp=16, appid="42")
+
+    assert s.is_following_global("42") is False
+    assert s.auto_config("42")["target_fps"] == 72
+    assert s.auto_config(None)["target_fps"] == 57
+    s.set_follow_global("42", True)
+    assert s.auto_config("42")["target_fps"] == 57
+
+
+def test_auto_config_clamps_free_target_to_the_supported_range(tmp_path):
+    s = _store(tmp_path)
+
+    s.set_auto_config("global", target_fps=19, initial_tdp=15)
+    assert s.auto_config(None)["target_fps"] == 20
+
+    s.set_auto_config("global", target_fps=241, initial_tdp=15)
+    assert s.auto_config(None)["target_fps"] == 240
+
+
+def test_auto_range_persists_per_scope_and_legacy_edits_preserve_endpoints(tmp_path):
+    s = _store(tmp_path)
+    s.set_auto_config("global", 40, 18, min_tdp=8, max_tdp=30)
+    s.set_auto_config("game", 60, 20, appid="42", min_tdp=12, max_tdp=25)
+    s.set_auto_config("game", 50, 22, appid="42")
+    loaded = _store(tmp_path)
+    assert (loaded.auto_config(None)["min_tdp"], loaded.auto_config(None)["max_tdp"]) == (8, 30)
+    assert (loaded.auto_config("42")["min_tdp"], loaded.auto_config("42")["max_tdp"]) == (12, 25)
+    loaded.set_auto_config("game", 50, 22, appid="42", min_tdp=None)
+    assert (loaded.auto_config("42")["min_tdp"], loaded.auto_config("42")["max_tdp"]) == (None, 25)
+    loaded.set_follow_global("42", True)
+    assert loaded.auto_config("42")["min_tdp"] == 8
+
+
+def test_auto_range_sanitize_uses_storage_bounds_and_recovers_invalid_order(tmp_path):
+    s = _store(tmp_path)
+    s.set_auto_config("global", 40, 40, min_tdp=2, max_tdp=99)
+    assert s.sanitize(5, 35) is True
+    assert (s.auto_config(None)["min_tdp"], s.auto_config(None)["max_tdp"]) == (5, 35)
+    s.set_auto_config("global", 40, 15, min_tdp=30, max_tdp=10)
+    assert s.auto_config(None)["min_tdp"] <= s.auto_config(None)["max_tdp"]
+    s.set_auto_config("global", 40, 15, min_tdp="broken", max_tdp=-1)
+    assert (s.auto_config(None)["min_tdp"], s.auto_config(None)["max_tdp"]) == (None, None)
+
+
+def test_auto_config_recovers_from_malformed_values_and_sanitizes_tdp(tmp_path):
+    path = str(tmp_path / "p.json")
+    with open(path, "w") as f:
+        json.dump({
+            "global": {
+                "pl1": 15,
+                "mode": "estable",
+                "auto_target_fps": "broken",
+                "auto_initial_tdp": 999,
+            },
+        }, f)
+
+    s = ProfileStore(path, default_watts=15)
+    assert s.auto_config(None)["target_fps"] == 40
+    assert s.sanitize(5, 35) is True
+    assert s.auto_config(None)["initial_tdp"] == 35
+
+
+def test_effective_at_keeps_boost_shape_without_mutating_profile(tmp_path):
+    s = _store(tmp_path)
+    s.set_pl1("global", 20)
+    s.set_offsets("global", 8, 4)
+
+    assert s.effective_at(None, 14) == {
+        "pl1": 14,
+        "pl2": 22,
+        "pl3": 26,
+        "watts": 14,
+        "mode": "custom",
+    }
+    assert s.effective(None) == {
+        "pl1": 20,
+        "pl2": 28,
+        "pl3": 32,
+        "watts": 20,
+        "mode": "custom",
+    }
+
+
 def test_gpu_clock_per_scope_follows_global(tmp_path):
     s = _store(tmp_path)
     s.set_gpu_clock("global", True, 800, 2000)

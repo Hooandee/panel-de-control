@@ -2,6 +2,7 @@ import { CSSProperties, FC } from "react";
 import { Focusable } from "@decky/ui";
 import { LuGamepad2 } from "react-icons/lu";
 import { Scope } from "../api";
+import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { segmentGroupStyle, segmentItemStyle } from "./segmented";
 
@@ -22,6 +23,7 @@ export const ProfileSelector: FC<ProfileSelectorProps> = ({
   inheritHint,
   onScope,
 }) => {
+  const { t } = useI18n();
   const seg = (active: boolean): CSSProperties => ({
     ...segmentItemStyle(active),
     flex: 1,
@@ -37,10 +39,10 @@ export const ProfileSelector: FC<ProfileSelectorProps> = ({
           {globalLabel}
         </Focusable>
         {gameName && (
-          <Focusable style={seg(scope === "game")} onActivate={() => onScope("game")} onClick={() => onScope("game")}>
+          <Focusable title={gameName} style={seg(scope === "game")} onActivate={() => onScope("game")} onClick={() => onScope("game")}>
             <span style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, minWidth: 0, width: "100%" }}>
               <LuGamepad2 size={13} style={{ flexShrink: 0 }} />
-              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{gameName}</span>
+              <span>{t("tdp.scope.game")}</span>
             </span>
           </Focusable>
         )}

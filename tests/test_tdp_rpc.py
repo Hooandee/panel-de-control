@@ -2,6 +2,7 @@ import asyncio
 import dataclasses
 import importlib
 import sys
+import threading
 import types
 
 import pytest
@@ -516,8 +517,9 @@ def test_get_power_draw_has_all_keys(PluginWithPower):
     p = PluginWithPower()
     r = asyncio.run(p.get_power_draw())
     assert set(r.keys()) == {"watts", "gpu_busy", "auto_tdp", "setpoint", "applied",
-                             "ui_floor_engaged", "on_ac", "ownership"}
+                             "on_ac", "ownership", "auto"}
     assert r["ownership"] == asyncio.run(p.get_tdp_state())["ownership"]
+    assert r["auto"]["state"] == "paused"
 
 
 def test_get_power_draw_values(PluginWithPower):
@@ -615,6 +617,100 @@ def test_collect_sample_returns_tuple_with_game(Plugin, monkeypatch):
     assert sample["temp_cpu"] == pytest.approx(52.0)
     assert sample["temp_gpu"] == pytest.approx(48.0)
     assert sample["fan_rpm"] == 1800
+
+
+def test_collect_sample_uses_live_auto_tdp_without_mutating_saved_profile(
+    Plugin, monkeypatch
+):
+    import main as main_module
+    import types
+
+    fake_pr = types.SimpleNamespace(read=lambda: {"watts": 12.0, "gpu_busy": 70})
+    fake_fan = types.SimpleNamespace(read=lambda: {"fans": [], "temps": []})
+    original_init = main_module.Plugin._init
+
+    def patched_init(self):
+        original_init(self)
+        self._power_reader = fake_pr
+        self._fan_reader = fake_fan
+
+    monkeypatch.setattr(main_module.Plugin, "_init", patched_init)
+
+    p = main_module.Plugin()
+    p._init()
+    p._current_appid = "42"
+    p._tdp_profiles.set_pl1("game", 20, appid="42")
+    p._tdp_profiles.set_auto_tdp("game", True, appid="42")
+    p._ensure_auto_session(on_ac=True)
+    p._auto_controller.setpoint = 14
+    p._auto_setpoint = 14
+
+    _, sample = p._collect_sample()
+
+    assert sample["pl1"] == 14
+    assert p._tdp_profiles.effective("42")["pl1"] == 20
+
+
+def test_collect_sample_discards_game_switch_during_sensor_io(Plugin):
+    p = Plugin()
+    p._init()
+    p._current_appid = "42"
+    started = threading.Event()
+    release = threading.Event()
+
+    def blocked_power_read():
+        started.set()
+        release.wait(timeout=2)
+        return {"watts": 12.0, "gpu_busy": 70}
+
+    p._power_reader.read = blocked_power_read
+    result = []
+    thread = threading.Thread(target=lambda: result.append(p._collect_sample()))
+    thread.start()
+    assert started.wait(timeout=1)
+    p._current_appid = "99"
+    release.set()
+    thread.join(timeout=2)
+
+    assert result == [None]
+
+
+def test_collect_sample_discards_auto_setpoint_change_during_sensor_io(Plugin):
+    p = Plugin()
+    p._init()
+    p._current_appid = "42"
+    p._tdp_profiles.set_auto_tdp("game", True, appid="42")
+    p._ensure_auto_session(on_ac=True)
+    p._auto_setpoint = 16
+    started = threading.Event()
+    release = threading.Event()
+
+    def blocked_power_read():
+        started.set()
+        release.wait(timeout=2)
+        return {"watts": 18.0, "gpu_busy": 70}
+
+    p._power_reader.read = blocked_power_read
+    result = []
+    thread = threading.Thread(target=lambda: result.append(p._collect_sample()))
+    thread.start()
+    assert started.wait(timeout=1)
+    p._auto_setpoint = 18
+    release.set()
+    thread.join(timeout=2)
+
+    assert result == [None]
+
+
+def test_collect_sample_skips_auto_focus_floor(Plugin):
+    p = Plugin()
+    p._init()
+    p._current_appid = "42"
+    p._tdp_profiles.set_auto_tdp("game", True, appid="42")
+    p._ensure_auto_session(on_ac=True)
+    p._auto_focus_hold_active = True
+
+    assert p._collect_sample() is None
 
 
 def test_get_telemetry_aggregates_after_collect(Plugin, monkeypatch):
@@ -1105,3 +1201,599 @@ def test_external_read_does_not_detach_a_follow_global_game(Plugin):
     p._tdp_backend._applied = 30
     asyncio.run(p.get_tdp_state())
     assert p._tdp_profiles.is_following_global("g") is True
+
+
+def test_auto_config_rpc_is_scoped_and_exposed_in_tdp_state(Plugin):
+    p = Plugin()
+    p._init()
+    p._set_current_appid("42")
+    asyncio.run(p.set_auto_tdp_config(45, 18, "global", None, "42"))
+    asyncio.run(p.set_auto_tdp_config(60, 22, "game", "42", "42"))
+
+    state = asyncio.run(p.get_tdp_state())
+
+    assert state["global_auto_config"] == {
+        "enabled": False,
+        "target_fps": 45,
+        "initial_tdp": 18,
+        "min_tdp": None,
+        "max_tdp": None,
+    }
+    assert state["auto_config"] == {
+        "enabled": False,
+        "target_fps": 60,
+        "initial_tdp": 22,
+        "min_tdp": None,
+        "max_tdp": None,
+    }
+
+
+def test_auto_range_rpc_preserves_legacy_arguments_and_resets_explicit_null(Plugin):
+    p = Plugin()
+    p._init()
+    p._set_current_appid("42")
+    asyncio.run(p.set_auto_tdp_config(40, 25, "game", "42", "42", 12, 35))
+    state = asyncio.run(p.set_auto_tdp_config(45, 26, "game", "42", "42"))
+    assert state["auto_config"]["min_tdp"] == 12
+    assert state["auto_config"]["max_tdp"] == 35
+    state = asyncio.run(p.set_auto_tdp_config(45, 26, "game", "42", "42", None))
+    assert state["auto_config"]["min_tdp"] is None
+    assert state["auto_config"]["max_tdp"] == 35
+    state = asyncio.run(p.set_auto_tdp_config(45, 26, "game", "42", "42", None, None))
+    assert state["auto_config"]["max_tdp"] is None
+
+
+def test_auto_range_rpc_keeps_charger_intent_through_battery_and_live_limits(Plugin, monkeypatch):
+    p = Plugin()
+    p._init()
+    monkeypatch.setattr(sys.modules["main"], "read_on_ac", lambda: False)
+    p._tdp_backend.live_max = 12
+    state = asyncio.run(p.set_auto_tdp_config(40, 32, "global", None, None, 25, 40))
+    assert state["auto_config"]["initial_tdp"] == 32
+    assert state["auto_config"]["min_tdp"] == 25
+    assert state["auto_config"]["max_tdp"] == 40
+    assert state["auto_request_limits"] == {"min": 5, "default": 15, "max": 20, "max_ac": 60}
+    assert state["auto_limits"]["max_ac"] == 12
+
+
+def test_auto_range_rpc_validates_static_bounds_and_rejects_inverted_range(Plugin):
+    p = Plugin()
+    p._init()
+    state = asyncio.run(p.set_auto_tdp_config(40, 99, "global", None, None, 1, 99))
+    assert state["auto_config"]["initial_tdp"] == 60
+    assert state["auto_config"]["min_tdp"] == 5
+    assert state["auto_config"]["max_tdp"] == 60
+    before = state["auto_config"]
+    state = asyncio.run(p.set_auto_tdp_config(50, 30, "global", None, None, 40, 20))
+    assert state["auto_config"] == before
+
+
+@pytest.mark.parametrize("initial, learned, minimum, maximum, expected", [
+    (5, None, 12, 25, 12),
+    (35, None, 12, 25, 25),
+    (15, 8, 12, 25, 12),
+    (15, 35, 12, 25, 25),
+])
+def test_auto_session_clamps_initial_and_learned_seeds_to_requested_range(
+    Plugin, initial, learned, minimum, maximum, expected,
+):
+    p = Plugin()
+    p._init()
+    p._set_current_appid("42")
+    p._tdp_profiles.set_auto_config("global", 40, initial, min_tdp=minimum, max_tdp=maximum)
+    if learned is not None:
+        for _ in range(12):
+            p._auto_learning.record("42", 40, True, learned, stable=True)
+    controller, _ = p._ensure_auto_session(True, p._tdp_backend.observe())
+    assert controller.setpoint == expected
+    assert p._auto_status["seed_watts"] == expected
+    assert (controller.min_w, controller.max_w) == (12, 25)
+    assert p._tdp_profiles.auto_config(None)["initial_tdp"] == initial
+
+
+def test_auto_session_restores_requested_range_after_firmware_limit(Plugin):
+    p = Plugin()
+    p._init()
+    p._set_current_appid("42")
+    p._tdp_profiles.set_auto_config("global", 40, 32, min_tdp=25, max_tdp=40)
+    p._tdp_backend.live_max = 12
+    limited, _ = p._ensure_auto_session(False, p._tdp_backend.observe())
+    assert (limited.min_w, limited.max_w, limited.setpoint) == (12, 12, 12)
+    p._tdp_backend.live_max = 60
+    restored, _ = p._ensure_auto_session(True, p._tdp_backend.observe())
+    assert (restored.min_w, restored.max_w, restored.setpoint) == (25, 40, 32)
+    assert p._tdp_profiles.auto_config(None)["min_tdp"] == 25
+
+
+def test_auto_target_is_clamped_to_the_known_internal_panel_refresh(Plugin):
+    from dataclasses import replace
+
+    p = Plugin()
+    p._init()
+    p._device = replace(p._device, display_refresh_hz=60)
+
+    state = asyncio.run(p.set_auto_tdp_config(120, 15, "global"))
+
+    assert state["auto_target_max_fps"] == 60
+    assert state["auto_config"]["target_fps"] == 60
+
+
+def test_auto_config_rpc_rejects_a_stale_game_context(Plugin):
+    p = Plugin()
+    p._init()
+    p._set_current_appid("42")
+
+    state = asyncio.run(
+        p.set_auto_tdp_config(60, 22, "game", "99", "42")
+    )
+
+    assert state["auto_config"]["target_fps"] == 40
+    assert p._tdp_profiles.has_game("99") is False
+
+
+def test_auto_session_prefers_reliable_learning_and_keeps_profile_immutable(Plugin):
+    p = Plugin()
+    p._init()
+    p._set_current_appid("42")
+    p._tdp_profiles.set_pl1("global", 10)
+    p._tdp_profiles.set_auto_config("global", 40, 16)
+    p._tdp_profiles.set_auto_tdp("global", True)
+    for _ in range(6):
+        p._auto_learning.record("42", 40, True, 19, stable=True)
+
+    control, created = p._ensure_auto_session(on_ac=True)
+    command = p._capture_tdp_command("auto-test", on_ac=True)
+
+    assert created is True
+    assert control.setpoint == 19
+    assert command.logical_requested["pl1"] == 19
+    assert p._tdp_profiles.effective(None)["pl1"] == 10
+    assert p._tdp_profiles.auto_config(None)["initial_tdp"] == 16
+
+
+def test_auto_session_uses_the_backend_pl1_range(Plugin):
+    p = Plugin()
+    p._init()
+    p._tdp_backend.level_limits = lambda: {
+        "pl1": {"min": 8, "max": 30},
+        "pl2": {"min": 5, "max": 40},
+    }
+    p._set_current_appid("42")
+    p._tdp_profiles.set_auto_config("global", 40, 5)
+    p._tdp_profiles.set_auto_tdp("global", True)
+
+    control, _created = p._ensure_auto_session(on_ac=True)
+    state = asyncio.run(p.get_tdp_state())
+
+    assert control.min_w == 8
+    assert control.max_w == 30
+    assert control.setpoint == 8
+    assert state["auto_limits"] == {
+        "min": 8,
+        "default": 15,
+        "max": 20,
+        "max_ac": 30,
+    }
+
+
+def test_auto_limits_follow_the_backend_primary_rail(Plugin):
+    p = Plugin()
+    p._init()
+    p._tdp_backend.primary_rail = "pl2"
+    p._tdp_backend.level_limits = lambda: {
+        "pl1": {"min": 8, "max": 10},
+        "pl2": {"min": 6, "max": 17},
+    }
+    p._set_current_appid("42")
+
+    control, _created = p._ensure_auto_session(on_ac=True)
+
+    assert control.min_w == 6
+    assert control.max_w == 17
+
+
+def test_auto_tdp_is_not_offered_on_an_unverifiable_backend(Plugin):
+    p = Plugin()
+    p._init()
+    p._tdp_backend.auto_tdp_safe = False
+
+    state = asyncio.run(p.get_tdp_state())
+
+    assert state["supported"] is True
+    assert state["auto_supported"] is False
+
+
+def test_auto_loop_start_does_not_open_gamescope_stats_until_needed(Plugin):
+    p = Plugin()
+    p._init()
+    starts = []
+    p._gamescope_stats.start = lambda: starts.append(True)
+
+    async def exercise():
+        p._start_auto_loop()
+        await asyncio.sleep(0)
+        p._stop_auto_loop()
+
+    asyncio.run(exercise())
+
+    assert starts == []
+
+
+def test_auto_tick_owns_gamescope_stats_only_during_an_active_session(Plugin):
+    p = Plugin()
+    p._init()
+    calls = []
+
+    class Stats:
+        def start(self):
+            calls.append("start")
+
+        def stop(self):
+            calls.append("stop")
+
+        def clear(self):
+            pass
+
+        def read(self, expected_appid=None):
+            return {
+                "fps": 40.0,
+                "focus": expected_appid,
+                "age_s": 0.0,
+                "sample_at": 1.0,
+                "available": True,
+                "reason": "ok",
+            }
+
+    p._gamescope_stats = Stats()
+    p._power_reader.read = lambda: {"watts": 12.0, "gpu_busy": 70.0}
+    p._set_current_appid("42")
+    p._tdp_profiles.set_auto_tdp("global", True)
+
+    asyncio.run(p._auto_tick())
+    asyncio.run(p._auto_tick())
+    p._tdp_profiles.set_auto_tdp("global", False)
+    asyncio.run(p._auto_tick())
+
+    assert calls == ["start", "stop"]
+
+
+def test_auto_tick_does_not_block_event_loop_while_stopping_stats(Plugin):
+    p = Plugin()
+    p._init()
+    release = threading.Event()
+
+    class Stats:
+        def stop(self):
+            release.wait(timeout=0.75)
+
+        def clear(self):
+            pass
+
+    p._gamescope_stats = Stats()
+    p._auto_stats_reader_active = True
+
+    async def exercise():
+        loop = asyncio.get_running_loop()
+        loop.call_later(0.02, release.set)
+        started = loop.time()
+        await p._auto_tick()
+        return loop.time() - started
+
+    elapsed = asyncio.run(exercise())
+
+    assert elapsed < 0.2
+
+
+def test_auto_tick_pauses_on_missing_fps_without_repeated_backend_writes(Plugin):
+    p = Plugin()
+    p._init()
+    p._set_current_appid("42")
+    p._tdp_profiles.set_pl1("global", 10)
+    p._tdp_profiles.set_auto_config("global", 40, 16)
+    p._tdp_profiles.set_auto_tdp("global", True)
+    p._gamescope_stats.read = lambda expected_appid=None: {
+        "fps": None,
+        "focus": "42",
+        "age_s": 7.0,
+        "sample_at": 100.0,
+        "available": False,
+        "reason": "fps_stale",
+    }
+    p._power_reader.read = lambda: {"watts": 12.0, "gpu_busy": 70.0}
+    p._tdp_backend.set_levels_calls = 0
+
+    asyncio.run(p._auto_tick())
+    first_calls = p._tdp_backend.set_levels_calls
+    asyncio.run(p._auto_tick())
+
+    assert first_calls == 0
+    assert p._tdp_backend.set_levels_calls == first_calls
+    assert p._auto_status["state"] == "paused"
+    assert p._auto_status["reason"] == "fps_stale"
+    assert p._tdp_profiles.effective(None)["pl1"] == 10
+
+
+def test_auto_tick_pauses_when_hardware_is_owned_elsewhere_without_sampling(Plugin):
+    p = Plugin()
+    p._init()
+    p._set_current_appid("42")
+    p._tdp_profiles.set_auto_tdp("global", True)
+    p._os_id = "anatase"
+    p._tdp_external_owner = True
+    power_reads = []
+    p._power_reader.read = lambda: power_reads.append(True)
+
+    asyncio.run(p._auto_tick())
+
+    assert power_reads == []
+    assert p._auto_status["state"] == "paused"
+    assert p._auto_status["reason"] == "external_owner"
+
+
+def test_auto_learning_respects_telemetry_opt_out_for_seed_and_record(
+    Plugin, monkeypatch
+):
+    p = Plugin()
+    p._init()
+    p._settings["telemetry_enabled"] = False
+    p._set_current_appid("42")
+    p._tdp_profiles.set_auto_config("global", 40, 16)
+    p._tdp_profiles.set_auto_tdp("global", True)
+    monkeypatch.setattr(
+        p._auto_learning,
+        "seed",
+        lambda *_args: (_ for _ in ()).throw(AssertionError("seeded")),
+    )
+
+    control, _created = p._ensure_auto_session(on_ac=True)
+
+    assert control.setpoint == 16
+
+    class StableDecision:
+        setpoint = 16
+        target_fps = 40
+        reason = "probe_stable"
+        changed = False
+
+        @staticmethod
+        def as_dict():
+            return {
+                "setpoint": 16,
+                "state": "holding",
+                "reason": "probe_stable",
+                "changed": False,
+                "fps": 40.0,
+                "target_fps": 40,
+            }
+
+    control.step = lambda **_kwargs: StableDecision()
+    p._auto_applied = True
+    p._gamescope_stats.read = lambda expected_appid=None: {
+        "fps": 40.0,
+        "focus": "42",
+        "age_s": 0,
+        "sample_at": 100,
+        "available": True,
+        "reason": "ok",
+    }
+    p._power_reader.read = lambda: {"watts": 16.0, "gpu_busy": 80.0}
+    monkeypatch.setattr(
+        p._auto_learning,
+        "record",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("recorded")
+        ),
+    )
+
+    asyncio.run(p._auto_tick())
+
+
+def test_unconfirmed_auto_apply_pauses_without_learning(Plugin, monkeypatch):
+    p = Plugin()
+    p._init()
+    p._set_current_appid("42")
+    p._tdp_profiles.set_auto_config("global", 40, 16)
+    p._tdp_profiles.set_auto_tdp("global", True)
+    p._gamescope_stats.read = lambda expected_appid=None: {
+        "fps": 40.0,
+        "focus": "42",
+        "age_s": 0,
+        "sample_at": 100,
+        "available": True,
+        "reason": "ok",
+    }
+    p._power_reader.read = lambda: {"watts": 16.0, "gpu_busy": 80.0}
+    p._tdp_backend.set_levels = lambda pl1, pl2, pl3, ac: TdpResult(
+        pl1, None, True, "write accepted without readback"
+    )
+    learned = []
+    monkeypatch.setattr(
+        p._auto_learning,
+        "record",
+        lambda *_args, **_kwargs: learned.append(True),
+    )
+
+    asyncio.run(p._auto_tick())
+
+    assert p._auto_status["state"] == "paused"
+    assert p._auto_status["reason"] == "apply_unconfirmed"
+    assert learned == []
+
+
+def test_auto_tick_uses_each_fps_sample_only_once(Plugin):
+    p = Plugin()
+    p._init()
+    p._set_current_appid("42")
+    p._tdp_profiles.set_auto_config("global", 40, 16)
+    p._tdp_profiles.set_auto_tdp("global", True)
+    p._gamescope_stats.read = lambda expected_appid=None: {
+        "fps": 30.0,
+        "focus": "42",
+        "age_s": 2.0,
+        "sample_at": 100.0,
+        "available": True,
+        "reason": "ok",
+    }
+    p._power_reader.read = lambda: {"watts": 16.0, "gpu_busy": 90.0}
+    p._tdp_backend.set_levels_calls = 0
+
+    asyncio.run(p._auto_tick())
+    first_calls = p._tdp_backend.set_levels_calls
+    asyncio.run(p._auto_tick())
+
+    assert p._auto_setpoint == 18
+    assert first_calls == 1
+    assert p._tdp_backend.set_levels_calls == first_calls
+
+
+def test_auto_session_reset_keeps_one_diagnostic_transition(Plugin):
+    p = Plugin()
+    p._init()
+
+    p._reset_auto_session("fps_reader_error")
+    first_size = len(p._auto_history)
+    p._reset_auto_session("fps_reader_error")
+
+    assert first_size == 1
+    assert len(p._auto_history) == first_size
+    assert p._auto_history[-1]["reason"] == "fps_reader_error"
+
+
+def test_editing_global_auto_config_does_not_restart_an_owned_game_session(Plugin):
+    p = Plugin()
+    p._init()
+    p._set_current_appid("42")
+    p._tdp_profiles.set_auto_config("game", 60, 22, appid="42")
+    p._tdp_profiles.set_auto_tdp("game", True, appid="42")
+    control, _created = p._ensure_auto_session(on_ac=True)
+
+    asyncio.run(p.set_auto_tdp_config(45, 18, "global", None, "42"))
+
+    assert p._auto_controller is control
+    assert p._auto_controller.target_fps == 60
+    assert p._auto_setpoint == 22
+
+
+def test_follow_global_switches_to_the_new_auto_seed_before_applying(Plugin):
+    p = Plugin()
+    p._init()
+    p._set_current_appid("42")
+    p._tdp_profiles.set_auto_config("global", 45, 18)
+    p._tdp_profiles.set_auto_tdp("global", True)
+    p._tdp_profiles.set_auto_config("game", 60, 22, appid="42")
+    p._tdp_profiles.set_auto_tdp("game", True, appid="42")
+    p._ensure_auto_session(on_ac=True)
+
+    state = asyncio.run(p.set_tdp_follow_global(True, "42", "42"))
+
+    assert state["auto_config"]["target_fps"] == 45
+    assert p._auto_controller.target_fps == 45
+    assert p._tdp_backend._levels[0] == 18
+
+
+def test_auto_runtime_flattens_hidden_boost_rails(Plugin):
+    p = Plugin()
+    p._init()
+    p._set_current_appid("42")
+    p._tdp_profiles.set_boost_mode("global", "auto")
+    p._tdp_profiles.set_auto_config("global", 40, 18)
+    p._tdp_profiles.set_auto_tdp("global", True)
+    p._ensure_auto_session(on_ac=True)
+
+    command = p._capture_tdp_command("auto-flat", on_ac=True)
+
+    assert command.logical_requested == {"pl1": 18, "pl2": 18, "pl3": 18}
+
+
+def test_auto_runtime_uses_auto_backend_route_only(Plugin):
+    p = Plugin()
+    p._init()
+    calls = []
+    backend = p._tdp_backend
+
+    def apply_targets(targets, ac):
+        calls.append(("manual", dict(targets)))
+        return backend.set_levels(
+            targets["pl1"],
+            targets.get("pl2", targets["pl1"]),
+            targets.get("pl3", targets["pl1"]),
+            ac,
+        )
+
+    def apply_auto_targets(targets, ac):
+        calls.append(("auto", dict(targets)))
+        return backend.set_levels(
+            targets["pl1"],
+            targets.get("pl2", targets["pl1"]),
+            targets.get("pl3", targets["pl1"]),
+            ac,
+        )
+
+    backend.apply_targets = apply_targets
+    backend.apply_auto_targets = apply_auto_targets
+
+    manual = p._capture_tdp_command("manual", on_ac=True)
+    assert manual.auto_tdp is False
+    assert p._execute_tdp_command(manual).ok
+
+    p._set_current_appid("42")
+    p._tdp_profiles.set_auto_config("global", 40, 18)
+    p._tdp_profiles.set_auto_tdp("global", True)
+    p._ensure_auto_session(on_ac=True)
+    automatic = p._capture_tdp_command("auto", on_ac=True)
+    assert automatic.auto_tdp is True
+    assert p._execute_tdp_command(automatic).ok
+
+    assert [route for route, _targets in calls] == ["manual", "auto"]
+
+
+def test_auto_confirmation_delegates_to_backend_full_surface_contract(Plugin):
+    p = Plugin()
+    p._init()
+    p._tdp_backend._applied = 18
+    p._tdp_backend._levels = (18, 18, 18)
+    calls = []
+    p._tdp_backend.auto_observation_confirmed = (
+        lambda observation, setpoint, tolerance: calls.append(
+            (observation, setpoint, tolerance)
+        )
+        or False
+    )
+    observation = p._tdp_backend.observe()
+
+    assert p._auto_observation_confirmed(observation, 18) is False
+    assert calls == [(observation, 18, 0)]
+
+
+def test_game_entry_applies_auto_initial_tdp_before_returning(Plugin):
+    p = Plugin()
+    p._init()
+    p._tdp_profiles.set_pl1("global", 10)
+    p._tdp_profiles.set_auto_config("global", 40, 18)
+    p._tdp_profiles.set_auto_tdp("global", True)
+
+    asyncio.run(p.set_current_game("42"))
+
+    assert p._tdp_backend._levels[0] == 18
+
+
+def test_resume_detection_invalidates_auto_session(Plugin):
+    p = Plugin()
+    p._init()
+    p._set_current_appid("42")
+    p._tdp_profiles.set_auto_tdp("global", True)
+    p._ensure_auto_session(on_ac=True)
+
+    p._log_lifecycle_event({"event": "resume_detected"})
+
+    assert p._auto_controller is None
+    assert p._auto_status["reason"] == "resume"
+
+
+def test_auto_config_invalid_initial_tdp_is_safely_normalized(Plugin):
+    p = Plugin()
+    p._init()
+
+    state = asyncio.run(p.set_auto_tdp_config(40, "invalid", "global"))
+
+    assert state["global_auto_config"]["initial_tdp"] == 10

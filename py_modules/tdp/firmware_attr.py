@@ -117,6 +117,7 @@ class FirmwareAttrBackend(TDPBackend):
             if rail in self._primary_rails or rail in self._legacy
         )
         self.supports_levels = any(rail != "pl1" for rail in self._rails)
+        self.auto_tdp_safe = self._auto_tdp_rails_ready()
         self._runtime_lock_payload = self._safety_lock.load_payload()
         self._write_circuit_open = (
             self._runtime_lock_payload.get("detail")
@@ -145,6 +146,17 @@ class FirmwareAttrBackend(TDPBackend):
             and complete_legacy
             and reassert_s > 0
             else None
+        )
+
+    def _auto_tdp_rails_ready(self):
+        return (
+            self.supported
+            and len(self._primary_rails) == len(_RAIL_ATTRS)
+            and all(
+                self._read_int(self._attr(attr)) is not None
+                and os.access(self._attr(attr), os.W_OK)
+                for _rail, attr in _RAIL_ATTRS
+            )
         )
 
     def _live_bounds(self, attr):

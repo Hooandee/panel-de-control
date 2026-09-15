@@ -65,7 +65,10 @@ vi.mock("./customize/modules", () => ({ hydrateModules: vi.fn() }));
 vi.mock("./launch/gameContextMenu", () => ({ installGameContextMenu: () => () => {} }));
 vi.mock("./pluginListLocalizer", () => ({ startPluginListLocalizer: () => () => {} }));
 vi.mock("./system/pdcStorage", () => ({ onPrefsHealed: () => () => {} }));
-vi.mock("./system/uiActivity", () => ({ shutdownUiActivity: vi.fn() }));
+vi.mock("./system/uiActivity", () => ({
+  shutdownUiActivity: vi.fn(),
+  startSteamOverlayActivity: vi.fn(() => () => {}),
+}));
 vi.mock("./themes/deckyCssLoaderHost", () => ({ configureDeckyCssLoaderHost: () => () => {} }));
 vi.mock("./themes/panelThemeInstallHost", () => ({
   configurePanelThemeInstallHost: (host: Record<string, unknown>) => {

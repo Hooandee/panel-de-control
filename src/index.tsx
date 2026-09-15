@@ -36,7 +36,10 @@ import {
   refreshQamShortcutPreference,
   startQamShortcut,
 } from "./system/qamShortcut";
-import { shutdownUiActivity } from "./system/uiActivity";
+import {
+  shutdownUiActivity,
+  startSteamOverlayActivity,
+} from "./system/uiActivity";
 import { StandardDeckyContent } from "./components/StandardDeckyContent";
 import { DirectQamShortcut } from "./components/DirectQamShortcut";
 import { configureDeckyCssLoaderHost } from "./themes/deckyCssLoaderHost";
@@ -118,6 +121,7 @@ export default definePlugin(() => {
   // running game to the backend so auto-TDP / telemetry / fan auto-apply engage
   // on a game already running after a plugin restart. See tdp/gameWatcher.ts.
   const stopGameWatcher = startGameWatcher();
+  const stopSteamOverlayActivity = startSteamOverlayActivity();
   // Persistent ambient-dim controller for download mode: also runs at plugin scope
   // so the screen keeps dimming/waking while a game downloads with the QAM closed.
   const stopEcoAmbient = startEcoAmbient();
@@ -161,6 +165,7 @@ export default definePlugin(() => {
       directLifecycle.abort();
       qamShortcut.dispose();
       stopPrefsHealed();
+      stopSteamOverlayActivity();
       shutdownUiActivity();
       stopGameWatcher();
       stopEcoAmbient();

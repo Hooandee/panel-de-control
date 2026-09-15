@@ -26,6 +26,13 @@ def is_gpd_win_mini_2025_tdp_recovery(device, root: str = "/") -> bool:
     )
 
 
+def is_msi_claw_8_ai_plus_a2vm(device, root: str = "/") -> bool:
+    return (
+        getattr(device, "key", None) == "msi_claw_8_ai_plus"
+        and _read_dmi(root, "product_name").casefold() == "claw 8 ai+ a2vm"
+    )
+
+
 def asus_tdp_authoritative_reassert_s(device, root: str = "/") -> float | None:
     vendor = _read_dmi(root, "sys_vendor").casefold()
     product = _read_dmi(root, "product_name").casefold()

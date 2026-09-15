@@ -16,6 +16,7 @@ export interface LearningInputs {
   tdpSupported: boolean;
   /** This device can WRITE fan curves (Null backend → false). */
   fanSupported: boolean;
+  autoTdpActive?: boolean;
 }
 
 export interface LearningBadge {
@@ -35,9 +36,10 @@ export function learningBadge({
   telemetryOn,
   tdpSupported,
   fanSupported,
+  autoTdpActive = false,
 }: LearningInputs): LearningBadge {
   const tags: LearningTag[] = [];
-  if (tdpSupported) tags.push("tdp");
+  if (tdpSupported && !autoTdpActive) tags.push("tdp");
   if (fanSupported) tags.push("fans");
 
   // Only learns in-game; only if there's something learnable at all.

@@ -245,6 +245,30 @@ def test_force_probe_keeps_backend_when_reselection_is_unsafe(
     assert plugin._tdp_status == status
 
 
+def test_failed_runtime_recovery_is_retried_by_the_next_probe(Plugin):
+    plugin = Plugin()
+    plugin._init()
+    backend = plugin._tdp_backend
+    backend.safety_locked = True
+    backend.probe = lambda: not backend.safety_locked
+    attempts = []
+
+    def recover():
+        attempts.append(True)
+        if len(attempts) == 1:
+            return {"ok": False, "detail": "temporary failure"}
+        backend.safety_locked = False
+        return {"ok": True, "detail": "recovered"}
+
+    backend.recover_runtime_transaction = recover
+
+    assert asyncio.run(plugin._probe_tdp_backend(force=True)) is False
+    assert plugin._tdp_reason == "recovery_pending"
+    assert asyncio.run(plugin._probe_tdp_backend(force=True)) is True
+    assert plugin._tdp_backend is backend
+    assert attempts == [True, True]
+
+
 @pytest.mark.parametrize("reselection_safe", (False, True))
 def test_route_loss_returns_previous_hhd_owner_without_double_writer(
     Plugin,
