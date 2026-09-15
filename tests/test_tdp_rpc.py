@@ -139,6 +139,8 @@ def test_get_tdp_state_shape(Plugin):
         "detected": False,
         "max_w": None,
         "source": None,
+        "status": "unsupported",
+        "reason": None,
     }
     assert st["request_min"] == 3
     assert "on_ac" in st and "watts" in st and "applied_w" in st

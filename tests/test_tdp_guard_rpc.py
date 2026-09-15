@@ -1249,6 +1249,8 @@ def test_cpu_gpu_diagnostics_keeps_deck_ppt_probe_failure_reason(plugin):
         "detected": False,
         "max_w": None,
         "source": None,
+        "status": "unsupported",
+        "reason": None,
     }
 
 
