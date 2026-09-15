@@ -61,6 +61,21 @@ describe("PowerArc Steam Deck PPT scale", () => {
 
     expect(screen.getByText("15W")).toBeTruthy();
     expect(screen.queryByText(/Fast/)).toBeNull();
+    expect(screen.queryByText("tdp.arc.overclocked")).toBeNull();
+  });
+
+  it("shows an overclocked pill for a configured Steam Deck baseline", () => {
+    render(
+      <PowerArc
+        watts={25}
+        limits={{ min: 3, default: 12, max: 25, max_ac: 25 }}
+        onAc
+        auto
+        overclocked
+      />,
+    );
+
+    expect(screen.getByText("tdp.arc.overclocked")).toBeTruthy();
   });
 
   it("does not overlap the requested marker with the identical minimum label", () => {

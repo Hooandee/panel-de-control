@@ -1245,6 +1245,11 @@ def test_cpu_gpu_diagnostics_keeps_deck_ppt_probe_failure_reason(plugin):
     deck = plugin._cpu_gpu_diagnostics()["steamdeck_ppt"]
 
     assert deck["probe_reason"] == "contradictory_labels"
+    assert deck["overclock"] == {
+        "detected": False,
+        "max_w": None,
+        "source": None,
+    }
 
 
 def test_confirmed_resume_is_written_to_plugin_log(plugin):

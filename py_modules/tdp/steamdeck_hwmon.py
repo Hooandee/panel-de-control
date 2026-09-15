@@ -204,6 +204,16 @@ class SteamDeckHwmonBackend(TDPBackend):
         pair = self._read_pair()
         return dict(pair) if pair is not None else None
 
+    def configured_tdp_ceiling(self, snapshot=None):
+        baseline = self.capture_ppt() if snapshot is None else snapshot
+        if not self.validate_ppt_snapshot(baseline):
+            return None
+        capability = self.ppt_capability()
+        if not capability["supported"]:
+            return None
+        slow = min(int(baseline["slow"]), int(capability["slow"]["max"]))
+        return slow if slow > self._fallback.max_ac_w else None
+
     @staticmethod
     def validate_ppt_snapshot(snapshot):
         if not isinstance(snapshot, dict):

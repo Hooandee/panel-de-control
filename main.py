@@ -2247,6 +2247,26 @@ class Plugin:
         except Exception:  # noqa: BLE001
             return False
 
+    def _steamdeck_overclock_state(self) -> dict:
+        configured_ceiling = getattr(
+            self._tdp_backend,
+            "configured_tdp_ceiling",
+            None,
+        )
+        if not callable(configured_ceiling):
+            return {"detected": False, "max_w": None, "source": None}
+        baseline = self._settings.get("steamdeck_ppt_previous")
+        source = "handoff" if baseline is not None else "live"
+        try:
+            ceiling = configured_ceiling(baseline)
+        except Exception:  # noqa: BLE001
+            ceiling = None
+        return {
+            "detected": ceiling is not None,
+            "max_w": int(ceiling) if ceiling is not None else None,
+            "source": source,
+        }
+
     def _record_steamdeck_ppt(self, action, ok, reason=None) -> None:
         history = getattr(self, "_steamdeck_ppt_history", None)
         if history is None:
@@ -3851,9 +3871,7 @@ class Plugin:
             self._tdp_storage_migration_retry_at = 0.0
 
     def _limits(self):
-        """Device TDP limits with the user's opt-in ceilings applied (a single
-        chokepoint so every clamp/limit path honours the Ajustes toggles): the
-        battery-unlock preference, then the GPD Win 5 cooler boost."""
+        """Device TDP limits after opt-ins and a detected Deck SlowPPT ceiling."""
         # Chokepoint for the battery-unlock preference. Ignore it where the firmware
         # enforces the battery cap (Ally/Ally X) — the write would be refused, so the
         # reported ceiling must not claim the extra either.
@@ -3866,6 +3884,15 @@ class Plugin:
         experimental_max = self._device.experimental_tdp_max_ac
         if experimental_max and self._settings.get("experimental_tdp_unlock") is True:
             lim = lim.with_ac_max(experimental_max)
+        configured_max = self._steamdeck_overclock_state()["max_w"]
+        if configured_max is not None:
+            ceiling = max(lim.max_ac_w, configured_max)
+            lim = TdpLimits(
+                lim.min_w,
+                lim.default_w,
+                ceiling,
+                ceiling,
+            )
         return lim
 
     def _automatic_limits(self):
@@ -7651,6 +7678,7 @@ class Plugin:
                 "fast": capability.get("fast"),
                 "visual_max": capability.get("visual_max"),
                 "probe_reason": raw_ppt.get("ppt_reason"),
+                "overclock": self._steamdeck_overclock_state(),
                 "requested": tdp_state.get("requested"),
                 "applied": tdp_state.get("applied"),
                 "status": tdp_state.get("status"),
@@ -8493,6 +8521,7 @@ class Plugin:
         levels, active, ac = self._effective_levels(self._current_appid)
         global_levels, _active, _ac = self._effective_levels(None, ac)
         limits = self._limits()
+        overclock = self._steamdeck_overclock_state()
         ll = self._cap_level_limits(self._tdp_backend.level_limits(), active)
         eff = self._tdp_profiles.effective(self._current_appid)
         geff = self._tdp_profiles.effective(None)
@@ -8552,6 +8581,7 @@ class Plugin:
             "request_min": request_min,
             "limits": {"min": limits.min_w, "default": limits.default_w,
                        "max": limits.max_w, "max_ac": limits.max_ac_w},
+            "overclock": overclock,
             "on_ac": ac,
             "appid": self._current_appid,
             "has_game_profile": (self._current_appid is not None
@@ -8666,6 +8696,7 @@ class Plugin:
             "history": list(self._tdp_history),
             "steamdeck_ppt": {
                 "previous": self._settings.get("steamdeck_ppt_previous"),
+                "overclock": self._steamdeck_overclock_state(),
                 "recovery_blocked": bool(
                     getattr(self, "_steamdeck_ppt_recovery_blocked", False)
                 ),
