@@ -136,6 +136,17 @@ tus propias variables reutilizables entre juegos, ocultar los que no usas (las h
 versiones de Proton se ocultan solas) y saltar directo al juego que tengas abierto. También añade una
 entrada en el menú del juego en tu biblioteca.
 
+### Limpieza
+
+Consulta cuánto ocupan la Shader Cache y los prefijos de tus juegos y elige qué limpiar en cada
+uno, también en varios juegos a la vez. La lista incluye portadas, búsqueda y un botón de limpieza
+que permanece a mano al desplazarte. Los prefijos se seleccionan por separado y requieren
+confirmación: pueden contener partidas guardadas y ajustes que se perderían al borrarlos.
+
+Funciona con Steam nativo en Linux y sus bibliotecas. Los datos en uso o que no se pueden comprobar
+se conservan. Steam puede volver a crear o descargar la Shader Cache; el próximo inicio puede
+tardar más. El resultado muestra el tamaño aproximado de los datos borrados y se puede cerrar.
+
 ### Ajustes
 
 Idioma (con banderas, no un desplegable), el interruptor de "aprender de mi uso" (la telemetría es

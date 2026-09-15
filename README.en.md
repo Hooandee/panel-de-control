@@ -134,6 +134,17 @@ already had (EmuDeck, launchers, your manual tweaks). You can define your own va
 games, hide the ones you don't use (tools like Proton versions hide themselves), and jump straight to
 the game you're playing. It also adds an entry to the game's library context menu.
 
+### Cleanup (Limpieza)
+
+See how much space your games' Shader Cache and prefixes use, then choose what to clean for each
+game or across several games at once. The list includes cover art, search and a cleanup button
+that stays within reach as you scroll. Prefixes are selected separately and require confirmation:
+they may contain saved games and settings that would be lost when deleted.
+
+Supports native Steam on Linux and its libraries. Data in use or that cannot be verified is kept.
+Steam may rebuild or download Shader Cache again, so the next launch may take longer. The result
+shows the approximate size of deleted data and can be dismissed.
+
 ### Settings (Ajustes)
 
 Language (with flags, not a dropdown), the "learn from my usage" switch (telemetry is 100% local and
