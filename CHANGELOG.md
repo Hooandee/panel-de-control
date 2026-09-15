@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+## [0.49.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.48.1...panel-de-control-v0.49.0) (2026-09-15)
+
+
+### Español
+
+* **Limpieza:** Estrena un espacio para recuperar almacenamiento desde el modo Gaming sin complicaciones. Muestra cuánto ocupan los datos de cada juego, las capturas y las versiones personalizadas de Proton que ya no se usan; permite elegir varios elementos y decidir exactamente qué borrar. Panel de Control señala qué elementos merece la pena revisar sin seleccionarlos por ti, protege los datos en uso o que no puede comprobar y avisa antes de eliminar prefijos que podrían contener partidas sin Steam Cloud. Steam puede volver a crear la Shader Cache al lanzar el juego. ([#646](https://github.com/Hooandee/panel-de-control/pull/646))
+
+### English
+
+* **Cleanup:** Introduces a simple way to reclaim storage directly from Gaming Mode. It shows how much space is used by each game's data, captures, and unused custom Proton versions, lets you select several items, and gives you precise control over what is removed. Panel de Control suggests items worth reviewing without selecting anything for you, protects data that is in use or cannot be verified, and warns before removing prefixes that may contain saves without Steam Cloud. Steam may rebuild the Shader Cache when the game is launched. ([#646](https://github.com/Hooandee/panel-de-control/pull/646))
+
+### Italiano
+
+* **Pulizia:** Introduce un modo semplice per recuperare spazio direttamente dalla modalità Gaming. Mostra quanto occupano i dati di ogni gioco, le catture e le versioni personalizzate di Proton non più utilizzate, permette di selezionare più elementi e di decidere con precisione cosa eliminare. Panel de Control segnala gli elementi che vale la pena controllare senza selezionare nulla al posto tuo, protegge i dati in uso o che non può verificare e avvisa prima di eliminare prefissi che potrebbero contenere salvataggi senza Steam Cloud. Steam può ricreare la Shader Cache all'avvio del gioco. ([#646](https://github.com/Hooandee/panel-de-control/pull/646))
+
+### Deutsch
+
+* **Bereinigung:** Bietet eine einfache Möglichkeit, direkt im Gaming-Modus Speicherplatz freizugeben. Die Ansicht zeigt den Speicherbedarf der Daten einzelner Spiele, der Aufnahmen und nicht mehr verwendeter benutzerdefinierter Proton-Versionen, erlaubt die Auswahl mehrerer Einträge und gibt dir die volle Kontrolle darüber, was entfernt wird. Panel de Control weist auf prüfenswerte Einträge hin, ohne etwas automatisch auszuwählen, schützt verwendete oder nicht überprüfbare Daten und warnt vor dem Löschen von Präfixen, die Spielstände ohne Steam Cloud enthalten könnten. Steam kann den Shader Cache beim Starten des Spiels neu erstellen. ([#646](https://github.com/Hooandee/panel-de-control/pull/646))
+
 ## [0.48.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.48.0...panel-de-control-v0.48.1) (2026-09-14)
 
 
