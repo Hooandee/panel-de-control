@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.49.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.49.0...panel-de-control-v0.49.1) (2026-09-15)
+
+
+### Bug Fixes
+
+* preserve AMD and Intel CPU frequency across boost changes ([#663](https://github.com/Hooandee/panel-de-control/issues/663)) ([c752b88](https://github.com/Hooandee/panel-de-control/commit/c752b885b426839bfe556789d9415ebf85b8bd0e))
+
 ## [0.49.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.48.1...panel-de-control-v0.49.0) (2026-09-15)
 
 
