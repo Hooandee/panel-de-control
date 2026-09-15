@@ -412,6 +412,8 @@ export const de: Record<string, string> = {
   "themes.group.animations": "Animationen",
   "themes.group.performance": "Leistung",
   "themes.group.compatibility": "Kompatibilität",
+  "themes.group.sections": "Theme-Bereiche",
+  "themes.group.sectionsDescription": "Wähle, welche Bereiche von Steam das Theme verwenden.",
   "audio.unsupported": "Der Equalizer ist in dieser Systemversion nicht verfügbar.",
   "audio.inherit": "Verwendet die globale Einstellung, bis du hier etwas änderst.",
   "audio.enable": "Equalizer",
