@@ -201,8 +201,35 @@ class SteamDeckHwmonBackend(TDPBackend):
         return {"slow": slow, "fast": fast} if slow is not None and fast is not None else None
 
     def capture_ppt(self):
-        pair = self._read_pair()
+        capability, _ = self._capability()
+        if capability is None:
+            return None
+        pair = self._read_pair(capability["surface"])
         return dict(pair) if pair is not None else None
+
+    def configured_tdp_state(self, snapshot=None):
+        capability, reason = self._capability()
+        if capability is None:
+            return {
+                "status": "unavailable",
+                "max_w": None,
+                "reason": reason,
+            }
+        baseline = (
+            self._read_pair(capability["surface"])
+            if snapshot is None
+            else snapshot
+        )
+        if not self.validate_ppt_snapshot(baseline):
+            return {
+                "status": "unavailable",
+                "max_w": None,
+                "reason": "snapshot_invalid",
+            }
+        slow = min(int(baseline["slow"]), int(capability["slow"]["max"]))
+        if slow <= self._fallback.max_ac_w:
+            return {"status": "stock", "max_w": None, "reason": None}
+        return {"status": "overclocked", "max_w": slow, "reason": None}
 
     @staticmethod
     def validate_ppt_snapshot(snapshot):

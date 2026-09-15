@@ -41,6 +41,7 @@ interface PowerArcProps {
   baseMarkerWatts?: number | null;
   slowMarkerWatts?: number | null;
   fastMarkerWatts?: number | null;
+  overclocked?: boolean;
 }
 
 export const PowerArc: FC<PowerArcProps> = ({
@@ -56,6 +57,7 @@ export const PowerArc: FC<PowerArcProps> = ({
   baseMarkerWatts = null,
   slowMarkerWatts = null,
   fastMarkerWatts = null,
+  overclocked = false,
 }) => {
   const { t } = useI18n();
 
@@ -195,7 +197,6 @@ export const PowerArc: FC<PowerArcProps> = ({
         <text x={ex} y={ey + 16} fill={theme.color.textMuted} fontSize="10" textAnchor="middle">{scaleMax}W{chargerHeadroom ? " ⚡" : ""}</text>
       </svg>
       <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
-        {/* Zone icon — hidden in auto mode to make room for AUTO chip */}
         {!auto && <div style={{ lineHeight: 0 }}><ZoneIcon size={26} color={color} /></div>}
         <div style={{ fontSize: 32, fontWeight: 700, color: theme.color.textPrimary, lineHeight: 1.15 }}>
           {Math.round(heroWatts)}
@@ -216,7 +217,22 @@ export const PowerArc: FC<PowerArcProps> = ({
             ⚡ {t("tdp.arc.boostHw")}
           </div>
         )}
-        {/* AUTO chip — replaces the zone label in auto mode */}
+        {overclocked && (
+          <div style={{
+            fontSize: 8,
+            fontWeight: 700,
+            lineHeight: 1.4,
+            letterSpacing: "0.08em",
+            textTransform: "uppercase",
+            color: theme.color.warn,
+            border: `1px solid ${theme.color.warn}`,
+            borderRadius: 999,
+            padding: "1px 6px",
+            marginTop: 2,
+          }}>
+            {t("tdp.arc.overclocked")}
+          </div>
+        )}
         {auto ? (
           <div style={{
             fontSize: 9,
@@ -233,7 +249,6 @@ export const PowerArc: FC<PowerArcProps> = ({
         ) : (
           <div style={{ fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color }}>{t(`tdp.zone.${zone.key}`)}</div>
         )}
-        {/* GPU load — shown in auto mode when data is available */}
         {auto && gpuBusy !== null && (
           <div style={{ fontSize: 9, color: theme.color.textMuted, marginTop: 2 }}>
             {t("tdp.arc.gpu", { pct: Math.round(gpuBusy) })}

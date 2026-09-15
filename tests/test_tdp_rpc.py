@@ -135,6 +135,13 @@ def test_get_tdp_state_shape(Plugin):
     st = asyncio.run(Plugin().get_tdp_state())
     assert st["supported"] is True and st["backend"] == "fake"
     assert st["limits"] == {"min": 5, "default": 15, "max": 20, "max_ac": 60}
+    assert st["overclock"] == {
+        "detected": False,
+        "max_w": None,
+        "source": None,
+        "status": "unsupported",
+        "reason": None,
+    }
     assert st["request_min"] == 3
     assert "on_ac" in st and "watts" in st and "applied_w" in st
     assert "global_watts" in st and isinstance(st["global_watts"], int)

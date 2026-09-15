@@ -863,6 +863,7 @@ export const it: Record<string, string> = {
   "tdp.ownership.unverifiable": "Pannello di controllo mantiene il limite, ma questo dispositivo non consente di verificarlo",
   "tdp.ownership.conflict": "Un altro gestore o il firmware sta modificando il TDP · Pannello di controllo lo mantiene",
   "tdp.arc.auto": "AUTO",
+  "tdp.arc.overclocked": "OVERCLOCK",
   "tdp.arc.target": "OBIETTIVO",
   "tdp.arc.gpu": "GPU {pct}%",
   "tdp.arc.boostHw": "boost HW",
