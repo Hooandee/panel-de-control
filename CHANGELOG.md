@@ -2,12 +2,23 @@
 
 ## Unreleased
 
-## [0.49.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.49.0...panel-de-control-v0.49.1) (2026-09-15)
+## 0.49.1 (2026-09-15)
 
+### Español
 
-### Bug Fixes
+* **CPU:** Corrige los bloqueos al cambiar Turbo Boost con una frecuencia manual en equipos AMD e Intel. Conserva el ajuste elegido y permite volver al modo automático sin que los controles de CPU queden atascados.
 
-* preserve AMD and Intel CPU frequency across boost changes ([#663](https://github.com/Hooandee/panel-de-control/issues/663)) ([c752b88](https://github.com/Hooandee/panel-de-control/commit/c752b885b426839bfe556789d9415ebf85b8bd0e))
+### English
+
+* **CPU:** Fixes controls getting stuck when changing Turbo Boost with a manual frequency on AMD and Intel devices. Preserves the selected setting and allows switching back to automatic mode normally.
+
+### Italiano
+
+* **CPU:** Risolve i blocchi quando si cambia Turbo Boost con una frequenza manuale sui dispositivi AMD e Intel. Mantiene l'impostazione scelta e permette di tornare alla modalità automatica senza bloccare i controlli della CPU.
+
+### Deutsch
+
+* **CPU:** Behebt blockierte CPU-Regler beim Umschalten von Turbo Boost mit manuell eingestellter Frequenz auf AMD- und Intel-Geräten. Die gewählte Einstellung bleibt erhalten, und der Wechsel zurück in den Automatikmodus funktioniert wieder.
 
 ## [0.49.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.48.1...panel-de-control-v0.49.0) (2026-09-15)
 
