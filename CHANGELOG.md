@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.49.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.48.1...panel-de-control-v0.49.0) (2026-09-15)
+
+
+### Features
+
+* expand Steam cleanup to captures and Proton ([#646](https://github.com/Hooandee/panel-de-control/issues/646)) ([1c9baec](https://github.com/Hooandee/panel-de-control/commit/1c9baec4164558f48212e7fbe0185eddbef16ceb))
+
 ## [0.48.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.48.0...panel-de-control-v0.48.1) (2026-09-14)
 
 
