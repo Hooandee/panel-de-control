@@ -190,7 +190,7 @@ class _TdpCommand:
     safe_bounds: dict
     primary_rail: str
     on_ac: bool
-    ppt_recovery_pending: bool
+    ppt_probe_pending: bool
 
 
 @dataclass(frozen=True)
@@ -2364,15 +2364,15 @@ class Plugin:
         self._record_steamdeck_ppt("restore", True)
         return True
 
-    def _steamdeck_ppt_handoff_pending(self, overclock=None) -> bool:
-        if self._settings.get("steamdeck_ppt_previous") is None:
+    def _steamdeck_ppt_probe_pending(self, overclock=None) -> bool:
+        if self._device.key not in ("steam_deck_lcd", "steam_deck_oled"):
             return False
         state = overclock or self._steamdeck_overclock_state()
         return state["status"] in {"unavailable", "unsupported"}
 
     def _restore_steamdeck_startup_ppt(self) -> bool:
         return self._restore_steamdeck_ppt(
-            preserve_ownership=self._steamdeck_ppt_handoff_pending()
+            preserve_ownership=self._steamdeck_ppt_probe_pending()
         )
 
     def _prepare_steamdeck_ppt(self, command):
@@ -4367,7 +4367,7 @@ class Plugin:
             safe_bounds=safe,
             primary_rail=getattr(backend, "primary_rail", "pl1"),
             on_ac=ac,
-            ppt_recovery_pending=self._steamdeck_ppt_handoff_pending(overclock),
+            ppt_probe_pending=self._steamdeck_ppt_probe_pending(overclock),
         )
 
     def _advance_tdp_generation(self):
@@ -4472,14 +4472,14 @@ class Plugin:
                 True,
                 "tdp-control-disabled",
             )
-        if command.ppt_recovery_pending:
+        if command.ppt_probe_pending:
             self._tdp_status = "rejected"
-            self._tdp_reason = "steamdeck_ppt_recovery_pending"
+            self._tdp_reason = "steamdeck_ppt_probe_pending"
             result = TdpResult(
                 logical_watts,
                 None,
                 False,
-                "steamdeck-ppt-recovery-pending",
+                "steamdeck-ppt-probe-pending",
             )
             self._record_tdp_transition(
                 command.reason,
@@ -4953,9 +4953,9 @@ class Plugin:
             self._tdp_reason = "control_disabled"
             self._tdp_reconcile_memory = ReconcileMemory()
             return
-        if command.ppt_recovery_pending:
+        if command.ppt_probe_pending:
             self._tdp_status = "rejected"
-            self._tdp_reason = "steamdeck_ppt_recovery_pending"
+            self._tdp_reason = "steamdeck_ppt_probe_pending"
             self._tdp_targets = None
             self._tdp_reconcile_memory = ReconcileMemory()
             return
