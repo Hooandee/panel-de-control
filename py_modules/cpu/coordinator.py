@@ -45,6 +45,11 @@ class CpuCoordinator:
             else {}
         )
         requested = diagnostics.get("requested")
+        checkpoint = getattr(self._frequency, "checkpoint", None)
+        boost_changes_frequency_bounds = bool(
+            diagnostics.get("reason") is None
+            and getattr(self._frequency, "boost_changes_frequency_bounds", False)
+        )
         return {
             "cores": self._cores.active() if self._supported(self._cores) else None,
             "smt": self._smt.enabled() if self._supported(self._smt) else None,
@@ -54,12 +59,22 @@ class CpuCoordinator:
                 if isinstance(requested, (list, tuple)) and len(requested) == 2
                 else None
             ),
+            "boost_changes_frequency_bounds": boost_changes_frequency_bounds,
+            "frequency_checkpoint": (
+                checkpoint()
+                if boost_changes_frequency_bounds and callable(checkpoint)
+                else None
+            ),
         }
 
     def _rollback(self, completed, snapshot):
         ok = True
         completed = set(completed)
-        if "frequency" in completed:
+        boost_first = snapshot.get("boost_changes_frequency_bounds", False)
+        if boost_first and "boost" in completed and not self._boost.set(snapshot["boost"]):
+            ok = False
+        checkpoint = snapshot.get("frequency_checkpoint")
+        if "frequency" in completed or "boost" in completed and checkpoint is not None:
             if (
                 self._supported(self._smt)
                 and not self._smt.enabled()
@@ -74,11 +89,14 @@ class CpuCoordinator:
             ):
                 ok = False
             previous = snapshot.get("frequency")
-            restored_frequency = (
-                self._frequency.set_window(*previous)
-                if previous is not None
-                else self._frequency.set_auto()
-            )
+            if checkpoint is not None:
+                restored_frequency = self._frequency.restore_checkpoint(checkpoint)
+            else:
+                restored_frequency = (
+                    self._frequency.set_window(*previous)
+                    if previous is not None
+                    else self._frequency.set_auto()
+                )
             safe_auto_noop = (
                 previous is None
                 and restored_frequency.status == "unverifiable"
@@ -86,7 +104,7 @@ class CpuCoordinator:
             )
             if not restored_frequency.ok and not safe_auto_noop:
                 ok = False
-        if "boost" in completed and not self._boost.set(snapshot["boost"]):
+        if not boost_first and "boost" in completed and not self._boost.set(snapshot["boost"]):
             ok = False
         if "smt" in completed and not self._smt.set(snapshot["smt"]):
             ok = False
@@ -123,7 +141,12 @@ class CpuCoordinator:
                     result.status == "unverifiable"
                     and result.reason == "baseline_unavailable"
                 )
-                if not result.ok and not safe_auto_noop:
+                incomplete_restore = (
+                    result.status == "clamped"
+                    and result.reason == "baseline_clamped"
+                    and not preserve_frequency_ownership
+                )
+                if incomplete_restore or not result.ok and not safe_auto_noop:
                     failures.append(
                         f"frequency_{result.reason or 'apply_failed'}"
                     )

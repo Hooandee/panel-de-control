@@ -12,6 +12,7 @@ from sysfs import read_int, read_str, write_str
 _CPUFREQ = "sys/devices/system/cpu/cpufreq"
 _POLICY_NAME = re.compile(r"policy([0-9]+)$")
 _APPLIED_UNSET = object()
+_AMD_PSTATE_DRIVERS = {"amd-pstate", "amd-pstate-epp"}
 
 
 def _parse_cpu_list(value):
@@ -100,6 +101,7 @@ class NullCpuFrequency:
             "policies": [],
             "drivers": [],
             "policy_state": [],
+            "last_failure": None,
         }
 
 
@@ -122,6 +124,10 @@ class LinuxCpuFrequency:
             os.path.join(root, "proc/sys/kernel/random/boot_id")
         )
         self._durable_state_reason = None
+        self._last_failure = None
+        self._failure_captured = False
+        self._attempt_policies = self._policies
+        self._attempt_targets = {}
         self._load_persisted_state(persisted_state)
 
     @staticmethod
@@ -144,6 +150,61 @@ class LinuxCpuFrequency:
             )
             for policy in policies
         )
+
+    def _baseline_identity(self, policy):
+        identity = self._policy_identity(policy)
+        if identity in (self._baseline or {}):
+            return identity
+        if policy.driver in _AMD_PSTATE_DRIVERS:
+            # amd-pstate changes cpuinfo_max_freq when boost changes, without
+            # replacing the policy. Transaction fingerprints remain exact.
+            matches = [
+                saved for saved in (self._baseline or {})
+                if saved[:5] == identity[:5]
+            ]
+            if len(matches) == 1:
+                return matches[0]
+        return None
+
+    def _can_reapply_limited_window(self, requested):
+        return requested == self._requested and all(
+            policy.driver in _AMD_PSTATE_DRIVERS
+            and self._baseline_identity(policy) is not None
+            for policy in self._policies
+        )
+
+    @property
+    def boost_changes_frequency_bounds(self):
+        return bool(self._policies) and all(
+            policy.driver in _AMD_PSTATE_DRIVERS for policy in self._policies
+        )
+
+    def checkpoint(self):
+        if (
+            self._durable_state_reason == "ownership_state_invalid"
+            or self._refresh() is not None
+            or not self.boost_changes_frequency_bounds
+        ):
+            return None
+        windows = {}
+        for policy in self._policies:
+            window = policy.read_window()
+            if window is None:
+                return None
+            windows[self._policy_identity(policy)] = window
+        return {
+            "baseline": dict(self._baseline) if self._baseline else windows,
+            "requested": self._requested,
+        }
+
+    def restore_checkpoint(self, checkpoint):
+        requested = checkpoint["requested"]
+        if not self._replace_ownership(checkpoint["baseline"], requested):
+            return self._result(
+                False, "partial", requested,
+                {"attempted": False, "ok": None}, "ownership_persist_failed",
+            )
+        return self.set_window(*requested) if requested is not None else self.set_auto()
 
     @staticmethod
     def _identity_payload(identity):
@@ -185,10 +246,13 @@ class LinuxCpuFrequency:
         )
         if not owned:
             return None
-        return {
+        payload = {
             "version": 1,
             "boot_id": self._boot_id,
-            "requested": list(active_request) if active_request else None,
+            "requested": list(active_request) if active_request is not None else [
+                min(window[0] for window in owned.values()),
+                max(window[1] for window in owned.values()),
+            ],
             "baseline": [
                 {
                     "identity": self._identity_payload(identity),
@@ -197,6 +261,9 @@ class LinuxCpuFrequency:
                 for identity, window in sorted(owned.items())
             ],
         }
+        if active_request is None:
+            payload["restore_pending"] = True
+        return payload
 
     def _persist_ownership(
         self, baseline=_APPLIED_UNSET, requested=_APPLIED_UNSET
@@ -265,7 +332,7 @@ class LinuxCpuFrequency:
             self._durable_state_reason = "ownership_state_invalid"
             return
         self._baseline = baseline
-        self._requested = tuple(requested)
+        self._requested = None if state.get("restore_pending") is True else tuple(requested)
 
     def _refresh(self):
         policies, reason = _discover_policies(self._root)
@@ -416,6 +483,8 @@ class LinuxCpuFrequency:
         self, ok, status, requested, rollback, reason=None,
         applied=_APPLIED_UNSET,
     ):
+        if not ok and reason != "baseline_unavailable":
+            self._capture_failure(reason, requested)
         if applied is _APPLIED_UNSET:
             applied = self._aggregate_windows(
                 [policy.read_window() for policy in self._policies]
@@ -423,6 +492,57 @@ class LinuxCpuFrequency:
         return CpuFrequencyResult(
             ok, status, requested, applied, rollback, reason, self._epoch,
         )
+
+    def _capture_failure(self, reason, requested):
+        if self._failure_captured:
+            return
+        live, _discovery_reason = _discover_policies(self._root)
+        current = {policy.name: policy for policy in (live or ())}
+        previous = {policy.name: policy for policy in self._attempt_policies}
+        identities = {
+            name: self._policy_identity(policy) for name, policy in previous.items()
+        }
+        identities.update({identity[0]: identity for identity in (self._baseline or {})})
+        names = sorted(set(current) | set(identities))
+        fields = (
+            "name", "path", "driver", "related_cpus",
+            "hardware_min_khz", "hardware_max_khz",
+        )
+        rows = []
+        for name in names[:32]:
+            policy = current.get(name)
+            before = identities.get(name)
+            after = self._policy_identity(policy) if policy else None
+            changed = (
+                [field for index, field in enumerate(fields) if before[index] != after[index]]
+                if before is not None and after is not None
+                else ["missing"] if policy is None else []
+            )
+            if (
+                policy is not None and name in previous
+                and previous[name].affected_cpus != policy.affected_cpus
+            ):
+                changed.append("affected_cpus")
+            window = policy.read_window() if policy else None
+            target = self._attempt_targets.get(name)
+            rows.append({
+                "name": name,
+                "driver": policy.driver if policy else before[2],
+                "hardware_bounds": (
+                    [policy.hardware_min_khz, policy.hardware_max_khz]
+                    if policy else None
+                ),
+                "target": list(target) if target is not None else None,
+                "applied": list(window) if window is not None else None,
+                "identity_changed_fields": changed,
+            })
+        self._last_failure = {
+            "reason": reason,
+            "requested": list(requested) if requested is not None else None,
+            "policies": rows,
+            "policies_omitted": max(0, len(names) - len(rows)),
+        }
+        self._failure_captured = True
 
     def _verify_transaction(self, fingerprint, targets):
         refresh_reason = self._refresh()
@@ -441,6 +561,9 @@ class LinuxCpuFrequency:
 
     def set_window(self, minimum_khz, maximum_khz):
         requested = (minimum_khz, maximum_khz)
+        self._failure_captured = False
+        self._attempt_policies = self._policies
+        self._attempt_targets = {}
         reason = self._refresh()
         if reason is not None:
             return self._result(
@@ -473,7 +596,7 @@ class LinuxCpuFrequency:
         if (
             minimum_khz > maximum_khz
             or minimum_khz < envelope[0]
-            or maximum_khz > envelope[1]
+            or maximum_khz > envelope[1] and not self._can_reapply_limited_window(requested)
         ):
             return self._result(
                 False, "rejected", requested,
@@ -483,7 +606,7 @@ class LinuxCpuFrequency:
             baseline_names = {identity[0] for identity in self._baseline}
             identity_changed = any(
                 policy.name in baseline_names
-                and self._policy_identity(policy) not in self._baseline
+                and self._baseline_identity(policy) is None
                 for policy in self._policies
             )
             if identity_changed:
@@ -505,8 +628,9 @@ class LinuxCpuFrequency:
                 )
             snapshots[policy.name] = current
             targets[policy.name] = self._target_for(policy, requested)
+        self._attempt_targets = targets
         baseline_entries = {
-            self._policy_identity(policy): snapshots[policy.name]
+            self._baseline_identity(policy) or self._policy_identity(policy): snapshots[policy.name]
             for policy in self._policies
         }
         previous_baseline = (
@@ -530,6 +654,7 @@ class LinuxCpuFrequency:
                 policy, snapshots[policy.name], targets[policy.name]
             )
             if failure is not None:
+                self._capture_failure(failure, requested)
                 rollback = self._rollback(touched, snapshots)
                 if rollback["ok"]:
                     self._replace_ownership(
@@ -544,6 +669,7 @@ class LinuxCpuFrequency:
             transaction_fingerprint, targets
         )
         if verification_reason is not None:
+            self._capture_failure(verification_reason, requested)
             if verification_reason == "policy_topology_changed":
                 rollback = self._rollback(touched, snapshots)
                 remaining = {}
@@ -574,6 +700,9 @@ class LinuxCpuFrequency:
         )
 
     def set_auto(self, preserve_ownership=False):
+        self._failure_captured = False
+        self._attempt_policies = self._policies
+        self._attempt_targets = {}
         reason = self._refresh()
         if reason is not None:
             return self._result(
@@ -590,73 +719,63 @@ class LinuxCpuFrequency:
                     else "baseline_unavailable"
                 ),
             )
-        current_identities = {
-            self._policy_identity(policy) for policy in self._policies
+        matching = {
+            policy.name: identity for policy in self._policies
+            if (identity := self._baseline_identity(policy)) is not None
         }
-        if set(self._baseline) != current_identities:
-            matching = [
-                policy
-                for policy in self._policies
-                if self._policy_identity(policy) in self._baseline
-            ]
-            restored = True
-            remaining_baseline = dict(self._baseline)
-            for policy in matching:
-                identity = self._policy_identity(policy)
-                if not self._restore_pair(policy, self._baseline[identity]):
-                    restored = False
-                else:
-                    remaining_baseline.pop(identity, None)
-            if not remaining_baseline:
-                if (
-                    not preserve_ownership
-                    and not self._replace_ownership(None, None)
-                ):
-                    return self._result(
-                        False, "partial", None,
-                        {"attempted": bool(matching), "ok": restored},
-                        "ownership_clear_failed",
-                    )
-                return self._result(
-                    restored,
-                    "restored" if restored else "partial",
-                    None,
-                    {"attempted": bool(matching), "ok": restored},
-                    None if restored else "restore_failed",
-                )
-            if matching:
-                if (
-                    not preserve_ownership
-                    and not self._replace_ownership(
-                        remaining_baseline, self._requested
-                    )
-                ):
-                    return self._result(
-                        False, "partial", None,
-                        {"attempted": True, "ok": restored},
-                        "ownership_persist_failed",
-                    )
-                return self._result(
-                    False,
-                    "partial",
-                    None,
-                    {"attempted": True, "ok": restored},
-                    "baseline_stale" if restored else "restore_failed",
-                )
+        if not matching:
             return self._result(
                 False, "unverifiable", None,
                 {"attempted": False, "ok": None}, "baseline_stale",
             )
-        touched = []
+        complete = (
+            len(matching) == len(self._policies)
+            and set(matching.values()) == set(self._baseline)
+        )
+        remaining_baseline = dict(self._baseline)
         restored = True
         transaction_fingerprint = self._fingerprint
         targets = {}
+        self._attempt_targets = targets
         for policy in self._policies:
-            touched.append(policy)
-            identity = self._policy_identity(policy)
-            targets[policy.name] = self._baseline[identity]
-            if not self._restore_pair(policy, targets[policy.name]):
+            identity = matching.get(policy.name)
+            if identity is None:
+                continue
+            baseline = self._baseline[identity]
+            target = self._target_for(policy, baseline)
+            targets[policy.name] = target
+            if not self._restore_pair(policy, target):
                 restored = False
+                self._capture_failure("restore_failed", None)
+            elif target == baseline:
+                remaining_baseline.pop(identity, None)
+        if not complete:
+            if not remaining_baseline:
+                if not preserve_ownership and not self._replace_ownership(None, None):
+                    return self._result(
+                        False, "partial", None,
+                        {"attempted": True, "ok": restored}, "ownership_clear_failed",
+                    )
+                return self._result(
+                    restored, "restored" if restored else "partial", None,
+                    {"attempted": True, "ok": restored},
+                    None if restored else "restore_failed",
+                )
+            self._capture_failure("baseline_stale", None)
+            if (
+                not preserve_ownership
+                and not self._replace_ownership(remaining_baseline, self._requested)
+            ):
+                return self._result(
+                    False, "partial", None,
+                    {"attempted": True, "ok": restored},
+                    "ownership_persist_failed",
+                )
+            return self._result(
+                False, "partial", None,
+                {"attempted": True, "ok": restored},
+                "baseline_stale" if restored else "restore_failed",
+            )
         if not restored:
             return self._result(
                 False, "partial", None,
@@ -666,10 +785,22 @@ class LinuxCpuFrequency:
             transaction_fingerprint, targets
         )
         if verification_reason is not None:
+            self._capture_failure(verification_reason, None)
             return self._result(
                 False, "partial", None,
                 {"attempted": True, "ok": False}, verification_reason,
                 applied=applied,
+            )
+        if remaining_baseline:
+            if not self._replace_ownership(self._baseline, None):
+                return self._result(
+                    False, "partial", None,
+                    {"attempted": True, "ok": True},
+                    "ownership_persist_failed", applied=applied,
+                )
+            return self._result(
+                True, "clamped", None, {"attempted": True, "ok": True},
+                "baseline_clamped", applied=applied,
             )
         if (
             not preserve_ownership
@@ -713,6 +844,7 @@ class LinuxCpuFrequency:
             "policies": [policy.name for policy in self._policies],
             "drivers": sorted({policy.driver for policy in self._policies if policy.driver}),
             "policy_state": policy_state,
+            "last_failure": self._last_failure,
         }
 
 
