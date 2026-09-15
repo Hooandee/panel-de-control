@@ -178,6 +178,67 @@ def test_get_cpu_state_shape(tmp_path, monkeypatch):
     assert st["frequency"]["policy_state"][0]["name"] == "policy0"
 
 
+def test_cpu_report_retains_failure_readback_without_private_backend_data(
+    tmp_path, monkeypatch
+):
+    from cpu.coordinator import CpuCoordinatorResult
+
+    frequency = _FakeFrequency()
+    p = _make_plugin(
+        tmp_path, monkeypatch, smt=_FakeToggle(), boost=_FakeToggle(),
+        frequency=frequency,
+    )
+    p._init()
+    failure = {
+        "reason": "readback_mismatch",
+        "requested": [419_175, 4_000_000],
+        "policies": [{
+            "name": "policy0",
+            "driver": "amd-pstate-epp",
+            "hardware_bounds": [419_175, 5_134_889],
+            "target": [419_175, 4_000_000],
+            "applied": [419_175, 3_301_000],
+            "identity_changed_fields": [],
+            "path": "/home/private-user/sysfs/policy0",
+        }],
+        "policies_omitted": 0,
+        "raw_output": "/home/private-user/game",
+    }
+    original_diagnostics = frequency.diagnostics
+    monkeypatch.setattr(
+        frequency, "diagnostics",
+        lambda: {**original_diagnostics(), "last_failure": failure},
+    )
+    p._cpu_generation = 7
+    p._record_cpu_result(CpuCoordinatorResult(
+        False, "failed", 7, {"attempted": True, "ok": True},
+        "frequency_readback_mismatch",
+    ), "set_frequency")
+
+    frequency.window = (419_175, 5_134_889)
+    failure["policies"][0]["applied"] = [419_175, 5_134_889]
+    p._cpu_generation = 8
+    p._record_cpu_result(CpuCoordinatorResult(
+        True, "applied", 8, {"attempted": False, "ok": None},
+    ), "set_frequency_auto")
+    report = p._cpu_gpu_diagnostics()["cpu"]
+
+    snapshot = report["history"][0]["frequency_failure"]
+    assert snapshot["requested"] == [419_175, 4_000_000]
+    assert snapshot["policies"][0] == {
+        "name": "policy0",
+        "driver": "amd-pstate-epp",
+        "hardware_bounds": [419_175, 5_134_889],
+        "target": [419_175, 4_000_000],
+        "applied": [419_175, 3_301_000],
+        "identity_changed_fields": [],
+    }
+    assert report["last_failure"]["reason"] == "readback_mismatch"
+    assert report["last_failure"]["policies"][0]["target"] == [419_175, 4_000_000]
+    assert "frequency_failure" not in report["history"][1]
+    assert "private-user" not in str(report)
+
+
 def test_set_smt_toggles_and_persists(tmp_path, monkeypatch):
     smt = _FakeToggle(on=True)
     p = _make_plugin(tmp_path, monkeypatch, smt=smt, boost=_FakeToggle())

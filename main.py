@@ -6041,6 +6041,15 @@ class Plugin:
             "error_type": result.error_type,
             "rollback": result.rollback,
         }
+        if not result.ok and (result.error_code or "").startswith("frequency_"):
+            try:
+                failure = self._cpu_frequency_failure_diagnostic(
+                    self._cpu_frequency.diagnostics().get("last_failure")
+                )
+                if failure and result.error_code == f"frequency_{failure['reason']}":
+                    event["frequency_failure"] = failure
+            except Exception:  # noqa: BLE001
+                pass
         history.append(event)
         log = decky.logger.info if result.ok else decky.logger.warning
         log("CPU transition %s", json.dumps(event, sort_keys=True, separators=(",", ":")))
@@ -7514,6 +7523,35 @@ class Plugin:
             "max_mhz": value.get("max_mhz"),
         }
 
+    @staticmethod
+    def _cpu_frequency_failure_diagnostic(value):
+        if not isinstance(value, dict):
+            return None
+        identity_fields = {
+            "path", "driver", "related_cpus", "hardware_min_khz",
+            "hardware_max_khz", "affected_cpus", "missing",
+        }
+        policies = value.get("policies") or []
+        return {
+            "reason": value.get("reason"),
+            "requested": list(value["requested"]) if value.get("requested") else None,
+            "policies": [{
+                "name": policy.get("name"),
+                "driver": policy.get("driver"),
+                **{
+                    key: list(policy[key]) if policy.get(key) else None
+                    for key in ("hardware_bounds", "target", "applied")
+                },
+                "identity_changed_fields": [
+                    field for field in policy.get("identity_changed_fields", ())
+                    if field in identity_fields
+                ],
+            } for policy in policies[:32]],
+            "policies_omitted": (
+                value.get("policies_omitted", 0) + max(0, len(policies) - 32)
+            ),
+        }
+
     def _cpu_gpu_diagnostics(self) -> dict:
         """Allowlisted CPU/GPU/PPT diagnostics for private reports.
 
@@ -7545,6 +7583,9 @@ class Plugin:
                 "owned": bool(raw_cpu.get("owned")),
                 "drivers": list(raw_cpu.get("drivers") or ()),
                 "policies": policies,
+                "last_failure": self._cpu_frequency_failure_diagnostic(
+                    raw_cpu.get("last_failure")
+                ),
                 "last_result": ({
                     "generation": last_cpu.generation,
                     "ok": last_cpu.ok,
