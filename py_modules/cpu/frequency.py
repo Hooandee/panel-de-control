@@ -155,8 +155,10 @@ class LinuxCpuFrequency:
         identity = self._policy_identity(policy)
         if identity in (self._baseline or {}):
             return identity
-        if policy.driver in _AMD_PSTATE_DRIVERS:
-            # amd-pstate changes cpuinfo_max_freq when boost changes, without
+        if policy.driver in _AMD_PSTATE_DRIVERS or (
+            policy.driver == "intel_pstate" and self.boost_changes_frequency_bounds
+        ):
+            # P-state drivers change cpuinfo_max_freq when boost changes, without
             # replacing the policy. Transaction fingerprints remain exact.
             matches = [
                 saved for saved in (self._baseline or {})
@@ -167,16 +169,17 @@ class LinuxCpuFrequency:
         return None
 
     def _can_reapply_limited_window(self, requested):
-        return requested == self._requested and all(
-            policy.driver in _AMD_PSTATE_DRIVERS
-            and self._baseline_identity(policy) is not None
-            for policy in self._policies
+        return (
+            requested == self._requested
+            and self.boost_changes_frequency_bounds
+            and all(self._baseline_identity(policy) is not None for policy in self._policies)
         )
 
     @property
     def boost_changes_frequency_bounds(self):
-        return bool(self._policies) and all(
-            policy.driver in _AMD_PSTATE_DRIVERS for policy in self._policies
+        drivers = {policy.driver for policy in self._policies}
+        return bool(drivers) and (
+            drivers <= _AMD_PSTATE_DRIVERS or drivers == {"intel_pstate"}
         )
 
     def checkpoint(self):

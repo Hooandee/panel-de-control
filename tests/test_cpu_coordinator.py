@@ -667,8 +667,8 @@ def _static_frequency(tmp_path, driver):
     return frequency, persisted
 
 
-@pytest.mark.parametrize("driver", ["intel_pstate", "acpi-cpufreq"])
-def test_non_amd_boost_failure_does_not_capture_or_create_ownership(
+@pytest.mark.parametrize("driver", ["intel_cpufreq", "acpi-cpufreq"])
+def test_other_driver_boost_failure_does_not_capture_or_create_ownership(
     tmp_path, monkeypatch, driver
 ):
     frequency, persisted = _static_frequency(tmp_path, driver)
@@ -695,8 +695,8 @@ def test_non_amd_boost_failure_does_not_capture_or_create_ownership(
     assert frequency.get_window() == (600_000, 3_000_000)
 
 
-@pytest.mark.parametrize("driver", ["intel_pstate", "acpi-cpufreq"])
-def test_non_amd_rollback_keeps_frequency_before_boost(tmp_path, monkeypatch, driver):
+@pytest.mark.parametrize("driver", ["intel_cpufreq", "acpi-cpufreq"])
+def test_other_driver_rollback_keeps_frequency_before_boost(tmp_path, monkeypatch, driver):
     frequency, persisted = _static_frequency(tmp_path, driver)
     events = []
     set_window = frequency.set_window
@@ -727,3 +727,197 @@ def test_non_amd_rollback_keeps_frequency_before_boost(tmp_path, monkeypatch, dr
     ]
     assert persisted[-1] is None
     assert frequency.get_window() == (600_000, 3_000_000)
+
+
+_INTEL_TURBO_MAXIMA = (
+    4_700_000, 4_800_000, 4_700_000, 4_800_000,
+    3_700_000, 3_700_000, 3_700_000, 3_700_000,
+)
+
+
+def _intel_boost_kernel(tmp_path, monkeypatch):
+    cpu = tmp_path / "sys/devices/system/cpu"
+    boost_path = cpu / "intel_pstate/no_turbo"
+
+    def write(path, value):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(str(value))
+
+    write(boost_path, 0)
+    write(cpu / "smt/control", "notsupported")
+    requests = {}
+    for index, maximum in enumerate(_INTEL_TURBO_MAXIMA):
+        write(cpu / f"cpu{index}/topology/core_id", index)
+        if index:
+            write(cpu / f"cpu{index}/online", 1)
+        policy = cpu / f"cpufreq/policy{index}"
+        for name, value in {
+            "scaling_driver": "intel_pstate",
+            "related_cpus": index,
+            "affected_cpus": index,
+            "cpuinfo_min_freq": 400_000,
+            "cpuinfo_max_freq": maximum,
+            "scaling_min_freq": 400_000,
+            "scaling_max_freq": maximum,
+        }.items():
+            write(policy / name, value)
+        requests[policy] = {"scaling_min_freq": 400_000, "scaling_max_freq": maximum}
+
+    real_write = controls_module.write_str
+
+    def kernel_write(path, value):
+        path = Path(path)
+        value = int(value)
+        if path.name in ("scaling_min_freq", "scaling_max_freq"):
+            hardware_max = int((path.parent / "cpuinfo_max_freq").read_text())
+            minimum = int((path.parent / "scaling_min_freq").read_text())
+            maximum = int((path.parent / "scaling_max_freq").read_text())
+            if not 400_000 <= value <= hardware_max:
+                return False
+            if path.name == "scaling_min_freq" and value > maximum:
+                return False
+            if path.name == "scaling_max_freq" and value < minimum:
+                return False
+        ok = real_write(str(path), value)
+        if ok and path.name in ("scaling_min_freq", "scaling_max_freq"):
+            requests[path.parent][path.name] = value
+        if ok and path == boost_path:
+            # intel_pstate refreshes cpuinfo.max_freq and clamps the user limits.
+            for index, turbo in enumerate(_INTEL_TURBO_MAXIMA):
+                policy = cpu / f"cpufreq/policy{index}"
+                limit = 2_200_000 if value else turbo
+                write(policy / "cpuinfo_max_freq", limit)
+                for node, requested in requests[policy].items():
+                    write(policy / node, min(requested, limit))
+        return ok
+
+    monkeypatch.setattr(controls_module, "write_str", kernel_write)
+    monkeypatch.setattr(frequency_module, "write_str", kernel_write)
+    durable = {"state": None}
+
+    def persist(state):
+        durable["state"] = state
+
+    frequency = select_cpu_frequency(
+        root=str(tmp_path), persist_state=persist, boot_id="boot-1"
+    )
+    boost = select_boost(root=str(tmp_path))
+    coordinator = CpuCoordinator(
+        CoreControl(root=str(tmp_path)), SmtControl(root=str(tmp_path)),
+        boost, frequency,
+    )
+    return coordinator, frequency, boost, durable, persist
+
+
+def _intel_windows(frequency):
+    return [
+        (policy["applied_min_khz"], policy["applied_max_khz"])
+        for policy in frequency.diagnostics()["policy_state"]
+    ]
+
+
+@pytest.mark.parametrize("minimum,maximum,limited,status", [
+    (1_500_000, 2_000_000, (1_500_000, 2_000_000), "applied"),
+    (1_500_000, 3_000_000, (1_500_000, 2_200_000), "clamped"),
+    (3_000_000, 3_000_000, (2_200_000, 2_200_000), "clamped"),
+])
+def test_intel_boost_round_trip_preserves_manual_and_policy_baselines(
+    tmp_path, monkeypatch, minimum, maximum, limited, status
+):
+    coordinator, frequency, boost, durable, _persist = _intel_boost_kernel(
+        tmp_path, monkeypatch
+    )
+    intent = _intent(
+        cores=None, smt=True, boost=True,
+        frequency={"manual": True, "min_khz": minimum, "max_khz": maximum},
+    )
+    assert coordinator.apply(intent, 1).ok is True
+    baseline = durable["state"]["baseline"]
+    intent["boost"] = False
+
+    result = coordinator.apply(intent, 2)
+
+    assert result.ok is True
+    assert result.status == status
+    assert boost.enabled() is False
+    assert _intel_windows(frequency) == [limited] * 8
+    assert frequency.diagnostics()["requested"] == [minimum, maximum]
+    assert durable["state"]["baseline"] == baseline
+    intent["boost"] = True
+    assert coordinator.apply(intent, 3).ok is True
+    assert _intel_windows(frequency) == [(minimum, maximum)] * 8
+    assert coordinator.apply(intent, 4, enabled=False).ok is True
+    assert _intel_windows(frequency) == [(400_000, value) for value in _INTEL_TURBO_MAXIMA]
+    assert durable["state"] is None
+
+
+def test_intel_auto_pending_restores_each_policy_after_restart_and_handoff(
+    tmp_path, monkeypatch
+):
+    coordinator, frequency, boost, durable, persist = _intel_boost_kernel(
+        tmp_path, monkeypatch
+    )
+    intent = _intent(cores=None, smt=True, boost=True)
+    assert coordinator.apply(intent, 1).ok is True
+    baseline = durable["state"]["baseline"]
+    intent["boost"] = False
+    intent["frequency"] = {"manual": False}
+
+    result = coordinator.apply(intent, 2)
+
+    assert result.ok is True
+    assert result.status == "clamped"
+    assert _intel_windows(frequency) == [(400_000, 2_200_000)] * 8
+    assert durable["state"]["version"] == 1
+    assert durable["state"]["requested"] == [400_000, 4_800_000]
+    assert durable["state"]["restore_pending"] is True
+    assert durable["state"]["baseline"] == baseline
+    restarted = select_cpu_frequency(
+        root=str(tmp_path), persisted_state=durable["state"],
+        persist_state=persist, boot_id="boot-1",
+    )
+    assert restarted.diagnostics()["owned"] is True
+    assert restarted.diagnostics()["requested"] is None
+    coordinator._frequency = restarted
+    assert coordinator.apply(intent, 3, enabled=False).ok is True
+    assert boost.enabled() is True
+    assert _intel_windows(restarted) == [(400_000, value) for value in _INTEL_TURBO_MAXIMA]
+    assert durable["state"] is None
+
+
+def test_intel_failed_core_change_after_auto_release_recovers_each_baseline(
+    tmp_path, monkeypatch
+):
+    coordinator, frequency, boost, durable, _persist = _intel_boost_kernel(
+        tmp_path, monkeypatch
+    )
+    intent = _intent(cores=None, smt=True, boost=True)
+    assert coordinator.apply(intent, 1).ok is True
+    intent["boost"] = False
+    intent["frequency"] = {"manual": False}
+    assert coordinator.apply(intent, 2).ok is True
+    baseline = durable["state"]["baseline"]
+    kernel_write = controls_module.write_str
+
+    def refuse_core_offline(path, value):
+        if path.endswith("cpu4/online") and int(value) == 0:
+            return False
+        return kernel_write(path, value)
+
+    monkeypatch.setattr(controls_module, "write_str", refuse_core_offline)
+    intent["boost"] = True
+    intent["cores"] = 4
+
+    result = coordinator.apply(intent, 3)
+
+    assert result.ok is False
+    assert result.error_code == "cores_write_failed"
+    assert result.rollback["ok"] is True
+    assert boost.enabled() is False
+    assert _intel_windows(frequency) == [(400_000, 2_200_000)] * 8
+    assert frequency.diagnostics()["requested"] is None
+    assert durable["state"]["baseline"] == baseline
+    assert durable["state"]["restore_pending"] is True
+    assert coordinator.apply(intent, 4, enabled=False).ok is True
+    assert _intel_windows(frequency) == [(400_000, value) for value in _INTEL_TURBO_MAXIMA]
+    assert durable["state"] is None
