@@ -74,6 +74,18 @@ def test_authoritative_sysfs_maxima_are_preferred(tmp_path):
     assert capability["fast"]["max"] == 30
 
 
+def test_configured_overclock_uses_the_live_slow_ppt_ceiling(tmp_path):
+    _mk_hwmon(str(tmp_path), slow=25, fast=30, maxima=True)
+
+    assert _backend(tmp_path).configured_tdp_ceiling() == 25
+
+
+def test_stock_deck_is_not_overclocked_by_the_shared_driver_maximum(tmp_path):
+    _mk_hwmon(str(tmp_path), slow=15, fast=30, maxima=True)
+
+    assert _backend(tmp_path).configured_tdp_ceiling() is None
+
+
 def test_power1_only_keeps_safe_base_control_without_advanced_ppt(tmp_path):
     cap = os.path.join(_mk_hwmon(str(tmp_path), include_fast=False), "power1_cap")
     backend = _backend(tmp_path)

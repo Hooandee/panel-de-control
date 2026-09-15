@@ -152,6 +152,7 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
             baseMarkerWatts={basePpt}
             slowMarkerWatts={slowPpt}
             fastMarkerWatts={fastPpt}
+            overclocked={tdp.overclock?.detected ?? false}
           />
         </PanelSectionRow>
       </>
@@ -188,6 +189,7 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
           baseMarkerWatts={basePpt}
           slowMarkerWatts={slowPpt}
           fastMarkerWatts={fastPpt}
+          overclocked={tdp.overclock?.detected ?? false}
         />
       </PanelSectionRow>
       {ownership.show && (

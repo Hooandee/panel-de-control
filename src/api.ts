@@ -250,6 +250,11 @@ export interface TdpState {
   recovery_pending?: boolean;
   request_min?: number;
   limits: TdpLimits;
+  overclock?: {
+    detected: boolean;
+    max_w: number | null;
+    source: "live" | "handoff" | null;
+  };
   on_ac: boolean;
   appid: string | null;
   has_game_profile: boolean;
