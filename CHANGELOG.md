@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+## [0.49.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.49.1...panel-de-control-v0.49.2) (2026-09-15)
+
+### Español
+
+* **Temas:** Los ocho interruptores de estilización de Gallery aparecen juntos al final de los ajustes, con un título y una breve descripción que ayudan a elegir en qué partes de Steam se aplica el tema.
+
+### English
+
+* **Themes:** Gallery's eight styling toggles now appear together at the end of the settings, with a heading and a short description to help you choose which parts of Steam use the theme.
+
+### Italiano
+
+* **Temi:** Gli otto interruttori di stile di Gallery sono ora raggruppati alla fine delle impostazioni, con un titolo e una breve descrizione per aiutarti a scegliere a quali parti di Steam applicare il tema.
+
+### Deutsch
+
+* **Themes:** Die acht Schalter für die Gestaltung mit Gallery stehen jetzt gemeinsam am Ende der Einstellungen. Eine Überschrift und eine kurze Beschreibung helfen dir bei der Auswahl, welche Bereiche von Steam das Theme verwenden.
+
 ## 0.49.1 (2026-09-15)
 
 ### Español
