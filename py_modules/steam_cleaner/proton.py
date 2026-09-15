@@ -11,7 +11,7 @@ from pathlib import Path
 
 from . import filesystem, vdf
 from .activity import process_activity
-from .service import REASONS, SteamCleanerError, clean_name, grouped_id, opaque
+from .service import REASONS, SteamCleanerError, clean_name, grouped_id, opaque, system_error
 
 
 PLAN_LIFETIME_SECONDS = 300
@@ -133,7 +133,10 @@ class ProtonCleanerService:
             code = getattr(error, "code", "io_error")
             with self._lock:
                 self._state.update(status="error", error=code)
-            self._event("error", operation_id, phase, reason=code)
+            details = {"reason": code}
+            if isinstance(error, OSError) or getattr(error, "errno", None) is not None:
+                details["system_error"] = system_error(error)
+            self._event("error", operation_id, phase, **details)
             raise SteamCleanerError(code) from None
         except Exception:
             with self._lock:
@@ -248,6 +251,7 @@ class ProtonCleanerService:
                 item = {"id": entry["id"], "status": "error", "reason": None, "bytes_removed": 0}
                 reviewed = stored["reviewed"][entry["id"]]
                 started_delete = False
+                system_code = None
                 try:
                     if self._cancelled.is_set():
                         item.update(status="skipped", reason="cancelled")
@@ -282,13 +286,16 @@ class ProtonCleanerService:
                         item["bytes_removed"] = error.bytes_removed
                         if error.changed:
                             item["reason"] = "partial_delete"
+                    if isinstance(error, OSError) or getattr(error, "errno", None) is not None:
+                        system_code = system_error(error)
                     if item["reason"] == "cancelled":
                         result["cancelled"] = True
                 result["estimated_bytes_removed"] += item["bytes_removed"]
                 result["items"].append(item)
                 self._event(
                     item["status"], operation_id, "execute", entry_id=entry["id"],
-                    reason=item["reason"], readback="absent" if item["status"] == "deleted" else "unverified",
+                    reason=item["reason"], system_error=system_code,
+                    readback="absent" if item["status"] == "deleted" else "unverified",
                 )
             deleted = {item["id"] for item in result["items"] if item["status"] == "deleted"}
             with self._lock:
@@ -543,6 +550,8 @@ class ProtonCleanerService:
                 event = {key: item[key] for key in ("event", "phase", "operation_id", "at")}
                 if item.get("reason") in REASONS:
                     event["reason"] = item["reason"]
+                if item.get("system_error") in REASONS:
+                    event["system_error"] = item["system_error"]
                 if isinstance(item.get("entry_id"), str) and OPAQUE_PATTERN.fullmatch(item["entry_id"]):
                     event["entry_id"] = item["entry_id"]
                 if item.get("readback") in ("absent", "unverified"):

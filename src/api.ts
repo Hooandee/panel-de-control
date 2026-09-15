@@ -21,8 +21,10 @@ export const measureSteamScreenshotPaths = callable<[
 ], Record<string, number | null>>("measure_steam_screenshot_paths");
 export type SteamMediaEvent = "scan_started" | "scan_completed" | "scan_failed" | "scan_cancelled" | "cleanup_started" | "cleanup_completed" | "cleanup_failed";
 export type SteamMediaSource = "none" | "screenshots" | "recordings" | "clips" | "measurement";
+export type SteamMediaReason = "none" | "steam_rejected" | "invalid_response" | "item_changed" | "active_recording" | "steam_api_error" | "invalid_item" | "measurement_failed" | "section_closed";
 export const recordSteamMediaEvent = callable<[
-  event: SteamMediaEvent, count: number, errors: number, source: SteamMediaSource,
+  event: SteamMediaEvent, operationId: string, count: number, errors: number,
+  source: SteamMediaSource, reason: SteamMediaReason,
 ], boolean>("record_steam_media_event");
 export const getProtonCleanerState = callable<[], ProtonState>("get_proton_cleaner_state");
 export const scanProtonCleaner = callable<[], ProtonState>("scan_proton_cleaner");

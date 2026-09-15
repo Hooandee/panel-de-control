@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { cleanMedia, scanMedia, type MediaGateway } from "./media";
+import { cleanMedia, MediaGatewayError, scanMedia, type MediaGateway } from "./media";
 
 const deferred = <T,>() => {
   let resolve!: (value: T) => void;
@@ -147,6 +147,7 @@ describe("Steam media inventory", () => {
     expect(api.deleteBackgroundRecordings).toHaveBeenCalledWith(["20"]);
     expect(api.deleteClip).toHaveBeenCalledWith("clip-1");
     expect(result.items.map((item) => item.status)).toEqual(["error", "deleted", "deleted"]);
+    expect(result.items.map((item) => item.reason)).toEqual(["steam_rejected", null, null]);
     expect(result.bytesRemoved).toBe(456 + 789);
   });
 
@@ -157,6 +158,7 @@ describe("Steam media inventory", () => {
     const result = await cleanMedia(api, items.filter((item) => item.kind === "screenshot"));
 
     expect(result.items[0].status).toBe("error");
+    expect(result.items[0].reason).toBe("steam_rejected");
     expect(result.bytesRemoved).toBe(0);
   });
 
@@ -167,7 +169,19 @@ describe("Steam media inventory", () => {
     const result = await cleanMedia(api, items.filter((item) => item.kind === "screenshot"));
 
     expect(result.items[0].status).toBe("error");
+    expect(result.items[0].reason).toBe("invalid_response");
     expect(result.bytesRemoved).toBe(0);
+  });
+
+  it("classifies a malformed Steam deletion response separately from an API error", async () => {
+    const api = gateway({
+      deleteScreenshots: vi.fn().mockResolvedValue({ bSuccess: true, rgFailedRequestIndices: null }),
+    });
+    const items = await scanMedia(api, () => undefined);
+
+    const result = await cleanMedia(api, items.filter((item) => item.kind === "screenshot"));
+
+    expect(result.items[0]).toMatchObject({ status: "error", reason: "invalid_response" });
   });
 
   it("keeps invalid media sizes as unknown", async () => {
@@ -193,5 +207,24 @@ describe("Steam media inventory", () => {
 
     expect(api.deleteBackgroundRecordings).not.toHaveBeenCalled();
     expect(result.items[0].status).toBe("error");
+    expect(result.items[0].reason).toBe("active_recording");
+  });
+
+  it("distinguishes Steam API errors from rejected clip deletion", async () => {
+    const api = gateway({ deleteClip: vi.fn().mockRejectedValue(new Error("private response")) });
+    const items = await scanMedia(api, () => undefined);
+
+    const result = await cleanMedia(api, items.filter((item) => item.kind === "clip"));
+
+    expect(result.items[0]).toMatchObject({ status: "error", reason: "steam_api_error" });
+  });
+
+  it("preserves a normalized invalid response from the real gateway", async () => {
+    const api = gateway({ deleteClip: vi.fn().mockRejectedValue(new MediaGatewayError("invalid_response")) });
+    const items = await scanMedia(api, () => undefined);
+
+    const result = await cleanMedia(api, items.filter((item) => item.kind === "clip"));
+
+    expect(result.items[0]).toMatchObject({ status: "error", reason: "invalid_response" });
   });
 });

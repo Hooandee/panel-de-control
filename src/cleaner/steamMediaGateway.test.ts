@@ -66,6 +66,22 @@ describe("Steam media gateway", () => {
     expect(mocks.recording.DeleteClip).toHaveBeenCalledWith({ clip_id: "clip" });
   });
 
+  it("preserves invalid screenshot responses for the cleaner to classify", async () => {
+    const screenshots = (window as unknown as { SteamClient: { Screenshots: Record<string, ReturnType<typeof vi.fn>> } }).SteamClient.Screenshots;
+    screenshots.DeleteLocalScreenshots.mockResolvedValue({ bSuccess: true, rgFailedRequestIndices: null });
+
+    await expect(createSteamMediaGateway().deleteScreenshots([{ gameID: "10", rgHandles: [1] }]))
+      .resolves.toEqual({ bSuccess: true, rgFailedRequestIndices: null });
+  });
+
+  it("distinguishes an invalid deletion response from a Steam API failure", async () => {
+    mocks.recording.DeleteClip.mockResolvedValue({});
+    await expect(createSteamMediaGateway().deleteClip("clip")).rejects.toMatchObject({ reason: "invalid_response" });
+
+    mocks.recording.DeleteClip.mockRejectedValue(new Error("private response"));
+    await expect(createSteamMediaGateway().deleteClip("clip")).rejects.toMatchObject({ reason: "steam_api_error" });
+  });
+
   it("forwards one bounded screenshot measurement request", async () => {
     const gateway = createSteamMediaGateway();
     const paths = Array.from({ length: 500 }, (_, index) => `/steam/${index}.jpg`);

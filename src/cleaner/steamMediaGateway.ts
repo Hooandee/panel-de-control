@@ -6,6 +6,7 @@ import type {
   SteamClip,
   SteamScreenshot,
 } from "./media";
+import { MediaGatewayError } from "./media";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -63,13 +64,18 @@ async function body<T>(operation: Promise<any> | undefined, key: string): Promis
 }
 
 async function success(operation: Promise<any> | undefined): Promise<boolean> {
-  if (!operation) return false;
+  if (!operation) throw new MediaGatewayError("steam_api_error");
+  let response: any;
   try {
-    const response = await operation;
-    return typeof response?.BSuccess === "function" ? response.BSuccess() === true : false;
+    response = await operation;
   } catch {
-    return false;
+    throw new MediaGatewayError("steam_api_error");
   }
+  if (typeof response?.BSuccess !== "function") throw new MediaGatewayError("invalid_response");
+  let accepted: unknown;
+  try { accepted = response.BSuccess(); } catch { throw new MediaGatewayError("steam_api_error"); }
+  if (typeof accepted !== "boolean") throw new MediaGatewayError("invalid_response");
+  return accepted;
 }
 
 export function createSteamMediaGateway(): MediaGateway {
@@ -107,17 +113,16 @@ export function createSteamMediaGateway(): MediaGateway {
     ),
     listClips: () => body<SteamClip>(recordingService()?.GetClips?.({}), "clip"),
     async deleteScreenshots(requests) {
+      const operation = screenshots()?.DeleteLocalScreenshots?.(requests);
+      if (!operation) throw new MediaGatewayError("steam_api_error");
       try {
-        const response = await screenshots()?.DeleteLocalScreenshots?.(requests);
+        const response = await operation;
         return {
-          bSuccess: response?.bSuccess === true,
-          rgFailedRequestIndices: Array.isArray(response?.rgFailedRequestIndices)
-            && response.rgFailedRequestIndices.every((index: unknown) => Number.isSafeInteger(index) && Number(index) >= 0 && Number(index) < requests.length)
-            ? response.rgFailedRequestIndices
-            : requests.map((_, index) => index),
+          bSuccess: response?.bSuccess,
+          rgFailedRequestIndices: response?.rgFailedRequestIndices,
         };
       } catch {
-        return { bSuccess: false, rgFailedRequestIndices: requests.map((_, index) => index) };
+        throw new MediaGatewayError("steam_api_error");
       }
     },
     deleteBackgroundRecordings: (gameIds) => success(

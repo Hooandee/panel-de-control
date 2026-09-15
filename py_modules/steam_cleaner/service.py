@@ -14,6 +14,7 @@ from pathlib import Path
 
 from . import filesystem, vdf
 from .activity import process_activity
+from .media_diagnostics import SteamMediaDiagnostics
 
 
 class SteamCleanerError(Exception):
@@ -85,6 +86,7 @@ class SteamCleanerService:
         }
         from .proton import ProtonCleanerService
         self._proton = ProtonCleanerService(home, logger=logger, state_dir=self._state_dir, activity_provider=activity_provider)
+        self._media = SteamMediaDiagnostics(self._state_dir, logger)
         self._load_history()
 
     def get_state(self):
@@ -95,7 +97,11 @@ class SteamCleanerService:
         with self._state_lock:
             result = copy.deepcopy(self._diagnostic)
         result["proton"] = self._proton.diagnostics()
+        result["media"] = self._media.diagnostics()
         return result
+
+    def record_media_event(self, event, operation_id, count=0, errors=0, source="none", reason="none"):
+        return self._media.record(event, operation_id, count, errors, source, reason)
 
     def cancel(self):
         self._cancelled.set()
@@ -667,7 +673,9 @@ class SteamCleanerService:
             self._state_dir.mkdir(parents=True, exist_ok=True)
             temporary = self._state_dir / f".steam_cleaner_{uuid.uuid4().hex}.tmp"
             with open(temporary, "x", encoding="utf-8") as output:
-                json.dump(self.diagnostics(), output, separators=(",", ":"))
+                with self._state_lock:
+                    document = copy.deepcopy(self._diagnostic)
+                json.dump(document, output, separators=(",", ":"))
                 output.flush()
                 os.fsync(output.fileno())
             os.replace(temporary, self._state_dir / "steam_cleaner_history.json")

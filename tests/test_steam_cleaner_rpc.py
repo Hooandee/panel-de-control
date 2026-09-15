@@ -167,18 +167,17 @@ def test_proton_rpcs_share_the_cleaner_worker_and_forward_only_ids(plugin):
     assert calls == [("proton-scan", ["opaque-entry"]), "proton-plan"]
 
 
-def test_media_events_log_only_bounded_diagnostic_counts(plugin, monkeypatch):
-    messages = []
-    monkeypatch.setattr(main.decky.logger, "info", lambda message: messages.append(message))
+def test_media_events_are_forwarded_to_the_persistent_diagnostic_journal(plugin):
+    service = install_service(plugin, BlockingService())
+    calls = []
+    service.record_media_event = lambda *args: calls.append(args) or True
+    operation_id = "abcd-1234-abcd-1234-abcd-1234-abcd-1234"
 
-    assert asyncio.run(plugin.record_steam_media_event("cleanup_completed", 4, 1)) is True
-    assert asyncio.run(plugin.record_steam_media_event("unknown", 4, 1)) is False
-    assert asyncio.run(plugin.record_steam_media_event("scan_completed", 100_001, 0)) is False
+    assert asyncio.run(plugin.record_steam_media_event(
+        "cleanup_failed", operation_id, 4, 1, "screenshots", "steam_rejected",
+    )) is True
 
-    assert len(messages) == 1
-    assert '"event":"cleanup_completed"' in messages[0]
-    assert '"count":4' in messages[0]
-    assert "/" not in messages[0]
+    assert calls == [("cleanup_failed", operation_id, 4, 1, "screenshots", "steam_rejected")]
 
 
 def test_shutdown_drains_constructor_that_has_not_published_service(plugin, monkeypatch):
@@ -300,7 +299,7 @@ def test_report_includes_bounded_redacted_cleaner_snapshot_without_scan(plugin, 
     assert snapshot["phase"] == "ready"
 
 
-def test_report_keeps_bounded_proton_diagnostics_without_paths():
+def test_report_keeps_bounded_nested_cleaner_diagnostics_without_paths():
     diagnostics = {
         "schema_version": 1,
         "phase": "idle",
@@ -310,10 +309,24 @@ def test_report_keeps_bounded_proton_diagnostics_without_paths():
             "phase": "scan",
             "events": [{"event": "error", "reason": "io_error", "private": "/home/deck/tool"}] * 200,
         },
+        "media": {
+            "schema_version": 1,
+            "phase": "cleanup",
+            "events": [{
+                "event": "cleanup_failed", "operation_id": "abcd-1234-abcd-1234-abcd-1234-abcd-1234",
+                "reason": "steam_rejected", "source": "screenshots", "count": 1, "errors": 1,
+                "deleted": 0,
+                "private": "/home/deck/capture",
+            }] * 200,
+        },
     }
     snapshot = main.report_collector.steam_cleaner_snapshot(diagnostics)
     assert snapshot["proton"]["phase"] == "scan"
     assert len(snapshot["proton"]["events"]) <= 120
+    assert snapshot["media"]["phase"] == "cleanup"
+    assert len(snapshot["media"]["events"]) <= 120
+    assert snapshot["media"]["events"][-1]["reason"] == "steam_rejected"
+    assert snapshot["media"]["events"][-1]["deleted"] == 0
     assert "/home/deck" not in json.dumps(snapshot)
 
 

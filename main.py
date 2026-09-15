@@ -907,20 +907,16 @@ class Plugin:
             paths,
         )
 
-    async def record_steam_media_event(self, event: str, count: int = 0, errors: int = 0, source: str = "none") -> bool:
+    async def record_steam_media_event(
+        self, event: str, operation_id: str, count: int = 0, errors: int = 0,
+        source: str = "none", reason: str = "none",
+    ) -> bool:
         self._init()
-        allowed = {
-            "scan_started", "scan_completed", "scan_failed", "scan_cancelled",
-            "cleanup_started", "cleanup_completed", "cleanup_failed",
-        }
-        if event not in allowed or source not in {"none", "screenshots", "recordings", "clips", "measurement"} or type(count) is not int or type(errors) is not int:
-            return False
-        if not 0 <= count <= 10_000 or not 0 <= errors <= 10_000:
-            return False
-        decky.logger.info("steam_media " + json.dumps({
-            "event": event, "source": source, "count": count, "errors": errors, "at": int(time.time()),
-        }, separators=(",", ":")))
-        return True
+        service = await self._get_steam_cleaner()
+        return await asyncio.get_running_loop().run_in_executor(
+            None,
+            lambda: service.record_media_event(event, operation_id, count, errors, source, reason),
+        )
 
     async def _steam_cleaner_diagnostics(self) -> dict:
         try:

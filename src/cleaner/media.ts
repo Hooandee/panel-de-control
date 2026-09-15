@@ -1,6 +1,13 @@
 export type MediaKind = "screenshot" | "recording" | "clip";
 export type MediaRecommendation = "old_capture" | "old_recording" | "temporary_clip";
 export type MediaSource = "screenshots" | "recordings" | "clips" | "measurement";
+export type MediaFailureReason = "steam_rejected" | "invalid_response" | "item_changed" | "active_recording" | "steam_api_error" | "invalid_item";
+
+export class MediaGatewayError extends Error {
+  constructor(readonly reason: "invalid_response" | "steam_api_error") {
+    super(reason);
+  }
+}
 
 export interface SteamScreenshot {
   strGameID: string;
@@ -54,16 +61,22 @@ export interface MediaGateway {
   measureScreenshotPaths(paths: string[]): Promise<Record<string, number | null>>;
   listBackgroundRecordings(): Promise<SteamBackgroundRecording[]>;
   listClips(): Promise<SteamClip[]>;
-  deleteScreenshots(requests: Array<{ gameID: string; rgHandles: number[] }>): Promise<{ bSuccess: boolean; rgFailedRequestIndices: number[] }>;
+  deleteScreenshots(requests: Array<{ gameID: string; rgHandles: number[] }>): Promise<{ bSuccess: unknown; rgFailedRequestIndices: unknown }>;
   deleteBackgroundRecordings(gameIds: string[]): Promise<boolean>;
   deleteClip(clipId: string): Promise<boolean>;
 }
 
-export interface MediaCleanResultItem { id: string; status: "deleted" | "error"; bytesRemoved: number; }
+export interface MediaCleanResultItem { id: string; status: "deleted" | "error"; reason: MediaFailureReason | null; bytesRemoved: number; }
 export interface MediaCleanResult { operationId: string; items: MediaCleanResultItem[]; bytesRemoved: number; }
 
 const DAY = 24 * 60 * 60;
 const SCREENSHOT_PATH_BATCH = 50;
+
+export function mediaOperationId(): string {
+  const bytes = globalThis.crypto.getRandomValues(new Uint8Array(16));
+  const hex = Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
+  return hex.match(/.{4}/g)!.join("-");
+}
 
 function numberValue(value: unknown): number {
   const parsed = Number(value);
@@ -197,8 +210,10 @@ export async function scanMedia(
   return completed;
 }
 
-export async function cleanMedia(gateway: MediaGateway, selected: MediaItem[]): Promise<MediaCleanResult> {
-  const statuses = new Map<string, "deleted" | "error">();
+export async function cleanMedia(gateway: MediaGateway, selected: MediaItem[], operationId = mediaOperationId()): Promise<MediaCleanResult> {
+  const outcomes = new Map<string, { status: "deleted" | "error"; reason: MediaFailureReason | null }>();
+  const deleted = (item: MediaItem) => outcomes.set(item.id, { status: "deleted", reason: null });
+  const failed = (item: MediaItem, reason: MediaFailureReason) => outcomes.set(item.id, { status: "error", reason });
   const screenshotGroups = new Map<string, MediaItem[]>();
   for (const item of selected) {
     if (item.kind === "screenshot") {
@@ -214,45 +229,70 @@ export async function cleanMedia(gateway: MediaGateway, selected: MediaItem[]): 
   if (requests.length) {
     try {
       const response = await gateway.deleteScreenshots(requests);
-      const validFailureIndices = response.rgFailedRequestIndices.every((index) => Number.isSafeInteger(index) && index >= 0 && index < requests.length);
-      const failed = new Set(response.bSuccess && validFailureIndices
-        ? response.rgFailedRequestIndices
+      const rawFailureIndices = response?.rgFailedRequestIndices;
+      const validFailureIndices = Array.isArray(rawFailureIndices)
+        && rawFailureIndices.every((index: unknown) => Number.isSafeInteger(index) && Number(index) >= 0 && Number(index) < requests.length)
+        ? rawFailureIndices as number[]
+        : null;
+      const validResponse = typeof response?.bSuccess === "boolean" && validFailureIndices !== null;
+      const failedIndices = new Set(response.bSuccess === true && validFailureIndices !== null
+        ? validFailureIndices
         : requests.map((_, index) => index));
+      const reason: MediaFailureReason = validResponse ? "steam_rejected" : "invalid_response";
       [...screenshotGroups.values()].forEach((items, index) => {
-        for (const item of items) statuses.set(item.id, failed.has(index) ? "error" : "deleted");
+        for (const item of items) failedIndices.has(index) ? failed(item, reason) : deleted(item);
       });
-    } catch {
-      for (const items of screenshotGroups.values()) for (const item of items) statuses.set(item.id, "error");
+    } catch (error) {
+      const reason = error instanceof MediaGatewayError ? error.reason : "steam_api_error";
+      for (const items of screenshotGroups.values()) for (const item of items) failed(item, reason);
     }
   }
-  const recordings = selected.filter((item) => item.kind === "recording" && !item.active);
+  const recordings = selected.filter((item) => item.kind === "recording");
   if (recordings.length) {
     let current: SteamBackgroundRecording[] | null = null;
-    try { current = await gateway.listBackgroundRecordings(); } catch { /* every recording remains an error below */ }
-    const inactive = recordings.filter((item) => current?.some((value) => value.game_id === item.gameId && value.is_active === false));
-    for (const item of recordings) if (!inactive.includes(item)) statuses.set(item.id, "error");
+    try { current = await gateway.listBackgroundRecordings(); } catch {
+      for (const item of recordings) failed(item, "steam_api_error");
+    }
+    const inactive = recordings.filter((item) => {
+      const match = current?.find((value) => value.game_id === item.gameId);
+      if (!match) {
+        if (current) failed(item, "item_changed");
+        return false;
+      }
+      if (match.is_active) {
+        failed(item, "active_recording");
+        return false;
+      }
+      return true;
+    });
     if (inactive.length) {
-      let success = false;
-      try { success = await gateway.deleteBackgroundRecordings(inactive.map((item) => item.gameId)); } catch { /* reported below */ }
-      for (const item of inactive) statuses.set(item.id, success ? "deleted" : "error");
+      try {
+        const success = await gateway.deleteBackgroundRecordings(inactive.map((item) => item.gameId));
+        for (const item of inactive) success ? deleted(item) : failed(item, "steam_rejected");
+      } catch (error) {
+        const reason = error instanceof MediaGatewayError ? error.reason : "steam_api_error";
+        for (const item of inactive) failed(item, reason);
+      }
     }
   }
   const clips = selected.filter((item) => item.kind === "clip" && item.clipId);
   for (let first = 0; first < clips.length; first += 25) {
     await Promise.all(clips.slice(first, first + 25).map(async (item) => {
-      let success = false;
-      try { success = await gateway.deleteClip(item.clipId!); } catch { /* reported below */ }
-      statuses.set(item.id, success ? "deleted" : "error");
+      try {
+        const success = await gateway.deleteClip(item.clipId!);
+        success ? deleted(item) : failed(item, "steam_rejected");
+      } catch (error) {
+        failed(item, error instanceof MediaGatewayError ? error.reason : "steam_api_error");
+      }
     }));
   }
-  for (const item of selected) if (!statuses.has(item.id)) statuses.set(item.id, "error");
-  const items = selected.map((item): MediaCleanResultItem => ({
-    id: item.id,
-    status: statuses.get(item.id)!,
-    bytesRemoved: statuses.get(item.id) === "deleted" ? item.bytes ?? 0 : 0,
-  }));
+  for (const item of selected) if (!outcomes.has(item.id)) failed(item, "invalid_item");
+  const items = selected.map((item): MediaCleanResultItem => {
+    const outcome = outcomes.get(item.id)!;
+    return { id: item.id, ...outcome, bytesRemoved: outcome.status === "deleted" ? item.bytes ?? 0 : 0 };
+  });
   return {
-    operationId: `media-${Date.now().toString(36)}`,
+    operationId,
     items,
     bytesRemoved: items.reduce((sum, item) => sum + item.bytesRemoved, 0),
   };

@@ -613,7 +613,7 @@ def steam_cleaner_snapshot(diagnostics) -> dict:
     safe_event_keys = {
         "event", "operation_id", "phase", "at", "reason", "source",
         "system_error", "library_id", "entry_id", "plan_id", "scan_id", "count", "complete",
-        "readback", "kind", "time",
+        "readback", "kind", "time", "errors", "deleted",
     }
 
     def bounded(value):
@@ -634,13 +634,15 @@ def steam_cleaner_snapshot(diagnostics) -> dict:
         return snapshot
 
     snapshot = bounded(diagnostics)
-    if isinstance(diagnostics.get("proton"), dict):
-        snapshot["proton"] = bounded(diagnostics["proton"])
+    for key in ("proton", "media"):
+        if isinstance(diagnostics.get(key), dict):
+            snapshot[key] = bounded(diagnostics[key])
     try:
         while len(json.dumps(snapshot).encode("utf-8")) > 48_000:
             candidates = [snapshot["events"]]
-            if isinstance(snapshot.get("proton"), dict):
-                candidates.append(snapshot["proton"]["events"])
+            for key in ("proton", "media"):
+                if isinstance(snapshot.get(key), dict):
+                    candidates.append(snapshot[key]["events"])
             longest = max(candidates, key=len)
             if not longest:
                 return {"error": "diagnostics_unavailable"}

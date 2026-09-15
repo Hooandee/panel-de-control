@@ -10,9 +10,10 @@ vi.mock("../api", () => ({ recordSteamMediaEvent: diagnostics.record }));
 import { useMediaCleaner } from "./useMediaCleaner";
 
 const screenshot = { strGameID: "10", hHandle: 7, nCreated: 1, nWidth: 1280, nHeight: 800, strUrl: "shot.jpg" };
+const operationId = expect.stringMatching(/^(?:[a-f0-9]{4}-){7}[a-f0-9]{4}$/);
 
 beforeEach(() => {
-  diagnostics.record.mockClear();
+  diagnostics.record.mockReset().mockResolvedValue(true);
   mocks.gateway = {
     listScreenshots: vi.fn().mockResolvedValue([screenshot]),
     screenshotPath: vi.fn().mockResolvedValue("/steam/shot.jpg"),
@@ -33,7 +34,18 @@ describe("media cleaner controller", () => {
     expect(result.current.items).toHaveLength(1);
     expect(result.current.items[0].bytes).toBe(50);
     expect(mocks.gateway.listScreenshots).toHaveBeenCalledOnce();
-    expect(diagnostics.record).toHaveBeenCalledWith("scan_completed", 1, 0, "none");
+    expect(diagnostics.record).toHaveBeenCalledWith("scan_completed", operationId, 1, 0, "none", "none");
+  });
+
+  it("keeps analysis and cleanup responsive while diagnostics are pending", async () => {
+    diagnostics.record.mockReturnValue(new Promise(() => undefined));
+    const { result } = renderHook(useMediaCleaner);
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(() => result.current.clean(["screenshot:10:7"]));
+
+    expect(mocks.gateway.deleteScreenshots).toHaveBeenCalledOnce();
+    expect(result.current.result?.bytesRemoved).toBe(50);
   });
 
   it("cleans only explicit ids and lets the result be dismissed", async () => {
@@ -42,7 +54,7 @@ describe("media cleaner controller", () => {
     await act(() => result.current.clean(["screenshot:10:7"]));
     expect(result.current.items).toEqual([]);
     expect(result.current.result?.bytesRemoved).toBe(50);
-    expect(diagnostics.record).toHaveBeenCalledWith("cleanup_completed", 1, 0, "none");
+    expect(diagnostics.record).toHaveBeenCalledWith("cleanup_completed", operationId, 1, 0, "none", "none");
     act(() => result.current.dismissResult());
     expect(result.current.result).toBeNull();
   });
@@ -63,7 +75,10 @@ describe("media cleaner controller", () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
     await act(() => result.current.clean(["screenshot:10:7"]));
     expect(result.current.result).not.toBeNull();
-    expect(diagnostics.record).toHaveBeenCalledWith("cleanup_failed", 1, 1, "screenshots");
+    expect(diagnostics.record).toHaveBeenCalledWith("cleanup_failed", operationId, 1, 1, "screenshots", "steam_rejected");
+
+    const calls = diagnostics.record.mock.calls.filter(([event]) => event.startsWith("cleanup_"));
+    expect(new Set(calls.map(([, id]) => id))).toHaveLength(1);
 
     let finish!: (value: { bSuccess: boolean; rgFailedRequestIndices: number[] }) => void;
     mocks.gateway.deleteScreenshots = vi.fn().mockReturnValue(new Promise((resolve) => { finish = resolve; }));

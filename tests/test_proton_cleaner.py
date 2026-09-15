@@ -1,3 +1,6 @@
+import errno
+import json
+
 import pytest
 
 from steam_cleaner import filesystem
@@ -181,6 +184,28 @@ def test_partial_deletion_reports_removed_bytes_and_requires_a_new_scan(tmp_path
     assert cleaner.get_state()["scan_id"] is None
 
 
+def test_delete_failure_persists_the_normalized_system_error(tmp_path, monkeypatch):
+    home, steam = make_steam(tmp_path)
+    custom(steam, "old", "GE-Proton-Old")
+    settings = tmp_path / "settings"
+    cleaner = ProtonCleanerService(str(home), state_dir=settings, activity_provider=idle)
+    state = cleaner.inventory()
+    plan = cleaner.prepare(state["scan_id"], [state["entries"][0]["id"]])
+
+    def fail_with_permission_error(*_args):
+        error = PermissionError(errno.EACCES, "private path")
+        raise filesystem.DeletionError("io_error", 0, False, error)
+
+    monkeypatch.setattr("steam_cleaner.proton.filesystem.remove_tree", fail_with_permission_error)
+    cleaner.execute(plan["id"])
+
+    restored = ProtonCleanerService(str(home), state_dir=settings, activity_provider=idle).diagnostics()
+    failures = [event for event in restored["events"] if event["phase"] == "execute" and event["event"] == "error"]
+    assert failures[-1]["reason"] == "io_error"
+    assert failures[-1]["system_error"] == "permission_denied"
+    assert "private path" not in json.dumps(restored)
+
+
 def test_diagnostics_survive_a_restart_without_storing_paths(tmp_path):
     home, steam = make_steam(tmp_path)
     custom(steam, "old", "GE-Proton-Old")
@@ -251,6 +276,39 @@ def test_new_profile_reference_after_prepare_prevents_deletion(tmp_path):
     with pytest.raises(SteamCleanerError, match="path_changed"):
         cleaner.execute(plan["id"])
     assert (steam / "compatibilitytools.d/old").exists()
+
+
+def test_changed_reference_source_does_not_invent_a_system_error(tmp_path):
+    home, steam = make_steam(tmp_path)
+    custom(steam, "old", "GE-Proton-Old")
+    settings = tmp_path / "settings"
+    cleaner = ProtonCleanerService(str(home), state_dir=settings, activity_provider=idle)
+    state = cleaner.inventory()
+    plan = cleaner.prepare(state["scan_id"], [state["entries"][0]["id"]])
+    write(
+        steam / "userdata/123/config/localconfig.vdf",
+        '"root" { "CompatToolMapping" { "10" { "name" "GE-Proton-Old" } } }',
+    )
+
+    with pytest.raises(SteamCleanerError, match="path_changed"):
+        cleaner.execute(plan["id"])
+
+    failures = [event for event in cleaner.diagnostics()["events"] if event["event"] == "error"]
+    assert failures[-1]["reason"] == "path_changed"
+    assert "system_error" not in failures[-1]
+
+
+def test_invalid_inventory_data_does_not_invent_a_system_error(tmp_path, monkeypatch):
+    home, _steam = make_steam(tmp_path)
+    cleaner = ProtonCleanerService(str(home), state_dir=tmp_path / "settings", activity_provider=idle)
+    monkeypatch.setattr(cleaner, "_discover", lambda: (_ for _ in ()).throw(ValueError("private data")))
+
+    with pytest.raises(SteamCleanerError, match="io_error"):
+        cleaner.inventory()
+
+    failures = [event for event in cleaner.diagnostics()["events"] if event["event"] == "error"]
+    assert failures[-1]["reason"] == "io_error"
+    assert "system_error" not in failures[-1]
 
 
 def test_non_proton_compatibility_tools_are_not_presented_as_proton(tmp_path):
