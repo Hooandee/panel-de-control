@@ -312,7 +312,13 @@ describe("TdpSection Steam Deck PPT arc", () => {
     const state = {
       ...deckState,
       limits: { min: 3, default: 12, max: 25, max_ac: 25 },
-      overclock: { detected: true, max_w: 25, source: "handoff" },
+      overclock: {
+        detected: true,
+        max_w: 25,
+        source: "handoff",
+        status: "overclocked",
+        reason: null,
+      },
     } as TdpState;
 
     renderTdpSection(state, { power: { auto_tdp: true } as PowerDraw });

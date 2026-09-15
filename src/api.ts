@@ -254,6 +254,8 @@ export interface TdpState {
     detected: boolean;
     max_w: number | null;
     source: "live" | "handoff" | null;
+    status: "overclocked" | "stock" | "unavailable" | "unsupported";
+    reason: string | null;
   };
   on_ac: boolean;
   appid: string | null;

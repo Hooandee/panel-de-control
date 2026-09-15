@@ -464,15 +464,21 @@ class Plugin:
             ),
         )
         self._powerstation_detector = powerstation_conflict.Detector()
-        # Keep durable TDP intent inside the device-authorised range.
-        _lim = self._profile_storage_limits()
-        _request_min = self._tdp_request_min()
         self._tdp_profile_sanitize_pending = False
         self._power_preset_sanitize_pending = False
         self._tdp_storage_migration_retry_at = 0.0
-        self._sanitize_tdp_profiles(_request_min, _lim.max_ac_w)
-        if _request_min > TDP_REQUEST_MIN_W:
-            self._sanitize_power_presets(_request_min, _lim.max_ac_w)
+        # Preserve durable intent while a dynamic hardware ceiling is unreadable.
+        _lim = self._profile_storage_limits()
+        _request_min = self._tdp_request_min()
+        if _lim is None:
+            self._tdp_profile_sanitize_pending = True
+            self._tdp_storage_migration_retry_at = (
+                _monotonic() + _TDP_STORAGE_MIGRATION_RETRY_S
+            )
+        else:
+            self._sanitize_tdp_profiles(_request_min, _lim.max_ac_w)
+            if _request_min > TDP_REQUEST_MIN_W:
+                self._sanitize_power_presets(_request_min, _lim.max_ac_w)
         # Which daemon owns the controller (HHD / InputPlumber / none). Detected
         # once — the resident daemon doesn't change at runtime. Probe never raises.
         self._controller = controller_detect.detect()
@@ -2248,23 +2254,54 @@ class Plugin:
             return False
 
     def _steamdeck_overclock_state(self) -> dict:
-        configured_ceiling = getattr(
+        configured_state = getattr(
             self._tdp_backend,
-            "configured_tdp_ceiling",
+            "configured_tdp_state",
             None,
         )
-        if not callable(configured_ceiling):
-            return {"detected": False, "max_w": None, "source": None}
+        if not callable(configured_state):
+            return {
+                "detected": False,
+                "max_w": None,
+                "source": None,
+                "status": "unsupported",
+                "reason": None,
+            }
         baseline = self._settings.get("steamdeck_ppt_previous")
         source = "handoff" if baseline is not None else "live"
         try:
-            ceiling = configured_ceiling(baseline)
-        except Exception:  # noqa: BLE001
+            configured = configured_state(baseline)
+        except Exception as error:  # noqa: BLE001
+            return {
+                "detected": False,
+                "max_w": None,
+                "source": None,
+                "status": "unavailable",
+                "reason": type(error).__name__,
+            }
+        if not isinstance(configured, dict):
+            configured = {}
+        status = configured.get("status")
+        ceiling = configured.get("max_w")
+        valid_ceiling = (
+            status == "overclocked"
+            and isinstance(ceiling, int)
+            and not isinstance(ceiling, bool)
+        )
+        reason = configured.get("reason")
+        if status not in {"overclocked", "stock", "unavailable"} or (
+            status == "overclocked" and not valid_ceiling
+        ):
+            status = "unavailable"
             ceiling = None
+            reason = reason or "invalid_state"
+        detected = status == "overclocked"
         return {
-            "detected": ceiling is not None,
-            "max_w": int(ceiling) if ceiling is not None else None,
-            "source": source,
+            "detected": detected,
+            "max_w": int(ceiling) if detected else None,
+            "source": source if detected else None,
+            "status": status,
+            "reason": reason,
         }
 
     def _record_steamdeck_ppt(self, action, ok, reason=None) -> None:
@@ -3801,9 +3838,14 @@ class Plugin:
 
     # ---- TDP helpers + RPCs -------------------------------------------------
     def _profile_storage_limits(self):
-        """Static authorised range for durable intent; live bounds only affect apply."""
+        """Authorised durable range, or None while a dynamic ceiling is unreadable."""
         if self._device.key == "gpd_win_mini_2025":
             return TdpLimits.from_profile(self._device)
+        if self._device.key in ("steam_deck_lcd", "steam_deck_oled"):
+            overclock = self._steamdeck_overclock_state()
+            if overclock["status"] == "unavailable":
+                return None
+            return self._limits(overclock)
         if self._device.key != "rog_flow_z13":
             return self._limits()
         limits = TdpLimits.from_profile(self._device)
@@ -3856,6 +3898,11 @@ class Plugin:
         if _monotonic() < self._tdp_storage_migration_retry_at:
             return
         limits = self._profile_storage_limits()
+        if limits is None:
+            self._tdp_storage_migration_retry_at = (
+                _monotonic() + _TDP_STORAGE_MIGRATION_RETRY_S
+            )
+            return
         request_min = self._tdp_request_min()
         if self._tdp_profile_sanitize_pending:
             self._sanitize_tdp_profiles(request_min, limits.max_ac_w)
@@ -3870,7 +3917,7 @@ class Plugin:
         ):
             self._tdp_storage_migration_retry_at = 0.0
 
-    def _limits(self):
+    def _limits(self, overclock=None):
         """Device TDP limits after opt-ins and a detected Deck SlowPPT ceiling."""
         # Chokepoint for the battery-unlock preference. Ignore it where the firmware
         # enforces the battery cap (Ally/Ally X) — the write would be refused, so the
@@ -3884,7 +3931,8 @@ class Plugin:
         experimental_max = self._device.experimental_tdp_max_ac
         if experimental_max and self._settings.get("experimental_tdp_unlock") is True:
             lim = lim.with_ac_max(experimental_max)
-        configured_max = self._steamdeck_overclock_state()["max_w"]
+        overclock = overclock or self._steamdeck_overclock_state()
+        configured_max = overclock["max_w"]
         if configured_max is not None:
             ceiling = max(lim.max_ac_w, configured_max)
             lim = TdpLimits(
@@ -3895,9 +3943,9 @@ class Plugin:
             )
         return lim
 
-    def _automatic_limits(self):
+    def _automatic_limits(self, limits=None):
         """Limits for automatic control and presets, excluding unsafe opt-ins."""
-        limits = self._limits()
+        limits = limits or self._limits()
         if not (
             self._device.experimental_tdp_max_ac
             and self._settings.get("experimental_tdp_unlock") is True
@@ -3911,10 +3959,10 @@ class Plugin:
             max_ac,
         )
 
-    def _effective_levels(self, appid=None, on_ac=None):
+    def _effective_levels(self, appid=None, on_ac=None, limits=None):
         """Clamped {pl1,pl2,pl3} for a scope at the active (on_ac) ceiling, plus the
         ceiling. Single source for every loop/RPC that needs the applied setpoint."""
-        limits = self._limits()
+        limits = limits or self._limits()
         ac = read_on_ac() if on_ac is None else on_ac
         active = self._active_max(limits, ac)
         ll = self._cap_level_limits(self._tdp_backend.level_limits(), active)
@@ -8518,10 +8566,17 @@ class Plugin:
         return bool(targets.target)
 
     def _tdp_state(self, observation) -> dict:
-        levels, active, ac = self._effective_levels(self._current_appid)
-        global_levels, _active, _ac = self._effective_levels(None, ac)
-        limits = self._limits()
         overclock = self._steamdeck_overclock_state()
+        limits = self._limits(overclock)
+        levels, active, ac = self._effective_levels(
+            self._current_appid,
+            limits=limits,
+        )
+        global_levels, _active, _ac = self._effective_levels(
+            None,
+            ac,
+            limits=limits,
+        )
         ll = self._cap_level_limits(self._tdp_backend.level_limits(), active)
         eff = self._tdp_profiles.effective(self._current_appid)
         geff = self._tdp_profiles.effective(None)
@@ -8610,7 +8665,7 @@ class Plugin:
             # The battery↔performance dial that picks a value inside it is now LOCAL UI
             # state — applying it is a fixed manual setpoint, not a loop parameter.
             "learned": self._tdp_learned_info(self._current_appid),
-            "presets": self._tdp_presets(self._automatic_limits()),
+            "presets": self._tdp_presets(self._automatic_limits(limits)),
             # Selectable firmware performance modes; empty on devices without them.
             "firmware_modes": self._firmware_choices(),
             "firmware_mode": self._firmware_mode(),

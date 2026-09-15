@@ -1029,7 +1029,7 @@ def test_exact_steam_deck_factory_preserves_the_reported_overclock_baseline(tmp_
     )
 
     assert backend.name == "steamdeck-hwmon"
-    assert backend.configured_tdp_ceiling() == 25
+    assert backend.configured_tdp_state()["max_w"] == 25
 
 
 def test_exact_steam_deck_never_falls_through_to_generic_amd_backends(tmp_path):
