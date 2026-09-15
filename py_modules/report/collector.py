@@ -606,6 +606,52 @@ def sysfs_snapshot(
     return result
 
 
+def steam_cleaner_snapshot(diagnostics) -> dict:
+    if not isinstance(diagnostics, dict):
+        return {"error": "diagnostics_unavailable"}
+
+    safe_event_keys = {
+        "event", "operation_id", "phase", "at", "reason", "source",
+        "system_error", "library_id", "entry_id", "plan_id", "scan_id", "count", "complete",
+        "readback", "kind", "time", "errors", "deleted",
+    }
+
+    def bounded(value):
+        snapshot = {
+            key: value[key]
+            for key in (
+                "schema_version", "phase", "last_operation_id", "interrupted",
+                "persistence_error",
+            )
+            if key in value
+        }
+        events = value.get("events")
+        snapshot["events"] = [
+            {key: event[key] for key in safe_event_keys if key in event}
+            for event in events[-120:]
+            if isinstance(event, dict)
+        ] if isinstance(events, list) else []
+        return snapshot
+
+    snapshot = bounded(diagnostics)
+    for key in ("proton", "media"):
+        if isinstance(diagnostics.get(key), dict):
+            snapshot[key] = bounded(diagnostics[key])
+    try:
+        while len(json.dumps(snapshot).encode("utf-8")) > 48_000:
+            candidates = [snapshot["events"]]
+            for key in ("proton", "media"):
+                if isinstance(snapshot.get(key), dict):
+                    candidates.append(snapshot[key]["events"])
+            longest = max(candidates, key=len)
+            if not longest:
+                return {"error": "diagnostics_unavailable"}
+            longest.pop(0)
+    except (TypeError, ValueError):
+        return {"error": "diagnostics_unavailable"}
+    return snapshot
+
+
 def capabilities_from(states: dict) -> dict:
     """Distil the per-subsystem detected backends + supported flags from the live
     state dicts. This is the single most useful section for triage: many reports

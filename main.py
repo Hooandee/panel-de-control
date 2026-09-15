@@ -123,6 +123,8 @@ from mangohud.coordinator import HudClosed, HudCoordinator, HudStale
 from mangohud.observations import TimedValue, fresh_value
 from report import collector as report_collector
 from report import client as report_client
+from steam_cleaner import SteamCleanerError, SteamCleanerService
+from steam_cleaner.media import measure_screenshot_paths
 
 # Report collector: the app slug (routes to the right GitHub repo, server-side) and the
 # collector endpoint. The URL is set to the deployed Vercel service; overridable via
@@ -796,6 +798,152 @@ class Plugin:
     async def get_version(self) -> str:
         self._init()
         return read_version()
+
+    def _ensure_steam_cleaner_executor(self):
+        executor = getattr(self, "_steam_cleaner_executor", None)
+        if executor is None:
+            executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="steam-cleaner")
+            self._steam_cleaner_executor = executor
+        return executor
+
+    async def _get_steam_cleaner(self):
+        if getattr(self, "_shutting_down", False) or getattr(self, "_steam_cleaner_closed", False):
+            raise RuntimeError("closed")
+        service = getattr(self, "_steam_cleaner", None)
+        if service is not None:
+            return service
+        future = getattr(self, "_steam_cleaner_init_future", None)
+        if future is None:
+            home = getattr(decky, "DECKY_USER_HOME", None)
+            if not isinstance(home, str) or not os.path.isabs(home):
+                raise RuntimeError("steam_home_unavailable")
+            future = self._ensure_steam_cleaner_executor().submit(
+                self._invoke_steam_cleaner,
+                lambda: SteamCleanerService(
+                    home,
+                    logger=decky.logger,
+                    state_dir=os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "steam_cleaner"),
+                ),
+            )
+            self._steam_cleaner_init_future = future
+        service = await asyncio.shield(asyncio.wrap_future(future))
+        if getattr(self, "_steam_cleaner_closed", False):
+            raise RuntimeError("closed")
+        self._steam_cleaner = service
+        return service
+
+    @staticmethod
+    def _invoke_steam_cleaner(operation, *args):
+        try:
+            return operation(*args)
+        except SteamCleanerError as error:
+            code = error.code
+            if not isinstance(code, str) or not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", code):
+                code = "internal_error"
+            raise RuntimeError(code) from None
+        except Exception:  # noqa: BLE001
+            decky.logger.warning("Steam cleaner operation failed: internal_error")
+            raise RuntimeError("internal_error") from None
+
+    async def _offload_steam_cleaner(self, method, *args):
+        service = await self._get_steam_cleaner()
+        active = getattr(self, "_steam_cleaner_future", None)
+        if active is not None and not active.done():
+            raise RuntimeError("busy")
+        executor = self._ensure_steam_cleaner_executor()
+        future = executor.submit(self._invoke_steam_cleaner, getattr(service, method), *args)
+        self._steam_cleaner_future = future
+        # Cancelling a QAM await must not hide a worker that can still delete files.
+        return await asyncio.shield(asyncio.wrap_future(future))
+
+    async def get_steam_cleaner_state(self) -> dict:
+        self._init()
+        service = await self._get_steam_cleaner()
+        return self._invoke_steam_cleaner(service.get_state)
+
+    async def scan_steam_cleaner(self) -> dict:
+        self._init()
+        return await self._offload_steam_cleaner("inventory")
+
+    async def prepare_steam_cleaner(self, scan_id: str, entry_ids: list[str]) -> dict:
+        self._init()
+        return await self._offload_steam_cleaner("prepare", scan_id, entry_ids)
+
+    async def execute_steam_cleaner(self, plan_id: str, confirm_compatdata: bool = False) -> dict:
+        self._init()
+        return await self._offload_steam_cleaner("execute", plan_id, confirm_compatdata)
+
+    async def cancel_steam_cleaner(self) -> dict:
+        self._init()
+        service = await self._get_steam_cleaner()
+        return self._invoke_steam_cleaner(service.cancel)
+
+    async def get_proton_cleaner_state(self) -> dict:
+        self._init()
+        service = await self._get_steam_cleaner()
+        return self._invoke_steam_cleaner(service.get_proton_state)
+
+    async def scan_proton_cleaner(self) -> dict:
+        self._init()
+        return await self._offload_steam_cleaner("inventory_proton")
+
+    async def prepare_proton_cleaner(self, scan_id: str, entry_ids: list[str]) -> dict:
+        self._init()
+        return await self._offload_steam_cleaner("prepare_proton", scan_id, entry_ids)
+
+    async def execute_proton_cleaner(self, plan_id: str) -> dict:
+        self._init()
+        return await self._offload_steam_cleaner("execute_proton", plan_id)
+
+    async def measure_steam_screenshot_paths(self, paths: list[str]) -> dict:
+        self._init()
+        home = getattr(decky, "DECKY_USER_HOME", None)
+        if not isinstance(home, str) or not os.path.isabs(home):
+            return {}
+        return await asyncio.get_running_loop().run_in_executor(
+            None,
+            measure_screenshot_paths,
+            home,
+            paths,
+        )
+
+    async def record_steam_media_event(
+        self, event: str, operation_id: str, count: int = 0, errors: int = 0,
+        source: str = "none", reason: str = "none",
+    ) -> bool:
+        self._init()
+        service = await self._get_steam_cleaner()
+        return await asyncio.get_running_loop().run_in_executor(
+            None,
+            lambda: service.record_media_event(event, operation_id, count, errors, source, reason),
+        )
+
+    async def _steam_cleaner_diagnostics(self) -> dict:
+        try:
+            service = await self._get_steam_cleaner()
+            return report_collector.steam_cleaner_snapshot(service.diagnostics())
+        except Exception:  # noqa: BLE001
+            return {"error": "diagnostics_unavailable"}
+
+    def _close_steam_cleaner_sync(self) -> None:
+        if getattr(self, "_steam_cleaner_closed", False):
+            return
+        self._steam_cleaner_closed = True
+        executor = getattr(self, "_steam_cleaner_executor", None)
+        service = getattr(self, "_steam_cleaner", None)
+        try:
+            pending = getattr(self, "_steam_cleaner_init_future", None)
+            if service is None and pending is not None:
+                service = pending.result()
+                self._steam_cleaner = service
+            if service is not None:
+                service.close()
+        except Exception:  # noqa: BLE001
+            decky.logger.warning("Steam cleaner close failed: internal_error")
+        finally:
+            if executor is not None:
+                executor.shutdown(wait=True, cancel_futures=True)
+                self._steam_cleaner_executor = None
 
     async def get_launch_tools(self) -> dict:
         self._init()
@@ -1617,6 +1765,7 @@ class Plugin:
             "hud_diagnostics": hud_diagnostics,
             # Detected tools + current game + the frontend's running-game snapshot.
             "launch": self._launch_report_state(context),
+            "steam_cleaner": await self._steam_cleaner_diagnostics(),
         }
         logs = report_collector.tail_logs(
             getattr(decky, "DECKY_PLUGIN_LOG_DIR", ""), home=home, hostname=hostname
@@ -9796,6 +9945,7 @@ class Plugin:
         if getattr(self, "_sampler", None) is not None:
             self._sampler.stop()
         self._cancel_queued_offloads()
+        self._close_steam_cleaner_sync()
 
     def _perform_shutdown_handoff(
         self, stage: str, preserve_recovery=False
