@@ -1,3 +1,5 @@
+import type { SteamOverlayDiagnostics } from "../mangohud/steamOverlay";
+
 export const REPORT_CATEGORIES = [
   "tdp",
   "cpu_gpu",
@@ -57,10 +59,14 @@ export function buildReportContext(
   launch: Record<string, unknown>,
   qam: object,
   kind: ReportKind = "bug",
+  steamOverlay?: SteamOverlayDiagnostics,
 ): Record<string, unknown> {
   return {
     ...launch,
     ...displayReportContext(selected, display),
+    ...(selected.includes("hud") && steamOverlay
+      ? { hud: { steam_overlay: steamOverlay } }
+      : {}),
     qam,
     report_kind: kind,
   };
