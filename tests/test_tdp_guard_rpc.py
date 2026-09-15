@@ -234,13 +234,15 @@ def test_anatase_external_owner_blocks_guard_correction(plugin):
     assert plugin._tdp_reason == "external_owner"
 
 
-def _set_pending_deck_handoff(plugin):
+def _set_indeterminate_deck_ppt(plugin, *, with_marker=True):
     from device_profiles import DEVICE_TABLE
 
     plugin._device = next(
         profile for profile in DEVICE_TABLE if profile.key == "steam_deck_oled"
     )
-    plugin._settings["steamdeck_ppt_previous"] = {"slow": 25, "fast": 30}
+    plugin._settings["steamdeck_ppt_previous"] = (
+        {"slow": 25, "fast": 30} if with_marker else None
+    )
     plugin._tdp_backend.configured_tdp_state = lambda _snapshot=None: {
         "status": "unavailable",
         "max_w": None,
@@ -249,18 +251,18 @@ def _set_pending_deck_handoff(plugin):
 
 
 def test_pending_deck_handoff_blocks_command_writes(plugin):
-    _set_pending_deck_handoff(plugin)
+    _set_indeterminate_deck_ppt(plugin)
     plugin._tdp_profiles.set_pl1("global", 25)
     plugin._tdp_backend.set_levels_calls = 0
 
     result = plugin._execute_tdp_command(plugin._capture_tdp_command("startup"))
 
     assert plugin._tdp_backend.set_levels_calls == 0
-    assert result.detail == "steamdeck-ppt-recovery-pending"
+    assert result.detail == "steamdeck-ppt-probe-pending"
 
 
 def test_pending_deck_handoff_blocks_guard_writes(plugin):
-    _set_pending_deck_handoff(plugin)
+    _set_indeterminate_deck_ppt(plugin)
     plugin._tdp_profiles.set_pl1("global", 25)
     plugin._tdp_backend.set_levels_calls = 0
     _reset_guard_memory(plugin)
@@ -269,7 +271,31 @@ def test_pending_deck_handoff_blocks_guard_writes(plugin):
     plugin._tdp_guard_tick(now=10.75)
 
     assert plugin._tdp_backend.set_levels_calls == 0
-    assert plugin._tdp_reason == "steamdeck_ppt_recovery_pending"
+    assert plugin._tdp_reason == "steamdeck_ppt_probe_pending"
+
+
+def test_indeterminate_deck_probe_without_marker_blocks_command_writes(plugin):
+    _set_indeterminate_deck_ppt(plugin, with_marker=False)
+    plugin._tdp_profiles.set_pl1("global", 15)
+    plugin._tdp_backend.set_levels_calls = 0
+
+    result = plugin._execute_tdp_command(plugin._capture_tdp_command("startup"))
+
+    assert plugin._tdp_backend.set_levels_calls == 0
+    assert result.detail == "steamdeck-ppt-probe-pending"
+
+
+def test_indeterminate_deck_probe_without_marker_blocks_guard_writes(plugin):
+    _set_indeterminate_deck_ppt(plugin, with_marker=False)
+    plugin._tdp_profiles.set_pl1("global", 15)
+    plugin._tdp_backend.set_levels_calls = 0
+    _reset_guard_memory(plugin)
+
+    plugin._tdp_guard_tick(now=10.0)
+    plugin._tdp_guard_tick(now=10.75)
+
+    assert plugin._tdp_backend.set_levels_calls == 0
+    assert plugin._tdp_reason == "steamdeck_ppt_probe_pending"
 
 
 def test_command_preserves_requested_but_applies_live_target(plugin):
