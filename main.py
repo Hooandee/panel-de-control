@@ -190,6 +190,7 @@ class _TdpCommand:
     safe_bounds: dict
     primary_rail: str
     on_ac: bool
+    ppt_recovery_pending: bool
 
 
 @dataclass(frozen=True)
@@ -2363,6 +2364,17 @@ class Plugin:
         self._record_steamdeck_ppt("restore", True)
         return True
 
+    def _steamdeck_ppt_handoff_pending(self, overclock=None) -> bool:
+        if self._settings.get("steamdeck_ppt_previous") is None:
+            return False
+        state = overclock or self._steamdeck_overclock_state()
+        return state["status"] in {"unavailable", "unsupported"}
+
+    def _restore_steamdeck_startup_ppt(self) -> bool:
+        return self._restore_steamdeck_ppt(
+            preserve_ownership=self._steamdeck_ppt_handoff_pending()
+        )
+
     def _prepare_steamdeck_ppt(self, command):
         if not self._steamdeck_ppt_supported():
             return None
@@ -3843,7 +3855,7 @@ class Plugin:
             return TdpLimits.from_profile(self._device)
         if self._device.key in ("steam_deck_lcd", "steam_deck_oled"):
             overclock = self._steamdeck_overclock_state()
-            if overclock["status"] == "unavailable":
+            if overclock["status"] in {"unavailable", "unsupported"}:
                 return None
             return self._limits(overclock)
         if self._device.key != "rog_flow_z13":
@@ -4303,7 +4315,8 @@ class Plugin:
     def _capture_tdp_command(self, reason, on_ac=None, bump=True):
         backend = self._tdp_backend
         ac = read_on_ac() if on_ac is None else bool(on_ac)
-        limits = self._limits()
+        overclock = self._steamdeck_overclock_state()
+        limits = self._limits(overclock)
         active = self._active_max(limits, ac)
         logical_requested = self._tdp_profiles.effective(self._current_appid)
         if self._settings.get("eco_enabled"):
@@ -4354,6 +4367,7 @@ class Plugin:
             safe_bounds=safe,
             primary_rail=getattr(backend, "primary_rail", "pl1"),
             on_ac=ac,
+            ppt_recovery_pending=self._steamdeck_ppt_handoff_pending(overclock),
         )
 
     def _advance_tdp_generation(self):
@@ -4458,6 +4472,23 @@ class Plugin:
                 True,
                 "tdp-control-disabled",
             )
+        if command.ppt_recovery_pending:
+            self._tdp_status = "rejected"
+            self._tdp_reason = "steamdeck_ppt_recovery_pending"
+            result = TdpResult(
+                logical_watts,
+                None,
+                False,
+                "steamdeck-ppt-recovery-pending",
+            )
+            self._record_tdp_transition(
+                command.reason,
+                action="blocked",
+                result=result,
+                on_ac=command.on_ac,
+                requested=command.requested,
+            )
+            return result
         if not self._tdp_write_authorized():
             self._tdp_status = "unverifiable"
             self._tdp_reason = "external_owner"
@@ -4920,6 +4951,12 @@ class Plugin:
         if not self._tdp_control_on():
             self._tdp_status = "unverifiable"
             self._tdp_reason = "control_disabled"
+            self._tdp_reconcile_memory = ReconcileMemory()
+            return
+        if command.ppt_recovery_pending:
+            self._tdp_status = "rejected"
+            self._tdp_reason = "steamdeck_ppt_recovery_pending"
+            self._tdp_targets = None
             self._tdp_reconcile_memory = ReconcileMemory()
             return
         if not self._tdp_write_authorized():
@@ -10006,7 +10043,7 @@ class Plugin:
         await self._prime_tdp_ownership()
         try:
             if self._settings.get("steamdeck_ppt_previous") is not None:
-                await self._offload_call(self._restore_steamdeck_ppt)
+                await self._offload_call(self._restore_steamdeck_startup_ppt)
             self._reapply_all()
             self._start_charge_limit_full_once_monitor()
             self._lifecycle.start()

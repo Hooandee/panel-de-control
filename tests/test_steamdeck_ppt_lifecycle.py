@@ -14,6 +14,7 @@ if "decky" not in sys.modules:
     sys.modules["decky"] = decky
 
 import main
+from tdp.backend import NullBackend
 from tdp.types import TdpLimits
 
 
@@ -209,6 +210,24 @@ def test_indeterminate_ppt_defers_profile_sanitization():
     plugin = _with_limits(_plugin(backend), pl1=25)
 
     assert plugin._profile_storage_limits() is None
+
+
+def test_missing_deck_backend_defers_profile_sanitization():
+    plugin = _with_limits(_plugin(NullBackend("hwmon missing")), pl1=25)
+
+    assert plugin._profile_storage_limits() is None
+
+
+def test_startup_restore_keeps_marker_while_ppt_probe_is_indeterminate():
+    backend = _DeckBackend()
+    backend.configuration_status = "unavailable"
+    plugin = _with_limits(_plugin(backend), pl1=25)
+    marker = {"slow": 25, "fast": 30}
+    plugin._settings["steamdeck_ppt_previous"] = marker
+
+    assert plugin._restore_steamdeck_startup_ppt() is True
+    assert backend.restore_calls == [marker]
+    assert plugin._settings["steamdeck_ppt_previous"] == marker
 
 
 def test_limits_reuse_a_previously_read_overclock_state():
