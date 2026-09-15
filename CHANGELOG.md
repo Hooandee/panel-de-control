@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.49.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.49.1...panel-de-control-v0.49.2) (2026-09-15)
+
+
+### Bug Fixes
+
+* **themes:** group Gallery section toggles at the end ([#666](https://github.com/Hooandee/panel-de-control/issues/666)) ([40e1683](https://github.com/Hooandee/panel-de-control/commit/40e1683c1b73466da93c32e57c776f527dcfd202))
+
 ## 0.49.1 (2026-09-15)
 
 ### Español
