@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.50.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.49.2...panel-de-control-v0.50.0) (2026-09-16)
+
+
+### Features
+
+* add Brazilian Portuguese localization ([#670](https://github.com/Hooandee/panel-de-control/issues/670)) ([f013b4d](https://github.com/Hooandee/panel-de-control/commit/f013b4d86111308bff80c5e9298f908cc7c2dfa2))
+
 ## [0.49.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.49.1...panel-de-control-v0.49.2) (2026-09-15)
 
 ### Español
