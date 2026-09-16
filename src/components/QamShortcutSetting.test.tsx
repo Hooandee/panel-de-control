@@ -16,7 +16,7 @@ const qamState = vi.hoisted(() => ({
 
 const restartLoader = vi.hoisted(() => vi.fn(async () => {}));
 const closeSideMenus = vi.hoisted(() => vi.fn());
-const openCustomize = vi.hoisted(() => vi.fn());
+const openQamCustomize = vi.hoisted(() => vi.fn());
 
 vi.mock("@decky/ui", () => ({
   Navigation: { CloseSideMenus: closeSideMenus },
@@ -33,7 +33,7 @@ vi.mock("../qam/runtime", () => ({
   getQamRuntimeSnapshot: () => qamState.snapshot,
   subscribeQamRuntime: () => () => {},
 }));
-vi.mock("./CustomizeModal", () => ({ openCustomizeModal: openCustomize }));
+vi.mock("./QamCustomizeModal", () => ({ openQamCustomizeModal: openQamCustomize }));
 
 vi.mock("../i18n", () => ({
   useI18n: () => ({
@@ -57,7 +57,7 @@ describe("QamShortcutSetting", () => {
       restartRequired: false,
       reason: "ready",
     });
-    openCustomize.mockClear();
+    openQamCustomize.mockClear();
     restartLoader.mockClear();
     closeSideMenus.mockClear();
   });
@@ -67,12 +67,12 @@ describe("QamShortcutSetting", () => {
     vi.useRealTimers();
   });
 
-  it("opens the unified QAM editor instead of exposing a legacy toggle", () => {
+  it("opens the dedicated QAM editor instead of exposing a legacy toggle", () => {
     render(<QamShortcutSetting />);
 
     fireEvent.click(screen.getByText("Configurar el QAM"));
 
-    expect(openCustomize).toHaveBeenCalledOnce();
+    expect(openQamCustomize).toHaveBeenCalledOnce();
     expect(screen.queryByRole("checkbox")).toBeNull();
   });
 

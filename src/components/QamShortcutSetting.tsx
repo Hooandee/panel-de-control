@@ -4,7 +4,7 @@ import { type FC, useSyncExternalStore } from "react";
 import { useI18n } from "../i18n";
 import { getQamRuntimeSnapshot, subscribeQamRuntime } from "../qam/runtime";
 import { theme } from "../theme";
-import { openCustomizeModal } from "./CustomizeModal";
+import { openQamCustomizeModal } from "./QamCustomizeModal";
 import { reloadDeckyAfterClosingMenus } from "../system/reloadDecky";
 
 export const QamShortcutSetting: FC = () => {
@@ -19,7 +19,7 @@ export const QamShortcutSetting: FC = () => {
       <ButtonItem
         layout="below"
         description={t("settings.qamShortcut.desc")}
-        onClick={openCustomizeModal}
+        onClick={openQamCustomizeModal}
       >
         {t("settings.qamShortcut")}
       </ButtonItem>
