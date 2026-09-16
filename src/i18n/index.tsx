@@ -446,6 +446,8 @@ const es: Record<string, string> = {
   "themes.group.animations": "Animaciones",
   "themes.group.performance": "Rendimiento",
   "themes.group.compatibility": "Compatibilidad",
+  "themes.group.sections": "Secciones del tema",
+  "themes.group.sectionsDescription": "Elige en qué partes de Steam se aplica el tema.",
   "audio.unsupported": "El ecualizador no está disponible en esta versión del sistema.",
   "audio.inherit": "Usa el ajuste global hasta que cambies algo aquí.",
   "audio.enable": "Ecualizador",
@@ -1617,6 +1619,8 @@ const en: Record<string, string> = {
   "themes.group.animations": "Animations",
   "themes.group.performance": "Performance",
   "themes.group.compatibility": "Compatibility",
+  "themes.group.sections": "Theme sections",
+  "themes.group.sectionsDescription": "Choose which parts of Steam use the theme.",
   "audio.unsupported": "The equalizer isn't available on this system version.",
   "audio.inherit": "Uses the global setting until you change something here.",
   "audio.enable": "Equalizer",
@@ -2423,6 +2427,8 @@ const themeIt: Record<string, string> = {
   "themes.group.animations": "Animazioni",
   "themes.group.performance": "Prestazioni",
   "themes.group.compatibility": "Compatibilità",
+  "themes.group.sections": "Sezioni del tema",
+  "themes.group.sectionsDescription": "Scegli a quali parti di Steam applicare il tema.",
 };
 
 export const DICTS: Record<Lang, Record<string, string>> = {
