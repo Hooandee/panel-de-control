@@ -8,6 +8,7 @@ import concurrent.futures
 import importlib
 import sys
 import threading
+import time
 import types
 
 import pytest
@@ -187,8 +188,46 @@ class _FixedChargeLimit(_RecordingChargeLimit):
     adjustable = False
     name = "lenovo-conservation"
 
+    def __init__(self):
+        super().__init__()
+        self.conservation_enabled = True
+        self.disable_requests = 0
+
     def get(self):
         return None
+
+    def set(self, percent):
+        self.set_requests.append(percent)
+        self.conservation_enabled = True
+        return True
+
+    def disable(self):
+        self.disable_requests += 1
+        self.conservation_enabled = False
+        return True
+
+
+class _RecoveringFixedChargeLimit(_FixedChargeLimit):
+    def __init__(self, *, set_failures=0, disable_failures=0):
+        super().__init__()
+        self.set_failures = set_failures
+        self.disable_failures = disable_failures
+
+    def set(self, percent):
+        self.set_requests.append(percent)
+        if self.set_failures > 0:
+            self.set_failures -= 1
+            return False
+        self.conservation_enabled = True
+        return True
+
+    def disable(self):
+        self.disable_requests += 1
+        if self.disable_failures > 0:
+            self.disable_failures -= 1
+            return False
+        self.conservation_enabled = False
+        return True
 
 
 def _late_probe_backend(tmp_path, kind):
@@ -430,6 +469,430 @@ def test_set_charge_limit_persists(tmp_path, monkeypatch):
     assert cl2.value == 65  # persisted limit re-applied to hardware
     cl = asyncio.run(p2.get_battery_state())["charge_limit"]
     assert cl["enabled"] is True and cl["percent"] == 65
+
+
+def test_full_charge_once_applies_max_without_replacing_saved_limit(
+    tmp_path, monkeypatch
+):
+    backend = _RecordingChargeLimit()
+    backend.value = 80
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=backend)
+    p._init()
+    p._settings["charge_limit_enabled"] = True
+    p._settings["charge_limit_percent"] = 80
+    monkeypatch.setattr(time, "time", lambda: 1_000.0)
+
+    state = asyncio.run(p.set_charge_limit_full_once(True))
+
+    assert backend.value == 100
+    assert p._settings["charge_limit_percent"] == 80
+    assert state["full_charge_once"] == {
+        "available": True,
+        "active": True,
+        "status": "active",
+        "expires_at": 87_400.0,
+    }
+
+
+def test_full_charge_once_restores_saved_limit_when_battery_is_full(
+    tmp_path, monkeypatch
+):
+    backend = _RecordingChargeLimit()
+    backend.value = 80
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=backend)
+    p._init()
+    p._settings["charge_limit_enabled"] = True
+    p._settings["charge_limit_percent"] = 80
+    p._battery = types.SimpleNamespace(
+        read=lambda: {"present": True, "percent": 100, "status": "Full"}
+    )
+    monkeypatch.setattr(time, "time", lambda: 1_000.0)
+
+    async def scenario():
+        await p.set_charge_limit_full_once(True)
+        await p._check_charge_limit_full_once()
+        return p._charge_limit_state()
+
+    state = asyncio.run(scenario())
+
+    assert backend.set_requests == [100, 80]
+    assert backend.value == 80
+    assert p._settings["charge_limit_full_once_until"] is None
+    assert state["full_charge_once"] == {
+        "available": True,
+        "active": False,
+        "status": "inactive",
+        "expires_at": None,
+    }
+
+
+def test_full_charge_once_restores_fixed_conservation_mode_after_full_charge(
+    tmp_path, monkeypatch
+):
+    backend = _FixedChargeLimit()
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=backend)
+    p._init()
+    p._settings["charge_limit_enabled"] = True
+    p._settings["charge_limit_percent"] = 80
+    p._battery = types.SimpleNamespace(
+        read=lambda: {"present": True, "percent": 100, "status": "Full"}
+    )
+    monkeypatch.setattr(time, "time", lambda: 1_000.0)
+
+    async def scenario():
+        started = await p.set_charge_limit_full_once(True)
+        assert started["full_charge_once"]["status"] == "active"
+        assert backend.conservation_enabled is False
+        await p._check_charge_limit_full_once()
+
+    asyncio.run(scenario())
+
+    assert backend.disable_requests == 1
+    assert backend.set_requests == [80]
+    assert backend.conservation_enabled is True
+    assert p._settings["charge_limit_full_once_until"] is None
+
+
+def test_full_charge_once_keeps_failed_fixed_restoration_visible_until_retry(
+    tmp_path, monkeypatch
+):
+    backend = _RecoveringFixedChargeLimit(set_failures=2)
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=backend)
+    p._init()
+    p._settings["charge_limit_enabled"] = True
+    p._settings["charge_limit_percent"] = 80
+    p._battery = types.SimpleNamespace(
+        read=lambda: {"present": True, "percent": 100, "status": "Full"}
+    )
+    monkeypatch.setattr(time, "time", lambda: 1_000.0)
+
+    async def scenario():
+        started = await p.set_charge_limit_full_once(True)
+        deadline = started["full_charge_once"]["expires_at"]
+        await p._check_charge_limit_full_once()
+        failed = p._charge_limit_state()["full_charge_once"]
+        await p._check_charge_limit_full_once()
+        restored = p._charge_limit_state()["full_charge_once"]
+        return deadline, failed, restored
+
+    deadline, failed, restored = asyncio.run(scenario())
+
+    assert backend.conservation_enabled is True
+    assert backend.set_requests == [80, 80, 80]
+    assert failed == {
+        "available": True,
+        "active": True,
+        "status": "failed",
+        "expires_at": deadline,
+    }
+    assert restored == {
+        "available": True,
+        "active": False,
+        "status": "inactive",
+        "expires_at": None,
+    }
+
+
+def test_full_charge_once_retries_failed_fixed_activation_on_monitor_check(
+    tmp_path, monkeypatch
+):
+    backend = _RecoveringFixedChargeLimit(disable_failures=2)
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=backend)
+    p._init()
+    p._settings["charge_limit_enabled"] = True
+    p._settings["charge_limit_percent"] = 80
+    p._battery = types.SimpleNamespace(
+        read=lambda: {"present": True, "percent": 60, "status": "Charging"}
+    )
+    monkeypatch.setattr(time, "time", lambda: 1_000.0)
+
+    async def scenario():
+        failed = await p.set_charge_limit_full_once(True)
+        await p._check_charge_limit_full_once()
+        recovered = p._charge_limit_state()
+        return failed, recovered
+
+    failed, recovered = asyncio.run(scenario())
+
+    assert failed["full_charge_once"]["status"] == "failed"
+    assert backend.disable_requests == 3
+    assert backend.conservation_enabled is False
+    assert recovered["full_charge_once"]["status"] == "active"
+
+
+def test_full_charge_once_restores_limit_when_deadline_expires(
+    tmp_path, monkeypatch
+):
+    backend = _RecordingChargeLimit()
+    backend.value = 100
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=backend)
+    p._init()
+    p._settings["charge_limit_enabled"] = True
+    p._settings["charge_limit_percent"] = 75
+    p._settings["charge_limit_full_once_until"] = 999.0
+    p._charge_limit_full_once_status = "active"
+    p._battery = types.SimpleNamespace(
+        read=lambda: {"present": True, "percent": 60, "status": "Charging"}
+    )
+    monkeypatch.setattr(time, "time", lambda: 1_000.0)
+
+    asyncio.run(p._check_charge_limit_full_once())
+
+    assert backend.value == 75
+    assert p._settings["charge_limit_full_once_until"] is None
+
+
+def test_manual_limit_change_cancels_full_charge_once(
+    tmp_path, monkeypatch
+):
+    backend = _RecordingChargeLimit()
+    backend.value = 100
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=backend)
+    p._init()
+    p._settings["charge_limit_enabled"] = True
+    p._settings["charge_limit_percent"] = 80
+    p._settings["charge_limit_full_once_until"] = time.time() + 3_600
+    p._charge_limit_full_once_status = "active"
+
+    state = asyncio.run(p.set_charge_limit(True, 65))
+
+    assert backend.value == 65
+    assert p._settings["charge_limit_full_once_until"] is None
+    assert state["full_charge_once"]["active"] is False
+
+
+@pytest.mark.parametrize("module_id", ["chargeLimit", "system"])
+def test_module_handoff_cancels_full_charge_once_without_restoring_limit(
+    tmp_path, monkeypatch, module_id
+):
+    backend = _RecordingChargeLimit()
+    backend.value = 100
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=backend)
+    p._init()
+    p._settings["charge_limit_enabled"] = True
+    p._settings["charge_limit_percent"] = 80
+    p._settings["charge_limit_full_once_until"] = time.time() + 3_600
+    p._charge_limit_full_once_status = "active"
+    p._reapply_all = lambda on_ac=None: None
+    p._release_gpu_clock = lambda *_: asyncio.sleep(0)
+
+    asyncio.run(p.set_ui_module(module_id, True))
+
+    assert backend.value == 100
+    assert backend.set_requests == []
+    assert p._settings["charge_limit_full_once_until"] is None
+
+
+def test_failed_full_charge_once_write_keeps_retry_intent_visible(
+    tmp_path, monkeypatch
+):
+    backend = _FailingChargeLimit()
+    backend.value = 80
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=backend)
+    p._init()
+    p._settings["charge_limit_enabled"] = True
+    p._settings["charge_limit_percent"] = 80
+
+    state = asyncio.run(p.set_charge_limit_full_once(True))
+
+    assert backend.attempts == 2
+    assert backend.value == 80
+    assert state["full_charge_once"]["active"] is True
+    assert state["full_charge_once"]["status"] == "failed"
+
+
+def test_full_charge_once_reconcile_updates_failed_status_after_recovery(
+    tmp_path, monkeypatch
+):
+    backend = _RecordingChargeLimit()
+    backend.value = 80
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=backend)
+    p._init()
+    p._settings["charge_limit_enabled"] = True
+    p._settings["charge_limit_percent"] = 80
+    p._settings["charge_limit_full_once_until"] = time.time() + 3_600
+    p._charge_limit_full_once_status = "failed"
+    p._charge_limit_generation += 1
+    monkeypatch.setattr(p, "_charge_limit_verify_delays", (0.0,))
+
+    asyncio.run(
+        p._reconcile_charge_limit(p._charge_limit_generation, "full_once")
+    )
+
+    assert backend.value == 100
+    assert p._charge_limit_full_once_status == "active"
+
+
+def test_reconcile_finishes_pending_adjustable_restoration(
+    tmp_path, monkeypatch
+):
+    backend = _RecordingChargeLimit()
+    backend.value = 100
+    attempts = 0
+
+    def recover_on_reconcile(percent):
+        nonlocal attempts
+        attempts += 1
+        backend.set_requests.append(percent)
+        if attempts <= 2:
+            return False
+        backend.value = percent
+        return True
+
+    monkeypatch.setattr(backend, "set", recover_on_reconcile)
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=backend)
+    p._init()
+    p._settings["charge_limit_enabled"] = True
+    p._settings["charge_limit_percent"] = 80
+    p._settings["charge_limit_full_once_until"] = time.time() + 3_600
+    p._charge_limit_full_once_status = "active"
+    p._battery = types.SimpleNamespace(
+        read=lambda: {"present": True, "percent": 100, "status": "Full"}
+    )
+    monkeypatch.setattr(p, "_charge_limit_verify_delays", (0.0,))
+    monkeypatch.setattr(p, "_schedule_charge_limit_reconcile", lambda _: None)
+    monkeypatch.setattr(p, "_start_charge_limit_full_once_monitor", lambda: None)
+
+    async def scenario():
+        await p._check_charge_limit_full_once()
+        failed = p._charge_limit_state()["full_charge_once"]
+        await p._reconcile_charge_limit(
+            p._charge_limit_generation,
+            "full_once_restore",
+        )
+        return failed, p._charge_limit_state()["full_charge_once"]
+
+    failed, restored = asyncio.run(scenario())
+
+    assert failed["status"] == "failed"
+    assert restored == {
+        "available": True,
+        "active": False,
+        "status": "inactive",
+        "expires_at": None,
+    }
+    assert backend.set_requests == [80, 80, 80]
+
+
+def test_persisted_full_charge_once_is_reapplied_after_restart(
+    tmp_path, monkeypatch
+):
+    backend = _RecordingChargeLimit()
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=backend)
+    p._init()
+    p._settings["charge_limit_enabled"] = True
+    p._settings["charge_limit_percent"] = 80
+    p._settings["charge_limit_full_once_until"] = time.time() + 3_600
+    p._save()
+
+    restarted_backend = _RecordingChargeLimit()
+    restarted_backend.value = 80
+    restarted = _make_plugin(
+        tmp_path, monkeypatch, charge_limit=restarted_backend
+    )
+    restarted._init()
+
+    restarted._apply_charge_limit()
+
+    assert restarted_backend.value == 100
+    assert restarted._settings["charge_limit_percent"] == 80
+
+
+@pytest.mark.parametrize(
+    ("device_key", "kind"),
+    [
+        ("rog_xbox_ally_x", "sysfs"),
+        ("steam_deck_lcd", "deck"),
+    ],
+)
+def test_persisted_full_charge_once_survives_late_backend_probe(
+    tmp_path,
+    monkeypatch,
+    device_key,
+    kind,
+):
+    replacement = _late_probe_backend(tmp_path, kind)
+    replacement.set(80)
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=NullChargeLimit())
+    p._init()
+    p._device = types.SimpleNamespace(key=device_key)
+    p._settings["charge_limit_enabled"] = True
+    p._settings["charge_limit_percent"] = 80
+    deadline = time.time() + 3_600
+    p._settings["charge_limit_full_once_until"] = deadline
+    monkeypatch.setattr(p, "_charge_limit_verify_delays", (0.0,))
+    monkeypatch.setattr(
+        sys.modules["main"],
+        "select_charge_limit",
+        lambda _: replacement,
+    )
+
+    async def scenario():
+        p._schedule_charge_limit_reconcile("startup")
+        reconcile = p._charge_limit_reconcile_task
+        assert reconcile is not None
+        p._start_charge_limit_full_once_monitor()
+        await reconcile
+        state = p._charge_limit_state()["full_charge_once"]
+        monitor = p._charge_limit_full_once_task
+        p._stop_charge_limit_full_once_monitor()
+        if monitor is not None:
+            await asyncio.gather(monitor, return_exceptions=True)
+        return state
+
+    state = asyncio.run(scenario())
+
+    assert p._charge_limit is replacement
+    assert replacement.get() == 100
+    assert p._settings["charge_limit_full_once_until"] == deadline
+    assert state["active"] is True
+
+
+def test_corrupt_full_charge_once_deadline_is_removed_at_startup(
+    tmp_path, monkeypatch
+):
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=_RecordingChargeLimit())
+    p._init()
+    p._settings["charge_limit_full_once_until"] = "tomorrow"
+    p._save()
+
+    restarted = _make_plugin(
+        tmp_path,
+        monkeypatch,
+        charge_limit=_RecordingChargeLimit(),
+    )
+    restarted._init()
+    restarted._start_charge_limit_full_once_monitor()
+
+    assert restarted._settings["charge_limit_full_once_until"] is None
+
+
+def test_full_charge_once_monitor_recovers_after_a_poll_error(
+    tmp_path, monkeypatch
+):
+    p = _make_plugin(tmp_path, monkeypatch, charge_limit=_RecordingChargeLimit())
+    p._init()
+    p._settings["charge_limit_enabled"] = True
+    p._settings["charge_limit_full_once_until"] = 2_000.0
+    monkeypatch.setattr(time, "time", lambda: 1_000.0)
+    checks = 0
+
+    async def check():
+        nonlocal checks
+        checks += 1
+        if checks == 1:
+            raise OSError("transient read failure")
+        p._clear_charge_limit_full_once()
+
+    async def no_wait(_delay):
+        return None
+
+    monkeypatch.setattr(p, "_check_charge_limit_full_once", check)
+    monkeypatch.setattr(asyncio, "sleep", no_wait)
+
+    asyncio.run(p._charge_limit_full_once_loop(2_000.0))
+
+    assert checks == 2
 
 
 def test_unsupported_charge_limit_degrades(tmp_path, monkeypatch):

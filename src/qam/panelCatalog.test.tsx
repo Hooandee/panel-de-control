@@ -17,6 +17,7 @@ describe("Panel QAM catalog", () => {
 
     expect(tokens).not.toContain("pdc:section:mandos");
     expect(tokens).toContain("pdc:section:hud");
+    expect(tokens).toContain("pdc:section:cleaner");
   });
 
   it("does not offer a disabled section or one with no visible content", () => {

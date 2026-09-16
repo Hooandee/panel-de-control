@@ -18,7 +18,7 @@ def _run(tmp_path: Path, mode: str, changelog: str) -> subprocess.CompletedProce
     )
 
 
-def test_check_accepts_separate_spanish_english_italian_and_german_blocks(tmp_path):
+def test_check_accepts_separate_blocks_for_every_supported_language(tmp_path):
     changelog = """# Changelog
 
 ## [0.37.0](https://example.test/0.37.0)
@@ -43,13 +43,72 @@ def test_check_accepts_separate_spanish_english_italian_and_german_blocks(tmp_pa
 * Öffne das Panel über das QAM.
 * Starte Decky neu, um die Änderung anzuwenden.
 
+### Português (Brasil)
+
+* Abra o painel pelo QAM.
+* Reinicie o Decky para aplicar a mudança.
+
 ## [0.36.0](https://example.test/0.36.0)
 """
 
     result = _run(tmp_path, "--check", changelog)
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "quadrilingual" in result.stdout
+    assert "five languages" in result.stdout
+
+
+def test_check_requires_and_renders_brazilian_portuguese(tmp_path):
+    changelog = """# Changelog
+
+## [0.50.0](https://example.test/0.50.0)
+
+### Español
+
+* Abre el panel desde el QAM.
+
+### English
+
+* Open the panel from the QAM.
+
+### Italiano
+
+* Apri il pannello dal QAM.
+
+### Deutsch
+
+* Öffne das Panel über das QAM.
+
+### Português (Brasil)
+
+* Abra o painel pelo QAM.
+"""
+
+    checked = _run(tmp_path, "--check", changelog)
+    rendered = _run(tmp_path, "--release-body", changelog)
+
+    assert checked.returncode == 0, checked.stdout + checked.stderr
+    assert "five languages" in checked.stdout
+    assert rendered.returncode == 0, rendered.stdout + rendered.stderr
+    assert rendered.stdout.endswith(
+        "### Novidades em português (Brasil)\n\n- Abra o painel pelo QAM.\n"
+    )
+
+
+def test_check_rejects_missing_brazilian_portuguese(tmp_path):
+    changelog = """# Changelog
+
+## [0.50.0](https://example.test/0.50.0)
+
+* **ES:** Abre el panel desde el QAM.
+* **EN:** Open the panel from the QAM.
+* **IT:** Apri il pannello dal QAM.
+* **DE:** Öffne das Panel über das QAM.
+"""
+
+    result = _run(tmp_path, "--check", changelog)
+
+    assert result.returncode == 1
+    assert "Brazilian Portuguese (**PT-BR:**)" in result.stdout
 
 
 def test_release_body_groups_and_strips_all_language_labels(tmp_path):
@@ -73,6 +132,10 @@ def test_release_body_groups_and_strips_all_language_labels(tmp_path):
 
 * Öffne das Panel über das QAM. ([#415](https://example.test/415))
 
+### Português (Brasil)
+
+* Abra o painel pelo QAM. ([#415](https://example.test/415))
+
 ## [0.36.0](https://example.test/0.36.0)
 """
 
@@ -94,6 +157,10 @@ def test_release_body_groups_and_strips_all_language_labels(tmp_path):
 ### Neuigkeiten
 
 - Öffne das Panel über das QAM.
+
+### Novidades em português (Brasil)
+
+- Abra o painel pelo QAM.
 """
 
 
@@ -133,12 +200,16 @@ def test_check_accepts_complete_german_translation(tmp_path):
 ### Deutsch
 
 * Öffne das Panel über das QAM.
+
+### Português (Brasil)
+
+* Abra o painel pelo QAM.
 """
 
     result = _run(tmp_path, "--check", changelog)
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "quadrilingual" in result.stdout
+    assert "five languages" in result.stdout
 
 
 def test_release_body_includes_german_notes(tmp_path):
@@ -150,12 +221,13 @@ def test_release_body_includes_german_notes(tmp_path):
 * **EN:** Open the panel from the QAM.
 * **IT:** Apri il pannello dal QAM.
 * **DE:** Öffne das Panel über das QAM.
+* **PT-BR:** Abra o painel pelo QAM.
 """
 
     result = _run(tmp_path, "--release-body", changelog)
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert result.stdout.endswith("### Neuigkeiten\n\n- Öffne das Panel über das QAM.\n")
+    assert "### Neuigkeiten\n\n- Öffne das Panel über das QAM." in result.stdout
 
 
 def test_check_rejects_partial_german_translation(tmp_path):
@@ -223,6 +295,7 @@ def test_check_rejects_missing_italian_translation(tmp_path):
 * **ES:** Abre el panel desde el QAM.
 * **EN:** Open the panel from the QAM.
 * **DE:** Öffne das Panel über das QAM.
+* **PT-BR:** Abra o painel pelo QAM.
 """
 
     result = _run(tmp_path, "--check", changelog)
@@ -240,12 +313,13 @@ def test_check_keeps_release_please_english_bullets_compatible(tmp_path):
 * **ES:** Abre el panel desde el QAM.
 * **IT:** Apri il pannello dal QAM.
 * **DE:** Öffne das Panel über das QAM.
+* **PT-BR:** Abra o painel pelo QAM.
 """
 
     result = _run(tmp_path, "--check", changelog)
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "quadrilingual" in result.stdout
+    assert "five languages" in result.stdout
 
 
 def test_check_keeps_explicit_language_labels_compatible(tmp_path):
@@ -257,12 +331,13 @@ def test_check_keeps_explicit_language_labels_compatible(tmp_path):
 * **EN:** Open the panel from the QAM.
 * **IT:** Apri il pannello dal QAM.
 * **DE:** Öffne das Panel über das QAM.
+* **PT-BR:** Abra o painel pelo QAM.
 """
 
     result = _run(tmp_path, "--check", changelog)
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "quadrilingual" in result.stdout
+    assert "five languages" in result.stdout
 
 
 def test_check_rejects_unknown_language_labels(tmp_path):

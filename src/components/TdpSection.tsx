@@ -1,4 +1,4 @@
-import { PanelSectionRow, SliderField, Focusable } from "@decky/ui";
+import { PanelSectionRow, SliderField, Focusable, ToggleField } from "@decky/ui";
 import { FC, useCallback, useMemo } from "react";
 import { LuInfo } from "react-icons/lu";
 
@@ -17,6 +17,7 @@ import { AdvancedBoost } from "./AdvancedBoost";
 import { TdpSuggestionCard } from "./TdpSuggestionCard";
 import { TdpMonitorNotice } from "./TdpMonitorNotice";
 import { TdpOwnershipStatus } from "./TdpOwnershipStatus";
+import { ExperimentalLabel } from "./ExperimentalBadge";
 import { ownershipView } from "../tdp/ownership";
 
 // Learned-band reasons worth surfacing as "still learning" (others — no_game,
@@ -36,6 +37,7 @@ export interface TdpSectionProps {
   onApplySuggestion: (watts: number) => void;
   // Select a firmware performance mode (Legion Go original); "custom" via the slider.
   onFirmwareMode: (mode: string) => void;
+  onLowBatteryHold: (enabled: boolean) => void;
   // Master switch off: show only the live arc + a notice, hide write controls.
   monitorOnly?: boolean;
   // Flip the master switch back on from the monitor notice.
@@ -46,7 +48,7 @@ export interface TdpSectionProps {
   onApplyPreset: (item: PresetItem) => void;
 }
 
-export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onScope, onWatts, onSetLevels, onSetMode, onApplySuggestion, onFirmwareMode, monitorOnly, onReactivate, presets, refreshPresets, onApplyPreset }) => {
+export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onScope, onWatts, onSetLevels, onSetMode, onApplySuggestion, onFirmwareMode, onLowBatteryHold, monitorOnly, onReactivate, presets, refreshPresets, onApplyPreset }) => {
   const { t } = useI18n();
 
   // Memoized (and above the early returns) so re-renders don't rebuild the chip list.
@@ -113,6 +115,13 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
   const fwModes = tdp.firmware_modes ?? [];
   const hasFwModes = fwModes.length > 0;
   const inFwMode = hasFwModes && tdp.firmware_mode !== "custom";
+  const minimumMessage = isAutoOn || inFwMode
+    ? null
+    : view.watts < tdp.limits.min
+      ? t("tdp.minimum.notice", { min: tdp.limits.min, requested: view.watts })
+      : requestMin > 3 && view.watts === requestMin
+        ? t("tdp.minimum.floor", { min: requestMin })
+        : null;
   const shownWatts = inFwMode ? (tdp.applied_w ?? view.watts) : view.watts;
   const ownership = ownershipView(tdp.ownership, tdp.limits.min);
   const deckPptActive = Boolean(tdp.ppt?.supported && view.mode !== "estable");
@@ -143,6 +152,7 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
             baseMarkerWatts={basePpt}
             slowMarkerWatts={slowPpt}
             fastMarkerWatts={fastPpt}
+            overclocked={tdp.overclock?.detected ?? false}
           />
         </PanelSectionRow>
       </>
@@ -179,6 +189,7 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
           baseMarkerWatts={basePpt}
           slowMarkerWatts={slowPpt}
           fastMarkerWatts={fastPpt}
+          overclocked={tdp.overclock?.detected ?? false}
         />
       </PanelSectionRow>
       {ownership.show && (
@@ -227,7 +238,23 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
               onChange={onWatts}
             />
           </PanelSectionRow>
-          {!inFwMode && view.watts < tdp.limits.min && (
+          {!inFwMode && tdp.low_battery_hold?.available && (
+            <PanelSectionRow>
+              <ToggleField
+                label={(
+                  <ExperimentalLabel
+                    badge={t("tdp.lowBatteryHold.experimental")}
+                    title={t("tdp.lowBatteryHold.title")}
+                  />
+                )}
+                description={t("tdp.lowBatteryHold.hint")}
+                checked={tdp.low_battery_hold.enabled}
+                onChange={onLowBatteryHold}
+                bottomSeparator="none"
+              />
+            </PanelSectionRow>
+          )}
+          {minimumMessage && (
             <PanelSectionRow>
               <div style={{
                 display: "flex",
@@ -237,7 +264,7 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
                 fontSize: theme.font.caption,
               }}>
                 <LuInfo size={13} aria-hidden style={{ flexShrink: 0, marginTop: 1 }} />
-                <span>{t("tdp.minimum.notice", { min: tdp.limits.min, requested: view.watts })}</span>
+                <span>{minimumMessage}</span>
               </div>
             </PanelSectionRow>
           )}

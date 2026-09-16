@@ -1,6 +1,6 @@
 {
   "name": "panel-de-control",
-  "version": "0.46.2",
+  "version": "0.51.0",
   "description": "Panel de control definitivo para PCs portátiles: TDP, ventiladores y más.",
   "type": "module",
   "scripts": {
@@ -8,7 +8,7 @@
     "watch": "rollup -c -w",
     "typecheck": "tsc --noEmit",
     "test:fe": "vitest run",
-    "test:i18n": "vitest run src/i18n/catalog.test.ts src/updater/editorial.test.ts src/updater/italian.test.ts src/updater/german.test.ts"
+    "test:i18n": "vitest run src/i18n/catalog.test.ts src/i18n/detect.test.ts src/glossary/data.test.ts src/updater/editorial.test.ts src/updater/releaseNotes.test.ts src/updater/italian.test.ts src/updater/german.test.ts src/updater/brazilianPortuguese.test.ts"
   },
   "author": "Hooandee",
   "license": "GPL-3.0-only",

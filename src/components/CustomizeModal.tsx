@@ -27,6 +27,7 @@ import { HomeVisibilitySetting } from "./HomeVisibilitySetting";
 import { QamLayoutEditor } from "./QamLayoutEditor";
 import { useDevice } from "../system/useDevice";
 import { buildPanelQamCatalog } from "../qam/panelCatalog";
+import { useCustomizeFocusVisibility } from "./useCustomizeFocusVisibility";
 
 // Blocks that are actually backend MODULES (get the on/off power control) rather
 // than cosmetic cards (which get the show/hide eye). Everything else is cosmetic.
@@ -102,6 +103,7 @@ const AccentPicker: FC = () => {
 };
 
 const CustomizeBody: FC = () => {
+  const focusVisibilityRef = useCustomizeFocusVisibility();
   const { t } = useI18n();
   const layout = useLayout();
   const disabled = useModules();
@@ -195,10 +197,11 @@ const CustomizeBody: FC = () => {
   }, []);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: theme.space.md, padding: theme.space.sm, maxWidth: 640, width: "100%", margin: "0 auto" }}>
+    <div ref={focusVisibilityRef} style={{ display: "flex", flexDirection: "column", gap: theme.space.md, padding: theme.space.sm, maxWidth: 640, width: "100%", margin: "0 auto" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ fontSize: theme.font.value, color: theme.color.textPrimary }}>{t("customize.title")}</div>
         <Focusable
+          noFocusRing
           style={{
             ...iconBtn, gap: theme.space.xs, padding: `${theme.space.xs}px ${theme.space.sm}px`,
             fontSize: theme.font.caption,

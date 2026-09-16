@@ -1,9 +1,39 @@
 import { callable } from "@decky/api";
 import type { LaunchTools } from "./launch/catalog";
+import type { CleanerPlan, CleanerResult, CleanerState } from "./cleaner/types";
+import type { ProtonPlan, ProtonResult, ProtonState } from "./cleaner/protonTypes";
 
 // callable<[arg types], ReturnType>("exact_backend_method_name")
 // Names must match the Python `async def` on the Plugin class exactly.
 export const getVersion = callable<[], string>("get_version");
+
+export const getSteamCleanerState = callable<[], CleanerState>("get_steam_cleaner_state");
+export const scanSteamCleaner = callable<[], CleanerState>("scan_steam_cleaner");
+export const prepareSteamCleaner = callable<[
+  scanId: string, entryIds: string[],
+], CleanerPlan>("prepare_steam_cleaner");
+export const executeSteamCleaner = callable<[
+  planId: string, confirmCompatdata: boolean,
+], CleanerResult>("execute_steam_cleaner");
+export const cancelSteamCleaner = callable<[], CleanerState>("cancel_steam_cleaner");
+export const measureSteamScreenshotPaths = callable<[
+  paths: string[],
+], Record<string, number | null>>("measure_steam_screenshot_paths");
+export type SteamMediaEvent = "scan_started" | "scan_completed" | "scan_failed" | "scan_cancelled" | "cleanup_started" | "cleanup_completed" | "cleanup_failed";
+export type SteamMediaSource = "none" | "screenshots" | "recordings" | "clips" | "measurement";
+export type SteamMediaReason = "none" | "steam_rejected" | "invalid_response" | "item_changed" | "active_recording" | "steam_api_error" | "invalid_item" | "measurement_failed" | "section_closed";
+export const recordSteamMediaEvent = callable<[
+  event: SteamMediaEvent, operationId: string, count: number, errors: number,
+  source: SteamMediaSource, reason: SteamMediaReason,
+], boolean>("record_steam_media_event");
+export const getProtonCleanerState = callable<[], ProtonState>("get_proton_cleaner_state");
+export const scanProtonCleaner = callable<[], ProtonState>("scan_proton_cleaner");
+export const prepareProtonCleaner = callable<[
+  scanId: string, entryIds: string[],
+], ProtonPlan>("prepare_proton_cleaner");
+export const executeProtonCleaner = callable<[
+  planId: string,
+], ProtonResult>("execute_proton_cleaner");
 
 export const prepareRemoteThemeInstall = callable<[
   themeId: string,
@@ -204,12 +234,29 @@ export interface SteamDeckPptState {
   applied: { slow: number | null; fast: number | null };
 }
 
+export interface LowBatteryTdpHoldState {
+  available: boolean;
+  enabled: boolean;
+  active: boolean;
+  verified: boolean;
+  status: "inactive" | "verified" | "unverified" | "failed" | "recovery_pending";
+  applied_w: number | null;
+  reason: string;
+}
+
 export interface TdpState {
   supported: boolean;
   backend: string;
   recovery_pending?: boolean;
   request_min?: number;
   limits: TdpLimits;
+  overclock?: {
+    detected: boolean;
+    max_w: number | null;
+    source: "live" | "handoff" | null;
+    status: "overclocked" | "stock" | "unavailable" | "unsupported";
+    reason: string | null;
+  };
   on_ac: boolean;
   appid: string | null;
   has_game_profile: boolean;
@@ -240,6 +287,7 @@ export interface TdpState {
   // hides the selector. firmware_mode is the active one ("custom" = our TDP slider).
   firmware_modes: string[];
   firmware_mode: string;
+  low_battery_hold: LowBatteryTdpHoldState;
   ownership: TdpOwnership;
   // Master switch: when false we stop writing rails → Potencia drops to monitor-only.
   tdp_control_enabled: boolean;
@@ -304,6 +352,9 @@ export interface FanState {
 export const getFanState = callable<[], FanState>("get_fan_state");
 
 export const getTdpState = callable<[], TdpState>("get_tdp_state");
+export const setLowBatteryTdpHold = callable<[enabled: boolean], TdpState>(
+  "set_low_battery_tdp_hold",
+);
 export const setTdpWatts = callable<[watts: number, scope: TdpScope, appid: string | null, contextAppid: string | null], TdpApplyResult>("set_tdp_watts");
 export const createGameProfile = callable<[appid: string], void>("create_game_profile");
 export const setCurrentGame = callable<[appid: string | null, name?: string | null], TdpState>("set_current_game");
@@ -557,6 +608,12 @@ export interface ChargeLimit {
   applied_percent: number | null;
   min: number;
   max: number;
+  full_charge_once: {
+    available: boolean;
+    active: boolean;
+    status: "inactive" | "pending" | "active" | "failed";
+    expires_at: number | null;
+  };
 }
 
 export interface BatteryState {
@@ -567,6 +624,8 @@ export interface BatteryState {
 export const getBatteryState = callable<[], BatteryState>("get_battery_state");
 export const setChargeLimit =
   callable<[enabled: boolean, percent: number], ChargeLimit>("set_charge_limit");
+export const setChargeLimitFullOnce =
+  callable<[enabled: boolean], ChargeLimit>("set_charge_limit_full_once");
 
 // ---- CPU (Sistema) --------------------------------------------------------
 export interface CpuToggle {

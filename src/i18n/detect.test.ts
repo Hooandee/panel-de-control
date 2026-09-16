@@ -28,8 +28,16 @@ describe("steamLangToLang (seed the default from Steam's UI language)", () => {
     expect(steamLangToLang("de")).toBe("de");
   });
 
+  it("maps only Brazilian Portuguese identifiers to pt-BR", () => {
+    expect(steamLangToLang("brazilian")).toBe("pt-BR");
+    expect(steamLangToLang("Brazilian Portuguese")).toBe("pt-BR");
+    expect(steamLangToLang("pt-BR")).toBe("pt-BR");
+    expect(steamLangToLang("portuguese")).toBe("es");
+    expect(steamLangToLang("pt-PT")).toBe("es");
+    expect(steamLangToLang("brazilian portuguese beta")).toBe("es");
+  });
+
   it("maps any other language to es (our default)", () => {
-    expect(steamLangToLang("brazilian")).toBe("es");
     expect(steamLangToLang("schinese")).toBe("es");
   });
 

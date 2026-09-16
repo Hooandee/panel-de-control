@@ -7,6 +7,7 @@ interface Props {
   max: number;
   step?: number;
   showValue?: boolean;
+  disabled?: boolean;
   /** Optional label rendered in SliderField's own compact label row (icon + text),
    *  so callers don't add a separate heading that wastes vertical space. */
   label?: ReactNode;
@@ -22,10 +23,19 @@ interface Props {
  * uniform scale (keeps the knob round) inside an overflow:hidden box. This wraps
  * that containment so call sites don't re-hand-roll it.
  */
-export const ContainedSlider: FC<Props> = ({ value, min, max, step, showValue, label, scale = 0.8, onChange }) => (
+export const ContainedSlider: FC<Props> = ({ value, min, max, step, showValue, disabled, label, scale = 0.8, onChange }) => (
   <div style={{ overflow: "hidden", width: "100%" }}>
     <div style={{ transform: `scale(${scale})`, transformOrigin: "center" }}>
-      <SliderField value={value} min={min} max={max} step={step} showValue={showValue} label={label} onChange={onChange} />
+      <SliderField
+        value={value}
+        min={min}
+        max={max}
+        step={step}
+        showValue={showValue}
+        disabled={disabled}
+        label={label}
+        onChange={onChange}
+      />
     </div>
   </div>
 );

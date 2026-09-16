@@ -6,7 +6,7 @@ import time
 
 from tdp.backend import TDPBackend
 from tdp.runtime_lock import RuntimeSafetyLock
-from tdp.types import TdpLimits, TdpResult
+from tdp.types import TdpLimits, TdpObservation, TdpResult
 
 # The sustained (STAPM) limit line of `ryzenadj -i`.
 _STAPM_RE = re.compile(r"STAPM LIMIT\s*\|\s*([\d.]+)", re.IGNORECASE)
@@ -106,21 +106,49 @@ class RyzenadjBackend(TDPBackend):
                  write_max: int | None = None, write_max_ac: int | None = None,
                  power_only_retry: bool = False,
                  require_readback: bool = False,
-                 safety_lock_path: str | None = None):
+                 allow_unverified_hold: bool = False,
+                 unverified_hold_restore: dict[str, int] | None = None,
+                 safety_lock_path: str | None = None,
+                 hold_rail_floors: dict[str, int] | None = None):
         self._fallback = fallback
         self._write_limits = fallback.with_cooler(write_max).with_ac_max(write_max_ac)
         self._runner = runner
         self._bin = resolve()
         self._power_only_retry = power_only_retry
         self._require_readback = bool(require_readback)
+        self._allow_unverified_hold = bool(allow_unverified_hold)
+        self._unverified_hold_restore = (
+            {
+                rail: int(unverified_hold_restore[rail])
+                for rail in ("pl1", "pl2", "pl3")
+            }
+            if isinstance(unverified_hold_restore, dict)
+            and all(rail in unverified_hold_restore for rail in ("pl1", "pl2", "pl3"))
+            else None
+        )
         self.auto_tdp_supported = not (
             self._power_only_retry and not self._require_readback
+        )
+        self._hold_rail_floors = dict(hold_rail_floors or {})
+        self.low_battery_hold_capable = bool(
+            self._allow_unverified_hold and self._bin
+        )
+        self.low_battery_hold_strategy = (
+            "primary" if self._require_readback else None
         )
         self._safety_lock = RuntimeSafetyLock(safety_lock_path)
         self.supported = self._bin is not None
         self._runtime_lock_payload = (
             self._safety_lock.load_payload()
-            if self._require_readback or self._power_only_retry
+            if self._require_readback or self._power_only_retry or self._allow_unverified_hold
+            else None
+        )
+        self._hold_recovery_target = (
+            dict(self._unverified_hold_restore)
+            if isinstance(self._runtime_lock_payload, dict)
+            and self._runtime_lock_payload.get("state") == "low_battery_hold_active"
+            and self._allow_unverified_hold
+            and self._unverified_hold_restore is not None
             else None
         )
         durable_lock = (
@@ -291,6 +319,140 @@ class RyzenadjBackend(TDPBackend):
                 open_circuit=target > self._fallback.max_ac_w,
             )
         return TdpResult(watts, applied, False, mismatch)
+
+    def hold_levels(self, levels: dict) -> TdpResult:
+        requested = {
+            rail: int(levels[rail])
+            for rail in ("pl1", "pl2", "pl3")
+        }
+        if not self._allow_unverified_hold:
+            return TdpResult(
+                requested["pl1"],
+                None,
+                False,
+                "ryzenadj write-only low-battery hold unavailable",
+            )
+        if not self.supported:
+            detail = self._last_readback_failure or "ryzenadj unavailable"
+            return TdpResult(requested["pl1"], None, False, detail)
+        lo = self._write_limits.min_w
+        hi = self._write_limits.max_ac_w
+        targets = {
+            rail: max(lo, min(value, hi))
+            for rail, value in requested.items()
+        }
+        if self._unverified_hold_restore is None:
+            return TdpResult(
+                requested["pl1"],
+                None,
+                False,
+                "low-battery hold restore target unavailable; no writes performed",
+            )
+        recovery_target = dict(self._unverified_hold_restore)
+        payload = {
+            "state": "low_battery_hold_active",
+            "detail": "low-battery TDP hold active without readback",
+            "recovery_target": recovery_target,
+            "target": targets,
+        }
+        if not self._safety_lock.persist_payload(payload):
+            return TdpResult(
+                requested["pl1"],
+                None,
+                False,
+                "low-battery hold safety lock unavailable; no writes performed",
+            )
+        self._runtime_lock_payload = payload
+        self._hold_recovery_target = recovery_target
+        try:
+            exit_code = self._apply_limits(
+                targets["pl1"],
+                targets["pl3"],
+                targets["pl2"],
+                include_temp=False,
+            )
+        except (OSError, subprocess.SubprocessError) as error:
+            return self._reject_unverified_hold(
+                requested["pl1"],
+                f"ryzenadj low-battery hold failed ({type(error).__name__})",
+            )
+        if exit_code:
+            return self._reject_unverified_hold(
+                requested["pl1"],
+                f"ryzenadj low-battery hold exit={exit_code}",
+            )
+        self._last_readback_failure = None
+        return TdpResult(
+            requested["pl1"],
+            None,
+            True,
+            "command accepted (limit readback unavailable)",
+        )
+
+    def _reject_unverified_hold(self, requested_watts: int, detail: str) -> TdpResult:
+        self.supported = False
+        restored = self.release_hold()
+        self.supported = False
+        outcome = "accepted" if restored else "unresolved"
+        self._last_readback_failure = f"{detail}; safe restore {outcome}"
+        if not restored and isinstance(self._runtime_lock_payload, dict):
+            self._runtime_lock_payload = {
+                **self._runtime_lock_payload,
+                "detail": self._last_readback_failure,
+            }
+            self._safety_lock.persist_payload(self._runtime_lock_payload)
+        return TdpResult(
+            requested_watts,
+            None,
+            False,
+            self._last_readback_failure,
+        )
+
+    def low_battery_level_limits(
+        self,
+        maximum: int | None = None,
+    ) -> dict[str, dict[str, int]]:
+        maximum = self._write_limits.clamp(
+            self._write_limits.max_w if maximum is None else maximum,
+            on_ac=True,
+        )
+        return {
+            rail: {
+                "min": min(maximum, max(self._write_limits.min_w, floor)),
+                "max": maximum,
+            }
+            for rail, floor in {
+                "pl1": self._write_limits.min_w,
+                "pl2": self._hold_rail_floors.get("pl2", self._write_limits.min_w),
+                "pl3": self._hold_rail_floors.get("pl3", self._write_limits.min_w),
+            }.items()
+        }
+
+    def observe_hold(self) -> TdpObservation:
+        return TdpObservation(readable=False)
+
+    def release_hold(self) -> bool:
+        if self._hold_recovery_target is None:
+            return True
+        target = self._hold_recovery_target
+        try:
+            exit_code = self._apply_limits(
+                target["pl1"],
+                target["pl3"],
+                target["pl2"],
+                include_temp=False,
+            )
+        except (KeyError, OSError, subprocess.SubprocessError):
+            exit_code = 1
+        if exit_code or not self._safety_lock.clear():
+            self.supported = False
+            self._readback_state = "circuit_open_low_battery_hold"
+            return False
+        self._hold_recovery_target = None
+        self._runtime_lock_payload = None
+        self._readback_state = "not_required"
+        self._last_readback_failure = None
+        return True
 
     def _recover_gpd(
         self,
@@ -520,8 +682,15 @@ class RyzenadjBackend(TDPBackend):
     def diagnostics(self) -> dict:
         return {
             "readback_required": self._require_readback,
+            "unverified_hold_allowed": self._allow_unverified_hold,
+            "unverified_hold_restore": (
+                dict(self._unverified_hold_restore)
+                if self._unverified_hold_restore is not None
+                else None
+            ),
             "readback_state": self._readback_state,
             "last_readback_failure": self._last_readback_failure,
+            "low_battery_hold_active": self._hold_recovery_target is not None,
         }
 
     def recover_safe_range(self) -> bool:
@@ -541,6 +710,30 @@ class RyzenadjBackend(TDPBackend):
 
     def recover_runtime_transaction(self) -> dict:
         payload = self._runtime_lock_payload
+        if (
+            isinstance(payload, dict)
+            and payload.get("state") == "low_battery_hold_active"
+        ):
+            if (
+                not self._allow_unverified_hold
+                or self._unverified_hold_restore is None
+                or self._bin is None
+            ):
+                return {
+                    "ok": False,
+                    "detail": "ryzenadj low-battery hold recovery target invalid",
+                }
+            self._hold_recovery_target = dict(self._unverified_hold_restore)
+            self.supported = True
+            ok = self.release_hold()
+            return {
+                "ok": ok,
+                "detail": (
+                    "ryzenadj low-battery hold recovery accepted"
+                    if ok
+                    else "ryzenadj low-battery hold recovery failed"
+                ),
+            }
         if (
             isinstance(payload, dict)
             and str(payload.get("state", "")).startswith("circuit_open")

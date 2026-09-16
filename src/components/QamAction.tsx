@@ -4,6 +4,7 @@ import { Focusable } from "@decky/ui";
 interface Props {
   onPress: () => void | Promise<void>;
   disabled?: boolean;
+  noFocusRing?: boolean;
   pressed?: boolean;
   checked?: boolean;
   expanded?: boolean;
@@ -15,6 +16,7 @@ interface Props {
 export const QamAction: FC<Props> = ({
   onPress,
   disabled = false,
+  noFocusRing,
   pressed,
   checked,
   expanded,
@@ -49,6 +51,7 @@ export const QamAction: FC<Props> = ({
 
   return (
     <Focusable
+      noFocusRing={noFocusRing}
       aria-label={label}
       aria-pressed={isCheckbox ? undefined : pressed}
       aria-checked={checked}

@@ -26,9 +26,10 @@ jobs:
           printf '%s' "$BODY" | grep -qF "### What's new" || missing="$missing '### What's new' (English)"
           printf '%s' "$BODY" | grep -qF "### Novità" || missing="$missing '### Novità' (italiano)"
           printf '%s' "$BODY" | grep -qF "### Neuigkeiten" || missing="$missing '### Neuigkeiten' (Deutsch)"
+          printf '%s' "$BODY" | grep -qF "### Novidades em português (Brasil)" || missing="$missing '### Novidades em português (Brasil)' (Português do Brasil)"
           if [ -n "$missing" ]; then
             echo "::error::Release notes must include every supported language. Missing section(s):$missing"
-            echo "Edit the release body so it includes Spanish, English, Italian and German sections."
+            echo "Edit the release body so it includes Spanish, English, Italian, German and Brazilian Portuguese sections."
             exit 1
           fi
           echo "Release notes include every supported language."

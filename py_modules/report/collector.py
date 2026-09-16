@@ -22,7 +22,7 @@ import re
 from sysfs import read_str
 
 # Bump when the bundle shape changes so consumers can adapt.
-SCHEMA = 3
+SCHEMA = 4
 
 _MAX_TEXT = 4000  # user free-text cap (defensive; the UI also limits it)
 
@@ -606,6 +606,52 @@ def sysfs_snapshot(
     return result
 
 
+def steam_cleaner_snapshot(diagnostics) -> dict:
+    if not isinstance(diagnostics, dict):
+        return {"error": "diagnostics_unavailable"}
+
+    safe_event_keys = {
+        "event", "operation_id", "phase", "at", "reason", "source",
+        "system_error", "library_id", "entry_id", "plan_id", "scan_id", "count", "complete",
+        "readback", "kind", "time", "errors", "deleted",
+    }
+
+    def bounded(value):
+        snapshot = {
+            key: value[key]
+            for key in (
+                "schema_version", "phase", "last_operation_id", "interrupted",
+                "persistence_error",
+            )
+            if key in value
+        }
+        events = value.get("events")
+        snapshot["events"] = [
+            {key: event[key] for key in safe_event_keys if key in event}
+            for event in events[-120:]
+            if isinstance(event, dict)
+        ] if isinstance(events, list) else []
+        return snapshot
+
+    snapshot = bounded(diagnostics)
+    for key in ("proton", "media"):
+        if isinstance(diagnostics.get(key), dict):
+            snapshot[key] = bounded(diagnostics[key])
+    try:
+        while len(json.dumps(snapshot).encode("utf-8")) > 48_000:
+            candidates = [snapshot["events"]]
+            for key in ("proton", "media"):
+                if isinstance(snapshot.get(key), dict):
+                    candidates.append(snapshot[key]["events"])
+            longest = max(candidates, key=len)
+            if not longest:
+                return {"error": "diagnostics_unavailable"}
+            longest.pop(0)
+    except (TypeError, ValueError):
+        return {"error": "diagnostics_unavailable"}
+    return snapshot
+
+
 def capabilities_from(states: dict) -> dict:
     """Distil the per-subsystem detected backends + supported flags from the live
     state dicts. This is the single most useful section for triage: many reports
@@ -623,6 +669,8 @@ def capabilities_from(states: dict) -> dict:
     running = running if isinstance(running, dict) else {}
     cpu_gpu = states.get("cpu_gpu_diagnostics") or {}
     hud = states.get("hud_diagnostics") or {}
+    hud_steam_overlay = hud.get("steam_overlay") or {}
+    hud_last_activation = hud_steam_overlay.get("last_activation") or {}
     cpu_frequency = cpu_gpu.get("cpu") or {}
     gpu_frequency = cpu_gpu.get("gpu") or {}
     deck_ppt = cpu_gpu.get("steamdeck_ppt") or {}
@@ -655,6 +703,11 @@ def capabilities_from(states: dict) -> dict:
         "hud_capability": hud.get("capability"),
         "hud_apply_status": hud.get("apply_status"),
         "hud_enabled": bool(hud.get("enabled")),
+        "hud_steam_overlay_master_enabled": hud_steam_overlay.get("master_enabled"),
+        "hud_steam_overlay_read_available": bool(
+            hud_steam_overlay.get("read_available")
+        ),
+        "hud_steam_overlay_last_activation": hud_last_activation.get("outcome"),
         "color_supported": bool(color.get("supported")),
         "controller_manager": ctl.get("manager"),
         "controller_kind": ctl.get("kind"),

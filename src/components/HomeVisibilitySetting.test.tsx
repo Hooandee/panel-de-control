@@ -1,17 +1,17 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import type { HTMLAttributes, ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { HomeVisibilitySetting } from "./HomeVisibilitySetting";
 
 vi.mock("@decky/ui", () => ({
-  Focusable: ({ children, onActivate, onClick, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & {
+  Focusable: ({ children, onActivate, onClick, noFocusRing: _noFocusRing, ...props }: HTMLAttributes<HTMLDivElement> & {
     children?: ReactNode;
+    noFocusRing?: boolean;
     onActivate?: () => void;
   }) => (
-    <button
-      type="button"
+    <div
       onClick={(event) => {
         onActivate?.();
         onClick?.(event);
@@ -19,7 +19,7 @@ vi.mock("@decky/ui", () => ({
       {...props}
     >
       {children}
-    </button>
+    </div>
   ),
   ToggleField: ({ label, description, checked, onChange }: {
     label: string;

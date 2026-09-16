@@ -12,6 +12,7 @@ import {
   canSubmit,
   toggleCategory,
 } from "../report/logic";
+import { steamOverlay } from "../mangohud/steamOverlay";
 import { FocusRoot } from "./FocusRoot";
 import { launchReportContext } from "../launch/reportContext";
 import { quickAccessTabDiagnostics } from "../deckyInternal";
@@ -98,6 +99,7 @@ const ReportBody: FC<{ closeModal?: () => void }> = ({ closeModal }) => {
       launchContext,
       quickAccessTabDiagnostics(window, getQamDocument()),
       kind,
+      selected.includes("hud") ? steamOverlay.diagnostics() : undefined,
     );
     submitReport(selected, text, context)
       .then((r) => {

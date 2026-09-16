@@ -18,6 +18,7 @@ class AsusNbWmiBackend(TDPBackend):
 
     name = "asus-nb-wmi"
     reselection_safe_after_use = True
+    low_battery_hold_strategy = "primary"
 
     def __init__(
         self,

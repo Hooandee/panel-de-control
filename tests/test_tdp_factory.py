@@ -26,17 +26,17 @@ def _mk_fw(root, driver, pl1_max=35):
                 fh.write(str(v))
 
 
-def _mk_hwmon(root):
+def _mk_hwmon(root, slow=15, fast=15):
     d = os.path.join(root, "sys/class/hwmon/hwmon0")
     os.makedirs(d, exist_ok=True)
     with open(os.path.join(d, "name"), "w") as f:
         f.write("amdgpu")
     with open(os.path.join(d, "power1_cap"), "w") as f:
-        f.write("15000000")
+        f.write(str(slow * 1_000_000))
     with open(os.path.join(d, "power1_label"), "w") as f:
         f.write("slowPPT")
     with open(os.path.join(d, "power2_cap"), "w") as f:
-        f.write("15000000")
+        f.write(str(fast * 1_000_000))
     with open(os.path.join(d, "power2_label"), "w") as f:
         f.write("fastPPT")
 
@@ -217,6 +217,7 @@ def test_rog_uses_asus_armoury_firmware_attr(tmp_path):
         "supported": True,
     },)
     assert b.diagnostics()["readback_settle_ms"] == 0
+    assert b.low_battery_hold_strategy == "primary"
 
 
 def test_flow_uses_asus_armoury_and_publishes_live_narrowed_limits(tmp_path):
@@ -348,6 +349,123 @@ def test_legion_uses_lenovo_firmware_attr(tmp_path):
     b = select_backend(_p("legion_go_2"), root=root, ryzenadj_resolve=_NO_RYZENADJ)
     assert b.supported and "lenovo-wmi-other" in b.name
     assert b.diagnostics()["readback_settle_ms"] == 0
+    assert b.low_battery_hold_strategy == "primary"
+
+
+def test_exact_legion_go_2_83n0_waits_for_async_readback_before_rollback(
+    tmp_path,
+    monkeypatch,
+):
+    root = str(tmp_path)
+    _mk_legion_firmware(root, "83N0", "custom", current=(21, 17, 36))
+    backend = select_backend(
+        _p("legion_go_2"),
+        root=root,
+        ryzenadj_resolve=_NO_RYZENADJ,
+    )
+    lock_path = os.path.join(
+        root,
+        "run/panel-de-control/firmware-lenovo-wmi-other.lock",
+    )
+    original_write = backend._write
+    target_writes = []
+    settle_delays = []
+    settled = False
+
+    def delayed_firmware_write(path, value):
+        if path.endswith("current_value") and value == 8:
+            target_writes.append(path)
+            if len(target_writes) == 3:
+                for attr, transient in zip(
+                    ("ppt_pl1_spl", "ppt_pl2_sppt", "ppt_pl3_fppt"),
+                    (25, 25, 30),
+                ):
+                    _set_fw_current(root, attr, transient)
+            return True
+        if target_writes and path.endswith("current_value") and not settled:
+            return False
+        return original_write(path, value)
+
+    def finish_delayed_write(delay):
+        nonlocal settled
+        settle_delays.append(delay)
+        if len(settle_delays) < 4:
+            return
+        settled = True
+        for attr in ("ppt_pl1_spl", "ppt_pl2_sppt", "ppt_pl3_fppt"):
+            _set_fw_current(root, attr, 8)
+
+    monkeypatch.setattr(backend, "_write", delayed_firmware_write)
+    monkeypatch.setattr("tdp.firmware_attr.time.sleep", finish_delayed_write)
+
+    result = backend.set_levels(8, 8, 8, ac=False)
+
+    assert result.ok is True
+    assert result.applied_w == 8
+    assert backend.safety_locked is False
+    assert not os.path.exists(lock_path)
+    assert settle_delays == [0.25, 0.5, 1.0, 2.0]
+    assert backend.diagnostics()["readback_settle_ms"] == 3750
+
+
+def test_exact_legion_go_2_83n0_recovers_delayed_persisted_transaction(
+    tmp_path,
+    monkeypatch,
+):
+    root = str(tmp_path)
+    _mk_legion_firmware(root, "83N0", "custom", current=(25, 25, 30))
+    lock_path = _arm_lenovo_transaction_lock(
+        root,
+        "custom",
+        snapshot={
+            "firmware-attr:lenovo-wmi-other/pl1": 8,
+            "firmware-attr:lenovo-wmi-other/pl2": 8,
+            "firmware-attr:lenovo-wmi-other/pl3": 8,
+        },
+    )
+    backend = select_backend(
+        _p("legion_go_2"),
+        root=root,
+        ryzenadj_resolve=_NO_RYZENADJ,
+    )
+    original_write = backend._write
+    settle_delays = []
+
+    def accept_delayed_restore(path, value):
+        if path.endswith("current_value"):
+            return True
+        return original_write(path, value)
+
+    def finish_delayed_restore(delay):
+        settle_delays.append(delay)
+        if len(settle_delays) < 4:
+            return
+        for attr in ("ppt_pl1_spl", "ppt_pl2_sppt", "ppt_pl3_fppt"):
+            _set_fw_current(root, attr, 8)
+
+    monkeypatch.setattr(backend, "_write", accept_delayed_restore)
+    monkeypatch.setattr("tdp.firmware_attr.time.sleep", finish_delayed_restore)
+
+    recovered = backend.recover_runtime_transaction()
+
+    assert recovered == {"ok": True, "detail": "no firmware recovery pending"}
+    assert backend.read_applied() == 8
+    assert backend.safety_locked is False
+    assert not os.path.exists(lock_path)
+    assert settle_delays == [0.25, 0.5, 1.0, 2.0]
+
+
+def test_legion_go_2_83n1_keeps_existing_strict_readback(tmp_path):
+    root = str(tmp_path)
+    _mk_legion_firmware(root, "83N1", "custom")
+
+    backend = select_backend(
+        _p("legion_go_2"),
+        root=root,
+        ryzenadj_resolve=_NO_RYZENADJ,
+    )
+
+    assert backend.diagnostics()["readback_settle_ms"] == 0
 
 
 def test_new_experimental_profile_defers_ryzenadj_probe_and_rejects_before_write(tmp_path):
@@ -359,6 +477,7 @@ def test_new_experimental_profile_defers_ryzenadj_probe_and_rejects_before_write
 
     assert backend.supported is True
     assert backend.name == "ryzenadj"
+    assert backend.low_battery_hold_strategy == "primary"
     assert [item["candidate"] for item in backend.probe_trace] == [
         "asus",
         "lenovo",
@@ -463,6 +582,51 @@ def test_only_exact_legion_go_s_83n6_gets_measured_rail_floors(tmp_path):
 
     assert getattr(exact, "_rail_floors", None) == {"pl2": 15, "pl3": 20}
     assert getattr(nearby, "_rail_floors", None) == {}
+    assert nearby.low_battery_hold_strategy is None
+
+
+def test_only_exact_legion_go_s_83n6_gets_the_unverified_low_battery_route(tmp_path):
+    exact_root = str(tmp_path / "exact")
+    _mk_dmi(exact_root, "LENOVO", "83N6")
+    exact = factory.select_low_battery_hold_backend(
+        _p("legion_go_s"),
+        root=exact_root,
+        ryzenadj_resolve=lambda: "/usr/bin/ryzenadj",
+    )
+
+    nearby_root = str(tmp_path / "nearby")
+    _mk_dmi(nearby_root, "LENOVO", "83L3")
+    nearby = factory.select_low_battery_hold_backend(
+        _p("legion_go_s"),
+        root=nearby_root,
+        ryzenadj_resolve=lambda: "/usr/bin/ryzenadj",
+    )
+
+    generic_root = str(tmp_path / "generic")
+    _mk_dmi(generic_root, "LENOVO", "83N6")
+    generic = factory.select_low_battery_hold_backend(
+        GENERIC,
+        root=generic_root,
+        ryzenadj_resolve=lambda: "/usr/bin/ryzenadj",
+    )
+
+    assert exact is not None
+    assert exact.name == "ryzenadj-low-battery-hold"
+    assert exact.low_battery_hold_strategy == "legion-go-s-83n6"
+    assert exact.low_battery_level_limits() == {
+        "pl1": {"min": 5, "max": 33},
+        "pl2": {"min": 15, "max": 33},
+        "pl3": {"min": 20, "max": 33},
+    }
+    assert exact.diagnostics()["readback_required"] is False
+    assert exact.diagnostics()["unverified_hold_allowed"] is True
+    assert exact.diagnostics()["unverified_hold_restore"] == {
+        "pl1": 15,
+        "pl2": 15,
+        "pl3": 20,
+    }
+    assert nearby is None
+    assert generic is None
 
 
 @pytest.mark.parametrize("profile", ("low-power", "balanced", "performance"))
@@ -814,6 +978,7 @@ def test_msi_uses_msi_firmware_attr(tmp_path):
     _mk_fw(root, "msi-wmi-platform")
     b = select_backend(_p("msi_claw_8_ai_plus"), root=root, ryzenadj_resolve=_NO_RYZENADJ)
     assert b.supported and "msi-wmi-platform" in b.name
+    assert b.low_battery_hold_strategy == "primary"
 
 
 def test_msi_claw_a8_never_uses_intel_msi_firmware_attr(tmp_path):
@@ -850,6 +1015,21 @@ def test_steam_deck_uses_hwmon(tmp_path):
     _mk_hwmon(root)
     b = select_backend(_p("steam_deck_oled"), root=root, ryzenadj_resolve=_NO_RYZENADJ)
     assert b.supported and b.name == "steamdeck-hwmon"
+    assert b.low_battery_hold_strategy == "primary"
+
+
+def test_exact_steam_deck_factory_preserves_the_reported_overclock_baseline(tmp_path):
+    root = str(tmp_path)
+    _mk_hwmon(root, slow=25, fast=30)
+
+    backend = select_backend(
+        _p("steam_deck_oled"),
+        root=root,
+        ryzenadj_resolve=_NO_RYZENADJ,
+    )
+
+    assert backend.name == "steamdeck-hwmon"
+    assert backend.configured_tdp_state()["max_w"] == 25
 
 
 def test_exact_steam_deck_never_falls_through_to_generic_amd_backends(tmp_path):
@@ -1121,6 +1301,7 @@ def test_generic_intel_uses_rapl_and_not_ryzenadj(tmp_path):
     intel = dataclasses.replace(GENERIC, vendor="intel")
     b = select_backend(intel, root=root, ryzenadj_resolve=lambda: "/usr/bin/ryzenadj")
     assert b.supported and b.name == "intel-rapl"
+    assert b.low_battery_hold_strategy == "primary"
 
 
 def test_generic_intel_never_uses_ryzenadj(tmp_path):
@@ -1137,6 +1318,7 @@ def test_known_rog_falls_through_to_ryzenadj(tmp_path):
     _mk_rapl(root)
     b = select_backend(_p("rog_ally_x"), root=root, ryzenadj_resolve=lambda: "/usr/bin/ryzenadj")
     assert b.supported and b.name == "ryzenadj"
+    assert b.low_battery_hold_strategy is None
 
 
 def test_amd_never_uses_intel_rapl(tmp_path):
@@ -1161,6 +1343,7 @@ def test_generic_amd_uses_alib_when_acpi_call_present(tmp_path):
     _mk_acpi_call(root)
     b = select_backend(GENERIC, root=root, ryzenadj_resolve=_NO_RYZENADJ)
     assert b.supported and b.name == "acpi-alib"
+    assert b.low_battery_hold_strategy is None
 
 
 def test_ryzenadj_precedes_alib(tmp_path):

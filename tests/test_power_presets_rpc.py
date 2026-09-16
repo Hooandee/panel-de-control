@@ -71,6 +71,23 @@ def Plugin(tmp_path, monkeypatch):
     return main.Plugin
 
 
+def _use_gpd_win_mini(monkeypatch):
+    import main as main_module
+    from device_profiles import DEVICE_TABLE
+
+    device = next(
+        profile for profile in DEVICE_TABLE if profile.key == "gpd_win_mini_2025"
+    )
+    monkeypatch.setattr(main_module.device_registry, "detect", lambda *_a, **_k: device)
+    monkeypatch.setattr(
+        FakeBackend,
+        "get_limits",
+        lambda _self: TdpLimits(20, 20, 35, 35),
+    )
+    monkeypatch.setattr(FakeBackend, "level_limits", lambda _self: {})
+    return main_module
+
+
 def test_get_power_presets_fresh_shape(Plugin):
     st = asyncio.run(Plugin().get_power_presets())
     assert st["order"] == ["quiet", "balanced", "turbo"]
@@ -120,6 +137,177 @@ def test_apply_three_watt_preset_preserves_request_and_applies_safe_minimum(Plug
     state = asyncio.run(p.get_tdp_state())
     assert state["global_watts"] == 3
     assert state["global_levels"]["pl1"] == 5
+
+
+def test_three_watt_custom_preset_survives_reload_on_other_devices(Plugin):
+    p = Plugin()
+    state = asyncio.run(p.create_power_preset(3, "leaf", None))
+    preset_id = state["order"][-1]
+
+    reloaded = asyncio.run(Plugin().get_power_presets())
+
+    assert reloaded["custom"][preset_id]["watts"] == 3
+
+
+def test_gpd_win_mini_normalizes_new_and_stored_low_presets(Plugin, monkeypatch):
+    legacy = Plugin()
+    legacy_state = asyncio.run(legacy.create_power_preset(3, "leaf", None))
+    preset_id = legacy_state["order"][-1]
+    _use_gpd_win_mini(monkeypatch)
+
+    migrated = Plugin()
+    state = asyncio.run(migrated.get_power_presets())
+    new_state = asyncio.run(migrated.create_power_preset(3, "leaf", None))
+    new_id = new_state["order"][-1]
+
+    assert state["custom"][preset_id]["watts"] == 20
+    assert new_state["custom"][new_id]["watts"] == 20
+
+
+def test_gpd_win_mini_preserves_preset_range_when_backend_is_unavailable(
+    Plugin,
+    monkeypatch,
+):
+    from tdp.backend import NullBackend
+
+    legacy = Plugin()
+    low = asyncio.run(legacy.create_power_preset(3, "leaf", None))
+    low_id = low["order"][-1]
+    high = asyncio.run(legacy.create_power_preset(35, "bolt", None))
+    high_id = high["order"][-1]
+    main_module = _use_gpd_win_mini(monkeypatch)
+    monkeypatch.setattr(
+        main_module.tdp_factory,
+        "select_backend",
+        lambda *_a, **_k: NullBackend("temporarily unavailable"),
+    )
+
+    migrated = Plugin()
+    state = asyncio.run(migrated.get_power_presets())
+    created = asyncio.run(migrated.create_power_preset(35, "bolt", None))
+    created_id = created["order"][-1]
+
+    assert state["custom"][low_id]["watts"] == 20
+    assert state["custom"][high_id]["watts"] == 35
+    assert created["custom"][created_id]["watts"] == 35
+
+
+def test_gpd_win_mini_preset_migration_retries_after_write_failure(
+    Plugin,
+    monkeypatch,
+):
+    import power_presets
+
+    legacy = Plugin()
+    legacy_state = asyncio.run(legacy.create_power_preset(3, "leaf", None))
+    preset_id = legacy_state["order"][-1]
+    main_module = _use_gpd_win_mini(monkeypatch)
+    original_save = power_presets.atomic_json_save
+    blocked = True
+    attempts = 0
+    clock = [0.0]
+
+    monkeypatch.setattr(main_module, "_monotonic", lambda: clock[0])
+
+    def flaky_save(path, data):
+        nonlocal attempts
+        if blocked and path.endswith("power_presets.json"):
+            attempts += 1
+            raise OSError("disk unavailable")
+        return original_save(path, data)
+
+    monkeypatch.setattr(power_presets, "atomic_json_save", flaky_save)
+    migrated = Plugin()
+    migrated._init()
+    state = asyncio.run(migrated.get_power_presets())
+    assert state["custom"][preset_id]["watts"] == 20
+    asyncio.run(migrated.get_power_presets())
+    assert attempts == 1
+
+    blocked = False
+    clock[0] += main_module._TDP_STORAGE_MIGRATION_RETRY_S
+    asyncio.run(migrated.get_power_presets())
+
+    reloaded = Plugin()
+    assert asyncio.run(reloaded.get_power_presets())["custom"][preset_id]["watts"] == 20
+
+
+def test_gpd_win_mini_crud_persists_pending_preset_migration(
+    Plugin,
+    monkeypatch,
+):
+    import power_presets
+
+    legacy = Plugin()
+    legacy_state = asyncio.run(legacy.create_power_preset(3, "leaf", None))
+    legacy_id = legacy_state["order"][-1]
+    main_module = _use_gpd_win_mini(monkeypatch)
+    original_save = power_presets.atomic_json_save
+    failures_remaining = 2
+    attempts = 0
+    clock = [0.0]
+
+    monkeypatch.setattr(main_module, "_monotonic", lambda: clock[0])
+
+    def flaky_save(path, data):
+        nonlocal attempts, failures_remaining
+        if path.endswith("power_presets.json"):
+            attempts += 1
+            if failures_remaining:
+                failures_remaining -= 1
+                raise OSError("disk unavailable")
+        return original_save(path, data)
+
+    monkeypatch.setattr(power_presets, "atomic_json_save", flaky_save)
+    migrated = Plugin()
+    migrated._init()
+    clock[0] += main_module._TDP_STORAGE_MIGRATION_RETRY_S
+
+    created = asyncio.run(migrated.create_power_preset(25, "bolt", None))
+    created_id = created["order"][-1]
+    on_disk = power_presets.PowerPresetStore(
+        migrated._power_presets._path
+    ).state()
+
+    assert attempts == 3
+    assert on_disk["custom"][legacy_id]["watts"] == 20
+    assert on_disk["custom"][created_id]["watts"] == 25
+
+
+def test_gpd_win_mini_failed_crud_keeps_pending_migration_sanitized(
+    Plugin,
+    monkeypatch,
+):
+    import power_presets
+
+    legacy = Plugin()
+    legacy_state = asyncio.run(legacy.create_power_preset(3, "leaf", None))
+    legacy_id = legacy_state["order"][-1]
+    _use_gpd_win_mini(monkeypatch)
+    original_save = power_presets.atomic_json_save
+    failures_remaining = 2
+
+    def flaky_save(path, data):
+        nonlocal failures_remaining
+        if path.endswith("power_presets.json") and failures_remaining:
+            failures_remaining -= 1
+            raise OSError("disk unavailable")
+        return original_save(path, data)
+
+    monkeypatch.setattr(power_presets, "atomic_json_save", flaky_save)
+    migrated = Plugin()
+    migrated._init()
+
+    with pytest.raises(OSError, match="disk unavailable"):
+        asyncio.run(migrated.create_power_preset(25, "bolt", None))
+    created = asyncio.run(migrated.create_power_preset(30, "bolt", None))
+    created_id = created["order"][-1]
+    on_disk = power_presets.PowerPresetStore(
+        migrated._power_presets._path
+    ).state()
+
+    assert on_disk["custom"][legacy_id]["watts"] == 20
+    assert on_disk["custom"][created_id]["watts"] == 30
 
 
 def test_apply_power_preset_with_boost_sets_custom_rails(Plugin):

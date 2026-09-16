@@ -1,3 +1,4 @@
+import json
 import os
 import subprocess
 from types import SimpleNamespace
@@ -640,6 +641,191 @@ def _snapshot_info(stapm, *, fast=None, slow=None):
 
 def _unreadable_info():
     return "| Name | Value | Parameter |\n| PPT FAST | 20.000 | fast-limit |\n"
+
+
+def test_unverified_low_battery_hold_applies_every_rail_without_readback(tmp_path):
+    lock_path = str(tmp_path / "run" / "low-battery-hold.lock")
+    fake = ScriptedRun(write_rcs=[0], infos=[])
+    backend = RyzenadjBackend(
+        FALLBACK,
+        resolve=lambda: "/usr/bin/ryzenadj",
+        runner=fake,
+        allow_unverified_hold=True,
+        unverified_hold_restore={"pl1": 15, "pl2": 15, "pl3": 20},
+        safety_lock_path=lock_path,
+        hold_rail_floors={"pl2": 15, "pl3": 20},
+    )
+
+    result = backend.hold_levels({"pl1": 19, "pl2": 23, "pl3": 27})
+
+    assert result.ok is True
+    assert result.applied_w is None
+    assert "readback unavailable" in result.detail
+    assert fake.writes == [[
+        "/usr/bin/ryzenadj",
+        "--stapm-limit", "19000",
+        "--fast-limit", "27000",
+        "--slow-limit", "23000",
+    ]]
+    assert backend.observe_hold().readable is False
+    assert backend.diagnostics()["low_battery_hold_active"] is True
+    assert os.path.exists(lock_path)
+    with open(lock_path, encoding="utf-8") as lock_file:
+        payload = json.load(lock_file)
+    assert payload["recovery_target"] == {"pl1": 15, "pl2": 15, "pl3": 20}
+    assert "baseline" not in payload
+
+
+def test_unverified_low_battery_hold_release_restores_known_firmware_limits(tmp_path):
+    lock_path = str(tmp_path / "run" / "low-battery-hold.lock")
+    fake = ScriptedRun(
+        write_rcs=[0, 0],
+        infos=[_unreadable_info()],
+        info_rcs=[251],
+    )
+    backend = RyzenadjBackend(
+        FALLBACK,
+        resolve=lambda: "/usr/bin/ryzenadj",
+        runner=fake,
+        allow_unverified_hold=True,
+        unverified_hold_restore={"pl1": 15, "pl2": 15, "pl3": 20},
+        safety_lock_path=lock_path,
+        hold_rail_floors={"pl2": 15, "pl3": 20},
+    )
+    assert backend.hold_levels({"pl1": 19, "pl2": 23, "pl3": 27}).ok is True
+
+    assert backend.release_hold() is True
+
+    assert fake.writes[-1] == [
+        "/usr/bin/ryzenadj",
+        "--stapm-limit", "15000",
+        "--fast-limit", "20000",
+        "--slow-limit", "15000",
+    ]
+    assert not any("-i" in argv for argv, _kwargs in fake.calls)
+    assert backend.diagnostics()["low_battery_hold_active"] is False
+    assert not os.path.exists(lock_path)
+
+
+def test_unverified_low_battery_hold_recovers_the_safe_target_after_restart(tmp_path):
+    lock_path = str(tmp_path / "run" / "low-battery-hold.lock")
+    initial = ScriptedRun(write_rcs=[0], infos=[])
+    backend = RyzenadjBackend(
+        FALLBACK,
+        resolve=lambda: "/usr/bin/ryzenadj",
+        runner=initial,
+        allow_unverified_hold=True,
+        unverified_hold_restore={"pl1": 15, "pl2": 15, "pl3": 20},
+        safety_lock_path=lock_path,
+    )
+    assert backend.hold_levels({"pl1": 19, "pl2": 23, "pl3": 27}).ok is True
+
+    recovery = ScriptedRun(write_rcs=[0], infos=[])
+    reloaded = RyzenadjBackend(
+        FALLBACK,
+        resolve=lambda: "/usr/bin/ryzenadj",
+        runner=recovery,
+        allow_unverified_hold=True,
+        unverified_hold_restore={"pl1": 15, "pl2": 15, "pl3": 20},
+        safety_lock_path=lock_path,
+    )
+
+    assert reloaded.supported is False
+    assert reloaded.safety_locked is True
+    assert reloaded.recover_runtime_transaction()["ok"] is True
+    assert recovery.writes == [[
+        "/usr/bin/ryzenadj",
+        "--stapm-limit", "15000",
+        "--fast-limit", "20000",
+        "--slow-limit", "15000",
+    ]]
+    assert reloaded.supported is True
+    assert reloaded.safety_locked is False
+    assert not os.path.exists(lock_path)
+
+
+def test_unverified_restart_never_trusts_a_persisted_recovery_target(tmp_path):
+    lock_path = tmp_path / "run" / "low-battery-hold.lock"
+    lock_path.parent.mkdir(parents=True)
+    lock_path.write_text(
+        json.dumps({
+            "state": "low_battery_hold_active",
+            "recovery_target": {"pl1": 40, "pl2": 40, "pl3": 40},
+        }),
+        encoding="utf-8",
+    )
+    recovery = ScriptedRun(write_rcs=[0], infos=[])
+    reloaded = RyzenadjBackend(
+        FALLBACK,
+        resolve=lambda: "/usr/bin/ryzenadj",
+        runner=recovery,
+        allow_unverified_hold=True,
+        unverified_hold_restore={"pl1": 15, "pl2": 15, "pl3": 20},
+        safety_lock_path=str(lock_path),
+    )
+
+    assert reloaded.recover_runtime_transaction()["ok"] is True
+
+    assert recovery.writes == [[
+        "/usr/bin/ryzenadj",
+        "--stapm-limit", "15000",
+        "--fast-limit", "20000",
+        "--slow-limit", "15000",
+    ]]
+    assert not lock_path.exists()
+
+
+def test_unverified_low_battery_hold_keeps_lock_when_safe_restore_fails(tmp_path):
+    lock_path = str(tmp_path / "run" / "low-battery-hold.lock")
+    fake = ScriptedRun(write_rcs=[0, 1], infos=[])
+    backend = RyzenadjBackend(
+        FALLBACK,
+        resolve=lambda: "/usr/bin/ryzenadj",
+        runner=fake,
+        allow_unverified_hold=True,
+        unverified_hold_restore={"pl1": 15, "pl2": 15, "pl3": 20},
+        safety_lock_path=lock_path,
+    )
+    assert backend.hold_levels({"pl1": 19, "pl2": 23, "pl3": 27}).ok is True
+
+    assert backend.release_hold() is False
+
+    assert backend.supported is False
+    assert backend.safety_locked is True
+    assert backend.diagnostics()["low_battery_hold_active"] is True
+    assert os.path.exists(lock_path)
+
+
+def test_unverified_low_battery_hold_failure_neutralises_partial_write(tmp_path):
+    lock_path = str(tmp_path / "run" / "low-battery-hold.lock")
+    fake = ScriptedRun(write_rcs=[1, 0, 0], infos=[])
+    backend = RyzenadjBackend(
+        FALLBACK,
+        resolve=lambda: "/usr/bin/ryzenadj",
+        runner=fake,
+        allow_unverified_hold=True,
+        unverified_hold_restore={"pl1": 15, "pl2": 15, "pl3": 20},
+        safety_lock_path=lock_path,
+        hold_rail_floors={"pl2": 15, "pl3": 20},
+    )
+
+    result = backend.hold_levels({"pl1": 19, "pl2": 23, "pl3": 27})
+    writes_after_failure = len(fake.writes)
+    retry = backend.hold_levels({"pl1": 19, "pl2": 23, "pl3": 27})
+
+    assert result.ok is False
+    assert retry.ok is False
+    assert backend.supported is False
+    assert len(fake.writes) == writes_after_failure
+    assert fake.writes[1] == [
+        "/usr/bin/ryzenadj",
+        "--stapm-limit", "15000",
+        "--fast-limit", "20000",
+        "--slow-limit", "15000",
+    ]
+    assert backend.safety_locked is False
+    assert backend.diagnostics()["low_battery_hold_active"] is False
+    assert not os.path.exists(lock_path)
 
 
 def test_non_gpd_preserves_nonzero_exit_semantics():

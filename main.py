@@ -1,6 +1,7 @@
 import asyncio
 import copy
 import json
+import math
 import os
 import re
 import time
@@ -31,6 +32,7 @@ from version import read_version
 from settings_store import SettingsStore
 from tdp import factory as tdp_factory
 from tdp.backend import NullBackend
+from tdp.low_battery_hold import decide_hold
 from tdp import powerstation as powerstation_conflict
 from tdp import suggest as tdp_suggest
 from tdp.reconcile import (
@@ -121,6 +123,8 @@ from mangohud.coordinator import HudClosed, HudCoordinator, HudStale
 from mangohud.observations import TimedValue, fresh_value
 from report import collector as report_collector
 from report import client as report_client
+from steam_cleaner import SteamCleanerError, SteamCleanerService
+from steam_cleaner.media import measure_screenshot_paths
 
 # Report collector: the app slug (routes to the right GitHub repo, server-side) and the
 # collector endpoint. The URL is set to the deployed Vercel service; overridable via
@@ -146,14 +150,17 @@ _HUD_OBSERVATION_MAX_AGE_S = 3.0
 _MIN_HUD_REFRESH_S = 1.0
 _HUD_RELOAD_MAX_ATTEMPTS = 4
 _TDP_BACKEND_REPROBE_S = 30.0
+_TDP_STORAGE_MIGRATION_RETRY_S = 30.0
 _CHARGE_LIMIT_VERIFY_DELAYS = (2.0, 8.0, 20.0)
+_FULL_CHARGE_ONCE_SECONDS = 24 * 60 * 60
+_FULL_CHARGE_ONCE_POLL_S = 30.0
 _ROG_CHARGE_LIMIT_PROFILES = frozenset({
     "rog_ally",
     "rog_ally_x",
     "rog_xbox_ally",
     "rog_xbox_ally_x",
 })
-_STEAM_DECK_CHARGE_LIMIT_PROFILES = frozenset({
+_STEAM_DECK_PROFILES = frozenset({
     "steam_deck_lcd",
     "steam_deck_oled",
 })
@@ -183,6 +190,7 @@ class _TdpCommand:
     safe_bounds: dict
     primary_rail: str
     on_ac: bool
+    ppt_probe_pending: bool
 
 
 @dataclass(frozen=True)
@@ -259,6 +267,7 @@ DEFAULTS = {
     # Master switch: when False we stop writing the TDP rails and Potencia drops to
     # monitor-only, handing TDP to another tool.
     "tdp_control_enabled": True,
+    "low_battery_tdp_hold": False,
     # Modules the user turned off in the customization editor (generic ids only;
     # power/learning are folded from tdp_control_enabled/telemetry_enabled).
     "disabled_modules": [],
@@ -274,6 +283,8 @@ DEFAULTS = {
     # (protects battery longevity). Disabled → firmware default (100%).
     "charge_limit_enabled": False,
     "charge_limit_percent": 80,
+    "charge_limit_full_once_until": None,
+    "charge_limit_full_once_restore_pending": False,
     # CPU controls default to full performance (SMT + boost on) — the stock state.
     "smt_enabled": True,
     "boost_enabled": True,
@@ -345,6 +356,12 @@ class Plugin:
         )
         self._tdp_external_owner = None if self._os_id == "anatase" else False
         desktop_settings_changed = normalize_desktop_settings(self._settings)
+        low_battery_setting_changed = not isinstance(
+            self._settings.get("low_battery_tdp_hold"),
+            bool,
+        )
+        if low_battery_setting_changed:
+            self._settings["low_battery_tdp_hold"] = False
         # Probe hardware/environment HERE, wrapped so it NEVER raises — a raise in
         # init or _main bricks plugin load (UI stuck on spinner forever).
         self._device = device_registry.detect()
@@ -353,7 +370,11 @@ class Plugin:
         )
         self._desktop_recognition_migration_last_attempt = float("-inf")
         self._desktop_recognition_migration_last_failure = None
-        if migrate_desktop_defaults(self._settings, self._device) or desktop_settings_changed:
+        if (
+            migrate_desktop_defaults(self._settings, self._device)
+            or desktop_settings_changed
+            or low_battery_setting_changed
+        ):
             self._store.save(self._settings)
         self._tdp_profiles = ProfileStore(
             os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "tdp_profiles.json"),
@@ -410,11 +431,20 @@ class Plugin:
             self._device,
             os_id=self._os_id,
         )
+        self._low_battery_hold_backend = (
+            tdp_factory.select_low_battery_hold_backend(self._device)
+        )
+        self._low_battery_hold_last_write_at = None
+        self._low_battery_hold_cached_reassert_s = None
+        self._low_battery_hold_last_failure = None
+        self._low_battery_hold_recovery_pending = bool(
+            getattr(self._low_battery_hold_backend, "safety_locked", False)
+        )
         self._steamdeck_ppt_history = deque(maxlen=32)
         self._steamdeck_ppt_last_failure = None
         self._steamdeck_ppt_recovery_blocked = False
         if (
-            self._device.key in ("steam_deck_lcd", "steam_deck_oled")
+            self._device.key in _STEAM_DECK_PROFILES
             and not self._settings.get("_deck_ppt_scope_migrated")
         ):
             self._tdp_profiles.migrate_deck_ppt_stable()
@@ -435,12 +465,21 @@ class Plugin:
             ),
         )
         self._powerstation_detector = powerstation_conflict.Detector()
-        # Safety self-heal: correct any stored TDP value an older version persisted
-        # outside the device's real range (a bogus firmware max could leak in) so it can
-        # never be applied — not merely clamped on read.
+        self._tdp_profile_sanitize_pending = False
+        self._power_preset_sanitize_pending = False
+        self._tdp_storage_migration_retry_at = 0.0
+        # Preserve durable intent while a dynamic hardware ceiling is unreadable.
         _lim = self._profile_storage_limits()
-        if self._tdp_profiles.sanitize(TDP_REQUEST_MIN_W, _lim.max_ac_w):
-            decky.logger.info("Corrected out-of-range stored TDP profiles")
+        _request_min = self._tdp_request_min()
+        if _lim is None:
+            self._tdp_profile_sanitize_pending = True
+            self._tdp_storage_migration_retry_at = (
+                _monotonic() + _TDP_STORAGE_MIGRATION_RETRY_S
+            )
+        else:
+            self._sanitize_tdp_profiles(_request_min, _lim.max_ac_w)
+            if _request_min > TDP_REQUEST_MIN_W:
+                self._sanitize_power_presets(_request_min, _lim.max_ac_w)
         # Which daemon owns the controller (HHD / InputPlumber / none). Detected
         # once — the resident daemon doesn't change at runtime. Probe never raises.
         self._controller = controller_detect.detect()
@@ -559,6 +598,12 @@ class Plugin:
         self._charge_limit_reconcile_task = None
         self._charge_limit_apply_tasks = set()
         self._charge_limit_candidate = None
+        self._charge_limit_full_once_task = None
+        self._charge_limit_full_once_status = (
+            "pending"
+            if self._charge_limit_full_once_deadline() is not None
+            else "inactive"
+        )
         self._charge_limit_history = deque(maxlen=8)
         self._charge_limit_reconciliation = {
             "generation": 0,
@@ -761,6 +806,152 @@ class Plugin:
         self._init()
         return read_version()
 
+    def _ensure_steam_cleaner_executor(self):
+        executor = getattr(self, "_steam_cleaner_executor", None)
+        if executor is None:
+            executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="steam-cleaner")
+            self._steam_cleaner_executor = executor
+        return executor
+
+    async def _get_steam_cleaner(self):
+        if getattr(self, "_shutting_down", False) or getattr(self, "_steam_cleaner_closed", False):
+            raise RuntimeError("closed")
+        service = getattr(self, "_steam_cleaner", None)
+        if service is not None:
+            return service
+        future = getattr(self, "_steam_cleaner_init_future", None)
+        if future is None:
+            home = getattr(decky, "DECKY_USER_HOME", None)
+            if not isinstance(home, str) or not os.path.isabs(home):
+                raise RuntimeError("steam_home_unavailable")
+            future = self._ensure_steam_cleaner_executor().submit(
+                self._invoke_steam_cleaner,
+                lambda: SteamCleanerService(
+                    home,
+                    logger=decky.logger,
+                    state_dir=os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "steam_cleaner"),
+                ),
+            )
+            self._steam_cleaner_init_future = future
+        service = await asyncio.shield(asyncio.wrap_future(future))
+        if getattr(self, "_steam_cleaner_closed", False):
+            raise RuntimeError("closed")
+        self._steam_cleaner = service
+        return service
+
+    @staticmethod
+    def _invoke_steam_cleaner(operation, *args):
+        try:
+            return operation(*args)
+        except SteamCleanerError as error:
+            code = error.code
+            if not isinstance(code, str) or not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", code):
+                code = "internal_error"
+            raise RuntimeError(code) from None
+        except Exception:  # noqa: BLE001
+            decky.logger.warning("Steam cleaner operation failed: internal_error")
+            raise RuntimeError("internal_error") from None
+
+    async def _offload_steam_cleaner(self, method, *args):
+        service = await self._get_steam_cleaner()
+        active = getattr(self, "_steam_cleaner_future", None)
+        if active is not None and not active.done():
+            raise RuntimeError("busy")
+        executor = self._ensure_steam_cleaner_executor()
+        future = executor.submit(self._invoke_steam_cleaner, getattr(service, method), *args)
+        self._steam_cleaner_future = future
+        # Cancelling a QAM await must not hide a worker that can still delete files.
+        return await asyncio.shield(asyncio.wrap_future(future))
+
+    async def get_steam_cleaner_state(self) -> dict:
+        self._init()
+        service = await self._get_steam_cleaner()
+        return self._invoke_steam_cleaner(service.get_state)
+
+    async def scan_steam_cleaner(self) -> dict:
+        self._init()
+        return await self._offload_steam_cleaner("inventory")
+
+    async def prepare_steam_cleaner(self, scan_id: str, entry_ids: list[str]) -> dict:
+        self._init()
+        return await self._offload_steam_cleaner("prepare", scan_id, entry_ids)
+
+    async def execute_steam_cleaner(self, plan_id: str, confirm_compatdata: bool = False) -> dict:
+        self._init()
+        return await self._offload_steam_cleaner("execute", plan_id, confirm_compatdata)
+
+    async def cancel_steam_cleaner(self) -> dict:
+        self._init()
+        service = await self._get_steam_cleaner()
+        return self._invoke_steam_cleaner(service.cancel)
+
+    async def get_proton_cleaner_state(self) -> dict:
+        self._init()
+        service = await self._get_steam_cleaner()
+        return self._invoke_steam_cleaner(service.get_proton_state)
+
+    async def scan_proton_cleaner(self) -> dict:
+        self._init()
+        return await self._offload_steam_cleaner("inventory_proton")
+
+    async def prepare_proton_cleaner(self, scan_id: str, entry_ids: list[str]) -> dict:
+        self._init()
+        return await self._offload_steam_cleaner("prepare_proton", scan_id, entry_ids)
+
+    async def execute_proton_cleaner(self, plan_id: str) -> dict:
+        self._init()
+        return await self._offload_steam_cleaner("execute_proton", plan_id)
+
+    async def measure_steam_screenshot_paths(self, paths: list[str]) -> dict:
+        self._init()
+        home = getattr(decky, "DECKY_USER_HOME", None)
+        if not isinstance(home, str) or not os.path.isabs(home):
+            return {}
+        return await asyncio.get_running_loop().run_in_executor(
+            None,
+            measure_screenshot_paths,
+            home,
+            paths,
+        )
+
+    async def record_steam_media_event(
+        self, event: str, operation_id: str, count: int = 0, errors: int = 0,
+        source: str = "none", reason: str = "none",
+    ) -> bool:
+        self._init()
+        service = await self._get_steam_cleaner()
+        return await asyncio.get_running_loop().run_in_executor(
+            None,
+            lambda: service.record_media_event(event, operation_id, count, errors, source, reason),
+        )
+
+    async def _steam_cleaner_diagnostics(self) -> dict:
+        try:
+            service = await self._get_steam_cleaner()
+            return report_collector.steam_cleaner_snapshot(service.diagnostics())
+        except Exception:  # noqa: BLE001
+            return {"error": "diagnostics_unavailable"}
+
+    def _close_steam_cleaner_sync(self) -> None:
+        if getattr(self, "_steam_cleaner_closed", False):
+            return
+        self._steam_cleaner_closed = True
+        executor = getattr(self, "_steam_cleaner_executor", None)
+        service = getattr(self, "_steam_cleaner", None)
+        try:
+            pending = getattr(self, "_steam_cleaner_init_future", None)
+            if service is None and pending is not None:
+                service = pending.result()
+                self._steam_cleaner = service
+            if service is not None:
+                service.close()
+        except Exception:  # noqa: BLE001
+            decky.logger.warning("Steam cleaner close failed: internal_error")
+        finally:
+            if executor is not None:
+                executor.shutdown(wait=True, cancel_futures=True)
+                self._steam_cleaner_executor = None
+
     async def get_launch_tools(self) -> dict:
         self._init()
         return dict(self._launch_tools)
@@ -853,6 +1044,8 @@ class Plugin:
             self._settings["disabled_modules"] = sorted(cur)
         else:
             return {"disabled": self._user_disabled_all()}  # unknown id → no-op
+        if disabled and module_id in ("system", "chargeLimit"):
+            self._clear_charge_limit_full_once()
         release_requested = (
             dict(targets.requested)
             if module_id == "power"
@@ -1549,7 +1742,7 @@ class Plugin:
 
         hud_diagnostics = await _safe(
             self._hud_call(
-                lambda: self._hud_report_diagnostics(self._hud_state())
+                lambda: self._hud_report_diagnostics(self._hud_state(), context)
             )
         )
         states = {
@@ -1579,6 +1772,7 @@ class Plugin:
             "hud_diagnostics": hud_diagnostics,
             # Detected tools + current game + the frontend's running-game snapshot.
             "launch": self._launch_report_state(context),
+            "steam_cleaner": await self._steam_cleaner_diagnostics(),
         }
         logs = report_collector.tail_logs(
             getattr(decky, "DECKY_PLUGIN_LOG_DIR", ""), home=home, hostname=hostname
@@ -1616,7 +1810,73 @@ class Plugin:
             hostname=hostname,
         )
 
-    def _hud_report_diagnostics(self, state) -> dict:
+    @staticmethod
+    def _hud_steam_overlay_diagnostics(context) -> dict | None:
+        if not isinstance(context, dict):
+            return None
+        hud = context.get("hud")
+        overlay = hud.get("steam_overlay") if isinstance(hud, dict) else None
+        if not isinstance(overlay, dict):
+            return None
+
+        def level(value):
+            return (
+                value
+                if isinstance(value, int)
+                and not isinstance(value, bool)
+                and 0 <= value <= 4
+                else None
+            )
+
+        raw_level = level(overlay.get("raw_level"))
+        raw_to_ui = {0: 0, 4: 1, 1: 2, 2: 3, 3: 4}
+        resolver = overlay.get("resolver")
+        if resolver not in {"global", "module", "unavailable"}:
+            resolver = "unavailable"
+        service_state = overlay.get("service_state")
+        if (
+            not isinstance(service_state, int)
+            or isinstance(service_state, bool)
+            or service_state not in {0, 1, 2}
+        ):
+            service_state = None
+        show_over_steam = overlay.get("show_over_steam")
+        if not isinstance(show_over_steam, bool):
+            show_over_steam = None
+
+        activation = overlay.get("last_activation")
+        activation = activation if isinstance(activation, dict) else {}
+        outcome = activation.get("outcome")
+        if outcome not in {
+            "not_attempted",
+            "already_visible",
+            "confirmed",
+            "unavailable",
+            "exception",
+            "readback_timeout",
+            "readback_mismatch",
+        }:
+            outcome = "unavailable"
+        return {
+            "snapshot_status": "available" if raw_level is not None else "unavailable",
+            "resolver": resolver,
+            "settings_available": overlay.get("settings_available") is True,
+            "read_available": raw_level is not None,
+            "write_available": overlay.get("write_available") is True,
+            "raw_level": raw_level,
+            "ui_level": raw_to_ui.get(raw_level),
+            "master_enabled": None if raw_level is None else raw_level != 0,
+            "service_state": service_state,
+            "show_over_steam": show_over_steam,
+            "last_activation": {
+                "outcome": outcome,
+                "before_level": level(activation.get("before_level")),
+                "requested_level": level(activation.get("requested_level")),
+                "observed_level": level(activation.get("observed_level")),
+            },
+        }
+
+    def _hud_report_diagnostics(self, state, context=None) -> dict:
         state = state if isinstance(state, dict) else {}
         model = state.get("model")
         model = model if isinstance(model, dict) else {}
@@ -1636,7 +1896,7 @@ class Plugin:
         values = values if isinstance(values, dict) else {}
         conflict = getattr(self, "_hud_conflict", None)
         conflict = conflict if isinstance(conflict, dict) else {}
-        return {
+        diagnostics = {
             "capability": state.get("capability"),
             "apply_status": state.get("applyStatus"),
             "enabled": bool(model.get("enabled")),
@@ -1668,6 +1928,10 @@ class Plugin:
             "conflict_reason": conflict.get("reason"),
             "shutdown": bool(getattr(self, "_hud_shutdown", False)),
         }
+        steam_overlay = self._hud_steam_overlay_diagnostics(context)
+        if steam_overlay is not None:
+            diagnostics["steam_overlay"] = steam_overlay
+        return diagnostics
 
     def _display_diagnostics(self, context) -> dict:
         diagnostics = getattr(self._color_backend, "diagnostics", None)
@@ -1706,11 +1970,13 @@ class Plugin:
             n_custom = len(launch_custom_vars.coerce_custom_vars(self._settings.get("custom_launch_vars")))
         except Exception:  # noqa: BLE001
             n_custom = 0
+        frontend = dict(context) if isinstance(context, dict) else {}
+        frontend.pop("hud", None)
         return {
             "tools": tools,
             "current_appid": self._current_appid,
             "custom_var_count": n_custom,
-            "frontend": context if isinstance(context, dict) else {},
+            "frontend": frontend,
         }
 
     def _safe_controller_config(self) -> dict:
@@ -1988,6 +2254,57 @@ class Plugin:
         except Exception:  # noqa: BLE001
             return False
 
+    def _steamdeck_overclock_state(self) -> dict:
+        configured_state = getattr(
+            self._tdp_backend,
+            "configured_tdp_state",
+            None,
+        )
+        if not callable(configured_state):
+            return {
+                "detected": False,
+                "max_w": None,
+                "source": None,
+                "status": "unsupported",
+                "reason": None,
+            }
+        baseline = self._settings.get("steamdeck_ppt_previous")
+        source = "handoff" if baseline is not None else "live"
+        try:
+            configured = configured_state(baseline)
+        except Exception as error:  # noqa: BLE001
+            return {
+                "detected": False,
+                "max_w": None,
+                "source": None,
+                "status": "unavailable",
+                "reason": type(error).__name__,
+            }
+        if not isinstance(configured, dict):
+            configured = {}
+        status = configured.get("status")
+        ceiling = configured.get("max_w")
+        valid_ceiling = (
+            status == "overclocked"
+            and isinstance(ceiling, int)
+            and not isinstance(ceiling, bool)
+        )
+        reason = configured.get("reason")
+        if status not in {"overclocked", "stock", "unavailable"} or (
+            status == "overclocked" and not valid_ceiling
+        ):
+            status = "unavailable"
+            ceiling = None
+            reason = reason or "invalid_state"
+        detected = status == "overclocked"
+        return {
+            "detected": detected,
+            "max_w": int(ceiling) if detected else None,
+            "source": source if detected else None,
+            "status": status,
+            "reason": reason,
+        }
+
     def _record_steamdeck_ppt(self, action, ok, reason=None) -> None:
         history = getattr(self, "_steamdeck_ppt_history", None)
         if history is None:
@@ -2047,6 +2364,17 @@ class Plugin:
         self._record_steamdeck_ppt("restore", True)
         return True
 
+    def _steamdeck_ppt_probe_pending(self, overclock=None) -> bool:
+        if self._device.key not in _STEAM_DECK_PROFILES:
+            return False
+        state = overclock or self._steamdeck_overclock_state()
+        return state["status"] in {"unavailable", "unsupported"}
+
+    def _restore_steamdeck_startup_ppt(self) -> bool:
+        return self._restore_steamdeck_ppt(
+            preserve_ownership=self._steamdeck_ppt_probe_pending()
+        )
+
     def _prepare_steamdeck_ppt(self, command):
         if not self._steamdeck_ppt_supported():
             return None
@@ -2081,7 +2409,15 @@ class Plugin:
                 return failure.get("reason", "restore_failed")
         return None
 
-    def _release_tdp_hardware(self, preserve_ownership=False) -> bool:
+    def _release_tdp_hardware(self, preserve_ownership=False) -> bool | None:
+        sidecar = getattr(self, "_low_battery_hold_backend", None)
+        if preserve_ownership and sidecar is not None and (
+            self._low_battery_sidecar_active()
+            or getattr(sidecar, "safety_locked", False)
+        ):
+            return None
+        if not self._release_low_battery_hold():
+            return False
         backend = getattr(self, "_tdp_backend", None)
         release = getattr(backend, "release", None)
         try:
@@ -2096,9 +2432,10 @@ class Plugin:
             else self._restore_steamdeck_ppt()
         )
 
-    def _restore_power_handoff(self, preserve_ownership=False) -> bool:
-        if not self._release_tdp_hardware(preserve_ownership):
-            return False
+    def _restore_power_handoff(self, preserve_ownership=False) -> bool | None:
+        hardware_released = self._release_tdp_hardware(preserve_ownership)
+        if hardware_released is not True:
+            return hardware_released
         return (
             self._restore_hhd_tdp(preserve_ownership=True)
             if preserve_ownership
@@ -2127,8 +2464,30 @@ class Plugin:
 
     async def _recover_tdp_startup_state(self) -> bool:
         managing = await self._prime_tdp_ownership()
+        sidecar = getattr(self, "_low_battery_hold_backend", None)
+        sidecar_locked = bool(getattr(sidecar, "safety_locked", False))
+        if sidecar_locked:
+            if self._os_id == "anatase" and managing is not False:
+                self._low_battery_hold_recovery_pending = True
+                self._low_battery_hold_last_failure = "external_owner"
+                decky.logger.warning(
+                    "Interrupted low-battery TDP hold recovery deferred: external owner"
+                )
+                return False
+            sidecar_recovered = await self._offload_call(
+                self._recover_low_battery_hold_transaction
+            )
+            self._low_battery_hold_recovery_pending = not sidecar_recovered
+            self._low_battery_hold_last_failure = (
+                None if sidecar_recovered else "restore_failed"
+            )
+            if not sidecar_recovered:
+                return False
         if self._os_id != "anatase" or managing is False:
-            return await self._offload_call(self._recover_tdp_runtime_transaction)
+            primary_recovered = await self._offload_call(
+                self._recover_tdp_runtime_transaction
+            )
+            return primary_recovered
         if not getattr(self._tdp_backend, "safety_locked", False):
             return True
         if managing is True:
@@ -2162,6 +2521,27 @@ class Plugin:
             reason,
         )
         return False
+
+    def _recover_low_battery_hold_transaction(self) -> bool:
+        backend = getattr(self, "_low_battery_hold_backend", None)
+        if backend is None or not getattr(backend, "safety_locked", False):
+            return True
+        recover = getattr(backend, "recover_runtime_transaction", None)
+        if not callable(recover):
+            return False
+        try:
+            result = recover()
+        except Exception as error:  # noqa: BLE001
+            decky.logger.error(
+                "Interrupted low-battery TDP hold recovery failed: %s",
+                type(error).__name__,
+            )
+            return False
+        ok = bool(isinstance(result, dict) and result.get("ok"))
+        detail = result.get("detail") if isinstance(result, dict) else "invalid response"
+        log = decky.logger.info if ok else decky.logger.warning
+        log("Interrupted low-battery TDP hold recovery: %s", detail)
+        return ok
 
     async def get_tdp_conflict(self) -> dict:
         """Which external managers can currently write the power rails."""
@@ -2231,7 +2611,26 @@ class Plugin:
             return {"ok": False, "hhd_managing": bool(applied)}
         if self._os_id == "anatase":
             self._tdp_external_owner = False
-        result = await self._apply_tdp_now("take-control")
+        if self._low_battery_hold_recovery_pending:
+            recovered = await self._offload_call(
+                self._recover_low_battery_hold_transaction
+            )
+            self._low_battery_hold_recovery_pending = not recovered
+            self._low_battery_hold_last_failure = (
+                None if recovered else "restore_failed"
+            )
+        else:
+            recovered = True
+        result = (
+            await self._apply_tdp_now("take-control")
+            if recovered
+            else TdpResult(
+                self._tdp_profiles.effective(self._current_appid)["pl1"],
+                None,
+                False,
+                "low-battery-hold-recovery-failed",
+            )
+        )
         if not result.ok:
             hardware_released = await self._offload_call(
                 self._release_tdp_hardware
@@ -2354,6 +2753,18 @@ class Plugin:
                 return False
             if not await self._probe_tdp_backend(force=True):
                 return False
+            if self._low_battery_hold_recovery_pending:
+                if not self._tdp_write_authorized():
+                    return False
+                recovered = await self._offload_call(
+                    self._recover_low_battery_hold_transaction
+                )
+                self._low_battery_hold_recovery_pending = not recovered
+                self._low_battery_hold_last_failure = (
+                    None if recovered else "restore_failed"
+                )
+                if not recovered:
+                    return False
         self._settings["tdp_control_enabled"] = enabled
         self._save()
         if not enabled:
@@ -3314,8 +3725,12 @@ class Plugin:
                 # read() sub-samples gpu_busy over a short blocking burst -> off
                 # the event loop so it can't stall other Decky RPC handling.
                 pr = await asyncio.to_thread(self._power_reader.read)
-                levels, _active, ac = self._effective_levels(self._current_appid)
-                lim = self._automatic_limits()
+                limits = self._limits()
+                levels, _active, ac = self._effective_levels(
+                    self._current_appid,
+                    limits=limits,
+                )
+                lim = self._automatic_limits(limits)
                 active = self._active_max(lim, ac)
                 requested = self._auto_control_pl1(levels["pl1"])
                 cur = min(requested, active)
@@ -3355,7 +3770,10 @@ class Plugin:
             return False  # device min already >= responsive floor → no raise
         # The floor bites only when the loop's PL1 sits AT the responsive floor
         # (it wanted lower / is being held up). A demanding game parks above it.
-        pl1 = self._effective_levels(self._current_appid)[0]["pl1"]
+        pl1 = self._effective_levels(
+            self._current_appid,
+            limits=lim,
+        )[0]["pl1"]
         return pl1 <= floor
 
     async def get_power_draw(self) -> dict:
@@ -3367,15 +3785,13 @@ class Plugin:
         )
         ac = read_on_ac()
         setpoint = self._effective_levels(self._current_appid, ac)[0]["pl1"]
-        if getattr(self._tdp_backend, "blocking", False):
+        observation_backend = self._tdp_observation_backend()
+        if getattr(observation_backend, "blocking", False):
             observation = self._tdp_observation
             applied = None
         else:
             observation = self._observe_tdp_sync()
-            primary = observation.surfaces.get(
-                self._tdp_backend.name,
-                {},
-            )
+            primary = observation.surfaces.get(observation_backend.name, {})
             pl1 = primary.get("pl1")
             applied = pl1.applied_w if pl1 is not None else None
         return {
@@ -3431,7 +3847,10 @@ class Plugin:
                 and self._firmware_mode() == _CUSTOM_MODE):
             lim = self._limits()
             floor = auto_tdp.effective_floor(lim.min_w, True)
-            cur = self._effective_levels(self._current_appid)[0]["pl1"]
+            cur = self._effective_levels(
+                self._current_appid,
+                limits=lim,
+            )[0]["pl1"]
             if cur < floor:  # only raise if actually below the responsive floor
                 self._tdp_profiles.set_pl1(self._auto_scope(), floor,
                                            appid=self._current_appid)
@@ -3441,15 +3860,14 @@ class Plugin:
 
     # ---- TDP helpers + RPCs -------------------------------------------------
     def _profile_storage_limits(self):
-        """Static authorised range for durable intent; live bounds only affect apply."""
+        """Authorised durable range, or None while a dynamic ceiling is unreadable."""
         if self._device.key == "gpd_win_mini_2025":
-            limits = self._limits()
-            return TdpLimits(
-                5,
-                limits.default_w,
-                limits.max_w,
-                limits.max_ac_w,
-            )
+            return TdpLimits.from_profile(self._device)
+        if self._device.key in _STEAM_DECK_PROFILES:
+            overclock = self._steamdeck_overclock_state()
+            if overclock["status"] in {"unavailable", "unsupported"}:
+                return None
+            return self._limits(overclock)
         if self._device.key != "rog_flow_z13":
             return self._limits()
         limits = TdpLimits.from_profile(self._device)
@@ -3458,10 +3876,71 @@ class Plugin:
             limits = limits.with_cooler(cooler_max)
         return limits
 
-    def _limits(self):
-        """Device TDP limits with the user's opt-in ceilings applied (a single
-        chokepoint so every clamp/limit path honours the Ajustes toggles): the
-        battery-unlock preference, then the GPD Win 5 cooler boost."""
+    def _sanitize_tdp_profiles(self, min_w: int, max_w: int) -> None:
+        try:
+            changed = self._tdp_profiles.sanitize(min_w, max_w)
+        except OSError:
+            self._tdp_profile_sanitize_pending = True
+            self._tdp_storage_migration_retry_at = max(
+                self._tdp_storage_migration_retry_at,
+                _monotonic() + _TDP_STORAGE_MIGRATION_RETRY_S,
+            )
+            decky.logger.warning(
+                "Stored TDP profile correction deferred after write failure"
+            )
+            return
+        self._tdp_profile_sanitize_pending = False
+        if changed:
+            decky.logger.info("Corrected out-of-range stored TDP profiles")
+
+    def _sanitize_power_presets(self, min_w: int, max_w: int) -> None:
+        try:
+            changed = self._power_presets.sanitize(min_w, max_w)
+        except OSError:
+            self._power_preset_sanitize_pending = True
+            self._tdp_storage_migration_retry_at = max(
+                self._tdp_storage_migration_retry_at,
+                _monotonic() + _TDP_STORAGE_MIGRATION_RETRY_S,
+            )
+            decky.logger.warning(
+                "Stored power preset correction deferred after write failure"
+            )
+            return
+        self._power_preset_sanitize_pending = False
+        if changed:
+            decky.logger.info("Corrected out-of-range stored power presets")
+
+    def _retry_tdp_storage_migrations(self) -> None:
+        if not (
+            self._tdp_profile_sanitize_pending
+            or self._power_preset_sanitize_pending
+        ):
+            self._tdp_storage_migration_retry_at = 0.0
+            return
+        if _monotonic() < self._tdp_storage_migration_retry_at:
+            return
+        limits = self._profile_storage_limits()
+        if limits is None:
+            self._tdp_storage_migration_retry_at = (
+                _monotonic() + _TDP_STORAGE_MIGRATION_RETRY_S
+            )
+            return
+        request_min = self._tdp_request_min()
+        if self._tdp_profile_sanitize_pending:
+            self._sanitize_tdp_profiles(request_min, limits.max_ac_w)
+        if (
+            self._power_preset_sanitize_pending
+            and request_min > TDP_REQUEST_MIN_W
+        ):
+            self._sanitize_power_presets(request_min, limits.max_ac_w)
+        if not (
+            self._tdp_profile_sanitize_pending
+            or self._power_preset_sanitize_pending
+        ):
+            self._tdp_storage_migration_retry_at = 0.0
+
+    def _limits(self, overclock=None):
+        """Device TDP limits after opt-ins and a detected Deck SlowPPT ceiling."""
         # Chokepoint for the battery-unlock preference. Ignore it where the firmware
         # enforces the battery cap (Ally/Ally X) — the write would be refused, so the
         # reported ceiling must not claim the extra either.
@@ -3474,11 +3953,21 @@ class Plugin:
         experimental_max = self._device.experimental_tdp_max_ac
         if experimental_max and self._settings.get("experimental_tdp_unlock") is True:
             lim = lim.with_ac_max(experimental_max)
+        overclock = overclock or self._steamdeck_overclock_state()
+        configured_max = overclock["max_w"]
+        if configured_max is not None:
+            ceiling = max(lim.max_ac_w, configured_max)
+            lim = TdpLimits(
+                lim.min_w,
+                lim.default_w,
+                ceiling,
+                ceiling,
+            )
         return lim
 
-    def _automatic_limits(self):
+    def _automatic_limits(self, limits=None):
         """Limits for automatic control and presets, excluding unsafe opt-ins."""
-        limits = self._limits()
+        limits = limits or self._limits()
         if not (
             self._device.experimental_tdp_max_ac
             and self._settings.get("experimental_tdp_unlock") is True
@@ -3492,10 +3981,10 @@ class Plugin:
             max_ac,
         )
 
-    def _effective_levels(self, appid=None, on_ac=None):
+    def _effective_levels(self, appid=None, on_ac=None, limits=None):
         """Clamped {pl1,pl2,pl3} for a scope at the active (on_ac) ceiling, plus the
         ceiling. Single source for every loop/RPC that needs the applied setpoint."""
-        limits = self._limits()
+        limits = limits or self._limits()
         ac = read_on_ac() if on_ac is None else on_ac
         active = self._active_max(limits, ac)
         ll = self._cap_level_limits(self._tdp_backend.level_limits(), active)
@@ -3536,15 +4025,28 @@ class Plugin:
     def _active_max(self, limits, ac: bool) -> int:
         return limits.max_ac_w if ac else limits.max_w
 
-    @staticmethod
-    def _clamp_tdp_request(watts, active_max: int) -> int:
-        return max(TDP_REQUEST_MIN_W, min(int(watts), int(active_max)))
+    def _tdp_request_min(self) -> int:
+        if self._device.key == "gpd_win_mini_2025":
+            return int(self._device.tdp_min)
+        return TDP_REQUEST_MIN_W
 
-    @staticmethod
-    def _clamp_requested_levels(effective: dict, active_max: int, level_limits: dict) -> dict:
+    def _clamp_tdp_request(self, watts, active_max: int) -> int:
+        return max(
+            self._tdp_request_min(),
+            min(int(watts), int(active_max)),
+        )
+
+    def _clamp_requested_levels(
+        self,
+        effective: dict,
+        active_max: int,
+        level_limits: dict,
+    ) -> dict:
+        request_min = self._tdp_request_min()
+
         def clamp(rail):
             ceiling = level_limits.get(rail, {}).get("max", active_max)
-            return max(TDP_REQUEST_MIN_W, min(int(effective[rail]), int(ceiling)))
+            return max(request_min, min(int(effective[rail]), int(ceiling)))
 
         return {rail: clamp(rail) for rail in ("pl1", "pl2", "pl3")}
 
@@ -3823,7 +4325,8 @@ class Plugin:
     def _capture_tdp_command(self, reason, on_ac=None, bump=True):
         backend = self._tdp_backend
         ac = read_on_ac() if on_ac is None else bool(on_ac)
-        limits = self._limits()
+        overclock = self._steamdeck_overclock_state()
+        limits = self._limits(overclock)
         active = self._active_max(limits, ac)
         logical_requested = self._tdp_profiles.effective(self._current_appid)
         if self._settings.get("eco_enabled"):
@@ -3874,6 +4377,7 @@ class Plugin:
             safe_bounds=safe,
             primary_rail=getattr(backend, "primary_rail", "pl1"),
             on_ac=ac,
+            ppt_probe_pending=self._steamdeck_ppt_probe_pending(overclock),
         )
 
     def _advance_tdp_generation(self):
@@ -3883,6 +4387,10 @@ class Plugin:
         )
 
     def _observe_tdp_sync(self):
+        sidecar = getattr(self, "_low_battery_hold_backend", None)
+        observe_hold = getattr(sidecar, "observe_hold", None)
+        if self._low_battery_sidecar_active() and callable(observe_hold):
+            return observe_hold()
         observe = getattr(self._tdp_backend, "observe", None)
         if callable(observe):
             return observe()
@@ -3893,6 +4401,10 @@ class Plugin:
                 "pl1": RailReading(applied),
             }
         return TdpObservation(readable=True, surfaces=surfaces)
+
+    def _tdp_observation_backend(self):
+        sidecar = getattr(self, "_low_battery_hold_backend", None)
+        return sidecar if self._low_battery_sidecar_active() else self._tdp_backend
 
     def _remember_tdp_observation(self, observation):
         self._tdp_observation = observation
@@ -3936,6 +4448,15 @@ class Plugin:
                 False,
                 "stale-backend",
             )
+        if self._low_battery_hold_recovery_pending:
+            self._tdp_status = "rejected"
+            self._tdp_reason = "low_battery_hold_recovery_pending"
+            return TdpResult(
+                logical_watts,
+                None,
+                False,
+                "low-battery-hold-recovery-pending",
+            )
         if not self._tdp_supported():
             self._tdp_status, self._tdp_reason = "unsupported", ""
             result = TdpResult(
@@ -3961,6 +4482,23 @@ class Plugin:
                 True,
                 "tdp-control-disabled",
             )
+        if command.ppt_probe_pending:
+            self._tdp_status = "rejected"
+            self._tdp_reason = "steamdeck_ppt_probe_pending"
+            result = TdpResult(
+                logical_watts,
+                None,
+                False,
+                "steamdeck-ppt-probe-pending",
+            )
+            self._record_tdp_transition(
+                command.reason,
+                action="blocked",
+                result=result,
+                on_ac=command.on_ac,
+                requested=command.requested,
+            )
+            return result
         if not self._tdp_write_authorized():
             self._tdp_status = "unverifiable"
             self._tdp_reason = "external_owner"
@@ -3980,8 +4518,18 @@ class Plugin:
                 requested=command.requested,
             )
             return result
+        sidecar = getattr(self, "_low_battery_hold_backend", None)
         mode = self._firmware_mode()
         if mode != _CUSTOM_MODE:
+            if sidecar is not None and not self._release_low_battery_hold():
+                self._tdp_status = "rejected"
+                self._tdp_reason = "low_battery_hold_restore_failed"
+                return TdpResult(
+                    logical_watts,
+                    None,
+                    False,
+                    "low-battery-hold-restore-failed",
+                )
             self._tdp_backend_used = True
             if not self._tdp_backend.set_profile(mode):
                 self._tdp_status = "rejected"
@@ -4020,6 +4568,35 @@ class Plugin:
                 requested=command.requested,
             )
             return result
+        if sidecar is not None:
+            hold = self._low_battery_hold_decision(command.on_ac)
+            if hold.active:
+                result = self._apply_low_battery_sidecar(
+                    command,
+                    time.monotonic(),
+                )
+                if command.generation != self._tdp_generation:
+                    return TdpResult(
+                        logical_watts,
+                        result.applied_w,
+                        False,
+                        "stale-generation",
+                    )
+                return TdpResult(
+                    logical_watts,
+                    result.applied_w,
+                    result.ok,
+                    result.detail,
+                )
+            if not self._release_low_battery_hold():
+                self._tdp_status = "rejected"
+                self._tdp_reason = "low_battery_hold_restore_failed"
+                return TdpResult(
+                    logical_watts,
+                    None,
+                    False,
+                    "low-battery-hold-restore-failed",
+                )
         ppt_failure = self._prepare_steamdeck_ppt(command)
         if ppt_failure is not None:
             self._tdp_status = "rejected"
@@ -4038,6 +4615,11 @@ class Plugin:
                 requested=command.requested,
             )
             return result
+        common_hold = (
+            self._low_battery_hold_decision(command.on_ac)
+            if sidecar is None
+            else None
+        )
         before = self._observe_tdp_sync()
         if command.generation != self._tdp_generation:
             return TdpResult(
@@ -4084,6 +4666,7 @@ class Plugin:
         self._tdp_status = outcome.status
         self._tdp_reason = outcome.reason
         self._tdp_conflict_persistent = outcome.conflict_persistent
+        self._remember_low_battery_primary_result(common_hold, result)
         self._record_tdp_transition(
             command.reason,
             action="apply",
@@ -4129,26 +4712,261 @@ class Plugin:
         command = self._capture_tdp_command(reason, on_ac)
         self._offload(lambda: self._execute_tdp_command(command))
 
-    def _tdp_authoritative_reassert_s(self):
-        if self._current_appid is None:
+    def _low_battery_hold_strategy(self):
+        sidecar = getattr(self, "_low_battery_hold_backend", None)
+        if sidecar is not None:
+            active = self._low_battery_sidecar_active()
+            if self._low_battery_hold_recovery_pending or not sidecar.supported or (
+                getattr(sidecar, "safety_locked", False) and not active
+            ):
+                return None
+            return getattr(sidecar, "low_battery_hold_strategy", None)
+        backend = self._tdp_backend
+        strategy = getattr(backend, "low_battery_hold_strategy", None)
+        if not strategy or not backend.supported or not getattr(backend, "readback", True):
             return None
-        return getattr(
-            self._tdp_backend,
-            "authoritative_reassert_s",
-            None,
+        if getattr(backend, "safety_locked", False):
+            return None
+        ready = getattr(backend, "ready", None)
+        if callable(ready):
+            try:
+                if not ready():
+                    return None
+            except Exception:  # noqa: BLE001
+                return None
+        return strategy
+
+    def _low_battery_hold_capability_strategy(self):
+        sidecar = getattr(self, "_low_battery_hold_backend", None)
+        if sidecar is not None:
+            configured = getattr(sidecar, "low_battery_hold_strategy", None)
+            if configured and (
+                getattr(sidecar, "low_battery_hold_capable", False)
+                or getattr(sidecar, "supported", False)
+                or getattr(sidecar, "safety_locked", False)
+            ):
+                return configured
+            return None
+        backend = self._tdp_backend
+        configured = getattr(backend, "low_battery_hold_strategy", None)
+        if (
+            configured
+            and backend.supported
+            and getattr(backend, "readback", True)
+        ):
+            return configured
+        return None
+
+    def _low_battery_hold_decision(self, on_ac=None):
+        enabled = self._settings.get("low_battery_tdp_hold") is True
+        strategy = (
+            self._low_battery_hold_strategy()
+            if enabled
+            else self._low_battery_hold_capability_strategy()
         )
+        ac = read_on_ac() if on_ac is None else bool(on_ac)
+        battery = self._battery.read() if enabled and strategy and not ac else {}
+        return decide_hold(
+            strategy=strategy,
+            enabled=enabled,
+            battery=battery,
+            on_ac=ac,
+            control_enabled=self._tdp_control_on(),
+            write_authorized=self._tdp_write_authorized(),
+            custom_mode=self._firmware_mode() == _CUSTOM_MODE,
+            auto_tdp=self._tdp_profiles.auto_tdp(self._current_appid),
+        )
+
+    def _remember_low_battery_primary_result(self, hold, result):
+        if hold is None:
+            return
+        if not hold.active:
+            self._low_battery_hold_last_failure = None
+            return
+        if result is None:
+            return
+        self._low_battery_hold_cached_reassert_s = hold.reassert_s
+        self._low_battery_hold_last_failure = None if result.ok else (
+            result.detail or "write_rejected"
+        )
+
+    def _low_battery_sidecar_active(self):
+        backend = getattr(self, "_low_battery_hold_backend", None)
+        diagnostics = getattr(backend, "diagnostics", None)
+        if not callable(diagnostics):
+            return False
+        try:
+            return bool(diagnostics().get("low_battery_hold_active"))
+        except Exception:  # noqa: BLE001
+            return False
+
+    def _release_low_battery_hold(self):
+        backend = getattr(self, "_low_battery_hold_backend", None)
+        needs_release = backend is not None and (
+            self._low_battery_sidecar_active()
+            or getattr(backend, "safety_locked", False)
+        )
+        if not needs_release:
+            self._low_battery_hold_last_write_at = None
+            return True
+        if not self._tdp_write_authorized():
+            self._low_battery_hold_recovery_pending = True
+            self._low_battery_hold_last_failure = "external_owner"
+            return False
+        release = getattr(backend, "release_hold", None)
+        try:
+            restored = bool(release()) if callable(release) else False
+        except Exception:  # noqa: BLE001
+            restored = False
+        if restored:
+            self._low_battery_hold_last_write_at = None
+            self._low_battery_hold_recovery_pending = False
+            self._low_battery_hold_last_failure = None
+        else:
+            self._low_battery_hold_recovery_pending = True
+            self._low_battery_hold_last_failure = "restore_failed"
+        return restored
+
+    def _guard_low_battery_sidecar(self, command, hold, now):
+        sidecar = getattr(self, "_low_battery_hold_backend", None)
+        if sidecar is None:
+            return False
+        if not hold.active:
+            if self._low_battery_sidecar_active():
+                decky.logger.info(
+                    "Low-battery TDP hold releasing reason=%s battery=%s",
+                    hold.reason,
+                    hold.battery_percent,
+                )
+            if not self._release_low_battery_hold():
+                self._tdp_status = "rejected"
+                self._tdp_reason = "low_battery_hold_restore_failed"
+                return True
+            return False
+        last_write = self._low_battery_hold_last_write_at
+        if last_write is not None and now - last_write < float(hold.reassert_s):
+            return True
+        self._apply_low_battery_sidecar(command, now)
+        return True
+
+    def _apply_low_battery_sidecar(self, command, now):
+        sidecar = self._low_battery_hold_backend
+        current = self._low_battery_hold_decision()
+        self._low_battery_hold_cached_reassert_s = current.reassert_s
+        if not current.active:
+            restored = self._release_low_battery_hold()
+            self._tdp_status = "unverifiable" if restored else "rejected"
+            self._tdp_reason = (
+                "low_battery_hold_condition_changed"
+                if restored
+                else "low_battery_hold_restore_failed"
+            )
+            return TdpResult(
+                command.logical_requested["pl1"],
+                None,
+                False,
+                "low-battery-hold-condition-changed",
+            )
+        self._low_battery_hold_last_write_at = now
+        sidecar_limits = getattr(sidecar, "low_battery_level_limits", None)
+        limits = self._limits()
+        active_max = self._active_max(limits, False)
+        bounds = (
+            sidecar_limits(active_max)
+            if callable(sidecar_limits)
+            else {}
+        )
+        for rail in ("pl1", "pl2", "pl3"):
+            bounds.setdefault(
+                rail,
+                command.safe_bounds.get(
+                    rail,
+                    {"min": limits.min_w, "max": limits.max_w},
+                ),
+            )
+        targets = build_targets(
+            command.logical_requested,
+            bounds,
+            TdpObservation(readable=False),
+        )
+        result = sidecar.hold_levels(targets.target)
+        self._tdp_targets = targets
+        if result.ok:
+            observe_hold = getattr(sidecar, "observe_hold", None)
+            observation = (
+                observe_hold()
+                if callable(observe_hold)
+                else TdpObservation(readable=False)
+            )
+            self._remember_tdp_observation(observation)
+            self._tdp_reconcile_memory = ReconcileMemory(last_write_at=now)
+            self._low_battery_hold_recovery_pending = False
+            self._low_battery_hold_last_failure = None
+        else:
+            self._low_battery_hold_recovery_pending = bool(
+                getattr(sidecar, "safety_locked", False)
+            )
+            self._low_battery_hold_last_failure = result.detail
+            self._remember_tdp_observation(self._observe_tdp_sync())
+        if result.ok and observation.readable:
+            self._tdp_status = "in_sync"
+            self._tdp_reason = "low_battery_hold"
+        elif result.ok:
+            self._tdp_status = "unverifiable"
+            self._tdp_reason = "low_battery_hold_unverified"
+        else:
+            self._tdp_status = "rejected"
+            self._tdp_reason = "low_battery_hold_failed"
+        self._record_tdp_transition(
+            "low-battery-hold",
+            action="reassert",
+            result=result,
+            on_ac=command.on_ac,
+            requested=command.logical_requested,
+        )
+        return result
+
+    def _tdp_authoritative_reassert_s(self, hold=None):
+        cadences = []
+        if self._current_appid is not None:
+            cadence = getattr(
+                self._tdp_backend,
+                "authoritative_reassert_s",
+                None,
+            )
+            if cadence is not None:
+                cadences.append(float(cadence))
+        if hold is not None and hold.reassert_s is not None:
+            cadences.append(float(hold.reassert_s))
+        return min(cadences) if cadences else None
 
     def _tdp_guard_tick(self, now=None):
         now = time.monotonic() if now is None else float(now)
         if self._tdp_shutdown:
             return
+        if self._low_battery_hold_recovery_pending:
+            self._tdp_status = "rejected"
+            self._tdp_reason = "low_battery_hold_recovery_pending"
+            self._tdp_reconcile_memory = ReconcileMemory()
+            return
         if not self._tdp_supported():
             self._tdp_status, self._tdp_reason = "unsupported", ""
             self._tdp_reconcile_memory = ReconcileMemory()
             return
+        command = self._capture_tdp_command("guard", bump=False)
+        hold = self._low_battery_hold_decision()
+        self._low_battery_hold_cached_reassert_s = hold.reassert_s
+        if self._guard_low_battery_sidecar(command, hold, now):
+            return
         if not self._tdp_control_on():
             self._tdp_status = "unverifiable"
             self._tdp_reason = "control_disabled"
+            self._tdp_reconcile_memory = ReconcileMemory()
+            return
+        if command.ppt_probe_pending:
+            self._tdp_status = "rejected"
+            self._tdp_reason = "steamdeck_ppt_probe_pending"
+            self._tdp_targets = None
             self._tdp_reconcile_memory = ReconcileMemory()
             return
         if not self._tdp_write_authorized():
@@ -4163,7 +4981,6 @@ class Plugin:
             self._tdp_reason = "firmware_mode"
             self._tdp_reconcile_memory = ReconcileMemory()
             return
-        command = self._capture_tdp_command("guard", bump=False)
         observation = self._observe_tdp_sync()
         if command.generation != self._tdp_generation:
             return
@@ -4188,7 +5005,7 @@ class Plugin:
                 "heartbeat_s",
                 None,
             ),
-            authoritative_reassert_s=self._tdp_authoritative_reassert_s(),
+            authoritative_reassert_s=self._tdp_authoritative_reassert_s(hold),
         )
         action = (
             "reassert"
@@ -4231,6 +5048,7 @@ class Plugin:
         self._tdp_status = outcome.status
         self._tdp_reason = outcome.reason
         self._tdp_conflict_persistent = outcome.conflict_persistent
+        self._remember_low_battery_primary_result(hold, result)
         self._record_tdp_transition(
             "guard",
             action=action,
@@ -4259,7 +5077,19 @@ class Plugin:
             due.append(ready_at)
         if memory.next_retry_at > now:
             due.append(memory.next_retry_at)
-        reassert_s = self._tdp_authoritative_reassert_s()
+        reassert_s = self._low_battery_hold_cached_reassert_s
+        if self._current_appid is not None:
+            primary_reassert = getattr(
+                self._tdp_backend,
+                "authoritative_reassert_s",
+                None,
+            )
+            if primary_reassert is not None:
+                reassert_s = (
+                    float(primary_reassert)
+                    if reassert_s is None
+                    else min(float(primary_reassert), float(reassert_s))
+                )
         if reassert_s is not None and memory.last_write_at is not None:
             due.append(memory.last_write_at + float(reassert_s))
         if not due:
@@ -4519,6 +5349,10 @@ class Plugin:
         }
         previous = getattr(self, "_charge_limit_last_apply", None)
         self._charge_limit_last_apply = event
+        if action == "full_once":
+            self._charge_limit_full_once_status = (
+                "active" if ok else "failed"
+            )
         if ok:
             self._charge_limit_failures = 0
             if event != previous:
@@ -4578,10 +5412,238 @@ class Plugin:
         self._apply_pending_charge_limit_candidate(generation)
 
     def _charge_limit_operation_for(self, backend):
+        if self._charge_limit_full_once_lifting():
+            if bool(getattr(backend, "adjustable", True)):
+                _, maximum = backend.range()
+                return (
+                    "full_once",
+                    maximum,
+                    lambda: backend.set(maximum),
+                )
+            return "full_once", None, backend.disable
         if bool(self._settings.get("charge_limit_enabled", False)):
-            requested = int(self._settings.get("charge_limit_percent", 80))
+            requested = self._charge_limit_requested_percent()
             return "set", requested, lambda: backend.set(requested)
         return "disable", None, backend.disable
+
+    def _charge_limit_full_once_deadline(self) -> float | None:
+        raw = self._settings.get("charge_limit_full_once_until")
+        if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+            return None
+        deadline = float(raw)
+        return deadline if math.isfinite(deadline) and deadline > 0 else None
+
+    def _charge_limit_full_once_available(self) -> bool:
+        backend = self._charge_limit
+        if not (
+            self._module_enabled("chargeLimit")
+            and bool(getattr(backend, "supported", False))
+            and bool(self._settings.get("charge_limit_enabled", False))
+        ):
+            return False
+        if not bool(getattr(backend, "adjustable", True)):
+            return True
+        _, maximum = backend.range()
+        return maximum >= 100
+
+    def _charge_limit_full_once_active(self) -> bool:
+        return (
+            self._charge_limit_full_once_deadline() is not None
+            and self._charge_limit_full_once_available()
+        )
+
+    def _charge_limit_full_once_restore_pending(self) -> bool:
+        return (
+            self._charge_limit_full_once_deadline() is not None
+            and bool(self._settings.get("charge_limit_full_once_restore_pending"))
+        )
+
+    def _charge_limit_full_once_lifting(self) -> bool:
+        deadline = self._charge_limit_full_once_deadline()
+        return (
+            deadline is not None
+            and deadline > time.time()
+            and not self._charge_limit_full_once_restore_pending()
+        )
+
+    def _stop_charge_limit_full_once_monitor(self) -> None:
+        task = getattr(self, "_charge_limit_full_once_task", None)
+        self._charge_limit_full_once_task = None
+        if task is None or task.done():
+            return
+        try:
+            current = asyncio.current_task()
+        except RuntimeError:
+            current = None
+        if task is not current:
+            task.cancel()
+
+    def _clear_charge_limit_full_once(self) -> None:
+        self._settings["charge_limit_full_once_until"] = None
+        self._settings["charge_limit_full_once_restore_pending"] = False
+        self._charge_limit_full_once_status = "inactive"
+        self._stop_charge_limit_full_once_monitor()
+
+    def _complete_charge_limit_full_once(self, reason: str) -> None:
+        self._clear_charge_limit_full_once()
+        self._save()
+        decky.logger.info("Full charge once finished: %s", reason)
+
+    def _charge_limit_requested_percent(self) -> int:
+        if self._charge_limit_full_once_lifting():
+            _, maximum = self._charge_limit.range()
+            return int(maximum)
+        return int(self._settings.get("charge_limit_percent", 80))
+
+    async def _finish_charge_limit_full_once(
+        self,
+        reason: str,
+        expected_deadline: float | None = None,
+    ) -> None:
+        deadline = self._charge_limit_full_once_deadline()
+        if deadline is None or (
+            expected_deadline is not None and deadline != expected_deadline
+        ):
+            return
+        generation = self._cancel_charge_limit_reconcile(reason)
+        self._settings["charge_limit_full_once_restore_pending"] = True
+        self._charge_limit_full_once_status = "pending"
+        self._save()
+        if not (
+            self._module_enabled("chargeLimit")
+            and bool(self._settings.get("charge_limit_enabled", False))
+        ):
+            self._clear_charge_limit_full_once()
+            self._save()
+            return
+        previous_apply = getattr(self, "_charge_limit_last_apply", None)
+        await self._apply_charge_limit_intent(generation)
+        if self._charge_limit_full_once_deadline() != deadline:
+            return
+        last_apply = getattr(self, "_charge_limit_last_apply", None)
+        restored = (
+            last_apply is not previous_apply
+            and isinstance(last_apply, dict)
+            and last_apply.get("action") == "set"
+            and bool(last_apply.get("ok"))
+        )
+        if restored:
+            self._complete_charge_limit_full_once(reason)
+            return
+        self._charge_limit_full_once_status = "failed"
+        self._save()
+        self._start_charge_limit_full_once_monitor()
+
+    async def _check_charge_limit_full_once(self) -> None:
+        deadline = self._charge_limit_full_once_deadline()
+        if deadline is None:
+            return
+        if self._charge_limit_full_once_restore_pending():
+            await self._finish_charge_limit_full_once(
+                "full_once_restore_retry",
+                deadline,
+            )
+            return
+        if deadline <= time.time():
+            await self._finish_charge_limit_full_once(
+                "full_once_expired",
+                deadline,
+            )
+            return
+        battery = await self._offload_call(self._battery.read)
+        if self._charge_limit_full_once_deadline() != deadline:
+            return
+        percent = battery.get("percent") if isinstance(battery, dict) else None
+        status = (
+            str(battery.get("status", "")).strip().lower()
+            if isinstance(battery, dict)
+            else ""
+        )
+        numeric_percent = (
+            float(percent)
+            if isinstance(percent, (int, float)) and not isinstance(percent, bool)
+            else None
+        )
+        full = numeric_percent is not None and numeric_percent >= 100
+        full = full or (
+            status == "full"
+            and (numeric_percent is None or numeric_percent >= 99)
+        )
+        if full:
+            await self._finish_charge_limit_full_once(
+                "full_once_complete",
+                deadline,
+            )
+            return
+        if getattr(self, "_charge_limit_full_once_status", None) == "failed":
+            generation = self._cancel_charge_limit_reconcile(
+                "full_once_retry"
+            )
+            await self._apply_charge_limit_intent(generation)
+
+    async def _charge_limit_full_once_loop(self, deadline: float) -> None:
+        failures = 0
+        first_check = True
+        while self._charge_limit_full_once_deadline() == deadline:
+            restore_pending = self._charge_limit_full_once_restore_pending()
+            remaining = deadline - time.time()
+            if not (first_check and restore_pending) and (
+                restore_pending or remaining > 0
+            ):
+                await asyncio.sleep(
+                    _FULL_CHARGE_ONCE_POLL_S
+                    if restore_pending
+                    else min(_FULL_CHARGE_ONCE_POLL_S, remaining)
+                )
+            first_check = False
+            try:
+                await self._check_charge_limit_full_once()
+                failures = 0
+            except asyncio.CancelledError:
+                raise
+            except Exception as error:  # noqa: BLE001
+                failures += 1
+                if failures & (failures - 1) == 0:
+                    decky.logger.warning(
+                        "Full charge once battery poll failed: %s",
+                        error,
+                    )
+
+    def _start_charge_limit_full_once_monitor(self) -> None:
+        raw_deadline = self._settings.get("charge_limit_full_once_until")
+        deadline = self._charge_limit_full_once_deadline()
+        if deadline is None:
+            if raw_deadline is not None:
+                self._clear_charge_limit_full_once()
+                self._save()
+            return
+        if not self._charge_limit_full_once_available():
+            if (
+                self._module_enabled("chargeLimit")
+                and bool(self._settings.get("charge_limit_enabled", False))
+                and self._charge_limit_late_probe_eligible()
+            ):
+                return
+            self._clear_charge_limit_full_once()
+            self._save()
+            return
+        task = getattr(self, "_charge_limit_full_once_task", None)
+        if task is not None and not task.done():
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        task = loop.create_task(self._charge_limit_full_once_loop(deadline))
+        self._charge_limit_full_once_task = task
+
+        def finished(done):
+            if self._charge_limit_full_once_task is done:
+                self._charge_limit_full_once_task = None
+            if not done.cancelled():
+                done.exception()
+
+        task.add_done_callback(finished)
 
     def _apply_selected_charge_limit(self, generation=None) -> None:
         backend = self._charge_limit
@@ -4644,7 +5706,7 @@ class Plugin:
         key = getattr(self._device, "key", "")
         return (
             key in _ROG_CHARGE_LIMIT_PROFILES
-            or key in _STEAM_DECK_CHARGE_LIMIT_PROFILES
+            or key in _STEAM_DECK_PROFILES
         )
 
     def _cancel_charge_limit_reconcile(
@@ -4791,7 +5853,7 @@ class Plugin:
                         and type(candidate) is SysfsChargeLimit
                     )
                     or (
-                        device_key in _STEAM_DECK_CHARGE_LIMIT_PROFILES
+                        device_key in _STEAM_DECK_PROFILES
                         and type(candidate)
                         in (SteamDeckChargeLimit, SysfsChargeLimit)
                     )
@@ -4864,6 +5926,7 @@ class Plugin:
                 readback,
             )
         self._charge_limit = candidate
+        self._start_charge_limit_full_once_monitor()
         return result
 
     async def _reconcile_charge_limit(self, generation, trigger) -> None:
@@ -4881,7 +5944,7 @@ class Plugin:
                 await asyncio.sleep(remaining)
             if not self._charge_limit_generation_current(generation):
                 return
-            requested = int(self._settings.get("charge_limit_percent", 80))
+            requested = self._charge_limit_requested_percent()
             readback = await self._offload_call(self._charge_limit.get)
             if not self._charge_limit_generation_current(generation):
                 return
@@ -4937,6 +6000,15 @@ class Plugin:
             elif readback is not None:
                 status = "confirmed"
                 reason = "matched"
+            if self._charge_limit_full_once_active():
+                if ok and self._charge_limit_full_once_restore_pending():
+                    self._complete_charge_limit_full_once(
+                        "full_once_restore_reconciled"
+                    )
+                else:
+                    self._charge_limit_full_once_status = (
+                        "active" if ok else "failed"
+                    )
             event = {
                 "trigger": trigger,
                 "check": check,
@@ -4969,6 +6041,7 @@ class Plugin:
             actual = self._charge_limit.get()
             if actual is not None:
                 applied_percent = actual
+        full_charge_once_active = self._charge_limit_full_once_active()
         return {
             "backend": getattr(self._charge_limit, "name", "unsupported"),
             "supported": supported,
@@ -4985,6 +6058,24 @@ class Plugin:
                 else None
             ),
             "reconciliation": dict(self._charge_limit_reconciliation),
+            "full_charge_once": {
+                "available": self._charge_limit_full_once_available(),
+                "active": full_charge_once_active,
+                "status": (
+                    getattr(
+                        self,
+                        "_charge_limit_full_once_status",
+                        "pending",
+                    )
+                    if full_charge_once_active
+                    else "inactive"
+                ),
+                "expires_at": (
+                    self._charge_limit_full_once_deadline()
+                    if full_charge_once_active
+                    else None
+                ),
+            },
         }
 
     async def get_battery_state(self) -> dict:
@@ -5072,6 +6163,15 @@ class Plugin:
             "error_type": result.error_type,
             "rollback": result.rollback,
         }
+        if not result.ok and (result.error_code or "").startswith("frequency_"):
+            try:
+                failure = self._cpu_frequency_failure_diagnostic(
+                    self._cpu_frequency.diagnostics().get("last_failure")
+                )
+                if failure and result.error_code == f"frequency_{failure['reason']}":
+                    event["frequency_failure"] = failure
+            except Exception:  # noqa: BLE001
+                pass
         history.append(event)
         log = decky.logger.info if result.ok else decky.logger.warning
         log("CPU transition %s", json.dumps(event, sort_keys=True, separators=(",", ":")))
@@ -5604,12 +6704,13 @@ class Plugin:
                     "tdp",
                     lambda: None,
                 )
+                observation_backend = self._tdp_observation_backend()
                 primary = (
-                    observation.surfaces.get(self._tdp_backend.name, {})
+                    observation.surfaces.get(observation_backend.name, {})
                     if getattr(observation, "readable", False)
                     else {}
                 )
-                primary_rail = getattr(self._tdp_backend, "primary_rail", "pl1")
+                primary_rail = getattr(observation_backend, "primary_rail", "pl1")
                 reading = primary.get(primary_rail)
                 snap["applied"] = reading.applied_w if reading is not None else None
             if "pdc_auto_tdp" in active_ids:
@@ -6544,6 +7645,35 @@ class Plugin:
             "max_mhz": value.get("max_mhz"),
         }
 
+    @staticmethod
+    def _cpu_frequency_failure_diagnostic(value):
+        if not isinstance(value, dict):
+            return None
+        identity_fields = {
+            "path", "driver", "related_cpus", "hardware_min_khz",
+            "hardware_max_khz", "affected_cpus", "missing",
+        }
+        policies = value.get("policies") or []
+        return {
+            "reason": value.get("reason"),
+            "requested": list(value["requested"]) if value.get("requested") else None,
+            "policies": [{
+                "name": policy.get("name"),
+                "driver": policy.get("driver"),
+                **{
+                    key: list(policy[key]) if policy.get(key) else None
+                    for key in ("hardware_bounds", "target", "applied")
+                },
+                "identity_changed_fields": [
+                    field for field in policy.get("identity_changed_fields", ())
+                    if field in identity_fields
+                ],
+            } for policy in policies[:32]],
+            "policies_omitted": (
+                value.get("policies_omitted", 0) + max(0, len(policies) - 32)
+            ),
+        }
+
     def _cpu_gpu_diagnostics(self) -> dict:
         """Allowlisted CPU/GPU/PPT diagnostics for private reports.
 
@@ -6575,6 +7705,9 @@ class Plugin:
                 "owned": bool(raw_cpu.get("owned")),
                 "drivers": list(raw_cpu.get("drivers") or ()),
                 "policies": policies,
+                "last_failure": self._cpu_frequency_failure_diagnostic(
+                    raw_cpu.get("last_failure")
+                ),
                 "last_result": ({
                     "generation": last_cpu.generation,
                     "ok": last_cpu.ok,
@@ -6640,6 +7773,7 @@ class Plugin:
                 "fast": capability.get("fast"),
                 "visual_max": capability.get("visual_max"),
                 "probe_reason": raw_ppt.get("ppt_reason"),
+                "overclock": self._steamdeck_overclock_state(),
                 "requested": tdp_state.get("requested"),
                 "applied": tdp_state.get("applied"),
                 "status": tdp_state.get("status"),
@@ -6919,6 +8053,7 @@ class Plugin:
         """Enable/disable the charge cap and set its threshold. Persists, applies via
         readback, and returns the resulting charge_limit block."""
         self._init()
+        self._clear_charge_limit_full_once()
         generation = self._cancel_charge_limit_reconcile(
             "new_intent",
             preserve_candidate=not getattr(self, "_shutting_down", False),
@@ -6943,6 +8078,31 @@ class Plugin:
 
         apply_task.add_done_callback(finished)
         await asyncio.shield(apply_task)
+        return await self._offload_call(self._charge_limit_state)
+
+    async def set_charge_limit_full_once(self, enabled: bool) -> dict:
+        self._init()
+        if not bool(enabled):
+            deadline = self._charge_limit_full_once_deadline()
+            if deadline is not None:
+                await self._finish_charge_limit_full_once(
+                    "full_once_cancelled",
+                    deadline,
+                )
+            return await self._offload_call(self._charge_limit_state)
+        if not self._charge_limit_full_once_available():
+            return await self._offload_call(self._charge_limit_state)
+
+        self._stop_charge_limit_full_once_monitor()
+        self._settings["charge_limit_full_once_until"] = (
+            time.time() + _FULL_CHARGE_ONCE_SECONDS
+        )
+        self._settings["charge_limit_full_once_restore_pending"] = False
+        self._charge_limit_full_once_status = "pending"
+        self._save()
+        generation = self._cancel_charge_limit_reconcile("full_once_started")
+        await self._apply_charge_limit_intent(generation)
+        self._start_charge_limit_full_once_monitor()
         return await self._offload_call(self._charge_limit_state)
 
     async def _apply_charge_limit_intent(self, generation) -> None:
@@ -7405,25 +8565,78 @@ class Plugin:
             await self._offload_call(self._observe_tdp_sync)
         )
 
+    async def _read_tdp_state(self):
+        observation = await self._read_tdp_observation()
+        return await self._offload_call(
+            lambda: self._tdp_state(observation)
+        )
+
     async def get_tdp_state(self) -> dict:
         self._init()
+        self._retry_tdp_storage_migrations()
         await self._ensure_recognised_desktop_migration()
         await self._retry_delayed_tdp_recovery()
         await self._probe_tdp_backend()
-        observation = await self._read_tdp_observation()
-        return self._tdp_state(observation)
+        return await self._read_tdp_state()
+
+    async def set_low_battery_tdp_hold(self, enabled: bool) -> dict:
+        self._init()
+        available = bool(self._low_battery_hold_capability_strategy())
+        self._settings["low_battery_tdp_hold"] = bool(enabled) and available
+        self._save()
+        if self._settings["low_battery_tdp_hold"]:
+            await self._apply_tdp_now("low-battery-hold-toggle")
+            await self._offload_call(self._tdp_guard_tick)
+        else:
+            restored = await self._offload_call(self._release_low_battery_hold)
+            if not restored:
+                self._tdp_status = "rejected"
+                self._tdp_reason = "low_battery_hold_restore_failed"
+            elif self._low_battery_hold_backend is not None:
+                await self._apply_tdp_now("low-battery-hold-toggle-off")
+            else:
+                self._low_battery_hold_last_failure = None
+                self._low_battery_hold_cached_reassert_s = None
+        return await self._read_tdp_state()
+
+    def _tdp_targets_match_observation(self, observation, backend) -> bool:
+        targets = self._tdp_targets
+        if targets is None or self._tdp_status != "in_sync":
+            return False
+        readings = observation.surfaces.get(backend.name, {})
+        tolerance = int(getattr(backend, "read_tolerance_w", 0))
+        for rail, target in targets.target.items():
+            reading = readings.get(rail)
+            applied = reading.applied_w if reading is not None else None
+            if applied is None or abs(int(applied) - int(target)) > tolerance:
+                return False
+        return bool(targets.target)
 
     def _tdp_state(self, observation) -> dict:
-        levels, active, ac = self._effective_levels(self._current_appid)
-        global_levels, _active, _ac = self._effective_levels(None, ac)
-        limits = self._limits()
+        overclock = self._steamdeck_overclock_state()
+        limits = self._limits(overclock)
+        levels, active, ac = self._effective_levels(
+            self._current_appid,
+            limits=limits,
+        )
+        global_levels, _active, _ac = self._effective_levels(
+            None,
+            ac,
+            limits=limits,
+        )
         ll = self._cap_level_limits(self._tdp_backend.level_limits(), active)
         eff = self._tdp_profiles.effective(self._current_appid)
         geff = self._tdp_profiles.effective(None)
+        request_min = self._tdp_request_min()
         requested_levels = self._clamp_requested_levels(eff, active, ll)
-        global_requested_levels = self._clamp_requested_levels(geff, active, ll)
-        primary = observation.surfaces.get(self._tdp_backend.name, {})
-        primary_rail = getattr(self._tdp_backend, "primary_rail", "pl1")
+        global_requested_levels = self._clamp_requested_levels(
+            geff,
+            active,
+            ll,
+        )
+        observation_backend = self._tdp_observation_backend()
+        primary = observation.surfaces.get(observation_backend.name, {})
+        primary_rail = getattr(observation_backend, "primary_rail", "pl1")
         primary_reading = primary.get(primary_rail)
         applied_w = primary_reading.applied_w if primary_reading is not None else None
         ppt_capability = getattr(self._tdp_backend, "ppt_capability", None)
@@ -7439,13 +8652,38 @@ class Plugin:
                     "fast": fast.applied_w if fast is not None else None,
                 },
             }
+        low_battery_hold = self._low_battery_hold_decision(ac)
+        hold_available = bool(self._low_battery_hold_capability_strategy())
+        hold_enabled = (
+            self._settings.get("low_battery_tdp_hold") is True
+            and hold_available
+        )
+        sidecar_active = self._low_battery_sidecar_active()
+        hold_verified = self._tdp_targets_match_observation(
+            observation,
+            observation_backend,
+        )
+        hold_active = (
+            low_battery_hold.active
+            and not self._low_battery_hold_recovery_pending
+            and (
+                sidecar_active
+                and not self._low_battery_hold_last_failure
+                if self._low_battery_hold_backend is not None
+                else hold_verified
+            )
+        )
         return {
             "supported": self._tdp_supported(),
             "backend": self._tdp_backend.name,
-            "recovery_pending": self._tdp_delayed_recovery_pending(),
-            "request_min": TDP_REQUEST_MIN_W,
+            "recovery_pending": (
+                self._tdp_delayed_recovery_pending()
+                or self._low_battery_hold_recovery_pending
+            ),
+            "request_min": request_min,
             "limits": {"min": limits.min_w, "default": limits.default_w,
                        "max": limits.max_w, "max_ac": limits.max_ac_w},
+            "overclock": overclock,
             "on_ac": ac,
             "appid": self._current_appid,
             "has_game_profile": (self._current_appid is not None
@@ -7454,7 +8692,10 @@ class Plugin:
             # is toggled to follow global). Powers the "usa el global / usa el propio" UI.
             "follows_global": self._tdp_profiles.is_following_global(self._current_appid),
             "watts": self._clamp_tdp_request(eff["watts"], active),
-            "global_watts": self._clamp_tdp_request(geff["watts"], active),
+            "global_watts": self._clamp_tdp_request(
+                geff["watts"],
+                active,
+            ),
             "applied_w": applied_w,
             "primary_rail": primary_rail,
             "ppt": ppt,
@@ -7471,10 +8712,35 @@ class Plugin:
             # The battery↔performance dial that picks a value inside it is now LOCAL UI
             # state — applying it is a fixed manual setpoint, not a loop parameter.
             "learned": self._tdp_learned_info(self._current_appid),
-            "presets": self._tdp_presets(self._automatic_limits()),
+            "presets": self._tdp_presets(self._automatic_limits(limits)),
             # Selectable firmware performance modes; empty on devices without them.
             "firmware_modes": self._firmware_choices(),
             "firmware_mode": self._firmware_mode(),
+            "low_battery_hold": {
+                "available": hold_available,
+                "enabled": hold_enabled,
+                "active": hold_active,
+                "verified": hold_active and hold_verified,
+                "status": (
+                    "recovery_pending"
+                    if self._low_battery_hold_recovery_pending
+                    else "verified" if hold_active and hold_verified
+                    else "unverified" if hold_active
+                    else "failed" if (
+                        self._low_battery_hold_last_failure
+                        and (
+                            self._low_battery_hold_backend is not None
+                            or low_battery_hold.active
+                        )
+                    ) or (
+                        low_battery_hold.active
+                        and self._tdp_status == "rejected"
+                    )
+                    else "inactive"
+                ),
+                "applied_w": applied_w if hold_active and hold_verified else None,
+                "reason": self._low_battery_hold_last_failure or low_battery_hold.reason,
+            },
             "ownership": self._tdp_ownership_state(observation),
             # Master switch + one-time-notice flags (durable across reboot; the
             # frontend gates monitor-only mode + the first-run modals off these).
@@ -7496,10 +8762,8 @@ class Plugin:
             else {}
         )
         applied = {}
-        primary = observation.surfaces.get(
-            self._tdp_backend.name,
-            {},
-        )
+        observation_backend = self._tdp_observation_backend()
+        primary = observation.surfaces.get(observation_backend.name, {})
         for rail, reading in primary.items():
             applied[rail] = reading.applied_w
         return {
@@ -7534,6 +8798,7 @@ class Plugin:
             "history": list(self._tdp_history),
             "steamdeck_ppt": {
                 "previous": self._settings.get("steamdeck_ppt_previous"),
+                "overclock": self._steamdeck_overclock_state(),
                 "recovery_blocked": bool(
                     getattr(self, "_steamdeck_ppt_recovery_blocked", False)
                 ),
@@ -7847,6 +9112,8 @@ class Plugin:
         return self._recover_tdp_runtime_transaction()
 
     def _tdp_supported(self) -> bool:
+        if getattr(self, "_low_battery_hold_recovery_pending", False):
+            return False
         if not self._tdp_backend.supported:
             return False
         ready = getattr(self._tdp_backend, "ready", None)
@@ -7899,6 +9166,36 @@ class Plugin:
         except Exception as exc:  # noqa: BLE001
             errors["rails"] = type(exc).__name__
             rails = []
+        hold = self._low_battery_hold_decision()
+        sidecar = getattr(self, "_low_battery_hold_backend", None)
+        sidecar_diagnostics = getattr(sidecar, "diagnostics", None)
+        if sidecar is None:
+            sidecar_detail = None
+        else:
+            try:
+                details = sidecar_diagnostics() if callable(sidecar_diagnostics) else {}
+            except Exception as exc:  # noqa: BLE001
+                details = {"diagnostics_error": type(exc).__name__}
+            sidecar_detail = {
+                "backend": getattr(sidecar, "name", "unknown"),
+                "supported": bool(getattr(sidecar, "supported", False)),
+                **details,
+            }
+        observation_backend = sidecar if sidecar is not None else self._tdp_backend
+        hold_verified = self._tdp_targets_match_observation(
+            self._tdp_observation,
+            observation_backend,
+        )
+        hold_active = (
+            hold.active
+            and not self._low_battery_hold_recovery_pending
+            and (
+                self._low_battery_sidecar_active()
+                and not self._low_battery_hold_last_failure
+                if sidecar is not None
+                else hold_verified
+            )
+        )
         return {
             "device_key": self._device.key,
             "generic": bool(self._device.is_generic),
@@ -7917,6 +9214,16 @@ class Plugin:
                 "authoritative_reassert_s",
                 None,
             ),
+            "low_battery_hold": {
+                "strategy": self._low_battery_hold_capability_strategy(),
+                "enabled": self._settings.get("low_battery_tdp_hold") is True,
+                "active": hold_active,
+                "verified": hold_active and hold_verified,
+                "recovery_pending": self._low_battery_hold_recovery_pending,
+                "reason": self._low_battery_hold_last_failure or hold.reason,
+                "battery_percent": hold.battery_percent,
+                "sidecar": sidecar_detail,
+            },
             "read_tolerance_w": int(
                 getattr(self._tdp_backend, "read_tolerance_w", 0)
             ),
@@ -8015,7 +9322,7 @@ class Plugin:
                 "game", appid, context_appid
             )
         ):
-            return self._tdp_state(await self._read_tdp_observation())
+            return await self._read_tdp_state()
         if appid is not None:
             self._clear_eco()
             appid = str(appid)
@@ -8026,7 +9333,7 @@ class Plugin:
                 self._tdp_profiles.create_game_from_global(appid)
             self._tdp_profiles.set_follow_global(appid, bool(follow))
             await self._apply_tdp_now("follow-global")
-        return self._tdp_state(await self._read_tdp_observation())
+        return await self._read_tdp_state()
 
     async def set_tdp_firmware_mode(self, mode: str) -> dict:
         """Select a firmware performance mode (Legion Go original). 'low-power' /
@@ -8089,42 +9396,56 @@ class Plugin:
             context_appid is not _RPC_CONTEXT_UNSET
             and not self._scope_context_is_current(scope, appid, context_appid)
         ):
-            return self._tdp_state(await self._read_tdp_observation())
+            return await self._read_tdp_state()
         resolved = self._resolve_scope(scope, appid)
         if resolved is not None:  # invalid scope → no-op (never from the UI)
             self._clear_eco()
             self._tdp_profiles.set_boost_mode(resolved, mode, appid=appid)
             await self._apply_tdp_now("boost-mode")
-        return self._tdp_state(await self._read_tdp_observation())
+        return await self._read_tdp_state()
 
     def _preset_wclamp(self):
-        lim = self._automatic_limits()
-        return TDP_REQUEST_MIN_W, lim.max_ac_w
+        lim = (
+            self._profile_storage_limits()
+            if self._device.key == "gpd_win_mini_2025"
+            else self._automatic_limits()
+        )
+        return self._tdp_request_min(), lim.max_ac_w
 
     async def get_power_presets(self) -> dict:
         self._init()
+        self._retry_tdp_storage_migrations()
         return self._power_presets.state()
 
     async def create_power_preset(self, watts: int, icon: str, boost=None, name="") -> dict:
         self._init()
+        self._retry_tdp_storage_migrations()
         lo, hi = self._preset_wclamp()
-        return self._power_presets.create(watts, icon, boost, name=name, min_w=lo, max_w=hi)
+        return self._power_presets.create(
+            watts, icon, boost, name=name, min_w=lo, max_w=hi
+        )
 
     async def update_power_preset(self, cid: str, watts: int, icon: str, boost=None, name="") -> dict:
         self._init()
+        self._retry_tdp_storage_migrations()
         lo, hi = self._preset_wclamp()
-        return self._power_presets.update(cid, watts, icon, boost, name=name, min_w=lo, max_w=hi)
+        return self._power_presets.update(
+            cid, watts, icon, boost, name=name, min_w=lo, max_w=hi
+        )
 
     async def delete_power_preset(self, cid: str) -> dict:
         self._init()
+        self._retry_tdp_storage_migrations()
         return self._power_presets.delete(cid)
 
     async def move_power_preset(self, cid: str, direction: int) -> dict:
         self._init()
+        self._retry_tdp_storage_migrations()
         return self._power_presets.move(cid, direction)
 
     async def set_power_preset_hidden(self, cid: str, hidden: bool) -> dict:
         self._init()
+        self._retry_tdp_storage_migrations()
         return self._power_presets.set_hidden(cid, bool(hidden))
 
     async def apply_power_preset(
@@ -8732,8 +10053,9 @@ class Plugin:
         await self._prime_tdp_ownership()
         try:
             if self._settings.get("steamdeck_ppt_previous") is not None:
-                await self._offload_call(self._restore_steamdeck_ppt)
+                await self._offload_call(self._restore_steamdeck_startup_ppt)
             self._reapply_all()
+            self._start_charge_limit_full_once_monitor()
             self._lifecycle.start()
             self._start_tdp_guard_loop()
             self._start_night_loop()
@@ -8769,6 +10091,7 @@ class Plugin:
 
     def _prepare_shutdown(self) -> None:
         self._cancel_charge_limit_reconcile("shutdown")
+        self._stop_charge_limit_full_once_monitor()
         self._shutting_down = True
         if not getattr(self, "_hud_shutdown", False):
             self._hud_shutdown = True
@@ -8796,6 +10119,7 @@ class Plugin:
         if getattr(self, "_sampler", None) is not None:
             self._sampler.stop()
         self._cancel_queued_offloads()
+        self._close_steam_cleaner_sync()
 
     def _perform_shutdown_handoff(
         self, stage: str, preserve_recovery=False
@@ -8834,7 +10158,16 @@ class Plugin:
             if preserve_recovery
             else self._restore_power_handoff()
         )
-        decky.logger.info(f"Shutdown stage {stage}:power-handoff ok=%s", power_released)
+        power_status = (
+            "deferred"
+            if power_released is None
+            else "complete" if power_released
+            else "failed"
+        )
+        decky.logger.info(
+            f"Shutdown stage {stage}:power-handoff status=%s",
+            power_status,
+        )
 
     def _defer_shutdown_handoff(self, stage: str, remove_fan_conf: bool = False) -> bool:
         executor = getattr(self, "_apply_executor", None)

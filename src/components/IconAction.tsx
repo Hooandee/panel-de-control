@@ -11,6 +11,7 @@ export const iconBtn: React.CSSProperties = {
 export const IconAction: FC<{ label: string; color: string; disabled?: boolean; onTap: () => void; children: ReactNode }> =
   ({ label, color, disabled, onTap, children }) => (
     <QamAction
+      noFocusRing
       onPress={onTap}
       disabled={disabled}
       style={{ ...iconBtn, color, opacity: disabled ? 0.3 : 1, cursor: disabled ? "default" : "pointer" }}

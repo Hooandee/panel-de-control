@@ -49,6 +49,7 @@ const BatteryBlock: FC = () => {
       <BatteryCard
         state={battery.state}
         onSetLimit={battery.setLimit}
+        onSetFullChargeOnce={battery.setFullChargeOnce}
         hideHealth={subitemHidden(layout.subitems, "battery", "health")}
         hideLimitControl={subitemHidden(layout.subitems, "battery", "limit")}
       />

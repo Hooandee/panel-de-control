@@ -46,8 +46,9 @@ export const HomeVisibilitySetting: FC<{
         >
           {t("customize.home.desc")}
         </div>
-        <div style={{ ...segmentGroupStyle, width: "100%", boxSizing: "border-box" }}>
+        <Focusable flow-children="row" noFocusRing style={{ ...segmentGroupStyle, width: "100%", boxSizing: "border-box" }}>
           <Focusable
+            noFocusRing
             role="button"
             aria-label={t("customize.home.dashboard")}
             aria-pressed={value}
@@ -59,6 +60,7 @@ export const HomeVisibilitySetting: FC<{
             {t("customize.home.dashboard")}
           </Focusable>
           <Focusable
+            noFocusRing
             role="button"
             aria-label={t("customize.home.tabs")}
             aria-pressed={!value}
@@ -69,7 +71,7 @@ export const HomeVisibilitySetting: FC<{
             <LuPanelsTopLeft size={16} aria-hidden="true" />
             {t("customize.home.tabs")}
           </Focusable>
-        </div>
+        </Focusable>
       </div>
       <ToggleField
         label={t("customize.deviceHeader")}

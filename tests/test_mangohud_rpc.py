@@ -186,6 +186,65 @@ def test_hud_report_diagnostics_are_useful_without_custom_content(
     assert str(tmp_path) not in encoded
 
 
+def test_hud_report_diagnostics_allowlist_frontend_steam_overlay(
+    tmp_path,
+    monkeypatch,
+):
+    _main, p = _make_plugin(tmp_path, monkeypatch)
+    p._init()
+    state = {
+        "capability": "ready",
+        "applyStatus": "reload_requested",
+        "model": {"enabled": True, "items": []},
+    }
+    context = {
+        "hud": {
+            "steam_overlay": {
+                "snapshot_status": "available",
+                "resolver": "module",
+                "settings_available": True,
+                "read_available": True,
+                "write_available": True,
+                "raw_level": 1,
+                "ui_level": 99,
+                "master_enabled": False,
+                "service_state": 2,
+                "show_over_steam": False,
+                "private_store": "PRIVATE-STORE",
+                "last_activation": {
+                    "outcome": "confirmed",
+                    "before_level": 0,
+                    "requested_level": 1,
+                    "observed_level": 1,
+                    "error": "PRIVATE-ERROR",
+                },
+            }
+        }
+    }
+
+    diagnostics = p._hud_report_diagnostics(state, context)
+
+    assert diagnostics["steam_overlay"] == {
+        "snapshot_status": "available",
+        "resolver": "module",
+        "settings_available": True,
+        "read_available": True,
+        "write_available": True,
+        "raw_level": 1,
+        "ui_level": 2,
+        "master_enabled": True,
+        "service_state": 2,
+        "show_over_steam": False,
+        "last_activation": {
+            "outcome": "confirmed",
+            "before_level": 0,
+            "requested_level": 1,
+            "observed_level": 1,
+        },
+    }
+    assert "PRIVATE" not in json.dumps(diagnostics)
+
+
 def test_hud_detection_fails_closed_when_user_ownership_is_unknown(
     tmp_path,
     monkeypatch,
@@ -722,6 +781,28 @@ def test_pdc_tdp_uses_the_backends_primary_rail(tmp_path, monkeypatch):
     )
 
     assert snapshot["applied"] == 17
+
+
+def test_pdc_tdp_uses_active_low_battery_sidecar_readback(tmp_path, monkeypatch):
+    main, p = _make_plugin(tmp_path, monkeypatch)
+    p._init()
+    sidecar = types.SimpleNamespace(
+        name="ryzenadj-low-battery-hold",
+        primary_rail="pl1",
+        diagnostics=lambda: {"low_battery_hold_active": True},
+    )
+    p._low_battery_hold_backend = sidecar
+    observation = main.TdpObservation(
+        readable=True,
+        surfaces={sidecar.name: {"pl1": main.RailReading(19)}},
+    )
+
+    snapshot = p._pdc_snapshot(
+        ["pdc_tdp"],
+        {"tdp": main.TimedValue(observation, main._monotonic(), True)},
+    )
+
+    assert snapshot["applied"] == 19
 
 
 def test_blocking_tdp_backend_reuses_reconciler_observation(tmp_path, monkeypatch):

@@ -18,6 +18,7 @@ import { getCurrentLanguage, subscribeLanguage, translate } from "../i18n";
 import { getQamDocument } from "../qamDocument";
 import { getQamLayout, saveQamLayout, subscribeQamLayout } from "./store";
 import { startQamComposerRuntime } from "./runtime";
+import { readRenderedQamKeys } from "./renderedKeys";
 import { buildPanelQamCatalog } from "./panelCatalog";
 import {
   ensureDevice,
@@ -56,12 +57,7 @@ function subscribeCatalog(listener: () => void): () => void {
 }
 
 function readRenderedKeys(): string[] | null {
-  const document = getQamDocument();
-  if (!document) return null;
-  return Array.from(
-    document.querySelectorAll<HTMLElement>("[id^='quickaccess_tab_']"),
-    (entry) => entry.id.slice("quickaccess_tab_".length),
-  );
+  return readRenderedQamKeys(getQamDocument());
 }
 
 function scheduleReadback(readback: () => void): () => void {

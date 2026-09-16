@@ -10,6 +10,7 @@ import { SonidoSection } from "./SonidoSection";
 import { MandosSection } from "./MandosSection";
 import { HudSection } from "./HudSection";
 import { ParametrosSection } from "./ParametrosSection";
+import { LimpiezaSection } from "./LimpiezaSection";
 import { TemasSection } from "./TemasSection";
 import { AjustesSection } from "./AjustesSection";
 import { buildSections } from "./registryModel";
@@ -38,6 +39,7 @@ const COMPONENTS: Record<string, FC> = {
   mandos: MandosSection,
   hud: HudSection,
   params: ParametrosSection,
+  cleaner: LimpiezaSection,
   themes: TemasSection,
   settings: AjustesSection,
 };

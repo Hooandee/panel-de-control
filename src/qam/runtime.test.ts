@@ -7,6 +7,7 @@ import type {
 } from "../deckyInternal";
 import type { QamInventoryEntry } from "./composer";
 import type { QamLayout } from "./layout";
+import { readRenderedQamKeys } from "./renderedKeys";
 import {
   getQamRuntimeSnapshot,
   startQamComposerRuntime,
@@ -115,6 +116,58 @@ function setup(initial = layout(["pdc:home"])) {
 }
 
 describe("QAM composer runtime", () => {
+  it("keeps shortcut edits live while the hidden QAM retains its previous DOM", () => {
+    const harness = setup();
+    let hidden = false;
+    let rendered = ["5260355", "4", "999"];
+    const document = {
+      get hidden() { return hidden; },
+      querySelectorAll: () => rendered.map((id) => ({ id: `quickaccess_tab_${id}` })),
+    } as unknown as Document;
+    harness.deps.readRenderedKeys = () => readRenderedQamKeys(document);
+    const session = startQamComposerRuntime(harness.deps);
+    harness.setCompositionReadback(rendered, rendered);
+    harness.emitInventory();
+    harness.flushReadbacks();
+    expect(getQamRuntimeSnapshot().applied).toBe(true);
+
+    hidden = true;
+    const pinned = ["5260355", "4", "5260356", "999"];
+    harness.setCompositionReadback(pinned, rendered);
+    harness.setLayout(layout(["pdc:home", "pdc:section:hud"]));
+    harness.flushReadbacks();
+    expect(getQamRuntimeSnapshot()).toMatchObject({
+      applied: false,
+      restartRequired: false,
+      reason: "awaiting_render",
+    });
+
+    harness.setCompositionReadback(["5260356", "4", "999"], rendered);
+    harness.setLayout(layout(["pdc:section:hud"]));
+    harness.flushReadbacks();
+    expect(getQamRuntimeSnapshot().activeTokens).toEqual(["pdc:section:hud"]);
+
+    hidden = false;
+    rendered = ["5260356", "4", "999"];
+    harness.emitInventory();
+    harness.flushReadbacks();
+    expect(getQamRuntimeSnapshot()).toMatchObject({
+      applied: true,
+      restartRequired: false,
+      reason: "ready",
+    });
+
+    rendered = ["4", "5260356", "999"];
+    harness.emitInventory();
+    harness.flushReadbacks();
+    expect(getQamRuntimeSnapshot()).toMatchObject({
+      applied: false,
+      restartRequired: true,
+      reason: "rendered_mismatch",
+    });
+    session.dispose();
+  });
+
   it("waits for the first rendered composition before reporting a live apply", () => {
     const harness = setup();
     const session = startQamComposerRuntime(harness.deps);

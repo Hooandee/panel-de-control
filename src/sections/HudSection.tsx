@@ -16,8 +16,10 @@ import { HudSliderRow } from "../components/HudSliderRow";
 import { QamAction } from "../components/QamAction";
 import { ColorPicker } from "../components/ColorPicker";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { ExperimentalBadge } from "../components/ExperimentalBadge";
 import { segmentGroupStyle, segmentItemStyle } from "../components/segmented";
 import { hasLocalEditor } from "../mangohud/editorUi";
+import { steamOverlay } from "../mangohud/steamOverlay";
 import {
   BlockGroup, COLOR_KEYS, ColorKey, GROUPS, HudItem, HudLayout, HudLocale, HudModel,
   HudPosition, ListRow, MetricId, SPACER_SIZES, TempUnit, PRESETS,
@@ -227,6 +229,9 @@ export const HudSection: FC = () => {
   } = useHud();
   const [selected, setSelected] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const [steamMasterEnabled, setSteamMasterEnabled] = useState<boolean | null>(
+    () => steamOverlay.diagnostics().master_enabled,
+  );
 
   if (!state) {
     return (
@@ -237,6 +242,16 @@ export const HudSection: FC = () => {
   }
 
   const m = state.model;
+  const activateSteamOverlay = () => {
+    void steamOverlay.ensureFullHudVisible().then((result) => {
+      setSteamMasterEnabled(result.master_enabled);
+    });
+  };
+  const setHudEnabled = (enabled: boolean) => {
+    if (!enabled) steamOverlay.cancelActivation();
+    setEnabled(enabled);
+    if (enabled) activateSteamOverlay();
+  };
   const uniformTextSize = m.noSmallFont && m.fontSizeSecondary === m.fontSize;
   const presets = PRESETS;
   const patch = (p: Partial<HudModel>) => setModel({ ...m, ...p });
@@ -439,20 +454,9 @@ export const HudSection: FC = () => {
       >
         <div style={{ ...card, display: "flex", flexDirection: "column", gap: theme.space.sm }}>
           <div style={{ display: "flex", justifyContent: "flex-end", minWidth: 0 }}>
-            <span
-              style={{
-                flexShrink: 0,
-                padding: "2px 8px",
-                borderRadius: theme.radius.sm,
-                background: "rgba(255,180,84,0.12)",
-                color: theme.color.warn,
-                fontSize: theme.font.caption,
-                letterSpacing: "0.06em",
-                textTransform: "uppercase",
-              }}
-            >
+            <ExperimentalBadge>
               {t("hud.experimental.badge")}
-            </span>
+            </ExperimentalBadge>
           </div>
           <HudLivePreview model={m} />
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: theme.space.sm }}>
@@ -478,7 +482,29 @@ export const HudSection: FC = () => {
               {t(`hud.status.${state.applyStatus}`)}
             </span>
           </div>
-          <ToggleField label={t("hud.show")} checked={m.enabled} onChange={setEnabled} bottomSeparator="none" />
+          <ToggleField label={t("hud.show")} checked={m.enabled} onChange={setHudEnabled} bottomSeparator="none" />
+          {m.enabled && steamMasterEnabled === false && (
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: theme.space.sm,
+                padding: theme.space.sm,
+                minWidth: 0,
+                borderRadius: theme.radius.sm,
+                background: "rgba(255,180,84,0.08)",
+                boxShadow: `inset 0 0 0 1px ${theme.color.warn}55`,
+              }}
+            >
+              <Note>{t("hud.steam.hidden")}</Note>
+              <OutlineBtn onClick={activateSteamOverlay}>
+                {t("hud.steam.activate")}
+              </OutlineBtn>
+            </div>
+          )}
+          {m.enabled && steamMasterEnabled === null && (
+            <Note>{t("hud.steam.unavailable")}</Note>
+          )}
           <div aria-live="polite" style={{ display: "flex", gap: theme.space.sm }}>
             <OutlineBtn onClick={reload}>
               {reloadStatus === "busy" ? (

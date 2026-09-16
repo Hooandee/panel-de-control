@@ -86,4 +86,23 @@ describe("TdpConflictCard conflict explanation", () => {
     expect(screen.getByText(powerstationDescription)).toBeTruthy();
     expect(screen.queryByText(legacyDescription)).toBeNull();
   });
+
+  it("stacks the takeover action below its copy and lets long labels wrap", () => {
+    render(
+      <TdpConflictCard
+        rivals={{ sdtdp: false, hhd: true, powerstation: false }}
+        onDisableSdtdp={noop}
+        onTakeHhd={noop}
+        onDisablePdcTdp={noop}
+      />,
+    );
+
+    const action = screen.getByText("copy:tdp.conflict.cede");
+    const row = action.parentElement!;
+
+    expect(row.style.flexDirection).toBe("column");
+    expect(row.style.alignItems).toBe("stretch");
+    expect(action.style.width).toBe("100%");
+    expect(action.style.whiteSpace).toBe("normal");
+  });
 });

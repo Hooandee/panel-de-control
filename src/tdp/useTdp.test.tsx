@@ -30,6 +30,7 @@ const mocks = vi.hoisted(() => ({
   setTdpWatts: vi.fn(),
   setTdpLevels: vi.fn(),
   setTdpFollowGlobal: vi.fn(),
+  setLowBatteryTdpHold: vi.fn(),
 }));
 
 vi.mock("../api", () => ({
@@ -39,6 +40,7 @@ vi.mock("../api", () => ({
   setTdpWatts: mocks.setTdpWatts,
   setTdpLevels: mocks.setTdpLevels,
   setTdpFollowGlobal: mocks.setTdpFollowGlobal,
+  setLowBatteryTdpHold: mocks.setLowBatteryTdpHold,
   setTdpBoostMode: vi.fn(async () => TDP_STATE),
   setTdpFirmwareMode: vi.fn(async () => TDP_STATE),
   setAutoTdp: vi.fn(async () => ({ auto_tdp: false })),
@@ -101,6 +103,7 @@ describe("useTdp game context", () => {
       detail: "",
     });
     mocks.setTdpFollowGlobal.mockResolvedValue(TDP_STATE);
+    mocks.setLowBatteryTdpHold.mockResolvedValue(TDP_STATE);
   });
 
   afterEach(() => {
@@ -201,6 +204,28 @@ describe("useTdp game context", () => {
     expect(result.current.tdp?.supported).toBe(true);
     expect(result.current.tdp?.recovery_pending).toBe(false);
     expect(mocks.getTdpState).toHaveBeenCalledTimes(4);
+  });
+
+  it("updates the low-battery hold from the backend response", async () => {
+    mocks.setLowBatteryTdpHold.mockResolvedValue({
+      ...TDP_STATE,
+      low_battery_hold: {
+        available: true,
+        enabled: true,
+        active: false,
+        verified: false,
+        status: "inactive",
+        applied_w: null,
+        reason: "battery_above_threshold",
+      },
+    });
+    const { result } = renderHook(() => useTdp());
+    await settle();
+
+    await act(async () => result.current.onLowBatteryHold(true));
+
+    expect(mocks.setLowBatteryTdpHold).toHaveBeenCalledWith(true);
+    expect(result.current.tdp?.low_battery_hold.enabled).toBe(true);
   });
 
 });
