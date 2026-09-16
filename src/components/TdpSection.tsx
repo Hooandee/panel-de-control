@@ -17,6 +17,7 @@ import { AdvancedBoost } from "./AdvancedBoost";
 import { TdpSuggestionCard } from "./TdpSuggestionCard";
 import { TdpMonitorNotice } from "./TdpMonitorNotice";
 import { TdpOwnershipStatus } from "./TdpOwnershipStatus";
+import { ExperimentalLabel } from "./ExperimentalBadge";
 import { ownershipView } from "../tdp/ownership";
 
 // Learned-band reasons worth surfacing as "still learning" (others — no_game,
@@ -239,20 +240,10 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
             <PanelSectionRow>
               <ToggleField
                 label={(
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                    {t("tdp.lowBatteryHold.title")}
-                    <span
-                      style={{
-                        fontSize: 10,
-                        padding: "1px 5px",
-                        borderRadius: 999,
-                        color: theme.color.warn,
-                        boxShadow: `inset 0 0 0 1px ${theme.color.warn}`,
-                      }}
-                    >
-                      {t("tdp.lowBatteryHold.experimental")}
-                    </span>
-                  </span>
+                  <ExperimentalLabel
+                    badge={t("tdp.lowBatteryHold.experimental")}
+                    title={t("tdp.lowBatteryHold.title")}
+                  />
                 )}
                 description={t("tdp.lowBatteryHold.hint")}
                 checked={tdp.low_battery_hold.enabled}

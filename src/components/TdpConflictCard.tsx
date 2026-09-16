@@ -16,7 +16,8 @@ const RivalRow: FC<RivalRowProps> = ({ name, desc, action, onAction }) => (
   <div
     style={{
       display: "flex",
-      alignItems: "center",
+      flexDirection: "column",
+      alignItems: "stretch",
       gap: theme.space.sm,
       marginTop: theme.space.sm,
       padding: `${theme.space.sm}px ${theme.space.md}px`,
@@ -37,13 +38,17 @@ const RivalRow: FC<RivalRowProps> = ({ name, desc, action, onAction }) => (
       noFocusRing
       style={{
         flex: "0 0 auto",
+        width: "100%",
+        boxSizing: "border-box",
         padding: `${theme.space.sm}px ${theme.space.md}px`,
         borderRadius: theme.radius.sm,
         background: theme.color.accent,
         color: theme.color.onAccent,
         fontSize: theme.font.body,
         fontWeight: 650,
-        whiteSpace: "nowrap",
+        lineHeight: 1.25,
+        textAlign: "center",
+        whiteSpace: "normal",
       }}
     >
       {action}
@@ -58,8 +63,6 @@ interface Props {
   onDisablePdcTdp: () => void;
 }
 
-// Persistent card atop Potencia while another TDP manager is active. One row per
-// active rival with a reversible action.
 export const TdpConflictCard: FC<Props> = ({
   rivals,
   onDisableSdtdp,
