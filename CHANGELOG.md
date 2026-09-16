@@ -5,9 +5,25 @@
 ## [0.51.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.50.0...panel-de-control-v0.51.0) (2026-09-16)
 
 
-### Features
+### Español
 
-* **tdp:** support overclocked Steam Deck limits ([#668](https://github.com/Hooandee/panel-de-control/issues/668)) ([d890b73](https://github.com/Hooandee/panel-de-control/commit/d890b73f5e57b1583567569bb8c969702a9093ba))
+* **Steam Deck:** Las unidades overclockeadas dejan de estar limitadas a 15 W: Panel de Control detecta el límite configurado por la máquina y lo usa en el control manual, Auto-TDP y los presets. El dial muestra una etiqueta de overclock para distinguirlas de una Steam Deck original. Las Deck sin modificar conservan su límite y comportamiento habituales.
+
+### English
+
+* **Steam Deck:** Overclocked units are no longer capped at 15 W: Panel de Control detects the limit configured by the device and uses it for manual control, Auto-TDP, and presets. The dial displays an overclock badge to distinguish them from a stock Steam Deck. Unmodified Decks keep their usual limit and behavior.
+
+### Italiano
+
+* **Steam Deck:** Le unità overcloccate non sono più limitate a 15 W: Panel de Control rileva il limite configurato dal dispositivo e lo usa per il controllo manuale, Auto-TDP e i preset. Il quadrante mostra un'etichetta di overclock per distinguerle da una Steam Deck originale. Le Deck non modificate mantengono il limite e il comportamento abituali.
+
+### Deutsch
+
+* **Steam Deck:** Übertaktete Geräte werden nicht mehr auf 15 W begrenzt: Panel de Control erkennt das auf dem Gerät konfigurierte Limit und verwendet es für die manuelle Steuerung, Auto-TDP und Presets. Das Einstellrad kennzeichnet den Overclock, um diese Geräte von einem unveränderten Steam Deck zu unterscheiden. Nicht modifizierte Decks behalten ihr gewohntes Limit und Verhalten.
+
+### Português (Brasil)
+
+* **Steam Deck:** Unidades com overclock deixam de ficar limitadas a 15 W: o Painel de Controle detecta o limite configurado pelo dispositivo e o usa no controle manual, no Auto-TDP e nas predefinições. O mostrador exibe um selo de overclock para diferenciá-las de um Steam Deck original. Decks não modificados mantêm o limite e o comportamento habituais.
 
 ## [0.50.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.49.2...panel-de-control-v0.50.0) (2026-09-16)
 
