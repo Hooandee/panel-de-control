@@ -42,7 +42,7 @@ vi.mock("@decky/ui", () => ({
   ErrorBoundary: ({ children }: { children: ReactNode }) => <>{children}</>,
   staticClasses: { Title: "title" },
 }));
-vi.mock("react-icons/lu", () => ({ LuGauge: () => null }));
+vi.mock("react-icons/lu", () => ({ LuSlidersVertical: () => null }));
 vi.mock("./i18n", () => ({
   I18nProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
   translate: (key: string) => key,
