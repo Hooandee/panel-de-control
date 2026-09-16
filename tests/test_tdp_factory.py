@@ -26,17 +26,17 @@ def _mk_fw(root, driver, pl1_max=35):
                 fh.write(str(v))
 
 
-def _mk_hwmon(root):
+def _mk_hwmon(root, slow=15, fast=15):
     d = os.path.join(root, "sys/class/hwmon/hwmon0")
     os.makedirs(d, exist_ok=True)
     with open(os.path.join(d, "name"), "w") as f:
         f.write("amdgpu")
     with open(os.path.join(d, "power1_cap"), "w") as f:
-        f.write("15000000")
+        f.write(str(slow * 1_000_000))
     with open(os.path.join(d, "power1_label"), "w") as f:
         f.write("slowPPT")
     with open(os.path.join(d, "power2_cap"), "w") as f:
-        f.write("15000000")
+        f.write(str(fast * 1_000_000))
     with open(os.path.join(d, "power2_label"), "w") as f:
         f.write("fastPPT")
 
@@ -1016,6 +1016,20 @@ def test_steam_deck_uses_hwmon(tmp_path):
     b = select_backend(_p("steam_deck_oled"), root=root, ryzenadj_resolve=_NO_RYZENADJ)
     assert b.supported and b.name == "steamdeck-hwmon"
     assert b.low_battery_hold_strategy == "primary"
+
+
+def test_exact_steam_deck_factory_preserves_the_reported_overclock_baseline(tmp_path):
+    root = str(tmp_path)
+    _mk_hwmon(root, slow=25, fast=30)
+
+    backend = select_backend(
+        _p("steam_deck_oled"),
+        root=root,
+        ryzenadj_resolve=_NO_RYZENADJ,
+    )
+
+    assert backend.name == "steamdeck-hwmon"
+    assert backend.configured_tdp_state()["max_w"] == 25
 
 
 def test_exact_steam_deck_never_falls_through_to_generic_amd_backends(tmp_path):

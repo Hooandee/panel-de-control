@@ -166,6 +166,10 @@ describe("HudSection QAM composition", () => {
     const position = badge.compareDocumentPosition(preview);
 
     expect(position & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    expect(badge.getAttribute("data-pdc-experimental-badge")).toBe("true");
+    expect(badge.style.borderRadius).toBe("999px");
+    expect(badge.style.whiteSpace).toBe("nowrap");
+    expect(badge.style.boxShadow).not.toBe("");
   });
 
   it("activates Steam when the user enables the HUD", () => {

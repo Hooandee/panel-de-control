@@ -2,6 +2,52 @@
 
 ## Unreleased
 
+## [0.51.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.50.0...panel-de-control-v0.51.0) (2026-09-16)
+
+
+### Español
+
+* **Steam Deck:** Las unidades overclockeadas dejan de estar limitadas a 15 W: Panel de Control detecta el límite configurado por la máquina y lo usa en el control manual, Auto-TDP y los presets. El dial muestra una etiqueta de overclock para distinguirlas de una Steam Deck original. Las Deck sin modificar conservan su límite y comportamiento habituales.
+
+### English
+
+* **Steam Deck:** Overclocked units are no longer capped at 15 W: Panel de Control detects the limit configured by the device and uses it for manual control, Auto-TDP, and presets. The dial displays an overclock badge to distinguish them from a stock Steam Deck. Unmodified Decks keep their usual limit and behavior.
+
+### Italiano
+
+* **Steam Deck:** Le unità overcloccate non sono più limitate a 15 W: Panel de Control rileva il limite configurato dal dispositivo e lo usa per il controllo manuale, Auto-TDP e i preset. Il quadrante mostra un'etichetta di overclock per distinguerle da una Steam Deck originale. Le Deck non modificate mantengono il limite e il comportamento abituali.
+
+### Deutsch
+
+* **Steam Deck:** Übertaktete Geräte werden nicht mehr auf 15 W begrenzt: Panel de Control erkennt das auf dem Gerät konfigurierte Limit und verwendet es für die manuelle Steuerung, Auto-TDP und Presets. Das Einstellrad kennzeichnet den Overclock, um diese Geräte von einem unveränderten Steam Deck zu unterscheiden. Nicht modifizierte Decks behalten ihr gewohntes Limit und Verhalten.
+
+### Português (Brasil)
+
+* **Steam Deck:** Unidades com overclock deixam de ficar limitadas a 15 W: o Painel de Controle detecta o limite configurado pelo dispositivo e o usa no controle manual, no Auto-TDP e nas predefinições. O mostrador exibe um selo de overclock para diferenciá-las de um Steam Deck original. Decks não modificados mantêm o limite e o comportamento habituais.
+
+## [0.50.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.49.2...panel-de-control-v0.50.0) (2026-09-16)
+
+
+### Español
+
+* **Idiomas:** Panel de Control está ahora completamente disponible en portugués de Brasil en toda la aplicación, el glosario, las actualizaciones y las notas de versión. El selector de idioma pasa a ser un menú compacto que conserva visible la bandera de cada idioma. Esta versión también mejora la legibilidad de las acciones largas en Potencia y unifica la etiqueta «Experimental» en TDP con batería baja, Auto-TDP y HUD.
+
+### English
+
+* **Languages:** Panel de Control is now fully available in Brazilian Portuguese throughout the app, glossary, updates, and release notes. The language selector is now a compact menu that keeps each language's flag visible. This release also improves the readability of long actions in Power and uses one consistent “Experimental” label for low-battery TDP, Auto-TDP, and the HUD.
+
+### Italiano
+
+* **Lingue:** Panel de Control è ora completamente disponibile in portoghese brasiliano nell'app, nel glossario, negli aggiornamenti e nelle note di rilascio. Il selettore della lingua è ora un menu compatto che mantiene visibile la bandiera di ogni lingua. Questa versione migliora inoltre la leggibilità delle azioni più lunghe in Potenza e uniforma l'etichetta «Sperimentale» per TDP con batteria scarica, Auto-TDP e HUD.
+
+### Deutsch
+
+* **Sprachen:** Panel de Control ist jetzt in der gesamten App, im Glossar, bei Aktualisierungen und in den Versionshinweisen vollständig auf brasilianischem Portugiesisch verfügbar. Die Sprachauswahl ist nun ein kompaktes Menü, in dem die Flagge jeder Sprache sichtbar bleibt. Außerdem sind längere Aktionen unter Leistung besser lesbar, und TDP bei niedrigem Akkustand, Auto-TDP sowie HUD verwenden dieselbe einheitliche Kennzeichnung „Experimentell“.
+
+### Português (Brasil)
+
+* **Idiomas:** O Painel de Controle agora está totalmente disponível em português do Brasil em todo o aplicativo, no glossário, nas atualizações e nas notas de versão. O seletor de idioma agora é um menu compacto que mantém a bandeira de cada idioma visível. Esta versão também melhora a legibilidade de ações mais longas em Potência e padroniza o selo “Experimental” para TDP com bateria baixa, Auto-TDP e HUD.
+
 ## [0.49.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.49.1...panel-de-control-v0.49.2) (2026-09-15)
 
 ### Español
@@ -19,6 +65,10 @@
 ### Deutsch
 
 * **Themes:** Die acht Schalter für die Gestaltung mit Gallery stehen jetzt gemeinsam am Ende der Einstellungen. Eine Überschrift und eine kurze Beschreibung helfen dir bei der Auswahl, welche Bereiche von Steam das Theme verwenden.
+
+### Português (Brasil)
+
+* **Temas:** Os oito controles de estilo do Gallery agora ficam agrupados no fim das configurações, com um título e uma breve descrição para ajudar você a escolher em quais partes do Steam o tema será aplicado.
 
 ## 0.49.1 (2026-09-15)
 
@@ -38,6 +88,10 @@
 
 * **CPU:** Behebt blockierte CPU-Regler beim Umschalten von Turbo Boost mit manuell eingestellter Frequenz auf AMD- und Intel-Geräten. Die gewählte Einstellung bleibt erhalten, und der Wechsel zurück in den Automatikmodus funktioniert wieder.
 
+### Português (Brasil)
+
+* **CPU:** Corrige o travamento dos controles ao alterar o Turbo Boost com uma frequência manual em dispositivos AMD e Intel. Mantém a configuração escolhida e permite voltar normalmente ao modo automático.
+
 ## [0.49.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.48.1...panel-de-control-v0.49.0) (2026-09-15)
 
 
@@ -56,6 +110,10 @@
 ### Deutsch
 
 * **Bereinigung:** Bietet eine einfache Möglichkeit, direkt im Gaming-Modus Speicherplatz freizugeben. Die Ansicht zeigt den Speicherbedarf der Daten einzelner Spiele, der Aufnahmen und nicht mehr verwendeter benutzerdefinierter Proton-Versionen, erlaubt die Auswahl mehrerer Einträge und gibt dir die volle Kontrolle darüber, was entfernt wird. Panel de Control weist auf prüfenswerte Einträge hin, ohne etwas automatisch auszuwählen, schützt verwendete oder nicht überprüfbare Daten und warnt vor dem Löschen von Präfixen, die Spielstände ohne Steam Cloud enthalten könnten. Steam kann den Shader Cache beim Starten des Spiels neu erstellen. ([#646](https://github.com/Hooandee/panel-de-control/pull/646))
+
+### Português (Brasil)
+
+* **Limpeza:** Traz uma forma simples de recuperar espaço diretamente pelo Modo de Jogo. Mostra quanto espaço os dados de cada jogo, as capturas e as versões personalizadas do Proton que não estão mais em uso ocupam, permite selecionar vários itens e dá controle total sobre o que será excluído. O Painel de Controle sugere itens que vale a pena revisar sem selecionar nada por você, protege dados em uso ou que não podem ser verificados e avisa antes de excluir prefixos que podem conter arquivos de salvamento sem Steam Cloud. O Steam pode recriar o cache de shaders quando o jogo for iniciado. ([#646](https://github.com/Hooandee/panel-de-control/pull/646))
 
 ## [0.48.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.48.0...panel-de-control-v0.48.1) (2026-09-14)
 

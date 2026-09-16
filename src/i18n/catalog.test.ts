@@ -6,24 +6,28 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("@decky/ui", async () => {
   const { createElement } = await import("react");
   return {
-    Focusable: ({
-      children,
-      onActivate: _onActivate,
-      onClick,
-      ...props
+    Dropdown: ({
+      rgOptions,
+      selectedOption,
+      onChange,
+      menuLabel,
     }: {
-      children?: ReactNode;
-      onActivate?: () => void;
-      onClick?: () => void;
-      [key: string]: unknown;
-    }) => {
-      const interactive = Boolean(onClick || _onActivate);
-      return createElement(
-        interactive ? "button" : "div",
-        { ...props, ...(interactive ? { type: "button" } : {}), onClick },
-        children,
-      );
-    },
+      rgOptions: Array<{ data: string; label: ReactNode }>;
+      selectedOption: string;
+      onChange?: (option: { data: string; label: ReactNode }) => void;
+      menuLabel?: string;
+    }) => createElement(
+      "select",
+      {
+        "aria-label": menuLabel,
+        value: selectedOption,
+        onChange: (event: { target: { value: string } }) => {
+          const option = rgOptions.find(({ data }) => data === event.target.value);
+          if (option) onChange?.(option);
+        },
+      },
+      rgOptions.map(({ data, label }) => createElement("option", { key: data, value: data }, label)),
+    ),
   };
 });
 
@@ -32,7 +36,7 @@ vi.mock("../api", () => ({
   setUiPrefs: vi.fn(async () => true),
 }));
 
-import { LanguageToggle } from "../components/LanguageToggle";
+import { LanguageSelector } from "../components/LanguageSelector";
 import * as i18n from "./index";
 
 const DICTS = i18n.DICTS;
@@ -48,6 +52,10 @@ function italianCatalog(): Record<string, string> {
 
 function germanCatalog(): Record<string, string> {
   return DICTS.de;
+}
+
+function brazilianPortugueseCatalog(): Record<string, string> {
+  return DICTS["pt-BR"];
 }
 
 function placeholders(value: string): string[] {
@@ -72,6 +80,10 @@ describe("Every supported translation catalog", () => {
 
   it.each(CATALOGS)("%s avoids em dashes in interface copy", (_lang, catalog) => {
     expect(Object.values(catalog).some((value) => value.includes("—"))).toBe(false);
+  });
+
+  it("keeps language autonyms out of the translation catalogs", () => {
+    expect(Object.keys(DICTS.es).some((key) => key.startsWith("lang."))).toBe(false);
   });
 
   it("keeps reviewed wording natural in every language", () => {
@@ -146,7 +158,6 @@ describe("Italian catalog", () => {
 
     expect(italian["app.title"]).toBe("Pannello di controllo");
     expect(italian["tdp.auto.title"]).toContain("TDP");
-    expect(italian["lang.italian"]).toBe("Italiano");
   });
 
   it("accepts a persisted Italian selection for lookup", () => {
@@ -216,7 +227,6 @@ describe("German catalog", () => {
   it("uses natural German product and safety copy", () => {
     expect(germanCatalog()).toMatchObject({
       "app.title": "Kontrollzentrum",
-      "lang.german": "Deutsch",
       "display.oled.desc": "Lässt die Farben deines Bildschirms lebendiger und tiefer wirken, ähnlich wie bei einem OLED-Display. Das Display selbst wird nicht verändert, nur die Farbdarstellung.",
       "settings.cooler": "Externe Kühlung angeschlossen",
       "settings.cooler.desc": "Aktiviere diese Option nur, wenn das externe Kühlsystem oder der externe Akku angeschlossen ist. Dadurch steigt das TDP-Limit auf bis zu {max} W. Ohne externe Kühlung kann das Gerät überhitzen.",
@@ -239,32 +249,121 @@ describe("German catalog", () => {
   });
 });
 
-describe("LanguageToggle", () => {
-  it("persists Italian when its localized selector button is pressed", () => {
+describe("Brazilian Portuguese catalog", () => {
+  it("is a first-class supported language with reviewed Brazilian wording", () => {
+    expect(i18n.SUPPORTED_LANGUAGES).toContain("pt-BR");
+    expect(brazilianPortugueseCatalog()).toMatchObject({
+      "app.title": "Painel de Controle",
+      "load.retry": "Tentar novamente",
+      "fans.suggest.dial.cool": "Mais frio",
+      "cleaner.reason.tool_in_use": "Um jogo está configurado para usar esta versão do Proton. Ela será mantida.",
+      "params.caveat.locale": "No SteamOS padrão, talvez não seja possível forçar o idioma.",
+      "learning.title": "Aprendendo com {name}",
+      "system.rgb.confirm.desc": "Colores será baixado e instalado a partir do GitHub. Continuar?",
+      "system.battery.health": "Saúde da bateria",
+      "settings.desktop.desc": "Ativa controles separados de CPU, GPU dedicada e ventoinha neste PC Linux. O modo inicial é Livre e nada muda até você selecionar outro modo.",
+      "settings.language": "Idioma",
+      "tdp.inherit": "Usando a configuração global",
+      "tdp.presets.add": "Adicionar predefinição",
+      "tdp.conflict.cede": "Passar o controle para o Painel de Controle",
+    });
+  });
+
+  it("keeps established gaming, hardware and product terms", () => {
+    const values = Object.values(brazilianPortugueseCatalog());
+    for (const term of [
+      "TDP", "Auto-TDP", "FPS", "CPU", "GPU", "HDR", "RGB", "FSR", "XeSS",
+      "RDNA", "Proton", "SteamOS", "Decky", "MangoHud", "GameMode", "PowerStation",
+      "SimpleDeckyTDP", "Colores",
+    ]) {
+      expect(values.some((value) => value.includes(term)), term).toBe(true);
+    }
+    expect(values.some((value) => /\b[Vv]entilador/.test(value))).toBe(false);
+  });
+
+  it("avoids reviewed calques and inconsistent Brazilian terms", () => {
+    const catalog = Object.values(brazilianPortugueseCatalog()).join("\n");
+
+    for (const rejected of [
+      "screenshot",
+      "Cache de Shaders",
+      "micro-travamentos",
+      "paddles",
+      "Overlay",
+      "engines Source",
+      "(offline?)",
+      "Parâmetros de lançamento",
+      "configurações configuráveis",
+      "já seu",
+    ]) {
+      expect(catalog, rejected).not.toContain(rejected);
+    }
+  });
+
+  it("accepts a persisted Brazilian Portuguese selection for lookup", () => {
+    window.localStorage.setItem(STORAGE_KEY, "pt-BR");
+
+    expect(i18n.translate("app.title")).toBe("Painel de Controle");
+  });
+});
+
+describe("LanguageSelector", () => {
+  it("persists Italian when selected", () => {
     render(
       createElement(
         i18n.I18nProvider,
         null,
-        createElement(LanguageToggle),
+        createElement(LanguageSelector),
       ),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Italiano" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Idioma" }), {
+      target: { value: "it" },
+    });
 
     expect(window.localStorage.getItem(STORAGE_KEY)).toBe("it");
   });
 
-  it("persists German when its localized selector button is pressed", () => {
+  it("persists German when selected", () => {
     render(
       createElement(
         i18n.I18nProvider,
         null,
-        createElement(LanguageToggle),
+        createElement(LanguageSelector),
       ),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Alemán" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Idioma" }), {
+      target: { value: "de" },
+    });
 
     expect(window.localStorage.getItem(STORAGE_KEY)).toBe("de");
+  });
+
+  it("uses one compact dropdown and persists Brazilian Portuguese", () => {
+    const { container } = render(
+      createElement(
+        i18n.I18nProvider,
+        null,
+        createElement(LanguageSelector),
+      ),
+    );
+
+    const selector = screen.getByRole("combobox", { name: "Idioma" });
+    expect(screen.queryAllByRole("button")).toHaveLength(0);
+    const flags = [...container.querySelectorAll<HTMLImageElement>("[data-language-flag]")];
+    expect(flags).toHaveLength(5);
+    expect(flags.every((flag) => flag.tagName === "IMG")).toBe(true);
+    expect(flags.every((flag) => flag.src.startsWith("data:image/svg+xml,"))).toBe(true);
+    expect([...selector.querySelectorAll("option")].map((option) => option.textContent)).toEqual([
+      "Español",
+      "English",
+      "Italiano",
+      "Deutsch",
+      "Português (Brasil)",
+    ]);
+    fireEvent.change(selector, { target: { value: "pt-BR" } });
+
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBe("pt-BR");
   });
 });

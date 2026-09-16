@@ -56,6 +56,20 @@ describe("releaseNotesForLanguage", () => {
     );
   });
 
+  it("selects Brazilian Portuguese notes without falling back to English", () => {
+    const notes = [
+      "## v0.50.0",
+      "### What's new",
+      "- English change",
+      "### Novidades em português (Brasil)",
+      "- Mudança em português do Brasil",
+    ].join("\n");
+
+    expect(releaseNotesForLanguage(notes, "pt-BR")).toBe(
+      "## v0.50.0\n- Mudança em português do Brasil",
+    );
+  });
+
   it("stops at the next heading even when its language is unknown", () => {
     const notes = [
       "## v0.36.0",

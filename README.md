@@ -23,8 +23,8 @@ Es un plugin para [Decky Loader](https://decky.xyz/). Está pensado para Steam D
 Go, MSI Claw y compañía, con una idea fija: que cada control se vea bien, muestre siempre el modelo
 real de tu equipo arriba, y nunca te mienta sobre lo que de verdad está pasando en el hardware.
 
-La interfaz arranca en español y también está disponible en inglés, italiano y alemán. En el
-primer inicio adopta uno de esos idiomas si Steam ya lo usa.
+La interfaz arranca en español y también está disponible en inglés, italiano, alemán y portugués
+de Brasil. En el primer inicio adopta uno de esos idiomas si Steam ya lo usa.
 
 ## Vídeo
 
@@ -149,7 +149,7 @@ tardar más. El resultado muestra el tamaño aproximado de los datos borrados y 
 
 ### Ajustes
 
-Idioma (con banderas, no un desplegable), el interruptor de "aprender de mi uso" (la telemetría es
+Idioma desde un selector compacto, el interruptor de "aprender de mi uso" (la telemetría es
 100% local y se puede apagar), y un botón para borrar lo aprendido. En "Personalizar interfaz"
 reordenas y ocultas pestañas y bloques, activas o desactivas módulos enteros (desactivar apaga esa
 función en todo el panel; ocultar solo deja de mostrarla), creas tus propias pestañas (vistas
