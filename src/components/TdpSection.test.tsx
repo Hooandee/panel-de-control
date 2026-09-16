@@ -308,6 +308,27 @@ describe("TdpSection Steam Deck PPT arc", () => {
     });
   });
 
+  it("uses the configured overclock ceiling and marks the automatic dial", () => {
+    const state = {
+      ...deckState,
+      limits: { min: 3, default: 12, max: 25, max_ac: 25 },
+      overclock: {
+        detected: true,
+        max_w: 25,
+        source: "handoff",
+        status: "overclocked",
+        reason: null,
+      },
+    } as TdpState;
+
+    renderTdpSection(state, { power: { auto_tdp: true } as PowerDraw });
+
+    expect(captured.arc).toMatchObject({
+      limits: { min: 3, default: 12, max: 25, max_ac: 25 },
+      overclocked: true,
+    });
+  });
+
   it("marks the low-battery switch as experimental and forwards the requested value", () => {
     const onLowBatteryHold = vi.fn();
 

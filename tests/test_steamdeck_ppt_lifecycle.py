@@ -14,6 +14,8 @@ if "decky" not in sys.modules:
     sys.modules["decky"] = decky
 
 import main
+from tdp.backend import NullBackend
+from tdp.types import TdpLimits
 
 
 class _Store:
@@ -38,10 +40,13 @@ class _Result:
 
 class _DeckBackend:
     name = "steamdeck-hwmon"
+    primary_rail = "pl2"
 
     def __init__(self, restore_ok=True):
         self.restore_ok = restore_ok
         self.capture_calls = 0
+        self.configuration_reads = 0
+        self.configuration_status = None
         self.restore_calls = []
         self.snapshot = {"slow": 14, "fast": 16}
 
@@ -51,6 +56,35 @@ class _DeckBackend:
     def capture_ppt(self):
         self.capture_calls += 1
         return dict(self.snapshot)
+
+    def configured_tdp_state(self, snapshot=None):
+        self.configuration_reads += 1
+        if self.configuration_status == "unavailable":
+            return {
+                "status": "unavailable",
+                "max_w": None,
+                "reason": "bounds_missing",
+            }
+        baseline = self.snapshot if snapshot is None else snapshot
+        slow = baseline.get("slow") if isinstance(baseline, dict) else None
+        detected = isinstance(slow, int) and slow > 15
+        return {
+            "status": "overclocked" if detected else "stock",
+            "max_w": slow if detected else None,
+            "reason": None,
+        }
+
+    def get_limits(self):
+        return TdpLimits(3, 12, 15, 15)
+
+    def level_limits(self):
+        return {
+            "pl2": {"min": 3, "max": 29},
+            "pl3": {"min": 3, "max": 30},
+        }
+
+    def physical_levels(self, levels):
+        return {"pl2": int(levels["pl2"]), "pl3": int(levels["pl3"])}
 
     def validate_ppt_snapshot(self, snapshot):
         return (
@@ -73,6 +107,38 @@ def _plugin(backend):
     plugin._settings = {"steamdeck_ppt_previous": None}
     plugin._store = _Store()
     plugin._tdp_history = []
+    return plugin
+
+
+class _Profiles:
+    def __init__(self, pl1):
+        self._pl1 = pl1
+
+    def effective(self, _appid):
+        return {
+            "pl1": self._pl1,
+            "pl2": self._pl1,
+            "pl3": self._pl1,
+            "watts": self._pl1,
+            "mode": "estable",
+        }
+
+
+def _with_limits(plugin, pl1):
+    plugin._device = types.SimpleNamespace(
+        key="steam_deck_oled",
+        charger_only_extra=False,
+        cooler_max=None,
+        experimental_tdp_max_ac=None,
+        tdp_max_charger=15,
+    )
+    plugin._settings.update({
+        "unlock_battery_max": False,
+        "cooler_boost": False,
+        "experimental_tdp_unlock": False,
+        "eco_enabled": False,
+    })
+    plugin._tdp_profiles = _Profiles(pl1)
     return plugin
 
 
@@ -103,6 +169,76 @@ def test_later_advanced_apply_does_not_replace_original_snapshot():
 
     assert backend.capture_calls == 0
     assert plugin._settings["steamdeck_ppt_previous"] == {"slow": 13, "fast": 15}
+
+
+def test_saved_overclock_baseline_sets_the_automatic_ceiling_while_owned():
+    backend = _DeckBackend()
+    plugin = _with_limits(_plugin(backend), pl1=25)
+    plugin._settings["steamdeck_ppt_previous"] = {"slow": 25, "fast": 30}
+
+    assert plugin._steamdeck_overclock_state() == {
+        "detected": True,
+        "max_w": 25,
+        "source": "handoff",
+        "status": "overclocked",
+        "reason": None,
+    }
+    assert plugin._automatic_limits() == TdpLimits(3, 12, 25, 25)
+    assert plugin._effective_levels(None, on_ac=True)[0]["pl1"] == 25
+    assert plugin._preset_wclamp() == (3, 25)
+
+
+def test_stock_live_ppt_keeps_automatic_tdp_at_fifteen_watts():
+    backend = _DeckBackend()
+    backend.snapshot = {"slow": 15, "fast": 30}
+    plugin = _with_limits(_plugin(backend), pl1=25)
+
+    assert plugin._steamdeck_overclock_state() == {
+        "detected": False,
+        "max_w": None,
+        "source": None,
+        "status": "stock",
+        "reason": None,
+    }
+    assert plugin._automatic_limits() == TdpLimits(3, 12, 15, 15)
+    assert plugin._effective_levels(None, on_ac=True)[0]["pl1"] == 15
+
+
+def test_indeterminate_ppt_defers_profile_sanitization():
+    backend = _DeckBackend()
+    backend.configuration_status = "unavailable"
+    plugin = _with_limits(_plugin(backend), pl1=25)
+
+    assert plugin._profile_storage_limits() is None
+
+
+def test_missing_deck_backend_defers_profile_sanitization():
+    plugin = _with_limits(_plugin(NullBackend("hwmon missing")), pl1=25)
+
+    assert plugin._profile_storage_limits() is None
+
+
+def test_startup_restore_keeps_marker_while_ppt_probe_is_indeterminate():
+    backend = _DeckBackend()
+    backend.configuration_status = "unavailable"
+    plugin = _with_limits(_plugin(backend), pl1=25)
+    marker = {"slow": 25, "fast": 30}
+    plugin._settings["steamdeck_ppt_previous"] = marker
+
+    assert plugin._restore_steamdeck_startup_ppt() is True
+    assert backend.restore_calls == [marker]
+    assert plugin._settings["steamdeck_ppt_previous"] == marker
+
+
+def test_limits_reuse_a_previously_read_overclock_state():
+    backend = _DeckBackend()
+    plugin = _with_limits(_plugin(backend), pl1=25)
+    plugin._settings["steamdeck_ppt_previous"] = {"slow": 25, "fast": 30}
+
+    overclock = plugin._steamdeck_overclock_state()
+
+    assert plugin._limits(overclock) == TdpLimits(3, 12, 25, 25)
+    assert backend.configuration_reads == 1
 
 
 def test_stable_keeps_slow_and_fast_owned_until_power_handoff():

@@ -920,6 +920,7 @@ export const de: Record<string, string> = {
   "tdp.ownership.unverifiable": "Das Kontrollzentrum hält das Limit, aber dieses Gerät kann es nicht bestätigen",
   "tdp.ownership.conflict": "Ein anderer Controller oder die Firmware ändert die TDP · das Kontrollzentrum hält dagegen",
   "tdp.arc.auto": "AUTO",
+  "tdp.arc.overclocked": "OVERCLOCK",
   "tdp.arc.target": "ZIEL",
   "tdp.arc.gpu": "GPU {pct}%",
   "tdp.arc.boostHw": "HW-Boost",
