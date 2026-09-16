@@ -33,12 +33,6 @@ import { useAccent } from "../system/useAccent";
 import { acquireUiActivity } from "../system/uiActivity";
 import { useDesktopState } from "../desktop/useDesktop";
 
-/**
- * The control-center shell: persistent chrome (device header + language flags +
- * tab bar) wrapping the active section. Loads the device once; each section owns
- * its own state. A per-section ErrorBoundary keeps one section's crash from
- * blanking the whole panel.
- */
 export const ControlCenter: FC = () => {
   const { t, lang } = useI18n();
   const [device, setDevice] = useState<DeviceInfo | null>(null);

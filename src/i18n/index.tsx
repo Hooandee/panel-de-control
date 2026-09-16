@@ -21,9 +21,10 @@ import { steamLangToLang } from "./detect";
 import { readSteamLanguage } from "./steamLanguage";
 import { it } from "./it";
 import { de } from "./de";
+import { ptBR } from "./ptBR";
+import { SUPPORTED_LANGUAGES, type Lang } from "./languages";
 
-export const SUPPORTED_LANGUAGES = ["es", "en", "it", "de"] as const;
-export type Lang = (typeof SUPPORTED_LANGUAGES)[number];
+export { SUPPORTED_LANGUAGES, type Lang } from "./languages";
 
 const STORAGE_KEY = "panel-de-control-lang";
 
@@ -36,10 +37,6 @@ const es: Record<string, string> = {
   "device.experimental.badge": "Experimental",
   "device.generic.hint": "Dispositivo no reconocido: detectamos qué admite y activamos solo lo que responde de verdad. Lo que aparece, funciona.",
   "device.experimental.hint": "Modelo reconocido; todavía lo estamos afinando, así que activamos solo lo que responde de verdad.",
-  "lang.spanish": "Español",
-  "lang.english": "Inglés",
-  "lang.italian": "Italiano",
-  "lang.german": "Alemán",
   "nav.power": "Potencia",
   "nav.system": "Sistema",
   "nav.display": "Pantalla",
@@ -1209,10 +1206,6 @@ const en: Record<string, string> = {
   "device.experimental.badge": "Experimental",
   "device.generic.hint": "Unrecognised device: we detect what it supports and enable only what actually responds. What you see, works.",
   "device.experimental.hint": "Recognised model; we're still fine-tuning it, so we only enable what actually responds.",
-  "lang.spanish": "Spanish",
-  "lang.english": "English",
-  "lang.italian": "Italian",
-  "lang.german": "German",
   "nav.power": "Power",
   "nav.system": "System",
   "nav.display": "Display",
@@ -2436,6 +2429,7 @@ export const DICTS: Record<Lang, Record<string, string>> = {
   en,
   it: { ...it, ...themeIt },
   de,
+  "pt-BR": ptBR,
 };
 
 function initialLang(): Lang {

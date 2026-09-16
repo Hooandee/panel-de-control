@@ -52,7 +52,7 @@ CI runs the same checks on every push and pull request.
 
 ### Localization quality
 
-Spanish, English, Italian, and German are product copy, not literal translation
+Spanish, English, Italian, German, and Brazilian Portuguese are product copy, not literal translation
 targets. New or changed strings must read naturally to a native speaker, use the
 established gaming and hardware terminology, and preserve the intent and tone of
 the original. Avoid machine-translation phrasing and editorial tics such as em

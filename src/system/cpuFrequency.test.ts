@@ -8,6 +8,7 @@ describe("CPU frequency controls", () => {
     expect(formatCpuFrequency(2_400_000, "es")).toBe("2,40 GHz");
     expect(formatCpuFrequency(2_400_000, "en")).toBe("2.40 GHz");
     expect(formatCpuFrequency(2_400_000, "it")).toBe("2,40 GHz");
+    expect(formatCpuFrequency(2_400_000, "pt-BR")).toBe("2,40 GHz");
     expect(formatCpuFrequency(null, "es")).toBe("—");
   });
 

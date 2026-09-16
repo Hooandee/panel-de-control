@@ -30,6 +30,10 @@ describe("glossary data", () => {
     const germanNames = terms.map((t) => t.termDe);
     expect(germanNames.every(Boolean)).toBe(true);
     expect(new Set(germanNames).size).toBe(germanNames.length);
+
+    const brazilianPortugueseNames = terms.map((t) => t.termPtBR);
+    expect(brazilianPortugueseNames.every(Boolean)).toBe(true);
+    expect(new Set(brazilianPortugueseNames).size).toBe(brazilianPortugueseNames.length);
   });
 
   it("has non-empty text in every language for each category title", () => {
@@ -38,6 +42,7 @@ describe("glossary data", () => {
       expect(c.en.trim()).not.toBe("");
       expect(c.it.trim()).not.toBe("");
       expect(c.de.trim()).not.toBe("");
+      expect(c.ptBR.trim()).not.toBe("");
     }
   });
 
@@ -48,6 +53,7 @@ describe("glossary data", () => {
       expect(t.en.trim()).not.toBe("");
       expect(t.it.trim()).not.toBe("");
       expect(t.de.trim()).not.toBe("");
+      expect(t.ptBR.trim()).not.toBe("");
     }
   });
 
@@ -83,15 +89,38 @@ describe("glossary data", () => {
     expect(terms.find((term) => term.id === "battery-health")?.termDe)
       .toBe("Akkuzustand");
   });
+
+  it("uses natural Brazilian terminology for generated frames and battery health", () => {
+    expect(terms.find((term) => term.id === "frame-gen")).toMatchObject({
+      termPtBR: "Geração de quadros",
+      ptBR: "O dispositivo calcula quadros extras e os insere entre os quadros reais para deixar o movimento mais fluido. O resultado pode ficar excelente, mas usa parte do desempenho gráfico e pode aumentar um pouco a latência dos controles.",
+    });
+    expect(terms.find((term) => term.id === "battery-health")?.termPtBR)
+      .toBe("Saúde da bateria");
+    expect(terms.find((term) => term.id === "gpu")?.termPtBR)
+      .toBe("GPU (processador gráfico)");
+    expect(terms.find((term) => term.id === "temp")?.ptBR)
+      .toBe("Indica a temperatura do chip em graus. É normal ela subir durante o jogo. As ventoinhas e o TDP ajudam a mantê-la sob controle e a proteger o dispositivo.");
+  });
+
+  it("does not use em dashes in Brazilian Portuguese text", () => {
+    const brazilianPortuguese = CATEGORIES.flatMap((category) => [
+      category.ptBR,
+      ...category.terms.flatMap((term) => [term.termPtBR, term.ptBR]),
+    ]);
+
+    expect(brazilianPortuguese.some((value) => value.includes("—"))).toBe(false);
+  });
 });
 
 describe("pick", () => {
   it("returns the matching language", () => {
-    const entry = { es: "hola", en: "hi", it: "ciao", de: "hallo" };
+    const entry = { es: "hola", en: "hi", it: "ciao", de: "hallo", ptBR: "olá" };
     expect(pick(entry, "es")).toBe("hola");
     expect(pick(entry, "en")).toBe("hi");
     expect(pick(entry, "it")).toBe("ciao");
     expect(pick(entry, "de")).toBe("hallo");
+    expect(pick(entry, "pt-BR")).toBe("olá");
   });
 
   it("uses the Italian display term without changing Spanish or English", () => {
@@ -100,15 +129,18 @@ describe("pick", () => {
       term: "Salud de la batería",
       termIt: "Stato di salute della batteria",
       termDe: "Akkuzustand",
+      termPtBR: "Saúde da bateria",
       es: "estado",
       en: "health",
       it: "stato",
       de: "Zustand",
+      ptBR: "saúde",
     };
 
     expect(pickTerm(entry, "es")).toBe("Salud de la batería");
     expect(pickTerm(entry, "en")).toBe("Salud de la batería");
     expect(pickTerm(entry, "it")).toBe("Stato di salute della batteria");
     expect(pickTerm(entry, "de")).toBe("Akkuzustand");
+    expect(pickTerm(entry, "pt-BR")).toBe("Saúde da bateria");
   });
 });

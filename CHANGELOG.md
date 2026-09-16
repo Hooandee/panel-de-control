@@ -20,6 +20,10 @@
 
 * **Themes:** Die acht Schalter für die Gestaltung mit Gallery stehen jetzt gemeinsam am Ende der Einstellungen. Eine Überschrift und eine kurze Beschreibung helfen dir bei der Auswahl, welche Bereiche von Steam das Theme verwenden.
 
+### Português (Brasil)
+
+* **Temas:** Os oito controles de estilo do Gallery agora ficam agrupados no fim das configurações, com um título e uma breve descrição para ajudar você a escolher em quais partes do Steam o tema será aplicado.
+
 ## 0.49.1 (2026-09-15)
 
 ### Español
@@ -37,6 +41,10 @@
 ### Deutsch
 
 * **CPU:** Behebt blockierte CPU-Regler beim Umschalten von Turbo Boost mit manuell eingestellter Frequenz auf AMD- und Intel-Geräten. Die gewählte Einstellung bleibt erhalten, und der Wechsel zurück in den Automatikmodus funktioniert wieder.
+
+### Português (Brasil)
+
+* **CPU:** Corrige o travamento dos controles ao alterar o Turbo Boost com uma frequência manual em dispositivos AMD e Intel. Mantém a configuração escolhida e permite voltar normalmente ao modo automático.
 
 ## [0.49.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.48.1...panel-de-control-v0.49.0) (2026-09-15)
 
@@ -56,6 +64,10 @@
 ### Deutsch
 
 * **Bereinigung:** Bietet eine einfache Möglichkeit, direkt im Gaming-Modus Speicherplatz freizugeben. Die Ansicht zeigt den Speicherbedarf der Daten einzelner Spiele, der Aufnahmen und nicht mehr verwendeter benutzerdefinierter Proton-Versionen, erlaubt die Auswahl mehrerer Einträge und gibt dir die volle Kontrolle darüber, was entfernt wird. Panel de Control weist auf prüfenswerte Einträge hin, ohne etwas automatisch auszuwählen, schützt verwendete oder nicht überprüfbare Daten und warnt vor dem Löschen von Präfixen, die Spielstände ohne Steam Cloud enthalten könnten. Steam kann den Shader Cache beim Starten des Spiels neu erstellen. ([#646](https://github.com/Hooandee/panel-de-control/pull/646))
+
+### Português (Brasil)
+
+* **Limpeza:** Traz uma forma simples de recuperar espaço diretamente pelo Modo de Jogo. Mostra quanto espaço os dados de cada jogo, as capturas e as versões personalizadas do Proton que não estão mais em uso ocupam, permite selecionar vários itens e dá controle total sobre o que será excluído. O Painel de Controle sugere itens que vale a pena revisar sem selecionar nada por você, protege dados em uso ou que não podem ser verificados e avisa antes de excluir prefixos que podem conter arquivos de salvamento sem Steam Cloud. O Steam pode recriar o cache de shaders quando o jogo for iniciado. ([#646](https://github.com/Hooandee/panel-de-control/pull/646))
 
 ## [0.48.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.48.0...panel-de-control-v0.48.1) (2026-09-14)
 

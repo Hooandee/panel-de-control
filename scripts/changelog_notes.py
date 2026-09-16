@@ -5,24 +5,27 @@ import re
 import sys
 
 _LINK = re.compile(r"\s*\(\[[^\]]+\]\(https?://[^)]+\)\).*$")
-_LANGUAGE_LABEL = re.compile(r"^\*\*(?P<language>[A-Z]{2}):\*\*\s*(?P<text>.*)$")
+_LANGUAGE_LABEL = re.compile(r"^\*\*(?P<language>[A-Z]{2}(?:-[A-Z]{2})?):\*\*\s*(?P<text>.*)$")
 _VERSION_HEADING = re.compile(r"^##\s+(?!Unreleased\s*$).+")
 _LANGUAGE_BLOCKS = {
     "### Español": "ES",
     "### English": "EN",
     "### Italiano": "IT",
     "### Deutsch": "DE",
+    "### Português (Brasil)": "PT-BR",
 }
 _HEADINGS = {
     "ES": "### Novedades",
     "EN": "### What's new",
     "IT": "### Novità",
     "DE": "### Neuigkeiten",
+    "PT-BR": "### Novidades em português (Brasil)",
 }
 _TRANSLATIONS = {
     "ES": ("Spanish", "### Español"),
     "IT": ("Italian", "### Italiano"),
     "DE": ("German", "### Deutsch"),
+    "PT-BR": ("Brazilian Portuguese", "### Português (Brasil)"),
 }
 _LANGUAGES = tuple(_HEADINGS)
 
@@ -88,7 +91,7 @@ def main():
         if error:
             print(f"::error::{error}")
             return 1
-        print("CHANGELOG top section is quadrilingual.")
+        print("CHANGELOG top section includes all five languages.")
         return 0
 
     if mode == "--release-body":
