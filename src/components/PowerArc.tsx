@@ -247,7 +247,7 @@ export const PowerArc: FC<PowerArcProps> = ({
             {t("tdp.arc.auto")}
           </div>
         ) : (
-          <div style={{ fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color }}>{t(`tdp.zone.${zone.key}`)}</div>
+          <div style={{ fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color, marginTop: overclocked ? 3 : undefined }}>{t(`tdp.zone.${zone.key}`)}</div>
         )}
         {auto && gpuBusy !== null && (
           <div style={{ fontSize: 9, color: theme.color.textMuted, marginTop: 2 }}>
