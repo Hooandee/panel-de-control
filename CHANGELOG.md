@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.51.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.50.0...panel-de-control-v0.51.0) (2026-09-16)
+
+
+### Features
+
+* **tdp:** support overclocked Steam Deck limits ([#668](https://github.com/Hooandee/panel-de-control/issues/668)) ([d890b73](https://github.com/Hooandee/panel-de-control/commit/d890b73f5e57b1583567569bb8c969702a9093ba))
+
 ## [0.50.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.49.2...panel-de-control-v0.50.0) (2026-09-16)
 
 
