@@ -920,6 +920,7 @@ export const ptBR: Record<string, string> = {
   "tdp.ownership.unverifiable": "O Painel de Controle mantém o limite, mas este dispositivo não consegue confirmá-lo.",
   "tdp.ownership.conflict": "Outro controle ou o firmware está alterando o TDP · o Painel de Controle mantém o valor escolhido",
   "tdp.arc.auto": "AUTO",
+  "tdp.arc.overclocked": "OVERCLOCK",
   "tdp.arc.target": "ALVO",
   "tdp.arc.gpu": "GPU {pct}%",
   "tdp.arc.boostHw": "Boost de Hardware",
