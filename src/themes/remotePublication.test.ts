@@ -103,4 +103,8 @@ describe("localizePublishedText", () => {
   it("falls back to English for German when a published theme has no German text", () => {
     expect(localizePublishedText({ es: "ES", en: "EN", it: "IT" }, "de")).toBe("EN");
   });
+
+  it("falls back to English for Brazilian Portuguese without widening the publication schema", () => {
+    expect(localizePublishedText({ es: "ES", en: "EN", it: "IT" }, "pt-BR")).toBe("EN");
+  });
 });

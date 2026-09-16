@@ -26,6 +26,14 @@ describe("nextRowText", () => {
     );
   });
 
+  it("localizes the identity row from a persisted Brazilian Portuguese selection", () => {
+    window.localStorage.setItem("panel-de-control-lang", "pt-BR");
+
+    expect(nextRowText(IDENTITY, IDENTITY, translate("app.title"))).toBe(
+      "Painel de Controle",
+    );
+  });
+
   it("leaves the row untouched when the target equals the identity (Spanish)", () => {
     expect(nextRowText(IDENTITY, IDENTITY, IDENTITY)).toBeNull();
   });

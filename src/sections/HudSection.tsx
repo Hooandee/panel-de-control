@@ -16,6 +16,7 @@ import { HudSliderRow } from "../components/HudSliderRow";
 import { QamAction } from "../components/QamAction";
 import { ColorPicker } from "../components/ColorPicker";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { ExperimentalBadge } from "../components/ExperimentalBadge";
 import { segmentGroupStyle, segmentItemStyle } from "../components/segmented";
 import { hasLocalEditor } from "../mangohud/editorUi";
 import { steamOverlay } from "../mangohud/steamOverlay";
@@ -453,20 +454,9 @@ export const HudSection: FC = () => {
       >
         <div style={{ ...card, display: "flex", flexDirection: "column", gap: theme.space.sm }}>
           <div style={{ display: "flex", justifyContent: "flex-end", minWidth: 0 }}>
-            <span
-              style={{
-                flexShrink: 0,
-                padding: "2px 8px",
-                borderRadius: theme.radius.sm,
-                background: "rgba(255,180,84,0.12)",
-                color: theme.color.warn,
-                fontSize: theme.font.caption,
-                letterSpacing: "0.06em",
-                textTransform: "uppercase",
-              }}
-            >
+            <ExperimentalBadge>
               {t("hud.experimental.badge")}
-            </span>
+            </ExperimentalBadge>
           </div>
           <HudLivePreview model={m} />
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: theme.space.sm }}>

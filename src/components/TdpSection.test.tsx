@@ -333,6 +333,12 @@ describe("TdpSection Steam Deck PPT arc", () => {
     const toggle = screen.getByText(/tdp.lowBatteryHold.title/).closest("button")!;
     expect(toggle.textContent).toContain("tdp.lowBatteryHold.experimental");
     expect(toggle.textContent).toContain("tdp.lowBatteryHold.hint");
+    const badge = screen.getByText("tdp.lowBatteryHold.experimental");
+    const label = badge.parentElement!;
+    expect(label.style.flexDirection).toBe("column");
+    expect(label.style.alignItems).toBe("flex-start");
+    expect(label.firstChild).toBe(badge);
+    expect(badge.style.whiteSpace).toBe("nowrap");
     fireEvent.click(toggle);
     expect(onLowBatteryHold).toHaveBeenCalledWith(true);
   });
