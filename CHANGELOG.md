@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.52.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.51.0...panel-de-control-v0.52.0) (2026-09-16)
+
+
+### Features
+
+* add dashboard navigation and configurable QAM views ([#644](https://github.com/Hooandee/panel-de-control/issues/644)) ([49b4404](https://github.com/Hooandee/panel-de-control/commit/49b440473915dd15a7b39f252f1b5480d05bf6dc))
+
 ## [0.51.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.50.0...panel-de-control-v0.51.0) (2026-09-16)
 
 
