@@ -5,9 +5,40 @@
 ## [0.52.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.51.0...panel-de-control-v0.52.0) (2026-09-16)
 
 
-### Features
+### Español
 
-* add dashboard navigation and configurable QAM views ([#644](https://github.com/Hooandee/panel-de-control/issues/644)) ([49b4404](https://github.com/Hooandee/panel-de-control/commit/49b440473915dd15a7b39f252f1b5480d05bf6dc))
+* **Dashboard y Pestañas:** Elige entre una portada con tarjetas para acceder a cada sección o la navegación por pestañas. Una pequeña línea identifica la pestaña activa; al volver de una sección, el Dashboard recupera el foco en la tarjeta de origen.
+* **Accesos del QAM:** Ordena u oculta las entradas del menú rápido de Steam y ancla secciones o vistas personalizadas de Panel de Control. Decky permanece accesible y los cambios se guardan para las próximas aperturas.
+* **Personalización:** «Configurar el QAM» se dedica a entradas y atajos. «Personalizar la interfaz» reúne Dashboard/Pestañas, visibilidad de la información del dispositivo, secciones, bloques, vistas personalizadas y apariencia.
+* **Navegación y aspecto:** Mejora el foco, el desplazamiento y la vuelta atrás con controles. Ajusta los bordes y el relleno de las tarjetas del Dashboard con Hooandee Gallery y distingue Panel de Control de Potencia con un icono de deslizadores verticales.
+
+### English
+
+* **Dashboard and Tabs:** Choose between a card-based home screen for opening each section and tab navigation. A small underline marks the active tab; returning from a section restores focus to its original Dashboard card.
+* **QAM shortcuts:** Reorder or hide entries in Steam's Quick Access Menu and pin Panel de Control sections or custom views. Decky remains accessible, and changes are saved for future openings.
+* **Customization:** “Configure QAM” is dedicated to menu entries and shortcuts. “Customize interface” brings together Dashboard/Tabs, device information visibility, sections, blocks, custom views, and appearance.
+* **Navigation and appearance:** Improves focus, scrolling, and back navigation with controls. Aligns Dashboard card borders and fills with Hooandee Gallery and distinguishes Panel de Control from Power with a vertical sliders icon.
+
+### Italiano
+
+* **Dashboard e schede:** Scegli tra una schermata iniziale con riquadri per accedere a ogni sezione e la navigazione a schede. Una piccola sottolineatura indica la scheda attiva; tornando da una sezione, il Dashboard riporta il focus sul riquadro di partenza.
+* **Scorciatoie del QAM:** Riordina o nascondi le voci del menu di accesso rapido di Steam e fissa sezioni o viste personalizzate di Panel de Control. Decky rimane accessibile e le modifiche vengono salvate per le aperture successive.
+* **Personalizzazione:** «Configura il QAM» è dedicato alle voci del menu e alle scorciatoie. «Personalizza l'interfaccia» raccoglie Dashboard/schede, visibilità delle informazioni del dispositivo, sezioni, blocchi, viste personalizzate e aspetto.
+* **Navigazione e aspetto:** Migliora il focus, lo scorrimento e il ritorno alla schermata precedente tramite i controlli. Allinea i bordi e lo sfondo dei riquadri del Dashboard con Hooandee Gallery e distingue Panel de Control da Potenza con un'icona di cursori verticali.
+
+### Deutsch
+
+* **Dashboard und Tabs:** Wähle zwischen einer Startseite mit Kacheln für die einzelnen Bereiche und der Tab-Navigation. Eine kleine Unterstreichung kennzeichnet den aktiven Tab. Beim Zurückkehren aus einem Bereich erhält die ursprüngliche Dashboard-Kachel wieder den Fokus.
+* **QAM-Verknüpfungen:** Ordne Einträge im Steam-Schnellzugriffsmenü neu an, blende sie aus oder hefte Bereiche und eigene Ansichten von Panel de Control an. Decky bleibt erreichbar, und Änderungen bleiben beim erneuten Öffnen erhalten.
+* **Anpassung:** „QAM konfigurieren“ enthält nur Menüeinträge und Verknüpfungen. „Oberfläche anpassen“ bündelt Dashboard/Tabs, die Anzeige der Geräteinformationen, Bereiche, Blöcke, eigene Ansichten und das Erscheinungsbild.
+* **Navigation und Darstellung:** Verbessert Fokus, Scrollen und Zurücknavigieren mit den Bedienelementen. Die Ränder und Füllflächen der Dashboard-Kacheln passen mit Hooandee Gallery besser zusammen. Ein Symbol mit vertikalen Schiebereglern unterscheidet Panel de Control von Leistung.
+
+### Português (Brasil)
+
+* **Dashboard e abas:** Escolha entre uma tela inicial com cartões para acessar cada seção e a navegação por abas. Uma pequena linha identifica a aba ativa; ao voltar de uma seção, o Dashboard devolve o foco ao cartão de origem.
+* **Acessos do QAM:** Reordene ou oculte entradas do menu de acesso rápido do Steam e fixe seções ou visualizações personalizadas do Painel de Controle. O Decky continua acessível, e as alterações são salvas para as próximas aberturas.
+* **Personalização:** «Configurar o QAM» reúne apenas entradas e atalhos. «Personalizar a interface» reúne Dashboard/abas, visibilidade das informações do dispositivo, seções, blocos, visualizações personalizadas e aparência.
+* **Navegação e aparência:** Melhora o foco, a rolagem e a navegação de volta com os controles. Alinha as bordas e o preenchimento dos cartões do Dashboard com o Hooandee Gallery e diferencia o Painel de Controle de Potência com um ícone de controles deslizantes verticais.
 
 ## [0.51.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.50.0...panel-de-control-v0.51.0) (2026-09-16)
 
