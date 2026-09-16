@@ -5,9 +5,25 @@
 ## [0.50.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.49.2...panel-de-control-v0.50.0) (2026-09-16)
 
 
-### Features
+### Español
 
-* add Brazilian Portuguese localization ([#670](https://github.com/Hooandee/panel-de-control/issues/670)) ([f013b4d](https://github.com/Hooandee/panel-de-control/commit/f013b4d86111308bff80c5e9298f908cc7c2dfa2))
+* **Idiomas:** Panel de Control está ahora completamente disponible en portugués de Brasil en toda la aplicación, el glosario, las actualizaciones y las notas de versión. El selector de idioma pasa a ser un menú compacto que conserva visible la bandera de cada idioma. Esta versión también mejora la legibilidad de las acciones largas en Potencia y unifica la etiqueta «Experimental» en TDP con batería baja, Auto-TDP y HUD.
+
+### English
+
+* **Languages:** Panel de Control is now fully available in Brazilian Portuguese throughout the app, glossary, updates, and release notes. The language selector is now a compact menu that keeps each language's flag visible. This release also improves the readability of long actions in Power and uses one consistent “Experimental” label for low-battery TDP, Auto-TDP, and the HUD.
+
+### Italiano
+
+* **Lingue:** Panel de Control è ora completamente disponibile in portoghese brasiliano nell'app, nel glossario, negli aggiornamenti e nelle note di rilascio. Il selettore della lingua è ora un menu compatto che mantiene visibile la bandiera di ogni lingua. Questa versione migliora inoltre la leggibilità delle azioni più lunghe in Potenza e uniforma l'etichetta «Sperimentale» per TDP con batteria scarica, Auto-TDP e HUD.
+
+### Deutsch
+
+* **Sprachen:** Panel de Control ist jetzt in der gesamten App, im Glossar, bei Aktualisierungen und in den Versionshinweisen vollständig auf brasilianischem Portugiesisch verfügbar. Die Sprachauswahl ist nun ein kompaktes Menü, in dem die Flagge jeder Sprache sichtbar bleibt. Außerdem sind längere Aktionen unter Leistung besser lesbar, und TDP bei niedrigem Akkustand, Auto-TDP sowie HUD verwenden dieselbe einheitliche Kennzeichnung „Experimentell“.
+
+### Português (Brasil)
+
+* **Idiomas:** O Painel de Controle agora está totalmente disponível em português do Brasil em todo o aplicativo, no glossário, nas atualizações e nas notas de versão. O seletor de idioma agora é um menu compacto que mantém a bandeira de cada idioma visível. Esta versão também melhora a legibilidade de ações mais longas em Potência e padroniza o selo “Experimental” para TDP com bateria baixa, Auto-TDP e HUD.
 
 ## [0.49.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.49.1...panel-de-control-v0.49.2) (2026-09-15)
 
