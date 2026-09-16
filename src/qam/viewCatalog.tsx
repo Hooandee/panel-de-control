@@ -1,4 +1,4 @@
-import { LuGauge } from "react-icons/lu";
+import { LuSlidersVertical } from "react-icons/lu";
 
 import type { SectionIcon } from "../sections/types";
 import { isViewTabId } from "../customize/views";
@@ -29,7 +29,7 @@ export interface QamViewSource {
   presentationKey?: string;
 }
 
-const homeIcon: SectionIcon = (size) => <LuGauge size={size} />;
+const homeIcon: SectionIcon = (size) => <LuSlidersVertical size={size} />;
 
 export function tokenForSectionId(id: string): QamEntryToken {
   return isViewTabId(id)

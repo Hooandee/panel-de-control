@@ -55,7 +55,6 @@ html:root #QuickAccess-Menu .${PDC_ROOT} .pdc-dashboard-card.gpfocus {
 .${PDC_ROOT} .pdc-dashboard-card.gpfocus > .pdc-dashboard-card-surface {
   background: linear-gradient(rgba(0,0,0,0.08), rgba(0,0,0,0.18)), var(--pdc-card-accent) !important;
   box-shadow: inset 0 0 0 1px rgba(255,255,255,0.28), 0 8px 20px rgba(0,0,0,0.28) !important;
-  transform: translateY(-2px);
 }
 .${PDC_ROOT} .pdc-dashboard-card-focused .pdc-dashboard-card-icon,
 .${PDC_ROOT} .pdc-dashboard-card.gpfocus .pdc-dashboard-card-icon {

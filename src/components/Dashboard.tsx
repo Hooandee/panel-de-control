@@ -21,7 +21,7 @@ const cardStyle: CSSProperties = {
   minWidth: 0,
   minHeight: 104,
   padding: `${theme.space.sm}px 6px ${theme.space.md}px`,
-  borderRadius: theme.radius.md,
+  borderRadius: "inherit",
   background: "transparent",
   display: "flex",
   flexDirection: "column",
@@ -87,6 +87,8 @@ export function Dashboard({ sections, activeId, settingsBadge, onOpenSection }: 
               onFocus={(event) => event.currentTarget.scrollIntoView({ block: "nearest" })}
               style={{
                 minWidth: 0,
+                display: "flex",
+                alignItems: "stretch",
                 "--pdc-card-accent": section.accent,
               } as CSSProperties}
             >

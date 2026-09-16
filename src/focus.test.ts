@@ -46,7 +46,7 @@ describe("buildFocusCss", () => {
     expect(css).toContain("background-image: none !important");
     expect(css).toContain(".pdc-dashboard-card-surface");
     expect(css).toContain("var(--pdc-card-accent)");
-    expect(css).toContain("translateY(-2px)");
+    expect(css).not.toContain("translateY(-2px)");
     expect(css).toContain("@media (prefers-reduced-motion: reduce)");
   });
 });

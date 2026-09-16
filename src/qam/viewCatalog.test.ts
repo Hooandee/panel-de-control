@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { LuGauge } from "react-icons/lu";
+import { LuSlidersVertical } from "react-icons/lu";
 
 import type { SectionDef } from "../sections/types";
 import { buildQamViewCatalog, targetForQamToken } from "./viewCatalog";
@@ -45,7 +45,7 @@ describe("QAM view catalog", () => {
     const home = buildQamViewCatalog(sections)[0];
 
     expect(renderToStaticMarkup(home.icon(20))).toBe(
-      renderToStaticMarkup(createElement(LuGauge, { size: 20 })),
+      renderToStaticMarkup(createElement(LuSlidersVertical, { size: 20 })),
     );
   });
 

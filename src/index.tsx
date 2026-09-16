@@ -1,7 +1,7 @@
 import { ErrorBoundary, findSP, staticClasses } from "@decky/ui";
 import { definePlugin } from "@decky/api";
 import { FC } from "react";
-import { LuGauge } from "react-icons/lu";
+import { LuSlidersVertical } from "react-icons/lu";
 
 import {
   acknowledgeThemeActivation,
@@ -143,7 +143,7 @@ export default definePlugin(() => {
         lifecycle={standardLifecycle.signal}
       />
     ),
-    icon: <LuGauge />,
+    icon: <LuSlidersVertical />,
     onDismount() {
       dismounted = true;
       cancelHydrationRetry();
