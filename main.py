@@ -160,7 +160,7 @@ _ROG_CHARGE_LIMIT_PROFILES = frozenset({
     "rog_xbox_ally",
     "rog_xbox_ally_x",
 })
-_STEAM_DECK_CHARGE_LIMIT_PROFILES = frozenset({
+_STEAM_DECK_PROFILES = frozenset({
     "steam_deck_lcd",
     "steam_deck_oled",
 })
@@ -444,7 +444,7 @@ class Plugin:
         self._steamdeck_ppt_last_failure = None
         self._steamdeck_ppt_recovery_blocked = False
         if (
-            self._device.key in ("steam_deck_lcd", "steam_deck_oled")
+            self._device.key in _STEAM_DECK_PROFILES
             and not self._settings.get("_deck_ppt_scope_migrated")
         ):
             self._tdp_profiles.migrate_deck_ppt_stable()
@@ -2365,7 +2365,7 @@ class Plugin:
         return True
 
     def _steamdeck_ppt_probe_pending(self, overclock=None) -> bool:
-        if self._device.key not in ("steam_deck_lcd", "steam_deck_oled"):
+        if self._device.key not in _STEAM_DECK_PROFILES:
             return False
         state = overclock or self._steamdeck_overclock_state()
         return state["status"] in {"unavailable", "unsupported"}
@@ -3725,8 +3725,12 @@ class Plugin:
                 # read() sub-samples gpu_busy over a short blocking burst -> off
                 # the event loop so it can't stall other Decky RPC handling.
                 pr = await asyncio.to_thread(self._power_reader.read)
-                levels, _active, ac = self._effective_levels(self._current_appid)
-                lim = self._automatic_limits()
+                limits = self._limits()
+                levels, _active, ac = self._effective_levels(
+                    self._current_appid,
+                    limits=limits,
+                )
+                lim = self._automatic_limits(limits)
                 active = self._active_max(lim, ac)
                 requested = self._auto_control_pl1(levels["pl1"])
                 cur = min(requested, active)
@@ -3766,7 +3770,10 @@ class Plugin:
             return False  # device min already >= responsive floor → no raise
         # The floor bites only when the loop's PL1 sits AT the responsive floor
         # (it wanted lower / is being held up). A demanding game parks above it.
-        pl1 = self._effective_levels(self._current_appid)[0]["pl1"]
+        pl1 = self._effective_levels(
+            self._current_appid,
+            limits=lim,
+        )[0]["pl1"]
         return pl1 <= floor
 
     async def get_power_draw(self) -> dict:
@@ -3840,7 +3847,10 @@ class Plugin:
                 and self._firmware_mode() == _CUSTOM_MODE):
             lim = self._limits()
             floor = auto_tdp.effective_floor(lim.min_w, True)
-            cur = self._effective_levels(self._current_appid)[0]["pl1"]
+            cur = self._effective_levels(
+                self._current_appid,
+                limits=lim,
+            )[0]["pl1"]
             if cur < floor:  # only raise if actually below the responsive floor
                 self._tdp_profiles.set_pl1(self._auto_scope(), floor,
                                            appid=self._current_appid)
@@ -3853,7 +3863,7 @@ class Plugin:
         """Authorised durable range, or None while a dynamic ceiling is unreadable."""
         if self._device.key == "gpd_win_mini_2025":
             return TdpLimits.from_profile(self._device)
-        if self._device.key in ("steam_deck_lcd", "steam_deck_oled"):
+        if self._device.key in _STEAM_DECK_PROFILES:
             overclock = self._steamdeck_overclock_state()
             if overclock["status"] in {"unavailable", "unsupported"}:
                 return None
@@ -5696,7 +5706,7 @@ class Plugin:
         key = getattr(self._device, "key", "")
         return (
             key in _ROG_CHARGE_LIMIT_PROFILES
-            or key in _STEAM_DECK_CHARGE_LIMIT_PROFILES
+            or key in _STEAM_DECK_PROFILES
         )
 
     def _cancel_charge_limit_reconcile(
@@ -5843,7 +5853,7 @@ class Plugin:
                         and type(candidate) is SysfsChargeLimit
                     )
                     or (
-                        device_key in _STEAM_DECK_CHARGE_LIMIT_PROFILES
+                        device_key in _STEAM_DECK_PROFILES
                         and type(candidate)
                         in (SteamDeckChargeLimit, SysfsChargeLimit)
                     )

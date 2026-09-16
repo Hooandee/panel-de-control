@@ -250,9 +250,10 @@ def _set_indeterminate_deck_ppt(plugin, *, with_marker=True):
     }
 
 
-def test_pending_deck_handoff_blocks_command_writes(plugin):
-    _set_indeterminate_deck_ppt(plugin)
-    plugin._tdp_profiles.set_pl1("global", 25)
+@pytest.mark.parametrize("with_marker", [True, False])
+def test_indeterminate_deck_probe_blocks_command_writes(plugin, with_marker):
+    _set_indeterminate_deck_ppt(plugin, with_marker=with_marker)
+    plugin._tdp_profiles.set_pl1("global", 25 if with_marker else 15)
     plugin._tdp_backend.set_levels_calls = 0
 
     result = plugin._execute_tdp_command(plugin._capture_tdp_command("startup"))
@@ -261,9 +262,10 @@ def test_pending_deck_handoff_blocks_command_writes(plugin):
     assert result.detail == "steamdeck-ppt-probe-pending"
 
 
-def test_pending_deck_handoff_blocks_guard_writes(plugin):
-    _set_indeterminate_deck_ppt(plugin)
-    plugin._tdp_profiles.set_pl1("global", 25)
+@pytest.mark.parametrize("with_marker", [True, False])
+def test_indeterminate_deck_probe_blocks_guard_writes(plugin, with_marker):
+    _set_indeterminate_deck_ppt(plugin, with_marker=with_marker)
+    plugin._tdp_profiles.set_pl1("global", 25 if with_marker else 15)
     plugin._tdp_backend.set_levels_calls = 0
     _reset_guard_memory(plugin)
 
@@ -272,32 +274,6 @@ def test_pending_deck_handoff_blocks_guard_writes(plugin):
 
     assert plugin._tdp_backend.set_levels_calls == 0
     assert plugin._tdp_reason == "steamdeck_ppt_probe_pending"
-
-
-def test_indeterminate_deck_probe_without_marker_blocks_command_writes(plugin):
-    _set_indeterminate_deck_ppt(plugin, with_marker=False)
-    plugin._tdp_profiles.set_pl1("global", 15)
-    plugin._tdp_backend.set_levels_calls = 0
-
-    result = plugin._execute_tdp_command(plugin._capture_tdp_command("startup"))
-
-    assert plugin._tdp_backend.set_levels_calls == 0
-    assert result.detail == "steamdeck-ppt-probe-pending"
-
-
-def test_indeterminate_deck_probe_without_marker_blocks_guard_writes(plugin):
-    _set_indeterminate_deck_ppt(plugin, with_marker=False)
-    plugin._tdp_profiles.set_pl1("global", 15)
-    plugin._tdp_backend.set_levels_calls = 0
-    _reset_guard_memory(plugin)
-
-    plugin._tdp_guard_tick(now=10.0)
-    plugin._tdp_guard_tick(now=10.75)
-
-    assert plugin._tdp_backend.set_levels_calls == 0
-    assert plugin._tdp_reason == "steamdeck_ppt_probe_pending"
-
-
 def test_command_preserves_requested_but_applies_live_target(plugin):
     plugin._tdp_profiles.set_pl1("global", 25)
     plugin._tdp_backend.live_max = 15
