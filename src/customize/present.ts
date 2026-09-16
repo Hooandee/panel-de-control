@@ -50,20 +50,18 @@ export function getPresent(sectionId: string): string[] | null {
   return state()[sectionId] ?? null;
 }
 
-// Re-read once the durable cache is healed on startup.
 onPrefsHealed(() => {
   cache = load();
   notify();
 });
 
-function subscribe(cb: () => void): () => void {
+export function subscribePresent(cb: () => void): () => void {
   listeners.add(cb);
   return () => {
     listeners.delete(cb);
   };
 }
 
-/** Re-render a consumer whenever any section's present-set changes. */
 export function usePresentVersion(): number {
-  return useSyncExternalStore(subscribe, () => version, () => version);
+  return useSyncExternalStore(subscribePresent, () => version, () => version);
 }

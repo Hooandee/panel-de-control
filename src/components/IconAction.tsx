@@ -1,7 +1,7 @@
 import { FC, ReactNode } from "react";
-import { Focusable } from "@decky/ui";
 
 import { theme } from "../theme";
+import { QamAction } from "./QamAction";
 
 export const iconBtn: React.CSSProperties = {
   display: "flex", alignItems: "center", justifyContent: "center",
@@ -10,12 +10,13 @@ export const iconBtn: React.CSSProperties = {
 
 export const IconAction: FC<{ label: string; color: string; disabled?: boolean; onTap: () => void; children: ReactNode }> =
   ({ label, color, disabled, onTap, children }) => (
-    <Focusable
+    <QamAction
+      noFocusRing
+      onPress={onTap}
+      disabled={disabled}
       style={{ ...iconBtn, color, opacity: disabled ? 0.3 : 1, cursor: disabled ? "default" : "pointer" }}
-      aria-label={label}
-      onActivate={() => !disabled && onTap()}
-      onClick={() => !disabled && onTap()}
+      label={label}
     >
       {children}
-    </Focusable>
+    </QamAction>
   );

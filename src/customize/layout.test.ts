@@ -20,7 +20,23 @@ describe("pinnedLast", () => {
 });
 
 describe("coerceLayout", () => {
-  const EMPTY = { tabs: { order: [], hidden: [] }, blocks: {}, subitems: {} };
+  const EMPTY = { showHome: true, showDeviceHeader: true, tabs: { order: [], hidden: [] }, blocks: {}, subitems: {} };
+
+  it("shows Home for old, missing, and corrupt preferences", () => {
+    expect(coerceLayout({ tabs: { order: [], hidden: [] } }).showHome).toBe(true);
+    expect(coerceLayout({ showHome: "no" }).showHome).toBe(true);
+    expect(coerceLayout(null).showHome).toBe(true);
+  });
+
+  it("preserves an explicit hidden Home preference", () => {
+    expect(coerceLayout({ showHome: false }).showHome).toBe(false);
+  });
+
+  it("shows device information by default and preserves an explicit hidden preference", () => {
+    expect(coerceLayout({ tabs: { order: [], hidden: [] } }).showDeviceHeader).toBe(true);
+    expect(coerceLayout({ showDeviceHeader: "no" }).showDeviceHeader).toBe(true);
+    expect(coerceLayout({ showDeviceHeader: false }).showDeviceHeader).toBe(false);
+  });
 
   it("returns empty layout for non-object input", () => {
     expect(coerceLayout(null)).toEqual(EMPTY);
@@ -31,6 +47,8 @@ describe("coerceLayout", () => {
 
   it("keeps a well-formed layout", () => {
     const good = {
+      showHome: true,
+      showDeviceHeader: false,
       tabs: { order: ["a"], hidden: ["b"] },
       blocks: { sys: { order: ["x"], hidden: [] } },
       subitems: { battery: ["health"] },
@@ -40,11 +58,13 @@ describe("coerceLayout", () => {
 
   it("defaults subitems to {} when the stored layout predates it", () => {
     const old = { tabs: { order: ["a"], hidden: [] }, blocks: {} };
-    expect(coerceLayout(old)).toEqual({ ...old, subitems: {} });
+    expect(coerceLayout(old)).toEqual({ showHome: true, showDeviceHeader: true, ...old, subitems: {} });
   });
 
   it("moves the saved GPU block preference from Power to System", () => {
     const old = {
+      showHome: true,
+      showDeviceHeader: true,
       tabs: { order: [], hidden: [] },
       blocks: {
         power: { order: ["gpu", "autoTdp"], hidden: ["gpu"] },
@@ -68,10 +88,10 @@ describe("coerceLayout", () => {
     expect(coerceLayout({ tabs: 5, blocks: [] })).toEqual(EMPTY);
     // non-string ids are dropped
     expect(coerceLayout({ tabs: { order: ["a", 1, null], hidden: [] } }))
-      .toEqual({ tabs: { order: ["a"], hidden: [] }, blocks: {}, subitems: {} });
+      .toEqual({ showHome: true, showDeviceHeader: true, tabs: { order: ["a"], hidden: [] }, blocks: {}, subitems: {} });
     // a block pref with a bad shape coerces, doesn't crash
     expect(coerceLayout({ blocks: { sys: { order: 9 } } }))
-      .toEqual({ tabs: { order: [], hidden: [] }, blocks: { sys: { order: [], hidden: [] } }, subitems: {} });
+      .toEqual({ showHome: true, showDeviceHeader: true, tabs: { order: [], hidden: [] }, blocks: { sys: { order: [], hidden: [] } }, subitems: {} });
     // a corrupt subitems map coerces to {}
     expect(coerceLayout({ subitems: 7 })).toEqual(EMPTY);
     // a subitems entry with a wrong-typed value coerces to an empty id list

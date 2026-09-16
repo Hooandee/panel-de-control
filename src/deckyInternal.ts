@@ -1,5 +1,14 @@
 import type { ReactNode } from "react";
 
+import {
+  QAM_DECKY_TOKEN,
+  resolveQamTokens,
+  type QamEntryToken,
+  type QamLayout,
+} from "./qam/layout";
+import { composeQamEntries, type QamInventoryEntry } from "./qam/composer";
+import { applyQamEntryTransaction } from "./qam/transaction";
+
 export const PDC_QAM_TAB_ID = 0x504443;
 
 const PDC_QAM_TAB_OWNER = "panel-de-control";
@@ -41,6 +50,14 @@ interface WeakArrayReference {
 interface RenderedArrayState {
   registry: TabRegistryEntry[];
   visible: boolean;
+  nativeTabs: RenderedQuickAccessTab[];
+  renderedNativeKeys: Set<string>;
+}
+
+interface ActiveQamComposition {
+  owner: object;
+  config: QuickAccessTabCompositionConfig;
+  expectedKeys: string[] | null;
 }
 
 interface QamRenderAdapterState {
@@ -54,7 +71,10 @@ interface QamRenderAdapterState {
   releaseRequested: boolean;
   rendering: boolean;
   failure: string | null;
+  deferFailure: boolean;
   failureListeners: Set<() => void>;
+  ownedIds: Set<string>;
+  composition: ActiveQamComposition | null;
 }
 
 interface DeckyTabsHook {
@@ -79,6 +99,20 @@ export interface QuickAccessTabRegistration {
   registered: boolean;
   restartRequired: boolean;
   reason: QuickAccessTabReason;
+  dispose(): void;
+}
+
+export interface QuickAccessTabCompositionConfig {
+  layout: QamLayout;
+  tokensById: ReadonlyMap<number, QamEntryToken>;
+  onInventory?: (entries: QamInventoryEntry[]) => void;
+  onRuntimeFailure?: () => void;
+}
+
+export interface QuickAccessTabCompositionRegistration {
+  configured: boolean;
+  update(config: QuickAccessTabCompositionConfig): boolean;
+  expectedKeys(): string[] | null;
   dispose(): void;
 }
 
@@ -124,12 +158,16 @@ function tabRegistryOf(host: unknown): DeckyQuickAccessTab[] | null {
   return Array.isArray(hook?.tabs) ? hook.tabs as DeckyQuickAccessTab[] : null;
 }
 
-function matchingQamTabs(hook: DeckyTabsHook): DeckyQuickAccessTab[] {
-  return hook.tabs.filter((tab) => tab.id === PDC_QAM_TAB_ID);
+function matchingQamTabs(hook: DeckyTabsHook, id = PDC_QAM_TAB_ID): DeckyQuickAccessTab[] {
+  return hook.tabs.filter((tab) => tab.id === id);
 }
 
 function ownsQamTab(tab: DeckyQuickAccessTab): boolean {
   return tab.__pdcOwner === PDC_QAM_TAB_OWNER;
+}
+
+function ownedQamTabs(hook: DeckyTabsHook): DeckyQuickAccessTab[] {
+  return hook.tabs.filter(ownsQamTab);
 }
 
 function snapshotTabRegistry(tabs: DeckyQuickAccessTab[]): TabRegistryEntry[] {
@@ -313,7 +351,7 @@ function observedArraysReleased(state: QamRenderAdapterState): boolean {
   return state.observedArrays.every((reference) => {
     const tabs = reference.deref();
     return !tabs || !renderedDeckyTabs(tabs).some(
-      (tab) => String(tab.key) === String(PDC_QAM_TAB_ID),
+      (tab) => state.ownedIds.has(String(tab.key)),
     );
   });
 }
@@ -324,6 +362,15 @@ function registryMatchesRenderedKeys(
 ): boolean {
   return registry.length === rendered.length
     && registry.every((entry, index) => String(entry.id) === String(rendered[index].key));
+}
+
+function registryMatchesRenderedKeySet(
+  registry: TabRegistryEntry[],
+  rendered: RenderedQuickAccessTab[],
+): boolean {
+  if (registry.length !== rendered.length) return false;
+  const renderedKeys = new Set(rendered.map((entry) => String(entry.key)));
+  return registry.every((entry) => renderedKeys.has(String(entry.id)));
 }
 
 function previousRegistryForArray(
@@ -347,9 +394,46 @@ function previousRegistryForArray(
   return null;
 }
 
+function mergeObservedNativeTabs(
+  previous: RenderedArrayState | undefined,
+  current: RenderedQuickAccessTab[],
+): RenderedQuickAccessTab[] {
+  if (!previous) return current;
+  const currentByKey = new Map(
+    current.map((entry) => [String(entry.key), entry]),
+  );
+  const retained = previous.nativeTabs.flatMap((entry) => {
+    const key = String(entry.key);
+    const replacement = currentByKey.get(key);
+    if (replacement) return [replacement];
+    return previous.renderedNativeKeys.has(key) ? [] : [entry];
+  });
+  const knownKeys = new Set(retained.map((entry) => String(entry.key)));
+  const merged = [...retained];
+  current.forEach((entry, index) => {
+    const key = String(entry.key);
+    if (knownKeys.has(key)) return;
+    const nextKnown = current.slice(index + 1).find(
+      (candidate) => knownKeys.has(String(candidate.key)),
+    );
+    if (nextKnown) {
+      merged.splice(
+        merged.findIndex((candidate) => String(candidate.key) === String(nextKnown.key)),
+        0,
+        entry,
+      );
+    } else {
+      merged.push(entry);
+    }
+    knownKeys.add(key);
+  });
+  return merged;
+}
+
 function failRenderAdapter(state: QamRenderAdapterState, reason: string): undefined {
   if (state.failure) return undefined;
   state.failure = reason;
+  if (state.deferFailure) return undefined;
   markCleanupFailure(state.hook);
   for (const listener of state.failureListeners) {
     try {
@@ -369,8 +453,9 @@ function reconcileAdaptedRender(
   if (!uniqueRegistryIds(registry)) {
     return failRenderAdapter(state, "registry_invalid");
   }
-  const ownedRegistry = registry.filter((entry) => entry.id === PDC_QAM_TAB_ID);
-  if (ownedRegistry.some((entry) => entry.owner !== PDC_QAM_TAB_OWNER)) {
+  const ownedRegistry = registry.filter((entry) => entry.owner === PDC_QAM_TAB_OWNER);
+  ownedRegistry.forEach((entry) => state.ownedIds.add(String(entry.id)));
+  if (registry.some((entry) => state.ownedIds.has(String(entry.id)) && entry.owner !== PDC_QAM_TAB_OWNER)) {
     return failRenderAdapter(state, "owner_mismatch");
   }
   if (!observeRenderedArray(state, existingTabs)) {
@@ -378,13 +463,17 @@ function reconcileAdaptedRender(
   }
 
   const before = [...existingTabs];
-  const nativeTabs = before.filter((tab) => tab.decky !== true);
+  const storedArrayState = state.arrayStates.get(existingTabs as object);
+  const nativeTabs = mergeObservedNativeTabs(
+    storedArrayState,
+    before.filter((tab) => tab.decky !== true),
+  );
   const deckyTabs = renderedDeckyTabs(before);
   const previousRegistry = previousRegistryForArray(state, existingTabs, registry);
   if (
     !previousRegistry
     || new Set(deckyTabs.map((tab) => String(tab.key))).size !== deckyTabs.length
-    || !registryMatchesRenderedKeys(previousRegistry, deckyTabs)
+    || !registryMatchesRenderedKeySet(previousRegistry, deckyTabs)
     || deckyTabs.some((tab) => tab.panel == null)
   ) {
     return failRenderAdapter(state, "rendered_registry_mismatch");
@@ -410,18 +499,12 @@ function reconcileAdaptedRender(
       previousIndex >= 0
       && sameRegistryEntry(entry, previousRegistry[previousIndex])
     ) {
-      return deckyTabs[previousIndex];
+      return deckyTabs.find((tab) => String(tab.key) === String(entry.id))!;
     }
     return generated![index];
   });
-  const desiredTabs = [...nativeTabs, ...desiredDeckyTabs];
-  if (
-    existingTabs.length !== desiredTabs.length
-    || existingTabs.some((tab, index) => tab !== desiredTabs[index])
-  ) {
-    existingTabs.splice(0, existingTabs.length, ...desiredTabs);
-  }
-  const expectedReferences = [...existingTabs];
+  const canonicalTabs = [...nativeTabs, ...desiredDeckyTabs];
+  existingTabs.splice(0, existingTabs.length, ...canonicalTabs);
   let result: unknown;
   try {
     result = state.original.call(state.hook, existingTabs, visible);
@@ -433,14 +516,76 @@ function reconcileAdaptedRender(
     !synchronous(result)
     || !matchesHookRegistry(state.hook, registry)
     || !renderedKeysMatchRegistry(existingTabs, registry)
-    || existingTabs.length !== expectedReferences.length
-    || !existingTabs.every((tab, index) => tab === expectedReferences[index])
+    || existingTabs.length !== canonicalTabs.length
+    || !existingTabs.every((tab, index) => tab === canonicalTabs[index])
   ) {
     existingTabs.splice(0, existingTabs.length, ...before);
     return failRenderAdapter(state, "stable_render_mismatch");
   }
-  state.arrayStates.set(existingTabs as object, { registry, visible });
-  if (state.releaseRequested && ownedRegistry.length === 0 && observedArraysReleased(state)) {
+
+  const activeComposition = state.composition;
+  if (activeComposition) {
+    const { config: composition } = activeComposition;
+    const ownedEntries = new Map<QamEntryToken, RenderedQuickAccessTab>();
+    for (const entry of ownedRegistry) {
+      const token = composition.tokensById.get(entry.id);
+      const rendered = desiredDeckyTabs.find(
+        (candidate) => String(candidate.key) === String(entry.id),
+      );
+      if (!token || !rendered || ownedEntries.has(token)) {
+        existingTabs.splice(0, existingTabs.length, ...before);
+        return failRenderAdapter(state, "composition_mapping_invalid");
+      }
+      ownedEntries.set(token, rendered);
+    }
+    const defaults = [
+      ...nativeTabs.map((entry) => `native:${String(entry.key)}`),
+      ...ownedEntries.keys(),
+      QAM_DECKY_TOKEN,
+    ];
+    const desiredTokens = resolveQamTokens(
+      defaults,
+      composition.layout,
+      QAM_DECKY_TOKEN,
+    );
+    const composed = composeQamEntries(canonicalTabs, desiredTokens, ownedEntries);
+    if (!composed.ok) {
+      existingTabs.splice(0, existingTabs.length, ...before);
+      return failRenderAdapter(state, `composition_${composed.reason}`);
+    }
+    const transaction = applyQamEntryTransaction(
+      existingTabs,
+      composed.entries,
+      () => matchesHookRegistry(state.hook, registry),
+    );
+    if (!transaction.applied) {
+      existingTabs.splice(0, existingTabs.length, ...before);
+      return failRenderAdapter(state, `composition_${transaction.reason}`);
+    }
+    if (visible || activeComposition.expectedKeys === null) {
+      activeComposition.expectedKeys = composed.entries.map((entry) => String(entry.key));
+      try {
+        composition.onInventory?.(composed.inventory);
+      } catch {}
+    }
+  }
+
+  state.arrayStates.set(existingTabs as object, {
+    registry,
+    visible,
+    nativeTabs,
+    renderedNativeKeys: new Set(
+      existingTabs
+        .filter((entry) => entry.decky !== true)
+        .map((entry) => String(entry.key)),
+    ),
+  });
+  if (
+    state.releaseRequested
+    && !state.composition
+    && ownedRegistry.length === 0
+    && observedArraysReleased(state)
+  ) {
     if (!restoreRenderAdapter(state)) {
       failRenderAdapter(state, "restore_failed");
     }
@@ -482,7 +627,14 @@ function installRenderAdapter(hook: DeckyTabsHook): QamRenderAdapterState | null
     releaseRequested: false,
     rendering: false,
     failure: null,
+    deferFailure: false,
     failureListeners: new Set<() => void>(),
+    ownedIds: new Set(
+      snapshotTabRegistry(hook.tabs)
+        .filter((entry) => entry.owner === PDC_QAM_TAB_OWNER)
+        .map((entry) => String(entry.id)),
+    ),
+    composition: null,
   });
   try {
     Object.defineProperty(hook, QAM_RENDER_ADAPTER, {
@@ -509,14 +661,13 @@ function releaseRenderAdapter(hook: DeckyTabsHook): boolean {
   if (!state) {
     return !Object.prototype.hasOwnProperty.call(hook, QAM_RENDER_ADAPTER);
   }
+  if (state.composition) return !state.failure;
   state.releaseRequested = true;
   for (const reference of state.observedArrays) {
     const tabs = reference.deref();
     if (
       tabs
-      && renderedDeckyTabs(tabs).some(
-        (tab) => String(tab.key) === String(PDC_QAM_TAB_ID),
-      )
+      && renderedDeckyTabs(tabs).some((tab) => state.ownedIds.has(String(tab.key)))
     ) {
       const visible = state.arrayStates.get(tabs as object)?.visible ?? false;
       reconcileAdaptedRender(state, tabs, visible);
@@ -526,6 +677,127 @@ function releaseRenderAdapter(hook: DeckyTabsHook): boolean {
   if (!observedArraysReleased(state)) return false;
   if (hook.render === state.original) return true;
   return restoreRenderAdapter(state);
+}
+
+function reconcileObservedArrays(
+  state: QamRenderAdapterState,
+  recoverFailure = false,
+): boolean {
+  if (state.failure || state.rendering) return false;
+  state.observedArrays = state.observedArrays.filter((reference) => reference.deref());
+  const snapshots = state.observedArrays.flatMap((reference) => {
+    const tabs = reference.deref();
+    if (!tabs) return [];
+    return [{
+      tabs,
+      entries: [...tabs],
+      arrayState: state.arrayStates.get(tabs as object),
+    }];
+  });
+  state.rendering = true;
+  state.deferFailure = recoverFailure;
+  try {
+    for (const { tabs } of snapshots) {
+      const visible = state.arrayStates.get(tabs as object)?.visible ?? false;
+      reconcileAdaptedRender(state, tabs, visible);
+      if (state.failure) {
+        snapshots.forEach(({ tabs: observed, entries, arrayState }) => {
+          observed.splice(0, observed.length, ...entries);
+          if (arrayState) state.arrayStates.set(observed as object, arrayState);
+          else state.arrayStates.delete(observed as object);
+        });
+        if (recoverFailure) state.failure = null;
+        return false;
+      }
+    }
+    return true;
+  } finally {
+    state.deferFailure = false;
+    state.rendering = false;
+  }
+}
+
+function unavailableQamComposition(): QuickAccessTabCompositionRegistration {
+  return {
+    configured: false,
+    update() { return false; },
+    expectedKeys() { return null; },
+    dispose() {},
+  };
+}
+
+export function configureQuickAccessTabComposition(
+  config: QuickAccessTabCompositionConfig,
+  host: unknown = window,
+): QuickAccessTabCompositionRegistration {
+  const hook = tabsHookOf(host);
+  if (!hook) return unavailableQamComposition();
+  const state = installRenderAdapter(hook);
+  if (!state || state.failure || state.composition) {
+    return unavailableQamComposition();
+  }
+
+  const owner = {};
+  state.composition = { owner, config, expectedKeys: null };
+  state.releaseRequested = false;
+  if (config.onRuntimeFailure) state.failureListeners.add(config.onRuntimeFailure);
+  if (!reconcileObservedArrays(state)) {
+    state.composition = null;
+    if (config.onRuntimeFailure) state.failureListeners.delete(config.onRuntimeFailure);
+    return unavailableQamComposition();
+  }
+
+  let disposed = false;
+  return {
+    configured: true,
+    update(nextConfig) {
+      if (disposed || state.failure || state.composition?.owner !== owner) return false;
+      const previousConfig = state.composition.config;
+      const previousExpectedKeys = state.composition.expectedKeys;
+      if (previousConfig.onRuntimeFailure) {
+        state.failureListeners.delete(previousConfig.onRuntimeFailure);
+      }
+      state.composition.config = nextConfig;
+      state.composition.expectedKeys = null;
+      if (nextConfig.onRuntimeFailure) {
+        state.failureListeners.add(nextConfig.onRuntimeFailure);
+      }
+      if (reconcileObservedArrays(state, true)) return true;
+      state.composition.config = previousConfig;
+      state.composition.expectedKeys = previousExpectedKeys;
+      if (nextConfig.onRuntimeFailure) {
+        state.failureListeners.delete(nextConfig.onRuntimeFailure);
+      }
+      if (previousConfig.onRuntimeFailure) {
+        state.failureListeners.add(previousConfig.onRuntimeFailure);
+      }
+      return false;
+    },
+    expectedKeys() {
+      if (disposed || state.composition?.owner !== owner) return null;
+      const keys = state.composition.expectedKeys;
+      return keys ? [...keys] : null;
+    },
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      if (state.composition?.owner !== owner) return;
+      const activeConfig = state.composition.config;
+      state.composition = null;
+      if (activeConfig.onRuntimeFailure) {
+        state.failureListeners.delete(activeConfig.onRuntimeFailure);
+      }
+      if (!reconcileObservedArrays(state)) {
+        markCleanupFailure(hook);
+        activeConfig.onRuntimeFailure?.();
+        return;
+      }
+      if (ownedQamTabs(hook).length === 0 && !releaseRenderAdapter(hook)) {
+        markCleanupFailure(hook);
+        activeConfig.onRuntimeFailure?.();
+      }
+    },
+  };
 }
 
 function canReconcileTabs(
@@ -540,8 +812,8 @@ function canReconcileTabs(
   if (reconcilesTabsExactly(hook, desiredTabs)) return true;
   const current = snapshotTabRegistry(hook.tabs);
   const desired = snapshotTabRegistry(desiredTabs);
-  const currentBase = current.filter((entry) => entry.id !== PDC_QAM_TAB_ID);
-  const desiredBase = desired.filter((entry) => entry.id !== PDC_QAM_TAB_ID);
+  const currentBase = current.filter((entry) => entry.owner !== PDC_QAM_TAB_OWNER);
+  const desiredBase = desired.filter((entry) => entry.owner !== PDC_QAM_TAB_OWNER);
   if (
     !uniqueRegistryIds(current)
     || !uniqueRegistryIds(desired)
@@ -645,17 +917,25 @@ function reconcilesTabsExactly(
     ));
 }
 
-function removeOwnedQamTabs(hook: DeckyTabsHook): boolean {
-  const matching = matchingQamTabs(hook);
+function removeOwnedQamTab(hook: DeckyTabsHook, id: number): boolean {
+  const matching = matchingQamTabs(hook, id);
   if (matching.some((tab) => !ownsQamTab(tab))) return false;
   if (matching.length > 0) {
     const registrySnapshot = snapshotTabRegistry(hook.tabs);
-    const remaining = hook.tabs.filter((tab) => tab.id !== PDC_QAM_TAB_ID);
+    const remaining = hook.tabs.filter((tab) => tab.id !== id);
     const remainingSnapshot = snapshotTabRegistry(remaining);
     if (!canReconcileTabs(hook, remaining)) return false;
     if (!matchesHookRegistry(hook, registrySnapshot)) return false;
-    hook.removeById(PDC_QAM_TAB_ID);
-    return matchesHookRegistry(hook, remainingSnapshot) && releaseRenderAdapter(hook);
+    hook.removeById(id);
+    if (!matchesHookRegistry(hook, remainingSnapshot)) return false;
+  }
+  return ownedQamTabs(hook).length > 0 || releaseRenderAdapter(hook);
+}
+
+function removeAllOwnedQamTabs(hook: DeckyTabsHook): boolean {
+  const ids = ownedQamTabs(hook).map((tab) => tab.id);
+  for (const id of ids) {
+    if (!removeOwnedQamTab(hook, id)) return false;
   }
   return releaseRenderAdapter(hook);
 }
@@ -663,9 +943,10 @@ function removeOwnedQamTabs(hook: DeckyTabsHook): boolean {
 function cleanupFailedRegistration(
   hook: DeckyTabsHook,
   previousTabs: TabRegistryEntry[],
+  id: number,
 ): boolean {
   try {
-    const cleaned = removeOwnedQamTabs(hook);
+    const cleaned = removeOwnedQamTab(hook, id);
     return !cleaned || !matchesHookRegistry(hook, previousTabs);
   } catch {
     return true;
@@ -721,12 +1002,12 @@ export function cleanupOwnedQuickAccessTabs(host: unknown = window): boolean {
     }
     hook = tabsHookOf(host);
     if (!hook) return false;
-    if (!matchingQamTabs(hook).some(ownsQamTab)) {
+    if (!ownedQamTabs(hook).length) {
       const restartRequired = !releaseRenderAdapter(hook);
       if (restartRequired) markCleanupFailure(hook);
       return restartRequired;
     }
-    const restartRequired = !removeOwnedQamTabs(hook);
+    const restartRequired = !removeAllOwnedQamTabs(hook);
     if (restartRequired) markCleanupFailure(hook);
     return restartRequired;
   } catch {
@@ -736,7 +1017,18 @@ export function cleanupOwnedQuickAccessTabs(host: unknown = window): boolean {
   }
 }
 
-export function registerQuickAccessTab(
+export function occupiedQuickAccessTabIds(host: unknown = window): ReadonlySet<number> {
+  const registry = tabRegistryOf(host);
+  if (!registry) return new Set<number>();
+  return new Set(
+    registry
+      .filter((tab) => !ownsQamTab(tab))
+      .map((tab) => tab.id),
+  );
+}
+
+export function registerOwnedQuickAccessTab(
+  id: number,
   view: QuickAccessTabView,
   host: unknown = window,
   onRuntimeFailure?: () => void,
@@ -746,8 +1038,8 @@ export function registerQuickAccessTab(
   try {
     hook = tabsHookOf(host);
     if (!hook) return unavailableQamTab("hook_unavailable");
-    registryMutationAttempted = matchingQamTabs(hook).some(ownsQamTab);
-    if (!removeOwnedQamTabs(hook)) {
+    registryMutationAttempted = matchingQamTabs(hook, id).some(ownsQamTab);
+    if (!removeOwnedQamTab(hook, id)) {
       return unavailableAfterMutation(
         "cleanup_failed",
         hook,
@@ -759,7 +1051,7 @@ export function registerQuickAccessTab(
 
     const tab: DeckyQuickAccessTab = {
       ...view,
-      id: PDC_QAM_TAB_ID,
+      id,
       __pdcOwner: PDC_QAM_TAB_OWNER,
     };
     const expectedTabs = [...previousTabs, tab];
@@ -789,21 +1081,21 @@ export function registerQuickAccessTab(
       return unavailableAfterMutation(
         "add_failed",
         hook,
-        cleanupFailedRegistration(hook, previousSnapshot),
+        cleanupFailedRegistration(hook, previousSnapshot, id),
       );
     }
     if (activeAdapter?.failure) {
       return unavailableAfterMutation(
         "add_failed",
         hook,
-        cleanupFailedRegistration(hook, previousSnapshot),
+        cleanupFailedRegistration(hook, previousSnapshot, id),
       );
     }
     if (!matchesHookRegistry(hook, expectedSnapshot)) {
       return unavailableAfterMutation(
         "registry_mismatch",
         hook,
-        cleanupFailedRegistration(hook, previousSnapshot),
+        cleanupFailedRegistration(hook, previousSnapshot, id),
       );
     }
     lastQamTabReason = "registered";
@@ -822,7 +1114,7 @@ export function registerQuickAccessTab(
         try {
           if (!registeredHook.tabs.includes(tab)) {
             if (
-              !matchingQamTabs(registeredHook).some(ownsQamTab)
+              !matchingQamTabs(registeredHook, id).some(ownsQamTab)
               && !releaseRenderAdapter(registeredHook)
             ) {
               markCleanupFailure(registeredHook);
@@ -831,9 +1123,9 @@ export function registerQuickAccessTab(
             return;
           }
           if (
-            tab.id !== PDC_QAM_TAB_ID
+            tab.id !== id
             || !ownsQamTab(tab)
-            || !removeOwnedQamTabs(registeredHook)
+            || !removeOwnedQamTab(registeredHook, id)
           ) {
             markCleanupFailure(registeredHook);
           }
@@ -850,6 +1142,14 @@ export function registerQuickAccessTab(
     if (hook && registryMutationAttempted) markCleanupFailure(hook);
     return unavailableQamTab("unexpected_error", registryMutationAttempted);
   }
+}
+
+export function registerQuickAccessTab(
+  view: QuickAccessTabView,
+  host: unknown = window,
+  onRuntimeFailure?: () => void,
+): QuickAccessTabRegistration {
+  return registerOwnedQuickAccessTab(PDC_QAM_TAB_ID, view, host, onRuntimeFailure);
 }
 
 type PluginListEntry = string | { name?: string; version?: string };

@@ -94,7 +94,7 @@ const ViewEditorBody: FC<{ viewId: string; closeModal?: () => void }> = ({ viewI
           return (
             <Fragment key={cat}>
               <div style={{ display: "flex", alignItems: "center", gap: theme.space.xs, marginTop: theme.space.xs, color: theme.color.textMuted }}>
-                {meta.icon}
+                {meta.icon(16)}
                 <span style={{ fontSize: theme.font.caption }}>{t(meta.labelKey)}</span>
               </div>
               {avail.map((id) => (

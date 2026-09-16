@@ -1,18 +1,12 @@
-// Pure layout logic for the customization feature (tab + block reordering and
-// hiding). No React, no localStorage here — the store owns persistence, the
-// editor owns the UI. Kept pure so the forward/backward-compat rules are
-// unit-testable.
-
-/** Order + visibility preference for one list (the tabs, or one section's blocks). */
 export interface ListPref {
   /** Explicit id order. Ids not in `defaults` are ignored; missing defaults append. */
   order: string[];
-  /** Ids the user chose to hide. */
   hidden: string[];
 }
 
-/** The whole saved layout: tab prefs + per-section block prefs. */
 export interface Layout {
+  showHome: boolean;
+  showDeviceHeader: boolean;
   tabs: ListPref;
   blocks: Record<string, ListPref>;
   /**
@@ -22,6 +16,14 @@ export interface Layout {
    */
   subitems: Record<string, string[]>;
 }
+
+export const createDefaultLayout = (): Layout => ({
+  showHome: true,
+  showDeviceHeader: true,
+  tabs: { order: [], hidden: [] },
+  blocks: {},
+  subitems: {},
+});
 
 /**
  * Resolve the full ordered id list from a stored order against the current
@@ -59,7 +61,6 @@ export function visibleIds(
   return orderIds(defaults, pref?.order).filter((id) => pin.has(id) || !hidden.has(id));
 }
 
-/** Immutably swap `id` one step up (dir -1) or down (dir +1). No-op at edges. */
 export function move(list: string[], id: string, dir: -1 | 1): string[] {
   const i = list.indexOf(id);
   if (i < 0) return list;
@@ -70,12 +71,10 @@ export function move(list: string[], id: string, dir: -1 | 1): string[] {
   return copy;
 }
 
-/** Immutably add `id` if absent, remove it if present. */
 export function toggle(set: string[], id: string): string[] {
   return set.includes(id) ? set.filter((x) => x !== id) : [...set, id];
 }
 
-/** Idempotent add (never removes), as opposed to toggle. */
 export function ensure(set: string[], id: string): string[] {
   return set.includes(id) ? set : [...set, id];
 }
@@ -85,7 +84,6 @@ export function pinnedLast(ids: string[], pinned: string): string[] {
   return ids.includes(pinned) ? [...ids.filter((x) => x !== pinned), pinned] : ids;
 }
 
-/** Whether a fixed sub-item within a block is hidden by the user's prefs. */
 export function subitemHidden(
   subitems: Record<string, string[]>,
   group: string,
@@ -138,9 +136,9 @@ function migrateMovedGpuBlock(blocks: Record<string, ListPref>): Record<string, 
  */
 export function coerceLayout(parsed: unknown): Layout {
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    return { tabs: { order: [], hidden: [] }, blocks: {}, subitems: {} };
+    return createDefaultLayout();
   }
-  const p = parsed as { tabs?: unknown; blocks?: unknown; subitems?: unknown };
+  const p = parsed as { showHome?: unknown; showDeviceHeader?: unknown; tabs?: unknown; blocks?: unknown; subitems?: unknown };
   const asRecordOf = <T>(v: unknown, mapVal: (x: unknown) => T): Record<string, T> => {
     const out: Record<string, T> = {};
     if (v && typeof v === "object" && !Array.isArray(v)) {
@@ -150,6 +148,8 @@ export function coerceLayout(parsed: unknown): Layout {
   };
   const blocks = asRecordOf(p.blocks, asPref);
   return {
+    showHome: p.showHome !== false,
+    showDeviceHeader: p.showDeviceHeader !== false,
     tabs: asPref(p.tabs),
     blocks: migrateMovedGpuBlock(blocks),
     subitems: asRecordOf(p.subitems, strArray),

@@ -5,41 +5,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const qamState = vi.hoisted(() => ({
   snapshot: {
-    enabled: true,
     initialized: true,
-    appliedEnabled: true,
-    registered: true,
+    applied: true,
     restartRequired: false,
+    reason: "ready",
+    activeTokens: ["pdc:home"],
+    inventory: [],
   },
-  setEnabled: vi.fn(),
 }));
 
 const restartLoader = vi.hoisted(() => vi.fn(async () => {}));
 const closeSideMenus = vi.hoisted(() => vi.fn());
+const openQamCustomize = vi.hoisted(() => vi.fn());
 
 vi.mock("@decky/ui", () => ({
   Navigation: { CloseSideMenus: closeSideMenus },
-  ToggleField: ({
-    label,
-    description,
-    checked,
-    onChange,
-  }: {
-    label: ReactNode;
-    description: ReactNode;
-    checked: boolean;
-    onChange(next: boolean): void;
-  }) => (
-    <label>
-      {label}
-      <span>{description}</span>
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(event) => onChange(event.currentTarget.checked)}
-      />
-    </label>
-  ),
   ButtonItem: ({ children, description, onClick }: {
     children: ReactNode;
     description: ReactNode;
@@ -49,20 +29,20 @@ vi.mock("@decky/ui", () => ({
 
 vi.mock("../api", () => ({ restartLoader }));
 
-vi.mock("../system/qamShortcut", () => ({
-  getQamShortcutSnapshot: () => qamState.snapshot,
-  setQamShortcutEnabled: qamState.setEnabled,
-  subscribeQamShortcut: () => () => {},
+vi.mock("../qam/runtime", () => ({
+  getQamRuntimeSnapshot: () => qamState.snapshot,
+  subscribeQamRuntime: () => () => {},
 }));
+vi.mock("./QamCustomizeModal", () => ({ openQamCustomizeModal: openQamCustomize }));
 
 vi.mock("../i18n", () => ({
   useI18n: () => ({
     t: (key: string) => ({
-      "settings.qamShortcut": "Acceso directo en el QAM",
-      "settings.qamShortcut.desc": "Añade un icono opcional junto a Decky. Panel de Control siempre sigue disponible dentro de Decky.",
-      "settings.qamShortcut.restart": "Reinicia Decky para aplicar el cambio.",
-      "settings.qamShortcut.restartButton": "Reiniciar Decky",
-      "settings.qamShortcut.fallback": "No se ha podido añadir el icono directo. Panel de Control sigue disponible dentro de Decky.",
+      "settings.qamShortcut": "Configurar el QAM",
+      "settings.qamShortcut.desc": "Elige qué entradas de Steam mostrar y qué vistas de Panel anclar.",
+      "customize.qam.restart": "Recarga Decky para aplicar los cambios guardados.",
+      "customize.qam.restartButton": "Recargar Decky",
+      "customize.qam.unavailable": "No se pudo modificar el QAM. Panel sigue disponible dentro de Decky.",
     })[key] ?? key,
   }),
 }));
@@ -72,13 +52,12 @@ import { QamShortcutSetting } from "./QamShortcutSetting";
 describe("QamShortcutSetting", () => {
   beforeEach(() => {
     Object.assign(qamState.snapshot, {
-      enabled: true,
       initialized: true,
-      appliedEnabled: true,
-      registered: true,
+      applied: true,
       restartRequired: false,
+      reason: "ready",
     });
-    qamState.setEnabled.mockClear();
+    openQamCustomize.mockClear();
     restartLoader.mockClear();
     closeSideMenus.mockClear();
   });
@@ -88,27 +67,21 @@ describe("QamShortcutSetting", () => {
     vi.useRealTimers();
   });
 
-  it("shows the enabled-by-default shortcut state", () => {
+  it("opens the dedicated QAM editor instead of exposing a legacy toggle", () => {
     render(<QamShortcutSetting />);
 
-    expect((screen.getByRole("checkbox") as HTMLInputElement).checked).toBe(true);
-    expect(screen.queryByText("Reiniciar Decky")).toBeNull();
-  });
+    fireEvent.click(screen.getByText("Configurar el QAM"));
 
-  it("persists the user's new preference", () => {
-    render(<QamShortcutSetting />);
-
-    fireEvent.click(screen.getByRole("checkbox"));
-
-    expect(qamState.setEnabled).toHaveBeenCalledWith(false);
+    expect(openQamCustomize).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("checkbox")).toBeNull();
   });
 
   it("offers an explicit Decky restart while the applied state differs", () => {
     vi.useFakeTimers();
-    qamState.snapshot.restartRequired = true;
+    Object.assign(qamState.snapshot, { applied: false, restartRequired: true });
     render(<QamShortcutSetting />);
 
-    fireEvent.click(screen.getByText("Reiniciar Decky"));
+    fireEvent.click(screen.getByText("Recargar Decky"));
 
     expect(closeSideMenus).toHaveBeenCalledOnce();
     expect(restartLoader).not.toHaveBeenCalled();
@@ -117,11 +90,11 @@ describe("QamShortcutSetting", () => {
   });
 
   it("reports the standard Decky fallback when the private route is unavailable", () => {
-    qamState.snapshot.registered = false;
+    qamState.snapshot.applied = false;
     render(<QamShortcutSetting />);
 
     expect(screen.getByText(
-      "No se ha podido añadir el icono directo. Panel de Control sigue disponible dentro de Decky.",
+      "No se pudo modificar el QAM. Panel sigue disponible dentro de Decky.",
     )).toBeTruthy();
   });
 });
