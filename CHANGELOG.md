@@ -5,9 +5,25 @@
 ## [0.52.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.52.0...panel-de-control-v0.52.1) (2026-09-17)
 
 
-### Bug Fixes
+### Español
 
-* cap Steam Deck PPT rails to active limit ([#677](https://github.com/Hooandee/panel-de-control/issues/677)) ([5838147](https://github.com/Hooandee/panel-de-control/commit/583814746dd2bc8d6533a6d1043e0702b038fe8c))
+* **Steam Deck:** Corrige una regresión del soporte para overclock que podía mostrar y solicitar límites PPT superiores a 15 W en una Deck sin modificar. Las Deck originales vuelven a respetar su techo de 15 W en todos los raíles y en el dial; las unidades overclockeadas conservan el límite detectado por la máquina. ([#677](https://github.com/Hooandee/panel-de-control/pull/677))
+
+### English
+
+* **Steam Deck:** Fixes a regression in overclock support that could display and request PPT limits above 15 W on an unmodified Deck. Stock Decks once again respect their 15 W ceiling across all rails and on the dial, while overclocked units retain the limit detected from the device. ([#677](https://github.com/Hooandee/panel-de-control/pull/677))
+
+### Italiano
+
+* **Steam Deck:** Corregge una regressione nel supporto all'overclock che poteva mostrare e richiedere limiti PPT superiori a 15 W su una Deck non modificata. Le Deck originali tornano a rispettare il limite di 15 W su tutti i rail e sul quadrante, mentre le unità overcloccate mantengono il limite rilevato dal dispositivo. ([#677](https://github.com/Hooandee/panel-de-control/pull/677))
+
+### Deutsch
+
+* **Steam Deck:** Behebt eine Regression in der Overclock-Unterstützung, durch die auf einer unveränderten Deck PPT-Limits über 15 W angezeigt und angefordert werden konnten. Unveränderte Decks halten wieder die 15-W-Obergrenze für alle Rails und im Einstellrad ein; übertaktete Geräte behalten das vom Gerät erkannte Limit. ([#677](https://github.com/Hooandee/panel-de-control/pull/677))
+
+### Português (Brasil)
+
+* **Steam Deck:** Corrige uma regressão no suporte a overclock que podia exibir e solicitar limites PPT acima de 15 W em um Deck sem modificações. Decks originais voltam a respeitar o teto de 15 W em todos os trilhos e no mostrador, enquanto unidades com overclock mantêm o limite detectado pelo dispositivo. ([#677](https://github.com/Hooandee/panel-de-control/pull/677))
 
 ## [0.52.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.51.0...panel-de-control-v0.52.0) (2026-09-16)
 
