@@ -40,6 +40,7 @@ class SteamDeckHwmonBackend(TDPBackend):
     name = "steamdeck-hwmon"
     primary_rail = "pl2"
     low_battery_hold_strategy = "primary"
+    cap_boost_to_active = True
 
     def __init__(self, fallback: TdpLimits, device_key: str, root: str = "/") -> None:
         self._fallback = fallback
