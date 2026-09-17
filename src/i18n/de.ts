@@ -1143,6 +1143,7 @@ export const de: Record<string, string> = {
   "report.section.kind": "Was möchtest du melden?",
   "report.kind.bug": "Ein Problem",
   "report.kind.feature": "Einen Wunsch oder eine Idee",
+  "report.kind.change": "Ändern",
   "report.section.what": "Was funktioniert nicht?",
   "report.section.what.feature": "Welchen Bereich betrifft es?",
   "report.cat.tdp": "TDP-Einstellung",

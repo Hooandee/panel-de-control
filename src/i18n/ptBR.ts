@@ -1143,6 +1143,7 @@ export const ptBR: Record<string, string> = {
   "report.section.kind": "O que você gostaria de enviar?",
   "report.kind.bug": "Um problema",
   "report.kind.feature": "Um pedido ou uma ideia",
+  "report.kind.change": "Alterar",
   "report.section.what": "O que está errado?",
   "report.section.what.feature": "Sobre qual área é?",
   "report.cat.tdp": "Ajuste de TDP",

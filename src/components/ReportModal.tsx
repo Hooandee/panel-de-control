@@ -1,5 +1,13 @@
-import { FC, useEffect, useState } from "react";
-import { ModalRoot, showModal, Focusable, DialogButton, TextField } from "@decky/ui";
+import { FC, ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  ModalRoot,
+  showModal,
+  Focusable,
+  DialogButton,
+  TextField,
+  getFocusNavController,
+} from "@decky/ui";
+import { LuBug, LuLightbulb } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
@@ -20,20 +28,74 @@ import { getQamDocument } from "../qamDocument";
 
 type Phase = "form" | "sending" | "done" | "error";
 
+const ReportKindCard: FC<{
+  label: string;
+  icon: ReactNode;
+  selected: boolean;
+  color: string;
+  tint: string;
+  preferredFocus?: boolean;
+  onSelect: () => void;
+}> = ({ label, icon, selected, color, tint, preferredFocus, onSelect }) => {
+  const [focused, setFocused] = useState(false);
+  return (
+    <Focusable
+      role="radio"
+      aria-checked={selected}
+      {...(preferredFocus ? { preferredFocus: true } : {})}
+      onActivate={onSelect}
+      onClick={onSelect}
+      onGamepadFocus={() => setFocused(true)}
+      onGamepadBlur={() => setFocused(false)}
+      noFocusRing
+      style={{
+        ...theme.card,
+        flex: "1 1 0",
+        minWidth: 0,
+        minHeight: 150,
+        padding: theme.space.lg,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: theme.space.md,
+        textAlign: "center",
+        color: theme.color.textPrimary,
+        background: focused || selected ? tint : theme.color.surfaceRaised,
+        boxShadow: `inset 0 0 0 ${focused ? 2 : 1}px ${focused || selected ? color : theme.color.hairline}`,
+      }}
+    >
+      <div
+        aria-hidden="true"
+        style={{
+          width: 56,
+          height: 56,
+          borderRadius: theme.radius.md,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color,
+          background: tint,
+          boxShadow: `inset 0 0 0 1px ${color}55`,
+        }}
+      >
+        {icon}
+      </div>
+      <span style={{ fontSize: 20, fontWeight: 700, lineHeight: 1.15 }}>{label}</span>
+    </Focusable>
+  );
+};
+
 const SelectionChip: FC<{
   label: string;
   on: boolean;
   onClick: () => void;
-  radio?: boolean;
 }> = ({
   label,
   on,
   onClick,
-  radio = false,
 }) => (
   <Focusable
-    role={radio ? "radio" : undefined}
-    aria-checked={radio ? on : undefined}
     onActivate={onClick}
     onClick={onClick}
     noFocusRing
@@ -75,18 +137,21 @@ const SelectionChip: FC<{
 const ReportBody: FC<{ closeModal?: () => void }> = ({ closeModal }) => {
   const { t } = useI18n();
   const [device, setDevice] = useState<DeviceInfo | null>(null);
-  const [kind, setKind] = useState<ReportKind>("bug");
+  const [kind, setKind] = useState<ReportKind | null>(null);
+  const [choosingKind, setChoosingKind] = useState(true);
   const [selected, setSelected] = useState<ReportCategory[]>([]);
   const [text, setText] = useState("");
   const [phase, setPhase] = useState<Phase>("form");
   const [result, setResult] = useState<ReportResult | null>(null);
   const [copied, setCopied] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     getDevice().then(setDevice).catch(() => {});
   }, []);
 
   const submit = async () => {
+    if (kind === null) return;
     setPhase("sending");
     const launchContext = selected.includes("launch")
       ? await launchReportContext().catch(() => ({}))
@@ -122,6 +187,7 @@ const ReportBody: FC<{ closeModal?: () => void }> = ({ closeModal }) => {
 
   const wrap = (children: React.ReactNode) => (
     <div
+      ref={rootRef}
       style={{
         display: "flex",
         flexDirection: "column",
@@ -141,6 +207,26 @@ const ReportBody: FC<{ closeModal?: () => void }> = ({ closeModal }) => {
     </div>
   );
   const copyKey = (key: string) => kind === "feature" ? `${key}.feature` : key;
+  const chooseKind = (next: ReportKind) => {
+    setKind(next);
+    setChoosingKind(false);
+  };
+
+  useLayoutEffect(() => {
+    if (!choosingKind || kind === null) return;
+    const target = rootRef.current?.querySelector<HTMLElement>(
+      '[role="radio"][aria-checked="true"]',
+    );
+    if (!target) return;
+    try {
+      const controller = getFocusNavController();
+      if (typeof controller?.FocusElement === "function") {
+        controller.FocusElement(target);
+        return;
+      }
+    } catch {}
+    target.focus({ preventScroll: true });
+  }, [choosingKind, kind]);
 
   if (phase === "sending") {
     return wrap(
@@ -198,29 +284,74 @@ const ReportBody: FC<{ closeModal?: () => void }> = ({ closeModal }) => {
     );
   }
 
-  return wrap(
-    <>
-      <div style={{ fontSize: theme.font.body, color: theme.color.textMuted }}>
-        {t(copyKey("report.intro"))}
-      </div>
-
-      <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
-        <div style={theme.sectionLabel}>{t("report.section.kind")}</div>
-        <div
+  if (choosingKind || kind === null) {
+    return wrap(
+      <>
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontSize: theme.font.value, fontWeight: 700, color: theme.color.textPrimary }}>
+            {t("report.title")}
+          </div>
+          <div style={{ marginTop: theme.space.xs, fontSize: theme.font.body, color: theme.color.textMuted }}>
+            {t("report.section.kind")}
+          </div>
+        </div>
+        <Focusable
           role="radiogroup"
           aria-label={t("report.section.kind")}
-          style={{ display: "flex", gap: theme.space.sm }}
+          flow-children="row"
+          noFocusRing
+          style={{ display: "flex", gap: theme.space.md, width: "100%" }}
         >
-          {(["bug", "feature"] as const).map((id) => (
-            <SelectionChip
-              key={id}
-              label={t(`report.kind.${id}`)}
-              on={kind === id}
-              onClick={() => setKind(id)}
-              radio
-            />
-          ))}
+          <ReportKindCard
+            label={t("report.kind.bug")}
+            icon={<LuBug size={36} />}
+            selected={kind === "bug"}
+            color={theme.color.danger}
+            tint="rgba(224,90,90,0.12)"
+            preferredFocus={kind === null}
+            onSelect={() => chooseKind("bug")}
+          />
+          <ReportKindCard
+            label={t("report.kind.feature")}
+            icon={<LuLightbulb size={36} />}
+            selected={kind === "feature"}
+            color={theme.color.accent}
+            tint={`rgba(${theme.color.accentRgb},0.12)`}
+            onSelect={() => chooseKind("feature")}
+          />
+        </Focusable>
+      </>,
+    );
+  }
+
+  return wrap(
+    <>
+      <div
+        style={{
+          ...theme.card,
+          padding: `${theme.space.sm}px ${theme.space.md}px`,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: theme.space.md,
+        }}
+      >
+        <div style={{ display: "flex", flex: "1 1 auto", minWidth: 0, alignItems: "center", gap: theme.space.sm, color: theme.color.textPrimary }}>
+          {kind === "bug"
+            ? <LuBug size={22} color={theme.color.danger} aria-hidden="true" />
+            : <LuLightbulb size={22} color={theme.color.accent} aria-hidden="true" />}
+          <span style={{ fontSize: theme.font.body, fontWeight: 700 }}>{t(`report.kind.${kind}`)}</span>
         </div>
+        <DialogButton
+          style={{ width: 112, minWidth: 112, flex: "0 0 auto" }}
+          onClick={() => setChoosingKind(true)}
+        >
+          {t("report.kind.change")}
+        </DialogButton>
+      </div>
+
+      <div style={{ fontSize: theme.font.body, color: theme.color.textMuted }}>
+        {t(copyKey("report.intro"))}
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>

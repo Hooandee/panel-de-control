@@ -30,4 +30,14 @@ describe("report translations", () => {
     expect(translateForLang(lang, "report.kind.feature")).toBe(label);
     expect(translateForLang(lang, "report.intro.feature")).toContain(explanation);
   });
+
+  it.each([
+    ["es", "Cambiar"],
+    ["en", "Change"],
+    ["it", "Cambia"],
+    ["de", "Ändern"],
+    ["pt-BR", "Alterar"],
+  ] as const)("offers a translated report-type change action in %s", (lang, label) => {
+    expect(translateForLang(lang, "report.kind.change")).toBe(label);
+  });
 });
