@@ -7,6 +7,7 @@ import { registerBlock } from "../customize/blocks";
 import { useDesktopState } from "../desktop/useDesktop";
 import { desktopUiActive } from "../desktop/presentation";
 import { DesktopPowerCard, DesktopPowerRecoveryCard } from "../components/DesktopPowerCard";
+import { SteamPerformanceCard } from "../components/SteamPerformanceCard";
 
 const TdpCoreBlock: FC = () => {
   const c = usePotencia();
@@ -46,6 +47,11 @@ const AutoTdpBlock: FC = () => {
 export function registerPowerBlocks(): void {
   registerBlock("tdp", { sectionId: "power", Component: TdpCoreBlock });
   registerBlock("desktopPower", { sectionId: "power", Component: DesktopPowerCard });
+  registerBlock("steamPerformance", {
+    sectionId: "power",
+    providerSectionId: null,
+    Component: SteamPerformanceCard,
+  });
   // Availability = hardware capability, not the module on/off (block self-gates).
   registerBlock("autoTdp", {
     sectionId: "power",

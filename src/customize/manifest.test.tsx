@@ -5,6 +5,7 @@ import {
   blocksForSection,
   CATEGORY_IDS,
   customizationBlocks,
+  pickableBlocksForSection,
   PINNED_TAB,
   subitemsFor,
   TABS,
@@ -38,18 +39,32 @@ describe("theme section registration", () => {
 });
 
 describe("desktop-only customization blocks", () => {
-  it("offers CPU and graphics only while desktop mode is active", () => {
+  it("offers native Steam performance controls in both device modes", () => {
     expect(blocksForSection("power", false).map((block) => block.id)).not.toContain("desktopPower");
-    expect(blocksForSection("power", true).map((block) => block.id)).toEqual(["desktopPower"]);
+    expect(blocksForSection("power", true).map((block) => block.id)).toEqual([
+      "desktopPower",
+      "steamPerformance",
+    ]);
   });
 
-  it("does not change the handheld default order", () => {
-    expect(blocksForSection("power", false).map((block) => block.id)).toEqual(["autoTdp"]);
+  it("places Steam's controls before Auto-TDP in the handheld default order", () => {
+    expect(blocksForSection("power", false).map((block) => block.id)).toEqual([
+      "steamPerformance",
+      "autoTdp",
+    ]);
+  });
+
+  it("allows the independent Steam block in custom views", () => {
+    expect(pickableBlocksForSection("power", false, null).map((block) => block.id)).toEqual([
+      "tdp",
+      "steamPerformance",
+      "autoTdp",
+    ]);
   });
 
   it("keeps the desktop core visible with a stale handheld presence cache", () => {
     expect(customizationBlocks("power", true, ["autoTdp"]).map((block) => block.id))
-      .toEqual(["desktopPower"]);
+      .toEqual(["desktopPower", "steamPerformance"]);
   });
 });
 

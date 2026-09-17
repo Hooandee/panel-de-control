@@ -1,6 +1,11 @@
 import { FC, ReactNode, useMemo } from "react";
 
-import { Block, getBlockDef, BLOCK_GAP } from "../customize/blocks";
+import {
+  Block,
+  getBlockDef,
+  getBlockProviderSectionId,
+  BLOCK_GAP,
+} from "../customize/blocks";
 import { providersFor } from "../customize/views";
 import { useViews } from "../customize/viewStore";
 import { useModules } from "../customize/modules";
@@ -11,9 +16,6 @@ import { usePotencia } from "../tdp/potenciaContext";
 import { TdpMonitorNotice } from "../components/TdpMonitorNotice";
 import { SECTION_PROVIDERS } from "./providerMounts";
 
-// Keeps a power-only view (GPU clock / Auto-TDP, no core tdp block) from rendering
-// blank in monitor mode. Only mounted when the view has power blocks, so its provider
-// is present. Skipped when TDP is unsupported (nothing to reactivate).
 const PowerMonitorFallback: FC = () => {
   const { monitorOnly, onReactivate, tdp } = usePotencia();
   if (!tdp?.supported || !monitorOnly) return null;
@@ -37,14 +39,13 @@ export const CustomView: FC<{ viewId: string }> = ({ viewId }) => {
   );
 
   const sections = useMemo(
-    () => providersFor(blocks, (id) => getBlockDef(id)?.sectionId),
+    () => providersFor(blocks, getBlockProviderSectionId),
     [blocks],
   );
 
-  // Power blocks but no core "tdp" block (which carries the notice itself) → add the
-  // fallback so a monitor-mode view isn't blank.
   const needsPowerFallback =
-    blocks.some((id) => getBlockDef(id)?.sectionId === POWER_TAB) && !blocks.includes("tdp");
+    blocks.some((id) => getBlockProviderSectionId(id) === POWER_TAB)
+    && !blocks.includes("tdp");
 
   const content: ReactNode = (
     <div style={{ display: "flex", flexDirection: "column", gap: BLOCK_GAP }}>

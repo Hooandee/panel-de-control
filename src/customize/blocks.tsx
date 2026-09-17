@@ -12,6 +12,7 @@ export const BLOCK_GAP = theme.space.card;
 export interface BlockDef {
   Component: FC;
   sectionId: string;
+  providerSectionId?: string | null;
   useAvailable?: () => boolean;
 }
 
@@ -23,6 +24,12 @@ export function registerBlock(id: string, def: BlockDef): void {
 
 export function getBlockDef(id: string): BlockDef | undefined {
   return REGISTRY[id];
+}
+
+export function getBlockProviderSectionId(id: string): string | undefined {
+  const def = getBlockDef(id);
+  if (!def || def.providerSectionId === null) return undefined;
+  return def.providerSectionId ?? def.sectionId;
 }
 
 export const Block: FC<{ id: string }> = ({ id }) => {
