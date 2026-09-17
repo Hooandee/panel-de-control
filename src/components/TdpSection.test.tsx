@@ -173,6 +173,41 @@ describe("TdpSection Steam Deck PPT arc", () => {
     });
   });
 
+  it.each([false, true])(
+    "uses the stock product ceiling instead of the raw 30 W Deck ABI in monitorOnly=%s",
+    (monitorOnly) => {
+      renderTdpSection({
+        ...deckState,
+        level_limits: {
+          pl2: { min: 3, max: 15 },
+          pl3: { min: 3, max: 15 },
+        },
+      }, { monitorOnly });
+
+      expect(captured.arc).toMatchObject({ visualMax: 15 });
+    },
+  );
+
+  it("uses the detected 25 W product ceiling for an overclocked Deck", () => {
+    renderTdpSection({
+      ...deckState,
+      limits: { min: 3, default: 12, max: 25, max_ac: 25 },
+      level_limits: {
+        pl2: { min: 3, max: 25 },
+        pl3: { min: 3, max: 25 },
+      },
+      overclock: {
+        detected: true,
+        max_w: 25,
+        source: "live",
+        status: "overclocked",
+        reason: null,
+      },
+    });
+
+    expect(captured.arc).toMatchObject({ visualMax: 25 });
+  });
+
   it("offers three watts while keeping the physical minimum visible as information", () => {
     const state = {
       ...deckState,
