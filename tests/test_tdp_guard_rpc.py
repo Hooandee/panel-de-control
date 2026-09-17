@@ -1495,6 +1495,77 @@ def test_backend_can_cap_boost_rails_to_active_battery_max(plugin):
     }
 
 
+def _use_real_steamdeck_backend(plugin, root, slow, fast):
+    from device_profiles import DEVICE_TABLE
+    from tdp.steamdeck_hwmon import SteamDeckHwmonBackend
+
+    directory = root / "sys/class/hwmon/hwmon7"
+    directory.mkdir(parents=True)
+    values = {
+        "name": "amdgpu",
+        "power1_label": "slowPPT",
+        "power1_cap": slow * 1_000_000,
+        "power1_cap_min": 0,
+        "power1_cap_max": 29_000_000,
+        "power2_label": "fastPPT",
+        "power2_cap": fast * 1_000_000,
+        "power2_cap_min": 0,
+        "power2_cap_max": 30_000_000,
+    }
+    for name, value in values.items():
+        (directory / name).write_text(str(value))
+
+    plugin._device = next(
+        profile for profile in DEVICE_TABLE if profile.key == "steam_deck_lcd"
+    )
+    plugin._tdp_backend = SteamDeckHwmonBackend(
+        TdpLimits(3, 12, 15, 15),
+        "steam_deck_lcd",
+        root=str(root),
+    )
+    plugin._settings["steamdeck_ppt_previous"] = None
+    return directory
+
+
+@pytest.mark.parametrize(
+    ("slow_ppt", "fast_ppt", "requested", "expected_target", "ceiling"),
+    [
+        pytest.param(15, 15, (14, 17), (14, 15), 15, id="stock"),
+        pytest.param(25, 30, (25, 29), (25, 25), 25, id="overclocked"),
+    ],
+)
+def test_steamdeck_caps_every_product_rail_to_the_detected_ceiling(
+    plugin,
+    tmp_path,
+    slow_ppt,
+    fast_ppt,
+    requested,
+    expected_target,
+    ceiling,
+):
+    directory = _use_real_steamdeck_backend(plugin, tmp_path, slow_ppt, fast_ppt)
+    plugin._tdp_profiles.set_levels("global", requested[0], *requested)
+
+    command = plugin._capture_tdp_command("manual", on_ac=True)
+    result = plugin._execute_tdp_command(command)
+    state = plugin._tdp_state(plugin._observe_tdp_sync())
+
+    expected_limits = {
+        "pl2": {"min": 3, "max": ceiling},
+        "pl3": {"min": 3, "max": ceiling},
+    }
+    requested_levels = dict(zip(("pl2", "pl3"), requested))
+    target_levels = dict(zip(("pl2", "pl3"), expected_target))
+    assert command.safe_bounds == expected_limits
+    assert result.ok is True
+    assert plugin._tdp_targets.requested == requested_levels
+    assert plugin._tdp_targets.target == target_levels
+    assert state["level_limits"] == expected_limits
+    assert state["ppt"]["visual_max"] == 30
+    for cap_file, watts in zip(("power1_cap", "power2_cap"), expected_target):
+        assert (directory / cap_file).read_text().strip() == str(watts * 1_000_000)
+
+
 def test_confirmed_secondary_rail_floor_is_constrained_without_retry(plugin):
     plugin._tdp_backend._rail_floors = {"pl2": 15, "pl3": 20}
     plugin._tdp_backend.level_limits = lambda: {
