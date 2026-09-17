@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.52.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.52.0...panel-de-control-v0.52.1) (2026-09-17)
+
+
+### Bug Fixes
+
+* cap Steam Deck PPT rails to active limit ([#677](https://github.com/Hooandee/panel-de-control/issues/677)) ([5838147](https://github.com/Hooandee/panel-de-control/commit/583814746dd2bc8d6533a6d1043e0702b038fe8c))
+
 ## [0.52.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.51.0...panel-de-control-v0.52.0) (2026-09-16)
 
 
