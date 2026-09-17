@@ -1,11 +1,15 @@
-import type { FC, ReactNode } from "react";
+import type { FC } from "react";
 
-import type { SectionDef } from "./types";
+import type { SectionDef, SectionIcon } from "./types";
+import type { LearningTag } from "../learning/logic";
 
 export interface SectionMetadata {
   id: string;
   labelKey: string;
-  icon: ReactNode;
+  descriptionKey: string;
+  accent: string;
+  icon: SectionIcon;
+  learningTags?: readonly LearningTag[];
 }
 
 export function buildSections(

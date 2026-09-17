@@ -1,18 +1,15 @@
 import { FC, ReactNode } from "react";
+import type { LearningTag } from "../learning/logic";
 
-/**
- * A control-center section. The registry is an array of these; the navigator
- * (TabBar today, possibly a dropdown later) renders from the array and the body
- * mounts the active section's Component. Adding a section = one array entry.
- */
+export type SectionIcon = (size: number) => ReactNode;
+
 export interface SectionDef {
   id: string;
-  icon: ReactNode;
-  /** i18n key for the tab label. */
+  icon: SectionIcon;
   labelKey: string;
-  /** Direct label (custom views: the user-set name), used instead of labelKey. */
+  descriptionKey: string;
+  accent: string;
   label?: string;
-  /** Self-contained section body; owns its own state. */
+  learningTags?: readonly LearningTag[];
   Component: FC;
-  // fullScreen?: boolean — RESERVED for a future heavy editor (e.g. fan curves).
 }

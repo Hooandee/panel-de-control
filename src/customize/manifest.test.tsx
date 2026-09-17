@@ -22,6 +22,14 @@ describe("section block ownership", () => {
 });
 
 describe("theme section registration", () => {
+  it("gives every tab dashboard presentation metadata", () => {
+    for (const tab of TABS) {
+      expect(tab.descriptionKey).toBe(`nav.${tab.id}.desc`);
+      expect(tab.accent).toMatch(/^#[0-9a-f]{6}$/i);
+      expect(typeof tab.icon).toBe("function");
+    }
+  });
+
   it("keeps Themes customizable immediately before pinned Settings", () => {
     expect(TABS.slice(-2).map((tab) => tab.id)).toEqual(["themes", "settings"]);
     expect(CATEGORY_IDS).toContain("themes");

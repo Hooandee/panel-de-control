@@ -1,33 +1,50 @@
-import { useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { getDevice, type DeviceInfo } from "../api";
 
-let cache: DeviceInfo | null = null;
+interface DeviceSnapshot {
+  device: DeviceInfo | null;
+  failed: boolean;
+}
+
+let state: DeviceSnapshot = { device: null, failed: false };
 let started = false;
 const listeners = new Set<() => void>();
 
-function ensure(): void {
+function publish(next: DeviceSnapshot): void {
+  state = next;
+  listeners.forEach((listener) => listener());
+}
+
+export function ensureDevice(): void {
   if (started) return;
   started = true;
   getDevice()
-    .then((d) => {
-      cache = d;
-      listeners.forEach((l) => l());
-    })
+    .then((device) => publish({ device, failed: false }))
     .catch(() => {
+      publish({ device: null, failed: true });
       started = false;
     });
 }
 
-function subscribe(cb: () => void): () => void {
+export function subscribeDevice(cb: () => void): () => void {
   listeners.add(cb);
   return () => {
     listeners.delete(cb);
   };
 }
 
-const snapshot = (): DeviceInfo | null => cache;
+export function getDeviceSnapshot(): DeviceInfo | null {
+  return state.device;
+}
 
 export function useDevice(): DeviceInfo | null {
-  ensure();
-  return useSyncExternalStore(subscribe, snapshot, snapshot);
+  const device = useSyncExternalStore(subscribeDevice, getDeviceSnapshot, getDeviceSnapshot);
+  useEffect(ensureDevice, []);
+  return device;
+}
+
+export function useDeviceState(): DeviceSnapshot {
+  const snapshot = useSyncExternalStore(subscribeDevice, () => state, () => state);
+  useEffect(ensureDevice, []);
+  return snapshot;
 }

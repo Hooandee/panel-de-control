@@ -2,12 +2,6 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../api", () => ({
-  getUiPrefs: vi.fn(async () => ({})),
-  setUiPrefs: vi.fn(async () => true),
-}));
-
-import { setQamShortcutEnabled, setQamShortcutRuntime } from "../system/qamShortcut";
 import { StandardDeckyContent } from "./StandardDeckyContent";
 
 let intersectionCallback: IntersectionObserverCallback;
@@ -42,8 +36,6 @@ function showFallbackPanel(): void {
 
 describe("StandardDeckyContent", () => {
   beforeEach(() => {
-    setQamShortcutEnabled(true);
-    setQamShortcutRuntime(true, true);
     Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
     window.ResizeObserver = FakeResizeObserver as unknown as typeof ResizeObserver;
     window.IntersectionObserver = FakeIntersectionObserver as unknown as typeof IntersectionObserver;
@@ -54,21 +46,7 @@ describe("StandardDeckyContent", () => {
     vi.restoreAllMocks();
   });
 
-  it("keeps the full plugin available from the standard Decky entry when the shortcut is registered", () => {
-    render(
-      <StandardDeckyContent lifecycle={new AbortController().signal}>
-        <div data-testid="fallback-panel" />
-      </StandardDeckyContent>,
-    );
-
-    showFallbackPanel();
-    expect(screen.getByTestId("fallback-panel")).toBeTruthy();
-  });
-
-  it("shows the standard panel when the direct tab is disabled", () => {
-    setQamShortcutEnabled(false);
-    setQamShortcutRuntime(false, false);
-
+  it("keeps the full plugin available from the standard Decky entry", () => {
     render(
       <StandardDeckyContent lifecycle={new AbortController().signal}>
         <div data-testid="fallback-panel" />
@@ -82,7 +60,6 @@ describe("StandardDeckyContent", () => {
   it("shows the standard panel when visibility observers are unavailable", () => {
     window.ResizeObserver = undefined as unknown as typeof ResizeObserver;
     window.IntersectionObserver = undefined as unknown as typeof IntersectionObserver;
-    setQamShortcutRuntime(true, false);
 
     render(
       <StandardDeckyContent lifecycle={new AbortController().signal}>

@@ -3,9 +3,11 @@ import { describe, expect, it, vi } from "vitest";
 import {
   callLegacyPluginBackend,
   cleanupOwnedQuickAccessTabs,
+  configureQuickAccessTabComposition,
   PDC_QAM_TAB_ID,
   pluginInventory,
   quickAccessTabDiagnostics,
+  registerOwnedQuickAccessTab,
   registerQuickAccessTab,
   strictPluginInventory,
 } from "./deckyInternal";
@@ -62,6 +64,311 @@ function useInheritedRenderer(
 }
 
 describe("registerQuickAccessTab", () => {
+  it("composes native and owned tabs live and restores the native-first materialization", () => {
+    const hook = createHook();
+    useInheritedRenderer(hook, appendRegistryOnCountChange);
+    const friends = { key: "friends" };
+    const help = { key: "help" };
+    const standardDecky = { decky: true, key: 999, panel: {} };
+    const renderedTabs = [friends, help, standardDecky];
+    const hudId = PDC_QAM_TAB_ID + 1;
+    const powerId = PDC_QAM_TAB_ID + 2;
+    const hud = registerOwnedQuickAccessTab(
+      hudId,
+      { title: "HUD", content: "hud-panel", icon: "hud-icon" },
+      { __TABS_HOOK_INSTANCE: hook },
+    );
+    const power = registerOwnedQuickAccessTab(
+      powerId,
+      { title: "Power", content: "power-panel", icon: "power-icon" },
+      { __TABS_HOOK_INSTANCE: hook },
+    );
+    const inventory = vi.fn();
+    const composition = configureQuickAccessTabComposition({
+      layout: {
+        order: ["pdc:section:hud", "native:friends", "pdc:section:power", "native:help"],
+        hiddenNative: ["native:help"],
+        pinnedViews: ["pdc:section:hud", "pdc:section:power"],
+        ownedIds: {},
+      },
+      tokensById: new Map([
+        [hudId, "pdc:section:hud"],
+        [powerId, "pdc:section:power"],
+      ]),
+      onInventory: inventory,
+    }, { __TABS_HOOK_INSTANCE: hook });
+
+    hook.render(renderedTabs, true);
+
+    expect(composition.configured).toBe(true);
+    expect(renderedTabs.map((tab) => tab.key)).toEqual([hudId, "friends", powerId, 999]);
+    expect(renderedTabs[1]).toBe(friends);
+    expect(inventory).toHaveBeenLastCalledWith([
+      expect.objectContaining({ token: "native:friends", entry: friends }),
+      expect.objectContaining({ token: "native:help", entry: help }),
+    ]);
+
+    expect(composition.update({
+      layout: {
+        order: ["native:help", "pdc:section:power", "native:friends", "pdc:section:hud"],
+        hiddenNative: [],
+        pinnedViews: ["pdc:section:hud", "pdc:section:power"],
+        ownedIds: {},
+      },
+      tokensById: new Map([
+        [hudId, "pdc:section:hud"],
+        [powerId, "pdc:section:power"],
+      ]),
+    })).toBe(true);
+    expect(renderedTabs.map((tab) => tab.key)).toEqual(["help", powerId, "friends", hudId, 999]);
+    expect(composition.expectedKeys()).toEqual([
+      "help",
+      String(powerId),
+      "friends",
+      String(hudId),
+      "999",
+    ]);
+
+    composition.dispose();
+    expect(renderedTabs.map((tab) => tab.key)).toEqual(["friends", "help", 999, hudId, powerId]);
+    hud.dispose();
+    power.dispose();
+  });
+
+  it("adds a newly observed native entry without reviving a hidden one", () => {
+    const hook = createHook();
+    useInheritedRenderer(hook, appendRegistryOnCountChange);
+    const friends = { key: "friends" };
+    const help = { key: "help" };
+    const soundtracks = { key: "soundtracks" };
+    const renderedTabs = [
+      friends,
+      help,
+      { decky: true, key: 999, panel: {} },
+    ];
+    const inventory = vi.fn();
+    const composition = configureQuickAccessTabComposition({
+      layout: {
+        order: ["native:friends", "native:help"],
+        hiddenNative: ["native:help"],
+        pinnedViews: [],
+        ownedIds: {},
+      },
+      tokensById: new Map(),
+      onInventory: inventory,
+    }, { __TABS_HOOK_INSTANCE: hook });
+    hook.render(renderedTabs, true);
+
+    renderedTabs.splice(1, 0, soundtracks);
+    hook.render(renderedTabs, true);
+
+    expect(renderedTabs.map((tab) => tab.key)).toEqual(["friends", "soundtracks", 999]);
+    expect(inventory).toHaveBeenLastCalledWith([
+      expect.objectContaining({ token: "native:friends", entry: friends }),
+      expect.objectContaining({ token: "native:help", entry: help }),
+      expect.objectContaining({ token: "native:soundtracks", entry: soundtracks }),
+    ]);
+    composition.dispose();
+  });
+
+  it("uses Steam's replacement when a native entry keeps the same key", () => {
+    const hook = createHook();
+    useInheritedRenderer(hook, appendRegistryOnCountChange);
+    const friends = { key: "friends", panel: "old" };
+    const replacement = { key: "friends", panel: "new" };
+    const renderedTabs = [
+      friends,
+      { decky: true, key: 999, panel: {} },
+    ];
+    const composition = configureQuickAccessTabComposition({
+      layout: {
+        order: ["native:friends"],
+        hiddenNative: [],
+        pinnedViews: [],
+        ownedIds: {},
+      },
+      tokensById: new Map(),
+    }, { __TABS_HOOK_INSTANCE: hook });
+    hook.render(renderedTabs, true);
+
+    renderedTabs[0] = replacement;
+    hook.render(renderedTabs, true);
+
+    expect(renderedTabs[0]).toBe(replacement);
+    composition.dispose();
+  });
+
+  it("reads back the visible QAM composition when Browser and Embedded differ", () => {
+    const hook = createHook();
+    useInheritedRenderer(hook, appendRegistryOnCountChange);
+    const browserTabs = [
+      { key: "browser-native" },
+      { decky: true, key: 999, panel: {} },
+    ];
+    const embeddedTabs = [
+      { key: "embedded-native" },
+      { decky: true, key: 999, panel: {} },
+    ];
+    const composition = configureQuickAccessTabComposition({
+      layout: {
+        order: [],
+        hiddenNative: [],
+        pinnedViews: [],
+        ownedIds: {},
+      },
+      tokensById: new Map(),
+    }, { __TABS_HOOK_INSTANCE: hook });
+
+    hook.render(browserTabs, true);
+    hook.render(embeddedTabs, false);
+
+    expect(composition.expectedKeys()).toEqual(["browser-native", "999"]);
+    composition.dispose();
+  });
+
+  it("restores earlier QAM arrays when a later array fails reconciliation", () => {
+    const hook = createHook();
+    useInheritedRenderer(hook, appendRegistryOnCountChange);
+    const browserNative = { key: "browser-native" };
+    const browserTabs = [
+      browserNative,
+      { decky: true, key: 999, panel: {} },
+    ];
+    const embeddedTabs = [
+      { key: "embedded-native" },
+      { decky: true, key: 999, panel: {} },
+    ];
+    const composition = configureQuickAccessTabComposition({
+      layout: {
+        order: [],
+        hiddenNative: [],
+        pinnedViews: [],
+        ownedIds: {},
+      },
+      tokensById: new Map(),
+    }, { __TABS_HOOK_INSTANCE: hook });
+    hook.render(browserTabs, true);
+    hook.render(embeddedTabs, false);
+    embeddedTabs.push({ decky: true, key: 999, panel: {} });
+
+    expect(composition.update({
+      layout: {
+        order: [],
+        hiddenNative: ["native:browser-native", "native:embedded-native"],
+        pinnedViews: [],
+        ownedIds: {},
+      },
+      tokensById: new Map(),
+    })).toBe(false);
+
+    expect(browserTabs).toEqual([
+      browserNative,
+      expect.objectContaining({ decky: true, key: 999 }),
+    ]);
+  });
+
+  it("allows registrations to roll back after a transactional composition failure", () => {
+    const hook = createHook();
+    useInheritedRenderer(hook, appendRegistryOnCountChange);
+    const host = { __TABS_HOOK_INSTANCE: hook };
+    const homeId = PDC_QAM_TAB_ID;
+    const hudId = PDC_QAM_TAB_ID + 1;
+    const home = registerOwnedQuickAccessTab(
+      homeId,
+      { title: "Inicio", content: "home-panel", icon: "home-icon" },
+      host,
+    );
+    const browserTabs = [
+      { key: "browser-native" },
+      { decky: true, key: 999, panel: {} },
+      { decky: true, key: homeId, panel: {} },
+    ];
+    const embeddedTabs = [
+      { key: "embedded-native" },
+      { decky: true, key: 999, panel: {} },
+      { decky: true, key: homeId, panel: {} },
+    ];
+    const composition = configureQuickAccessTabComposition({
+      layout: {
+        order: ["pdc:home"],
+        hiddenNative: [],
+        pinnedViews: ["pdc:home"],
+        ownedIds: { "pdc:home": homeId },
+      },
+      tokensById: new Map([[homeId, "pdc:home"]]),
+    }, host);
+    hook.render(browserTabs, true);
+    hook.render(embeddedTabs, false);
+
+    home.dispose();
+    const hud = registerOwnedQuickAccessTab(
+      hudId,
+      { title: "HUD", content: "hud-panel", icon: "hud-icon" },
+      host,
+    );
+    embeddedTabs.push({ decky: true, key: 999, panel: {} });
+
+    expect(composition.update({
+      layout: {
+        order: ["pdc:section:hud"],
+        hiddenNative: [],
+        pinnedViews: ["pdc:section:hud"],
+        ownedIds: { "pdc:section:hud": hudId },
+      },
+      tokensById: new Map([[hudId, "pdc:section:hud"]]),
+    })).toBe(false);
+
+    hud.dispose();
+    const restoredHome = registerOwnedQuickAccessTab(
+      homeId,
+      { title: "Inicio", content: "home-panel", icon: "home-icon" },
+      host,
+    );
+    expect(restoredHome.registered).toBe(true);
+    expect(hook.tabs.map((tab) => tab.id)).toEqual([999, homeId]);
+  });
+
+  it("keeps independently owned QAM tabs until the final registration is disposed", () => {
+    const hook = createHook();
+    useInheritedRenderer(hook, appendRegistryOnCountChange);
+    const originalRender = hook.render;
+    const renderedTabs = [{ key: "native" }, { decky: true, key: 999, panel: {} }];
+    const hud = registerOwnedQuickAccessTab(
+      PDC_QAM_TAB_ID + 1,
+      { title: "HUD", content: "hud-panel", icon: "hud-icon" },
+      { __TABS_HOOK_INSTANCE: hook },
+    );
+    const power = registerOwnedQuickAccessTab(
+      PDC_QAM_TAB_ID + 2,
+      { title: "Power", content: "power-panel", icon: "power-icon" },
+      { __TABS_HOOK_INSTANCE: hook },
+    );
+
+    hook.render(renderedTabs, true);
+    expect(renderedTabs.map((tab) => tab.key)).toEqual([
+      "native",
+      999,
+      PDC_QAM_TAB_ID + 1,
+      PDC_QAM_TAB_ID + 2,
+    ]);
+
+    hud.dispose();
+    hook.render(renderedTabs, true);
+    expect(renderedTabs.map((tab) => tab.key)).toEqual([
+      "native",
+      999,
+      PDC_QAM_TAB_ID + 2,
+    ]);
+    expect(hook.render).not.toBe(originalRender);
+
+    power.dispose();
+    hook.render(renderedTabs, false);
+    expect(renderedTabs.map((tab) => tab.key)).toEqual(["native", 999]);
+    expect(hook.render).toBe(originalRender);
+    expect(hud.registered).toBe(true);
+    expect(power.registered).toBe(true);
+  });
+
   it("falls back when Decky's tab hook is absent", () => {
     const result = registerQuickAccessTab(
       { title: null, content: "panel", icon: "icon" },

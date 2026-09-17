@@ -65,7 +65,7 @@ onPrefsHealed(() => {
   listeners.forEach((l) => l());
 });
 
-function subscribe(cb: () => void): () => void {
+export function subscribeViews(cb: () => void): () => void {
   listeners.add(cb);
   return () => {
     listeners.delete(cb);
@@ -73,5 +73,5 @@ function subscribe(cb: () => void): () => void {
 }
 
 export function useViews(): CustomView[] {
-  return useSyncExternalStore(subscribe, getViews, getViews);
+  return useSyncExternalStore(subscribeViews, getViews, getViews);
 }

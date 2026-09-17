@@ -38,6 +38,7 @@ describe("QamAction", () => {
     screen.getByText("Run").click();
 
     expect(onPress).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Run" })).toBeTruthy();
   });
 
   it("exposes selection and expansion state", () => {
