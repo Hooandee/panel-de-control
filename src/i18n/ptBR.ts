@@ -924,6 +924,7 @@ export const ptBR: Record<string, string> = {
   "steam.performance.group.display": "Tela",
   "steam.performance.group.fluidity": "Fluidez",
   "steam.performance.group.scaling": "Escalonamento",
+  "steam.performance.loading": "Verificando o Steam…",
   "steam.performance.synced": "Sincronizado com o Steam",
   "steam.performance.partial": "Alguns controles do Steam não estão disponíveis nesta sessão.",
   "steam.performance.unavailable": "O Steam não disponibilizou estes controles nesta sessão.",

@@ -61,6 +61,7 @@ class NativeControlBoundary extends Component<
     }
 
     if (previousState.failed && !this.state.failed) {
+      this.retryCount = 0;
       this.props.onRecovery(this.props.id, this.props.Control);
     }
   }
@@ -110,11 +111,17 @@ const GROUPS: ReadonlyArray<{
 interface PerformanceGroupProps {
   label: string;
   rows: SteamPerformanceRow[];
+  hidden: boolean;
   renderRow: (row: SteamPerformanceRow) => ReactNode;
 }
 
-const PerformanceGroup: FC<PerformanceGroupProps> = ({ label, rows, renderRow }) => (
-  <section role="group" aria-label={label} style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
+const PerformanceGroup: FC<PerformanceGroupProps> = ({ label, rows, hidden, renderRow }) => (
+  <section
+    role="group"
+    aria-label={label}
+    hidden={hidden}
+    style={{ display: hidden ? "none" : "flex", flexDirection: "column", gap: theme.space.sm }}
+  >
     <div style={theme.sectionLabel}>{label}</div>
     <div style={{
       ...theme.card,
@@ -160,7 +167,9 @@ export const SteamPerformanceModal: FC<{ closeModal?: () => void }> = ({ closeMo
   const available = surface.status === "ready";
   const partial = surface.rows.some(({ id, Component: Control }) => failures.get(id) === Control);
   const status = t(!available
-    ? "steam.performance.unavailable"
+    ? surface.status === "loading"
+      ? "steam.performance.loading"
+      : "steam.performance.unavailable"
     : partial
       ? "steam.performance.partial"
       : "steam.performance.synced");
@@ -229,7 +238,7 @@ export const SteamPerformanceModal: FC<{ closeModal?: () => void }> = ({ closeMo
                   marginTop: theme.space.sm,
                   color: partial ? theme.color.warn : available ? theme.color.ok : theme.color.textMuted,
                   fontSize: theme.font.caption,
-                }}>
+                }} role="status" aria-live="polite">
                   {status}
                 </div>
               </div>
@@ -243,13 +252,22 @@ export const SteamPerformanceModal: FC<{ closeModal?: () => void }> = ({ closeMo
                     key={group.label}
                     label={t(group.label)}
                     rows={rows}
+                    hidden={rows.every(({ id, Component }) => failures.get(id) === Component)}
                     renderRow={renderRow}
                   />
                 ) : null;
               })}
 
               {reset ? (
-                <div style={{ ...theme.card, padding: theme.space.md, overflow: "hidden" }}>
+                <div
+                  hidden={failures.get(reset.id) === reset.Component}
+                  style={{
+                    ...theme.card,
+                    display: failures.get(reset.id) === reset.Component ? "none" : undefined,
+                    padding: theme.space.md,
+                    overflow: "hidden",
+                  }}
+                >
                   {renderRow(reset)}
                 </div>
               ) : null}

@@ -1,6 +1,12 @@
 import type { FC } from "react";
 import { PanelSectionRow, showModal } from "@decky/ui";
-import { LuChevronRight, LuMonitorCog } from "react-icons/lu";
+import {
+  LuChevronRight,
+  LuCircleAlert,
+  LuCircleCheck,
+  LuLoaderCircle,
+  LuMonitorCog,
+} from "react-icons/lu";
 
 import { useI18n } from "../i18n";
 import { useSteamPerformanceSurface } from "../steam/useSteamPerformanceSurface";
@@ -11,13 +17,17 @@ import { SteamPerformanceModal } from "./SteamPerformanceModal";
 export const SteamPerformanceCard: FC = () => {
   const { t } = useI18n();
   const surface = useSteamPerformanceSurface();
-  const available = surface.status === "ready";
+  const statusKey = surface.status === "ready"
+    ? "steam.performance.synced"
+    : surface.status === "loading"
+      ? "steam.performance.loading"
+      : "steam.performance.unavailable";
 
   return (
     <PanelSectionRow>
       <div style={{ width: "100%" }}>
         <QamAction
-          label={t("steam.performance.open")}
+          label={`${t("steam.performance.open")}. ${t(statusKey)}`}
           onPress={() => {
             showModal(<SteamPerformanceModal />, window);
           }}
@@ -72,17 +82,28 @@ export const SteamPerformanceCard: FC = () => {
             </div>
 
             <div style={{ display: "flex", alignItems: "center", gap: theme.space.xs, flexShrink: 0 }}>
-              <span
-                role="status"
-                aria-label={available ? t("steam.performance.synced") : t("steam.performance.unavailable")}
-                style={{
-                  width: 7,
-                  height: 7,
-                  borderRadius: 999,
-                  background: available ? theme.color.ok : theme.color.textMuted,
-                  boxShadow: available ? `0 0 8px rgba(126,224,160,0.38)` : undefined,
-                }}
-              />
+              {surface.status === "ready" ? (
+                <LuCircleCheck
+                  data-testid="steam-performance-status-ready"
+                  aria-hidden
+                  size={16}
+                  color={theme.color.ok}
+                />
+              ) : surface.status === "loading" ? (
+                <LuLoaderCircle
+                  data-testid="steam-performance-status-loading"
+                  aria-hidden
+                  size={16}
+                  color={theme.color.textMuted}
+                />
+              ) : (
+                <LuCircleAlert
+                  data-testid="steam-performance-status-unavailable"
+                  aria-hidden
+                  size={16}
+                  color={theme.color.textMuted}
+                />
+              )}
               <LuChevronRight size={17} color={theme.color.textMuted} aria-hidden />
             </div>
           </div>

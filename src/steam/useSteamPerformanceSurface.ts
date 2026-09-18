@@ -12,10 +12,11 @@ import {
 } from "./performanceRuntime";
 
 export interface SteamPerformanceSurfaceState {
-  status: "ready" | "unavailable";
+  status: "loading" | "ready" | "unavailable";
   rows: SteamPerformanceRow[];
 }
 
+const LOADING: SteamPerformanceSurfaceState = { status: "loading", rows: [] };
 const EMPTY: SteamPerformanceSurfaceState = { status: "unavailable", rows: [] };
 const RETRY_MS = 2000;
 
@@ -26,22 +27,25 @@ const sameRows = (left: SteamPerformanceRow[], right: SteamPerformanceRow[]): bo
   ))
 );
 
+const readSurface = (): SteamPerformanceSurfaceState => {
+  const components = discoverSteamPerformanceComponents();
+  const store = resolveSteamPerformanceStore();
+  const layout = store ? performanceLayoutFromStore(store) : null;
+  const rows = layout
+    ? composeSteamPerformanceRows(components, layout)
+    : [];
+  return rows.some(({ id }) => id !== "profile" && id !== "reset")
+    ? { status: "ready", rows }
+    : EMPTY;
+};
+
 export function useSteamPerformanceSurface(): SteamPerformanceSurfaceState {
-  const [surface, setSurface] = useState<SteamPerformanceSurfaceState>(EMPTY);
+  const [surface, setSurface] = useState<SteamPerformanceSurfaceState>(LOADING);
   const aliveRef = useRef(false);
 
   const sync = useCallback(() => {
     if (!aliveRef.current) return;
-    const components = discoverSteamPerformanceComponents();
-    const store = resolveSteamPerformanceStore();
-    const layout = store ? performanceLayoutFromStore(store) : null;
-    const rows = layout
-      ? composeSteamPerformanceRows(components, layout)
-      : [];
-    const hasNativeControl = rows.some(({ id }) => id !== "profile" && id !== "reset");
-    const next: SteamPerformanceSurfaceState = hasNativeControl
-      ? { status: "ready", rows }
-      : EMPTY;
+    const next = readSurface();
     setSurface((previous) => (
       previous.status === next.status && sameRows(previous.rows, next.rows)
         ? previous
@@ -51,8 +55,8 @@ export function useSteamPerformanceSurface(): SteamPerformanceSurfaceState {
 
   useEffect(() => {
     aliveRef.current = true;
-    sync();
     const unsubscribe = subscribeSteamPerformanceState(sync);
+    sync();
     const timer = setInterval(sync, RETRY_MS);
     return () => {
       aliveRef.current = false;

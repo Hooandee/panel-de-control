@@ -46,6 +46,12 @@ let cachedRuntime: {
   store?: SteamPerformanceStore;
   components?: SteamPerformanceComponents;
 } | null = null;
+let cachedLegacyComponents: SteamPerformanceComponents | null = null;
+
+export function resetSteamPerformanceRuntimeCache(): void {
+  cachedRuntime = null;
+  cachedLegacyComponents = null;
+}
 
 const sourceOf = (candidate: unknown): string => {
   if (typeof candidate !== "function") return "";
@@ -143,6 +149,10 @@ const discoverCurrentRuntimeComponents = (): SteamPerformanceComponents | null =
 };
 
 export function discoverSteamPerformanceComponents(): SteamPerformanceComponents {
+  const current = discoverCurrentRuntimeComponents();
+  if (current !== null) return current;
+  if (cachedLegacyComponents) return cachedLegacyComponents;
+
   let snapshot: SteamPerformanceComponents = {};
   try {
     const module = findModuleByExport(isResetExport);
@@ -150,8 +160,8 @@ export function discoverSteamPerformanceComponents(): SteamPerformanceComponents
   } catch {
     snapshot = {};
   }
-  const current = discoverCurrentRuntimeComponents();
-  return current ?? snapshot;
+  if (componentCount(snapshot) > 0) cachedLegacyComponents = snapshot;
+  return snapshot;
 }
 
 const asStore = (candidate: unknown): SteamPerformanceStore | null => {

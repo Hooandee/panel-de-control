@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { act, renderHook } from "@testing-library/react";
+import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const runtime = vi.hoisted(() => ({
@@ -55,6 +56,16 @@ describe("useSteamPerformanceSurface", () => {
       "disableFrameLimit",
       "reset",
     ]);
+  });
+
+  it("reports loading before the first effect without touching Steam during render", () => {
+    runtime.discover.mockReturnValue({ legacyFrameRate: Native, reset: Native });
+    runtime.resolve.mockReturnValue({ msgLimits: {} });
+    const Probe = () => <span>{useSteamPerformanceSurface().status}</span>;
+
+    expect(renderToString(<Probe />)).toContain("loading");
+    expect(runtime.discover).not.toHaveBeenCalled();
+    expect(runtime.resolve).not.toHaveBeenCalled();
   });
 
   it("converges when Steam loads the performance module after the block mounts", () => {

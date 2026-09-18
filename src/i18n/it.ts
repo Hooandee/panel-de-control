@@ -863,6 +863,7 @@ export const it: Record<string, string> = {
   "steam.performance.group.display": "Schermo",
   "steam.performance.group.fluidity": "Fluidità",
   "steam.performance.group.scaling": "Ridimensionamento",
+  "steam.performance.loading": "Verifica di Steam…",
   "steam.performance.synced": "Sincronizzato con Steam",
   "steam.performance.partial": "Alcuni controlli di Steam non sono disponibili in questa sessione.",
   "steam.performance.unavailable": "Steam non ha reso disponibili questi controlli in questa sessione.",

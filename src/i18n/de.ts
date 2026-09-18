@@ -924,6 +924,7 @@ export const de: Record<string, string> = {
   "steam.performance.group.display": "Anzeige",
   "steam.performance.group.fluidity": "Flüssige Darstellung",
   "steam.performance.group.scaling": "Skalierung",
+  "steam.performance.loading": "Steam wird überprüft…",
   "steam.performance.synced": "Mit Steam synchronisiert",
   "steam.performance.partial": "Einige Steam-Steuerungen sind in dieser Sitzung nicht verfügbar.",
   "steam.performance.unavailable": "Steam hat diese Steuerung in dieser Sitzung nicht bereitgestellt.",

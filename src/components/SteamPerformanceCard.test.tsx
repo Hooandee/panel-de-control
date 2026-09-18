@@ -58,14 +58,14 @@ import { SteamPerformanceCard } from "./SteamPerformanceCard";
 import { SteamPerformanceModal } from "./SteamPerformanceModal";
 import type { SteamPerformanceSurfaceState } from "../steam/useSteamPerformanceSurface";
 
-function openDetail(): void {
+function openDetail(): ReturnType<typeof render> {
   render(<SteamPerformanceCard />);
   expect(screen.queryByTestId("native-row")).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: "steam.performance.open" }));
+  fireEvent.click(screen.getByRole("button", { name: /steam\.performance\.open/ }));
   const modal = decky.modal;
   expect(modal).not.toBeNull();
   cleanup();
-  render(modal);
+  return render(modal);
 }
 
 describe("SteamPerformanceCard", () => {
@@ -85,10 +85,23 @@ describe("SteamPerformanceCard", () => {
 
     render(<SteamPerformanceCard />);
 
-    const card = screen.getByRole("button", { name: "steam.performance.open" });
+    const card = screen.getByRole("button", {
+      name: "steam.performance.open. steam.performance.synced",
+    });
     expect(within(card).getByText("steam.performance.cardSummary")).toBeTruthy();
     expect(within(card).queryByText("steam.performance.synced")).toBeNull();
-    expect(within(card).getByLabelText("steam.performance.synced")).toBeTruthy();
+    expect(within(card).getByTestId("steam-performance-status-ready")).toBeTruthy();
+  });
+
+  it("shows an honest compact loading state while Steam is being checked", () => {
+    surface.useSurface.mockReturnValue({ status: "loading", rows: [] });
+
+    render(<SteamPerformanceCard />);
+
+    const card = screen.getByRole("button", {
+      name: "steam.performance.open. steam.performance.loading",
+    });
+    expect(within(card).getByTestId("steam-performance-status-loading")).toBeTruthy();
   });
 
   it("keeps native controls out of the compact card and opens them in a dedicated view", () => {
@@ -187,7 +200,7 @@ describe("SteamPerformanceCard", () => {
     surface.useSurface.mockImplementation(() => current);
 
     render(<SteamPerformanceCard />);
-    fireEvent.click(screen.getByRole("button", { name: "steam.performance.open" }));
+    fireEvent.click(screen.getByRole("button", { name: /steam\.performance\.open/ }));
     const modal = decky.modal;
     cleanup();
     const view = render(modal);
@@ -224,5 +237,62 @@ describe("SteamPerformanceCard", () => {
 
     expect(screen.getByTestId("native-row").textContent).toBe("recovered");
     expect(screen.getByText("steam.performance.synced")).toBeTruthy();
+  });
+
+  it("renews the retry budget after the same native control recovers", () => {
+    vi.useFakeTimers();
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    let failing = true;
+    const Intermittent = () => {
+      if (failing) throw new Error("Steam control is temporarily unavailable");
+      return <div data-testid="native-row">stable</div>;
+    };
+    surface.useSurface.mockReturnValue({
+      status: "ready",
+      rows: [{ id: "refreshRate", Component: Intermittent }],
+    });
+
+    const view = openDetail();
+    failing = false;
+    act(() => { vi.advanceTimersByTime(2000); });
+    expect(screen.getByTestId("native-row").textContent).toBe("stable");
+
+    failing = true;
+    view.rerender(<SteamPerformanceModal />);
+    expect(screen.getByText("steam.performance.partial")).toBeTruthy();
+
+    failing = false;
+    act(() => { vi.advanceTimersByTime(2000); });
+    const rows = screen.getAllByTestId("native-row");
+    expect(rows[rows.length - 1]?.textContent).toBe("stable");
+  });
+
+  it("hides a group while its only native control is failed", () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const Broken = () => {
+      throw new Error("Steam display control changed");
+    };
+    const Healthy = () => <div data-testid="native-row">vrr</div>;
+    surface.useSurface.mockReturnValue({
+      status: "ready",
+      rows: [
+        { id: "refreshRate", Component: Broken },
+        { id: "vrr", Component: Healthy },
+      ],
+    });
+
+    openDetail();
+
+    expect(screen.queryByRole("group", { name: "steam.performance.group.display" })).toBeNull();
+    expect(within(screen.getByRole("group", { name: "steam.performance.group.fluidity" }))
+      .getByTestId("native-row").textContent).toBe("vrr");
+  });
+
+  it("announces modal synchronization changes", () => {
+    surface.useSurface.mockReturnValue({ status: "unavailable", rows: [] });
+
+    openDetail();
+
+    expect(screen.getByRole("status").textContent).toBe("steam.performance.unavailable");
   });
 });

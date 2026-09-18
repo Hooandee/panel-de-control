@@ -10,6 +10,7 @@ vi.mock("@decky/ui", () => decky);
 
 import {
   discoverSteamPerformanceComponents,
+  resetSteamPerformanceRuntimeCache,
   resolveSteamPerformanceStore,
   subscribeSteamPerformanceState,
 } from "./performanceRuntime";
@@ -22,6 +23,7 @@ const component = (...tokens: string[]) => {
 
 describe("Steam performance runtime", () => {
   beforeEach(() => {
+    resetSteamPerformanceRuntimeCache();
     decky.findModuleByExport.mockReset();
     decky.findModuleExport.mockReset();
     delete (window as Window & { SystemPerfStore?: unknown }).SystemPerfStore;
@@ -45,9 +47,12 @@ describe("Steam performance runtime", () => {
     });
 
     const controls = discoverSteamPerformanceComponents();
+    const cached = discoverSteamPerformanceComponents();
 
     expect(controls.reset).toBe(reset);
     expect(controls.allowTearing).toBe(tearing);
+    expect(cached).toBe(controls);
+    expect(decky.findModuleByExport).toHaveBeenCalledOnce();
   });
 
   it("discovers a performance module loaded after Decky's startup snapshot", () => {
@@ -122,6 +127,7 @@ describe("Steam performance runtime", () => {
 
     expect(controls.reset).toBe(currentReset);
     expect(controls.vrr).toBe(currentVrr);
+    expect(decky.findModuleByExport).not.toHaveBeenCalled();
   });
 
   it("does not reuse Decky's old controls while the current module is still loading", () => {
