@@ -209,6 +209,63 @@ describe("SteamPerformanceCard", () => {
     expect(screen.getByText("Permitir desgarro").style.paddingInline).toBe("");
   });
 
+  it("keeps the native refresh-rate value on one line in the narrow card", () => {
+    const RefreshRate = () => (
+      <div>
+        <div id="refresh-rate-label">
+          <div>Frecuencia de actualización</div>
+          <div aria-hidden="true">77&nbsp;Hz</div>
+        </div>
+        <div role="button">
+          <div role="slider" aria-labelledby="refresh-rate-label" />
+        </div>
+      </div>
+    );
+    surface.useSurface.mockReturnValue({
+      status: "ready",
+      rows: [{ id: "refreshRate", Component: RefreshRate }],
+    });
+
+    render(<SteamPerformanceCard />);
+
+    const value = screen.getByText("77 Hz");
+    expect(value.style.whiteSpace).toBe("nowrap");
+    expect(value.style.flexShrink).toBe("0");
+  });
+
+  it("uses the mounted document realm for native Steam elements", () => {
+    const RefreshRate = () => (
+      <div>
+        <div id="cross-realm-refresh-label">
+          <div>Frecuencia de actualización</div>
+          <div aria-hidden="true">77&nbsp;Hz</div>
+        </div>
+        <div role="slider" aria-labelledby="cross-realm-refresh-label" />
+      </div>
+    );
+    surface.useSurface.mockReturnValue({
+      status: "ready",
+      rows: [{ id: "refreshRate", Component: RefreshRate }],
+    });
+    const iframe = document.createElement("iframe");
+    document.body.appendChild(iframe);
+    const foreignDocument = iframe.contentDocument!;
+    const NativeHTMLElement = globalThis.HTMLElement;
+    vi.stubGlobal("HTMLElement", class ForeignHTMLElement {});
+    expect(foreignDocument.defaultView?.HTMLElement).not.toBe(globalThis.HTMLElement);
+
+    let view;
+    try {
+      view = render(<SteamPerformanceCard />, { container: foreignDocument.body });
+    } finally {
+      vi.stubGlobal("HTMLElement", NativeHTMLElement);
+    }
+
+    expect(view.getByText("77 Hz").style.whiteSpace).toBe("nowrap");
+    view.unmount();
+    iframe.remove();
+  });
+
   it("suppresses only Steam's separator below the reset row", () => {
     const Reset = () => (
       <div className="Panel Focusable" data-testid="native-reset-panel">

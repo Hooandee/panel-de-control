@@ -44,6 +44,11 @@ const SCALING_CONTROL_IDS = new Set<SteamPerformanceComponentId>([
   "fsrSharpness",
   "nisSharpness",
 ]);
+const FRAME_RATE_SLIDER_CONTROL_IDS = new Set<SteamPerformanceComponentId>([
+  "legacyFrameRate",
+  "appFrameRate",
+  "refreshRate",
+]);
 
 const shortenAutoLabel = (root: HTMLElement): void => {
   const walker = root.ownerDocument.createTreeWalker(root, 4);
@@ -58,15 +63,24 @@ const shortenAutoLabel = (root: HTMLElement): void => {
   }
 };
 
-const insetNativeSliderTitles = (root: HTMLElement): void => {
+const forEachNativeSliderLabel = (
+  root: HTMLElement,
+  visit: (label: HTMLElement) => void,
+): void => {
   root.querySelectorAll<HTMLElement>('[role="slider"][aria-labelledby]').forEach((slider) => {
     const labelIds = slider.getAttribute("aria-labelledby")?.split(/\s+/) ?? [];
     labelIds.forEach((labelId) => {
       const label = root.ownerDocument.getElementById(labelId);
       if (!label || !root.contains(label)) return;
-      label.style.paddingInline = `${theme.space.sm}px`;
-      label.style.boxSizing = "border-box";
+      visit(label);
     });
+  });
+};
+
+const insetNativeSliderTitles = (root: HTMLElement): void => {
+  forEachNativeSliderLabel(root, (label) => {
+    label.style.paddingInline = `${theme.space.sm}px`;
+    label.style.boxSizing = "border-box";
   });
 };
 
@@ -79,8 +93,25 @@ const scaleNativeSliderRows = (root: HTMLElement): void => {
   });
 };
 
-const CompactNativeSlider: FC<{ children: ReactNode; compactAuto: boolean }> = ({
+const keepNativeSliderValuesInline = (root: HTMLElement): void => {
+  forEachNativeSliderLabel(root, (label) => {
+    const value = Array.from(label.children).find((child) => (
+      child.getAttribute("aria-hidden") === "true"
+    ));
+    const ElementType = root.ownerDocument.defaultView?.HTMLElement;
+    if (!ElementType || !(value instanceof ElementType)) return;
+    if (value.style.whiteSpace !== "nowrap") value.style.whiteSpace = "nowrap";
+    if (value.style.flexShrink !== "0") value.style.flexShrink = "0";
+  });
+};
+
+const NativeSliderLayout: FC<{
+  children: ReactNode;
+  compact: boolean;
+  compactAuto: boolean;
+}> = ({
   children,
+  compact,
   compactAuto,
 }) => {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -89,9 +120,12 @@ const CompactNativeSlider: FC<{ children: ReactNode; compactAuto: boolean }> = (
     const root = rootRef.current;
     if (!root) return;
     const reconcile = () => {
-      scaleNativeSliderRows(root);
-      insetNativeSliderTitles(root);
-      if (compactAuto) shortenAutoLabel(root);
+      keepNativeSliderValuesInline(root);
+      if (compact) {
+        scaleNativeSliderRows(root);
+        insetNativeSliderTitles(root);
+        if (compactAuto) shortenAutoLabel(root);
+      }
     };
     reconcile();
     const Observer = root.ownerDocument.defaultView?.MutationObserver;
@@ -99,19 +133,19 @@ const CompactNativeSlider: FC<{ children: ReactNode; compactAuto: boolean }> = (
     const observer = new Observer(reconcile);
     observer.observe(root, { childList: true, characterData: true, subtree: true });
     return () => observer.disconnect();
-  }, [compactAuto]);
+  }, [compact, compactAuto]);
 
   return (
     <div
       ref={rootRef}
-      data-testid="steam-scaling-slider-viewport"
-      style={{
+      data-testid={compact ? "steam-scaling-slider-viewport" : undefined}
+      style={compact ? {
         width: `calc(100% - ${theme.space.sm}px)`,
         minWidth: 0,
         marginInline: "auto",
         overflow: "visible",
         contain: "layout",
-      }}
+      } : { display: "contents" }}
     >
       {children}
     </div>
@@ -184,9 +218,13 @@ class NativeControlBoundary extends Component<
   render() {
     if (this.state.failed) return null;
     const { Control, id } = this.props;
-    return SCALING_CONTROL_IDS.has(id)
-      ? <CompactNativeSlider compactAuto={id === "scalingMode"}><Control /></CompactNativeSlider>
-      : <Control />;
+    const compact = SCALING_CONTROL_IDS.has(id);
+    if (!compact && !FRAME_RATE_SLIDER_CONTROL_IDS.has(id)) return <Control />;
+    return (
+      <NativeSliderLayout compact={compact} compactAuto={id === "scalingMode"}>
+        <Control />
+      </NativeSliderLayout>
+    );
   }
 }
 
