@@ -12,6 +12,7 @@ export interface SteamPerformanceComponents {
   combinedScaling?: SteamPerformanceComponent;
   splitScalingFilter?: SteamPerformanceComponent;
   scalingMode?: SteamPerformanceComponent;
+  sharpness?: SteamPerformanceComponent;
   fsrSharpness?: SteamPerformanceComponent;
   nisSharpness?: SteamPerformanceComponent;
   allowTearing?: SteamPerformanceComponent;
@@ -23,7 +24,7 @@ export type SteamPerformanceComponentId = keyof SteamPerformanceComponents;
 
 export interface SteamPerformanceLayout {
   frameRate: "legacy" | "app_target";
-  splitScaling: boolean;
+  splitScaling: boolean | null;
 }
 
 export interface SteamPerformanceStoreView {
@@ -38,21 +39,27 @@ export interface SteamPerformanceRow {
   Component: SteamPerformanceComponent;
 }
 
-const SIGNATURES: Record<SteamPerformanceComponentId, readonly string[]> = {
-  profile: ["#QuickAccess_Tab_Perf_ToggleGameSettings", "GameProfileExplainer"],
-  legacyFrameRate: ["#QuickAccess_Tab_Perf_LimitFrameRate", "LimitFramerateSlider"],
-  appFrameRate: ["#QuickAccess_Tab_Perf_AppRefreshRate", "gamescope_app_target_framerate"],
-  disableFrameLimit: ["#QuickAccess_Tab_Perf_DisableFrameLimit", "gamescope_disable_framelimit"],
-  refreshRate: ["#QuickAccess_Tab_Perf_RefreshRate", "onChangeComplete"],
-  variableResolution: ["#QuickAccess_Tab_Perf_VariableResolution", "SetVariableResolutionEnabled"],
-  combinedScaling: ["#QuickAccess_Tab_Perf_ScalingFilter_Integer", "#QuickAccess_Tab_Perf_ScalingFilter_NIS"],
-  splitScalingFilter: ["#QuickAccess_Tab_Perf_ScalingFilter", "notchTicksVisible"],
-  scalingMode: ["#QuickAccess_Tab_Perf_ScalingScaler", "notchTicksVisible"],
-  fsrSharpness: ["#QuickAccess_Tab_Perf_FSRSharpness", "#QuickAccess_Tab_Perf_ScalingFilter_FSRSharpness_Explainer"],
-  nisSharpness: ["#QuickAccess_Tab_Perf_NISSharpness", "#QuickAccess_Tab_Perf_ScalingFilter_NISSharpness_Explainer"],
-  allowTearing: ["#QuickAccess_Tab_Perf_EnableTearing", "gamescope_allow_tearing"],
-  vrr: ["#QuickAccess_Tab_Perf_EnableVRR", "#QuickAccess_Tab_Perf_VRR_NotCapable"],
-  reset: ["#QuickAccess_Tab_Perf_ResetToDefault", "ResetCurrentPerfProfileSettings"],
+const signature = (...tokens: string[]): readonly (readonly string[])[] => [tokens];
+
+const SIGNATURES: Record<SteamPerformanceComponentId, readonly (readonly string[])[]> = {
+  profile: signature("#QuickAccess_Tab_Perf_ToggleGameSettings", "GameProfileExplainer"),
+  legacyFrameRate: signature("#QuickAccess_Tab_Perf_LimitFrameRate", "LimitFramerateSlider"),
+  appFrameRate: signature("#QuickAccess_Tab_Perf_AppRefreshRate", "gamescope_app_target_framerate"),
+  disableFrameLimit: signature("#QuickAccess_Tab_Perf_DisableFrameLimit", "gamescope_disable_framelimit"),
+  refreshRate: signature("#QuickAccess_Tab_Perf_RefreshRate", "onChangeComplete"),
+  variableResolution: [
+    ["#QuickAccess_Tab_Perf_VariableResolution", "SetVariableResolutionEnabled"],
+    ["#QuickAccess_Tab_Perf_VariableResolution", "#QuickAccess_Tab_Perf_VariableResolution_Explainer"],
+  ],
+  combinedScaling: signature("#QuickAccess_Tab_Perf_ScalingFilter_Integer", "#QuickAccess_Tab_Perf_ScalingFilter_NIS"),
+  splitScalingFilter: signature("#QuickAccess_Tab_Perf_ScalingFilter", "notchTicksVisible"),
+  scalingMode: signature("#QuickAccess_Tab_Perf_ScalingScaler", "notchTicksVisible"),
+  sharpness: signature("#QuickAccess_Tab_Perf_Sharpness", "#QuickAccess_Tab_Perf_ScalingFilter_Sharpness_Explainer"),
+  fsrSharpness: signature("#QuickAccess_Tab_Perf_FSRSharpness", "#QuickAccess_Tab_Perf_ScalingFilter_FSRSharpness_Explainer"),
+  nisSharpness: signature("#QuickAccess_Tab_Perf_NISSharpness", "#QuickAccess_Tab_Perf_ScalingFilter_NISSharpness_Explainer"),
+  allowTearing: signature("#QuickAccess_Tab_Perf_EnableTearing", "gamescope_allow_tearing"),
+  vrr: signature("#QuickAccess_Tab_Perf_EnableVRR", "#QuickAccess_Tab_Perf_VRR_NotCapable"),
+  reset: signature("#QuickAccess_Tab_Perf_ResetToDefault", "ResetCurrentPerfProfileSettings"),
 };
 
 const sourceOf = (candidate: unknown): string => {
@@ -66,11 +73,13 @@ const sourceOf = (candidate: unknown): string => {
 
 const uniquelyMatching = (
   candidates: unknown[],
-  tokens: readonly string[],
+  signatures: readonly (readonly string[])[],
 ): SteamPerformanceComponent | undefined => {
   const matches = candidates.filter((candidate) => {
     const source = sourceOf(candidate);
-    return source.length > 0 && tokens.every((token) => source.includes(token));
+    return source.length > 0 && signatures.some((tokens) => (
+      tokens.every((token) => source.includes(token))
+    ));
   });
   return matches.length === 1 ? matches[0] as SteamPerformanceComponent : undefined;
 };
@@ -80,11 +89,11 @@ export function selectSteamPerformanceComponents(
 ): SteamPerformanceComponents {
   const candidates = [...new Set(Object.values(moduleExports))];
   const matches = new Map<SteamPerformanceComponentId, SteamPerformanceComponent>();
-  for (const [id, tokens] of Object.entries(SIGNATURES) as Array<[
+  for (const [id, signatures] of Object.entries(SIGNATURES) as Array<[
     SteamPerformanceComponentId,
-    readonly string[],
+    readonly (readonly string[])[],
   ]>) {
-    const component = uniquelyMatching(candidates, tokens);
+    const component = uniquelyMatching(candidates, signatures);
     if (component) matches.set(id, component);
   }
   const usage = new Map<SteamPerformanceComponent, number>();
@@ -102,11 +111,12 @@ export function performanceLayoutFromStore(
   store: SteamPerformanceStoreView,
 ): SteamPerformanceLayout | null {
   if (!store.msgLimits) return null;
+  const splitScaling = store.msgLimits.is_split_scaling_and_filtering_supported;
   return {
     frameRate: store.msgLimits.disable_refresh_rate_management === true
       ? "app_target"
       : "legacy",
-    splitScaling: store.msgLimits.is_split_scaling_and_filtering_supported === true,
+    splitScaling: typeof splitScaling === "boolean" ? splitScaling : null,
   };
 }
 
@@ -125,9 +135,21 @@ export function composeSteamPerformanceRows(
   const frameRows: SteamPerformanceComponentId[] = layout.frameRate === "app_target"
     ? ["appFrameRate", "disableFrameLimit"]
     : ["legacyFrameRate", "refreshRate"];
-  const scalingRows: SteamPerformanceComponentId[] = layout.splitScaling
-    ? ["scalingMode", "splitScalingFilter"]
-    : ["combinedScaling"];
+  const hasSplitScaling = Boolean(components.scalingMode && components.splitScalingFilter);
+  const hasCombinedScaling = Boolean(components.combinedScaling);
+  let scalingRows: SteamPerformanceComponentId[] = [];
+  if (layout.splitScaling === true) {
+    scalingRows = ["scalingMode", "splitScalingFilter"];
+  } else if (layout.splitScaling === false) {
+    scalingRows = ["combinedScaling"];
+  } else if (hasSplitScaling !== hasCombinedScaling) {
+    scalingRows = hasSplitScaling
+      ? ["scalingMode", "splitScalingFilter"]
+      : ["combinedScaling"];
+  }
+  const sharpnessRows: SteamPerformanceComponentId[] = components.sharpness
+    ? ["sharpness"]
+    : ["fsrSharpness", "nisSharpness"];
   const ids: SteamPerformanceComponentId[] = [
     "profile",
     ...frameRows,
@@ -135,8 +157,7 @@ export function composeSteamPerformanceRows(
     "vrr",
     "allowTearing",
     ...scalingRows,
-    "fsrSharpness",
-    "nisSharpness",
+    ...sharpnessRows,
     "reset",
   ];
   return ids.flatMap((id) => {

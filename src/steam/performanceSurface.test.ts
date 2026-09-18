@@ -89,6 +89,22 @@ describe("Steam performance component discovery", () => {
     expect(selected.splitScalingFilter).toBeUndefined();
     expect(selected.vrr).toBe(fixture.vrr);
   });
+
+  it("recognizes current Steam variable-resolution and sharpness controls", () => {
+    const variableResolution = component(
+      "#QuickAccess_Tab_Perf_VariableResolution",
+      "#QuickAccess_Tab_Perf_VariableResolution_Explainer",
+    );
+    const sharpness = component(
+      "#QuickAccess_Tab_Perf_Sharpness",
+      "#QuickAccess_Tab_Perf_ScalingFilter_Sharpness_Explainer",
+    );
+
+    expect(selectSteamPerformanceComponents({ variableResolution, sharpness })).toEqual({
+      variableResolution,
+      sharpness,
+    });
+  });
 });
 
 describe("Steam performance route composition", () => {
@@ -135,6 +151,46 @@ describe("Steam performance route composition", () => {
     ]);
   });
 
+  it("infers the current split-scaling route when Steam omits the legacy capability flag", () => {
+    const scalingMode = component(
+      "#QuickAccess_Tab_Perf_ScalingScaler",
+      "notchTicksVisible",
+    );
+    const splitScalingFilter = component(
+      "#QuickAccess_Tab_Perf_ScalingFilter",
+      "notchTicksVisible",
+    );
+    const sharpness = component(
+      "#QuickAccess_Tab_Perf_Sharpness",
+      "#QuickAccess_Tab_Perf_ScalingFilter_Sharpness_Explainer",
+    );
+    const components = selectSteamPerformanceComponents({
+      scalingMode,
+      splitScalingFilter,
+      sharpness,
+    });
+
+    expect(composeSteamPerformanceRows(components, {
+      frameRate: "app_target",
+      splitScaling: null,
+    }).map((row) => row.id)).toEqual([
+      "scalingMode",
+      "splitScalingFilter",
+      "sharpness",
+    ]);
+  });
+
+  it("omits scaling when Steam publishes both routes without a capability flag", () => {
+    const components = selectSteamPerformanceComponents(exportsFixture());
+    const ids = composeSteamPerformanceRows(components, {
+      frameRate: "legacy",
+      splitScaling: null,
+    }).map((row) => row.id);
+
+    expect(ids).not.toContain("combinedScaling");
+    expect(ids).not.toContain("scalingMode");
+  });
+
   it("derives the active routes only from Steam's published limits", () => {
     expect(performanceLayoutFromStore({
       msgLimits: {
@@ -145,7 +201,7 @@ describe("Steam performance route composition", () => {
 
     expect(performanceLayoutFromStore({ msgLimits: {} })).toEqual({
       frameRate: "legacy",
-      splitScaling: false,
+      splitScaling: null,
     });
     expect(performanceLayoutFromStore({})).toBeNull();
   });
