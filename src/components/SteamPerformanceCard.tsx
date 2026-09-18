@@ -1,151 +1,93 @@
-import { Component, type FC, useCallback, useState } from "react";
-import { LuMonitorCog } from "react-icons/lu";
+import type { FC } from "react";
+import { PanelSectionRow, showModal } from "@decky/ui";
+import { LuChevronRight, LuMonitorCog } from "react-icons/lu";
 
 import { useI18n } from "../i18n";
-import type {
-  SteamPerformanceComponent,
-  SteamPerformanceComponentId,
-} from "../steam/performanceSurface";
 import { useSteamPerformanceSurface } from "../steam/useSteamPerformanceSurface";
 import { theme } from "../theme";
-import { Collapsible } from "./Collapsible";
-
-interface NativeControlBoundaryProps {
-  id: SteamPerformanceComponentId;
-  Control: SteamPerformanceComponent;
-  onError: (id: SteamPerformanceComponentId, control: SteamPerformanceComponent) => void;
-  onRecovery: (id: SteamPerformanceComponentId, control: SteamPerformanceComponent) => void;
-}
-
-interface NativeControlBoundaryState {
-  failed: boolean;
-}
-
-class NativeControlBoundary extends Component<
-  NativeControlBoundaryProps,
-  NativeControlBoundaryState
-> {
-  private retryCount = 0;
-  private retryTimer: ReturnType<typeof setTimeout> | null = null;
-
-  state: NativeControlBoundaryState = { failed: false };
-
-  static getDerivedStateFromError(): NativeControlBoundaryState {
-    return { failed: true };
-  }
-
-  componentDidCatch(): void {
-    this.props.onError(this.props.id, this.props.Control);
-    if (this.retryCount >= 1) return;
-
-    this.retryCount += 1;
-    this.retryTimer = setTimeout(() => {
-      this.retryTimer = null;
-      this.setState({ failed: false });
-    }, 2000);
-  }
-
-  componentDidUpdate(
-    previousProps: NativeControlBoundaryProps,
-    previousState: NativeControlBoundaryState,
-  ): void {
-    if (previousProps.Control !== this.props.Control) {
-      this.clearRetry();
-      this.retryCount = 0;
-      this.props.onRecovery(this.props.id, previousProps.Control);
-      if (this.state.failed) this.setState({ failed: false });
-      return;
-    }
-
-    if (previousState.failed && !this.state.failed) {
-      this.props.onRecovery(this.props.id, this.props.Control);
-    }
-  }
-
-  componentWillUnmount(): void {
-    this.clearRetry();
-  }
-
-  private clearRetry(): void {
-    if (this.retryTimer === null) return;
-    clearTimeout(this.retryTimer);
-    this.retryTimer = null;
-  }
-
-  render() {
-    if (this.state.failed) return null;
-    const { Control } = this.props;
-    return <Control />;
-  }
-}
+import { QamAction } from "./QamAction";
+import { SteamPerformanceModal } from "./SteamPerformanceModal";
 
 export const SteamPerformanceCard: FC = () => {
   const { t } = useI18n();
   const surface = useSteamPerformanceSurface();
-  const [failures, setFailures] = useState(() => (
-    new Map<SteamPerformanceComponentId, SteamPerformanceComponent>()
-  ));
-  const reportFailure = useCallback((
-    id: SteamPerformanceComponentId,
-    control: SteamPerformanceComponent,
-  ) => {
-    setFailures((previous) => {
-      if (previous.get(id) === control) return previous;
-      const next = new Map(previous);
-      next.set(id, control);
-      return next;
-    });
-  }, []);
-  const clearFailure = useCallback((
-    id: SteamPerformanceComponentId,
-    control: SteamPerformanceComponent,
-  ) => {
-    setFailures((previous) => {
-      if (previous.get(id) !== control) return previous;
-      const next = new Map(previous);
-      next.delete(id);
-      return next;
-    });
-  }, []);
   const available = surface.status === "ready";
-  const partial = surface.rows.some(({ id, Component: Control }) => (
-    failures.get(id) === Control
-  ));
-  const status = t(!available
-    ? "steam.performance.unavailable"
-    : partial
-      ? "steam.performance.partial"
-      : "steam.performance.synced");
 
   return (
-    <Collapsible
-      id="steam-performance"
-      icon={<LuMonitorCog size={16} />}
-      title={t("steam.performance.title")}
-      summary={status}
-    >
-      <div style={{ color: theme.color.textMuted, fontSize: theme.font.caption, lineHeight: 1.4 }}>
-        {t("steam.performance.desc")}
+    <PanelSectionRow>
+      <div style={{ width: "100%" }}>
+        <QamAction
+          label={t("steam.performance.open")}
+          onPress={() => {
+            showModal(<SteamPerformanceModal />, window);
+          }}
+          style={{ display: "block", width: "100%", cursor: "pointer" }}
+        >
+          <div style={{
+            ...theme.card,
+            display: "flex",
+            alignItems: "center",
+            gap: theme.space.md,
+            padding: theme.space.md,
+            marginBottom: theme.space.card,
+          }}>
+            <span aria-hidden style={{
+              width: 38,
+              height: 38,
+              flexShrink: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              borderRadius: theme.radius.sm,
+              color: theme.color.accent,
+              background: `rgba(${theme.color.accentRgb},0.12)`,
+              boxShadow: `inset 0 0 0 1px rgba(${theme.color.accentRgb},0.2)`,
+            }}>
+              <LuMonitorCog size={19} />
+            </span>
+
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{
+                color: theme.color.textPrimary,
+                fontSize: theme.font.body,
+                fontWeight: 700,
+                lineHeight: 1.25,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}>
+                {t("steam.performance.title")}
+              </div>
+              <div style={{
+                marginTop: 3,
+                color: theme.color.textMuted,
+                fontSize: theme.font.caption,
+                lineHeight: 1.35,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}>
+                {t("steam.performance.cardSummary")}
+              </div>
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: theme.space.xs, flexShrink: 0 }}>
+              <span
+                role="status"
+                aria-label={available ? t("steam.performance.synced") : t("steam.performance.unavailable")}
+                style={{
+                  width: 7,
+                  height: 7,
+                  borderRadius: 999,
+                  background: available ? theme.color.ok : theme.color.textMuted,
+                  boxShadow: available ? `0 0 8px rgba(126,224,160,0.38)` : undefined,
+                }}
+              />
+              <LuChevronRight size={17} color={theme.color.textMuted} aria-hidden />
+            </div>
+          </div>
+        </QamAction>
       </div>
-      <div
-        style={{
-          color: partial ? theme.color.warn : available ? theme.color.accent : theme.color.textMuted,
-          fontSize: theme.font.caption,
-          marginTop: theme.space.xs,
-          marginBottom: available ? theme.space.xs : 0,
-        }}
-      >
-        {status}
-      </div>
-      {surface.rows.map(({ id, Component: NativeControl }) => (
-        <NativeControlBoundary
-          key={id}
-          id={id}
-          Control={NativeControl}
-          onError={reportFailure}
-          onRecovery={clearFailure}
-        />
-      ))}
-    </Collapsible>
+    </PanelSectionRow>
   );
 };
