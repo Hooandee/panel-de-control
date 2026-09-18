@@ -3,7 +3,6 @@ import type { ComponentType } from "react";
 export type SteamPerformanceComponent = ComponentType<Record<string, unknown>>;
 
 export interface SteamPerformanceComponents {
-  profile?: SteamPerformanceComponent;
   legacyFrameRate?: SteamPerformanceComponent;
   appFrameRate?: SteamPerformanceComponent;
   disableFrameLimit?: SteamPerformanceComponent;
@@ -42,7 +41,6 @@ export interface SteamPerformanceRow {
 const signature = (...tokens: string[]): readonly (readonly string[])[] => [tokens];
 
 const SIGNATURES: Record<SteamPerformanceComponentId, readonly (readonly string[])[]> = {
-  profile: signature("#QuickAccess_Tab_Perf_ToggleGameSettings", "GameProfileExplainer"),
   legacyFrameRate: signature("#QuickAccess_Tab_Perf_LimitFrameRate", "LimitFramerateSlider"),
   appFrameRate: signature("#QuickAccess_Tab_Perf_AppRefreshRate", "gamescope_app_target_framerate"),
   disableFrameLimit: signature("#QuickAccess_Tab_Perf_DisableFrameLimit", "gamescope_disable_framelimit"),
@@ -151,7 +149,6 @@ export function composeSteamPerformanceRows(
     ? ["sharpness"]
     : ["fsrSharpness", "nisSharpness"];
   const ids: SteamPerformanceComponentId[] = [
-    "profile",
     ...frameRows,
     "variableResolution",
     "vrr",

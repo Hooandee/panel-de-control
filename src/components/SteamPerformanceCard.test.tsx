@@ -1,14 +1,10 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const surface = vi.hoisted(() => ({
   useSurface: vi.fn(),
-}));
-
-const decky = vi.hoisted(() => ({
-  modal: null as ReactNode | null,
 }));
 
 vi.mock("../steam/useSteamPerformanceSurface", () => ({
@@ -19,59 +15,27 @@ vi.mock("../i18n", () => ({
   useI18n: () => ({ t: (key: string) => key }),
 }));
 
-vi.mock("./Collapsible", () => ({
-  Collapsible: ({ children, summary, title }: {
-    children?: ReactNode;
-    summary?: ReactNode;
-    title?: ReactNode;
-  }) => (
-    <section>
-      <h2>{title}</h2>
-      <div>{summary}</div>
-      {children}
-    </section>
-  ),
-}));
-
-vi.mock("./FocusRoot", () => ({
-  FocusRoot: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+vi.mock("../system/collapseState", () => ({
+  isCollapsed: () => false,
+  setCollapsed: vi.fn(),
 }));
 
 vi.mock("@decky/ui", () => ({
-  Focusable: ({ children, onActivate, onClick, noFocusRing: _noFocusRing, ...props }: {
+  Focusable: ({ children, onClick, style }: {
     children?: ReactNode;
-    onActivate?: () => void;
     onClick?: () => void;
-    noFocusRing?: boolean;
-    [key: string]: unknown;
-  }) => (
-    <button {...props} onClick={onClick ?? onActivate}>{children}</button>
-  ),
-  ModalRoot: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+    style?: CSSProperties;
+  }) => <button type="button" onClick={onClick} style={style}>{children}</button>,
   PanelSectionRow: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
-  showModal: (modal: ReactNode) => {
-    decky.modal = modal;
-  },
 }));
 
 import { SteamPerformanceCard } from "./SteamPerformanceCard";
-import { SteamPerformanceModal } from "./SteamPerformanceModal";
 import type { SteamPerformanceSurfaceState } from "../steam/useSteamPerformanceSurface";
-
-function openDetail(): ReturnType<typeof render> {
-  render(<SteamPerformanceCard />);
-  expect(screen.queryByTestId("native-row")).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: /steam\.performance\.open/ }));
-  const modal = decky.modal;
-  expect(modal).not.toBeNull();
-  cleanup();
-  return render(modal);
-}
 
 describe("SteamPerformanceCard", () => {
   beforeEach(() => {
     surface.useSurface.mockReset();
-    decky.modal = null;
+    localStorage.clear();
   });
 
   afterEach(() => {
@@ -80,56 +44,11 @@ describe("SteamPerformanceCard", () => {
     vi.restoreAllMocks();
   });
 
-  it("keeps synchronization visible as a compact indicator without competing with the summary", () => {
-    surface.useSurface.mockReturnValue({ status: "ready", rows: [] });
-
-    render(<SteamPerformanceCard />);
-
-    const card = screen.getByRole("button", {
-      name: "steam.performance.open. steam.performance.synced",
-    });
-    expect(within(card).getByText("steam.performance.cardSummary")).toBeTruthy();
-    expect(within(card).queryByText("steam.performance.synced")).toBeNull();
-    expect(within(card).getByTestId("steam-performance-status-ready")).toBeTruthy();
-  });
-
-  it("shows an honest compact loading state while Steam is being checked", () => {
-    surface.useSurface.mockReturnValue({ status: "loading", rows: [] });
-
-    render(<SteamPerformanceCard />);
-
-    const card = screen.getByRole("button", {
-      name: "steam.performance.open. steam.performance.loading",
-    });
-    expect(within(card).getByTestId("steam-performance-status-loading")).toBeTruthy();
-  });
-
-  it("keeps native controls out of the compact card and opens them in a dedicated view", () => {
-    const Refresh = () => <div data-testid="native-row">refresh</div>;
-    const Vrr = () => <div data-testid="native-row">vrr</div>;
-    surface.useSurface.mockReturnValue({
-      status: "ready",
-      rows: [
-        { id: "refreshRate", Component: Refresh },
-        { id: "vrr", Component: Vrr },
-      ],
-    });
-
-    openDetail();
-
-    expect(screen.getByRole("heading", { name: "steam.performance.detailTitle" })).toBeTruthy();
-    expect(screen.getAllByTestId("native-row").map((row) => row.textContent)).toEqual([
-      "refresh",
-      "vrr",
-    ]);
-  });
-
-  it("groups the dedicated controls into display, fluidity and scaling", () => {
+  it("renders the native controls inline in three always-open groups", () => {
     const row = (text: string) => () => <div data-testid="native-row">{text}</div>;
     surface.useSurface.mockReturnValue({
       status: "ready",
       rows: [
-        { id: "profile", Component: row("profile") },
         { id: "appFrameRate", Component: row("frame") },
         { id: "disableFrameLimit", Component: row("limit") },
         { id: "variableResolution", Component: row("shading") },
@@ -142,11 +61,12 @@ describe("SteamPerformanceCard", () => {
       ],
     });
 
-    openDetail();
+    render(<SteamPerformanceCard />);
 
+    expect(screen.queryByRole("button", { name: /steam\.performance\.open/ })).toBeNull();
     expect(within(screen.getByRole("group", { name: "steam.performance.group.display" }))
       .getAllByTestId("native-row").map((item) => item.textContent))
-      .toEqual(["profile", "frame", "limit"]);
+      .toEqual(["frame", "limit"]);
     expect(within(screen.getByRole("group", { name: "steam.performance.group.fluidity" }))
       .getAllByTestId("native-row").map((item) => item.textContent))
       .toEqual(["shading", "vrr", "tearing"]);
@@ -157,16 +77,186 @@ describe("SteamPerformanceCard", () => {
     expect(rows[rows.length - 1]?.textContent).toBe("reset");
   });
 
-  it("shows the unavailable state without inventing summary values", () => {
-    surface.useSurface.mockReturnValue({ status: "unavailable", rows: [] });
+  it("selects the running game's Steam profile through the shared power scope", () => {
+    surface.useSurface.mockImplementation((scope, gameId) => ({
+      status: scope === "game" && gameId === 42 ? "ready" : "unavailable",
+      rows: [],
+    }));
 
-    openDetail();
+    render(<SteamPerformanceCard profileScope="game" runningGameId={42} />);
 
-    expect(screen.getByText("steam.performance.unavailable")).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toContain("steam.performance.synced");
+  });
+
+  it("uses the same inline collapsible card pattern as the System section", () => {
+    const Refresh = () => <div data-testid="native-row">refresh</div>;
+    surface.useSurface.mockReturnValue({
+      status: "ready",
+      rows: [{ id: "refreshRate", Component: Refresh }],
+    });
+
+    render(<SteamPerformanceCard />);
+
+    const title = screen.getByText("steam.performance.title");
+    const toggle = title.closest("button");
+    expect(toggle).toBeTruthy();
+    expect(screen.getByRole("group", { name: "steam.performance.group.display" })).toBeTruthy();
+
+    fireEvent.click(toggle!);
+    expect(screen.queryByRole("group", { name: "steam.performance.group.display" })).toBeNull();
+
+    fireEvent.click(toggle!);
+    expect(screen.getByRole("group", { name: "steam.performance.group.display" })).toBeTruthy();
+  });
+
+  it("shortens only Steam's automatic scaling notch to Auto", () => {
+    const ScalingMode = () => (
+      <div>
+        <span>Automático</span>
+        <span>Ajustar</span>
+      </div>
+    );
+    surface.useSurface.mockReturnValue({
+      status: "ready",
+      rows: [{ id: "scalingMode", Component: ScalingMode }],
+    });
+
+    render(<SteamPerformanceCard />);
+
+    expect(screen.queryByText("Automático")).toBeNull();
+    expect(screen.getByText("Auto")).toBeTruthy();
+    expect(screen.getByText("Ajustar")).toBeTruthy();
+  });
+
+  it("fits native scaling sliders inside a narrower isolated viewport", () => {
+    const sliderRow = (id: string, text: string) => () => (
+      <div>
+        <div id={`${id}-label`}>{text}</div>
+        <div role="button" data-testid="native-slider-control">
+          <div
+            role="slider"
+            aria-labelledby={`${id}-label`}
+            data-testid="native-slider"
+          />
+        </div>
+      </div>
+    );
+    const Tearing = () => <div>tearing</div>;
+    surface.useSurface.mockReturnValue({
+      status: "ready",
+      rows: [
+        { id: "scalingMode", Component: sliderRow("mode", "mode") },
+        { id: "splitScalingFilter", Component: sliderRow("filter", "filter") },
+        { id: "sharpness", Component: sliderRow("sharpness", "sharpness") },
+        { id: "allowTearing", Component: Tearing },
+      ],
+    });
+
+    render(<SteamPerformanceCard />);
+
+    const viewports = screen.getAllByTestId("steam-scaling-slider-viewport");
+    const controls = screen.getAllByTestId("native-slider-control");
+    const sliders = screen.getAllByTestId("native-slider");
+    expect(viewports).toHaveLength(3);
+    expect(controls).toHaveLength(3);
+    expect(sliders).toHaveLength(3);
+    expect(screen.queryByTestId("steam-scaling-slider-layout")).toBeNull();
+    viewports.forEach((viewport) => {
+      expect(viewport.style.width).toBe("calc(100% - 8px)");
+      expect(viewport.style.marginInline).toBe("auto");
+      expect(viewport.style.minWidth).toBe("0");
+      expect(viewport.style.overflow).toBe("visible");
+      expect(viewport.style.contain).toBe("layout");
+    });
+    controls.forEach((control) => {
+      expect(control.style.width).toBe("");
+      const scale = Number(control.style.transform.match(/scale\(([^)]+)\)/)?.[1]);
+      expect(scale).toBeLessThanOrEqual(0.86);
+      expect(control.style.transformOrigin).toBe("left top");
+    });
+    sliders.forEach((slider) => {
+      expect(slider.style.width).toBe("");
+      expect(slider.style.transform).toBe("");
+    });
+    expect(screen.getByText("tearing").closest('[data-testid="steam-scaling-slider-viewport"]')).toBeNull();
+  });
+
+  it("indents native scaling titles without changing unrelated controls", () => {
+    const ScalingMode = () => (
+      <div>
+        <div id="scaling-mode-label">Modo de escalado</div>
+        <div role="slider" aria-labelledby="scaling-mode-label">Auto</div>
+      </div>
+    );
+    const Tearing = () => (
+      <div>
+        <div id="tearing-label">Permitir desgarro</div>
+        <div role="slider" aria-labelledby="tearing-label">Off</div>
+      </div>
+    );
+    surface.useSurface.mockReturnValue({
+      status: "ready",
+      rows: [
+        { id: "scalingMode", Component: ScalingMode },
+        { id: "allowTearing", Component: Tearing },
+      ],
+    });
+
+    render(<SteamPerformanceCard />);
+
+    expect(screen.getByText("Modo de escalado").style.paddingInline).toBe("8px");
+    expect(screen.getByText("Modo de escalado").style.boxSizing).toBe("border-box");
+    expect(screen.getByText("Permitir desgarro").style.paddingInline).toBe("");
+  });
+
+  it("suppresses only Steam's separator below the reset row", () => {
+    const Reset = () => (
+      <div className="Panel Focusable" data-testid="native-reset-panel">
+        <button type="button">Restablecer predeterminado</button>
+      </div>
+    );
+    surface.useSurface.mockReturnValue({
+      status: "ready",
+      rows: [{ id: "reset", Component: Reset }],
+    });
+
+    render(<SteamPerformanceCard />);
+
+    const resetWrapper = screen.getByTestId("native-reset-panel")
+      .closest("[data-pdc-steam-reset]");
+    expect(resetWrapper).toBeTruthy();
+    expect(resetWrapper?.querySelector("style")?.textContent)
+      .toContain("[data-pdc-steam-reset] .Panel.Focusable::after");
+  });
+
+  it("shows synchronization as visible announced text", () => {
+    surface.useSurface.mockReturnValue({ status: "ready", rows: [] });
+
+    render(<SteamPerformanceCard />);
+
+    expect(screen.getByText("steam.performance.title")).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toContain("steam.performance.synced");
+  });
+
+  it("shows an honest loading state before Steam discovery finishes", () => {
+    surface.useSurface.mockReturnValue({ status: "loading", rows: [] });
+
+    render(<SteamPerformanceCard />);
+
+    expect(screen.getByRole("status").textContent).toContain("steam.performance.loading");
     expect(screen.queryByTestId("native-row")).toBeNull();
   });
 
-  it("keeps healthy modal controls mounted if one Steam control throws", () => {
+  it("shows the unavailable state without inventing controls", () => {
+    surface.useSurface.mockReturnValue({ status: "unavailable", rows: [] });
+
+    render(<SteamPerformanceCard />);
+
+    expect(screen.getByRole("status").textContent).toContain("steam.performance.unavailable");
+    expect(screen.queryByTestId("native-row")).toBeNull();
+  });
+
+  it("keeps healthy inline controls mounted if one Steam control throws", () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     const Broken = () => {
       throw new Error("Steam component changed");
@@ -180,43 +270,37 @@ describe("SteamPerformanceCard", () => {
       ],
     });
 
-    openDetail();
+    render(<SteamPerformanceCard />);
 
     expect(screen.getByTestId("native-row").textContent).toBe("tearing");
-    expect(screen.getByText("steam.performance.partial")).toBeTruthy();
-    expect(screen.queryByText("steam.performance.synced")).toBeNull();
+    expect(screen.getByRole("status").textContent).toContain("steam.performance.partial");
   });
 
-  it("recovers a failed modal control when Steam publishes a new generation", () => {
+  it("recovers a failed inline control when Steam publishes a new generation", () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     const Broken = () => {
       throw new Error("Old Steam component");
     };
     const Recovered = () => <div data-testid="native-row">refresh-recovered</div>;
     let current: SteamPerformanceSurfaceState = {
-      status: "ready" as const,
-      rows: [{ id: "refreshRate" as const, Component: Broken }],
+      status: "ready",
+      rows: [{ id: "refreshRate", Component: Broken }],
     };
     surface.useSurface.mockImplementation(() => current);
-
-    render(<SteamPerformanceCard />);
-    fireEvent.click(screen.getByRole("button", { name: /steam\.performance\.open/ }));
-    const modal = decky.modal;
-    cleanup();
-    const view = render(modal);
-    expect(screen.getByText("steam.performance.partial")).toBeTruthy();
+    const view = render(<SteamPerformanceCard />);
+    expect(screen.getByRole("status").textContent).toContain("steam.performance.partial");
 
     current = {
       status: "ready",
       rows: [{ id: "refreshRate", Component: Recovered }],
     };
-    view.rerender(<SteamPerformanceModal />);
+    view.rerender(<SteamPerformanceCard />);
 
     expect(screen.getByTestId("native-row").textContent).toBe("refresh-recovered");
-    expect(screen.getByText("steam.performance.synced")).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toContain("steam.performance.synced");
   });
 
-  it("retries one transient native render failure in the dedicated view", () => {
+  it("retries one transient native render failure inline", () => {
     vi.useFakeTimers();
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     let hydrated = false;
@@ -229,17 +313,17 @@ describe("SteamPerformanceCard", () => {
       rows: [{ id: "refreshRate", Component: Transient }],
     });
 
-    openDetail();
-    expect(screen.getByText("steam.performance.partial")).toBeTruthy();
+    render(<SteamPerformanceCard />);
+    expect(screen.getByRole("status").textContent).toContain("steam.performance.partial");
 
     hydrated = true;
     act(() => { vi.advanceTimersByTime(2000); });
 
     expect(screen.getByTestId("native-row").textContent).toBe("recovered");
-    expect(screen.getByText("steam.performance.synced")).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toContain("steam.performance.synced");
   });
 
-  it("renews the retry budget after the same native control recovers", () => {
+  it("renews the retry budget after the same inline control recovers", () => {
     vi.useFakeTimers();
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     let failing = true;
@@ -251,20 +335,19 @@ describe("SteamPerformanceCard", () => {
       status: "ready",
       rows: [{ id: "refreshRate", Component: Intermittent }],
     });
+    const view = render(<SteamPerformanceCard />);
 
-    const view = openDetail();
     failing = false;
     act(() => { vi.advanceTimersByTime(2000); });
     expect(screen.getByTestId("native-row").textContent).toBe("stable");
 
     failing = true;
-    view.rerender(<SteamPerformanceModal />);
-    expect(screen.getByText("steam.performance.partial")).toBeTruthy();
+    view.rerender(<SteamPerformanceCard />);
+    expect(screen.getByRole("status").textContent).toContain("steam.performance.partial");
 
     failing = false;
     act(() => { vi.advanceTimersByTime(2000); });
-    const rows = screen.getAllByTestId("native-row");
-    expect(rows[rows.length - 1]?.textContent).toBe("stable");
+    expect(screen.getByTestId("native-row").textContent).toBe("stable");
   });
 
   it("hides a group while its only native control is failed", () => {
@@ -281,18 +364,10 @@ describe("SteamPerformanceCard", () => {
       ],
     });
 
-    openDetail();
+    render(<SteamPerformanceCard />);
 
     expect(screen.queryByRole("group", { name: "steam.performance.group.display" })).toBeNull();
     expect(within(screen.getByRole("group", { name: "steam.performance.group.fluidity" }))
       .getByTestId("native-row").textContent).toBe("vrr");
-  });
-
-  it("announces modal synchronization changes", () => {
-    surface.useSurface.mockReturnValue({ status: "unavailable", rows: [] });
-
-    openDetail();
-
-    expect(screen.getByRole("status").textContent).toBe("steam.performance.unavailable");
   });
 });

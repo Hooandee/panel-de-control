@@ -31,7 +31,6 @@ vi.mock("./PowerArc", () => ({
 }));
 vi.mock("./TdpMonitorNotice", () => ({ TdpMonitorNotice: () => <div /> }));
 vi.mock("./PowerPresetsModal", () => ({ openPowerPresetsModal: vi.fn() }));
-vi.mock("./ProfileSelector", () => ({ ProfileSelector: () => <div /> }));
 vi.mock("./Presets", () => ({ Presets: () => <div /> }));
 vi.mock("./FirmwareModes", () => ({ FirmwareModes: () => <div /> }));
 vi.mock("./AdvancedBoost", () => ({ AdvancedBoost: () => <div /> }));
@@ -119,9 +118,7 @@ function renderTdpSection(
     <TdpSection
       tdp={tdp}
       scope="global"
-      game={null}
       power={power}
-      onScope={vi.fn()}
       onWatts={vi.fn()}
       onSetLevels={vi.fn()}
       onSetMode={vi.fn()}
@@ -148,9 +145,7 @@ describe("TdpSection Steam Deck PPT arc", () => {
       <TdpSection
         tdp={deckState}
         scope="game"
-        game={null}
         power={null}
-        onScope={vi.fn()}
         onWatts={vi.fn()}
         onSetLevels={vi.fn()}
         onSetMode={vi.fn()}
@@ -227,9 +222,7 @@ describe("TdpSection Steam Deck PPT arc", () => {
       <TdpSection
         tdp={state}
         scope="global"
-        game={null}
         power={null}
-        onScope={vi.fn()}
         onWatts={vi.fn()}
         onSetLevels={vi.fn()}
         onSetMode={vi.fn()}
@@ -266,9 +259,7 @@ describe("TdpSection Steam Deck PPT arc", () => {
       <TdpSection
         tdp={state}
         scope="global"
-        game={null}
         power={null}
-        onScope={vi.fn()}
         onWatts={vi.fn()}
         onSetLevels={vi.fn()}
         onSetMode={vi.fn()}
@@ -323,9 +314,7 @@ describe("TdpSection Steam Deck PPT arc", () => {
       <TdpSection
         tdp={state}
         scope="global"
-        game={null}
         power={{ auto_tdp: true } as never}
-        onScope={vi.fn()}
         onWatts={vi.fn()}
         onSetLevels={vi.fn()}
         onSetMode={vi.fn()}
@@ -371,9 +360,7 @@ describe("TdpSection Steam Deck PPT arc", () => {
       <TdpSection
         tdp={deckState}
         scope="global"
-        game={null}
         power={null}
-        onScope={vi.fn()}
         onWatts={vi.fn()}
         onSetLevels={vi.fn()}
         onSetMode={vi.fn()}
@@ -415,9 +402,7 @@ describe("TdpSection Steam Deck PPT arc", () => {
           },
         }}
         scope="global"
-        game={null}
         power={null}
-        onScope={vi.fn()}
         onWatts={vi.fn()}
         onSetLevels={vi.fn()}
         onSetMode={vi.fn()}

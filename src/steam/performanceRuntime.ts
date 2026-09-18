@@ -7,6 +7,9 @@ import {
 } from "./performanceSurface";
 
 interface SteamPerformanceStore extends SteamPerformanceStoreView {
+  nCurrentGameID?: string | number;
+  nActiveProfileGameID?: string | number;
+  SetGameSpecificProfileEnabled?: (enabled: boolean) => unknown;
   SetVRREnabled?: (enabled: boolean) => unknown;
   SetSplitScalingScaler?: (value: number) => unknown;
   ResetCurrentPerfProfileSettings?: () => unknown;
@@ -47,10 +50,28 @@ let cachedRuntime: {
   components?: SteamPerformanceComponents;
 } | null = null;
 let cachedLegacyComponents: SteamPerformanceComponents | null = null;
+let legacyProfileRequests = new WeakMap<object, string>();
+const STEAM_GLOBAL_PROFILE_GAME_ID = "769";
+
+const appIdFromSteamGameId = (gameId: string): string | null => {
+  if (typeof BigInt !== "function") return null;
+  try {
+    const value = BigInt(gameId);
+    const uint32Mask = BigInt(0xffffffff);
+    if (value <= uint32Mask) return value.toString();
+    const type = (value >> BigInt(24)) & BigInt(0xff);
+    return type === BigInt(2)
+      ? ((value >> BigInt(32)) & uint32Mask).toString()
+      : (value & BigInt(0xffffff)).toString();
+  } catch {
+    return null;
+  }
+};
 
 export function resetSteamPerformanceRuntimeCache(): void {
   cachedRuntime = null;
   cachedLegacyComponents = null;
+  legacyProfileRequests = new WeakMap<object, string>();
 }
 
 const sourceOf = (candidate: unknown): string => {
@@ -175,8 +196,6 @@ const isStoreClass = (candidate: unknown): candidate is SteamPerformanceStoreCla
   if (typeof candidate !== "function") return false;
   const type = candidate as unknown as SteamPerformanceStoreClass;
   return typeof type.Get === "function"
-    && typeof type.prototype?.SetVRREnabled === "function"
-    && typeof type.prototype?.SetSplitScalingScaler === "function"
     && typeof type.prototype?.ResetCurrentPerfProfileSettings === "function";
 };
 
@@ -207,8 +226,6 @@ const resolveCurrentRuntimeStore = (): SteamPerformanceStore | null | undefined 
   for (const [moduleId, factory] of Object.entries(runtime.m)) {
     if (!factoryIncludes(
       factory,
-      "SetVRREnabled",
-      "SetSplitScalingScaler",
       "ResetCurrentPerfProfileSettings",
     )) continue;
     try {
@@ -241,6 +258,51 @@ export function resolveSteamPerformanceStore(): SteamPerformanceStore | null {
     return snapshotStore?.msgLimits ? snapshotStore : null;
   } catch {
     return null;
+  }
+}
+
+export function syncSteamPerformanceProfile(
+  scope: "global" | "game",
+  runningGameId: number | null,
+  force = false,
+): void {
+  if (runningGameId === null) return;
+  const store = resolveSteamPerformanceStore();
+  if (!store?.SetGameSpecificProfileEnabled) return;
+
+  const expectedGameId = String(runningGameId);
+  const currentGameId = store.nCurrentGameID === undefined
+    ? null
+    : String(store.nCurrentGameID);
+  const activeProfileGameId = store.nActiveProfileGameID === undefined
+    ? null
+    : String(store.nActiveProfileGameID);
+  if (
+    currentGameId !== null
+    && currentGameId !== STEAM_GLOBAL_PROFILE_GAME_ID
+    && appIdFromSteamGameId(currentGameId) !== expectedGameId
+  ) return;
+
+  const useGameProfile = scope === "game";
+  const gameProfileActive = currentGameId !== null
+    && currentGameId !== STEAM_GLOBAL_PROFILE_GAME_ID
+    && activeProfileGameId === currentGameId;
+  if (
+    currentGameId !== null
+    && activeProfileGameId !== null
+    && gameProfileActive === useGameProfile
+  ) return;
+
+  if (currentGameId === null || activeProfileGameId === null) {
+    const request = `${expectedGameId}:${useGameProfile}`;
+    if (!force && legacyProfileRequests.get(store) === request) return;
+    legacyProfileRequests.set(store, request);
+  }
+
+  try {
+    store.SetGameSpecificProfileEnabled(useGameProfile);
+  } catch {
+    legacyProfileRequests.delete(store);
   }
 }
 

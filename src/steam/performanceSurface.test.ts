@@ -36,7 +36,6 @@ describe("Steam performance component discovery", () => {
     const selected = selectSteamPerformanceComponents(exportsFixture());
 
     expect(Object.keys(selected)).toEqual([
-      "profile",
       "legacyFrameRate",
       "appFrameRate",
       "disableFrameLimit",
@@ -116,7 +115,6 @@ describe("Steam performance route composition", () => {
     });
 
     expect(rows.map((row) => row.id)).toEqual([
-      "profile",
       "legacyFrameRate",
       "refreshRate",
       "variableResolution",
@@ -137,7 +135,6 @@ describe("Steam performance route composition", () => {
     });
 
     expect(rows.map((row) => row.id)).toEqual([
-      "profile",
       "appFrameRate",
       "disableFrameLimit",
       "variableResolution",

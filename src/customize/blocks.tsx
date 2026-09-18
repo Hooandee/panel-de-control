@@ -12,7 +12,6 @@ export const BLOCK_GAP = theme.space.card;
 export interface BlockDef {
   Component: FC;
   sectionId: string;
-  providerSectionId?: string | null;
   useAvailable?: () => boolean;
 }
 
@@ -24,12 +23,6 @@ export function registerBlock(id: string, def: BlockDef): void {
 
 export function getBlockDef(id: string): BlockDef | undefined {
   return REGISTRY[id];
-}
-
-export function getBlockProviderSectionId(id: string): string | undefined {
-  const def = getBlockDef(id);
-  if (!def || def.providerSectionId === null) return undefined;
-  return def.providerSectionId ?? def.sectionId;
 }
 
 export const Block: FC<{ id: string }> = ({ id }) => {
@@ -51,13 +44,20 @@ export const BlockProbe: FC<{ sectionKey: string; id: string }> = ({ sectionKey,
   return null;
 };
 
-export const SectionView: FC<{ sectionId: string; desktopMode?: boolean }> = ({ sectionId, desktopMode = false }) => {
+export function useSectionBlockIds(
+  sectionId: string,
+  desktopMode = false,
+): { ids: string[]; visible: string[] } {
   const layout = useLayout();
   const ids = useMemo(() => blockOrder(sectionId, desktopMode), [sectionId, desktopMode]);
-  const visible = useMemo(
-    () => visibleIds(ids, layout.blocks[sectionId]),
+  return useMemo(
+    () => ({ ids, visible: visibleIds(ids, layout.blocks[sectionId]) }),
     [ids, layout, sectionId],
   );
+}
+
+export const SectionView: FC<{ sectionId: string; desktopMode?: boolean }> = ({ sectionId, desktopMode = false }) => {
+  const { ids, visible } = useSectionBlockIds(sectionId, desktopMode);
   return (
     <>
       {ids.map((id) => (

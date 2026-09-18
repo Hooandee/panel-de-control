@@ -1,11 +1,6 @@
 import { FC, ReactNode, useMemo } from "react";
 
-import {
-  Block,
-  getBlockDef,
-  getBlockProviderSectionId,
-  BLOCK_GAP,
-} from "../customize/blocks";
+import { Block, getBlockDef, BLOCK_GAP } from "../customize/blocks";
 import { providersFor } from "../customize/views";
 import { useViews } from "../customize/viewStore";
 import { useModules } from "../customize/modules";
@@ -14,7 +9,9 @@ import { blockAvailableInMode, POWER_TAB } from "../customize/manifest";
 import { useDesktopState } from "../desktop/useDesktop";
 import { usePotencia } from "../tdp/potenciaContext";
 import { TdpMonitorNotice } from "../components/TdpMonitorNotice";
-import { SECTION_PROVIDERS } from "./providerMounts";
+import { PotenciaProviderMount, SECTION_PROVIDERS } from "./providerMounts";
+
+const POWER_PROFILE_BLOCKS = new Set(["tdp", "autoTdp", "steamPerformance"]);
 
 const PowerMonitorFallback: FC = () => {
   const { monitorOnly, onReactivate, tdp } = usePotencia();
@@ -39,13 +36,12 @@ export const CustomView: FC<{ viewId: string }> = ({ viewId }) => {
   );
 
   const sections = useMemo(
-    () => providersFor(blocks, getBlockProviderSectionId),
+    () => providersFor(blocks, (id) => getBlockDef(id)?.sectionId),
     [blocks],
   );
 
-  const needsPowerFallback =
-    blocks.some((id) => getBlockProviderSectionId(id) === POWER_TAB)
-    && !blocks.includes("tdp");
+  const needsPowerFallback = blocks.includes("autoTdp") && !blocks.includes("tdp");
+  const needsPowerProfileSelector = blocks.some((id) => POWER_PROFILE_BLOCKS.has(id));
 
   const content: ReactNode = (
     <div style={{ display: "flex", flexDirection: "column", gap: BLOCK_GAP }}>
@@ -57,6 +53,13 @@ export const CustomView: FC<{ viewId: string }> = ({ viewId }) => {
   );
 
   return sections.reduceRight<ReactNode>((acc, s) => {
+    if (s === POWER_TAB) {
+      return (
+        <PotenciaProviderMount showProfileSelector={needsPowerProfileSelector}>
+          {acc}
+        </PotenciaProviderMount>
+      );
+    }
     const Mount = SECTION_PROVIDERS[s];
     return Mount ? <Mount>{acc}</Mount> : acc;
   }, content);

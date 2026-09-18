@@ -12,6 +12,7 @@ import {
   discoverSteamPerformanceComponents,
   resetSteamPerformanceRuntimeCache,
   resolveSteamPerformanceStore,
+  syncSteamPerformanceProfile,
   subscribeSteamPerformanceState,
 } from "./performanceRuntime";
 
@@ -192,6 +193,123 @@ describe("Steam performance runtime", () => {
     expect(decky.findModuleExport).not.toHaveBeenCalled();
   });
 
+  it("selects the running game's Steam profile for game scope", () => {
+    const state = { active: "769" };
+    (window as Window & { SystemPerfStore?: unknown }).SystemPerfStore = {
+      msgLimits: {},
+      nCurrentGameID: "42",
+      get nActiveProfileGameID() { return state.active; },
+      SetGameSpecificProfileEnabled(enabled: boolean) {
+        state.active = enabled ? "42" : "769";
+      },
+    };
+
+    syncSteamPerformanceProfile("game", 42);
+
+    expect(state.active).toBe("42");
+  });
+
+  it("returns Steam to its global profile for global scope", () => {
+    const state = { active: "42" };
+    (window as Window & { SystemPerfStore?: unknown }).SystemPerfStore = {
+      msgLimits: {},
+      nCurrentGameID: "42",
+      get nActiveProfileGameID() { return state.active; },
+      SetGameSpecificProfileEnabled(enabled: boolean) {
+        state.active = enabled ? "42" : "769";
+      },
+    };
+
+    syncSteamPerformanceProfile("global", 42);
+
+    expect(state.active).toBe("769");
+  });
+
+  it("selects the game profile when Steam is still on its global sentinel", () => {
+    const state = { current: "769", active: "769" };
+    (window as Window & { SystemPerfStore?: unknown }).SystemPerfStore = {
+      msgLimits: {},
+      get nCurrentGameID() { return state.current; },
+      get nActiveProfileGameID() { return state.active; },
+      SetGameSpecificProfileEnabled(enabled: boolean) {
+        state.current = enabled ? "42" : "769";
+        state.active = state.current;
+      },
+    };
+
+    syncSteamPerformanceProfile("game", 42);
+
+    expect(state).toEqual({ current: "42", active: "42" });
+  });
+
+  it("matches a non-Steam shortcut GameID64 to its running appid", () => {
+    const shortcutAppId = 3570110851;
+    const shortcutGameId = "15333509348173283328";
+    const state = { active: "769" };
+    (window as Window & { SystemPerfStore?: unknown }).SystemPerfStore = {
+      msgLimits: {},
+      nCurrentGameID: shortcutGameId,
+      get nActiveProfileGameID() { return state.active; },
+      SetGameSpecificProfileEnabled(enabled: boolean) {
+        state.active = enabled ? shortcutGameId : "769";
+      },
+    };
+
+    syncSteamPerformanceProfile("game", shortcutAppId);
+
+    expect(state.active).toBe(shortcutGameId);
+  });
+
+  it("fails closed on GameID64 matching when an old client lacks BigInt", () => {
+    const nativeBigInt = globalThis.BigInt;
+    const setProfile = vi.fn();
+    (window as Window & { SystemPerfStore?: unknown }).SystemPerfStore = {
+      msgLimits: {},
+      nCurrentGameID: "15333509348173283328",
+      nActiveProfileGameID: "769",
+      SetGameSpecificProfileEnabled: setProfile,
+    };
+
+    vi.stubGlobal("BigInt", undefined);
+    try {
+      syncSteamPerformanceProfile("game", 3570110851);
+    } finally {
+      vi.stubGlobal("BigInt", nativeBigInt);
+    }
+
+    expect(setProfile).not.toHaveBeenCalled();
+  });
+
+  it("does not change Steam when its foreground game differs from Panel de Control", () => {
+    let active = "41";
+    (window as Window & { SystemPerfStore?: unknown }).SystemPerfStore = {
+      msgLimits: {},
+      nCurrentGameID: "41",
+      nActiveProfileGameID: active,
+      SetGameSpecificProfileEnabled(enabled: boolean) {
+        active = enabled ? "41" : "769";
+      },
+    };
+
+    syncSteamPerformanceProfile("game", 42);
+
+    expect(active).toBe("41");
+  });
+
+  it("reapplies a legacy game profile when a new surface lifecycle starts", () => {
+    const setProfile = vi.fn();
+    (window as Window & { SystemPerfStore?: unknown }).SystemPerfStore = {
+      msgLimits: {},
+      SetGameSpecificProfileEnabled: setProfile,
+    };
+
+    syncSteamPerformanceProfile("game", 42);
+    syncSteamPerformanceProfile("game", 42);
+    syncSteamPerformanceProfile("game", 42, true);
+
+    expect(setProfile.mock.calls).toEqual([[true], [true]]);
+  });
+
   it("hydrates the store singleton when Steam has not published the global yet", () => {
     const hydrated = { msgLimits: { disable_refresh_rate_management: true } };
     class SteamPerfStore {
@@ -236,6 +354,50 @@ describe("Steam performance runtime", () => {
     expect(resolveSteamPerformanceStore()).toBe(hydrated);
     expect(resolveSteamPerformanceStore()).toBe(hydrated);
     expect(runtime).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    {
+      missing: "VRR",
+      Store: class SteamPerfStore {
+        static Get() { return { msgLimits: { legacy: "without-vrr" } }; }
+        SetSplitScalingScaler() {}
+        ResetCurrentPerfProfileSettings() {}
+      },
+      factory: function legacyStoreWithoutVrrFactory(): string {
+        return "SetSplitScalingScaler ResetCurrentPerfProfileSettings";
+      },
+      expected: "without-vrr",
+    },
+    {
+      missing: "split scaling",
+      Store: class SteamPerfStore {
+        static Get() { return { msgLimits: { legacy: "without-split-scaling" } }; }
+        SetVRREnabled() {}
+        ResetCurrentPerfProfileSettings() {}
+      },
+      factory: function legacyStoreWithoutSplitScalingFactory(): string {
+        return "SetVRREnabled ResetCurrentPerfProfileSettings";
+      },
+      expected: "without-split-scaling",
+    },
+  ])("discovers an older runtime without optional $missing support", ({ Store, factory, expected }) => {
+    const runtime = Object.assign(
+      vi.fn((_id: string) => ({ SteamPerfStore: Store })),
+      {
+        m: {
+          legacy: factory,
+        },
+      },
+    );
+    (window as Window & { webpackChunksteamui?: unknown }).webpackChunksteamui = {
+      push: (_chunk: [unknown[], Record<string, never>, (value: typeof runtime) => void]) => {
+        _chunk[2](runtime);
+      },
+    };
+    decky.findModuleExport.mockReturnValue(undefined);
+
+    expect(resolveSteamPerformanceStore()?.msgLimits).toEqual({ legacy: expected });
   });
 
   it("rejects two distinct performance stores in the live runtime", () => {

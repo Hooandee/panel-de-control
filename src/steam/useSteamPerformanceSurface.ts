@@ -8,6 +8,7 @@ import {
 import {
   discoverSteamPerformanceComponents,
   resolveSteamPerformanceStore,
+  syncSteamPerformanceProfile,
   subscribeSteamPerformanceState,
 } from "./performanceRuntime";
 
@@ -34,30 +35,35 @@ const readSurface = (): SteamPerformanceSurfaceState => {
   const rows = layout
     ? composeSteamPerformanceRows(components, layout)
     : [];
-  return rows.some(({ id }) => id !== "profile" && id !== "reset")
+  return rows.some(({ id }) => id !== "reset")
     ? { status: "ready", rows }
     : EMPTY;
 };
 
-export function useSteamPerformanceSurface(): SteamPerformanceSurfaceState {
+export function useSteamPerformanceSurface(
+  profileScope: "global" | "game" = "global",
+  runningGameId: number | null = null,
+): SteamPerformanceSurfaceState {
   const [surface, setSurface] = useState<SteamPerformanceSurfaceState>(LOADING);
   const aliveRef = useRef(false);
 
-  const sync = useCallback(() => {
+  const sync = useCallback((forceProfileSync = false) => {
     if (!aliveRef.current) return;
+    syncSteamPerformanceProfile(profileScope, runningGameId, forceProfileSync);
     const next = readSurface();
     setSurface((previous) => (
       previous.status === next.status && sameRows(previous.rows, next.rows)
         ? previous
         : next
     ));
-  }, []);
+  }, [profileScope, runningGameId]);
 
   useEffect(() => {
     aliveRef.current = true;
-    const unsubscribe = subscribeSteamPerformanceState(sync);
-    sync();
-    const timer = setInterval(sync, RETRY_MS);
+    const refresh = () => sync(false);
+    const unsubscribe = subscribeSteamPerformanceState(refresh);
+    sync(true);
+    const timer = setInterval(refresh, RETRY_MS);
     return () => {
       aliveRef.current = false;
       clearInterval(timer);

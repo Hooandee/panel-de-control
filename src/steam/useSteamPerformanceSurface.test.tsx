@@ -6,12 +6,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const runtime = vi.hoisted(() => ({
   discover: vi.fn(),
   resolve: vi.fn(),
+  syncProfile: vi.fn(),
   subscribe: vi.fn(),
 }));
 
 vi.mock("./performanceRuntime", () => ({
   discoverSteamPerformanceComponents: runtime.discover,
   resolveSteamPerformanceStore: runtime.resolve,
+  syncSteamPerformanceProfile: runtime.syncProfile,
   subscribeSteamPerformanceState: runtime.subscribe,
 }));
 
@@ -24,6 +26,7 @@ describe("useSteamPerformanceSurface", () => {
     vi.useFakeTimers();
     runtime.discover.mockReset();
     runtime.resolve.mockReset();
+    runtime.syncProfile.mockReset();
     runtime.subscribe.mockReset();
     runtime.subscribe.mockReturnValue(vi.fn());
   });
@@ -51,11 +54,19 @@ describe("useSteamPerformanceSurface", () => {
 
     expect(result.current.status).toBe("ready");
     expect(result.current.rows.map((row) => row.id)).toEqual([
-      "profile",
       "appFrameRate",
       "disableFrameLimit",
       "reset",
     ]);
+  });
+
+  it("keeps Steam on the profile selected by the shared power scope", () => {
+    runtime.discover.mockReturnValue({ legacyFrameRate: Native });
+    runtime.resolve.mockReturnValue({ msgLimits: {} });
+
+    renderHook(() => useSteamPerformanceSurface("game", 42));
+
+    expect(runtime.syncProfile).toHaveBeenCalledWith("game", 42, true);
   });
 
   it("reports loading before the first effect without touching Steam during render", () => {
@@ -102,8 +113,8 @@ describe("useSteamPerformanceSurface", () => {
     expect(runtime.discover).toHaveBeenCalledOnce();
   });
 
-  it("does not claim availability when only profile and reset chrome resolved", () => {
-    runtime.discover.mockReturnValue({ profile: Native, reset: Native });
+  it("does not claim availability when only reset chrome resolved", () => {
+    runtime.discover.mockReturnValue({ reset: Native });
     runtime.resolve.mockReturnValue({ msgLimits: {} });
 
     const { result } = renderHook(() => useSteamPerformanceSurface());
@@ -111,9 +122,9 @@ describe("useSteamPerformanceSurface", () => {
     expect(result.current).toEqual({ status: "unavailable", rows: [] });
   });
 
-  it("retries discovery after resolving only non-control profile chrome", () => {
+  it("retries discovery after resolving only reset chrome", () => {
     runtime.discover
-      .mockReturnValueOnce({ profile: Native, reset: Native })
+      .mockReturnValueOnce({ reset: Native })
       .mockReturnValue({ legacyFrameRate: Native, reset: Native });
     runtime.resolve.mockReturnValue({ msgLimits: {} });
 

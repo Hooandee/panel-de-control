@@ -34,6 +34,18 @@ vi.mock("../components/TdpMonitorNotice", () => ({
   TdpMonitorNotice: () => <div>tdp-monitor-fallback</div>,
 }));
 vi.mock("./providerMounts", () => ({
+  PotenciaProviderMount: ({
+    children,
+    showProfileSelector,
+  }: {
+    children: React.ReactNode;
+    showProfileSelector?: boolean;
+  }) => (
+    <div data-testid="power-provider">
+      {showProfileSelector && <div>profile-selector</div>}
+      {children}
+    </div>
+  ),
   SECTION_PROVIDERS: {
     power: ({ children }: { children: React.ReactNode }) => (
       <div data-testid="power-provider">{children}</div>
@@ -49,11 +61,7 @@ const DesktopPower: FC = () => <div>desktop-power</div>;
 const SteamPerformance: FC = () => <div>steam-performance</div>;
 registerBlock("autoTdp", { sectionId: "power", Component: AutoTdp });
 registerBlock("desktopPower", { sectionId: "power", Component: DesktopPower });
-registerBlock("steamPerformance", {
-  sectionId: "power",
-  providerSectionId: null,
-  Component: SteamPerformance,
-});
+registerBlock("steamPerformance", { sectionId: "power", Component: SteamPerformance });
 
 describe("CustomView machine-specific blocks", () => {
   afterEach(() => {
@@ -69,6 +77,7 @@ describe("CustomView machine-specific blocks", () => {
 
     expect(screen.getByText("desktop-power")).toBeTruthy();
     expect(screen.queryByText("handheld-auto-tdp")).toBeNull();
+    expect(screen.queryByText("profile-selector")).toBeNull();
   });
 
   it("hides persisted desktop blocks in handheld mode", () => {
@@ -79,14 +88,33 @@ describe("CustomView machine-specific blocks", () => {
     expect(screen.getByTestId("power-provider")).toBeTruthy();
   });
 
-  it("does not tie Steam's independent block to the TDP monitor fallback", () => {
+  it("mounts the power provider for Steam's shared global and game scope", () => {
+    context.blocks = ["steamPerformance"];
+
+    render(<CustomView viewId="mixed" />);
+
+    expect(screen.getByText("steam-performance")).toBeTruthy();
+    expect(screen.getByTestId("power-provider")).toBeTruthy();
+    expect(screen.getByText("profile-selector")).toBeTruthy();
+  });
+
+  it("does not ask to reactivate TDP for a Steam-only view", () => {
     context.blocks = ["steamPerformance"];
     context.monitorOnly = true;
 
     render(<CustomView viewId="mixed" />);
 
-    expect(screen.getByText("steam-performance")).toBeTruthy();
     expect(screen.queryByText("tdp-monitor-fallback")).toBeNull();
-    expect(screen.queryByTestId("power-provider")).toBeNull();
+    expect(screen.getByText("steam-performance")).toBeTruthy();
+  });
+
+  it("keeps the reactivation notice for an Auto-TDP-only view", () => {
+    context.blocks = ["autoTdp"];
+    context.monitorOnly = true;
+
+    render(<CustomView viewId="mixed" />);
+
+    expect(screen.getByText("tdp-monitor-fallback")).toBeTruthy();
+    expect(screen.getByText("handheld-auto-tdp")).toBeTruthy();
   });
 });
