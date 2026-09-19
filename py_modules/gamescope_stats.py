@@ -16,11 +16,23 @@ class GamescopeStats:
         self._fps = None
         self._fps_at = None
         self._focus = None
+        self._unread_min_fps = None
+        self._unread_focus = None
+        self._unread_sample_at = None
         self._pending_fps = None
         self._pending_fps_at = None
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
         self._thread = None
+
+    def _clear_samples_locked(self):
+        self._fps = None
+        self._fps_at = None
+        self._unread_min_fps = None
+        self._unread_focus = None
+        self._unread_sample_at = None
+        self._pending_fps = None
+        self._pending_fps_at = None
 
     def _apply_line(self, line):
         if not isinstance(line, str):
@@ -30,17 +42,11 @@ class GamescopeStats:
                 fps = float(line[4:])
             except (TypeError, ValueError, OverflowError):
                 with self._lock:
-                    self._pending_fps = None
-                    self._pending_fps_at = None
-                    self._fps = None
-                    self._fps_at = None
+                    self._clear_samples_locked()
                 return
             if not math.isfinite(fps) or fps < 0:
                 with self._lock:
-                    self._pending_fps = None
-                    self._pending_fps_at = None
-                    self._fps = None
-                    self._fps_at = None
+                    self._clear_samples_locked()
                 return
             with self._lock:
                 self._pending_fps = fps
@@ -54,11 +60,19 @@ class GamescopeStats:
             if self._pending_fps is not None:
                 self._fps = self._pending_fps
                 self._fps_at = self._pending_fps_at
+                if self._unread_focus != focus or self._unread_min_fps is None:
+                    self._unread_min_fps = self._pending_fps
+                else:
+                    self._unread_min_fps = min(
+                        self._unread_min_fps,
+                        self._pending_fps,
+                    )
+                self._unread_focus = focus
+                self._unread_sample_at = self._pending_fps_at
                 self._pending_fps = None
                 self._pending_fps_at = None
             else:
-                self._fps = None
-                self._fps_at = None
+                self._clear_samples_locked()
 
     def _pipe_path(self):
         pattern = os.path.join(
@@ -133,17 +147,21 @@ class GamescopeStats:
 
     def clear(self):
         with self._lock:
-            self._fps = None
-            self._fps_at = None
             self._focus = None
-            self._pending_fps = None
-            self._pending_fps_at = None
+            self._clear_samples_locked()
 
     def read(self):
         with self._lock:
-            fps = self._fps
-            fps_at = self._fps_at
             focus = self._focus
+            if self._unread_focus == focus and self._unread_min_fps is not None:
+                fps = self._unread_min_fps
+                fps_at = self._unread_sample_at
+            else:
+                fps = self._fps
+                fps_at = self._fps_at
+            self._unread_min_fps = None
+            self._unread_focus = None
+            self._unread_sample_at = None
         now = self._clock()
         age = None if fps_at is None else max(0.0, now - fps_at)
         if focus is None or focus == "steam":

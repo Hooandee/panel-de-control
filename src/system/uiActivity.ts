@@ -1,4 +1,6 @@
+import { getGamepadNavigationTrees } from "@decky/ui";
 import { setUiActive } from "../api";
+import { onQamDocument } from "../qamDocument";
 
 const RETRY_DELAYS_MS = [250, 1000] as const;
 
@@ -16,6 +18,32 @@ interface SteamOverlayActivityApi {
       userInvoked?: boolean,
     ) => void,
   ): { unregister(): void };
+}
+
+type QamDocumentSubscriber = (callback: (doc: Document) => void) => () => void;
+
+interface QamNavigationTree {
+  id?: unknown;
+  m_ID?: unknown;
+  m_Root?: { m_element?: Element | null };
+  Root?: { Element?: Element | null };
+}
+
+export function findQamNavigationDocument(
+  candidates?: QamNavigationTree[],
+): Document | null {
+  try {
+    const trees = candidates
+      ?? getGamepadNavigationTrees() as QamNavigationTree[] | undefined;
+    const tree = trees?.find((candidate) => {
+      const id = candidate.id ?? candidate.m_ID;
+      return typeof id === "string" && id.startsWith("QuickAccess");
+    });
+    const element = tree?.m_Root?.m_element ?? tree?.Root?.Element;
+    return element?.ownerDocument ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export function createUiActivityCoordinator(
@@ -144,6 +172,58 @@ export function startSteamOverlayActivity(): () => void {
   return createSteamOverlayActivityBridge(
     () => uiActivity.acquire(),
     overlay,
+  );
+}
+
+export function createQamDocumentActivityBridge(
+  acquire: () => () => void,
+  subscribe: QamDocumentSubscriber,
+  discover: () => Document | null = () => null,
+): () => void {
+  let current: Document | null = null;
+  let release: (() => void) | null = null;
+  let stopped = false;
+  const releaseOwner = () => {
+    const activeRelease = release;
+    release = null;
+    activeRelease?.();
+  };
+  const refresh = () => {
+    if (stopped || !current) return;
+    if (!current.hidden) {
+      if (release === null) release = acquire();
+      return;
+    }
+    releaseOwner();
+  };
+  const detach = () => {
+    current?.removeEventListener("visibilitychange", refresh);
+    current = null;
+    releaseOwner();
+  };
+  const attach = (doc: Document) => {
+    if (stopped || doc === current) return;
+    detach();
+    current = doc;
+    current.addEventListener("visibilitychange", refresh);
+    refresh();
+  };
+  const discovered = discover();
+  if (discovered) attach(discovered);
+  const unsubscribe = subscribe(attach);
+  return () => {
+    if (stopped) return;
+    stopped = true;
+    unsubscribe();
+    detach();
+  };
+}
+
+export function startQamDocumentActivity(): () => void {
+  return createQamDocumentActivityBridge(
+    () => uiActivity.acquire(),
+    onQamDocument,
+    findQamNavigationDocument,
   );
 }
 

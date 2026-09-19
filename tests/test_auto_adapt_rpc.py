@@ -958,6 +958,47 @@ def test_game_exit_keeps_global_auto_grid_floor_and_restores_manual_on_disable(P
     assert p._tdp_backend._levels == (5, 8, 12)
 
 
+def test_game_exit_applies_global_auto_floor_while_ui_is_active(Plugin):
+    p = Plugin()
+    p._init()
+    p._tdp_profiles.set_pl1("global", 5)
+    p._tdp_profiles.set_auto_config("global", 60, 5)
+    p._tdp_profiles.set_auto_tdp("global", True)
+    asyncio.run(p.set_current_game("42"))
+    p._auto_controller.setpoint = 33
+    p._auto_setpoint = 33
+    p._tdp_backend._applied = 33
+    p._tdp_backend._levels = (33, 33, 33)
+    asyncio.run(p.set_ui_active(True))
+
+    asyncio.run(p.set_current_game(None))
+
+    assert p._tdp_backend._levels == (15, 15, 15)
+    assert p._auto_controller is None
+    assert p._auto_setpoint is None
+
+
+def test_auto_tick_recovers_from_the_lowest_fps_between_ticks(Plugin):
+    p = Plugin()
+    p._init()
+    p._current_appid = "g"
+    p._tdp_profiles.set_auto_tdp("game", True, appid="g")
+    p._tdp_profiles.set_auto_config("game", 40, 5, appid="g")
+    p._power_reader.read = lambda: {"watts": 6.0, "gpu_busy": 90.0}
+    stats = GamescopeStats(clock=lambda: 100.0)
+    for fps in (40, 35, 40):
+        stats._apply_line(f"fps={fps}")
+        stats._apply_line("focus=g")
+    stats.start = lambda: None
+    p._gamescope_stats = stats
+
+    status = asyncio.run(p._auto_tick())
+
+    assert status["reason"] == "fps_below_target"
+    assert p._auto_setpoint == 7
+    assert p._tdp_backend._levels == (7, 7, 7)
+
+
 @pytest.mark.parametrize("gate", ["auto", "safe", "control", "eco", "module", "firmware", "owner"])
 def test_grid_floor_requires_global_auto_and_all_control_gates(Plugin, monkeypatch, gate):
     p = Plugin()
@@ -1162,6 +1203,27 @@ def test_leaving_ui_reapplies_the_auto_setpoint_on_the_next_fps_sample(Plugin):
 
     assert p._tdp_backend._applied == 5
     assert p._tdp_backend._levels == (5, 5, 5)
+
+
+def test_leaving_ui_discards_fps_samples_collected_during_the_pause(Plugin):
+    p = Plugin()
+    p._init()
+    p._current_appid = "g"
+    p._tdp_profiles.set_auto_tdp("game", True, appid="g")
+    p._tdp_profiles.set_auto_config("game", 40, 5, appid="g")
+    p._ensure_auto_session(on_ac=True)
+    stats = GamescopeStats(clock=lambda: 100.0)
+    stats.start = lambda: None
+    p._gamescope_stats = stats
+
+    asyncio.run(p.set_ui_active(True))
+    stats._apply_line("fps=20")
+    stats._apply_line("focus=g")
+    stats._apply_line("fps=40")
+    stats._apply_line("focus=g")
+    asyncio.run(p.set_ui_active(False))
+
+    assert stats.read()["reason"] == "no_game_focus"
 
 
 def test_non_steam_profile_uses_fresh_fps_from_its_rendering_process(

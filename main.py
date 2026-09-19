@@ -262,8 +262,6 @@ DEFAULTS = {
     # monitor-only, handing TDP to another tool.
     "tdp_control_enabled": True,
     "low_battery_tdp_hold": False,
-    # Retained for upgrade compatibility; the AutoTDP menu floor is automatic now.
-    "qam_tdp_boost": False,
     # Modules the user turned off in the customization editor (generic ids only;
     # power/learning are folded from tdp_control_enabled/telemetry_enabled).
     "disabled_modules": [],
@@ -3840,7 +3838,7 @@ class Plugin:
 
     def _auto_ui_blocks_tdp_write(self, reason):
         reason = str(reason)
-        if reason in ("auto-ui-floor", "auto-focus-floor"):
+        if reason in ("auto-ui-floor", "auto-focus-floor", "auto-game-exit"):
             return False
         responsive_hold = self._ui_active or self._auto_focus_hold_active
         return bool(
@@ -4616,6 +4614,9 @@ class Plugin:
     async def set_ui_active(self, enabled: bool) -> bool:
         self._init()
         active = bool(enabled)
+        changed = active != self._ui_active
+        if changed:
+            self._gamescope_stats.clear()
         activated = active and not self._ui_active
         self._ui_active = active
         if activated and self._auto_controller is not None:
@@ -6188,7 +6189,7 @@ class Plugin:
         firmware's post-transition reset without re-running the full re-apply each time."""
         self._schedule_tdp_apply("settle-retry", on_ac)
 
-    def _reapply_all(self, on_ac=None) -> None:
+    def _reapply_all(self, on_ac=None, *, tdp_reason="lifecycle") -> None:
         """Lifecycle callback: re-assert TDP, the fan curve, the charge limit and the
         CPU controls (resume/AC — firmware may drop these across a suspend)."""
         # A context change (resume, AC/DC, game change, eco) invalidates any
@@ -6239,7 +6240,7 @@ class Plugin:
             schedule_charge_limit_reconcile()
         self._apply_cpu()
         self._apply_gpu_clock()
-        self._schedule_tdp_apply("lifecycle", on_ac)
+        self._schedule_tdp_apply(tdp_reason, on_ac)
         if self._desktop_mode_on():
             self._offload(self._reapply_desktop_power)
         # Stepped aside: retry a pending HHD hand-back (no-op while we control / no marker).
@@ -10474,6 +10475,7 @@ class Plugin:
             self._current_game_name = next_name
             await self._refresh_pdc_metrics()
             return await self.get_tdp_state()
+        leaving_game = self._current_appid is not None and next_appid is None
         self._set_current_appid(next_appid)
         self._current_game_name = next_name
         self._reset_auto_session("context_changed")
@@ -10481,7 +10483,13 @@ class Plugin:
         self._adaptive_applied = False  # re-arm the mid-session adaptive drive for this game
         self._last_adaptive_points = None  # anti-churn baseline resets with the game
         self._maybe_drive_adaptive_fan_curve()
-        self._reapply_all()
+        self._reapply_all(
+            tdp_reason=(
+                "auto-game-exit"
+                if leaving_game and self._auto_control_active()
+                else "lifecycle"
+            )
+        )
         # The TDP re-apply is off-loop; wait for it so the returned state's hardware
         # readback (applied_w) reflects the new game, not the previous setpoint.
         await self._drain_offloaded()

@@ -30,6 +30,7 @@ import { installGameContextMenu } from "./launch/gameContextMenu";
 import { startPluginListLocalizer } from "./pluginListLocalizer";
 import {
   shutdownUiActivity,
+  startQamDocumentActivity,
   startSteamOverlayActivity,
 } from "./system/uiActivity";
 import { StandardDeckyContent } from "./components/StandardDeckyContent";
@@ -129,6 +130,7 @@ export default definePlugin(() => {
 
   const stopGameWatcher = startGameWatcher();
   const stopSteamOverlayActivity = startSteamOverlayActivity();
+  const stopQamDocumentActivity = startQamDocumentActivity();
   const stopEcoAmbient = startEcoAmbient();
   const stopValueToast = startValueToast();
   const stopContextMenu = installGameContextMenu();
@@ -154,6 +156,7 @@ export default definePlugin(() => {
       standardLifecycle.abort();
       qamRuntime?.dispose();
       stopPrefsHealed();
+      stopQamDocumentActivity();
       stopSteamOverlayActivity();
       shutdownUiActivity();
       stopGameWatcher();

@@ -83,6 +83,21 @@ def test_focus_change_clears_previous_games_fps():
     assert stats.read()["sample_at"] == 101.0
 
 
+def test_read_preserves_the_lowest_fps_committed_between_reads():
+    clock = Clock()
+    stats = GamescopeStats(clock=clock)
+    for fps in (40, 35, 40):
+        stats._apply_line(f"fps={fps}")
+        stats._apply_line("focus=42")
+        clock.now += 1.0
+
+    reading = stats.read()
+
+    assert reading["fps"] == 35.0
+    assert reading["sample_at"] == 102.0
+    assert stats.read()["fps"] == 40.0
+
+
 def test_focus_without_a_matching_fps_invalidates_the_previous_sample():
     stats = GamescopeStats(clock=Clock())
     stats._apply_line("fps=60")

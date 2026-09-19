@@ -67,6 +67,7 @@ vi.mock("./launch/gameContextMenu", () => ({ installGameContextMenu: () => () =>
 vi.mock("./pluginListLocalizer", () => ({ startPluginListLocalizer: () => () => {} }));
 vi.mock("./system/uiActivity", () => ({
   shutdownUiActivity: vi.fn(),
+  startQamDocumentActivity: vi.fn(() => () => {}),
   startSteamOverlayActivity: vi.fn(() => () => {}),
 }));
 vi.mock("./themes/deckyCssLoaderHost", () => ({ configureDeckyCssLoaderHost: () => () => {} }));
