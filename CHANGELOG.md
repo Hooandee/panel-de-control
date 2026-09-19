@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## [0.53.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.52.1...panel-de-control-v0.53.0) (2026-09-19)
+
+
+### Features
+
+* add native Steam performance controls ([#686](https://github.com/Hooandee/panel-de-control/issues/686)) ([f729c0c](https://github.com/Hooandee/panel-de-control/commit/f729c0c89a819e8c97611e567ed57017733923bd))
+* clarify report type selection ([#683](https://github.com/Hooandee/panel-de-control/issues/683)) ([8e60d93](https://github.com/Hooandee/panel-de-control/commit/8e60d93695fd9ac10c5e8e78df9f7b576f33c0a5))
+
 ## [0.52.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.52.0...panel-de-control-v0.52.1) (2026-09-17)
 
 
