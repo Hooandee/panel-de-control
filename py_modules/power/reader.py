@@ -2,6 +2,8 @@ import glob
 import os
 import time
 
+from power.intel import IntelGpuUtil
+
 
 class PowerReader:
     """Reads actual APU/GPU power draw in watts and GPU utilisation from sysfs.
@@ -29,6 +31,7 @@ class PowerReader:
         self._gpu_sample_gap = max(0.0, gpu_sample_gap)
         self._amdgpu_hwmon = self._find_amdgpu_dir()
         self._gpu_busy_path = self._find_gpu_busy_path()
+        self._intel_gpu = IntelGpuUtil(root=root)
         (
             self._desktop_hwmon,
             self._desktop_gpu_device,
@@ -150,6 +153,8 @@ class PowerReader:
         None only if EVERY read failed (never fabricates a 0)."""
         if self._gpu_busy_path is None or not os.path.exists(self._gpu_busy_path):
             self._gpu_busy_path = self._find_gpu_busy_path()
+        if self._gpu_busy_path is None:
+            return self._intel_gpu.read_gpu_busy()
         return self._read_gpu_busy_from(self._gpu_busy_path)
 
     def read(self):
