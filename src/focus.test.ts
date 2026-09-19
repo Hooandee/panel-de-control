@@ -37,9 +37,9 @@ describe("buildFocusCss", () => {
     expect(css).toContain("width: 100% !important");
   });
 
-  it("keeps nested card sliders inside their available width", () => {
-    expect(css).toContain(".pdc-contained-slider");
-    expect(css).toContain(".pdc-contained-slider > div > div");
+  it("retains the nested-card override for Decky's fixed slider width", () => {
+    expect(css).toContain(`.${PDC_ROOT} .pdc-contained-slider`);
+    expect(css).toContain(`.${PDC_ROOT} .pdc-contained-slider > div > div`);
     expect(css).toContain("margin-inline: 0 !important");
     expect(css).toContain("min-width: 0 !important");
     expect(css).toContain("width: 100% !important");

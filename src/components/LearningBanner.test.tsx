@@ -17,7 +17,7 @@ import { LearningBanner } from "./LearningBanner";
 describe("LearningBanner", () => {
   afterEach(cleanup);
 
-  it("separates the learning label from the game title so both remain legible", () => {
+  it("renders the active label and game name as separate content", () => {
     render(
       <LearningBanner
         gameName="Sekiro™: Shadows Die Twice - Edición del año"

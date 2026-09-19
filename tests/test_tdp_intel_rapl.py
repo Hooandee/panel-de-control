@@ -113,6 +113,28 @@ class TestIntelRapl:
         assert _read_uw(legacy, 0) == 18_000_000
         assert _read_uw(legacy, 1) == 18_000_000
 
+    def test_auto_tdp_orders_rails_safely_when_lowering_and_raising(
+        self, tmp_path, monkeypatch
+    ):
+        _mk_rapl(str(tmp_path), _MMIO, pl1_uw=22_000_000, pl2_uw=37_000_000)
+        _mk_rapl(str(tmp_path), _LEGACY, pl1_uw=30_000_000, pl2_uw=37_000_000)
+        backend = IntelRaplBackend(_FALLBACK, root=str(tmp_path))
+        real_write = backend._write
+        rails = []
+
+        def record_rail(path, value):
+            rails.append("pl1" if "constraint_0_" in path else "pl2")
+            return real_write(path, value)
+
+        monkeypatch.setattr(backend, "_write", record_rail)
+
+        assert backend.apply_auto_targets({"pl1": 18, "pl2": 18}, ac=True).ok
+        assert rails == ["pl1", "pl1", "pl2", "pl2"]
+
+        rails.clear()
+        assert backend.apply_auto_targets({"pl1": 25, "pl2": 25}, ac=True).ok
+        assert rails == ["pl2", "pl2", "pl1", "pl1"]
+
     def test_auto_tdp_partial_write_rolls_back_every_surface(
         self, tmp_path, monkeypatch
     ):

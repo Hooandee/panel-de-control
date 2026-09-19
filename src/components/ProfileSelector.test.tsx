@@ -15,7 +15,7 @@ import { ProfileSelector } from "./ProfileSelector";
 describe("ProfileSelector", () => {
   afterEach(cleanup);
 
-  it("uses a compact generic game label instead of squeezing a long title", () => {
+  it("uses the generic game scope label instead of the full title", () => {
     render(
       <ProfileSelector
         scope="game"

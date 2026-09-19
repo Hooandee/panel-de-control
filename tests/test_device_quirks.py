@@ -53,6 +53,10 @@ def test_msi_claw_intel_auto_tdp_requires_exact_a2vm_identity(tmp_path):
 
     assert device_quirks.is_msi_claw_8_ai_plus_a2vm(profile, str(tmp_path))
 
+    _write_dmi(str(tmp_path), "Other Vendor", "Claw 8 AI+ A2VM")
+    assert not device_quirks.is_msi_claw_8_ai_plus_a2vm(profile, str(tmp_path))
+    _write_dmi(str(tmp_path), "", "Claw 8 AI+ A2VM")
+    assert not device_quirks.is_msi_claw_8_ai_plus_a2vm(profile, str(tmp_path))
     _write_dmi(str(tmp_path), "Micro-Star International Co., Ltd.", "Claw 8 AI+")
     assert not device_quirks.is_msi_claw_8_ai_plus_a2vm(profile, str(tmp_path))
     _write_dmi(str(tmp_path), "Micro-Star International Co., Ltd.", "Claw 8 AI+ A2VM")

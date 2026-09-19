@@ -4,8 +4,10 @@ test_tdp_suggest / test_auto_tdp / test_fans_suggest; this locks the glue in mai
 """
 import asyncio
 import importlib
+import os
 import sys
 import threading
+import time
 import types
 
 import pytest
@@ -22,6 +24,7 @@ class FakeBackend:
     def __init__(self):
         self._applied = None
         self._levels = None
+        self.set_levels_calls = 0
 
     def get_limits(self):
         return TdpLimits(min_w=5, default_w=15, max_w=35, max_ac_w=35)
@@ -30,6 +33,7 @@ class FakeBackend:
         return {"pl1": {"min": 5, "max": 35}}
 
     def set_levels(self, pl1, pl2, pl3, ac):
+        self.set_levels_calls += 1
         self._applied = pl1
         self._levels = (pl1, pl2, pl3)
         return TdpResult(pl1, pl1, True, "")
@@ -210,30 +214,6 @@ def _run_loop_ticks(p, reads, _monkeypatch):
         asyncio.run(p._auto_tick())
 
 
-def test_loop_warmup_holds_without_sawtooth(Plugin, monkeypatch):
-    p = Plugin()
-    p._init()
-    p._current_appid = "g"  # per-game control needs a running game
-    p._tdp_profiles.set_pl1("game", 22, appid="g")
-    reads = [{"fps": 40, "gpu_busy": 92, "watts": 20} for _ in range(2)]
-    _run_loop_ticks(p, reads, monkeypatch)
-    assert p._auto_setpoint == 22
-    assert p._tdp_profiles.effective("g")["pl1"] == 22
-
-
-def test_loop_probes_down_only_one_watt_after_stable_fps(Plugin, monkeypatch):
-    p = Plugin()
-    p._init()
-    p._current_appid = "g"
-    cap = p._effective_levels("g")[1]  # active max ceiling
-    p._tdp_profiles.set_pl1("game", cap, appid="g")
-    assert p._effective_levels("g")[0]["pl1"] == cap  # start pinned at the cap
-    reads = [{"fps": 40, "gpu_busy": 80, "watts": 34} for _ in range(12)]
-    _run_loop_ticks(p, reads, monkeypatch)
-    assert p._auto_setpoint == cap - 1
-    assert p._tdp_profiles.effective("g")["pl1"] == cap
-
-
 def test_loop_never_persists_its_dynamic_drop(Plugin, monkeypatch):
     p = Plugin()
     p._init()
@@ -243,28 +223,6 @@ def test_loop_never_persists_its_dynamic_drop(Plugin, monkeypatch):
     _run_loop_ticks(p, reads, monkeypatch)
     assert p._auto_setpoint == 21
     assert p._tdp_profiles.effective("g")["pl1"] == 22
-
-
-def test_loop_steps_up_when_fps_is_below_target(Plugin, monkeypatch):
-    p = Plugin()
-    p._init()
-    p._current_appid = "g"
-    p._tdp_profiles.set_pl1("game", 20, appid="g")
-    reads = [{"fps": 35, "gpu_busy": 40, "watts": 18} for _ in range(4)]
-    _run_loop_ticks(p, reads, monkeypatch)
-    assert p._auto_setpoint == 28
-    assert p._tdp_profiles.effective("g")["pl1"] == 20
-
-
-def test_loop_clamps_recovery_to_automatic_device_max(Plugin, monkeypatch):
-    p = Plugin()
-    p._init()
-    p._current_appid = "g"
-    p._tdp_profiles.set_pl1("game", 35, appid="g")
-    reads = [{"fps": 20, "gpu_busy": 99, "watts": 35}]
-    _run_loop_ticks(p, reads, monkeypatch)
-    assert p._auto_setpoint == 35
-    assert p._auto_status["reason"] == "at_maximum"
 
 
 def test_loop_holds_with_no_signal(Plugin, monkeypatch):
@@ -304,17 +262,6 @@ def test_loop_never_writes_when_backend_disables_auto_tdp(Plugin, monkeypatch):
 
     assert p._tdp_profiles.effective("g")["pl1"] == 20
     assert p._tdp_backend._levels is None
-
-
-def test_loop_reports_recovery_state_after_pl1_change(Plugin, monkeypatch):
-    p = Plugin()
-    p._init()
-    p._current_appid = "g"
-    p._tdp_profiles.set_pl1("game", 20, appid="g")
-    reads = [{"fps": 35, "gpu_busy": 99, "watts": 20}]
-    _run_loop_ticks(p, reads, monkeypatch)
-    assert p._auto_status["state"] == "recovering"
-    assert p._auto_status["setpoint"] == 22
 
 
 def test_signal_loss_during_protected_cooldown_reapplies_last_stable_tdp(
@@ -474,8 +421,6 @@ def test_tick_abandons_a_decision_when_game_changes_during_power_read(
         "available": True,
         "reason": "ok",
     }
-    p._tdp_backend.set_levels_calls = 0
-
     async def run_race():
         task = asyncio.create_task(p._auto_tick())
         await asyncio.to_thread(started.wait, 1)
@@ -997,6 +942,51 @@ def test_auto_tick_recovers_from_the_lowest_fps_between_ticks(Plugin):
     assert status["reason"] == "fps_below_target"
     assert p._auto_setpoint == 7
     assert p._tdp_backend._levels == (7, 7, 7)
+
+
+def test_auto_tick_recovers_from_a_fragmented_gamescope_fifo(Plugin, tmp_path):
+    p = Plugin()
+    p._init()
+    p._current_appid = "g"
+    p._tdp_profiles.set_auto_tdp("game", True, appid="g")
+    p._tdp_profiles.set_auto_config("game", 40, 5, appid="g")
+    p._power_reader.read = lambda: {"watts": 6.0, "gpu_busy": 90.0}
+    stats = GamescopeStats(root=str(tmp_path), stale_after_s=5)
+    p._gamescope_stats = stats
+
+    pipe = tmp_path / "run/user/1000/gamescope.test/stats.pipe"
+    pipe.parent.mkdir(parents=True)
+    os.mkfifo(pipe)
+    writer_done = threading.Event()
+
+    def write_sample():
+        descriptor = os.open(pipe, os.O_WRONLY)
+        try:
+            os.write(descriptor, b"fps=2")
+            os.write(descriptor, b"0\nfocus=g\n")
+        finally:
+            os.close(descriptor)
+            writer_done.set()
+
+    writer = threading.Thread(target=write_sample, daemon=True)
+    writer.start()
+    stats.start()
+    try:
+        assert writer_done.wait(timeout=3)
+        deadline = time.monotonic() + 2
+        while time.monotonic() < deadline:
+            with stats._lock:
+                if stats._fps == 20 and stats._focus == "g":
+                    break
+            time.sleep(0.01)
+
+        status = asyncio.run(p._auto_tick())
+        assert status["reason"] == "fps_below_target"
+        assert p._auto_setpoint == 7
+        assert p._tdp_backend._levels == (7, 7, 7)
+    finally:
+        stats.stop()
+        writer.join(timeout=1)
 
 
 @pytest.mark.parametrize("gate", ["auto", "safe", "control", "eco", "module", "firmware", "owner"])

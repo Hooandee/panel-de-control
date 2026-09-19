@@ -246,7 +246,7 @@ def test_auto_config_defaults_to_profile_tdp(tmp_path):
     }
 
 
-def test_auto_config_persists_atomically_per_scope(tmp_path):
+def test_auto_config_persists_complete_values_per_scope(tmp_path):
     path = str(tmp_path / "p.json")
     s1 = ProfileStore(path, default_watts=15)
     s1.set_auto_config("global", target_fps=57, initial_tdp=18)

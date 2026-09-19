@@ -1,5 +1,6 @@
 import gamescope_stats
 import os
+import threading
 import time
 from gamescope_stats import GamescopeStats
 
@@ -193,6 +194,47 @@ def test_stop_terminates_reader_even_when_fifo_has_no_writer(tmp_path):
     stats.stop()
 
     assert stats._thread is None
+
+
+def test_reader_streams_fragmented_fifo_updates_and_preserves_the_lowest_fps(tmp_path):
+    pipe = tmp_path / "run/user/1000/gamescope.test/stats.pipe"
+    pipe.parent.mkdir(parents=True)
+    os.mkfifo(pipe)
+    stats = GamescopeStats(root=str(tmp_path), stale_after_s=5)
+    writer_done = threading.Event()
+
+    def write_samples():
+        descriptor = os.open(pipe, os.O_WRONLY)
+        try:
+            for chunk in (
+                b"fps=40\nfo",
+                b"cus=42\nfps=35\nfocus=42\nfps=",
+                b"40\nfocus=42\n",
+            ):
+                os.write(descriptor, chunk)
+        finally:
+            os.close(descriptor)
+            writer_done.set()
+
+    writer = threading.Thread(target=write_samples, daemon=True)
+    writer.start()
+    stats.start()
+    try:
+        assert writer_done.wait(timeout=3)
+        deadline = time.monotonic() + 2
+        while time.monotonic() < deadline:
+            with stats._lock:
+                if stats._fps == 40 and stats._unread_min_fps == 35:
+                    break
+            time.sleep(0.01)
+
+        reading = stats.read()
+        assert reading["available"] is True
+        assert reading["focus"] == "42"
+        assert reading["fps"] == 35
+    finally:
+        stats.stop()
+        writer.join(timeout=1)
 
 
 def test_stop_discards_samples_from_the_previous_auto_session():

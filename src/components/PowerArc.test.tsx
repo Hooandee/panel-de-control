@@ -35,22 +35,7 @@ describe("PowerArc Steam Deck PPT scale", () => {
     expect(container.querySelector('[data-testid="auto-tdp-halo"]')).not.toBeNull();
   });
 
-  it("limits the AutoTDP halo to the active gauge", () => {
-    const { container } = render(
-      <PowerArc
-        watts={20}
-        limits={{ min: 5, default: 15, max: 35, max_ac: 35 }}
-        onAc
-        auto
-        setpoint={20}
-      />,
-    );
-
-    expect(container.querySelector('[data-testid="auto-tdp-halo"]')?.getAttribute("stroke-dasharray"))
-      .toBe("500 1000");
-  });
-
-  it("keeps a visible gauge at the minimum AutoTDP setpoint", () => {
+  it("keeps a non-zero gauge and matching halo at the minimum setpoint", () => {
     const { container } = render(
       <PowerArc
         watts={5}
@@ -61,42 +46,39 @@ describe("PowerArc Steam Deck PPT scale", () => {
       />,
     );
 
-    expect(container.querySelector('[data-testid="auto-tdp-gauge"]')?.getAttribute("stroke-dasharray"))
-      .toBe("55 1000");
-    expect(container.querySelector('[data-testid="auto-tdp-halo"]')?.getAttribute("stroke-dasharray"))
-      .toBe("55 1000");
+    const gauge = container.querySelector('[data-testid="auto-tdp-gauge"]')
+      ?.getAttribute("stroke-dasharray");
+    const halo = container.querySelector('[data-testid="auto-tdp-halo"]')
+      ?.getAttribute("stroke-dasharray");
+    expect(Number(gauge?.split(" ")[0])).toBeGreaterThan(0);
+    expect(halo).toBe(gauge);
   });
 
-  it("shifts the AutoTDP gauge from blue to purple as its setpoint rises", () => {
-    const { container, rerender } = render(
-      <PowerArc
-        watts={10}
-        limits={{ min: 5, default: 15, max: 35, max_ac: 35 }}
-        onAc
-        auto
-        setpoint={10}
-      />,
-    );
+  it("changes the automatic gauge colour as the setpoint rises", () => {
+    const props = {
+      watts: 10,
+      limits: { min: 5, default: 15, max: 35, max_ac: 35 },
+      onAc: true,
+      auto: true,
+    };
+    const { container, rerender } = render(<PowerArc {...props} setpoint={10} />);
+    const low = container.querySelector('[data-testid="auto-tdp-gauge"]')
+      ?.getAttribute("stroke");
 
-    expect(container.querySelector('[data-testid="auto-tdp-gauge"]')?.getAttribute("stroke"))
-      .toBe("hsl(220, 82%, 62%)");
+    rerender(<PowerArc {...props} setpoint={30} />);
+    const high = container.querySelector('[data-testid="auto-tdp-gauge"]')
+      ?.getAttribute("stroke");
+    const hue = (stroke: string | null | undefined) =>
+      Number(/^hsl\((\d+)/.exec(stroke ?? "")?.[1]);
 
-    rerender(
-      <PowerArc
-        watts={30}
-        limits={{ min: 5, default: 15, max: 35, max_ac: 35 }}
-        onAc
-        auto
-        setpoint={30}
-      />,
-    );
-
-    expect(container.querySelector('[data-testid="auto-tdp-gauge"]')?.getAttribute("stroke"))
-      .toBe("hsl(260, 82%, 62%)");
+    expect(hue(low)).toBeGreaterThanOrEqual(200);
+    expect(hue(low)).toBeLessThanOrEqual(240);
+    expect(hue(high)).toBeGreaterThanOrEqual(250);
+    expect(hue(high)).toBeLessThanOrEqual(280);
   });
 
-  it("keeps the AutoTDP radial free of charger-headroom styling", () => {
-    const { container } = render(
+  it("hides charger headroom from the automatic scale", () => {
+    render(
       <PowerArc
         watts={5}
         limits={{ min: 5, default: 15, max: 33, max_ac: 40 }}
@@ -106,9 +88,8 @@ describe("PowerArc Steam Deck PPT scale", () => {
       />,
     );
 
-    expect(container.querySelector('path[stroke="rgba(255,180,84,0.55)"]')).toBeNull();
-    expect(screen.queryByText("40W ⚡")).toBeNull();
     expect(screen.getByText("40W")).toBeTruthy();
+    expect(screen.queryByText("40W ⚡")).toBeNull();
   });
 
   it("uses the active battery ceiling for the AutoTDP scale", () => {

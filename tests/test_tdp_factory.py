@@ -1451,6 +1451,17 @@ def test_only_msi_claw_enables_dual_surface_rapl_auto_tdp(tmp_path):
     )
     assert generic.auto_tdp_safe is False
 
+    _mk_dmi(root, "Other Vendor", "Claw 8 AI+ A2VM")
+    wrong_vendor = select_backend(
+        _p("msi_claw_8_ai_plus"),
+        root=root,
+        ryzenadj_resolve=_NO_RYZENADJ,
+    )
+
+    assert wrong_vendor.supported is True
+    assert wrong_vendor.auto_tdp_safe is False
+    assert wrong_vendor.set_tdp(18, ac=True).ok is True
+
 
 def test_generic_intel_never_uses_ryzenadj(tmp_path):
     intel = dataclasses.replace(GENERIC, vendor="intel")

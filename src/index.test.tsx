@@ -19,6 +19,20 @@ const prefs = vi.hoisted(() => ({
   get: vi.fn<() => Promise<Record<string, string>>>(),
   set: vi.fn<(values: Record<string, string | null>) => Promise<boolean>>(),
 }));
+const persistentServices = vi.hoisted(() => {
+  const stopGameWatcher = vi.fn();
+  const stopQamActivity = vi.fn();
+  const stopSteamActivity = vi.fn();
+  return {
+    shutdownUiActivity: vi.fn(),
+    startGameWatcher: vi.fn(() => stopGameWatcher),
+    startQamActivity: vi.fn(() => stopQamActivity),
+    startSteamActivity: vi.fn(() => stopSteamActivity),
+    stopGameWatcher,
+    stopQamActivity,
+    stopSteamActivity,
+  };
+});
 
 vi.mock("@decky/api", () => ({ definePlugin: (factory: unknown) => factory }));
 vi.mock("./api", () => ({
@@ -55,7 +69,7 @@ vi.mock("./components/QamPanelGate", () => ({
 }));
 vi.mock("./qam/pluginRuntime", () => ({ startPluginQamRuntime: qamRuntime.start }));
 
-vi.mock("./tdp/gameWatcher", () => ({ startGameWatcher: () => () => {} }));
+vi.mock("./tdp/gameWatcher", () => ({ startGameWatcher: persistentServices.startGameWatcher }));
 vi.mock("./system/ecoAmbient", () => ({ startEcoAmbient: () => () => {} }));
 vi.mock("./system/valueToast", () => ({
   refreshValueToast: vi.fn(),
@@ -66,9 +80,9 @@ vi.mock("./customize/modules", () => ({ hydrateModules: vi.fn() }));
 vi.mock("./launch/gameContextMenu", () => ({ installGameContextMenu: () => () => {} }));
 vi.mock("./pluginListLocalizer", () => ({ startPluginListLocalizer: () => () => {} }));
 vi.mock("./system/uiActivity", () => ({
-  shutdownUiActivity: vi.fn(),
-  startQamDocumentActivity: vi.fn(() => () => {}),
-  startSteamOverlayActivity: vi.fn(() => () => {}),
+  shutdownUiActivity: persistentServices.shutdownUiActivity,
+  startQamDocumentActivity: persistentServices.startQamActivity,
+  startSteamOverlayActivity: persistentServices.startSteamActivity,
 }));
 vi.mock("./themes/deckyCssLoaderHost", () => ({ configureDeckyCssLoaderHost: () => () => {} }));
 vi.mock("./themes/panelThemeInstallHost", () => ({
@@ -114,6 +128,23 @@ describe("QAM plugin surfaces", () => {
     qamRuntime.start.mockClear();
     qamRuntime.dispose.mockClear();
     qamRuntime.refresh.mockClear();
+    Object.values(persistentServices).forEach((mock) => mock.mockClear());
+  });
+
+  it("keeps game and menu activity services alive outside the panel lifecycle", async () => {
+    const plugin = await createPlugin();
+    plugins.pop();
+
+    expect(persistentServices.startGameWatcher).toHaveBeenCalledOnce();
+    expect(persistentServices.startQamActivity).toHaveBeenCalledOnce();
+    expect(persistentServices.startSteamActivity).toHaveBeenCalledOnce();
+
+    plugin.onDismount();
+
+    expect(persistentServices.stopGameWatcher).toHaveBeenCalledOnce();
+    expect(persistentServices.stopQamActivity).toHaveBeenCalledOnce();
+    expect(persistentServices.stopSteamActivity).toHaveBeenCalledOnce();
+    expect(persistentServices.shutdownUiActivity).toHaveBeenCalledOnce();
   });
 
   it("starts one plugin-scope QAM composer after durable preferences hydrate", async () => {
