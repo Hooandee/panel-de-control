@@ -20,7 +20,9 @@ import decky
 
 # py_modules/ is on sys.path → import TOP-LEVEL (never `from py_modules.x import`).
 import auto_tdp
+from auto_tdp_learning import AutoTdpLearningStore
 import device_registry
+from gamescope_stats import GamescopeStats
 import osinfo
 import pdc_platform as platform_support
 import self_updater
@@ -50,7 +52,7 @@ from tdp.types import (
     TdpObservation,
     TdpResult,
 )
-from tdp_profiles import ProfileStore
+from tdp_profiles import AUTO_RANGE_UNSET, ProfileStore
 from power_presets import PowerPresetStore
 from lifecycle import LifecycleManager, read_on_ac
 from fans.hwmon import FanReader, extract_cpu_gpu_temps
@@ -134,11 +136,6 @@ _REPORT_SERVICE_URL = os.environ.get(
     "PDC_REPORT_URL", "https://bug-collector-khaki.vercel.app/api/report"
 )
 
-# Auto-TDP rolling window: last N samples (~2 s apart) the control law reads. It
-# measures the FREQUENCY of boost over the window (not an instant), so it is longer
-# than the old reactive window; the up-trigger still uses the recent peak to reject
-# transient dips. See py_modules/auto_tdp.py.
-_AUTO_WINDOW = 10
 # How often the audio EQ watcher checks the active output route (headphones vs speakers)
 # to re-apply the per-route curve with the QAM closed.
 _AUDIO_POLL_S = 4
@@ -151,6 +148,7 @@ _MIN_HUD_REFRESH_S = 1.0
 _HUD_RELOAD_MAX_ATTEMPTS = 4
 _TDP_BACKEND_REPROBE_S = 30.0
 _TDP_STORAGE_MIGRATION_RETRY_S = 30.0
+_AUTO_APPLY_RETRY_DELAYS_S = (2.0, 8.0, 30.0)
 _CHARGE_LIMIT_VERIFY_DELAYS = (2.0, 8.0, 20.0)
 _FULL_CHARGE_ONCE_SECONDS = 24 * 60 * 60
 _FULL_CHARGE_ONCE_POLL_S = 30.0
@@ -190,6 +188,7 @@ class _TdpCommand:
     safe_bounds: dict
     primary_rail: str
     on_ac: bool
+    auto_tdp: bool
     ppt_probe_pending: bool
 
 
@@ -259,15 +258,12 @@ DEFAULTS = {
     "unlock_battery_max": False,
     "cooler_boost": False,
     "experimental_tdp_unlock": False,
-    # Opt-in: while the QAM/plugin UI is open, raise PL1 to a responsive floor so the
-    # CPU-bound menu render stays fluid. Default OFF for honesty — raising TDP behind
-    # the menu would show an inflated number vs the REAL in-game TDP the user wants to
-    # see with the QAM open. When ON, the user accepts the menu-time bump for fluidity.
-    "qam_tdp_boost": False,
     # Master switch: when False we stop writing the TDP rails and Potencia drops to
     # monitor-only, handing TDP to another tool.
     "tdp_control_enabled": True,
     "low_battery_tdp_hold": False,
+    # Retained for upgrade compatibility; the AutoTDP menu floor is automatic now.
+    "qam_tdp_boost": False,
     # Modules the user turned off in the customization editor (generic ids only;
     # power/learning are folded from tdp_control_enabled/telemetry_enabled).
     "disabled_modules": [],
@@ -379,6 +375,13 @@ class Plugin:
         self._tdp_profiles = ProfileStore(
             os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "tdp_profiles.json"),
             default_watts=self._device.tdp_default or 15,
+        )
+        self._auto_learning = AutoTdpLearningStore(
+            os.path.join(
+                decky.DECKY_PLUGIN_SETTINGS_DIR,
+                "auto_tdp_learning.json",
+            ),
+            required_samples=6,
         )
         self._power_presets = PowerPresetStore(
             os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "power_presets.json"))
@@ -589,6 +592,8 @@ class Plugin:
             self._settings.get("hud_managed_path")
         )
         self._power_reader = PowerReader()
+        self._gamescope_stats = GamescopeStats()
+        self._auto_stats_reader_active = False
         self._battery = BatteryReader()
         self._charge_limit = select_charge_limit(self._device)
         self._charge_limit_last_apply = None
@@ -708,7 +713,32 @@ class Plugin:
                                             reassert_cb=self._reassert_tdp_only,
                                             event_cb=self._log_lifecycle_event)
         self._auto_task = None
+        self._auto_controller = None
+        self._auto_context = None
         self._auto_setpoint = None
+        self._auto_seed_source = None
+        self._auto_seed_watts = None
+        self._auto_last_sample_at = None
+        self._auto_applied = False
+        self._auto_apply_blocked = False
+        self._auto_apply_attempts = 0
+        self._auto_apply_retry_at = 0.0
+        self._auto_apply_exhausted = False
+        self._auto_ui_hold_watts = None
+        self._auto_focus_hold_active = False
+        self._auto_status = {
+            "state": "paused",
+            "reason": "no_game",
+            "setpoint": None,
+            "fps": None,
+            "target_fps": None,
+            "signal_age_s": None,
+            "focus": None,
+            "seed_source": None,
+            "seed_watts": None,
+            "held_watts": None,
+        }
+        self._auto_history = deque(maxlen=32)
         # Audio EQ output-route watcher: last applied route + its loop task.
         self._audio_task = None
         self._audio_route_last = None
@@ -720,12 +750,6 @@ class Plugin:
         self._audio_apply_failures = 0
         self._audio_last_apply = None
         self._test_sample = None
-        # Rolling GPU% window + slack counter for the GPU-driven auto-TDP control law.
-        self._gpu_window = []      # recent GPU% samples
-        self._slack_ticks = 0      # consecutive GPU-headroom ticks (temporal gate)
-        # QAM/plugin UI open → the auto loop uses a higher "responsive" floor so the
-        # CPU-bound menu render stays fluid (the GPU-only loop can't see CPU load).
-        # Set/cleared by the ControlCenter mount/unmount via set_ui_active.
         self._ui_active = False
         self._telemetry = TelemetryStore(
             os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "telemetry.json")
@@ -2181,9 +2205,15 @@ class Plugin:
         row = {"appid": appid}
         if self._tdp_profiles.differs_from_global(appid):
             tp = self._tdp_profiles.game_profile(appid)
-            row["tdp"] = {"pl1": int(tp.get("pl1", 0)),
-                          "auto": bool(tp.get("auto_tdp")),
-                          "follows_global": self._tdp_profiles.is_following_global(appid)}
+            row["tdp"] = {
+                "pl1": int(tp.get("pl1", 0)),
+                "auto": bool(tp.get("auto_tdp")),
+                "target_fps": int(tp["auto_target_fps"]),
+                "initial_tdp": int(tp["auto_initial_tdp"]),
+                "min_tdp": tp["auto_min_tdp"],
+                "max_tdp": tp["auto_max_tdp"],
+                "follows_global": self._tdp_profiles.is_following_global(appid),
+            }
         if self._gpu_profiles.differs_from_global(appid):
             gp = self._gpu_profiles.game_profile(appid)
             row["gpu"] = {
@@ -2419,6 +2449,11 @@ class Plugin:
         if not self._release_low_battery_hold():
             return False
         backend = getattr(self, "_tdp_backend", None)
+        if preserve_ownership and backend is not None and (
+            getattr(backend, "owns_auto_state", False)
+            or getattr(backend, "safety_locked", False)
+        ):
+            return None
         release = getattr(backend, "release", None)
         try:
             backend_released = bool(release()) if callable(release) else True
@@ -3363,6 +3398,8 @@ class Plugin:
         """
         if not self._learning_active():
             return None
+        if self._ui_active or self._auto_focus_hold_active:
+            return None
         try:
             # Snapshot the appid once: this method now runs on a worker thread
             # (via asyncio.to_thread) and spans a ~120 ms gpu_busy burst + fan
@@ -3373,9 +3410,27 @@ class Plugin:
             appid = self._current_appid
             if appid is None:
                 return None
+            auto_context = self._auto_context
+            auto_active = self._auto_runtime_active()
+            auto_setpoint = self._auto_setpoint
+            tdp_generation = self._tdp_generation
+            pl1 = (
+                auto_setpoint
+                if auto_active
+                else self._effective_levels(appid)[0]["pl1"]
+            )
 
             pr = self._power_reader.read()
             fan = self._read_fans()  # includes EC RPM on devices without a hwmon fan
+            if appid != self._current_appid:
+                return None
+            if tdp_generation != self._tdp_generation:
+                return None
+            if auto_active and (
+                auto_context != self._auto_context
+                or auto_setpoint != self._auto_setpoint
+            ):
+                return None
 
             # CPU / GPU temps — prefer labels "CPU" / "GPU", fall back to position
             temp_cpu, temp_gpu = extract_cpu_gpu_temps(fan)
@@ -3384,9 +3439,6 @@ class Plugin:
             fans = fan.get("fans") or []
             fan_rpms = [f["rpm"] for f in fans if f.get("rpm") is not None]
             fan_rpm = max(fan_rpms) if fan_rpms else None
-
-            # Clamped effective setpoint (mirrors get_power_draw)
-            pl1 = self._effective_levels(appid)[0]["pl1"]
 
             # boost = was the chip boosting at this PL1 (draw > PL1 + deadband)?
             # 1.0/0.0/None; its per-bin average = the honest "power-limited here?"
@@ -3444,7 +3496,8 @@ class Plugin:
         the loop doesn't carry stale signal into the freshly-empty model."""
         self._init()
         self._telemetry.clear()
-        self._reset_auto_windows()
+        self._auto_learning.reset()
+        self._reset_auto_session("learning_reset")
         return True
 
     def _start_sampler(self) -> None:
@@ -3491,6 +3544,12 @@ class Plugin:
             "telemetry_enabled": bool(self._settings.get("telemetry_enabled", True)),
             "tdp_supported": self._tdp_supported(),
             "fan_supported": bool(self._fan_ctrl.supported),
+            "auto_tdp_active": bool(
+                self._current_appid is not None
+                and self._module_enabled("autoTdp")
+                and self._tdp_profiles.auto_tdp(self._current_appid)
+                and self._auto_tdp_supported()
+            ),
         }
 
     async def get_unlock_battery_max(self) -> bool:
@@ -3617,28 +3676,29 @@ class Plugin:
             await self.set_tdp_control_enabled(False)
         return result
 
-    def _qam_boost_active(self) -> bool:
-        """The QAM-open responsive floor applies ONLY when its opt-in setting is on
-        AND the UI is open. Default OFF → the auto loop shows the REAL in-game TDP
-        with the QAM open (never inflates the number behind the menu). When ON, the
-        user accepts the menu-time bump for fluidity."""
-        return self._ui_active and bool(self._settings.get("qam_tdp_boost", False))
-
-    async def get_qam_tdp_boost(self) -> bool:
-        self._init()
-        return bool(self._settings.get("qam_tdp_boost", False))
-
-    async def set_qam_tdp_boost(self, enabled: bool) -> bool:
-        """Opt in/out of raising PL1 while the QAM is open. When turning OFF while the
-        UI is open we do NOT force PL1 back down — the auto loop will settle it to the
-        real in-game value on its next tick (no jarring drop)."""
-        self._init()
-        enabled = bool(enabled)
-        self._settings["qam_tdp_boost"] = enabled
-        self._save()
-        return enabled
-
     # ---- Auto-TDP loop ------------------------------------------------------
+    def _auto_target_max_fps(self):
+        value = getattr(self._device, "display_refresh_hz", None)
+        return int(value) if value is not None else None
+
+    def _auto_config(self, appid):
+        config = self._tdp_profiles.auto_config(appid)
+        maximum = self._auto_target_max_fps()
+        if maximum is None or config["target_fps"] <= maximum:
+            return config
+        return {**config, "target_fps": maximum}
+
+    async def _sync_auto_stats_reader(self, active):
+        active = bool(active)
+        if active == getattr(self, "_auto_stats_reader_active", False):
+            return
+        if active:
+            self._gamescope_stats.start()
+            self._auto_stats_reader_active = True
+        else:
+            self._auto_stats_reader_active = False
+            await asyncio.to_thread(self._gamescope_stats.stop)
+
     def _start_auto_loop(self) -> None:
         if self._auto_task is not None and not self._auto_task.done():
             return
@@ -3646,145 +3706,650 @@ class Plugin:
             asyncio.get_running_loop()
         except RuntimeError:
             return  # no event loop in tests — skip task creation safely
-        self._reset_auto_windows()  # start each auto session with fresh windows
+        self._reset_auto_session("starting")
         self._auto_task = asyncio.create_task(self._auto_loop())
 
     def _stop_auto_loop(self) -> None:
         if self._auto_task is not None:
             self._auto_task.cancel()
             self._auto_task = None
+        stats = getattr(self, "_gamescope_stats", None)
+        if stats is not None:
+            stats.stop()
+        self._auto_stats_reader_active = False
 
-    def _clear_auto_windows(self) -> None:
-        """Empty the GPU% window — keeping it HOMOGENEOUS at the current PL1. Called
-        after every applied PL1 change so decide never averages GPU% across
-        different setpoints (samples taken at the OLD PL1 no longer describe the new
-        one)."""
-        self._gpu_window = []
-
-    def _reset_auto_windows(self) -> None:
-        """Full reset: clear the windows AND the slack counter, so a game change /
-        loop (re)start / telemetry wipe never carries stale signal into the fresh
-        state. (A mere PL1 change clears only the windows — decide already zeroes
-        slack itself on any UP/DOWN, so don't double-reset it there.)"""
-        self._clear_auto_windows()
-        self._slack_ticks = 0
-
-    def _auto_control_pl1(self, requested):
-        targets = self._tdp_targets
+    def _reset_auto_session(self, reason="inactive") -> None:
+        stats = getattr(self, "_gamescope_stats", None)
+        if stats is not None:
+            stats.clear()
         if (
-            self._tdp_status == "constrained"
-            and targets is not None
-            and targets.requested.get("pl1") == requested
+            getattr(self, "_auto_controller", None) is not None
+            and hasattr(self, "_tdp_generation")
         ):
-            return int(targets.target.get("pl1", requested))
-        return int(requested)
+            self._advance_tdp_generation()
+        self._auto_controller = None
+        self._auto_context = None
+        self._auto_setpoint = None
+        self._auto_seed_source = None
+        self._auto_seed_watts = None
+        self._auto_last_sample_at = None
+        self._auto_applied = False
+        self._auto_apply_blocked = False
+        self._auto_apply_attempts = 0
+        self._auto_apply_retry_at = 0.0
+        self._auto_apply_exhausted = False
+        self._auto_focus_hold_active = False
+        if reason != "config_changed":
+            self._auto_ui_hold_watts = None
+        config = self._auto_config(self._current_appid)
+        status = {
+            "state": "paused",
+            "reason": reason,
+            "setpoint": None,
+            "fps": None,
+            "target_fps": config["target_fps"],
+            "signal_age_s": None,
+            "focus": None,
+            "seed_source": None,
+            "seed_watts": None,
+            "held_watts": (
+                self._auto_ui_hold_watts if self._ui_active else None
+            ),
+        }
+        if (
+            hasattr(self, "_auto_history")
+            and getattr(self, "_auto_status", None) != status
+        ):
+            self._auto_history.append({"at": round(_monotonic(), 3), **status})
+        self._auto_status = status
+
+    def _ensure_auto_session(self, on_ac=None, observation=None):
+        ac = read_on_ac() if on_ac is None else bool(on_ac)
+        config = self._auto_config(self._current_appid)
+        minimum, active = self._auto_effective_range(
+            self._current_appid, ac, observation
+        )
+        context = (
+            self._current_appid,
+            config["target_fps"],
+            config["initial_tdp"],
+            ac,
+            minimum,
+            active,
+        )
+        if self._auto_controller is not None and self._auto_context == context:
+            return self._auto_controller, False
+        if self._auto_controller is not None:
+            self._advance_tdp_generation()
+        learned = None
+        if self._learning_active():
+            learned = self._auto_learning.seed(
+                self._current_appid,
+                config["target_fps"],
+                ac,
+                minimum,
+                active,
+            )
+        initial = learned["watts"] if learned is not None else config["initial_tdp"]
+        self._auto_controller = auto_tdp.AutoTdpController(
+            initial_w=initial,
+            min_w=minimum,
+            max_w=active,
+            target_fps=config["target_fps"],
+        )
+        self._auto_context = context
+        self._auto_setpoint = self._auto_controller.setpoint
+        self._auto_seed_source = "learned" if learned is not None else "initial"
+        self._auto_seed_watts = self._auto_controller.setpoint
+        self._auto_applied = False
+        self._auto_apply_blocked = False
+        self._auto_apply_attempts = 0
+        self._auto_apply_retry_at = 0.0
+        self._auto_apply_exhausted = False
+        self._auto_status = {
+            **self._auto_controller.snapshot().as_dict(),
+            "reason": f"{self._auto_seed_source}_seed",
+            "signal_age_s": None,
+            "focus": None,
+            "seed_source": self._auto_seed_source,
+            "seed_watts": self._auto_seed_watts,
+            "held_watts": (
+                self._auto_ui_hold_watts if self._ui_active else None
+            ),
+        }
+        return self._auto_controller, True
+
+    def _auto_runtime_active(self):
+        return bool(
+            self._auto_controller is not None
+            and self._auto_setpoint is not None
+            and self._current_appid is not None
+            and self._auto_control_active()
+        )
+
+    def _auto_control_active(self):
+        return bool(
+            not self._settings.get("eco_enabled")
+            and self._module_enabled("autoTdp")
+            and self._tdp_profiles.auto_tdp(self._current_appid)
+            and self._firmware_mode() == _CUSTOM_MODE
+            and self._auto_tdp_supported()
+            and self._tdp_control_on()
+            and self._tdp_write_authorized()
+        )
+
+    def _auto_ui_blocks_tdp_write(self, reason):
+        reason = str(reason)
+        if reason in ("auto-ui-floor", "auto-focus-floor"):
+            return False
+        responsive_hold = self._ui_active or self._auto_focus_hold_active
+        return bool(
+            responsive_hold
+            and (
+                reason.startswith("auto-")
+                or (
+                    reason in ("guard", "settle-retry", "lifecycle", "reapply")
+                    and (
+                        self._auto_runtime_active()
+                        or (
+                            self._current_appid is None
+                            and self._auto_control_active()
+                        )
+                    )
+                )
+            )
+        )
+
+    def _auto_context_is_current(self, controller, context, appid):
+        return bool(
+            self._auto_identity_is_current(controller, context, appid)
+            and bool(context[3]) == read_on_ac()
+        )
+
+    def _auto_identity_is_current(self, controller, context, appid):
+        return bool(
+            controller is self._auto_controller
+            and context == self._auto_context
+            and appid == self._current_appid
+        )
+
+    def _auto_apply_confirmed(self, result, setpoint):
+        if not result.ok or result.applied_w is None:
+            return False
+        tolerance = max(
+            0,
+            int(getattr(self._tdp_backend, "read_tolerance_w", 0)),
+        )
+        return abs(int(result.applied_w) - int(setpoint)) <= tolerance
+
+    def _auto_observation_confirmed(self, observation, setpoint):
+        tolerance = max(
+            0,
+            int(getattr(self._tdp_backend, "read_tolerance_w", 0)),
+        )
+        confirm = getattr(
+            self._tdp_backend,
+            "auto_observation_confirmed",
+            None,
+        )
+        if callable(confirm):
+            try:
+                return bool(confirm(observation, setpoint, tolerance))
+            except Exception:  # noqa: BLE001
+                return False
+        if not callable(getattr(self._tdp_backend, "observe", None)):
+            primary = observation.surfaces.get(self._tdp_backend.name, {})
+            reading = primary.get(getattr(self._tdp_backend, "primary_rail", "pl1"))
+            return bool(
+                reading is not None
+                and reading.applied_w is not None
+                and abs(int(reading.applied_w) - int(setpoint)) <= tolerance
+            )
+        command = self._capture_tdp_command(
+            "auto-confirm",
+            bump=False,
+            auto_watts=setpoint,
+        )
+        targets = build_targets(
+            command.requested,
+            command.safe_bounds,
+            observation,
+        )
+        seen = set()
+        for rails in observation.surfaces.values():
+            for rail, reading in rails.items():
+                expected = targets.target.get(rail)
+                if expected is None:
+                    continue
+                if (
+                    reading.applied_w is None
+                    or abs(int(reading.applied_w) - expected) > tolerance
+                ):
+                    return False
+                seen.add(rail)
+        if set(targets.target) - seen:
+            return False
+        return True
+
+    def _auto_observed_primary_watts(self, observation):
+        primary = observation.surfaces.get(self._tdp_backend.name, {})
+        rail = getattr(self._tdp_backend, "primary_rail", "pl1")
+        reading = primary.get(rail)
+        if reading is None or reading.applied_w is None:
+            return None
+        return int(reading.applied_w)
+
+    def _accept_auto_apply(self, result, controller, ac):
+        if self._auto_apply_confirmed(result, controller.setpoint):
+            return controller
+        if not (
+            result.ok
+            and result.applied_w is not None
+            and self._tdp_status == "constrained"
+            and self._tdp_reason in ("live_min", "live_max")
+        ):
+            return None
+        constrained, _created = self._ensure_auto_session(
+            ac,
+            observation=self._tdp_observation,
+        )
+        if self._auto_apply_confirmed(result, constrained.setpoint):
+            return constrained
+        return None
+
+    def _confirm_auto_apply(self, controller):
+        controller.confirm_apply()
+        self._auto_setpoint = controller.setpoint
+        self._auto_applied = True
+        self._clear_auto_apply_failure()
+
+    def _clear_auto_apply_failure(self):
+        self._auto_apply_blocked = False
+        self._auto_apply_attempts = 0
+        self._auto_apply_retry_at = 0.0
+        self._auto_apply_exhausted = False
+
+    def _schedule_auto_apply_retry(self):
+        if self._auto_apply_attempts >= len(_AUTO_APPLY_RETRY_DELAYS_S):
+            self._auto_apply_exhausted = True
+            self._auto_apply_retry_at = (
+                _monotonic() + _AUTO_APPLY_RETRY_DELAYS_S[-1]
+            )
+            self._auto_apply_blocked = True
+            return
+        index = self._auto_apply_attempts
+        self._auto_apply_retry_at = (
+            _monotonic() + _AUTO_APPLY_RETRY_DELAYS_S[index]
+        )
+        self._auto_apply_attempts += 1
+        self._auto_apply_exhausted = False
+        self._auto_apply_blocked = True
+
+    def _restart_auto_for_power_source(self, on_ac):
+        self._reset_auto_session("power_source_changed")
+        self._ensure_auto_session(
+            on_ac,
+            observation=self._tdp_observation,
+        )
+
+    async def _recover_auto_apply(self, controller, context, appid, ac, reading):
+        if self._ui_active:
+            self._hold_auto_session("ui_active", reading)
+            return
+        if reading.get("reason") != "ok":
+            decision = controller.pause(
+                reading.get("reason", "fps_unavailable")
+            )
+            self._auto_setpoint = decision.setpoint
+            self._record_auto_status(decision, reading)
+            return
+        if _monotonic() < self._auto_apply_retry_at:
+            decision = controller.pause("apply_retry_wait")
+            self._auto_setpoint = decision.setpoint
+            self._record_auto_status(decision, reading)
+            return
+
+        observation = await self._read_tdp_observation()
+        if not self._auto_identity_is_current(controller, context, appid):
+            return
+        if self._ui_active:
+            self._hold_auto_session("ui_active", reading)
+            return
+        current_ac = read_on_ac()
+        if current_ac != ac:
+            self._restart_auto_for_power_source(current_ac)
+            return
+        if not self._auto_context_is_current(controller, context, appid):
+            return
+        if self._auto_observation_confirmed(observation, controller.setpoint):
+            self._confirm_auto_apply(controller)
+            decision = controller.pause("apply_recovered")
+            self._record_auto_status(decision, reading)
+            return
+        if self._auto_apply_exhausted:
+            self._auto_apply_retry_at = (
+                _monotonic() + _AUTO_APPLY_RETRY_DELAYS_S[-1]
+            )
+            decision = controller.pause("apply_unconfirmed")
+            self._auto_setpoint = decision.setpoint
+            self._record_auto_status(decision, reading)
+            return
+
+        result = await self._apply_tdp_now(
+            "auto-retry",
+            on_ac=ac,
+            auto_guard=(controller, context, appid),
+        )
+        if not self._auto_context_is_current(controller, context, appid):
+            return
+        if self._ui_active:
+            self._hold_auto_session("ui_active", reading)
+            return
+        accepted = self._accept_auto_apply(result, controller, ac)
+        if accepted is not None:
+            self._confirm_auto_apply(accepted)
+            decision = accepted.pause("apply_recovered")
+            self._record_auto_status(decision, reading)
+            return
+        self._schedule_auto_apply_retry()
+        decision = controller.pause(
+            "apply_unconfirmed" if result.ok else "apply_failed"
+        )
+        self._auto_setpoint = decision.setpoint
+        self._record_auto_status(decision, reading)
+
+    async def _apply_auto_seed(self, reason, on_ac=None):
+        """Apply an explicit starting point before the first trustworthy FPS sample.
+
+        Enable, configuration and lifecycle actions may do this one write; autonomous
+        adjustments remain gated on a fresh, focused Gamescope reading in `_auto_tick`.
+        """
+        controller = self._auto_controller
+        context = self._auto_context
+        appid = self._current_appid
+        if controller is None or context is None or appid is None:
+            return await self._apply_tdp_now(reason, on_ac=on_ac)
+        if self._ui_active:
+            self._hold_auto_session("ui_active")
+            return TdpResult(controller.setpoint, None, False, "auto-ui-active")
+        ac = read_on_ac() if on_ac is None else bool(on_ac)
+        result = await self._apply_tdp_now(
+            reason,
+            on_ac=ac,
+            auto_guard=(controller, context, appid),
+        )
+        if not self._auto_identity_is_current(controller, context, appid):
+            return result
+        if self._ui_active:
+            self._hold_auto_session("ui_active")
+            return result
+        current_ac = read_on_ac()
+        if current_ac != ac:
+            self._restart_auto_for_power_source(current_ac)
+            return result
+        if not self._auto_context_is_current(controller, context, appid):
+            return result
+        accepted = self._accept_auto_apply(result, controller, ac)
+        if accepted is not None:
+            self._confirm_auto_apply(accepted)
+            return result
+        decision = controller.pause(
+            "apply_unconfirmed" if result.ok else "apply_failed"
+        )
+        self._schedule_auto_apply_retry()
+        self._auto_setpoint = decision.setpoint
+        self._record_auto_status(decision, {})
+        return result
+
+    def _record_auto_status(self, decision, reading):
+        status = {
+            **decision.as_dict(),
+            "signal_age_s": reading.get("age_s"),
+            "focus": reading.get("focus"),
+            "seed_source": self._auto_seed_source,
+            "seed_watts": self._auto_seed_watts,
+            "held_watts": (
+                self._auto_ui_hold_watts
+                if self._ui_active or self._auto_focus_hold_active
+                else None
+            ),
+        }
+        previous = getattr(self, "_auto_status", None)
+        transition_fields = (
+            "state",
+            "reason",
+            "setpoint",
+            "target_fps",
+            "focus",
+            "seed_source",
+            "seed_watts",
+        )
+        if previous is None or any(
+            previous.get(field) != status.get(field)
+            for field in transition_fields
+        ):
+            decky.logger.info(
+                "Auto-TDP transition %s",
+                json.dumps(
+                    {
+                        field: status.get(field)
+                        for field in transition_fields
+                    },
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ),
+            )
+        if previous != status:
+            self._auto_history.append({
+                "at": round(_monotonic(), 3),
+                **status,
+            })
+        self._auto_status = status
+        return status
+
+    def _hold_auto_session(self, reason, reading=None):
+        controller = getattr(self, "_auto_controller", None)
+        if controller is None:
+            return self._auto_status
+        decision = controller.hold(reason)
+        self._auto_setpoint = decision.setpoint
+        if reading is None:
+            current = getattr(self, "_auto_status", {})
+            reading = {
+                "age_s": current.get("signal_age_s"),
+                "focus": current.get("focus"),
+            }
+        return self._record_auto_status(decision, reading)
+
+    async def _auto_tick(self):
+        async def inactive(reason):
+            await self._sync_auto_stats_reader(False)
+            self._reset_auto_session(reason)
+            return self._auto_status
+
+        if self._current_appid is None:
+            return await inactive("no_game")
+        if self._settings.get("eco_enabled"):
+            return await inactive("eco_active")
+        if not self._module_enabled("autoTdp"):
+            return await inactive("module_disabled")
+        if not self._tdp_profiles.auto_tdp(self._current_appid):
+            return await inactive("disabled")
+        if self._firmware_mode() != _CUSTOM_MODE:
+            return await inactive("firmware_mode")
+        if not self._auto_tdp_supported():
+            return await inactive("tdp_unsupported")
+        if not self._tdp_control_on():
+            return await inactive("control_disabled")
+        if not self._tdp_write_authorized():
+            return await inactive("external_owner")
+
+        await self._sync_auto_stats_reader(True)
+
+        ac = read_on_ac()
+        controller, _created = self._ensure_auto_session(
+            ac,
+            observation=self._tdp_observation,
+        )
+        context = self._auto_context
+        appid = self._current_appid
+        if self._ui_active:
+            return self._hold_auto_session("ui_active")
+        power = await asyncio.to_thread(self._power_reader.read)
+        if not self._auto_identity_is_current(controller, context, appid):
+            return self._auto_status
+        if self._ui_active:
+            return self._hold_auto_session("ui_active")
+        live_ac = read_on_ac()
+        if live_ac != ac:
+            self._restart_auto_for_power_source(live_ac)
+            return self._auto_status
+        if not self._auto_context_is_current(controller, context, appid):
+            return self._auto_status
+        controller, _created = self._ensure_auto_session(
+            ac,
+            observation=self._tdp_observation,
+        )
+        context = self._auto_context
+        appid = self._current_appid
+        reading = self._gamescope_stats.read()
+        if self._ui_active:
+            return self._hold_auto_session("ui_active", reading)
+        focus_lost = (
+            reading.get("reason") == "no_game_focus"
+            and reading.get("focus") in (None, "steam")
+        )
+        if focus_lost:
+            if not self._auto_focus_hold_active:
+                self._set_auto_focus_hold(True)
+            decision = controller.step(
+                fps=None,
+                signal_reason="no_game_focus",
+                gpu_busy=power.get("gpu_busy"),
+            )
+            self._auto_setpoint = decision.setpoint
+            self._record_auto_status(decision, reading)
+            if (
+                self._auto_apply_blocked
+                and _monotonic() < self._auto_apply_retry_at
+            ):
+                return self._auto_status
+            await self._apply_auto_responsive_floor("no_game_focus", reading)
+            return self._auto_status
+        if self._auto_focus_hold_active:
+            self._set_auto_focus_hold(False)
+        self._auto_ui_hold_watts = None
+        sample_at = reading.get("sample_at")
+        if self._auto_apply_blocked:
+            await self._recover_auto_apply(
+                controller,
+                context,
+                appid,
+                ac,
+                reading,
+            )
+            return self._auto_status
+        if (
+            reading.get("reason") == "ok"
+            and sample_at is not None
+            and sample_at == self._auto_last_sample_at
+        ):
+            return self._auto_status
+        if reading.get("reason") == "ok":
+            self._auto_last_sample_at = sample_at
+        decision = controller.step(
+            fps=reading.get("fps"),
+            signal_reason=reading.get("reason", "fps_unavailable"),
+            gpu_busy=power.get("gpu_busy"),
+        )
+        self._auto_setpoint = decision.setpoint
+        self._record_auto_status(decision, reading)
+        if not self._auto_context_is_current(controller, context, appid):
+            return self._auto_status
+        if self._ui_active:
+            return self._hold_auto_session("ui_active", reading)
+        if decision.reason == "probe_stable" and self._learning_active():
+            try:
+                recorded = self._auto_learning.record(
+                    appid,
+                    decision.target_fps,
+                    ac,
+                    decision.setpoint,
+                    stable=True,
+                )
+            except Exception as error:  # noqa: BLE001
+                recorded = False
+                decky.logger.warning(
+                    "Auto-TDP learning write failed: %s",
+                    type(error).__name__,
+                )
+            if not recorded:
+                decky.logger.warning("Auto-TDP learning observation was not saved")
+        should_apply = decision.changed or (
+            reading.get("reason") == "ok" and not self._auto_applied
+        )
+        if not should_apply:
+            return self._auto_status
+        live_ac = read_on_ac()
+        if live_ac != ac:
+            self._restart_auto_for_power_source(live_ac)
+            return self._auto_status
+        if self._ui_active:
+            return self._hold_auto_session("ui_active", reading)
+        result = await self._apply_tdp_now(
+            "auto-start" if not self._auto_applied else "auto-step",
+            on_ac=ac,
+            auto_guard=(controller, context, appid),
+        )
+        if not self._auto_context_is_current(controller, context, appid):
+            return self._auto_status
+        if self._ui_active:
+            return self._hold_auto_session("ui_active", reading)
+        accepted = self._accept_auto_apply(result, controller, ac)
+        if accepted is not None:
+            self._confirm_auto_apply(accepted)
+            return self._auto_status
+
+        rejected = controller.reject_apply(
+            "apply_unconfirmed" if result.ok else "apply_failed"
+        )
+        self._auto_setpoint = rejected.setpoint
+        self._schedule_auto_apply_retry()
+        self._record_auto_status(rejected, reading)
+        if rejected.changed:
+            await self._apply_tdp_now(
+                "auto-rollback",
+                on_ac=ac,
+                auto_guard=(controller, context, appid),
+            )
+        return self._auto_status
 
     async def _auto_loop(self) -> None:
-        """Autonomous, band-DECOUPLED GPU-driven controller. Runs over the full
-        device range [min_w, active_max]: every 2 s it feeds the rolling GPU%
-        window to auto_tdp.decide, which converges on the knee and HOLDS (dead-band
-        + temporal gate = no sawtooth), stepping up on GPU saturation and down after
-        sustained GPU headroom. Watts/boost are NOT used for the decision — on a
-        power-limited game the draw follows PL1, so any draw signal is confounded
-        (a 35 W cap with the GPU at 80% would hold at max forever). The learned
-        band never caps it. Degrades to HOLD on devices without gpu_busy (Claw)."""
         while True:
             try:
                 await asyncio.sleep(2)
-                # Piggyback the HUD plugin-state refresh on this existing tick (no new
-                # loop): re-bake presets.conf and reload mangoapp when a shown value
-                # changes. Runs regardless of the auto-TDP gating below (it must update
-                # on desktop / manual / eco too). No-op when no pdc metric is shown.
                 self._offer_pdc_refresh()
-                # Auto-TDP is a per-GAME dynamic control: don't adjust the global
-                # setpoint from desktop/loading activity. Idle → drop stale window
-                # so re-entry into a game starts homogeneous.
-                if self._current_appid is None:
-                    self._reset_auto_windows()
-                    continue
-                # Download mode owns the setpoint (min) — the loop must not fight it.
-                # Drop the window so post-eco decisions start from fresh samples taken
-                # at the real PL1, not stale ones from before eco pinned it to min.
-                if self._settings.get("eco_enabled"):
-                    self._reset_auto_windows()
-                    continue
-                # TDP master switch off (module 'power') or Auto-TDP disabled — don't
-                # drive PL1. _module_enabled folds the power cascade into autoTdp.
-                if not self._module_enabled("autoTdp"):
-                    self._reset_auto_windows()
-                    continue
-                if not self._auto_tdp_supported():
-                    self._reset_auto_windows()
-                    continue
-                # Hold when auto-TDP is off for THIS game (per-game, own or global) or a
-                # named firmware mode owns the rails — either way we don't drive PL1.
-                if (not self._tdp_profiles.auto_tdp(self._current_appid)
-                        or self._firmware_mode() != _CUSTOM_MODE):
-                    self._reset_auto_windows()
-                    continue
-                # read() sub-samples gpu_busy over a short blocking burst -> off
-                # the event loop so it can't stall other Decky RPC handling.
-                pr = await asyncio.to_thread(self._power_reader.read)
-                limits = self._limits()
-                levels, _active, ac = self._effective_levels(
-                    self._current_appid,
-                    limits=limits,
-                )
-                lim = self._automatic_limits(limits)
-                active = self._active_max(lim, ac)
-                requested = self._auto_control_pl1(levels["pl1"])
-                cur = min(requested, active)
-
-                self._gpu_window.append(pr.get("gpu_busy"))
-                del self._gpu_window[:-_AUTO_WINDOW]
-
-                floor = auto_tdp.effective_floor(lim.min_w, self._qam_boost_active())
-                nxt, self._slack_ticks = auto_tdp.decide(
-                    cur, self._gpu_window, self._slack_ticks, floor, active)
-                if nxt != requested:
-                    self._tdp_profiles.set_pl1(self._auto_scope(), nxt, appid=self._current_appid)
-                    await self._apply_tdp_now("auto-step")
-                    # PL1 changed → drop the now-stale window (samples taken at the
-                    # OLD setpoint) so the next reads are homogeneous at the new PL1.
-                    self._clear_auto_windows()
+                await self._auto_tick()
             except asyncio.CancelledError:
                 return
-            except Exception:  # noqa: BLE001
-                pass  # loop must never die
+            except Exception as error:  # noqa: BLE001
+                await self._sync_auto_stats_reader(False)
+                self._reset_auto_session(f"error:{type(error).__name__}")
 
     # ---- Power draw + auto-TDP RPCs -----------------------------------------
-    def _ui_floor_engaged(self) -> bool:
-        """True ONLY when the QAM-open responsive floor is REALLY holding PL1 above
-        where the auto loop would otherwise park it — so the UI can honestly say
-        "this number is raised for the menu, not the in-game value". False when the
-        game already demands >= the responsive floor (the number IS the in-game one),
-        or when not auto / no game / UI closed. Don't claim a raise that
-        isn't happening."""
-        if not (self._auto_tdp_supported()
-                and self._qam_boost_active() and self._current_appid is not None
-                and self._tdp_profiles.auto_tdp(self._current_appid)):
-            return False
-        lim = self._limits()
-        floor = auto_tdp.effective_floor(lim.min_w, True)
-        if floor <= lim.min_w:
-            return False  # device min already >= responsive floor → no raise
-        # The floor bites only when the loop's PL1 sits AT the responsive floor
-        # (it wanted lower / is being held up). A demanding game parks above it.
-        pl1 = self._effective_levels(
-            self._current_appid,
-            limits=lim,
-        )[0]["pl1"]
-        return pl1 <= floor
-
     async def get_power_draw(self) -> dict:
         self._init()
         pr = await asyncio.to_thread(self._power_reader.read)
         auto = (
-            self._auto_tdp_supported()
-            and self._tdp_profiles.auto_tdp(self._current_appid)
+            self._tdp_profiles.auto_tdp(self._current_appid)
+            and self._auto_tdp_supported()
         )
         ac = read_on_ac()
-        setpoint = self._effective_levels(self._current_appid, ac)[0]["pl1"]
+        setpoint = (
+            self._auto_setpoint
+            if self._auto_runtime_active()
+            else self._effective_levels(self._current_appid, ac)[0]["pl1"]
+        )
         observation_backend = self._tdp_observation_backend()
         if getattr(observation_backend, "blocking", False):
             observation = self._tdp_observation
@@ -3792,19 +4357,24 @@ class Plugin:
         else:
             observation = self._observe_tdp_sync()
             primary = observation.surfaces.get(observation_backend.name, {})
-            pl1 = primary.get("pl1")
-            applied = pl1.applied_w if pl1 is not None else None
+            primary_rail = getattr(observation_backend, "primary_rail", "pl1")
+            primary_reading = primary.get(primary_rail)
+            applied = (
+                primary_reading.applied_w
+                if primary_reading is not None
+                else None
+            )
         return {
             "watts": pr["watts"],
             "gpu_busy": pr["gpu_busy"],
             "auto_tdp": auto,
             "setpoint": setpoint,
             "applied": applied,
-            "ui_floor_engaged": self._ui_floor_engaged(),
             # Polled every second, so the UI can refresh the slider ceiling the moment
             # the charger is plugged or unplugged.
             "on_ac": ac,
             "ownership": self._tdp_ownership_state(observation),
+            "auto": dict(self._auto_status),
         }
 
     async def set_auto_tdp(
@@ -3827,35 +4397,236 @@ class Plugin:
         if not self._tdp_control_on():
             return {"auto_tdp": auto_tdp}
         self._clear_eco()
+        before = self._tdp_profiles.auto_tdp(self._current_appid)
         self._tdp_profiles.set_auto_tdp(scope, bool(enabled), appid=appid)
-        await self._apply_tdp_now("auto-toggle")
+        after = self._tdp_profiles.auto_tdp(self._current_appid)
+        if before != after:
+            self._reset_auto_session("enabled" if after else "disabled")
+        if after and self._current_appid is not None:
+            self._ensure_auto_session(
+                read_on_ac(),
+                observation=self._tdp_observation,
+            )
+            if self._ui_active:
+                await self._apply_auto_ui_floor()
+            else:
+                await self._apply_auto_seed("auto-toggle")
+        elif self._current_appid is None:
+            await self._apply_tdp_now("auto-ui-floor" if after else "manual-auto-restore")
+        else:
+            await self._apply_tdp_now("auto-toggle")
         return {"auto_tdp": self._tdp_profiles.auto_tdp(self._current_appid)}
 
-    async def set_ui_active(self, enabled: bool) -> bool:
-        """The plugin UI (QAM panel) opened/closed. When the opt-in ``qam_tdp_boost``
-        setting is on, while open the AUTO loop uses a higher responsive floor
-        (CPU-bound menu render stays fluid) and we bump PL1 to that floor IMMEDIATELY
-        (only if it's currently LOWER) so the menu is snappy without waiting for the
-        loop to ramp — a real, honest PL1 change surfaced via ui_floor_engaged. With
-        the setting OFF (default) opening the QAM changes NOTHING: the auto loop shows
-        the REAL in-game TDP. Only affects AUTO mode + a running game."""
+    async def set_auto_tdp_config(
+        self,
+        target_fps: int,
+        initial_tdp: int,
+        scope: str = "global",
+        appid=None,
+        context_appid=_RPC_CONTEXT_UNSET,
+        min_tdp=AUTO_RANGE_UNSET,
+        max_tdp=AUTO_RANGE_UNSET,
+    ) -> dict:
         self._init()
-        self._ui_active = bool(enabled)
-        if (self._auto_tdp_supported()
-                and self._qam_boost_active() and self._current_appid is not None
+        if (
+            context_appid is not _RPC_CONTEXT_UNSET
+            and not self._scope_context_is_current(scope, appid, context_appid)
+        ):
+            return self._tdp_state(await self._read_tdp_observation())
+        resolved = self._resolve_scope(scope, appid)
+        if resolved is None:
+            return self._tdp_state(await self._read_tdp_observation())
+        limits = self._auto_request_limits()
+        previous = self._tdp_profiles.auto_config(
+            None if resolved == "global" else appid
+        )
+
+        def endpoint(value, key):
+            if value is AUTO_RANGE_UNSET:
+                return previous[key]
+            if value is None:
+                return None
+            try:
+                return max(limits.min_w, min(int(value), limits.max_ac_w))
+            except (TypeError, ValueError, OverflowError):
+                return previous[key]
+
+        minimum = endpoint(min_tdp, "min_tdp")
+        maximum = endpoint(max_tdp, "max_tdp")
+        if minimum is not None and maximum is not None and minimum > maximum:
+            return self._tdp_state(await self._read_tdp_observation())
+        try:
+            requested_initial = int(initial_tdp)
+        except (TypeError, ValueError, OverflowError):
+            requested_initial = self._tdp_profiles.auto_config(
+                None if resolved == "global" else appid
+            )["initial_tdp"]
+        initial = max(limits.min_w, min(requested_initial, limits.max_ac_w))
+        try:
+            requested_target = int(target_fps)
+        except (TypeError, ValueError, OverflowError):
+            requested_target = self._auto_config(
+                None if resolved == "global" else appid
+            )["target_fps"]
+        maximum_fps = self._auto_target_max_fps()
+        target = (
+            min(requested_target, maximum_fps)
+            if maximum_fps is not None
+            else requested_target
+        )
+        self._tdp_profiles.set_auto_config(
+            resolved,
+            target,
+            initial,
+            appid=appid,
+            min_tdp=minimum,
+            max_tdp=maximum,
+        )
+        applies_to_current = (
+            resolved == "global"
+            and (
+                self._current_appid is None
+                or self._tdp_profiles.is_following_global(self._current_appid)
+            )
+        ) or (
+            resolved == "game"
+            and appid is not None
+            and str(appid) == self._current_appid
+        )
+        if applies_to_current:
+            self._reset_auto_session("config_changed")
+            if (
+                self._current_appid is not None
                 and self._tdp_profiles.auto_tdp(self._current_appid)
-                and self._firmware_mode() == _CUSTOM_MODE):
-            lim = self._limits()
-            floor = auto_tdp.effective_floor(lim.min_w, True)
-            cur = self._effective_levels(
-                self._current_appid,
-                limits=lim,
-            )[0]["pl1"]
-            if cur < floor:  # only raise if actually below the responsive floor
-                self._tdp_profiles.set_pl1(self._auto_scope(), floor,
-                                           appid=self._current_appid)
-                await self._apply_tdp_now("qam-floor")
-                self._clear_auto_windows()  # PL1 changed → window is now stale
+                and self._auto_tdp_supported()
+            ):
+                self._ensure_auto_session(
+                    read_on_ac(),
+                    observation=self._tdp_observation,
+                )
+                if self._ui_active:
+                    await self._apply_auto_ui_floor()
+                else:
+                    await self._apply_auto_seed("auto-config")
+            elif self._current_appid is None and self._auto_control_active():
+                await self._apply_tdp_now("auto-ui-floor")
+        return self._tdp_state(await self._read_tdp_observation())
+
+    def _auto_responsive_hold_active(self, reason, reading=None):
+        if reason == "ui_active":
+            return self._ui_active
+        if reason == "no_game_focus":
+            current = reading if reading is not None else self._gamescope_stats.read()
+            return bool(
+                self._auto_focus_hold_active
+                and current.get("reason") == reason
+                and current.get("focus") in (None, "steam")
+            )
+        return False
+
+    def _set_auto_focus_hold(self, active):
+        active = bool(active)
+        if active == self._auto_focus_hold_active:
+            return
+        self._auto_focus_hold_active = active
+        if not active:
+            self._auto_ui_hold_watts = None
+        self._advance_tdp_generation()
+
+    async def _apply_auto_responsive_floor(self, reason, reading=None):
+        if (
+            not self._auto_responsive_hold_active(reason, reading)
+            or not self._auto_runtime_active()
+        ):
+            return
+        if reason == "ui_active":
+            self._hold_auto_session(reason, reading)
+        controller = self._auto_controller
+        context = self._auto_context
+        appid = self._current_appid
+        generation = self._tdp_generation
+        self._auto_applied = False
+        observation = await self._read_tdp_observation()
+        if (
+            not self._auto_responsive_hold_active(reason)
+            or generation != self._tdp_generation
+            or not self._auto_context_is_current(controller, context, appid)
+            or not self._auto_runtime_active()
+        ):
+            return
+        observed = self._auto_observed_primary_watts(observation)
+        floor = self._auto_responsive_floor(appid, read_on_ac(), observation)
+        _minimum, maximum = self._auto_effective_range(appid, read_on_ac(), observation)
+        if observed is None:
+            self._auto_ui_hold_watts = None
+            if reason == "ui_active":
+                self._hold_auto_session(reason, reading)
+            else:
+                self._record_auto_status(controller.snapshot(), reading or {})
+            return
+        current = max(
+            int(controller.setpoint),
+            int(observed) if observed is not None else int(controller.setpoint),
+        )
+        hold_watts = max(floor, min(current, maximum))
+        confirmed = self._auto_observation_confirmed(observation, hold_watts)
+        self._auto_ui_hold_watts = hold_watts if confirmed else None
+        if not confirmed:
+            apply_reason = (
+                "auto-focus-floor"
+                if reason == "no_game_focus"
+                else "auto-ui-floor"
+            )
+            result = await self._apply_tdp_now(
+                apply_reason,
+                auto_guard=(controller, context, appid),
+                auto_watts=hold_watts,
+            )
+            if (
+                not self._auto_responsive_hold_active(reason)
+                or not self._auto_context_is_current(controller, context, appid)
+                or not self._auto_runtime_active()
+            ):
+                if reason == "no_game_focus":
+                    self._set_auto_focus_hold(False)
+                return
+            confirmed = bool(
+                result.ok
+                and self._auto_observation_confirmed(
+                    self._tdp_observation,
+                    hold_watts,
+                )
+            )
+            if confirmed:
+                self._auto_ui_hold_watts = hold_watts
+                self._clear_auto_apply_failure()
+            else:
+                self._auto_ui_hold_watts = None
+                self._schedule_auto_apply_retry()
+        elif confirmed:
+            self._clear_auto_apply_failure()
+        if reason == "ui_active":
+            self._hold_auto_session(reason, reading)
+        else:
+            self._record_auto_status(controller.snapshot(), reading or {})
+
+    async def _apply_auto_ui_floor(self):
+        await self._apply_auto_responsive_floor("ui_active")
+
+    async def set_ui_active(self, enabled: bool) -> bool:
+        self._init()
+        active = bool(enabled)
+        activated = active and not self._ui_active
+        self._ui_active = active
+        if activated and self._auto_controller is not None:
+            self._advance_tdp_generation()
+            await self._apply_auto_ui_floor()
+        elif activated:
+            self._auto_ui_hold_watts = None
+        elif not active and not self._auto_focus_hold_active:
+            self._auto_ui_hold_watts = None
+            if self._auto_status.get("held_watts") is not None:
+                self._auto_status = {**self._auto_status, "held_watts": None}
         return self._ui_active
 
     # ---- TDP helpers + RPCs -------------------------------------------------
@@ -3967,7 +4738,7 @@ class Plugin:
 
     def _automatic_limits(self, limits=None):
         """Limits for automatic control and presets, excluding unsafe opt-ins."""
-        limits = limits or self._limits()
+        limits = self._limits() if limits is None else limits
         if not (
             self._device.experimental_tdp_max_ac
             and self._settings.get("experimental_tdp_unlock") is True
@@ -3980,6 +4751,51 @@ class Plugin:
             limits.max_w,
             max_ac,
         )
+
+    def _auto_request_limits(self):
+        return self._automatic_limits(self._profile_storage_limits())
+
+    def _auto_effective_range(self, appid, on_ac, observation=None):
+        limits = self._auto_power_limits(observation)
+        active = self._active_max(limits, on_ac)
+        config = self._auto_config(appid)
+        minimum = config["min_tdp"]
+        maximum = config["max_tdp"]
+        return (
+            max(limits.min_w, min(minimum, active)) if minimum is not None else limits.min_w,
+            max(limits.min_w, min(maximum, active)) if maximum is not None else active,
+        )
+
+    def _auto_responsive_floor(self, appid, on_ac, observation=None):
+        minimum, maximum = self._auto_effective_range(appid, on_ac, observation)
+        return max(minimum, min(self._auto_request_limits().default_w, maximum))
+
+    def _auto_power_limits(self, observation=None):
+        limits = self._automatic_limits()
+        primary_rail = getattr(self._tdp_backend, "primary_rail", "pl1")
+        get_level_limits = getattr(self._tdp_backend, "auto_level_limits", None)
+        level_limits = (
+            get_level_limits()
+            if callable(get_level_limits)
+            else self._tdp_backend.level_limits()
+        )
+        rail = level_limits.get(primary_rail, {})
+        minimum = max(limits.min_w, int(rail.get("min", limits.min_w)))
+        rail_max = int(rail.get("max", limits.max_ac_w))
+        if observation is not None:
+            live = observation.surfaces.get(
+                self._tdp_backend.name,
+                {},
+            ).get(primary_rail)
+            if live is not None and live.min_w is not None:
+                minimum = max(minimum, int(live.min_w))
+            if live is not None and live.max_w is not None:
+                rail_max = min(rail_max, int(live.max_w))
+        rail_max = max(minimum, rail_max)
+        maximum = max(minimum, min(limits.max_w, rail_max))
+        maximum_ac = max(maximum, min(limits.max_ac_w, rail_max))
+        default = max(minimum, min(limits.default_w, maximum_ac))
+        return TdpLimits(minimum, default, maximum, maximum_ac)
 
     def _effective_levels(self, appid=None, on_ac=None, limits=None):
         """Clamped {pl1,pl2,pl3} for a scope at the active (on_ac) ceiling, plus the
@@ -4322,13 +5138,38 @@ class Plugin:
                 out.append(mid)
         return out
 
-    def _capture_tdp_command(self, reason, on_ac=None, bump=True):
+    def _capture_tdp_command(
+        self,
+        reason,
+        on_ac=None,
+        bump=True,
+        auto_watts=None,
+    ):
         backend = self._tdp_backend
         ac = read_on_ac() if on_ac is None else bool(on_ac)
         overclock = self._steamdeck_overclock_state()
         limits = self._limits(overclock)
         active = self._active_max(limits, ac)
         logical_requested = self._tdp_profiles.effective(self._current_appid)
+        requested_auto_watts = None
+        if auto_watts is not None and self._auto_runtime_active():
+            requested_auto_watts = int(auto_watts)
+        elif self._auto_runtime_active():
+            requested_auto_watts = int(self._auto_setpoint)
+        elif self._current_appid is None and self._auto_control_active():
+            requested_auto_watts = self._auto_responsive_floor(
+                None,
+                ac,
+                self._tdp_observation,
+            )
+        if requested_auto_watts is not None:
+            logical_requested = {
+                "pl1": requested_auto_watts,
+                "pl2": requested_auto_watts,
+                "pl3": requested_auto_watts,
+                "mode": "estable",
+            }
+        auto_active = requested_auto_watts is not None
         if self._settings.get("eco_enabled"):
             minimum = limits.min_w
             logical_requested = {
@@ -4339,9 +5180,11 @@ class Plugin:
             }
         select_levels = getattr(
             backend,
-            "physical_levels",
+            "auto_physical_levels" if auto_active else "physical_levels",
             None,
         )
+        if auto_active and not callable(select_levels):
+            select_levels = getattr(backend, "physical_levels", None)
         if callable(select_levels):
             requested = select_levels(logical_requested)
         elif getattr(backend, "supports_levels", False):
@@ -4351,10 +5194,14 @@ class Plugin:
             }
         else:
             requested = {"pl1": int(logical_requested["pl1"])}
-        safe = self._cap_level_limits(
-            backend.level_limits(),
-            active,
+        get_level_limits = getattr(
+            backend,
+            "auto_level_limits" if auto_active else "level_limits",
+            None,
         )
+        if auto_active and not callable(get_level_limits):
+            get_level_limits = getattr(backend, "level_limits", None)
+        safe = self._cap_level_limits(get_level_limits(), active)
         for rail in requested:
             safe.setdefault(
                 rail,
@@ -4377,6 +5224,7 @@ class Plugin:
             safe_bounds=safe,
             primary_rail=getattr(backend, "primary_rail", "pl1"),
             on_ac=ac,
+            auto_tdp=auto_active,
             ppt_probe_pending=self._steamdeck_ppt_probe_pending(overclock),
         )
 
@@ -4411,9 +5259,15 @@ class Plugin:
         self._tdp_observation_at = _monotonic()
         return observation
 
-    def _apply_tdp_targets(self, target, on_ac):
+    def _apply_tdp_targets(self, target, on_ac, auto_tdp):
         self._tdp_backend_used = True
-        apply_targets = getattr(self._tdp_backend, "apply_targets", None)
+        apply_targets = getattr(
+            self._tdp_backend,
+            "apply_auto_targets" if auto_tdp else "apply_targets",
+            None,
+        )
+        if auto_tdp and not callable(apply_targets):
+            apply_targets = getattr(self._tdp_backend, "apply_targets", None)
         if callable(apply_targets):
             return apply_targets(target, on_ac)
         primary_rail = getattr(self._tdp_backend, "primary_rail", "pl1")
@@ -4440,6 +5294,13 @@ class Plugin:
                 None,
                 False,
                 "stale-generation",
+            )
+        if self._auto_ui_blocks_tdp_write(command.reason):
+            return TdpResult(
+                logical_watts,
+                None,
+                False,
+                "auto-ui-active",
             )
         if command.backend is not self._tdp_backend:
             return TdpResult(
@@ -4633,7 +5494,25 @@ class Plugin:
             command.safe_bounds,
             before,
         )
-        result = self._apply_tdp_targets(targets.target, command.on_ac)
+        if bool(command.on_ac) != read_on_ac():
+            return TdpResult(
+                logical_watts,
+                None,
+                False,
+                "stale-power-source",
+            )
+        if self._auto_ui_blocks_tdp_write(command.reason):
+            return TdpResult(
+                logical_watts,
+                None,
+                False,
+                "auto-ui-active",
+            )
+        result = self._apply_tdp_targets(
+            targets.target,
+            command.on_ac,
+            command.auto_tdp,
+        )
         after = self._observe_tdp_sync()
         if command.generation != self._tdp_generation:
             return TdpResult(
@@ -4681,8 +5560,36 @@ class Plugin:
             result.detail,
         )
 
-    async def _apply_tdp_now(self, reason, on_ac=None):
+    async def _apply_tdp_now(
+        self,
+        reason,
+        on_ac=None,
+        auto_guard=None,
+        auto_watts=None,
+    ):
+        ui_floor = reason in ("auto-ui-floor", "auto-focus-floor")
+        if auto_guard is not None and self._ui_active and not ui_floor:
+            return TdpResult(
+                int(getattr(self, "_auto_setpoint", 0) or 0),
+                None,
+                False,
+                "auto-ui-active",
+            )
         await self._ensure_recognised_desktop_migration()
+        if auto_guard is not None and not self._auto_context_is_current(*auto_guard):
+            return TdpResult(
+                int(getattr(self, "_auto_setpoint", 0) or 0),
+                None,
+                False,
+                "stale-auto-context",
+            )
+        if auto_guard is not None and self._ui_active and not ui_floor:
+            return TdpResult(
+                int(getattr(self, "_auto_setpoint", 0) or 0),
+                None,
+                False,
+                "auto-ui-active",
+            )
         if getattr(self, "_desktop_recognition_migration_pending", False):
             requested = self._tdp_profiles.effective(self._current_appid)
             return TdpResult(
@@ -4701,7 +5608,18 @@ class Plugin:
                 False,
                 "tdp-shutdown",
             )
-        command = self._capture_tdp_command(reason, on_ac)
+        if auto_guard is not None and not self._auto_context_is_current(*auto_guard):
+            return TdpResult(
+                int(getattr(self, "_auto_setpoint", 0) or 0),
+                None,
+                False,
+                "stale-auto-context",
+            )
+        command = self._capture_tdp_command(
+            reason,
+            on_ac,
+            auto_watts=auto_watts,
+        )
         return await self._offload_call(
             lambda: self._execute_tdp_command(command)
         )
@@ -4774,7 +5692,7 @@ class Plugin:
             control_enabled=self._tdp_control_on(),
             write_authorized=self._tdp_write_authorized(),
             custom_mode=self._firmware_mode() == _CUSTOM_MODE,
-            auto_tdp=self._tdp_profiles.auto_tdp(self._current_appid),
+            auto_tdp=self._auto_control_active(),
         )
 
     def _remember_low_battery_primary_result(self, hold, result):
@@ -4981,6 +5899,12 @@ class Plugin:
             self._tdp_reason = "firmware_mode"
             self._tdp_reconcile_memory = ReconcileMemory()
             return
+        if self._auto_ui_blocks_tdp_write("guard"):
+            self._tdp_reconcile_memory = ReconcileMemory(
+                drift_times=self._tdp_reconcile_memory.drift_times,
+            )
+            self._remember_tdp_observation(self._observe_tdp_sync())
+            return
         observation = self._observe_tdp_sync()
         if command.generation != self._tdp_generation:
             return
@@ -5016,8 +5940,16 @@ class Plugin:
         result = None
         if command.generation != self._tdp_generation:
             return
+        if self._auto_ui_blocks_tdp_write(command.reason):
+            return
         if outcome.action == "apply":
-            result = self._apply_tdp_targets(targets.target, command.on_ac)
+            if bool(command.on_ac) != read_on_ac():
+                return
+            result = self._apply_tdp_targets(
+                targets.target,
+                command.on_ac,
+                command.auto_tdp,
+            )
             after = self._observe_tdp_sync()
             if command.generation != self._tdp_generation:
                 return
@@ -5264,6 +6196,11 @@ class Plugin:
         # stale preview can't leak onto the new context (nor a dangling timer fire).
         self._reapply_generation = int(getattr(self, "_reapply_generation", 0)) + 1
         self._last_reapply_trigger = "lifecycle_or_context"
+        if self._current_appid is not None and self._auto_control_active():
+            self._ensure_auto_session(
+                on_ac,
+                observation=self._tdp_observation,
+            )
         if getattr(self, "_desktop_recognition_migration_pending", False):
             self._offload(self._recover_recognised_desktop_migration)
         self._drop_color_preview()
@@ -7116,7 +8053,12 @@ class Plugin:
         current = str(appid) if appid is not None else None
         if current == getattr(self, "_current_appid", None):
             return
+        stats = getattr(self, "_gamescope_stats", None)
+        if stats is not None:
+            stats.clear()
         self._current_appid = current
+        if getattr(self, "_auto_controller", None) is not None:
+            self._reset_auto_session("context_changed")
         self._next_gpu_generation()
 
     def _cpu_scope_is_current(
@@ -8624,6 +9566,8 @@ class Plugin:
             ac,
             limits=limits,
         )
+        auto_limits = self._auto_power_limits(observation)
+        auto_request_limits = self._auto_request_limits()
         ll = self._cap_level_limits(self._tdp_backend.level_limits(), active)
         eff = self._tdp_profiles.effective(self._current_appid)
         geff = self._tdp_profiles.effective(None)
@@ -8675,6 +9619,7 @@ class Plugin:
         )
         return {
             "supported": self._tdp_supported(),
+            "auto_supported": self._auto_tdp_supported(),
             "backend": self._tdp_backend.name,
             "recovery_pending": (
                 self._tdp_delayed_recovery_pending()
@@ -8683,6 +9628,18 @@ class Plugin:
             "request_min": request_min,
             "limits": {"min": limits.min_w, "default": limits.default_w,
                        "max": limits.max_w, "max_ac": limits.max_ac_w},
+            "auto_limits": {
+                "min": auto_limits.min_w,
+                "default": auto_limits.default_w,
+                "max": auto_limits.max_w,
+                "max_ac": auto_limits.max_ac_w,
+            },
+            "auto_request_limits": {
+                "min": auto_request_limits.min_w,
+                "default": auto_request_limits.default_w,
+                "max": auto_request_limits.max_w,
+                "max_ac": auto_request_limits.max_ac_w,
+            },
             "overclock": overclock,
             "on_ac": ac,
             "appid": self._current_appid,
@@ -8708,6 +9665,9 @@ class Plugin:
             "global_levels": global_levels,
             "global_requested_levels": global_requested_levels,
             "global_boost_mode": geff["mode"],
+            "auto_config": self._auto_config(self._current_appid),
+            "global_auto_config": self._auto_config(None),
+            "auto_target_max_fps": self._auto_target_max_fps(),
             # The learned band for this game (powers the separate TDP suggestion card).
             # The battery↔performance dial that picks a value inside it is now LOCAL UI
             # state — applying it is a fixed manual setpoint, not a loop parameter.
@@ -8796,6 +9756,10 @@ class Plugin:
                 ),
             },
             "history": list(self._tdp_history),
+            "auto": {
+                "status": dict(self._auto_status),
+                "history": list(self._auto_history),
+            },
             "steamdeck_ppt": {
                 "previous": self._settings.get("steamdeck_ppt_previous"),
                 "overclock": self._steamdeck_overclock_state(),
@@ -9125,7 +10089,12 @@ class Plugin:
             return False
 
     def _auto_tdp_supported(self) -> bool:
-        return bool(getattr(self._tdp_backend, "auto_tdp_supported", True))
+        return bool(
+            self._tdp_supported()
+            and getattr(self._tdp_backend, "readback", True)
+            and getattr(self._tdp_backend, "auto_tdp_safe", True)
+            and getattr(self._tdp_backend, "auto_tdp_supported", True)
+        )
 
     def _tdp_backend_diagnostics(self):
         errors = {}
@@ -9332,7 +10301,18 @@ class Plugin:
             if not follow and not self._tdp_profiles.has_game(appid):
                 self._tdp_profiles.create_game_from_global(appid)
             self._tdp_profiles.set_follow_global(appid, bool(follow))
-            await self._apply_tdp_now("follow-global")
+            self._reset_auto_session("scope_changed")
+            if (
+                self._tdp_profiles.auto_tdp(self._current_appid)
+                and self._auto_tdp_supported()
+            ):
+                self._ensure_auto_session(
+                    read_on_ac(),
+                    observation=self._tdp_observation,
+                )
+                await self._apply_auto_seed("follow-global")
+            else:
+                await self._apply_tdp_now("follow-global")
         return await self._read_tdp_state()
 
     async def set_tdp_firmware_mode(self, mode: str) -> dict:
@@ -9496,15 +10476,11 @@ class Plugin:
             return await self.get_tdp_state()
         self._set_current_appid(next_appid)
         self._current_game_name = next_name
-        self._reset_auto_windows()  # don't let the previous game's signal gate the new one
+        self._reset_auto_session("context_changed")
         self._reapply_ticks = 0        # fresh ~30 min re-fit window for the new game
         self._adaptive_applied = False  # re-arm the mid-session adaptive drive for this game
         self._last_adaptive_points = None  # anti-churn baseline resets with the game
-        # Auto-TDP no longer seeds PL1 from the learned band: the loop is band-decoupled
-        # and explores to its own level. The learned band is a separate, explicit
-        # suggestion (apply a fixed value) — see the UI. `_reapply_all` drives the
-        # effective fan curve, including the adaptive learned curve when that mode is on.
-        self._maybe_drive_adaptive_fan_curve()  # track + drive if adaptive with enough data
+        self._maybe_drive_adaptive_fan_curve()
         self._reapply_all()
         # The TDP re-apply is off-loop; wait for it so the returned state's hardware
         # readback (applied_w) reflects the new game, not the previous setpoint.
@@ -10001,6 +10977,8 @@ class Plugin:
         log("Controller transition %s", encoded)
 
     def _log_lifecycle_event(self, event) -> None:
+        if event.get("event") == "resume_detected":
+            self._reset_auto_session("resume")
         encoded = json.dumps(event, sort_keys=True, separators=(",", ":"))
         log = (
             decky.logger.warning

@@ -300,6 +300,18 @@ describe("TdpSection Steam Deck PPT arc", () => {
     expect(screen.queryByText("tdp.minimum.floor")).toBeNull();
   });
 
+  it("shows physical power without an AutoTDP halo in monitor-only mode", () => {
+    renderTdpSection(
+      { ...elevatedFloorState, applied_w: 18 },
+      {
+        monitorOnly: true,
+        power: { auto_tdp: true, setpoint: 5, applied: 18 } as PowerDraw,
+      },
+    );
+
+    expect(captured.arc).toMatchObject({ auto: false, appliedWatts: 18 });
+  });
+
   it("keeps the physical minimum on the automatic TDP scale", () => {
     const state = {
       ...deckState,
@@ -416,5 +428,52 @@ describe("TdpSection Steam Deck PPT arc", () => {
     );
 
     expect(screen.queryByText(/tdp.lowBatteryHold.title/)).toBeNull();
+  });
+
+  it("keeps GPU telemetry out of the automatic radial", () => {
+    render(
+      <TdpSection
+        tdp={{ ...deckState, ppt: null }}
+        scope="global"
+        power={{ auto_tdp: true, gpu_busy: 99 } as never}
+        onWatts={vi.fn()}
+        onSetLevels={vi.fn()}
+        onSetMode={vi.fn()}
+        onApplySuggestion={vi.fn()}
+        onFirmwareMode={vi.fn()}
+        onLowBatteryHold={vi.fn()}
+        presets={null}
+        refreshPresets={vi.fn()}
+        onApplyPreset={vi.fn()}
+      />,
+    );
+
+    expect(captured.arc).not.toHaveProperty("gpuBusy");
+  });
+
+  it("does not show the generic learned TDP band while AutoTDP is active", () => {
+    render(
+      <TdpSection
+        tdp={{
+          ...deckState,
+          learned: { ...deckState.learned, enough: true, floor: 3, ceil: 15 },
+          ppt: null,
+        }}
+        scope="global"
+        power={{ auto_tdp: true } as never}
+        onWatts={vi.fn()}
+        onSetLevels={vi.fn()}
+        onSetMode={vi.fn()}
+        onApplySuggestion={vi.fn()}
+        onFirmwareMode={vi.fn()}
+        onLowBatteryHold={vi.fn()}
+        presets={null}
+        refreshPresets={vi.fn()}
+        onApplyPreset={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByText("tdp.learned.band")).toBeNull();
+    expect(screen.queryByText("tdp.learned.learning.title")).toBeNull();
   });
 });

@@ -10,6 +10,7 @@ class TDPBackend(ABC):
     blocking: bool = False
     name: str = "base"
     readback: bool = True
+    auto_tdp_safe: bool = False
     guard_interval_s: float = 2.0
     heartbeat_s: float | None = None
     authoritative_reassert_s: float | None = None
@@ -35,6 +36,9 @@ class TDPBackend(ABC):
         """Per-PL min/max bounds. Returns empty dict on backends without PL support."""
         return {}
 
+    def auto_level_limits(self) -> dict:
+        return self.level_limits()
+
     def set_levels(self, pl1: int, pl2: int, pl3: int, ac: bool) -> TdpResult:
         """Set explicit per-PL targets. Defaults to applying pl1 via set_tdp."""
         return self.set_tdp(pl1, ac)
@@ -53,6 +57,9 @@ class TDPBackend(ABC):
     def physical_levels(self, levels: dict) -> dict[str, int]:
         return self.reconciliation_levels(levels)
 
+    def auto_physical_levels(self, levels: dict) -> dict[str, int]:
+        return self.physical_levels(levels)
+
     def selection_ready(self) -> bool:
         """Whether this candidate is usable without performing a hardware write."""
         return bool(self.supported)
@@ -68,6 +75,9 @@ class TDPBackend(ABC):
             int(targets.get("pl3", targets.get("pl2", primary))),
             ac,
         )
+
+    def apply_auto_targets(self, targets: dict[str, int], ac: bool) -> TdpResult:
+        return self.apply_targets(targets, ac)
 
     def profile_choices(self) -> list:
         return []

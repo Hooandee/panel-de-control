@@ -7,7 +7,7 @@ import { openCustomizeModal } from "../components/CustomizeModal";
 import { openGameProfilesModal } from "../components/GameProfilesModal";
 import { openGlossaryModal } from "../components/GlossaryModal";
 import { openReportModal } from "../components/ReportModal";
-import { getUnlockBatteryMax, setUnlockBatteryMax, getCoolerBoost, setCoolerBoost, getExperimentalTdpUnlock, setExperimentalTdpUnlock, getQamTdpBoost, setQamTdpBoost, resetTelemetry, getVersion, getDevice, getLearningStatus, DeviceInfo, isUnvalidated } from "../api";
+import { getUnlockBatteryMax, setUnlockBatteryMax, getCoolerBoost, setCoolerBoost, getExperimentalTdpUnlock, setExperimentalTdpUnlock, resetTelemetry, getVersion, getDevice, getLearningStatus, DeviceInfo, isUnvalidated } from "../api";
 import { useModules, setModuleDisabled } from "../customize/modules";
 import { effectiveEnabled } from "../customize/moduleLogic";
 import { isValueToastEnabled, setValueToastEnabled } from "../system/valueToast";
@@ -68,7 +68,6 @@ export const AjustesSection: FC = () => {
           .catch(() => setExperimentalTdp(false));
       });
   };
-  const [qamBoost, onToggleQamBoost] = useToggleSetting(getQamTdpBoost, setQamTdpBoost, false);
   const desktop = useDesktopState();
   const desktopActive = desktopUiActive(desktop.state);
 
@@ -182,16 +181,6 @@ export const AjustesSection: FC = () => {
             maxWatts={device.experimental_tdp_max_ac}
             safeMaxWatts={device.tdp_max_charger}
             onToggle={onToggleExperimentalTdp}
-          />
-        )}
-
-        {!desktopActive && qamBoost !== null && (
-          <ToggleField
-            label={t("settings.qamboost")}
-            description={t("settings.qamboost.desc")}
-            checked={qamBoost}
-            onChange={onToggleQamBoost}
-            bottomSeparator="none"
           />
         )}
 

@@ -1166,7 +1166,11 @@ def test_auto_tick_offers_hud_refresh_without_awaiting_it(tmp_path, monkeypatch)
     monkeypatch.setattr(main.asyncio, "sleep", sleep)
     monkeypatch.setattr(p, "_refresh_pdc_metrics", fail_if_awaited)
     monkeypatch.setattr(p, "_offer_pdc_refresh", lambda: offers.append(True), raising=False)
-    monkeypatch.setattr(p, "_reset_auto_windows", lambda: resets.append(True))
+    monkeypatch.setattr(
+        p,
+        "_reset_auto_session",
+        lambda _reason="inactive": resets.append(True),
+    )
 
     asyncio.run(p._auto_loop())
 

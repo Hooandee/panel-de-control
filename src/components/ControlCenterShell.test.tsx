@@ -812,8 +812,9 @@ describe("ControlCenterShell", () => {
         activeId,
       });
 
-      const title = screen.getByText("Aprendiendo de Test Game");
-      const banner = title.parentElement?.parentElement;
+      const title = screen.getByText("Aprendiendo");
+      expect(screen.getByText("Test Game")).toBeTruthy();
+      const banner = title.parentElement?.parentElement?.parentElement;
       expect(banner).toBeTruthy();
       expect(within(banner!).getByText(expectedTag)).toBeTruthy();
       if (absentTag) expect(within(banner!).queryByText(absentTag)).toBeNull();
@@ -827,7 +828,7 @@ describe("ControlCenterShell", () => {
     setShellMode("detail");
     renderShell({ gameName: "Test Game", learning: activeLearning, activeId: "settings" });
 
-    expect(screen.queryByText("Aprendiendo de Test Game")).toBeNull();
+    expect(screen.queryByText("Aprendiendo")).toBeNull();
   });
 
   it("renders the update dot beside Settings on Dashboard and the Tabs carousel", () => {
