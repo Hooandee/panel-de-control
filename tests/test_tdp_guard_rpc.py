@@ -1176,6 +1176,16 @@ def test_report_contains_tdp_transition_history(plugin, monkeypatch):
                     "rendered_count": 8,
                     "rendered_unique_count": 7,
                 },
+                "steam_performance": {
+                    "schema": 1,
+                    "current": {
+                        "profile": {
+                            "status": "request_failed",
+                            "running_game_id": "42",
+                        },
+                    },
+                    "events": [],
+                },
                 "report_kind": "feature",
             },
         )
@@ -1218,6 +1228,16 @@ def test_report_contains_tdp_transition_history(plugin, monkeypatch):
     assert bundle["state"]["launch"]["frontend"]["qam"] == {
         "rendered_count": 8,
         "rendered_unique_count": 7,
+    }
+    assert bundle["state"]["launch"]["frontend"]["steam_performance"] == {
+        "schema": 1,
+        "current": {
+            "profile": {
+                "status": "request_failed",
+                "running_game_id": "42",
+            },
+        },
+        "events": [],
     }
     hud = bundle["state"]["hud_diagnostics"]
     assert hud["capability"] == "inactive"

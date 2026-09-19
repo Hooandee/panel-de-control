@@ -18,12 +18,17 @@ vi.mock("./performanceRuntime", () => ({
 }));
 
 import { useSteamPerformanceSurface } from "./useSteamPerformanceSurface";
+import {
+  resetSteamPerformanceDiagnostics,
+  steamPerformanceDiagnostics,
+} from "./performanceDiagnostics";
 
 const Native = () => null;
 
 describe("useSteamPerformanceSurface", () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    resetSteamPerformanceDiagnostics();
     runtime.discover.mockReset();
     runtime.resolve.mockReset();
     runtime.syncProfile.mockReset();
@@ -58,6 +63,12 @@ describe("useSteamPerformanceSurface", () => {
       "disableFrameLimit",
       "reset",
     ]);
+    expect(steamPerformanceDiagnostics()?.current.surface).toMatchObject({
+      status: "ready",
+      frame_rate_path: "app_target",
+      split_scaling: false,
+      row_ids: ["appFrameRate", "disableFrameLimit", "reset"],
+    });
   });
 
   it("keeps Steam on the profile selected by the shared power scope", () => {

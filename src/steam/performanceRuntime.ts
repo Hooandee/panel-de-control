@@ -5,6 +5,11 @@ import {
   SteamPerformanceComponents,
   SteamPerformanceStoreView,
 } from "./performanceSurface";
+import {
+  recordSteamPerformanceDiagnostic,
+  resetSteamPerformanceDiagnostics,
+  steamPerformanceError,
+} from "./performanceDiagnostics";
 
 interface SteamPerformanceStore extends SteamPerformanceStoreView {
   nCurrentGameID?: string | number;
@@ -72,6 +77,7 @@ export function resetSteamPerformanceRuntimeCache(): void {
   cachedRuntime = null;
   cachedLegacyComponents = null;
   legacyProfileRequests = new WeakMap<object, string>();
+  resetSteamPerformanceDiagnostics();
 }
 
 const sourceOf = (candidate: unknown): string => {
@@ -101,6 +107,10 @@ const currentSteamRuntime = (): SteamWebpackRuntime | null => {
     .webpackChunksteamui;
   if (!chunks || typeof chunks.push !== "function") {
     cachedRuntime = null;
+    recordSteamPerformanceDiagnostic("runtime", {
+      status: "unavailable",
+      reason: "webpack_chunks_missing",
+    });
     return null;
   }
   if (cachedRuntime?.chunks === chunks) return cachedRuntime.runtime;
@@ -112,12 +122,26 @@ const currentSteamRuntime = (): SteamWebpackRuntime | null => {
       {},
       (candidate) => { runtime = candidate; },
     ]);
-  } catch {
+  } catch (error) {
+    recordSteamPerformanceDiagnostic("runtime", {
+      status: "capture_failed",
+      error: steamPerformanceError(error),
+    });
     return null;
   }
   const resolved = runtime as SteamWebpackRuntime | null;
-  if (!resolved?.m) return null;
+  if (!resolved?.m) {
+    recordSteamPerformanceDiagnostic("runtime", {
+      status: "unavailable",
+      reason: "module_table_missing",
+    });
+    return null;
+  }
   cachedRuntime = { chunks, runtime: resolved };
+  recordSteamPerformanceDiagnostic("runtime", {
+    status: "ready",
+    module_count: Object.keys(resolved.m).length,
+  });
   return resolved;
 };
 
@@ -163,8 +187,21 @@ const discoverCurrentRuntimeComponents = (): SteamPerformanceComponents | null =
       continue;
     }
   }
-  if (candidates.length !== 1) return {};
+  if (candidates.length !== 1) {
+    recordSteamPerformanceDiagnostic("components", {
+      status: candidates.length === 0 ? "not_found" : "ambiguous",
+      source: "current_runtime",
+      candidate_count: candidates.length,
+    });
+    return {};
+  }
   const [components] = candidates;
+  recordSteamPerformanceDiagnostic("components", {
+    status: "ready",
+    source: "current_runtime",
+    candidate_count: 1,
+    component_ids: Object.keys(components).sort(),
+  });
   if (cachedRuntime?.runtime === runtime) cachedRuntime.components = components;
   return components;
 };
@@ -181,6 +218,12 @@ export function discoverSteamPerformanceComponents(): SteamPerformanceComponents
   } catch {
     snapshot = {};
   }
+  recordSteamPerformanceDiagnostic("components", {
+    status: componentCount(snapshot) > 0 ? "ready" : "not_found",
+    source: "legacy_snapshot",
+    candidate_count: componentCount(snapshot) > 0 ? 1 : 0,
+    component_ids: Object.keys(snapshot).sort(),
+  });
   if (componentCount(snapshot) > 0) cachedLegacyComponents = snapshot;
   return snapshot;
 }
@@ -216,6 +259,21 @@ const storeClassFromModule = (candidate: unknown): SteamPerformanceStoreClass | 
   return candidates.find(isStoreClass) ?? null;
 };
 
+const storeProfileIds = (store: SteamPerformanceStore) => ({
+  current_game_id: store.nCurrentGameID === undefined ? null : String(store.nCurrentGameID),
+  active_profile_game_id:
+    store.nActiveProfileGameID === undefined ? null : String(store.nActiveProfileGameID),
+});
+
+const recordResolvedStore = (
+  source: "global" | "current_runtime" | "legacy_snapshot",
+): void => {
+  recordSteamPerformanceDiagnostic("store", {
+    status: "ready",
+    source,
+  });
+};
+
 const resolveCurrentRuntimeStore = (): SteamPerformanceStore | null | undefined => {
   const runtime = currentSteamRuntime();
   if (!runtime?.m) return undefined;
@@ -236,7 +294,14 @@ const resolveCurrentRuntimeStore = (): SteamPerformanceStore | null | undefined 
     }
   }
   if (candidates.size === 0) return undefined;
-  if (candidates.size > 1) return null;
+  if (candidates.size > 1) {
+    recordSteamPerformanceDiagnostic("store", {
+      status: "ambiguous",
+      source: "current_runtime",
+      candidate_count: candidates.size,
+    });
+    return null;
+  }
   const [store] = candidates;
   if (cachedRuntime?.runtime === runtime) cachedRuntime.store = store;
   return store;
@@ -247,16 +312,35 @@ export function resolveSteamPerformanceStore(): SteamPerformanceStore | null {
     const globalStore = storeSingleton(
       (window as Window & { SystemPerfStore?: unknown }).SystemPerfStore,
     );
-    if (globalStore?.msgLimits) return globalStore;
+    if (globalStore?.msgLimits) {
+      recordResolvedStore("global");
+      return globalStore;
+    }
 
     const currentStore = resolveCurrentRuntimeStore();
     if (currentStore === null) return null;
-    if (currentStore?.msgLimits) return currentStore;
+    if (currentStore?.msgLimits) {
+      recordResolvedStore("current_runtime");
+      return currentStore;
+    }
 
     const Store = findModuleExport(isStoreClass) as SteamPerformanceStoreClass | undefined;
     const snapshotStore = storeSingleton(Store);
-    return snapshotStore?.msgLimits ? snapshotStore : null;
-  } catch {
+    if (snapshotStore?.msgLimits) {
+      recordResolvedStore("legacy_snapshot");
+      return snapshotStore;
+    }
+    recordSteamPerformanceDiagnostic("store", {
+      status: "unavailable",
+      source: "none",
+    });
+    return null;
+  } catch (error) {
+    recordSteamPerformanceDiagnostic("store", {
+      status: "resolution_failed",
+      source: "unknown",
+      error: steamPerformanceError(error),
+    });
     return null;
   }
 }
@@ -268,20 +352,42 @@ export function syncSteamPerformanceProfile(
 ): void {
   if (runningGameId === null) return;
   const store = resolveSteamPerformanceStore();
-  if (!store?.SetGameSpecificProfileEnabled) return;
-
   const expectedGameId = String(runningGameId);
-  const currentGameId = store.nCurrentGameID === undefined
-    ? null
-    : String(store.nCurrentGameID);
-  const activeProfileGameId = store.nActiveProfileGameID === undefined
-    ? null
-    : String(store.nActiveProfileGameID);
+  if (!store) {
+    recordSteamPerformanceDiagnostic("profile", {
+      status: "store_unavailable",
+      scope,
+      running_game_id: expectedGameId,
+    });
+    return;
+  }
+  if (!store.SetGameSpecificProfileEnabled) {
+    recordSteamPerformanceDiagnostic("profile", {
+      status: "setter_unavailable",
+      scope,
+      running_game_id: expectedGameId,
+    });
+    return;
+  }
+
+  const {
+    current_game_id: currentGameId,
+    active_profile_game_id: activeProfileGameId,
+  } = storeProfileIds(store);
   if (
     currentGameId !== null
     && currentGameId !== STEAM_GLOBAL_PROFILE_GAME_ID
     && appIdFromSteamGameId(currentGameId) !== expectedGameId
-  ) return;
+  ) {
+    recordSteamPerformanceDiagnostic("profile", {
+      status: "foreground_mismatch",
+      scope,
+      running_game_id: expectedGameId,
+      current_game_id: currentGameId,
+      active_profile_game_id: activeProfileGameId,
+    });
+    return;
+  }
 
   const useGameProfile = scope === "game";
   const gameProfileActive = currentGameId !== null
@@ -291,7 +397,16 @@ export function syncSteamPerformanceProfile(
     currentGameId !== null
     && activeProfileGameId !== null
     && gameProfileActive === useGameProfile
-  ) return;
+  ) {
+    recordSteamPerformanceDiagnostic("profile", {
+      status: "already_synced",
+      scope,
+      running_game_id: expectedGameId,
+      current_game_id: currentGameId,
+      active_profile_game_id: activeProfileGameId,
+    });
+    return;
+  }
 
   if (currentGameId === null || activeProfileGameId === null) {
     const request = `${expectedGameId}:${useGameProfile}`;
@@ -301,8 +416,23 @@ export function syncSteamPerformanceProfile(
 
   try {
     store.SetGameSpecificProfileEnabled(useGameProfile);
-  } catch {
+    recordSteamPerformanceDiagnostic("profile", {
+      status: "request_sent",
+      scope,
+      running_game_id: expectedGameId,
+      current_game_id: currentGameId,
+      active_profile_game_id: activeProfileGameId,
+    });
+  } catch (error) {
     legacyProfileRequests.delete(store);
+    recordSteamPerformanceDiagnostic("profile", {
+      status: "request_failed",
+      scope,
+      running_game_id: expectedGameId,
+      current_game_id: currentGameId,
+      active_profile_game_id: activeProfileGameId,
+      error: steamPerformanceError(error),
+    });
   }
 }
 
@@ -317,17 +447,38 @@ export function subscribeSteamPerformanceState(
         ? {}
         : SteamClient as unknown as SteamPerformanceClient
     );
-    registration = resolvedClient.System?.Perf?.RegisterForStateChanges?.(() => {
+    const perf = resolvedClient.System?.Perf;
+    const register = perf?.RegisterForStateChanges;
+    if (typeof register !== "function") {
+      recordSteamPerformanceDiagnostic("subscription", { status: "unavailable" });
+      return () => {};
+    }
+    registration = register.call(perf, () => {
       void Promise.resolve().then(onChange);
     });
-  } catch {
+    recordSteamPerformanceDiagnostic("subscription", {
+      status: "registered",
+      cleanup_available: typeof registration?.unregister === "function",
+    });
+  } catch (error) {
     registration = undefined;
+    recordSteamPerformanceDiagnostic("subscription", {
+      status: "registration_failed",
+      error: steamPerformanceError(error),
+    });
   }
   return () => {
     try {
       registration?.unregister?.();
-    } catch {
+      if (registration && typeof registration.unregister === "function") {
+        recordSteamPerformanceDiagnostic("subscription", { status: "unregistered" });
+      }
+    } catch (error) {
       // Steam registrations are best-effort and may already belong to an old CEF generation.
+      recordSteamPerformanceDiagnostic("subscription", {
+        status: "unregistration_failed",
+        error: steamPerformanceError(error),
+      });
     }
   };
 }

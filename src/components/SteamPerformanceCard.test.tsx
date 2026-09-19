@@ -31,10 +31,15 @@ vi.mock("@decky/ui", () => ({
 
 import { SteamPerformanceCard } from "./SteamPerformanceCard";
 import type { SteamPerformanceSurfaceState } from "../steam/useSteamPerformanceSurface";
+import {
+  resetSteamPerformanceDiagnostics,
+  steamPerformanceDiagnostics,
+} from "../steam/performanceDiagnostics";
 
 describe("SteamPerformanceCard", () => {
   beforeEach(() => {
     surface.useSurface.mockReset();
+    resetSteamPerformanceDiagnostics();
     localStorage.clear();
   });
 
@@ -331,6 +336,14 @@ describe("SteamPerformanceCard", () => {
 
     expect(screen.getByTestId("native-row").textContent).toBe("tearing");
     expect(screen.getByRole("status").textContent).toContain("steam.performance.partial");
+    expect(steamPerformanceDiagnostics()?.current.control).toEqual({
+      status: "render_failed",
+      control_id: "vrr",
+      error: {
+        name: "Error",
+        message: "Steam component changed",
+      },
+    });
   });
 
   it("recovers a failed inline control when Steam publishes a new generation", () => {
@@ -355,6 +368,46 @@ describe("SteamPerformanceCard", () => {
 
     expect(screen.getByTestId("native-row").textContent).toBe("refresh-recovered");
     expect(screen.getByRole("status").textContent).toContain("steam.performance.synced");
+    expect(steamPerformanceDiagnostics()?.current.control).toEqual({
+      status: "recovered",
+      control_id: "refreshRate",
+      reason: "control_replaced",
+    });
+  });
+
+  it("recovers when Steam's replacement control also fails once", () => {
+    vi.useFakeTimers();
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const Broken = () => {
+      throw new Error("Old Steam component");
+    };
+    let replacementReady = false;
+    const Replacement = () => {
+      if (!replacementReady) throw new Error("New Steam component is still hydrating");
+      return <div data-testid="native-row">replacement-recovered</div>;
+    };
+    let current: SteamPerformanceSurfaceState = {
+      status: "ready",
+      rows: [{ id: "refreshRate", Component: Broken }],
+    };
+    surface.useSurface.mockImplementation(() => current);
+    const view = render(<SteamPerformanceCard />);
+
+    current = {
+      status: "ready",
+      rows: [{ id: "refreshRate", Component: Replacement }],
+    };
+    view.rerender(<SteamPerformanceCard />);
+    replacementReady = true;
+    act(() => { vi.advanceTimersByTime(2000); });
+
+    expect(screen.getByTestId("native-row").textContent).toBe("replacement-recovered");
+    expect(screen.getByRole("status").textContent).toContain("steam.performance.synced");
+    expect(steamPerformanceDiagnostics()?.current.control).toMatchObject({
+      status: "recovered",
+      control_id: "refreshRate",
+      reason: "retry_succeeded",
+    });
   });
 
   it("retries one transient native render failure inline", () => {
@@ -378,6 +431,11 @@ describe("SteamPerformanceCard", () => {
 
     expect(screen.getByTestId("native-row").textContent).toBe("recovered");
     expect(screen.getByRole("status").textContent).toContain("steam.performance.synced");
+    expect(steamPerformanceDiagnostics()?.current.control).toEqual({
+      status: "recovered",
+      control_id: "refreshRate",
+      reason: "retry_succeeded",
+    });
   });
 
   it("renews the retry budget after the same inline control recovers", () => {

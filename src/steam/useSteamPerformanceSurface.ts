@@ -11,6 +11,7 @@ import {
   syncSteamPerformanceProfile,
   subscribeSteamPerformanceState,
 } from "./performanceRuntime";
+import { recordSteamPerformanceDiagnostic } from "./performanceDiagnostics";
 
 export interface SteamPerformanceSurfaceState {
   status: "loading" | "ready" | "unavailable";
@@ -35,9 +36,16 @@ const readSurface = (): SteamPerformanceSurfaceState => {
   const rows = layout
     ? composeSteamPerformanceRows(components, layout)
     : [];
-  return rows.some(({ id }) => id !== "reset")
-    ? { status: "ready", rows }
-    : EMPTY;
+  const ready = rows.some(({ id }) => id !== "reset");
+  recordSteamPerformanceDiagnostic("surface", {
+    status: ready ? "ready" : "unavailable",
+    store_available: store !== null,
+    layout_available: layout !== null,
+    frame_rate_path: layout?.frameRate ?? null,
+    split_scaling: layout?.splitScaling ?? null,
+    row_ids: ready ? rows.map(({ id }) => id) : [],
+  });
+  return ready ? { status: "ready", rows } : EMPTY;
 };
 
 export function useSteamPerformanceSurface(

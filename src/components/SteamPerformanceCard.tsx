@@ -21,6 +21,10 @@ import type {
   SteamPerformanceRow,
 } from "../steam/performanceSurface";
 import { useSteamPerformanceSurface } from "../steam/useSteamPerformanceSurface";
+import {
+  recordSteamPerformanceDiagnostic,
+  steamPerformanceError,
+} from "../steam/performanceDiagnostics";
 import { theme } from "../theme";
 import { Collapsible } from "./Collapsible";
 
@@ -169,6 +173,7 @@ class NativeControlBoundary extends Component<
 > {
   private retryCount = 0;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  private replacementRecoveryPending = false;
 
   state: NativeControlBoundaryState = { failed: false };
 
@@ -176,7 +181,13 @@ class NativeControlBoundary extends Component<
     return { failed: true };
   }
 
-  componentDidCatch(): void {
+  componentDidCatch(error: unknown): void {
+    this.replacementRecoveryPending = false;
+    recordSteamPerformanceDiagnostic("control", {
+      status: "render_failed",
+      control_id: this.props.id,
+      error: steamPerformanceError(error),
+    });
     this.props.onError(this.props.id, this.props.Control);
     if (this.retryCount >= 1) return;
 
@@ -194,13 +205,30 @@ class NativeControlBoundary extends Component<
     if (previousProps.Control !== this.props.Control) {
       this.clearRetry();
       this.retryCount = 0;
+      if (this.state.failed) {
+        this.replacementRecoveryPending = true;
+      }
       this.props.onRecovery(this.props.id, previousProps.Control);
       if (this.state.failed) this.setState({ failed: false });
       return;
     }
 
     if (previousState.failed && !this.state.failed) {
+      if (this.replacementRecoveryPending) {
+        this.replacementRecoveryPending = false;
+        recordSteamPerformanceDiagnostic("control", {
+          status: "recovered",
+          control_id: this.props.id,
+          reason: "control_replaced",
+        });
+        return;
+      }
       this.retryCount = 0;
+      recordSteamPerformanceDiagnostic("control", {
+        status: "recovered",
+        control_id: this.props.id,
+        reason: "retry_succeeded",
+      });
       this.props.onRecovery(this.props.id, this.props.Control);
     }
   }
