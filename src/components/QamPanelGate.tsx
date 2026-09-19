@@ -5,7 +5,14 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
+
+import {
+  claimQamSurface,
+  getActiveQamSurface,
+  subscribeActiveQamSurface,
+} from "./qamSurfaceLease";
 
 interface QamPanelCapabilities {
   ResizeObserver?: unknown;
@@ -15,6 +22,7 @@ interface QamPanelCapabilities {
 interface QamPanelGateProps extends PropsWithChildren {
   lifecycle: AbortSignal;
   fallback?: ReactNode;
+  surfaceId?: string;
 }
 
 // Ancestor overflow can suppress IntersectionObserver updates after vertical clipping.
@@ -34,9 +42,26 @@ export function canGateQamPanel(host: QamPanelCapabilities = window): boolean {
     && typeof host.IntersectionObserver === "function";
 }
 
-export const QamPanelGate: FC<QamPanelGateProps> = ({ children, lifecycle, fallback = null }) => {
+export const QamPanelGate: FC<QamPanelGateProps> = ({
+  children,
+  lifecycle,
+  fallback = null,
+  surfaceId = "pdc:panel",
+}) => {
   const hostRef = useRef<HTMLDivElement>(null);
+  const surfaceToken = useRef(Symbol(surfaceId));
   const [mode, setMode] = useState<"hidden" | "content" | "fallback">("hidden");
+  const activeSurface = useSyncExternalStore(
+    subscribeActiveQamSurface,
+    getActiveQamSurface,
+    getActiveQamSurface,
+  );
+  const wantsLease = mode === "content" || (mode === "fallback" && fallback !== null);
+
+  useLayoutEffect(() => {
+    if (!wantsLease) return;
+    return claimQamSurface(surfaceId, surfaceToken.current);
+  }, [surfaceId, wantsLease]);
 
   useLayoutEffect(() => {
     const host = hostRef.current;
@@ -178,9 +203,15 @@ export const QamPanelGate: FC<QamPanelGateProps> = ({ children, lifecycle, fallb
     return () => teardown(false);
   }, [lifecycle]);
 
+  let content: ReactNode = null;
+  if (activeSurface === surfaceToken.current) {
+    if (mode === "content") content = children;
+    if (mode === "fallback") content = fallback;
+  }
+
   return (
     <div ref={hostRef} data-testid="qam-panel-gate" style={{ minHeight: 1, width: "100%" }}>
-      {mode === "content" ? children : mode === "fallback" ? fallback : null}
+      {content}
     </div>
   );
 };

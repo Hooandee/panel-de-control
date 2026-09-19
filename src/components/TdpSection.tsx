@@ -9,7 +9,6 @@ import { openPowerPresetsModal } from "./PowerPresetsModal";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { Loading } from "./Loading";
-import { ProfileSelector } from "./ProfileSelector";
 import { PowerArc } from "./PowerArc";
 import { Presets } from "./Presets";
 import { FirmwareModes } from "./FirmwareModes";
@@ -17,14 +16,13 @@ import { AdvancedBoost } from "./AdvancedBoost";
 import { TdpSuggestionCard } from "./TdpSuggestionCard";
 import { TdpMonitorNotice } from "./TdpMonitorNotice";
 import { TdpOwnershipStatus } from "./TdpOwnershipStatus";
+import { ExperimentalLabel } from "./ExperimentalBadge";
 import { ownershipView } from "../tdp/ownership";
 
 export interface TdpSectionProps {
   tdp: TdpState | null;
   scope: TdpScope;
-  game: { appid: string; name: string } | null;
   power: PowerDraw | null;
-  onScope: (scope: TdpScope) => void;
   onWatts: (watts: number) => void;
   onSetLevels: (off2: number, off3: number) => void;
   onSetMode: (mode: BoostMode) => void;
@@ -43,7 +41,7 @@ export interface TdpSectionProps {
   onApplyPreset: (item: PresetItem) => void;
 }
 
-export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onScope, onWatts, onSetLevels, onSetMode, onApplySuggestion, onFirmwareMode, onLowBatteryHold, monitorOnly, onReactivate, presets, refreshPresets, onApplyPreset }) => {
+export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, onSetLevels, onSetMode, onApplySuggestion, onFirmwareMode, onLowBatteryHold, monitorOnly, onReactivate, presets, refreshPresets, onApplyPreset }) => {
   const { t } = useI18n();
 
   // Memoized (and above the early returns) so re-renders don't rebuild the chip list.
@@ -120,6 +118,7 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
   const shownWatts = inFwMode ? (tdp.applied_w ?? view.watts) : view.watts;
   const ownership = ownershipView(tdp.ownership, tdp.limits.min);
   const deckPptActive = Boolean(tdp.ppt?.supported && view.mode !== "estable");
+  const pptVisualMax = deckPptActive ? activeMax : null;
   const arcTarget = deckPptActive ? (tdp.ppt?.requested.slow ?? shownWatts) : shownWatts;
   const arcApplied = deckPptActive
     ? (tdp.ppt?.applied.slow ?? null)
@@ -144,10 +143,11 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
             auto={isAutoOn}
             setpoint={power?.setpoint ?? null}
             appliedWatts={arcApplied}
-            visualMax={deckPptActive ? tdp.ppt?.visual_max : null}
+            visualMax={pptVisualMax}
             baseMarkerWatts={basePpt}
             slowMarkerWatts={slowPpt}
             fastMarkerWatts={fastPpt}
+            overclocked={tdp.overclock?.detected ?? false}
           />
         </PanelSectionRow>
       </>
@@ -156,20 +156,6 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
 
   return (
     <>
-      {/* Hidden under a firmware mode: it owns the rails, so a per-game TDP scope has
-          no effect there (same as the advanced/boost controls below). */}
-      {!inFwMode && (
-        <PanelSectionRow>
-          <ProfileSelector
-            scope={scope}
-            gameName={game?.name ?? null}
-            hasGameProfile={tdp.has_game_profile}
-            globalLabel={t("tdp.scope.global")}
-            inheritHint={t("tdp.inherit")}
-            onScope={onScope}
-          />
-        </PanelSectionRow>
-      )}
       <PanelSectionRow>
         <PowerArc
           watts={arcTarget}
@@ -179,10 +165,11 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
           auto={isAutoOn}
           setpoint={power?.setpoint ?? null}
           appliedWatts={arcApplied}
-          visualMax={deckPptActive ? tdp.ppt?.visual_max : null}
+          visualMax={pptVisualMax}
           baseMarkerWatts={basePpt}
           slowMarkerWatts={slowPpt}
           fastMarkerWatts={fastPpt}
+          overclocked={tdp.overclock?.detected ?? false}
         />
       </PanelSectionRow>
       {ownership.show && (
@@ -206,20 +193,10 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
             <PanelSectionRow>
               <ToggleField
                 label={(
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                    {t("tdp.lowBatteryHold.title")}
-                    <span
-                      style={{
-                        fontSize: 10,
-                        padding: "1px 5px",
-                        borderRadius: 999,
-                        color: theme.color.warn,
-                        boxShadow: `inset 0 0 0 1px ${theme.color.warn}`,
-                      }}
-                    >
-                      {t("tdp.lowBatteryHold.experimental")}
-                    </span>
-                  </span>
+                  <ExperimentalLabel
+                    badge={t("tdp.lowBatteryHold.experimental")}
+                    title={t("tdp.lowBatteryHold.title")}
+                  />
                 )}
                 description={t("tdp.lowBatteryHold.hint")}
                 checked={tdp.low_battery_hold.enabled}

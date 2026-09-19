@@ -2,6 +2,203 @@
 
 ## Unreleased
 
+## [0.53.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.52.1...panel-de-control-v0.53.0) (2026-09-19)
+
+
+### Español
+
+* **Rendimiento de Steam:** La sección Potencia incorpora los controles de rendimiento de Steam para ajustar el límite de FPS y los hercios, el VRR, el desgarro, el sombreado variable y el escalado —modo, filtro y nitidez— sin salir de Panel de Control. Muestra solo las opciones compatibles, usa automáticamente el perfil global o el del juego abierto y se puede ocultar, ordenar o añadir a vistas personalizadas.
+* **Reportes:** Antes de abrir el formulario puedes elegir claramente entre informar de un problema y proponer una función. Las dos opciones son grandes, accesibles y navegables con mando; si cambias de tipo, Panel de Control conserva el texto y el área que ya habías seleccionado.
+
+### English
+
+* **Steam performance:** The Power section now includes Steam's performance controls for adjusting the FPS limit and refresh rate, VRR, tearing, variable-rate shading, and scaling —mode, filter, and sharpness— without leaving Panel de Control. It shows only supported options, automatically uses the global profile or the running game's profile, and can be hidden, reordered, or added to custom views.
+* **Reports:** Before opening the form, you can now clearly choose between reporting a problem and proposing a feature. Both options are large, accessible, and controller-friendly; if you switch type, Panel de Control keeps the text and area you already selected.
+
+### Italiano
+
+* **Prestazioni di Steam:** La sezione Potenza include ora i controlli delle prestazioni di Steam per regolare il limite FPS e la frequenza di aggiornamento, il VRR, il tearing, l'ombreggiatura variabile e il ridimensionamento —modalità, filtro e nitidezza— senza uscire da Panel de Control. Mostra solo le opzioni supportate, usa automaticamente il profilo globale o quello del gioco in esecuzione e può essere nascosta, riordinata o aggiunta alle viste personalizzate.
+* **Segnalazioni:** Prima di aprire il modulo, ora puoi scegliere chiaramente se segnalare un problema o proporre una funzionalità. Le due opzioni sono grandi, accessibili e navigabili con il controller; se cambi tipo, Panel de Control conserva il testo e l'area che avevi già selezionato.
+
+### Deutsch
+
+* **Steam-Leistung:** Im Bereich Leistung stehen jetzt die Leistungsregler von Steam für FPS-Limit und Bildwiederholrate, VRR, Tearing, variable Schattierung sowie Skalierung —Modus, Filter und Schärfe— direkt in Panel de Control bereit. Es werden nur unterstützte Optionen angezeigt, automatisch das globale Profil oder das Profil des laufenden Spiels verwendet, und der Bereich lässt sich ausblenden, neu anordnen oder eigenen Ansichten hinzufügen.
+* **Berichte:** Vor dem Öffnen des Formulars kannst du jetzt eindeutig zwischen dem Melden eines Problems und dem Vorschlagen einer Funktion wählen. Beide Optionen sind groß, barrierearm und mit dem Controller bedienbar; beim Wechsel des Typs behält Panel de Control den bereits eingegebenen Text und den ausgewählten Bereich bei.
+
+### Português (Brasil)
+
+* **Desempenho do Steam:** A seção Potência agora inclui os controles de desempenho do Steam para ajustar o limite de FPS e a taxa de atualização, o VRR, o tearing, o sombreamento variável e a escala —modo, filtro e nitidez— sem sair do Painel de Controle. Ela mostra apenas as opções compatíveis, usa automaticamente o perfil global ou o perfil do jogo em execução e pode ser ocultada, reordenada ou adicionada a visualizações personalizadas.
+* **Relatórios:** Antes de abrir o formulário, agora você pode escolher claramente entre relatar um problema e propor um recurso. As duas opções são grandes, acessíveis e navegáveis com o controle; ao mudar o tipo, o Painel de Controle mantém o texto e a área que você já havia selecionado.
+
+## [0.52.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.52.0...panel-de-control-v0.52.1) (2026-09-17)
+
+
+### Español
+
+* **Steam Deck:** Corrige una regresión del soporte para overclock que podía mostrar y solicitar límites PPT superiores a 15 W en una Deck sin modificar. Las Deck originales vuelven a respetar su techo de 15 W en todos los raíles y en el dial; las unidades overclockeadas conservan el límite detectado por la máquina. ([#677](https://github.com/Hooandee/panel-de-control/pull/677))
+
+### English
+
+* **Steam Deck:** Fixes a regression in overclock support that could display and request PPT limits above 15 W on an unmodified Deck. Stock Decks once again respect their 15 W ceiling across all rails and on the dial, while overclocked units retain the limit detected from the device. ([#677](https://github.com/Hooandee/panel-de-control/pull/677))
+
+### Italiano
+
+* **Steam Deck:** Corregge una regressione nel supporto all'overclock che poteva mostrare e richiedere limiti PPT superiori a 15 W su una Deck non modificata. Le Deck originali tornano a rispettare il limite di 15 W su tutti i rail e sul quadrante, mentre le unità overcloccate mantengono il limite rilevato dal dispositivo. ([#677](https://github.com/Hooandee/panel-de-control/pull/677))
+
+### Deutsch
+
+* **Steam Deck:** Behebt eine Regression in der Overclock-Unterstützung, durch die auf einer unveränderten Deck PPT-Limits über 15 W angezeigt und angefordert werden konnten. Unveränderte Decks halten wieder die 15-W-Obergrenze für alle Rails und im Einstellrad ein; übertaktete Geräte behalten das vom Gerät erkannte Limit. ([#677](https://github.com/Hooandee/panel-de-control/pull/677))
+
+### Português (Brasil)
+
+* **Steam Deck:** Corrige uma regressão no suporte a overclock que podia exibir e solicitar limites PPT acima de 15 W em um Deck sem modificações. Decks originais voltam a respeitar o teto de 15 W em todos os trilhos e no mostrador, enquanto unidades com overclock mantêm o limite detectado pelo dispositivo. ([#677](https://github.com/Hooandee/panel-de-control/pull/677))
+
+## [0.52.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.51.0...panel-de-control-v0.52.0) (2026-09-16)
+
+
+### Español
+
+* Panel de Control estrena **Dashboard**, una pantalla de inicio con tarjetas para entrar directamente en Potencia, Pantalla, Sonido y las demás secciones. Si prefieres moverte por pestañas, puedes seguir usando ese modo. En ambos he cuidado la navegación con mando: la selección se ve con más claridad, el desplazamiento acompaña al control seleccionado y, al volver al Dashboard, recuperas la tarjeta desde la que entraste.
+* Ahora puedes tener tus controles habituales a mano desde el **menú rápido de Steam (QAM)**. Ancla una sección de Panel de Control o una vista creada por ti, colócala donde te resulte cómoda y oculta las entradas de Steam que no uses. Así puedes abrir, por ejemplo, Potencia directamente desde el QAM. El acceso a Decky sigue siempre disponible.
+* En Ajustes encontrarás dos opciones para organizarlo todo. **Configurar el QAM** permite elegir y ordenar esos accesos directos. **Personalizar la interfaz** sirve para elegir entre Dashboard y Pestañas, ordenar u ocultar secciones y bloques, crear tus propias vistas y ajustar la apariencia de Panel de Control. Tus preferencias se conservan al actualizar.
+
+### English
+
+* Panel de Control introduces **Dashboard**, a home screen with cards that take you straight to Power, Display, Sound, and the other sections. If you prefer tabs, that navigation mode is still available. I have improved controller navigation in both modes: selections are easier to see, scrolling keeps the selected control in view, and returning to Dashboard takes you back to the card you opened.
+* You can now keep your everyday controls within reach in **Steam's Quick Access Menu (QAM)**. Pin a Panel de Control section or a view you created, put it where it suits you, and hide Steam entries you do not use. For example, you can open Power directly from the QAM. Decky always remains accessible.
+* Settings now has two options to help you organize everything. **Configure QAM** lets you choose and reorder those shortcuts. **Customize interface** lets you choose Dashboard or Tabs, reorder or hide sections and blocks, create your own views, and adjust how Panel de Control looks. Your preferences are preserved when updating.
+
+### Italiano
+
+* Panel de Control introduce **Dashboard**, una schermata iniziale con riquadri per accedere direttamente a Potenza, Schermo, Suono e alle altre sezioni. Se preferisci navigare con le schede, puoi continuare a usare quella modalità. In entrambe ho migliorato la navigazione con il controller: la selezione è più visibile, lo scorrimento mantiene in vista il controllo selezionato e, tornando al Dashboard, ritrovi il riquadro da cui sei partito.
+* Ora puoi tenere i controlli che usi più spesso a portata di mano nel **menu di accesso rapido di Steam (QAM)**. Fissa una sezione di Panel de Control o una vista creata da te, spostala dove ti è più comodo e nascondi le voci di Steam che non usi. Puoi, ad esempio, aprire Potenza direttamente dal QAM. L'accesso a Decky rimane sempre disponibile.
+* Nelle impostazioni trovi due opzioni per organizzare tutto. **Configura il QAM** permette di scegliere e riordinare queste scorciatoie. **Personalizza l'interfaccia** permette di scegliere tra Dashboard e schede, riordinare o nascondere sezioni e blocchi, creare le tue viste e modificare l'aspetto di Panel de Control. Le tue preferenze vengono mantenute durante l'aggiornamento.
+
+### Deutsch
+
+* Panel de Control erhält ein **Dashboard**: eine Startseite mit Kacheln, über die du direkt zu Leistung, Anzeige, Ton und den anderen Bereichen gelangst. Wenn du lieber Tabs nutzt, steht dir diese Navigation weiterhin zur Verfügung. Ich habe die Controller-Bedienung in beiden Ansichten verbessert: Die Auswahl ist deutlicher sichtbar, das ausgewählte Bedienelement bleibt beim Scrollen im Bild, und beim Zurückkehren zum Dashboard landest du wieder auf der ursprünglichen Kachel.
+* Häufig verwendete Funktionen kannst du jetzt direkt im **Steam-Schnellzugriffsmenü (QAM)** bereithalten. Hefte einen Bereich von Panel de Control oder eine selbst erstellte Ansicht an, verschiebe den Eintrag an die gewünschte Stelle und blende nicht benötigte Steam-Einträge aus. So kannst du beispielsweise Leistung direkt aus dem QAM öffnen. Decky bleibt dabei immer erreichbar.
+* In den Einstellungen findest du zwei Möglichkeiten, alles nach deinen Wünschen anzuordnen. Unter **QAM konfigurieren** wählst und sortierst du diese Verknüpfungen. Unter **Oberfläche anpassen** wechselst du zwischen Dashboard und Tabs, sortierst Bereiche und Blöcke oder blendest sie aus, erstellst eigene Ansichten und passt das Aussehen von Panel de Control an. Deine Einstellungen bleiben beim Aktualisieren erhalten.
+
+### Português (Brasil)
+
+* O Painel de Controle estreia o **Dashboard**, uma tela inicial com cartões para acessar diretamente Potência, Tela, Som e as outras seções. Se você prefere navegar por abas, pode continuar usando esse modo. Nos dois, melhorei a navegação com controle: a seleção fica mais visível, a rolagem mantém o item selecionado na tela e, ao voltar ao Dashboard, você retorna ao cartão de onde saiu.
+* Agora você pode deixar os controles que mais usa à mão no **menu de acesso rápido do Steam (QAM)**. Fixe uma seção do Painel de Controle ou uma visualização criada por você, coloque-a onde for mais prático e oculte as entradas do Steam que não usa. Assim, você pode abrir Potência diretamente pelo QAM, por exemplo. O acesso ao Decky continua sempre disponível.
+* Nas configurações, você encontra duas opções para organizar tudo. **Configurar o QAM** permite escolher e ordenar esses atalhos. **Personalizar a interface** permite escolher entre Dashboard e abas, ordenar ou ocultar seções e blocos, criar suas próprias visualizações e ajustar a aparência do Painel de Controle. Suas preferências são mantidas ao atualizar.
+
+## [0.51.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.50.0...panel-de-control-v0.51.0) (2026-09-16)
+
+
+### Español
+
+* **Steam Deck:** Las unidades overclockeadas dejan de estar limitadas a 15 W: Panel de Control detecta el límite configurado por la máquina y lo usa en el control manual, Auto-TDP y los presets. El dial muestra una etiqueta de overclock para distinguirlas de una Steam Deck original. Las Deck sin modificar conservan su límite y comportamiento habituales.
+
+### English
+
+* **Steam Deck:** Overclocked units are no longer capped at 15 W: Panel de Control detects the limit configured by the device and uses it for manual control, Auto-TDP, and presets. The dial displays an overclock badge to distinguish them from a stock Steam Deck. Unmodified Decks keep their usual limit and behavior.
+
+### Italiano
+
+* **Steam Deck:** Le unità overcloccate non sono più limitate a 15 W: Panel de Control rileva il limite configurato dal dispositivo e lo usa per il controllo manuale, Auto-TDP e i preset. Il quadrante mostra un'etichetta di overclock per distinguerle da una Steam Deck originale. Le Deck non modificate mantengono il limite e il comportamento abituali.
+
+### Deutsch
+
+* **Steam Deck:** Übertaktete Geräte werden nicht mehr auf 15 W begrenzt: Panel de Control erkennt das auf dem Gerät konfigurierte Limit und verwendet es für die manuelle Steuerung, Auto-TDP und Presets. Das Einstellrad kennzeichnet den Overclock, um diese Geräte von einem unveränderten Steam Deck zu unterscheiden. Nicht modifizierte Decks behalten ihr gewohntes Limit und Verhalten.
+
+### Português (Brasil)
+
+* **Steam Deck:** Unidades com overclock deixam de ficar limitadas a 15 W: o Painel de Controle detecta o limite configurado pelo dispositivo e o usa no controle manual, no Auto-TDP e nas predefinições. O mostrador exibe um selo de overclock para diferenciá-las de um Steam Deck original. Decks não modificados mantêm o limite e o comportamento habituais.
+
+## [0.50.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.49.2...panel-de-control-v0.50.0) (2026-09-16)
+
+
+### Español
+
+* **Idiomas:** Panel de Control está ahora completamente disponible en portugués de Brasil en toda la aplicación, el glosario, las actualizaciones y las notas de versión. El selector de idioma pasa a ser un menú compacto que conserva visible la bandera de cada idioma. Esta versión también mejora la legibilidad de las acciones largas en Potencia y unifica la etiqueta «Experimental» en TDP con batería baja, Auto-TDP y HUD.
+
+### English
+
+* **Languages:** Panel de Control is now fully available in Brazilian Portuguese throughout the app, glossary, updates, and release notes. The language selector is now a compact menu that keeps each language's flag visible. This release also improves the readability of long actions in Power and uses one consistent “Experimental” label for low-battery TDP, Auto-TDP, and the HUD.
+
+### Italiano
+
+* **Lingue:** Panel de Control è ora completamente disponibile in portoghese brasiliano nell'app, nel glossario, negli aggiornamenti e nelle note di rilascio. Il selettore della lingua è ora un menu compatto che mantiene visibile la bandiera di ogni lingua. Questa versione migliora inoltre la leggibilità delle azioni più lunghe in Potenza e uniforma l'etichetta «Sperimentale» per TDP con batteria scarica, Auto-TDP e HUD.
+
+### Deutsch
+
+* **Sprachen:** Panel de Control ist jetzt in der gesamten App, im Glossar, bei Aktualisierungen und in den Versionshinweisen vollständig auf brasilianischem Portugiesisch verfügbar. Die Sprachauswahl ist nun ein kompaktes Menü, in dem die Flagge jeder Sprache sichtbar bleibt. Außerdem sind längere Aktionen unter Leistung besser lesbar, und TDP bei niedrigem Akkustand, Auto-TDP sowie HUD verwenden dieselbe einheitliche Kennzeichnung „Experimentell“.
+
+### Português (Brasil)
+
+* **Idiomas:** O Painel de Controle agora está totalmente disponível em português do Brasil em todo o aplicativo, no glossário, nas atualizações e nas notas de versão. O seletor de idioma agora é um menu compacto que mantém a bandeira de cada idioma visível. Esta versão também melhora a legibilidade de ações mais longas em Potência e padroniza o selo “Experimental” para TDP com bateria baixa, Auto-TDP e HUD.
+
+## [0.49.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.49.1...panel-de-control-v0.49.2) (2026-09-15)
+
+### Español
+
+* **Temas:** Los ocho interruptores de estilización de Gallery aparecen juntos al final de los ajustes, con un título y una breve descripción que ayudan a elegir en qué partes de Steam se aplica el tema.
+
+### English
+
+* **Themes:** Gallery's eight styling toggles now appear together at the end of the settings, with a heading and a short description to help you choose which parts of Steam use the theme.
+
+### Italiano
+
+* **Temi:** Gli otto interruttori di stile di Gallery sono ora raggruppati alla fine delle impostazioni, con un titolo e una breve descrizione per aiutarti a scegliere a quali parti di Steam applicare il tema.
+
+### Deutsch
+
+* **Themes:** Die acht Schalter für die Gestaltung mit Gallery stehen jetzt gemeinsam am Ende der Einstellungen. Eine Überschrift und eine kurze Beschreibung helfen dir bei der Auswahl, welche Bereiche von Steam das Theme verwenden.
+
+### Português (Brasil)
+
+* **Temas:** Os oito controles de estilo do Gallery agora ficam agrupados no fim das configurações, com um título e uma breve descrição para ajudar você a escolher em quais partes do Steam o tema será aplicado.
+
+## 0.49.1 (2026-09-15)
+
+### Español
+
+* **CPU:** Corrige los bloqueos al cambiar Turbo Boost con una frecuencia manual en equipos AMD e Intel. Conserva el ajuste elegido y permite volver al modo automático sin que los controles de CPU queden atascados.
+
+### English
+
+* **CPU:** Fixes controls getting stuck when changing Turbo Boost with a manual frequency on AMD and Intel devices. Preserves the selected setting and allows switching back to automatic mode normally.
+
+### Italiano
+
+* **CPU:** Risolve i blocchi quando si cambia Turbo Boost con una frequenza manuale sui dispositivi AMD e Intel. Mantiene l'impostazione scelta e permette di tornare alla modalità automatica senza bloccare i controlli della CPU.
+
+### Deutsch
+
+* **CPU:** Behebt blockierte CPU-Regler beim Umschalten von Turbo Boost mit manuell eingestellter Frequenz auf AMD- und Intel-Geräten. Die gewählte Einstellung bleibt erhalten, und der Wechsel zurück in den Automatikmodus funktioniert wieder.
+
+### Português (Brasil)
+
+* **CPU:** Corrige o travamento dos controles ao alterar o Turbo Boost com uma frequência manual em dispositivos AMD e Intel. Mantém a configuração escolhida e permite voltar normalmente ao modo automático.
+
+## [0.49.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.48.1...panel-de-control-v0.49.0) (2026-09-15)
+
+
+### Español
+
+* **Limpieza:** Estrena un espacio para recuperar almacenamiento desde el modo Gaming sin complicaciones. Muestra cuánto ocupan los datos de cada juego, las capturas y las versiones personalizadas de Proton que ya no se usan; permite elegir varios elementos y decidir exactamente qué borrar. Panel de Control señala qué elementos merece la pena revisar sin seleccionarlos por ti, protege los datos en uso o que no puede comprobar y avisa antes de eliminar prefijos que podrían contener partidas sin Steam Cloud. Steam puede volver a crear la Shader Cache al lanzar el juego. ([#646](https://github.com/Hooandee/panel-de-control/pull/646))
+
+### English
+
+* **Cleanup:** Introduces a simple way to reclaim storage directly from Gaming Mode. It shows how much space is used by each game's data, captures, and unused custom Proton versions, lets you select several items, and gives you precise control over what is removed. Panel de Control suggests items worth reviewing without selecting anything for you, protects data that is in use or cannot be verified, and warns before removing prefixes that may contain saves without Steam Cloud. Steam may rebuild the Shader Cache when the game is launched. ([#646](https://github.com/Hooandee/panel-de-control/pull/646))
+
+### Italiano
+
+* **Pulizia:** Introduce un modo semplice per recuperare spazio direttamente dalla modalità Gaming. Mostra quanto occupano i dati di ogni gioco, le catture e le versioni personalizzate di Proton non più utilizzate, permette di selezionare più elementi e di decidere con precisione cosa eliminare. Panel de Control segnala gli elementi che vale la pena controllare senza selezionare nulla al posto tuo, protegge i dati in uso o che non può verificare e avvisa prima di eliminare prefissi che potrebbero contenere salvataggi senza Steam Cloud. Steam può ricreare la Shader Cache all'avvio del gioco. ([#646](https://github.com/Hooandee/panel-de-control/pull/646))
+
+### Deutsch
+
+* **Bereinigung:** Bietet eine einfache Möglichkeit, direkt im Gaming-Modus Speicherplatz freizugeben. Die Ansicht zeigt den Speicherbedarf der Daten einzelner Spiele, der Aufnahmen und nicht mehr verwendeter benutzerdefinierter Proton-Versionen, erlaubt die Auswahl mehrerer Einträge und gibt dir die volle Kontrolle darüber, was entfernt wird. Panel de Control weist auf prüfenswerte Einträge hin, ohne etwas automatisch auszuwählen, schützt verwendete oder nicht überprüfbare Daten und warnt vor dem Löschen von Präfixen, die Spielstände ohne Steam Cloud enthalten könnten. Steam kann den Shader Cache beim Starten des Spiels neu erstellen. ([#646](https://github.com/Hooandee/panel-de-control/pull/646))
+
+### Português (Brasil)
+
+* **Limpeza:** Traz uma forma simples de recuperar espaço diretamente pelo Modo de Jogo. Mostra quanto espaço os dados de cada jogo, as capturas e as versões personalizadas do Proton que não estão mais em uso ocupam, permite selecionar vários itens e dá controle total sobre o que será excluído. O Painel de Controle sugere itens que vale a pena revisar sem selecionar nada por você, protege dados em uso ou que não podem ser verificados e avisa antes de excluir prefixos que podem conter arquivos de salvamento sem Steam Cloud. O Steam pode recriar o cache de shaders quando o jogo for iniciado. ([#646](https://github.com/Hooandee/panel-de-control/pull/646))
+
 ## [0.48.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.48.0...panel-de-control-v0.48.1) (2026-09-14)
 
 

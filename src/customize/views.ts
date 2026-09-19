@@ -1,4 +1,6 @@
 import { strArray } from "./layout";
+import type { LearningTag } from "../learning/logic";
+import { blockAvailableInMode, PICKABLE_BLOCKS } from "./manifest";
 
 export const VIEW_ICON_KEYS = [
   "star", "zap", "gamepad", "thermometer", "gauge", "grid", "monitor", "cpu", "sliders", "sparkles",
@@ -15,6 +17,23 @@ export interface CustomView {
 
 export const viewTabId = (id: string): string => `view:${id}`;
 export const isViewTabId = (tabId: string): boolean => tabId.startsWith("view:");
+
+export function learningTagsForViewBlocks(
+  blockIds: readonly string[],
+  desktopMode: boolean,
+): LearningTag[] {
+  const available = new Set(
+    blockIds.filter((blockId) => blockAvailableInMode(blockId, desktopMode)),
+  );
+  const activeTags = new Set<LearningTag>();
+  for (const blocks of Object.values(PICKABLE_BLOCKS)) {
+    for (const block of blocks) {
+      if (!available.has(block.id)) continue;
+      block.learningTags?.forEach((tag) => activeTags.add(tag));
+    }
+  }
+  return (["tdp", "fans"] as const).filter((tag) => activeTags.has(tag));
+}
 
 export function providersFor(
   blockIds: string[],

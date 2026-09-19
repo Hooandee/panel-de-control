@@ -2,7 +2,7 @@ import { FC, useEffect, useState } from "react";
 import { ButtonItem, Focusable, Navigation, PanelSectionRow, ToggleField } from "@decky/ui";
 
 import { useI18n } from "../i18n";
-import { LanguageToggle } from "../components/LanguageToggle";
+import { LanguageSelector } from "../components/LanguageSelector";
 import { openCustomizeModal } from "../components/CustomizeModal";
 import { openGameProfilesModal } from "../components/GameProfilesModal";
 import { openGlossaryModal } from "../components/GlossaryModal";
@@ -129,7 +129,7 @@ export const AjustesSection: FC = () => {
           <span style={{ fontSize: theme.font.body, color: theme.color.textPrimary }}>
             {t("settings.language")}
           </span>
-          <LanguageToggle />
+          <LanguageSelector />
         </div>
 
         {(device?.is_generic || desktop.state?.automatic) && desktop.state && (

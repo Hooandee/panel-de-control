@@ -3,61 +3,74 @@ import { DeviceInfo, isUnvalidated } from "../api";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 
-export const DeviceHeader: FC<{ device: DeviceInfo }> = ({ device }) => {
+export const DeviceHeader: FC<{
+  device: DeviceInfo;
+  presentation?: "full" | "compact";
+  fullWidth?: boolean;
+}> = ({ device, presentation = "full", fullWidth = false }) => {
   const { t } = useI18n();
   return (
     <div
+      data-testid="device-pill"
       style={{
-        display: "flex",
+        display: "inline-flex",
         alignItems: "center",
-        justifyContent: "space-between",
-        gap: theme.space.md,
-        padding: `${theme.space.md}px ${theme.space.lg}px`,
-        borderRadius: theme.radius.md,
-        background:
-          `radial-gradient(120% 90% at 0% 0%, rgba(${theme.color.accentRgb},0.10), rgba(0,0,0,0) 60%), ` +
-          theme.color.surfaceRaised,
+        alignSelf: "flex-start",
+        gap: 6,
+        width: fullWidth ? "100%" : "fit-content",
+        maxWidth: "100%",
+        minHeight: 24,
+        padding: "3px 8px",
+        borderRadius: 999,
+        background: "rgba(255,255,255,0.04)",
         boxShadow: `inset 0 0 0 1px ${theme.color.hairline}`,
+        boxSizing: "border-box",
       }}
     >
-      <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
-        <div
-          style={{
-            fontSize: theme.font.body,
-            fontWeight: 600,
-            color: theme.color.textPrimary,
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-          }}
-        >
-          {t("device.detected", { name: device.display_name })}
-        </div>
-        <div
-          style={{
-            fontSize: theme.font.caption,
-            letterSpacing: "0.08em",
-            textTransform: "uppercase",
-            color: theme.color.textMuted,
-          }}
-        >
-          {device.chip}
-        </div>
-      </div>
+      <span
+        style={{
+          minWidth: 0,
+          color: theme.color.textPrimary,
+          fontSize: theme.font.caption,
+          fontWeight: 650,
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+        }}
+      >
+        {t("device.detected", { name: device.display_name })}
+      </span>
+      {presentation === "full" ? (
+        <>
+          <span aria-hidden="true" style={{ color: theme.color.textMuted, fontSize: 9 }}>•</span>
+          <span
+            style={{
+              flexShrink: 0,
+              color: theme.color.textMuted,
+              fontSize: 9,
+              fontWeight: 650,
+              letterSpacing: "0.05em",
+              textTransform: "uppercase",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {device.chip}
+          </span>
+        </>
+      ) : null}
       {isUnvalidated(device) && (
         <span
+          role="img"
+          aria-label={t(device.is_generic ? "device.generic.hint" : "device.experimental.hint")}
           title={t(device.is_generic ? "device.generic.hint" : "device.experimental.hint")}
           style={{
+            width: 6,
+            height: 6,
             flexShrink: 0,
-            fontSize: theme.font.caption,
-            padding: "2px 8px",
-            borderRadius: theme.radius.sm,
-            color: theme.color.warn,
-            background: "rgba(255,180,84,0.12)",
+            borderRadius: "50%",
+            background: theme.color.warn,
           }}
-        >
-          {t("device.experimental.badge")}
-        </span>
+        />
       )}
     </div>
   );

@@ -8,12 +8,13 @@ import { TABS, customizationBlocks, blockOrder, subitemsFor, PINNED_TAB, CATEGOR
 import { iconBtn, IconAction } from "./IconAction";
 import { orderIds, move, toggle, ensure, Layout } from "../customize/layout";
 import { useLayout, saveLayout, resetLayout } from "../customize/store";
+import { resetHomeMode, updateShowHome } from "../customize/homePreference";
 import { useModules, setModuleDisabled, resetModules } from "../customize/modules";
 import { moduleState, isDisableableSection, sectionModuleDisabled } from "../customize/moduleLogic";
 import { FocusRoot } from "./FocusRoot";
 import { ACCENTS } from "../system/accentColor";
 import { useAccent, setAccent } from "../system/useAccent";
-import { getBatteryState, getDevice, DeviceInfo } from "../api";
+import { getBatteryState } from "../api";
 import { sectionHiddenOnDevice, allBlocksHidden } from "../sections/availability";
 import { getPresent, usePresentVersion } from "../customize/present";
 import { useViews, createView } from "../customize/viewStore";
@@ -22,6 +23,9 @@ import { viewIconNode } from "../customize/viewIcons";
 import { openViewEditorModal } from "./ViewEditor";
 import { openDisableModuleModal } from "./DisableModuleModal";
 import { useDesktopState } from "../desktop/useDesktop";
+import { HomeVisibilitySetting } from "./HomeVisibilitySetting";
+import { useDevice } from "../system/useDevice";
+import { useCustomizeFocusVisibility } from "./useCustomizeFocusVisibility";
 
 // Blocks that are actually backend MODULES (get the on/off power control) rather
 // than cosmetic cards (which get the show/hide eye). Everything else is cosmetic.
@@ -97,19 +101,19 @@ const AccentPicker: FC = () => {
 };
 
 const CustomizeBody: FC = () => {
+  const focusVisibilityRef = useCustomizeFocusVisibility();
   const { t } = useI18n();
   const layout = useLayout();
   const disabled = useModules();
   const desktopMode = !!useDesktopState().state?.enabled;
   useAccent(); // re-render the whole modal live when the accent changes (separate root)
-  usePresentVersion(); // reflect which blocks each machine actually has
+  usePresentVersion();
   const [editing, setEditing] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   // Device (one-time) so we don't list a category this machine can't use (e.g.
   // Mandos on the Steam Deck) — mirrors the shell's tab gating.
-  const [device, setDevice] = useState<DeviceInfo | null>(null);
+  const device = useDevice();
   const [chargeLimitSupported, setChargeLimitSupported] = useState(false);
-  useEffect(() => { getDevice().then(setDevice).catch(() => {}); }, []);
   useEffect(() => {
     let alive = true;
     getBatteryState()
@@ -184,10 +188,11 @@ const CustomizeBody: FC = () => {
   }, []);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: theme.space.md, padding: theme.space.sm, maxWidth: 640, width: "100%", margin: "0 auto" }}>
+    <div ref={focusVisibilityRef} style={{ display: "flex", flexDirection: "column", gap: theme.space.md, padding: theme.space.sm, maxWidth: 640, width: "100%", margin: "0 auto" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ fontSize: theme.font.value, color: theme.color.textPrimary }}>{t("customize.title")}</div>
         <Focusable
+          noFocusRing
           style={{
             ...iconBtn, gap: theme.space.xs, padding: `${theme.space.xs}px ${theme.space.sm}px`,
             fontSize: theme.font.caption,
@@ -203,6 +208,13 @@ const CustomizeBody: FC = () => {
           <span>{editing ? t("customize.reorder.done") : t("customize.reorder")}</span>
         </Focusable>
       </div>
+
+      <HomeVisibilitySetting
+        value={layout.showHome}
+        onChange={(showHome) => updateShowHome(layout, showHome)}
+        deviceHeaderValue={layout.showDeviceHeader}
+        onDeviceHeaderChange={(showDeviceHeader) => save({ ...layout, showDeviceHeader })}
+      />
 
       <div style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
         {tabOrder.map((id, i) => {
@@ -276,7 +288,7 @@ const CustomizeBody: FC = () => {
                   onActivate={() => expandable && setOpenId(open ? null : id)}
                   onClick={() => expandable && setOpenId(open ? null : id)}
                 >
-                  <span style={iconSquare(!off)}>{meta?.icon}</span>
+                  <span style={iconSquare(!off)}>{meta?.icon(16)}</span>
                   <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
                     <span style={{ fontSize: theme.font.body, color: theme.color.textPrimary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {t(meta.labelKey)}
@@ -423,7 +435,7 @@ const CustomizeBody: FC = () => {
 
           <div style={theme.sectionLabel}>{t("customize.appearance")}</div>
           <AccentPicker />
-          <ButtonItem layout="below" onClick={() => { resetLayout(); resetModules(); }}>
+          <ButtonItem layout="below" onClick={() => { resetLayout(); resetModules(); resetHomeMode(); }}>
             {t("customize.reset")}
           </ButtonItem>
         </>

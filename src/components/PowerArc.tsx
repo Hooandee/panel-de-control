@@ -46,6 +46,7 @@ interface PowerArcProps {
   baseMarkerWatts?: number | null;
   slowMarkerWatts?: number | null;
   fastMarkerWatts?: number | null;
+  overclocked?: boolean;
 }
 
 export const PowerArc: FC<PowerArcProps> = ({
@@ -60,6 +61,7 @@ export const PowerArc: FC<PowerArcProps> = ({
   baseMarkerWatts = null,
   slowMarkerWatts = null,
   fastMarkerWatts = null,
+  overclocked = false,
 }) => {
   const { t } = useI18n();
 
@@ -231,6 +233,22 @@ export const PowerArc: FC<PowerArcProps> = ({
             +{boost} W · {t("tdp.arc.boostHw")}
           </div>
         )}
+        {overclocked && (
+          <div style={{
+            fontSize: 8,
+            fontWeight: 700,
+            lineHeight: 1.4,
+            letterSpacing: "0.08em",
+            textTransform: "uppercase",
+            color: theme.color.warn,
+            border: `1px solid ${theme.color.warn}`,
+            borderRadius: 999,
+            padding: "1px 6px",
+            marginTop: 2,
+          }}>
+            {t("tdp.arc.overclocked")}
+          </div>
+        )}
         {auto ? (
           <div style={{
             fontSize: 9,
@@ -245,7 +263,7 @@ export const PowerArc: FC<PowerArcProps> = ({
             {t("tdp.arc.auto")}
           </div>
         ) : (
-          <div style={{ fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color }}>{t(`tdp.zone.${zone.key}`)}</div>
+          <div style={{ fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color, marginTop: overclocked ? 3 : undefined }}>{t(`tdp.zone.${zone.key}`)}</div>
         )}
       </div>
     </div>

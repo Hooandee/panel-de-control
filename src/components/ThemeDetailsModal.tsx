@@ -275,7 +275,7 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
   const displayName = localizePublishedText(card.release.displayName, lang);
   const description = localizePublishedText(card.release.description, lang);
   const releaseNote = localizePublishedText(card.release.notes, lang);
-  const groups = groupThemePatches(card.cssLoaderTheme?.patches ?? []);
+  const groups = groupThemePatches(card.cssLoaderTheme?.patches ?? [], card.id);
   const fullSizeLayout = card.installed && groups.length > 0;
   const availableCover = themeCoverFor(card.release);
   const cover = availableCover === failedCover ? undefined : availableCover;
@@ -509,6 +509,11 @@ export function ThemeDetailsModal({ themeId, closeModal }: ThemeDetailsModalProp
                   return (
                     <section key={group.id} aria-labelledby={headingId} style={{ minWidth: 0 }}>
                       <h3 id={headingId} data-pdc-theme-muted style={{ ...theme.sectionLabel, margin: `0 0 ${theme.space.sm}px` }}>{t(`themes.group.${group.id}`)}</h3>
+                      {group.id === "sections" ? (
+                        <p data-pdc-theme-muted style={{ margin: `0 0 ${theme.space.sm}px`, lineHeight: 1.4 }}>
+                          {t("themes.group.sectionsDescription")}
+                        </p>
+                      ) : null}
                       <div role="list" style={{ display: "flex", flexDirection: "column", gap: theme.space.sm }}>
                         {group.patches.map((patch) => (
                           <div key={patch.name} role="listitem">

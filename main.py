@@ -125,6 +125,8 @@ from mangohud.coordinator import HudClosed, HudCoordinator, HudStale
 from mangohud.observations import TimedValue, fresh_value
 from report import collector as report_collector
 from report import client as report_client
+from steam_cleaner import SteamCleanerError, SteamCleanerService
+from steam_cleaner.media import measure_screenshot_paths
 
 # Report collector: the app slug (routes to the right GitHub repo, server-side) and the
 # collector endpoint. The URL is set to the deployed Vercel service; overridable via
@@ -156,7 +158,7 @@ _ROG_CHARGE_LIMIT_PROFILES = frozenset({
     "rog_xbox_ally",
     "rog_xbox_ally_x",
 })
-_STEAM_DECK_CHARGE_LIMIT_PROFILES = frozenset({
+_STEAM_DECK_PROFILES = frozenset({
     "steam_deck_lcd",
     "steam_deck_oled",
 })
@@ -187,6 +189,7 @@ class _TdpCommand:
     primary_rail: str
     on_ac: bool
     auto_tdp: bool
+    ppt_probe_pending: bool
 
 
 @dataclass(frozen=True)
@@ -259,6 +262,8 @@ DEFAULTS = {
     # monitor-only, handing TDP to another tool.
     "tdp_control_enabled": True,
     "low_battery_tdp_hold": False,
+    # Retained for upgrade compatibility; the AutoTDP menu floor is automatic now.
+    "qam_tdp_boost": False,
     # Modules the user turned off in the customization editor (generic ids only;
     # power/learning are folded from tdp_control_enabled/telemetry_enabled).
     "disabled_modules": [],
@@ -442,7 +447,7 @@ class Plugin:
         self._steamdeck_ppt_last_failure = None
         self._steamdeck_ppt_recovery_blocked = False
         if (
-            self._device.key in ("steam_deck_lcd", "steam_deck_oled")
+            self._device.key in _STEAM_DECK_PROFILES
             and not self._settings.get("_deck_ppt_scope_migrated")
         ):
             self._tdp_profiles.migrate_deck_ppt_stable()
@@ -463,15 +468,21 @@ class Plugin:
             ),
         )
         self._powerstation_detector = powerstation_conflict.Detector()
-        # Keep durable TDP intent inside the device-authorised range.
-        _lim = self._profile_storage_limits()
-        _request_min = self._tdp_request_min()
         self._tdp_profile_sanitize_pending = False
         self._power_preset_sanitize_pending = False
         self._tdp_storage_migration_retry_at = 0.0
-        self._sanitize_tdp_profiles(_request_min, _lim.max_ac_w)
-        if _request_min > TDP_REQUEST_MIN_W:
-            self._sanitize_power_presets(_request_min, _lim.max_ac_w)
+        # Preserve durable intent while a dynamic hardware ceiling is unreadable.
+        _lim = self._profile_storage_limits()
+        _request_min = self._tdp_request_min()
+        if _lim is None:
+            self._tdp_profile_sanitize_pending = True
+            self._tdp_storage_migration_retry_at = (
+                _monotonic() + _TDP_STORAGE_MIGRATION_RETRY_S
+            )
+        else:
+            self._sanitize_tdp_profiles(_request_min, _lim.max_ac_w)
+            if _request_min > TDP_REQUEST_MIN_W:
+                self._sanitize_power_presets(_request_min, _lim.max_ac_w)
         # Which daemon owns the controller (HHD / InputPlumber / none). Detected
         # once — the resident daemon doesn't change at runtime. Probe never raises.
         self._controller = controller_detect.detect()
@@ -818,6 +829,152 @@ class Plugin:
     async def get_version(self) -> str:
         self._init()
         return read_version()
+
+    def _ensure_steam_cleaner_executor(self):
+        executor = getattr(self, "_steam_cleaner_executor", None)
+        if executor is None:
+            executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="steam-cleaner")
+            self._steam_cleaner_executor = executor
+        return executor
+
+    async def _get_steam_cleaner(self):
+        if getattr(self, "_shutting_down", False) or getattr(self, "_steam_cleaner_closed", False):
+            raise RuntimeError("closed")
+        service = getattr(self, "_steam_cleaner", None)
+        if service is not None:
+            return service
+        future = getattr(self, "_steam_cleaner_init_future", None)
+        if future is None:
+            home = getattr(decky, "DECKY_USER_HOME", None)
+            if not isinstance(home, str) or not os.path.isabs(home):
+                raise RuntimeError("steam_home_unavailable")
+            future = self._ensure_steam_cleaner_executor().submit(
+                self._invoke_steam_cleaner,
+                lambda: SteamCleanerService(
+                    home,
+                    logger=decky.logger,
+                    state_dir=os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "steam_cleaner"),
+                ),
+            )
+            self._steam_cleaner_init_future = future
+        service = await asyncio.shield(asyncio.wrap_future(future))
+        if getattr(self, "_steam_cleaner_closed", False):
+            raise RuntimeError("closed")
+        self._steam_cleaner = service
+        return service
+
+    @staticmethod
+    def _invoke_steam_cleaner(operation, *args):
+        try:
+            return operation(*args)
+        except SteamCleanerError as error:
+            code = error.code
+            if not isinstance(code, str) or not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", code):
+                code = "internal_error"
+            raise RuntimeError(code) from None
+        except Exception:  # noqa: BLE001
+            decky.logger.warning("Steam cleaner operation failed: internal_error")
+            raise RuntimeError("internal_error") from None
+
+    async def _offload_steam_cleaner(self, method, *args):
+        service = await self._get_steam_cleaner()
+        active = getattr(self, "_steam_cleaner_future", None)
+        if active is not None and not active.done():
+            raise RuntimeError("busy")
+        executor = self._ensure_steam_cleaner_executor()
+        future = executor.submit(self._invoke_steam_cleaner, getattr(service, method), *args)
+        self._steam_cleaner_future = future
+        # Cancelling a QAM await must not hide a worker that can still delete files.
+        return await asyncio.shield(asyncio.wrap_future(future))
+
+    async def get_steam_cleaner_state(self) -> dict:
+        self._init()
+        service = await self._get_steam_cleaner()
+        return self._invoke_steam_cleaner(service.get_state)
+
+    async def scan_steam_cleaner(self) -> dict:
+        self._init()
+        return await self._offload_steam_cleaner("inventory")
+
+    async def prepare_steam_cleaner(self, scan_id: str, entry_ids: list[str]) -> dict:
+        self._init()
+        return await self._offload_steam_cleaner("prepare", scan_id, entry_ids)
+
+    async def execute_steam_cleaner(self, plan_id: str, confirm_compatdata: bool = False) -> dict:
+        self._init()
+        return await self._offload_steam_cleaner("execute", plan_id, confirm_compatdata)
+
+    async def cancel_steam_cleaner(self) -> dict:
+        self._init()
+        service = await self._get_steam_cleaner()
+        return self._invoke_steam_cleaner(service.cancel)
+
+    async def get_proton_cleaner_state(self) -> dict:
+        self._init()
+        service = await self._get_steam_cleaner()
+        return self._invoke_steam_cleaner(service.get_proton_state)
+
+    async def scan_proton_cleaner(self) -> dict:
+        self._init()
+        return await self._offload_steam_cleaner("inventory_proton")
+
+    async def prepare_proton_cleaner(self, scan_id: str, entry_ids: list[str]) -> dict:
+        self._init()
+        return await self._offload_steam_cleaner("prepare_proton", scan_id, entry_ids)
+
+    async def execute_proton_cleaner(self, plan_id: str) -> dict:
+        self._init()
+        return await self._offload_steam_cleaner("execute_proton", plan_id)
+
+    async def measure_steam_screenshot_paths(self, paths: list[str]) -> dict:
+        self._init()
+        home = getattr(decky, "DECKY_USER_HOME", None)
+        if not isinstance(home, str) or not os.path.isabs(home):
+            return {}
+        return await asyncio.get_running_loop().run_in_executor(
+            None,
+            measure_screenshot_paths,
+            home,
+            paths,
+        )
+
+    async def record_steam_media_event(
+        self, event: str, operation_id: str, count: int = 0, errors: int = 0,
+        source: str = "none", reason: str = "none",
+    ) -> bool:
+        self._init()
+        service = await self._get_steam_cleaner()
+        return await asyncio.get_running_loop().run_in_executor(
+            None,
+            lambda: service.record_media_event(event, operation_id, count, errors, source, reason),
+        )
+
+    async def _steam_cleaner_diagnostics(self) -> dict:
+        try:
+            service = await self._get_steam_cleaner()
+            return report_collector.steam_cleaner_snapshot(service.diagnostics())
+        except Exception:  # noqa: BLE001
+            return {"error": "diagnostics_unavailable"}
+
+    def _close_steam_cleaner_sync(self) -> None:
+        if getattr(self, "_steam_cleaner_closed", False):
+            return
+        self._steam_cleaner_closed = True
+        executor = getattr(self, "_steam_cleaner_executor", None)
+        service = getattr(self, "_steam_cleaner", None)
+        try:
+            pending = getattr(self, "_steam_cleaner_init_future", None)
+            if service is None and pending is not None:
+                service = pending.result()
+                self._steam_cleaner = service
+            if service is not None:
+                service.close()
+        except Exception:  # noqa: BLE001
+            decky.logger.warning("Steam cleaner close failed: internal_error")
+        finally:
+            if executor is not None:
+                executor.shutdown(wait=True, cancel_futures=True)
+                self._steam_cleaner_executor = None
 
     async def get_launch_tools(self) -> dict:
         self._init()
@@ -1639,6 +1796,7 @@ class Plugin:
             "hud_diagnostics": hud_diagnostics,
             # Detected tools + current game + the frontend's running-game snapshot.
             "launch": self._launch_report_state(context),
+            "steam_cleaner": await self._steam_cleaner_diagnostics(),
         }
         logs = report_collector.tail_logs(
             getattr(decky, "DECKY_PLUGIN_LOG_DIR", ""), home=home, hostname=hostname
@@ -2126,6 +2284,57 @@ class Plugin:
         except Exception:  # noqa: BLE001
             return False
 
+    def _steamdeck_overclock_state(self) -> dict:
+        configured_state = getattr(
+            self._tdp_backend,
+            "configured_tdp_state",
+            None,
+        )
+        if not callable(configured_state):
+            return {
+                "detected": False,
+                "max_w": None,
+                "source": None,
+                "status": "unsupported",
+                "reason": None,
+            }
+        baseline = self._settings.get("steamdeck_ppt_previous")
+        source = "handoff" if baseline is not None else "live"
+        try:
+            configured = configured_state(baseline)
+        except Exception as error:  # noqa: BLE001
+            return {
+                "detected": False,
+                "max_w": None,
+                "source": None,
+                "status": "unavailable",
+                "reason": type(error).__name__,
+            }
+        if not isinstance(configured, dict):
+            configured = {}
+        status = configured.get("status")
+        ceiling = configured.get("max_w")
+        valid_ceiling = (
+            status == "overclocked"
+            and isinstance(ceiling, int)
+            and not isinstance(ceiling, bool)
+        )
+        reason = configured.get("reason")
+        if status not in {"overclocked", "stock", "unavailable"} or (
+            status == "overclocked" and not valid_ceiling
+        ):
+            status = "unavailable"
+            ceiling = None
+            reason = reason or "invalid_state"
+        detected = status == "overclocked"
+        return {
+            "detected": detected,
+            "max_w": int(ceiling) if detected else None,
+            "source": source if detected else None,
+            "status": status,
+            "reason": reason,
+        }
+
     def _record_steamdeck_ppt(self, action, ok, reason=None) -> None:
         history = getattr(self, "_steamdeck_ppt_history", None)
         if history is None:
@@ -2184,6 +2393,17 @@ class Plugin:
         self._steamdeck_ppt_last_failure = None
         self._record_steamdeck_ppt("restore", True)
         return True
+
+    def _steamdeck_ppt_probe_pending(self, overclock=None) -> bool:
+        if self._device.key not in _STEAM_DECK_PROFILES:
+            return False
+        state = overclock or self._steamdeck_overclock_state()
+        return state["status"] in {"unavailable", "unsupported"}
+
+    def _restore_steamdeck_startup_ppt(self) -> bool:
+        return self._restore_steamdeck_ppt(
+            preserve_ownership=self._steamdeck_ppt_probe_pending()
+        )
 
     def _prepare_steamdeck_ppt(self, command):
         if not self._steamdeck_ppt_supported():
@@ -4411,9 +4631,14 @@ class Plugin:
 
     # ---- TDP helpers + RPCs -------------------------------------------------
     def _profile_storage_limits(self):
-        """Static authorised range for durable intent; live bounds only affect apply."""
+        """Authorised durable range, or None while a dynamic ceiling is unreadable."""
         if self._device.key == "gpd_win_mini_2025":
             return TdpLimits.from_profile(self._device)
+        if self._device.key in _STEAM_DECK_PROFILES:
+            overclock = self._steamdeck_overclock_state()
+            if overclock["status"] in {"unavailable", "unsupported"}:
+                return None
+            return self._limits(overclock)
         if self._device.key != "rog_flow_z13":
             return self._limits()
         limits = TdpLimits.from_profile(self._device)
@@ -4466,6 +4691,11 @@ class Plugin:
         if _monotonic() < self._tdp_storage_migration_retry_at:
             return
         limits = self._profile_storage_limits()
+        if limits is None:
+            self._tdp_storage_migration_retry_at = (
+                _monotonic() + _TDP_STORAGE_MIGRATION_RETRY_S
+            )
+            return
         request_min = self._tdp_request_min()
         if self._tdp_profile_sanitize_pending:
             self._sanitize_tdp_profiles(request_min, limits.max_ac_w)
@@ -4480,10 +4710,8 @@ class Plugin:
         ):
             self._tdp_storage_migration_retry_at = 0.0
 
-    def _limits(self):
-        """Device TDP limits with the user's opt-in ceilings applied (a single
-        chokepoint so every clamp/limit path honours the Ajustes toggles): the
-        battery-unlock preference, then the GPD Win 5 cooler boost."""
+    def _limits(self, overclock=None):
+        """Device TDP limits after opt-ins and a detected Deck SlowPPT ceiling."""
         # Chokepoint for the battery-unlock preference. Ignore it where the firmware
         # enforces the battery cap (Ally/Ally X) — the write would be refused, so the
         # reported ceiling must not claim the extra either.
@@ -4496,6 +4724,16 @@ class Plugin:
         experimental_max = self._device.experimental_tdp_max_ac
         if experimental_max and self._settings.get("experimental_tdp_unlock") is True:
             lim = lim.with_ac_max(experimental_max)
+        overclock = overclock or self._steamdeck_overclock_state()
+        configured_max = overclock["max_w"]
+        if configured_max is not None:
+            ceiling = max(lim.max_ac_w, configured_max)
+            lim = TdpLimits(
+                lim.min_w,
+                lim.default_w,
+                ceiling,
+                ceiling,
+            )
         return lim
 
     def _automatic_limits(self, limits=None):
@@ -4559,10 +4797,10 @@ class Plugin:
         default = max(minimum, min(limits.default_w, maximum_ac))
         return TdpLimits(minimum, default, maximum, maximum_ac)
 
-    def _effective_levels(self, appid=None, on_ac=None):
+    def _effective_levels(self, appid=None, on_ac=None, limits=None):
         """Clamped {pl1,pl2,pl3} for a scope at the active (on_ac) ceiling, plus the
         ceiling. Single source for every loop/RPC that needs the applied setpoint."""
-        limits = self._limits()
+        limits = limits or self._limits()
         ac = read_on_ac() if on_ac is None else on_ac
         active = self._active_max(limits, ac)
         ll = self._cap_level_limits(self._tdp_backend.level_limits(), active)
@@ -4909,7 +5147,8 @@ class Plugin:
     ):
         backend = self._tdp_backend
         ac = read_on_ac() if on_ac is None else bool(on_ac)
-        limits = self._limits()
+        overclock = self._steamdeck_overclock_state()
+        limits = self._limits(overclock)
         active = self._active_max(limits, ac)
         logical_requested = self._tdp_profiles.effective(self._current_appid)
         requested_auto_watts = None
@@ -4986,6 +5225,7 @@ class Plugin:
             primary_rail=getattr(backend, "primary_rail", "pl1"),
             on_ac=ac,
             auto_tdp=auto_active,
+            ppt_probe_pending=self._steamdeck_ppt_probe_pending(overclock),
         )
 
     def _advance_tdp_generation(self):
@@ -5103,6 +5343,23 @@ class Plugin:
                 True,
                 "tdp-control-disabled",
             )
+        if command.ppt_probe_pending:
+            self._tdp_status = "rejected"
+            self._tdp_reason = "steamdeck_ppt_probe_pending"
+            result = TdpResult(
+                logical_watts,
+                None,
+                False,
+                "steamdeck-ppt-probe-pending",
+            )
+            self._record_tdp_transition(
+                command.reason,
+                action="blocked",
+                result=result,
+                on_ac=command.on_ac,
+                requested=command.requested,
+            )
+            return result
         if not self._tdp_write_authorized():
             self._tdp_status = "unverifiable"
             self._tdp_reason = "external_owner"
@@ -5622,6 +5879,12 @@ class Plugin:
         if not self._tdp_control_on():
             self._tdp_status = "unverifiable"
             self._tdp_reason = "control_disabled"
+            self._tdp_reconcile_memory = ReconcileMemory()
+            return
+        if command.ppt_probe_pending:
+            self._tdp_status = "rejected"
+            self._tdp_reason = "steamdeck_ppt_probe_pending"
+            self._tdp_targets = None
             self._tdp_reconcile_memory = ReconcileMemory()
             return
         if not self._tdp_write_authorized():
@@ -6380,7 +6643,7 @@ class Plugin:
         key = getattr(self._device, "key", "")
         return (
             key in _ROG_CHARGE_LIMIT_PROFILES
-            or key in _STEAM_DECK_CHARGE_LIMIT_PROFILES
+            or key in _STEAM_DECK_PROFILES
         )
 
     def _cancel_charge_limit_reconcile(
@@ -6527,7 +6790,7 @@ class Plugin:
                         and type(candidate) is SysfsChargeLimit
                     )
                     or (
-                        device_key in _STEAM_DECK_CHARGE_LIMIT_PROFILES
+                        device_key in _STEAM_DECK_PROFILES
                         and type(candidate)
                         in (SteamDeckChargeLimit, SysfsChargeLimit)
                     )
@@ -6837,6 +7100,15 @@ class Plugin:
             "error_type": result.error_type,
             "rollback": result.rollback,
         }
+        if not result.ok and (result.error_code or "").startswith("frequency_"):
+            try:
+                failure = self._cpu_frequency_failure_diagnostic(
+                    self._cpu_frequency.diagnostics().get("last_failure")
+                )
+                if failure and result.error_code == f"frequency_{failure['reason']}":
+                    event["frequency_failure"] = failure
+            except Exception:  # noqa: BLE001
+                pass
         history.append(event)
         log = decky.logger.info if result.ok else decky.logger.warning
         log("CPU transition %s", json.dumps(event, sort_keys=True, separators=(",", ":")))
@@ -8315,6 +8587,35 @@ class Plugin:
             "max_mhz": value.get("max_mhz"),
         }
 
+    @staticmethod
+    def _cpu_frequency_failure_diagnostic(value):
+        if not isinstance(value, dict):
+            return None
+        identity_fields = {
+            "path", "driver", "related_cpus", "hardware_min_khz",
+            "hardware_max_khz", "affected_cpus", "missing",
+        }
+        policies = value.get("policies") or []
+        return {
+            "reason": value.get("reason"),
+            "requested": list(value["requested"]) if value.get("requested") else None,
+            "policies": [{
+                "name": policy.get("name"),
+                "driver": policy.get("driver"),
+                **{
+                    key: list(policy[key]) if policy.get(key) else None
+                    for key in ("hardware_bounds", "target", "applied")
+                },
+                "identity_changed_fields": [
+                    field for field in policy.get("identity_changed_fields", ())
+                    if field in identity_fields
+                ],
+            } for policy in policies[:32]],
+            "policies_omitted": (
+                value.get("policies_omitted", 0) + max(0, len(policies) - 32)
+            ),
+        }
+
     def _cpu_gpu_diagnostics(self) -> dict:
         """Allowlisted CPU/GPU/PPT diagnostics for private reports.
 
@@ -8346,6 +8647,9 @@ class Plugin:
                 "owned": bool(raw_cpu.get("owned")),
                 "drivers": list(raw_cpu.get("drivers") or ()),
                 "policies": policies,
+                "last_failure": self._cpu_frequency_failure_diagnostic(
+                    raw_cpu.get("last_failure")
+                ),
                 "last_result": ({
                     "generation": last_cpu.generation,
                     "ok": last_cpu.ok,
@@ -8411,6 +8715,7 @@ class Plugin:
                 "fast": capability.get("fast"),
                 "visual_max": capability.get("visual_max"),
                 "probe_reason": raw_ppt.get("ppt_reason"),
+                "overclock": self._steamdeck_overclock_state(),
                 "requested": tdp_state.get("requested"),
                 "applied": tdp_state.get("applied"),
                 "status": tdp_state.get("status"),
@@ -9250,9 +9555,17 @@ class Plugin:
         return bool(targets.target)
 
     def _tdp_state(self, observation) -> dict:
-        levels, active, ac = self._effective_levels(self._current_appid)
-        global_levels, _active, _ac = self._effective_levels(None, ac)
-        limits = self._limits()
+        overclock = self._steamdeck_overclock_state()
+        limits = self._limits(overclock)
+        levels, active, ac = self._effective_levels(
+            self._current_appid,
+            limits=limits,
+        )
+        global_levels, _active, _ac = self._effective_levels(
+            None,
+            ac,
+            limits=limits,
+        )
         auto_limits = self._auto_power_limits(observation)
         auto_request_limits = self._auto_request_limits()
         ll = self._cap_level_limits(self._tdp_backend.level_limits(), active)
@@ -9327,6 +9640,7 @@ class Plugin:
                 "max": auto_request_limits.max_w,
                 "max_ac": auto_request_limits.max_ac_w,
             },
+            "overclock": overclock,
             "on_ac": ac,
             "appid": self._current_appid,
             "has_game_profile": (self._current_appid is not None
@@ -9358,7 +9672,7 @@ class Plugin:
             # The battery↔performance dial that picks a value inside it is now LOCAL UI
             # state — applying it is a fixed manual setpoint, not a loop parameter.
             "learned": self._tdp_learned_info(self._current_appid),
-            "presets": self._tdp_presets(self._automatic_limits()),
+            "presets": self._tdp_presets(self._automatic_limits(limits)),
             # Selectable firmware performance modes; empty on devices without them.
             "firmware_modes": self._firmware_choices(),
             "firmware_mode": self._firmware_mode(),
@@ -9448,6 +9762,7 @@ class Plugin:
             },
             "steamdeck_ppt": {
                 "previous": self._settings.get("steamdeck_ppt_previous"),
+                "overclock": self._steamdeck_overclock_state(),
                 "recovery_blocked": bool(
                     getattr(self, "_steamdeck_ppt_recovery_blocked", False)
                 ),
@@ -10716,7 +11031,7 @@ class Plugin:
         await self._prime_tdp_ownership()
         try:
             if self._settings.get("steamdeck_ppt_previous") is not None:
-                await self._offload_call(self._restore_steamdeck_ppt)
+                await self._offload_call(self._restore_steamdeck_startup_ppt)
             self._reapply_all()
             self._start_charge_limit_full_once_monitor()
             self._lifecycle.start()
@@ -10782,6 +11097,7 @@ class Plugin:
         if getattr(self, "_sampler", None) is not None:
             self._sampler.stop()
         self._cancel_queued_offloads()
+        self._close_steam_cleaner_sync()
 
     def _perform_shutdown_handoff(
         self, stage: str, preserve_recovery=False

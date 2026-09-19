@@ -1,4 +1,8 @@
-import { describe, it, expect } from "vitest";
+import { beforeEach, describe, it, expect } from "vitest";
+import {
+  recordSteamPerformanceDiagnostic,
+  resetSteamPerformanceDiagnostics,
+} from "../steam/performanceDiagnostics";
 import {
   REPORT_CATEGORIES,
   buildReportContext,
@@ -94,6 +98,8 @@ describe("displayReportContext", () => {
 });
 
 describe("buildReportContext", () => {
+  beforeEach(resetSteamPerformanceDiagnostics);
+
   it("marks a feature request without replacing its diagnostic context", () => {
     expect(buildReportContext(
       ["themes"],
@@ -152,6 +158,35 @@ describe("buildReportContext", () => {
       hud: { steam_overlay: steamOverlay },
       qam: { rendered_count: 1 },
       report_kind: "bug",
+    });
+  });
+
+  it("includes bounded Steam performance diagnostics in the frontend context", () => {
+    recordSteamPerformanceDiagnostic("profile", {
+      status: "request_failed",
+      running_game_id: "42",
+    });
+
+    expect(buildReportContext(["other"], {}, {}, {}, "bug")).toMatchObject({
+      steam_performance: {
+        schema: 1,
+        current: {
+          profile: {
+            status: "request_failed",
+            running_game_id: "42",
+          },
+        },
+        events: [
+          {
+            sequence: 1,
+            area: "profile",
+            data: {
+              status: "request_failed",
+              running_game_id: "42",
+            },
+          },
+        ],
+      },
     });
   });
 });

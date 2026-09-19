@@ -13,6 +13,7 @@ interface Props {
   gameName: string | null;
   status: LearningStatus | null;
   onOpenSettings: () => void;
+  scope?: readonly LearningTag[];
 }
 
 const TAG_KEY: Record<LearningTag, string> = {
@@ -20,17 +21,18 @@ const TAG_KEY: Record<LearningTag, string> = {
   fans: "learning.tag.fans",
 };
 
-export const LearningBanner: FC<Props> = ({ gameName, status, onOpenSettings }) => {
+export const LearningBanner: FC<Props> = ({ gameName, status, onOpenSettings, scope }) => {
   const { t } = useI18n();
-  const disabled = useModules();
+  const disabledModules = useModules();
   if (!status) return null;
 
   const { state, tags } = learningBadge({
     inGame: gameName !== null,
-    telemetryOn: status.telemetry_enabled && effectiveEnabled("learning", disabled),
-    tdpSupported: status.tdp_supported && effectiveEnabled("power", disabled),
-    fanSupported: status.fan_supported && effectiveEnabled("fans", disabled),
+    telemetryOn: status.telemetry_enabled && effectiveEnabled("learning", disabledModules),
+    tdpSupported: status.tdp_supported && effectiveEnabled("power", disabledModules),
+    fanSupported: status.fan_supported && effectiveEnabled("fans", disabledModules),
     autoTdpActive: status.auto_tdp_active,
+    scope,
   });
 
   if (state === "hidden") return null;

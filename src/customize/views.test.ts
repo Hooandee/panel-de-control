@@ -1,5 +1,38 @@
 import { describe, expect, it } from "vitest";
-import { coerceViews, viewTabId, isViewTabId, DEFAULT_VIEW_ICON, providersFor } from "./views";
+import {
+  coerceViews,
+  viewTabId,
+  isViewTabId,
+  DEFAULT_VIEW_ICON,
+  learningTagsForViewBlocks,
+  providersFor,
+} from "./views";
+
+describe("learningTagsForViewBlocks", () => {
+  it("derives TDP and fan learning from the blocks in a handheld view", () => {
+    expect(learningTagsForViewBlocks(["battery", "tdp", "curve"], false)).toEqual([
+      "tdp",
+      "fans",
+    ]);
+  });
+
+  it("uses only blocks available in the active handheld or desktop mode", () => {
+    expect(learningTagsForViewBlocks(["desktopPower"], false)).toEqual([]);
+    expect(learningTagsForViewBlocks(["tdp"], true)).toEqual([]);
+    expect(learningTagsForViewBlocks(["desktopPower"], true)).toEqual(["tdp"]);
+  });
+
+  it("ignores unrelated, duplicate, and unknown blocks", () => {
+    expect(learningTagsForViewBlocks(["battery", "curve", "curve", "ghost"], false)).toEqual([
+      "fans",
+    ]);
+  });
+
+  it("does not attach TDP learning to Steam's independent performance block", () => {
+    expect(learningTagsForViewBlocks(["steamPerformance"], false)).toEqual([]);
+    expect(learningTagsForViewBlocks(["steamPerformance", "autoTdp"], false)).toEqual(["tdp"]);
+  });
+});
 
 describe("providersFor", () => {
   const section: Record<string, string> = {

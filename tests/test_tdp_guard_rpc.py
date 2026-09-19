@@ -235,6 +235,46 @@ def test_anatase_external_owner_blocks_guard_correction(plugin):
     assert plugin._tdp_reason == "external_owner"
 
 
+def _set_indeterminate_deck_ppt(plugin, *, with_marker=True):
+    from device_profiles import DEVICE_TABLE
+
+    plugin._device = next(
+        profile for profile in DEVICE_TABLE if profile.key == "steam_deck_oled"
+    )
+    plugin._settings["steamdeck_ppt_previous"] = (
+        {"slow": 25, "fast": 30} if with_marker else None
+    )
+    plugin._tdp_backend.configured_tdp_state = lambda _snapshot=None: {
+        "status": "unavailable",
+        "max_w": None,
+        "reason": "bounds_missing",
+    }
+
+
+@pytest.mark.parametrize("with_marker", [True, False])
+def test_indeterminate_deck_probe_blocks_command_writes(plugin, with_marker):
+    _set_indeterminate_deck_ppt(plugin, with_marker=with_marker)
+    plugin._tdp_profiles.set_pl1("global", 25 if with_marker else 15)
+    plugin._tdp_backend.set_levels_calls = 0
+
+    result = plugin._execute_tdp_command(plugin._capture_tdp_command("startup"))
+
+    assert plugin._tdp_backend.set_levels_calls == 0
+    assert result.detail == "steamdeck-ppt-probe-pending"
+
+
+@pytest.mark.parametrize("with_marker", [True, False])
+def test_indeterminate_deck_probe_blocks_guard_writes(plugin, with_marker):
+    _set_indeterminate_deck_ppt(plugin, with_marker=with_marker)
+    plugin._tdp_profiles.set_pl1("global", 25 if with_marker else 15)
+    plugin._tdp_backend.set_levels_calls = 0
+    _reset_guard_memory(plugin)
+
+    plugin._tdp_guard_tick(now=10.0)
+    plugin._tdp_guard_tick(now=10.75)
+
+    assert plugin._tdp_backend.set_levels_calls == 0
+    assert plugin._tdp_reason == "steamdeck_ppt_probe_pending"
 def test_command_preserves_requested_but_applies_live_target(plugin):
     plugin._tdp_profiles.set_pl1("global", 25)
     plugin._tdp_backend.live_max = 15
@@ -1354,6 +1394,16 @@ def test_report_contains_tdp_transition_history(plugin, monkeypatch):
                     "rendered_count": 8,
                     "rendered_unique_count": 7,
                 },
+                "steam_performance": {
+                    "schema": 1,
+                    "current": {
+                        "profile": {
+                            "status": "request_failed",
+                            "running_game_id": "42",
+                        },
+                    },
+                    "events": [],
+                },
                 "report_kind": "feature",
             },
         )
@@ -1396,6 +1446,16 @@ def test_report_contains_tdp_transition_history(plugin, monkeypatch):
     assert bundle["state"]["launch"]["frontend"]["qam"] == {
         "rendered_count": 8,
         "rendered_unique_count": 7,
+    }
+    assert bundle["state"]["launch"]["frontend"]["steam_performance"] == {
+        "schema": 1,
+        "current": {
+            "profile": {
+                "status": "request_failed",
+                "running_game_id": "42",
+            },
+        },
+        "events": [],
     }
     hud = bundle["state"]["hud_diagnostics"]
     assert hud["capability"] == "inactive"
@@ -1463,6 +1523,13 @@ def test_cpu_gpu_diagnostics_keeps_deck_ppt_probe_failure_reason(plugin):
     deck = plugin._cpu_gpu_diagnostics()["steamdeck_ppt"]
 
     assert deck["probe_reason"] == "contradictory_labels"
+    assert deck["overclock"] == {
+        "detected": False,
+        "max_w": None,
+        "source": None,
+        "status": "unsupported",
+        "reason": None,
+    }
 
 
 def test_confirmed_resume_is_written_to_plugin_log(plugin):
@@ -1664,6 +1731,77 @@ def test_backend_can_cap_boost_rails_to_active_battery_max(plugin):
         "pl2": {"min": 15, "max": 33},
         "pl3": {"min": 20, "max": 33},
     }
+
+
+def _use_real_steamdeck_backend(plugin, root, slow, fast):
+    from device_profiles import DEVICE_TABLE
+    from tdp.steamdeck_hwmon import SteamDeckHwmonBackend
+
+    directory = root / "sys/class/hwmon/hwmon7"
+    directory.mkdir(parents=True)
+    values = {
+        "name": "amdgpu",
+        "power1_label": "slowPPT",
+        "power1_cap": slow * 1_000_000,
+        "power1_cap_min": 0,
+        "power1_cap_max": 29_000_000,
+        "power2_label": "fastPPT",
+        "power2_cap": fast * 1_000_000,
+        "power2_cap_min": 0,
+        "power2_cap_max": 30_000_000,
+    }
+    for name, value in values.items():
+        (directory / name).write_text(str(value))
+
+    plugin._device = next(
+        profile for profile in DEVICE_TABLE if profile.key == "steam_deck_lcd"
+    )
+    plugin._tdp_backend = SteamDeckHwmonBackend(
+        TdpLimits(3, 12, 15, 15),
+        "steam_deck_lcd",
+        root=str(root),
+    )
+    plugin._settings["steamdeck_ppt_previous"] = None
+    return directory
+
+
+@pytest.mark.parametrize(
+    ("slow_ppt", "fast_ppt", "requested", "expected_target", "ceiling"),
+    [
+        pytest.param(15, 15, (14, 17), (14, 15), 15, id="stock"),
+        pytest.param(25, 30, (25, 29), (25, 25), 25, id="overclocked"),
+    ],
+)
+def test_steamdeck_caps_every_product_rail_to_the_detected_ceiling(
+    plugin,
+    tmp_path,
+    slow_ppt,
+    fast_ppt,
+    requested,
+    expected_target,
+    ceiling,
+):
+    directory = _use_real_steamdeck_backend(plugin, tmp_path, slow_ppt, fast_ppt)
+    plugin._tdp_profiles.set_levels("global", requested[0], *requested)
+
+    command = plugin._capture_tdp_command("manual", on_ac=True)
+    result = plugin._execute_tdp_command(command)
+    state = plugin._tdp_state(plugin._observe_tdp_sync())
+
+    expected_limits = {
+        "pl2": {"min": 3, "max": ceiling},
+        "pl3": {"min": 3, "max": ceiling},
+    }
+    requested_levels = dict(zip(("pl2", "pl3"), requested))
+    target_levels = dict(zip(("pl2", "pl3"), expected_target))
+    assert command.safe_bounds == expected_limits
+    assert result.ok is True
+    assert plugin._tdp_targets.requested == requested_levels
+    assert plugin._tdp_targets.target == target_levels
+    assert state["level_limits"] == expected_limits
+    assert state["ppt"]["visual_max"] == 30
+    for cap_file, watts in zip(("power1_cap", "power2_cap"), expected_target):
+        assert (directory / cap_file).read_text().strip() == str(watts * 1_000_000)
 
 
 def test_confirmed_secondary_rail_floor_is_constrained_without_retry(plugin):

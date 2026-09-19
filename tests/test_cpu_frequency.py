@@ -1,6 +1,8 @@
 import os
 import shutil
 
+import pytest
+
 import cpu.frequency as frequency_module
 from cpu.frequency import NullCpuFrequency, select_cpu_frequency
 
@@ -1102,3 +1104,204 @@ def test_manual_reapply_rejects_replacement_policy_before_any_write(
     assert reapplied.status == "rejected"
     assert reapplied.reason == "policy_identity_changed"
     assert writes == []
+
+
+@pytest.mark.parametrize("driver", ["amd-pstate", "amd-pstate-epp", "intel_pstate"])
+def test_pstate_max_change_reapplies_only_previous_valid_window(tmp_path, driver):
+    root = str(tmp_path)
+    base = _policy(root, 0, driver=driver, hw_max=3_501_250)
+    control = select_cpu_frequency(root=root)
+    assert control.set_window(800_000, 3_501_250).ok is True
+    _write(root, f"{base}/cpuinfo_max_freq", 2_801_000)
+    _write(root, f"{base}/scaling_max_freq", 2_801_000)
+
+    assert control.set_window(900_000, 3_000_000).reason == "invalid_range"
+    reapplied = control.set_window(800_000, 3_501_250)
+
+    assert reapplied.ok is True
+    assert reapplied.status == "clamped"
+    assert control.get_window() == (800_000, 2_801_000)
+    assert control.diagnostics()["requested"] == [800_000, 3_501_250]
+
+
+@pytest.mark.parametrize("driver,node,value,changed", [
+    ("intel_cpufreq", "cpuinfo_max_freq", 3_600_000, "hardware_max_khz"),
+    ("acpi-cpufreq", "cpuinfo_max_freq", 3_600_000, "hardware_max_khz"),
+    ("intel_pstate", "cpuinfo_min_freq", 500_000, "hardware_min_khz"),
+    ("intel_pstate", "scaling_driver", "intel_cpufreq", "driver"),
+    ("intel_pstate", "related_cpus", "4-7", "related_cpus"),
+    ("amd-pstate-epp", "cpuinfo_min_freq", 500_000, "hardware_min_khz"),
+    ("amd-pstate-epp", "scaling_driver", "amd-pstate", "driver"),
+    ("amd-pstate-epp", "related_cpus", "4-7", "related_cpus"),
+])
+def test_baseline_matching_keeps_other_identity_fields_strict(
+    tmp_path, driver, node, value, changed
+):
+    root = str(tmp_path)
+    base = _policy(root, 0, driver=driver)
+    control = select_cpu_frequency(root=root)
+    assert control.set_window(800_000, 2_400_000).ok is True
+    _write(root, f"{base}/{node}", value)
+
+    result = control.set_window(900_000, 2_500_000)
+
+    assert result.reason == "policy_identity_changed"
+    assert control.get_window() == (800_000, 2_400_000)
+    failure = control.diagnostics()["last_failure"]
+    assert failure["reason"] == "policy_identity_changed"
+    assert changed in failure["policies"][0]["identity_changed_fields"]
+    assert root not in str(failure)
+
+
+@pytest.mark.parametrize("driver", ["amd-pstate-epp", "intel_pstate"])
+def test_pstate_max_change_during_write_still_rejects_transaction(tmp_path, monkeypatch, driver):
+    root = str(tmp_path)
+    base = _policy(root, 0, driver=driver, hw_max=3_501_250)
+    control = select_cpu_frequency(root=root)
+    real_write = frequency_module.write_str
+    changed = False
+
+    def change_max_after_write(path, value):
+        nonlocal changed
+        ok = real_write(path, value)
+        if not changed:
+            changed = True
+            _write(root, f"{base}/cpuinfo_max_freq", 2_801_000)
+        return ok
+
+    monkeypatch.setattr(frequency_module, "write_str", change_max_after_write)
+    result = control.set_window(800_000, 2_400_000)
+
+    assert result.ok is False
+    assert result.reason == "policy_topology_changed"
+    assert control.diagnostics()["owned"] is True
+
+
+def test_readback_failure_keeps_attempted_target_and_observed_value(tmp_path, monkeypatch):
+    root = str(tmp_path)
+    _policy(root, 0)
+    control = select_cpu_frequency(root=root)
+    real_write = frequency_module.write_str
+
+    def driver_rounds_requested_max(path, value):
+        if path.endswith("scaling_max_freq") and int(value) == 2_401_000:
+            return real_write(path, "2400000\n")
+        return real_write(path, value)
+
+    monkeypatch.setattr(frequency_module, "write_str", driver_rounds_requested_max)
+    result = control.set_window(800_000, 2_401_000)
+
+    assert result.reason == "readback_mismatch"
+    assert control.get_window() == (400_000, 3_500_000)
+    failure = control.diagnostics()["last_failure"]
+    assert failure["requested"] == [800_000, 2_401_000]
+    assert failure["policies"][0]["target"] == [800_000, 2_401_000]
+    assert failure["policies"][0]["applied"] == [800_000, 2_400_000]
+    assert failure["policies"][0]["driver"] == "amd-pstate-epp"
+    assert failure["policies"][0]["hardware_bounds"] == [400_000, 3_500_000]
+    assert root not in str(failure)
+    assert control.set_window(800_000, 2_400_000).ok is True
+    assert control.diagnostics()["last_failure"] == failure
+
+
+@pytest.mark.parametrize("driver", ["amd-pstate-epp", "intel_pstate"])
+def test_clamped_auto_persistence_failure_keeps_original_handoff(tmp_path, driver):
+    root = str(tmp_path)
+    base = _policy(root, 0, driver=driver, hw_max=3_501_250)
+    durable = {"state": None}
+
+    def persist(state):
+        if state is not None and state.get("restore_pending"):
+            raise OSError("disk full")
+        durable["state"] = state
+
+    control = select_cpu_frequency(
+        root=root, persist_state=persist, boot_id="boot-1"
+    )
+    assert control.set_window(800_000, 2_400_000).ok is True
+    original = durable["state"]
+    _write(root, f"{base}/cpuinfo_max_freq", 2_801_000)
+
+    result = control.set_auto()
+
+    assert result.ok is False
+    assert result.reason == "ownership_persist_failed"
+    assert durable["state"] == original
+    assert control.diagnostics()["owned"] is True
+    assert control.get_window() == (400_000, 2_801_000)
+    _write(root, f"{base}/cpuinfo_max_freq", 3_501_250)
+    assert control.set_auto().ok is True
+    assert control.get_window() == (400_000, 3_501_250)
+    assert durable["state"] is None
+
+
+@pytest.mark.parametrize("driver", ["amd-pstate-epp", "intel_pstate"])
+def test_checkpoint_persistence_failure_prevents_rollback_writes(tmp_path, monkeypatch, driver):
+    root = str(tmp_path)
+    _policy(root, 0, driver=driver)
+    durable = {"state": None, "fail": False}
+
+    def persist(state):
+        if durable["fail"]:
+            raise OSError("disk full")
+        durable["state"] = state
+
+    control = select_cpu_frequency(
+        root=root, persist_state=persist, boot_id="boot-1"
+    )
+    assert control.set_window(800_000, 2_400_000).ok is True
+    checkpoint = control.checkpoint()
+    assert control.set_window(900_000, 2_500_000).ok is True
+    marker = durable["state"]
+    durable["fail"] = True
+    writes = []
+    monkeypatch.setattr(
+        frequency_module, "write_str", lambda path, value: writes.append((path, value))
+    )
+
+    result = control.restore_checkpoint(checkpoint)
+
+    assert result.ok is False
+    assert result.reason == "ownership_persist_failed"
+    assert writes == []
+    assert control.get_window() == (900_000, 2_500_000)
+    assert durable["state"] == marker
+
+
+@pytest.mark.parametrize("drivers,allowed", [
+    (("amd-pstate",), True),
+    (("amd-pstate-epp",), True),
+    (("intel_pstate", "intel_pstate"), True),
+    (("intel_cpufreq",), False),
+    (("acpi-cpufreq",), False),
+    (("amd-pstate-epp", "intel_pstate"), False),
+])
+def test_checkpoint_requires_compatible_pstate_policies(tmp_path, drivers, allowed):
+    root = str(tmp_path)
+    for index, driver in enumerate(drivers):
+        _policy(root, index, driver=driver, cpus=str(index))
+    persisted = []
+    control = select_cpu_frequency(
+        root=root, persist_state=persisted.append, boot_id="boot-1"
+    )
+
+    checkpoint = control.checkpoint()
+
+    assert (checkpoint is not None) is allowed
+    assert control.diagnostics()["owned"] is False
+    assert persisted == []
+
+
+def test_mixed_drivers_keep_intel_maximum_identity_strict(tmp_path):
+    root = str(tmp_path)
+    _policy(root, 0, driver="amd-pstate-epp", cpus="0")
+    intel = _policy(root, 1, driver="intel_pstate", cpus="1")
+    control = select_cpu_frequency(root=root)
+    assert control.set_window(800_000, 2_000_000).ok is True
+    _write(root, f"{intel}/cpuinfo_max_freq", 2_200_000)
+
+    result = control.set_window(800_000, 2_000_000)
+
+    assert result.reason == "policy_identity_changed"
+    failure = control.diagnostics()["last_failure"]["policies"][1]
+    assert failure["identity_changed_fields"] == ["hardware_max_khz"]

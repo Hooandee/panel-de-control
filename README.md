@@ -23,8 +23,8 @@ Es un plugin para [Decky Loader](https://decky.xyz/). Está pensado para Steam D
 Go, MSI Claw y compañía, con una idea fija: que cada control se vea bien, muestre siempre el modelo
 real de tu equipo arriba, y nunca te mienta sobre lo que de verdad está pasando en el hardware.
 
-La interfaz arranca en español y también está disponible en inglés, italiano y alemán. En el
-primer inicio adopta uno de esos idiomas si Steam ya lo usa.
+La interfaz arranca en español y también está disponible en inglés, italiano, alemán y portugués
+de Brasil. En el primer inicio adopta uno de esos idiomas si Steam ya lo usa.
 
 ## Vídeo
 
@@ -136,9 +136,20 @@ tus propias variables reutilizables entre juegos, ocultar los que no usas (las h
 versiones de Proton se ocultan solas) y saltar directo al juego que tengas abierto. También añade una
 entrada en el menú del juego en tu biblioteca.
 
+### Limpieza
+
+Consulta cuánto ocupan la Shader Cache y los prefijos de tus juegos y elige qué limpiar en cada
+uno, también en varios juegos a la vez. La lista incluye portadas, búsqueda y un botón de limpieza
+que permanece a mano al desplazarte. Los prefijos se seleccionan por separado y requieren
+confirmación: pueden contener partidas guardadas y ajustes que se perderían al borrarlos.
+
+Funciona con Steam nativo en Linux y sus bibliotecas. Los datos en uso o que no se pueden comprobar
+se conservan. Steam puede volver a crear o descargar la Shader Cache; el próximo inicio puede
+tardar más. El resultado muestra el tamaño aproximado de los datos borrados y se puede cerrar.
+
 ### Ajustes
 
-Idioma (con banderas, no un desplegable), el interruptor de "aprender de mi uso" (la telemetría es
+Idioma desde un selector compacto, el interruptor de "aprender de mi uso" (la telemetría es
 100% local y se puede apagar), y un botón para borrar lo aprendido. En "Personalizar interfaz"
 reordenas y ocultas pestañas y bloques, activas o desactivas módulos enteros (desactivar apaga esa
 función en todo el panel; ocultar solo deja de mostrarla), creas tus propias pestañas (vistas

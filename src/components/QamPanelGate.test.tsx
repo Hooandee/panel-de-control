@@ -143,6 +143,62 @@ describe("QamPanelGate", () => {
     expect(screen.getByTestId("initial-panel")).toBeTruthy();
   });
 
+  it("renders only the newest visible Panel surface", () => {
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+      left: 0,
+      right: 268,
+      top: 0,
+      bottom: 600,
+      width: 268,
+      height: 600,
+    } as DOMRect);
+
+    const first = render(
+      <QamPanelGate surfaceId="pdc:standard" lifecycle={new AbortController().signal}>
+        <div data-testid="standard-panel" />
+      </QamPanelGate>,
+    );
+    expect(screen.getByTestId("standard-panel")).toBeTruthy();
+
+    const second = render(
+      <QamPanelGate surfaceId="pdc:section:hud" lifecycle={new AbortController().signal}>
+        <div data-testid="hud-panel" />
+      </QamPanelGate>,
+    );
+
+    expect(screen.queryByTestId("standard-panel")).toBeNull();
+    expect(screen.getByTestId("hud-panel")).toBeTruthy();
+    second.unmount();
+    first.unmount();
+  });
+
+  it("renders only the newest instance when two surfaces share the same destination", () => {
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+      left: 0,
+      right: 268,
+      top: 0,
+      bottom: 600,
+      width: 268,
+      height: 600,
+    } as DOMRect);
+
+    const first = render(
+      <QamPanelGate surfaceId="pdc:section:hud" lifecycle={new AbortController().signal}>
+        <div data-testid="first-hud-panel" />
+      </QamPanelGate>,
+    );
+    const second = render(
+      <QamPanelGate surfaceId="pdc:section:hud" lifecycle={new AbortController().signal}>
+        <div data-testid="second-hud-panel" />
+      </QamPanelGate>,
+    );
+
+    expect(screen.queryByTestId("first-hud-panel")).toBeNull();
+    expect(screen.getByTestId("second-hud-panel")).toBeTruthy();
+    second.unmount();
+    first.unmount();
+  });
+
   it("keeps mounted content when vertical scrolling moves the gate edge above the viewport", () => {
     render(
       <QamPanelGate lifecycle={new AbortController().signal}>

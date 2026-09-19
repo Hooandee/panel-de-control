@@ -31,7 +31,6 @@ vi.mock("./PowerArc", () => ({
 }));
 vi.mock("./TdpMonitorNotice", () => ({ TdpMonitorNotice: () => <div /> }));
 vi.mock("./PowerPresetsModal", () => ({ openPowerPresetsModal: vi.fn() }));
-vi.mock("./ProfileSelector", () => ({ ProfileSelector: () => <div /> }));
 vi.mock("./Presets", () => ({ Presets: () => <div /> }));
 vi.mock("./FirmwareModes", () => ({ FirmwareModes: () => <div /> }));
 vi.mock("./AdvancedBoost", () => ({ AdvancedBoost: () => <div /> }));
@@ -119,9 +118,7 @@ function renderTdpSection(
     <TdpSection
       tdp={tdp}
       scope="global"
-      game={null}
       power={power}
-      onScope={vi.fn()}
       onWatts={vi.fn()}
       onSetLevels={vi.fn()}
       onSetMode={vi.fn()}
@@ -148,9 +145,7 @@ describe("TdpSection Steam Deck PPT arc", () => {
       <TdpSection
         tdp={deckState}
         scope="game"
-        game={null}
         power={null}
-        onScope={vi.fn()}
         onWatts={vi.fn()}
         onSetLevels={vi.fn()}
         onSetMode={vi.fn()}
@@ -173,6 +168,41 @@ describe("TdpSection Steam Deck PPT arc", () => {
     });
   });
 
+  it.each([false, true])(
+    "uses the stock product ceiling instead of the raw 30 W Deck ABI in monitorOnly=%s",
+    (monitorOnly) => {
+      renderTdpSection({
+        ...deckState,
+        level_limits: {
+          pl2: { min: 3, max: 15 },
+          pl3: { min: 3, max: 15 },
+        },
+      }, { monitorOnly });
+
+      expect(captured.arc).toMatchObject({ visualMax: 15 });
+    },
+  );
+
+  it("uses the detected 25 W product ceiling for an overclocked Deck", () => {
+    renderTdpSection({
+      ...deckState,
+      limits: { min: 3, default: 12, max: 25, max_ac: 25 },
+      level_limits: {
+        pl2: { min: 3, max: 25 },
+        pl3: { min: 3, max: 25 },
+      },
+      overclock: {
+        detected: true,
+        max_w: 25,
+        source: "live",
+        status: "overclocked",
+        reason: null,
+      },
+    });
+
+    expect(captured.arc).toMatchObject({ visualMax: 25 });
+  });
+
   it("offers three watts while keeping the physical minimum visible as information", () => {
     const state = {
       ...deckState,
@@ -192,9 +222,7 @@ describe("TdpSection Steam Deck PPT arc", () => {
       <TdpSection
         tdp={state}
         scope="global"
-        game={null}
         power={null}
-        onScope={vi.fn()}
         onWatts={vi.fn()}
         onSetLevels={vi.fn()}
         onSetMode={vi.fn()}
@@ -231,9 +259,7 @@ describe("TdpSection Steam Deck PPT arc", () => {
       <TdpSection
         tdp={state}
         scope="global"
-        game={null}
         power={null}
-        onScope={vi.fn()}
         onWatts={vi.fn()}
         onSetLevels={vi.fn()}
         onSetMode={vi.fn()}
@@ -300,9 +326,7 @@ describe("TdpSection Steam Deck PPT arc", () => {
       <TdpSection
         tdp={state}
         scope="global"
-        game={null}
         power={{ auto_tdp: true } as never}
-        onScope={vi.fn()}
         onWatts={vi.fn()}
         onSetLevels={vi.fn()}
         onSetMode={vi.fn()}
@@ -320,6 +344,27 @@ describe("TdpSection Steam Deck PPT arc", () => {
     });
   });
 
+  it("uses the configured overclock ceiling and marks the automatic dial", () => {
+    const state = {
+      ...deckState,
+      limits: { min: 3, default: 12, max: 25, max_ac: 25 },
+      overclock: {
+        detected: true,
+        max_w: 25,
+        source: "handoff",
+        status: "overclocked",
+        reason: null,
+      },
+    } as TdpState;
+
+    renderTdpSection(state, { power: { auto_tdp: true } as PowerDraw });
+
+    expect(captured.arc).toMatchObject({
+      limits: { min: 3, default: 12, max: 25, max_ac: 25 },
+      overclocked: true,
+    });
+  });
+
   it("marks the low-battery switch as experimental and forwards the requested value", () => {
     const onLowBatteryHold = vi.fn();
 
@@ -327,9 +372,7 @@ describe("TdpSection Steam Deck PPT arc", () => {
       <TdpSection
         tdp={deckState}
         scope="global"
-        game={null}
         power={null}
-        onScope={vi.fn()}
         onWatts={vi.fn()}
         onSetLevels={vi.fn()}
         onSetMode={vi.fn()}
@@ -345,6 +388,12 @@ describe("TdpSection Steam Deck PPT arc", () => {
     const toggle = screen.getByText(/tdp.lowBatteryHold.title/).closest("button")!;
     expect(toggle.textContent).toContain("tdp.lowBatteryHold.experimental");
     expect(toggle.textContent).toContain("tdp.lowBatteryHold.hint");
+    const badge = screen.getByText("tdp.lowBatteryHold.experimental");
+    const label = badge.parentElement!;
+    expect(label.style.flexDirection).toBe("column");
+    expect(label.style.alignItems).toBe("flex-start");
+    expect(label.firstChild).toBe(badge);
+    expect(badge.style.whiteSpace).toBe("nowrap");
     fireEvent.click(toggle);
     expect(onLowBatteryHold).toHaveBeenCalledWith(true);
   });
@@ -365,9 +414,7 @@ describe("TdpSection Steam Deck PPT arc", () => {
           },
         }}
         scope="global"
-        game={null}
         power={null}
-        onScope={vi.fn()}
         onWatts={vi.fn()}
         onSetLevels={vi.fn()}
         onSetMode={vi.fn()}
@@ -388,9 +435,7 @@ describe("TdpSection Steam Deck PPT arc", () => {
       <TdpSection
         tdp={{ ...deckState, ppt: null }}
         scope="global"
-        game={null}
         power={{ auto_tdp: true, gpu_busy: 99 } as never}
-        onScope={vi.fn()}
         onWatts={vi.fn()}
         onSetLevels={vi.fn()}
         onSetMode={vi.fn()}
@@ -415,9 +460,7 @@ describe("TdpSection Steam Deck PPT arc", () => {
           ppt: null,
         }}
         scope="global"
-        game={{ appid: "42", name: "Game" }}
         power={{ auto_tdp: true } as never}
-        onScope={vi.fn()}
         onWatts={vi.fn()}
         onSetLevels={vi.fn()}
         onSetMode={vi.fn()}
