@@ -3,6 +3,7 @@ import { steamPerformanceDiagnostics } from "../steam/performanceDiagnostics";
 
 export const REPORT_CATEGORIES = [
   "tdp",
+  "auto_tdp",
   "cpu_gpu",
   "hud",
   "fans",

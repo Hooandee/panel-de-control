@@ -1461,6 +1461,129 @@ def test_report_contains_tdp_transition_history(plugin, monkeypatch):
     assert hud["capability"] == "inactive"
 
 
+def test_report_collects_autotdp_diagnostics_for_an_unrelated_category(
+    plugin, monkeypatch
+):
+    import main as main_module
+
+    monkeypatch.setattr(main_module, "_monotonic", lambda: 100.0)
+    monkeypatch.setattr(main_module.report_collector, "tail_logs", lambda *a, **k: [])
+    monkeypatch.setattr(main_module.report_collector, "sysfs_snapshot", lambda *a, **k: {})
+    monkeypatch.setattr(main_module.report_collector, "kernel_logs", lambda *a, **k: {})
+    monkeypatch.setattr(
+        main_module.report_collector,
+        "build_bundle",
+        lambda **kwargs: kwargs,
+    )
+    monkeypatch.setattr(plugin, "_hud_state", lambda: {})
+
+    plugin._set_current_appid("42")
+    plugin._tdp_profiles.set_auto_config("game", 60, 15, appid="42")
+    plugin._tdp_profiles.set_auto_tdp("game", True, appid="42")
+    controller, _created = plugin._ensure_auto_session(on_ac=True)
+    decision = controller.step(fps=60, signal_reason="ok", gpu_busy=55)
+    plugin._record_auto_status(
+        decision,
+        {"age_s": 0.2, "focus": "42"},
+    )
+    plugin._gamescope_stats._apply_line("fps=58")
+    plugin._gamescope_stats._apply_line("focus=42")
+    asyncio.run(plugin.set_ui_active(True))
+    plugin._auto_stats_reader_active = True
+    plugin._auto_apply_blocked = True
+    plugin._auto_apply_attempts = 2
+    plugin._auto_apply_retry_at = 105.0
+    for _ in range(6):
+        plugin._auto_learning.record("42", 60, True, 15, stable=True)
+
+    bundle = asyncio.run(
+        plugin._build_report_bundle(
+            ["fans"],
+            "The fan page is slow",
+            "/home/deck",
+            "handheld",
+            {},
+        )
+    )
+
+    auto = bundle["state"]["auto_tdp"]
+    assert bundle["categories"] == ["fans"]
+    assert auto["schema"] == 1
+    assert auto["supported"] is True
+    assert auto["enabled"] is True
+    assert auto["active"] is True
+    assert auto["target_fps"] == 60
+    assert auto["ui"]["active"] is True
+    assert auto["ui"]["focus_hold"] is False
+    assert auto["apply"]["blocked"] is True
+    assert auto["apply"]["attempts"] == 2
+    assert auto["apply"]["retry_in_s"] == 5.0
+    assert auto["signal"]["reader_requested"] is True
+    assert auto["signal"]["focus"] == "game"
+    assert auto["learning"]["usable"] is True
+    assert auto["last_pre_ui"]["reason"] != "ui_active"
+    assert auto["last_pre_ui"]["fps"] == 58
+    assert "42" not in json.dumps(auto)
+
+
+def test_autotdp_diagnostics_do_not_reprobe_backend_readiness(plugin):
+    plugin._set_current_appid("42")
+    plugin._tdp_profiles.set_auto_tdp("game", True, appid="42")
+    plugin._ensure_auto_session(on_ac=True)
+    calls = 0
+
+    def ready():
+        nonlocal calls
+        calls += 1
+        return True
+
+    plugin._tdp_backend.ready = ready
+
+    diagnostics = plugin._auto_tdp_diagnostics(
+        {
+            "supports_auto_tdp": True,
+            "auto_config": {"enabled": True, "target_fps": 40},
+            "auto_limits": {"min": 5, "max": 35, "max_ac": 35},
+            "on_ac": True,
+        },
+        {"auto_tdp": True, "setpoint": 15},
+    )
+
+    assert diagnostics["active"] is True
+    assert calls == 0
+
+
+@pytest.mark.parametrize(
+    "on_ac, expected_max",
+    [(False, 35), (True, 40)],
+)
+def test_autotdp_diagnostics_apply_configured_range_to_learning(
+    plugin, on_ac, expected_max
+):
+    plugin._set_current_appid("42")
+    plugin._tdp_profiles.set_auto_tdp("game", True, appid="42")
+    for _ in range(6):
+        plugin._auto_learning.record("42", 60, on_ac, 42, stable=True)
+
+    diagnostics = plugin._auto_tdp_diagnostics(
+        {
+            "supports_auto_tdp": True,
+            "auto_config": {
+                "enabled": True,
+                "target_fps": 60,
+                "min_tdp": 12,
+                "max_tdp": 40,
+            },
+            "auto_limits": {"min": 5, "max": 35, "max_ac": 45},
+            "on_ac": on_ac,
+        },
+        {"auto_tdp": True, "setpoint": 15},
+    )
+
+    assert diagnostics["effective_range"] == {"min_w": 12, "max_w": expected_max}
+    assert diagnostics["learning"]["candidate_watts"] == expected_max
+
+
 def test_incomplete_feature_report_keeps_its_kind(plugin, monkeypatch):
     import main as main_module
 
@@ -1489,6 +1612,9 @@ def test_incomplete_feature_report_keeps_its_kind(plugin, monkeypatch):
 
     assert result["ok"] is True
     assert captured["kind"] == "feature"
+    assert captured["state"] == {
+        "auto_tdp": {"schema": 1, "error": "bundle_incomplete"},
+    }
 
 
 def test_cpu_gpu_diagnostics_allowlist_drops_app_identity(plugin):

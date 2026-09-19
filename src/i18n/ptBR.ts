@@ -1177,6 +1177,7 @@ export const ptBR: Record<string, string> = {
   "report.section.what": "O que está errado?",
   "report.section.what.feature": "Sobre qual área é?",
   "report.cat.tdp": "Ajuste de TDP",
+  "report.cat.auto_tdp": "TDP automático",
   "report.cat.cpu_gpu": "Controle de CPU e GPU",
   "report.cat.hud": "HUD de desempenho",
   "report.cat.fans": "Curva da ventoinha",

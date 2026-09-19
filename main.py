@@ -737,6 +737,10 @@ class Plugin:
             "held_watts": None,
         }
         self._auto_history = deque(maxlen=32)
+        self._auto_transitions = deque(maxlen=32)
+        self._auto_last_pre_ui = None
+        self._auto_last_tick_at = None
+        self._auto_last_error = None
         # Audio EQ output-route watcher: last applied route + its loop task.
         self._audio_task = None
         self._audio_route_last = None
@@ -1712,7 +1716,14 @@ class Plugin:
             decky.logger.error("report bundle failed: %s", e)
             bundle = report_collector.build_bundle(
                 app=_REPORT_APP, categories=categories, text=text,
-                environment={}, capabilities={}, state={}, stores={}, logs=[],
+                environment={}, capabilities={},
+                state={
+                    "auto_tdp": {
+                        "schema": 1,
+                        "error": "bundle_incomplete",
+                    },
+                },
+                stores={}, logs=[],
                 kind=report_kind,
                 home=home, hostname=hostname,
             )
@@ -1767,10 +1778,23 @@ class Plugin:
                 lambda: self._hud_report_diagnostics(self._hud_state(), context)
             )
         )
+        tdp_state = await _safe(self.get_tdp_state())
+        power_state = await _safe(self.get_power_draw())
+        try:
+            auto_tdp_diagnostics = self._auto_tdp_diagnostics(
+                tdp_state,
+                power_state,
+            )
+        except Exception as error:  # noqa: BLE001
+            auto_tdp_diagnostics = {
+                "schema": 1,
+                "error": type(error).__name__,
+            }
         states = {
             "device": await _safe(self.get_device()),
-            "tdp": await _safe(self.get_tdp_state()),
+            "tdp": tdp_state,
             "tdp_diagnostics": self._tdp_diagnostics(),
+            "auto_tdp": auto_tdp_diagnostics,
             "lifecycle_diagnostics": self._lifecycle.diagnostics(),
             "tdp_conflict": await _safe(self.get_tdp_conflict()),
             "fan_curve": await _safe(self.get_fan_curve_state()),
@@ -1787,7 +1811,7 @@ class Plugin:
             # run it off the event loop, unlike the cheap sysfs reads above.
             "controller": await loop.run_in_executor(None, self._safe_controller_config),
             "controller_diagnostics": self._controller_backend.diagnostics(),
-            "power": await _safe(self.get_power_draw()),
+            "power": power_state,
             "eco": await _safe(self.get_eco_state()),
             "audio": await _safe(self.get_audio_state()),
             "audio_diag": await _safe(self._offload_call(self._audio.diagnostics)),
@@ -3737,6 +3761,7 @@ class Plugin:
         self._auto_apply_retry_at = 0.0
         self._auto_apply_exhausted = False
         self._auto_focus_hold_active = False
+        self._auto_last_pre_ui = None
         if reason != "config_changed":
             self._auto_ui_hold_watts = None
         config = self._auto_config(self._current_appid)
@@ -3758,7 +3783,10 @@ class Plugin:
             hasattr(self, "_auto_history")
             and getattr(self, "_auto_status", None) != status
         ):
-            self._auto_history.append({"at": round(_monotonic(), 3), **status})
+            event = {"at": round(_monotonic(), 3), **status}
+            self._auto_history.append(event)
+            if hasattr(self, "_auto_transitions"):
+                self._auto_transitions.append(event)
         self._auto_status = status
 
     def _ensure_auto_session(self, on_ac=None, observation=None):
@@ -4122,10 +4150,11 @@ class Plugin:
             "seed_source",
             "seed_watts",
         )
-        if previous is None or any(
+        transitioned = previous is None or any(
             previous.get(field) != status.get(field)
             for field in transition_fields
-        ):
+        )
+        if transitioned:
             decky.logger.info(
                 "Auto-TDP transition %s",
                 json.dumps(
@@ -4137,6 +4166,10 @@ class Plugin:
                     separators=(",", ":"),
                 ),
             )
+            self._auto_transitions.append({
+                "at": round(_monotonic(), 3),
+                **status,
+            })
         if previous != status:
             self._auto_history.append({
                 "at": round(_monotonic(), 3),
@@ -4328,9 +4361,15 @@ class Plugin:
                 await asyncio.sleep(2)
                 self._offer_pdc_refresh()
                 await self._auto_tick()
+                self._auto_last_tick_at = _monotonic()
+                self._auto_last_error = None
             except asyncio.CancelledError:
                 return
             except Exception as error:  # noqa: BLE001
+                self._auto_last_error = {
+                    "phase": "tick",
+                    "type": type(error).__name__,
+                }
                 await self._sync_auto_stats_reader(False)
                 self._reset_auto_session(f"error:{type(error).__name__}")
 
@@ -4615,9 +4654,23 @@ class Plugin:
         self._init()
         active = bool(enabled)
         changed = active != self._ui_active
+        activated = active and not self._ui_active
+        if activated:
+            signal = self._gamescope_stats.diagnostics()
+            pre_ui = dict(self._auto_status)
+            pre_ui["at"] = round(_monotonic(), 3)
+            for target, source in (
+                ("fps", "fps"),
+                ("signal_age_s", "sample_age_s"),
+                ("focus", "focus"),
+                ("pending_min_fps", "pending_min_fps"),
+            ):
+                value = signal.get(source)
+                if value is not None:
+                    pre_ui[target] = value
+            self._auto_last_pre_ui = pre_ui
         if changed:
             self._gamescope_stats.clear()
-        activated = active and not self._ui_active
         self._ui_active = active
         if activated and self._auto_controller is not None:
             self._advance_tdp_generation()
@@ -9738,6 +9791,218 @@ class Plugin:
             "failures": self._tdp_reconcile_memory.failures,
             "handoff_required": self._os_id == "anatase",
             "external_owner": self._tdp_external_owner,
+        }
+
+    @staticmethod
+    def _auto_focus_kind(focus):
+        if focus is None:
+            return None
+        return "steam" if focus == "steam" else "game"
+
+    def _auto_report_event(self, event, now):
+        if not isinstance(event, dict):
+            return None
+        out = {
+            key: event.get(key)
+            for key in (
+                "state",
+                "reason",
+                "setpoint",
+                "fps",
+                "target_fps",
+                "signal_age_s",
+                "seed_source",
+                "seed_watts",
+                "held_watts",
+                "pending_min_fps",
+            )
+        }
+        out["focus"] = self._auto_focus_kind(event.get("focus"))
+        try:
+            out["age_s"] = round(max(0.0, now - float(event["at"])), 3)
+        except (KeyError, TypeError, ValueError, OverflowError):
+            out["age_s"] = None
+        return out
+
+    def _auto_tdp_diagnostics(self, tdp_state, power_state):
+        tdp_state = tdp_state if isinstance(tdp_state, dict) else {}
+        power_state = power_state if isinstance(power_state, dict) else {}
+        now = _monotonic()
+        status = dict(getattr(self, "_auto_status", {}) or {})
+        config = tdp_state.get("auto_config")
+        config = config if isinstance(config, dict) else {}
+        auto_limits = tdp_state.get("auto_limits")
+        auto_limits = auto_limits if isinstance(auto_limits, dict) else {}
+        ownership = tdp_state.get("ownership")
+        ownership = ownership if isinstance(ownership, dict) else {}
+        enabled = config.get("enabled")
+        if enabled is None:
+            enabled = power_state.get("auto_tdp")
+        supported = tdp_state.get("supports_auto_tdp")
+        if supported is None:
+            supported = tdp_state.get("auto_supported")
+
+        transitions = [
+            self._auto_report_event(event, now)
+            for event in list(getattr(self, "_auto_transitions", ()))
+        ]
+        transitions = [event for event in transitions if event is not None]
+        samples = [
+            self._auto_report_event(event, now)
+            for event in list(getattr(self, "_auto_history", ()))
+        ]
+        samples = [event for event in samples if event is not None]
+        last_pre_ui = self._auto_report_event(
+            getattr(self, "_auto_last_pre_ui", None),
+            now,
+        )
+        if last_pre_ui is None:
+            last_pre_ui = next(
+                (
+                    event
+                    for event in reversed(samples)
+                    if event.get("reason") != "ui_active"
+                ),
+                None,
+            )
+
+        stats_diagnostics = getattr(self._gamescope_stats, "diagnostics", None)
+        signal = stats_diagnostics() if callable(stats_diagnostics) else {}
+        signal = dict(signal) if isinstance(signal, dict) else {}
+        signal["reader_requested"] = bool(self._auto_stats_reader_active)
+        signal_source = last_pre_ui if status.get("reason") == "ui_active" else status
+        if signal_source:
+            signal["focus"] = self._auto_focus_kind(signal_source.get("focus"))
+            if signal.get("fps") is None:
+                signal["fps"] = signal_source.get("fps")
+            if signal.get("sample_age_s") is None:
+                signal["sample_age_s"] = signal_source.get("signal_age_s")
+
+        on_ac = tdp_state.get("on_ac")
+        active_max = auto_limits.get("max_ac") if on_ac else auto_limits.get("max")
+        minimum = auto_limits.get("min")
+        configured_minimum = config.get("min_tdp")
+        configured_maximum = config.get("max_tdp")
+        if minimum is not None and active_max is not None:
+            if configured_minimum is not None:
+                minimum = max(minimum, min(configured_minimum, active_max))
+            if configured_maximum is not None:
+                active_max = max(
+                    auto_limits.get("min"),
+                    min(configured_maximum, active_max),
+                )
+        try:
+            learning = self._auto_learning.diagnostics(
+                self._current_appid,
+                config.get("target_fps") or status.get("target_fps") or 40,
+                bool(on_ac),
+                minimum if minimum is not None else 0,
+                active_max if active_max is not None else minimum or 0,
+            )
+        except Exception as error:  # noqa: BLE001
+            learning = {"error": type(error).__name__}
+        learning = {
+            "enabled": bool(self._settings.get("telemetry_enabled", True)),
+            "active": bool(self._learning_active()),
+            "seed_source": status.get("seed_source"),
+            "seed_watts": status.get("seed_watts"),
+            **learning,
+        }
+
+        game_present = self._current_appid is not None
+        module_enabled = self._module_enabled("autoTdp")
+        profile_enabled = bool(enabled)
+        firmware_custom = self._firmware_mode() == _CUSTOM_MODE
+        control_enabled = self._tdp_control_on()
+        write_authorized = self._tdp_write_authorized()
+        eco_clear = not bool(self._settings.get("eco_enabled"))
+        eligible = bool(
+            game_present
+            and module_enabled
+            and profile_enabled
+            and firmware_custom
+            and control_enabled
+            and write_authorized
+            and eco_clear
+            and supported
+        )
+        task = getattr(self, "_auto_task", None)
+        last_tick = getattr(self, "_auto_last_tick_at", None)
+        retry_at = float(getattr(self, "_auto_apply_retry_at", 0.0) or 0.0)
+        blocked = bool(getattr(self, "_auto_apply_blocked", False))
+        active = bool(
+            getattr(self, "_auto_controller", None) is not None
+            and self._auto_setpoint is not None
+            and eligible
+        )
+
+        return {
+            "schema": 1,
+            "supported": supported,
+            "enabled": enabled,
+            "eligible": eligible,
+            "active": active,
+            "state": status.get("state"),
+            "reason": status.get("reason"),
+            "target_fps": status.get("target_fps") or config.get("target_fps"),
+            "fps": status.get("fps"),
+            "signal_age_s": status.get("signal_age_s"),
+            "setpoint_w": status.get("setpoint", power_state.get("setpoint")),
+            "applied_w": tdp_state.get("applied_w", power_state.get("applied")),
+            "on_ac": on_ac,
+            "profile_scope": (
+                "global"
+                if not game_present
+                else "follow_global"
+                if tdp_state.get("follows_global")
+                else "game"
+            ),
+            "configured": {
+                "target_fps": config.get("target_fps"),
+                "initial_tdp_w": config.get("initial_tdp"),
+                "min_tdp_w": config.get("min_tdp"),
+                "max_tdp_w": config.get("max_tdp"),
+            },
+            "effective_range": {"min_w": minimum, "max_w": active_max},
+            "gates": {
+                "game_present": game_present,
+                "module_enabled": module_enabled,
+                "profile_enabled": profile_enabled,
+                "firmware_custom": firmware_custom,
+                "control_enabled": control_enabled,
+                "write_authorized": write_authorized,
+                "eco_clear": eco_clear,
+            },
+            "signal": signal,
+            "apply": {
+                "confirmed": bool(getattr(self, "_auto_applied", False)),
+                "blocked": blocked,
+                "attempts": int(getattr(self, "_auto_apply_attempts", 0)),
+                "retry_in_s": round(max(0.0, retry_at - now), 3) if blocked else 0.0,
+                "exhausted": bool(
+                    getattr(self, "_auto_apply_exhausted", False)
+                ),
+                "tdp_status": ownership.get("status"),
+                "tdp_reason": ownership.get("reason"),
+            },
+            "ui": {
+                "active": bool(self._ui_active),
+                "focus_hold": bool(self._auto_focus_hold_active),
+                "held_watts": status.get("held_watts"),
+            },
+            "learning": learning,
+            "task": {
+                "alive": bool(task is not None and not task.done()),
+                "last_tick_age_s": (
+                    round(max(0.0, now - float(last_tick)), 3)
+                    if last_tick is not None
+                    else None
+                ),
+                "last_error": getattr(self, "_auto_last_error", None),
+            },
+            "last_pre_ui": last_pre_ui,
+            "transitions": transitions,
+            "samples": samples,
         }
 
     def _tdp_diagnostics(self):

@@ -22,7 +22,7 @@ import re
 from sysfs import read_str
 
 # Bump when the bundle shape changes so consumers can adapt.
-SCHEMA = 4
+SCHEMA = 5
 
 _MAX_TEXT = 4000  # user free-text cap (defensive; the UI also limits it)
 
@@ -657,6 +657,8 @@ def capabilities_from(states: dict) -> dict:
     state dicts. This is the single most useful section for triage: many reports
     are 'X doesn't work' when X simply has no write path on that device."""
     tdp = states.get("tdp") or {}
+    auto_tdp = states.get("auto_tdp")
+    auto_tdp = auto_tdp if isinstance(auto_tdp, dict) else {}
     fan = states.get("fan_curve") or {}
     batt = (states.get("battery") or {}).get("charge_limit") or {}
     gpu = states.get("gpu") or {}
@@ -677,6 +679,15 @@ def capabilities_from(states: dict) -> dict:
     return {
         "tdp_backend": tdp.get("backend"),
         "tdp_supported": bool(tdp.get("supported")),
+        "auto_tdp_supported": auto_tdp.get("supported"),
+        "auto_tdp_enabled": auto_tdp.get("enabled"),
+        "auto_tdp_active": auto_tdp.get("active"),
+        "auto_tdp_state": auto_tdp.get("state"),
+        "auto_tdp_reason": auto_tdp.get("reason"),
+        "auto_tdp_target_fps": auto_tdp.get("target_fps"),
+        "auto_tdp_fps": auto_tdp.get("fps"),
+        "auto_tdp_setpoint_w": auto_tdp.get("setpoint_w"),
+        "auto_tdp_applied_w": auto_tdp.get("applied_w"),
         "fan_source": fan.get("source"),
         "fan_supported": bool(fan.get("supported")),
         # Experimental EC fan control (Legion Go S): whether the device offers the

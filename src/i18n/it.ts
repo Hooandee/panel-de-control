@@ -1073,6 +1073,7 @@ export const it: Record<string, string> = {
   "report.section.what": "Cosa non funziona?",
   "report.section.what.feature": "Quale parte riguarda?",
   "report.cat.tdp": "Regolazione TDP",
+  "report.cat.auto_tdp": "TDP automatico",
   "report.cat.cpu_gpu": "Controllo CPU e GPU",
   "report.cat.hud": "HUD delle prestazioni",
   "report.cat.fans": "Curva della ventola",

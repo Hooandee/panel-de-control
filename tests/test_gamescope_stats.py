@@ -99,6 +99,31 @@ def test_read_preserves_the_lowest_fps_committed_between_reads():
     assert stats.read()["fps"] == 40.0
 
 
+def test_diagnostics_preserve_the_lowest_unread_fps_for_the_controller():
+    clock = Clock()
+    stats = GamescopeStats(clock=clock)
+    for fps in (40, 35, 40):
+        stats._apply_line(f"fps={fps}")
+        stats._apply_line("focus=42")
+        clock.now += 1.0
+
+    diagnostics = stats.diagnostics()
+
+    assert diagnostics == {
+        "reader_alive": False,
+        "pipe_available": None,
+        "connected": False,
+        "last_error": None,
+        "sample_available": True,
+        "sample_age_s": 1.0,
+        "reason": "ok",
+        "focus": "game",
+        "fps": 40.0,
+        "pending_min_fps": 35.0,
+    }
+    assert stats.read()["fps"] == 35.0
+
+
 def test_focus_without_a_matching_fps_invalidates_the_previous_sample():
     stats = GamescopeStats(clock=Clock())
     stats._apply_line("fps=60")

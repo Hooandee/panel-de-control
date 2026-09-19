@@ -1,6 +1,7 @@
 import json
 
 import auto_tdp_learning
+import pytest
 from auto_tdp_learning import AutoTdpLearningStore
 
 
@@ -107,3 +108,28 @@ def test_failed_persistence_does_not_pollute_in_memory_learning(
 
     assert learned.record("42", 40, False, 14, stable=True) is False
     assert learned.seed("42", 40, False, 5, 35) is None
+    assert learned.diagnostics("42", 40, False, 5, 35)["last_record"] == {
+        "ok": False,
+        "reason": "persist_failed",
+    }
+
+
+def test_diagnostics_summarize_only_the_current_learning_profile(tmp_path):
+    learned = store(tmp_path, required=3)
+    for watts in (12, 14, 13):
+        assert learned.record("42", 60, True, watts, stable=True) is True
+    learned.record("99", 30, False, 20, stable=True)
+
+    diagnostics = learned.diagnostics("42", 60, True, 5, 35)
+
+    assert diagnostics == {
+        "load_status": "ok",
+        "profiles": 2,
+        "samples": 3,
+        "required_samples": 3,
+        "usable": True,
+        "candidate_watts": 13,
+        "confidence": pytest.approx(1 / 3),
+        "last_record": {"ok": True, "reason": "saved"},
+    }
+    assert "42" not in json.dumps(diagnostics)

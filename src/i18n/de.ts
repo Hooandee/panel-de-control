@@ -1177,6 +1177,7 @@ export const de: Record<string, string> = {
   "report.section.what": "Was funktioniert nicht?",
   "report.section.what.feature": "Welchen Bereich betrifft es?",
   "report.cat.tdp": "TDP-Einstellung",
+  "report.cat.auto_tdp": "Automatische TDP-Steuerung",
   "report.cat.cpu_gpu": "CPU- und GPU-Steuerung",
   "report.cat.hud": "Leistungs-HUD",
   "report.cat.fans": "Lüfterkurve",

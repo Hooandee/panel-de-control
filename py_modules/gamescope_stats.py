@@ -24,6 +24,9 @@ class GamescopeStats:
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
         self._thread = None
+        self._pipe_available = None
+        self._connected = False
+        self._last_error = None
 
     def _clear_samples_locked(self):
         self._fps = None
@@ -94,6 +97,8 @@ class GamescopeStats:
     def _run(self):
         while not self._stop_event.is_set():
             path = self._pipe_path()
+            with self._lock:
+                self._pipe_available = path is not None
             if path is None:
                 self._stop_event.wait(2.0)
                 continue
@@ -101,9 +106,18 @@ class GamescopeStats:
                 flags = os.O_RDONLY | os.O_NONBLOCK
                 flags |= getattr(os, "O_CLOEXEC", 0)
                 descriptor = os.open(path, flags)
-            except OSError:
+            except OSError as error:
+                with self._lock:
+                    self._connected = False
+                    self._last_error = {
+                        "phase": "open",
+                        "type": type(error).__name__,
+                    }
                 self._stop_event.wait(1.0)
                 continue
+            with self._lock:
+                self._connected = True
+                self._last_error = None
             buffer = ""
             try:
                 while not self._stop_event.is_set():
@@ -119,10 +133,16 @@ class GamescopeStats:
                     while "\n" in buffer:
                         line, buffer = buffer.split("\n", 1)
                         self._apply_line(line.strip())
-            except OSError:
-                pass
+            except OSError as error:
+                with self._lock:
+                    self._last_error = {
+                        "phase": "read",
+                        "type": type(error).__name__,
+                    }
             finally:
                 os.close(descriptor)
+                with self._lock:
+                    self._connected = False
             self._stop_event.wait(1.0)
 
     def start(self):
@@ -149,6 +169,40 @@ class GamescopeStats:
         with self._lock:
             self._focus = None
             self._clear_samples_locked()
+
+    def diagnostics(self):
+        with self._lock:
+            focus = self._focus
+            fps = self._fps
+            fps_at = self._fps_at
+            pending_min = self._unread_min_fps
+            pipe_available = self._pipe_available
+            connected = self._connected
+            last_error = dict(self._last_error) if self._last_error else None
+        now = self._clock()
+        age = None if fps_at is None else max(0.0, now - fps_at)
+        focus_kind = None if focus is None else "steam" if focus == "steam" else "game"
+        if focus_kind in (None, "steam"):
+            reason = "no_game_focus"
+        elif fps is None or age is None:
+            reason = "fps_unavailable"
+        elif age > self._stale_after_s:
+            reason = "fps_stale"
+        else:
+            reason = "ok"
+        thread = self._thread
+        return {
+            "reader_alive": bool(thread is not None and thread.is_alive()),
+            "pipe_available": pipe_available,
+            "connected": connected,
+            "last_error": last_error,
+            "sample_available": reason == "ok",
+            "sample_age_s": age,
+            "reason": reason,
+            "focus": focus_kind,
+            "fps": fps,
+            "pending_min_fps": pending_min,
+        }
 
     def read(self):
         with self._lock:
