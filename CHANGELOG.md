@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+## [0.53.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.52.1...panel-de-control-v0.53.0) (2026-09-19)
+
+
+### Español
+
+* **Rendimiento de Steam:** La sección Potencia incorpora los controles de rendimiento de Steam para ajustar el límite de FPS y los hercios, el VRR, el desgarro, el sombreado variable y el escalado —modo, filtro y nitidez— sin salir de Panel de Control. Muestra solo las opciones compatibles, usa automáticamente el perfil global o el del juego abierto y se puede ocultar, ordenar o añadir a vistas personalizadas.
+* **Reportes:** Antes de abrir el formulario puedes elegir claramente entre informar de un problema y proponer una función. Las dos opciones son grandes, accesibles y navegables con mando; si cambias de tipo, Panel de Control conserva el texto y el área que ya habías seleccionado.
+
+### English
+
+* **Steam performance:** The Power section now includes Steam's performance controls for adjusting the FPS limit and refresh rate, VRR, tearing, variable-rate shading, and scaling —mode, filter, and sharpness— without leaving Panel de Control. It shows only supported options, automatically uses the global profile or the running game's profile, and can be hidden, reordered, or added to custom views.
+* **Reports:** Before opening the form, you can now clearly choose between reporting a problem and proposing a feature. Both options are large, accessible, and controller-friendly; if you switch type, Panel de Control keeps the text and area you already selected.
+
+### Italiano
+
+* **Prestazioni di Steam:** La sezione Potenza include ora i controlli delle prestazioni di Steam per regolare il limite FPS e la frequenza di aggiornamento, il VRR, il tearing, l'ombreggiatura variabile e il ridimensionamento —modalità, filtro e nitidezza— senza uscire da Panel de Control. Mostra solo le opzioni supportate, usa automaticamente il profilo globale o quello del gioco in esecuzione e può essere nascosta, riordinata o aggiunta alle viste personalizzate.
+* **Segnalazioni:** Prima di aprire il modulo, ora puoi scegliere chiaramente se segnalare un problema o proporre una funzionalità. Le due opzioni sono grandi, accessibili e navigabili con il controller; se cambi tipo, Panel de Control conserva il testo e l'area che avevi già selezionato.
+
+### Deutsch
+
+* **Steam-Leistung:** Im Bereich Leistung stehen jetzt die Leistungsregler von Steam für FPS-Limit und Bildwiederholrate, VRR, Tearing, variable Schattierung sowie Skalierung —Modus, Filter und Schärfe— direkt in Panel de Control bereit. Es werden nur unterstützte Optionen angezeigt, automatisch das globale Profil oder das Profil des laufenden Spiels verwendet, und der Bereich lässt sich ausblenden, neu anordnen oder eigenen Ansichten hinzufügen.
+* **Berichte:** Vor dem Öffnen des Formulars kannst du jetzt eindeutig zwischen dem Melden eines Problems und dem Vorschlagen einer Funktion wählen. Beide Optionen sind groß, barrierearm und mit dem Controller bedienbar; beim Wechsel des Typs behält Panel de Control den bereits eingegebenen Text und den ausgewählten Bereich bei.
+
+### Português (Brasil)
+
+* **Desempenho do Steam:** A seção Potência agora inclui os controles de desempenho do Steam para ajustar o limite de FPS e a taxa de atualização, o VRR, o tearing, o sombreamento variável e a escala —modo, filtro e nitidez— sem sair do Painel de Controle. Ela mostra apenas as opções compatíveis, usa automaticamente o perfil global ou o perfil do jogo em execução e pode ser ocultada, reordenada ou adicionada a visualizações personalizadas.
+* **Relatórios:** Antes de abrir o formulário, agora você pode escolher claramente entre relatar um problema e propor um recurso. As duas opções são grandes, acessíveis e navegáveis com o controle; ao mudar o tipo, o Painel de Controle mantém o texto e a área que você já havia selecionado.
+
 ## [0.52.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.52.0...panel-de-control-v0.52.1) (2026-09-17)
 
 
