@@ -1553,6 +1553,24 @@ def test_autotdp_diagnostics_do_not_reprobe_backend_readiness(plugin):
     assert calls == 0
 
 
+def test_autotdp_diagnostics_include_sanitized_gpu_signal_source(plugin):
+    plugin._power_reader.gpu_diagnostics = lambda: {
+        "source": "intel_xe_fdinfo",
+        "state": "ok",
+        "clients": 3,
+        "engines": 4,
+    }
+
+    diagnostics = plugin._auto_tdp_diagnostics({}, {})
+
+    assert diagnostics["signal"]["gpu_activity"] == {
+        "source": "intel_xe_fdinfo",
+        "state": "ok",
+        "clients": 3,
+        "engines": 4,
+    }
+
+
 @pytest.mark.parametrize(
     "on_ac, expected_max",
     [(False, 35), (True, 40)],

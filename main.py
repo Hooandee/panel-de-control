@@ -9870,6 +9870,10 @@ class Plugin:
         signal = stats_diagnostics() if callable(stats_diagnostics) else {}
         signal = dict(signal) if isinstance(signal, dict) else {}
         signal["reader_requested"] = bool(self._auto_stats_reader_active)
+        gpu_diagnostics = getattr(self._power_reader, "gpu_diagnostics", None)
+        gpu_activity = gpu_diagnostics() if callable(gpu_diagnostics) else None
+        if isinstance(gpu_activity, dict):
+            signal["gpu_activity"] = gpu_activity
         signal_source = last_pre_ui if status.get("reason") == "ui_active" else status
         if signal_source:
             signal["focus"] = self._auto_focus_kind(signal_source.get("focus"))

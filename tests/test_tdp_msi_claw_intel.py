@@ -2,6 +2,7 @@ import os
 
 from device_profiles import DEVICE_TABLE
 from tdp.factory import select_backend
+from tdp.firmware_attr import FirmwareAttrBackend
 
 
 _MMIO = "intel-rapl-mmio/intel-rapl-mmio:0"
@@ -182,3 +183,81 @@ def test_partial_rapl_failure_restores_every_surface(tmp_path, monkeypatch):
     assert _read(os.path.join(mmio, "constraint_1_power_limit_uw")) == 37_000_000
     assert _read(os.path.join(msr, "constraint_0_power_limit_uw")) == 30_000_000
     assert _read(os.path.join(msr, "constraint_1_power_limit_uw")) == 37_000_000
+
+
+def test_manual_transaction_recovery_uses_the_manual_firmware_instance(
+    tmp_path,
+    monkeypatch,
+):
+    root = str(tmp_path)
+    _make_claw_dmi(root)
+    firmware = _make_firmware(root)
+    _make_rapl(root, _MMIO, 22, 37)
+    _make_rapl(root, _MSR, 30, 37)
+    backend = _select(root)
+    real_clear = backend._manual._safety_lock.clear
+    clear_calls = 0
+
+    def fail_first_clear():
+        nonlocal clear_calls
+        clear_calls += 1
+        return False if clear_calls == 1 else real_clear()
+
+    monkeypatch.setattr(backend._manual._safety_lock, "clear", fail_first_clear)
+
+    result = backend.set_levels(19, 23, 23, ac=False)
+
+    assert result.ok is False
+    assert backend.safety_locked is True
+    assert backend.recover_runtime_transaction()["ok"] is True
+    assert backend.safety_locked is False
+    assert _read(os.path.join(firmware, "ppt_pl1_spl/current_value")) == 17
+    assert _read(os.path.join(firmware, "ppt_pl2_sppt/current_value")) == 17
+
+
+def test_present_but_unreadable_firmware_never_falls_through_to_rapl_auto(
+    tmp_path,
+    monkeypatch,
+):
+    root = str(tmp_path)
+    _make_claw_dmi(root)
+    _make_firmware(root)
+    _make_rapl(root, _MMIO, 22, 37)
+    _make_rapl(root, _MSR, 30, 37)
+    real_read = FirmwareAttrBackend._read_int
+
+    def fail_firmware_pl1(self, path):
+        if "msi-wmi-platform" in path and path.endswith(
+            "ppt_pl1_spl/current_value"
+        ):
+            return None
+        return real_read(self, path)
+
+    monkeypatch.setattr(FirmwareAttrBackend, "_read_int", fail_firmware_pl1)
+
+    backend = _select(root)
+
+    assert backend.name == "firmware-attr:msi-wmi-platform"
+    assert backend.auto_tdp_safe is False
+    assert backend.selection_ready() is False
+    assert all(item["candidate"] != "intel" for item in backend.probe_trace)
+
+
+def test_manual_transaction_recovers_after_backend_restart(tmp_path, monkeypatch):
+    root = str(tmp_path)
+    _make_claw_dmi(root)
+    firmware = _make_firmware(root)
+    _make_rapl(root, _MMIO, 22, 37)
+    _make_rapl(root, _MSR, 30, 37)
+    interrupted = _select(root)
+    monkeypatch.setattr(interrupted._manual._safety_lock, "clear", lambda: False)
+
+    result = interrupted.set_levels(19, 23, 23, ac=False)
+    restarted = _select(root)
+
+    assert result.ok is False
+    assert restarted.safety_locked is True
+    assert restarted.recover_runtime_transaction()["ok"] is True
+    assert restarted.safety_locked is False
+    assert _read(os.path.join(firmware, "ppt_pl1_spl/current_value")) == 17
+    assert _read(os.path.join(firmware, "ppt_pl2_sppt/current_value")) == 17

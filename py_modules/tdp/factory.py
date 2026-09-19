@@ -114,7 +114,7 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None):
             optional_rails=("pl3",),
             safety_lock_path=_runtime_lock_path(
                 root,
-                "firmware-msi-wmi-platform.lock",
+                "firmware-msi-wmi-platform-auto.lock",
             ),
             restore_on_release=True,
             ownership_lock_path=_runtime_lock_path(
@@ -277,7 +277,8 @@ def select_backend(device, root="/", ryzenadj_resolve=None, os_id=None) -> TDPBa
             if isinstance(details, dict):
                 trace_item.update(details)
         trace.append(trace_item)
-        if ready or safety_locked:
+        blocks_fallback = bool(getattr(backend, "blocks_fallback", False))
+        if ready or safety_locked or (backend.supported and blocks_fallback):
             backend.probe_trace = tuple(trace)
             return backend
     backend = NullBackend(f"no supported TDP interface for {device.key}")

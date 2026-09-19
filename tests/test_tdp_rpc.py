@@ -1,12 +1,14 @@
 import asyncio
 import dataclasses
 import importlib
+import os
 import sys
 import threading
 import types
 
 import pytest
 
+from power.reader import PowerReader
 from tdp.types import RailReading, TdpLimits, TdpObservation, TdpResult
 
 _FAKE_POWER = {"watts": 13.1, "gpu_busy": 49}
@@ -1462,6 +1464,59 @@ def test_auto_tick_owns_gamescope_stats_only_during_an_active_session(Plugin):
     asyncio.run(p._auto_tick())
 
     assert calls == ["start", "stop"]
+
+
+def test_auto_tick_uses_the_real_xe_reader_to_qualify_gameplay(Plugin, tmp_path):
+    root = str(tmp_path)
+    fdinfo = os.path.join(root, "proc/100/fdinfo/3")
+    os.makedirs(os.path.dirname(fdinfo), exist_ok=True)
+
+    def write_fdinfo(busy, total):
+        with open(fdinfo, "w") as handle:
+            handle.write(
+                "drm-driver:\txe\n"
+                "drm-pdev:\t0000:00:02.0\n"
+                "drm-client-id:\t7\n"
+                f"drm-cycles-rcs:\t{busy}\n"
+                f"drm-total-cycles-rcs:\t{total}\n"
+            )
+
+    write_fdinfo(100, 1_000)
+    p = Plugin()
+    p._init()
+    p._settings["telemetry_enabled"] = False
+    p._set_current_appid("42")
+    p._tdp_profiles.set_auto_config("global", 60, 17)
+    p._tdp_profiles.set_auto_tdp("global", True)
+    p._power_reader = PowerReader(root=root)
+    p._power_reader._intel_gpu._cache_s = 0
+    sample_at = 0
+
+    def read_stats(expected_appid=None):
+        nonlocal sample_at
+        sample_at += 1
+        return {
+            "fps": 60.0,
+            "focus": expected_appid or "42",
+            "age_s": 0.0,
+            "sample_at": sample_at,
+            "available": True,
+            "reason": "ok",
+        }
+
+    p._gamescope_stats.read = read_stats
+    controller, _created = p._ensure_auto_session(on_ac=True)
+    controller._qualification_s = 0
+    controller._low_load_qualification_s = 0
+    controller._warmup_s = 0
+
+    asyncio.run(p._auto_tick())
+    assert p._auto_status["reason"] == "awaiting_gameplay"
+
+    write_fdinfo(700, 2_000)
+    asyncio.run(p._auto_tick())
+
+    assert p._auto_status["reason"] == "building_stability"
 
 
 def test_auto_tick_does_not_block_event_loop_while_stopping_stats(Plugin):

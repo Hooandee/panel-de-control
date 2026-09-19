@@ -5,6 +5,8 @@ from tdp.types import TdpObservation, TdpResult
 class MsiClawIntelBackend(TDPBackend):
     """Keep MSI firmware manual control and co-own every AutoTDP surface."""
 
+    blocks_fallback = True
+
     def __init__(self, manual, auto_firmware, auto_rapl):
         self._manual = manual
         self._auto_firmware = auto_firmware
@@ -187,16 +189,15 @@ class MsiClawIntelBackend(TDPBackend):
         )
 
     def recover_runtime_transaction(self):
+        manual = self._manual.recover_runtime_transaction()
         firmware = self._auto_firmware.recover_runtime_transaction()
         rapl = self._auto_rapl.recover_runtime_transaction()
-        ok = bool(firmware.get("ok") and rapl.get("ok"))
+        results = (manual, firmware, rapl)
+        ok = all(bool(result.get("ok")) for result in results)
+        details = (result.get("detail") for result in results)
         return {
             "ok": ok,
-            "detail": "; ".join(
-                detail
-                for detail in (firmware.get("detail"), rapl.get("detail"))
-                if detail
-            ),
+            "detail": "; ".join(filter(None, details)),
         }
 
     def release(self):
