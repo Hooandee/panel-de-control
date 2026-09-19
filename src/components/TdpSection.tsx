@@ -9,7 +9,6 @@ import { openPowerPresetsModal } from "./PowerPresetsModal";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { Loading } from "./Loading";
-import { ProfileSelector } from "./ProfileSelector";
 import { PowerArc } from "./PowerArc";
 import { Presets } from "./Presets";
 import { FirmwareModes } from "./FirmwareModes";
@@ -27,9 +26,7 @@ const LEARNING_REASONS = new Set(["no_data", "too_few", "one_level"]);
 export interface TdpSectionProps {
   tdp: TdpState | null;
   scope: TdpScope;
-  game: { appid: string; name: string } | null;
   power: PowerDraw | null;
-  onScope: (scope: TdpScope) => void;
   onWatts: (watts: number) => void;
   onSetLevels: (off2: number, off3: number) => void;
   onSetMode: (mode: BoostMode) => void;
@@ -48,7 +45,7 @@ export interface TdpSectionProps {
   onApplyPreset: (item: PresetItem) => void;
 }
 
-export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onScope, onWatts, onSetLevels, onSetMode, onApplySuggestion, onFirmwareMode, onLowBatteryHold, monitorOnly, onReactivate, presets, refreshPresets, onApplyPreset }) => {
+export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, onSetLevels, onSetMode, onApplySuggestion, onFirmwareMode, onLowBatteryHold, monitorOnly, onReactivate, presets, refreshPresets, onApplyPreset }) => {
   const { t } = useI18n();
 
   // Memoized (and above the early returns) so re-renders don't rebuild the chip list.
@@ -162,20 +159,6 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
 
   return (
     <>
-      {/* Hidden under a firmware mode: it owns the rails, so a per-game TDP scope has
-          no effect there (same as the advanced/boost controls below). */}
-      {!inFwMode && (
-        <PanelSectionRow>
-          <ProfileSelector
-            scope={scope}
-            gameName={game?.name ?? null}
-            hasGameProfile={tdp.has_game_profile}
-            globalLabel={t("tdp.scope.global")}
-            inheritHint={t("tdp.inherit")}
-            onScope={onScope}
-          />
-        </PanelSectionRow>
-      )}
       <PanelSectionRow>
         <PowerArc
           watts={arcTarget}

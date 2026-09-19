@@ -25,10 +25,14 @@ export function learningTagsForViewBlocks(
   const available = new Set(
     blockIds.filter((blockId) => blockAvailableInMode(blockId, desktopMode)),
   );
-  const tags: LearningTag[] = [];
-  if (PICKABLE_BLOCKS.power.some((block) => available.has(block.id))) tags.push("tdp");
-  if (PICKABLE_BLOCKS.fans.some((block) => available.has(block.id))) tags.push("fans");
-  return tags;
+  const activeTags = new Set<LearningTag>();
+  for (const blocks of Object.values(PICKABLE_BLOCKS)) {
+    for (const block of blocks) {
+      if (!available.has(block.id)) continue;
+      block.learningTags?.forEach((tag) => activeTags.add(tag));
+    }
+  }
+  return (["tdp", "fans"] as const).filter((tag) => activeTags.has(tag));
 }
 
 export function providersFor(

@@ -7,6 +7,7 @@ import { registerBlock } from "../customize/blocks";
 import { useDesktopState } from "../desktop/useDesktop";
 import { desktopUiActive } from "../desktop/presentation";
 import { DesktopPowerCard, DesktopPowerRecoveryCard } from "../components/DesktopPowerCard";
+import { SteamPerformanceCard } from "../components/SteamPerformanceCard";
 
 const TdpCoreBlock: FC = () => {
   const c = usePotencia();
@@ -19,9 +20,7 @@ const TdpCoreBlock: FC = () => {
     <TdpSection
       tdp={c.tdp}
       scope={c.scope}
-      game={c.game}
       power={power}
-      onScope={c.onScope}
       onWatts={c.onWatts}
       onSetLevels={c.onSetLevels}
       onSetMode={c.onSetMode}
@@ -43,9 +42,23 @@ const AutoTdpBlock: FC = () => {
   return <AutoTdpToggle checked={power?.auto_tdp ?? false} onChange={onAutoTdpToggle} />;
 };
 
+const SteamPerformanceBlock: FC = () => {
+  const { scope, game } = usePotencia();
+  return (
+    <SteamPerformanceCard
+      profileScope={scope}
+      runningGameId={game?.liveAppid ?? null}
+    />
+  );
+};
+
 export function registerPowerBlocks(): void {
   registerBlock("tdp", { sectionId: "power", Component: TdpCoreBlock });
   registerBlock("desktopPower", { sectionId: "power", Component: DesktopPowerCard });
+  registerBlock("steamPerformance", {
+    sectionId: "power",
+    Component: SteamPerformanceBlock,
+  });
   // Availability = hardware capability, not the module on/off (block self-gates).
   registerBlock("autoTdp", {
     sectionId: "power",

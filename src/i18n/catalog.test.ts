@@ -68,6 +68,16 @@ afterEach(() => {
 });
 
 describe("Every supported translation catalog", () => {
+  it("provides localized Steam performance status copy", () => {
+    expect(DICTS).toMatchObject({
+      es: { "steam.performance.title": "Rendimiento de Steam" },
+      en: { "steam.performance.title": "Steam performance" },
+      it: { "steam.performance.title": "Prestazioni di Steam" },
+      de: { "steam.performance.title": "Steam-Leistung" },
+      "pt-BR": { "steam.performance.title": "Desempenho do Steam" },
+    });
+  });
+
   it("provides dashboard copy in every supported language", () => {
     expect(DICTS).toMatchObject({
       es: {

@@ -9,11 +9,10 @@ import { blockAvailableInMode, POWER_TAB } from "../customize/manifest";
 import { useDesktopState } from "../desktop/useDesktop";
 import { usePotencia } from "../tdp/potenciaContext";
 import { TdpMonitorNotice } from "../components/TdpMonitorNotice";
-import { SECTION_PROVIDERS } from "./providerMounts";
+import { PotenciaProviderMount, SECTION_PROVIDERS } from "./providerMounts";
 
-// Keeps a power-only view (GPU clock / Auto-TDP, no core tdp block) from rendering
-// blank in monitor mode. Only mounted when the view has power blocks, so its provider
-// is present. Skipped when TDP is unsupported (nothing to reactivate).
+const POWER_PROFILE_BLOCKS = new Set(["tdp", "autoTdp", "steamPerformance"]);
+
 const PowerMonitorFallback: FC = () => {
   const { monitorOnly, onReactivate, tdp } = usePotencia();
   if (!tdp?.supported || !monitorOnly) return null;
@@ -41,10 +40,8 @@ export const CustomView: FC<{ viewId: string }> = ({ viewId }) => {
     [blocks],
   );
 
-  // Power blocks but no core "tdp" block (which carries the notice itself) → add the
-  // fallback so a monitor-mode view isn't blank.
-  const needsPowerFallback =
-    blocks.some((id) => getBlockDef(id)?.sectionId === POWER_TAB) && !blocks.includes("tdp");
+  const needsPowerFallback = blocks.includes("autoTdp") && !blocks.includes("tdp");
+  const needsPowerProfileSelector = blocks.some((id) => POWER_PROFILE_BLOCKS.has(id));
 
   const content: ReactNode = (
     <div style={{ display: "flex", flexDirection: "column", gap: BLOCK_GAP }}>
@@ -56,6 +53,13 @@ export const CustomView: FC<{ viewId: string }> = ({ viewId }) => {
   );
 
   return sections.reduceRight<ReactNode>((acc, s) => {
+    if (s === POWER_TAB) {
+      return (
+        <PotenciaProviderMount showProfileSelector={needsPowerProfileSelector}>
+          {acc}
+        </PotenciaProviderMount>
+      );
+    }
     const Mount = SECTION_PROVIDERS[s];
     return Mount ? <Mount>{acc}</Mount> : acc;
   }, content);

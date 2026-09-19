@@ -83,7 +83,13 @@ export const AdvancedBoost: FC<AdvancedBoostProps> = ({
   };
 
   return (
-    <div style={{ ...theme.card, padding: theme.space.md, marginTop: theme.space.sm, overflow: "hidden" }}>
+    <div style={{
+      ...theme.card,
+      padding: theme.space.md,
+      marginTop: theme.space.sm,
+      marginBottom: theme.space.card,
+      overflow: "hidden",
+    }}>
       <Focusable
         style={{ display: "flex", flexDirection: "column", alignItems: "stretch", gap: theme.space.xs, cursor: "pointer" }}
         onActivate={() => setOpen((o) => !o)}

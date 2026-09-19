@@ -19,6 +19,7 @@ import { effectiveEnabled } from "../customize/moduleLogic";
 import { TdpConflictCard } from "../components/TdpConflictCard";
 import { openTdpConflictModal } from "../components/TdpConflictModal";
 import { ColorPreviewConfirm } from "../components/ColorPreviewConfirm";
+import { ProfileSelector } from "../components/ProfileSelector";
 
 // A section's shared hooks + context in one instance, shared by the section and any
 // custom view hosting its blocks. Machinery-bound safety chrome travels with the
@@ -65,7 +66,11 @@ export const MandosProviderMount: FC<{ children: ReactNode }> = ({ children }) =
   return <MandosProvider value={controller}>{children}</MandosProvider>;
 };
 
-export const PotenciaProviderMount: FC<{ children: ReactNode }> = ({ children }) => {
+export const PotenciaProviderMount: FC<{
+  children: ReactNode;
+  showProfileSelector?: boolean;
+}> = ({ children, showProfileSelector = false }) => {
+  const { t } = useI18n();
   const tdpCtl = useTdp();
   const { tdp, refresh } = tdpCtl;
   const conflict = useTdpConflict(tdp?.supported ?? false, tdp?.tdp_control_enabled ?? true);
@@ -109,6 +114,18 @@ export const PotenciaProviderMount: FC<{ children: ReactNode }> = ({ children })
             onDisableSdtdp={() => void conflict.disableSdtdp()}
             onTakeHhd={() => void conflict.takeHhd()}
             onDisablePdcTdp={() => void onDisablePdcTdp()}
+          />
+        </PanelSectionRow>
+      )}
+      {tdp && showProfileSelector && (
+        <PanelSectionRow>
+          <ProfileSelector
+            scope={tdpCtl.scope}
+            gameName={tdpCtl.game?.name ?? null}
+            hasGameProfile={tdp.has_game_profile}
+            globalLabel={t("tdp.scope.global")}
+            inheritHint={t("tdp.inherit")}
+            onScope={tdpCtl.onScope}
           />
         </PanelSectionRow>
       )}
