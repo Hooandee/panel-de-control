@@ -16,6 +16,7 @@ from tdp.asus_nb_wmi import AsusNbWmiBackend
 from tdp.backend import NullBackend, TDPBackend
 from tdp.firmware_attr import FirmwareAttrBackend
 from tdp.intel_rapl import IntelRaplBackend
+from tdp.msi_claw_intel import MsiClawIntelBackend
 from tdp.msi_claw_a8 import MsiClawA8FirmwareBackend
 from tdp.ryzenadj import RyzenadjBackend
 from tdp.steamdeck_hwmon import SteamDeckHwmonBackend
@@ -93,7 +94,7 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None):
         return backend
 
     def msi():
-        return FirmwareAttrBackend(
+        manual = FirmwareAttrBackend(
             "msi-wmi-platform",
             fallback,
             root=root,
@@ -103,6 +104,25 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None):
                 "firmware-msi-wmi-platform.lock",
             ),
         )
+        if not is_msi_claw_8_ai_plus_a2vm(device, root) or not manual.supported:
+            return manual
+        auto_firmware = FirmwareAttrBackend(
+            "msi-wmi-platform",
+            fallback,
+            root=root,
+            is_generic=generic,
+            optional_rails=("pl3",),
+            safety_lock_path=_runtime_lock_path(
+                root,
+                "firmware-msi-wmi-platform.lock",
+            ),
+            restore_on_release=True,
+            ownership_lock_path=_runtime_lock_path(
+                root,
+                "ownership-firmware-msi-wmi-platform.lock",
+            ),
+        )
+        return MsiClawIntelBackend(manual, auto_firmware, intel())
 
     def intel():
         return IntelRaplBackend(
