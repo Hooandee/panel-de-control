@@ -5,9 +5,25 @@
 ## [0.54.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.54.0...panel-de-control-v0.54.1) (2026-09-20)
 
 
-### Bug Fixes
+### Español
 
-* handle linked Steam library roots ([#700](https://github.com/Hooandee/panel-de-control/issues/700)) ([eb33860](https://github.com/Hooandee/panel-de-control/commit/eb3386061b64eac2b24a01086ce3f3fc69d0088f))
+* **Limpieza:** Las bibliotecas de Steam enlazadas, como las instaladas en una tarjeta microSD, vuelven a reconocerse correctamente en Juegos y Proton. Antes de limpiar, Panel de Control comprueba que el enlace siga apuntando al mismo lugar y bloquea la operación si detecta un cambio, sin seguir enlaces internos inesperados. ([#700](https://github.com/Hooandee/panel-de-control/pull/700))
+
+### English
+
+* **Cleanup:** Linked Steam libraries, such as those installed on a microSD card, are once again detected correctly in Games and Proton. Before cleaning, Panel de Control verifies that the link still points to the same location and blocks the operation if it changes, without following unexpected internal links. ([#700](https://github.com/Hooandee/panel-de-control/pull/700))
+
+### Italiano
+
+* **Pulizia:** Le librerie Steam collegate, come quelle installate su una scheda microSD, vengono nuovamente rilevate correttamente in Giochi e Proton. Prima della pulizia, Panel de Control verifica che il collegamento punti ancora alla stessa posizione e blocca l'operazione se cambia, senza seguire collegamenti interni imprevisti. ([#700](https://github.com/Hooandee/panel-de-control/pull/700))
+
+### Deutsch
+
+* **Bereinigung:** Verknüpfte Steam-Bibliotheken, etwa auf einer microSD-Karte installierte, werden in den Bereichen Spiele und Proton wieder korrekt erkannt. Vor der Bereinigung prüft Panel de Control, ob die Verknüpfung weiterhin auf denselben Ort verweist, und bricht bei Änderungen ab, ohne unerwarteten internen symbolischen Links zu folgen. ([#700](https://github.com/Hooandee/panel-de-control/pull/700))
+
+### Português (Brasil)
+
+* **Limpeza:** Bibliotecas vinculadas do Steam, como as instaladas em um cartão microSD, voltam a ser reconhecidas corretamente em Jogos e Proton. Antes da limpeza, o Painel de Controle verifica se o link ainda aponta para o mesmo local e bloqueia a operação se ele mudar, sem seguir links simbólicos internos inesperados. ([#700](https://github.com/Hooandee/panel-de-control/pull/700))
 
 ## [0.54.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.53.0...panel-de-control-v0.54.0) (2026-09-20)
 
