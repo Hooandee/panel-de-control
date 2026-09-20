@@ -7,7 +7,7 @@ const api = vi.hoisted(() => ({ state: vi.fn(), scan: vi.fn(), prepare: vi.fn(),
 vi.mock("../api", () => ({ getSteamCleanerState: api.state, scanSteamCleaner: api.scan, prepareSteamCleaner: api.prepare, executeSteamCleaner: api.execute, cancelSteamCleaner: api.cancel }));
 import { useSteamCleaner } from "./useSteamCleaner";
 
-const entry: CleanerEntry = { id: "entry", game_id: "game", appid: "10", name: "Game", kind: "compatdata", library_id: "lib", library_label: "Library", bytes: 500, installation: "installed", blocked_reason: null, warnings: [] };
+const entry: CleanerEntry = { id: "entry", game_id: "game", appid: "10", name: "Game", kind: "compatdata", library_id: "lib", library_label: "Library", bytes: 500, installation: "installed", blocked_reason: null, requires_manual_selection: false, warnings: [] };
 const state = (overrides: Partial<CleanerState> = {}): CleanerState => ({ schema_version: 1, available: true, status: "ready", scan_id: "scan", coverage_complete: true, entries: [entry], libraries: [], totals: { shadercache: 0, compatdata: 500, unknown: 0 }, progress: { processed: 0, total: null }, error: null, last_result: null, ...overrides });
 const plan: CleanerPlan = { id: "plan", scan_id: "scan", entries: [entry], estimated_bytes: 500, requires_prefix_confirmation: true, expires_at: 9999999999 };
 const outcome: CleanerResult = { operation_id: "operation", cancelled: false, estimated_bytes_removed: 500, items: [{ id: "entry", status: "deleted", bytes_removed: 500, reason: null }] };

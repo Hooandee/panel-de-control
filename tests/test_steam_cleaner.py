@@ -2,6 +2,7 @@ import json
 import os
 import struct
 import threading
+from pathlib import Path
 
 import pytest
 
@@ -395,6 +396,112 @@ def test_unknown_shortcut_identity_is_not_a_cleanup_candidate(tmp_path):
     with pytest.raises(SteamCleanerError, match="unknown_identity"):
         cleaner.prepare(state["scan_id"], [state["entries"][0]["id"]])
     assert target.exists()
+
+
+def test_malformed_shortcuts_fall_back_to_explicit_review_without_partial_identity(tmp_path):
+    home, steam = make_steam(tmp_path)
+    appid = 3_000_000_001
+    manifest(steam)
+    data(steam)
+    cache = data(steam, appid=str(appid))
+    prefix = data(steam, "compatdata", str(appid))
+    shortcuts = (
+        b"\x00shortcuts\x00"
+        b"\x000\x00\x02appid\x00" + struct.pack("<I", appid) + b"\x01appname\x00Partial\x00\x08"
+        b"\x001\x00\x01appname\x00Missing ID\x00\x08"
+        b"\x08\x08"
+    )
+    write(steam / "userdata/1/config/shortcuts.vdf", shortcuts)
+
+    cleaner = service(home)
+    state = cleaner.inventory()
+
+    assert state["coverage_complete"] is False
+    official = next(entry for entry in state["entries"] if entry["appid"] == "10")
+    unidentified = [entry for entry in state["entries"] if entry["appid"] == str(appid)]
+    assert official["installation"] == "installed"
+    assert official["blocked_reason"] is None
+    assert {entry["name"] for entry in unidentified} == {None}
+    assert {entry["installation"] for entry in unidentified} == {"unknown"}
+    assert {entry["blocked_reason"] for entry in unidentified} == {None}
+    assert {entry["requires_manual_selection"] for entry in unidentified} == {True}
+    assert {tuple(entry["warnings"]) for entry in unidentified} == {
+        ("unknown_identity",),
+        ("prefix_data", "unknown_identity"),
+    }
+
+    prefix_entry = next(entry for entry in unidentified if entry["kind"] == "compatdata")
+    plan = cleaner.prepare(state["scan_id"], [prefix_entry["id"]])
+    assert plan["requires_prefix_confirmation"] is True
+    with pytest.raises(SteamCleanerError, match="prefix_confirmation_required"):
+        cleaner.execute(plan["id"])
+    assert prefix.exists()
+    assert cache.exists()
+
+    result = cleaner.execute(plan["id"], confirm_compatdata=True)
+    assert result["items"][0]["status"] == "deleted"
+    assert not prefix.exists()
+    assert cache.exists()
+
+
+@pytest.mark.parametrize("denied_name", ["userdata", "shortcuts.vdf"])
+def test_shortcut_fingerprint_failure_does_not_block_safe_entries(tmp_path, monkeypatch, denied_name):
+    home, steam = make_steam(tmp_path)
+    appid = 3_000_000_001
+    manifest(steam)
+    data(steam)
+    target = data(steam, appid=str(appid))
+    shortcuts = b"\x00shortcuts\x00\x000\x00\x02appid\x00" + struct.pack("<I", appid) + b"\x01appname\x00External\x00\x08\x08\x08"
+    write(steam / "userdata/1/config/shortcuts.vdf", shortcuts)
+    original_stat = Path.stat
+
+    def deny_shortcut_fingerprint(path, *args, **kwargs):
+        if path.name == denied_name:
+            raise PermissionError(13, "private path")
+        return original_stat(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "stat", deny_shortcut_fingerprint)
+    cleaner = service(home)
+    state = cleaner.inventory()
+
+    official = next(entry for entry in state["entries"] if entry["appid"] == "10")
+    unidentified = next(entry for entry in state["entries"] if entry["appid"] == str(appid))
+    assert state["coverage_complete"] is False
+    assert state["libraries"][0]["available"] is True
+    assert state["libraries"][0]["reason"] is None
+    assert official["installation"] == "installed"
+    assert official["blocked_reason"] is None
+    assert unidentified["installation"] == "unknown"
+    assert unidentified["blocked_reason"] is None
+    assert unidentified["requires_manual_selection"] is True
+    assert target.exists()
+    issues = [event for event in cleaner.diagnostics()["events"] if event.get("event") == "error"]
+    assert any(event.get("source") == "shortcuts" and event.get("system_error") == "permission_denied" for event in issues)
+    assert not any(event.get("source") == "library" for event in issues)
+
+
+def test_partial_shortcut_profiles_keep_valid_names_but_require_manual_selection(tmp_path, monkeypatch):
+    home, steam = make_steam(tmp_path)
+    appid = 3_000_000_001
+    data(steam, appid=str(appid))
+    shortcuts = b"\x00shortcuts\x00\x000\x00\x02appid\x00" + struct.pack("<I", appid) + b"\x01appname\x00External\x00\x08\x08\x08"
+    write(steam / "userdata/1/config/shortcuts.vdf", shortcuts)
+    write(steam / "userdata/2/config/shortcuts.vdf", shortcuts)
+    original_stat = Path.stat
+
+    def deny_second_profile(path, *args, **kwargs):
+        if str(path).endswith("userdata/2/config/shortcuts.vdf"):
+            raise PermissionError(13, "private path")
+        return original_stat(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "stat", deny_second_profile)
+    state = service(home).inventory()
+    entry = next(item for item in state["entries"] if item["appid"] == str(appid))
+
+    assert entry["name"] == "External"
+    assert entry["installation"] == "non_steam"
+    assert entry["blocked_reason"] is None
+    assert entry["requires_manual_selection"] is True
 
 
 def test_execute_removes_confirmed_entries_and_requires_fresh_inventory(tmp_path):

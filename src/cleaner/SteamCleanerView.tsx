@@ -110,7 +110,7 @@ const GameRow: FC<{ game: CleanerGame; selected: ReadonlySet<string>; disabled: 
       </div>
       {selectedCount > 0 && <div style={{ ...caption, color: theme.color.accent, padding: "2px 8px 6px" }}>{selectedKinds.map((kind) => t(`cleaner.kind.${kind}`)).join(" · ")}</div>}
       {open && <div style={{ ...column, padding: "6px" }}>
-        {!game.name && <div style={caption}>{t("cleaner.steamIdentifier", { id: game.entries[0].appid })}</div>}
+        {(!game.name || game.entries.some((entry) => entry.requires_manual_selection)) && <div style={caption}>{t("cleaner.steamIdentifier", { id: game.entries[0].appid })}</div>}
         {game.entries.map((entry) => <EntryChoice key={entry.id} entry={entry} selected={selected.has(entry.id)} disabled={disabled} onToggle={() => onEntry(entry)} />)}
       </div>}
     </div>
