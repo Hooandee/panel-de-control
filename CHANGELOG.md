@@ -7,23 +7,23 @@
 
 ### Español
 
-* **Limpieza:** Las bibliotecas de Steam enlazadas, como las instaladas en una tarjeta microSD, vuelven a reconocerse correctamente en Juegos y Proton. Antes de limpiar, Panel de Control comprueba que el enlace siga apuntando al mismo lugar y bloquea la operación si detecta un cambio, sin seguir enlaces internos inesperados. ([#700](https://github.com/Hooandee/panel-de-control/pull/700))
+* **Limpieza:** Los juegos y las versiones de Proton instalados en una tarjeta microSD vuelven a aparecer correctamente, sin el error que impedía acceder a la unidad. Antes de limpiar, Panel de Control comprueba de nuevo la tarjeta para no borrar nada si se ha retirado o ha cambiado. ([#700](https://github.com/Hooandee/panel-de-control/pull/700))
 
 ### English
 
-* **Cleanup:** Linked Steam libraries, such as those installed on a microSD card, are once again detected correctly in Games and Proton. Before cleaning, Panel de Control verifies that the link still points to the same location and blocks the operation if it changes, without following unexpected internal links. ([#700](https://github.com/Hooandee/panel-de-control/pull/700))
+* **Cleanup:** Games and Proton versions installed on a microSD card now appear correctly again, without the error that prevented access to the drive. Before cleaning, Panel de Control checks the card again so nothing is deleted if it has been removed or changed. ([#700](https://github.com/Hooandee/panel-de-control/pull/700))
 
 ### Italiano
 
-* **Pulizia:** Le librerie Steam collegate, come quelle installate su una scheda microSD, vengono nuovamente rilevate correttamente in Giochi e Proton. Prima della pulizia, Panel de Control verifica che il collegamento punti ancora alla stessa posizione e blocca l'operazione se cambia, senza seguire collegamenti interni imprevisti. ([#700](https://github.com/Hooandee/panel-de-control/pull/700))
+* **Pulizia:** I giochi e le versioni di Proton installati su una scheda microSD tornano a essere visualizzati correttamente, senza l'errore che impediva di accedere all'unità. Prima della pulizia, Panel de Control controlla di nuovo la scheda per evitare di eliminare dati se è stata rimossa o modificata. ([#700](https://github.com/Hooandee/panel-de-control/pull/700))
 
 ### Deutsch
 
-* **Bereinigung:** Verknüpfte Steam-Bibliotheken, etwa auf einer microSD-Karte installierte, werden in den Bereichen Spiele und Proton wieder korrekt erkannt. Vor der Bereinigung prüft Panel de Control, ob die Verknüpfung weiterhin auf denselben Ort verweist, und bricht bei Änderungen ab, ohne unerwarteten internen symbolischen Links zu folgen. ([#700](https://github.com/Hooandee/panel-de-control/pull/700))
+* **Bereinigung:** Spiele und Proton-Versionen auf einer microSD-Karte werden wieder korrekt angezeigt, ohne den Fehler, der den Zugriff auf das Laufwerk verhindert hat. Vor der Bereinigung prüft Panel de Control die Karte erneut, damit nichts gelöscht wird, wenn sie entfernt oder verändert wurde. ([#700](https://github.com/Hooandee/panel-de-control/pull/700))
 
 ### Português (Brasil)
 
-* **Limpeza:** Bibliotecas vinculadas do Steam, como as instaladas em um cartão microSD, voltam a ser reconhecidas corretamente em Jogos e Proton. Antes da limpeza, o Painel de Controle verifica se o link ainda aponta para o mesmo local e bloqueia a operação se ele mudar, sem seguir links simbólicos internos inesperados. ([#700](https://github.com/Hooandee/panel-de-control/pull/700))
+* **Limpeza:** Jogos e versões do Proton instalados em um cartão microSD voltam a aparecer corretamente, sem o erro que impedia o acesso à unidade. Antes da limpeza, o Painel de Controle verifica o cartão novamente para não apagar nada caso ele tenha sido removido ou alterado. ([#700](https://github.com/Hooandee/panel-de-control/pull/700))
 
 ## [0.54.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.53.0...panel-de-control-v0.54.0) (2026-09-20)
 
