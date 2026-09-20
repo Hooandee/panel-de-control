@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.54.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.53.0...panel-de-control-v0.54.0) (2026-09-20)
+
+
+### Features
+
+* rebuild automatic TDP control ([#647](https://github.com/Hooandee/panel-de-control/issues/647)) ([3b4d427](https://github.com/Hooandee/panel-de-control/commit/3b4d427dc2db40c4949cdb1e8550b0ac6bc1b364))
+
 ## [0.53.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.52.1...panel-de-control-v0.53.0) (2026-09-19)
 
 
