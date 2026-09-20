@@ -27,6 +27,11 @@ describe("learningTagsForViewBlocks", () => {
       "fans",
     ]);
   });
+
+  it("does not attach TDP learning to Steam's independent performance block", () => {
+    expect(learningTagsForViewBlocks(["steamPerformance"], false)).toEqual([]);
+    expect(learningTagsForViewBlocks(["steamPerformance", "autoTdp"], false)).toEqual(["tdp"]);
+  });
 });
 
 describe("providersFor", () => {

@@ -79,8 +79,10 @@ def test_ui_save_after_upgrade_preserves_active_settings(
     assert asyncio.run(plugin.set_ui_prefs({"pdc:qamLayout": qam_layout})) is True
 
     expected = copy.deepcopy(settings)
+    expected.pop("qam_tdp_boost")
     expected["ui_prefs"]["pdc:qamLayout"] = qam_layout
     saved = json.loads(path.read_text())
+    assert "qam_tdp_boost" not in saved
     assert {key: saved[key] for key in expected} == expected
     reloaded = load_settings_plugin()
     assert {key: reloaded._settings[key] for key in expected} == expected

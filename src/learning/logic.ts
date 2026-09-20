@@ -6,7 +6,8 @@ export interface LearningInputs {
   telemetryOn: boolean;
   tdpSupported: boolean;
   fanSupported: boolean;
-  scope: readonly LearningTag[];
+  autoTdpActive?: boolean;
+  scope?: readonly LearningTag[];
 }
 
 export interface LearningBadge {
@@ -19,10 +20,11 @@ export function learningBadge({
   telemetryOn,
   tdpSupported,
   fanSupported,
-  scope,
+  autoTdpActive = false,
+  scope = ["tdp", "fans"],
 }: LearningInputs): LearningBadge {
   const tags: LearningTag[] = [];
-  if (tdpSupported && scope.includes("tdp")) tags.push("tdp");
+  if (tdpSupported && !autoTdpActive && scope.includes("tdp")) tags.push("tdp");
   if (fanSupported && scope.includes("fans")) tags.push("fans");
 
   if (!inGame || tags.length === 0) return { state: "hidden", tags: [] };

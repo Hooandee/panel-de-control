@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   modal: null as ReactNode | null,
   submitReport: vi.fn(async () => ({ ok: true, code: "PDC-TEST" })),
   steamDiagnostics: vi.fn(),
+  focusElement: vi.fn((element: HTMLElement | null) => element?.focus()),
   steamOverlay: {
     snapshot_status: "available",
     resolver: "global",
@@ -35,12 +36,18 @@ vi.mock("@decky/ui", () => ({
     children,
     onActivate,
     onClick,
+    onGamepadFocus: _onGamepadFocus,
+    onGamepadBlur: _onGamepadBlur,
+    preferredFocus: _preferredFocus,
     noFocusRing: _noFocusRing,
     ...props
   }: {
     children?: ReactNode;
     onActivate?: () => void;
     onClick?: () => void;
+    onGamepadFocus?: () => void;
+    onGamepadBlur?: () => void;
+    preferredFocus?: boolean;
     noFocusRing?: boolean;
     [key: string]: unknown;
   }) => createElement(
@@ -53,6 +60,7 @@ vi.mock("@decky/ui", () => ({
     children,
   ),
   ModalRoot: ({ children }: { children?: ReactNode }) => <>{children}</>,
+  getFocusNavController: () => ({ FocusElement: mocks.focusElement }),
   showModal: (node: ReactNode) => { mocks.modal = node; },
   TextField: ({ value, onChange }: { value: string; onChange: (event: unknown) => void }) => (
     <input value={value} onChange={onChange} />
@@ -87,25 +95,37 @@ describe("ReportModal request type", () => {
     cleanup();
     mocks.modal = null;
     mocks.submitReport.mockClear();
+    mocks.focusElement.mockClear();
     mocks.steamDiagnostics.mockReset();
   });
 
-  it("starts as a problem and submits a feature request without losing its area or text", async () => {
+  it("requires an explicit report type before revealing the form", () => {
     openReportModal();
     render(mocks.modal);
 
     const problem = screen.getByRole("radio", { name: "report.kind.bug" });
     const feature = screen.getByRole("radio", { name: "report.kind.feature" });
-    expect(problem.getAttribute("aria-checked")).toBe("true");
+    expect(problem.getAttribute("aria-checked")).toBe("false");
     expect(feature.getAttribute("aria-checked")).toBe("false");
+    expect(screen.getByRole("radiogroup").getAttribute("flow-children")).toBe("row");
+    expect(screen.queryByRole("button", { name: "report.cat.themes" })).toBeNull();
+    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(screen.queryByRole("button", { name: "report.send" })).toBeNull();
+  });
+
+  it("preserves the area and text when changing type and submits a feature request", async () => {
+    openReportModal();
+    render(mocks.modal);
+
+    fireEvent.click(screen.getByRole("radio", { name: "report.kind.bug" }));
 
     fireEvent.click(screen.getByRole("button", { name: "report.cat.themes" }));
     fireEvent.change(screen.getByRole("textbox"), {
       target: { value: "Add automatic theme rotation" },
     });
-    fireEvent.click(feature);
+    fireEvent.click(screen.getByRole("button", { name: "report.kind.change" }));
+    fireEvent.click(screen.getByRole("radio", { name: "report.kind.feature" }));
 
-    expect(feature.getAttribute("aria-checked")).toBe("true");
     expect(screen.getByText("report.intro.feature")).toBeTruthy();
     expect(screen.getByRole("textbox")).toHaveProperty(
       "value",
@@ -124,10 +144,34 @@ describe("ReportModal request type", () => {
     expect(mocks.steamDiagnostics).not.toHaveBeenCalled();
   });
 
+  it("restores focus to the selected request type when reopening the selector", () => {
+    openReportModal();
+    render(mocks.modal);
+
+    fireEvent.click(screen.getByRole("radio", { name: "report.kind.feature" }));
+    fireEvent.click(screen.getByRole("button", { name: "report.kind.change" }));
+
+    expect(document.activeElement).toBe(
+      screen.getByRole("radio", { name: "report.kind.feature" }),
+    );
+  });
+
+  it("keeps the change-type action compact beside the selected type", () => {
+    openReportModal();
+    render(mocks.modal);
+
+    fireEvent.click(screen.getByRole("radio", { name: "report.kind.feature" }));
+
+    const change = screen.getByRole("button", { name: "report.kind.change" });
+    expect(change.style.width).toBe("112px");
+    expect(change.style.flex).toBe("0 0 auto");
+  });
+
   it("includes the current Steam overlay state in a HUD report", async () => {
     openReportModal();
     render(mocks.modal);
 
+    fireEvent.click(screen.getByRole("radio", { name: "report.kind.bug" }));
     fireEvent.click(screen.getByRole("button", { name: "report.cat.hud" }));
     fireEvent.change(screen.getByRole("textbox"), {
       target: { value: "No aparece el HUD" },
@@ -140,6 +184,25 @@ describe("ReportModal request type", () => {
       expect.objectContaining({
         hud: { steam_overlay: mocks.steamOverlay },
       }),
+    ));
+  });
+
+  it("offers AutoTDP separately from manual TDP and submits that category", async () => {
+    openReportModal();
+    render(mocks.modal);
+
+    fireEvent.click(screen.getByRole("radio", { name: "report.kind.bug" }));
+    expect(screen.getByRole("button", { name: "report.cat.tdp" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "report.cat.auto_tdp" }));
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: "Los FPS caen y tarda en recuperar" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "report.send" }));
+
+    await waitFor(() => expect(mocks.submitReport).toHaveBeenCalledWith(
+      ["auto_tdp"],
+      "Los FPS caen y tarda en recuperar",
+      expect.objectContaining({ report_kind: "bug" }),
     ));
   });
 });

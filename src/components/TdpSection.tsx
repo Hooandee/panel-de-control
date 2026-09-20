@@ -9,7 +9,6 @@ import { openPowerPresetsModal } from "./PowerPresetsModal";
 import { useI18n } from "../i18n";
 import { theme } from "../theme";
 import { Loading } from "./Loading";
-import { ProfileSelector } from "./ProfileSelector";
 import { PowerArc } from "./PowerArc";
 import { Presets } from "./Presets";
 import { FirmwareModes } from "./FirmwareModes";
@@ -20,16 +19,10 @@ import { TdpOwnershipStatus } from "./TdpOwnershipStatus";
 import { ExperimentalLabel } from "./ExperimentalBadge";
 import { ownershipView } from "../tdp/ownership";
 
-// Learned-band reasons worth surfacing as "still learning" (others — no_game,
-// disabled, error — show no line).
-const LEARNING_REASONS = new Set(["no_data", "too_few", "one_level"]);
-
 export interface TdpSectionProps {
   tdp: TdpState | null;
   scope: TdpScope;
-  game: { appid: string; name: string } | null;
   power: PowerDraw | null;
-  onScope: (scope: TdpScope) => void;
   onWatts: (watts: number) => void;
   onSetLevels: (off2: number, off3: number) => void;
   onSetMode: (mode: BoostMode) => void;
@@ -48,7 +41,7 @@ export interface TdpSectionProps {
   onApplyPreset: (item: PresetItem) => void;
 }
 
-export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onScope, onWatts, onSetLevels, onSetMode, onApplySuggestion, onFirmwareMode, onLowBatteryHold, monitorOnly, onReactivate, presets, refreshPresets, onApplyPreset }) => {
+export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, onSetLevels, onSetMode, onApplySuggestion, onFirmwareMode, onLowBatteryHold, monitorOnly, onReactivate, presets, refreshPresets, onApplyPreset }) => {
   const { t } = useI18n();
 
   // Memoized (and above the early returns) so re-renders don't rebuild the chip list.
@@ -103,7 +96,7 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
   // Active ceiling: on battery the device-aware cap (max), on charger max_ac.
   // Never offer more than the current power source can deliver.
   const activeMax = tdp.on_ac ? tdp.limits.max_ac : tdp.limits.max;
-  const isAutoOn = power?.auto_tdp ?? false;
+  const isAutoOn = !monitorOnly && (power?.auto_tdp ?? false);
   const visualLimits = { ...tdp.limits, min: isAutoOn ? tdp.limits.min : requestMin };
   const atCeiling = Math.min(view.watts, activeMax) >= activeMax;
   // Reference watts clamped to the active ceiling; the reset link shows only when
@@ -127,7 +120,9 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
   const deckPptActive = Boolean(tdp.ppt?.supported && view.mode !== "estable");
   const pptVisualMax = deckPptActive ? activeMax : null;
   const arcTarget = deckPptActive ? (tdp.ppt?.requested.slow ?? shownWatts) : shownWatts;
-  const arcApplied = deckPptActive ? (tdp.ppt?.applied.slow ?? null) : (power?.applied ?? null);
+  const arcApplied = deckPptActive
+    ? (tdp.ppt?.applied.slow ?? null)
+    : (power?.applied ?? (monitorOnly ? tdp.applied_w : null));
   const basePpt = deckPptActive ? shownWatts : null;
   const slowPpt = deckPptActive ? (tdp.ppt?.requested.slow ?? null) : null;
   const fastPpt = deckPptActive ? (tdp.ppt?.requested.fast ?? null) : null;
@@ -145,7 +140,6 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
             limits={visualLimits}
             onAc={tdp.on_ac}
             actualWatts={power?.watts ?? null}
-            gpuBusy={power?.gpu_busy ?? null}
             auto={isAutoOn}
             setpoint={power?.setpoint ?? null}
             appliedWatts={arcApplied}
@@ -162,27 +156,12 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
 
   return (
     <>
-      {/* Hidden under a firmware mode: it owns the rails, so a per-game TDP scope has
-          no effect there (same as the advanced/boost controls below). */}
-      {!inFwMode && (
-        <PanelSectionRow>
-          <ProfileSelector
-            scope={scope}
-            gameName={game?.name ?? null}
-            hasGameProfile={tdp.has_game_profile}
-            globalLabel={t("tdp.scope.global")}
-            inheritHint={t("tdp.inherit")}
-            onScope={onScope}
-          />
-        </PanelSectionRow>
-      )}
       <PanelSectionRow>
         <PowerArc
           watts={arcTarget}
           limits={visualLimits}
           onAc={tdp.on_ac}
           actualWatts={power?.watts ?? null}
-          gpuBusy={power?.gpu_busy ?? null}
           auto={isAutoOn}
           setpoint={power?.setpoint ?? null}
           appliedWatts={arcApplied}
@@ -197,35 +176,6 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, game, power, onSco
         <PanelSectionRow>
           <TdpOwnershipStatus ownership={tdp.ownership} />
         </PanelSectionRow>
-      )}
-      {/* Auto status, sitting directly under the arc so it fills what would
-          otherwise be dead space above the toggle. */}
-      {isAutoOn && power?.ui_floor_engaged && (
-        // Honest: opening the QAM raised PL1 so the CPU-bound menu render stays
-        // fluid — the arc shows a menu-temporary value, NOT the settled in-game one.
-        <PanelSectionRow>
-          <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
-            {t("tdp.auto.ui_floor")}
-          </div>
-        </PanelSectionRow>
-      )}
-      {isAutoOn && (
-        // The learned band when ready, a plain "learning…" note while collecting,
-        // nothing otherwise. Auto-TDP itself is decoupled from the band (runs the
-        // full range + explores); this is a read-only status line.
-        tdp.learned.enough ? (
-          <PanelSectionRow>
-            <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
-              {t("tdp.learned.band", { lo: tdp.learned.floor!, hi: tdp.learned.ceil! })}
-            </div>
-          </PanelSectionRow>
-        ) : LEARNING_REASONS.has(tdp.learned.reason) ? (
-          <PanelSectionRow>
-            <div style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
-              {t("tdp.learned.learning.title")}
-            </div>
-          </PanelSectionRow>
-        ) : null
       )}
       {!isAutoOn && (
         <>

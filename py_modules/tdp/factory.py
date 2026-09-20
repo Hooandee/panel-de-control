@@ -4,6 +4,7 @@ from device_quirks import (
     asus_tdp_authoritative_reassert_s,
     is_gpd_win_mini_2025_tdp_recovery,
     is_legion_go_s_83n6,
+    is_msi_claw_8_ai_plus_a2vm,
     legion_go_2_83n0_firmware_attr_quirks,
     legion_go_s_83l3_firmware_attr_quirks,
     legion_go_s_83n6_firmware_attr_quirks,
@@ -15,6 +16,7 @@ from tdp.asus_nb_wmi import AsusNbWmiBackend
 from tdp.backend import NullBackend, TDPBackend
 from tdp.firmware_attr import FirmwareAttrBackend
 from tdp.intel_rapl import IntelRaplBackend
+from tdp.msi_claw_intel import MsiClawIntelBackend
 from tdp.msi_claw_a8 import MsiClawA8FirmwareBackend
 from tdp.ryzenadj import RyzenadjBackend
 from tdp.steamdeck_hwmon import SteamDeckHwmonBackend
@@ -92,7 +94,7 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None):
         return backend
 
     def msi():
-        return FirmwareAttrBackend(
+        manual = FirmwareAttrBackend(
             "msi-wmi-platform",
             fallback,
             root=root,
@@ -102,9 +104,40 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None):
                 "firmware-msi-wmi-platform.lock",
             ),
         )
+        if not is_msi_claw_8_ai_plus_a2vm(device, root) or not manual.supported:
+            return manual
+        auto_firmware = FirmwareAttrBackend(
+            "msi-wmi-platform",
+            fallback,
+            root=root,
+            is_generic=generic,
+            optional_rails=("pl3",),
+            safety_lock_path=_runtime_lock_path(
+                root,
+                "firmware-msi-wmi-platform-auto.lock",
+            ),
+            restore_on_release=True,
+            ownership_lock_path=_runtime_lock_path(
+                root,
+                "ownership-firmware-msi-wmi-platform.lock",
+            ),
+        )
+        return MsiClawIntelBackend(manual, auto_firmware, intel())
 
     def intel():
-        return IntelRaplBackend(fallback, root=root)
+        return IntelRaplBackend(
+            fallback,
+            root=root,
+            safety_lock_path=_runtime_lock_path(
+                root,
+                "intel-rapl-transaction.lock",
+            ),
+            ownership_lock_path=_runtime_lock_path(
+                root,
+                "ownership-intel-rapl.lock",
+            ),
+            auto_tdp_allowed=is_msi_claw_8_ai_plus_a2vm(device, root),
+        )
 
     def deck():
         return SteamDeckHwmonBackend(fallback, device.key, root=root)
@@ -244,7 +277,8 @@ def select_backend(device, root="/", ryzenadj_resolve=None, os_id=None) -> TDPBa
             if isinstance(details, dict):
                 trace_item.update(details)
         trace.append(trace_item)
-        if ready or safety_locked:
+        blocks_fallback = bool(getattr(backend, "blocks_fallback", False))
+        if ready or safety_locked or (backend.supported and blocks_fallback):
             backend.probe_trace = tuple(trace)
             return backend
     backend = NullBackend(f"no supported TDP interface for {device.key}")

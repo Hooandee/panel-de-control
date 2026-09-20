@@ -2,6 +2,8 @@ import glob
 import os
 import time
 
+from power.intel import IntelGpuUtil
+
 
 class PowerReader:
     """Reads actual APU/GPU power draw in watts and GPU utilisation from sysfs.
@@ -29,6 +31,11 @@ class PowerReader:
         self._gpu_sample_gap = max(0.0, gpu_sample_gap)
         self._amdgpu_hwmon = self._find_amdgpu_dir()
         self._gpu_busy_path = self._find_gpu_busy_path()
+        self._intel_gpu = IntelGpuUtil(root=root)
+        self._gpu_busy_diagnostics = {
+            "source": "unknown",
+            "state": "not_sampled",
+        }
         (
             self._desktop_hwmon,
             self._desktop_gpu_device,
@@ -150,7 +157,27 @@ class PowerReader:
         None only if EVERY read failed (never fabricates a 0)."""
         if self._gpu_busy_path is None or not os.path.exists(self._gpu_busy_path):
             self._gpu_busy_path = self._find_gpu_busy_path()
-        return self._read_gpu_busy_from(self._gpu_busy_path)
+        if self._gpu_busy_path is None:
+            if self._amdgpu_hwmon is None or not os.path.isdir(self._amdgpu_hwmon):
+                self._amdgpu_hwmon = self._find_amdgpu_dir()
+            if self._amdgpu_hwmon is not None:
+                self._gpu_busy_diagnostics = {
+                    "source": "amdgpu",
+                    "state": "busy_unavailable",
+                }
+                return None
+            value = self._intel_gpu.read_gpu_busy()
+            self._gpu_busy_diagnostics = self._intel_gpu.diagnostics()
+            return value
+        value = self._read_gpu_busy_from(self._gpu_busy_path)
+        self._gpu_busy_diagnostics = {
+            "source": "amdgpu_sysfs",
+            "state": "ok" if value is not None else "unavailable",
+        }
+        return value
+
+    def gpu_diagnostics(self):
+        return dict(self._gpu_busy_diagnostics)
 
     def read(self):
         return {"watts": self.read_watts(), "gpu_busy": self.read_gpu_busy()}

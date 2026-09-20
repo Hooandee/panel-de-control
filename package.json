@@ -1,6 +1,6 @@
 {
   "name": "panel-de-control",
-  "version": "0.52.1",
+  "version": "0.54.0",
   "description": "Panel de control definitivo para PCs portátiles: TDP, ventiladores y más.",
   "type": "module",
   "scripts": {
@@ -14,19 +14,19 @@
   "license": "GPL-3.0-only",
   "devDependencies": {
     "@decky/rollup": "^1.0.2",
-    "@decky/ui": "^4.12.0",
-    "@rollup/rollup-linux-x64-musl": "^4.63.1",
+    "@decky/ui": "^4.12.1",
+    "@rollup/rollup-linux-x64-musl": "^4.63.3",
     "@testing-library/react": "^16.3.3",
-    "@types/react": "19.2.18",
-    "@types/react-dom": "19.2.7",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
     "@types/webpack": "^5.28.5",
-    "happy-dom": "^20.14.0",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8",
-    "react-router": "^8.3.1",
-    "rollup": "^4.63.1",
+    "happy-dom": "^20.14.5",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-router": "^8.4.0",
+    "rollup": "^4.63.3",
     "typescript": "^7.0.2",
-    "vitest": "^5.0.0"
+    "vitest": "^5.0.1"
   },
   "dependencies": {
     "@decky/api": "^1.1.3",

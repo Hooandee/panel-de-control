@@ -3,7 +3,7 @@
 // in either place.
 import { DeviceInfo } from "../api";
 import { Layout, ListPref } from "../customize/layout";
-import { blockOrder, POWER_TAB } from "../customize/manifest";
+import { blockOrder, customizationBlocks, POWER_TAB } from "../customize/manifest";
 import { effectiveEnabled } from "../customize/moduleLogic";
 
 // Sections whose whole content is blocks (no fixed core): hiding every block
@@ -56,7 +56,7 @@ export function allBlocksHidden(
 ): boolean {
   if (!FULLY_MODULAR.has(id) && !(desktopMode && id === "power")) return false;
   const declared = blockOrder(id, desktopMode);
-  const present = presentIds?.filter((blockId) => declared.includes(blockId));
+  const present = customizationBlocks(id, desktopMode, presentIds ?? null).map((block) => block.id);
   if (presentIds && presentIds.length === 0 && !(desktopMode && id === "power")) return true;
   const ids = present && present.length ? present : declared;
   if (!ids.length) return false;

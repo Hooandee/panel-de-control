@@ -2,6 +2,67 @@
 
 ## Unreleased
 
+## [0.54.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.53.0...panel-de-control-v0.54.0) (2026-09-20)
+
+
+### Español
+
+* **Auto-TDP:** Reconstruido para alcanzar con rapidez los FPS que elijas y reducir después el consumo de forma progresiva, evitando oscilaciones innecesarias. Puedes indicar cualquier objetivo de FPS y un TDP inicial, tanto globalmente como por juego, y el ajuste continúa funcionando con el panel cerrado.
+* **Auto-TDP:** Los menús de Steam, las superposiciones, los emuladores y las aplicaciones de terceros reciben potencia cuando la necesitan, sin quedarse atrapados en valores mínimos. El sistema aprende un buen punto de partida para cada juego y, al desactivarlo, vuelve a respetar tus perfiles manuales.
+* **Auto-TDP:** El dial muestra un único valor automático claro, acompañado de un halo y una escala azul a morado, sin exponer los picos internos que podían resultar confusos. También mejora la disposición en espacios compactos y amplía el soporte seguro para GPU Intel Xe y MSI Claw 8 AI+.
+
+### English
+
+* **Auto-TDP:** Rebuilt to reach your chosen frame rate quickly and then reduce power gradually, avoiding unnecessary oscillation. You can set any FPS target and a starting TDP globally or per game, and adjustment continues while the panel is closed.
+* **Auto-TDP:** Steam menus, overlays, emulators, and third-party applications now receive power when they need it instead of becoming stuck at minimum values. The system learns a suitable starting point for each game and returns to your manual profiles when disabled.
+* **Auto-TDP:** The dial now presents one clear automatic value with a halo and a blue-to-purple scale, without exposing potentially confusing internal boost peaks. This release also improves compact layouts and extends safe support for Intel Xe GPUs and the MSI Claw 8 AI+.
+
+### Italiano
+
+* **Auto-TDP:** Ricostruito per raggiungere rapidamente il frame rate scelto e ridurre poi la potenza in modo graduale, evitando oscillazioni inutili. Puoi impostare qualsiasi obiettivo FPS e un TDP iniziale a livello globale o per singolo gioco; la regolazione continua anche con il pannello chiuso.
+* **Auto-TDP:** I menu di Steam, gli overlay, gli emulatori e le applicazioni di terze parti ricevono potenza quando ne hanno bisogno, senza rimanere bloccati sui valori minimi. Il sistema apprende un punto di partenza adatto per ogni gioco e, quando viene disattivato, torna a rispettare i profili manuali.
+* **Auto-TDP:** Il quadrante mostra ora un unico valore automatico chiaro, accompagnato da un alone e da una scala dal blu al viola, senza esporre picchi interni potenzialmente fuorvianti. Questa versione migliora inoltre la disposizione negli spazi compatti ed estende il supporto sicuro alle GPU Intel Xe e a MSI Claw 8 AI+.
+
+### Deutsch
+
+* **Auto-TDP:** Neu aufgebaut, um die gewählte Bildrate schnell zu erreichen und die Leistung anschließend schrittweise zu senken, ohne unnötige Schwankungen. Du kannst ein beliebiges FPS-Ziel und einen anfänglichen TDP-Wert global oder pro Spiel festlegen; die Regelung läuft auch bei geschlossenem Panel weiter.
+* **Auto-TDP:** Steam-Menüs, Overlays, Emulatoren und Drittanbieter-Apps erhalten nun bei Bedarf genügend Leistung, statt auf Minimalwerten hängen zu bleiben. Das System lernt einen geeigneten Ausgangspunkt für jedes Spiel und berücksichtigt nach dem Deaktivieren wieder deine manuellen Profile.
+* **Auto-TDP:** Das Einstellrad zeigt jetzt einen einzigen klaren Automatikwert mit Leuchteffekt und einer Skala von Blau bis Violett, ohne potenziell verwirrende interne Boost-Spitzen einzublenden. Außerdem wurde die Darstellung bei wenig Platz verbessert und die sichere Unterstützung für Intel-Xe-GPUs und den MSI Claw 8 AI+ erweitert.
+
+### Português (Brasil)
+
+* **Auto-TDP:** Reconstruído para alcançar rapidamente a taxa de quadros escolhida e depois reduzir a potência de forma gradual, evitando oscilações desnecessárias. Você pode definir qualquer meta de FPS e um TDP inicial de forma global ou por jogo; o ajuste continua funcionando mesmo com o painel fechado.
+* **Auto-TDP:** Menus do Steam, sobreposições, emuladores e aplicativos de terceiros agora recebem potência quando precisam, sem ficar presos em valores mínimos. O sistema aprende um ponto de partida adequado para cada jogo e volta a respeitar seus perfis manuais quando é desativado.
+* **Auto-TDP:** O mostrador agora apresenta um único valor automático claro, acompanhado de um halo e uma escala do azul ao roxo, sem exibir picos internos que poderiam causar confusão. Esta versão também melhora o layout em espaços compactos e amplia o suporte seguro para GPUs Intel Xe e o MSI Claw 8 AI+.
+
+## [0.53.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.52.1...panel-de-control-v0.53.0) (2026-09-19)
+
+
+### Español
+
+* **Rendimiento de Steam:** La sección Potencia incorpora los controles de rendimiento de Steam para ajustar el límite de FPS y los hercios, el VRR, el desgarro, el sombreado variable y el escalado —modo, filtro y nitidez— sin salir de Panel de Control. Muestra solo las opciones compatibles, usa automáticamente el perfil global o el del juego abierto y se puede ocultar, ordenar o añadir a vistas personalizadas.
+* **Reportes:** Antes de abrir el formulario puedes elegir claramente entre informar de un problema y proponer una función. Las dos opciones son grandes, accesibles y navegables con mando; si cambias de tipo, Panel de Control conserva el texto y el área que ya habías seleccionado.
+
+### English
+
+* **Steam performance:** The Power section now includes Steam's performance controls for adjusting the FPS limit and refresh rate, VRR, tearing, variable-rate shading, and scaling —mode, filter, and sharpness— without leaving Panel de Control. It shows only supported options, automatically uses the global profile or the running game's profile, and can be hidden, reordered, or added to custom views.
+* **Reports:** Before opening the form, you can now clearly choose between reporting a problem and proposing a feature. Both options are large, accessible, and controller-friendly; if you switch type, Panel de Control keeps the text and area you already selected.
+
+### Italiano
+
+* **Prestazioni di Steam:** La sezione Potenza include ora i controlli delle prestazioni di Steam per regolare il limite FPS e la frequenza di aggiornamento, il VRR, il tearing, l'ombreggiatura variabile e il ridimensionamento —modalità, filtro e nitidezza— senza uscire da Panel de Control. Mostra solo le opzioni supportate, usa automaticamente il profilo globale o quello del gioco in esecuzione e può essere nascosta, riordinata o aggiunta alle viste personalizzate.
+* **Segnalazioni:** Prima di aprire il modulo, ora puoi scegliere chiaramente se segnalare un problema o proporre una funzionalità. Le due opzioni sono grandi, accessibili e navigabili con il controller; se cambi tipo, Panel de Control conserva il testo e l'area che avevi già selezionato.
+
+### Deutsch
+
+* **Steam-Leistung:** Im Bereich Leistung stehen jetzt die Leistungsregler von Steam für FPS-Limit und Bildwiederholrate, VRR, Tearing, variable Schattierung sowie Skalierung —Modus, Filter und Schärfe— direkt in Panel de Control bereit. Es werden nur unterstützte Optionen angezeigt, automatisch das globale Profil oder das Profil des laufenden Spiels verwendet, und der Bereich lässt sich ausblenden, neu anordnen oder eigenen Ansichten hinzufügen.
+* **Berichte:** Vor dem Öffnen des Formulars kannst du jetzt eindeutig zwischen dem Melden eines Problems und dem Vorschlagen einer Funktion wählen. Beide Optionen sind groß, barrierearm und mit dem Controller bedienbar; beim Wechsel des Typs behält Panel de Control den bereits eingegebenen Text und den ausgewählten Bereich bei.
+
+### Português (Brasil)
+
+* **Desempenho do Steam:** A seção Potência agora inclui os controles de desempenho do Steam para ajustar o limite de FPS e a taxa de atualização, o VRR, o tearing, o sombreamento variável e a escala —modo, filtro e nitidez— sem sair do Painel de Controle. Ela mostra apenas as opções compatíveis, usa automaticamente o perfil global ou o perfil do jogo em execução e pode ser ocultada, reordenada ou adicionada a visualizações personalizadas.
+* **Relatórios:** Antes de abrir o formulário, agora você pode escolher claramente entre relatar um problema e propor um recurso. As duas opções são grandes, acessíveis e navegáveis com o controle; ao mudar o tipo, o Painel de Controle mantém o texto e a área que você já havia selecionado.
+
 ## [0.52.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.52.0...panel-de-control-v0.52.1) (2026-09-17)
 
 
