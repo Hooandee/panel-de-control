@@ -21,6 +21,7 @@ import decky
 # py_modules/ is on sys.path → import TOP-LEVEL (never `from py_modules.x import`).
 import auto_tdp
 from auto_tdp_learning import AutoTdpLearningStore
+import decky_compat
 import device_registry
 from gamescope_stats import GamescopeStats
 import osinfo
@@ -570,6 +571,7 @@ class Plugin:
         self._night_applied = False
         # Bounded startup task that re-asserts the display look once gamescope is ready.
         self._display_wait_task = None
+        self._decky_compat_task = None
         # HDR output on/off (gamescope). State lives in settings (hdr_enabled); gated to
         # HDR-capable panels with gamescope.
         self._hdr_backend = HdrBackend(run_gamescopectl)
@@ -11264,12 +11266,53 @@ class Plugin:
         )
         log("Lifecycle transition %s", encoded)
 
+    def _start_decky_frontend_compat(self) -> None:
+        version = getattr(decky, "DECKY_VERSION", "")
+        if not decky_compat.is_affected_version(version):
+            return
+        task = getattr(self, "_decky_compat_task", None)
+        if task is not None and not task.done():
+            return
+        self._decky_compat_task = asyncio.create_task(
+            self._recover_decky_frontend_compat(version)
+        )
+
+    async def _recover_decky_frontend_compat(self, version: str) -> None:
+        task = asyncio.current_task()
+        try:
+            result = await decky_compat.recover_frontend(version)
+            log = (
+                decky.logger.info
+                if result.status in {
+                    "recovered",
+                    "already_loaded",
+                    "legacy_api_available",
+                }
+                else decky.logger.warning
+            )
+            log(
+                "Decky frontend compatibility status=%s attempted=%s detail=%s",
+                result.status,
+                result.attempted,
+                result.detail,
+            )
+        finally:
+            if getattr(self, "_decky_compat_task", None) is task:
+                self._decky_compat_task = None
+
+    def _stop_decky_frontend_compat(self) -> None:
+        task = getattr(self, "_decky_compat_task", None)
+        self._decky_compat_task = None
+        if task is not None and not task.done():
+            task.cancel()
+
     async def _main(self) -> None:
         self._init()
         # Single-worker executor for subprocess-backed applies (gamescopectl /
         # systemctl / ryzenadj) → keeps them off the event loop AND serialised.
         # Created here (not _init) so unit tests that never call _main run inline.
         self._ensure_apply_executor()
+        self._start_decky_frontend_compat()
         await self._offload_call(self._recover_recognised_desktop_migration)
         await self._recover_tdp_startup_state()
         await self._probe_tdp_backend(force=True)
@@ -11345,6 +11388,7 @@ class Plugin:
         decky.logger.info("Panel de Control unloaded")
 
     def _prepare_shutdown(self) -> None:
+        self._stop_decky_frontend_compat()
         self._cancel_charge_limit_reconcile("shutdown")
         self._stop_charge_limit_full_once_monitor()
         self._shutting_down = True
