@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## [0.54.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.54.1...panel-de-control-v0.54.2) (2026-09-20)
+
+
+### Bug Fixes
+
+* allow manual cleanup when Steam shortcuts cannot be read ([#706](https://github.com/Hooandee/panel-de-control/issues/706)) ([904408e](https://github.com/Hooandee/panel-de-control/commit/904408e1a8b495ec97c8667d6e4b054bae6c2ef9))
+* **reports:** capture Steam frontend crash diagnostics ([#708](https://github.com/Hooandee/panel-de-control/issues/708)) ([8420098](https://github.com/Hooandee/panel-de-control/commit/8420098af6d3555f2045390da20efd1b29717529))
+
 ## [0.54.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.54.0...panel-de-control-v0.54.1) (2026-09-20)
 
 
