@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+## [0.54.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.54.0...panel-de-control-v0.54.1) (2026-09-20)
+
+
+### Español
+
+* **Limpieza:** Los juegos y las versiones de Proton instalados en una tarjeta microSD vuelven a aparecer correctamente, sin el error que impedía acceder a la unidad. Antes de limpiar, Panel de Control comprueba de nuevo la tarjeta para no borrar nada si se ha retirado o ha cambiado. ([#700](https://github.com/Hooandee/panel-de-control/pull/700))
+
+### English
+
+* **Cleanup:** Games and Proton versions installed on a microSD card now appear correctly again, without the error that prevented access to the drive. Before cleaning, Panel de Control checks the card again so nothing is deleted if it has been removed or changed. ([#700](https://github.com/Hooandee/panel-de-control/pull/700))
+
+### Italiano
+
+* **Pulizia:** I giochi e le versioni di Proton installati su una scheda microSD tornano a essere visualizzati correttamente, senza l'errore che impediva di accedere all'unità. Prima della pulizia, Panel de Control controlla di nuovo la scheda per evitare di eliminare dati se è stata rimossa o modificata. ([#700](https://github.com/Hooandee/panel-de-control/pull/700))
+
+### Deutsch
+
+* **Bereinigung:** Spiele und Proton-Versionen auf einer microSD-Karte werden wieder korrekt angezeigt, ohne den Fehler, der den Zugriff auf das Laufwerk verhindert hat. Vor der Bereinigung prüft Panel de Control die Karte erneut, damit nichts gelöscht wird, wenn sie entfernt oder verändert wurde. ([#700](https://github.com/Hooandee/panel-de-control/pull/700))
+
+### Português (Brasil)
+
+* **Limpeza:** Jogos e versões do Proton instalados em um cartão microSD voltam a aparecer corretamente, sem o erro que impedia o acesso à unidade. Antes da limpeza, o Painel de Controle verifica o cartão novamente para não apagar nada caso ele tenha sido removido ou alterado. ([#700](https://github.com/Hooandee/panel-de-control/pull/700))
+
 ## [0.54.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.53.0...panel-de-control-v0.54.0) (2026-09-20)
 
 

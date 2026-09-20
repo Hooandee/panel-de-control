@@ -491,19 +491,66 @@ def test_diagnostic_ids_survive_report_redaction(tmp_path):
                 assert redact_text(event[key]) == event[key]
 
 
-def test_secondary_library_symlink_is_visible_but_not_followed(tmp_path):
+def test_secondary_library_alias_resolves_to_a_cleanable_root(tmp_path):
     home, steam = make_steam(tmp_path)
     sd = tmp_path / "sd"
-    external = data(sd)
+    cache = data(sd)
     alias = tmp_path / "linked-card"
     alias.symlink_to(sd)
     write(steam / "steamapps/libraryfolders.vdf", f'"libraryfolders" {{ "1" "{alias}" }}')
-    state = service(home).inventory()
+    cleaner = service(home)
+    state = cleaner.inventory()
+
     assert len(state["libraries"]) == 2
-    assert state["libraries"][1]["reason"] == "symlink"
-    assert state["coverage_complete"] is False
-    assert state["entries"] == []
-    assert external.exists()
+    assert state["libraries"][1]["reason"] is None
+    assert state["coverage_complete"] is True
+    assert state["entries"][0]["blocked_reason"] is None
+
+    plan = cleaner.prepare(state["scan_id"], [state["entries"][0]["id"]])
+    result = cleaner.execute(plan["id"])
+
+    assert result["items"][0]["status"] == "deleted"
+    assert not cache.parent.exists()
+    assert alias.is_symlink()
+
+
+@pytest.mark.parametrize("root_kind", ["primary", "secondary"])
+@pytest.mark.parametrize("change_phase", ["before_prepare", "before_execute"])
+def test_library_alias_change_after_inventory_prevents_deletion(tmp_path, root_kind, change_phase):
+    first = tmp_path / "first-library"
+    second = tmp_path / "second-library"
+    first_cache = data(first)
+    second_cache = data(second)
+    if root_kind == "primary":
+        home = tmp_path / "home"
+        alias = home / ".local/share/Steam"
+        alias.parent.mkdir(parents=True)
+        alias.symlink_to(first)
+        write(first / "steamapps/libraryfolders.vdf", f'"libraryfolders" {{ "0" {{ "path" "{first}" }} }}')
+    else:
+        home, steam = make_steam(tmp_path)
+        alias = tmp_path / "linked-library"
+        alias.symlink_to(first)
+        write(steam / "steamapps/libraryfolders.vdf", f'"libraryfolders" {{ "1" "{alias}" }}')
+    cleaner = service(home)
+    state = cleaner.inventory()
+    entry_id = state["entries"][0]["id"]
+
+    if change_phase == "before_execute":
+        plan = cleaner.prepare(state["scan_id"], [entry_id])
+
+    alias.unlink()
+    alias.symlink_to(second)
+
+    if change_phase == "before_prepare":
+        with pytest.raises(SteamCleanerError, match="path_changed"):
+            cleaner.prepare(state["scan_id"], [entry_id])
+    else:
+        result = cleaner.execute(plan["id"])
+        assert result["items"][0]["status"] == "skipped"
+        assert result["items"][0]["reason"] == "path_changed"
+    assert first_cache.exists()
+    assert second_cache.exists()
 
 
 def test_download_in_other_library_protects_the_game_cache(tmp_path):

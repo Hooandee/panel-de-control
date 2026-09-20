@@ -71,6 +71,7 @@ class SteamCleanerService:
         self._closed = False
         self._targets = {}
         self._sources = {}
+        self._library_resolutions = {}
         self._libraries = []
         self._scan_reported = set()
         self._plans = {}
@@ -173,6 +174,7 @@ class SteamCleanerService:
                 self._state.update(status="scanning", scan_id=None, error=None, progress={"processed": 0, "total": None})
             self._targets = {}
             self._sources = {}
+            self._library_resolutions = {}
             self._scan_reported = set()
             roots, complete = self._discover()
             self._libraries = roots
@@ -430,19 +432,19 @@ class SteamCleanerService:
 
     def _discover(self):
         roots = []
-        aliases = {}
         complete = True
         for relative in (".local/share/Steam", ".steam/steam", ".steam/root"):
             candidate = self._home / relative
             if not os.path.lexists(candidate):
                 continue
-            try:
-                root = candidate.resolve(strict=True)
-                aliases[str(candidate)] = root
-                if root not in roots:
-                    roots.append(root)
-            except (OSError, RuntimeError):
+            source, root = filesystem.resolve_library_root(candidate)
+            if root is None:
                 complete = False
+                continue
+            if source != root:
+                self._library_resolutions[str(source)] = root
+            if root not in roots:
+                roots.append(root)
         for root in list(roots):
             index = root / "steamapps/libraryfolders.vdf"
             try:
@@ -456,8 +458,11 @@ class SteamCleanerService:
                     raw = value.get("path") if isinstance(value, dict) else value
                     if not isinstance(raw, str) or not os.path.isabs(raw) or "\0" in raw:
                         raise ValueError("malformed_vdf")
-                    normalized = os.path.abspath(raw)
-                    path = aliases.get(normalized, Path(normalized))
+                    source, path = filesystem.resolve_library_root(raw)
+                    if path is None:
+                        path = source
+                    elif source != path:
+                        self._library_resolutions[str(source)] = path
                     if path not in roots:
                         roots.append(path)
             except (OSError, ValueError, UnicodeError) as error:
@@ -539,6 +544,8 @@ class SteamCleanerService:
             self._sources[str(path)] = None
 
     def _check_sources(self):
+        if not filesystem.library_resolutions_match(self._library_resolutions):
+            raise SteamCleanerError("path_changed")
         for path, expected in self._sources.items():
             try:
                 current = filesystem.fingerprint(os.stat(path))
