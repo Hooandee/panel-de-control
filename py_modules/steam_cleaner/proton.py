@@ -69,6 +69,7 @@ class ProtonCleanerService:
         self._closed = False
         self._targets = {}
         self._sources = {}
+        self._library_resolutions = {}
         self._plans = {}
         self._libraries = []
         self._state = {
@@ -156,6 +157,7 @@ class ProtonCleanerService:
                 self._state.update(status="scanning", scan_id=None, error=None, progress={"processed": 0, "total": None})
             self._targets = {}
             self._sources = {}
+            self._library_resolutions = {}
             roots, complete = self._discover()
             self._libraries = roots
             references, references_complete = self._read_references(roots)
@@ -311,19 +313,19 @@ class ProtonCleanerService:
 
     def _discover(self):
         roots = []
-        aliases = {}
         complete = True
         for relative in (".local/share/Steam", ".steam/steam", ".steam/root"):
             candidate = self._home / relative
             if not os.path.lexists(candidate):
                 continue
-            try:
-                root = candidate.resolve(strict=True)
-                aliases[str(candidate)] = root
-                if root not in roots:
-                    roots.append(root)
-            except (OSError, RuntimeError):
+            source, root = filesystem.resolve_library_root(candidate)
+            if root is None:
                 complete = False
+                continue
+            if source != root:
+                self._library_resolutions[str(source)] = root
+            if root not in roots:
+                roots.append(root)
         for root in list(roots):
             index = root / "steamapps/libraryfolders.vdf"
             try:
@@ -337,7 +339,11 @@ class ProtonCleanerService:
                     raw = value.get("path") if isinstance(value, dict) else value
                     if not isinstance(raw, str) or not os.path.isabs(raw) or "\0" in raw:
                         raise ValueError("malformed_vdf")
-                    path = aliases.get(os.path.abspath(raw), Path(os.path.abspath(raw)))
+                    source, path = filesystem.resolve_library_root(raw)
+                    if path is None:
+                        path = source
+                    elif source != path:
+                        self._library_resolutions[str(source)] = path
                     if path not in roots:
                         roots.append(path)
             except (OSError, ValueError, UnicodeError):
@@ -373,6 +379,8 @@ class ProtonCleanerService:
         complete = True
         steamapps = root / "steamapps"
         try:
+            if not stat.S_ISDIR(steamapps.lstat().st_mode):
+                return entries, False
             manifests = sorted(path for path in steamapps.iterdir() if path.name.startswith("appmanifest_") and path.name.endswith(".acf"))
         except OSError:
             return entries, False
@@ -429,8 +437,10 @@ class ProtonCleanerService:
 
     def _custom_entries(self, root, mounts, references, coverage_complete, activity):
         custom_root = root / "compatibilitytools.d"
-        self._remember(custom_root)
         try:
+            if not stat.S_ISDIR(custom_root.lstat().st_mode):
+                return [], False
+            self._remember(custom_root)
             children = sorted(custom_root.iterdir(), key=lambda path: path.name.casefold())
         except FileNotFoundError:
             return [], True
@@ -512,6 +522,8 @@ class ProtonCleanerService:
             self._sources[str(path)] = None
 
     def _check_sources(self):
+        if not filesystem.library_resolutions_match(self._library_resolutions):
+            raise SteamCleanerError("path_changed")
         for path, expected in self._sources.items():
             try:
                 current = filesystem.fingerprint(os.stat(path))

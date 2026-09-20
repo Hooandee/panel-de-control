@@ -3,6 +3,7 @@ import hashlib
 import stat
 import sys
 from contextlib import contextmanager
+from pathlib import Path
 
 
 class UnsafePath(Exception):
@@ -25,6 +26,22 @@ def identity(value):
 
 def fingerprint(value):
     return (*identity(value), value.st_mode, value.st_size, value.st_mtime_ns, value.st_ctime_ns)
+
+
+def resolve_library_root(path):
+    source = Path(os.path.abspath(path))
+    try:
+        return source, source.resolve(strict=True)
+    except (OSError, RuntimeError):
+        return source, None
+
+
+def library_resolutions_match(resolutions):
+    for source, expected in resolutions.items():
+        _, current = resolve_library_root(source)
+        if current != expected:
+            return False
+    return True
 
 
 def tree_summary(tree):
