@@ -135,6 +135,102 @@ def test_execution_deletes_only_the_reviewed_custom_tool(tmp_path):
     assert not payload.parent.parent.exists()
 
 
+def test_secondary_library_alias_exposes_cleanable_custom_proton(tmp_path):
+    home, steam = make_steam(tmp_path)
+    card = tmp_path / "card"
+    (card / "steamapps").mkdir(parents=True)
+    payload = custom(card, "old", "GE-Proton-Old")
+    alias = tmp_path / "linked-card"
+    alias.symlink_to(card)
+    write(steam / "steamapps/libraryfolders.vdf", f'"libraryfolders" {{ "1" "{alias}" }}')
+    cleaner = ProtonCleanerService(str(home), activity_provider=idle)
+    state = cleaner.inventory()
+
+    assert state["coverage_complete"] is True
+    assert state["entries"][0]["selectable"] is True
+
+    plan = cleaner.prepare(state["scan_id"], [state["entries"][0]["id"]])
+    result = cleaner.execute(plan["id"])
+
+    assert result["items"][0]["status"] == "deleted"
+    assert not payload.parent.parent.exists()
+    assert alias.is_symlink()
+
+
+@pytest.mark.parametrize("root_kind", ["primary", "secondary"])
+@pytest.mark.parametrize("change_phase", ["before_prepare", "before_execute"])
+def test_library_alias_change_after_inventory_protects_custom_proton(tmp_path, root_kind, change_phase):
+    first = tmp_path / "first-library"
+    second = tmp_path / "second-library"
+    (first / "steamapps").mkdir(parents=True)
+    (second / "steamapps").mkdir(parents=True)
+    first_payload = custom(first, "old", "GE-Proton-Old")
+    second_payload = custom(second, "other", "GE-Proton-Other")
+    if root_kind == "primary":
+        home = tmp_path / "home"
+        alias = home / ".local/share/Steam"
+        alias.parent.mkdir(parents=True)
+        alias.symlink_to(first)
+        write(first / "steamapps/libraryfolders.vdf", f'"libraryfolders" {{ "0" {{ "path" "{first}" }} }}')
+    else:
+        home, steam = make_steam(tmp_path)
+        alias = tmp_path / "linked-library"
+        alias.symlink_to(first)
+        write(steam / "steamapps/libraryfolders.vdf", f'"libraryfolders" {{ "1" "{alias}" }}')
+    cleaner = ProtonCleanerService(str(home), activity_provider=idle)
+    state = cleaner.inventory()
+    entry_id = state["entries"][0]["id"]
+
+    if change_phase == "before_execute":
+        plan = cleaner.prepare(state["scan_id"], [entry_id])
+
+    alias.unlink()
+    alias.symlink_to(second)
+
+    with pytest.raises(SteamCleanerError, match="path_changed"):
+        if change_phase == "before_prepare":
+            cleaner.prepare(state["scan_id"], [entry_id])
+        else:
+            cleaner.execute(plan["id"])
+    assert first_payload.exists()
+    assert second_payload.exists()
+
+
+@pytest.mark.parametrize("symlink_kind", ["category", "entry"])
+def test_custom_proton_internal_symlinks_never_become_selectable(tmp_path, symlink_kind):
+    home, steam = make_steam(tmp_path)
+    outside = tmp_path / "outside-library"
+    payload = custom(outside, "old", "GE-Proton-Old")
+    custom_root = steam / "compatibilitytools.d"
+    if symlink_kind == "category":
+        custom_root.symlink_to(outside / "compatibilitytools.d", target_is_directory=True)
+    else:
+        custom_root.mkdir()
+        (custom_root / "old").symlink_to(outside / "compatibilitytools.d/old", target_is_directory=True)
+
+    state = ProtonCleanerService(str(home), activity_provider=idle).inventory()
+
+    assert state["coverage_complete"] is False
+    assert state["entries"] == []
+    assert payload.exists()
+
+
+def test_official_proton_category_symlink_is_not_traversed(tmp_path):
+    home, steam = make_steam(tmp_path)
+    outside = tmp_path / "outside-library"
+    official(outside, "100", "External Proton", "External Proton")
+    write(outside / "steamapps/libraryfolders.vdf", '"libraryfolders" {}')
+    (steam / "steamapps/libraryfolders.vdf").unlink()
+    (steam / "steamapps").rmdir()
+    (steam / "steamapps").symlink_to(outside / "steamapps", target_is_directory=True)
+
+    state = ProtonCleanerService(str(home), activity_provider=idle).inventory()
+
+    assert state["coverage_complete"] is False
+    assert state["entries"] == []
+    assert (outside / "steamapps/common/External Proton/payload.bin").exists()
+
+
 def test_referenced_or_steam_managed_tools_cannot_be_prepared(tmp_path):
     home, steam = make_steam(tmp_path)
     official(steam, "100", "Proton 10.0", "Proton 10")
