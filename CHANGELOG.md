@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.54.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.54.0...panel-de-control-v0.54.1) (2026-09-20)
+
+
+### Bug Fixes
+
+* handle linked Steam library roots ([#700](https://github.com/Hooandee/panel-de-control/issues/700)) ([eb33860](https://github.com/Hooandee/panel-de-control/commit/eb3386061b64eac2b24a01086ce3f3fc69d0088f))
+
 ## [0.54.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.53.0...panel-de-control-v0.54.0) (2026-09-20)
 
 
