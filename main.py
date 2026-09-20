@@ -1823,6 +1823,27 @@ class Plugin:
         logs = report_collector.tail_logs(
             getattr(decky, "DECKY_PLUGIN_LOG_DIR", ""), home=home, hostname=hostname
         )
+        if self._report_kind(context) == "bug":
+            steam_home = home or getattr(decky, "DECKY_USER_HOME", None)
+            cef_paths = [
+                os.path.join(steam_home, ".local", "share", "Steam", "logs", name)
+                for name in ("cef_log.txt", "cef_log.previous.txt")
+            ] if steam_home else []
+            try:
+                states["frontend_crash"] = await loop.run_in_executor(
+                    None,
+                    lambda: report_collector.frontend_crash_diagnostics(cef_paths),
+                )
+            except Exception:  # noqa: BLE001
+                states["frontend_crash"] = {
+                    "schema": 1,
+                    "status": "unavailable",
+                    "files": [],
+                    "crash_detected": False,
+                    "plugin_load_error": False,
+                    "plugin_load_errors": [],
+                    "signals": [],
+                }
         # Bounded filesystem listing of the raw sysfs support surfaces (fan/temp
         # chips, vendor WMI attributes, battery/charge nodes, ACPI-call + modules)
         # so an unrecognised device is diagnosable from what actually exists.

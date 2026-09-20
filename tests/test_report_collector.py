@@ -1,9 +1,11 @@
 import os
 
+from report import collector as report_collector
 from report.collector import (
     build_bundle,
     capabilities_from,
     controller_daemon_cmds,
+    frontend_crash_diagnostics,
     kernel_logs,
     redact_obj,
     redact_text,
@@ -265,6 +267,170 @@ def test_tail_logs_caps_bytes_and_drops_partial_first_line(tmp_path):
     logs = tail_logs(d, max_bytes=6)  # only the tail fits
     assert logs[0]["text"].endswith("CCCC\n")
     assert "AAAA" not in logs[0]["text"]  # partial leading line dropped
+
+
+def test_frontend_crash_diagnostics_keeps_equal_current_and_previous_quotas(tmp_path):
+    current = tmp_path / "cef_log.txt"
+    previous = tmp_path / "cef_log.previous.txt"
+    _write(
+        current,
+        "x" * 200 + "\nRenderer process crashed while loading Steam UI\n",
+    )
+    _write(
+        previous,
+        "x" * 200 + "\nDecky PluginLoader: SP died after loading plugin\n",
+    )
+
+    diagnostics = frontend_crash_diagnostics(
+        [str(current), str(previous)],
+        max_bytes=160,
+    )
+
+    assert [entry["name"] for entry in diagnostics["files"]] == [
+        "cef_log.txt",
+        "cef_log.previous.txt",
+    ]
+    assert all(entry["status"] == "captured" for entry in diagnostics["files"])
+    assert all(entry["bytes_read"] <= 80 for entry in diagnostics["files"])
+    assert {signal["source"] for signal in diagnostics["signals"]} == {
+        "cef_log.txt",
+        "cef_log.previous.txt",
+    }
+
+
+def test_frontend_crash_diagnostics_names_plugin_and_crash(tmp_path):
+    previous = tmp_path / "cef_log.previous.txt"
+    _write(
+        previous,
+        "Decky PluginLoader: Error loading plugin Panel de Control "
+        "(v0.54.1) TypeError: broken API\n"
+        "Decky PluginLoader: SP died after loading plugin. Restarting webhelper.\n",
+    )
+
+    diagnostics = frontend_crash_diagnostics([str(previous)])
+
+    assert diagnostics["crash_detected"] is True
+    assert diagnostics["plugin_load_error"] is True
+    assert diagnostics["plugin_load_errors"] == [
+        {
+            "error_type": "TypeError",
+            "source": "cef_log.previous.txt",
+        }
+    ]
+    assert {signal["kind"] for signal in diagnostics["signals"]} == {
+        "plugin_load_error",
+        "shared_context_crash",
+    }
+
+
+def test_frontend_crash_diagnostics_does_not_parse_error_from_plugin_name(tmp_path):
+    previous = tmp_path / "cef_log.previous.txt"
+    _write(
+        previous,
+        "Decky PluginLoader: Error loading plugin Error Toolkit (v1) "
+        "typeerror: boom\n"
+        "Decky PluginLoader: Error loading plugin SyntaxError Helper (v2) "
+        "ReferenceError: boom\n",
+    )
+
+    diagnostics = frontend_crash_diagnostics([str(previous)])
+
+    assert diagnostics["plugin_load_errors"] == [
+        {"error_type": "TypeError", "source": "cef_log.previous.txt"},
+        {"error_type": "ReferenceError", "source": "cef_log.previous.txt"},
+    ]
+
+
+def test_frontend_crash_diagnostics_ignores_generic_steam_noise(tmp_path):
+    current = tmp_path / "cef_log.txt"
+    _write(
+        current,
+        '"Uncaught (in promise) #<Object>", '
+        "source: https://steamloopback.host/routes/library/home\n",
+    )
+
+    diagnostics = frontend_crash_diagnostics([str(current)])
+
+    assert diagnostics["status"] == "no_relevant_signals"
+    assert diagnostics["crash_detected"] is False
+    assert diagnostics["plugin_load_error"] is False
+    assert diagnostics["plugin_load_errors"] == []
+    assert diagnostics["signals"] == []
+
+
+def test_frontend_crash_diagnostics_never_includes_free_form_cef_text(tmp_path):
+    previous = tmp_path / "cef_log.previous.txt"
+    _write(
+        previous,
+        "Decky PluginLoader: Error loading plugin Panel de Control (v0.54.1) "
+        "TypeError at https://example.test/plugin.js?token=secret#private "
+        "Bearer eyJhbGciOiJIUzI1NiJ9.payload.signature "
+        "sessionid=keep-me-secret user@example.com 76561198276602736 "
+        "192.168.50.62 2001:db8::1234 /home/deck/private "
+        "password=hunter2 api_key=sk_live_private "
+        "client_secret=client-private steamLoginSecure=steam-private\n"
+        "Decky PluginLoader: Error loading plugin password=hunter2 (v1) "
+        "TypeError: hidden\n"
+        "Decky PluginLoader: Error loading plugin sk_live_private (v1) "
+        "ReferenceError: hidden\n",
+    )
+
+    diagnostics = frontend_crash_diagnostics([str(previous)])
+    serialized = str(diagnostics)
+
+    for secret in (
+        "token=secret",
+        "#private",
+        "eyJhbGciOiJIUzI1NiJ9",
+        "keep-me-secret",
+        "user@example.com",
+        "76561198276602736",
+        "192.168.50.62",
+        "2001:db8::1234",
+        "/home/deck",
+        "hunter2",
+        "sk_live_private",
+        "client-private",
+        "steam-private",
+    ):
+        assert secret not in serialized
+    assert diagnostics["plugin_load_errors"] == [
+        {"error_type": "TypeError", "source": "cef_log.previous.txt"},
+        {"error_type": "ReferenceError", "source": "cef_log.previous.txt"},
+    ]
+    assert all("line" not in signal for signal in diagnostics["signals"])
+
+
+def test_frontend_crash_diagnostics_reports_missing_unreadable_and_symlink(
+    tmp_path,
+    monkeypatch,
+):
+    missing = tmp_path / "cef_log.txt"
+    previous = tmp_path / "cef_log.previous.txt"
+    target = tmp_path / "real-cef.log"
+    _write(target, "Decky PluginLoader: SP died after loading plugin\n")
+    previous.symlink_to(target)
+
+    diagnostics = frontend_crash_diagnostics([str(missing), str(previous)])
+    assert [entry["status"] for entry in diagnostics["files"]] == [
+        "missing",
+        "rejected",
+    ]
+    assert diagnostics["signals"] == []
+
+    previous.unlink()
+    _write(previous, "Decky PluginLoader: SP died after loading plugin\n")
+    real_reader = report_collector._tail_regular_file
+
+    def deny_previous(path, size):
+        if path == str(previous):
+            raise PermissionError(path)
+        return real_reader(path, size)
+
+    monkeypatch.setattr(report_collector, "_tail_regular_file", deny_previous)
+    diagnostics = frontend_crash_diagnostics([str(previous)])
+    assert diagnostics["files"][0]["status"] == "unreadable"
+    assert diagnostics["signals"] == []
 
 
 # ---- build_bundle ---------------------------------------------------------
