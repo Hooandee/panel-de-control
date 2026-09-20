@@ -28,7 +28,11 @@ import { reloadLayout } from "./customize/store";
 import { hydrateModules } from "./customize/modules";
 import { installGameContextMenu } from "./launch/gameContextMenu";
 import { startPluginListLocalizer } from "./pluginListLocalizer";
-import { shutdownUiActivity } from "./system/uiActivity";
+import {
+  shutdownUiActivity,
+  startQamDocumentActivity,
+  startSteamOverlayActivity,
+} from "./system/uiActivity";
 import { StandardDeckyContent } from "./components/StandardDeckyContent";
 import { configureDeckyCssLoaderHost } from "./themes/deckyCssLoaderHost";
 import { configurePanelThemeInstallHost } from "./themes/panelThemeInstallHost";
@@ -125,6 +129,8 @@ export default definePlugin(() => {
   hydrateModules();
 
   const stopGameWatcher = startGameWatcher();
+  const stopSteamOverlayActivity = startSteamOverlayActivity();
+  const stopQamDocumentActivity = startQamDocumentActivity();
   const stopEcoAmbient = startEcoAmbient();
   const stopValueToast = startValueToast();
   const stopContextMenu = installGameContextMenu();
@@ -150,6 +156,8 @@ export default definePlugin(() => {
       standardLifecycle.abort();
       qamRuntime?.dispose();
       stopPrefsHealed();
+      stopQamDocumentActivity();
+      stopSteamOverlayActivity();
       shutdownUiActivity();
       stopGameWatcher();
       stopEcoAmbient();

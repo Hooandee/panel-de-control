@@ -67,7 +67,7 @@ describe("PotenciaProviderMount profile scope", () => {
     );
 
     expect(screen.getByText("tdp.scope.global")).toBeTruthy();
-    fireEvent.click(screen.getByText("Dante"));
+    fireEvent.click(screen.getByText("tdp.scope.game"));
     expect(onScope).toHaveBeenCalledWith("game");
     expect(screen.getByText("steam-performance")).toBeTruthy();
   });

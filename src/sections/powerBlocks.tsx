@@ -1,11 +1,12 @@
 import { FC } from "react";
 
 import { TdpSection } from "../components/TdpSection";
-import { AutoTdpToggle } from "../components/AutoTdpToggle";
+import { AutoTdpCard } from "../components/AutoTdpCard";
 import { usePotencia } from "../tdp/potenciaContext";
 import { registerBlock } from "../customize/blocks";
 import { useDesktopState } from "../desktop/useDesktop";
 import { desktopUiActive } from "../desktop/presentation";
+import { resolveAutoView } from "../tdp/autoView";
 import { DesktopPowerCard, DesktopPowerRecoveryCard } from "../components/DesktopPowerCard";
 import { SteamPerformanceCard } from "../components/SteamPerformanceCard";
 
@@ -14,11 +15,18 @@ const TdpCoreBlock: FC = () => {
   const desktop = useDesktopState();
   if (desktop.error) return <DesktopPowerRecoveryCard kind="unavailable" onRetry={desktop.refresh} />;
   if (desktopUiActive(desktop.state)) return <DesktopPowerCard />;
-  // Auto-TDP module off → the loop is stopped; show manual, not the raw flag.
-  const power = c.power && !c.autoTdpEnabled ? { ...c.power, auto_tdp: false } : c.power;
+  const autoView = c.tdp
+    ? resolveAutoView(c.tdp, c.power, c.scope, Boolean(c.game))
+    : null;
+  const power = autoView?.power && !c.autoTdpEnabled
+    ? { ...autoView.power, auto_tdp: false }
+    : autoView?.power ?? c.power;
+  const tdp = c.tdp && c.autoTdpEnabled && autoView?.hideManualSuggestion
+    ? { ...c.tdp, learned: { ...c.tdp.learned, enough: false } }
+    : c.tdp;
   return (
     <TdpSection
-      tdp={c.tdp}
+      tdp={tdp}
       scope={c.scope}
       power={power}
       onWatts={c.onWatts}
@@ -37,9 +45,38 @@ const TdpCoreBlock: FC = () => {
 };
 
 const AutoTdpBlock: FC = () => {
-  const { power, onAutoTdpToggle, autoTdpEnabled, monitorOnly } = usePotencia();
-  if (monitorOnly || !autoTdpEnabled) return null;
-  return <AutoTdpToggle checked={power?.auto_tdp ?? false} onChange={onAutoTdpToggle} />;
+  const {
+    tdp,
+    power,
+    scope,
+    game,
+    onAutoTdpToggle,
+    onAutoTargetFps,
+    onAutoInitialTdp,
+    onAutoMinTdp,
+    onAutoMaxTdp,
+    autoTdpEnabled,
+    monitorOnly,
+  } = usePotencia();
+  if (monitorOnly || !autoTdpEnabled || !tdp) return null;
+  const view = resolveAutoView(tdp, power, scope, Boolean(game));
+  return (
+    <AutoTdpCard
+      config={view.config}
+      scope={scope}
+      limits={tdp.auto_limits}
+      requestLimits={tdp.auto_request_limits}
+      onAc={tdp.on_ac}
+      maxTargetFps={tdp.auto_target_max_fps}
+      live={view.power?.auto ?? null}
+      liveApplies={view.liveApplies && Boolean(power?.auto_tdp)}
+      onToggle={onAutoTdpToggle}
+      onTargetFps={onAutoTargetFps}
+      onInitialTdp={onAutoInitialTdp}
+      onMinTdp={onAutoMinTdp}
+      onMaxTdp={onAutoMaxTdp}
+    />
+  );
 };
 
 const SteamPerformanceBlock: FC = () => {

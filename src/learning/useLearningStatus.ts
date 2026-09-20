@@ -1,24 +1,34 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { getLearningStatus, LearningStatus } from "../api";
+import {
+  getLearningStatusVersion,
+  subscribeLearningStatus,
+} from "./statusInvalidation";
 
-/**
- * Fetches the learning capability + opt-in snapshot for the banner. Device
- * capabilities (tdp/fan support) are static; `telemetry_enabled` can change (the
- * Ajustes toggle). We refetch when `appidKey` changes — a game change is exactly
- * when the banner's "learning of X" needs a fresh read — and expose `refresh`
- * so the caller can re-pull after toggling telemetry. Returns null until the
- * first RPC lands (banner renders nothing until then — never a fake state).
- */
 export function useLearningStatus(appidKey: string | null) {
   const [status, setStatus] = useState<LearningStatus | null>(null);
+  const requestId = useRef(0);
+  const invalidation = useSyncExternalStore(
+    subscribeLearningStatus,
+    getLearningStatusVersion,
+    getLearningStatusVersion,
+  );
 
   const refresh = useCallback(() => {
-    getLearningStatus().then(setStatus).catch(() => {});
+    const currentRequest = ++requestId.current;
+    getLearningStatus()
+      .then((next) => {
+        if (requestId.current === currentRequest) setStatus(next);
+      })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
     refresh();
-  }, [appidKey, refresh]);
+    return () => {
+      requestId.current += 1;
+    };
+  }, [appidKey, invalidation, refresh]);
 
   return { status, refresh };
 }

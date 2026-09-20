@@ -6,7 +6,7 @@ import time
 
 from tdp.backend import TDPBackend
 from tdp.runtime_lock import RuntimeSafetyLock
-from tdp.types import TdpLimits, TdpObservation, TdpResult
+from tdp.types import RailReading, TdpLimits, TdpObservation, TdpResult
 
 # The sustained (STAPM) limit line of `ryzenadj -i`.
 _STAPM_RE = re.compile(r"STAPM LIMIT\s*\|\s*([\d.]+)", re.IGNORECASE)
@@ -136,6 +136,7 @@ class RyzenadjBackend(TDPBackend):
         self.low_battery_hold_strategy = (
             "primary" if self._require_readback else None
         )
+        self.auto_tdp_safe = self._require_readback
         self._safety_lock = RuntimeSafetyLock(safety_lock_path)
         self.supported = self._bin is not None
         self._runtime_lock_payload = (
@@ -678,6 +679,31 @@ class RyzenadjBackend(TDPBackend):
 
     def read_applied(self) -> int | None:
         return self._read_applied()
+
+    def observe(self) -> TdpObservation:
+        if not self._require_readback:
+            return super().observe()
+        snapshot = self._read_snapshot(require_zero_exit=True)
+        if snapshot is None:
+            return TdpObservation(readable=False)
+        return TdpObservation(
+            readable=True,
+            surfaces={
+                self.name: {
+                    "pl1": RailReading(snapshot["stapm"]),
+                    "pl2": RailReading(snapshot["slow"]),
+                    "pl3": RailReading(snapshot["fast"]),
+                },
+            },
+        )
+
+    def auto_physical_levels(self, levels: dict) -> dict[str, int]:
+        if not self._require_readback:
+            return super().auto_physical_levels(levels)
+        return {
+            rail: int(levels[rail])
+            for rail in ("pl1", "pl2", "pl3")
+        }
 
     def diagnostics(self) -> dict:
         return {

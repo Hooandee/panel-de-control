@@ -68,6 +68,11 @@ afterEach(() => {
 });
 
 describe("Every supported translation catalog", () => {
+  it.each(CATALOGS)("%s includes learned starting watts and FPS without dead reason copy", (_lang, catalog) => {
+    expect(placeholders(catalog["tdp.auto.learned_start"])).toEqual(["{fps}", "{watts}"]);
+    expect(catalog["tdp.auto.status.above_target"]).toBeUndefined();
+  });
+
   it("provides localized Steam performance status copy", () => {
     expect(DICTS).toMatchObject({
       es: { "steam.performance.title": "Rendimiento de Steam" },
@@ -208,7 +213,6 @@ describe("Every supported translation catalog", () => {
       en: {
         "display.oled.desc": "Gives your screen a more vibrant, deeper OLED-like look. It changes only the color rendering, not the panel itself.",
         "fans.experimental.resetFail": "Couldn't restart the fan control. Reboot the device if the problem persists.",
-        "settings.qamboost.desc": "Raises TDP while the quick access menu is open so it stays responsive. The displayed value applies only while the menu is open. It is adjusted again in game.",
       },
       it: {
         "app.title": "Pannello di controllo",

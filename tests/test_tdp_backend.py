@@ -82,3 +82,32 @@ def test_legacy_backend_physical_contract_preserves_all_existing_rails():
     result = backend.apply_targets(levels, True)
     assert result.ok is True
     assert backend.applied == (15, 20, 25, True)
+
+
+def test_default_auto_contract_preserves_existing_backend_behavior():
+    class Existing(TDPBackend):
+        supports_levels = True
+
+        def get_limits(self):
+            return TdpLimits(5, 15, 20, 30)
+
+        def level_limits(self):
+            return {"pl1": {"min": 5, "max": 30}}
+
+        def set_tdp(self, watts, ac):
+            return TdpResult(watts, watts, True, "")
+
+        def read_applied(self):
+            return 15
+
+        def set_levels(self, pl1, pl2, pl3, ac):
+            self.applied = (pl1, pl2, pl3, ac)
+            return TdpResult(pl1, pl1, True, "")
+
+    backend = Existing()
+    levels = {"pl1": 15, "pl2": 20, "pl3": 25}
+
+    assert backend.auto_level_limits() == backend.level_limits()
+    assert backend.auto_physical_levels(levels) == levels
+    assert backend.apply_auto_targets(levels, True).ok is True
+    assert backend.applied == (15, 20, 25, True)

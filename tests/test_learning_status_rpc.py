@@ -68,7 +68,25 @@ def _make_plugin(tmp_path, monkeypatch, fan_supported=True):
 def test_learning_status_both_supported_telemetry_default_on(tmp_path, monkeypatch):
     p = _make_plugin(tmp_path, monkeypatch, fan_supported=True)
     st = asyncio.run(p.get_learning_status())
-    assert st == {"telemetry_enabled": True, "tdp_supported": True, "fan_supported": True}
+    assert st == {
+        "telemetry_enabled": True,
+        "tdp_supported": True,
+        "fan_supported": True,
+        "auto_tdp_active": False,
+    }
+
+
+def test_learning_status_marks_the_current_game_as_owned_by_auto_tdp(
+    tmp_path, monkeypatch
+):
+    p = _make_plugin(tmp_path, monkeypatch, fan_supported=True)
+    p._init()
+    p._set_current_appid("42")
+    p._tdp_profiles.set_auto_tdp("global", True)
+
+    st = asyncio.run(p.get_learning_status())
+
+    assert st["auto_tdp_active"] is True
 
 
 def test_learning_status_fan_null_reports_false(tmp_path, monkeypatch):

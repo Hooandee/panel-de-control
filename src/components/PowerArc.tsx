@@ -11,6 +11,12 @@ const R = 80;
 const SW = 14;
 const START = 135;
 const SWEEP = 270;
+const MIN_AUTO_GAUGE_FRACTION = 0.055;
+
+function autoArcColor(progress: number): string {
+  const hue = Math.round(210 + progress * 60);
+  return `hsl(${hue}, 82%, 62%)`;
+}
 
 function polarAt(deg: number, r: number): [number, number] {
   const a = (deg * Math.PI) / 180;
@@ -33,7 +39,6 @@ interface PowerArcProps {
   limits: TdpLimits;
   onAc: boolean;
   actualWatts?: number | null;
-  gpuBusy?: number | null;
   auto?: boolean;
   setpoint?: number | null;
   appliedWatts?: number | null;
@@ -49,7 +54,6 @@ export const PowerArc: FC<PowerArcProps> = ({
   limits,
   onAc,
   actualWatts = null,
-  gpuBusy = null,
   auto = false,
   setpoint = null,
   appliedWatts = null,
@@ -61,27 +65,26 @@ export const PowerArc: FC<PowerArcProps> = ({
 }) => {
   const { t } = useI18n();
 
-  // The fixed target you set (auto → the loop's setpoint) — shown as a marker.
+  // Auto owns the dial presentation: firmware rails and readback remain diagnostics,
+  // while the player sees the single TDP value maintained by the controller.
   const targetWatts = auto ? (setpoint ?? watts) : watts;
-  // The live applied PL1 — the hero number + fill. Falls back to the target so it
-  // never shows "—".
-  const heroWatts = appliedWatts ?? targetWatts;
-  const targetOnly = appliedWatts === null && (
+  const heroWatts = auto ? targetWatts : (appliedWatts ?? targetWatts);
+  const targetOnly = !auto && appliedWatts === null && (
     baseMarkerWatts !== null || slowMarkerWatts !== null || fastMarkerWatts !== null
   );
-  const scaleMax = Math.max(limits.max_ac, visualMax ?? limits.max_ac);
+  const scaleMax = auto
+    ? (onAc ? limits.max_ac : limits.max)
+    : Math.max(limits.max_ac, visualMax ?? limits.max_ac);
 
   const f = fraction(heroWatts, limits.min, scaleMax);
+  const gaugeFraction = auto ? Math.max(MIN_AUTO_GAUGE_FRACTION, f) : f;
   const zone = zoneFor(f);
-  const color = arcColor(f);
+  const color = auto ? autoArcColor(f) : arcColor(f);
   const ZoneIcon = ZONE_ICON[zone.key];
 
-  // Charger-only headroom: the dim ⚡ segment between the on-battery max and the
-  // charger max. NOT the HW boost — this is a fixed ceiling band. (Renamed from
-  // the old `hasBoost` to avoid colliding with the real HW-boost segment below.)
   const fMax = fraction(limits.max, limits.min, scaleMax);
   const fMaxAc = fraction(limits.max_ac, limits.min, scaleMax);
-  const chargerHeadroom = limits.max < limits.max_ac;
+  const chargerHeadroom = !auto && limits.max < limits.max_ac;
   const end = START + SWEEP;
   const fullArc = arcPath(START, end);
   const [sx, sy] = polar(START);
@@ -89,11 +92,13 @@ export const PowerArc: FC<PowerArcProps> = ({
 
   // HW boost: watts drawn above the applied PL1 via SPPT/FPPT. Null when no draw
   // sensor; shown only when it's a real extra.
-  const boost = boostWatts(heroWatts, actualWatts);
+  const boost = auto ? null : boostWatts(heroWatts, actualWatts);
   const hasBoost = boost !== null && boost > 0;
   // Where the boost segment ends on the arc (null → nothing to draw). The clamp to
   // the ceiling and the same-rounded-gate-as-boostWatts live in the pure helper.
-  const boostEnd = boostEndFraction(heroWatts, actualWatts, limits.min, scaleMax);
+  const boostEnd = auto
+    ? null
+    : boostEndFraction(heroWatts, actualWatts, limits.min, scaleMax);
 
   // Marker at the fixed target you set. A small number by it appears only when it
   // diverges from the applied value (eco/HHD/Steam), so it's read, not estimated.
@@ -103,7 +108,7 @@ export const PowerArc: FC<PowerArcProps> = ({
   const [tx1, ty1] = polarAt(tickDeg, R - SW / 2 - 1);
   const [tx2, ty2] = polarAt(tickDeg, R + SW / 2 + 1);
   const targetDiverged = Math.round(markerWatts) !== Math.round(heroWatts);
-  const showTargetLabel = targetDiverged || baseMarkerWatts !== null;
+  const showTargetLabel = !auto && (targetDiverged || baseMarkerWatts !== null);
   const targetLabelAtMinimum = showTargetLabel
     && Math.round(markerWatts) === Math.round(limits.min);
   const [lx, ly] = polarAt(tickDeg, R + SW / 2 + 10);
@@ -124,6 +129,21 @@ export const PowerArc: FC<PowerArcProps> = ({
           y172, so the lower ~20px of a square box was dead space that pushed the
           next control away. Overflow stays visible for the round stroke caps. */}
       <svg viewBox="0 0 200 180" style={{ width: "100%", display: "block", overflow: "visible" }}>
+        {auto && (
+          <path
+            data-testid="auto-tdp-halo"
+            aria-hidden="true"
+            d={fullArc}
+            fill="none"
+            stroke={color}
+            strokeOpacity={0.28}
+            strokeWidth={SW + 5}
+            strokeLinecap="round"
+            pathLength={1000}
+            strokeDasharray={`${1000 * gaugeFraction} 1000`}
+            style={{ filter: `drop-shadow(0 0 9px ${color})` }}
+          />
+        )}
         <path d={fullArc} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={SW} strokeLinecap="round" />
         {chargerHeadroom && (
           <path
@@ -137,19 +157,19 @@ export const PowerArc: FC<PowerArcProps> = ({
         )}
         {/* Base fill: min → applied TDP. A single growing dash (offset 0) so the
             round cap can't bleed a dot onto the far end when f→0. */}
-        {f > 0 && (
+        {gaugeFraction > 0 && (
           <path
+            data-testid={auto ? "auto-tdp-gauge" : undefined}
             d={fullArc}
             fill="none"
             stroke={color}
             strokeWidth={SW}
             strokeLinecap="round"
             pathLength={1000}
-            strokeDasharray={`${1000 * f} 1000`}
+            strokeDasharray={`${1000 * gaugeFraction} 1000`}
             style={{ transition: "stroke-dasharray 240ms ease, stroke 240ms ease", filter: `drop-shadow(0 0 6px ${color})` }}
           />
         )}
-        {/* HW boost segment: your TDP → live draw (clamped to arc end), warm + glow. */}
         {boostEnd !== null && (
           <path
             d={arcPath(START + f * SWEEP, START + boostEnd * SWEEP)}
@@ -160,22 +180,23 @@ export const PowerArc: FC<PowerArcProps> = ({
             style={{ filter: `drop-shadow(0 0 7px ${theme.color.boost})` }}
           />
         )}
-        {/* Fixed-target tick — where YOU set PL1, in auto and manual. */}
-        <line
-          x1={tx1}
-          y1={ty1}
-          x2={tx2}
-          y2={ty2}
-          stroke="rgba(255,255,255,0.90)"
-          strokeWidth={2.5}
-          strokeLinecap="round"
-        />
+        {!auto && (
+          <line
+            x1={tx1}
+            y1={ty1}
+            x2={tx2}
+            y2={ty2}
+            stroke="rgba(255,255,255,0.90)"
+            strokeWidth={2.5}
+            strokeLinecap="round"
+          />
+        )}
         {showTargetLabel && (
           <text x={lx} y={ly + 3} fill="rgba(255,255,255,0.90)" fontSize="9" fontWeight={700} textAnchor="middle">
             {Math.round(markerWatts)}W
           </text>
         )}
-        {slowMarkerWatts !== null && (
+        {!auto && slowMarkerWatts !== null && (
           <>
             <line x1={slx1} y1={sly1} x2={slx2} y2={sly2} stroke={theme.color.accent} strokeWidth={2.5} strokeLinecap="round" />
             <text x={sllx} y={slly + 3} fill={theme.color.accent} fontSize="9" fontWeight={700} textAnchor="middle">
@@ -183,7 +204,7 @@ export const PowerArc: FC<PowerArcProps> = ({
             </text>
           </>
         )}
-        {fastMarkerWatts !== null && (
+        {!auto && fastMarkerWatts !== null && (
           <>
             <line x1={fx1} y1={fy1} x2={fx2} y2={fy2} stroke={theme.color.boost} strokeWidth={2.5} strokeLinecap="round" />
             <text x={flx} y={fly + 3} fill={theme.color.boost} fontSize="9" fontWeight={700} textAnchor="middle">
@@ -200,11 +221,6 @@ export const PowerArc: FC<PowerArcProps> = ({
         {!auto && <div style={{ lineHeight: 0 }}><ZoneIcon size={26} color={color} /></div>}
         <div style={{ fontSize: 32, fontWeight: 700, color: theme.color.textPrimary, lineHeight: 1.15 }}>
           {Math.round(heroWatts)}
-          {hasBoost && (
-            <span style={{ fontSize: 15, fontWeight: 700, color: theme.color.boost, verticalAlign: "super", marginLeft: 1 }}>
-              ⁺{boost}
-            </span>
-          )}
           <span style={{ fontSize: 16, color: theme.color.textMuted }}> W</span>
         </div>
         {targetOnly && (
@@ -213,8 +229,8 @@ export const PowerArc: FC<PowerArcProps> = ({
           </div>
         )}
         {hasBoost && (
-          <div style={{ fontSize: 9, color: theme.color.boost, marginTop: 1, letterSpacing: "0.04em" }}>
-            ⚡ {t("tdp.arc.boostHw")}
+          <div style={{ fontSize: 10, color: theme.color.boost, marginTop: 2, letterSpacing: "0.02em", fontWeight: 700 }}>
+            +{boost} W · {t("tdp.arc.boostHw")}
           </div>
         )}
         {overclocked && (
@@ -248,11 +264,6 @@ export const PowerArc: FC<PowerArcProps> = ({
           </div>
         ) : (
           <div style={{ fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color, marginTop: overclocked ? 3 : undefined }}>{t(`tdp.zone.${zone.key}`)}</div>
-        )}
-        {auto && gpuBusy !== null && (
-          <div style={{ fontSize: 9, color: theme.color.textMuted, marginTop: 2 }}>
-            {t("tdp.arc.gpu", { pct: Math.round(gpuBusy) })}
-          </div>
         )}
       </div>
     </div>

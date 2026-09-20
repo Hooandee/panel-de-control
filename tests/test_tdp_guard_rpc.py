@@ -15,6 +15,7 @@ from tdp.types import RailReading, TdpLimits, TdpObservation, TdpResult
 class FakeBackend(TDPBackend):
     supported = True
     supports_levels = True
+    auto_tdp_safe = True
     name = "fake"
     low_battery_hold_strategy = "primary"
 
@@ -406,6 +407,160 @@ def test_rejected_firmware_mode_is_reported_and_not_persisted(
 
 def _reset_guard_memory(plugin):
     plugin._tdp_reconcile_memory = ReconcileMemory()
+
+
+def _enable_auto_session(plugin, setpoint=5):
+    plugin._set_current_appid("42")
+    plugin._tdp_profiles.set_auto_config("global", 40, setpoint)
+    plugin._tdp_profiles.set_auto_tdp("global", True)
+    plugin._ensure_auto_session(on_ac=True)
+
+
+def test_guard_does_not_reconcile_auto_setpoint_while_ui_is_active(plugin):
+    _enable_auto_session(plugin)
+    plugin._tdp_backend._levels = {"pl1": 7, "pl2": 15, "pl3": 20}
+    asyncio.run(plugin.set_ui_active(True))
+    plugin._tdp_backend.set_levels_calls = 0
+
+    plugin._tdp_guard_tick(now=10.0)
+    plugin._tdp_guard_tick(now=10.75)
+
+    assert plugin._tdp_backend.set_levels_calls == 0
+    assert plugin._tdp_backend._levels["pl1"] == 15
+
+
+def test_guard_does_not_reconcile_auto_setpoint_while_steam_has_focus(plugin):
+    _enable_auto_session(plugin)
+    plugin._tdp_backend._levels = {"pl1": 5, "pl2": 5, "pl3": 5}
+    queued = plugin._capture_tdp_command("settle-retry")
+    plugin._power_reader.read = lambda: {"watts": 6.0, "gpu_busy": 50.0}
+    plugin._gamescope_stats.start = lambda: None
+    plugin._gamescope_stats.read = lambda: {
+        "fps": None,
+        "focus": "steam",
+        "age_s": None,
+        "sample_at": None,
+        "available": False,
+        "reason": "no_game_focus",
+    }
+
+    asyncio.run(plugin._auto_tick())
+    plugin._tdp_backend.set_levels_calls = 0
+    stale = plugin._execute_tdp_command(queued)
+    lifecycle = plugin._execute_tdp_command(
+        plugin._capture_tdp_command("lifecycle")
+    )
+    plugin._tdp_guard_tick(now=10.0)
+    plugin._tdp_guard_tick(now=10.75)
+
+    assert stale.detail == "stale-generation"
+    assert lifecycle.detail == "auto-ui-active"
+    assert plugin._tdp_backend.set_levels_calls == 0
+    assert plugin._tdp_backend._levels["pl1"] == 15
+
+
+def test_focus_floor_repairs_drift_on_a_secondary_surface(plugin):
+    _enable_auto_session(plugin)
+    plugin._tdp_backend._levels = {"pl1": 5, "pl2": 5, "pl3": 5}
+    plugin._tdp_backend._legacy_levels = {"pl1": 5, "pl2": 5, "pl3": 5}
+    plugin._power_reader.read = lambda: {"watts": 6.0, "gpu_busy": 50.0}
+    plugin._gamescope_stats.start = lambda: None
+    plugin._gamescope_stats.read = lambda: {
+        "fps": None,
+        "focus": "steam",
+        "age_s": None,
+        "sample_at": None,
+        "available": False,
+        "reason": "no_game_focus",
+    }
+
+    asyncio.run(plugin._auto_tick())
+    plugin._tdp_backend._legacy_levels["pl2"] = 14
+    plugin._tdp_backend.set_levels_calls = 0
+    asyncio.run(plugin._auto_tick())
+
+    assert plugin._tdp_backend.set_levels_calls == 1
+    assert plugin._tdp_backend._legacy_levels == {
+        "pl1": 15,
+        "pl2": 15,
+        "pl3": 15,
+    }
+
+
+def test_auto_guard_rechecks_power_source_after_observation(plugin, monkeypatch):
+    import main as main_module
+
+    power = {"ac": True}
+    monkeypatch.setattr(
+        main_module,
+        "read_on_ac",
+        lambda root="/": power["ac"],
+    )
+    _enable_auto_session(plugin, setpoint=10)
+    plugin._tdp_backend._levels = {"pl1": 20, "pl2": 20, "pl3": 20}
+    plugin._tdp_guard_tick(now=10.0)
+    original_observe = plugin._tdp_backend.observe
+
+    def observe_then_unplug():
+        observation = original_observe()
+        power["ac"] = False
+        return observation
+
+    monkeypatch.setattr(plugin._tdp_backend, "observe", observe_then_unplug)
+    calls = []
+    plugin._tdp_backend.apply_auto_targets = lambda targets, ac: calls.append(
+        (dict(targets), ac)
+    ) or TdpResult(targets["pl1"], targets["pl1"], True, "")
+
+    plugin._tdp_guard_tick(now=10.75)
+
+    assert calls == []
+
+
+def test_queued_settle_retry_does_not_write_auto_setpoint_during_ui_pause(
+    plugin,
+):
+    _enable_auto_session(plugin)
+    plugin._tdp_backend._levels = {"pl1": 7, "pl2": 15, "pl3": 20}
+    asyncio.run(plugin.set_ui_active(True))
+    command = plugin._capture_tdp_command("settle-retry")
+    plugin._tdp_backend.set_levels_calls = 0
+
+    result = plugin._execute_tdp_command(command)
+
+    assert result.detail == "auto-ui-active"
+    assert plugin._tdp_backend.set_levels_calls == 0
+    assert plugin._tdp_backend._levels["pl1"] == 15
+
+
+def test_grid_guard_keeps_physical_hold_while_qam_is_open(plugin):
+    plugin._tdp_profiles.set_auto_tdp("global", True)
+    asyncio.run(plugin.set_ui_active(True))
+    plugin._tdp_backend._levels = {"pl1": 7, "pl2": 15, "pl3": 20}
+    plugin._tdp_backend.set_levels_calls = 0
+
+    plugin._tdp_guard_tick(now=10.0)
+    plugin._tdp_guard_tick(now=10.75)
+    plugin._tdp_guard_tick(now=12.0)
+
+    assert plugin._auto_controller is None
+    assert plugin._tdp_backend.set_levels_calls == 0
+    assert plugin._tdp_backend._levels["pl1"] == 7
+
+
+def test_grid_queued_settle_retry_is_blocked_when_qam_opens(plugin):
+    plugin._tdp_profiles.set_auto_tdp("global", True)
+    command = plugin._capture_tdp_command("settle-retry")
+    asyncio.run(plugin.set_ui_active(True))
+    plugin._tdp_backend._levels = {"pl1": 7, "pl2": 15, "pl3": 20}
+    plugin._tdp_backend.set_levels_calls = 0
+
+    result = plugin._execute_tdp_command(command)
+
+    assert result.detail == "auto-ui-active"
+    assert plugin._auto_controller is None
+    assert plugin._tdp_backend.set_levels_calls == 0
+    assert plugin._tdp_backend._levels["pl1"] == 7
 
 
 def test_guard_ignores_one_shot_spike(plugin):
@@ -842,6 +997,24 @@ def test_emergency_handoff_defers_all_power_writers_until_serial_worker(
     assert handoffs == []
 
 
+def test_emergency_handoff_preserves_active_backend_auto_ownership(
+    plugin, monkeypatch
+):
+    releases = []
+    plugin._tdp_backend.owns_auto_state = True
+    monkeypatch.setattr(
+        plugin._tdp_backend,
+        "release",
+        lambda: releases.append(True) or True,
+    )
+
+    assert plugin._restore_power_handoff(preserve_ownership=True) is None
+    assert releases == []
+
+    assert plugin._restore_power_handoff() is True
+    assert releases == [True]
+
+
 def test_power_draw_does_not_publish_cached_primary_blocking_readback(plugin):
     plugin._tdp_backend.blocking = True
     plugin._tdp_observation = plugin._tdp_backend.observe()
@@ -873,6 +1046,51 @@ def test_failed_common_hold_is_never_reported_as_active(plugin, monkeypatch):
     assert state["low_battery_hold"]["active"] is False
     assert state["low_battery_hold"]["verified"] is False
     assert state["low_battery_hold"]["status"] == "failed"
+
+
+@pytest.mark.parametrize("inactive_auto", ("module", "unsafe_backend"))
+def test_inactive_auto_intent_does_not_block_low_battery_hold(
+    plugin,
+    monkeypatch,
+    inactive_auto,
+):
+    import main as main_module
+
+    monkeypatch.setattr(main_module, "read_on_ac", lambda root="/": False)
+    monkeypatch.setattr(
+        plugin._battery,
+        "read",
+        lambda: {"present": True, "percent": 18, "status": "Discharging"},
+    )
+    plugin._settings["low_battery_tdp_hold"] = True
+    plugin._tdp_profiles.set_auto_tdp("global", True)
+    if inactive_auto == "module":
+        plugin._settings["disabled_modules"] = ["autoTdp"]
+    else:
+        plugin._tdp_backend.auto_tdp_safe = False
+
+    decision = plugin._low_battery_hold_decision(on_ac=False)
+
+    assert decision.active is True
+    assert decision.reason == "active"
+
+
+def test_active_auto_control_still_blocks_low_battery_hold(plugin, monkeypatch):
+    import main as main_module
+
+    monkeypatch.setattr(main_module, "read_on_ac", lambda root="/": False)
+    monkeypatch.setattr(
+        plugin._battery,
+        "read",
+        lambda: {"present": True, "percent": 18, "status": "Discharging"},
+    )
+    plugin._settings["low_battery_tdp_hold"] = True
+    plugin._tdp_profiles.set_auto_tdp("global", True)
+
+    decision = plugin._low_battery_hold_decision(on_ac=False)
+
+    assert decision.active is False
+    assert decision.reason == "auto_tdp"
 
 
 def test_sidecar_rechecks_ac_immediately_before_writing(plugin, monkeypatch):
@@ -1243,6 +1461,147 @@ def test_report_contains_tdp_transition_history(plugin, monkeypatch):
     assert hud["capability"] == "inactive"
 
 
+def test_report_collects_autotdp_diagnostics_for_an_unrelated_category(
+    plugin, monkeypatch
+):
+    import main as main_module
+
+    monkeypatch.setattr(main_module, "_monotonic", lambda: 100.0)
+    monkeypatch.setattr(main_module.report_collector, "tail_logs", lambda *a, **k: [])
+    monkeypatch.setattr(main_module.report_collector, "sysfs_snapshot", lambda *a, **k: {})
+    monkeypatch.setattr(main_module.report_collector, "kernel_logs", lambda *a, **k: {})
+    monkeypatch.setattr(
+        main_module.report_collector,
+        "build_bundle",
+        lambda **kwargs: kwargs,
+    )
+    monkeypatch.setattr(plugin, "_hud_state", lambda: {})
+
+    plugin._set_current_appid("42")
+    plugin._tdp_profiles.set_auto_config("game", 60, 15, appid="42")
+    plugin._tdp_profiles.set_auto_tdp("game", True, appid="42")
+    controller, _created = plugin._ensure_auto_session(on_ac=True)
+    decision = controller.step(fps=60, signal_reason="ok", gpu_busy=55)
+    plugin._record_auto_status(
+        decision,
+        {"age_s": 0.2, "focus": "42"},
+    )
+    plugin._gamescope_stats._apply_line("fps=58")
+    plugin._gamescope_stats._apply_line("focus=42")
+    asyncio.run(plugin.set_ui_active(True))
+    plugin._auto_stats_reader_active = True
+    plugin._auto_apply_blocked = True
+    plugin._auto_apply_attempts = 2
+    plugin._auto_apply_retry_at = 105.0
+    for _ in range(6):
+        plugin._auto_learning.record("42", 60, True, 15, stable=True)
+
+    bundle = asyncio.run(
+        plugin._build_report_bundle(
+            ["fans"],
+            "The fan page is slow",
+            "/home/deck",
+            "handheld",
+            {},
+        )
+    )
+
+    auto = bundle["state"]["auto_tdp"]
+    assert bundle["categories"] == ["fans"]
+    assert auto["schema"] == 1
+    assert auto["supported"] is True
+    assert auto["enabled"] is True
+    assert auto["active"] is True
+    assert auto["target_fps"] == 60
+    assert auto["ui"]["active"] is True
+    assert auto["ui"]["focus_hold"] is False
+    assert auto["apply"]["blocked"] is True
+    assert auto["apply"]["attempts"] == 2
+    assert auto["apply"]["retry_in_s"] == 5.0
+    assert auto["signal"]["reader_requested"] is True
+    assert auto["signal"]["focus"] == "game"
+    assert auto["learning"]["usable"] is True
+    assert auto["last_pre_ui"]["reason"] != "ui_active"
+    assert auto["last_pre_ui"]["fps"] == 58
+    assert "42" not in json.dumps(auto)
+
+
+def test_autotdp_diagnostics_do_not_reprobe_backend_readiness(plugin):
+    plugin._set_current_appid("42")
+    plugin._tdp_profiles.set_auto_tdp("game", True, appid="42")
+    plugin._ensure_auto_session(on_ac=True)
+    calls = 0
+
+    def ready():
+        nonlocal calls
+        calls += 1
+        return True
+
+    plugin._tdp_backend.ready = ready
+
+    diagnostics = plugin._auto_tdp_diagnostics(
+        {
+            "supports_auto_tdp": True,
+            "auto_config": {"enabled": True, "target_fps": 40},
+            "auto_limits": {"min": 5, "max": 35, "max_ac": 35},
+            "on_ac": True,
+        },
+        {"auto_tdp": True, "setpoint": 15},
+    )
+
+    assert diagnostics["active"] is True
+    assert calls == 0
+
+
+def test_autotdp_diagnostics_include_sanitized_gpu_signal_source(plugin):
+    plugin._power_reader.gpu_diagnostics = lambda: {
+        "source": "intel_xe_fdinfo",
+        "state": "ok",
+        "clients": 3,
+        "engines": 4,
+    }
+
+    diagnostics = plugin._auto_tdp_diagnostics({}, {})
+
+    assert diagnostics["signal"]["gpu_activity"] == {
+        "source": "intel_xe_fdinfo",
+        "state": "ok",
+        "clients": 3,
+        "engines": 4,
+    }
+
+
+@pytest.mark.parametrize(
+    "on_ac, expected_max",
+    [(False, 35), (True, 40)],
+)
+def test_autotdp_diagnostics_apply_configured_range_to_learning(
+    plugin, on_ac, expected_max
+):
+    plugin._set_current_appid("42")
+    plugin._tdp_profiles.set_auto_tdp("game", True, appid="42")
+    for _ in range(6):
+        plugin._auto_learning.record("42", 60, on_ac, 42, stable=True)
+
+    diagnostics = plugin._auto_tdp_diagnostics(
+        {
+            "supports_auto_tdp": True,
+            "auto_config": {
+                "enabled": True,
+                "target_fps": 60,
+                "min_tdp": 12,
+                "max_tdp": 40,
+            },
+            "auto_limits": {"min": 5, "max": 35, "max_ac": 45},
+            "on_ac": on_ac,
+        },
+        {"auto_tdp": True, "setpoint": 15},
+    )
+
+    assert diagnostics["effective_range"] == {"min_w": 12, "max_w": expected_max}
+    assert diagnostics["learning"]["candidate_watts"] == expected_max
+
+
 def test_incomplete_feature_report_keeps_its_kind(plugin, monkeypatch):
     import main as main_module
 
@@ -1271,6 +1630,9 @@ def test_incomplete_feature_report_keeps_its_kind(plugin, monkeypatch):
 
     assert result["ok"] is True
     assert captured["kind"] == "feature"
+    assert captured["state"] == {
+        "auto_tdp": {"schema": 1, "error": "bundle_incomplete"},
+    }
 
 
 def test_cpu_gpu_diagnostics_allowlist_drops_app_identity(plugin):
@@ -1772,6 +2134,27 @@ def test_ac_change_invalidates_queued_old_command(plugin):
     result = plugin._execute_tdp_command(old)
     assert result.detail == "stale-generation"
     assert plugin._tdp_backend.set_levels_calls == 0
+
+
+def test_auto_command_rechecks_power_source_before_backend_ownership(
+    plugin, monkeypatch
+):
+    import main as main_module
+
+    calls = []
+    plugin._tdp_backend.apply_auto_targets = lambda targets, ac: calls.append(
+        (dict(targets), ac)
+    ) or TdpResult(targets["pl1"], targets["pl1"], True, "")
+    plugin._tdp_profiles.set_auto_config("global", 40, 18)
+    plugin._tdp_profiles.set_auto_tdp("global", True)
+    plugin._ensure_auto_session(on_ac=True)
+    command = plugin._capture_tdp_command("auto", on_ac=True)
+    monkeypatch.setattr(main_module, "read_on_ac", lambda root="/": False)
+
+    result = plugin._execute_tdp_command(command)
+
+    assert result.detail == "stale-power-source"
+    assert calls == []
 
 
 def test_firmware_mode_invalidates_queued_custom_command(plugin):

@@ -86,6 +86,34 @@ def test_capabilities_from_tolerates_missing():
     caps = capabilities_from({})
     assert caps["tdp_backend"] is None
     assert caps["tdp_supported"] is False
+    assert caps["auto_tdp_supported"] is None
+    assert caps["auto_tdp_active"] is None
+
+
+def test_capabilities_from_surfaces_the_autotdp_triage_summary():
+    caps = capabilities_from({
+        "auto_tdp": {
+            "supported": True,
+            "enabled": True,
+            "active": True,
+            "state": "recovering",
+            "reason": "fps_below_target",
+            "target_fps": 60,
+            "fps": 52.5,
+            "setpoint_w": 18,
+            "applied_w": 18,
+        },
+    })
+
+    assert caps["auto_tdp_supported"] is True
+    assert caps["auto_tdp_enabled"] is True
+    assert caps["auto_tdp_active"] is True
+    assert caps["auto_tdp_state"] == "recovering"
+    assert caps["auto_tdp_reason"] == "fps_below_target"
+    assert caps["auto_tdp_target_fps"] == 60
+    assert caps["auto_tdp_fps"] == 52.5
+    assert caps["auto_tdp_setpoint_w"] == 18
+    assert caps["auto_tdp_applied_w"] == 18
 
 
 def test_capabilities_from_includes_cpu_gpu_backends():
@@ -251,7 +279,7 @@ def test_build_bundle_shape_and_redaction():
         stores={"profiles": {}},
         logs=[{"name": "x.log", "text": "boom"}],
     )
-    assert b["schema"] == 4
+    assert b["schema"] == 5
     assert b["app"] == "panel-de-control"
     assert b["kind"] == "bug"
     assert b["categories"] == ["tdp", "fans"]

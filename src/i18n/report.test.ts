@@ -21,6 +21,16 @@ describe("report translations", () => {
   });
 
   it.each([
+    ["es", "TDP automático"],
+    ["en", "Automatic TDP"],
+    ["it", "TDP automatico"],
+    ["de", "Automatische TDP-Steuerung"],
+    ["pt-BR", "TDP automático"],
+  ] as const)("names AutoTDP independently from manual TDP in %s", (lang, expected) => {
+    expect(translateForLang(lang, "report.cat.auto_tdp")).toBe(expected);
+  });
+
+  it.each([
     ["es", "Una petición o idea", "Esto no es un fallo."],
     ["en", "A request or idea", "This is not a bug report."],
     ["it", "Una richiesta o un'idea", "Questa non è una segnalazione di errore."],

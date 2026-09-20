@@ -82,6 +82,7 @@ class FirmwareAttrBackend(TDPBackend):
         restore_on_release=False,
         ownership_lock_path=None,
         named_profile_owns_rails=False,
+        optional_rails=None,
     ):
         self.name = f"firmware-attr:{driver_prefix}"
         self._driver_prefix = driver_prefix
@@ -95,6 +96,7 @@ class FirmwareAttrBackend(TDPBackend):
         self.reselection_safe_after_use = self._restore_on_release
         self._ownership_lock = RuntimeSafetyLock(ownership_lock_path)
         self._named_profile_owns_rails = bool(named_profile_owns_rails)
+        self._optional_rails = frozenset(optional_rails or ())
         self._rail_floors = _normalise_rail_floors(rail_floors)
         self._ignored_live_maxes = _normalise_rail_values(ignored_live_maxes)
         self.cap_boost_to_active = bool(cap_boost_to_active)
@@ -117,6 +119,7 @@ class FirmwareAttrBackend(TDPBackend):
             if rail in self._primary_rails or rail in self._legacy
         )
         self.supports_levels = any(rail != "pl1" for rail in self._rails)
+        self.auto_tdp_safe = self._auto_tdp_rails_ready()
         self._runtime_lock_payload = self._safety_lock.load_payload()
         self._write_circuit_open = (
             self._runtime_lock_payload.get("detail")
@@ -145,6 +148,22 @@ class FirmwareAttrBackend(TDPBackend):
             and complete_legacy
             and reassert_s > 0
             else None
+        )
+
+    def _auto_tdp_rails_ready(self):
+        if not self.supported or "pl1" not in self._primary_rails:
+            return False
+        if any(
+            rail not in self._primary_rails
+            for rail, _attr in _RAIL_ATTRS
+            if rail not in self._optional_rails
+        ):
+            return False
+        return all(
+            self._read_int(self._attr(attr)) is not None
+            and os.access(self._attr(attr), os.W_OK)
+            for rail, attr in _RAIL_ATTRS
+            if rail in self._primary_rails
         )
 
     def _live_bounds(self, attr):
@@ -431,6 +450,7 @@ class FirmwareAttrBackend(TDPBackend):
             if rail in self._primary_rails or rail in self._legacy
         )
         self.supports_levels = any(rail != "pl1" for rail in self._rails)
+        self.auto_tdp_safe = self._auto_tdp_rails_ready()
 
     def _attr(self, name, leaf="current_value"):
         return os.path.join(self._dir or "", "attributes", name, leaf)

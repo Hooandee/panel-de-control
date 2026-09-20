@@ -186,4 +186,23 @@ describe("ReportModal request type", () => {
       }),
     ));
   });
+
+  it("offers AutoTDP separately from manual TDP and submits that category", async () => {
+    openReportModal();
+    render(mocks.modal);
+
+    fireEvent.click(screen.getByRole("radio", { name: "report.kind.bug" }));
+    expect(screen.getByRole("button", { name: "report.cat.tdp" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "report.cat.auto_tdp" }));
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: "Los FPS caen y tarda en recuperar" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "report.send" }));
+
+    await waitFor(() => expect(mocks.submitReport).toHaveBeenCalledWith(
+      ["auto_tdp"],
+      "Los FPS caen y tarda en recuperar",
+      expect.objectContaining({ report_kind: "bug" }),
+    ));
+  });
 });

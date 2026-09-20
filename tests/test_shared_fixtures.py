@@ -86,7 +86,7 @@ def test_shared_fixture_catalog_is_complete():
     assert {path.name for path in FIXTURE_DIR.glob("*.json")} == EXPECTED_FIXTURES
 
 
-def test_current_python_brain_matches_shared_fixtures(tmp_path):
+def test_shared_compatibility_algorithms_match_fixtures(tmp_path):
     documents = _load_documents()
     assert documents
     for document in documents:

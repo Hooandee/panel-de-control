@@ -13,7 +13,7 @@ interface Props {
   gameName: string | null;
   status: LearningStatus | null;
   onOpenSettings: () => void;
-  scope: readonly LearningTag[];
+  scope?: readonly LearningTag[];
 }
 
 const TAG_KEY: Record<LearningTag, string> = {
@@ -31,6 +31,7 @@ export const LearningBanner: FC<Props> = ({ gameName, status, onOpenSettings, sc
     telemetryOn: status.telemetry_enabled && effectiveEnabled("learning", disabledModules),
     tdpSupported: status.tdp_supported && effectiveEnabled("power", disabledModules),
     fanSupported: status.fan_supported && effectiveEnabled("fans", disabledModules),
+    autoTdpActive: status.auto_tdp_active,
     scope,
   });
 
@@ -52,23 +53,35 @@ export const LearningBanner: FC<Props> = ({ gameName, status, onOpenSettings, sc
         boxShadow: `inset 0 0 0 1px ${theme.color.hairline}`,
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: theme.space.sm, minWidth: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: theme.space.sm, minWidth: 0, flex: 1 }}>
         {learning ? (
           <LuSparkles size={14} color={accent} style={{ flexShrink: 0 }} />
         ) : (
           <LuPause size={14} color={accent} style={{ flexShrink: 0 }} />
         )}
-        <span
-          style={{
-            fontSize: theme.font.caption,
-            color: learning ? theme.color.textPrimary : theme.color.textMuted,
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-          }}
-        >
-          {learning ? t("learning.title", { name: gameName ?? "" }) : t("learning.paused")}
-        </span>
+        {learning ? (
+          <div style={{ display: "flex", flexDirection: "column", minWidth: 0, flex: 1, lineHeight: 1.2 }}>
+            <span style={{ fontSize: theme.font.caption, color: theme.color.ok, fontWeight: 700 }}>
+              {t("learning.active")}
+            </span>
+            <span
+              title={gameName ?? undefined}
+              style={{
+                fontSize: theme.font.caption,
+                color: theme.color.textPrimary,
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+            >
+              {gameName}
+            </span>
+          </div>
+        ) : (
+          <span style={{ fontSize: theme.font.caption, color: theme.color.textMuted }}>
+            {t("learning.paused")}
+          </span>
+        )}
       </div>
 
       {learning ? (

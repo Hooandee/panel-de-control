@@ -37,6 +37,14 @@ describe("buildFocusCss", () => {
     expect(css).toContain("width: 100% !important");
   });
 
+  it("retains the nested-card override for Decky's fixed slider width", () => {
+    expect(css).toContain(`.${PDC_ROOT} .pdc-contained-slider`);
+    expect(css).toContain(`.${PDC_ROOT} .pdc-contained-slider > div > div`);
+    expect(css).toContain("margin-inline: 0 !important");
+    expect(css).toContain("min-width: 0 !important");
+    expect(css).toContain("width: 100% !important");
+  });
+
   it("replaces Steam's Dashboard gradient with the section colour and restrained motion", () => {
     expect(css).toContain(".pdc-dashboard-card-focused");
     expect(css).toContain(
