@@ -17,12 +17,12 @@ vi.mock("../system/pdcStorage", () => ({
   onPrefsHealed: () => () => {},
 }));
 vi.mock("./steamMetadata", () => ({
-  readCleanerMetadata: () => new Map(),
+  readCleanerMetadata: () => new Map([["3999999999", { name: "Visual name", coverUrls: [] }]]),
   readInstalledCleanerMetadata: () => [{ appid: "42", name: "Installed Game", coverUrls: [] }],
 }));
 import { SteamCleanerView } from "./SteamCleanerView";
 
-const entry = (id: string, overrides: Partial<CleanerEntry> = {}): CleanerEntry => ({ id, game_id: "game", appid: "10", name: "Game", kind: "shadercache", library_id: "library", library_label: "Internal drive", bytes: 1_000_000, installation: "installed", blocked_reason: null, warnings: [], ...overrides });
+const entry = (id: string, overrides: Partial<CleanerEntry> = {}): CleanerEntry => ({ id, game_id: "game", appid: "10", name: "Game", kind: "shadercache", library_id: "library", library_label: "Internal drive", bytes: 1_000_000, installation: "installed", blocked_reason: null, requires_manual_selection: false, warnings: [], ...overrides });
 const state = (overrides: Partial<CleanerState> = {}): CleanerState => ({ schema_version: 1, available: true, status: "ready", scan_id: "scan", coverage_complete: true, entries: [entry("cache"), entry("prefix", { kind: "compatdata" })], libraries: [{ id: "library", label: "Internal drive", available: true, reason: null }], totals: { shadercache: 1_000_000, compatdata: 1_000_000, unknown: 0 }, progress: { processed: 0, total: null }, error: null, last_result: null, ...overrides });
 const controller = (overrides: Partial<CleanerController> = {}): CleanerController => ({ state: state(), plan: null, result: null, error: null, loading: false, pending: null, busy: false, cancelling: false, scan: vi.fn(async () => {}), prepare: vi.fn(async () => {}), execute: vi.fn(async () => {}), cancel: vi.fn(async () => {}), refresh: vi.fn(async () => {}), dismissPlan: vi.fn(), dismissResult: vi.fn(), ...overrides });
 afterEach(() => {
@@ -192,6 +192,22 @@ describe("Steam Cleaner interface", () => {
     fireEvent.click(cache);
     expect(cache.getAttribute("aria-checked")).toBe("true");
     expect(screen.getByText(/cleaner.recommendation.game_not_installed/)).toBeTruthy();
+  });
+
+  it("requires an explicit per-entry choice for unidentified data", () => {
+    render(<SteamCleanerView controller={controller({ state: state({
+      coverage_complete: false,
+      entries: [entry("unknown", { appid: "3999999999", name: null, installation: "unknown", requires_manual_selection: true, warnings: ["unknown_identity"] })],
+    }) })} />);
+
+    expect(screen.getByRole("button", { name: "cleaner.selectCaches" }).getAttribute("aria-disabled")).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "cleaner.chooseGameData Visual name" }));
+    expect(screen.getByText("cleaner.steamIdentifier 3999999999")).toBeTruthy();
+    const cache = screen.getByRole("checkbox", { name: "cleaner.kind.shadercache · Internal drive" });
+    expect(cache.getAttribute("aria-disabled")).toBe("false");
+    fireEvent.click(cache);
+    expect(cache.getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByText("cleaner.warning.unknown_identity")).toBeTruthy();
   });
 
   it.each([

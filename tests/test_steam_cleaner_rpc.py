@@ -278,8 +278,121 @@ def stub_other_report_sources(plugin, monkeypatch):
     plugin._controller_backend = types.SimpleNamespace(diagnostics=lambda: {}, manager=None)
     plugin._audio = types.SimpleNamespace(diagnostics=lambda: {})
     plugin._run_capture = lambda *args: None
-    for name in ("tail_logs", "sysfs_snapshot", "kernel_logs"):
+    monkeypatch.setattr(main.report_collector, "tail_logs", lambda *args, **kwargs: [])
+    monkeypatch.setattr(
+        main.report_collector,
+        "frontend_crash_diagnostics",
+        lambda *args, **kwargs: {
+            "schema": 1,
+            "status": "no_relevant_signals",
+            "files": [],
+            "crash_detected": False,
+            "plugin_load_error": False,
+            "plugin_load_errors": [],
+            "signals": [],
+        },
+    )
+    for name in ("sysfs_snapshot", "kernel_logs"):
         monkeypatch.setattr(main.report_collector, name, lambda *args, **kwargs: {})
+
+
+def test_report_includes_steam_frontend_crash_evidence(plugin, monkeypatch):
+    stub_other_report_sources(plugin, monkeypatch)
+    diagnostics = {
+        "schema": 1,
+        "status": "crash_detected",
+        "files": [{
+            "name": "cef_log.previous.txt",
+            "status": "captured",
+            "bytes_read": 512,
+        }],
+        "crash_detected": True,
+        "plugin_load_error": True,
+        "plugin_load_errors": [{
+            "error_type": "TypeError",
+            "source": "cef_log.previous.txt",
+        }],
+        "signals": [{
+            "source": "cef_log.previous.txt",
+            "kind": "shared_context_crash",
+        }],
+    }
+    calls = []
+    caller_thread = threading.get_ident()
+
+    def collect(paths, **kwargs):
+        calls.append((paths, kwargs, threading.get_ident()))
+        return diagnostics
+
+    monkeypatch.setattr(
+        main.report_collector,
+        "frontend_crash_diagnostics",
+        collect,
+    )
+
+    bundle = asyncio.run(
+        plugin._build_report_bundle([], "", "/home/player", None)
+    )
+
+    assert bundle["logs"] == []
+    assert bundle["state"]["frontend_crash"] == diagnostics
+    assert calls[0][0] == [
+        "/home/player/.local/share/Steam/logs/cef_log.txt",
+        "/home/player/.local/share/Steam/logs/cef_log.previous.txt",
+    ]
+    assert calls[0][2] != caller_thread
+
+
+def test_feature_report_does_not_read_steam_frontend_logs(plugin, monkeypatch):
+    stub_other_report_sources(plugin, monkeypatch)
+
+    def unexpected(*args, **kwargs):
+        raise AssertionError("feature reports must not read CEF logs")
+
+    monkeypatch.setattr(
+        main.report_collector,
+        "frontend_crash_diagnostics",
+        unexpected,
+    )
+
+    bundle = asyncio.run(plugin._build_report_bundle(
+        [],
+        "",
+        "/home/player",
+        None,
+        {"report_kind": "feature"},
+    ))
+
+    assert bundle["kind"] == "feature"
+    assert "frontend_crash" not in bundle["state"]
+
+
+def test_frontend_log_failure_does_not_block_bug_report(plugin, monkeypatch):
+    stub_other_report_sources(plugin, monkeypatch)
+
+    def fail(*args, **kwargs):
+        raise OSError("private CEF path")
+
+    monkeypatch.setattr(
+        main.report_collector,
+        "frontend_crash_diagnostics",
+        fail,
+    )
+
+    bundle = asyncio.run(
+        plugin._build_report_bundle([], "", "/home/player", None)
+    )
+
+    assert bundle["kind"] == "bug"
+    assert bundle["state"]["frontend_crash"] == {
+        "schema": 1,
+        "status": "unavailable",
+        "files": [],
+        "crash_detected": False,
+        "plugin_load_error": False,
+        "plugin_load_errors": [],
+        "signals": [],
+    }
 
 
 def test_report_includes_bounded_redacted_cleaner_snapshot_without_scan(plugin, monkeypatch):

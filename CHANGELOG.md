@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+## [0.54.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.54.1...panel-de-control-v0.54.2) (2026-09-20)
+
+
+### Español
+
+* **Limpieza:** Si Steam no puede leer los accesos directos de juegos externos, la limpieza ya no queda bloqueada: puedes revisar por AppID y seleccionar manualmente los datos que no se identifican, mientras las bibliotecas que no se pueden comprobar siguen protegidas. ([#706](https://github.com/Hooandee/panel-de-control/pull/706))
+* **Reportes:** Cuando la interfaz de Steam o Decky falla o se reinicia, los reportes incluyen ahora señales seguras para investigarlo sin adjuntar registros completos ni datos privados. ([#708](https://github.com/Hooandee/panel-de-control/pull/708))
+
+### English
+
+* **Cleanup:** If Steam cannot read non-Steam shortcuts, Cleanup is no longer blocked: unidentified data can be reviewed by AppID and selected manually, while libraries that cannot be verified remain protected. ([#706](https://github.com/Hooandee/panel-de-control/pull/706))
+* **Reports:** When the Steam or Decky frontend crashes or restarts, reports now include safe diagnostic signals without attaching full logs or private data. ([#708](https://github.com/Hooandee/panel-de-control/pull/708))
+
+### Italiano
+
+* **Pulizia:** Se Steam non riesce a leggere i collegamenti dei giochi esterni, la pulizia non viene più bloccata: i dati non identificati possono essere controllati tramite AppID e selezionati manualmente, mentre le librerie che non possono essere verificate restano protette. ([#706](https://github.com/Hooandee/panel-de-control/pull/706))
+* **Segnalazioni:** Quando l'interfaccia di Steam o Decky si arresta o si riavvia, le segnalazioni includono ora indicatori diagnostici sicuri senza allegare registri completi o dati privati. ([#708](https://github.com/Hooandee/panel-de-control/pull/708))
+
+### Deutsch
+
+* **Bereinigung:** Wenn Steam Verknüpfungen externer Spiele nicht lesen kann, wird die Bereinigung nicht mehr blockiert: Nicht erkannte Daten lassen sich per AppID prüfen und manuell auswählen, während nicht überprüfbare Bibliotheken geschützt bleiben. ([#706](https://github.com/Hooandee/panel-de-control/pull/706))
+* **Berichte:** Wenn die Steam- oder Decky-Oberfläche abstürzt oder neu startet, enthalten Berichte jetzt sichere Diagnosesignale, ohne vollständige Protokolle oder private Daten anzuhängen. ([#708](https://github.com/Hooandee/panel-de-control/pull/708))
+
+### Português (Brasil)
+
+* **Limpeza:** Se o Steam não conseguir ler os atalhos de jogos externos, a limpeza não ficará mais bloqueada: os dados não identificados poderão ser revisados pelo AppID e selecionados manualmente, enquanto bibliotecas que não possam ser verificadas continuarão protegidas. ([#706](https://github.com/Hooandee/panel-de-control/pull/706))
+* **Relatórios:** Quando a interface do Steam ou do Decky falhar ou reiniciar, os relatórios passarão a incluir sinais de diagnóstico seguros, sem anexar registros completos nem dados privados. ([#708](https://github.com/Hooandee/panel-de-control/pull/708))
+
 ## [0.54.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.54.0...panel-de-control-v0.54.1) (2026-09-20)
 
 

@@ -18,6 +18,7 @@ import glob
 import json
 import os
 import re
+import stat
 
 from sysfs import read_str
 
@@ -134,6 +135,169 @@ def tail_logs(
         })
         budget -= len(data)
     return out
+
+
+_PLUGIN_LOAD_ERROR = re.compile(r"Error loading plugin\b", re.I)
+_PLUGIN_LOAD_EXCEPTION = re.compile(
+    r"Error loading plugin\s+.+?\s+\([^)\r\n]{1,80}\)\s+"
+    r"(?P<error>TypeError|ReferenceError|SyntaxError|Error)\b",
+    re.I,
+)
+_PLUGIN_ERROR_TYPES = {
+    "typeerror": "TypeError",
+    "referenceerror": "ReferenceError",
+    "syntaxerror": "SyntaxError",
+    "error": "Error",
+}
+_MAX_FRONTEND_SIGNALS = 24
+_MAX_FRONTEND_LOG_BYTES = 64 * 1024
+_CEF_LOG_NAMES = frozenset({"cef_log.txt", "cef_log.previous.txt"})
+
+
+def _tail_regular_file(path: str, n: int) -> tuple[str, int]:
+    """Read a regular file tail without following a symlink race."""
+    flags = os.O_RDONLY
+    flags |= getattr(os, "O_CLOEXEC", 0)
+    flags |= getattr(os, "O_NOFOLLOW", 0)
+    fd = os.open(path, flags)
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode):
+            raise ValueError("not_regular")
+        size = info.st_size
+        start = max(0, size - n)
+        os.lseek(fd, start, os.SEEK_SET)
+        raw = os.read(fd, n)
+    finally:
+        os.close(fd)
+    text = raw.decode("utf-8", "replace")
+    if start > 0:
+        newline = text.find("\n")
+        if newline != -1:
+            text = text[newline + 1:]
+    return text, len(raw)
+
+
+def _frontend_signal(line: str) -> tuple[str | None, bool]:
+    if _PLUGIN_LOAD_ERROR.search(line):
+        return "plugin_load_error", False
+    if "SP died after loading plugin" in line:
+        return "shared_context_crash", True
+    if re.search(
+        r"(?:renderer|render process|steamwebhelper).*"
+        r"(?:crash(?:ed)?|died|terminated unexpectedly)",
+        line,
+        re.I,
+    ):
+        return "renderer_crash", True
+    if (
+        "Minified React error" in line
+        and ("localhost:1337" in line or "Decky PluginLoader" in line)
+    ):
+        return "react_error", False
+    if (
+        "localhost:1337" in line
+        and re.search(r"Uncaught|TypeError|ReferenceError|SyntaxError", line)
+    ):
+        return "decky_frontend_exception", False
+    return None, False
+
+
+def frontend_crash_diagnostics(
+    paths,
+    *,
+    max_bytes: int = _MAX_FRONTEND_LOG_BYTES,
+) -> dict:
+    """Extract bounded, redacted crash evidence from Steam's two CEF logs.
+
+    Raw CEF logs can contain account and session data, so reports receive only
+    recognised diagnostic lines. Each requested file keeps an equal quota so a
+    large current log cannot crowd out the rotated log containing the crash.
+    """
+    paths = list(paths or ())
+    quota = max_bytes // len(paths) if paths and max_bytes > 0 else 0
+    files = []
+    signals = []
+    plugin_load_errors = []
+    seen_plugins = set()
+    crash_detected = False
+    plugin_load_error = False
+
+    for path in paths:
+        basename = os.path.basename(path) if isinstance(path, str) else ""
+        source = basename if basename in _CEF_LOG_NAMES else "invalid"
+        record = {"name": source, "status": "unreadable"}
+        files.append(record)
+        if not isinstance(path, str) or source == "invalid" or quota <= 0:
+            record["status"] = "rejected"
+            continue
+        try:
+            info = os.lstat(path)
+        except FileNotFoundError:
+            record["status"] = "missing"
+            continue
+        except OSError:
+            continue
+        if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
+            record["status"] = "rejected"
+            continue
+        try:
+            text, bytes_read = _tail_regular_file(path, quota)
+        except FileNotFoundError:
+            record["status"] = "missing"
+            continue
+        except ValueError:
+            record["status"] = "rejected"
+            continue
+        except OSError:
+            continue
+        record.update({"status": "captured", "bytes_read": bytes_read})
+
+        for raw_line in text.splitlines():
+            kind, is_crash = _frontend_signal(raw_line)
+            if not kind:
+                continue
+            crash_detected = crash_detected or is_crash
+            if kind == "plugin_load_error":
+                plugin_load_error = True
+            match = _PLUGIN_LOAD_EXCEPTION.search(raw_line)
+            if match:
+                plugin = {
+                    "error_type": _PLUGIN_ERROR_TYPES[match.group("error").lower()],
+                    "source": source,
+                }
+                key = (plugin["error_type"], source)
+                if (
+                    key not in seen_plugins
+                    and len(plugin_load_errors) < _MAX_FRONTEND_SIGNALS
+                ):
+                    seen_plugins.add(key)
+                    plugin_load_errors.append(plugin)
+            if len(signals) < _MAX_FRONTEND_SIGNALS:
+                signals.append({
+                    "source": source,
+                    "kind": kind,
+                })
+
+    captured = any(entry["status"] == "captured" for entry in files)
+    status = (
+        "crash_detected"
+        if crash_detected
+        else "signals_found"
+        if signals
+        else "no_relevant_signals"
+        if captured
+        else "unavailable"
+    )
+    return {
+        "schema": 1,
+        "status": status,
+        "files": files,
+        "crash_detected": crash_detected,
+        "plugin_load_error": plugin_load_error,
+        "plugin_load_errors": plugin_load_errors,
+        "signals": signals,
+    }
 
 
 # Kernel-side evidence: firmware/hardware write rejections (TDP, fan curves) land

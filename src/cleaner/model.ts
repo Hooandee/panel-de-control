@@ -32,7 +32,7 @@ export function filterGames(games: CleanerGame[], query: string, filter: Cleaner
 }
 
 export function eligibleCaches(entries: CleanerEntry[]): CleanerEntry[] {
-  return entries.filter((entry) => entry.kind === "shadercache" && !entry.blocked_reason);
+  return entries.filter((entry) => entry.kind === "shadercache" && !entry.blocked_reason && !entry.requires_manual_selection);
 }
 
 export function toggleCaches(entries: CleanerEntry[], selected: ReadonlySet<string>): Set<string> {

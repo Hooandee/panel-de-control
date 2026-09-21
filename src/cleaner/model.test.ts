@@ -5,7 +5,7 @@ import { filterGames, formatBytes, groupEntries, toggleCaches, toggleEntry } fro
 const entry = (id: string, overrides: Partial<CleanerEntry> = {}): CleanerEntry => ({
   id, game_id: "game", appid: "10", name: "Game", kind: "shadercache",
   library_id: "library", library_label: "Library", bytes: 100,
-  installation: "installed", blocked_reason: null, warnings: [], ...overrides,
+  installation: "installed", blocked_reason: null, requires_manual_selection: false, warnings: [], ...overrides,
 });
 
 describe("Steam Cleaner selection", () => {
@@ -32,6 +32,14 @@ describe("Steam Cleaner selection", () => {
     expect(groups[0].name).toBe("Known title");
     expect(groups[0].entries[0].installation).toBe("unknown");
     expect([...toggleCaches(groups[0].entries, new Set())]).toEqual([]);
+  });
+
+  it("keeps unidentified caches out of bulk selection but allows an explicit choice", () => {
+    const known = entry("known");
+    const unidentified = entry("unidentified", { name: null, appid: "3999999999", installation: "unknown", requires_manual_selection: true, warnings: ["unknown_identity"] });
+
+    expect([...toggleCaches([known, unidentified], new Set())]).toEqual(["known"]);
+    expect([...toggleEntry(unidentified, new Set())]).toEqual(["unidentified"]);
   });
 
   it("groups locations by backend identity and filters without changing selection", () => {

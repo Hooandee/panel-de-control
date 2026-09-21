@@ -176,7 +176,8 @@ class SteamCleanerService:
             self._sources = {}
             self._library_resolutions = {}
             self._scan_reported = set()
-            roots, complete = self._discover()
+            roots, critical_complete = self._discover()
+            shortcuts_complete = True
             self._libraries = roots
             libraries = []
             identities = {}
@@ -201,17 +202,17 @@ class SteamCleanerService:
                     self._remember(steamapps)
                     library["available"] = True
                     if not self._read_manifests(root, identities):
-                        complete = False
+                        critical_complete = False
                     if not self._read_shortcuts(root, identities):
-                        complete = False
+                        shortcuts_complete = False
                 except (OSError, filesystem.UnsafePath) as error:
-                    complete = False
+                    critical_complete = False
                     library["reason"] = "symlink" if any(path.is_symlink() for path in (steamapps, *steamapps.parents)) else "library_unavailable"
                     self._scan_issue("library", library["reason"], error, library["id"])
                 libraries.append(library)
             for root, library in zip(roots, libraries):
                 if len(entries) >= MAX_ENTRIES:
-                    complete = False
+                    critical_complete = False
                     break
                 if not library["available"]:
                     continue
@@ -222,7 +223,7 @@ class SteamCleanerService:
                     except FileNotFoundError:
                         continue
                     except OSError:
-                        complete = False
+                        critical_complete = False
                         entries.append(self._entry(category, "unknown", kind, library, "unsafe_path"))
                         continue
                     if stat.S_ISLNK(value.st_mode):
@@ -234,18 +235,18 @@ class SteamCleanerService:
                     try:
                         children = sorted(islice(category.iterdir(), MAX_ENTRIES + 1), key=lambda path: path.name)
                         if len(entries) + len(children) > MAX_ENTRIES:
-                            complete = False
+                            critical_complete = False
                             self._scan_issue("measure", "size_unknown", library_id=library["id"])
                     except OSError:
-                        complete = False
+                        critical_complete = False
                         entries.append(self._entry(category, "unknown", kind, library, "unsafe_path"))
                         continue
                     for path in children:
                         if len(entries) >= MAX_ENTRIES:
-                            complete = False
+                            critical_complete = False
                             break
                         if self._cancelled.is_set():
-                            complete = False
+                            critical_complete = False
                             break
                         appid = path.name if re.fullmatch(r"[0-9]{1,10}", path.name) else "unknown"
                         entry = self._entry(path, appid, kind, library)
@@ -280,10 +281,15 @@ class SteamCleanerService:
                         entry["blocked_reason"] = entry["blocked_reason"] or "runtime"
                     elif known["installation"] == "unknown":
                         entry["blocked_reason"] = entry["blocked_reason"] or "unknown_identity"
-                elif complete and entry["appid"].isdecimal() and int(entry["appid"]) < 0x80000000:
+                    elif known["installation"] == "non_steam" and not shortcuts_complete:
+                        entry["requires_manual_selection"] = True
+                elif critical_complete and entry["appid"].isdecimal() and int(entry["appid"]) < 0x80000000:
                     entry["installation"] = "not_installed"
-                elif complete and entry["installation"] == "unknown":
-                    entry["blocked_reason"] = entry["blocked_reason"] or "unknown_identity"
+                elif critical_complete and entry["installation"] == "unknown":
+                    if shortcuts_complete:
+                        entry["blocked_reason"] = entry["blocked_reason"] or "unknown_identity"
+                    else:
+                        entry["requires_manual_selection"] = True
                 if entry["name"] is None:
                     entry["warnings"].append("unknown_identity")
                 if entry["bytes"] is None:
@@ -292,7 +298,7 @@ class SteamCleanerService:
                 else:
                     totals[entry["kind"]] += entry["bytes"]
                 reason = self._activity_reason(entry, activity)
-                entry["blocked_reason"] = entry["blocked_reason"] or ("coverage_incomplete" if not complete else reason)
+                entry["blocked_reason"] = entry["blocked_reason"] or ("coverage_incomplete" if not critical_complete else reason)
                 target = self._targets.get(entry["id"])
                 if target and any(str(other).startswith(str(target["path"]) + os.sep) for other in roots):
                     entry["blocked_reason"] = "unsafe_path"
@@ -302,7 +308,7 @@ class SteamCleanerService:
                 self._state.update(
                     available=any(library["available"] for library in libraries),
                     status="cancelled" if self._cancelled.is_set() else "ready",
-                    scan_id=grouped_id(), coverage_complete=bool(roots) and complete,
+                    scan_id=grouped_id(), coverage_complete=bool(roots) and critical_complete and shortcuts_complete,
                     entries=entries, libraries=libraries, totals=totals,
                     progress={"processed": len(entries), "total": len(entries)},
                 )
@@ -427,6 +433,7 @@ class SteamCleanerService:
             "library_id": library["id"], "library_label": library["label"],
             "library_internal": library["internal"],
             "bytes": None, "installation": "unknown", "blocked_reason": reason,
+            "requires_manual_selection": False,
             "warnings": ["prefix_data"] if kind == "compatdata" else [],
         }
 
@@ -502,31 +509,34 @@ class SteamCleanerService:
 
     def _read_shortcuts(self, root, identities):
         userdata = root / "userdata"
-        self._remember(userdata)
-        if not userdata.exists():
-            return True
-        complete = True
         try:
+            self._remember(userdata)
+            if not userdata.exists():
+                return True
             profiles = sorted(userdata.iterdir())
         except OSError as error:
             self._scan_issue("shortcuts", "coverage_incomplete", error, opaque(root))
             return False
+        complete = True
         for profile in profiles:
             if not profile.name.isdecimal():
                 continue
             path = profile / "config/shortcuts.vdf"
-            self._remember(path)
-            if not path.exists():
-                continue
             try:
+                self._remember(path)
+                if not path.exists():
+                    continue
                 shortcuts = vdf.read_shortcuts(path)
                 if not isinstance(shortcuts, dict):
                     raise ValueError("malformed_vdf")
+                validated = []
                 for value in shortcuts.values():
                     if not isinstance(value, dict) or not isinstance(value.get("appid"), int):
                         raise ValueError("malformed_vdf")
                     appid = str(value["appid"] & 0xFFFFFFFF)
                     name = clean_name(value.get("appname", ""))
+                    validated.append((appid, name))
+                for appid, name in validated:
                     previous = identities.get(appid)
                     if previous and (previous["installation"] == "unknown" or previous["name"] != name):
                         identities[appid] = {"name": None, "installation": "unknown", "runtime": previous.get("runtime", False)}
