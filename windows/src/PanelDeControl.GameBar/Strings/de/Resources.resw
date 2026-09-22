@@ -132,6 +132,12 @@
   <data name="ReadingPermission" xml:space="preserve">
     <value>Berechtigung nötig</value>
   </data>
+  <data name="ReadingServiceNotRunning" xml:space="preserve">
+    <value>Der Panel-de-Control-Dienst läuft nicht</value>
+  </data>
+  <data name="ReadingServiceUnavailable" xml:space="preserve">
+    <value>Der Panel-de-Control-Dienst antwortet nicht</value>
+  </data>
   <data name="RefreshButton.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
     <value>Telemetrie, Helligkeit und Lautstärke aktualisieren</value>
   </data>

@@ -11,7 +11,7 @@ public sealed record PipeAccessEntry(
 
 public static class ServicePipeSecurity
 {
-    public const string PipeName = "PanelDeControl.Service";
+    public const string PipeName = PanelDeControl.Hardware.ServiceSnapshotClient.PipeName;
 
     public static IReadOnlyList<PipeAccessEntry> Entries { get; } = new[]
     {
