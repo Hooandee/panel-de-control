@@ -28,6 +28,22 @@ BROKER_PROGRAM = HARDWARE_DIR / "Program.cs"
 ROOT_LICENSE = ROOT / "LICENSE"
 ROOT_NOTICES = ROOT / "THIRD_PARTY_NOTICES.md"
 WORKFLOW = ROOT / ".github" / "workflows" / "windows-ci.yml"
+STRINGS_DIR = PROJECT_DIR / "Strings"
+LANGUAGES = ("en-US", "es", "de", "it", "pt-BR")
+XAML_UID = "{http://schemas.microsoft.com/winfx/2006/xaml}Uid"
+AUTOMATION = "[using:Windows.UI.Xaml.Automation]AutomationProperties"
+
+
+def load_strings(language):
+    root = ElementTree.parse(STRINGS_DIR / language / "Resources.resw").getroot()
+    return {
+        node.attrib["name"]: node.findtext("value")
+        for node in root.findall("data")
+    }
+
+
+def spanish_automation_name(uid):
+    return load_strings("es")[f"{uid}.{AUTOMATION}.Name"]
 NUGET_CI_CONFIG = ROOT / "windows" / "NuGet.ci.config"
 
 
@@ -339,10 +355,8 @@ class GameBarProjectTests(unittest.TestCase):
         self.assertEqual("100", slider.attrib["Maximum"])
         self.assertEqual("5", slider.attrib["StepFrequency"])
         self.assertEqual("True", slider.attrib["IsTabStop"])
-        self.assertEqual(
-            "Volumen del sistema",
-            slider.attrib["AutomationProperties.Name"],
-        )
+        self.assertEqual("VolumeSlider", slider.attrib[XAML_UID])
+        self.assertEqual("Volumen del sistema", spanish_automation_name("VolumeSlider"))
 
     def test_widget_debounces_volume_writes_and_ignores_stale_responses(self):
         code = WIDGET_CODE.read_text(encoding="utf-8")
@@ -390,13 +404,86 @@ class GameBarProjectTests(unittest.TestCase):
         self.assertEqual("100", slider.attrib["Maximum"])
         self.assertEqual("5", slider.attrib["StepFrequency"])
         self.assertEqual("True", slider.attrib["IsTabStop"])
-        self.assertEqual(
-            "Brillo de la pantalla integrada",
-            slider.attrib["AutomationProperties.Name"],
-        )
+        self.assertEqual("BrightnessSlider", slider.attrib[XAML_UID])
+        self.assertEqual("Brillo de la pantalla integrada", spanish_automation_name("BrightnessSlider"))
         self.assertEqual(
             "BrightnessSlider_ValueChanged",
             slider.attrib["ValueChanged"],
+        )
+
+
+
+
+    def test_widget_debounces_brightness_and_ignores_stale_readback(self):
+        code = WIDGET_CODE.read_text(encoding="utf-8")
+        refresh = code[
+            code.index("private async Task RefreshAsync()"):
+            code.index("private void ApplySnapshot")
+        ]
+        normalized_refresh = " ".join(refresh.split())
+
+        self.assertIn("BrightnessSlider_ValueChanged", code)
+        self.assertIn("brightnessGeneration", code)
+        self.assertIn("brightnessDebounce", code)
+        self.assertIn("brightnessClient.SetAsync", code)
+        self.assertRegex(
+            code,
+            r"ApplyBrightnessResponse\(\s*brightness,\s*"
+            r"writeAttempted: false\)",
+        )
+        self.assertIn("ApplyObservedBrightness", code)
+        self.assertIn("CancelPendingBrightnessWrite", code)
+        self.assertIn(
+            "var brightnessWriteWasPendingAtRefreshStart = "
+            "brightnessWritePending;",
+            normalized_refresh,
+        )
+        self.assertIn(
+            "!brightnessWriteWasPendingAtRefreshStart && "
+            "!brightnessWritePending && "
+            "brightnessRefreshGeneration == brightnessGeneration",
+            normalized_refresh,
+        )
+        self.assertIn("brightnessClient.GetAsync()", refresh)
+        self.assertNotIn("brightnessClient.SetAsync", refresh)
+        self.assertIn(
+            'writeAttempted ? Localized("BrightnessControlFailed")',
+            " ".join(code.split()),
+        )
+
+    def test_widget_applies_refresh_streams_independently(self):
+        code = WIDGET_CODE.read_text(encoding="utf-8")
+        normalized_code = " ".join(code.split())
+        refresh = code[
+            code.index("private async Task RefreshAsync()"):
+            code.index("private void ApplySnapshot")
+        ]
+
+        self.assertIn("ApplySnapshotWhenReadyAsync", refresh)
+        self.assertIn("ApplyVolumeWhenReadyAsync", refresh)
+        self.assertIn("ApplyBrightnessWhenReadyAsync", refresh)
+        self.assertIn("await Task.WhenAll(", refresh)
+        self.assertIn("private bool snapshotRefreshInProgress;", code)
+        self.assertIn("private bool volumeRefreshInProgress;", code)
+        self.assertIn("private bool brightnessRefreshInProgress;", code)
+        self.assertNotIn("private bool refreshInProgress;", code)
+        self.assertIn(
+            "if (snapshotRefreshInProgress || disposed)",
+            normalized_code,
+        )
+        self.assertIn(
+            "if (volumeRefreshInProgress || disposed)",
+            normalized_code,
+        )
+        self.assertIn(
+            "if (brightnessRefreshInProgress || disposed)",
+            normalized_code,
+        )
+        self.assertNotRegex(
+            refresh,
+            r"var snapshot = await snapshotTask;\s*"
+            r"var volume = await volumeTask;\s*"
+            r"var brightness = await brightnessTask;",
         )
 
     def test_widget_has_accessible_focusable_system_mute_control(self):
@@ -433,11 +520,12 @@ class GameBarProjectTests(unittest.TestCase):
         )
         self.assertEqual("False", mute_toggle.attrib["IsEnabled"])
         self.assertEqual("True", mute_toggle.attrib["IsTabStop"])
+        self.assertEqual("MuteToggle", mute_toggle.attrib[XAML_UID])
         self.assertEqual(
             "Silenciar audio del sistema",
-            mute_toggle.attrib["AutomationProperties.Name"],
+            spanish_automation_name("MuteToggle"),
         )
-        self.assertTrue(mute_toggle.attrib["AutomationProperties.HelpText"])
+        self.assertTrue(load_strings("es")[f"MuteToggle.{AUTOMATION}.HelpText"])
         self.assertEqual("MuteToggle_Toggled", mute_toggle.attrib["Toggled"])
 
     def test_widget_verifies_mute_independently_and_ignores_stale_responses(self):
@@ -562,7 +650,7 @@ class GameBarProjectTests(unittest.TestCase):
         code = WIDGET_CODE.read_text(encoding="utf-8")
 
         self.assertIn('"device_not_supported"', code)
-        self.assertIn('"Dispositivo no compatible"', code)
+        self.assertIn('Localized("DeviceUnrecognized")', code)
         self.assertIn("var unsupported = snapshot.Readings.Any(", code)
         self.assertIn("available && !unsupported", code)
 
@@ -681,3 +769,66 @@ class SideloadPackageTests(unittest.TestCase):
         self.assertIn("/property:UapAppxPackageBuildMode=SideloadOnly", workflow)
         self.assertNotIn("UapAppxPackageBuildMode=CI", workflow)
         self.assertIn("<UseDotNetNativeToolchain>true</UseDotNetNativeToolchain>", project)
+
+
+
+
+
+class GameBarLocalizationTests(unittest.TestCase):
+    def test_every_language_ships_the_same_non_empty_keys(self):
+        reference = load_strings("en-US")
+        self.assertTrue(reference)
+        for language in LANGUAGES:
+            strings = load_strings(language)
+            self.assertEqual(set(reference), set(strings), language)
+            for key, value in strings.items():
+                self.assertTrue(value and value.strip(), f"{language}:{key}")
+
+    def test_every_language_is_packaged_and_english_is_the_fallback(self):
+        project = PROJECT.read_text(encoding="utf-8")
+        self.assertIn("<DefaultLanguage>en-US</DefaultLanguage>", project)
+        for language in LANGUAGES:
+            self.assertIn(
+                f'<PRIResource Include="Strings\\{language}\\Resources.resw" />',
+                project,
+            )
+
+    def test_every_xaml_uid_is_localized(self):
+        strings = load_strings("en-US")
+        uids = {
+            node.attrib[XAML_UID]
+            for node in ElementTree.parse(WIDGET).getroot().iter()
+            if XAML_UID in node.attrib
+        }
+        self.assertTrue(uids)
+        for uid in uids:
+            self.assertTrue(
+                any(key.startswith(f"{uid}.") for key in strings),
+                uid,
+            )
+
+    def test_widget_has_no_hard_coded_visible_text(self):
+        allowed = {"—", "↻", "CPU", "GPU"}
+        visible = (
+            "Text",
+            "Content",
+            "OnContent",
+            "OffContent",
+            "AutomationProperties.Name",
+            "AutomationProperties.HelpText",
+        )
+        for node in ElementTree.parse(WIDGET).getroot().iter():
+            for attribute in visible:
+                value = node.attrib.get(attribute)
+                if value is not None and not value.startswith("{"):
+                    self.assertIn(value, allowed, f"{node.tag} {attribute}")
+
+    def test_code_behind_only_uses_known_resource_keys(self):
+        strings = load_strings("en-US")
+        code = WIDGET_CODE.read_text(encoding="utf-8")
+        keys = set(re.findall(r'Localized\("([A-Za-z]+)"\)', code))
+        self.assertTrue(keys)
+        self.assertTrue(keys.issubset(strings), keys - set(strings))
+        self.assertNotRegex(code, r'\.Text = "[^"—]')
+        self.assertNotIn("Sin datos", code)
+
