@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.54.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.54.2...panel-de-control-v0.54.3) (2026-09-22)
+
+
+### Bug Fixes
+
+* resolve reported TDP, cleanup, audio, and title regressions ([#718](https://github.com/Hooandee/panel-de-control/issues/718)) ([6df1886](https://github.com/Hooandee/panel-de-control/commit/6df188642f5f8f2cdabd8d2a088f0927c835f08b))
+
 ## [0.54.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.54.1...panel-de-control-v0.54.2) (2026-09-20)
 
 
