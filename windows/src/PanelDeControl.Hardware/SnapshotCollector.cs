@@ -47,6 +47,7 @@ public sealed class SnapshotCollector : IHardwareSnapshotProvider
     private readonly IHardwareReader hardwareReader;
     private readonly IPowerStatusReader powerReader;
     private readonly ISensorAccessProbe accessProbe;
+    private DeviceIdentity? cachedIdentity;
 
     public SnapshotCollector(
         IClock clock,
@@ -74,9 +75,20 @@ public sealed class SnapshotCollector : IHardwareSnapshotProvider
 
     private DeviceIdentity ReadIdentity()
     {
+        if (cachedIdentity is not null)
+        {
+            return cachedIdentity;
+        }
+
         try
         {
-            return identityReader.Read();
+            var identity = identityReader.Read();
+            if (identity.IsRecognized || identity.ProductName != DeviceIdentity.Unrecognized().ProductName)
+            {
+                cachedIdentity = identity;
+            }
+
+            return identity;
         }
         catch
         {
@@ -136,7 +148,9 @@ public sealed class SnapshotCollector : IHardwareSnapshotProvider
         var missingAccess = MissingTemperatureAccess();
         return SensorDefinitions.Select(definition =>
         {
-            if (definition.SensorKind == SensorKind.Temperature && missingAccess is not null)
+            if (definition.HardwareKind == HardwareKind.Cpu &&
+                definition.SensorKind == SensorKind.Temperature &&
+                missingAccess is not null)
             {
                 return TelemetryReading.Unavailable(
                     definition.Id,
@@ -164,6 +178,7 @@ public sealed class SnapshotCollector : IHardwareSnapshotProvider
             var onlyImplausible = candidates.Any(candidate =>
                 candidate.HardwareKind == definition.HardwareKind &&
                 candidate.SensorKind == definition.SensorKind &&
+                candidate.Value.HasValue &&
                 definition.PreferredNames.Contains(candidate.Name, StringComparer.OrdinalIgnoreCase));
             return TelemetryReading.Unavailable(
                 definition.Id,
@@ -183,7 +198,7 @@ public sealed class SnapshotCollector : IHardwareSnapshotProvider
         }
         catch
         {
-            return "sensor_driver_missing";
+            return "sensor_permission_required";
         }
 
         if (!access.HasSensorDriver)

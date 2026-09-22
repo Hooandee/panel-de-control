@@ -173,13 +173,41 @@ public sealed class SnapshotCollectorTests
         var snapshot = collector.Capture();
 
         Assert.Equal(37, Reading(snapshot, "cpu.load").Value);
-        foreach (var id in new[] { "cpu.temperature", "gpu.temperature" })
-        {
-            var reading = Reading(snapshot, id);
-            Assert.Equal(ReadingStatus.PermissionRequired, reading.Status);
-            Assert.Null(reading.Value);
-            Assert.Equal(expectedError, reading.ErrorCode);
-        }
+        Assert.Equal(58, Reading(snapshot, "gpu.temperature").Value);
+        var cpuTemperature = Reading(snapshot, "cpu.temperature");
+        Assert.Equal(ReadingStatus.PermissionRequired, cpuTemperature.Status);
+        Assert.Null(cpuTemperature.Value);
+        Assert.Equal(expectedError, cpuTemperature.ErrorCode);
+    }
+
+    [Fact]
+    public void RecognizedIdentityIsReadOnceAcrossPolls()
+    {
+        var identityReader = new CountingIdentityReader();
+        var collector = new SnapshotCollector(
+            new FixedClock(),
+            identityReader,
+            new FixedHardwareReader(Array.Empty<SensorCandidate>()),
+            new FixedPowerReader(AvailablePower()),
+            FixedAccessProbe.Full);
+
+        collector.Capture();
+        collector.Capture();
+
+        Assert.Equal(1, identityReader.ReadCount);
+    }
+
+    [Fact]
+    public void MissingValueIsNotFoundRatherThanImplausible()
+    {
+        var collector = CreateCollector(
+            hardwareReadings: new[]
+            {
+                new SensorCandidate("gpu/temp/core", HardwareKind.Gpu, SensorKind.Temperature, "GPU Core", null, "gpu/temp/core"),
+            },
+            powerReadings: AvailablePower());
+
+        Assert.Equal("sensor_not_found", Reading(collector.Capture(), "gpu.temperature").ErrorCode);
     }
 
     [Fact]
@@ -196,6 +224,7 @@ public sealed class SnapshotCollectorTests
         var reading = Reading(collector.Capture(), "cpu.temperature");
 
         Assert.Equal(ReadingStatus.PermissionRequired, reading.Status);
+        Assert.Equal("sensor_permission_required", reading.ErrorCode);
     }
 
     private static SnapshotCollector CreateCollector(
@@ -343,6 +372,17 @@ public sealed class SnapshotCollectorTests
         public SensorAccess Probe()
         {
             throw new InvalidOperationException("registry unavailable");
+        }
+    }
+
+    private sealed class CountingIdentityReader : IDeviceIdentityReader
+    {
+        public int ReadCount { get; private set; }
+
+        public DeviceIdentity Read()
+        {
+            ReadCount++;
+            return new FixedIdentityReader().Read();
         }
     }
 }
