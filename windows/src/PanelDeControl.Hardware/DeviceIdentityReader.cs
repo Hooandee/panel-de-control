@@ -1,4 +1,5 @@
 using System.Management;
+using System.Runtime.InteropServices;
 using PanelDeControl.Core.Devices;
 
 namespace PanelDeControl.Hardware;
@@ -52,7 +53,7 @@ public sealed class DeviceIdentityReader : IDeviceIdentityReader
                 return Convert.ToString(board["Product"]);
             }
         }
-        catch (ManagementException)
+        catch (Exception exception) when (exception is ManagementException or COMException or UnauthorizedAccessException)
         {
         }
 
