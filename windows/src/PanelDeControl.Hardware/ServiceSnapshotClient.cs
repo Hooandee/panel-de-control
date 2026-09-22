@@ -1,6 +1,7 @@
-using System.IO.Pipes;
 using System.Text;
+using PanelDeControl.Core.Capabilities;
 using PanelDeControl.Core.Telemetry;
+using PanelDeControl.Hardware.Capabilities;
 
 namespace PanelDeControl.Hardware;
 
@@ -28,21 +29,61 @@ public sealed class ServiceSnapshotClient : IServiceSnapshotSource
     public const string PipeName = "PanelDeControl.Service";
 
     private static readonly TimeSpan ConnectTimeout = TimeSpan.FromMilliseconds(500);
-    private static readonly TimeSpan ResponseTimeout = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan SnapshotResponseTimeout = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan InventoryResponseTimeout = TimeSpan.FromSeconds(8);
 
     public ServiceSnapshotResult Read()
+    {
+        var (outcome, line) = Send("snapshot", SnapshotResponseTimeout);
+        if (outcome != ServiceSnapshotOutcome.Received)
+        {
+            return new ServiceSnapshotResult(outcome, null);
+        }
+
+        try
+        {
+            return new ServiceSnapshotResult(outcome, TelemetryWireCodec.Deserialize(line!));
+        }
+        catch
+        {
+            return ServiceSnapshotResult.Unavailable;
+        }
+    }
+
+    public CapabilityInventory ReadInventory(IClock clock)
+    {
+        var (outcome, line) = Send("inventory", InventoryResponseTimeout);
+        if (outcome == ServiceSnapshotOutcome.Received)
+        {
+            try
+            {
+                return CapabilityWireCodec.Deserialize(line!);
+            }
+            catch
+            {
+                outcome = ServiceSnapshotOutcome.Unavailable;
+            }
+        }
+
+        var entry = outcome == ServiceSnapshotOutcome.NotRunning
+            ? new CapabilityEntry(CapabilityIds.Service, CapabilityStatus.Absent, "service_not_running")
+            : new CapabilityEntry(CapabilityIds.Service, CapabilityStatus.Fault, "service_unavailable");
+        return new CapabilityInventory(clock.UtcNow, "unknown", new[] { entry });
+    }
+
+    private static (ServiceSnapshotOutcome Outcome, string? Line) Send(string command, TimeSpan responseTimeout)
     {
         try
         {
             var state = ServicePipeConnector.Connect(PipeName, ConnectTimeout, out var connected);
             if (state == ServicePipeState.NotRunning)
             {
-                return ServiceSnapshotResult.NotRunning;
+                return (ServiceSnapshotOutcome.NotRunning, null);
             }
 
             if (connected is null)
             {
-                return ServiceSnapshotResult.Unavailable;
+                return (ServiceSnapshotOutcome.Unavailable, null);
             }
 
             using var pipe = connected;
@@ -51,15 +92,32 @@ public sealed class ServiceSnapshotClient : IServiceSnapshotSource
             {
                 AutoFlush = true,
             };
-            writer.WriteLine("snapshot");
-            var line = reader.ReadLineAsync().WaitAsync(ResponseTimeout).GetAwaiter().GetResult();
+            writer.WriteLine(command);
+            var line = reader.ReadLineAsync().WaitAsync(responseTimeout).GetAwaiter().GetResult();
             return string.IsNullOrWhiteSpace(line)
-                ? ServiceSnapshotResult.Unavailable
-                : new ServiceSnapshotResult(ServiceSnapshotOutcome.Received, TelemetryWireCodec.Deserialize(line));
+                ? (ServiceSnapshotOutcome.Unavailable, null)
+                : (ServiceSnapshotOutcome.Received, line);
         }
         catch
         {
-            return ServiceSnapshotResult.Unavailable;
+            return (ServiceSnapshotOutcome.Unavailable, null);
         }
+    }
+}
+
+public sealed class ServiceInventoryProvider : ICapabilityInventoryProvider
+{
+    private readonly ServiceSnapshotClient client;
+    private readonly IClock clock;
+
+    public ServiceInventoryProvider(ServiceSnapshotClient client, IClock clock)
+    {
+        this.client = client;
+        this.clock = clock;
+    }
+
+    public CapabilityInventory Collect()
+    {
+        return client.ReadInventory(clock);
     }
 }

@@ -3,6 +3,8 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Gaming.XboxGameBar;
+using System.Collections.Generic;
+using PanelDeControl.Core.Capabilities;
 using PanelDeControl.Core.Controls;
 using PanelDeControl.Core.Telemetry;
 using Windows.ApplicationModel.Resources;
@@ -30,6 +32,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     private readonly TelemetryClient telemetryClient = new();
     private readonly VolumeControlClient volumeClient = new();
     private readonly BrightnessControlClient brightnessClient = new();
+    private readonly InventoryClient inventoryClient = new();
     private XboxGameBarWidget? gameBarWidget;
     private CancellationTokenSource? volumeDebounce;
     private CancellationTokenSource? brightnessDebounce;
@@ -37,6 +40,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     private long volumeGeneration;
     private long muteGeneration;
     private long brightnessGeneration;
+    private long inventoryGeneration;
     private bool snapshotRefreshInProgress;
     private bool volumeRefreshInProgress;
     private bool brightnessRefreshInProgress;
@@ -142,6 +146,95 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     private async void RefreshButton_Click(object sender, RoutedEventArgs args)
     {
         await RefreshAsync();
+        if (DiagnosticsList.Visibility == Visibility.Visible)
+        {
+            await LoadInventoryAsync();
+        }
+    }
+
+    private async void DiagnosticsToggle_Click(object sender, RoutedEventArgs args)
+    {
+        if (DiagnosticsList.Visibility == Visibility.Visible)
+        {
+            inventoryGeneration++;
+            DiagnosticsList.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        DiagnosticsList.Visibility = Visibility.Visible;
+        await LoadInventoryAsync();
+    }
+
+    private async Task LoadInventoryAsync()
+    {
+        var generation = ++inventoryGeneration;
+        ShowDiagnosticsLines(new[] { Localized("DiagnosticsLoading") });
+        var inventory = await inventoryClient.GetInventoryAsync();
+        if (disposed || generation != inventoryGeneration)
+        {
+            return;
+        }
+
+        ShowDiagnosticsLines(inventory is null
+            ? new[] { Localized("DiagnosticsUnavailable") }
+            : inventory.Entries.Select(FormatCapability).ToArray());
+    }
+
+    private void ShowDiagnosticsLines(IReadOnlyList<string> lines)
+    {
+        DiagnosticsList.Children.Clear();
+        foreach (var line in lines)
+        {
+            DiagnosticsList.Children.Add(new TextBlock
+            {
+                Text = line,
+                FontSize = 13,
+                Margin = new Thickness(0, 4, 0, 0),
+                TextWrapping = TextWrapping.Wrap,
+                Foreground = new SolidColorBrush(Color.FromArgb(255, 197, 207, 220)),
+            });
+        }
+    }
+
+    private static readonly Dictionary<string, string> CapabilityLabelKeys = new()
+    {
+        ["sensor.pawnio"] = "CapabilitySensorDriver",
+        ["asus.atkacpi"] = "CapabilityAsusAtkacpi",
+        ["lenovo.wmi.gamezone"] = "CapabilityLenovoGameZone",
+        ["lenovo.wmi.other"] = "CapabilityLenovoOther",
+        ["lenovo.wmi.fan"] = "CapabilityLenovoFan",
+        ["msi.wmi.acpi"] = "CapabilityMsiAcpi",
+        ["rival.asus.armourycrate"] = "CapabilityRivalArmoury",
+        ["rival.lenovo.legionspace"] = "CapabilityRivalLegionSpace",
+        ["rival.msi.center"] = "CapabilityRivalMsiCenter",
+        ["rival.intel.dtt"] = "CapabilityRivalIntelDtt",
+        ["service"] = "CapabilityService",
+    };
+
+    private static string FormatCapability(CapabilityEntry entry)
+    {
+        var label = CapabilityLabelKeys.TryGetValue(entry.Id, out var key) ? Localized(key) : entry.Id;
+        return string.Format(Localized("CapabilityRowFormat"), label, CapabilityStatusText(entry));
+    }
+
+    private static string CapabilityStatusText(CapabilityEntry entry)
+    {
+        switch (entry.ErrorCode)
+        {
+            case "service_not_running":
+                return Localized("ReadingServiceNotRunning");
+            case "service_unavailable":
+                return Localized("ReadingServiceUnavailable");
+        }
+
+        var isRival = entry.Id.StartsWith("rival.", StringComparison.Ordinal);
+        return entry.Status switch
+        {
+            CapabilityStatus.Present => Localized(isRival ? "RivalRunning" : "CapabilityPresent"),
+            CapabilityStatus.Absent => Localized(isRival ? "RivalNotRunning" : "CapabilityAbsent"),
+            CapabilityStatus.PermissionRequired => Localized("ReadingPermission"),
+            _ => Localized("ReadingFault"),
+        };
     }
 
     private async Task RefreshAsync()
