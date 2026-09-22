@@ -111,6 +111,37 @@ public sealed class CapabilityInventoryTests
     }
 
     [Fact]
+    public void HungProbeIsNotRestartedOnTheNextRequest()
+    {
+        using var release = new ManualResetEventSlim();
+        var sources = new FakeSources { BlockWmi = release };
+        var collector = Collector("83E1", "LENOVO", sources, TimeSpan.FromMilliseconds(50));
+
+        collector.Collect();
+        var second = collector.Collect();
+        var callsWhileHung = sources.WmiCalls;
+        release.Set();
+
+        Assert.Equal("probe_busy", Entry(second, CapabilityIds.LenovoGameZone).ErrorCode);
+        Assert.Equal(3, callsWhileHung);
+    }
+
+    [Fact]
+    public void ProbesShareOneTimeBudget()
+    {
+        using var release = new ManualResetEventSlim();
+        var sources = new FakeSources { BlockWmi = release };
+        var collector = Collector("83E1", "LENOVO", sources, TimeSpan.FromMilliseconds(200));
+
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        collector.Collect();
+        watch.Stop();
+        release.Set();
+
+        Assert.True(watch.Elapsed < TimeSpan.FromMilliseconds(500), watch.Elapsed.ToString());
+    }
+
+    [Fact]
     public void InventoryRoundTripsThroughTheWireCodec()
     {
         var inventory = Collector("83E1", "LENOVO", new FakeSources()).Collect();
@@ -179,8 +210,13 @@ public sealed class CapabilityInventoryTests
 
         public ManualResetEventSlim? BlockWmi { get; set; }
 
+        private int wmiCalls;
+
+        public int WmiCalls => Volatile.Read(ref wmiCalls);
+
         public bool HasClass(string wmiNamespace, string className)
         {
+            Interlocked.Increment(ref wmiCalls);
             BlockWmi?.Wait();
             if (ThrowOnWmi is not null)
             {
