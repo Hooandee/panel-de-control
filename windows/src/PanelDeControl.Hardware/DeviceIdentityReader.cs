@@ -38,6 +38,11 @@ public sealed class DeviceIdentityReader : IDeviceIdentityReader
 
     private static string? ReadBoardProduct()
     {
+        if (!OperatingSystem.IsWindows())
+        {
+            return null;
+        }
+
         try
         {
             using var boards = new ManagementObjectSearcher("SELECT Product FROM Win32_BaseBoard");
