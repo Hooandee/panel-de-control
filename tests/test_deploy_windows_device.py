@@ -18,9 +18,9 @@ def _run(*args, env=None):
 
 
 def _encoded_script(stdout):
-    match = re.search(r"-EncodedCommand (\S+)", stdout)
-    assert match
-    return base64.b64decode(match.group(1)).decode("utf-16-le")
+    matches = re.findall(r"-EncodedCommand (\S+)", stdout)
+    assert len(matches) == 2
+    return base64.b64decode(matches[-1]).decode("utf-16-le")
 
 
 def test_requires_a_user_at_host_target():
@@ -40,7 +40,7 @@ def test_dry_run_prints_every_step_without_touching_the_device():
     assert result.returncode == 0, result.stderr
     assert "+ gh run download 42 --name panel-de-control-gamebar-x64" in result.stdout
     assert "+ scp -q " in result.stdout
-    assert "me@handheld:pdc-gamebar.msix" in result.stdout
+    assert "me@handheld:pdc-deploy" in result.stdout
     assert "+ ssh me@handheld powershell -NoProfile -NonInteractive -EncodedCommand" in result.stdout
 
 
@@ -58,6 +58,29 @@ def test_remote_script_requires_developer_mode_and_registers_the_layout():
     assert remote.index("throw 'Developer Mode is off") < remote.index("Remove-AppxPackage")
     assert "Get-AppxPackage -Name 'PanelDeControl.Windows' | Remove-AppxPackage" in remote
     assert "Add-AppxPackage -Register (Join-Path $layout 'AppxManifest.xml')" in remote
+    assert remote.index("Expand-Archive") < remote.index("Remove-AppxPackage")
+    assert remote.index("Add-AppxPackage -Path $dependency.FullName") < remote.index("Remove-AppxPackage")
+
+
+def test_detached_head_needs_an_explicit_build(tmp_path):
+    import shutil
+
+    repo = tmp_path / "repo"
+    (repo / "scripts").mkdir(parents=True)
+    shutil.copy(SCRIPT, repo / "scripts" / SCRIPT.name)
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    subprocess.run(["git", "-C", str(repo), "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "x"], check=True)
+    subprocess.run(["git", "-C", str(repo), "checkout", "-q", "--detach"], check=True)
+
+    result = subprocess.run(
+        ["bash", str(repo / "scripts" / SCRIPT.name), "--dry-run", "me@handheld"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "detached HEAD" in result.stderr
 
 
 def test_package_name_matches_the_manifest_identity():
