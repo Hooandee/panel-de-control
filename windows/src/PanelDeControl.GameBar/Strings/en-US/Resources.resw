@@ -73,7 +73,7 @@
     <value>Load —</value>
   </data>
   <data name="HeaderTitle.Text" xml:space="preserve">
-    <value>CONTROL PANEL</value>
+    <value>PANEL DE CONTROL</value>
   </data>
   <data name="LoadFormat" xml:space="preserve">
     <value>Load {0}</value>
