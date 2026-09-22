@@ -32,16 +32,20 @@ public sealed class ServiceSnapshotClient : IServiceSnapshotSource
 
     public ServiceSnapshotResult Read()
     {
-        if (!OperatingSystem.IsWindows() || !File.Exists($@"\\.\pipe\{PipeName}"))
-        {
-            return ServiceSnapshotResult.NotRunning;
-        }
-
         try
         {
-            using var pipe = new NamedPipeClientStream(".", PipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
-            pipe.Connect((int)ConnectTimeout.TotalMilliseconds);
+            var state = ServicePipeConnector.Connect(PipeName, ConnectTimeout, out var connected);
+            if (state == ServicePipeState.NotRunning)
+            {
+                return ServiceSnapshotResult.NotRunning;
+            }
 
+            if (connected is null)
+            {
+                return ServiceSnapshotResult.Unavailable;
+            }
+
+            using var pipe = connected;
             using var reader = new StreamReader(pipe, new UTF8Encoding(false), false, 256, leaveOpen: true);
             using var writer = new StreamWriter(pipe, new UTF8Encoding(false), 256, leaveOpen: true)
             {
