@@ -287,6 +287,137 @@ def test_command_preserves_requested_but_applies_live_target(plugin):
     assert plugin._tdp_targets.target["pl1"] == 15
 
 
+def test_legion_manual_ac_probe_attempts_once_then_reports_power_limit(
+    plugin,
+    monkeypatch,
+):
+    import main as main_module
+
+    monkeypatch.setattr(main_module, "read_on_ac", lambda root="/": True)
+    plugin._tdp_backend.probe_live_max_on_ac = True
+    plugin._tdp_backend.live_max = 15
+    plugin._tdp_backend._levels = {"pl1": 15, "pl2": 15, "pl3": 20}
+    plugin._tdp_profiles.set_levels("global", 22, 22, 22)
+    original_set_levels = plugin._tdp_backend.set_levels
+
+    def reject_above_live_max(pl1, pl2, pl3, ac):
+        original_set_levels(pl1, pl2, pl3, ac)
+        return TdpResult(
+            pl1,
+            15,
+            False,
+            "write not confirmed: fake/pl1=15; rollback confirmed",
+            "target_not_applied",
+        )
+
+    monkeypatch.setattr(plugin._tdp_backend, "set_levels", reject_above_live_max)
+    plugin._tdp_backend.set_levels_calls = 0
+
+    plugin._execute_tdp_command(plugin._capture_tdp_command("manual"))
+
+    assert plugin._tdp_backend.set_levels_calls == 1
+    assert plugin._tdp_targets.requested == {"pl1": 22, "pl2": 22, "pl3": 22}
+    assert plugin._tdp_targets.target == {"pl1": 22, "pl2": 22, "pl3": 22}
+    assert (plugin._tdp_status, plugin._tdp_reason) == (
+        "constrained",
+        "power_source_limit",
+    )
+
+    for now in (10.0, 10.75, 12.0, 40.0):
+        plugin._tdp_guard_tick(now=now)
+
+    assert plugin._tdp_backend.set_levels_calls == 1
+
+
+def test_legion_live_max_probe_is_not_used_for_battery_or_auto_tdp(plugin):
+    plugin._tdp_backend.probe_live_max_on_ac = True
+    manual_ac = plugin._capture_tdp_command("manual", on_ac=True)
+
+    assert plugin._probe_tdp_live_max(manual_ac) is True
+    assert plugin._probe_tdp_live_max(
+        replace(manual_ac, on_ac=False),
+    ) is False
+    assert plugin._probe_tdp_live_max(
+        replace(manual_ac, auto_tdp=True),
+    ) is False
+
+
+def test_legion_power_limit_suppresses_scheduled_ac_settle_retries(
+    plugin,
+    monkeypatch,
+):
+    import main as main_module
+
+    monkeypatch.setattr(main_module, "read_on_ac", lambda root="/": True)
+    monkeypatch.setattr(plugin, "_offload", lambda callback: callback())
+    plugin._tdp_backend.probe_live_max_on_ac = True
+    plugin._tdp_backend.live_max = 15
+    plugin._tdp_backend._levels = {"pl1": 15, "pl2": 15, "pl3": 20}
+    plugin._tdp_profiles.set_levels("global", 22, 22, 22)
+    original_set_levels = plugin._tdp_backend.set_levels
+
+    def reject_above_live_max(pl1, pl2, pl3, ac):
+        original_set_levels(pl1, pl2, pl3, ac)
+        return TdpResult(
+            pl1,
+            15,
+            False,
+            "write not confirmed: fake/pl1=15; rollback confirmed",
+            "target_not_applied",
+        )
+
+    monkeypatch.setattr(plugin._tdp_backend, "set_levels", reject_above_live_max)
+    plugin._tdp_backend.set_levels_calls = 0
+    plugin._execute_tdp_command(plugin._capture_tdp_command("manual"))
+    generation = plugin._tdp_generation
+
+    plugin._reassert_tdp_only(on_ac=True)
+    plugin._reassert_tdp_only(on_ac=True)
+
+    assert plugin._tdp_backend.set_levels_calls == 1
+    assert plugin._tdp_generation == generation
+    assert (plugin._tdp_status, plugin._tdp_reason) == (
+        "constrained",
+        "power_source_limit",
+    )
+
+
+def test_legion_probe_keeps_backoff_for_platform_profile_failure(
+    plugin,
+    monkeypatch,
+):
+    import main as main_module
+
+    monkeypatch.setattr(main_module, "read_on_ac", lambda root="/": True)
+    plugin._tdp_backend.probe_live_max_on_ac = True
+    plugin._tdp_backend.live_max = 15
+    plugin._tdp_profiles.set_levels("global", 22, 22, 22)
+    original_set_levels = plugin._tdp_backend.set_levels
+
+    def fail_platform_profile(pl1, pl2, pl3, ac):
+        original_set_levels(pl1, pl2, pl3, ac)
+        return TdpResult(
+            pl1,
+            15,
+            False,
+            "write not confirmed: platform-profile; rollback confirmed",
+        )
+
+    monkeypatch.setattr(
+        plugin._tdp_backend,
+        "set_levels",
+        fail_platform_profile,
+    )
+
+    plugin._execute_tdp_command(plugin._capture_tdp_command("manual"))
+
+    assert (plugin._tdp_status, plugin._tdp_reason) == (
+        "settling",
+        "write_rejected",
+    )
+    assert plugin._tdp_reconcile_memory.failures == 1
+
+
 def test_guard_recovers_requested_when_live_ceiling_returns(plugin):
     plugin._tdp_profiles.set_pl1("global", 25)
     plugin._tdp_backend.live_max = 15

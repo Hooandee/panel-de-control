@@ -174,7 +174,7 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, on
       </PanelSectionRow>
       {ownership.show && (
         <PanelSectionRow>
-          <TdpOwnershipStatus ownership={tdp.ownership} />
+          <TdpOwnershipStatus ownership={tdp.ownership} onAc={tdp.on_ac} />
         </PanelSectionRow>
       )}
       {!isAutoOn && (

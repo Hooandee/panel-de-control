@@ -108,6 +108,30 @@ def test_missing_library_prevents_orphan_claims(tmp_path):
     state = service(home).inventory()
     assert state["coverage_complete"] is False
     assert state["entries"][0]["installation"] == "unknown"
+    assert state["entries"][0]["blocked_reason"] == "coverage_incomplete"
+
+
+def test_missing_library_keeps_verified_available_entries_cleanable(tmp_path):
+    home, steam = make_steam(tmp_path)
+    target = data(steam)
+    manifest(steam)
+    write(
+        steam / "steamapps/libraryfolders.vdf",
+        f'"libraryfolders" {{ "1" {{ "path" "{tmp_path / "absent"}" }} }}',
+    )
+    cleaner = service(home)
+
+    state = cleaner.inventory()
+    entry = state["entries"][0]
+
+    assert state["coverage_complete"] is False
+    assert entry["installation"] == "installed"
+    assert entry["blocked_reason"] is None
+    result = cleaner.execute(
+        cleaner.prepare(state["scan_id"], [entry["id"]])["id"]
+    )
+    assert result["items"][0]["status"] == "deleted"
+    assert not target.exists()
 
 
 def test_malformed_library_index_remains_read_only(tmp_path):

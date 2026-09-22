@@ -57,6 +57,21 @@ def legion_go_2_83n0_firmware_attr_quirks(device, root: str = "/") -> dict:
     return {"readback_settle_delays": (0.25, 0.50, 1.0, 2.0)}
 
 
+def lenovo_legion_firmware_attr_quirks(device, root: str = "/") -> dict:
+    product_by_key = {
+        "legion_go": {"83e1"},
+        "legion_go_s": {"83l3", "83n6"},
+        "legion_go_2": {"83n0", "83n1"},
+    }
+    products = product_by_key.get(getattr(device, "key", None), set())
+    if (
+        _read_dmi(root, "sys_vendor").casefold() != "lenovo"
+        or _read_dmi(root, "product_name").casefold() not in products
+    ):
+        return {}
+    return {"probe_live_max_on_ac": True}
+
+
 def is_legion_go_s_83n6(device, root: str = "/") -> bool:
     return (
         getattr(device, "key", None) == "legion_go_s"
@@ -88,7 +103,6 @@ def legion_go_s_83n6_firmware_attr_quirks(device, root: str = "/") -> dict:
     if not is_legion_go_s_83n6(device, root):
         return {}
     return {
-        "ignored_live_maxes": {"pl1": 15, "pl2": 15, "pl3": 20},
         "cap_boost_to_active": True,
         "readback_settle_delays": (0.05, 0.10, 0.20, 0.40),
     }

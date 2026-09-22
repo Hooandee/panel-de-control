@@ -1126,6 +1126,137 @@ def test_route_handoff_retargets_while_eq_remains_default(tmp_path):
     assert fake._link_target == "alsa_speaker"
 
 
+def test_new_bluetooth_output_replaces_speaker_while_eq_is_default(tmp_path):
+    fake = _FakeRunner(downstream_vol={
+        "alsa_speaker": "40%",
+        "bluez_output.headset": "65%",
+    })
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    assert eq.ensure_sink([0] * 10) is True
+
+    fake._sinks = (
+        "1\talsa_speaker\tPipeWire\t...\tIDLE\n"
+        "2\tbluez_output.headset\tPipeWire\t...\tSUSPENDED\n"
+        "3\tX EQ\tPipeWire\t...\tRUNNING\n"
+    )
+
+    assert eq.ensure_sink([0] * 10) is True
+    assert eq._active_downstream == "bluez_output.headset"
+    assert fake._link_target == "bluez_output.headset"
+    assert eq._route_state()["sink"] == "bluez_output.headset"
+
+
+def test_multiple_new_bluetooth_outputs_do_not_override_current_route(tmp_path):
+    fake = _FakeRunner()
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    assert eq.ensure_sink([0] * 10) is True
+
+    fake._sinks = (
+        "1\talsa_speaker\tPipeWire\t...\tIDLE\n"
+        "2\tbluez_output.headset-a\tPipeWire\t...\tSUSPENDED\n"
+        "3\tbluez_output.headset-b\tPipeWire\t...\tSUSPENDED\n"
+        "4\tX EQ\tPipeWire\t...\tRUNNING\n"
+    )
+
+    assert eq.ensure_sink([0] * 10) is True
+    assert eq._active_downstream == "alsa_speaker"
+    assert fake._link_target == "alsa_speaker"
+    assert eq._route_state()["sink"] == "alsa_speaker"
+
+
+def test_empty_sink_inventory_does_not_make_existing_bluetooth_look_new(tmp_path):
+    fake = _FakeRunner(downstream_vol={
+        "alsa_speaker": "40%",
+        "bluez_output.headset": "65%",
+    })
+    fake._sinks = (
+        "1\talsa_speaker\tPipeWire\t...\tRUNNING\n"
+        "2\tbluez_output.headset\tPipeWire\t...\tSUSPENDED\n"
+    )
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    assert eq.ensure_sink([0] * 10) is True
+    assert eq._active_downstream == "alsa_speaker"
+
+    fake._sinks = ""
+    assert eq._downstream_sink() is None
+
+    fake._sinks = (
+        "1\talsa_speaker\tPipeWire\t...\tRUNNING\n"
+        "2\tbluez_output.headset\tPipeWire\t...\tSUSPENDED\n"
+        "3\tX EQ\tPipeWire\t...\tRUNNING\n"
+    )
+
+    assert eq.ensure_sink([0] * 10) is True
+    assert eq._active_downstream == "alsa_speaker"
+    assert fake._link_target == "alsa_speaker"
+
+
+def test_initial_empty_sink_inventory_is_unconfirmed(tmp_path):
+    fake = _FakeRunner()
+    fake._default = "X EQ"
+    fake._sinks = ""
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+
+    assert eq._downstream_sink() is None
+    assert eq._known_downstreams is None
+
+
+def test_route_handoff_defers_restore_and_reselects_returning_bluetooth(tmp_path):
+    fake = _FakeRunner(downstream_vol={
+        "alsa_speaker": "40%",
+        "bluez_output.headset": "65%",
+    })
+    fake._default = "bluez_output.headset"
+    fake._configured_default = "bluez_output.headset"
+    fake._link_target = "bluez_output.headset"
+    fake._sinks = (
+        "1\talsa_speaker\tPipeWire\t...\tIDLE\n"
+        "2\tbluez_output.headset\tPipeWire\t...\tRUNNING\n"
+    )
+    eq = _make_eq(tmp_path, fake, conf_exists=False)
+    assert eq.ensure_sink([0] * 10) is True
+
+    fake._configured_default = "alsa_speaker"
+    fake._sinks = (
+        "1\talsa_speaker\tPipeWire\t...\tRUNNING\n"
+        "3\tX EQ\tPipeWire\t...\tRUNNING\n"
+    )
+    run = eq._runner
+
+    def disconnected_headset_has_no_readback(argv, timeout=8):
+        if argv in (
+            ["pactl", "get-sink-volume", "bluez_output.headset"],
+            ["pactl", "get-sink-mute", "bluez_output.headset"],
+        ):
+            fake.calls.append(argv)
+            return ""
+        return run(argv, timeout)
+
+    eq._runner = disconnected_headset_has_no_readback
+
+    assert eq.ensure_sink([0] * 10) is True
+    assert eq.is_active() is True
+    assert eq._route_state()["pending_restores"] == [{
+        "sink": "bluez_output.headset",
+        "volumes": ["65%"],
+        "muted": False,
+    }]
+
+    fake._sinks = (
+        "1\talsa_speaker\tPipeWire\t...\tRUNNING\n"
+        "2\tbluez_output.headset\tPipeWire\t...\tIDLE\n"
+        "3\tX EQ\tPipeWire\t...\tRUNNING\n"
+    )
+    eq._runner = run
+
+    assert eq.ensure_sink([0] * 10) is True
+    state = eq._route_state()
+    assert eq._active_downstream == "bluez_output.headset"
+    assert state["sink"] == "bluez_output.headset"
+    assert state["physical_volumes"] == ["65%"]
+    assert state["pending_restores"] == []
+
+
 def test_route_handoff_stages_eq_before_republishing_it(tmp_path):
     fake = _FakeRunner(downstream_vol={
         "alsa_speaker": "40%",

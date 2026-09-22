@@ -874,6 +874,7 @@ export const it: Record<string, string> = {
   "tdp.minimum.notice": "Il firmware supporta da {min} W in su. Salveremo {requested} W per quando sarà disponibile.",
   "tdp.minimum.floor": "Il firmware di questo dispositivo non consente meno di {min} W.",
   "tdp.ownership.constrained": "Hai richiesto {requested} W · il firmware ora consente {applied} W",
+  "tdp.ownership.powerLimited": "L'alimentazione o il firmware limita temporaneamente la potenza · l'impostazione resta selezionata",
   "tdp.ownership.settling": "Applicazione e verifica del limite di potenza…",
   "tdp.ownership.rejected": "Il firmware non ha accettato {target} W · mantiene {applied} W",
   "tdp.ownership.unverifiable": "Pannello di controllo mantiene il limite, ma questo dispositivo non consente di verificarlo",

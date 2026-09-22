@@ -5354,6 +5354,24 @@ class Plugin:
             on_ac,
         )
 
+    @staticmethod
+    def _probe_tdp_live_max(command):
+        return bool(
+            command.on_ac
+            and not command.auto_tdp
+            and getattr(command.backend, "probe_live_max_on_ac", False)
+        )
+
+    def _tdp_live_max_probe_failed_safely(self, result):
+        detail = result.detail or ""
+        return bool(
+            not result.ok
+            and getattr(result, "failure_kind", None) == "target_not_applied"
+            and not getattr(self._tdp_backend, "safety_locked", False)
+            and detail.startswith("write not confirmed")
+            and "; rollback confirmed" in detail
+        )
+
     def _execute_tdp_command(self, command):
         logical_watts = command.logical_requested["pl1"]
         if self._tdp_shutdown:
@@ -5564,10 +5582,12 @@ class Plugin:
                 False,
                 "stale-generation",
             )
+        probe_live_max = self._probe_tdp_live_max(command)
         targets = build_targets(
             command.requested,
             command.safe_bounds,
             before,
+            probe_live_max=probe_live_max,
         )
         if bool(command.on_ac) != read_on_ac():
             return TdpResult(
@@ -5612,6 +5632,10 @@ class Plugin:
                 self._tdp_backend,
                 "heartbeat_s",
                 None,
+            ),
+            probe_live_max=(
+                probe_live_max
+                and self._tdp_live_max_probe_failed_safely(result)
             ),
         )
         self._tdp_targets = targets
@@ -5701,6 +5725,12 @@ class Plugin:
 
     def _schedule_tdp_apply(self, reason, on_ac=None):
         if self._tdp_shutdown:
+            return
+        if (
+            reason == "settle-retry"
+            and (read_on_ac() if on_ac is None else bool(on_ac))
+            and self._tdp_reconcile_memory.live_limit_signature is not None
+        ):
             return
         command = self._capture_tdp_command(reason, on_ac)
         self._offload(lambda: self._execute_tdp_command(command))
@@ -5983,10 +6013,12 @@ class Plugin:
         observation = self._observe_tdp_sync()
         if command.generation != self._tdp_generation:
             return
+        probe_live_max = self._probe_tdp_live_max(command)
         targets = build_targets(
             command.requested,
             command.safe_bounds,
             observation,
+            probe_live_max=probe_live_max,
         )
         outcome = decide(
             targets,
@@ -6044,6 +6076,10 @@ class Plugin:
                     self._tdp_backend,
                     "heartbeat_s",
                     None,
+                ),
+                probe_live_max=(
+                    probe_live_max
+                    and self._tdp_live_max_probe_failed_safely(result)
                 ),
             )
             observation = after

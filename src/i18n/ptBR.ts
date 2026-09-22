@@ -961,6 +961,7 @@ export const ptBR: Record<string, string> = {
   "tdp.minimum.notice": "O firmware suporta {min} W ou mais. Vamos salvar {requested} W para aplicá-lo quando for possível.",
   "tdp.minimum.floor": "O firmware deste dispositivo não permite menos que {min} W.",
   "tdp.ownership.constrained": "Você solicitou {requested} W · o firmware atualmente permite {applied} W",
+  "tdp.ownership.powerLimited": "A alimentação ou o firmware limita temporariamente a potência · sua configuração permanece selecionada",
   "tdp.ownership.settling": "Aplicando e verificando o limite de energia...",
   "tdp.ownership.rejected": "O firmware não aceitou {target} W · permanece em {applied} W",
   "tdp.ownership.unverifiable": "O Painel de Controle mantém o limite, mas este dispositivo não consegue confirmá-lo.",

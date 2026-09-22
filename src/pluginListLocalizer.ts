@@ -2,17 +2,12 @@ import { translate } from "./i18n";
 import { onQamDocument } from "./qamDocument";
 import { PLUGIN_IDENTITY_NAME, nextRowText } from "./pluginListName";
 
-// The shared document mutates constantly, so a scan runs at most once per window;
-// the resulting sub-second relabel latency is imperceptible.
-const SCAN_THROTTLE_MS = 400;
-
 // Relabels our row in Decky's plugin list to the localized name. Decky has no
 // display-name API, so this patches the rendered text node in the QAM document,
 // leaving the identity `name` (the key for open/hide/updates) untouched.
 export function startPluginListLocalizer(): () => void {
   let observer: MutationObserver | null = null;
   let attached: Document | null = null;
-  let timer: ReturnType<typeof setTimeout> | null = null;
 
   const scan = (doc: Document): void => {
     if (!doc.body) return;
@@ -64,16 +59,12 @@ export function startPluginListLocalizer(): () => void {
     return false;
   };
 
-  const schedule = (doc: Document): void => {
-    if (timer) return;
-    timer = setTimeout(() => {
-      timer = null;
-      try {
-        scan(doc);
-      } catch {
-        /* best-effort */
-      }
-    }, SCAN_THROTTLE_MS);
+  const scanSafely = (doc: Document): void => {
+    try {
+      scan(doc);
+    } catch {
+      /* best-effort */
+    }
   };
 
   const attach = (doc: Document): void => {
@@ -83,14 +74,14 @@ export function startPluginListLocalizer(): () => void {
       attached = doc;
       const Obs = doc.defaultView?.MutationObserver ?? MutationObserver;
       observer = new Obs((records) => {
-        if (relevant(records)) schedule(doc);
+        if (relevant(records)) scanSafely(doc);
       });
       observer.observe(doc.body, {
         childList: true,
         subtree: true,
         characterData: true,
       });
-      schedule(doc); // patch whatever is already rendered
+      scanSafely(doc);
     } catch {
       /* best-effort */
     }
@@ -100,10 +91,6 @@ export function startPluginListLocalizer(): () => void {
 
   return () => {
     off();
-    if (timer) {
-      clearTimeout(timer);
-      timer = null;
-    }
     try {
       observer?.disconnect();
     } catch {
