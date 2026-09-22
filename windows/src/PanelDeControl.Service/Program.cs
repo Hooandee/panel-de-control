@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using PanelDeControl.Hardware;
+using PanelDeControl.Hardware.Capabilities;
 
 namespace PanelDeControl.Service;
 
@@ -15,16 +16,28 @@ public static class Program
             return 1;
         }
 
+        var clock = new SystemClock();
+        var identityReader = new DeviceIdentityReader(DeviceCatalogResource.TryLoad());
+        var sensorAccess = new WindowsSensorAccessProbe();
         var collector = new SnapshotCollector(
-            new SystemClock(),
-            new DeviceIdentityReader(DeviceCatalogResource.TryLoad()),
+            clock,
+            identityReader,
             new LibreHardwareReader(),
             new PowerStatusReader(),
-            new WindowsSensorAccessProbe());
+            sensorAccess);
+        var inventory = new CapabilityInventoryCollector(
+            clock,
+            identityReader,
+            new CapabilityProbeCatalog(
+                new WindowsWmiClassCatalog(),
+                new WindowsDevicePathProbe(),
+                new WindowsSoftwareInventory(),
+                sensorAccess));
         var server = new SnapshotPipeServer(
             ServicePipeSecurity.PipeName,
             collector,
-            ServicePipeSecurity.Create);
+            ServicePipeSecurity.Create,
+            inventoryProvider: inventory);
 
         Host.CreateDefaultBuilder(args)
             .UseWindowsService(options => options.ServiceName = ServiceName)

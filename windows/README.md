@@ -18,6 +18,10 @@ del brillo del panel integrado y del volumen del sistema.
 - Servicio opcional `PanelDeControlService`, de solo lectura, que corre con
   permisos de sistema y da la temperatura de CPU al widget. Si no está en
   marcha, el widget lo dice y sigue funcionando con lo demás.
+- Tarjeta de diagnóstico que enseña qué vías de hardware encuentra el servicio
+  en cada equipo (WMI del fabricante, ATKACPI, driver de sensores) y si hay
+  software del fabricante en marcha que también controle potencia o
+  ventiladores. Solo mira; no escribe nada.
 - Lectura y ajuste del volumen principal del dispositivo de audio predeterminado
   mediante Windows Core Audio.
 - Lectura y ajuste del silencio principal del mismo dispositivo mediante la

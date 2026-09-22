@@ -106,6 +106,7 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
@@ -279,6 +280,32 @@
                         <TextBlock Text="GPU" Style="{StaticResource TelemetryLabelStyle}" />
                         <TextBlock x:Name="GpuTemperatureValue" Margin="0,5,0,0" Text="—" Style="{StaticResource TelemetryValueStyle}" />
                         <TextBlock x:Name="GpuLoadValue" x:Uid="GpuLoadValue" Margin="0,8,0,0" FontSize="13" Foreground="#FFC5CFDC" />
+                    </StackPanel>
+                </Border>
+
+                <Border
+                    x:Name="DiagnosticsCard"
+                    Grid.Row="4"
+                    Grid.ColumnSpan="2"
+                    Margin="0,12,0,0"
+                    Padding="18"
+                    Background="{StaticResource CardBackgroundBrush}"
+                    CornerRadius="16">
+                    <StackPanel>
+                        <Button
+                            x:Name="DiagnosticsToggle"
+                            x:Uid="DiagnosticsToggle"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Left"
+                            IsTabStop="True"
+                            Background="Transparent"
+                            Foreground="White"
+                            Click="DiagnosticsToggle_Click" />
+                        <StackPanel
+                            x:Name="DiagnosticsList"
+                            Margin="0,10,0,0"
+                            Visibility="Collapsed"
+                            AutomationProperties.LiveSetting="Polite" />
                     </StackPanel>
                 </Border>
             </Grid>
