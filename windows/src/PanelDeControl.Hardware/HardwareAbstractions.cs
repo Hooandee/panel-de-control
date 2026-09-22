@@ -30,6 +30,11 @@ public interface IPowerStatusReader
     IReadOnlyList<TelemetryReading> Read();
 }
 
+public interface ISnapshotServer
+{
+    Task RunAsync(TimeSpan idleTimeout, CancellationToken cancellationToken);
+}
+
 public interface IHardwareSnapshotProvider
 {
     HardwareSnapshot Capture();
