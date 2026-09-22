@@ -11,6 +11,7 @@ public sealed class FixtureCatalogTests
         "fan_suggestions.json",
         "tdp_learned_band.json",
         "telemetry_learning.json",
+        "windows_tdp.json",
     };
 
     [Fact]

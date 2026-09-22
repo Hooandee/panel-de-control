@@ -37,4 +37,19 @@ public sealed class ServicePipeSecurityTests
         Assert.DoesNotContain("LOCAL\\", ServicePipeSecurity.PipeName, StringComparison.Ordinal);
         Assert.Equal("PanelDeControlService", Program.ServiceName);
     }
+
+    [Fact]
+    public void TdpWritePipeIsNarrowerThanTheReadPipe()
+    {
+        var grants = TdpServicePipeSecurity.Entries
+            .Where(entry => entry.Access == AccessControlType.Allow)
+            .ToDictionary(entry => entry.Identity, entry => entry.Rights);
+
+        Assert.Equal(PipeAccessRights.FullControl, grants[WellKnownSidType.LocalSystemSid]);
+        Assert.Equal(PipeAccessRights.ReadWrite, grants[WellKnownSidType.InteractiveSid]);
+        Assert.DoesNotContain(
+            TdpServicePipeSecurity.Entries,
+            entry => entry.Identity == WellKnownSidType.AuthenticatedUserSid);
+        Assert.NotEqual(ServicePipeSecurity.PipeName, TdpServicePipeSecurity.PipeName);
+    }
 }
