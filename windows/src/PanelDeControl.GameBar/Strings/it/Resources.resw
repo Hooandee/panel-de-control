@@ -132,6 +132,12 @@
   <data name="ReadingPermission" xml:space="preserve">
     <value>Serve l'autorizzazione</value>
   </data>
+  <data name="ReadingServiceNotRunning" xml:space="preserve">
+    <value>Il servizio di Panel de Control non è in esecuzione</value>
+  </data>
+  <data name="ReadingServiceUnavailable" xml:space="preserve">
+    <value>Il servizio di Panel de Control non risponde</value>
+  </data>
   <data name="RefreshButton.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
     <value>Aggiorna telemetria, luminosità e volume</value>
   </data>
