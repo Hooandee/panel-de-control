@@ -82,6 +82,11 @@ REMOVE_SERVICE_SCRIPT=$(cat <<POWERSHELL
 \$service = Get-Service -Name '${SERVICE_NAME}' -ErrorAction SilentlyContinue
 if (\$service) {
   if (\$service.Status -ne 'Stopped') { Stop-Service -Name '${SERVICE_NAME}' -Force }
+  \$deadline = (Get-Date).AddSeconds(15)
+  while ((Get-Process -Name 'PanelDeControl.Service' -ErrorAction SilentlyContinue) -and (Get-Date) -lt \$deadline) {
+    Start-Sleep -Milliseconds 250
+  }
+  if (Get-Process -Name 'PanelDeControl.Service' -ErrorAction SilentlyContinue) { throw 'The old service process did not exit; nothing was removed.' }
   sc.exe delete '${SERVICE_NAME}' | Out-Null
   \$deadline = (Get-Date).AddSeconds(15)
   while ((Get-Service -Name '${SERVICE_NAME}' -ErrorAction SilentlyContinue) -and (Get-Date) -lt \$deadline) {
@@ -98,7 +103,7 @@ INSTALL_SERVICE_SCRIPT=$(cat <<POWERSHELL
 New-Item -ItemType Directory -Path \$serviceDir -Force | Out-Null
 Copy-Item -Path (Join-Path \$stage 'service\\*') -Destination \$serviceDir -Recurse -Force
 \$binary = Join-Path \$serviceDir 'PanelDeControl.Service.exe'
-New-Service -Name '${SERVICE_NAME}' -BinaryPathName ('"' + \$binary + '"') -DisplayName 'Panel de Control' -StartupType Manual | Out-Null
+New-Service -Name '${SERVICE_NAME}' -BinaryPathName ('"' + \$binary + '"') -DisplayName 'Panel de Control' -StartupType Automatic | Out-Null
 Start-Service -Name '${SERVICE_NAME}'
 Get-Service -Name '${SERVICE_NAME}' | Select-Object Name, Status, StartType | Format-List
 POWERSHELL

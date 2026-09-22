@@ -120,7 +120,8 @@ scripts/deploy-windows-device.sh usuario@equipo
 
 `--dry-run` enseña cada paso sin tocar nada y `--run-id` elige otra compilación.
 Con `--with-service` también instala el servicio `PanelDeControlService` en
-`Program Files` (hace falta entrar por SSH con una cuenta de administrador), y
+`Program Files`, con arranque automático (hace falta entrar por SSH con una
+cuenta de administrador), y
 `--remove-service` lo quita.
 El paquete de la CI no está firmado, así que se registra desde su contenido
 descomprimido, como hace Visual Studio. Registrar de nuevo borra la
