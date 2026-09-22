@@ -16,6 +16,7 @@ APP_CODE = PROJECT_DIR / "App.xaml.cs"
 TELEMETRY_CLIENT = PROJECT_DIR / "TelemetryClient.cs"
 VOLUME_CLIENT = PROJECT_DIR / "VolumeControlClient.cs"
 BRIGHTNESS_CLIENT = PROJECT_DIR / "BrightnessControlClient.cs"
+TDP_CLIENT = PROJECT_DIR / "TdpControlClient.cs"
 BROKER_LAUNCHER = PROJECT_DIR / "HardwareBrokerLauncher.cs"
 HARDWARE_DIR = ROOT / "windows" / "src" / "PanelDeControl.Hardware"
 PIPE_SERVER = HARDWARE_DIR / "SnapshotPipeServer.cs"
@@ -23,6 +24,8 @@ CONTROL_PIPE_SERVER = HARDWARE_DIR / "VolumeControlPipeServer.cs"
 BRIGHTNESS_PIPE_SERVER = HARDWARE_DIR / "BrightnessControlPipeServer.cs"
 BRIGHTNESS_PROVIDER = HARDWARE_DIR / "WmiDisplayBrightnessProvider.cs"
 BRIGHTNESS_CONTROLLER = HARDWARE_DIR / "IntegratedDisplayBrightnessController.cs"
+TDP_PIPE_SERVER = HARDWARE_DIR / "TdpControlPipeServer.cs"
+SERVICE_TDP_CLIENT = HARDWARE_DIR / "ServiceTdpClient.cs"
 PIPE_FACTORY = HARDWARE_DIR / "PackageNamedPipeServerFactory.cs"
 BROKER_PROGRAM = HARDWARE_DIR / "Program.cs"
 ROOT_LICENSE = ROOT / "LICENSE"
@@ -252,8 +255,10 @@ class GameBarProjectTests(unittest.TestCase):
         self.assertIn("volumen", app_description)
         self.assertIn("brillo", app_description)
         self.assertIn("telemetría", app_description)
+        self.assertIn("potencia", app_description)
         self.assertIn("volumen", widget.attrib["Description"].casefold())
         self.assertIn("brillo", widget.attrib["Description"].casefold())
+        self.assertIn("potencia", widget.attrib["Description"].casefold())
 
     def test_broker_payload_metadata_is_bound_to_published_files(self):
         root = ElementTree.parse(PROJECT).getroot()
@@ -357,6 +362,42 @@ class GameBarProjectTests(unittest.TestCase):
         self.assertEqual("True", slider.attrib["IsTabStop"])
         self.assertEqual("VolumeSlider", slider.attrib[XAML_UID])
         self.assertEqual("Volumen del sistema", spanish_automation_name("VolumeSlider"))
+
+    def test_widget_has_an_arc_based_experimental_power_card(self):
+        root = ElementTree.parse(WIDGET).getroot()
+        xaml_name = "{http://schemas.microsoft.com/winfx/2006/xaml}Name"
+        nodes = {node.attrib.get(xaml_name): node for node in root.iter()}
+
+        expected = {
+            "PowerCard",
+            "PowerArcTrack",
+            "PowerArcFill",
+            "PowerValue",
+            "PowerStatus",
+            "TdpDecreaseButton",
+            "TdpIncreaseButton",
+            "ExperimentalTdpToggle",
+        }
+        self.assertTrue(expected.issubset(nodes))
+        self.assertNotEqual("Slider", nodes["PowerCard"].tag.split("}")[-1])
+        self.assertFalse(
+            any(
+                node.tag.endswith("Slider")
+                and node.attrib.get(xaml_name, "").startswith("Tdp")
+                for node in nodes.values()
+            )
+        )
+        self.assertEqual("True", nodes["TdpDecreaseButton"].attrib["IsTabStop"])
+        self.assertEqual("True", nodes["TdpIncreaseButton"].attrib["IsTabStop"])
+        self.assertEqual("True", nodes["ExperimentalTdpToggle"].attrib["IsTabStop"])
+
+        code = WIDGET_CODE.read_text(encoding="utf-8")
+        self.assertIn("CreatePowerArcGeometry", code)
+        self.assertIn("SweepDirection.Clockwise", code)
+        self.assertIn("ControlStatus.Applied", code)
+        self.assertIn("ControlStatus.Unverifiable", code)
+        self.assertIn('"armoury_crate_running"', code)
+        self.assertIn("ManufacturerRecoveryUnverified", code)
 
     def test_widget_debounces_volume_writes_and_ignores_stale_responses(self):
         code = WIDGET_CODE.read_text(encoding="utf-8")
@@ -483,6 +524,34 @@ class GameBarProjectTests(unittest.TestCase):
             "muteRefreshGeneration == muteGeneration)",
             normalized_refresh,
         )
+
+
+
+
+    def test_project_compiles_shared_broker_launcher_and_control_clients(self):
+        root = ElementTree.parse(PROJECT).getroot()
+        namespace = {"msbuild": "http://schemas.microsoft.com/developer/msbuild/2003"}
+        sources = {
+            node.attrib["Include"]
+            for node in root.findall(".//msbuild:Compile", namespace)
+        }
+
+        self.assertIn("HardwareBrokerLauncher.cs", sources)
+        self.assertIn("VolumeControlClient.cs", sources)
+        self.assertIn("BrightnessControlClient.cs", sources)
+        self.assertIn("TdpControlClient.cs", sources)
+        self.assertTrue(BROKER_LAUNCHER.is_file())
+        self.assertTrue(VOLUME_CLIENT.is_file())
+        self.assertTrue(BRIGHTNESS_CLIENT.is_file())
+        self.assertTrue(TDP_CLIENT.is_file())
+
+    def test_tdp_client_never_retries_an_indeterminate_write(self):
+        code = TDP_CLIENT.read_text(encoding="utf-8")
+
+        self.assertIn("SendAsync(TdpControlRequest.Set(requestedWatts))", code)
+        self.assertIn("if (!attempt.RequestWriteStarted)", code)
+        self.assertIn("TdpControlResponse.Indeterminate", code)
+        self.assertNotIn("Task.Run", code)
 
     def test_volume_client_never_retries_an_indeterminate_write(self):
         code = VOLUME_CLIENT.read_text(encoding="utf-8")
@@ -635,6 +704,19 @@ class GameBarProjectTests(unittest.TestCase):
         self.assertIn("ReadbackTolerancePercentagePoints = 1", controller)
         self.assertNotIn("DeviceIdentity", provider)
         self.assertNotIn("DeviceIdentity", controller)
+
+    def test_broker_relays_tdp_without_owning_hardware(self):
+        server = TDP_PIPE_SERVER.read_text(encoding="utf-8")
+        client = SERVICE_TDP_CLIENT.read_text(encoding="utf-8")
+        program = BROKER_PROGRAM.read_text(encoding="utf-8")
+
+        self.assertIn(r'@"LOCAL\PanelDeControl.Tdp"', server)
+        self.assertIn('PipeName = "PanelDeControl.Service.Tdp"', client)
+        self.assertIn("ServicePipeConnector.Connect", client)
+        self.assertIn("new TdpControlPipeServer(", program)
+        self.assertIn("new ServiceTdpClient()", program)
+        self.assertNotIn("ATKACPI", server)
+        self.assertNotIn("ATKACPI", client)
 
     def test_brightness_timeouts_cover_full_verified_set(self):
         provider = BRIGHTNESS_PROVIDER.read_text(encoding="utf-8")

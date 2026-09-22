@@ -240,6 +240,21 @@ public sealed class TdpControlService : ITdpControlEndpoint
         }
 
         var external = power == AcPowerState.External;
+        if (armouryCrate.IsRunning())
+        {
+            return TdpControlResponse.Rejected(
+                experimentalEnabled,
+                requestedWatts: null,
+                targetWatts: null,
+                profile.Limits.TdpMin,
+                external
+                    ? profile.Limits.TdpMaxCharger
+                    : profile.Limits.TdpMax,
+                profile.Limits.TdpPresets,
+                external,
+                "armoury_crate_running");
+        }
+
         return TdpControlResponse.Available(
             experimentalEnabled,
             profile.Limits.TdpMin,
@@ -248,7 +263,8 @@ public sealed class TdpControlService : ITdpControlEndpoint
                 : profile.Limits.TdpMax,
             profile.Limits.TdpPresets,
             external,
-            manufacturerRecoveryUnverified);
+            manufacturerRecoveryUnverified,
+            profile.Limits.TdpDefault);
     }
 
     private DeviceProfile? ReadSupportedProfile()

@@ -7,9 +7,27 @@
             <Color x:Key="PanelBackgroundColor">#F213171D</Color>
             <Color x:Key="CardBackgroundColor">#F2252B35</Color>
             <Color x:Key="AccentColor">#FF67D4FF</Color>
+            <Color x:Key="PowerSurfaceRaisedColor">#FF0C0C10</Color>
+            <Color x:Key="PowerHairlineColor">#0FFFFFFF</Color>
+            <Color x:Key="PowerPrimaryColor">#EBFFFFFF</Color>
+            <Color x:Key="PowerMutedColor">#73FFFFFF</Color>
+            <Color x:Key="PowerSafeColor">#FF7EE0A0</Color>
+            <Color x:Key="PowerWarningColor">#FFFFB454</Color>
+            <Color x:Key="PowerDangerColor">#FFE05A5A</Color>
+            <Color x:Key="PowerArcTrackColor">#FF1A1A22</Color>
+            <Color x:Key="PowerControlColor">#FF18181F</Color>
             <SolidColorBrush x:Key="PanelBackgroundBrush" Color="{StaticResource PanelBackgroundColor}" />
             <SolidColorBrush x:Key="CardBackgroundBrush" Color="{StaticResource CardBackgroundColor}" />
             <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}" />
+            <SolidColorBrush x:Key="PowerSurfaceRaisedBrush" Color="{StaticResource PowerSurfaceRaisedColor}" />
+            <SolidColorBrush x:Key="PowerHairlineBrush" Color="{StaticResource PowerHairlineColor}" />
+            <SolidColorBrush x:Key="PowerPrimaryBrush" Color="{StaticResource PowerPrimaryColor}" />
+            <SolidColorBrush x:Key="PowerMutedBrush" Color="{StaticResource PowerMutedColor}" />
+            <SolidColorBrush x:Key="PowerSafeBrush" Color="{StaticResource PowerSafeColor}" />
+            <SolidColorBrush x:Key="PowerWarningBrush" Color="{StaticResource PowerWarningColor}" />
+            <SolidColorBrush x:Key="PowerDangerBrush" Color="{StaticResource PowerDangerColor}" />
+            <SolidColorBrush x:Key="PowerArcTrackBrush" Color="{StaticResource PowerArcTrackColor}" />
+            <SolidColorBrush x:Key="PowerControlBrush" Color="{StaticResource PowerControlColor}" />
             <Style x:Key="TelemetryValueStyle" TargetType="TextBlock">
                 <Setter Property="FontFamily" Value="Segoe UI Variable Display" />
                 <Setter Property="FontSize" Value="28" />
