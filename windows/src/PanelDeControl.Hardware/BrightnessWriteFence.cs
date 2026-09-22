@@ -64,7 +64,7 @@ public sealed class BrightnessWriteFence
                 throw new BrightnessWriteInProgressException();
             }
 
-            writeTask = Task.Run(write);
+            writeTask = StartPhysicalCall(write);
             activeWrite = writeTask;
             _ = writeTask.ContinueWith(
                 Complete,
@@ -99,7 +99,7 @@ public sealed class BrightnessWriteFence
                 throw new BrightnessReadInProgressException();
             }
 
-            readTask = Task.Run(read);
+            readTask = StartPhysicalCall(read);
             activeRead = readTask;
             _ = readTask.ContinueWith(
                 CompleteRead,
@@ -112,6 +112,16 @@ public sealed class BrightnessWriteFence
             .WaitAsync(timeout)
             .GetAwaiter()
             .GetResult();
+    }
+
+    // A hung WMI call must not hold a shared thread-pool thread, or later reads starve behind it.
+    private static Task<T> StartPhysicalCall<T>(Func<T> call)
+    {
+        return Task.Factory.StartNew(
+            call,
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
     }
 
     private void CompleteRead(Task completedRead)
