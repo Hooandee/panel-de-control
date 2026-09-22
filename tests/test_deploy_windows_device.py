@@ -112,6 +112,8 @@ def test_with_service_installs_into_program_files_after_the_widget():
     assert "Join-Path $env:ProgramFiles 'PanelDeControl\\Service'" in remote
     assert "ProgramData" not in remote
     assert remote.index("sc.exe delete") < remote.index("New-Service")
+    assert remote.index("Get-Process -Name 'PanelDeControl.Service'") < remote.index("sc.exe delete")
+    assert "-StartupType Automatic" in remote
     assert remote.rstrip().endswith("Remove-Item -LiteralPath $stage -Recurse -Force")
 
 
