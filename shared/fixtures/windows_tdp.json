@@ -1,0 +1,27 @@
+{
+  "algorithm": "windows_tdp_v1",
+  "cases": [
+    {
+      "external_power": false,
+      "expected_target_watts": 25,
+      "id": "battery_ceiling",
+      "profile": "rog_xbox_ally_x",
+      "requested_watts": 35
+    },
+    {
+      "external_power": true,
+      "expected_target_watts": 35,
+      "id": "charger_ceiling",
+      "profile": "rog_xbox_ally_x",
+      "requested_watts": 40
+    },
+    {
+      "external_power": false,
+      "expected_target_watts": 7,
+      "id": "catalog_floor",
+      "profile": "rog_xbox_ally_x",
+      "requested_watts": 1
+    }
+  ],
+  "schema_version": 1
+}

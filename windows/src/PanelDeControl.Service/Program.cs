@@ -19,6 +19,7 @@ public static class Program
         var clock = new SystemClock();
         var identityReader = new DeviceIdentityReader(DeviceCatalogResource.TryLoad());
         var sensorAccess = new WindowsSensorAccessProbe();
+        var softwareInventory = new WindowsSoftwareInventory();
         var collector = new SnapshotCollector(
             clock,
             identityReader,
@@ -31,18 +32,33 @@ public static class Program
             new CapabilityProbeCatalog(
                 new WindowsWmiClassCatalog(),
                 new WindowsDevicePathProbe(),
-                new WindowsSoftwareInventory(),
+                softwareInventory,
                 sensorAccess));
         var server = new SnapshotPipeServer(
             ServicePipeSecurity.PipeName,
             collector,
             ServicePipeSecurity.Create,
             inventoryProvider: inventory);
+        var tdpControl = new TdpControlService(
+            identityReader,
+            new WindowsAcPowerSource(),
+            new ArmouryCrateGuard(softwareInventory),
+            new AsusAtkTdpTransport());
+        var tdpServer = new TdpServicePipeServer(
+            TdpServicePipeSecurity.PipeName,
+            tdpControl,
+            TdpServicePipeSecurity.Create,
+            new PackagedTdpClientValidator());
 
         Host.CreateDefaultBuilder(args)
             .UseWindowsService(options => options.ServiceName = ServiceName)
-            .ConfigureServices(services => services.AddHostedService(
-                _ => new SnapshotServiceWorker(server)))
+            .ConfigureServices(services =>
+            {
+                services.AddHostedService(
+                    _ => new SnapshotServiceWorker(server));
+                services.AddHostedService(
+                    _ => new TdpServiceWorker(tdpServer));
+            })
             .Build()
             .Run();
         return 0;
