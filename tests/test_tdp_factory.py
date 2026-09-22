@@ -837,7 +837,12 @@ def test_exact_legion_go_s_83n6_applies_profile_safe_target_despite_low_firmware
         ryzenadj_resolve=_NO_RYZENADJ,
     )
     requested = {"pl1": 30, "pl2": 30, "pl3": 30}
-    targets = build_targets(requested, backend.level_limits(), backend.observe())
+    targets = build_targets(
+        requested,
+        backend.level_limits(),
+        backend.observe(),
+        probe_live_max=backend.probe_live_max_on_ac,
+    )
     result = backend.apply_targets(targets.target, ac=True)
 
     assert targets.target == requested
@@ -861,6 +866,7 @@ def test_exact_legion_go_s_83n6_does_not_unlock_unverified_boost_range(tmp_path)
         {"pl1": 999, "pl2": 999, "pl3": 999},
         backend.level_limits(),
         backend.observe(),
+        probe_live_max=backend.probe_live_max_on_ac,
     )
 
     assert targets.target == {"pl1": 40, "pl2": 40, "pl3": 40}
@@ -901,7 +907,8 @@ def test_exact_legion_go_s_83n6_diagnostics_keep_reported_sentinel_max(tmp_path)
 
     assert backend.diagnostics() == {
         "boost_capped_to_active": True,
-        "ignored_live_maxes": {"pl1": 15, "pl2": 15, "pl3": 20},
+        "ignored_live_maxes": {},
+        "probe_live_max_on_ac": True,
         "readback_settle_ms": 750,
         "reported_live_bounds": {
             "pl1": {"min": 5, "max": 15},
@@ -911,7 +918,7 @@ def test_exact_legion_go_s_83n6_diagnostics_keep_reported_sentinel_max(tmp_path)
     }
 
 
-def test_nearby_legion_go_s_still_honours_low_firmware_max(tmp_path):
+def test_exact_legion_go_s_83l3_battery_still_honours_low_firmware_max(tmp_path):
     root = str(tmp_path)
     _mk_fw(root, "lenovo-wmi-other-0", pl1_max=15)
     _mk_dmi(root, "LENOVO", "83L3")
@@ -927,8 +934,10 @@ def test_nearby_legion_go_s_still_honours_low_firmware_max(tmp_path):
         {"pl1": 30, "pl2": 30, "pl3": 30},
         backend.level_limits(),
         backend.observe(),
+        probe_live_max=False,
     )
 
+    assert backend.probe_live_max_on_ac is True
     assert targets.target == {"pl1": 15, "pl2": 15, "pl3": 20}
 
 

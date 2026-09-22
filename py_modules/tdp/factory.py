@@ -9,6 +9,7 @@ from device_quirks import (
     legion_go_s_83l3_firmware_attr_quirks,
     legion_go_s_83n6_firmware_attr_quirks,
     legion_go_s_83n6_rail_floors,
+    lenovo_legion_firmware_attr_quirks,
 )
 from tdp.alib import AlibBackend
 from tdp.amd_dptc import AmdDptcBackend
@@ -85,6 +86,7 @@ def _candidates(device, fallback, root, ryzenadj, os_id=None):
                 root,
                 "firmware-lenovo-wmi-other.lock",
             ),
+            **lenovo_legion_firmware_attr_quirks(device, root),
             **legion_go_2_83n0_firmware_attr_quirks(device, root),
             **go_s_83l3,
             **legion_go_s_83n6_firmware_attr_quirks(device, root),

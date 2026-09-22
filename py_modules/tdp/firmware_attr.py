@@ -83,6 +83,7 @@ class FirmwareAttrBackend(TDPBackend):
         ownership_lock_path=None,
         named_profile_owns_rails=False,
         optional_rails=None,
+        probe_live_max_on_ac=False,
     ):
         self.name = f"firmware-attr:{driver_prefix}"
         self._driver_prefix = driver_prefix
@@ -99,6 +100,7 @@ class FirmwareAttrBackend(TDPBackend):
         self._optional_rails = frozenset(optional_rails or ())
         self._rail_floors = _normalise_rail_floors(rail_floors)
         self._ignored_live_maxes = _normalise_rail_values(ignored_live_maxes)
+        self.probe_live_max_on_ac = bool(probe_live_max_on_ac)
         self.cap_boost_to_active = bool(cap_boost_to_active)
         self._readback_settle_delays = tuple(
             float(delay) for delay in (readback_settle_delays or ())
@@ -634,11 +636,13 @@ class FirmwareAttrBackend(TDPBackend):
             return None
         return reported
 
-    def _clamp_live(self, value, attr):
+    def _clamp_live(self, value, attr, ac=False):
         mn, mx = self._live_bounds(attr)
         safe_hi = self._profile_rail_max(attr)
         rail = self._rail_for_attr(attr)
         live_hi = self._effective_live_max(rail, mx)
+        if ac and self.probe_live_max_on_ac:
+            live_hi = None
         hi = min(live_hi if live_hi is not None else safe_hi, safe_hi)
         live_lo = mn if mn is not None else self._fallback.min_w
         floor = self._rail_floors.get(rail, self._fallback.min_w)
@@ -671,7 +675,7 @@ class FirmwareAttrBackend(TDPBackend):
         values = {"pl1": pl1, "pl2": pl2, "pl3": pl3}
         attrs = dict(_RAIL_ATTRS)
         targets = {
-            rail: self._clamp_live(values[rail], attrs[rail])
+            rail: self._clamp_live(values[rail], attrs[rail], ac=ac)
             for rail in self._rails
         }
         surfaces = self._transaction_surfaces(targets)
@@ -799,6 +803,13 @@ class FirmwareAttrBackend(TDPBackend):
                 if applied_w is not None
                 else None
             )
+            failure_kind = (
+                "target_not_applied"
+                if not failed
+                and mismatches
+                and all("=unavailable" not in mismatch for mismatch in mismatches)
+                else None
+            )
             return TdpResult(
                 pl1,
                 restored_applied_w,
@@ -807,6 +818,7 @@ class FirmwareAttrBackend(TDPBackend):
                 + ", ".join(problems)
                 + "; "
                 + rollback_detail,
+                failure_kind,
             )
         if not self._safety_lock.clear():
             self._write_circuit_open = "write confirmed; runtime lock clear failed"
@@ -873,6 +885,7 @@ class FirmwareAttrBackend(TDPBackend):
         diagnostics = {
             "boost_capped_to_active": self.cap_boost_to_active,
             "ignored_live_maxes": dict(self._ignored_live_maxes),
+            "probe_live_max_on_ac": self.probe_live_max_on_ac,
             "readback_settle_ms": round(
                 sum(self._readback_settle_delays) * 1000
             ),

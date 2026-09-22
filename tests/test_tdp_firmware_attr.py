@@ -333,6 +333,7 @@ def test_set_levels_rolls_back_primary_rails_and_profile_after_write_error(
     assert b.read_profile() == "performance"
     assert f"{b.name}/pl2" in result.detail
     assert "rollback confirmed" in result.detail
+    assert result.failure_kind is None
 
 
 def test_set_levels_keeps_failure_when_async_readback_never_converges(
@@ -353,6 +354,7 @@ def test_set_levels_keeps_failure_when_async_readback_never_converges(
     assert b._read_int(b._attr("ppt_pl2_sppt")) == 37
     assert b._read_int(b._attr("ppt_pl3_fppt")) == 45
     assert "rollback confirmed" in result.detail
+    assert result.failure_kind == "target_not_applied"
 
 
 def test_set_levels_never_succeeds_when_primary_readback_disappears(
@@ -369,6 +371,7 @@ def test_set_levels_never_succeeds_when_primary_readback_disappears(
     assert result.ok is False
     assert result.applied_w is None
     assert f"{b.name}/pl1=unavailable" in result.detail
+    assert result.failure_kind is None
 
 
 def test_set_levels_never_succeeds_when_primary_sysfs_disappears_after_probe(
@@ -959,6 +962,54 @@ def test_lenovo_write_clamps_to_live_firmware_when_low(tmp_path):
     with open(os.path.join(p1, "max_value"), "w") as f:
         f.write("33")                               # firmware recovered
     assert b.set_tdp(30, ac=True).applied_w == 30   # now reaches the setpoint
+
+
+def test_lenovo_manual_ac_probe_writes_profile_target_above_live_max(tmp_path):
+    root = str(tmp_path)
+    _mk_attr(root, "lenovo-wmi-other-0", "ppt_pl1_spl", 15, 5, 15)
+    _mk_attr(root, "lenovo-wmi-other-0", "ppt_pl2_sppt", 15, 5, 15)
+    _mk_attr(root, "lenovo-wmi-other-0", "ppt_pl3_fppt", 20, 5, 20)
+    _mk_profile(root, cur="custom")
+    fb = TdpLimits.from_profile(detect(product_name="83L3"))
+    backend = FirmwareAttrBackend(
+        "lenovo-wmi-other",
+        fb,
+        root=root,
+        profile_name="lenovo-wmi-gamezone",
+        probe_live_max_on_ac=True,
+    )
+
+    result = backend.set_levels(22, 22, 22, ac=True)
+
+    assert result.ok is True
+    assert result.applied_w == 22
+    rails = backend.observe().surfaces[backend.name]
+    assert {rail: reading.applied_w for rail, reading in rails.items()} == {
+        "pl1": 22,
+        "pl2": 22,
+        "pl3": 22,
+    }
+
+
+def test_lenovo_live_max_probe_stays_disabled_on_battery(tmp_path):
+    root = str(tmp_path)
+    _mk_attr(root, "lenovo-wmi-other-0", "ppt_pl1_spl", 15, 5, 15)
+    _mk_attr(root, "lenovo-wmi-other-0", "ppt_pl2_sppt", 15, 5, 15)
+    _mk_attr(root, "lenovo-wmi-other-0", "ppt_pl3_fppt", 20, 5, 20)
+    _mk_profile(root, cur="custom")
+    fb = TdpLimits.from_profile(detect(product_name="83L3"))
+    backend = FirmwareAttrBackend(
+        "lenovo-wmi-other",
+        fb,
+        root=root,
+        profile_name="lenovo-wmi-gamezone",
+        probe_live_max_on_ac=True,
+    )
+
+    result = backend.set_levels(22, 22, 22, ac=False)
+
+    assert result.ok is True
+    assert result.applied_w == 15
 
 
 def test_measured_rail_floors_turn_flat_15w_into_confirmed_15_15_20(tmp_path):

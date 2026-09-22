@@ -54,6 +54,7 @@ class TdpResult:
     applied_w: int | None   # read back after writing (None if unreadable)
     ok: bool                # command succeeded and available verification passed
     detail: str             # detail surfaced to UI/log on failure
+    failure_kind: str | None = None
 
 
 @dataclass(frozen=True)
