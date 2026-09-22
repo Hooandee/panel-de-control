@@ -17,10 +17,14 @@ def _run(*args, env=None):
     )
 
 
-def _encoded_script(stdout):
-    matches = re.findall(r"-EncodedCommand (\S+)", stdout)
-    assert len(matches) == 2
-    return base64.b64decode(matches[-1]).decode("utf-16-le")
+def _remote_script(stdout):
+    marker = "deploy.ps1:\n"
+    assert marker in stdout
+    return stdout.split(marker, 1)[1].split("==> Copying", 1)[0]
+
+
+def _encoded_scripts(stdout):
+    return [base64.b64decode(item).decode("utf-16-le") for item in re.findall(r"-EncodedCommand (\S+)", stdout)]
 
 
 def test_requires_a_user_at_host_target():
@@ -41,7 +45,7 @@ def test_dry_run_prints_every_step_without_touching_the_device():
     assert "+ gh run download 42 --name panel-de-control-gamebar-x64" in result.stdout
     assert "+ scp -q " in result.stdout
     assert "me@handheld:pdc-deploy" in result.stdout
-    assert "+ ssh me@handheld powershell -NoProfile -NonInteractive -EncodedCommand" in result.stdout
+    assert "+ ssh me@handheld powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File pdc-deploy/deploy.ps1" in result.stdout
 
 
 def test_host_can_come_from_the_environment():
@@ -52,7 +56,7 @@ def test_host_can_come_from_the_environment():
 
 
 def test_remote_script_requires_developer_mode_and_registers_the_layout():
-    remote = _encoded_script(_run("--dry-run", "--run-id", "42", "me@handheld").stdout)
+    remote = _remote_script(_run("--dry-run", "--run-id", "42", "me@handheld").stdout)
 
     assert "AllowDevelopmentWithoutDevLicense -ne 1" in remote
     assert remote.index("throw 'Developer Mode is off") < remote.index("Remove-AppxPackage")
@@ -88,3 +92,39 @@ def test_package_name_matches_the_manifest_identity():
     identity = re.search(r'<Identity\s+Name="([^"]+)"', manifest).group(1)
 
     assert f'PACKAGE_NAME="{identity}"' in SCRIPT.read_text(encoding="utf-8")
+
+
+def test_widget_only_deploy_never_touches_the_service():
+    remote = _remote_script(_run("--dry-run", "--run-id", "42", "me@handheld").stdout)
+
+    assert "PanelDeControlService" not in remote
+    assert "IsInRole" not in remote
+
+
+def test_with_service_installs_into_program_files_after_the_widget():
+    result = _run("--dry-run", "--run-id", "42", "--with-service", "me@handheld")
+    remote = _remote_script(result.stdout)
+
+    assert result.returncode == 0, result.stderr
+    assert "gh run download 42 --name panel-de-control-service-x64" in result.stdout
+    assert remote.index("IsInRole") < remote.index("Remove-AppxPackage")
+    assert remote.index("Add-AppxPackage -Register") < remote.index("New-Service")
+    assert "Join-Path $env:ProgramFiles 'PanelDeControl\\Service'" in remote
+    assert "ProgramData" not in remote
+    assert remote.index("sc.exe delete") < remote.index("New-Service")
+    assert remote.rstrip().endswith("Remove-Item -LiteralPath $stage -Recurse -Force")
+
+
+def test_remove_service_skips_downloads_and_requires_admin():
+    result = _run("--dry-run", "--remove-service", "me@handheld")
+    scripts = _encoded_scripts(result.stdout)
+
+    assert result.returncode == 0, result.stderr
+    assert "gh run" not in result.stdout
+    assert len(scripts) == 1
+    assert scripts[0].index("IsInRole") < scripts[0].index("sc.exe delete")
+    assert "New-Service" not in scripts[0]
+
+
+def test_service_flags_are_exclusive():
+    assert _run("--dry-run", "--with-service", "--remove-service", "me@handheld").returncode == 2
