@@ -25,6 +25,7 @@ class ReconcileMemory:
     next_retry_at: float = 0.0
     last_write_at: float | None = None
     drift_times: tuple[float, ...] = ()
+    live_limit_signature: tuple | None = None
 
 
 @dataclass(frozen=True)
@@ -49,14 +50,19 @@ def _live_bounds(observation, rail):
     return (max(mins) if mins else None, min(maxes) if maxes else None)
 
 
-def build_targets(requested, safe_bounds, observation):
+def build_targets(requested, safe_bounds, observation, probe_live_max=False):
     target, reasons = {}, {}
     for rail, raw in requested.items():
         bound = safe_bounds[rail]
         safe_min, safe_max = int(bound["min"]), int(bound["max"])
         live_min, live_max = _live_bounds(observation, rail)
         lo = max(safe_min, live_min) if live_min is not None else safe_min
-        hi = min(safe_max, live_max) if live_max is not None else safe_max
+        effective_live_max = None if probe_live_max else live_max
+        hi = (
+            min(safe_max, effective_live_max)
+            if effective_live_max is not None
+            else safe_max
+        )
         if hi < lo:
             lo = hi = max(safe_min, min(safe_max, hi))
         value = max(lo, min(int(raw), hi))
@@ -70,10 +76,33 @@ def build_targets(requested, safe_bounds, observation):
         elif value < int(raw):
             reasons[rail] = (
                 "live_max"
-                if live_max is not None and hi == live_max
+                if effective_live_max is not None and hi == effective_live_max
                 else "safe_max"
             )
     return TargetSet(dict(requested), target, reasons)
+
+
+def _live_limit_signature(targets, observation, tolerance):
+    limited = []
+    saw_divergence = False
+    for surface, rails in observation.surfaces.items():
+        for rail, reading in rails.items():
+            expected = targets.target.get(rail)
+            applied = reading.applied_w
+            live_max = reading.max_w
+            if expected is None or applied is None:
+                continue
+            if abs(int(applied) - int(expected)) <= tolerance:
+                continue
+            saw_divergence = True
+            if live_max is None or int(expected) <= int(live_max):
+                return None
+            if int(applied) > int(live_max) + tolerance:
+                return None
+            limited.append(
+                (surface, rail, int(expected), int(applied), int(live_max))
+            )
+    return tuple(sorted(limited)) if saw_divergence and limited else None
 
 
 def _signature(targets, observation, tolerance):
@@ -154,6 +183,17 @@ def decide(
     authoritative_reassert_s=None,
 ):
     memory, conflict = _recent_memory(memory, now)
+    if memory.live_limit_signature is not None:
+        current_limit = _live_limit_signature(targets, observation, tolerance)
+        if current_limit == memory.live_limit_signature:
+            return ReconcileDecision(
+                "hold",
+                "constrained",
+                "power_source_limit",
+                memory,
+                conflict,
+            )
+        memory = replace(memory, live_limit_signature=None)
     heartbeat = _heartbeat_delay(heartbeat_s)
     if write_only:
         if memory.failures:
@@ -334,6 +374,7 @@ def after_apply(
     tolerance,
     write_only=False,
     heartbeat_s=None,
+    probe_live_max=False,
 ):
     memory, conflict = _recent_memory(memory, now)
     heartbeat = _heartbeat_delay(heartbeat_s)
@@ -354,6 +395,28 @@ def after_apply(
         )
     has_readback = _has_target_readback(targets, observation)
     signature = _signature(targets, observation, tolerance)
+    live_limit = (
+        _live_limit_signature(targets, observation, tolerance)
+        if probe_live_max and not wrote_ok and has_readback
+        else None
+    )
+    if live_limit is not None:
+        constrained = replace(
+            memory,
+            pending_signature=None,
+            pending_since=None,
+            failures=0,
+            next_retry_at=0.0,
+            last_write_at=now,
+            live_limit_signature=live_limit,
+        )
+        return ReconcileDecision(
+            "hold",
+            "constrained",
+            "power_source_limit",
+            constrained,
+            conflict,
+        )
     if wrote_ok and has_readback and not signature:
         status, reason = _steady_status(targets)
         clean = replace(
@@ -363,6 +426,7 @@ def after_apply(
             failures=0,
             next_retry_at=now + VERIFY_S,
             last_write_at=now,
+            live_limit_signature=None,
         )
         return ReconcileDecision("verify", status, reason, clean, conflict)
     if wrote_ok and not has_readback:

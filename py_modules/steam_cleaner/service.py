@@ -298,7 +298,14 @@ class SteamCleanerService:
                 else:
                     totals[entry["kind"]] += entry["bytes"]
                 reason = self._activity_reason(entry, activity)
-                entry["blocked_reason"] = entry["blocked_reason"] or ("coverage_incomplete" if not critical_complete else reason)
+                incomplete_identity = (
+                    "coverage_incomplete"
+                    if not critical_complete and not known
+                    else None
+                )
+                entry["blocked_reason"] = (
+                    entry["blocked_reason"] or incomplete_identity or reason
+                )
                 target = self._targets.get(entry["id"])
                 if target and any(str(other).startswith(str(target["path"]) + os.sep) for other in roots):
                     entry["blocked_reason"] = "unsafe_path"

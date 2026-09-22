@@ -20,6 +20,19 @@ def test_target_keeps_request_but_clamps_to_live_max():
     assert targets.reasons == {"pl1": "live_max"}
 
 
+def test_manual_live_max_probe_keeps_the_profile_safe_target():
+    targets = build_targets(
+        {"pl1": 25},
+        {"pl1": {"min": 7, "max": 30}},
+        obs(value=15, hi=15),
+        probe_live_max=True,
+    )
+
+    assert targets.requested == {"pl1": 25}
+    assert targets.target == {"pl1": 25}
+    assert targets.reasons == {}
+
+
 def test_bogus_live_max_never_expands_safe_max():
     targets = build_targets(
         {"pl1": 150},
@@ -204,6 +217,97 @@ def test_apply_failure_uses_retry_ladder_then_degrades():
     )
     assert out.status == "rejected"
     assert out.memory.next_retry_at == 40.0
+
+
+def test_rejected_live_max_probe_holds_until_the_published_limit_changes():
+    limited = obs(value=15, hi=15)
+    targets = build_targets(
+        {"pl1": 25},
+        {"pl1": {"min": 7, "max": 30}},
+        limited,
+        probe_live_max=True,
+    )
+
+    failed = after_apply(
+        targets,
+        limited,
+        ReconcileMemory(),
+        now=10.0,
+        wrote_ok=False,
+        tolerance=0,
+        probe_live_max=True,
+    )
+
+    assert (failed.action, failed.status, failed.reason) == (
+        "hold",
+        "constrained",
+        "power_source_limit",
+    )
+    assert failed.memory.failures == 0
+
+    held = decide(
+        targets,
+        limited,
+        failed.memory,
+        now=100.0,
+        tolerance=0,
+    )
+    assert (held.action, held.status, held.reason) == (
+        "hold",
+        "constrained",
+        "power_source_limit",
+    )
+
+    changed = decide(
+        targets,
+        obs(value=15, hi=30),
+        held.memory,
+        now=101.0,
+        tolerance=0,
+    )
+    assert (changed.action, changed.status, changed.reason) == (
+        "confirm_again",
+        "settling",
+        "external_drift",
+    )
+
+
+def test_live_max_probe_requires_complete_target_readback():
+    observation = TdpObservation(
+        readable=True,
+        surfaces={
+            "primary": {
+                "pl1": RailReading(15, 7, 15),
+                "pl2": RailReading(None, 7, 15),
+            },
+        },
+    )
+    targets = build_targets(
+        {"pl1": 25, "pl2": 25},
+        {
+            "pl1": {"min": 7, "max": 30},
+            "pl2": {"min": 7, "max": 30},
+        },
+        observation,
+        probe_live_max=True,
+    )
+
+    failed = after_apply(
+        targets,
+        observation,
+        ReconcileMemory(),
+        now=10.0,
+        wrote_ok=False,
+        tolerance=0,
+        probe_live_max=True,
+    )
+
+    assert (failed.action, failed.status, failed.reason) == (
+        "retry",
+        "settling",
+        "write_rejected",
+    )
+    assert failed.memory.failures == 1
 
 
 def test_write_only_heartbeat_is_unverifiable():

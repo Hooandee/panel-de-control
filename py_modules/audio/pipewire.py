@@ -190,6 +190,7 @@ class PipeWireEq:
         self._orig_default = None
         self._active_downstream = None
         self._requested_downstream = None
+        self._known_downstreams = None
         self._configured_default_seen = None
         self._configured_request = None
         self._default_failure = None
@@ -694,8 +695,27 @@ class PipeWireEq:
         default_sink = self._runner(["pactl", "get-default-sink"])
         sinks = self._runner(["pactl", "list", "short", "sinks"])
         candidates = [name for name, _state in _sink_candidates(sinks, self._label)]
-        if self._requested_downstream not in candidates:
-            self._requested_downstream = None
+        new_bluetooth = []
+        if sinks.strip():
+            if self._requested_downstream not in candidates:
+                self._requested_downstream = None
+            previous_candidates = self._known_downstreams
+            self._known_downstreams = set(candidates)
+            new_bluetooth = [
+                name
+                for name in candidates
+                if name.startswith("bluez_output.")
+                and previous_candidates is not None
+                and name not in previous_candidates
+            ]
+        if (
+            default_sink == self._label
+            and self._requested_downstream is None
+            and self._known_downstreams is not None
+            and self._active_downstream in self._known_downstreams
+            and len(new_bluetooth) == 1
+        ):
+            self._requested_downstream = new_bluetooth[0]
         linked = None
         configured = None
         configured_changed = False
@@ -1569,9 +1589,14 @@ class PipeWireEq:
             self._orig_default = downstream
         self._owns_sink = True
         previous_downstream = self._active_downstream
+        previous_restore_pending = any(
+            item["sink"] == previous_downstream
+            for item in self._pending_restores
+        )
         if (
             previous_downstream
             and previous_downstream != downstream
+            and not previous_restore_pending
             and (
                 previous_downstream in self._downstream_volumes
                 or previous_downstream in self._downstream_mutes
