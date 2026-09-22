@@ -36,6 +36,9 @@ public sealed class WindowsDevicePathProbe : IDevicePathProbe
 {
     private const uint FileShareReadWrite = 0x00000003;
     private const uint OpenExisting = 3;
+    private const int ErrorFileNotFound = 2;
+    private const int ErrorPathNotFound = 3;
+    private const int ErrorAccessDenied = 5;
 
     // Desired access 0 only queries the device object; it never sends an IOCTL or reads data.
     public bool Exists(string devicePath)
@@ -46,7 +49,18 @@ public sealed class WindowsDevicePathProbe : IDevicePathProbe
         }
 
         using var handle = CreateFile(devicePath, 0, FileShareReadWrite, IntPtr.Zero, OpenExisting, 0, IntPtr.Zero);
-        return !handle.IsInvalid;
+        if (!handle.IsInvalid)
+        {
+            return true;
+        }
+
+        var error = Marshal.GetLastPInvokeError();
+        return error switch
+        {
+            ErrorFileNotFound or ErrorPathNotFound => false,
+            ErrorAccessDenied => throw new UnauthorizedAccessException($"{devicePath} denied access."),
+            _ => throw new IOException($"{devicePath} could not be queried ({error})."),
+        };
     }
 
     [DllImport("kernel32.dll", EntryPoint = "CreateFileW", CharSet = CharSet.Unicode, SetLastError = true, ExactSpelling = true)]
