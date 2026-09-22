@@ -64,9 +64,9 @@ public sealed class SnapshotCollector : IHardwareSnapshotProvider
         var identity = ReadIdentity();
         var readings = new List<TelemetryReading>();
         readings.AddRange(ReadPower());
-        readings.AddRange(ReadHardware(identity.IsInitialTarget));
+        readings.AddRange(ReadHardware(identity.IsRecognized));
 
-        return new HardwareSnapshot(clock.UtcNow, identity.ProductName, readings);
+        return new HardwareSnapshot(clock.UtcNow, identity.DisplayName, readings);
     }
 
     private DeviceIdentity ReadIdentity()
@@ -77,7 +77,7 @@ public sealed class SnapshotCollector : IHardwareSnapshotProvider
         }
         catch
         {
-            return DeviceIdentity.FromDmi(null, null);
+            return DeviceIdentity.Unrecognized();
         }
     }
 
@@ -105,9 +105,9 @@ public sealed class SnapshotCollector : IHardwareSnapshotProvider
         }
     }
 
-    private IEnumerable<TelemetryReading> ReadHardware(bool isInitialTarget)
+    private IEnumerable<TelemetryReading> ReadHardware(bool isRecognized)
     {
-        if (!isInitialTarget)
+        if (!isRecognized)
         {
             return UnavailableHardware(
                 ReadingStatus.Unavailable,
