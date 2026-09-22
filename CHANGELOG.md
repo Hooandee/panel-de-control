@@ -5,9 +5,40 @@
 ## [0.54.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.54.2...panel-de-control-v0.54.3) (2026-09-22)
 
 
-### Bug Fixes
+### Español
 
-* resolve reported TDP, cleanup, audio, and title regressions ([#718](https://github.com/Hooandee/panel-de-control/issues/718)) ([6df1886](https://github.com/Hooandee/panel-de-control/commit/6df188642f5f8f2cdabd8d2a088f0927c835f08b))
+* **Potencia en Lenovo Legion:** Al conectar el cargador, el control manual de TDP ya no se queda limitado por un valor incorrecto del firmware. Puedes elegir el máximo seguro de tu equipo; si la alimentación o el firmware no lo admite en ese momento, el ajuste se conserva y Panel de Control te avisa sin intentar aplicarlo continuamente.
+* **Limpieza de Steam:** Si una biblioteca o unidad de Steam no está disponible, todavía puedes limpiar los datos comprobados de los juegos instalados en las demás unidades. Los datos cuya identidad no es segura continúan protegidos.
+* **Auriculares Bluetooth:** Con el ecualizador activado, el sonido cambia automáticamente a los auriculares cuando los conectas y conserva los volúmenes correctos al desconectarlos o volver a conectarlos.
+* **Nombre del plugin:** La lista de Decky muestra directamente el nombre de Panel de Control en el idioma elegido, sin enseñar brevemente el nombre en español antes de traducirlo.
+
+### English
+
+* **Power on Lenovo Legion:** On supported devices, manual TDP while plugged in is no longer capped by an incorrect firmware value. You can select the device's safe maximum; if power delivery or firmware cannot accept it at that moment, your setting stays selected and Panel de Control explains the limitation without continuously retrying.
+* **Steam Cleanup:** If one Steam library or drive is unavailable, you can still clean verified data for installed games on the other drives. Anything that cannot be identified safely remains protected.
+* **Bluetooth headphones:** With the equalizer enabled, audio now switches automatically when you connect Bluetooth headphones and keeps the correct volumes when they disconnect or reconnect.
+* **Plugin name:** Decky's plugin list now shows the localized Panel de Control name immediately, without briefly displaying the Spanish name first.
+
+### Italiano
+
+* **Potenza su Lenovo Legion:** Sui dispositivi compatibili, il TDP manuale con l'alimentatore collegato non viene più limitato da un valore errato del firmware. Puoi scegliere il massimo sicuro del dispositivo; se l'alimentazione o il firmware non lo accetta in quel momento, l'impostazione resta selezionata e Panel de Control segnala il limite senza riprovare continuamente.
+* **Pulizia di Steam:** Se una libreria o un'unità di Steam non è disponibile, puoi comunque pulire i dati verificati dei giochi installati sulle altre unità. I dati che non possono essere identificati in modo sicuro restano protetti.
+* **Cuffie Bluetooth:** Con l'equalizzatore attivo, l'audio passa automaticamente alle cuffie Bluetooth quando le colleghi e mantiene i volumi corretti quando vengono scollegate o ricollegate.
+* **Nome del plugin:** L'elenco dei plugin di Decky mostra subito il nome localizzato di Panel de Control, senza visualizzare brevemente prima il nome in spagnolo.
+
+### Deutsch
+
+* **Leistung auf Lenovo Legion:** Auf unterstützten Geräten wird die manuelle TDP-Einstellung am Netzteil nicht mehr durch einen fehlerhaften Firmware-Wert begrenzt. Du kannst den sicheren Höchstwert des Geräts wählen; wenn Stromversorgung oder Firmware ihn gerade nicht akzeptieren, bleibt deine Auswahl erhalten und Panel de Control weist auf die Begrenzung hin, ohne es fortlaufend erneut zu versuchen.
+* **Steam-Bereinigung:** Wenn eine Steam-Bibliothek oder ein Laufwerk nicht verfügbar ist, kannst du weiterhin die bestätigten Daten installierter Spiele auf den übrigen Laufwerken bereinigen. Daten, die sich nicht sicher zuordnen lassen, bleiben geschützt.
+* **Bluetooth-Kopfhörer:** Bei aktiviertem Equalizer wechselt die Audioausgabe beim Verbinden automatisch zu den Bluetooth-Kopfhörern und behält beim Trennen oder erneuten Verbinden die richtigen Lautstärken bei.
+* **Plugin-Name:** In Deckys Plugin-Liste erscheint der lokalisierte Name von Panel de Control jetzt sofort, ohne zuvor kurz den spanischen Namen anzuzeigen.
+
+### Português (Brasil)
+
+* **Potência no Lenovo Legion:** Nos dispositivos compatíveis, o TDP manual com o carregador conectado não fica mais limitado por um valor incorreto do firmware. Você pode escolher o máximo seguro do aparelho; se a alimentação ou o firmware não aceitar naquele momento, a configuração permanece selecionada e o Painel de Controle informa a limitação sem tentar aplicá-la repetidamente.
+* **Limpeza do Steam:** Se uma biblioteca ou unidade do Steam não estiver disponível, ainda será possível limpar os dados verificados dos jogos instalados nas outras unidades. Os dados que não puderem ser identificados com segurança continuarão protegidos.
+* **Fones de ouvido Bluetooth:** Com o equalizador ativado, o áudio passa automaticamente para os fones Bluetooth quando eles são conectados e mantém os volumes corretos ao desconectar ou reconectar.
+* **Nome do plugin:** A lista de plugins do Decky agora mostra imediatamente o nome localizado do Painel de Controle, sem exibir primeiro, por alguns instantes, o nome em espanhol.
 
 ## [0.54.2](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.54.1...panel-de-control-v0.54.2) (2026-09-20)
 
