@@ -1,0 +1,171 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="AudioConnectFailed" xml:space="preserve">
+    <value>Não foi possível conectar ao controle de áudio</value>
+  </data>
+  <data name="AudioNoDefault" xml:space="preserve">
+    <value>Não há um dispositivo de áudio padrão</value>
+  </data>
+  <data name="BatteryLabel.Text" xml:space="preserve">
+    <value>BATERIA</value>
+  </data>
+  <data name="BrightnessAvailable" xml:space="preserve">
+    <value>Painel integrado disponível</value>
+  </data>
+  <data name="BrightnessChecking" xml:space="preserve">
+    <value>Verificando o painel integrado…</value>
+  </data>
+  <data name="BrightnessControlFailed" xml:space="preserve">
+    <value>Não foi possível controlar o brilho do painel integrado</value>
+  </data>
+  <data name="BrightnessLabel.Text" xml:space="preserve">
+    <value>BRILHO DO PAINEL INTEGRADO</value>
+  </data>
+  <data name="BrightnessMismatch" xml:space="preserve">
+    <value>A alteração não corresponde ao valor lido</value>
+  </data>
+  <data name="BrightnessPermission" xml:space="preserve">
+    <value>O Windows negou a permissão para controlar o brilho</value>
+  </data>
+  <data name="BrightnessReadFailed" xml:space="preserve">
+    <value>Não foi possível ler o brilho do painel integrado</value>
+  </data>
+  <data name="BrightnessSlider.[using:Windows.UI.Xaml.Automation]AutomationProperties.HelpText" xml:space="preserve">
+    <value>Ajusta o brilho real do painel integrado e confirma a porcentagem lida pelo Windows</value>
+  </data>
+  <data name="BrightnessSlider.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Brilho da tela integrada</value>
+  </data>
+  <data name="BrightnessStatus.Text" xml:space="preserve">
+    <value>Verificando o painel integrado…</value>
+  </data>
+  <data name="BrightnessUnavailable" xml:space="preserve">
+    <value>Brilho do painel integrado indisponível</value>
+  </data>
+  <data name="ConnectionStatus.Text" xml:space="preserve">
+    <value>Conectando ao hardware…</value>
+  </data>
+  <data name="CpuLoadValue.Text" xml:space="preserve">
+    <value>Carga —</value>
+  </data>
+  <data name="DeviceName.Text" xml:space="preserve">
+    <value>Procurando o dispositivo…</value>
+  </data>
+  <data name="DeviceUnrecognized" xml:space="preserve">
+    <value>Dispositivo não reconhecido</value>
+  </data>
+  <data name="FooterScope.Text" xml:space="preserve">
+    <value>Brilho do painel integrado e volume com verificação · Telemetria experimental somente leitura · Sem controle de telas externas, potência ou ventoinhas.</value>
+  </data>
+  <data name="GpuLoadValue.Text" xml:space="preserve">
+    <value>Carga —</value>
+  </data>
+  <data name="HeaderTitle.Text" xml:space="preserve">
+    <value>PANEL DE CONTROL</value>
+  </data>
+  <data name="LoadFormat" xml:space="preserve">
+    <value>Carga {0}</value>
+  </data>
+  <data name="MuteAvailable" xml:space="preserve">
+    <value>Estado do silêncio disponível</value>
+  </data>
+  <data name="MuteChecking" xml:space="preserve">
+    <value>Verificando o estado do silêncio…</value>
+  </data>
+  <data name="MuteLabel.Text" xml:space="preserve">
+    <value>SILENCIAR</value>
+  </data>
+  <data name="MutePermission" xml:space="preserve">
+    <value>O Windows exige permissão para silenciar o áudio</value>
+  </data>
+  <data name="MuteReadFailed" xml:space="preserve">
+    <value>Não foi possível ler o estado do silêncio</value>
+  </data>
+  <data name="MuteStatus.Text" xml:space="preserve">
+    <value>Verificando o estado do silêncio…</value>
+  </data>
+  <data name="MuteToggle.OffContent" xml:space="preserve">
+    <value>Com som</value>
+  </data>
+  <data name="MuteToggle.OnContent" xml:space="preserve">
+    <value>Silenciado</value>
+  </data>
+  <data name="MuteToggle.[using:Windows.UI.Xaml.Automation]AutomationProperties.HelpText" xml:space="preserve">
+    <value>Ativa ou desativa o silêncio do dispositivo de áudio padrão e verifica o estado lido</value>
+  </data>
+  <data name="MuteToggle.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Silenciar o áudio do sistema</value>
+  </data>
+  <data name="PlatformBadge.Text" xml:space="preserve">
+    <value>Windows · Xbox Game Bar · Experimental</value>
+  </data>
+  <data name="PowerAc" xml:space="preserve">
+    <value>Conectada à tomada</value>
+  </data>
+  <data name="PowerBattery" xml:space="preserve">
+    <value>Usando bateria</value>
+  </data>
+  <data name="ReadingDriverMissing" xml:space="preserve">
+    <value>Falta o driver de sensores</value>
+  </data>
+  <data name="ReadingElevation" xml:space="preserve">
+    <value>Precisa de permissões de administrador</value>
+  </data>
+  <data name="ReadingFault" xml:space="preserve">
+    <value>Erro de leitura</value>
+  </data>
+  <data name="ReadingNoData" xml:space="preserve">
+    <value>Sem dados</value>
+  </data>
+  <data name="ReadingPermission" xml:space="preserve">
+    <value>Precisa de permissão</value>
+  </data>
+  <data name="RefreshButton.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Atualizar telemetria, brilho e volume</value>
+  </data>
+  <data name="StatusApplying" xml:space="preserve">
+    <value>Aplicando e verificando…</value>
+  </data>
+  <data name="StatusNotVerified" xml:space="preserve">
+    <value>Não foi possível verificar a alteração</value>
+  </data>
+  <data name="StatusRejected" xml:space="preserve">
+    <value>O Windows recusou a alteração</value>
+  </data>
+  <data name="StatusVerified" xml:space="preserve">
+    <value>Alteração aplicada e verificada</value>
+  </data>
+  <data name="TelemetryConnected" xml:space="preserve">
+    <value>Telemetria do Windows conectada</value>
+  </data>
+  <data name="VolumeAvailable" xml:space="preserve">
+    <value>Dispositivo de áudio padrão disponível</value>
+  </data>
+  <data name="VolumeLabel.Text" xml:space="preserve">
+    <value>VOLUME DO SISTEMA</value>
+  </data>
+  <data name="VolumePermission" xml:space="preserve">
+    <value>O Windows exige permissão para controlar o áudio</value>
+  </data>
+  <data name="VolumeSlider.[using:Windows.UI.Xaml.Automation]AutomationProperties.HelpText" xml:space="preserve">
+    <value>Ajusta o volume do dispositivo de áudio padrão</value>
+  </data>
+  <data name="VolumeSlider.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Volume do sistema</value>
+  </data>
+  <data name="VolumeStatus.Text" xml:space="preserve">
+    <value>Verificando o dispositivo de áudio padrão…</value>
+  </data>
+</root>
