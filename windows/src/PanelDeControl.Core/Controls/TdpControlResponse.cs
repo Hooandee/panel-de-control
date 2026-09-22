@@ -19,6 +19,7 @@ public sealed class TdpControlResponse
         int? appliedWatts,
         int? minimumWatts,
         int? maximumWatts,
+        int? defaultWatts,
         IEnumerable<int>? presetWatts,
         bool? externalPower,
         bool readbackCandidateUnvalidated,
@@ -32,6 +33,7 @@ public sealed class TdpControlResponse
         AppliedWatts = appliedWatts;
         MinimumWatts = minimumWatts;
         MaximumWatts = maximumWatts;
+        DefaultWatts = defaultWatts;
         this.presetWatts = presetWatts?.ToArray() ?? Array.Empty<int>();
         ExternalPower = externalPower;
         ReadbackCandidateUnvalidated = readbackCandidateUnvalidated;
@@ -61,31 +63,34 @@ public sealed class TdpControlResponse
     [DataMember(Name = "maximum_watts", Order = 7, EmitDefaultValue = false)]
     public int? MaximumWatts { get; private set; }
 
+    [DataMember(Name = "default_watts", Order = 8, EmitDefaultValue = false)]
+    public int? DefaultWatts { get; private set; }
+
     public IReadOnlyList<int> PresetWatts => presetWatts;
 
-    [DataMember(Name = "preset_watts", Order = 8, IsRequired = true)]
+    [DataMember(Name = "preset_watts", Order = 9, IsRequired = true)]
     private int[] PresetWattsWire
     {
         get => presetWatts;
         set => presetWatts = value ?? Array.Empty<int>();
     }
 
-    [DataMember(Name = "external_power", Order = 9, EmitDefaultValue = false)]
+    [DataMember(Name = "external_power", Order = 10, EmitDefaultValue = false)]
     public bool? ExternalPower { get; private set; }
 
     [DataMember(
         Name = "readback_candidate_unvalidated",
-        Order = 10,
+        Order = 11,
         IsRequired = true)]
     public bool ReadbackCandidateUnvalidated { get; private set; }
 
     [DataMember(
         Name = "manufacturer_recovery_unverified",
-        Order = 11,
+        Order = 12,
         IsRequired = true)]
     public bool ManufacturerRecoveryUnverified { get; private set; }
 
-    [DataMember(Name = "error_code", Order = 12, EmitDefaultValue = false)]
+    [DataMember(Name = "error_code", Order = 13, EmitDefaultValue = false)]
     public string? ErrorCode { get; private set; }
 
     public static TdpControlResponse Available(
@@ -94,7 +99,8 @@ public sealed class TdpControlResponse
         int maximumWatts,
         IEnumerable<int> presetWatts,
         bool externalPower,
-        bool manufacturerRecoveryUnverified = false)
+        bool manufacturerRecoveryUnverified = false,
+        int? defaultWatts = null)
     {
         return new TdpControlResponse(
             ControlStatus.Available,
@@ -104,6 +110,7 @@ public sealed class TdpControlResponse
             null,
             minimumWatts,
             maximumWatts,
+            defaultWatts,
             presetWatts,
             externalPower,
             true,
@@ -136,6 +143,7 @@ public sealed class TdpControlResponse
             appliedWatts,
             minimumWatts,
             maximumWatts,
+            null,
             presetWatts,
             externalPower,
             true,
@@ -172,6 +180,7 @@ public sealed class TdpControlResponse
         return new TdpControlResponse(
             ControlStatus.Rejected,
             experimentalEnabled,
+            null,
             null,
             null,
             null,
@@ -221,6 +230,7 @@ public sealed class TdpControlResponse
             null,
             null,
             null,
+            null,
             false,
             false,
             RequireText(errorCode, nameof(errorCode)));
@@ -256,6 +266,14 @@ public sealed class TdpControlResponse
         if (MinimumWatts.HasValue != MaximumWatts.HasValue)
         {
             throw new InvalidDataException("TDP limits must be provided together.");
+        }
+
+        if (DefaultWatts.HasValue &&
+            (!MinimumWatts.HasValue ||
+             DefaultWatts.Value < MinimumWatts.Value ||
+             DefaultWatts.Value > MaximumWatts!.Value))
+        {
+            throw new InvalidDataException("Default TDP is outside the active limits.");
         }
 
         if (MinimumWatts.HasValue &&
@@ -312,6 +330,7 @@ public sealed class TdpControlResponse
              AppliedWatts.HasValue ||
              MinimumWatts.HasValue ||
              MaximumWatts.HasValue ||
+             DefaultWatts.HasValue ||
              presetWatts.Length > 0 ||
              ExternalPower.HasValue))
         {
@@ -339,6 +358,7 @@ public sealed class TdpControlResponse
             null,
             minimumWatts,
             maximumWatts,
+            null,
             presetWatts,
             externalPower,
             true,
@@ -354,6 +374,7 @@ public sealed class TdpControlResponse
         return new TdpControlResponse(
             status,
             experimentalEnabled,
+            null,
             null,
             null,
             null,

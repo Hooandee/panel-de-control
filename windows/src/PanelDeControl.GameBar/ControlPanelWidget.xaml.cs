@@ -7,10 +7,12 @@ using System.Collections.Generic;
 using PanelDeControl.Core.Capabilities;
 using PanelDeControl.Core.Controls;
 using PanelDeControl.Core.Telemetry;
+using Windows.Foundation;
 using Windows.ApplicationModel.Resources;
 using Windows.UI;
 using Windows.UI.Core;
 using Windows.UI.Xaml;
+using Windows.UI.Xaml.Automation;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Media;
 using Windows.UI.Xaml.Navigation;
@@ -24,6 +26,12 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         new(Color.FromArgb(255, 103, 212, 255));
     private static readonly SolidColorBrush DisconnectedBrush =
         new(Color.FromArgb(255, 235, 110, 93));
+    private static readonly SolidColorBrush PowerSafeBrush =
+        new(Color.FromArgb(255, 126, 224, 160));
+    private static readonly SolidColorBrush PowerWarningBrush =
+        new(Color.FromArgb(255, 255, 180, 84));
+    private static readonly SolidColorBrush PowerDangerBrush =
+        new(Color.FromArgb(255, 224, 90, 90));
 
     private readonly DispatcherTimer refreshTimer = new()
     {
@@ -32,6 +40,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     private readonly TelemetryClient telemetryClient = new();
     private readonly VolumeControlClient volumeClient = new();
     private readonly BrightnessControlClient brightnessClient = new();
+    private readonly TdpControlClient tdpClient = new();
     private readonly InventoryClient inventoryClient = new();
     private XboxGameBarWidget? gameBarWidget;
     private CancellationTokenSource? volumeDebounce;
@@ -40,25 +49,36 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     private long volumeGeneration;
     private long muteGeneration;
     private long brightnessGeneration;
+    private long tdpGeneration;
     private long inventoryGeneration;
     private bool snapshotRefreshInProgress;
     private bool volumeRefreshInProgress;
     private bool brightnessRefreshInProgress;
+    private bool tdpRefreshInProgress;
     private bool applyingVolumeReadback;
     private bool applyingMuteReadback;
     private bool applyingBrightnessReadback;
+    private bool applyingTdpReadback;
     private bool volumeReady;
     private bool muteReady;
     private bool brightnessReady;
+    private bool tdpReady;
     private bool volumeWritePending;
     private bool muteWritePending;
     private bool brightnessWritePending;
+    private bool tdpWritePending;
+    private bool tdpConflict;
+    private int tdpMinimumWatts;
+    private int tdpMaximumWatts;
+    private int selectedTdpWatts;
     private bool? lastObservedMuted;
     private bool disposed;
 
     public ControlPanelWidget()
     {
         InitializeComponent();
+        PowerArcTrack.Data = CreatePowerArcGeometry(1);
+        PowerArcFill.Data = CreatePowerArcGeometry(0);
         refreshTimer.Tick += OnRefreshTimerTick;
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
@@ -248,7 +268,8 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         await Task.WhenAll(
             ApplySnapshotWhenReadyAsync(currentRefreshGeneration),
             ApplyVolumeWhenReadyAsync(currentRefreshGeneration),
-            ApplyBrightnessWhenReadyAsync(currentRefreshGeneration));
+            ApplyBrightnessWhenReadyAsync(currentRefreshGeneration),
+            ApplyTdpWhenReadyAsync(currentRefreshGeneration));
     }
 
     private async Task ApplySnapshotWhenReadyAsync(
@@ -350,6 +371,38 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             if (currentRefreshGeneration == refreshGeneration)
             {
                 brightnessRefreshInProgress = false;
+            }
+        }
+    }
+
+    private async Task ApplyTdpWhenReadyAsync(
+        long currentRefreshGeneration)
+    {
+        if (tdpRefreshInProgress || disposed)
+        {
+            return;
+        }
+
+        tdpRefreshInProgress = true;
+        var controlGeneration = tdpGeneration;
+        var writeWasPendingAtRefreshStart = tdpWritePending;
+        try
+        {
+            var response = await tdpClient.GetAsync();
+            if (!disposed &&
+                currentRefreshGeneration == refreshGeneration &&
+                !writeWasPendingAtRefreshStart &&
+                !tdpWritePending &&
+                controlGeneration == tdpGeneration)
+            {
+                ApplyTdpResponse(response);
+            }
+        }
+        finally
+        {
+            if (currentRefreshGeneration == refreshGeneration)
+            {
+                tdpRefreshInProgress = false;
             }
         }
     }
@@ -500,6 +553,296 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
                 debounce.Dispose();
             }
         }
+    }
+
+    private async void ExperimentalTdpToggle_Toggled(
+        object sender,
+        RoutedEventArgs args)
+    {
+        if (disposed || applyingTdpReadback || !tdpReady || tdpWritePending)
+        {
+            return;
+        }
+
+        var enable = ExperimentalTdpToggle.IsOn;
+        PowerStatus.Text = Localized("StatusApplying");
+        var generation = ++tdpGeneration;
+        tdpWritePending = true;
+        UpdateTdpControlAvailability();
+        try
+        {
+            var response = enable
+                ? await tdpClient.EnableExperimentalAsync()
+                : await tdpClient.DisableExperimentalAsync();
+            if (!disposed && generation == tdpGeneration)
+            {
+                ApplyTdpResponse(response);
+            }
+        }
+        finally
+        {
+            if (generation == tdpGeneration)
+            {
+                tdpWritePending = false;
+                UpdateTdpControlAvailability();
+            }
+        }
+    }
+
+    private async void TdpDecreaseButton_Click(
+        object sender,
+        RoutedEventArgs args)
+    {
+        await ApplyTdpSelectionAsync(selectedTdpWatts - 1);
+    }
+
+    private async void TdpIncreaseButton_Click(
+        object sender,
+        RoutedEventArgs args)
+    {
+        await ApplyTdpSelectionAsync(selectedTdpWatts + 1);
+    }
+
+    private async void TdpPresetButton_Click(
+        object sender,
+        RoutedEventArgs args)
+    {
+        if (sender is Button { Tag: int watts })
+        {
+            await ApplyTdpSelectionAsync(watts);
+        }
+    }
+
+    private async Task ApplyTdpSelectionAsync(int requestedWatts)
+    {
+        if (disposed ||
+            !tdpReady ||
+            tdpWritePending ||
+            tdpConflict ||
+            !ExperimentalTdpToggle.IsOn)
+        {
+            return;
+        }
+
+        selectedTdpWatts = Math.Min(
+            Math.Max(requestedWatts, tdpMinimumWatts),
+            tdpMaximumWatts);
+        UpdatePowerArc();
+        PowerStatus.Text = Localized("StatusApplying");
+        var generation = ++tdpGeneration;
+        tdpWritePending = true;
+        UpdateTdpControlAvailability();
+        try
+        {
+            var response = await tdpClient.SetAsync(selectedTdpWatts);
+            if (!disposed && generation == tdpGeneration)
+            {
+                ApplyTdpResponse(response);
+            }
+        }
+        finally
+        {
+            if (generation == tdpGeneration)
+            {
+                tdpWritePending = false;
+                UpdateTdpControlAvailability();
+            }
+        }
+    }
+
+    private void ApplyTdpResponse(TdpControlResponse response)
+    {
+        tdpReady = response.MinimumWatts.HasValue &&
+            response.MaximumWatts.HasValue;
+        tdpConflict = response.ErrorCode == "armoury_crate_running";
+        applyingTdpReadback = true;
+        try
+        {
+            ExperimentalTdpToggle.IsOn = response.ExperimentalEnabled;
+        }
+        finally
+        {
+            applyingTdpReadback = false;
+        }
+
+        if (tdpReady)
+        {
+            tdpMinimumWatts = response.MinimumWatts!.Value;
+            tdpMaximumWatts = response.MaximumWatts!.Value;
+            selectedTdpWatts = Math.Min(
+                Math.Max(
+                    response.AppliedWatts ??
+                    response.TargetWatts ??
+                    response.DefaultWatts ??
+                    selectedTdpWatts,
+                    tdpMinimumWatts),
+                tdpMaximumWatts);
+            UpdatePowerArc();
+            UpdateTdpPresetButtons(response.PresetWatts);
+        }
+        else
+        {
+            PowerValue.Text = "—";
+            PowerArcFill.Data = CreatePowerArcGeometry(0);
+            HideTdpPresetButtons();
+        }
+
+        ManufacturerRecoveryHint.Visibility =
+            response.ManufacturerRecoveryUnverified
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+        PowerStatus.Text = response.Status switch
+        {
+            ControlStatus.Available => response.ExperimentalEnabled
+                ? Localized("PowerAvailable")
+                : Localized("PowerOptInDisabled"),
+            ControlStatus.Applied => Localized("PowerApplied"),
+            ControlStatus.Unverifiable => Localized("PowerUnverifiable"),
+            ControlStatus.Rejected when tdpConflict =>
+                Localized("PowerArmouryConflict"),
+            ControlStatus.Rejected when
+                response.ErrorCode == "experimental_tdp_disabled" =>
+                Localized("PowerOptInDisabled"),
+            ControlStatus.Rejected => Localized("PowerRejected"),
+            ControlStatus.Unavailable when
+                response.ErrorCode == "tdp_profile_unsupported" =>
+                Localized("PowerUnsupported"),
+            ControlStatus.Unavailable when
+                response.ErrorCode == "power_source_unknown" =>
+                Localized("PowerSourceUnknown"),
+            _ => Localized("PowerServiceUnavailable"),
+        };
+        UpdateTdpControlAvailability();
+    }
+
+    private void UpdatePowerArc()
+    {
+        var range = tdpMaximumWatts - tdpMinimumWatts;
+        var fraction = range <= 0
+            ? 0
+            : (double)(selectedTdpWatts - tdpMinimumWatts) / range;
+        PowerArcFill.Data = CreatePowerArcGeometry(fraction);
+        PowerArcFill.Stroke = fraction < 0.55
+            ? PowerSafeBrush
+            : fraction < 0.82
+                ? PowerWarningBrush
+                : PowerDangerBrush;
+        PowerValue.Text = $"{selectedTdpWatts} W";
+        PowerLimits.Text = string.Format(
+            Localized("PowerLimitsFormat"),
+            tdpMinimumWatts,
+            tdpMaximumWatts);
+    }
+
+    private void UpdateTdpPresetButtons(IReadOnlyList<int> presets)
+    {
+        var available = presets
+            .Where(watts =>
+                watts >= tdpMinimumWatts && watts <= tdpMaximumWatts)
+            .Distinct()
+            .Take(TdpPresetButtons.Count)
+            .ToArray();
+        for (var index = 0; index < TdpPresetButtons.Count; index++)
+        {
+            var button = TdpPresetButtons[index];
+            if (index >= available.Length)
+            {
+                button.Visibility = Visibility.Collapsed;
+                button.Tag = null;
+                continue;
+            }
+
+            var watts = available[index];
+            button.Visibility = Visibility.Visible;
+            button.Tag = watts;
+            button.Content = $"{watts} W";
+            AutomationProperties.SetName(
+                button,
+                string.Format(Localized("PowerPresetAutomation"), watts));
+        }
+    }
+
+    private void HideTdpPresetButtons()
+    {
+        foreach (var button in TdpPresetButtons)
+        {
+            button.Visibility = Visibility.Collapsed;
+            button.IsEnabled = false;
+            button.Tag = null;
+        }
+    }
+
+    private void UpdateTdpControlAvailability()
+    {
+        ExperimentalTdpToggle.IsEnabled = tdpReady && !tdpWritePending;
+        var canWrite = tdpReady &&
+            ExperimentalTdpToggle.IsOn &&
+            !tdpWritePending &&
+            !tdpConflict;
+        TdpDecreaseButton.IsEnabled = canWrite &&
+            selectedTdpWatts > tdpMinimumWatts;
+        TdpIncreaseButton.IsEnabled = canWrite &&
+            selectedTdpWatts < tdpMaximumWatts;
+        foreach (var button in TdpPresetButtons)
+        {
+            button.IsEnabled = canWrite &&
+                button.Visibility == Visibility.Visible;
+        }
+    }
+
+    private IReadOnlyList<Button> TdpPresetButtons => new[]
+    {
+        TdpPreset1,
+        TdpPreset2,
+        TdpPreset3,
+        TdpPreset4,
+    };
+
+    private static PathGeometry CreatePowerArcGeometry(double fraction)
+    {
+        const double centerX = 95;
+        const double centerY = 88;
+        const double radius = 68;
+        const double startDegrees = 135;
+        const double totalDegrees = 270;
+        var clamped = Math.Min(Math.Max(fraction, 0), 1);
+        var start = PolarPoint(centerX, centerY, radius, startDegrees);
+        var geometry = new PathGeometry();
+        var figure = new PathFigure
+        {
+            StartPoint = start,
+            IsClosed = false,
+        };
+        if (clamped > 0)
+        {
+            var sweep = totalDegrees * clamped;
+            figure.Segments.Add(new ArcSegment
+            {
+                Point = PolarPoint(
+                    centerX,
+                    centerY,
+                    radius,
+                    startDegrees + sweep),
+                Size = new Size(radius, radius),
+                IsLargeArc = sweep > 180,
+                SweepDirection = SweepDirection.Clockwise,
+            });
+        }
+
+        geometry.Figures.Add(figure);
+        return geometry;
+    }
+
+    private static Point PolarPoint(
+        double centerX,
+        double centerY,
+        double radius,
+        double degrees)
+    {
+        var radians = degrees * Math.PI / 180;
+        return new Point(
+            centerX + (radius * Math.Cos(radians)),
+            centerY + (radius * Math.Sin(radians)));
     }
 
     private void ApplyVolumeResponse(VolumeControlResponse response)
@@ -719,9 +1062,11 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         snapshotRefreshInProgress = false;
         volumeRefreshInProgress = false;
         brightnessRefreshInProgress = false;
+        tdpRefreshInProgress = false;
         CancelPendingVolumeWrite();
         CancelPendingMuteWrite();
         CancelPendingBrightnessWrite();
+        CancelPendingTdpWrite();
     }
 
     private void CancelPendingVolumeWrite()
@@ -753,6 +1098,23 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         BrightnessSlider.IsEnabled = false;
         BrightnessValue.Text = "—";
         BrightnessStatus.Text = Localized("BrightnessChecking");
+    }
+
+    private void CancelPendingTdpWrite()
+    {
+        tdpGeneration++;
+        tdpWritePending = false;
+        tdpReady = false;
+        tdpConflict = false;
+        ExperimentalTdpToggle.IsEnabled = false;
+        TdpDecreaseButton.IsEnabled = false;
+        TdpIncreaseButton.IsEnabled = false;
+        foreach (var button in TdpPresetButtons)
+        {
+            button.IsEnabled = false;
+        }
+
+        PowerStatus.Text = Localized("PowerChecking");
     }
 
     private static string Format(

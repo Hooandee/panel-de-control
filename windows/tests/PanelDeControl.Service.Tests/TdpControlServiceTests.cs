@@ -84,6 +84,23 @@ public sealed class TdpControlServiceTests
     }
 
     [Fact]
+    public void AvailableStateReportsArmouryCrateBeforeAWriteIsAttempted()
+    {
+        var transport = new FakeTransport();
+        var rival = new FakeArmouryCrateGuard { Running = true };
+        var control = Create(rival: rival, transport: transport);
+
+        var response = control.Get();
+
+        Assert.Equal(ControlStatus.Rejected, response.Status);
+        Assert.Equal("armoury_crate_running", response.ErrorCode);
+        Assert.Equal(7, response.MinimumWatts);
+        Assert.Equal(25, response.MaximumWatts);
+        Assert.Empty(transport.Writes);
+        Assert.Empty(transport.Reads);
+    }
+
+    [Fact]
     public void FirmwareRejectionIsRejectedNotUnverifiable()
     {
         var transport = new FakeTransport

@@ -93,6 +93,23 @@ public sealed class TdpControlContractTests
     }
 
     [Fact]
+    public void AvailableStateCarriesTheCatalogDefaultForTheWidget()
+    {
+        var response = TdpControlResponse.Available(
+            experimentalEnabled: false,
+            minimumWatts: 7,
+            maximumWatts: 25,
+            presetWatts: new[] { 13, 17, 25 },
+            externalPower: false,
+            defaultWatts: 17);
+
+        var roundTrip = TdpControlWireCodec.DeserializeResponse(
+            TdpControlWireCodec.SerializeResponse(response));
+
+        Assert.Equal(17, roundTrip.DefaultWatts);
+    }
+
+    [Fact]
     public void RejectedAndUnverifiableNeverCarryAppliedWatts()
     {
         var rejected = TdpControlResponse.Rejected(
