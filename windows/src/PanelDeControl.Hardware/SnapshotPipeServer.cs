@@ -4,7 +4,7 @@ using PanelDeControl.Core.Telemetry;
 
 namespace PanelDeControl.Hardware;
 
-public sealed class SnapshotPipeServer
+public sealed class SnapshotPipeServer : ISnapshotServer
 {
     private const int MaximumCommandLength = 64;
 
