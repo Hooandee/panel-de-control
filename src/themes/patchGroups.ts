@@ -23,19 +23,10 @@ const GROUP_MATCHERS: Readonly<Record<Exclude<ThemePatchGroupId, "appearance" | 
   compatibility: /compat|navigation|navegación|navegacion|fallback|legacy|steam|decky/,
 };
 
-const GALLERY_SECTION_PATCHES = new Set([
-  "Estilizar Inicio",
-  "Estilizar Biblioteca y parrilla",
-  "Estilizar detalles del juego",
-  "Estilizar Ajustes",
-  "Estilizar Descargas",
-  "Estilizar multimedia y logros",
-  "Estilizar menús y barras",
-  "Estilizar notificaciones",
-]);
+const SECTION_PATCH_PREFIX = "Estilizar ";
 
 function groupForPatch(patch: CssLoaderPatch, themeId?: string): ThemePatchGroupId {
-  if (themeId === "hooandee-gallery" && patch.type === "checkbox" && GALLERY_SECTION_PATCHES.has(patch.name)) {
+  if (themeId?.startsWith("hooandee-") && patch.type === "checkbox" && patch.name.startsWith(SECTION_PATCH_PREFIX)) {
     return "sections";
   }
   const name = patch.name.toLocaleLowerCase();

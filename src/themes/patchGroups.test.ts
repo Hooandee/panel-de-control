@@ -26,4 +26,23 @@ describe("groupThemePatches", () => {
         ["compatibility", ["Navigation compatibility"]],
       ]);
   });
+
+  it("gathers every Hooandee theme's section toggles at the end", () => {
+    const groups = groupThemePatches([
+      patch("Estilizar Inicio"),
+      patch("Posición de la parrilla"),
+      patch("Estilizar QAM y Decky"),
+    ], "hooandee-luminous-atlas");
+
+    expect(groups[groups.length - 1]).toEqual({
+      id: "sections",
+      patches: [patch("Estilizar Inicio"), patch("Estilizar QAM y Decky")],
+    });
+  });
+
+  it("does not treat a third-party theme's toggles as sections", () => {
+    const groups = groupThemePatches([patch("Estilizar Inicio")], "someone-else");
+
+    expect(groups.map((group) => group.id)).toEqual(["appearance"]);
+  });
 });
