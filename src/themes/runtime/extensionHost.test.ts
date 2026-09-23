@@ -12,6 +12,7 @@ import {
   ThemeExtensionRuntimeHost,
   type ThemeExtensionExport,
   type ThemeExtensionMountContext,
+  type ThemeExtensionMountContextV2,
 } from "./extensionHost";
 
 const DESCRIPTOR: ThemeExtensionDescriptor = {
@@ -24,6 +25,14 @@ const DESCRIPTOR: ThemeExtensionDescriptor = {
 
 const SOURCE = `module.exports = Object.freeze({
   abiVersion: 1,
+  mount(context) {
+    context.document.documentElement.dataset.extensionMounted = context.theme.version;
+    return () => { delete context.document.documentElement.dataset.extensionMounted; };
+  }
+});`;
+
+const SOURCE_V2 = `module.exports = Object.freeze({
+  abiVersion: 2,
   mount(context) {
     context.document.documentElement.dataset.extensionMounted = context.theme.version;
     return () => { delete context.document.documentElement.dataset.extensionMounted; };
@@ -63,15 +72,21 @@ async function settle(): Promise<void> {
 }
 
 describe("evaluateThemeExtensionBundle", () => {
-  it("accepts only the exact frozen ABI-v1 CommonJS export", () => {
-    const extension = evaluateThemeExtensionBundle(SOURCE);
-    expect(extension.abiVersion).toBe(1);
-    expect(Object.isFrozen(extension)).toBe(true);
-  });
+  it.each([
+    { source: SOURCE, abiVersion: 1 },
+    { source: SOURCE_V2, abiVersion: 2 },
+  ])(
+    "accepts the exact frozen ABI-$abiVersion CommonJS export",
+    ({ source, abiVersion }) => {
+      const extension = evaluateThemeExtensionBundle(source);
+      expect(extension.abiVersion).toBe(abiVersion);
+      expect(Object.isFrozen(extension)).toBe(true);
+    },
+  );
 
   it.each([
     "module.exports = { abiVersion: 1, mount() { return () => {}; } };",
-    "module.exports = Object.freeze({ abiVersion: 2, mount() { return () => {}; } });",
+    "module.exports = Object.freeze({ abiVersion: 3, mount() { return () => {}; } });",
     "module.exports = Object.freeze({ abiVersion: 1, mount() { return () => {}; }, extra: true });",
     "module.exports = Object.freeze({ abiVersion: 1 });",
   ])("rejects invalid exports", (source) => {
@@ -80,6 +95,138 @@ describe("evaluateThemeExtensionBundle", () => {
 });
 
 describe("ThemeExtensionRuntimeHost", () => {
+  it("keeps the ABI-v1 mount context exact when QAM access is available", async () => {
+    const keys: string[][] = [];
+    const host = new ThemeExtensionRuntimeHost({
+      client: client(),
+      doc: document,
+      qam: {
+        getDocument: () => document,
+        subscribe: () => () => {},
+      },
+      evaluate: () => Object.freeze({
+        abiVersion: 1,
+        mount: (context: ThemeExtensionMountContext) => {
+          keys.push(Object.keys(context).sort());
+          return () => {};
+        },
+      }),
+    });
+
+    host.reconcile(snapshot());
+    await settle();
+
+    expect(keys).toEqual([["document", "host", "theme"]]);
+    host.dispose();
+  });
+
+  it("exposes the live QAM document channel and releases extension subscriptions", async () => {
+    const firstQamDocument = document.implementation.createHTMLDocument("QAM 1");
+    const secondQamDocument = document.implementation.createHTMLDocument("QAM 2");
+    let currentQamDocument: Document | null = firstQamDocument;
+    let publishQamDocument!: (doc: Document) => void;
+    const unsubscribe = vi.fn();
+    const seen: Document[] = [];
+    const host = new ThemeExtensionRuntimeHost({
+      client: client([{ ...DESCRIPTOR, abiVersion: 2 } as ThemeExtensionDescriptor], SOURCE_V2),
+      doc: document,
+      qam: {
+        getDocument: () => currentQamDocument,
+        subscribe: (listener) => {
+          publishQamDocument = listener;
+          return unsubscribe;
+        },
+      },
+      evaluate: () => Object.freeze({
+        abiVersion: 2,
+        mount: (context: ThemeExtensionMountContextV2) => {
+          expect(Object.isFrozen(context.qam)).toBe(true);
+          const current = context.qam.getDocument();
+          if (current) seen.push(current);
+          const stop = context.qam.subscribe((doc: Document) => seen.push(doc));
+          return stop;
+        },
+      }) as unknown as ThemeExtensionExport,
+    });
+
+    host.reconcile(snapshot());
+    await settle();
+    currentQamDocument = secondQamDocument;
+    publishQamDocument(secondQamDocument);
+    host.dispose();
+
+    expect(seen).toEqual([firstQamDocument, secondQamDocument]);
+    expect(unsubscribe).toHaveBeenCalledOnce();
+  });
+
+  it("exposes a frozen, narrowly scoped library action channel to ABI-v2 themes", async () => {
+    const library = {
+      launch: vi.fn(() => "started" as const),
+      openSettings: vi.fn(() => true),
+      openController: vi.fn(() => true),
+      verticalCapsule: vi.fn(() => "/assets/812140/library_600x900.jpg"),
+    };
+    const host = new ThemeExtensionRuntimeHost({
+      client: client([{ ...DESCRIPTOR, abiVersion: 2 } as ThemeExtensionDescriptor], SOURCE_V2),
+      doc: document,
+      qam: { getDocument: () => document, subscribe: () => () => {} },
+      library,
+      evaluate: () => Object.freeze({
+        abiVersion: 2,
+        mount: (context: ThemeExtensionMountContextV2) => {
+          expect(Object.isFrozen(context.library)).toBe(true);
+          expect(context.library?.launch(812140)).toBe("started");
+          expect(context.library?.openSettings(812140)).toBe(true);
+          expect(context.library?.openController(812140)).toBe(true);
+          expect(context.library?.verticalCapsule(812140)).toBe("/assets/812140/library_600x900.jpg");
+          return () => {};
+        },
+      }) as unknown as ThemeExtensionExport,
+    });
+
+    host.reconcile(snapshot());
+    await settle();
+
+    expect(library.launch).toHaveBeenCalledWith(812140);
+    expect(library.openSettings).toHaveBeenCalledWith(812140);
+    expect(library.openController).toHaveBeenCalledWith(812140);
+    expect(library.verticalCapsule).toHaveBeenCalledWith(812140);
+    host.dispose();
+  });
+
+  it("exposes a frozen navigation channel to ABI-v2 themes", async () => {
+    const stopCapture = vi.fn();
+    const navigation = {
+      focus: vi.fn(() => true),
+      capture: vi.fn(() => stopCapture),
+    };
+    const button = document.createElement("button");
+    const host = new ThemeExtensionRuntimeHost({
+      client: client([{ ...DESCRIPTOR, abiVersion: 2 } as ThemeExtensionDescriptor], SOURCE_V2),
+      doc: document,
+      qam: { getDocument: () => document, subscribe: () => () => {} },
+      navigation,
+      evaluate: () => Object.freeze({
+        abiVersion: 2,
+        mount: (context: ThemeExtensionMountContextV2) => {
+          expect(Object.isFrozen(context.navigation)).toBe(true);
+          expect(context.navigation?.focus(button)).toBe(true);
+          const stop = context.navigation?.capture(() => {});
+          stop?.();
+          return () => {};
+        },
+      }) as unknown as ThemeExtensionExport,
+    });
+
+    host.reconcile(snapshot());
+    await settle();
+
+    expect(navigation.focus).toHaveBeenCalledWith(button);
+    expect(navigation.capture).toHaveBeenCalledOnce();
+    expect(stopCapture).toHaveBeenCalledOnce();
+    host.dispose();
+  });
+
   it("retries a transient descriptor failure when the active inventory is unchanged", async () => {
     const extensions = client();
     extensions.list = vi.fn()

@@ -41,6 +41,7 @@ _REMOTE_REQUIRED_FILES = {"theme.json", "panel-theme.json"}
 _REMOTE_ASSET_SUFFIXES = _REMOTE_ALLOWED_SUFFIXES - {".css", ".json", ".txt"}
 _REMOTE_ASSET_SUFFIXES.discard(".js")
 _MAX_EXTENSION_BYTES = 2 * 1024 * 1024
+_SUPPORTED_EXTENSION_ABI_VERSIONS = frozenset({1, 2})
 _MAX_RECEIPTS = 32
 _MAX_FILES = 2_048
 _MAX_UNCOMPRESSED_BYTES = 64 * 1024 * 1024
@@ -602,7 +603,8 @@ def _extension_receipt(
         set(panel) != {"schemaVersion", "catalogId", "extension"}
         or not isinstance(extension, dict)
         or set(extension) != {"abiVersion", "entrypoint", "size", "sha256"}
-        or extension.get("abiVersion") != 1
+        or type(extension.get("abiVersion")) is not int
+        or extension["abiVersion"] not in _SUPPORTED_EXTENSION_ABI_VERSIONS
         or extension.get("entrypoint") != "panel-extension.js"
         or not isinstance(extension.get("size"), int)
         or isinstance(extension.get("size"), bool)
@@ -628,7 +630,7 @@ def _extension_receipt(
         "catalogId": theme_id,
         "cssLoaderName": theme_name,
         "version": version,
-        "abiVersion": 1,
+        "abiVersion": extension["abiVersion"],
         "entrypoint": "panel-extension.js",
         "size": extension["size"],
         "sha256": extension["sha256"],
@@ -923,7 +925,8 @@ def _validated_receipt(value: object) -> dict[str, object] | None:
         or Path(theme_name).name != theme_name
         or not isinstance(version, str)
         or not _SEMVER.fullmatch(version)
-        or value.get("abiVersion") != 1
+        or type(value.get("abiVersion")) is not int
+        or value["abiVersion"] not in _SUPPORTED_EXTENSION_ABI_VERSIONS
         or value.get("entrypoint") != "panel-extension.js"
         or not isinstance(size, int)
         or isinstance(size, bool)

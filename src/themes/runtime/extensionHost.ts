@@ -4,21 +4,49 @@ import type {
   ThemeExtensionDescriptor,
   ThemeExtensionPayload,
 } from "../themeExtensionClient";
+import type { ThemeExtensionLibraryAccess } from "./libraryAccess";
+import type { ThemeExtensionNavigationAccess } from "./navigationAccess";
 
 export interface ThemeExtensionHostDescriptor {
   abiVersion: 1;
 }
 
-export interface ThemeExtensionMountContext {
+export interface ThemeExtensionQamAccess {
+  getDocument(): Document | null;
+  subscribe(listener: (doc: Document) => void): () => void;
+}
+
+export interface ThemeExtensionMountContextV1 {
   theme: Readonly<CssLoaderTheme>;
   document: Document;
   host: Readonly<ThemeExtensionHostDescriptor>;
+  qam?: never;
 }
 
-export interface ThemeExtensionExport {
-  abiVersion: 1;
-  mount(context: ThemeExtensionMountContext): () => void;
+export interface ThemeExtensionMountContextV2 {
+  theme: Readonly<CssLoaderTheme>;
+  document: Document;
+  host: Readonly<ThemeExtensionHostDescriptor>;
+  qam: Readonly<ThemeExtensionQamAccess>;
+  library?: Readonly<ThemeExtensionLibraryAccess>;
+  navigation?: Readonly<ThemeExtensionNavigationAccess>;
 }
+
+export type ThemeExtensionMountContext =
+  | ThemeExtensionMountContextV1
+  | ThemeExtensionMountContextV2;
+
+export interface ThemeExtensionExportV1 {
+  abiVersion: 1;
+  mount(context: ThemeExtensionMountContextV1): () => void;
+}
+
+export interface ThemeExtensionExportV2 {
+  abiVersion: 2;
+  mount(context: ThemeExtensionMountContextV2): () => void;
+}
+
+export type ThemeExtensionExport = ThemeExtensionExportV1 | ThemeExtensionExportV2;
 
 type ExtensionEvaluator = (source: string) => ThemeExtensionExport;
 type ExtensionLogCode =
@@ -32,6 +60,9 @@ type ExtensionLogCode =
 interface ThemeExtensionRuntimeHostOptions {
   client: ThemeExtensionClient;
   doc: Document;
+  qam?: ThemeExtensionQamAccess;
+  library?: ThemeExtensionLibraryAccess;
+  navigation?: ThemeExtensionNavigationAccess;
   evaluate?: ExtensionEvaluator;
   log?(code: ExtensionLogCode): void;
 }
@@ -62,7 +93,7 @@ export function evaluateThemeExtensionBundle(source: string): ThemeExtensionExpo
     || Array.isArray(extension)
     || !Object.isFrozen(extension)
     || !exactKeys(extension, ["abiVersion", "mount"])
-    || Reflect.get(extension, "abiVersion") !== 1
+    || (Reflect.get(extension, "abiVersion") !== 1 && Reflect.get(extension, "abiVersion") !== 2)
     || typeof Reflect.get(extension, "mount") !== "function"
   ) throw new Error("Theme extension export is invalid");
   return extension as ThemeExtensionExport;
@@ -101,6 +132,9 @@ function payloadMatches(
 export class ThemeExtensionRuntimeHost {
   private readonly client: ThemeExtensionClient;
   private readonly doc: Document;
+  private readonly qam: Readonly<ThemeExtensionQamAccess> | undefined;
+  private readonly library: Readonly<ThemeExtensionLibraryAccess> | undefined;
+  private readonly navigation: Readonly<ThemeExtensionNavigationAccess> | undefined;
   private readonly evaluate: ExtensionEvaluator;
   private readonly log: (code: ExtensionLogCode) => void;
   private descriptors: readonly ThemeExtensionDescriptor[] | null = null;
@@ -117,11 +151,28 @@ export class ThemeExtensionRuntimeHost {
   constructor({
     client,
     doc,
+    qam,
+    library,
+    navigation,
     evaluate = evaluateThemeExtensionBundle,
     log = (code) => console.warn(`[themes:${code}]`),
   }: ThemeExtensionRuntimeHostOptions) {
     this.client = client;
     this.doc = doc;
+    this.qam = qam ? Object.freeze({
+      getDocument: qam.getDocument,
+      subscribe: qam.subscribe,
+    }) : undefined;
+    this.library = library ? Object.freeze({
+      launch: library.launch,
+      openSettings: library.openSettings,
+      openController: library.openController,
+      verticalCapsule: library.verticalCapsule,
+    }) : undefined;
+    this.navigation = navigation ? Object.freeze({
+      focus: navigation.focus,
+      capture: navigation.capture,
+    }) : undefined;
     this.evaluate = evaluate;
     this.log = log;
   }
@@ -228,6 +279,9 @@ export class ThemeExtensionRuntimeHost {
     let extension: ThemeExtensionExport;
     try {
       extension = this.evaluate(payload.source);
+      if (extension.abiVersion !== payload.abiVersion) {
+        throw new Error("Theme extension ABI does not match its receipt");
+      }
     } catch {
       if (this.isCurrent(selection.fingerprint, generation)) {
         this.pendingFingerprint = null;
@@ -237,11 +291,23 @@ export class ThemeExtensionRuntimeHost {
     }
     if (!this.isCurrent(selection.fingerprint, generation)) return;
     try {
-      const stop = extension.mount(Object.freeze({
+      const sharedContext = {
         theme: freezeTheme(selection.theme),
         document: this.doc,
         host: HOST_DESCRIPTOR,
-      }));
+      };
+      let stop: () => void;
+      if (extension.abiVersion === 1) {
+        stop = extension.mount(Object.freeze(sharedContext));
+      } else {
+        if (!this.qam) throw new Error("QAM access is unavailable");
+        stop = extension.mount(Object.freeze({
+          ...sharedContext,
+          qam: this.qam,
+          ...(this.library ? { library: this.library } : {}),
+          ...(this.navigation ? { navigation: this.navigation } : {}),
+        }));
+      }
       if (typeof stop !== "function") throw new Error("Theme extension disposer is invalid");
       if (!this.isCurrent(selection.fingerprint, generation)) {
         try {
