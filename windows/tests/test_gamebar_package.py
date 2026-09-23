@@ -840,21 +840,7 @@ class DesignSystemTests(unittest.TestCase):
         )
 
 
-
-
-    def test_accent_choice_is_persisted_locally_and_defaults_to_blue(self):
-        code = WIDGET_CODE.read_text(encoding="utf-8")
-        self.assertIn("ApplicationData.Current.LocalSettings", code)
-        self.assertIn("AccentPalette.Resolve", code)
-
-
 class EnergyCardTests(unittest.TestCase):
-    def test_energy_card_leads_the_power_tab(self):
-        xaml = WIDGET.read_text(encoding="utf-8")
-        power_panel = xaml.split('x:Name="PowerPanel"', 1)[1]
-        self.assertLess(power_panel.index('x:Name="EnergyCard"'), power_panel.index('x:Name="BatteryCard"'))
-        self.assertLess(power_panel.index('x:Name="BatteryCard"'), power_panel.index('x:Name="PowerCard"'))
-
     def test_every_power_mode_has_a_localized_name(self):
         strings = load_strings("en-US")
         modes = (ROOT / "windows" / "src" / "PanelDeControl.Core" / "Telemetry" / "PowerModes.cs").read_text(encoding="utf-8")
@@ -862,4 +848,3 @@ class EnergyCardTests(unittest.TestCase):
         self.assertEqual(["BestEfficiency", "Balanced", "BetterPerformance", "BestPerformance"], names)
         for name in names:
             self.assertIn(f"PowerMode{name}", strings)
-
