@@ -1103,7 +1103,19 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
 
     private static void MoveTo(FrameworkElement element, Panel target)
     {
-        (element.Parent as Panel)?.Children.Remove(element);
+        switch (element.Parent)
+        {
+            case Panel panel:
+                panel.Children.Remove(element);
+                break;
+            case ScrollViewer scroller:
+                scroller.Content = null;
+                break;
+            case Border border:
+                border.Child = null;
+                break;
+        }
+
         target.Children.Add(element);
     }
 
