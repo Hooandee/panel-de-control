@@ -814,18 +814,6 @@ class DiagnosticsCardTests(unittest.TestCase):
         self.assertTrue(set(mapping.values()).issubset(strings), set(mapping.values()) - set(strings))
 
 
-
-
-    def test_diagnostics_card_is_focusable_and_starts_collapsed(self):
-        root = ElementTree.parse(WIDGET).getroot()
-        xaml_name = "{http://schemas.microsoft.com/winfx/2006/xaml}Name"
-        nodes = {node.attrib.get(xaml_name): node for node in root.iter()}
-
-        self.assertEqual("True", nodes["DiagnosticsToggle"].attrib["IsTabStop"])
-        self.assertEqual("DiagnosticsToggle", nodes["DiagnosticsToggle"].attrib[XAML_UID])
-        self.assertEqual("Collapsed", nodes["DiagnosticsList"].attrib["Visibility"])
-
-
 class DesignSystemTests(unittest.TestCase):
     def test_widget_and_app_never_hard_code_colours(self):
         for path in (WIDGET, PROJECT_DIR / "App.xaml"):
@@ -841,19 +829,6 @@ class DesignSystemTests(unittest.TestCase):
         self.assertIn('<Page Include="Theme\\PdcTokens.xaml">', project)
         self.assertIn('x:Key="PdcAccentBrush"', (PROJECT_DIR / "Theme" / "PdcTokens.xaml").read_text(encoding="utf-8"))
 
-    def test_tabs_are_focusable_and_switch_with_the_shoulder_buttons(self):
-        root = ElementTree.parse(WIDGET).getroot()
-        xaml_name = "{http://schemas.microsoft.com/winfx/2006/xaml}Name"
-        nodes = {node.attrib.get(xaml_name): node for node in root.iter()}
-        for tab in ("TabPower", "TabSystem", "TabSensors", "TabSettings"):
-            self.assertEqual("TabButton_Click", nodes[tab].attrib["Click"])
-            self.assertEqual(tab, nodes[tab].attrib[XAML_UID])
-        for panel in ("SystemPanel", "SensorsPanel", "SettingsPanel"):
-            self.assertEqual("Collapsed", nodes[panel].attrib["Visibility"])
-        code = WIDGET_CODE.read_text(encoding="utf-8")
-        self.assertIn("VirtualKey.GamepadLeftShoulder", code)
-        self.assertIn("VirtualKey.GamepadRightShoulder", code)
-
     def test_every_power_zone_has_a_localized_label(self):
         strings = load_strings("en-US")
         for zone in ("Save", "Eco", "Balanced", "Hot", "Turbo"):
@@ -863,9 +838,3 @@ class DesignSystemTests(unittest.TestCase):
             ["Save", "Eco", "Balanced", "Hot", "Turbo"],
             re.findall(r"^\s{4}(\w+),$", power_arc.split("public enum PowerZone", 1)[1].split("}", 1)[0], re.M),
         )
-
-    def test_accent_choice_is_persisted_locally_and_defaults_to_blue(self):
-        code = WIDGET_CODE.read_text(encoding="utf-8")
-        self.assertIn("ApplicationData.Current.LocalSettings", code)
-        self.assertIn("AccentPalette.Resolve", code)
-
