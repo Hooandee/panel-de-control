@@ -8,7 +8,6 @@ public static class Program
         {
             return 1;
         }
-
         try
         {
             // Process teardown owns cleanup because a timed-out hardware poll may still be active.
@@ -68,11 +67,11 @@ public static class Program
                     .WhenAll(snapshotTask, volumeTask, brightnessTask, tdpTask)
                     .ConfigureAwait(false);
             }
-
             return 0;
         }
-        catch
+        catch (Exception exception)
         {
+            CompanionLog.Write("fatal", exception);
             return 1;
         }
     }
