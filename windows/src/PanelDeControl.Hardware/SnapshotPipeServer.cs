@@ -4,7 +4,7 @@ using PanelDeControl.Core.Telemetry;
 
 namespace PanelDeControl.Hardware;
 
-public sealed class SnapshotPipeServer
+public sealed class SnapshotPipeServer : ISnapshotServer
 {
     private const int MaximumCommandLength = 64;
 
@@ -14,13 +14,15 @@ public sealed class SnapshotPipeServer
     private readonly IHardwareSnapshotProvider snapshotProvider;
     private readonly Func<string, NamedPipeServerStream> pipeFactory;
     private readonly TimeSpan captureTimeout;
+    private readonly TimeSpan commandReadTimeout;
     private Task<HardwareSnapshot>? activeCapture;
 
     public SnapshotPipeServer(
         string pipeName,
         IHardwareSnapshotProvider snapshotProvider,
         Func<string, NamedPipeServerStream> pipeFactory,
-        TimeSpan? captureTimeout = null)
+        TimeSpan? captureTimeout = null,
+        TimeSpan? commandReadTimeout = null)
     {
         if (string.IsNullOrWhiteSpace(pipeName))
         {
@@ -37,6 +39,7 @@ public sealed class SnapshotPipeServer
         this.snapshotProvider = snapshotProvider;
         this.pipeFactory = pipeFactory;
         this.captureTimeout = effectiveCaptureTimeout;
+        this.commandReadTimeout = commandReadTimeout ?? TimeSpan.FromSeconds(1);
     }
 
     public async Task RunAsync(CancellationToken cancellationToken)
@@ -60,7 +63,7 @@ public sealed class SnapshotPipeServer
             idleCancellation.CancelAfter(idleTimeout);
             try
             {
-                await RunOnceAsync(idleCancellation.Token).ConfigureAwait(false);
+                await RunConnectionAsync(idleCancellation.Token, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
@@ -69,10 +72,20 @@ public sealed class SnapshotPipeServer
         }
     }
 
-    public async Task RunOnceAsync(CancellationToken cancellationToken)
+    public Task RunOnceAsync(CancellationToken cancellationToken)
     {
-        await using var server = pipeFactory(pipeName);
-        await server.WaitForConnectionAsync(cancellationToken).ConfigureAwait(false);
+        return RunConnectionAsync(cancellationToken, cancellationToken);
+    }
+
+    private async Task RunConnectionAsync(
+        CancellationToken connectToken,
+        CancellationToken cancellationToken)
+    {
+        await using var server = await PipeInstances
+            .CreateAsync(pipeFactory, pipeName, connectToken)
+            .ConfigureAwait(false);
+        using var clientRelease = PipeClientRelease.For(server);
+        await server.WaitForConnectionAsync(connectToken).ConfigureAwait(false);
 
         using var reader = new StreamReader(
             server,
@@ -90,9 +103,15 @@ public sealed class SnapshotPipeServer
         };
 
         PipeCommand command;
+        using var commandCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        commandCancellation.CancelAfter(commandReadTimeout);
         try
         {
-            command = await ReadCommandAsync(reader, cancellationToken).ConfigureAwait(false);
+            command = await ReadCommandAsync(reader, commandCancellation.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return;
         }
         catch (IOException)
         {

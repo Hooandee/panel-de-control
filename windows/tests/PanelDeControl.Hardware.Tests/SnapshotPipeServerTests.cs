@@ -136,6 +136,82 @@ public sealed class SnapshotPipeServerTests
         provider.Release();
     }
 
+    [Fact]
+    public async Task BusyPipeInstanceIsRetriedInsteadOfEndingTheServer()
+    {
+        var pipeName = $"pdc-tests-{Guid.NewGuid():N}";
+        var expected = new HardwareSnapshot(
+            new DateTimeOffset(2026, 9, 22, 23, 0, 0, TimeSpan.Zero),
+            "ROG Xbox Ally X",
+            new[] { TelemetryReading.Available("cpu.load", "CPU", 7, "%", "test") });
+        var busyAttempts = 2;
+        var server = new SnapshotPipeServer(
+            pipeName,
+            new FixedSnapshotProvider(expected),
+            name => busyAttempts-- > 0
+                ? throw new IOException("All pipe instances are busy.")
+                : CreateTestPipe(name));
+        using var lifetime = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var serverTask = server.RunAsync(TimeSpan.FromSeconds(5), lifetime.Token);
+
+        await using var client = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+        await client.ConnectAsync(lifetime.Token);
+        await using var writer = new StreamWriter(client, leaveOpen: true) { AutoFlush = true };
+        using var reader = new StreamReader(client, leaveOpen: true);
+        await writer.WriteLineAsync("snapshot");
+        var payload = await reader.ReadLineAsync(lifetime.Token);
+
+        Assert.Equal(7, Assert.Single(TelemetryWireCodec.Deserialize(payload!).Readings).Value);
+        lifetime.Cancel();
+        try
+        {
+            await serverTask;
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    [Fact]
+    public async Task SilentClientIsDroppedSoTheNextClientIsServed()
+    {
+        var pipeName = $"pdc-tests-{Guid.NewGuid():N}";
+        var expected = new HardwareSnapshot(
+            new DateTimeOffset(2026, 9, 22, 23, 0, 0, TimeSpan.Zero),
+            "ROG Xbox Ally X",
+            new[] { TelemetryReading.Available("cpu.load", "CPU", 5, "%", "test") });
+        var server = new SnapshotPipeServer(
+            pipeName,
+            new FixedSnapshotProvider(expected),
+            CreateTestPipe,
+            commandReadTimeout: TimeSpan.FromMilliseconds(100));
+        using var lifetime = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var serverTask = server.RunAsync(TimeSpan.FromSeconds(5), lifetime.Token);
+
+        await using (var silent = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous))
+        {
+            await silent.ConnectAsync(lifetime.Token);
+            await Task.Delay(300, lifetime.Token);
+        }
+
+        await using var client = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+        await client.ConnectAsync(lifetime.Token);
+        await using var writer = new StreamWriter(client, leaveOpen: true) { AutoFlush = true };
+        using var reader = new StreamReader(client, leaveOpen: true);
+        await writer.WriteLineAsync("snapshot");
+        var payload = await reader.ReadLineAsync(lifetime.Token);
+
+        Assert.Equal(5, Assert.Single(TelemetryWireCodec.Deserialize(payload!).Readings).Value);
+        lifetime.Cancel();
+        try
+        {
+            await serverTask;
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
     private static SnapshotPipeServer CreateServer(
         string pipeName,
         IHardwareSnapshotProvider provider)
