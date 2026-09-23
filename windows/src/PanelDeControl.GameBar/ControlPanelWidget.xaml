@@ -107,6 +107,7 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
@@ -140,8 +141,153 @@
                 </Border>
 
                 <Border
-                    x:Name="VolumeCard"
+                    x:Name="PowerCard"
                     Grid.Row="1"
+                    Grid.ColumnSpan="2"
+                    Margin="0,12,0,0"
+                    Padding="18"
+                    Background="{StaticResource PowerSurfaceRaisedBrush}"
+                    BorderBrush="{StaticResource PowerHairlineBrush}"
+                    BorderThickness="1"
+                    CornerRadius="14">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="210" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid Width="190" Height="166" HorizontalAlignment="Center">
+                            <Path
+                                x:Name="PowerArcTrack"
+                                Stroke="{StaticResource PowerArcTrackBrush}"
+                                StrokeThickness="14"
+                                StrokeStartLineCap="Round"
+                                StrokeEndLineCap="Round" />
+                            <Path
+                                x:Name="PowerArcFill"
+                                Stroke="{StaticResource PowerSafeBrush}"
+                                StrokeThickness="14"
+                                StrokeStartLineCap="Round"
+                                StrokeEndLineCap="Round" />
+                            <StackPanel
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center">
+                                <TextBlock
+                                    x:Uid="PowerLabel"
+                                    HorizontalAlignment="Center"
+                                    FontSize="11"
+                                    Foreground="{StaticResource PowerMutedBrush}" />
+                                <TextBlock
+                                    x:Name="PowerValue"
+                                    Margin="0,3,0,0"
+                                    HorizontalAlignment="Center"
+                                    FontFamily="Segoe UI Variable Display"
+                                    FontSize="28"
+                                    FontWeight="SemiBold"
+                                    Foreground="{StaticResource PowerPrimaryBrush}"
+                                    Text="—" />
+                                <TextBlock
+                                    x:Name="PowerLimits"
+                                    x:Uid="PowerLimits"
+                                    Margin="0,2,0,0"
+                                    HorizontalAlignment="Center"
+                                    FontSize="11"
+                                    Foreground="{StaticResource PowerMutedBrush}" />
+                            </StackPanel>
+                        </Grid>
+                        <StackPanel Grid.Column="1" Margin="16,0,0,0">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock
+                                    x:Uid="ExperimentalTdpLabel"
+                                    VerticalAlignment="Center"
+                                    Style="{StaticResource TelemetryLabelStyle}" />
+                                <ToggleSwitch
+                                    x:Name="ExperimentalTdpToggle"
+                                    x:Uid="ExperimentalTdpToggle"
+                                    Grid.Column="1"
+                                    IsEnabled="False"
+                                    IsTabStop="True"
+                                    Toggled="ExperimentalTdpToggle_Toggled" />
+                            </Grid>
+                            <Grid Margin="0,12,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="44" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="44" />
+                                </Grid.ColumnDefinitions>
+                                <Button
+                                    x:Name="TdpDecreaseButton"
+                                    x:Uid="TdpDecreaseButton"
+                                    Width="40"
+                                    Height="40"
+                                    IsEnabled="False"
+                                    IsTabStop="True"
+                                    Click="TdpDecreaseButton_Click"
+                                    Background="{StaticResource PowerControlBrush}"
+                                    Foreground="{StaticResource PowerPrimaryBrush}" />
+                                <TextBlock
+                                    x:Uid="PowerStepHint"
+                                    Grid.Column="1"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    FontSize="11"
+                                    Foreground="{StaticResource PowerMutedBrush}" />
+                                <Button
+                                    x:Name="TdpIncreaseButton"
+                                    x:Uid="TdpIncreaseButton"
+                                    Grid.Column="2"
+                                    Width="40"
+                                    Height="40"
+                                    IsEnabled="False"
+                                    IsTabStop="True"
+                                    Click="TdpIncreaseButton_Click"
+                                    Background="{StaticResource PowerControlBrush}"
+                                    Foreground="{StaticResource PowerPrimaryBrush}" />
+                            </Grid>
+                            <Grid Margin="0,10,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Button x:Name="TdpPreset1" Margin="0,0,4,0" IsEnabled="False" IsTabStop="True" Click="TdpPresetButton_Click" />
+                                <Button x:Name="TdpPreset2" Grid.Column="1" Margin="4,0" IsEnabled="False" IsTabStop="True" Click="TdpPresetButton_Click" />
+                                <Button x:Name="TdpPreset3" Grid.Column="2" Margin="4,0" IsEnabled="False" IsTabStop="True" Click="TdpPresetButton_Click" />
+                                <Button x:Name="TdpPreset4" Grid.Column="3" Margin="4,0,0,0" IsEnabled="False" IsTabStop="True" Click="TdpPresetButton_Click" />
+                            </Grid>
+                            <TextBlock
+                                x:Name="PowerStatus"
+                                x:Uid="PowerStatus"
+                                Margin="0,10,0,0"
+                                FontSize="12"
+                                Foreground="{StaticResource PowerMutedBrush}"
+                                AutomationProperties.LiveSetting="Polite"
+                                TextWrapping="Wrap" />
+                            <TextBlock
+                                x:Name="ManufacturerRecoveryHint"
+                                x:Uid="ManufacturerRecoveryHint"
+                                Margin="0,6,0,0"
+                                FontSize="11"
+                                Foreground="{StaticResource PowerWarningBrush}"
+                                TextWrapping="Wrap"
+                                Visibility="Collapsed" />
+                            <TextBlock
+                                x:Uid="PowerReadbackHint"
+                                Margin="0,6,0,0"
+                                FontSize="11"
+                                Foreground="{StaticResource PowerMutedBrush}"
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <Border
+                    x:Name="VolumeCard"
+                    Grid.Row="2"
                     Grid.ColumnSpan="2"
                     Margin="0,12,0,0"
                     Padding="18"
@@ -210,7 +356,7 @@
 
                 <Border
                     x:Name="BrightnessCard"
-                    Grid.Row="2"
+                    Grid.Row="3"
                     Grid.ColumnSpan="2"
                     Margin="0,12,0,0"
                     Padding="18"
@@ -255,7 +401,7 @@
 
                 <Border
                     x:Name="CpuCard"
-                    Grid.Row="3"
+                    Grid.Row="4"
                     Grid.Column="0"
                     Margin="0,12,6,0"
                     Padding="18"
@@ -270,7 +416,7 @@
 
                 <Border
                     x:Name="GpuCard"
-                    Grid.Row="3"
+                    Grid.Row="4"
                     Grid.Column="1"
                     Margin="6,12,0,0"
                     Padding="18"
@@ -285,7 +431,7 @@
 
                 <Border
                     x:Name="DiagnosticsCard"
-                    Grid.Row="4"
+                    Grid.Row="5"
                     Grid.ColumnSpan="2"
                     Margin="0,12,0,0"
                     Padding="18"

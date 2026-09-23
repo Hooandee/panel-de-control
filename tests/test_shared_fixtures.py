@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 from auto_tdp import decide
+from device_profiles import DEVICE_TABLE
 from fans.suggest import band, biased_curve, enough_data, suggest_curves
 from tdp.suggest import learned_band
 from telemetry.store import TelemetryStore
@@ -13,6 +14,7 @@ EXPECTED_FIXTURES = {
     "fan_suggestions.json",
     "tdp_learned_band.json",
     "telemetry_learning.json",
+    "windows_tdp.json",
 }
 
 
@@ -77,6 +79,11 @@ def _run_case(document, case, tmp_path):
             "aggregate": store.aggregate(inputs["appid"]),
             "temp_histogram": store.temp_histogram(inputs["appid"]),
         }
+
+    if operation == "tdp.catalog_clamp":
+        profile = next(item for item in DEVICE_TABLE if item.key == inputs["profile"])
+        ceiling = profile.tdp_max_charger if inputs["external_power"] else profile.tdp_max
+        return {"target_watts": min(max(inputs["requested_watts"], profile.tdp_min), ceiling)}
 
     raise AssertionError(f"unsupported fixture operation: {operation}")
 

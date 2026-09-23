@@ -121,7 +121,7 @@
     <value>Diagnostics could not be read</value>
   </data>
   <data name="FooterScope.Text" xml:space="preserve">
-    <value>Built-in panel brightness and volume with verification · Experimental read-only telemetry · No control of external displays, power or fans.</value>
+    <value>Verified brightness and volume · Experimental Ally X power control · Readback remains unvalidated on RC73XA · No control of external displays or fans.</value>
   </data>
   <data name="GpuLoadValue.Text" xml:space="preserve">
     <value>Load —</value>
@@ -193,7 +193,7 @@
     <value>The Panel de Control service is not responding</value>
   </data>
   <data name="RefreshButton.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
-    <value>Refresh telemetry, brightness and volume</value>
+    <value>Refresh telemetry, power, brightness and volume</value>
   </data>
   <data name="RivalNotRunning" xml:space="preserve">
     <value>Not running</value>
@@ -233,5 +233,92 @@
   </data>
   <data name="VolumeStatus.Text" xml:space="preserve">
     <value>Checking the default audio device…</value>
+  </data>
+  <data name="ExperimentalTdpLabel.Text" xml:space="preserve">
+    <value>EXPERIMENTAL TDP</value>
+  </data>
+  <data name="ExperimentalTdpToggle.OffContent" xml:space="preserve">
+    <value>Off</value>
+  </data>
+  <data name="ExperimentalTdpToggle.OnContent" xml:space="preserve">
+    <value>Enabled</value>
+  </data>
+  <data name="ExperimentalTdpToggle.[using:Windows.UI.Xaml.Automation]AutomationProperties.HelpText" xml:space="preserve">
+    <value>Explicitly enables experimental TDP writes for this service session</value>
+  </data>
+  <data name="ExperimentalTdpToggle.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Experimental TDP write opt-in</value>
+  </data>
+  <data name="ManufacturerRecoveryHint.Text" xml:space="preserve">
+    <value>Manufacturer recovery is not verified: restart Windows or reopen Armoury Crate to return control.</value>
+  </data>
+  <data name="PowerApplied" xml:space="preserve">
+    <value>Applied and confirmed on PL1, SPPT and FPPT</value>
+  </data>
+  <data name="PowerArmouryConflict" xml:space="preserve">
+    <value>Close Armoury Crate before changing the power limit</value>
+  </data>
+  <data name="PowerAvailable" xml:space="preserve">
+    <value>Experimental writes are ready</value>
+  </data>
+  <data name="PowerChecking" xml:space="preserve">
+    <value>Checking experimental power control…</value>
+  </data>
+  <data name="PowerLabel.Text" xml:space="preserve">
+    <value>POWER LIMIT</value>
+  </data>
+  <data name="PowerLimits.Text" xml:space="preserve">
+    <value>—</value>
+  </data>
+  <data name="PowerLimitsFormat" xml:space="preserve">
+    <value>{0}–{1} W</value>
+  </data>
+  <data name="PowerOptInDisabled" xml:space="preserve">
+    <value>Experimental writes are off</value>
+  </data>
+  <data name="PowerPresetAutomation" xml:space="preserve">
+    <value>Set experimental TDP to {0} watts</value>
+  </data>
+  <data name="PowerReadbackHint.Text" xml:space="preserve">
+    <value>DSTS readback is a candidate and remains unvalidated on RC73XA.</value>
+  </data>
+  <data name="PowerRejected" xml:space="preserve">
+    <value>The firmware rejected the power change</value>
+  </data>
+  <data name="PowerServiceUnavailable" xml:space="preserve">
+    <value>Experimental power control is unavailable</value>
+  </data>
+  <data name="PowerSourceUnknown" xml:space="preserve">
+    <value>The current AC or battery state could not be read</value>
+  </data>
+  <data name="PowerStatus.Text" xml:space="preserve">
+    <value>Checking experimental power control…</value>
+  </data>
+  <data name="PowerStepHint.Text" xml:space="preserve">
+    <value>1 W step</value>
+  </data>
+  <data name="PowerUnsupported" xml:space="preserve">
+    <value>Available only on the ROG Xbox Ally X profile</value>
+  </data>
+  <data name="PowerUnverifiable" xml:space="preserve">
+    <value>Sent, but DSTS did not confirm all three limits</value>
+  </data>
+  <data name="TdpDecreaseButton.Content" xml:space="preserve">
+    <value>−</value>
+  </data>
+  <data name="TdpDecreaseButton.[using:Windows.UI.Xaml.Automation]AutomationProperties.HelpText" xml:space="preserve">
+    <value>Writes one watt less to PL1, SPPT and FPPT</value>
+  </data>
+  <data name="TdpDecreaseButton.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Decrease experimental TDP</value>
+  </data>
+  <data name="TdpIncreaseButton.Content" xml:space="preserve">
+    <value>+</value>
+  </data>
+  <data name="TdpIncreaseButton.[using:Windows.UI.Xaml.Automation]AutomationProperties.HelpText" xml:space="preserve">
+    <value>Writes one watt more to PL1, SPPT and FPPT</value>
+  </data>
+  <data name="TdpIncreaseButton.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Increase experimental TDP</value>
   </data>
 </root>

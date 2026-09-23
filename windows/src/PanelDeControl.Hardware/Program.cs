@@ -41,6 +41,10 @@ public static class Program
                 BrightnessControlPipeServer.PackagedPipeName,
                 brightnessController,
                 PackageNamedPipeServerFactory.CreateControl);
+            var tdpServer = new TdpControlPipeServer(
+                TdpControlPipeServer.PackagedPipeName,
+                new ServiceTdpClient(),
+                PackageNamedPipeServerFactory.CreateControl);
 
             using var brokerLifetime = new CancellationTokenSource();
             var snapshotTask = snapshotServer.RunAsync(brokerLifetime.Token);
@@ -48,10 +52,12 @@ public static class Program
                 brokerLifetime.Token);
             var brightnessTask = brightnessServer.RunUntilCancelledAsync(
                 brokerLifetime.Token);
+            var tdpTask = tdpServer.RunUntilCancelledAsync(
+                brokerLifetime.Token);
             try
             {
                 var completedTask = await Task
-                    .WhenAny(snapshotTask, volumeTask, brightnessTask)
+                    .WhenAny(snapshotTask, volumeTask, brightnessTask, tdpTask)
                     .ConfigureAwait(false);
                 await completedTask.ConfigureAwait(false);
             }
@@ -59,7 +65,7 @@ public static class Program
             {
                 brokerLifetime.Cancel();
                 await Task
-                    .WhenAll(snapshotTask, volumeTask, brightnessTask)
+                    .WhenAll(snapshotTask, volumeTask, brightnessTask, tdpTask)
                     .ConfigureAwait(false);
             }
 
