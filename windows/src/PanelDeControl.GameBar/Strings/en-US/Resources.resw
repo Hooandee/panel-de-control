@@ -120,14 +120,8 @@
   <data name="DiagnosticsUnavailable" xml:space="preserve">
     <value>Diagnostics could not be read</value>
   </data>
-  <data name="FooterScope.Text" xml:space="preserve">
-    <value>Verified brightness and volume · Experimental Ally X power control · Readback remains unvalidated on RC73XA · No control of external displays or fans.</value>
-  </data>
   <data name="GpuLoadValue.Text" xml:space="preserve">
     <value>Load —</value>
-  </data>
-  <data name="HeaderTitle.Text" xml:space="preserve">
-    <value>PANEL DE CONTROL</value>
   </data>
   <data name="LoadFormat" xml:space="preserve">
     <value>Load {0}</value>
@@ -161,9 +155,6 @@
   </data>
   <data name="MuteToggle.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
     <value>Mute system audio</value>
-  </data>
-  <data name="PlatformBadge.Text" xml:space="preserve">
-    <value>Windows · Xbox Game Bar · Experimental</value>
   </data>
   <data name="PowerAc" xml:space="preserve">
     <value>Plugged in</value>
@@ -320,5 +311,53 @@
   </data>
   <data name="TdpIncreaseButton.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
     <value>Increase experimental TDP</value>
+  </data>
+  <data name="ExperimentalBadge.Text" xml:space="preserve">
+    <value>EXPERIMENTAL</value>
+  </data>
+  <data name="TabPowerLabel.Text" xml:space="preserve">
+    <value>Power</value>
+  </data>
+  <data name="TabPower.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Power tab</value>
+  </data>
+  <data name="TabSystemLabel.Text" xml:space="preserve">
+    <value>System</value>
+  </data>
+  <data name="TabSystem.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>System tab</value>
+  </data>
+  <data name="TabSensorsLabel.Text" xml:space="preserve">
+    <value>Sensors</value>
+  </data>
+  <data name="TabSensors.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Sensors tab</value>
+  </data>
+  <data name="TabSettingsLabel.Text" xml:space="preserve">
+    <value>Settings</value>
+  </data>
+  <data name="TabSettings.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Settings tab</value>
+  </data>
+  <data name="AccentLabel.Text" xml:space="preserve">
+    <value>ACCENT COLOR</value>
+  </data>
+  <data name="AccentSwatchAutomation" xml:space="preserve">
+    <value>Accent color {0} of {1}</value>
+  </data>
+  <data name="PowerZoneSave" xml:space="preserve">
+    <value>SAVER</value>
+  </data>
+  <data name="PowerZoneEco" xml:space="preserve">
+    <value>ECO</value>
+  </data>
+  <data name="PowerZoneBalanced" xml:space="preserve">
+    <value>BALANCED</value>
+  </data>
+  <data name="PowerZoneHot" xml:space="preserve">
+    <value>HIGH</value>
+  </data>
+  <data name="PowerZoneTurbo" xml:space="preserve">
+    <value>TURBO</value>
   </data>
 </root>
