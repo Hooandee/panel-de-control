@@ -17,8 +17,8 @@ const GROUP_ORDER: readonly ThemePatchGroupId[] = [
 ];
 
 const GROUP_MATCHERS: Readonly<Record<Exclude<ThemePatchGroupId, "appearance" | "sections">, RegExp>> = {
-  grid: /grid|parrilla|cover|carátula|caratula|column|row|fila|library|biblioteca|card|tarjeta/,
-  animations: /anim|motion|movimiento|transition|transición|transicion|spring|parallax/,
+  grid: /grid|parrilla|cover|portada|carátula|caratula|column|row|fila|library|biblioteca|card|tarjeta/,
+  animations: /anim|motion|movimiento|flota|float|transition|transición|transicion|spring|parallax/,
   performance: /performance|rendimiento|quality|calidad|blur|desenfoque|effect|efecto|fps|budget/,
   compatibility: /compat|navigation|navegación|navegacion|fallback|legacy|steam|decky/,
 };

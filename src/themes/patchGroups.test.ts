@@ -27,6 +27,16 @@ describe("groupThemePatches", () => {
       ]);
   });
 
+  it("groups cover shape with the grid and floating covers with animations", () => {
+    const groups = groupThemePatches([patch("Forma de las portadas"), patch("Flotación de los juegos")]);
+
+    expect(groups.map((group) => [group.id, group.patches.map((item) => item.name)]))
+      .toEqual([
+        ["grid", ["Forma de las portadas"]],
+        ["animations", ["Flotación de los juegos"]],
+      ]);
+  });
+
   it("gathers every Hooandee theme's section toggles at the end", () => {
     const groups = groupThemePatches([
       patch("Estilizar Inicio"),
