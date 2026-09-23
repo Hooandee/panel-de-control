@@ -1021,10 +1021,17 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
 
     private void Page_KeyDown(object sender, KeyRoutedEventArgs args)
     {
+        var controlDown = Window.Current.CoreWindow
+            .GetKeyState(VirtualKey.Control)
+            .HasFlag(CoreVirtualKeyStates.Down);
+        var shiftDown = Window.Current.CoreWindow
+            .GetKeyState(VirtualKey.Shift)
+            .HasFlag(CoreVirtualKeyStates.Down);
         var step = args.Key switch
         {
             VirtualKey.GamepadLeftShoulder => -1,
             VirtualKey.GamepadRightShoulder => 1,
+            VirtualKey.Tab when controlDown => shiftDown ? -1 : 1,
             _ => 0,
         };
         if (step == 0)
