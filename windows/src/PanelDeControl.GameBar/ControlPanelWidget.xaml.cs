@@ -1098,32 +1098,18 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     {
         WidgetShell.Visibility = Visibility.Collapsed;
         DesktopShell.Visibility = Visibility.Visible;
-        MoveTo(HeaderBlock, DesktopHeaderSlot);
-        MoveTo(ConnectionStatus, DesktopHeaderSlot);
-        MoveTo(SectionHeaderBlock, DesktopContent);
-        MoveTo(SectionHost, DesktopContent);
+        WidgetShell.Children.Remove(HeaderBlock);
+        WidgetShell.Children.Remove(ConnectionStatus);
+        WidgetShell.Children.Remove(SectionHeaderBlock);
+        WidgetScroller.Content = null;
+        DesktopHeaderSlot.Children.Add(HeaderBlock);
+        DesktopHeaderSlot.Children.Add(ConnectionStatus);
+        DesktopContent.Children.Add(SectionHeaderBlock);
+        DesktopContent.Children.Add(SectionHost);
         SectionHeaderBlock.Margin = new Thickness(0, 0, 0, 24);
         SectionTitle.FontSize = 30;
         SectionDescription.FontSize = 14;
         DesktopScroller.SizeChanged += (_, _) => ReflowDesktopColumns();
-    }
-
-    private static void MoveTo(FrameworkElement element, Panel target)
-    {
-        switch (element.Parent)
-        {
-            case Panel panel:
-                panel.Children.Remove(element);
-                break;
-            case ScrollViewer scroller:
-                scroller.Content = null;
-                break;
-            case Border border:
-                border.Child = null;
-                break;
-        }
-
-        target.Children.Add(element);
     }
 
     private void ReflowDesktopColumns()
