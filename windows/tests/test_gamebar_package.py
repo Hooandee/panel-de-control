@@ -739,3 +739,23 @@ class GameBarProjectTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ProxyStubTests(unittest.TestCase):
+    def test_every_marshalled_interface_has_a_unique_id(self):
+        interfaces = re.findall(
+            r'<Interface Name="([^"]+)" InterfaceId="([^"]+)"',
+            MANIFEST.read_text(encoding="utf-8"),
+        )
+        ids = [interface_id.upper() for _, interface_id in interfaces]
+
+        self.assertTrue(interfaces)
+        self.assertEqual(len(ids), len(set(ids)), [name for name, _ in interfaces])
+
+    def test_notification_host_uses_the_id_game_bar_registers(self):
+        manifest = MANIFEST.read_text(encoding="utf-8")
+        self.assertIn(
+            'IXboxGameBarWidgetNotificationHost" InterfaceId="6F68D392-E4A9-46F7-A024-5275BC2FE7BA"',
+            manifest,
+        )
+
