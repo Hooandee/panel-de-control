@@ -19,7 +19,7 @@
     <value>There is no default audio device</value>
   </data>
   <data name="BatteryLabel.Text" xml:space="preserve">
-    <value>BATTERY</value>
+    <value>Battery</value>
   </data>
   <data name="BrightnessAvailable" xml:space="preserve">
     <value>Built-in panel available</value>
@@ -31,7 +31,7 @@
     <value>Could not control the built-in panel brightness</value>
   </data>
   <data name="BrightnessLabel.Text" xml:space="preserve">
-    <value>BUILT-IN PANEL BRIGHTNESS</value>
+    <value>Brightness</value>
   </data>
   <data name="BrightnessMismatch" xml:space="preserve">
     <value>The change does not match the value read back</value>
@@ -112,7 +112,7 @@
     <value>Checking the device…</value>
   </data>
   <data name="DiagnosticsToggle.Content" xml:space="preserve">
-    <value>DIAGNOSTICS</value>
+    <value>Diagnostics</value>
   </data>
   <data name="DiagnosticsToggle.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
     <value>Show or hide device diagnostics</value>
@@ -133,7 +133,7 @@
     <value>Checking mute state…</value>
   </data>
   <data name="MuteLabel.Text" xml:space="preserve">
-    <value>MUTE</value>
+    <value>Mute</value>
   </data>
   <data name="MutePermission" xml:space="preserve">
     <value>Windows requires permission to mute audio</value>
@@ -211,7 +211,7 @@
     <value>Default audio device available</value>
   </data>
   <data name="VolumeLabel.Text" xml:space="preserve">
-    <value>SYSTEM VOLUME</value>
+    <value>Volume</value>
   </data>
   <data name="VolumePermission" xml:space="preserve">
     <value>Windows requires permission to control audio</value>
@@ -226,7 +226,7 @@
     <value>Checking the default audio device…</value>
   </data>
   <data name="ExperimentalTdpLabel.Text" xml:space="preserve">
-    <value>EXPERIMENTAL TDP</value>
+    <value>Experimental control</value>
   </data>
   <data name="ExperimentalTdpToggle.OffContent" xml:space="preserve">
     <value>Off</value>
@@ -244,7 +244,7 @@
     <value>Manufacturer recovery is not verified: restart Windows or reopen Armoury Crate to return control.</value>
   </data>
   <data name="PowerApplied" xml:space="preserve">
-    <value>Applied and confirmed on PL1, SPPT and FPPT</value>
+    <value>Applied and confirmed</value>
   </data>
   <data name="PowerArmouryConflict" xml:space="preserve">
     <value>Close Armoury Crate before changing the power limit</value>
@@ -256,7 +256,7 @@
     <value>Checking experimental power control…</value>
   </data>
   <data name="PowerLabel.Text" xml:space="preserve">
-    <value>POWER LIMIT</value>
+    <value>Power limit</value>
   </data>
   <data name="PowerLimits.Text" xml:space="preserve">
     <value>—</value>
@@ -271,7 +271,7 @@
     <value>Set experimental TDP to {0} watts</value>
   </data>
   <data name="PowerReadbackHint.Text" xml:space="preserve">
-    <value>DSTS readback is a candidate and remains unvalidated on RC73XA.</value>
+    <value>Limit confirmation is not yet validated on this device.</value>
   </data>
   <data name="PowerRejected" xml:space="preserve">
     <value>The firmware rejected the power change</value>
@@ -292,7 +292,7 @@
     <value>Available only on the ROG Xbox Ally X profile</value>
   </data>
   <data name="PowerUnverifiable" xml:space="preserve">
-    <value>Sent, but DSTS did not confirm all three limits</value>
+    <value>Sent, but the device did not confirm it</value>
   </data>
   <data name="TdpDecreaseButton.Content" xml:space="preserve">
     <value>−</value>
@@ -340,28 +340,28 @@
     <value>Settings tab</value>
   </data>
   <data name="AccentLabel.Text" xml:space="preserve">
-    <value>ACCENT COLOR</value>
+    <value>Accent color</value>
   </data>
   <data name="AccentSwatchAutomation" xml:space="preserve">
     <value>Accent color {0} of {1}</value>
   </data>
   <data name="PowerZoneSave" xml:space="preserve">
-    <value>SAVER</value>
+    <value>Saver</value>
   </data>
   <data name="PowerZoneEco" xml:space="preserve">
-    <value>ECO</value>
+    <value>Eco</value>
   </data>
   <data name="PowerZoneBalanced" xml:space="preserve">
-    <value>BALANCED</value>
+    <value>Balanced</value>
   </data>
   <data name="PowerZoneHot" xml:space="preserve">
-    <value>HIGH</value>
+    <value>High</value>
   </data>
   <data name="PowerZoneTurbo" xml:space="preserve">
-    <value>TURBO</value>
+    <value>Turbo</value>
   </data>
   <data name="EnergyLabel.Text" xml:space="preserve">
-    <value>SYSTEM POWER DRAW</value>
+    <value>Power draw</value>
   </data>
   <data name="PowerDrawOnAc" xml:space="preserve">
     <value>On the charger: power draw is only measured on battery</value>

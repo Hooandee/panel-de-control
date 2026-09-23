@@ -19,7 +19,7 @@
     <value>Es gibt kein Standard-Audiogerät</value>
   </data>
   <data name="BatteryLabel.Text" xml:space="preserve">
-    <value>AKKU</value>
+    <value>Akku</value>
   </data>
   <data name="BrightnessAvailable" xml:space="preserve">
     <value>Integriertes Display verfügbar</value>
@@ -31,7 +31,7 @@
     <value>Helligkeit des integrierten Displays konnte nicht gesteuert werden</value>
   </data>
   <data name="BrightnessLabel.Text" xml:space="preserve">
-    <value>HELLIGKEIT DES INTEGRIERTEN DISPLAYS</value>
+    <value>Helligkeit</value>
   </data>
   <data name="BrightnessMismatch" xml:space="preserve">
     <value>Die Änderung stimmt nicht mit dem gelesenen Wert überein</value>
@@ -112,7 +112,7 @@
     <value>Gerät wird geprüft…</value>
   </data>
   <data name="DiagnosticsToggle.Content" xml:space="preserve">
-    <value>DIAGNOSE</value>
+    <value>Diagnose</value>
   </data>
   <data name="DiagnosticsToggle.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
     <value>Gerätediagnose ein- oder ausblenden</value>
@@ -133,7 +133,7 @@
     <value>Stummschaltung wird geprüft…</value>
   </data>
   <data name="MuteLabel.Text" xml:space="preserve">
-    <value>STUMM</value>
+    <value>Stumm</value>
   </data>
   <data name="MutePermission" xml:space="preserve">
     <value>Windows benötigt eine Berechtigung zum Stummschalten</value>
@@ -211,7 +211,7 @@
     <value>Standard-Audiogerät verfügbar</value>
   </data>
   <data name="VolumeLabel.Text" xml:space="preserve">
-    <value>SYSTEMLAUTSTÄRKE</value>
+    <value>Lautstärke</value>
   </data>
   <data name="VolumePermission" xml:space="preserve">
     <value>Windows benötigt eine Berechtigung zur Audiosteuerung</value>
@@ -225,29 +225,29 @@
   <data name="VolumeStatus.Text" xml:space="preserve">
     <value>Standard-Audiogerät wird geprüft…</value>
   </data>
-  <data name="ExperimentalTdpLabel.Text" xml:space="preserve"><value>EXPERIMENTELLE TDP</value></data>
+  <data name="ExperimentalTdpLabel.Text" xml:space="preserve"><value>Experimentelle Steuerung</value></data>
   <data name="ExperimentalTdpToggle.OffContent" xml:space="preserve"><value>Aus</value></data>
   <data name="ExperimentalTdpToggle.OnContent" xml:space="preserve"><value>Aktiviert</value></data>
   <data name="ExperimentalTdpToggle.[using:Windows.UI.Xaml.Automation]AutomationProperties.HelpText" xml:space="preserve"><value>Aktiviert experimentelle TDP-Schreibvorgänge ausdrücklich für diese Dienstsitzung</value></data>
   <data name="ExperimentalTdpToggle.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Experimentelle TDP-Schreibfreigabe</value></data>
   <data name="ManufacturerRecoveryHint.Text" xml:space="preserve"><value>Hersteller-Wiederherstellung nicht geprüft: Windows neu starten oder Armoury Crate erneut öffnen, um die Steuerung zurückzugeben.</value></data>
-  <data name="PowerApplied" xml:space="preserve"><value>Auf PL1, SPPT und FPPT angewendet und bestätigt</value></data>
+  <data name="PowerApplied" xml:space="preserve"><value>Angewendet und bestätigt</value></data>
   <data name="PowerArmouryConflict" xml:space="preserve"><value>Armoury Crate vor einer Änderung des Leistungslimits schließen</value></data>
   <data name="PowerAvailable" xml:space="preserve"><value>Experimentelle Schreibvorgänge sind bereit</value></data>
   <data name="PowerChecking" xml:space="preserve"><value>Experimentelle Leistungssteuerung wird geprüft…</value></data>
-  <data name="PowerLabel.Text" xml:space="preserve"><value>LEISTUNGSLIMIT</value></data>
+  <data name="PowerLabel.Text" xml:space="preserve"><value>Leistungslimit</value></data>
   <data name="PowerLimits.Text" xml:space="preserve"><value>—</value></data>
   <data name="PowerLimitsFormat" xml:space="preserve"><value>{0}–{1} W</value></data>
   <data name="PowerOptInDisabled" xml:space="preserve"><value>Experimentelle Schreibvorgänge sind aus</value></data>
   <data name="PowerPresetAutomation" xml:space="preserve"><value>Experimentelle TDP auf {0} Watt setzen</value></data>
-  <data name="PowerReadbackHint.Text" xml:space="preserve"><value>DSTS-Readback ist ein Kandidat und auf RC73XA noch nicht validiert.</value></data>
+  <data name="PowerReadbackHint.Text" xml:space="preserve"><value>Die Bestätigung des Limits ist auf diesem Gerät noch nicht validiert.</value></data>
   <data name="PowerRejected" xml:space="preserve"><value>Die Firmware hat die Leistungsänderung abgelehnt</value></data>
   <data name="PowerServiceUnavailable" xml:space="preserve"><value>Experimentelle Leistungssteuerung ist nicht verfügbar</value></data>
   <data name="PowerSourceUnknown" xml:space="preserve"><value>Der aktuelle Netz- oder Akkustatus konnte nicht gelesen werden</value></data>
   <data name="PowerStatus.Text" xml:space="preserve"><value>Experimentelle Leistungssteuerung wird geprüft…</value></data>
   <data name="PowerStepHint.Text" xml:space="preserve"><value>1-W-Schritt</value></data>
   <data name="PowerUnsupported" xml:space="preserve"><value>Nur im Profil ROG Xbox Ally X verfügbar</value></data>
-  <data name="PowerUnverifiable" xml:space="preserve"><value>Gesendet, aber DSTS hat nicht alle drei Limits bestätigt</value></data>
+  <data name="PowerUnverifiable" xml:space="preserve"><value>Gesendet, aber vom Gerät nicht bestätigt</value></data>
   <data name="TdpDecreaseButton.Content" xml:space="preserve"><value>−</value></data>
   <data name="TdpDecreaseButton.[using:Windows.UI.Xaml.Automation]AutomationProperties.HelpText" xml:space="preserve"><value>Schreibt ein Watt weniger auf PL1, SPPT und FPPT</value></data>
   <data name="TdpDecreaseButton.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Experimentelle TDP verringern</value></data>
@@ -282,28 +282,28 @@
     <value>Tab Einstellungen</value>
   </data>
   <data name="AccentLabel.Text" xml:space="preserve">
-    <value>AKZENTFARBE</value>
+    <value>Akzentfarbe</value>
   </data>
   <data name="AccentSwatchAutomation" xml:space="preserve">
     <value>Akzentfarbe {0} von {1}</value>
   </data>
   <data name="PowerZoneSave" xml:space="preserve">
-    <value>SPAREN</value>
+    <value>Sparen</value>
   </data>
   <data name="PowerZoneEco" xml:space="preserve">
-    <value>ECO</value>
+    <value>Eco</value>
   </data>
   <data name="PowerZoneBalanced" xml:space="preserve">
-    <value>AUSGEWOGEN</value>
+    <value>Ausgewogen</value>
   </data>
   <data name="PowerZoneHot" xml:space="preserve">
-    <value>HOCH</value>
+    <value>Hoch</value>
   </data>
   <data name="PowerZoneTurbo" xml:space="preserve">
-    <value>TURBO</value>
+    <value>Turbo</value>
   </data>
   <data name="EnergyLabel.Text" xml:space="preserve">
-    <value>SYSTEMVERBRAUCH</value>
+    <value>Verbrauch</value>
   </data>
   <data name="PowerDrawOnAc" xml:space="preserve">
     <value>Am Netzteil: Verbrauch wird nur im Akkubetrieb gemessen</value>

@@ -85,7 +85,6 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         PowerArcFill.Data = CreatePowerArcGeometry(0);
         ApplyAccent(ReadSavedAccent());
         BuildAccentSwatches();
-        ExperimentalDot.Fill = new SolidColorBrush(SectionColor(0));
         CreateHeroGlow();
         SelectTab(0);
         refreshTimer.Tick += OnRefreshTimerTick;
@@ -426,27 +425,35 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         TileCpuValue.Text = Format(snapshot, "cpu.load", "0", "%");
         TileGpuValue.Text = Format(snapshot, "gpu.load", "0", "%");
         var battery = FindReading(snapshot, "battery.level");
-        SetRing(BatteryRing, battery, BatteryColor(battery));
-        SetRing(CpuRing, FindReading(snapshot, "cpu.load"), ResourceBrush("PdcAccentBrush").Color);
-        SetRing(GpuRing, FindReading(snapshot, "gpu.load"), ToColor(AccentPalette.Resolve("mint").Argb));
+        var batteryColor = BatteryColor(battery);
+        var cpuColor = ResourceBrush("PdcAccentBrush").Color;
+        var gpuColor = ToColor(AccentPalette.Resolve("mint").Argb);
+        SetRing(BatteryRing, battery, batteryColor, RingOuterSize);
+        SetRing(CpuRing, FindReading(snapshot, "cpu.load"), cpuColor, RingOuterSize - (2 * RingInset));
+        SetRing(GpuRing, FindReading(snapshot, "gpu.load"), gpuColor, RingOuterSize - (4 * RingInset));
+        BatteryValue.Foreground = new SolidColorBrush(batteryColor);
+        TileCpuValue.Foreground = new SolidColorBrush(cpuColor);
+        TileGpuValue.Foreground = new SolidColorBrush(gpuColor);
         ApplyEnergy(snapshot);
         PowerSourceValue.Text = FormatPowerSource(snapshot);
         CpuTemperatureValue.Text = Format(snapshot, "cpu.temperature", "0", "°C");
         CpuLoadValue.Text = string.Format(Localized("LoadFormat"), Format(snapshot, "cpu.load", "0", "%"));
         GpuTemperatureValue.Text = Format(snapshot, "gpu.temperature", "0", "°C");
         GpuLoadValue.Text = string.Format(Localized("LoadFormat"), Format(snapshot, "gpu.load", "0", "%"));
-        LastUpdated.Text = snapshot.CapturedAtUtc.ToLocalTime().ToString("HH:mm:ss");
+        CpuTemperatureValue.Foreground = TemperatureBrush(FindReading(snapshot, "cpu.temperature"));
+        GpuTemperatureValue.Foreground = TemperatureBrush(FindReading(snapshot, "gpu.temperature"));
 
         var available = snapshot.Readings.Any(
             reading => reading.Status == ReadingStatus.Available);
         var unsupported = snapshot.Readings.Any(
             reading => reading.ErrorCode == "device_not_supported");
+        var healthy = available && !unsupported;
         ConnectionStatus.Text = unsupported
             ? Localized("DeviceUnrecognized")
-            : available
-                ? Localized("TelemetryConnected")
+            : healthy
+                ? string.Empty
                 : StatusText(snapshot.Readings.FirstOrDefault());
-        ConnectionDot.Fill = ResourceBrush(available && !unsupported ? "PdcOkBrush" : "PdcDangerBrush");
+        ConnectionStatus.Visibility = healthy ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private async void VolumeSlider_ValueChanged(
@@ -887,13 +894,15 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             var (tab, panel) = TabPanels[position];
             var selected = position == index;
             panel.Visibility = selected ? Visibility.Visible : Visibility.Collapsed;
-            tab.Foreground = selected ? new SolidColorBrush(section) : ResourceBrush("PdcTextMutedBrush");
-            tab.Background = new SolidColorBrush(selected ? WithAlpha(section, 0x2E) : Colors.Transparent);
+            tab.Foreground = ResourceBrush(selected ? "PdcTextPrimaryBrush" : "PdcTextMutedBrush");
         }
+
+        Grid.SetColumn(TabThumb, index);
+        TabThumb.Background = new SolidColorBrush(WithAlpha(section, 0x40));
 
         var glow = new ColorAnimation
         {
-            To = WithAlpha(section, 0x66),
+            To = WithAlpha(section, 0x30),
             Duration = new Duration(TimeSpan.FromMilliseconds(420)),
             EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
         };
@@ -998,7 +1007,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     {
         if (heroGlowStop is not null)
         {
-            heroGlowStop.Color = color is Color value ? WithAlpha(value, 0x50) : Colors.Transparent;
+            heroGlowStop.Color = color is Color value ? WithAlpha(value, 0x42) : Colors.Transparent;
         }
     }
 
@@ -1032,22 +1041,23 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         TdpMarker.Visibility = Visibility.Visible;
     }
 
-    private const double RingSize = 84;
-    private const double RingStroke = 7;
+    private const double RingOuterSize = 132;
+    private const double RingInset = 15;
+    private const double RingStroke = 11;
 
-    private static void SetRing(Path ring, TelemetryReading? reading, Color color)
+    private static void SetRing(Path ring, TelemetryReading? reading, Color color, double size)
     {
         var fraction = reading?.Status == ReadingStatus.Available && reading.Value is double value
             ? Math.Min(Math.Max(value, 0), 100) / 100
             : 0;
         ring.Stroke = new SolidColorBrush(color);
-        ring.Data = CreateRingGeometry(fraction);
+        ring.Data = CreateRingGeometry(fraction, size);
     }
 
-    private static PathGeometry CreateRingGeometry(double fraction)
+    private static PathGeometry CreateRingGeometry(double fraction, double size)
     {
-        var radius = (RingSize - RingStroke) / 2;
-        var center = RingSize / 2;
+        var radius = (size - RingStroke) / 2;
+        var center = size / 2;
         var geometry = new PathGeometry();
         if (fraction <= 0)
         {
@@ -1071,6 +1081,12 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         });
         geometry.Figures.Add(figure);
         return geometry;
+    }
+
+    private static SolidColorBrush TemperatureBrush(TelemetryReading? temperature)
+    {
+        var celsius = temperature?.Status == ReadingStatus.Available ? temperature.Value : null;
+        return ResourceBrush(celsius >= 85 ? "PdcDangerBrush" : celsius >= 70 ? "PdcWarnBrush" : "PdcTextPrimaryBrush");
     }
 
     private static Color BatteryColor(TelemetryReading? battery)
@@ -1110,18 +1126,18 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             var swatch = new Button
             {
                 Tag = accent.Id,
-                Width = 30,
-                Height = 30,
+                Width = 36,
+                Height = 36,
                 Padding = new Thickness(0),
                 Margin = new Thickness(3),
-                CornerRadius = new CornerRadius(15),
+                CornerRadius = new CornerRadius(18),
                 Background = new SolidColorBrush(Colors.Transparent),
                 BorderThickness = new Thickness(0),
                 IsTabStop = true,
                 Content = new Ellipse
                 {
-                    Width = 22,
-                    Height = 22,
+                    Width = 26,
+                    Height = 26,
                     Fill = new SolidColorBrush(ToColor(accent.Argb)),
                 },
             };
@@ -1131,6 +1147,18 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             swatch.Click += AccentSwatch_Click;
             AccentSwatches.Children.Add(swatch);
         }
+
+        MarkSelectedSwatch(ReadSavedAccent().Id);
+    }
+
+    private void MarkSelectedSwatch(string id)
+    {
+        foreach (var swatch in AccentSwatches.Children.OfType<Button>())
+        {
+            var selected = Equals(swatch.Tag, id);
+            swatch.BorderBrush = ResourceBrush("PdcTextPrimaryBrush");
+            swatch.BorderThickness = new Thickness(selected ? 2 : 0);
+        }
     }
 
     private void AccentSwatch_Click(object sender, RoutedEventArgs args)
@@ -1138,6 +1166,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         if (sender is Button { Tag: string id })
         {
             ApplyAccent(AccentPalette.Resolve(id));
+            MarkSelectedSwatch(id);
             SelectTab(selectedTab);
             try
             {

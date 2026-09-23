@@ -8,36 +8,35 @@
                 <ResourceDictionary Source="ms-appx:///Theme/PdcTokens.xaml" />
             </ResourceDictionary.MergedDictionaries>
             <FontFamily x:Key="PdcIconFontFamily">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
-            <SolidColorBrush x:Key="PdcTrackBrush" Color="{StaticResource PdcHairlineColor}" />
-            <LinearGradientBrush x:Key="PdcCardBorderBrush" StartPoint="0,0" EndPoint="0,1" Opacity="0.35">
-                <GradientStop Offset="0" Color="{StaticResource PdcTextMutedColor}" />
-                <GradientStop Offset="1" Color="Transparent" />
-            </LinearGradientBrush>
+            <FontFamily x:Key="PdcDisplayFontFamily">Segoe UI Variable Display, Segoe UI Variable</FontFamily>
+            <CornerRadius x:Key="PdcRadiusSurface">20</CornerRadius>
+            <CornerRadius x:Key="PdcRadiusInset">14</CornerRadius>
+            <SolidColorBrush x:Key="PdcLayerBrush" Color="{StaticResource PdcTextPrimaryColor}" Opacity="0.045" />
+            <SolidColorBrush x:Key="PdcLayerStrongBrush" Color="{StaticResource PdcTextPrimaryColor}" Opacity="0.1" />
+            <SolidColorBrush x:Key="PdcTrackBrush" Color="{StaticResource PdcTextPrimaryColor}" Opacity="0.08" />
+
             <Style x:Key="PdcCardStyle" TargetType="Border">
-                <Setter Property="Background" Value="{StaticResource PdcSurfaceRaisedBrush}" />
-                <Setter Property="BorderBrush" Value="{StaticResource PdcCardBorderBrush}" />
-                <Setter Property="BorderThickness" Value="1" />
-                <Setter Property="CornerRadius" Value="{StaticResource PdcRadiusCard}" />
-                <Setter Property="Padding" Value="16" />
+                <Setter Property="Background" Value="{StaticResource PdcLayerBrush}" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="CornerRadius" Value="{StaticResource PdcRadiusSurface}" />
+                <Setter Property="Padding" Value="18,16" />
                 <Setter Property="Margin" Value="0,0,0,12" />
             </Style>
             <Style x:Key="PdcTileStyle" TargetType="Border">
-                <Setter Property="Background" Value="{StaticResource PdcSurfaceRaisedBrush}" />
-                <Setter Property="BorderBrush" Value="{StaticResource PdcCardBorderBrush}" />
-                <Setter Property="BorderThickness" Value="1" />
-                <Setter Property="CornerRadius" Value="{StaticResource PdcRadiusTile}" />
-                <Setter Property="Padding" Value="12" />
+                <Setter Property="Background" Value="{StaticResource PdcLayerBrush}" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="CornerRadius" Value="{StaticResource PdcRadiusSurface}" />
+                <Setter Property="Padding" Value="18,16" />
             </Style>
-            <Style x:Key="PdcPillStyle" TargetType="Border">
-                <Setter Property="Background" Value="{StaticResource PdcHairlineBrush}" />
-                <Setter Property="CornerRadius" Value="{StaticResource PdcRadiusPill}" />
-                <Setter Property="Padding" Value="10,4" />
+            <Style x:Key="PdcTitleStyle" TargetType="TextBlock">
+                <Setter Property="FontFamily" Value="{StaticResource PdcFontFamily}" />
+                <Setter Property="FontSize" Value="14" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="Foreground" Value="{StaticResource PdcTextPrimaryBrush}" />
             </Style>
             <Style x:Key="PdcCaptionStyle" TargetType="TextBlock">
                 <Setter Property="FontFamily" Value="{StaticResource PdcFontFamily}" />
-                <Setter Property="FontSize" Value="{StaticResource PdcFontCaption}" />
-                <Setter Property="FontWeight" Value="SemiBold" />
-                <Setter Property="CharacterSpacing" Value="60" />
+                <Setter Property="FontSize" Value="12" />
                 <Setter Property="Foreground" Value="{StaticResource PdcTextMutedBrush}" />
             </Style>
             <Style x:Key="PdcBodyStyle" TargetType="TextBlock">
@@ -51,32 +50,40 @@
                 <Setter Property="Foreground" Value="{StaticResource PdcTextMutedBrush}" />
             </Style>
             <Style x:Key="PdcValueStyle" TargetType="TextBlock">
-                <Setter Property="FontFamily" Value="{StaticResource PdcFontFamily}" />
+                <Setter Property="FontFamily" Value="{StaticResource PdcDisplayFontFamily}" />
                 <Setter Property="FontSize" Value="{StaticResource PdcFontValue}" />
-                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="FontWeight" Value="SemiLight" />
                 <Setter Property="Foreground" Value="{StaticResource PdcTextPrimaryBrush}" />
                 <Setter Property="Typography.NumeralAlignment" Value="Tabular" />
             </Style>
             <Style x:Key="PdcInlineValueStyle" TargetType="TextBlock" BasedOn="{StaticResource PdcValueStyle}">
-                <Setter Property="FontSize" Value="16" />
+                <Setter Property="FontSize" Value="17" />
+                <Setter Property="FontWeight" Value="Normal" />
             </Style>
             <Style x:Key="PdcTabButtonStyle" TargetType="Button">
                 <Setter Property="Background" Value="Transparent" />
                 <Setter Property="BorderThickness" Value="0" />
-                <Setter Property="CornerRadius" Value="{StaticResource PdcRadiusControl}" />
+                <Setter Property="CornerRadius" Value="{StaticResource PdcRadiusInset}" />
                 <Setter Property="Foreground" Value="{StaticResource PdcTextMutedBrush}" />
                 <Setter Property="HorizontalAlignment" Value="Stretch" />
-                <Setter Property="Padding" Value="4,6" />
+                <Setter Property="Padding" Value="4,7" />
                 <Setter Property="IsTabStop" Value="True" />
             </Style>
             <Style x:Key="PdcChipButtonStyle" TargetType="Button">
-                <Setter Property="Background" Value="{StaticResource PdcHairlineBrush}" />
+                <Setter Property="Background" Value="{StaticResource PdcLayerBrush}" />
                 <Setter Property="BorderThickness" Value="0" />
-                <Setter Property="CornerRadius" Value="{StaticResource PdcRadiusControl}" />
+                <Setter Property="CornerRadius" Value="{StaticResource PdcRadiusPill}" />
                 <Setter Property="Foreground" Value="{StaticResource PdcTextPrimaryBrush}" />
                 <Setter Property="FontSize" Value="{StaticResource PdcFontBody}" />
                 <Setter Property="HorizontalAlignment" Value="Stretch" />
-                <Setter Property="Padding" Value="4,6" />
+                <Setter Property="Padding" Value="4,7" />
+            </Style>
+            <Style x:Key="PdcRoundButtonStyle" TargetType="Button" BasedOn="{StaticResource PdcChipButtonStyle}">
+                <Setter Property="Width" Value="40" />
+                <Setter Property="Height" Value="40" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="FontSize" Value="18" />
+                <Setter Property="HorizontalAlignment" Value="Center" />
             </Style>
         </ResourceDictionary>
     </Application.Resources>
