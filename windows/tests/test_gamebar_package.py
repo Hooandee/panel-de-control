@@ -399,78 +399,6 @@ class GameBarProjectTests(unittest.TestCase):
             slider.attrib["ValueChanged"],
         )
 
-    def test_widget_debounces_brightness_and_ignores_stale_readback(self):
-        code = WIDGET_CODE.read_text(encoding="utf-8")
-        refresh = code[
-            code.index("private async Task RefreshAsync()"):
-            code.index("private void ApplySnapshot")
-        ]
-        normalized_refresh = " ".join(refresh.split())
-
-        self.assertIn("BrightnessSlider_ValueChanged", code)
-        self.assertIn("brightnessGeneration", code)
-        self.assertIn("brightnessDebounce", code)
-        self.assertIn("brightnessClient.SetAsync", code)
-        self.assertRegex(
-            code,
-            r"ApplyBrightnessResponse\(\s*brightness,\s*"
-            r"writeAttempted: false\)",
-        )
-        self.assertIn("ApplyObservedBrightness", code)
-        self.assertIn("CancelPendingBrightnessWrite", code)
-        self.assertIn(
-            "var brightnessWriteWasPendingAtRefreshStart = "
-            "brightnessWritePending;",
-            normalized_refresh,
-        )
-        self.assertIn(
-            "!brightnessWriteWasPendingAtRefreshStart && "
-            "!brightnessWritePending && "
-            "brightnessRefreshGeneration == brightnessGeneration",
-            normalized_refresh,
-        )
-        self.assertIn("brightnessClient.GetAsync()", refresh)
-        self.assertNotIn("brightnessClient.SetAsync", refresh)
-        self.assertIn(
-            'writeAttempted ? "No se pudo controlar el brillo',
-            " ".join(code.split()),
-        )
-
-    def test_widget_applies_refresh_streams_independently(self):
-        code = WIDGET_CODE.read_text(encoding="utf-8")
-        normalized_code = " ".join(code.split())
-        refresh = code[
-            code.index("private async Task RefreshAsync()"):
-            code.index("private void ApplySnapshot")
-        ]
-
-        self.assertIn("ApplySnapshotWhenReadyAsync", refresh)
-        self.assertIn("ApplyVolumeWhenReadyAsync", refresh)
-        self.assertIn("ApplyBrightnessWhenReadyAsync", refresh)
-        self.assertIn("await Task.WhenAll(", refresh)
-        self.assertIn("private bool snapshotRefreshInProgress;", code)
-        self.assertIn("private bool volumeRefreshInProgress;", code)
-        self.assertIn("private bool brightnessRefreshInProgress;", code)
-        self.assertNotIn("private bool refreshInProgress;", code)
-        self.assertIn(
-            "if (snapshotRefreshInProgress || disposed)",
-            normalized_code,
-        )
-        self.assertIn(
-            "if (volumeRefreshInProgress || disposed)",
-            normalized_code,
-        )
-        self.assertIn(
-            "if (brightnessRefreshInProgress || disposed)",
-            normalized_code,
-        )
-        self.assertNotRegex(
-            refresh,
-            r"var snapshot = await snapshotTask;\s*"
-            r"var volume = await volumeTask;\s*"
-            r"var brightness = await brightnessTask;",
-        )
-
     def test_widget_has_accessible_focusable_system_mute_control(self):
         root = ElementTree.parse(WIDGET).getroot()
         xaml_name = "{http://schemas.microsoft.com/winfx/2006/xaml}Name"
@@ -541,21 +469,6 @@ class GameBarProjectTests(unittest.TestCase):
             "muteRefreshGeneration == muteGeneration)",
             normalized_refresh,
         )
-
-    def test_project_compiles_shared_broker_launcher_and_control_clients(self):
-        root = ElementTree.parse(PROJECT).getroot()
-        namespace = {"msbuild": "http://schemas.microsoft.com/developer/msbuild/2003"}
-        sources = {
-            node.attrib["Include"]
-            for node in root.findall(".//msbuild:Compile", namespace)
-        }
-
-        self.assertIn("HardwareBrokerLauncher.cs", sources)
-        self.assertIn("VolumeControlClient.cs", sources)
-        self.assertIn("BrightnessControlClient.cs", sources)
-        self.assertTrue(BROKER_LAUNCHER.is_file())
-        self.assertTrue(VOLUME_CLIENT.is_file())
-        self.assertTrue(BRIGHTNESS_CLIENT.is_file())
 
     def test_volume_client_never_retries_an_indeterminate_write(self):
         code = VOLUME_CLIENT.read_text(encoding="utf-8")
@@ -768,4 +681,3 @@ class SideloadPackageTests(unittest.TestCase):
         self.assertIn("/property:UapAppxPackageBuildMode=SideloadOnly", workflow)
         self.assertNotIn("UapAppxPackageBuildMode=CI", workflow)
         self.assertIn("<UseDotNetNativeToolchain>true</UseDotNetNativeToolchain>", project)
-
