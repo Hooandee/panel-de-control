@@ -19,7 +19,7 @@
             </Rectangle.Fill>
         </Rectangle>
 
-        <Grid MaxWidth="540" Padding="20,18,20,8">
+        <Grid x:Name="WidgetShell" MaxWidth="540" Padding="20,18,20,8">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
@@ -28,7 +28,7 @@
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
-            <Grid Grid.Row="0">
+            <Grid x:Name="HeaderBlock" Grid.Row="0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
@@ -76,7 +76,7 @@
                 AutomationProperties.LiveSetting="Polite"
                 Style="{StaticResource PdcMutedStyle}" />
 
-            <Border Grid.Row="2" Margin="0,16,0,0" Padding="6" CornerRadius="18" Background="{StaticResource PdcLayerBrush}">
+            <Border x:Name="SectionTabsBar" Grid.Row="2" Margin="0,16,0,0" Padding="6" CornerRadius="18" Background="{StaticResource PdcLayerBrush}">
                 <ScrollViewer
                     x:Name="SectionTabsScroller"
                     HorizontalScrollMode="Enabled"
@@ -87,7 +87,7 @@
                 </ScrollViewer>
             </Border>
 
-            <StackPanel Grid.Row="3" Margin="2,18,2,12">
+            <StackPanel x:Name="SectionHeaderBlock" Grid.Row="3" Margin="2,18,2,12">
                 <TextBlock
                     x:Name="SectionTitle"
                     FontFamily="{StaticResource PdcDisplayFontFamily}"
@@ -97,8 +97,30 @@
                 <TextBlock x:Name="SectionDescription" Margin="0,2,0,0" Style="{StaticResource PdcMutedStyle}" />
             </StackPanel>
 
-            <ScrollViewer Grid.Row="4" VerticalScrollBarVisibility="Auto">
+            <ScrollViewer x:Name="WidgetScroller" Grid.Row="4" VerticalScrollBarVisibility="Auto">
                 <Grid x:Name="SectionHost" />
+            </ScrollViewer>
+        </Grid>
+
+        <Grid x:Name="DesktopShell" Visibility="Collapsed">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="272" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Grid Background="{StaticResource PdcLayerBrush}" Padding="18,22,18,18">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <StackPanel x:Name="DesktopHeaderSlot" Margin="4,0,0,22" />
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                    <StackPanel x:Name="DesktopNav" Spacing="2" />
+                </ScrollViewer>
+                <StackPanel x:Name="DesktopNavPinned" Grid.Row="2" Margin="0,12,0,0" Spacing="2" />
+            </Grid>
+            <ScrollViewer x:Name="DesktopScroller" Grid.Column="1" VerticalScrollBarVisibility="Auto">
+                <StackPanel x:Name="DesktopContent" MaxWidth="1180" Padding="40,30,40,24" />
             </ScrollViewer>
         </Grid>
 

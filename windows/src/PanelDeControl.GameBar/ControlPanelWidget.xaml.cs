@@ -95,8 +95,6 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         ApplyAccent(ReadSavedAccent());
         BuildAccentSwatches();
         CreateHeroGlow();
-        BuildSections();
-        SelectSection(0);
         refreshTimer.Tick += OnRefreshTimerTick;
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
@@ -105,6 +103,19 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     protected override void OnNavigatedTo(NavigationEventArgs args)
     {
         base.OnNavigatedTo(args);
+        if (!layoutBuilt)
+        {
+            layoutBuilt = true;
+            desktopLayout = args.Parameter is not XboxGameBarWidget;
+            if (desktopLayout)
+            {
+                EnterDesktopLayout();
+            }
+
+            BuildSections();
+            SelectSection(0);
+        }
+
         if (args.Parameter is XboxGameBarWidget widget)
         {
             gameBarWidget = widget;
@@ -1046,17 +1057,23 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         args.Handled = true;
     }
 
+    private const double DesktopTwoColumnWidth = 980;
+    private const string PinnedSectionId = "settings";
     private readonly List<SectionView> sections = new();
     private int selectedSection;
+    private bool layoutBuilt;
+    private bool desktopLayout;
+    private int desktopColumns;
 
     private sealed class SectionView
     {
-        public SectionView(SectionDefinition definition, Button tab, TextBlock label, StackPanel panel)
+        public SectionView(SectionDefinition definition, Button tab, TextBlock label, Panel panel, IReadOnlyList<FrameworkElement> blocks)
         {
             Definition = definition;
             Tab = tab;
             Label = label;
             Panel = panel;
+            Blocks = blocks;
         }
 
         public SectionDefinition Definition { get; }
@@ -1065,7 +1082,86 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
 
         public TextBlock Label { get; }
 
-        public StackPanel Panel { get; }
+        public Panel Panel { get; }
+
+        public IReadOnlyList<FrameworkElement> Blocks { get; }
+    }
+
+    private void EnterDesktopLayout()
+    {
+        WidgetShell.Visibility = Visibility.Collapsed;
+        DesktopShell.Visibility = Visibility.Visible;
+        MoveTo(HeaderBlock, DesktopHeaderSlot);
+        MoveTo(ConnectionStatus, DesktopHeaderSlot);
+        MoveTo(SectionHeaderBlock, DesktopContent);
+        MoveTo(SectionHost, DesktopContent);
+        SectionHeaderBlock.Margin = new Thickness(0, 0, 0, 24);
+        SectionTitle.FontSize = 30;
+        SectionDescription.FontSize = 14;
+        DesktopScroller.SizeChanged += (_, _) => ReflowDesktopColumns();
+    }
+
+    private static void MoveTo(FrameworkElement element, Panel target)
+    {
+        (element.Parent as Panel)?.Children.Remove(element);
+        target.Children.Add(element);
+    }
+
+    private void ReflowDesktopColumns()
+    {
+        var columns = DesktopScroller.ActualWidth >= DesktopTwoColumnWidth ? 2 : 1;
+        if (!desktopLayout || columns == desktopColumns)
+        {
+            return;
+        }
+
+        desktopColumns = columns;
+        foreach (var view in sections)
+        {
+            var grid = (Grid)view.Panel;
+            var stacks = grid.Children.OfType<StackPanel>().ToArray();
+            foreach (var stack in stacks)
+            {
+                stack.Children.Clear();
+            }
+
+            grid.ColumnDefinitions[1].Width = columns == 2
+                ? new GridLength(1, GridUnitType.Star)
+                : new GridLength(0);
+            for (var index = 0; index < view.Blocks.Count; index++)
+            {
+                stacks[columns == 2 ? index % 2 : 0].Children.Add(view.Blocks[index]);
+            }
+        }
+    }
+
+    private Panel CreateSectionPanel()
+    {
+        if (!desktopLayout)
+        {
+            var stack = new StackPanel { Visibility = Visibility.Collapsed };
+            stack.ChildrenTransitions = new TransitionCollection
+            {
+                new EntranceThemeTransition { FromVerticalOffset = 12 },
+            };
+            return stack;
+        }
+
+        var grid = new Grid { Visibility = Visibility.Collapsed, ColumnSpacing = 20 };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(0) });
+        for (var column = 0; column < 2; column++)
+        {
+            var stack = new StackPanel();
+            stack.ChildrenTransitions = new TransitionCollection
+            {
+                new EntranceThemeTransition { FromVerticalOffset = 12 },
+            };
+            Grid.SetColumn(stack, column);
+            grid.Children.Add(stack);
+        }
+
+        return grid;
     }
 
     private void BuildSections()
@@ -1082,22 +1178,25 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             .ToDictionary(element => (string)element.Tag);
         foreach (var section in SectionCatalog.All)
         {
-            var panel = new StackPanel { Visibility = Visibility.Collapsed };
-            panel.ChildrenTransitions = new TransitionCollection
-            {
-                new EntranceThemeTransition { FromVerticalOffset = 12 },
-            };
+            var panel = CreateSectionPanel();
+            var blocks = new List<FrameworkElement>();
             foreach (var block in section.Blocks)
             {
                 if (library.TryGetValue(section.Id + "." + block.Id, out var element))
                 {
                     BlockLibrary.Children.Remove(element);
-                    panel.Children.Add(element);
+                    blocks.Add(element);
                 }
                 else
                 {
-                    panel.Children.Add(CreatePendingBlock(section, block));
+                    blocks.Add(CreatePendingBlock(section, block));
                 }
+            }
+
+            var target = desktopLayout ? (Panel)((Grid)panel).Children[0] : panel;
+            foreach (var block in blocks)
+            {
+                target.Children.Add(block);
             }
 
             SectionHost.Children.Add(panel);
@@ -1106,9 +1205,9 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
                 Text = Localized("Nav" + section.ResourceStem),
                 FontSize = 13,
                 VerticalAlignment = VerticalAlignment.Center,
-                Visibility = Visibility.Collapsed,
+                Visibility = desktopLayout ? Visibility.Visible : Visibility.Collapsed,
             };
-            var content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 7 };
+            var content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = desktopLayout ? 12 : 7 };
             content.Children.Add(new FontIcon
             {
                 FontFamily = (FontFamily)Application.Current.Resources["PdcIconFontFamily"],
@@ -1119,15 +1218,19 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             var tab = new Button
             {
                 Style = (Style)Application.Current.Resources["PdcTabButtonStyle"],
-                HorizontalAlignment = HorizontalAlignment.Left,
-                Padding = new Thickness(11, 8, 11, 8),
+                HorizontalAlignment = desktopLayout ? HorizontalAlignment.Stretch : HorizontalAlignment.Left,
+                HorizontalContentAlignment = desktopLayout ? HorizontalAlignment.Left : HorizontalAlignment.Center,
+                Padding = desktopLayout ? new Thickness(14, 11, 14, 11) : new Thickness(11, 8, 11, 8),
                 Content = content,
                 Tag = sections.Count,
             };
             AutomationProperties.SetName(tab, Localized("Nav" + section.ResourceStem));
             tab.Click += SectionTab_Click;
-            SectionTabs.Children.Add(tab);
-            sections.Add(new SectionView(section, tab, label, panel));
+            var tabHost = !desktopLayout
+                ? SectionTabs
+                : section.Id == PinnedSectionId ? DesktopNavPinned : DesktopNav;
+            tabHost.Children.Add(tab);
+            sections.Add(new SectionView(section, tab, label, panel, blocks));
         }
     }
 
@@ -1205,12 +1308,16 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             var view = sections[position];
             var selected = position == index;
             view.Panel.Visibility = selected ? Visibility.Visible : Visibility.Collapsed;
-            view.Label.Visibility = selected ? Visibility.Visible : Visibility.Collapsed;
+            view.Label.Visibility = selected || desktopLayout ? Visibility.Visible : Visibility.Collapsed;
             view.Tab.Background = new SolidColorBrush(selected ? WithAlpha(accent, 0x70) : Colors.Transparent);
             view.Tab.Foreground = ResourceBrush(selected ? "PdcTextPrimaryBrush" : "PdcTextMutedBrush");
         }
 
-        sections[index].Tab.StartBringIntoView();
+        if (!desktopLayout)
+        {
+            sections[index].Tab.StartBringIntoView();
+        }
+
         SectionTitle.Text = Localized("Nav" + current.ResourceStem);
         SectionDescription.Text = Localized("Nav" + current.ResourceStem + "Desc");
 
