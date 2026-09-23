@@ -916,7 +916,7 @@ export const ptBR: Record<string, string> = {
   "tdp.deckPpt.off": "Desligado",
   "tdp.deckPpt.hint": "O Steam Deck usa estes limites de aumento quando a carga exige mais potência.",
   "tdp.deckPpt.applied": "Aplicado: SlowPPT {slow} W · FastPPT {fast} W",
-  "tdp.deckPpt.biosRequired": "Acima de {max} W requer BIOS modificada",
+  "tdp.deckPpt.biosRequired": "Acima de 15 W requer BIOS modificada",
   "tdp.level.slow": "Aumento lento (SPPT)",
   "tdp.level.fast": "Aumento rápido (FPPT)",
   "steam.performance.title": "Desempenho do Steam",

@@ -41,6 +41,8 @@ export interface TdpSectionProps {
   onApplyPreset: (item: PresetItem) => void;
 }
 
+const STEAM_DECK_NOMINAL_MAX_W = 15;
+
 export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, onSetLevels, onSetMode, onApplySuggestion, onFirmwareMode, onLowBatteryHold, monitorOnly, onReactivate, presets, refreshPresets, onApplyPreset }) => {
   const { t } = useI18n();
 
@@ -126,7 +128,7 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, on
   const slowPpt = deckPptActive ? (tdp.ppt?.requested.slow ?? null) : null;
   const fastPpt = deckPptActive ? (tdp.ppt?.requested.fast ?? null) : null;
   const pptVisualMax = deckPptActive ? Math.max(activeMax, slowPpt ?? 0, fastPpt ?? 0) : null;
-  const biosNoticeAbove = tdp.ppt?.supported && !tdp.overclock?.detected ? activeMax : null;
+  const biosNoticeAbove = tdp.ppt?.supported && !tdp.overclock?.detected ? STEAM_DECK_NOMINAL_MAX_W : null;
 
   // Master switch off: keep the live arc, drop every write control.
   if (monitorOnly) {

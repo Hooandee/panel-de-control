@@ -160,7 +160,7 @@ export const AdvancedBoost: FC<AdvancedBoostProps> = ({
 
           {needsBios && (
             <div style={{ fontSize: theme.font.caption, color: theme.color.warn, marginTop: theme.space.xs }}>
-              {t("tdp.deckPpt.biosRequired", { max: biosNoticeAbove })}
+              {t("tdp.deckPpt.biosRequired")}
             </div>
           )}
 
