@@ -88,6 +88,7 @@ public sealed class SnapshotPipeServer : ISnapshotServer
         CancellationToken cancellationToken)
     {
         await using var server = pipeFactory(pipeName);
+        using var clientRelease = PipeClientRelease.For(server);
         await server.WaitForConnectionAsync(connectToken).ConfigureAwait(false);
 
         using var reader = new StreamReader(
