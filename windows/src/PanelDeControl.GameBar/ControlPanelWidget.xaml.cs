@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Microsoft.Gaming.XboxGameBar;
 using PanelDeControl.Core.Controls;
 using PanelDeControl.Core.Telemetry;
+using Windows.ApplicationModel.Resources;
 using Windows.UI;
 using Windows.UI.Core;
 using Windows.UI.Xaml;
@@ -16,6 +17,7 @@ namespace PanelDeControl.GameBar;
 
 public sealed partial class ControlPanelWidget : Page, IDisposable
 {
+    private static readonly ResourceLoader Strings = ResourceLoader.GetForViewIndependentUse();
     private static readonly SolidColorBrush ConnectedBrush =
         new(Color.FromArgb(255, 103, 212, 255));
     private static readonly SolidColorBrush DisconnectedBrush =
@@ -265,9 +267,9 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         BatteryValue.Text = Format(snapshot, "battery.level", "0", "%");
         PowerSourceValue.Text = FormatPowerSource(snapshot);
         CpuTemperatureValue.Text = Format(snapshot, "cpu.temperature", "0", "°C");
-        CpuLoadValue.Text = $"Carga {Format(snapshot, "cpu.load", "0", "%")}";
+        CpuLoadValue.Text = string.Format(Localized("LoadFormat"), Format(snapshot, "cpu.load", "0", "%"));
         GpuTemperatureValue.Text = Format(snapshot, "gpu.temperature", "0", "°C");
-        GpuLoadValue.Text = $"Carga {Format(snapshot, "gpu.load", "0", "%")}";
+        GpuLoadValue.Text = string.Format(Localized("LoadFormat"), Format(snapshot, "gpu.load", "0", "%"));
         LastUpdated.Text = snapshot.CapturedAtUtc.ToLocalTime().ToString("HH:mm:ss");
 
         var available = snapshot.Readings.Any(
@@ -275,9 +277,9 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         var unsupported = snapshot.Readings.Any(
             reading => reading.ErrorCode == "device_not_supported");
         ConnectionStatus.Text = unsupported
-            ? "Dispositivo no compatible"
+            ? Localized("DeviceUnrecognized")
             : available
-                ? "Telemetría Windows conectada"
+                ? Localized("TelemetryConnected")
                 : StatusText(snapshot.Readings.FirstOrDefault());
         ConnectionDot.Fill = available && !unsupported
             ? ConnectedBrush
@@ -294,7 +296,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         }
 
         VolumeValue.Text = $"{Math.Round(args.NewValue):0} %";
-        VolumeStatus.Text = "Aplicando y verificando…";
+        VolumeStatus.Text = Localized("StatusApplying");
 
         volumeDebounce?.Cancel();
         volumeDebounce?.Dispose();
@@ -341,7 +343,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         }
 
         var requestedMuted = MuteToggle.IsOn;
-        MuteStatus.Text = "Aplicando y verificando…";
+        MuteStatus.Text = Localized("StatusApplying");
         MuteToggle.IsEnabled = false;
         var generation = ++muteGeneration;
         muteWritePending = true;
@@ -373,7 +375,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             return;
         }
 
-        BrightnessStatus.Text = "Aplicando y verificando…";
+        BrightnessStatus.Text = Localized("StatusApplying");
         brightnessDebounce?.Cancel();
         brightnessDebounce?.Dispose();
         var debounce = new CancellationTokenSource();
@@ -417,8 +419,8 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
                 VolumeSlider.IsEnabled = true;
                 volumeReady = true;
                 VolumeStatus.Text = response.Status == ControlStatus.Applied
-                    ? "Cambio aplicado y verificado"
-                    : "Audio predeterminado disponible";
+                    ? Localized("StatusVerified")
+                    : Localized("VolumeAvailable");
                 break;
             case ControlStatus.Unverifiable:
                 if (response.ObservedLevel.HasValue)
@@ -428,19 +430,19 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
 
                 VolumeSlider.IsEnabled = true;
                 volumeReady = true;
-                VolumeStatus.Text = "No se pudo verificar el cambio";
+                VolumeStatus.Text = Localized("StatusNotVerified");
                 break;
             case ControlStatus.PermissionRequired:
-                DisableVolumeControl("Windows requiere permiso para controlar el audio");
+                DisableVolumeControl(Localized("VolumePermission"));
                 break;
             case ControlStatus.Unavailable:
-                DisableVolumeControl("No hay un dispositivo de audio predeterminado");
+                DisableVolumeControl(Localized("AudioNoDefault"));
                 break;
             case ControlStatus.Rejected:
-                VolumeStatus.Text = "Windows rechazó el cambio";
+                VolumeStatus.Text = Localized("StatusRejected");
                 break;
             default:
-                DisableVolumeControl("No se pudo conectar con el control de audio");
+                DisableVolumeControl(Localized("AudioConnectFailed"));
                 break;
         }
     }
@@ -453,7 +455,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             case ControlStatus.Applied:
                 if (!response.ObservedMuted.HasValue)
                 {
-                    DisableMuteControl("No se pudo leer el estado de silencio");
+                    DisableMuteControl(Localized("MuteReadFailed"));
                     break;
                 }
 
@@ -461,25 +463,25 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
                 muteReady = true;
                 MuteToggle.IsEnabled = !muteWritePending;
                 MuteStatus.Text = response.Status == ControlStatus.Applied
-                    ? "Cambio aplicado y verificado"
-                    : "Estado de silencio disponible";
+                    ? Localized("StatusVerified")
+                    : Localized("MuteAvailable");
                 break;
             case ControlStatus.Unverifiable:
                 RestoreKnownMuteState(response.ObservedMuted);
-                MuteStatus.Text = "No se pudo verificar el cambio";
+                MuteStatus.Text = Localized("StatusNotVerified");
                 break;
             case ControlStatus.PermissionRequired:
-                DisableMuteControl("Windows requiere permiso para silenciar el audio");
+                DisableMuteControl(Localized("MutePermission"));
                 break;
             case ControlStatus.Unavailable:
-                DisableMuteControl("No hay un dispositivo de audio predeterminado");
+                DisableMuteControl(Localized("AudioNoDefault"));
                 break;
             case ControlStatus.Rejected:
                 RestoreKnownMuteState(null);
-                MuteStatus.Text = "Windows rechazó el cambio";
+                MuteStatus.Text = Localized("StatusRejected");
                 break;
             default:
-                DisableMuteControl("No se pudo conectar con el control de audio");
+                DisableMuteControl(Localized("AudioConnectFailed"));
                 break;
         }
     }
@@ -496,8 +498,8 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
                 BrightnessSlider.IsEnabled = true;
                 brightnessReady = true;
                 BrightnessStatus.Text = response.Status == ControlStatus.Applied
-                    ? "Cambio aplicado y verificado"
-                    : "Panel integrado disponible";
+                    ? Localized("StatusVerified")
+                    : Localized("BrightnessAvailable");
                 break;
             case ControlStatus.Unverifiable:
                 if (response.ObservedPercentage.HasValue)
@@ -505,30 +507,30 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
                     ApplyObservedBrightness(response.ObservedPercentage.Value);
                     BrightnessSlider.IsEnabled = true;
                     brightnessReady = true;
-                    BrightnessStatus.Text = "El cambio no coincide con el valor leído";
+                    BrightnessStatus.Text = Localized("BrightnessMismatch");
                 }
                 else
                 {
-                    DisableBrightnessControl("No se pudo verificar el cambio");
+                    DisableBrightnessControl(Localized("StatusNotVerified"));
                 }
 
                 break;
             case ControlStatus.PermissionRequired:
                 DisableBrightnessControl(
-                    "Windows denegó el permiso para controlar el brillo");
+                    Localized("BrightnessPermission"));
                 break;
             case ControlStatus.Unavailable:
                 DisableBrightnessControl(
-                    "Brillo del panel integrado no disponible");
+                    Localized("BrightnessUnavailable"));
                 break;
             case ControlStatus.Rejected:
-                BrightnessStatus.Text = "Windows rechazó el cambio";
+                BrightnessStatus.Text = Localized("StatusRejected");
                 break;
             default:
                 DisableBrightnessControl(
                     writeAttempted
-                        ? "No se pudo controlar el brillo del panel integrado"
-                        : "No se pudo leer el brillo del panel integrado");
+                        ? Localized("BrightnessControlFailed")
+                        : Localized("BrightnessReadFailed"));
                 break;
         }
     }
@@ -644,7 +646,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         muteWritePending = false;
         muteReady = false;
         MuteToggle.IsEnabled = false;
-        MuteStatus.Text = "Comprobando estado de silencio…";
+        MuteStatus.Text = Localized("MuteChecking");
     }
 
     private void CancelPendingBrightnessWrite()
@@ -657,7 +659,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         brightnessDebounce = null;
         BrightnessSlider.IsEnabled = false;
         BrightnessValue.Text = "—";
-        BrightnessStatus.Text = "Comprobando panel integrado…";
+        BrightnessStatus.Text = Localized("BrightnessChecking");
     }
 
     private static string Format(
@@ -678,8 +680,8 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             candidate => candidate.Id == "power.ac");
         return reading?.Status == ReadingStatus.Available && reading.Value.HasValue
             ? reading.Value.Value >= 1
-                ? "Conectada a corriente"
-                : "Usando batería"
+                ? Localized("PowerAc")
+                : Localized("PowerBattery")
             : StatusText(reading);
     }
 
@@ -687,14 +689,29 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     {
         if (reading?.ErrorCode == "device_not_supported")
         {
-            return "Dispositivo no compatible";
+            return Localized("DeviceUnrecognized");
         }
 
-        return reading?.Status switch
+        return reading?.ErrorCode switch
         {
-            ReadingStatus.PermissionRequired => "Necesita permiso",
-            ReadingStatus.Fault => "Error de lectura",
-            _ => "Sin datos",
+            "sensor_driver_missing" => Localized("ReadingDriverMissing"),
+            "sensor_elevation_required" => Localized("ReadingElevation"),
+            _ => ReadingStatusText(reading?.Status),
         };
+    }
+
+    private static string ReadingStatusText(ReadingStatus? status)
+    {
+        return status switch
+        {
+            ReadingStatus.PermissionRequired => Localized("ReadingPermission"),
+            ReadingStatus.Fault => Localized("ReadingFault"),
+            _ => Localized("ReadingNoData"),
+        };
+    }
+
+    private static string Localized(string key)
+    {
+        return Strings.GetString(key);
     }
 }
