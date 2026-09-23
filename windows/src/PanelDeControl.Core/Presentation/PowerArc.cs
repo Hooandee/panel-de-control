@@ -53,7 +53,6 @@ public static class PowerArc
         return Zones[Math.Min(Zones.Length - 1, index)];
     }
 
-    // Mirrors the Linux arc: hue 140 (green) at the floor to 8 (red) at the ceiling, 75 % saturation, 52 % lightness.
     public static uint ColorFor(double fraction)
     {
         var hue = Math.Round(140 - (Clamp(fraction) * 132));

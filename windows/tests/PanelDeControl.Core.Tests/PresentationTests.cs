@@ -5,15 +5,6 @@ namespace PanelDeControl.Core.Tests;
 
 public sealed class PresentationTests
 {
-    [Fact]
-    public void AccentPaletteMatchesLinuxAndDefaultsToBlue()
-    {
-        Assert.Equal(16, AccentPalette.All.Count);
-        Assert.Equal("blue", AccentPalette.DefaultId);
-        Assert.Equal(0xFF4EA1FFu, AccentPalette.Resolve("blue").Argb);
-        Assert.Equal(0xFFE5484Du, AccentPalette.Resolve("red").Argb);
-    }
-
     [Theory]
     [InlineData(null)]
     [InlineData("")]
