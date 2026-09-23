@@ -59,6 +59,7 @@ function controller(overrides: Partial<ThemesController> = {}): ThemesController
     }],
     operation: null,
     recoveryBlocked: false,
+    recoveryKeptCurrent: false,
     error: null,
     publication: { status: "published", checkedAt: 10, themes: [release] },
     refresh: vi.fn(async () => {}),

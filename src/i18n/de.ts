@@ -373,6 +373,7 @@ export const de: Record<string, string> = {
   "themes.title": "Hooandee Themes",
   "themes.loading": "CSS Loader wird geprüft…",
   "themes.recovery.blocked": "Die Theme-Wiederherstellung ist blockiert. Bis zum erfolgreichen Abschluss der Prüfung werden keine Änderungen angewendet.",
+  "themes.recovery.keptCurrent": "Der vorherige Theme-Zustand konnte nicht wiederhergestellt werden. Der aktuelle bleibt erhalten.",
   "themes.engine": "Das Panel installiert geprüfte Theme-Pakete. CSS Loader bindet sie ein und behält ihre Aktivierung sowie kompatible Einstellungen bei.",
   "themes.cssLoader.missing": "Zum Installieren und Verwenden von Themes brauchst du CSS Loader. Installiere ihn aus dem Decky Store und wähle danach Erneut prüfen.",
   "themes.cssLoader.disabled": "CSS Loader ist installiert, aber deaktiviert. Aktiviere ihn in Decky und versuche es erneut.",

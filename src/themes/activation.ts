@@ -123,11 +123,15 @@ interface ActivationRecovery {
   status: "needed" | "pending" | "ready";
   snapshot?: CssLoaderReadySnapshot;
   error?: unknown;
+  failures: number;
 }
+
+const MAX_RESTORATION_FAILURES = 3;
 
 export class ThemeActivator {
   private running = false;
   private pendingRecovery: ActivationRecovery | null = null;
+  private recoveryAbandoned = false;
 
   constructor(
     private readonly adapter: ThemeActivationAdapter,
@@ -269,6 +273,7 @@ export class ThemeActivator {
         transaction: durable.transaction,
         initial: durable.snapshot,
         status: "needed",
+        failures: 0,
       };
       this.pendingRecovery = recovery;
     }
@@ -292,13 +297,40 @@ export class ThemeActivator {
       const restored = await this.attemptRecovery(recovery);
       return await this.acknowledgeRecovery(recovery, restored);
     } catch (error) {
-      if (this.adapter.hasPendingMutation()) this.beginDeferredRecovery(recovery);
+      recovery.failures += 1;
+      if (this.adapter.hasPendingMutation()) {
+        this.beginDeferredRecovery(recovery);
+      } else if (recovery.failures >= MAX_RESTORATION_FAILURES) {
+        const kept = await this.abandonRecovery(recovery);
+        if (kept) return kept;
+      }
       const detail = error instanceof Error ? `: ${error.message}` : "";
       throw new ThemeActivationError(
         "rollback_failed",
         `The previous theme state could not be restored${detail}`,
         true,
       );
+    }
+  }
+
+  takeAbandonedRecovery(): boolean {
+    const abandoned = this.recoveryAbandoned;
+    this.recoveryAbandoned = false;
+    return abandoned;
+  }
+
+  // A snapshot that CSS Loader can no longer reproduce (a theme removed or its patches changed)
+  // would otherwise block every theme change forever, so the current state becomes the baseline.
+  private async abandonRecovery(recovery: ActivationRecovery): Promise<CssLoaderReadySnapshot | null> {
+    try {
+      const current = await this.adapter.inspect();
+      requireReady(current);
+      await this.journal.acknowledge(recovery.transaction);
+      if (this.pendingRecovery === recovery) this.pendingRecovery = null;
+      this.recoveryAbandoned = true;
+      return current;
+    } catch {
+      return null;
     }
   }
 
@@ -318,6 +350,7 @@ export class ThemeActivator {
       await this.attemptRecovery(recovery);
       await this.acknowledgeRecovery(recovery, recovery.snapshot!);
     } catch (error) {
+      recovery.failures += 1;
       if (this.adapter.hasPendingMutation()) this.beginDeferredRecovery(recovery);
       recovery.error = error;
       throw new ThemeActivationError(
@@ -383,6 +416,7 @@ export class ThemeActivator {
         transaction,
         initial: structuredClone(initial),
         status: "needed",
+        failures: 0,
       };
       this.pendingRecovery = recovery;
       return recovery;

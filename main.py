@@ -1167,6 +1167,14 @@ class Plugin:
     def _theme_activation_recovery_path(self) -> Path:
         return Path(decky.DECKY_PLUGIN_SETTINGS_DIR) / _THEME_ACTIVATION_RECOVERY_FILE
 
+    def _theme_report_diagnostics(self) -> dict:
+        activation = self._theme_activation_recovery_path()
+        return {
+            "transactions": theme_packages.theme_transaction_diagnostics(self._themes_root()),
+            "activation_pending": activation.exists(),
+            "activation_quarantined": activation.with_name(f"{activation.name}.quarantined").exists(),
+        }
+
     def _remote_themes(self) -> theme_remote.ThemeRemoteService:
         service = getattr(self, "_theme_remote_service", None)
         if service is None:
@@ -1819,6 +1827,7 @@ class Plugin:
             # Detected tools + current game + the frontend's running-game snapshot.
             "launch": self._launch_report_state(context),
             "steam_cleaner": await self._steam_cleaner_diagnostics(),
+            "themes": await _safe(self._offload_theme_call(self._theme_report_diagnostics)),
         }
         logs = report_collector.tail_logs(
             getattr(decky, "DECKY_PLUGIN_LOG_DIR", ""), home=home, hostname=hostname
@@ -11349,6 +11358,15 @@ class Plugin:
             if recovered:
                 decky.logger.warning(
                     "Rolled back %s interrupted theme transaction(s)", len(recovered)
+                )
+            quarantine = await self._offload_theme_call(
+                lambda: theme_packages.theme_transaction_diagnostics(self._themes_root())
+            )
+            if quarantine["quarantined"]:
+                decky.logger.warning(
+                    "Theme transactions kept in quarantine: %s (last: %s)",
+                    quarantine["quarantined"],
+                    (quarantine["last_quarantine"] or {}).get("reason"),
                 )
         except Exception as error:  # noqa: BLE001
             decky.logger.error("Interrupted theme recovery failed: %s", error)

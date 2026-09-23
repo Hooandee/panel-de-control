@@ -20,6 +20,7 @@ export interface ThemesController {
   cards: ThemeCardModel[];
   operation: ThemesOperation | null;
   recoveryBlocked: boolean;
+  recoveryKeptCurrent: boolean;
   error: string | null;
   publication: ThemePublicationState;
   refresh(): Promise<void>;
