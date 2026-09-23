@@ -40,14 +40,16 @@ public static class PackageNamedPipeServerFactory
                 PipeAccessRights.ReadWrite);
         }
 
-        AddRule(security, ReadCurrentPackageSid(), PipeAccessRights.ReadWrite);
+        var packageSid = ReadCurrentPackageSid();
+        AddRule(security, packageSid, PipeAccessRights.ReadWrite);
 
         var currentUser = WindowsIdentity.GetCurrent().User
             ?? throw new InvalidOperationException("Current Windows user SID is unavailable.");
         AddRule(security, currentUser, PipeAccessRights.FullControl);
 
+        using var process = System.Diagnostics.Process.GetCurrentProcess();
         return NamedPipeServerStreamAcl.Create(
-            pipeName,
+            AppContainerNames.ServerPipeName(pipeName, process.SessionId, packageSid.Value),
             PipeDirection.InOut,
             1,
             PipeTransmissionMode.Byte,
@@ -72,6 +74,11 @@ public static class PackageNamedPipeServerFactory
 
     private static SecurityIdentifier ReadCurrentPackageSid()
     {
+        return new SecurityIdentifier(AppContainerNames.SidFromPackageFamilyName(ReadCurrentPackageFamilyName()));
+    }
+
+    private static string ReadCurrentPackageFamilyName()
+    {
         uint length = 0;
         var result = GetCurrentPackageFamilyName(ref length, null);
         if (result != ErrorInsufficientBuffer || length == 0)
@@ -88,23 +95,7 @@ public static class PackageNamedPipeServerFactory
                 $"Current package family name could not be read ({result}).");
         }
 
-        result = DeriveAppContainerSidFromAppContainerName(
-            familyName.ToString(),
-            out var sidPointer);
-        if (result != 0 || sidPointer == IntPtr.Zero)
-        {
-            throw new InvalidOperationException(
-                $"Current package SID could not be derived ({result}).");
-        }
-
-        try
-        {
-            return new SecurityIdentifier(sidPointer);
-        }
-        finally
-        {
-            FreeSid(sidPointer);
-        }
+        return familyName.ToString();
     }
 
     [DllImport(
@@ -116,18 +107,5 @@ public static class PackageNamedPipeServerFactory
         ref uint packageFamilyNameLength,
         StringBuilder? packageFamilyName);
 
-    [DllImport(
-        "userenv.dll",
-        EntryPoint = "DeriveAppContainerSidFromAppContainerName",
-        CharSet = CharSet.Unicode,
-        ExactSpelling = true)]
-    private static extern int DeriveAppContainerSidFromAppContainerName(
-        string appContainerName,
-        out IntPtr appContainerSid);
 
-    [DllImport(
-        "advapi32.dll",
-        EntryPoint = "FreeSid",
-        ExactSpelling = true)]
-    private static extern IntPtr FreeSid(IntPtr sid);
 }

@@ -602,15 +602,11 @@ class GameBarProjectTests(unittest.TestCase):
         server = PIPE_SERVER.read_text(encoding="utf-8")
 
         self.assertIn("WellKnownSidType.WorldSid", factory)
-        self.assertIn("DeriveAppContainerSidFromAppContainerName", factory)
         self.assertIn("NamedPipeServerStreamAcl.Create", factory)
         self.assertIn('EntryPoint = "GetCurrentPackageFamilyName"', factory)
-        self.assertIn(
-            'EntryPoint = "DeriveAppContainerSidFromAppContainerName"',
-            factory,
-        )
-        self.assertIn('EntryPoint = "FreeSid"', factory)
-        self.assertEqual(3, factory.count("ExactSpelling = true"))
+        self.assertIn("AppContainerNames.SidFromPackageFamilyName", factory)
+        self.assertIn("AppContainerNames.ServerPipeName", factory)
+        self.assertNotIn("DeriveAppContainerSidFromAppContainerName", factory)
         self.assertNotIn("new NamedPipeServerStream(", server)
         self.assertIn("catch (IOException)", server)
 
