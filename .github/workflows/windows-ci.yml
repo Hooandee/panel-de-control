@@ -101,7 +101,7 @@ jobs:
           /property:AppxPackageSigningEnabled=false
           /property:GenerateAppxPackageOnBuild=true
           /property:AppxBundle=Never
-          /property:UapAppxPackageBuildMode=CI
+          /property:UapAppxPackageBuildMode=SideloadOnly
           /property:AppxPackageDir=${{ github.workspace }}\artifacts\gamebar\
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

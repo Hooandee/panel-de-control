@@ -27,15 +27,23 @@ public static class Program
                 VolumeControlPipeServer.PackagedPipeName,
                 volumeController,
                 PackageNamedPipeServerFactory.CreateControl);
+            var brightnessController = new IntegratedDisplayBrightnessController(
+                new WmiDisplayBrightnessProvider());
+            var brightnessServer = new BrightnessControlPipeServer(
+                BrightnessControlPipeServer.PackagedPipeName,
+                brightnessController,
+                PackageNamedPipeServerFactory.CreateControl);
 
             using var brokerLifetime = new CancellationTokenSource();
             var snapshotTask = snapshotServer.RunAsync(brokerLifetime.Token);
             var volumeTask = volumeServer.RunUntilCancelledAsync(
                 brokerLifetime.Token);
+            var brightnessTask = brightnessServer.RunUntilCancelledAsync(
+                brokerLifetime.Token);
             try
             {
                 var completedTask = await Task
-                    .WhenAny(snapshotTask, volumeTask)
+                    .WhenAny(snapshotTask, volumeTask, brightnessTask)
                     .ConfigureAwait(false);
                 await completedTask.ConfigureAwait(false);
             }
@@ -43,7 +51,7 @@ public static class Program
             {
                 brokerLifetime.Cancel();
                 await Task
-                    .WhenAll(snapshotTask, volumeTask)
+                    .WhenAll(snapshotTask, volumeTask, brightnessTask)
                     .ConfigureAwait(false);
             }
 

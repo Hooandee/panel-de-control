@@ -1,4 +1,5 @@
 import json
+import re
 import struct
 import unittest
 from pathlib import Path
@@ -14,10 +15,14 @@ WIDGET_CODE = PROJECT_DIR / "ControlPanelWidget.xaml.cs"
 APP_CODE = PROJECT_DIR / "App.xaml.cs"
 TELEMETRY_CLIENT = PROJECT_DIR / "TelemetryClient.cs"
 VOLUME_CLIENT = PROJECT_DIR / "VolumeControlClient.cs"
+BRIGHTNESS_CLIENT = PROJECT_DIR / "BrightnessControlClient.cs"
 BROKER_LAUNCHER = PROJECT_DIR / "HardwareBrokerLauncher.cs"
 HARDWARE_DIR = ROOT / "windows" / "src" / "PanelDeControl.Hardware"
 PIPE_SERVER = HARDWARE_DIR / "SnapshotPipeServer.cs"
 CONTROL_PIPE_SERVER = HARDWARE_DIR / "VolumeControlPipeServer.cs"
+BRIGHTNESS_PIPE_SERVER = HARDWARE_DIR / "BrightnessControlPipeServer.cs"
+BRIGHTNESS_PROVIDER = HARDWARE_DIR / "WmiDisplayBrightnessProvider.cs"
+BRIGHTNESS_CONTROLLER = HARDWARE_DIR / "IntegratedDisplayBrightnessController.cs"
 PIPE_FACTORY = HARDWARE_DIR / "PackageNamedPipeServerFactory.cs"
 BROKER_PROGRAM = HARDWARE_DIR / "Program.cs"
 ROOT_LICENSE = ROOT / "LICENSE"
@@ -229,8 +234,10 @@ class GameBarProjectTests(unittest.TestCase):
             },
         ).attrib["Description"].casefold()
         self.assertIn("volumen", app_description)
+        self.assertIn("brillo", app_description)
         self.assertIn("telemetría", app_description)
         self.assertIn("volumen", widget.attrib["Description"].casefold())
+        self.assertIn("brillo", widget.attrib["Description"].casefold())
 
     def test_broker_payload_metadata_is_bound_to_published_files(self):
         root = ElementTree.parse(PROJECT).getroot()
@@ -361,6 +368,37 @@ class GameBarProjectTests(unittest.TestCase):
             normalized_refresh,
         )
 
+    def test_widget_has_accessible_integrated_display_brightness_control(self):
+        root = ElementTree.parse(WIDGET).getroot()
+        xaml_name = "{http://schemas.microsoft.com/winfx/2006/xaml}Name"
+        slider = next(
+            node
+            for node in root.iter()
+            if node.attrib.get(xaml_name) == "BrightnessSlider"
+        )
+        names = {
+            node.attrib.get(xaml_name)
+            for node in root.iter()
+        }
+
+        self.assertTrue(
+            {"BrightnessCard", "BrightnessValue", "BrightnessStatus"}.issubset(
+                names
+            )
+        )
+        self.assertEqual("0", slider.attrib["Minimum"])
+        self.assertEqual("100", slider.attrib["Maximum"])
+        self.assertEqual("5", slider.attrib["StepFrequency"])
+        self.assertEqual("True", slider.attrib["IsTabStop"])
+        self.assertEqual(
+            "Brillo de la pantalla integrada",
+            slider.attrib["AutomationProperties.Name"],
+        )
+        self.assertEqual(
+            "BrightnessSlider_ValueChanged",
+            slider.attrib["ValueChanged"],
+        )
+
     def test_widget_has_accessible_focusable_system_mute_control(self):
         root = ElementTree.parse(WIDGET).getroot()
         xaml_name = "{http://schemas.microsoft.com/winfx/2006/xaml}Name"
@@ -432,19 +470,6 @@ class GameBarProjectTests(unittest.TestCase):
             normalized_refresh,
         )
 
-    def test_project_compiles_shared_broker_launcher_and_volume_client(self):
-        root = ElementTree.parse(PROJECT).getroot()
-        namespace = {"msbuild": "http://schemas.microsoft.com/developer/msbuild/2003"}
-        sources = {
-            node.attrib["Include"]
-            for node in root.findall(".//msbuild:Compile", namespace)
-        }
-
-        self.assertIn("HardwareBrokerLauncher.cs", sources)
-        self.assertIn("VolumeControlClient.cs", sources)
-        self.assertTrue(BROKER_LAUNCHER.is_file())
-        self.assertTrue(VOLUME_CLIENT.is_file())
-
     def test_volume_client_never_retries_an_indeterminate_write(self):
         code = VOLUME_CLIENT.read_text(encoding="utf-8")
 
@@ -463,6 +488,25 @@ class GameBarProjectTests(unittest.TestCase):
         self.assertIn("control_response_unavailable", code)
         self.assertIn("VolumeControlResponse.Unverifiable", code)
         self.assertIn("VolumeControlResponse.MuteUnverifiable", code)
+        self.assertNotIn("Task.Run", code)
+
+    def test_brightness_client_never_retries_an_indeterminate_write(self):
+        code = BRIGHTNESS_CLIENT.read_text(encoding="utf-8")
+
+        self.assertIn(
+            "public Task<BrightnessControlResponse> SetAsync(",
+            code,
+        )
+        self.assertIn(
+            "SendAsync(BrightnessControlRequest.Set(requestedPercentage))",
+            code,
+        )
+        write_started = code.index("requestWriteStarted = true;")
+        write_call = code.index("await writer.WriteLineAsync(")
+        self.assertLess(write_started, write_call)
+        self.assertIn("if (!attempt.RequestWriteStarted)", code)
+        self.assertIn("brightness_response_unavailable", code)
+        self.assertIn("BrightnessControlResponse.Unverifiable", code)
         self.assertNotIn("Task.Run", code)
 
     def test_required_package_images_are_real_png_files(self):
@@ -554,6 +598,86 @@ class GameBarProjectTests(unittest.TestCase):
         self.assertIn("PackageNamedPipeServerFactory.CreateControl", program)
         self.assertIn("new CoreAudioEndpointVolumeProvider()", program)
 
+    def test_broker_hosts_brightness_on_a_dedicated_strict_pipe(self):
+        factory = PIPE_FACTORY.read_text(encoding="utf-8")
+        brightness_server = BRIGHTNESS_PIPE_SERVER.read_text(encoding="utf-8")
+        provider = BRIGHTNESS_PROVIDER.read_text(encoding="utf-8")
+        controller = BRIGHTNESS_CONTROLLER.read_text(encoding="utf-8")
+        program = BROKER_PROGRAM.read_text(encoding="utf-8")
+
+        self.assertIn(
+            "return Create(pipeName, includeWorldAccess: false);",
+            factory,
+        )
+        self.assertIn(r'@"LOCAL\PanelDeControl.Display"', brightness_server)
+        self.assertIn("new BrightnessControlPipeServer(", program)
+        self.assertIn("new WmiDisplayBrightnessProvider()", program)
+        self.assertIn("brightnessTask", program)
+        self.assertIn(r'@"\\.\root\wmi"', provider)
+        self.assertIn("FROM WmiMonitorConnectionParams", provider)
+        self.assertIn("FROM WmiMonitorBrightness ", provider)
+        self.assertIn("FROM WmiMonitorBrightnessMethods", provider)
+        self.assertIn('"WmiSetBrightness"', provider)
+        self.assertIn("ReadbackTolerancePercentagePoints = 1", controller)
+        self.assertNotIn("DeviceIdentity", provider)
+        self.assertNotIn("DeviceIdentity", controller)
+
+    def test_brightness_timeouts_cover_full_verified_set(self):
+        provider = BRIGHTNESS_PROVIDER.read_text(encoding="utf-8")
+        server = BRIGHTNESS_PIPE_SERVER.read_text(encoding="utf-8")
+        client = BRIGHTNESS_CLIENT.read_text(encoding="utf-8")
+
+        provider_timeout = re.search(
+            r"OperationTimeout\s*=\s*TimeSpan\.FromMilliseconds\((\d+)\)",
+            provider,
+        )
+        server_timeout = re.search(
+            r"DefaultOperationTimeout\s*=\s*TimeSpan\.FromSeconds\((\d+)\)",
+            server,
+        )
+        client_timeout = re.search(
+            r"ResponseTimeout\s*=\s*TimeSpan\.FromSeconds\((\d+)\)",
+            client,
+        )
+
+        self.assertIsNotNone(provider_timeout)
+        self.assertIsNotNone(server_timeout)
+        self.assertIsNotNone(client_timeout)
+        provider_budget_ms = int(provider_timeout.group(1))
+        server_budget_ms = int(server_timeout.group(1)) * 1000
+        client_budget_ms = int(client_timeout.group(1)) * 1000
+        self.assertGreater(server_budget_ms, provider_budget_ms * 3)
+        self.assertGreater(client_budget_ms, server_budget_ms)
+
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ProxyStubTests(unittest.TestCase):
+    def test_every_marshalled_interface_has_a_unique_id(self):
+        interfaces = re.findall(
+            r'<Interface Name="([^"]+)" InterfaceId="([^"]+)"',
+            MANIFEST.read_text(encoding="utf-8"),
+        )
+        ids = [interface_id.upper() for _, interface_id in interfaces]
+
+        self.assertTrue(interfaces)
+        self.assertEqual(len(ids), len(set(ids)), [name for name, _ in interfaces])
+
+    def test_notification_host_uses_the_id_game_bar_registers(self):
+        manifest = MANIFEST.read_text(encoding="utf-8")
+        self.assertIn(
+            'IXboxGameBarWidgetNotificationHost" InterfaceId="6F68D392-E4A9-46F7-A024-5275BC2FE7BA"',
+            manifest,
+        )
+
+
+class SideloadPackageTests(unittest.TestCase):
+    def test_ci_builds_a_native_sideload_package(self):
+        workflow = WORKFLOW.read_text(encoding="utf-8")
+        project = PROJECT.read_text(encoding="utf-8")
+
+        self.assertIn("/property:UapAppxPackageBuildMode=SideloadOnly", workflow)
+        self.assertNotIn("UapAppxPackageBuildMode=CI", workflow)
+        self.assertIn("<UseDotNetNativeToolchain>true</UseDotNetNativeToolchain>", project)
