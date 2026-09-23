@@ -1648,7 +1648,7 @@ def test_go_s_83l3_selected_backend_recovers_firmware_that_ignores_custom_writes
     assert {rail: reading.applied_w for rail, reading in rails.items()} == {
         "pl1": 8, "pl2": 8, "pl3": 8,
     }
-    assert backend.diagnostics()["custom_rearm"] == {"last": "recovered"}
+    assert backend.diagnostics()["custom_rearm"] == {"last": "recovered", "return_pending": False}
 
 
 def test_custom_rearm_is_not_selected_for_other_legion_go_s_dmi(tmp_path):

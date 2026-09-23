@@ -1195,3 +1195,109 @@ def test_failed_rail_write_reports_the_system_error(tmp_path):
 
     assert result.ok is False
     assert "firmware-attr:lenovo-wmi-other/pl3!EACCES" in result.detail
+
+
+def _gos_83l3_profile_moving_firmware(tmp_path, custom_failures):
+    root = str(tmp_path)
+    _mk_attr(root, "lenovo-wmi-other-0", "ppt_pl1_spl", 30, 5, 33)
+    _mk_attr(root, "lenovo-wmi-other-0", "ppt_pl2_sppt", 15, 5, 33)
+    _mk_attr(root, "lenovo-wmi-other-0", "ppt_pl3_fppt", 20, 5, 35)
+    profile_path = _mk_profile(root, cur="custom")
+    lock_path = os.path.join(root, "run/panel-de-control/firmware-lenovo-wmi-other.lock")
+    backend = FirmwareAttrBackend(
+        "lenovo-wmi-other",
+        TdpLimits.from_profile(detect(product_name="83L3")),
+        root=root,
+        profile_name="lenovo-wmi-gamezone",
+        named_profile_owns_rails=True,
+        rearm_custom_on_ignored_writes=True,
+        safety_lock_path=lock_path,
+    )
+    firmware = {"profile": "custom", "armed": False, "custom_failures": custom_failures}
+    original_write = backend._write
+
+    def firmware_write(path, value):
+        backend._last_write_error = None
+        if path == profile_path:
+            value = str(value)
+            if value == "custom" and firmware["profile"] != "custom" and firmware["custom_failures"]:
+                firmware["custom_failures"] -= 1
+                backend._last_write_error = "EIO"
+                return False
+            if value == "custom" and firmware["profile"] != "custom":
+                firmware["armed"] = True
+            firmware["profile"] = value
+            original_write(path, value)
+            if value != "custom":
+                for attr, watts in zip(("ppt_pl1_spl", "ppt_pl2_sppt", "ppt_pl3_fppt"), (22, 18, 37)):
+                    original_write(backend._attr(attr), watts)
+            return True
+        if firmware["profile"] != "custom":
+            backend._last_write_error = "EBUSY"
+            return False
+        return original_write(path, value) if firmware["armed"] else True
+
+    backend._write = firmware_write
+    return backend, firmware, lock_path
+
+
+def test_gos_83l3_rearm_retries_the_return_to_custom(tmp_path, monkeypatch):
+    monkeypatch.setattr("tdp.firmware_attr.time.sleep", lambda _delay: None)
+    backend, firmware, lock_path = _gos_83l3_profile_moving_firmware(tmp_path, custom_failures=2)
+
+    result = backend.set_levels(8, 8, 8, ac=False)
+
+    assert result.ok is True
+    assert backend.read_profile() == "custom"
+    assert _rails(backend) == {"pl1": 8, "pl2": 8, "pl3": 8}
+    assert backend.diagnostics()["custom_rearm"] == {"last": "recovered", "return_pending": False}
+    assert "write_circuit_open" not in backend.diagnostics()
+    assert not os.path.exists(lock_path)
+
+
+def test_gos_83l3_failed_return_to_custom_never_locks_and_self_recovers(tmp_path, monkeypatch):
+    monkeypatch.setattr("tdp.firmware_attr.time.sleep", lambda _delay: None)
+    backend, firmware, lock_path = _gos_83l3_profile_moving_firmware(tmp_path, custom_failures=99)
+
+    stuck = backend.set_levels(8, 8, 8, ac=False)
+
+    assert stuck.ok is False
+    assert "custom return pending" in stuck.detail
+    assert "write_circuit_open" not in backend.diagnostics()
+    assert backend.ready()
+    assert backend.diagnostics()["custom_rearm"]["return_pending"] is True
+    assert os.path.exists(lock_path)
+
+    waiting = backend.set_levels(8, 8, 8, ac=False)
+    assert waiting.ok is False
+    assert "no rail writes performed" in waiting.detail
+
+    firmware["custom_failures"] = 0
+    recovered = backend.set_levels(8, 8, 8, ac=False)
+
+    assert recovered.ok is True
+    assert backend.read_profile() == "custom"
+    assert _rails(backend) == {"pl1": 8, "pl2": 8, "pl3": 8}
+    assert backend.diagnostics()["custom_rearm"]["return_pending"] is False
+    assert not os.path.exists(lock_path)
+
+
+def test_pending_custom_return_is_recovered_from_the_lock_after_restart(tmp_path, monkeypatch):
+    monkeypatch.setattr("tdp.firmware_attr.time.sleep", lambda _delay: None)
+    backend, firmware, lock_path = _gos_83l3_profile_moving_firmware(tmp_path, custom_failures=99)
+    backend.set_levels(8, 8, 8, ac=False)
+
+    restarted = FirmwareAttrBackend(
+        "lenovo-wmi-other",
+        TdpLimits.from_profile(detect(product_name="83L3")),
+        root=str(tmp_path),
+        profile_name="lenovo-wmi-gamezone",
+        named_profile_owns_rails=True,
+        rearm_custom_on_ignored_writes=True,
+        safety_lock_path=lock_path,
+    )
+    recovery = restarted.recover_runtime_transaction()
+
+    assert recovery["ok"] is True
+    assert restarted.read_profile() == "custom"
+    assert not os.path.exists(lock_path)

@@ -26,6 +26,7 @@ _RAIL_ATTRS = (
 _PL2_BOOST_RATIO = 1.2
 _PL3_BOOST_RATIO = 1.4
 _CUSTOM_REARM_COOLDOWN_S = 60.0
+_CUSTOM_RETURN_DELAYS_S = (0.0, 0.25, 0.5, 1.0)
 
 
 def _normalise_rail_floors(values):
@@ -107,6 +108,7 @@ class FirmwareAttrBackend(TDPBackend):
         self._rearm_custom_on_ignored_writes = bool(rearm_custom_on_ignored_writes)
         self._last_custom_rearm_at = None
         self._last_custom_rearm = None
+        self._custom_return_pending = False
         self._last_write_error = None
         self.cap_boost_to_active = bool(cap_boost_to_active)
         self._readback_settle_delays = tuple(
@@ -509,6 +511,16 @@ class FirmwareAttrBackend(TDPBackend):
             )
         )
 
+    def _return_to_custom(self):
+        profile_path = os.path.join(self._pp_dir, "profile")
+        for delay in _CUSTOM_RETURN_DELAYS_S:
+            time.sleep(delay)
+            if self._write(profile_path, "custom") and self.read_profile() == "custom":
+                self._custom_return_pending = False
+                return True
+        self._custom_return_pending = True
+        return False
+
     def _rearm_custom(self, surfaces, targets):
         # Some Legion Go S firmware silently drops every custom rail write until the
         # gamezone profile leaves "custom" and re-enters it.
@@ -518,11 +530,10 @@ class FirmwareAttrBackend(TDPBackend):
             choice for choice in choices if choice != "custom"
         )
         profile_path = os.path.join(self._pp_dir, "profile")
-        if not (
-            self._write(profile_path, transient)
-            and self._write(profile_path, "custom")
-            and self.read_profile() == "custom"
-        ):
+        left_custom = self._write(profile_path, transient)
+        if not left_custom and self.read_profile() == "custom":
+            return False
+        if not self._return_to_custom():
             return False
         for surface, rail, path in surfaces:
             if not self._write(path, targets[rail]):
@@ -723,6 +734,15 @@ class FirmwareAttrBackend(TDPBackend):
                 False,
                 "firmware ownership recovery pending",
             )
+        if self._custom_return_pending and not self._return_to_custom():
+            return TdpResult(
+                pl1,
+                self.read_applied(),
+                False,
+                "custom return pending: platform-profile="
+                + str(self.read_profile())
+                + "; no rail writes performed",
+            )
         if self._trust_live_bounds and any(
             self._validated_live_bounds(attr) is None
             for rail, attr in _RAIL_ATTRS
@@ -839,6 +859,25 @@ class FirmwareAttrBackend(TDPBackend):
             self._last_custom_rearm = "recovered" if recovered else "not_recovered"
             if not recovered:
                 rearm_detail = "custom re-arm not confirmed"
+            if self._custom_return_pending:
+                # Rails cannot be restored outside "custom"; keep the transaction lock
+                # for restart recovery and retry the return before the next write.
+                pending_payload = {
+                    **lock_payload,
+                    "state": "custom_return_pending",
+                    "detail": "custom return pending",
+                }
+                if self._safety_lock.persist_payload(pending_payload):
+                    self._runtime_lock_payload = pending_payload
+                return TdpResult(
+                    pl1,
+                    self._read_int(self._attr("ppt_pl1_spl")),
+                    False,
+                    "write not confirmed: "
+                    + ", ".join(mismatches + [rearm_detail])
+                    + "; custom return pending: platform-profile="
+                    + str(self.read_profile()),
+                )
         applied = observation.surfaces.get(self.name, {}).get("pl1")
         applied_w = applied.applied_w if applied else None
         problems = failed + mismatches + ([rearm_detail] if rearm_detail else [])
@@ -969,7 +1008,10 @@ class FirmwareAttrBackend(TDPBackend):
             "reported_live_bounds": reported,
         }
         if self._rearm_custom_on_ignored_writes:
-            diagnostics["custom_rearm"] = {"last": self._last_custom_rearm}
+            diagnostics["custom_rearm"] = {
+                "last": self._last_custom_rearm,
+                "return_pending": self._custom_return_pending,
+            }
         if self._restore_on_release:
             diagnostics["owns_state"] = self._owns_state
             diagnostics["ownership_recovery_pending"] = (
