@@ -74,7 +74,7 @@ public sealed class SnapshotCollector : IHardwareSnapshotProvider
         readings.AddRange(ReadPower());
         readings.AddRange(ReadHardware(identity.IsRecognized));
 
-        return new HardwareSnapshot(clock.UtcNow, identity.DisplayName, readings);
+        return new HardwareSnapshot(clock.UtcNow, identity.DisplayName, readings, identity.Profile?.Limits.TdpMaxCharger);
     }
 
     private DeviceIdentity ReadIdentity()

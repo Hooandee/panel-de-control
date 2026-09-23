@@ -18,6 +18,7 @@ using Windows.UI.Xaml;
 using Windows.UI.Xaml.Automation;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Media;
+using Windows.UI.Xaml.Media.Animation;
 using Windows.UI.Xaml.Input;
 using Windows.UI.Xaml.Navigation;
 using Windows.UI.Xaml.Shapes;
@@ -81,6 +82,12 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         PowerArcFill.Data = CreatePowerArcGeometry(0);
         ApplyAccent(ReadSavedAccent());
         BuildAccentSwatches();
+        BatteryBar.Fill = ResourceBrush("PdcBrightnessBrush");
+        CpuBar.Fill = ResourceBrush("PdcAccentBrush");
+        GpuBar.Fill = new SolidColorBrush(ToColor(AccentPalette.Resolve("mint").Argb));
+        var boost = SectionColor(0);
+        ExperimentalPill.Background = new SolidColorBrush(WithAlpha(boost, 0x29));
+        ExperimentalBadge.Foreground = new SolidColorBrush(boost);
         SelectTab(0);
         refreshTimer.Tick += OnRefreshTimerTick;
         Loaded += OnLoaded;
@@ -107,6 +114,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
 
         disposed = true;
         refreshTimer.Stop();
+        heroTimer.Stop();
         InvalidatePendingOperations();
         refreshTimer.Tick -= OnRefreshTimerTick;
         if (gameBarWidget is not null)
@@ -131,6 +139,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     private void OnUnloaded(object sender, RoutedEventArgs args)
     {
         refreshTimer.Stop();
+        heroTimer.Stop();
         InvalidatePendingOperations();
     }
 
@@ -162,6 +171,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         else
         {
             refreshTimer.Stop();
+        heroTimer.Stop();
             InvalidatePendingOperations();
         }
     }
@@ -414,6 +424,11 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     {
         DeviceName.Text = snapshot.DeviceModel;
         BatteryValue.Text = Format(snapshot, "battery.level", "0", "%");
+        TileCpuValue.Text = Format(snapshot, "cpu.load", "0", "%");
+        TileGpuValue.Text = Format(snapshot, "gpu.load", "0", "%");
+        SetBar(BatteryBarFill, BatteryBarRest, FindReading(snapshot, "battery.level"));
+        SetBar(CpuBarFill, CpuBarRest, FindReading(snapshot, "cpu.load"));
+        SetBar(GpuBarFill, GpuBarRest, FindReading(snapshot, "gpu.load"));
         ApplyEnergy(snapshot);
         PowerSourceValue.Text = FormatPowerSource(snapshot);
         CpuTemperatureValue.Text = Format(snapshot, "cpu.temperature", "0", "°C");
@@ -695,8 +710,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         else
         {
             PowerValue.Text = "—";
-            PowerZone.Text = string.Empty;
-            PowerArcFill.Data = CreatePowerArcGeometry(0);
+            TdpMarker.Visibility = Visibility.Collapsed;
             HideTdpPresetButtons();
         }
 
@@ -734,9 +748,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         var fraction = range <= 0
             ? 0
             : (double)(selectedTdpWatts - tdpMinimumWatts) / range;
-        PowerArcFill.Data = CreatePowerArcGeometry(fraction);
-        PowerArcFill.Stroke = new SolidColorBrush(ToColor(PowerArc.ColorFor(fraction)));
-        PowerZone.Text = Localized("PowerZone" + PowerArc.ZoneFor(fraction));
+        PlaceTdpMarker();
         PowerValue.Text = $"{selectedTdpWatts} W";
         PowerLimits.Text = string.Format(
             Localized("PowerLimitsFormat"),
@@ -871,14 +883,149 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     private void SelectTab(int index)
     {
         selectedTab = index;
+        var section = SectionColor(index);
         for (var position = 0; position < TabPanels.Count; position++)
         {
             var (tab, panel) = TabPanels[position];
             var selected = position == index;
             panel.Visibility = selected ? Visibility.Visible : Visibility.Collapsed;
-            tab.Foreground = ResourceBrush(selected ? "PdcAccentBrush" : "PdcTextMutedBrush");
-            tab.Background = selected ? ResourceBrush("PdcHairlineBrush") : new SolidColorBrush(Colors.Transparent);
+            tab.Foreground = selected ? new SolidColorBrush(section) : ResourceBrush("PdcTextMutedBrush");
+            tab.Background = new SolidColorBrush(selected ? WithAlpha(section, 0x2E) : Colors.Transparent);
         }
+
+        var glow = new ColorAnimation
+        {
+            To = WithAlpha(section, 0x40),
+            Duration = new Duration(TimeSpan.FromMilliseconds(420)),
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+        };
+        Storyboard.SetTarget(glow, SectionGlowTop);
+        Storyboard.SetTargetProperty(glow, "Color");
+        var storyboard = new Storyboard();
+        storyboard.Children.Add(glow);
+        storyboard.Begin();
+    }
+
+    private static Color SectionColor(int index)
+    {
+        return index switch
+        {
+            0 => ((SolidColorBrush)Application.Current.Resources["PdcBoostBrush"]).Color,
+            1 => ResourceBrush("PdcAccentBrush").Color,
+            2 => ToColor(AccentPalette.Resolve("mint").Argb),
+            _ => ToColor(AccentPalette.Resolve("purple").Argb),
+        };
+    }
+
+    private static Color WithAlpha(Color color, byte alpha)
+    {
+        return Color.FromArgb(alpha, color.R, color.G, color.B);
+    }
+
+    private const double DefaultHeroScaleWatts = 40;
+    private static readonly TimeSpan HeroAnimationLength = TimeSpan.FromMilliseconds(450);
+    private readonly DispatcherTimer heroTimer = new() { Interval = TimeSpan.FromMilliseconds(16) };
+    private double heroScaleWatts = DefaultHeroScaleWatts;
+    private double heroShownWatts;
+    private double heroFromWatts;
+    private double heroTargetWatts;
+    private DateTimeOffset heroAnimationStart;
+    private PanelDeControl.Core.Presentation.PowerZone? heroZone;
+
+    private void AnimateHero(double? watts)
+    {
+        if (watts is not double target)
+        {
+            heroTimer.Stop();
+            heroShownWatts = 0;
+            PowerDrawValue.Text = "—";
+            PowerZone.Text = string.Empty;
+            PowerArcFill.Data = CreatePowerArcGeometry(0);
+            return;
+        }
+
+        heroFromWatts = heroShownWatts;
+        heroTargetWatts = target;
+        heroAnimationStart = DateTimeOffset.UtcNow;
+        if (!heroTimer.IsEnabled)
+        {
+            heroTimer.Tick -= OnHeroTick;
+            heroTimer.Tick += OnHeroTick;
+            heroTimer.Start();
+        }
+    }
+
+    private void OnHeroTick(object sender, object args)
+    {
+        var progress = Math.Min(1, (DateTimeOffset.UtcNow - heroAnimationStart).TotalMilliseconds / HeroAnimationLength.TotalMilliseconds);
+        var eased = 1 - Math.Pow(1 - progress, 3);
+        heroShownWatts = heroFromWatts + ((heroTargetWatts - heroFromWatts) * eased);
+        RenderHero(heroShownWatts);
+        if (progress >= 1)
+        {
+            heroTimer.Stop();
+        }
+    }
+
+    private void RenderHero(double watts)
+    {
+        var fraction = PowerArc.Fraction(watts, 0, heroScaleWatts);
+        PowerDrawValue.Text = watts.ToString("0.0");
+        PowerArcFill.Data = CreatePowerArcGeometry(fraction);
+        PowerArcFill.Stroke ??= HeroGradient();
+        var zone = PowerArc.ZoneFor(fraction);
+        if (zone == heroZone)
+        {
+            return;
+        }
+
+        heroZone = zone;
+        var zoneColor = ToColor(PowerArc.ColorFor(fraction));
+        PowerZone.Text = Localized("PowerZone" + zone);
+        PowerZone.Foreground = new SolidColorBrush(zoneColor);
+        var glowBrush = new SolidColorBrush(zoneColor);
+        HeroGlowOuter.Fill = glowBrush;
+        HeroGlowMid.Fill = glowBrush;
+        HeroGlowInner.Fill = glowBrush;
+    }
+
+    private static LinearGradientBrush HeroGradient()
+    {
+        var gradient = new LinearGradientBrush
+        {
+            MappingMode = BrushMappingMode.Absolute,
+            StartPoint = new Point(ArcCenterX - ArcRadius, 0),
+            EndPoint = new Point(ArcCenterX + ArcRadius, 0),
+        };
+        foreach (var offset in new[] { 0.0, 0.5, 1.0 })
+        {
+            gradient.GradientStops.Add(new GradientStop { Offset = offset, Color = ToColor(PowerArc.ColorFor(offset)) });
+        }
+
+        return gradient;
+    }
+
+    private void PlaceTdpMarker()
+    {
+        if (!tdpReady || tdpMaximumWatts <= 0)
+        {
+            TdpMarker.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var point = PowerArc.PointAt(PowerArc.Fraction(selectedTdpWatts, 0, heroScaleWatts), ArcCenterX, ArcCenterY, ArcRadius);
+        Canvas.SetLeft(TdpMarker, point.X - (TdpMarker.Width / 2));
+        Canvas.SetTop(TdpMarker, point.Y - (TdpMarker.Height / 2));
+        TdpMarker.Visibility = Visibility.Visible;
+    }
+
+    private static void SetBar(ColumnDefinition fill, ColumnDefinition rest, TelemetryReading? reading)
+    {
+        var percent = reading?.Status == ReadingStatus.Available && reading.Value is double value
+            ? Math.Min(Math.Max(value, 0), 100)
+            : 0;
+        fill.Width = new GridLength(percent, GridUnitType.Star);
+        rest.Width = new GridLength(100 - percent, GridUnitType.Star);
     }
 
     private void BuildAccentSwatches()
@@ -1246,9 +1393,9 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     private void ApplyEnergy(HardwareSnapshot snapshot)
     {
         var draw = FindReading(snapshot, "power.draw");
-        PowerDrawValue.Text = draw?.Status == ReadingStatus.Available && draw.Value.HasValue
-            ? $"{draw.Value.Value:0.0} W"
-            : "—";
+        heroScaleWatts = snapshot.DeviceMaxWatts ?? DefaultHeroScaleWatts;
+        AnimateHero(draw?.Status == ReadingStatus.Available ? draw.Value : null);
+        PlaceTdpMarker();
         var remaining = FindReading(snapshot, "battery.time_remaining");
         PowerDrawDetail.Text = draw?.ErrorCode switch
         {

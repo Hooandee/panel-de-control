@@ -44,7 +44,7 @@ public sealed class ServiceBackedSnapshotProvider : IHardwareSnapshotProvider
         var serviceReadings = FreshServiceReadings(result);
         var merged = localSnapshot.Readings.Select(reading =>
             Merge(reading, serviceReadings, result.Outcome));
-        return new HardwareSnapshot(localSnapshot.CapturedAtUtc, localSnapshot.DeviceModel, merged);
+        return new HardwareSnapshot(localSnapshot.CapturedAtUtc, localSnapshot.DeviceModel, merged, localSnapshot.DeviceMaxWatts);
     }
 
     private IReadOnlyDictionary<string, TelemetryReading> FreshServiceReadings(ServiceSnapshotResult result)

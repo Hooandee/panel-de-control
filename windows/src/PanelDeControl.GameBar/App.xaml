@@ -9,9 +9,13 @@
             </ResourceDictionary.MergedDictionaries>
             <FontFamily x:Key="PdcIconFontFamily">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
             <SolidColorBrush x:Key="PdcTrackBrush" Color="{StaticResource PdcHairlineColor}" />
+            <LinearGradientBrush x:Key="PdcCardBorderBrush" StartPoint="0,0" EndPoint="0,1" Opacity="0.35">
+                <GradientStop Offset="0" Color="{StaticResource PdcTextMutedColor}" />
+                <GradientStop Offset="1" Color="Transparent" />
+            </LinearGradientBrush>
             <Style x:Key="PdcCardStyle" TargetType="Border">
                 <Setter Property="Background" Value="{StaticResource PdcSurfaceRaisedBrush}" />
-                <Setter Property="BorderBrush" Value="{StaticResource PdcHairlineBrush}" />
+                <Setter Property="BorderBrush" Value="{StaticResource PdcCardBorderBrush}" />
                 <Setter Property="BorderThickness" Value="1" />
                 <Setter Property="CornerRadius" Value="{StaticResource PdcRadiusCard}" />
                 <Setter Property="Padding" Value="16" />
@@ -19,7 +23,7 @@
             </Style>
             <Style x:Key="PdcTileStyle" TargetType="Border">
                 <Setter Property="Background" Value="{StaticResource PdcSurfaceRaisedBrush}" />
-                <Setter Property="BorderBrush" Value="{StaticResource PdcHairlineBrush}" />
+                <Setter Property="BorderBrush" Value="{StaticResource PdcCardBorderBrush}" />
                 <Setter Property="BorderThickness" Value="1" />
                 <Setter Property="CornerRadius" Value="{StaticResource PdcRadiusTile}" />
                 <Setter Property="Padding" Value="12" />

@@ -20,7 +20,7 @@ SCHEMA_VERSION = 1
 
 WINDOWS = {
     "font_family": "Segoe UI Variable",
-    "radius": {"card": 8, "tile": 6, "control": 4, "pill": 999},
+    "radius": {"card": 14, "tile": 10, "control": 6, "pill": 999},
 }
 
 
