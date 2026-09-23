@@ -47,6 +47,13 @@ public sealed class ServicePipeSecurityTests
 
         Assert.Equal(PipeAccessRights.FullControl, grants[WellKnownSidType.LocalSystemSid]);
         Assert.Equal(PipeAccessRights.ReadWrite, grants[WellKnownSidType.InteractiveSid]);
+        Assert.Equal(2, grants.Count);
+        var first = TdpServicePipeSecurity.Entries[0];
+        Assert.Equal(WellKnownSidType.NetworkSid, first.Identity);
+        Assert.Equal(AccessControlType.Deny, first.Access);
+        Assert.Equal(PipeAccessRights.FullControl, first.Rights);
+        Assert.DoesNotContain(TdpServicePipeSecurity.Entries,
+            entry => entry.Identity == WellKnownSidType.WorldSid);
         Assert.DoesNotContain(
             TdpServicePipeSecurity.Entries,
             entry => entry.Identity == WellKnownSidType.AuthenticatedUserSid);

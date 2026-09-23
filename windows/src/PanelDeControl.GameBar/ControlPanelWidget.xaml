@@ -303,12 +303,10 @@
                                         IsTabStop="True"
                                         Style="{StaticResource PdcChipButtonStyle}"
                                         Click="TdpDecreaseButton_Click" />
-                                    <TextBlock
-                                        x:Uid="PowerStepHint"
-                                        Grid.Column="1"
-                                        HorizontalAlignment="Center"
-                                        VerticalAlignment="Center"
-                                        Style="{StaticResource PdcMutedStyle}" />
+                                    <StackPanel Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                        <TextBlock x:Name="TdpSelectionValue" Text="—" HorizontalAlignment="Center" Style="{StaticResource PdcInlineValueStyle}" />
+                                        <TextBlock x:Uid="PowerStepHint" HorizontalAlignment="Center" Style="{StaticResource PdcMutedStyle}" />
+                                    </StackPanel>
                                     <Button
                                         x:Name="TdpIncreaseButton"
                                         x:Uid="TdpIncreaseButton"

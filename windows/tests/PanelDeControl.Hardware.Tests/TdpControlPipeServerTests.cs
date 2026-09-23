@@ -16,6 +16,7 @@ public sealed class TdpControlPipeServerTests
         var server = new TdpControlPipeServer(
             pipeName,
             proxy,
+            new FixedClientValidator(true),
             CreateTestPipe);
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
@@ -40,6 +41,7 @@ public sealed class TdpControlPipeServerTests
         var server = new TdpControlPipeServer(
             pipeName,
             proxy,
+            new FixedClientValidator(true),
             CreateTestPipe);
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
@@ -76,6 +78,37 @@ public sealed class TdpControlPipeServerTests
         };
 
         Assert.Equal(expected, ServiceTdpClient.BuildCommand(request));
+    }
+
+    [Fact]
+    public async Task UnpackagedClientNeverReachesTheServiceProxy()
+    {
+        var pipeName = "pt-" + Guid.NewGuid().ToString("N")[..12];
+        var proxy = new CountingProxy();
+        var server = new TdpControlPipeServer(pipeName, proxy, new PackagedWidgetClientValidator(), CreateTestPipe);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var serverTask = server.RunOnceAsync(timeout.Token);
+        await using var client = new NamedPipeClientStream(
+            ".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+        await client.ConnectAsync(timeout.Token);
+        await using var writer = new StreamWriter(client, new UTF8Encoding(false), leaveOpen: true)
+        {
+            AutoFlush = true,
+        };
+        using var reader = new StreamReader(client, leaveOpen: true);
+        try
+        {
+            await writer.WriteLineAsync(TdpControlWireCodec.SerializeRequest(TdpControlRequest.Set(25)));
+        }
+        catch (IOException)
+        {
+        }
+
+        var response = await reader.ReadLineAsync(timeout.Token);
+        await serverTask;
+
+        Assert.Null(response);
+        Assert.Equal(0, proxy.SendCount);
     }
 
     private static NamedPipeServerStream CreateTestPipe(string pipeName)
@@ -127,6 +160,18 @@ public sealed class TdpControlPipeServerTests
         await writer.WriteLineAsync(payload);
         var response = await reader.ReadLineAsync(cancellationToken);
         return TdpControlWireCodec.DeserializeResponse(response!);
+    }
+
+    private sealed class FixedClientValidator : IPipeClientValidator
+    {
+        private readonly bool trusted;
+
+        public FixedClientValidator(bool trusted)
+        {
+            this.trusted = trusted;
+        }
+
+        public bool IsTrusted(NamedPipeServerStream pipe) => trusted;
     }
 
     private sealed class CountingProxy : ITdpControlProxy
