@@ -329,7 +329,11 @@ class GameBarProjectTests(unittest.TestCase):
                 "BatteryCard",
                 "CpuCard",
                 "GpuCard",
-                "ConnectionCard",
+                "ConnectionStatus",
+                "TabPower",
+                "TabSystem",
+                "TabSensors",
+                "TabSettings",
             }.issubset(names)
         )
         self.assertEqual(
@@ -808,3 +812,29 @@ class DiagnosticsCardTests(unittest.TestCase):
         self.assertTrue(ids)
         self.assertEqual(ids, set(mapping))
         self.assertTrue(set(mapping.values()).issubset(strings), set(mapping.values()) - set(strings))
+
+
+class DesignSystemTests(unittest.TestCase):
+    def test_widget_and_app_never_hard_code_colours(self):
+        for path in (WIDGET, PROJECT_DIR / "App.xaml"):
+            xaml = path.read_text(encoding="utf-8")
+            self.assertNotRegex(xaml, r'"#[0-9A-Fa-f]{6,8}"', path.name)
+        code = WIDGET_CODE.read_text(encoding="utf-8")
+        self.assertNotIn("Color.FromArgb(255,", code)
+
+    def test_app_merges_the_generated_tokens(self):
+        app = (PROJECT_DIR / "App.xaml").read_text(encoding="utf-8")
+        project = PROJECT.read_text(encoding="utf-8")
+        self.assertIn('Source="ms-appx:///Theme/PdcTokens.xaml"', app)
+        self.assertIn('<Page Include="Theme\\PdcTokens.xaml">', project)
+        self.assertIn('x:Key="PdcAccentBrush"', (PROJECT_DIR / "Theme" / "PdcTokens.xaml").read_text(encoding="utf-8"))
+
+    def test_every_power_zone_has_a_localized_label(self):
+        strings = load_strings("en-US")
+        for zone in ("Save", "Eco", "Balanced", "Hot", "Turbo"):
+            self.assertIn(f"PowerZone{zone}", strings)
+        power_arc = (ROOT / "windows" / "src" / "PanelDeControl.Core" / "Presentation" / "PowerArc.cs").read_text(encoding="utf-8")
+        self.assertEqual(
+            ["Save", "Eco", "Balanced", "Hot", "Turbo"],
+            re.findall(r"^\s{4}(\w+),$", power_arc.split("public enum PowerZone", 1)[1].split("}", 1)[0], re.M),
+        )

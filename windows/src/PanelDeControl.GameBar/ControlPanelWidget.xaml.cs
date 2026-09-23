@@ -6,32 +6,31 @@ using Microsoft.Gaming.XboxGameBar;
 using System.Collections.Generic;
 using PanelDeControl.Core.Capabilities;
 using PanelDeControl.Core.Controls;
+using PanelDeControl.Core.Presentation;
 using PanelDeControl.Core.Telemetry;
 using Windows.Foundation;
 using Windows.ApplicationModel.Resources;
+using Windows.Storage;
+using Windows.System;
 using Windows.UI;
 using Windows.UI.Core;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Automation;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Media;
+using Windows.UI.Xaml.Input;
 using Windows.UI.Xaml.Navigation;
+using Windows.UI.Xaml.Shapes;
 
 namespace PanelDeControl.GameBar;
 
 public sealed partial class ControlPanelWidget : Page, IDisposable
 {
     private static readonly ResourceLoader Strings = ResourceLoader.GetForViewIndependentUse();
-    private static readonly SolidColorBrush ConnectedBrush =
-        new(Color.FromArgb(255, 103, 212, 255));
-    private static readonly SolidColorBrush DisconnectedBrush =
-        new(Color.FromArgb(255, 235, 110, 93));
-    private static readonly SolidColorBrush PowerSafeBrush =
-        new(Color.FromArgb(255, 126, 224, 160));
-    private static readonly SolidColorBrush PowerWarningBrush =
-        new(Color.FromArgb(255, 255, 180, 84));
-    private static readonly SolidColorBrush PowerDangerBrush =
-        new(Color.FromArgb(255, 224, 90, 90));
+    private const string AccentSettingKey = "accent";
+    private const double ArcCenterX = 100;
+    private const double ArcCenterY = 92;
+    private const double ArcRadius = 78;
 
     private readonly DispatcherTimer refreshTimer = new()
     {
@@ -80,6 +79,9 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         InitializeComponent();
         PowerArcTrack.Data = CreatePowerArcGeometry(1);
         PowerArcFill.Data = CreatePowerArcGeometry(0);
+        ApplyAccent(ReadSavedAccent());
+        BuildAccentSwatches();
+        SelectTab(0);
         refreshTimer.Tick += OnRefreshTimerTick;
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
@@ -212,7 +214,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
                 FontSize = 13,
                 Margin = new Thickness(0, 4, 0, 0),
                 TextWrapping = TextWrapping.Wrap,
-                Foreground = new SolidColorBrush(Color.FromArgb(255, 197, 207, 220)),
+                Foreground = ResourceBrush("PdcTextMutedBrush"),
             });
         }
     }
@@ -428,9 +430,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             : available
                 ? Localized("TelemetryConnected")
                 : StatusText(snapshot.Readings.FirstOrDefault());
-        ConnectionDot.Fill = available && !unsupported
-            ? ConnectedBrush
-            : DisconnectedBrush;
+        ConnectionDot.Fill = ResourceBrush(available && !unsupported ? "PdcOkBrush" : "PdcDangerBrush");
     }
 
     private async void VolumeSlider_ValueChanged(
@@ -694,6 +694,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         else
         {
             PowerValue.Text = "—";
+            PowerZone.Text = string.Empty;
             PowerArcFill.Data = CreatePowerArcGeometry(0);
             HideTdpPresetButtons();
         }
@@ -733,11 +734,8 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             ? 0
             : (double)(selectedTdpWatts - tdpMinimumWatts) / range;
         PowerArcFill.Data = CreatePowerArcGeometry(fraction);
-        PowerArcFill.Stroke = fraction < 0.55
-            ? PowerSafeBrush
-            : fraction < 0.82
-                ? PowerWarningBrush
-                : PowerDangerBrush;
+        PowerArcFill.Stroke = new SolidColorBrush(ToColor(PowerArc.ColorFor(fraction)));
+        PowerZone.Text = Localized("PowerZone" + PowerArc.ZoneFor(fraction));
         PowerValue.Text = $"{selectedTdpWatts} W";
         PowerLimits.Text = string.Format(
             Localized("PowerLimitsFormat"),
@@ -811,49 +809,153 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
 
     private static PathGeometry CreatePowerArcGeometry(double fraction)
     {
-        const double centerX = 95;
-        const double centerY = 88;
-        const double radius = 68;
-        const double startDegrees = 135;
-        const double totalDegrees = 270;
-        var clamped = Math.Min(Math.Max(fraction, 0), 1);
-        var start = PolarPoint(centerX, centerY, radius, startDegrees);
-        var geometry = new PathGeometry();
+        var start = PowerArc.PointAt(0, ArcCenterX, ArcCenterY, ArcRadius);
         var figure = new PathFigure
         {
-            StartPoint = start,
+            StartPoint = new Point(start.X, start.Y),
             IsClosed = false,
         };
-        if (clamped > 0)
+        if (fraction > 0)
         {
-            var sweep = totalDegrees * clamped;
+            var end = PowerArc.PointAt(fraction, ArcCenterX, ArcCenterY, ArcRadius);
             figure.Segments.Add(new ArcSegment
             {
-                Point = PolarPoint(
-                    centerX,
-                    centerY,
-                    radius,
-                    startDegrees + sweep),
-                Size = new Size(radius, radius),
-                IsLargeArc = sweep > 180,
+                Point = new Point(end.X, end.Y),
+                Size = new Size(ArcRadius, ArcRadius),
+                IsLargeArc = PowerArc.IsLargeArc(fraction),
                 SweepDirection = SweepDirection.Clockwise,
             });
         }
 
+        var geometry = new PathGeometry();
         geometry.Figures.Add(figure);
         return geometry;
     }
 
-    private static Point PolarPoint(
-        double centerX,
-        double centerY,
-        double radius,
-        double degrees)
+    private void TabButton_Click(object sender, RoutedEventArgs args)
     {
-        var radians = degrees * Math.PI / 180;
-        return new Point(
-            centerX + (radius * Math.Cos(radians)),
-            centerY + (radius * Math.Sin(radians)));
+        if (sender is Button { Tag: string tag } && int.TryParse(tag, out var index))
+        {
+            SelectTab(index);
+        }
+    }
+
+    private void Page_KeyDown(object sender, KeyRoutedEventArgs args)
+    {
+        var step = args.Key switch
+        {
+            VirtualKey.GamepadLeftShoulder => -1,
+            VirtualKey.GamepadRightShoulder => 1,
+            _ => 0,
+        };
+        if (step == 0)
+        {
+            return;
+        }
+
+        SelectTab((selectedTab + step + TabPanels.Count) % TabPanels.Count);
+        args.Handled = true;
+    }
+
+    private int selectedTab;
+
+    private IReadOnlyList<(Button Tab, Panel Panel)> TabPanels => new (Button, Panel)[]
+    {
+        (TabPower, PowerPanel),
+        (TabSystem, SystemPanel),
+        (TabSensors, SensorsPanel),
+        (TabSettings, SettingsPanel),
+    };
+
+    private void SelectTab(int index)
+    {
+        selectedTab = index;
+        for (var position = 0; position < TabPanels.Count; position++)
+        {
+            var (tab, panel) = TabPanels[position];
+            var selected = position == index;
+            panel.Visibility = selected ? Visibility.Visible : Visibility.Collapsed;
+            tab.Foreground = ResourceBrush(selected ? "PdcAccentBrush" : "PdcTextMutedBrush");
+            tab.Background = selected ? ResourceBrush("PdcHairlineBrush") : new SolidColorBrush(Colors.Transparent);
+        }
+    }
+
+    private void BuildAccentSwatches()
+    {
+        var index = 0;
+        foreach (var accent in AccentPalette.All)
+        {
+            index++;
+            var swatch = new Button
+            {
+                Tag = accent.Id,
+                Width = 30,
+                Height = 30,
+                Padding = new Thickness(0),
+                Margin = new Thickness(3),
+                CornerRadius = new CornerRadius(15),
+                Background = new SolidColorBrush(Colors.Transparent),
+                BorderThickness = new Thickness(0),
+                IsTabStop = true,
+                Content = new Ellipse
+                {
+                    Width = 22,
+                    Height = 22,
+                    Fill = new SolidColorBrush(ToColor(accent.Argb)),
+                },
+            };
+            AutomationProperties.SetName(
+                swatch,
+                string.Format(Localized("AccentSwatchAutomation"), index, AccentPalette.All.Count));
+            swatch.Click += AccentSwatch_Click;
+            AccentSwatches.Children.Add(swatch);
+        }
+    }
+
+    private void AccentSwatch_Click(object sender, RoutedEventArgs args)
+    {
+        if (sender is Button { Tag: string id })
+        {
+            ApplyAccent(AccentPalette.Resolve(id));
+            SelectTab(selectedTab);
+            try
+            {
+                ApplicationData.Current.LocalSettings.Values[AccentSettingKey] = id;
+            }
+            catch
+            {
+            }
+        }
+    }
+
+    private static AccentColor ReadSavedAccent()
+    {
+        try
+        {
+            return AccentPalette.Resolve(ApplicationData.Current.LocalSettings.Values[AccentSettingKey] as string);
+        }
+        catch
+        {
+            return AccentPalette.Resolve(null);
+        }
+    }
+
+    private static void ApplyAccent(AccentColor accent)
+    {
+        if (Application.Current.Resources["PdcAccentBrush"] is SolidColorBrush brush)
+        {
+            brush.Color = ToColor(accent.Argb);
+        }
+    }
+
+    private static SolidColorBrush ResourceBrush(string key)
+    {
+        return (SolidColorBrush)Application.Current.Resources[key];
+    }
+
+    private static Color ToColor(uint argb)
+    {
+        return Color.FromArgb((byte)(argb >> 24), (byte)(argb >> 16), (byte)(argb >> 8), (byte)argb);
     }
 
     private void ApplyVolumeResponse(VolumeControlResponse response)
