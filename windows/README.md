@@ -59,9 +59,10 @@ la verificación y se informa como tal.
 El widget y el companion nunca acceden al hardware de potencia: solo solicitan
 operaciones al servicio. En cada escritura, el servicio relee si el equipo está
 con batería o cargador, limita la consigna al catálogo (25 W en batería y 35 W
-con cargador) y envía el mismo valor a PL1/SPL, SPPT y FPPT. Si Armoury Crate
-está en marcha, rechaza la operación antes de tocar el firmware. Un rechazo de
-`DEVS` se muestra como rechazado; un fallo de transporte o una lectura
+con cargador) y envía el mismo valor a PL1/SPL, SPPT y FPPT. Si detecta alguno
+de los servicios de Armoury Crate vigilados por el inventario R4, rechaza la
+operación antes de tocar el firmware. Un rechazo de `DEVS` detiene los raíles
+restantes y se muestra como rechazado; un fallo de transporte o una lectura
 discordante se muestra como no verificable.
 
 El candidato de readback usa `DSTS` sobre A3, A0 y C1. Solo se muestra

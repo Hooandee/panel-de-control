@@ -49,6 +49,33 @@ public sealed class TdpServicePipeServerTests
 
         Assert.Equal(ControlStatus.Rejected, response.Status);
         Assert.Equal("invalid_tdp_command", response.ErrorCode);
+        Assert.False(response.ExperimentalStateKnown);
+        Assert.Equal(0, endpoint.SetCount);
+    }
+
+    [Fact]
+    public async Task IncompleteCommandTimesOutBeforeEndpointAccess()
+    {
+        var pipeName = $"pdc-tdp-{Guid.NewGuid():N}";
+        var endpoint = new CountingEndpoint();
+        var server = new TdpServicePipeServer(
+            pipeName,
+            endpoint,
+            CreateTestPipe,
+            new FixedClientValidator(true),
+            commandReadTimeout: TimeSpan.FromMilliseconds(50));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        var serverTask = server.RunOnceAsync(timeout.Token);
+        var response = await RequestIncompleteAsync(
+            pipeName,
+            "experimental ",
+            timeout.Token);
+        await serverTask;
+
+        Assert.Equal(ControlStatus.Rejected, response.Status);
+        Assert.Equal("tdp_command_timeout", response.ErrorCode);
+        Assert.False(response.ExperimentalStateKnown);
         Assert.Equal(0, endpoint.SetCount);
     }
 
@@ -76,15 +103,23 @@ public sealed class TdpServicePipeServerTests
     [Fact]
     public void PackagedIdentityRequiresBothExpectedPackageAndExecutable()
     {
+        const string family = "PanelDeControl.Windows_abcde12345abc";
+        const string root = @"C:\Program Files\WindowsApps\PanelDeControl.Windows";
         Assert.True(PackagedTdpClientValidator.IsTrustedIdentity(
-            @"C:\Program Files\WindowsApps\PanelDeControl.Hardware.exe",
-            "PanelDeControl.Windows_1.0.0.0_x64__publisher"));
+            root + @"\HardwareBroker\PanelDeControl.Hardware.exe",
+            family,
+            family,
+            root));
         Assert.False(PackagedTdpClientValidator.IsTrustedIdentity(
             @"C:\Temp\attacker.exe",
-            "PanelDeControl.Windows_1.0.0.0_x64__publisher"));
+            family,
+            family,
+            root));
         Assert.False(PackagedTdpClientValidator.IsTrustedIdentity(
-            @"C:\Program Files\WindowsApps\PanelDeControl.Hardware.exe",
-            "Other.Package_1.0.0.0_x64__publisher"));
+            root + @"\HardwareBroker\PanelDeControl.Hardware.exe",
+            "PanelDeControl.Windows_otherpublisher",
+            family,
+            root));
     }
 
     private static NamedPipeServerStream CreateTestPipe(string pipeName)
@@ -147,6 +182,30 @@ public sealed class TdpServicePipeServerTests
         catch (IOException)
         {
         }
+    }
+
+    private static async Task<TdpControlResponse> RequestIncompleteAsync(
+        string pipeName,
+        string command,
+        CancellationToken cancellationToken)
+    {
+        await using var client = new NamedPipeClientStream(
+            ".",
+            pipeName,
+            PipeDirection.InOut,
+            PipeOptions.Asynchronous);
+        await client.ConnectAsync(cancellationToken);
+        using var reader = new StreamReader(
+            client,
+            new UTF8Encoding(false),
+            false,
+            256,
+            leaveOpen: true);
+        await client.WriteAsync(
+            Encoding.UTF8.GetBytes(command),
+            cancellationToken);
+        var line = await reader.ReadLineAsync(cancellationToken);
+        return TdpControlWireCodec.DeserializeResponse(line!);
     }
 
     private sealed class FixedClientValidator : ITdpClientValidator

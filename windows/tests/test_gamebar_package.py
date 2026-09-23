@@ -26,6 +26,8 @@ BRIGHTNESS_PROVIDER = HARDWARE_DIR / "WmiDisplayBrightnessProvider.cs"
 BRIGHTNESS_CONTROLLER = HARDWARE_DIR / "IntegratedDisplayBrightnessController.cs"
 TDP_PIPE_SERVER = HARDWARE_DIR / "TdpControlPipeServer.cs"
 SERVICE_TDP_CLIENT = HARDWARE_DIR / "ServiceTdpClient.cs"
+SERVICE_DIR = ROOT / "windows" / "src" / "PanelDeControl.Service"
+TDP_CLIENT_VALIDATOR = SERVICE_DIR / "PackagedTdpClientValidator.cs"
 PIPE_FACTORY = HARDWARE_DIR / "PackageNamedPipeServerFactory.cs"
 BROKER_PROGRAM = HARDWARE_DIR / "Program.cs"
 ROOT_LICENSE = ROOT / "LICENSE"
@@ -398,6 +400,8 @@ class GameBarProjectTests(unittest.TestCase):
         self.assertIn("ControlStatus.Unverifiable", code)
         self.assertIn('"armoury_crate_running"', code)
         self.assertIn("ManufacturerRecoveryUnverified", code)
+        self.assertIn("response.ExperimentalStateKnown", code)
+        self.assertIn("confirmedExperimentalTdpEnabled", code)
 
     def test_widget_debounces_volume_writes_and_ignores_stale_responses(self):
         code = WIDGET_CODE.read_text(encoding="utf-8")
@@ -551,6 +555,7 @@ class GameBarProjectTests(unittest.TestCase):
         self.assertIn("SendAsync(TdpControlRequest.Set(requestedWatts))", code)
         self.assertIn("if (!attempt.RequestWriteStarted)", code)
         self.assertIn("TdpControlResponse.Indeterminate", code)
+        self.assertIn("experimentalStateKnown: false", code)
         self.assertNotIn("Task.Run", code)
 
     def test_volume_client_never_retries_an_indeterminate_write(self):
@@ -717,6 +722,22 @@ class GameBarProjectTests(unittest.TestCase):
         self.assertIn("new ServiceTdpClient()", program)
         self.assertNotIn("ATKACPI", server)
         self.assertNotIn("ATKACPI", client)
+
+    def test_tdp_service_pins_the_package_family_and_broker_location(self):
+        manifest = ElementTree.parse(MANIFEST).getroot()
+        identity = manifest.find(
+            "{http://schemas.microsoft.com/appx/manifest/foundation/windows10}Identity"
+        )
+        validator = TDP_CLIENT_VALIDATOR.read_text(encoding="utf-8")
+
+        self.assertEqual("PanelDeControl.Windows", identity.attrib["Name"])
+        self.assertEqual("CN=Hooandee", identity.attrib["Publisher"])
+        self.assertIn('PackageName = "PanelDeControl.Windows"', validator)
+        self.assertIn('PackagePublisher = "CN=Hooandee"', validator)
+        self.assertIn("PackageFamilyNameFromFullName", validator)
+        self.assertIn("PackageFamilyNameFromId", validator)
+        self.assertIn("GetPackagePathByFullName", validator)
+        self.assertIn(r'@"HardwareBroker\PanelDeControl.Hardware.exe"', validator)
 
     def test_brightness_timeouts_cover_full_verified_set(self):
         provider = BRIGHTNESS_PROVIDER.read_text(encoding="utf-8")

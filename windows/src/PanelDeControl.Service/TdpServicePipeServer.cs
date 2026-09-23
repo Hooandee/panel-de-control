@@ -18,6 +18,7 @@ public sealed class TdpServicePipeServer : ITdpServiceServer
     private readonly Func<string, NamedPipeServerStream> pipeFactory;
     private readonly ITdpClientValidator clientValidator;
     private readonly TimeSpan operationTimeout;
+    private readonly TimeSpan commandReadTimeout;
     private Task<TdpControlResponse>? activeOperation;
 
     public TdpServicePipeServer(
@@ -25,16 +26,22 @@ public sealed class TdpServicePipeServer : ITdpServiceServer
         ITdpControlEndpoint endpoint,
         Func<string, NamedPipeServerStream> pipeFactory,
         ITdpClientValidator clientValidator,
-        TimeSpan? operationTimeout = null)
+        TimeSpan? operationTimeout = null,
+        TimeSpan? commandReadTimeout = null)
     {
         this.pipeName = pipeName;
         this.endpoint = endpoint;
         this.pipeFactory = pipeFactory;
         this.clientValidator = clientValidator;
         this.operationTimeout = operationTimeout ?? TimeSpan.FromSeconds(3);
+        this.commandReadTimeout = commandReadTimeout ?? TimeSpan.FromSeconds(1);
         if (this.operationTimeout <= TimeSpan.Zero)
         {
             throw new ArgumentOutOfRangeException(nameof(operationTimeout));
+        }
+        if (this.commandReadTimeout <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(commandReadTimeout));
         }
     }
 
@@ -77,15 +84,39 @@ public sealed class TdpServicePipeServer : ITdpServiceServer
             AutoFlush = true,
         };
 
-        var raw = await ReadCommandAsync(reader, cancellationToken)
-            .ConfigureAwait(false);
+        var raw = default(PipeCommand);
+        var readTimedOut = false;
+        using (var readTimeout = CancellationTokenSource.CreateLinkedTokenSource(
+                   cancellationToken))
+        {
+            readTimeout.CancelAfter(commandReadTimeout);
+            try
+            {
+                raw = await ReadCommandAsync(reader, readTimeout.Token)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+                when (!cancellationToken.IsCancellationRequested)
+            {
+                readTimedOut = true;
+            }
+        }
+
         TdpControlResponse response;
-        if (raw.TooLong ||
+        if (readTimedOut)
+        {
+            response = TdpControlResponse.Rejected(
+                false,
+                "tdp_command_timeout",
+                experimentalStateKnown: false);
+        }
+        else if (raw.TooLong ||
             !TdpServiceCommandParser.TryParse(raw.Value, out var command))
         {
             response = TdpControlResponse.Rejected(
                 experimentalEnabled: false,
-                raw.TooLong ? "tdp_command_too_long" : "invalid_tdp_command");
+                raw.TooLong ? "tdp_command_too_long" : "invalid_tdp_command",
+                experimentalStateKnown: false);
         }
         else
         {
@@ -145,7 +176,8 @@ public sealed class TdpServicePipeServer : ITdpServiceServer
                     endpoint.Set(command.RequestedWatts!.Value),
                 _ => TdpControlResponse.Rejected(
                     false,
-                    "unsupported_tdp_operation"),
+                    "unsupported_tdp_operation",
+                    experimentalStateKnown: false),
             };
         }
         catch
@@ -154,8 +186,12 @@ public sealed class TdpServicePipeServer : ITdpServiceServer
                 ? TdpControlResponse.Indeterminate(
                     false,
                     command.RequestedWatts!.Value,
-                    "tdp_operation_failed")
-                : TdpControlResponse.Fault(false, "tdp_operation_failed");
+                    "tdp_operation_failed",
+                    experimentalStateKnown: false)
+                : TdpControlResponse.Fault(
+                    false,
+                    "tdp_operation_failed",
+                    experimentalStateKnown: false);
         }
     }
 
@@ -167,8 +203,12 @@ public sealed class TdpServicePipeServer : ITdpServiceServer
             ? TdpControlResponse.Indeterminate(
                 false,
                 command.RequestedWatts!.Value,
-                errorCode)
-            : TdpControlResponse.Fault(false, errorCode);
+                errorCode,
+                experimentalStateKnown: false)
+            : TdpControlResponse.Fault(
+                false,
+                errorCode,
+                experimentalStateKnown: false);
     }
 
     private static async Task<PipeCommand> ReadCommandAsync(

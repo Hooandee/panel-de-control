@@ -71,6 +71,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     private int tdpMinimumWatts;
     private int tdpMaximumWatts;
     private int selectedTdpWatts;
+    private bool? confirmedExperimentalTdpEnabled;
     private bool? lastObservedMuted;
     private bool disposed;
 
@@ -658,7 +659,17 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         applyingTdpReadback = true;
         try
         {
-            ExperimentalTdpToggle.IsOn = response.ExperimentalEnabled;
+            if (response.ExperimentalStateKnown)
+            {
+                confirmedExperimentalTdpEnabled =
+                    response.ExperimentalEnabled;
+                ExperimentalTdpToggle.IsOn = response.ExperimentalEnabled;
+            }
+            else if (confirmedExperimentalTdpEnabled.HasValue)
+            {
+                ExperimentalTdpToggle.IsOn =
+                    confirmedExperimentalTdpEnabled.Value;
+            }
         }
         finally
         {

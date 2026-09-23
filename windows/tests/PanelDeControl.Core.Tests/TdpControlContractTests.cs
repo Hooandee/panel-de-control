@@ -1,3 +1,4 @@
+using System.Text.Json;
 using PanelDeControl.Core.Controls;
 using PanelDeControl.Core.Devices;
 using Xunit;
@@ -6,6 +7,28 @@ namespace PanelDeControl.Core.Tests;
 
 public sealed class TdpControlContractTests
 {
+    public static IEnumerable<object[]> SharedWindowsTdpCases()
+    {
+        var path = Path.Combine(
+            AppContext.BaseDirectory,
+            "Fixtures",
+            "windows_tdp.json");
+        using var document = JsonDocument.Parse(File.ReadAllText(path));
+        foreach (var testCase in document.RootElement
+                     .GetProperty("cases")
+                     .EnumerateArray())
+        {
+            yield return new object[]
+            {
+                testCase.GetProperty("id").GetString()!,
+                testCase.GetProperty("profile").GetString()!,
+                testCase.GetProperty("requested_watts").GetInt32(),
+                testCase.GetProperty("external_power").GetBoolean(),
+                testCase.GetProperty("expected_target_watts").GetInt32(),
+            };
+        }
+    }
+
     private static DeviceProfile AllyX()
     {
         var path = Path.Combine(AppContext.BaseDirectory, "Devices", "catalog.json");
@@ -43,6 +66,26 @@ public sealed class TdpControlContractTests
 
         Assert.Throws<NotSupportedException>(() =>
             TdpLimitPolicy.CreateTarget(other, 20, externalPower: true));
+    }
+
+    [Theory]
+    [MemberData(nameof(SharedWindowsTdpCases))]
+    public void SharedFixtureMatchesTheCorePolicy(
+        string id,
+        string profileKey,
+        int requestedWatts,
+        bool externalPower,
+        int expectedTargetWatts)
+    {
+        Assert.False(string.IsNullOrWhiteSpace(id));
+        Assert.Equal(TdpLimitPolicy.SupportedProfileKey, profileKey);
+
+        var target = TdpLimitPolicy.CreateTarget(
+            AllyX(),
+            requestedWatts,
+            externalPower);
+
+        Assert.Equal(expectedTargetWatts, target.TargetWatts);
     }
 
     [Fact]
@@ -135,5 +178,19 @@ public sealed class TdpControlContractTests
         Assert.Null(rejected.AppliedWatts);
         Assert.Equal(ControlStatus.Unverifiable, unverifiable.Status);
         Assert.Null(unverifiable.AppliedWatts);
+    }
+
+    [Fact]
+    public void TransportFailureDoesNotInventTheExperimentalState()
+    {
+        var response = TdpControlResponse.Fault(
+            experimentalEnabled: false,
+            "service_unavailable",
+            experimentalStateKnown: false);
+
+        var roundTrip = TdpControlWireCodec.DeserializeResponse(
+            TdpControlWireCodec.SerializeResponse(response));
+
+        Assert.False(roundTrip.ExperimentalStateKnown);
     }
 }
