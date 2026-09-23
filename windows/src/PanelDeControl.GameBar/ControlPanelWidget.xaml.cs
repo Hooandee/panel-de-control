@@ -414,6 +414,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     {
         DeviceName.Text = snapshot.DeviceModel;
         BatteryValue.Text = Format(snapshot, "battery.level", "0", "%");
+        ApplyEnergy(snapshot);
         PowerSourceValue.Text = FormatPowerSource(snapshot);
         CpuTemperatureValue.Text = Format(snapshot, "cpu.temperature", "0", "°C");
         CpuLoadValue.Text = string.Format(Localized("LoadFormat"), Format(snapshot, "cpu.load", "0", "%"));
@@ -1240,6 +1241,49 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         return reading?.Status == ReadingStatus.Available && reading.Value.HasValue
             ? $"{reading.Value.Value.ToString(format)} {unit}"
             : StatusText(reading);
+    }
+
+    private void ApplyEnergy(HardwareSnapshot snapshot)
+    {
+        var draw = FindReading(snapshot, "power.draw");
+        PowerDrawValue.Text = draw?.Status == ReadingStatus.Available && draw.Value.HasValue
+            ? $"{draw.Value.Value:0.0} W"
+            : "—";
+        var remaining = FindReading(snapshot, "battery.time_remaining");
+        PowerDrawDetail.Text = draw?.ErrorCode switch
+        {
+            "power_draw_on_ac" => Localized("PowerDrawOnAc"),
+            "power_draw_pending" => Localized("PowerDrawPending"),
+            _ when remaining?.Status == ReadingStatus.Available && remaining.Value.HasValue =>
+                string.Format(
+                    Localized("PowerDrawRemainingFormat"),
+                    (int)(remaining.Value.Value / 60),
+                    (int)(remaining.Value.Value % 60)),
+            _ when draw?.Status == ReadingStatus.Available => Localized("PowerDrawOnBattery"),
+            _ => StatusText(draw),
+        };
+
+        var mode = FindReading(snapshot, "power.mode");
+        var effective = FindReading(snapshot, "power.mode_effective");
+        PowerModeValue.Text = ModeName(mode) ?? "—";
+        PowerModeDetail.Text = mode?.Value is double selected &&
+            effective?.Value is double active &&
+            (int)selected != (int)active
+                ? string.Format(Localized("PowerModeEffectiveFormat"), ModeName(effective))
+                : string.Empty;
+    }
+
+    private static string? ModeName(TelemetryReading? reading)
+    {
+        return reading?.Status == ReadingStatus.Available && reading.Value.HasValue &&
+            Enum.IsDefined(typeof(PowerMode), (int)reading.Value.Value)
+                ? Localized("PowerMode" + (PowerMode)(int)reading.Value.Value)
+                : null;
+    }
+
+    private static TelemetryReading? FindReading(HardwareSnapshot snapshot, string id)
+    {
+        return snapshot.Readings.FirstOrDefault(candidate => candidate.Id == id);
     }
 
     private static string FormatPowerSource(HardwareSnapshot snapshot)

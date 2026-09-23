@@ -29,7 +29,10 @@ public sealed class SnapshotCollectorTests
         Assert.Equal(0, Reading(snapshot, "battery.level").Value);
         Assert.Equal(0, Reading(snapshot, "cpu.load").Value);
         Assert.Equal(0, Reading(snapshot, "gpu.load").Value);
-        Assert.All(snapshot.Readings, reading => Assert.Equal(ReadingStatus.Available, reading.Status));
+        Assert.All(
+            snapshot.Readings.Where(reading => reading.Id is "battery.level" or "power.ac" or "cpu.load" or "cpu.temperature" or "gpu.load" or "gpu.temperature"),
+            reading => Assert.Equal(ReadingStatus.Available, reading.Status));
+        Assert.Equal("power_reading_not_found", Reading(snapshot, "power.draw").ErrorCode);
     }
 
     [Fact]

@@ -119,6 +119,54 @@
         <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto">
             <Grid>
                 <StackPanel x:Name="PowerPanel">
+                    <Border x:Name="EnergyCard" Style="{StaticResource PdcCardStyle}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <TextBlock x:Uid="EnergyLabel" Style="{StaticResource PdcCaptionStyle}" />
+                                <TextBlock x:Name="PowerDrawValue" Margin="0,4,0,0" Text="—" Style="{StaticResource PdcValueStyle}" />
+                                <TextBlock x:Name="PowerDrawDetail" Margin="0,2,0,0" Style="{StaticResource PdcMutedStyle}" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Right">
+                                <Border Style="{StaticResource PdcPillStyle}" HorizontalAlignment="Right">
+                                    <TextBlock
+                                        x:Name="PowerModeValue"
+                                        Text="—"
+                                        FontFamily="{StaticResource PdcFontFamily}"
+                                        FontSize="{StaticResource PdcFontCaption}"
+                                        FontWeight="SemiBold"
+                                        Foreground="{StaticResource PdcAccentBrush}" />
+                                </Border>
+                                <TextBlock
+                                    x:Name="PowerModeDetail"
+                                    Margin="0,4,0,0"
+                                    HorizontalAlignment="Right"
+                                    Style="{StaticResource PdcMutedStyle}" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                    <Border x:Name="BatteryCard" Style="{StaticResource PdcCardStyle}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <TextBlock x:Uid="BatteryLabel" Style="{StaticResource PdcCaptionStyle}" />
+                                <TextBlock x:Name="BatteryValue" Margin="0,4,0,0" Text="—" Style="{StaticResource PdcValueStyle}" />
+                            </StackPanel>
+                            <TextBlock
+                                x:Name="PowerSourceValue"
+                                Grid.Column="1"
+                                Text="—"
+                                VerticalAlignment="Center"
+                                Style="{StaticResource PdcMutedStyle}" />
+                        </Grid>
+                    </Border>
+
                     <Border x:Name="PowerCard" Style="{StaticResource PdcCardStyle}">
                         <StackPanel>
                             <TextBlock x:Uid="PowerLabel" Style="{StaticResource PdcCaptionStyle}" />
@@ -235,24 +283,6 @@
                         </StackPanel>
                     </Border>
 
-                    <Border x:Name="BatteryCard" Style="{StaticResource PdcCardStyle}">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel>
-                                <TextBlock x:Uid="BatteryLabel" Style="{StaticResource PdcCaptionStyle}" />
-                                <TextBlock x:Name="BatteryValue" Margin="0,4,0,0" Text="—" Style="{StaticResource PdcValueStyle}" />
-                            </StackPanel>
-                            <TextBlock
-                                x:Name="PowerSourceValue"
-                                Grid.Column="1"
-                                Text="—"
-                                VerticalAlignment="Center"
-                                Style="{StaticResource PdcMutedStyle}" />
-                        </Grid>
-                    </Border>
                 </StackPanel>
 
                 <StackPanel x:Name="SystemPanel" Visibility="Collapsed">

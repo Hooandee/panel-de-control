@@ -302,4 +302,34 @@
   <data name="PowerZoneTurbo" xml:space="preserve">
     <value>TURBO</value>
   </data>
+  <data name="EnergyLabel.Text" xml:space="preserve">
+    <value>SYSTEMVERBRAUCH</value>
+  </data>
+  <data name="PowerDrawOnAc" xml:space="preserve">
+    <value>Am Netzteil: Verbrauch wird nur im Akkubetrieb gemessen</value>
+  </data>
+  <data name="PowerDrawPending" xml:space="preserve">
+    <value>Warte auf den Akkuwert</value>
+  </data>
+  <data name="PowerDrawOnBattery" xml:space="preserve">
+    <value>Akkubetrieb</value>
+  </data>
+  <data name="PowerDrawRemainingFormat" xml:space="preserve">
+    <value>Akkubetrieb · noch {0} h {1:00} min</value>
+  </data>
+  <data name="PowerModeBestEfficiency" xml:space="preserve">
+    <value>Beste Energieeffizienz</value>
+  </data>
+  <data name="PowerModeBalanced" xml:space="preserve">
+    <value>Ausbalanciert</value>
+  </data>
+  <data name="PowerModeBetterPerformance" xml:space="preserve">
+    <value>Bessere Leistung</value>
+  </data>
+  <data name="PowerModeBestPerformance" xml:space="preserve">
+    <value>Beste Leistung</value>
+  </data>
+  <data name="PowerModeEffectiveFormat" xml:space="preserve">
+    <value>Aktuell {0}</value>
+  </data>
 </root>

@@ -40,6 +40,10 @@ public sealed class SnapshotCollector : IHardwareSnapshotProvider
     {
         new("battery.level", "Batería", "%"),
         new("power.ac", "Alimentación", "bool"),
+        new("power.draw", "Consumo", "W"),
+        new("battery.time_remaining", "Autonomía", "min"),
+        new("power.mode", "Modo de energía", "mode"),
+        new("power.mode_effective", "Modo de energía", "mode"),
     };
 
     private readonly IClock clock;
