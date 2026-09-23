@@ -390,4 +390,7 @@
   <data name="PowerModeEffectiveFormat" xml:space="preserve">
     <value>Ahora en {0}</value>
   </data>
+  <data name="HeaderSubtitle.Text" xml:space="preserve">
+    <value>Windows · Xbox Game Bar</value>
+  </data>
 </root>

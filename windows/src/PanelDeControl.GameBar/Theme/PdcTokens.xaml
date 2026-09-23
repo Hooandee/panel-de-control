@@ -26,10 +26,10 @@
     <SolidColorBrush x:Key="PdcTextPrimaryBrush" Color="{StaticResource PdcTextPrimaryColor}" />
     <SolidColorBrush x:Key="PdcWarnBrush" Color="{StaticResource PdcWarnColor}" />
     <SolidColorBrush x:Key="PdcAccentBrush" Color="{StaticResource PdcAccentColor}" />
-    <CornerRadius x:Key="PdcRadiusCard">8</CornerRadius>
-    <CornerRadius x:Key="PdcRadiusControl">4</CornerRadius>
+    <CornerRadius x:Key="PdcRadiusCard">14</CornerRadius>
+    <CornerRadius x:Key="PdcRadiusControl">6</CornerRadius>
     <CornerRadius x:Key="PdcRadiusPill">999</CornerRadius>
-    <CornerRadius x:Key="PdcRadiusTile">6</CornerRadius>
+    <CornerRadius x:Key="PdcRadiusTile">10</CornerRadius>
     <x:Double x:Key="PdcSpaceCard">6</x:Double>
     <x:Double x:Key="PdcSpaceLg">18</x:Double>
     <x:Double x:Key="PdcSpaceMd">12</x:Double>
