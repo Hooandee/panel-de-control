@@ -170,7 +170,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         else
         {
             refreshTimer.Stop();
-        heroTimer.Stop();
+            heroTimer.Stop();
             InvalidatePendingOperations();
         }
     }
@@ -746,10 +746,6 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
 
     private void UpdatePowerArc()
     {
-        var range = tdpMaximumWatts - tdpMinimumWatts;
-        var fraction = range <= 0
-            ? 0
-            : (double)(selectedTdpWatts - tdpMinimumWatts) / range;
         PlaceTdpMarker();
         PowerValue.Text = $"{selectedTdpWatts} W";
         PowerLimits.Text = string.Format(
@@ -932,7 +928,8 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     private double heroFromWatts;
     private double heroTargetWatts;
     private DateTimeOffset heroAnimationStart;
-    private PanelDeControl.Core.Presentation.PowerZone? heroZone;
+    private PowerZone? heroZone;
+    private bool heroScaleFromDevice;
 
     private void AnimateHero(double? watts)
     {
@@ -941,7 +938,9 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             heroTimer.Stop();
             heroShownWatts = 0;
             PowerDrawValue.Text = "—";
-            PowerZone.Text = string.Empty;
+            heroZone = null;
+            PowerZoneLabel.Text = string.Empty;
+            SetHeroGlow(null);
             PowerArcFill.Data = CreatePowerArcGeometry(0);
             return;
         }
@@ -975,6 +974,13 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         PowerDrawValue.Text = watts.ToString("0.0");
         PowerArcFill.Data = CreatePowerArcGeometry(fraction);
         PowerArcFill.Stroke ??= HeroGradient();
+        if (!heroScaleFromDevice)
+        {
+            PowerZoneLabel.Text = string.Empty;
+            SetHeroGlow(null);
+            return;
+        }
+
         var zone = PowerArc.ZoneFor(fraction);
         if (zone == heroZone)
         {
@@ -983,11 +989,16 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
 
         heroZone = zone;
         var zoneColor = ToColor(PowerArc.ColorFor(fraction));
-        PowerZone.Text = Localized("PowerZone" + zone);
-        PowerZone.Foreground = new SolidColorBrush(zoneColor);
+        PowerZoneLabel.Text = Localized("PowerZone" + zone);
+        PowerZoneLabel.Foreground = new SolidColorBrush(zoneColor);
+        SetHeroGlow(zoneColor);
+    }
+
+    private void SetHeroGlow(Color? color)
+    {
         if (heroGlowStop is not null)
         {
-            heroGlowStop.Color = WithAlpha(zoneColor, 0x50);
+            heroGlowStop.Color = color is Color value ? WithAlpha(value, 0x50) : Colors.Transparent;
         }
     }
 
@@ -1455,7 +1466,12 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     private void ApplyEnergy(HardwareSnapshot snapshot)
     {
         var draw = FindReading(snapshot, "power.draw");
+        heroScaleFromDevice = snapshot.DeviceMaxWatts.HasValue;
         heroScaleWatts = snapshot.DeviceMaxWatts ?? DefaultHeroScaleWatts;
+        if (!heroScaleFromDevice)
+        {
+            heroZone = null;
+        }
         AnimateHero(draw?.Status == ReadingStatus.Available ? draw.Value : null);
         PlaceTdpMarker();
         var remaining = FindReading(snapshot, "battery.time_remaining");
