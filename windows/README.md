@@ -6,10 +6,15 @@ del brillo del panel integrado y del volumen del sistema.
 
 ## Alcance inicial
 
-- Identificación estricta de la ROG Xbox Ally X mediante fabricante y producto.
+- Identificación del modelo con el mismo catálogo que la versión de Linux
+  (`shared/devices/catalog.json`), a partir de fabricante, modelo y placa.
+- Interfaz en español, inglés, alemán, italiano y portugués de Brasil, según el
+  idioma de Windows. Si no hay traducción, se muestra en inglés.
 - Batería y estado de alimentación mediante la API de energía de Windows.
 - Carga y temperatura de CPU/GPU cuando LibreHardwareMonitor publica un sensor
-  compatible.
+  compatible con un valor posible. Las temperaturas necesitan el driver PawnIO
+  y permisos de administrador; sin ellos se indica qué falta en vez de mostrar
+  un número.
 - Lectura y ajuste del volumen principal del dispositivo de audio predeterminado
   mediante Windows Core Audio.
 - Lectura y ajuste del silencio principal del mismo dispositivo mediante la
@@ -64,9 +69,10 @@ varias pantallas. Si falta una capacidad, hay más de una candidata o Windows
 deniega acceso, el slider queda deshabilitado con un estado explícito sin afectar
 al resto del widget.
 
-LibreHardwareMonitor solo se inicializa cuando el DMI coincide con la ROG Xbox
-Ally X. En cualquier otro equipo, el companion conserva únicamente la lectura
-estándar de batería/AC y marca el resto como dispositivo no compatible.
+LibreHardwareMonitor solo se inicializa cuando el equipo es un modelo reconocido
+del catálogo. En cualquier otro, el companion conserva únicamente la lectura
+estándar de batería/AC y marca el resto como dispositivo no reconocido.
+Reconocer un modelo no significa que esté probado en Windows.
 El volumen, el silencio y el brillo no dependen de esa identificación: se
 habilitan por capacidades estándar de Windows. El audio requiere un endpoint
 predeterminado y el brillo la coincidencia verificable del panel integrado
@@ -92,6 +98,27 @@ msbuild windows\src\PanelDeControl.GameBar\PanelDeControl.GameBar.csproj /restor
 El paquete generado no está firmado. Para una instalación reproducible fuera de
 Visual Studio hace falta firmarlo con un certificado cuya identidad coincida con
 el `Publisher` del manifiesto.
+
+## Probar en un equipo
+
+Hace falta hacerlo una vez en cada equipo:
+
+1. Activar el **Modo de desarrollador** en Configuración > Sistema > Para
+   programadores.
+2. Instalar y arrancar **OpenSSH Server** (Configuración > Sistema >
+   Características opcionales) y dejar entrar con tu clave SSH.
+
+Después, desde el ordenador de desarrollo, un solo comando instala la última
+compilación correcta de la CI de la rama actual:
+
+```bash
+scripts/deploy-windows-device.sh usuario@equipo
+```
+
+`--dry-run` enseña cada paso sin tocar nada y `--run-id` elige otra compilación.
+El paquete de la CI no está firmado, así que se registra desde su contenido
+descomprimido, como hace Visual Studio. Registrar de nuevo borra la
+instalación anterior del widget.
 
 ## Validación física pendiente
 
