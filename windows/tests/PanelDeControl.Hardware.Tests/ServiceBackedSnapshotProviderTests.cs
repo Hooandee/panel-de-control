@@ -109,6 +109,49 @@ public sealed class ServiceBackedSnapshotProviderTests
         Assert.Equal(7, Single(provider.Capture(), "cpu.load").Value);
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(3800)]
+    [InlineData(10000)]
+    public void FreshServiceFansReachConsumersWithoutLocalFanDefinitions(double rpm)
+    {
+        var provider = Provider(Local(), Received(Now,
+            TelemetryReading.Available("fan.cpu.rpm", "Ventilador 1", rpm, "RPM", "asus/atk-dsts"),
+            TelemetryReading.Available("fan.gpu.rpm", "Ventilador 2", 3700, "RPM", "asus/atk-dsts")));
+
+        Assert.Equal(rpm, Single(provider.Capture(), "fan.cpu.rpm").Value);
+        Assert.Equal(3700, Single(provider.Capture(), "fan.gpu.rpm").Value);
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(10001)]
+    public void ImplausibleServiceOnlyFansNeverPublishANumber(double rpm)
+    {
+        var snapshot = Provider(Local(), Received(Now,
+            TelemetryReading.Available("fan.cpu.rpm", "Ventilador 1", rpm, "RPM", "asus/atk-dsts"))).Capture();
+        Assert.DoesNotContain(snapshot.Readings, r => r.Id == "fan.cpu.rpm" && r.Value.HasValue);
+    }
+
+    [Theory]
+    [InlineData(-11)]
+    [InlineData(1)]
+    public void StaleOrFutureFansAreNotAppended(int seconds)
+    {
+        var snapshot = Provider(Local(), Received(Now.AddSeconds(seconds),
+            TelemetryReading.Available("fan.cpu.rpm", "Ventilador 1", 3800, "RPM", "asus/atk-dsts"))).Capture();
+        Assert.DoesNotContain(snapshot.Readings, r => r.Id == "fan.cpu.rpm");
+    }
+
+    [Fact]
+    public void UnsupportedDevicesNeverAppendServiceFans()
+    {
+        var snapshot = Provider(Local(TelemetryReading.Unavailable("cpu.temperature", "CPU", "°C",
+                ReadingStatus.Unavailable, "device_not_supported")),
+            Received(Now, TelemetryReading.Available("fan.cpu.rpm", "Ventilador 1", 3800, "RPM", "asus/atk-dsts"))).Capture();
+        Assert.DoesNotContain(snapshot.Readings, r => r.Id == "fan.cpu.rpm");
+    }
+
     private static ServiceBackedSnapshotProvider Provider(HardwareSnapshot local, ServiceSnapshotResult service)
     {
         return new ServiceBackedSnapshotProvider(new FixedProvider(local), new FixedSource(service), new FixedClock());
