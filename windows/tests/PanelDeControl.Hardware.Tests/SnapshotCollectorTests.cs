@@ -54,7 +54,8 @@ public sealed class SnapshotCollectorTests
             new FixedClock(),
             new FixedIdentityReader(),
             new ThrowingHardwareReader(new UnauthorizedAccessException("denied")),
-            new FixedPowerReader(AvailablePower()));
+            new FixedPowerReader(AvailablePower()),
+            FixedAccessProbe.Full);
 
         var snapshot = collector.Capture();
 
@@ -71,7 +72,8 @@ public sealed class SnapshotCollectorTests
             new FixedClock(),
             new FixedIdentityReader(),
             new ThrowingHardwareReader(new InvalidOperationException("private machine path")),
-            new FixedPowerReader(AvailablePower()));
+            new FixedPowerReader(AvailablePower()),
+            FixedAccessProbe.Full);
 
         var snapshot = collector.Capture();
 
@@ -89,7 +91,8 @@ public sealed class SnapshotCollectorTests
             new FixedClock(),
             new UnsupportedIdentityReader(),
             hardwareReader,
-            new FixedPowerReader(AvailablePower()));
+            new FixedPowerReader(AvailablePower()),
+            FixedAccessProbe.Full);
 
         var snapshot = collector.Capture();
 
@@ -103,15 +106,138 @@ public sealed class SnapshotCollectorTests
             Reading(snapshot, "gpu.temperature").ErrorCode);
     }
 
+    [Fact]
+    public void AllZeroSensorOutputIsNotReportedAsARealTemperature()
+    {
+        var collector = CreateCollector(
+            hardwareReadings: new[]
+            {
+                Candidate("cpu/load/total", HardwareKind.Cpu, SensorKind.Load, "CPU Total", 0),
+                Candidate("cpu/temp/package", HardwareKind.Cpu, SensorKind.Temperature, "CPU Package", 0),
+                Candidate("gpu/load/core", HardwareKind.Gpu, SensorKind.Load, "GPU Core", 0),
+                Candidate("gpu/temp/core", HardwareKind.Gpu, SensorKind.Temperature, "GPU Core", 0),
+            },
+            powerReadings: AvailablePower());
+
+        var snapshot = collector.Capture();
+
+        Assert.Equal(ReadingStatus.Available, Reading(snapshot, "cpu.load").Status);
+        Assert.Equal(0, Reading(snapshot, "cpu.load").Value);
+        foreach (var id in new[] { "cpu.temperature", "gpu.temperature" })
+        {
+            var reading = Reading(snapshot, id);
+            Assert.Equal(ReadingStatus.Unavailable, reading.Status);
+            Assert.Null(reading.Value);
+            Assert.Equal("sensor_implausible", reading.ErrorCode);
+        }
+    }
+
+    [Theory]
+    [InlineData(SensorKind.Temperature, "CPU Package", double.NaN)]
+    [InlineData(SensorKind.Temperature, "CPU Package", 130)]
+    [InlineData(SensorKind.Temperature, "CPU Package", -5)]
+    [InlineData(SensorKind.Load, "CPU Total", 101)]
+    [InlineData(SensorKind.Load, "CPU Total", double.PositiveInfinity)]
+    public void ImplausibleValuesAreUnavailable(SensorKind kind, string name, double value)
+    {
+        var id = kind == SensorKind.Temperature ? "cpu.temperature" : "cpu.load";
+        var collector = CreateCollector(
+            hardwareReadings: new[] { Candidate("cpu/x", HardwareKind.Cpu, kind, name, value) },
+            powerReadings: AvailablePower());
+
+        var reading = Reading(collector.Capture(), id);
+
+        Assert.Equal(ReadingStatus.Unavailable, reading.Status);
+        Assert.Equal("sensor_implausible", reading.ErrorCode);
+    }
+
+    [Theory]
+    [InlineData(false, true, "sensor_driver_missing")]
+    [InlineData(true, false, "sensor_elevation_required")]
+    [InlineData(false, false, "sensor_driver_missing")]
+    public void TemperaturesNeedDriverAndElevationWhileLoadStillReads(
+        bool hasDriver,
+        bool isElevated,
+        string expectedError)
+    {
+        var collector = CreateCollector(
+            hardwareReadings: new[]
+            {
+                Candidate("cpu/load/total", HardwareKind.Cpu, SensorKind.Load, "CPU Total", 37),
+                Candidate("cpu/temp/package", HardwareKind.Cpu, SensorKind.Temperature, "CPU Package", 61),
+                Candidate("gpu/temp/core", HardwareKind.Gpu, SensorKind.Temperature, "GPU Core", 58),
+            },
+            powerReadings: AvailablePower(),
+            accessProbe: new FixedAccessProbe(new SensorAccess(isElevated, hasDriver)));
+
+        var snapshot = collector.Capture();
+
+        Assert.Equal(37, Reading(snapshot, "cpu.load").Value);
+        Assert.Equal(58, Reading(snapshot, "gpu.temperature").Value);
+        var cpuTemperature = Reading(snapshot, "cpu.temperature");
+        Assert.Equal(ReadingStatus.PermissionRequired, cpuTemperature.Status);
+        Assert.Null(cpuTemperature.Value);
+        Assert.Equal(expectedError, cpuTemperature.ErrorCode);
+    }
+
+    [Fact]
+    public void RecognizedIdentityIsReadOnceAcrossPolls()
+    {
+        var identityReader = new CountingIdentityReader();
+        var collector = new SnapshotCollector(
+            new FixedClock(),
+            identityReader,
+            new FixedHardwareReader(Array.Empty<SensorCandidate>()),
+            new FixedPowerReader(AvailablePower()),
+            FixedAccessProbe.Full);
+
+        collector.Capture();
+        collector.Capture();
+
+        Assert.Equal(1, identityReader.ReadCount);
+    }
+
+    [Fact]
+    public void MissingValueIsNotFoundRatherThanImplausible()
+    {
+        var collector = CreateCollector(
+            hardwareReadings: new[]
+            {
+                new SensorCandidate("gpu/temp/core", HardwareKind.Gpu, SensorKind.Temperature, "GPU Core", null, "gpu/temp/core"),
+            },
+            powerReadings: AvailablePower());
+
+        Assert.Equal("sensor_not_found", Reading(collector.Capture(), "gpu.temperature").ErrorCode);
+    }
+
+    [Fact]
+    public void FailingAccessProbeIsTreatedAsMissingAccess()
+    {
+        var collector = CreateCollector(
+            hardwareReadings: new[]
+            {
+                Candidate("cpu/temp/package", HardwareKind.Cpu, SensorKind.Temperature, "CPU Package", 61),
+            },
+            powerReadings: AvailablePower(),
+            accessProbe: new ThrowingAccessProbe());
+
+        var reading = Reading(collector.Capture(), "cpu.temperature");
+
+        Assert.Equal(ReadingStatus.PermissionRequired, reading.Status);
+        Assert.Equal("sensor_permission_required", reading.ErrorCode);
+    }
+
     private static SnapshotCollector CreateCollector(
         IReadOnlyList<SensorCandidate> hardwareReadings,
-        IReadOnlyList<TelemetryReading> powerReadings)
+        IReadOnlyList<TelemetryReading> powerReadings,
+        ISensorAccessProbe? accessProbe = null)
     {
         return new SnapshotCollector(
             new FixedClock(),
             new FixedIdentityReader(),
             new FixedHardwareReader(hardwareReadings),
-            new FixedPowerReader(powerReadings));
+            new FixedPowerReader(powerReadings),
+            accessProbe ?? FixedAccessProbe.Full);
     }
 
     private static IReadOnlyList<TelemetryReading> AvailablePower()
@@ -221,6 +347,42 @@ public sealed class SnapshotCollectorTests
                 "Contoso",
                 "Some Laptop 15",
                 "X1");
+        }
+    }
+
+    private sealed class FixedAccessProbe : ISensorAccessProbe
+    {
+        public static readonly FixedAccessProbe Full = new(new SensorAccess(true, true));
+
+        private readonly SensorAccess access;
+
+        public FixedAccessProbe(SensorAccess access)
+        {
+            this.access = access;
+        }
+
+        public SensorAccess Probe()
+        {
+            return access;
+        }
+    }
+
+    private sealed class ThrowingAccessProbe : ISensorAccessProbe
+    {
+        public SensorAccess Probe()
+        {
+            throw new InvalidOperationException("registry unavailable");
+        }
+    }
+
+    private sealed class CountingIdentityReader : IDeviceIdentityReader
+    {
+        public int ReadCount { get; private set; }
+
+        public DeviceIdentity Read()
+        {
+            ReadCount++;
+            return new FixedIdentityReader().Read();
         }
     }
 }

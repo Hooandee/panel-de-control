@@ -46,17 +46,21 @@ public sealed class SnapshotCollector : IHardwareSnapshotProvider
     private readonly IDeviceIdentityReader identityReader;
     private readonly IHardwareReader hardwareReader;
     private readonly IPowerStatusReader powerReader;
+    private readonly ISensorAccessProbe accessProbe;
+    private DeviceIdentity? cachedIdentity;
 
     public SnapshotCollector(
         IClock clock,
         IDeviceIdentityReader identityReader,
         IHardwareReader hardwareReader,
-        IPowerStatusReader powerReader)
+        IPowerStatusReader powerReader,
+        ISensorAccessProbe accessProbe)
     {
         this.clock = clock;
         this.identityReader = identityReader;
         this.hardwareReader = hardwareReader;
         this.powerReader = powerReader;
+        this.accessProbe = accessProbe;
     }
 
     public HardwareSnapshot Capture()
@@ -71,9 +75,20 @@ public sealed class SnapshotCollector : IHardwareSnapshotProvider
 
     private DeviceIdentity ReadIdentity()
     {
+        if (cachedIdentity is not null)
+        {
+            return cachedIdentity;
+        }
+
         try
         {
-            return identityReader.Read();
+            var identity = identityReader.Read();
+            if (identity.IsRecognized || identity.ProductName != DeviceIdentity.Unrecognized().ProductName)
+            {
+                cachedIdentity = identity;
+            }
+
+            return identity;
         }
         catch
         {
@@ -130,27 +145,68 @@ public sealed class SnapshotCollector : IHardwareSnapshotProvider
             return UnavailableHardware(ReadingStatus.Fault, "sensor_provider_failed");
         }
 
+        var missingAccess = MissingTemperatureAccess();
         return SensorDefinitions.Select(definition =>
         {
+            if (definition.HardwareKind == HardwareKind.Cpu &&
+                definition.SensorKind == SensorKind.Temperature &&
+                missingAccess is not null)
+            {
+                return TelemetryReading.Unavailable(
+                    definition.Id,
+                    definition.Label,
+                    definition.Unit,
+                    ReadingStatus.PermissionRequired,
+                    missingAccess);
+            }
+
             var selected = SensorSelector.Select(
                 candidates,
                 definition.HardwareKind,
                 definition.SensorKind,
                 definition.PreferredNames);
-            return selected is null
-                ? TelemetryReading.Unavailable(
-                    definition.Id,
-                    definition.Label,
-                    definition.Unit,
-                    ReadingStatus.Unavailable,
-                    "sensor_not_found")
-                : TelemetryReading.Available(
+            if (selected is not null)
+            {
+                return TelemetryReading.Available(
                     definition.Id,
                     definition.Label,
                     selected.Value!.Value,
                     definition.Unit,
                     selected.Source);
+            }
+
+            var onlyImplausible = candidates.Any(candidate =>
+                candidate.HardwareKind == definition.HardwareKind &&
+                candidate.SensorKind == definition.SensorKind &&
+                candidate.Value.HasValue &&
+                definition.PreferredNames.Contains(candidate.Name, StringComparer.OrdinalIgnoreCase));
+            return TelemetryReading.Unavailable(
+                definition.Id,
+                definition.Label,
+                definition.Unit,
+                ReadingStatus.Unavailable,
+                onlyImplausible ? "sensor_implausible" : "sensor_not_found");
         });
+    }
+
+    private string? MissingTemperatureAccess()
+    {
+        SensorAccess access;
+        try
+        {
+            access = accessProbe.Probe();
+        }
+        catch
+        {
+            return "sensor_permission_required";
+        }
+
+        if (!access.HasSensorDriver)
+        {
+            return "sensor_driver_missing";
+        }
+
+        return access.IsElevated ? null : "sensor_elevation_required";
     }
 
     private static IEnumerable<TelemetryReading> UnavailablePower(

@@ -16,7 +16,8 @@ public static class Program
                 new SystemClock(),
                 new DeviceIdentityReader(DeviceCatalogResource.TryLoad()),
                 new LibreHardwareReader(),
-                new PowerStatusReader());
+                new PowerStatusReader(),
+                new WindowsSensorAccessProbe());
             var snapshotServer = new SnapshotPipeServer(
                 SnapshotPipeServer.PackagedPipeName,
                 collector,
