@@ -207,6 +207,18 @@ public sealed class AsusSensorSnapshotProviderTests
         Assert.Equal(1, calls);
     }
 
+    [Fact]
+    public void UnknownIdentityCanRecoverOnTheNextCapture()
+    {
+        var calls = 0;
+        var identity = new CallbackIdentity(() =>
+            Interlocked.Increment(ref calls) == 1 ? DeviceIdentity.Unrecognized() : new Identity().Read());
+        var provider = Create(new FixedSnapshot(), new Transport(), identity);
+        Assert.Empty(provider.Capture().Readings);
+        Assert.Equal(3800, Reading(provider.Capture(), "fan.cpu.rpm").Value);
+        Assert.Equal(2, calls);
+    }
+
     private sealed class CallbackIdentity(Func<DeviceIdentity> read) : IDeviceIdentityReader
     {
         public DeviceIdentity Read() => read();

@@ -44,7 +44,7 @@ public sealed class AsusSensorSnapshotProvider : IHardwareSnapshotProvider
             if (identity is null)
             {
                 identity = identityProbe.CompletedValue;
-                if (identity is null)
+                if (identity?.IsRecognized != true)
                 {
                     identityProbe.Start();
                     identity = identityProbe.Finish(Remaining(watch)).Value;
