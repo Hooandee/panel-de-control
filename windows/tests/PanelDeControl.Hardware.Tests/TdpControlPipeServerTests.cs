@@ -91,14 +91,12 @@ public sealed class TdpControlPipeServerTests
         await using var client = new NamedPipeClientStream(
             ".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
         await client.ConnectAsync(timeout.Token);
-        await using var writer = new StreamWriter(client, new UTF8Encoding(false), leaveOpen: true)
-        {
-            AutoFlush = true,
-        };
         using var reader = new StreamReader(client, leaveOpen: true);
         try
         {
-            await writer.WriteLineAsync(TdpControlWireCodec.SerializeRequest(TdpControlRequest.Set(25)));
+            var payload = Encoding.UTF8.GetBytes(
+                TdpControlWireCodec.SerializeRequest(TdpControlRequest.Set(25)) + "\n");
+            await client.WriteAsync(payload.AsMemory(), timeout.Token);
         }
         catch (IOException)
         {
