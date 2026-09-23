@@ -759,3 +759,13 @@ class ProxyStubTests(unittest.TestCase):
             manifest,
         )
 
+
+class SideloadPackageTests(unittest.TestCase):
+    def test_ci_builds_a_native_sideload_package(self):
+        workflow = WORKFLOW.read_text(encoding="utf-8")
+        project = PROJECT.read_text(encoding="utf-8")
+
+        self.assertIn("/property:UapAppxPackageBuildMode=SideloadOnly", workflow)
+        self.assertNotIn("UapAppxPackageBuildMode=CI", workflow)
+        self.assertIn("<UseDotNetNativeToolchain>true</UseDotNetNativeToolchain>", project)
+
