@@ -268,6 +268,20 @@
                 </Border>
             </StackPanel>
 
+            <Border x:Name="PerformanceCard" Tag="power.steamPerformance" Style="{StaticResource PdcCardStyle}">
+                <StackPanel>
+                    <TextBlock x:Name="PerformanceTitle" Style="{StaticResource PdcTitleStyle}" />
+                    <TextBlock x:Name="RefreshRateLabel" Margin="0,14,0,0" Style="{StaticResource PdcBodyStyle}" />
+                    <StackPanel x:Name="RefreshRateChips" Margin="0,8,0,0" Orientation="Horizontal" Spacing="6" />
+                    <TextBlock
+                        x:Name="RefreshRateStatus"
+                        Margin="0,6,0,0"
+                        AutomationProperties.LiveSetting="Polite"
+                        Style="{StaticResource PdcCaptionStyle}" />
+                    <TextBlock x:Name="PerformancePending" Margin="0,12,0,0" FontSize="11" Style="{StaticResource PdcMutedStyle}" />
+                </StackPanel>
+            </Border>
+
             <Border x:Name="BatteryCard" Tag="power.energy" Style="{StaticResource PdcCardStyle}" Padding="20,18">
                 <StackPanel>
                     <TextBlock x:Name="EnergyTitle" Style="{StaticResource PdcTitleStyle}" />

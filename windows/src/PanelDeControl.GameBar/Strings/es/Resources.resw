@@ -363,7 +363,7 @@
   <data name="BlockTdpDesc" xml:space="preserve"><value>Ajusta los vatios del procesador.</value></data>
   <data name="BlockEnergyTitle" xml:space="preserve"><value>Energía</value></data>
   <data name="BlockEnergyDesc" xml:space="preserve"><value>Consumo, carga y actividad del equipo.</value></data>
-  <data name="BlockSteamPerformanceTitle" xml:space="preserve"><value>Rendimiento de Steam</value></data>
+  <data name="BlockSteamPerformanceTitle" xml:space="preserve"><value>Rendimiento en juego</value></data>
   <data name="BlockSteamPerformanceDesc" xml:space="preserve"><value>Límite de FPS, frecuencia de pantalla y ajustes por juego.</value></data>
   <data name="BlockAutoTdpTitle" xml:space="preserve"><value>TDP automático</value></data>
   <data name="BlockAutoTdpDesc" xml:space="preserve"><value>Ajusta la potencia solo, según los FPS del juego.</value></data>
@@ -425,4 +425,8 @@
   <data name="PowerDrawNowFormat" xml:space="preserve"><value>Consumo actual {0:0.0} W</value></data>
   <data name="TdpSlider.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Límite de potencia experimental</value></data>
   <data name="TdpSlider.[using:Windows.UI.Xaml.Automation]AutomationProperties.HelpText" xml:space="preserve"><value>Elige los vatios y los aplica tras confirmarlos con el equipo</value></data>
+  <data name="RefreshRateLabel" xml:space="preserve"><value>Frecuencia de pantalla</value></data>
+  <data name="RefreshRateUnavailable" xml:space="preserve"><value>No se pudo leer la frecuencia de la pantalla</value></data>
+  <data name="RefreshRateAutomation" xml:space="preserve"><value>Cambiar la pantalla a {0} Hz</value></data>
+  <data name="PerformancePending" xml:space="preserve"><value>Límite de FPS y escalado: pendiente en Windows</value></data>
 </root>

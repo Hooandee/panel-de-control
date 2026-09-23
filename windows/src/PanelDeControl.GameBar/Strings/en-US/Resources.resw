@@ -363,7 +363,7 @@
   <data name="BlockTdpDesc" xml:space="preserve"><value>Sets the processor wattage.</value></data>
   <data name="BlockEnergyTitle" xml:space="preserve"><value>Energy</value></data>
   <data name="BlockEnergyDesc" xml:space="preserve"><value>Power draw, charge and device activity.</value></data>
-  <data name="BlockSteamPerformanceTitle" xml:space="preserve"><value>Steam performance</value></data>
+  <data name="BlockSteamPerformanceTitle" xml:space="preserve"><value>Game performance</value></data>
   <data name="BlockSteamPerformanceDesc" xml:space="preserve"><value>FPS limit, refresh rate and per-game settings.</value></data>
   <data name="BlockAutoTdpTitle" xml:space="preserve"><value>Automatic TDP</value></data>
   <data name="BlockAutoTdpDesc" xml:space="preserve"><value>Adjusts power on its own from the game's FPS.</value></data>
@@ -425,4 +425,8 @@
   <data name="PowerDrawNowFormat" xml:space="preserve"><value>Drawing {0:0.0} W now</value></data>
   <data name="TdpSlider.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Experimental power limit</value></data>
   <data name="TdpSlider.[using:Windows.UI.Xaml.Automation]AutomationProperties.HelpText" xml:space="preserve"><value>Picks the wattage and applies it after the device confirms it</value></data>
+  <data name="RefreshRateLabel" xml:space="preserve"><value>Refresh rate</value></data>
+  <data name="RefreshRateUnavailable" xml:space="preserve"><value>The display refresh rate could not be read</value></data>
+  <data name="RefreshRateAutomation" xml:space="preserve"><value>Switch the display to {0} Hz</value></data>
+  <data name="PerformancePending" xml:space="preserve"><value>FPS limit and scaling: coming to Windows</value></data>
 </root>

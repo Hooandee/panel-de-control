@@ -319,7 +319,7 @@
   <data name="BlockTdpDesc" xml:space="preserve"><value>Stellt die Prozessorleistung ein.</value></data>
   <data name="BlockEnergyTitle" xml:space="preserve"><value>Energie</value></data>
   <data name="BlockEnergyDesc" xml:space="preserve"><value>Verbrauch, Ladung und Geräteaktivität.</value></data>
-  <data name="BlockSteamPerformanceTitle" xml:space="preserve"><value>Steam-Leistung</value></data>
+  <data name="BlockSteamPerformanceTitle" xml:space="preserve"><value>Spielleistung</value></data>
   <data name="BlockSteamPerformanceDesc" xml:space="preserve"><value>FPS-Limit, Bildwiederholrate und Einstellungen pro Spiel.</value></data>
   <data name="BlockAutoTdpTitle" xml:space="preserve"><value>Automatische TDP</value></data>
   <data name="BlockAutoTdpDesc" xml:space="preserve"><value>Passt die Leistung selbst anhand der FPS an.</value></data>
@@ -381,4 +381,8 @@
   <data name="PowerDrawNowFormat" xml:space="preserve"><value>Aktueller Verbrauch {0:0.0} W</value></data>
   <data name="TdpSlider.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Experimentelles Leistungslimit</value></data>
   <data name="TdpSlider.[using:Windows.UI.Xaml.Automation]AutomationProperties.HelpText" xml:space="preserve"><value>Wählt die Leistung und wendet sie nach Bestätigung durch das Gerät an</value></data>
+  <data name="RefreshRateLabel" xml:space="preserve"><value>Bildwiederholrate</value></data>
+  <data name="RefreshRateUnavailable" xml:space="preserve"><value>Die Bildwiederholrate konnte nicht gelesen werden</value></data>
+  <data name="RefreshRateAutomation" xml:space="preserve"><value>Display auf {0} Hz umstellen</value></data>
+  <data name="PerformancePending" xml:space="preserve"><value>FPS-Limit und Skalierung: kommt für Windows</value></data>
 </root>

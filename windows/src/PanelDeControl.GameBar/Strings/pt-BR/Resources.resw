@@ -319,7 +319,7 @@
   <data name="BlockTdpDesc" xml:space="preserve"><value>Ajusta os watts do processador.</value></data>
   <data name="BlockEnergyTitle" xml:space="preserve"><value>Energia</value></data>
   <data name="BlockEnergyDesc" xml:space="preserve"><value>Consumo, carga e atividade do aparelho.</value></data>
-  <data name="BlockSteamPerformanceTitle" xml:space="preserve"><value>Desempenho do Steam</value></data>
+  <data name="BlockSteamPerformanceTitle" xml:space="preserve"><value>Desempenho em jogo</value></data>
   <data name="BlockSteamPerformanceDesc" xml:space="preserve"><value>Limite de FPS, taxa de atualização e ajustes por jogo.</value></data>
   <data name="BlockAutoTdpTitle" xml:space="preserve"><value>TDP automático</value></data>
   <data name="BlockAutoTdpDesc" xml:space="preserve"><value>Ajusta a potência sozinho conforme os FPS do jogo.</value></data>
@@ -381,4 +381,8 @@
   <data name="PowerDrawNowFormat" xml:space="preserve"><value>Consumo atual {0:0.0} W</value></data>
   <data name="TdpSlider.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Limite de potência experimental</value></data>
   <data name="TdpSlider.[using:Windows.UI.Xaml.Automation]AutomationProperties.HelpText" xml:space="preserve"><value>Escolhe os watts e aplica após o aparelho confirmar</value></data>
+  <data name="RefreshRateLabel" xml:space="preserve"><value>Taxa de atualização</value></data>
+  <data name="RefreshRateUnavailable" xml:space="preserve"><value>Não foi possível ler a taxa de atualização</value></data>
+  <data name="RefreshRateAutomation" xml:space="preserve"><value>Mudar a tela para {0} Hz</value></data>
+  <data name="PerformancePending" xml:space="preserve"><value>Limite de FPS e escala: em breve no Windows</value></data>
 </root>

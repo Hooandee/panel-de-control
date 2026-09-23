@@ -45,6 +45,11 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     private readonly VolumeControlClient volumeClient = new();
     private readonly BrightnessControlClient brightnessClient = new();
     private readonly TdpControlClient tdpClient = new();
+    private readonly RefreshRateClient refreshClient = new();
+    private bool refreshRefreshInProgress;
+    private bool refreshWritePending;
+    private long refreshControlGeneration;
+    private int[] shownRefreshRates = Array.Empty<int>();
     private readonly InventoryClient inventoryClient = new();
     private XboxGameBarWidget? gameBarWidget;
     private CancellationTokenSource? volumeDebounce;
@@ -285,7 +290,8 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             ApplySnapshotWhenReadyAsync(currentRefreshGeneration),
             ApplyVolumeWhenReadyAsync(currentRefreshGeneration),
             ApplyBrightnessWhenReadyAsync(currentRefreshGeneration),
-            ApplyTdpWhenReadyAsync(currentRefreshGeneration));
+            ApplyTdpWhenReadyAsync(currentRefreshGeneration),
+            ApplyRefreshRateWhenReadyAsync(currentRefreshGeneration));
     }
 
     private async Task ApplySnapshotWhenReadyAsync(
@@ -419,6 +425,109 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             if (currentRefreshGeneration == refreshGeneration)
             {
                 tdpRefreshInProgress = false;
+            }
+        }
+    }
+
+    private async Task ApplyRefreshRateWhenReadyAsync(long currentRefreshGeneration)
+    {
+        if (refreshRefreshInProgress || refreshWritePending || disposed)
+        {
+            return;
+        }
+
+        refreshRefreshInProgress = true;
+        var generation = refreshControlGeneration;
+        try
+        {
+            var response = await refreshClient.GetAsync();
+            if (!disposed &&
+                currentRefreshGeneration == refreshGeneration &&
+                !refreshWritePending &&
+                generation == refreshControlGeneration)
+            {
+                ApplyRefreshRateResponse(response);
+            }
+        }
+        finally
+        {
+            if (currentRefreshGeneration == refreshGeneration)
+            {
+                refreshRefreshInProgress = false;
+            }
+        }
+    }
+
+    private void ApplyRefreshRateResponse(RefreshRateResponse response)
+    {
+        var rates = response.Supported.ToArray();
+        if (!rates.SequenceEqual(shownRefreshRates))
+        {
+            shownRefreshRates = rates;
+            RefreshRateChips.Children.Clear();
+            foreach (var hertz in rates)
+            {
+                var chip = new Button
+                {
+                    Content = $"{hertz} Hz",
+                    Tag = hertz,
+                    MinWidth = 72,
+                    Style = (Style)Application.Current.Resources["PdcChipButtonStyle"],
+                };
+                AutomationProperties.SetName(chip, string.Format(Localized("RefreshRateAutomation"), hertz));
+                chip.Click += RefreshRateChip_Click;
+                RefreshRateChips.Children.Add(chip);
+            }
+        }
+
+        foreach (var chip in RefreshRateChips.Children.OfType<Button>())
+        {
+            var active = Equals(chip.Tag, response.ObservedHertz);
+            chip.Background = active
+                ? new SolidColorBrush(WithAlpha(ResourceBrush("PdcAccentBrush").Color, 0x66))
+                : ResourceBrush("PdcLayerBrush");
+            chip.IsEnabled = !refreshWritePending;
+        }
+
+        RefreshRateStatus.Text = response.Status switch
+        {
+            ControlStatus.Available => string.Empty,
+            ControlStatus.Applied => Localized("StatusVerified"),
+            ControlStatus.Unverifiable => Localized("StatusNotVerified"),
+            ControlStatus.Rejected => Localized("StatusRejected"),
+            _ => Localized("RefreshRateUnavailable"),
+        };
+    }
+
+    private async void RefreshRateChip_Click(object sender, RoutedEventArgs args)
+    {
+        if (disposed || refreshWritePending || sender is not Button { Tag: int hertz })
+        {
+            return;
+        }
+
+        refreshWritePending = true;
+        var generation = ++refreshControlGeneration;
+        RefreshRateStatus.Text = Localized("StatusApplying");
+        foreach (var chip in RefreshRateChips.Children.OfType<Button>())
+        {
+            chip.IsEnabled = false;
+        }
+
+        try
+        {
+            var response = await refreshClient.SetAsync(hertz);
+            if (!disposed && generation == refreshControlGeneration)
+            {
+                refreshWritePending = false;
+                ApplyRefreshRateResponse(response);
+            }
+        }
+        finally
+        {
+            if (generation == refreshControlGeneration)
+            {
+                refreshWritePending = false;
             }
         }
     }
@@ -954,6 +1063,9 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         EnergyTitle.Text = Localized("BlockEnergyTitle");
         SystemBatteryTitle.Text = Localized("BlockBatteryTitle");
         SystemBatteryPending.Text = Localized("BatteryHealthPending");
+        PerformanceTitle.Text = Localized("BlockSteamPerformanceTitle");
+        RefreshRateLabel.Text = Localized("RefreshRateLabel");
+        PerformancePending.Text = Localized("PerformancePending");
         var library = BlockLibrary.Children
             .OfType<FrameworkElement>()
             .Where(element => element.Tag is string)
@@ -1747,6 +1859,9 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         volumeRefreshInProgress = false;
         brightnessRefreshInProgress = false;
         tdpRefreshInProgress = false;
+        refreshRefreshInProgress = false;
+        refreshWritePending = false;
+        refreshControlGeneration++;
         CancelPendingVolumeWrite();
         CancelPendingMuteWrite();
         CancelPendingBrightnessWrite();
