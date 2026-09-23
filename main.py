@@ -4887,8 +4887,13 @@ class Plugin:
         limits = limits or self._limits()
         ac = read_on_ac() if on_ac is None else on_ac
         active = self._active_max(limits, ac)
-        ll = self._cap_level_limits(self._tdp_backend.level_limits(), active)
-        levels = self._clamp_levels(self._tdp_profiles.effective(appid), limits, active, ll)
+        effective = self._tdp_profiles.effective(appid)
+        ll = self._cap_level_limits(
+            self._tdp_backend.level_limits(),
+            active,
+            self._manual_boost(effective, appid),
+        )
+        levels = self._clamp_levels(effective, limits, active, ll)
         if self._settings.get("eco_enabled"):
             # Download mode: force every rail to the device minimum, overriding any
             # profile/scope (this is the single chokepoint every RPC + reapply reads).
@@ -4898,10 +4903,16 @@ class Plugin:
             levels = self._clamp_levels({"pl1": m, "pl2": m, "pl3": m}, limits, active, ll)
         return levels, active, ac
 
-    def _cap_level_limits(self, ll: dict, active_max: int) -> dict:
+    def _manual_boost(self, effective: dict, appid=None) -> bool:
+        return effective.get("mode") == "custom" and not self._tdp_profiles.auto_tdp(appid)
+
+    def _cap_level_limits(self, ll: dict, active_max: int, manual_boost: bool = False) -> dict:
         out = {}
         cap_boost = bool(
             getattr(self._tdp_backend, "cap_boost_to_active", False)
+        ) and not (
+            manual_boost
+            and getattr(self._tdp_backend, "manual_boost_to_driver_max", False)
         )
         for key, b in ll.items():
             if key == "pl1" or cap_boost:
@@ -5285,7 +5296,11 @@ class Plugin:
         )
         if auto_active and not callable(get_level_limits):
             get_level_limits = getattr(backend, "level_limits", None)
-        safe = self._cap_level_limits(get_level_limits(), active)
+        safe = self._cap_level_limits(
+            get_level_limits(),
+            active,
+            not auto_active and self._manual_boost(logical_requested, self._current_appid),
+        )
         for rail in requested:
             safe.setdefault(
                 rail,
@@ -9688,8 +9703,12 @@ class Plugin:
         )
         auto_limits = self._auto_power_limits(observation)
         auto_request_limits = self._auto_request_limits()
-        ll = self._cap_level_limits(self._tdp_backend.level_limits(), active)
         eff = self._tdp_profiles.effective(self._current_appid)
+        ll = self._cap_level_limits(
+            self._tdp_backend.level_limits(),
+            active,
+            self._manual_boost(eff, self._current_appid),
+        )
         geff = self._tdp_profiles.effective(None)
         request_min = self._tdp_request_min()
         requested_levels = self._clamp_requested_levels(eff, active, ll)

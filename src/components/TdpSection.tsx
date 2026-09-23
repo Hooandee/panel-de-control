@@ -41,6 +41,8 @@ export interface TdpSectionProps {
   onApplyPreset: (item: PresetItem) => void;
 }
 
+const STEAM_DECK_NOMINAL_MAX_W = 15;
+
 export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, onSetLevels, onSetMode, onApplySuggestion, onFirmwareMode, onLowBatteryHold, monitorOnly, onReactivate, presets, refreshPresets, onApplyPreset }) => {
   const { t } = useI18n();
 
@@ -118,7 +120,6 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, on
   const shownWatts = inFwMode ? (tdp.applied_w ?? view.watts) : view.watts;
   const ownership = ownershipView(tdp.ownership, tdp.limits.min);
   const deckPptActive = Boolean(tdp.ppt?.supported && view.mode !== "estable");
-  const pptVisualMax = deckPptActive ? activeMax : null;
   const arcTarget = deckPptActive ? (tdp.ppt?.requested.slow ?? shownWatts) : shownWatts;
   const arcApplied = deckPptActive
     ? (tdp.ppt?.applied.slow ?? null)
@@ -126,6 +127,8 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, on
   const basePpt = deckPptActive ? shownWatts : null;
   const slowPpt = deckPptActive ? (tdp.ppt?.requested.slow ?? null) : null;
   const fastPpt = deckPptActive ? (tdp.ppt?.requested.fast ?? null) : null;
+  const pptVisualMax = deckPptActive ? Math.max(activeMax, slowPpt ?? 0, fastPpt ?? 0) : null;
+  const biosNoticeAbove = tdp.ppt?.supported && !tdp.overclock?.detected ? STEAM_DECK_NOMINAL_MAX_W : null;
 
   // Master switch off: keep the live arc, drop every write control.
   if (monitorOnly) {
@@ -289,6 +292,7 @@ export const TdpSection: FC<TdpSectionProps> = ({ tdp, scope, power, onWatts, on
                 mode={view.mode}
                 bounds={{ pl2: tdp.level_limits.pl2, pl3: tdp.level_limits.pl3 }}
                 ppt={tdp.ppt}
+                biosNoticeAbove={biosNoticeAbove}
                 onSetLevels={onSetLevels}
                 onSetMode={onSetMode}
               />

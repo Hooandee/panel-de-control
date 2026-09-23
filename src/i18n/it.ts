@@ -855,6 +855,7 @@ export const it: Record<string, string> = {
   "tdp.deckPpt.off": "Disattivato",
   "tdp.deckPpt.hint": "Steam Deck usa questi limiti di boost quando il carico lo richiede.",
   "tdp.deckPpt.applied": "Applicato: SlowPPT {slow} W · FastPPT {fast} W",
+  "tdp.deckPpt.biosRequired": "Oltre 15 W serve un BIOS modificato",
   "tdp.level.slow": "Boost lento (SPPT)",
   "tdp.level.fast": "Boost rapido (FPPT)",
   "steam.performance.title": "Prestazioni di Steam",
