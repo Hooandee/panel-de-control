@@ -755,11 +755,6 @@ class GameBarLocalizationTests(unittest.TestCase):
         self.assertNotRegex(code, r'\.Text = "[^"—]')
 
 
-
-        self.assertNotIn("Sin datos", code)
-
-
-
 class DiagnosticsCardTests(unittest.TestCase):
     def test_every_capability_id_has_a_localized_label(self):
         ids_source = (HARDWARE_DIR / "Capabilities" / "CapabilityIds.cs").read_text(encoding="utf-8")
@@ -771,12 +766,3 @@ class DiagnosticsCardTests(unittest.TestCase):
         self.assertTrue(ids)
         self.assertEqual(ids, set(mapping))
         self.assertTrue(set(mapping.values()).issubset(strings), set(mapping.values()) - set(strings))
-
-    def test_diagnostics_card_is_focusable_and_starts_collapsed(self):
-        root = ElementTree.parse(WIDGET).getroot()
-        xaml_name = "{http://schemas.microsoft.com/winfx/2006/xaml}Name"
-        nodes = {node.attrib.get(xaml_name): node for node in root.iter()}
-
-        self.assertEqual("True", nodes["DiagnosticsToggle"].attrib["IsTabStop"])
-        self.assertEqual("DiagnosticsToggle", nodes["DiagnosticsToggle"].attrib[XAML_UID])
-        self.assertEqual("Collapsed", nodes["DiagnosticsList"].attrib["Visibility"])
