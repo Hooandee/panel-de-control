@@ -1608,3 +1608,52 @@ def test_amd_does_not_hijack_gpu_power_cap_as_tdp(tmp_path):
     b = select_backend(_p("rog_ally_x"), root=root, ryzenadj_resolve=lambda: "/usr/bin/ryzenadj")
     assert b.name != "steamdeck-hwmon"
     assert b.name == "ryzenadj"
+
+
+def _ignore_rails_until_custom_rearm(backend, root):
+    profile_path = os.path.join(
+        root, "sys/class/platform-profile/platform-profile-0/profile",
+    )
+    firmware = {"armed": False, "left_custom": False}
+    original_write = backend._write
+
+    def firmware_write(path, value):
+        if path == profile_path:
+            if str(value) != "custom":
+                firmware["left_custom"] = True
+            elif firmware["left_custom"]:
+                firmware["armed"] = True
+            return original_write(path, value)
+        return original_write(path, value) if firmware["armed"] else True
+
+    backend._write = firmware_write
+
+
+def test_go_s_83l3_selected_backend_recovers_firmware_that_ignores_custom_writes(tmp_path):
+    root = str(tmp_path)
+    _mk_legion_firmware(root, "83L3", "custom", current=(30, 15, 20))
+    backend = select_backend(_p("legion_go_s"), root=root, ryzenadj_resolve=_NO_RYZENADJ)
+    _ignore_rails_until_custom_rearm(backend, root)
+    before = backend.observe()
+    safe = {rail: {"min": 5, "max": 33} for rail in ("pl1", "pl2", "pl3")}
+    targets = build_targets({"pl1": 8, "pl2": 8, "pl3": 8}, safe, before)
+
+    result = backend.set_levels(
+        targets.target["pl1"], targets.target["pl2"], targets.target["pl3"], ac=False,
+    )
+
+    assert backend.name == "firmware-attr:lenovo-wmi-other"
+    assert result.ok is True
+    rails = backend.observe().surfaces[backend.name]
+    assert {rail: reading.applied_w for rail, reading in rails.items()} == {
+        "pl1": 8, "pl2": 8, "pl3": 8,
+    }
+    assert backend.diagnostics()["custom_rearm"] == {"last": "recovered"}
+
+
+def test_custom_rearm_is_not_selected_for_other_legion_go_s_dmi(tmp_path):
+    root = str(tmp_path)
+    _mk_legion_firmware(root, "83N6", "custom", current=(30, 15, 20))
+    backend = select_backend(_p("legion_go_s"), root=root, ryzenadj_resolve=_NO_RYZENADJ)
+
+    assert "custom_rearm" not in backend.diagnostics()

@@ -29,6 +29,22 @@ def test_kernel_logs_runner_raising_is_null():
     assert out["dmesg"] is None and out["journal"] is None
 
 
+def test_kernel_logs_captures_power_daemon_journal():
+    def run(cmd):
+        if "steamos-manager" in cmd:
+            return "steamos_manager::power: Failed to set TDP limit /home/deck/x"
+        return None
+    out = kernel_logs(run)
+    assert "Failed to set TDP limit" in out["power_daemons"]
+    assert "/home/deck" not in out["power_daemons"]
+
+
+def test_power_daemon_journal_covers_known_tdp_writers():
+    cmd = report_collector._KERNEL_CMDS["power_daemons"]
+    for identifier in ("steamos-manager", "powerstation", "power-profiles-daemon", "tuned"):
+        assert identifier in cmd
+
+
 def test_controller_daemon_cmds_hhd():
     cmd = controller_daemon_cmds("hhd")["controller"]
     assert "journalctl" in cmd[0] and "hhd.service" in cmd

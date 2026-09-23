@@ -1079,3 +1079,119 @@ def test_legion_go_2_profile_bumped_to_35(tmp_path):
     # the range; the firmware read is irrelevant to the ceiling.
     dev = detect(product_name="83N0")
     assert (dev.tdp_max, dev.tdp_max_charger) == (30, 35)
+
+
+def _gos_83l3_ignoring_firmware(tmp_path, rearm=True):
+    root = str(tmp_path)
+    _mk_attr(root, "lenovo-wmi-other-0", "ppt_pl1_spl", 30, 5, 33)
+    _mk_attr(root, "lenovo-wmi-other-0", "ppt_pl2_sppt", 15, 5, 33)
+    _mk_attr(root, "lenovo-wmi-other-0", "ppt_pl3_fppt", 20, 5, 35)
+    profile_path = _mk_profile(root, cur="custom")
+    backend = FirmwareAttrBackend(
+        "lenovo-wmi-other",
+        TdpLimits.from_profile(detect(product_name="83L3")),
+        root=root,
+        profile_name="lenovo-wmi-gamezone",
+        named_profile_owns_rails=True,
+        rearm_custom_on_ignored_writes=rearm,
+    )
+    firmware = {"armed": False, "left_custom": False, "profiles": []}
+    original_write = backend._write
+
+    def firmware_write(path, value):
+        if path == profile_path:
+            firmware["profiles"].append(str(value))
+            if str(value) != "custom":
+                firmware["left_custom"] = True
+            elif firmware["left_custom"]:
+                firmware["armed"] = True
+            return original_write(path, value)
+        if not firmware["armed"]:
+            return True
+        return original_write(path, value)
+
+    backend._write = firmware_write
+    return backend, firmware
+
+
+def _rails(backend):
+    return {
+        rail: reading.applied_w
+        for rail, reading in backend.observe().surfaces[backend.name].items()
+    }
+
+
+def test_gos_83l3_rearms_custom_when_firmware_ignores_every_rail(tmp_path):
+    backend, firmware = _gos_83l3_ignoring_firmware(tmp_path)
+
+    result = backend.set_levels(8, 8, 8, ac=False)
+
+    assert result.ok is True
+    assert _rails(backend) == {"pl1": 8, "pl2": 8, "pl3": 8}
+    assert firmware["profiles"] == ["custom", "balanced", "custom"]
+    assert backend.read_profile() == "custom"
+    assert backend.diagnostics()["custom_rearm"]["last"] == "recovered"
+
+
+def test_gos_83l3_rearm_failure_keeps_strict_rollback_and_is_rate_limited(tmp_path):
+    backend, firmware = _gos_83l3_ignoring_firmware(tmp_path)
+    firmware["left_custom"] = False
+
+    def never_arms(path, value):
+        if str(value) == "custom":
+            firmware["left_custom"] = False
+        return FirmwareAttrBackend._write(backend, path, value) if path.endswith("profile") else True
+
+    backend._write = never_arms
+
+    first = backend.set_levels(8, 8, 8, ac=False)
+    second = backend.set_levels(8, 8, 8, ac=False)
+
+    assert first.ok is False and second.ok is False
+    assert "custom re-arm not confirmed" in first.detail
+    assert "; rollback confirmed" in first.detail
+    assert "custom re-arm" not in second.detail
+    assert _rails(backend) == {"pl1": 30, "pl2": 15, "pl3": 20}
+    assert backend.read_profile() == "custom"
+    assert backend.diagnostics()["custom_rearm"]["last"] == "not_recovered"
+
+
+def test_ignored_write_rearm_is_opt_in(tmp_path):
+    backend, firmware = _gos_83l3_ignoring_firmware(tmp_path, rearm=False)
+
+    result = backend.set_levels(8, 8, 8, ac=False)
+
+    assert result.ok is False
+    assert firmware["profiles"].count("balanced") == 0
+    assert "custom_rearm" not in backend.diagnostics()
+
+
+def test_partial_rail_change_is_not_treated_as_ignored_write(tmp_path):
+    backend, firmware = _gos_83l3_ignoring_firmware(tmp_path)
+    firmware["armed"] = True
+    pl3 = backend._attr("ppt_pl3_fppt")
+    original_write = backend._write
+    backend._write = lambda path, value: True if path == pl3 else original_write(path, value)
+
+    result = backend.set_levels(8, 8, 8, ac=False)
+
+    assert result.ok is False
+    assert firmware["profiles"].count("balanced") == 0
+
+
+def test_failed_rail_write_reports_the_system_error(tmp_path):
+    root = str(tmp_path)
+    _mk_full(root)
+    _mk_profile(root, cur="custom")
+    backend = FirmwareAttrBackend(
+        "lenovo-wmi-other", FALLBACK, root=root, profile_name="lenovo-wmi-gamezone",
+    )
+    pl3 = backend._attr("ppt_pl3_fppt")
+    os.chmod(pl3, 0o444)
+    try:
+        result = backend.set_levels(10, 10, 10, ac=False)
+    finally:
+        os.chmod(pl3, 0o644)
+
+    assert result.ok is False
+    assert "firmware-attr:lenovo-wmi-other/pl3!EACCES" in result.detail

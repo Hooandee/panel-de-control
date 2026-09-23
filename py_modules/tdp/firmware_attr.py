@@ -1,3 +1,4 @@
+import errno
 import glob
 import os
 import time
@@ -24,6 +25,7 @@ _RAIL_ATTRS = (
 # PL2 (slow) and PL3 (fast) are scaled above PL1, then clamped to each rail's sysfs max.
 _PL2_BOOST_RATIO = 1.2
 _PL3_BOOST_RATIO = 1.4
+_CUSTOM_REARM_COOLDOWN_S = 60.0
 
 
 def _normalise_rail_floors(values):
@@ -84,6 +86,7 @@ class FirmwareAttrBackend(TDPBackend):
         named_profile_owns_rails=False,
         optional_rails=None,
         probe_live_max_on_ac=False,
+        rearm_custom_on_ignored_writes=False,
     ):
         self.name = f"firmware-attr:{driver_prefix}"
         self._driver_prefix = driver_prefix
@@ -101,6 +104,10 @@ class FirmwareAttrBackend(TDPBackend):
         self._rail_floors = _normalise_rail_floors(rail_floors)
         self._ignored_live_maxes = _normalise_rail_values(ignored_live_maxes)
         self.probe_live_max_on_ac = bool(probe_live_max_on_ac)
+        self._rearm_custom_on_ignored_writes = bool(rearm_custom_on_ignored_writes)
+        self._last_custom_rearm_at = None
+        self._last_custom_rearm = None
+        self._last_write_error = None
         self.cap_boost_to_active = bool(cap_boost_to_active)
         self._readback_settle_delays = tuple(
             float(delay) for delay in (readback_settle_delays or ())
@@ -465,12 +472,62 @@ class FirmwareAttrBackend(TDPBackend):
             return None
 
     def _write(self, path, value):
+        self._last_write_error = None
         try:
             with open(path, "w") as f:
                 f.write(f"{value}\n")
             return True
-        except OSError:
+        except OSError as error:
+            self._last_write_error = errno.errorcode.get(error.errno, "OSError")
             return False
+
+    def _failed_write_label(self, surface, rail):
+        label = self._surface_label(surface, rail)
+        return f"{label}!{self._last_write_error}" if self._last_write_error else label
+
+    def _writes_ignored(self, observation, surfaces, snapshot, targets):
+        observed = observation.surfaces
+        return any(
+            snapshot[path] != targets[rail] for _surface, rail, path in surfaces
+        ) and all(
+            (reading := observed.get(surface, {}).get(rail)) is not None
+            and reading.applied_w == snapshot[path]
+            for surface, rail, path in surfaces
+        )
+
+    def _custom_rearm_allowed(self, previous_profile):
+        choices = self.profile_choices()
+        return (
+            self._rearm_custom_on_ignored_writes
+            and previous_profile == "custom"
+            and "custom" in choices
+            and any(choice != "custom" for choice in choices)
+            and (
+                self._last_custom_rearm_at is None
+                or time.monotonic() - self._last_custom_rearm_at
+                >= _CUSTOM_REARM_COOLDOWN_S
+            )
+        )
+
+    def _rearm_custom(self, surfaces, targets):
+        # Some Legion Go S firmware silently drops every custom rail write until the
+        # gamezone profile leaves "custom" and re-enters it.
+        self._last_custom_rearm_at = time.monotonic()
+        choices = self.profile_choices()
+        transient = "balanced" if "balanced" in choices else next(
+            choice for choice in choices if choice != "custom"
+        )
+        profile_path = os.path.join(self._pp_dir, "profile")
+        if not (
+            self._write(profile_path, transient)
+            and self._write(profile_path, "custom")
+            and self.read_profile() == "custom"
+        ):
+            return False
+        for surface, rail, path in surfaces:
+            if not self._write(path, targets[rail]):
+                return False
+        return True
 
     def get_limits(self):
         if not self.supported:
@@ -747,7 +804,7 @@ class FirmwareAttrBackend(TDPBackend):
         if not failed:
             for surface, rail, path in surfaces:
                 if not self._write(path, targets[rail]):
-                    failed.append(self._surface_label(surface, rail))
+                    failed.append(self._failed_write_label(surface, rail))
                     break
 
         observation = self.observe()
@@ -762,9 +819,29 @@ class FirmwareAttrBackend(TDPBackend):
                     observation,
                     targets,
                 )
+        rearm_detail = None
+        if (
+            not failed
+            and mismatches
+            and self._custom_rearm_allowed(previous_profile)
+            and self._writes_ignored(observation, surfaces, snapshot, targets)
+        ):
+            rearmed = self._rearm_custom(surfaces, targets)
+            observation = self.observe()
+            mismatches = self._observation_mismatches(observation, targets)
+            for delay in self._readback_settle_delays if rearmed else ():
+                if not mismatches:
+                    break
+                time.sleep(delay)
+                observation = self.observe()
+                mismatches = self._observation_mismatches(observation, targets)
+            recovered = rearmed and not mismatches
+            self._last_custom_rearm = "recovered" if recovered else "not_recovered"
+            if not recovered:
+                rearm_detail = "custom re-arm not confirmed"
         applied = observation.surfaces.get(self.name, {}).get("pl1")
         applied_w = applied.applied_w if applied else None
-        problems = failed + mismatches
+        problems = failed + mismatches + ([rearm_detail] if rearm_detail else [])
         if problems:
             rollback_ok, rollback_problems = self._rollback_transaction(
                 surfaces,
@@ -891,6 +968,8 @@ class FirmwareAttrBackend(TDPBackend):
             ),
             "reported_live_bounds": reported,
         }
+        if self._rearm_custom_on_ignored_writes:
+            diagnostics["custom_rearm"] = {"last": self._last_custom_rearm}
         if self._restore_on_release:
             diagnostics["owns_state"] = self._owns_state
             diagnostics["ownership_recovery_pending"] = (
