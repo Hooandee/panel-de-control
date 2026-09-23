@@ -12,6 +12,8 @@ public sealed class ServiceBackedSnapshotProvider : IHardwareSnapshotProvider
         "gpu.temperature",
         "cpu.load",
         "gpu.load",
+        "fan.cpu.rpm",
+        "fan.gpu.rpm",
     };
 
     private readonly IHardwareSnapshotProvider local;
@@ -43,7 +45,14 @@ public sealed class ServiceBackedSnapshotProvider : IHardwareSnapshotProvider
 
         var serviceReadings = FreshServiceReadings(result);
         var merged = localSnapshot.Readings.Select(reading =>
-            Merge(reading, serviceReadings, result.Outcome));
+            Merge(reading, serviceReadings, result.Outcome)).ToList();
+        if (!localSnapshot.Readings.Any(reading => reading.ErrorCode == "device_not_supported"))
+        {
+            var localIds = new HashSet<string>(localSnapshot.Readings.Select(reading => reading.Id), StringComparer.Ordinal);
+            merged.AddRange(serviceReadings.Values.Where(reading =>
+                reading.Id is "fan.cpu.rpm" or "fan.gpu.rpm" && !localIds.Contains(reading.Id) &&
+                (reading.Status != ReadingStatus.Available || IsPlausible(reading))));
+        }
         return new HardwareSnapshot(localSnapshot.CapturedAtUtc, localSnapshot.DeviceModel, merged, localSnapshot.DeviceMaxWatts);
     }
 
@@ -105,7 +114,7 @@ public sealed class ServiceBackedSnapshotProvider : IHardwareSnapshotProvider
     {
         var kind = reading.Id.EndsWith(".temperature", StringComparison.Ordinal)
             ? SensorKind.Temperature
-            : SensorKind.Load;
+            : reading.Id.EndsWith(".rpm", StringComparison.Ordinal) ? SensorKind.Fan : SensorKind.Load;
         return SensorPlausibility.IsPlausible(kind, reading.Value);
     }
 }
