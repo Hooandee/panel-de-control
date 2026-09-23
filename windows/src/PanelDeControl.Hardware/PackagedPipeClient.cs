@@ -78,7 +78,7 @@ public static class PackagedPipeClient
         var familyName = ReadString((ref uint length, StringBuilder? value) =>
             PackageFamilyNameFromFullName(packageFullName, ref length, value));
         var packagePath = ReadString((ref uint length, StringBuilder? value) =>
-            GetPackagePathByFullName(packageFullName, ref length, value));
+            GetStagedPackagePathByFullName(packageFullName, ref length, value));
         return familyName is null || packagePath is null
             ? null
             : new PackagedProcess(path.ToString(), familyName, packagePath);
@@ -185,7 +185,7 @@ public static class PackagedPipeClient
         StringBuilder? packageFamilyName);
 
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
-    private static extern int GetPackagePathByFullName(
+    private static extern int GetStagedPackagePathByFullName(
         string packageFullName,
         ref uint pathLength,
         StringBuilder? path);
