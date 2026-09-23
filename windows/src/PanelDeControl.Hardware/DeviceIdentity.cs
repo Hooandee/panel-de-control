@@ -1,46 +1,56 @@
+using PanelDeControl.Core.Devices;
+
 namespace PanelDeControl.Hardware;
 
 public sealed class DeviceIdentity
 {
-    private const string XboxAllyXProduct = "ROG Xbox Ally X";
-
     private DeviceIdentity(
         string manufacturer,
         string productName,
-        string profileId,
-        bool isInitialTarget)
+        string boardName,
+        DeviceProfile? profile)
     {
         Manufacturer = manufacturer;
         ProductName = productName;
-        ProfileId = profileId;
-        IsInitialTarget = isInitialTarget;
+        BoardName = boardName;
+        Profile = profile;
     }
 
     public string Manufacturer { get; }
 
     public string ProductName { get; }
 
-    public string ProfileId { get; }
+    public string BoardName { get; }
 
-    public bool IsInitialTarget { get; }
+    public DeviceProfile? Profile { get; }
 
-    public static DeviceIdentity FromDmi(string? manufacturer, string? productName)
+    public bool IsRecognized => Profile is not null;
+
+    public string ProfileId => Profile?.Key ?? "unknown";
+
+    public string DisplayName => Profile?.DisplayName ?? ProductName;
+
+    public static DeviceIdentity Unrecognized()
+    {
+        return FromDmi(null, null, null, null);
+    }
+
+    public static DeviceIdentity FromDmi(
+        DeviceCatalog? catalog,
+        string? manufacturer,
+        string? productName,
+        string? boardName)
     {
         var normalizedManufacturer = Normalize(manufacturer, "Unknown manufacturer");
         var normalizedProduct = Normalize(productName, "Unknown device");
-        var isAsus = normalizedManufacturer.Contains(
-            "ASUSTeK",
-            StringComparison.OrdinalIgnoreCase);
-        var isXboxAllyX = normalizedProduct.Contains(
-            XboxAllyXProduct,
-            StringComparison.OrdinalIgnoreCase);
-        var isInitialTarget = isAsus && isXboxAllyX;
+        var normalizedBoard = Normalize(boardName, string.Empty);
+        var match = catalog?.Match(productName, manufacturer, boardName);
 
         return new DeviceIdentity(
             normalizedManufacturer,
             normalizedProduct,
-            isInitialTarget ? "rog_xbox_ally_x" : "unknown",
-            isInitialTarget);
+            normalizedBoard,
+            match is null || match.IsGeneric ? null : match);
     }
 
     private static string Normalize(string? value, string fallback)

@@ -25,7 +25,7 @@ public sealed class SnapshotCollectorTests
 
         var snapshot = collector.Capture();
 
-        Assert.Equal("ROG Xbox Ally X RC73XA_RC73XA", snapshot.DeviceModel);
+        Assert.Equal("ROG Xbox Ally X", snapshot.DeviceModel);
         Assert.Equal(0, Reading(snapshot, "battery.level").Value);
         Assert.Equal(0, Reading(snapshot, "cpu.load").Value);
         Assert.Equal(0, Reading(snapshot, "gpu.load").Value);
@@ -149,8 +149,10 @@ public sealed class SnapshotCollectorTests
         public DeviceIdentity Read()
         {
             return DeviceIdentity.FromDmi(
+                DeviceCatalogResource.TryLoad(),
                 "ASUSTeK COMPUTER INC.",
-                "ROG Xbox Ally X RC73XA_RC73XA");
+                "ROG Xbox Ally X RC73XA_RC73XA",
+                "RC73XA");
         }
     }
 
@@ -214,7 +216,11 @@ public sealed class SnapshotCollectorTests
     {
         public DeviceIdentity Read()
         {
-            return DeviceIdentity.FromDmi("Valve", "Jupiter");
+            return DeviceIdentity.FromDmi(
+                DeviceCatalogResource.TryLoad(),
+                "Contoso",
+                "Some Laptop 15",
+                "X1");
         }
     }
 }

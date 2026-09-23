@@ -7,11 +7,13 @@ on:
       - ".github/workflows/windows-ci.yml"
       - "windows/**"
       - "shared/fixtures/**"
+      - "shared/devices/**"
   pull_request:
     paths:
       - ".github/workflows/windows-ci.yml"
       - "windows/**"
       - "shared/fixtures/**"
+      - "shared/devices/**"
 
 permissions:
   contents: read
