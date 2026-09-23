@@ -69,6 +69,7 @@ def test_remote_script_requires_developer_mode_and_registers_the_layout():
     assert "AllowDevelopmentWithoutDevLicense -ne 1" in remote
     assert remote.index("throw 'Developer Mode is off") < remote.index("Expand-Archive")
     assert "-LogonType Interactive" in remote
+    assert "-AllowStartIfOnBatteries -DontStopIfGoingOnBatteries" in remote
     assert remote.index("Start-ScheduledTask") < remote.index("Unregister-ScheduledTask")
     assert "Get-AppxPackage -Name 'PanelDeControl.Windows' | Remove-AppxPackage" in register
     assert "Add-AppxPackage -Register (Join-Path $layout 'AppxManifest.xml')" in register
