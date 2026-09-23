@@ -18,9 +18,21 @@ public interface IHardwareReader
     IReadOnlyList<SensorCandidate> Read();
 }
 
+public sealed record SensorAccess(bool IsElevated, bool HasSensorDriver);
+
+public interface ISensorAccessProbe
+{
+    SensorAccess Probe();
+}
+
 public interface IPowerStatusReader
 {
     IReadOnlyList<TelemetryReading> Read();
+}
+
+public interface ISnapshotServer
+{
+    Task RunAsync(TimeSpan idleTimeout, CancellationToken cancellationToken);
 }
 
 public interface IHardwareSnapshotProvider

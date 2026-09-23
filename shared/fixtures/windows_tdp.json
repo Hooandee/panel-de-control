@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "algorithm": "tdp.catalog_clamp",
+  "cases": [
+    {
+      "id": "battery_ceiling",
+      "input": {
+        "profile": "rog_xbox_ally_x",
+        "requested_watts": 35,
+        "external_power": false
+      },
+      "expected": {
+        "target_watts": 25
+      }
+    },
+    {
+      "id": "charger_ceiling",
+      "input": {
+        "profile": "rog_xbox_ally_x",
+        "requested_watts": 40,
+        "external_power": true
+      },
+      "expected": {
+        "target_watts": 35
+      }
+    },
+    {
+      "id": "catalog_floor",
+      "input": {
+        "profile": "rog_xbox_ally_x",
+        "requested_watts": 1,
+        "external_power": false
+      },
+      "expected": {
+        "target_watts": 7
+      }
+    }
+  ]
+}

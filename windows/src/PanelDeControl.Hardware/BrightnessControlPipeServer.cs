@@ -64,7 +64,10 @@ public sealed class BrightnessControlPipeServer
 
     public async Task RunOnceAsync(CancellationToken cancellationToken)
     {
-        await using var server = pipeFactory(pipeName);
+        await using var server = await PipeInstances
+            .CreateAsync(pipeFactory, pipeName, cancellationToken)
+            .ConfigureAwait(false);
+        using var clientRelease = PipeClientRelease.For(server);
         await server.WaitForConnectionAsync(cancellationToken).ConfigureAwait(false);
 
         using var reader = new StreamReader(

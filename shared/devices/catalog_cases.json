@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "algorithm": "devices.catalog.match",
+  "cases": [
+    {"id": "rog_xbox_ally_x", "input": {"product_name": "ROG Xbox Ally X RC73XA", "sys_vendor": "ASUSTeK COMPUTER INC.", "board_name": ""}, "expected": {"key": "rog_xbox_ally_x"}},
+    {"id": "rog_xbox_ally", "input": {"product_name": "ROG Xbox Ally RC73YA_RC73YA", "sys_vendor": "ASUSTeK COMPUTER INC.", "board_name": ""}, "expected": {"key": "rog_xbox_ally"}},
+    {"id": "rog_ally_x_before_rog_ally", "input": {"product_name": "ROG Ally X RC72LA_RC72LA", "sys_vendor": "ASUSTeK COMPUTER INC.", "board_name": ""}, "expected": {"key": "rog_ally_x"}},
+    {"id": "rog_ally", "input": {"product_name": "ROG Ally RC71L_RC71L", "sys_vendor": "ASUSTeK COMPUTER INC.", "board_name": ""}, "expected": {"key": "rog_ally"}},
+    {"id": "legion_go", "input": {"product_name": "83E1", "sys_vendor": "LENOVO", "board_name": ""}, "expected": {"key": "legion_go"}},
+    {"id": "legion_go_2_z2_extreme", "input": {"product_name": "83N0", "sys_vendor": "LENOVO", "board_name": ""}, "expected": {"key": "legion_go_2"}},
+    {"id": "legion_go_2_z2", "input": {"product_name": "83N1", "sys_vendor": "LENOVO", "board_name": ""}, "expected": {"key": "legion_go_2"}},
+    {"id": "msi_claw_8_ai_plus", "input": {"product_name": "Claw 8 AI+ A2VM", "sys_vendor": "Micro-Star International Co., Ltd.", "board_name": ""}, "expected": {"key": "msi_claw_8_ai_plus"}},
+    {"id": "msi_claw_a8", "input": {"product_name": "Claw A8", "sys_vendor": "Micro-Star International Co., Ltd.", "board_name": ""}, "expected": {"key": "msi_claw_a8"}},
+    {"id": "dmi_exact_board_match", "input": {"product_name": "ZOTAC GAMING ZONE", "sys_vendor": "ZOTAC", "board_name": "G1A1W"}, "expected": {"key": "zotac_gaming_zone"}},
+    {"id": "dmi_rejects_wrong_vendor", "input": {"product_name": "ZOTAC GAMING ZONE", "sys_vendor": "Other", "board_name": "G1A1W"}, "expected": {"key": "generic"}},
+    {"id": "dmi_case_and_space_insensitive", "input": {"product_name": " ayaneo 3 ", "sys_vendor": "ayaneo", "board_name": ""}, "expected": {"key": "ayaneo_3"}},
+    {"id": "unknown_device", "input": {"product_name": "Some Laptop 15", "sys_vendor": "Contoso", "board_name": "X1"}, "expected": {"key": "generic"}},
+    {"id": "empty_identity", "input": {"product_name": "", "sys_vendor": "", "board_name": ""}, "expected": {"key": "generic"}}
+  ]
+}

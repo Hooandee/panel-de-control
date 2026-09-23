@@ -17,5 +17,6 @@
 
   <ItemGroup>
     <None Include="../../../shared/fixtures/*.json" Link="Fixtures/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../../shared/devices/*.json" Link="Devices/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
