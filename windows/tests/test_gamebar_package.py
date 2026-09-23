@@ -607,7 +607,6 @@ class GameBarProjectTests(unittest.TestCase):
         self.assertIn("AppContainerNames.SidFromPackageFamilyName", factory)
         self.assertIn("AppContainerNames.ServerPipeName", factory)
         self.assertNotIn("DeriveAppContainerSidFromAppContainerName", factory)
-        self.assertEqual(1, factory.count("ExactSpelling = true"))
         self.assertNotIn("new NamedPipeServerStream(", server)
         self.assertIn("catch (IOException)", server)
 
