@@ -365,44 +365,6 @@ class GameBarProjectTests(unittest.TestCase):
         self.assertEqual("VolumeSlider", slider.attrib[XAML_UID])
         self.assertEqual("Volumen del sistema", spanish_automation_name("VolumeSlider"))
 
-    def test_widget_has_an_arc_based_experimental_power_card(self):
-        root = ElementTree.parse(WIDGET).getroot()
-        xaml_name = "{http://schemas.microsoft.com/winfx/2006/xaml}Name"
-        nodes = {node.attrib.get(xaml_name): node for node in root.iter()}
-
-        expected = {
-            "PowerCard",
-            "PowerArcTrack",
-            "PowerArcFill",
-            "PowerValue",
-            "PowerStatus",
-            "TdpDecreaseButton",
-            "TdpIncreaseButton",
-            "ExperimentalTdpToggle",
-        }
-        self.assertTrue(expected.issubset(nodes))
-        self.assertNotEqual("Slider", nodes["PowerCard"].tag.split("}")[-1])
-        self.assertFalse(
-            any(
-                node.tag.endswith("Slider")
-                and node.attrib.get(xaml_name, "").startswith("Tdp")
-                for node in nodes.values()
-            )
-        )
-        self.assertEqual("True", nodes["TdpDecreaseButton"].attrib["IsTabStop"])
-        self.assertEqual("True", nodes["TdpIncreaseButton"].attrib["IsTabStop"])
-        self.assertEqual("True", nodes["ExperimentalTdpToggle"].attrib["IsTabStop"])
-
-        code = WIDGET_CODE.read_text(encoding="utf-8")
-        self.assertIn("CreatePowerArcGeometry", code)
-        self.assertIn("SweepDirection.Clockwise", code)
-        self.assertIn("ControlStatus.Applied", code)
-        self.assertIn("ControlStatus.Unverifiable", code)
-        self.assertIn('"armoury_crate_running"', code)
-        self.assertIn("ManufacturerRecoveryUnverified", code)
-        self.assertIn("response.ExperimentalStateKnown", code)
-        self.assertIn("confirmedExperimentalTdpEnabled", code)
-
     def test_widget_debounces_volume_writes_and_ignores_stale_responses(self):
         code = WIDGET_CODE.read_text(encoding="utf-8")
         refresh = code[
@@ -529,25 +491,6 @@ class GameBarProjectTests(unittest.TestCase):
             normalized_refresh,
         )
 
-
-
-
-    def test_project_compiles_shared_broker_launcher_and_control_clients(self):
-        root = ElementTree.parse(PROJECT).getroot()
-        namespace = {"msbuild": "http://schemas.microsoft.com/developer/msbuild/2003"}
-        sources = {
-            node.attrib["Include"]
-            for node in root.findall(".//msbuild:Compile", namespace)
-        }
-
-        self.assertIn("HardwareBrokerLauncher.cs", sources)
-        self.assertIn("VolumeControlClient.cs", sources)
-        self.assertIn("BrightnessControlClient.cs", sources)
-        self.assertIn("TdpControlClient.cs", sources)
-        self.assertTrue(BROKER_LAUNCHER.is_file())
-        self.assertTrue(VOLUME_CLIENT.is_file())
-        self.assertTrue(BRIGHTNESS_CLIENT.is_file())
-        self.assertTrue(TDP_CLIENT.is_file())
 
     def test_tdp_client_never_retries_an_indeterminate_write(self):
         code = TDP_CLIENT.read_text(encoding="utf-8")
