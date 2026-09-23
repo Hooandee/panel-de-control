@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## [0.55.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.54.4...panel-de-control-v0.55.0) (2026-09-23)
+
+
+### Features
+
+* **tdp:** let custom Steam Deck boost rails reach the driver limit ([#747](https://github.com/Hooandee/panel-de-control/issues/747)) ([0e38e5b](https://github.com/Hooandee/panel-de-control/commit/0e38e5b5fbbf306a6ea216235201be45b3c3da1c))
+* **windows:** add verified built-in panel brightness ([#721](https://github.com/Hooandee/panel-de-control/issues/721)) ([6388d33](https://github.com/Hooandee/panel-de-control/commit/6388d33ed15b27a126804224d6e247d34dfdeb03))
+
+
+### Bug Fixes
+
+* **themes:** recover from unreadable theme journals ([#746](https://github.com/Hooandee/panel-de-control/issues/746)) ([b28fd8b](https://github.com/Hooandee/panel-de-control/commit/b28fd8b4ebc0eee1123c3b384ccd939c83dc89d5))
+
 ## [0.54.4](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.54.3...panel-de-control-v0.54.4) (2026-09-23)
 
 
