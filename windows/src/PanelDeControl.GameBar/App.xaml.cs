@@ -12,10 +12,36 @@ sealed partial class App : Application
 
     public App()
     {
-        InitializeComponent();
+        UnhandledException += (_, args) => CrashLog.Write("unhandled", args.Exception, args.Message);
+        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+            CrashLog.Write("domain", args.ExceptionObject as Exception, args.ExceptionObject?.ToString());
+        System.Threading.Tasks.TaskScheduler.UnobservedTaskException += (_, args) =>
+            CrashLog.Write("task", args.Exception);
+        try
+        {
+            InitializeComponent();
+        }
+        catch (Exception exception)
+        {
+            CrashLog.Write("app-resources", exception);
+            throw;
+        }
     }
 
     protected override void OnActivated(IActivatedEventArgs args)
+    {
+        try
+        {
+            ActivateWidget(args);
+        }
+        catch (Exception exception)
+        {
+            CrashLog.Write("activate", exception);
+            throw;
+        }
+    }
+
+    private void ActivateWidget(IActivatedEventArgs args)
     {
         if (args.Kind != ActivationKind.Protocol ||
             args is not IProtocolActivatedEventArgs protocol ||
