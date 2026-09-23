@@ -163,7 +163,8 @@ Expand-Archive -LiteralPath \$archive -DestinationPath \$incoming -Force
 \$user = [Security.Principal.WindowsIdentity]::GetCurrent().Name
 \$action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument ('-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + \$register + '"')
 \$principal = New-ScheduledTaskPrincipal -UserId \$user -LogonType Interactive -RunLevel Limited
-Register-ScheduledTask -TaskName \$task -Action \$action -Principal \$principal -Force | Out-Null
+\$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 5)
+Register-ScheduledTask -TaskName \$task -Action \$action -Principal \$principal -Settings \$settings -Force | Out-Null
 try {
   Start-ScheduledTask -TaskName \$task
   \$deadline = (Get-Date).AddSeconds(180)
