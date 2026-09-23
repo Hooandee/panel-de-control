@@ -173,15 +173,27 @@ describe("TdpSection Steam Deck PPT arc", () => {
     (monitorOnly) => {
       renderTdpSection({
         ...deckState,
+        boost_mode: "auto",
+        global_boost_mode: "auto",
         level_limits: {
           pl2: { min: 3, max: 15 },
           pl3: { min: 3, max: 15 },
         },
+        ppt: { ...deckState.ppt!, requested: { slow: 15, fast: 15 }, applied: { slow: 15, fast: 15 } },
       }, { monitorOnly });
 
       expect(captured.arc).toMatchObject({ visualMax: 15 });
     },
   );
+
+  it("widens the arc only as far as a custom stock Deck rail actually requests", () => {
+    renderTdpSection({
+      ...deckState,
+      ppt: { ...deckState.ppt!, requested: { slow: 15, fast: 20 }, applied: { slow: 15, fast: 20 } },
+    });
+
+    expect(captured.arc).toMatchObject({ visualMax: 20 });
+  });
 
   it("uses the detected 25 W product ceiling for an overclocked Deck", () => {
     renderTdpSection({
@@ -198,6 +210,7 @@ describe("TdpSection Steam Deck PPT arc", () => {
         status: "overclocked",
         reason: null,
       },
+      ppt: { ...deckState.ppt!, requested: { slow: 25, fast: 25 }, applied: { slow: 25, fast: 25 } },
     });
 
     expect(captured.arc).toMatchObject({ visualMax: 25 });
