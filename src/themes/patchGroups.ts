@@ -38,7 +38,11 @@ function groupForPatch(patch: CssLoaderPatch, themeId?: string): ThemePatchGroup
 
 export function groupThemePatches(patches: readonly CssLoaderPatch[], themeId?: string): ThemePatchGroup[] {
   const grouped = new Map(GROUP_ORDER.map((id) => [id, [] as CssLoaderPatch[]]));
-  for (const patch of patches) grouped.get(groupForPatch(patch, themeId))?.push(patch);
+  const hooandeeTheme = themeId?.startsWith("hooandee-") ?? false;
+  for (const patch of patches) {
+    if (hooandeeTheme && patch.type === "none") continue;
+    grouped.get(groupForPatch(patch, themeId))?.push(patch);
+  }
   return GROUP_ORDER
     .map((id) => ({ id, patches: grouped.get(id) ?? [] }))
     .filter((group) => group.patches.length > 0);

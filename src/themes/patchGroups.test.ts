@@ -50,6 +50,19 @@ describe("groupThemePatches", () => {
     });
   });
 
+  it("drops a Hooandee theme's CSS Loader heading, since Panel titles its own groups", () => {
+    const heading: CssLoaderPatch = { name: "Secciones", defaultValue: "Secciones", value: "Secciones", options: ["Secciones"], type: "none", rawType: "none" };
+    const groups = groupThemePatches([heading, patch("Estilizar Inicio")], "hooandee-luminous-atlas");
+
+    expect(groups).toEqual([{ id: "sections", patches: [patch("Estilizar Inicio")] }]);
+  });
+
+  it("keeps a third-party theme's headings visible", () => {
+    const heading: CssLoaderPatch = { name: "Colors", defaultValue: "-", value: "-", options: ["-"], type: "none", rawType: "none" };
+
+    expect(groupThemePatches([heading], "someone-else")).toEqual([{ id: "appearance", patches: [heading] }]);
+  });
+
   it("does not treat a third-party theme's toggles as sections", () => {
     const groups = groupThemePatches([patch("Estilizar Inicio")], "someone-else");
 
