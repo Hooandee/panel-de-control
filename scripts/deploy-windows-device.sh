@@ -192,6 +192,9 @@ mkdir -p "$STAGE/Dependencies"
 if [ "$DRY_RUN" -eq 1 ]; then
   echo "+ stage <package>.msix and Dependencies/x64/* into $STAGE"
 else
+  # CI builds in store-upload mode, which wraps the .msix and its symbols in a .msixupload zip.
+  find "$WORK" -path "$STAGE" -prune -o \( -name '*.msixupload' -o -name '*.appxupload' \) -print |
+    while IFS= read -r upload; do unzip -o -q "$upload" -d "$WORK/unpacked"; done
   MSIX="$(find "$WORK" -path "$STAGE" -prune -o -name '*.msix' -print | head -n 1)"
   [ -n "$MSIX" ] || { echo "the artifact contains no .msix" >&2; exit 1; }
   cp "$MSIX" "$STAGE/package.msix"
