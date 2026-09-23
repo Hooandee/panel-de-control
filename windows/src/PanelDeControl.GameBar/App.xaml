@@ -109,21 +109,22 @@
                 <Setter Property="HorizontalAlignment" Value="Stretch" />
                 <Setter Property="Padding" Value="4,8" />
             </Style>
+            <Style x:Key="PdcSegmentButtonStyle" TargetType="Button" BasedOn="{StaticResource PdcSoftButtonStyle}">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="CornerRadius" Value="10" />
+                <Setter Property="Foreground" Value="{StaticResource PdcTextPrimaryBrush}" />
+                <Setter Property="FontSize" Value="{StaticResource PdcFontBody}" />
+                <Setter Property="HorizontalAlignment" Value="Stretch" />
+                <Setter Property="Padding" Value="4,9" />
+            </Style>
             <Style x:Key="PdcChipButtonStyle" TargetType="Button" BasedOn="{StaticResource PdcSoftButtonStyle}">
                 <Setter Property="Background" Value="{StaticResource PdcLayerBrush}" />
                 <Setter Property="BorderThickness" Value="0" />
-                <Setter Property="CornerRadius" Value="{StaticResource PdcRadiusPill}" />
+                <Setter Property="CornerRadius" Value="10" />
                 <Setter Property="Foreground" Value="{StaticResource PdcTextPrimaryBrush}" />
                 <Setter Property="FontSize" Value="{StaticResource PdcFontBody}" />
                 <Setter Property="HorizontalAlignment" Value="Stretch" />
                 <Setter Property="Padding" Value="4,7" />
-            </Style>
-            <Style x:Key="PdcRoundButtonStyle" TargetType="Button" BasedOn="{StaticResource PdcChipButtonStyle}">
-                <Setter Property="Width" Value="40" />
-                <Setter Property="Height" Value="40" />
-                <Setter Property="Padding" Value="0" />
-                <Setter Property="FontSize" Value="18" />
-                <Setter Property="HorizontalAlignment" Value="Center" />
             </Style>
             <Style x:Key="PdcSliderStyle" TargetType="Slider">
                 <Setter Property="UseSystemFocusVisuals" Value="True" />

@@ -465,15 +465,17 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         {
             shownRefreshRates = rates;
             RefreshRateChips.Children.Clear();
+            RefreshRateChips.ColumnDefinitions.Clear();
             foreach (var hertz in rates)
             {
+                RefreshRateChips.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
                 var chip = new Button
                 {
                     Content = $"{hertz} Hz",
                     Tag = hertz,
-                    MinWidth = 72,
-                    Style = (Style)Application.Current.Resources["PdcChipButtonStyle"],
+                    Style = (Style)Application.Current.Resources["PdcSegmentButtonStyle"],
                 };
+                Grid.SetColumn(chip, RefreshRateChips.ColumnDefinitions.Count - 1);
                 AutomationProperties.SetName(chip, string.Format(Localized("RefreshRateAutomation"), hertz));
                 chip.Click += RefreshRateChip_Click;
                 RefreshRateChips.Children.Add(chip);
@@ -484,8 +486,9 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         {
             var active = Equals(chip.Tag, response.ObservedHertz);
             chip.Background = active
-                ? new SolidColorBrush(WithAlpha(ResourceBrush("PdcAccentBrush").Color, 0x66))
-                : ResourceBrush("PdcLayerBrush");
+                ? new SolidColorBrush(WithAlpha(ResourceBrush("PdcAccentBrush").Color, 0x70))
+                : new SolidColorBrush(Colors.Transparent);
+            chip.FontWeight = active ? Windows.UI.Text.FontWeights.SemiBold : Windows.UI.Text.FontWeights.Normal;
             chip.IsEnabled = !refreshWritePending;
         }
 
