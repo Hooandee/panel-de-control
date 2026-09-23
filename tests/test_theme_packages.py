@@ -361,7 +361,11 @@ def test_recovery_removes_only_an_authenticated_created_transaction(
         assert not (themes_root / THEME_NAME).exists()
 
 
-def test_recovery_rejects_a_forged_created_transaction_without_deleting_it(
+def _quarantined(tmp_path: Path) -> list[Path]:
+    return sorted(tmp_path.glob(".panel-theme-quarantine-*"))
+
+
+def test_recovery_quarantines_a_forged_created_transaction_without_deleting_it(
     tmp_path: Path,
 ) -> None:
     themes_root = tmp_path / "themes"
@@ -375,14 +379,14 @@ def test_recovery_rejects_a_forged_created_transaction_without_deleting_it(
         _journal(token, state="created", had_previous=False),
     )
 
-    with pytest.raises(theme_packages.ThemePackageError) as error:
-        _recover_theme_transactions(themes_root)
+    assert _recover_theme_transactions(themes_root) == []
 
-    assert error.value.code == "invalid_journal"
-    assert (work / "not-created-by-panel").read_text(encoding="utf-8") == "keep"
+    assert not work.exists()
+    [quarantine] = _quarantined(tmp_path)
+    assert (quarantine / "not-created-by-panel").read_text(encoding="utf-8") == "keep"
 
 
-def test_recovery_rejects_a_swapped_transaction_with_an_unrelated_receipt(
+def test_recovery_quarantines_a_swapped_transaction_with_an_unrelated_receipt(
     tmp_path: Path,
 ) -> None:
     themes_root = tmp_path / "themes"
@@ -406,12 +410,13 @@ def test_recovery_rejects_a_swapped_transaction_with_an_unrelated_receipt(
     }
     theme_packages._write_receipts(receipt_store, [forged_receipt])
 
-    with pytest.raises(theme_packages.ThemePackageError) as error:
-        _recover_theme_transactions(themes_root)
+    assert _recover_theme_transactions(themes_root) == []
 
-    assert error.value.code == "invalid_journal"
     assert theme_packages._installed_version(themes_root / THEME_NAME) == THEME_VERSION
-    assert transaction.exists()
+    assert not transaction.exists()
+    assert len(_quarantined(tmp_path)) == 1
+    [receipt] = theme_packages._read_receipts(receipt_store, strict=True)
+    assert receipt["version"] == THEME_VERSION
 
 
 @pytest.mark.parametrize(
@@ -1111,12 +1116,114 @@ def test_recovery_never_mutates_a_theme_not_owned_by_panel(tmp_path):
         "themeName": "Third Party Theme",
     })
 
+    assert _recover_theme_transactions(themes_root) == []
+
+    assert marker.read_text(encoding="utf-8") == "third-party"
+    assert sorted(path.name for path in installed.iterdir()) == ["keep.css"]
+    assert not work.exists()
+    assert len(_quarantined(tmp_path)) == 1
+
+
+def test_recovery_quarantines_an_unreadable_journal_and_unblocks_installs(tmp_path):
+    themes_root = tmp_path / "themes"
+    themes_root.mkdir()
+    work = tmp_path / f".panel-theme-transaction-{'q' * 43}"
+    work.mkdir()
+    (work / "transaction.json").write_text('{"schemaVersion": 2, "tok', encoding="utf-8")
+
+    assert _recover_theme_transactions(themes_root) == []
+
+    assert not work.exists()
+    [quarantine] = _quarantined(tmp_path)
+    assert (quarantine / "transaction.json").read_text(encoding="utf-8").startswith('{"schemaVersion')
+    archive, descriptor = _write_package(tmp_path)
+    prepared = _prepare_theme_archive(archive, descriptor, themes_root)
+    assert prepared["ok"] is True
+
+
+def test_install_quarantines_an_unrecoverable_transaction_instead_of_blocking(tmp_path):
+    themes_root = tmp_path / "themes"
+    themes_root.mkdir()
+    work = tmp_path / f".panel-theme-transaction-{'w' * 43}"
+    work.mkdir()
+    (work / "transaction.json").write_text("not json", encoding="utf-8")
+    archive, descriptor = _write_package(tmp_path)
+
+    prepared = _prepare_theme_archive(archive, descriptor, themes_root)
+
+    assert prepared["ok"] is True
+    assert not work.exists()
+    assert len(_quarantined(tmp_path)) == 1
+
+
+def test_quarantine_reconciles_the_receipt_of_a_missing_theme(tmp_path):
+    themes_root = tmp_path / "themes"
+    receipt_store = _receipts(themes_root)
+    archive, descriptor = _write_package(tmp_path, extension_source=EXTENSION_SOURCE)
+    installed = _prepare_theme_archive(archive, descriptor, themes_root)
+    _commit_theme_install(installed["transaction"], themes_root)
+    assert theme_packages._read_receipts(receipt_store, strict=True)
+    shutil.rmtree(themes_root / THEME_NAME)
+    token = "m" * 43
+    work = tmp_path / f".panel-theme-transaction-{token}"
+    work.mkdir()
+    theme_packages._write_journal(work / "transaction.json", {
+        **_journal(token, state="swapped", had_previous=True, previous_version="1.2.2"),
+        "previousReceipt": {"forged": True},
+    })
+
+    assert _recover_theme_transactions(themes_root) == []
+
+    assert theme_packages._read_receipts(receipt_store, strict=True) == []
+    archive, descriptor = _write_package(tmp_path, extension_source=EXTENSION_SOURCE)
+    assert _prepare_theme_archive(archive, descriptor, themes_root)["ok"] is True
+
+
+def test_quarantine_keeps_only_the_most_recent_transactions(tmp_path):
+    themes_root = tmp_path / "themes"
+    themes_root.mkdir()
+    for index in range(5):
+        work = tmp_path / f".panel-theme-transaction-{str(index) * 43}"
+        work.mkdir()
+        (work / "transaction.json").write_text("broken", encoding="utf-8")
+        _recover_theme_transactions(themes_root)
+
+    assert len(_quarantined(tmp_path)) == 3
+
+
+def test_recovery_still_blocks_when_quarantine_is_impossible(tmp_path, monkeypatch):
+    themes_root = tmp_path / "themes"
+    themes_root.mkdir()
+    work = tmp_path / f".panel-theme-transaction-{'x' * 43}"
+    work.mkdir()
+    (work / "transaction.json").write_text("broken", encoding="utf-8")
+
+    def refuse(source, destination):
+        raise OSError("read-only")
+
+    monkeypatch.setattr(theme_packages, "_durable_replace", refuse)
+
     with pytest.raises(theme_packages.ThemePackageError) as error:
         _recover_theme_transactions(themes_root)
 
     assert error.value.code == "invalid_journal"
-    assert marker.read_text(encoding="utf-8") == "third-party"
     assert work.exists()
+
+
+def test_transaction_diagnostics_report_pending_and_quarantined_work(tmp_path):
+    themes_root = tmp_path / "themes"
+    themes_root.mkdir()
+    work = tmp_path / f".panel-theme-transaction-{'d' * 43}"
+    work.mkdir()
+    (work / "transaction.json").write_text("broken", encoding="utf-8")
+    _recover_theme_transactions(themes_root)
+
+    diagnostics = theme_packages.theme_transaction_diagnostics(themes_root)
+
+    assert diagnostics["pending"] == []
+    assert diagnostics["quarantined"] == 1
+    assert diagnostics["last_quarantine"]["reason"] == "unreadable_journal"
+    assert "token" not in json.dumps(diagnostics)
 
 
 def test_journal_transition_ignores_a_stale_temporary_file_from_a_crash(tmp_path):

@@ -373,6 +373,7 @@ export const ptBR: Record<string, string> = {
   "themes.title": "Temas Hooandee",
   "themes.loading": "Verificando CSS Loader…",
   "themes.recovery.blocked": "A recuperação de tema está bloqueada. Nenhuma alteração será aplicada até que a verificação seja concluída com sucesso.",
+  "themes.recovery.keptCurrent": "Não foi possível restaurar o estado anterior dos temas. O atual foi mantido.",
   "themes.engine": "O Painel instala pacotes de tema verificados. O CSS Loader injeta e preserva as configurações ativadas e compatíveis.",
   "themes.cssLoader.missing": "Você precisa do CSS Loader para instalar e usar temas. Instale na Loja Decky e depois selecione “Verificar novamente”.",
   "themes.cssLoader.disabled": "O CSS Loader está instalado, mas desativado. Ative-o no Decky e tente novamente.",

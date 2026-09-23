@@ -246,6 +246,21 @@ def _read_journal(path: Path):
     return journal
 
 
+def _read_journal_or_quarantine(path: Path):
+    """An unreadable journal cannot restore anything; moving it aside unblocks theme changes."""
+    try:
+        return _read_journal(path)
+    except ThemeActivationJournalError as error:
+        if error.code != "invalid_journal":
+            raise
+        try:
+            os.replace(path, path.with_name(f"{path.name}.quarantined"))
+            _fsync_directory(path.parent)
+        except OSError:
+            raise error from None
+        return None
+
+
 def begin_theme_activation(snapshot, journal_path):
     path = Path(journal_path)
     snapshot = _parse_snapshot(snapshot)
@@ -256,7 +271,7 @@ def begin_theme_activation(snapshot, journal_path):
             "System boot identity is unavailable",
         )
     with _lock:
-        existing = _read_journal(path)
+        existing = _read_journal_or_quarantine(path)
         if existing is not None and existing["phase"] != "completed":
             raise ThemeActivationJournalError(
                 "recovery_pending",
@@ -275,7 +290,7 @@ def begin_theme_activation(snapshot, journal_path):
 
 def get_theme_activation_recovery(journal_path):
     with _lock:
-        journal = _read_journal(Path(journal_path))
+        journal = _read_journal_or_quarantine(Path(journal_path))
     if journal is None or journal["phase"] == "completed":
         return None
     boot_id = _boot_id()
