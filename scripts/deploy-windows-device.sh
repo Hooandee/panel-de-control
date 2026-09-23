@@ -71,6 +71,7 @@ run() {
 
 REQUIRE_ADMIN=$(cat <<'POWERSHELL'
 $ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
 $principal = [Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
 if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
   throw 'The service needs an administrator SSH account.'
@@ -111,6 +112,7 @@ POWERSHELL
 
 WIDGET_SCRIPT=$(cat <<POWERSHELL
 \$ErrorActionPreference = 'Stop'
+\$ProgressPreference = 'SilentlyContinue'
 \$unlock = Get-ItemProperty -Path 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\AppModelUnlock' -ErrorAction SilentlyContinue
 if (-not \$unlock -or \$unlock.AllowDevelopmentWithoutDevLicense -ne 1) {
   throw 'Developer Mode is off: enable it in Settings > System > For developers.'
@@ -155,7 +157,7 @@ encode_powershell() {
   printf '%s' "$1" | iconv -f UTF-8 -t UTF-16LE | base64 | tr -d '\n'
 }
 ENCODED_SCRIPT="$(encode_powershell "$REMOTE_SCRIPT")"
-ENCODED_CLEAN="$(encode_powershell "Remove-Item -LiteralPath (Join-Path \$HOME '${REMOTE_STAGE}') -Recurse -Force -ErrorAction SilentlyContinue")"
+ENCODED_CLEAN="$(encode_powershell "\$ProgressPreference = 'SilentlyContinue'; Remove-Item -LiteralPath (Join-Path \$HOME '${REMOTE_STAGE}') -Recurse -Force -ErrorAction SilentlyContinue; exit 0")"
 
 if [ "$REMOVE_SERVICE" -eq 1 ]; then
   echo "==> Removing $SERVICE_NAME from $HOST"
