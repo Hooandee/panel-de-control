@@ -110,6 +110,39 @@ Get-Service -Name '${SERVICE_NAME}' | Select-Object Name, Status, StartType | Fo
 POWERSHELL
 )
 
+# Appx registration needs the user's interactive desktop session (Process Lifetime Manager);
+# over SSH it fails with 0x80070005, so this part runs as an interactive scheduled task.
+REGISTER_SCRIPT=$(cat <<POWERSHELL
+\$ErrorActionPreference = 'Stop'
+\$ProgressPreference = 'SilentlyContinue'
+\$stage = Join-Path \$HOME '${REMOTE_STAGE}'
+\$root = Join-Path \$env:LOCALAPPDATA 'PanelDeControl'
+\$layout = Join-Path \$root 'dev-layout'
+\$incoming = Join-Path \$root 'dev-layout-incoming'
+\$log = Join-Path \$stage 'register.log'
+\$code = 1
+try {
+  foreach (\$dependency in Get-ChildItem -Path (Join-Path \$stage 'Dependencies') -File -ErrorAction SilentlyContinue) {
+    try {
+      Add-AppxPackage -Path \$dependency.FullName
+    } catch {
+      "Dependency \$(\$dependency.Name) not installed: \$(\$_.Exception.Message)" | Out-File -Append \$log
+    }
+  }
+  Get-AppxPackage -Name '${PACKAGE_NAME}' | Remove-AppxPackage
+  if (Test-Path \$layout) { Remove-Item -LiteralPath \$layout -Recurse -Force }
+  Move-Item -LiteralPath \$incoming -Destination \$layout
+  Add-AppxPackage -Register (Join-Path \$layout 'AppxManifest.xml')
+  Get-AppxPackage -Name '${PACKAGE_NAME}' | Select-Object Name, Version, InstallLocation | Format-List | Out-String | Out-File -Append \$log
+  \$code = 0
+} catch {
+  \$_ | Out-String | Out-File -Append \$log
+} finally {
+  \$code | Out-File (Join-Path \$stage 'register.done')
+}
+POWERSHELL
+)
+
 WIDGET_SCRIPT=$(cat <<POWERSHELL
 \$ErrorActionPreference = 'Stop'
 \$ProgressPreference = 'SilentlyContinue'
@@ -119,24 +152,28 @@ if (-not \$unlock -or \$unlock.AllowDevelopmentWithoutDevLicense -ne 1) {
 }
 \$stage = Join-Path \$HOME '${REMOTE_STAGE}'
 \$root = Join-Path \$env:LOCALAPPDATA 'PanelDeControl'
-\$layout = Join-Path \$root 'dev-layout'
 \$incoming = Join-Path \$root 'dev-layout-incoming'
-foreach (\$dependency in Get-ChildItem -Path (Join-Path \$stage 'Dependencies') -File -ErrorAction SilentlyContinue) {
-  try {
-    Add-AppxPackage -Path \$dependency.FullName
-  } catch {
-    Write-Warning "Dependency \$(\$dependency.Name) not installed: \$(\$_.Exception.Message)"
-  }
-}
 if (Test-Path \$incoming) { Remove-Item -LiteralPath \$incoming -Recurse -Force }
 \$archive = Join-Path \$stage 'package.zip'
 Copy-Item -LiteralPath (Join-Path \$stage 'package.msix') -Destination \$archive -Force
 Expand-Archive -LiteralPath \$archive -DestinationPath \$incoming -Force
-Get-AppxPackage -Name '${PACKAGE_NAME}' | Remove-AppxPackage
-if (Test-Path \$layout) { Remove-Item -LiteralPath \$layout -Recurse -Force }
-Move-Item -LiteralPath \$incoming -Destination \$layout
-Add-AppxPackage -Register (Join-Path \$layout 'AppxManifest.xml')
-Get-AppxPackage -Name '${PACKAGE_NAME}' | Select-Object Name, Version, InstallLocation | Format-List
+\$task = 'PanelDeControlDeploy'
+\$register = Join-Path \$stage 'register.ps1'
+\$done = Join-Path \$stage 'register.done'
+\$user = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+\$action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument ('-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + \$register + '"')
+\$principal = New-ScheduledTaskPrincipal -UserId \$user -LogonType Interactive -RunLevel Limited
+Register-ScheduledTask -TaskName \$task -Action \$action -Principal \$principal -Force | Out-Null
+try {
+  Start-ScheduledTask -TaskName \$task
+  \$deadline = (Get-Date).AddSeconds(180)
+  while (-not (Test-Path \$done) -and (Get-Date) -lt \$deadline) { Start-Sleep -Milliseconds 500 }
+} finally {
+  Unregister-ScheduledTask -TaskName \$task -Confirm:\$false
+}
+if (-not (Test-Path \$done)) { throw 'The widget was not registered: sign in on the device and run the deploy again.' }
+Get-Content -Path (Join-Path \$stage 'register.log') -ErrorAction SilentlyContinue
+if ((Get-Content -Path \$done -Raw).Trim() -ne '0') { throw 'Widget registration failed; see the log above.' }
 POWERSHELL
 )
 
@@ -209,6 +246,8 @@ if [ "$WITH_SERVICE" -eq 1 ]; then
 fi
 
 printf '%s\n' "$REMOTE_SCRIPT" > "$STAGE/deploy.ps1"
+printf '%s\n' "$REGISTER_SCRIPT" > "$STAGE/register.ps1"
+[ "$DRY_RUN" -eq 0 ] || { echo "+ write $STAGE/register.ps1:"; printf '%s\n' "$REGISTER_SCRIPT"; }
 [ "$DRY_RUN" -eq 0 ] || { echo "+ write $STAGE/deploy.ps1:"; printf '%s\n' "$REMOTE_SCRIPT"; }
 
 echo "==> Copying package to $HOST"
