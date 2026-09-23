@@ -81,7 +81,9 @@ public sealed class SnapshotPipeServer : ISnapshotServer
         CancellationToken connectToken,
         CancellationToken cancellationToken)
     {
-        await using var server = pipeFactory(pipeName);
+        await using var server = await PipeInstances
+            .CreateAsync(pipeFactory, pipeName, connectToken)
+            .ConfigureAwait(false);
         using var clientRelease = PipeClientRelease.For(server);
         await server.WaitForConnectionAsync(connectToken).ConfigureAwait(false);
 
