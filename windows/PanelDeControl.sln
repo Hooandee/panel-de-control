@@ -1,4 +1,4 @@
-Microsoft Visual Studio Solution File, Format Version 12.00
+﻿Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
@@ -11,6 +11,14 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PanelDeControl.Hardware.Tests", "tests\PanelDeControl.Hardware.Tests\PanelDeControl.Hardware.Tests.csproj", "{8B98E872-3883-471F-B6AE-BF70266F83FC}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PanelDeControl.GameBar", "src\PanelDeControl.GameBar\PanelDeControl.GameBar.csproj", "{67BEB927-C377-40B6-AAFE-43BFE60624E5}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{6638B415-6C38-40C9-848A-8F01DD8E86AD}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PanelDeControl.Service", "src\PanelDeControl.Service\PanelDeControl.Service.csproj", "{567C7F33-94F9-4CF2-ADDA-7D5803A43CB2}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{EAD0A0D0-CE17-4C97-AE97-37099776A7B3}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PanelDeControl.Service.Tests", "tests\PanelDeControl.Service.Tests\PanelDeControl.Service.Tests.csproj", "{098D05A0-7A33-48E5-9E6E-55D0FC099110}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -60,5 +68,25 @@ Global
 		{67BEB927-C377-40B6-AAFE-43BFE60624E5}.Release|Any CPU.Build.0 = Release|x64
 		{67BEB927-C377-40B6-AAFE-43BFE60624E5}.Release|x64.ActiveCfg = Release|x64
 		{67BEB927-C377-40B6-AAFE-43BFE60624E5}.Release|x64.Build.0 = Release|x64
+		{567C7F33-94F9-4CF2-ADDA-7D5803A43CB2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{567C7F33-94F9-4CF2-ADDA-7D5803A43CB2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{567C7F33-94F9-4CF2-ADDA-7D5803A43CB2}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{567C7F33-94F9-4CF2-ADDA-7D5803A43CB2}.Debug|x64.Build.0 = Debug|Any CPU
+		{567C7F33-94F9-4CF2-ADDA-7D5803A43CB2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{567C7F33-94F9-4CF2-ADDA-7D5803A43CB2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{567C7F33-94F9-4CF2-ADDA-7D5803A43CB2}.Release|x64.ActiveCfg = Release|Any CPU
+		{567C7F33-94F9-4CF2-ADDA-7D5803A43CB2}.Release|x64.Build.0 = Release|Any CPU
+		{098D05A0-7A33-48E5-9E6E-55D0FC099110}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{098D05A0-7A33-48E5-9E6E-55D0FC099110}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{098D05A0-7A33-48E5-9E6E-55D0FC099110}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{098D05A0-7A33-48E5-9E6E-55D0FC099110}.Debug|x64.Build.0 = Debug|Any CPU
+		{098D05A0-7A33-48E5-9E6E-55D0FC099110}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{098D05A0-7A33-48E5-9E6E-55D0FC099110}.Release|Any CPU.Build.0 = Release|Any CPU
+		{098D05A0-7A33-48E5-9E6E-55D0FC099110}.Release|x64.ActiveCfg = Release|Any CPU
+		{098D05A0-7A33-48E5-9E6E-55D0FC099110}.Release|x64.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{567C7F33-94F9-4CF2-ADDA-7D5803A43CB2} = {6638B415-6C38-40C9-848A-8F01DD8E86AD}
+		{098D05A0-7A33-48E5-9E6E-55D0FC099110} = {EAD0A0D0-CE17-4C97-AE97-37099776A7B3}
 	EndGlobalSection
 EndGlobal

@@ -1,10 +1,12 @@
 using System.IO.Pipes;
 using System.Text;
+using PanelDeControl.Core.Capabilities;
 using PanelDeControl.Core.Telemetry;
+using PanelDeControl.Hardware.Capabilities;
 
 namespace PanelDeControl.Hardware;
 
-public sealed class SnapshotPipeServer
+public sealed class SnapshotPipeServer : ISnapshotServer
 {
     private const int MaximumCommandLength = 64;
 
@@ -14,13 +16,18 @@ public sealed class SnapshotPipeServer
     private readonly IHardwareSnapshotProvider snapshotProvider;
     private readonly Func<string, NamedPipeServerStream> pipeFactory;
     private readonly TimeSpan captureTimeout;
+    private readonly TimeSpan commandReadTimeout;
+    private readonly ICapabilityInventoryProvider? inventoryProvider;
     private Task<HardwareSnapshot>? activeCapture;
+    private Task<CapabilityInventory>? activeInventory;
 
     public SnapshotPipeServer(
         string pipeName,
         IHardwareSnapshotProvider snapshotProvider,
         Func<string, NamedPipeServerStream> pipeFactory,
-        TimeSpan? captureTimeout = null)
+        TimeSpan? captureTimeout = null,
+        TimeSpan? commandReadTimeout = null,
+        ICapabilityInventoryProvider? inventoryProvider = null)
     {
         if (string.IsNullOrWhiteSpace(pipeName))
         {
@@ -37,6 +44,8 @@ public sealed class SnapshotPipeServer
         this.snapshotProvider = snapshotProvider;
         this.pipeFactory = pipeFactory;
         this.captureTimeout = effectiveCaptureTimeout;
+        this.commandReadTimeout = commandReadTimeout ?? TimeSpan.FromSeconds(1);
+        this.inventoryProvider = inventoryProvider;
     }
 
     public async Task RunAsync(CancellationToken cancellationToken)
@@ -60,7 +69,7 @@ public sealed class SnapshotPipeServer
             idleCancellation.CancelAfter(idleTimeout);
             try
             {
-                await RunOnceAsync(idleCancellation.Token).ConfigureAwait(false);
+                await RunConnectionAsync(idleCancellation.Token, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
@@ -69,10 +78,20 @@ public sealed class SnapshotPipeServer
         }
     }
 
-    public async Task RunOnceAsync(CancellationToken cancellationToken)
+    public Task RunOnceAsync(CancellationToken cancellationToken)
     {
-        await using var server = pipeFactory(pipeName);
-        await server.WaitForConnectionAsync(cancellationToken).ConfigureAwait(false);
+        return RunConnectionAsync(cancellationToken, cancellationToken);
+    }
+
+    private async Task RunConnectionAsync(
+        CancellationToken connectToken,
+        CancellationToken cancellationToken)
+    {
+        await using var server = await PipeInstances
+            .CreateAsync(pipeFactory, pipeName, connectToken)
+            .ConfigureAwait(false);
+        using var clientRelease = PipeClientRelease.For(server);
+        await server.WaitForConnectionAsync(connectToken).ConfigureAwait(false);
 
         using var reader = new StreamReader(
             server,
@@ -90,9 +109,15 @@ public sealed class SnapshotPipeServer
         };
 
         PipeCommand command;
+        using var commandCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        commandCancellation.CancelAfter(commandReadTimeout);
         try
         {
-            command = await ReadCommandAsync(reader, cancellationToken).ConfigureAwait(false);
+            command = await ReadCommandAsync(reader, commandCancellation.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return;
         }
         catch (IOException)
         {
@@ -103,22 +128,29 @@ public sealed class SnapshotPipeServer
             return;
         }
 
+        if (!command.TooLong && command.Value == "inventory" && inventoryProvider is not null)
+        {
+            var inventory = await CollectInventoryAsync(cancellationToken).ConfigureAwait(false);
+            await TryWriteResponseAsync(writer, CapabilityWireCodec.Serialize(inventory)).ConfigureAwait(false);
+            return;
+        }
+
         var snapshot = command.TooLong
             ? Fault("command_too_long")
             : command.Value == "snapshot"
                 ? await CaptureAsync(cancellationToken).ConfigureAwait(false)
                 : Fault("unsupported_command");
-        await TryWriteResponseAsync(writer, snapshot).ConfigureAwait(false);
+        await TryWriteResponseAsync(writer, TelemetryWireCodec.Serialize(snapshot)).ConfigureAwait(false);
     }
 
     private static async Task TryWriteResponseAsync(
         StreamWriter writer,
-        HardwareSnapshot snapshot)
+        string payload)
     {
         try
         {
             await writer
-                .WriteLineAsync(TelemetryWireCodec.Serialize(snapshot))
+                .WriteLineAsync(payload)
                 .ConfigureAwait(false);
         }
         catch (IOException)
@@ -177,6 +209,45 @@ public sealed class SnapshotPipeServer
 
         activeCapture = null;
         return await currentCapture.ConfigureAwait(false);
+    }
+
+    private async Task<CapabilityInventory> CollectInventoryAsync(CancellationToken cancellationToken)
+    {
+        if (activeInventory is { IsCompleted: false })
+        {
+            return InventoryFault("inventory_busy");
+        }
+
+        var provider = inventoryProvider!;
+        activeInventory = Task.Run(() =>
+        {
+            try
+            {
+                return provider.Collect();
+            }
+            catch
+            {
+                return InventoryFault("inventory_failed");
+            }
+        });
+        var currentInventory = activeInventory;
+        var timeout = Task.Delay(captureTimeout, cancellationToken);
+        if (await Task.WhenAny(currentInventory, timeout).ConfigureAwait(false) != currentInventory)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return InventoryFault("inventory_timeout");
+        }
+
+        activeInventory = null;
+        return await currentInventory.ConfigureAwait(false);
+    }
+
+    private static CapabilityInventory InventoryFault(string errorCode)
+    {
+        return new CapabilityInventory(
+            DateTimeOffset.UtcNow,
+            "unknown",
+            new[] { new CapabilityEntry(CapabilityIds.Service, CapabilityStatus.Fault, errorCode) });
     }
 
     private HardwareSnapshot Capture()

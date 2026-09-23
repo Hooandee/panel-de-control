@@ -3,23 +3,38 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Gaming.XboxGameBar;
+using System.Collections.Generic;
+using PanelDeControl.Core.Capabilities;
 using PanelDeControl.Core.Controls;
+using PanelDeControl.Core.Presentation;
 using PanelDeControl.Core.Telemetry;
+using Windows.Foundation;
+using Windows.ApplicationModel.Resources;
+using Windows.Storage;
+using Windows.System;
 using Windows.UI;
 using Windows.UI.Core;
 using Windows.UI.Xaml;
+using Windows.UI.Xaml.Automation;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Media;
+using Windows.UI.Xaml.Media.Animation;
+using Windows.UI.Composition;
+using Windows.UI.Xaml.Hosting;
+using System.Numerics;
+using Windows.UI.Xaml.Input;
 using Windows.UI.Xaml.Navigation;
+using Windows.UI.Xaml.Shapes;
 
 namespace PanelDeControl.GameBar;
 
 public sealed partial class ControlPanelWidget : Page, IDisposable
 {
-    private static readonly SolidColorBrush ConnectedBrush =
-        new(Color.FromArgb(255, 103, 212, 255));
-    private static readonly SolidColorBrush DisconnectedBrush =
-        new(Color.FromArgb(255, 235, 110, 93));
+    private static readonly ResourceLoader Strings = ResourceLoader.GetForViewIndependentUse();
+    private const string AccentSettingKey = "accent";
+    private const double ArcCenterX = 100;
+    private const double ArcCenterY = 92;
+    private const double ArcRadius = 78;
 
     private readonly DispatcherTimer refreshTimer = new()
     {
@@ -28,6 +43,8 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     private readonly TelemetryClient telemetryClient = new();
     private readonly VolumeControlClient volumeClient = new();
     private readonly BrightnessControlClient brightnessClient = new();
+    private readonly TdpControlClient tdpClient = new();
+    private readonly InventoryClient inventoryClient = new();
     private XboxGameBarWidget? gameBarWidget;
     private CancellationTokenSource? volumeDebounce;
     private CancellationTokenSource? brightnessDebounce;
@@ -35,24 +52,42 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     private long volumeGeneration;
     private long muteGeneration;
     private long brightnessGeneration;
+    private long tdpGeneration;
+    private long inventoryGeneration;
     private bool snapshotRefreshInProgress;
     private bool volumeRefreshInProgress;
     private bool brightnessRefreshInProgress;
+    private bool tdpRefreshInProgress;
     private bool applyingVolumeReadback;
     private bool applyingMuteReadback;
     private bool applyingBrightnessReadback;
+    private bool applyingTdpReadback;
     private bool volumeReady;
     private bool muteReady;
     private bool brightnessReady;
+    private bool tdpReady;
     private bool volumeWritePending;
     private bool muteWritePending;
     private bool brightnessWritePending;
+    private bool tdpWritePending;
+    private bool tdpConflict;
+    private int tdpMinimumWatts;
+    private int tdpMaximumWatts;
+    private int selectedTdpWatts;
+    private bool? confirmedExperimentalTdpEnabled;
     private bool? lastObservedMuted;
     private bool disposed;
 
     public ControlPanelWidget()
     {
         InitializeComponent();
+        PowerArcTrack.Data = CreatePowerArcGeometry(1);
+        PowerArcFill.Data = CreatePowerArcGeometry(0);
+        ApplyAccent(ReadSavedAccent());
+        BuildAccentSwatches();
+        ExperimentalDot.Fill = new SolidColorBrush(SectionColor(0));
+        CreateHeroGlow();
+        SelectTab(0);
         refreshTimer.Tick += OnRefreshTimerTick;
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
@@ -78,6 +113,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
 
         disposed = true;
         refreshTimer.Stop();
+        heroTimer.Stop();
         InvalidatePendingOperations();
         refreshTimer.Tick -= OnRefreshTimerTick;
         if (gameBarWidget is not null)
@@ -102,6 +138,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     private void OnUnloaded(object sender, RoutedEventArgs args)
     {
         refreshTimer.Stop();
+        heroTimer.Stop();
         InvalidatePendingOperations();
     }
 
@@ -133,6 +170,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         else
         {
             refreshTimer.Stop();
+            heroTimer.Stop();
             InvalidatePendingOperations();
         }
     }
@@ -140,6 +178,95 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     private async void RefreshButton_Click(object sender, RoutedEventArgs args)
     {
         await RefreshAsync();
+        if (DiagnosticsList.Visibility == Visibility.Visible)
+        {
+            await LoadInventoryAsync();
+        }
+    }
+
+    private async void DiagnosticsToggle_Click(object sender, RoutedEventArgs args)
+    {
+        if (DiagnosticsList.Visibility == Visibility.Visible)
+        {
+            inventoryGeneration++;
+            DiagnosticsList.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        DiagnosticsList.Visibility = Visibility.Visible;
+        await LoadInventoryAsync();
+    }
+
+    private async Task LoadInventoryAsync()
+    {
+        var generation = ++inventoryGeneration;
+        ShowDiagnosticsLines(new[] { Localized("DiagnosticsLoading") });
+        var inventory = await inventoryClient.GetInventoryAsync();
+        if (disposed || generation != inventoryGeneration)
+        {
+            return;
+        }
+
+        ShowDiagnosticsLines(inventory is null
+            ? new[] { Localized("DiagnosticsUnavailable") }
+            : inventory.Entries.Select(FormatCapability).ToArray());
+    }
+
+    private void ShowDiagnosticsLines(IReadOnlyList<string> lines)
+    {
+        DiagnosticsList.Children.Clear();
+        foreach (var line in lines)
+        {
+            DiagnosticsList.Children.Add(new TextBlock
+            {
+                Text = line,
+                FontSize = 13,
+                Margin = new Thickness(0, 4, 0, 0),
+                TextWrapping = TextWrapping.Wrap,
+                Foreground = ResourceBrush("PdcTextMutedBrush"),
+            });
+        }
+    }
+
+    private static readonly Dictionary<string, string> CapabilityLabelKeys = new()
+    {
+        ["sensor.pawnio"] = "CapabilitySensorDriver",
+        ["asus.atkacpi"] = "CapabilityAsusAtkacpi",
+        ["lenovo.wmi.gamezone"] = "CapabilityLenovoGameZone",
+        ["lenovo.wmi.other"] = "CapabilityLenovoOther",
+        ["lenovo.wmi.fan"] = "CapabilityLenovoFan",
+        ["msi.wmi.acpi"] = "CapabilityMsiAcpi",
+        ["rival.asus.armourycrate"] = "CapabilityRivalArmoury",
+        ["rival.lenovo.legionspace"] = "CapabilityRivalLegionSpace",
+        ["rival.msi.center"] = "CapabilityRivalMsiCenter",
+        ["rival.intel.dtt"] = "CapabilityRivalIntelDtt",
+        ["service"] = "CapabilityService",
+    };
+
+    private static string FormatCapability(CapabilityEntry entry)
+    {
+        var label = CapabilityLabelKeys.TryGetValue(entry.Id, out var key) ? Localized(key) : entry.Id;
+        return string.Format(Localized("CapabilityRowFormat"), label, CapabilityStatusText(entry));
+    }
+
+    private static string CapabilityStatusText(CapabilityEntry entry)
+    {
+        switch (entry.ErrorCode)
+        {
+            case "service_not_running":
+                return Localized("ReadingServiceNotRunning");
+            case "service_unavailable":
+                return Localized("ReadingServiceUnavailable");
+        }
+
+        var isRival = entry.Id.StartsWith("rival.", StringComparison.Ordinal);
+        return entry.Status switch
+        {
+            CapabilityStatus.Present => Localized(isRival ? "RivalRunning" : "CapabilityPresent"),
+            CapabilityStatus.Absent => Localized(isRival ? "RivalNotRunning" : "CapabilityAbsent"),
+            CapabilityStatus.PermissionRequired => Localized("ReadingPermission"),
+            _ => Localized("ReadingFault"),
+        };
     }
 
     private async Task RefreshAsync()
@@ -153,7 +280,8 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         await Task.WhenAll(
             ApplySnapshotWhenReadyAsync(currentRefreshGeneration),
             ApplyVolumeWhenReadyAsync(currentRefreshGeneration),
-            ApplyBrightnessWhenReadyAsync(currentRefreshGeneration));
+            ApplyBrightnessWhenReadyAsync(currentRefreshGeneration),
+            ApplyTdpWhenReadyAsync(currentRefreshGeneration));
     }
 
     private async Task ApplySnapshotWhenReadyAsync(
@@ -259,15 +387,54 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         }
     }
 
+    private async Task ApplyTdpWhenReadyAsync(
+        long currentRefreshGeneration)
+    {
+        if (tdpRefreshInProgress || disposed)
+        {
+            return;
+        }
+
+        tdpRefreshInProgress = true;
+        var controlGeneration = tdpGeneration;
+        var writeWasPendingAtRefreshStart = tdpWritePending;
+        try
+        {
+            var response = await tdpClient.GetAsync();
+            if (!disposed &&
+                currentRefreshGeneration == refreshGeneration &&
+                !writeWasPendingAtRefreshStart &&
+                !tdpWritePending &&
+                controlGeneration == tdpGeneration)
+            {
+                ApplyTdpResponse(response);
+            }
+        }
+        finally
+        {
+            if (currentRefreshGeneration == refreshGeneration)
+            {
+                tdpRefreshInProgress = false;
+            }
+        }
+    }
+
     private void ApplySnapshot(HardwareSnapshot snapshot)
     {
         DeviceName.Text = snapshot.DeviceModel;
         BatteryValue.Text = Format(snapshot, "battery.level", "0", "%");
+        TileCpuValue.Text = Format(snapshot, "cpu.load", "0", "%");
+        TileGpuValue.Text = Format(snapshot, "gpu.load", "0", "%");
+        var battery = FindReading(snapshot, "battery.level");
+        SetRing(BatteryRing, battery, BatteryColor(battery));
+        SetRing(CpuRing, FindReading(snapshot, "cpu.load"), ResourceBrush("PdcAccentBrush").Color);
+        SetRing(GpuRing, FindReading(snapshot, "gpu.load"), ToColor(AccentPalette.Resolve("mint").Argb));
+        ApplyEnergy(snapshot);
         PowerSourceValue.Text = FormatPowerSource(snapshot);
         CpuTemperatureValue.Text = Format(snapshot, "cpu.temperature", "0", "°C");
-        CpuLoadValue.Text = $"Carga {Format(snapshot, "cpu.load", "0", "%")}";
+        CpuLoadValue.Text = string.Format(Localized("LoadFormat"), Format(snapshot, "cpu.load", "0", "%"));
         GpuTemperatureValue.Text = Format(snapshot, "gpu.temperature", "0", "°C");
-        GpuLoadValue.Text = $"Carga {Format(snapshot, "gpu.load", "0", "%")}";
+        GpuLoadValue.Text = string.Format(Localized("LoadFormat"), Format(snapshot, "gpu.load", "0", "%"));
         LastUpdated.Text = snapshot.CapturedAtUtc.ToLocalTime().ToString("HH:mm:ss");
 
         var available = snapshot.Readings.Any(
@@ -275,13 +442,11 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         var unsupported = snapshot.Readings.Any(
             reading => reading.ErrorCode == "device_not_supported");
         ConnectionStatus.Text = unsupported
-            ? "Dispositivo no compatible"
+            ? Localized("DeviceUnrecognized")
             : available
-                ? "Telemetría Windows conectada"
+                ? Localized("TelemetryConnected")
                 : StatusText(snapshot.Readings.FirstOrDefault());
-        ConnectionDot.Fill = available && !unsupported
-            ? ConnectedBrush
-            : DisconnectedBrush;
+        ConnectionDot.Fill = ResourceBrush(available && !unsupported ? "PdcOkBrush" : "PdcDangerBrush");
     }
 
     private async void VolumeSlider_ValueChanged(
@@ -294,7 +459,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         }
 
         VolumeValue.Text = $"{Math.Round(args.NewValue):0} %";
-        VolumeStatus.Text = "Aplicando y verificando…";
+        VolumeStatus.Text = Localized("StatusApplying");
 
         volumeDebounce?.Cancel();
         volumeDebounce?.Dispose();
@@ -341,7 +506,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         }
 
         var requestedMuted = MuteToggle.IsOn;
-        MuteStatus.Text = "Aplicando y verificando…";
+        MuteStatus.Text = Localized("StatusApplying");
         MuteToggle.IsEnabled = false;
         var generation = ++muteGeneration;
         muteWritePending = true;
@@ -373,7 +538,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             return;
         }
 
-        BrightnessStatus.Text = "Aplicando y verificando…";
+        BrightnessStatus.Text = Localized("StatusApplying");
         brightnessDebounce?.Cancel();
         brightnessDebounce?.Dispose();
         var debounce = new CancellationTokenSource();
@@ -407,6 +572,613 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         }
     }
 
+    private async void ExperimentalTdpToggle_Toggled(
+        object sender,
+        RoutedEventArgs args)
+    {
+        if (disposed || applyingTdpReadback || !tdpReady || tdpWritePending)
+        {
+            return;
+        }
+
+        var enable = ExperimentalTdpToggle.IsOn;
+        PowerStatus.Text = Localized("StatusApplying");
+        var generation = ++tdpGeneration;
+        tdpWritePending = true;
+        UpdateTdpControlAvailability();
+        try
+        {
+            var response = enable
+                ? await tdpClient.EnableExperimentalAsync()
+                : await tdpClient.DisableExperimentalAsync();
+            if (!disposed && generation == tdpGeneration)
+            {
+                ApplyTdpResponse(response);
+            }
+        }
+        finally
+        {
+            if (generation == tdpGeneration)
+            {
+                tdpWritePending = false;
+                UpdateTdpControlAvailability();
+            }
+        }
+    }
+
+    private async void TdpDecreaseButton_Click(
+        object sender,
+        RoutedEventArgs args)
+    {
+        await ApplyTdpSelectionAsync(selectedTdpWatts - 1);
+    }
+
+    private async void TdpIncreaseButton_Click(
+        object sender,
+        RoutedEventArgs args)
+    {
+        await ApplyTdpSelectionAsync(selectedTdpWatts + 1);
+    }
+
+    private async void TdpPresetButton_Click(
+        object sender,
+        RoutedEventArgs args)
+    {
+        if (sender is Button { Tag: int watts })
+        {
+            await ApplyTdpSelectionAsync(watts);
+        }
+    }
+
+    private async Task ApplyTdpSelectionAsync(int requestedWatts)
+    {
+        if (disposed ||
+            !tdpReady ||
+            tdpWritePending ||
+            tdpConflict ||
+            !ExperimentalTdpToggle.IsOn)
+        {
+            return;
+        }
+
+        selectedTdpWatts = Math.Min(
+            Math.Max(requestedWatts, tdpMinimumWatts),
+            tdpMaximumWatts);
+        UpdatePowerArc();
+        PowerStatus.Text = Localized("StatusApplying");
+        var generation = ++tdpGeneration;
+        tdpWritePending = true;
+        UpdateTdpControlAvailability();
+        try
+        {
+            var response = await tdpClient.SetAsync(selectedTdpWatts);
+            if (!disposed && generation == tdpGeneration)
+            {
+                ApplyTdpResponse(response);
+            }
+        }
+        finally
+        {
+            if (generation == tdpGeneration)
+            {
+                tdpWritePending = false;
+                UpdateTdpControlAvailability();
+            }
+        }
+    }
+
+    private void ApplyTdpResponse(TdpControlResponse response)
+    {
+        tdpReady = response.MinimumWatts.HasValue &&
+            response.MaximumWatts.HasValue;
+        tdpConflict = response.ErrorCode == "armoury_crate_running";
+        applyingTdpReadback = true;
+        try
+        {
+            if (response.ExperimentalStateKnown)
+            {
+                confirmedExperimentalTdpEnabled =
+                    response.ExperimentalEnabled;
+                ExperimentalTdpToggle.IsOn = response.ExperimentalEnabled;
+            }
+            else if (confirmedExperimentalTdpEnabled.HasValue)
+            {
+                ExperimentalTdpToggle.IsOn =
+                    confirmedExperimentalTdpEnabled.Value;
+            }
+        }
+        finally
+        {
+            applyingTdpReadback = false;
+        }
+
+        if (tdpReady)
+        {
+            tdpMinimumWatts = response.MinimumWatts!.Value;
+            tdpMaximumWatts = response.MaximumWatts!.Value;
+            selectedTdpWatts = Math.Min(
+                Math.Max(
+                    response.AppliedWatts ??
+                    response.TargetWatts ??
+                    response.DefaultWatts ??
+                    selectedTdpWatts,
+                    tdpMinimumWatts),
+                tdpMaximumWatts);
+            TdpControls.Visibility = Visibility.Visible;
+            UpdatePowerArc();
+            UpdateTdpPresetButtons(response.PresetWatts);
+        }
+        else
+        {
+            PowerValue.Text = "—";
+            TdpMarker.Visibility = Visibility.Collapsed;
+            TdpControls.Visibility = Visibility.Collapsed;
+            HideTdpPresetButtons();
+        }
+
+        ManufacturerRecoveryHint.Visibility =
+            response.ManufacturerRecoveryUnverified
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+        PowerStatus.Text = response.Status switch
+        {
+            ControlStatus.Available => response.ExperimentalEnabled
+                ? Localized("PowerAvailable")
+                : Localized("PowerOptInDisabled"),
+            ControlStatus.Applied => Localized("PowerApplied"),
+            ControlStatus.Unverifiable => Localized("PowerUnverifiable"),
+            ControlStatus.Rejected when tdpConflict =>
+                Localized("PowerArmouryConflict"),
+            ControlStatus.Rejected when
+                response.ErrorCode == "experimental_tdp_disabled" =>
+                Localized("PowerOptInDisabled"),
+            ControlStatus.Rejected => Localized("PowerRejected"),
+            ControlStatus.Unavailable when
+                response.ErrorCode == "tdp_profile_unsupported" =>
+                Localized("PowerUnsupported"),
+            ControlStatus.Unavailable when
+                response.ErrorCode == "power_source_unknown" =>
+                Localized("PowerSourceUnknown"),
+            _ => Localized("PowerServiceUnavailable"),
+        };
+        UpdateTdpControlAvailability();
+    }
+
+    private void UpdatePowerArc()
+    {
+        PlaceTdpMarker();
+        PowerValue.Text = $"{selectedTdpWatts} W";
+        PowerLimits.Text = string.Format(
+            Localized("PowerLimitsFormat"),
+            tdpMinimumWatts,
+            tdpMaximumWatts);
+    }
+
+    private void UpdateTdpPresetButtons(IReadOnlyList<int> presets)
+    {
+        var available = presets
+            .Where(watts =>
+                watts >= tdpMinimumWatts && watts <= tdpMaximumWatts)
+            .Distinct()
+            .Take(TdpPresetButtons.Count)
+            .ToArray();
+        for (var index = 0; index < TdpPresetButtons.Count; index++)
+        {
+            var button = TdpPresetButtons[index];
+            if (index >= available.Length)
+            {
+                button.Visibility = Visibility.Collapsed;
+                button.Tag = null;
+                continue;
+            }
+
+            var watts = available[index];
+            button.Visibility = Visibility.Visible;
+            button.Tag = watts;
+            button.Content = $"{watts} W";
+            AutomationProperties.SetName(
+                button,
+                string.Format(Localized("PowerPresetAutomation"), watts));
+        }
+    }
+
+    private void HideTdpPresetButtons()
+    {
+        foreach (var button in TdpPresetButtons)
+        {
+            button.Visibility = Visibility.Collapsed;
+            button.IsEnabled = false;
+            button.Tag = null;
+        }
+    }
+
+    private void UpdateTdpControlAvailability()
+    {
+        ExperimentalTdpToggle.IsEnabled = tdpReady && !tdpWritePending;
+        var canWrite = tdpReady &&
+            ExperimentalTdpToggle.IsOn &&
+            !tdpWritePending &&
+            !tdpConflict;
+        TdpDecreaseButton.IsEnabled = canWrite &&
+            selectedTdpWatts > tdpMinimumWatts;
+        TdpIncreaseButton.IsEnabled = canWrite &&
+            selectedTdpWatts < tdpMaximumWatts;
+        foreach (var button in TdpPresetButtons)
+        {
+            button.IsEnabled = canWrite &&
+                button.Visibility == Visibility.Visible;
+        }
+    }
+
+    private IReadOnlyList<Button> TdpPresetButtons => new[]
+    {
+        TdpPreset1,
+        TdpPreset2,
+        TdpPreset3,
+        TdpPreset4,
+    };
+
+    private static PathGeometry CreatePowerArcGeometry(double fraction)
+    {
+        var start = PowerArc.PointAt(0, ArcCenterX, ArcCenterY, ArcRadius);
+        var figure = new PathFigure
+        {
+            StartPoint = new Point(start.X, start.Y),
+            IsClosed = false,
+        };
+        if (fraction > 0)
+        {
+            var end = PowerArc.PointAt(fraction, ArcCenterX, ArcCenterY, ArcRadius);
+            figure.Segments.Add(new ArcSegment
+            {
+                Point = new Point(end.X, end.Y),
+                Size = new Size(ArcRadius, ArcRadius),
+                IsLargeArc = PowerArc.IsLargeArc(fraction),
+                SweepDirection = SweepDirection.Clockwise,
+            });
+        }
+
+        var geometry = new PathGeometry();
+        geometry.Figures.Add(figure);
+        return geometry;
+    }
+
+    private void TabButton_Click(object sender, RoutedEventArgs args)
+    {
+        if (sender is Button { Tag: string tag } && int.TryParse(tag, out var index))
+        {
+            SelectTab(index);
+        }
+    }
+
+    private void Page_KeyDown(object sender, KeyRoutedEventArgs args)
+    {
+        var step = args.Key switch
+        {
+            VirtualKey.GamepadLeftShoulder => -1,
+            VirtualKey.GamepadRightShoulder => 1,
+            _ => 0,
+        };
+        if (step == 0)
+        {
+            return;
+        }
+
+        SelectTab((selectedTab + step + TabPanels.Count) % TabPanels.Count);
+        args.Handled = true;
+    }
+
+    private int selectedTab;
+
+    private IReadOnlyList<(Button Tab, Panel Panel)> TabPanels => new (Button, Panel)[]
+    {
+        (TabPower, PowerPanel),
+        (TabSystem, SystemPanel),
+        (TabSensors, SensorsPanel),
+        (TabSettings, SettingsPanel),
+    };
+
+    private void SelectTab(int index)
+    {
+        selectedTab = index;
+        var section = SectionColor(index);
+        for (var position = 0; position < TabPanels.Count; position++)
+        {
+            var (tab, panel) = TabPanels[position];
+            var selected = position == index;
+            panel.Visibility = selected ? Visibility.Visible : Visibility.Collapsed;
+            tab.Foreground = selected ? new SolidColorBrush(section) : ResourceBrush("PdcTextMutedBrush");
+            tab.Background = new SolidColorBrush(selected ? WithAlpha(section, 0x2E) : Colors.Transparent);
+        }
+
+        var glow = new ColorAnimation
+        {
+            To = WithAlpha(section, 0x66),
+            Duration = new Duration(TimeSpan.FromMilliseconds(420)),
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+        };
+        Storyboard.SetTarget(glow, SectionGlowTop);
+        Storyboard.SetTargetProperty(glow, "Color");
+        var storyboard = new Storyboard();
+        storyboard.Children.Add(glow);
+        storyboard.Begin();
+    }
+
+    private static Color SectionColor(int index)
+    {
+        return index switch
+        {
+            0 => ((SolidColorBrush)Application.Current.Resources["PdcBoostBrush"]).Color,
+            1 => ResourceBrush("PdcAccentBrush").Color,
+            2 => ToColor(AccentPalette.Resolve("mint").Argb),
+            _ => ToColor(AccentPalette.Resolve("purple").Argb),
+        };
+    }
+
+    private static Color WithAlpha(Color color, byte alpha)
+    {
+        return Color.FromArgb(alpha, color.R, color.G, color.B);
+    }
+
+    private const double DefaultHeroScaleWatts = 40;
+    private static readonly TimeSpan HeroAnimationLength = TimeSpan.FromMilliseconds(450);
+    private readonly DispatcherTimer heroTimer = new() { Interval = TimeSpan.FromMilliseconds(16) };
+    private double heroScaleWatts = DefaultHeroScaleWatts;
+    private double heroShownWatts;
+    private double heroFromWatts;
+    private double heroTargetWatts;
+    private DateTimeOffset heroAnimationStart;
+    private PowerZone? heroZone;
+    private bool heroScaleFromDevice;
+
+    private void AnimateHero(double? watts)
+    {
+        if (watts is not double target)
+        {
+            heroTimer.Stop();
+            heroShownWatts = 0;
+            PowerDrawValue.Text = "—";
+            heroZone = null;
+            PowerZoneLabel.Text = string.Empty;
+            SetHeroGlow(null);
+            PowerArcFill.Data = CreatePowerArcGeometry(0);
+            return;
+        }
+
+        heroFromWatts = heroShownWatts;
+        heroTargetWatts = target;
+        heroAnimationStart = DateTimeOffset.UtcNow;
+        if (!heroTimer.IsEnabled)
+        {
+            heroTimer.Tick -= OnHeroTick;
+            heroTimer.Tick += OnHeroTick;
+            heroTimer.Start();
+        }
+    }
+
+    private void OnHeroTick(object sender, object args)
+    {
+        var progress = Math.Min(1, (DateTimeOffset.UtcNow - heroAnimationStart).TotalMilliseconds / HeroAnimationLength.TotalMilliseconds);
+        var eased = 1 - Math.Pow(1 - progress, 3);
+        heroShownWatts = heroFromWatts + ((heroTargetWatts - heroFromWatts) * eased);
+        RenderHero(heroShownWatts);
+        if (progress >= 1)
+        {
+            heroTimer.Stop();
+        }
+    }
+
+    private void RenderHero(double watts)
+    {
+        var fraction = PowerArc.Fraction(watts, 0, heroScaleWatts);
+        PowerDrawValue.Text = watts.ToString("0.0");
+        PowerArcFill.Data = CreatePowerArcGeometry(fraction);
+        PowerArcFill.Stroke ??= HeroGradient();
+        if (!heroScaleFromDevice)
+        {
+            PowerZoneLabel.Text = string.Empty;
+            SetHeroGlow(null);
+            return;
+        }
+
+        var zone = PowerArc.ZoneFor(fraction);
+        if (zone == heroZone)
+        {
+            return;
+        }
+
+        heroZone = zone;
+        var zoneColor = ToColor(PowerArc.ColorFor(fraction));
+        PowerZoneLabel.Text = Localized("PowerZone" + zone);
+        PowerZoneLabel.Foreground = new SolidColorBrush(zoneColor);
+        SetHeroGlow(zoneColor);
+    }
+
+    private void SetHeroGlow(Color? color)
+    {
+        if (heroGlowStop is not null)
+        {
+            heroGlowStop.Color = color is Color value ? WithAlpha(value, 0x50) : Colors.Transparent;
+        }
+    }
+
+    private static LinearGradientBrush HeroGradient()
+    {
+        var gradient = new LinearGradientBrush
+        {
+            MappingMode = BrushMappingMode.Absolute,
+            StartPoint = new Point(ArcCenterX - ArcRadius, 0),
+            EndPoint = new Point(ArcCenterX + ArcRadius, 0),
+        };
+        foreach (var offset in new[] { 0.0, 0.5, 1.0 })
+        {
+            gradient.GradientStops.Add(new GradientStop { Offset = offset, Color = ToColor(PowerArc.ColorFor(offset)) });
+        }
+
+        return gradient;
+    }
+
+    private void PlaceTdpMarker()
+    {
+        if (!tdpReady || tdpMaximumWatts <= 0)
+        {
+            TdpMarker.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var point = PowerArc.PointAt(PowerArc.Fraction(selectedTdpWatts, 0, heroScaleWatts), ArcCenterX, ArcCenterY, ArcRadius);
+        Canvas.SetLeft(TdpMarker, point.X - (TdpMarker.Width / 2));
+        Canvas.SetTop(TdpMarker, point.Y - (TdpMarker.Height / 2));
+        TdpMarker.Visibility = Visibility.Visible;
+    }
+
+    private const double RingSize = 84;
+    private const double RingStroke = 7;
+
+    private static void SetRing(Path ring, TelemetryReading? reading, Color color)
+    {
+        var fraction = reading?.Status == ReadingStatus.Available && reading.Value is double value
+            ? Math.Min(Math.Max(value, 0), 100) / 100
+            : 0;
+        ring.Stroke = new SolidColorBrush(color);
+        ring.Data = CreateRingGeometry(fraction);
+    }
+
+    private static PathGeometry CreateRingGeometry(double fraction)
+    {
+        var radius = (RingSize - RingStroke) / 2;
+        var center = RingSize / 2;
+        var geometry = new PathGeometry();
+        if (fraction <= 0)
+        {
+            return geometry;
+        }
+
+        var sweep = Math.Min(fraction, 0.9999) * 360;
+        Point At(double degrees)
+        {
+            var radians = (degrees - 90) * Math.PI / 180;
+            return new Point(center + (radius * Math.Cos(radians)), center + (radius * Math.Sin(radians)));
+        }
+
+        var figure = new PathFigure { StartPoint = At(0), IsClosed = false };
+        figure.Segments.Add(new ArcSegment
+        {
+            Point = At(sweep),
+            Size = new Size(radius, radius),
+            IsLargeArc = sweep > 180,
+            SweepDirection = SweepDirection.Clockwise,
+        });
+        geometry.Figures.Add(figure);
+        return geometry;
+    }
+
+    private static Color BatteryColor(TelemetryReading? battery)
+    {
+        var level = battery?.Value ?? 100;
+        return ResourceBrush(level < 20 ? "PdcDangerBrush" : level < 50 ? "PdcWarnBrush" : "PdcOkBrush").Color;
+    }
+
+    private CompositionColorGradientStop? heroGlowStop;
+
+    private void CreateHeroGlow()
+    {
+        try
+        {
+            var compositor = ElementCompositionPreview.GetElementVisual(HeroGlowHost).Compositor;
+            var brush = compositor.CreateRadialGradientBrush();
+            heroGlowStop = compositor.CreateColorGradientStop(0, Colors.Transparent);
+            brush.ColorStops.Add(heroGlowStop);
+            brush.ColorStops.Add(compositor.CreateColorGradientStop(1, Colors.Transparent));
+            var visual = compositor.CreateSpriteVisual();
+            visual.Size = new Vector2((float)HeroGlowHost.Width, (float)HeroGlowHost.Height);
+            visual.Brush = brush;
+            ElementCompositionPreview.SetElementChildVisual(HeroGlowHost, visual);
+        }
+        catch (Exception exception)
+        {
+            CrashLog.Write("hero-glow", exception);
+        }
+    }
+
+    private void BuildAccentSwatches()
+    {
+        var index = 0;
+        foreach (var accent in AccentPalette.All)
+        {
+            index++;
+            var swatch = new Button
+            {
+                Tag = accent.Id,
+                Width = 30,
+                Height = 30,
+                Padding = new Thickness(0),
+                Margin = new Thickness(3),
+                CornerRadius = new CornerRadius(15),
+                Background = new SolidColorBrush(Colors.Transparent),
+                BorderThickness = new Thickness(0),
+                IsTabStop = true,
+                Content = new Ellipse
+                {
+                    Width = 22,
+                    Height = 22,
+                    Fill = new SolidColorBrush(ToColor(accent.Argb)),
+                },
+            };
+            AutomationProperties.SetName(
+                swatch,
+                string.Format(Localized("AccentSwatchAutomation"), index, AccentPalette.All.Count));
+            swatch.Click += AccentSwatch_Click;
+            AccentSwatches.Children.Add(swatch);
+        }
+    }
+
+    private void AccentSwatch_Click(object sender, RoutedEventArgs args)
+    {
+        if (sender is Button { Tag: string id })
+        {
+            ApplyAccent(AccentPalette.Resolve(id));
+            SelectTab(selectedTab);
+            try
+            {
+                ApplicationData.Current.LocalSettings.Values[AccentSettingKey] = id;
+            }
+            catch
+            {
+            }
+        }
+    }
+
+    private static AccentColor ReadSavedAccent()
+    {
+        try
+        {
+            return AccentPalette.Resolve(ApplicationData.Current.LocalSettings.Values[AccentSettingKey] as string);
+        }
+        catch
+        {
+            return AccentPalette.Resolve(null);
+        }
+    }
+
+    private static void ApplyAccent(AccentColor accent)
+    {
+        if (Application.Current.Resources["PdcAccentBrush"] is SolidColorBrush brush)
+        {
+            brush.Color = ToColor(accent.Argb);
+        }
+    }
+
+    private static SolidColorBrush ResourceBrush(string key)
+    {
+        return (SolidColorBrush)Application.Current.Resources[key];
+    }
+
+    private static Color ToColor(uint argb)
+    {
+        return Color.FromArgb((byte)(argb >> 24), (byte)(argb >> 16), (byte)(argb >> 8), (byte)argb);
+    }
+
     private void ApplyVolumeResponse(VolumeControlResponse response)
     {
         switch (response.Status)
@@ -417,8 +1189,8 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
                 VolumeSlider.IsEnabled = true;
                 volumeReady = true;
                 VolumeStatus.Text = response.Status == ControlStatus.Applied
-                    ? "Cambio aplicado y verificado"
-                    : "Audio predeterminado disponible";
+                    ? Localized("StatusVerified")
+                    : Localized("VolumeAvailable");
                 break;
             case ControlStatus.Unverifiable:
                 if (response.ObservedLevel.HasValue)
@@ -428,19 +1200,19 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
 
                 VolumeSlider.IsEnabled = true;
                 volumeReady = true;
-                VolumeStatus.Text = "No se pudo verificar el cambio";
+                VolumeStatus.Text = Localized("StatusNotVerified");
                 break;
             case ControlStatus.PermissionRequired:
-                DisableVolumeControl("Windows requiere permiso para controlar el audio");
+                DisableVolumeControl(Localized("VolumePermission"));
                 break;
             case ControlStatus.Unavailable:
-                DisableVolumeControl("No hay un dispositivo de audio predeterminado");
+                DisableVolumeControl(Localized("AudioNoDefault"));
                 break;
             case ControlStatus.Rejected:
-                VolumeStatus.Text = "Windows rechazó el cambio";
+                VolumeStatus.Text = Localized("StatusRejected");
                 break;
             default:
-                DisableVolumeControl("No se pudo conectar con el control de audio");
+                DisableVolumeControl(Localized("AudioConnectFailed"));
                 break;
         }
     }
@@ -453,7 +1225,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             case ControlStatus.Applied:
                 if (!response.ObservedMuted.HasValue)
                 {
-                    DisableMuteControl("No se pudo leer el estado de silencio");
+                    DisableMuteControl(Localized("MuteReadFailed"));
                     break;
                 }
 
@@ -461,25 +1233,25 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
                 muteReady = true;
                 MuteToggle.IsEnabled = !muteWritePending;
                 MuteStatus.Text = response.Status == ControlStatus.Applied
-                    ? "Cambio aplicado y verificado"
-                    : "Estado de silencio disponible";
+                    ? Localized("StatusVerified")
+                    : Localized("MuteAvailable");
                 break;
             case ControlStatus.Unverifiable:
                 RestoreKnownMuteState(response.ObservedMuted);
-                MuteStatus.Text = "No se pudo verificar el cambio";
+                MuteStatus.Text = Localized("StatusNotVerified");
                 break;
             case ControlStatus.PermissionRequired:
-                DisableMuteControl("Windows requiere permiso para silenciar el audio");
+                DisableMuteControl(Localized("MutePermission"));
                 break;
             case ControlStatus.Unavailable:
-                DisableMuteControl("No hay un dispositivo de audio predeterminado");
+                DisableMuteControl(Localized("AudioNoDefault"));
                 break;
             case ControlStatus.Rejected:
                 RestoreKnownMuteState(null);
-                MuteStatus.Text = "Windows rechazó el cambio";
+                MuteStatus.Text = Localized("StatusRejected");
                 break;
             default:
-                DisableMuteControl("No se pudo conectar con el control de audio");
+                DisableMuteControl(Localized("AudioConnectFailed"));
                 break;
         }
     }
@@ -496,8 +1268,8 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
                 BrightnessSlider.IsEnabled = true;
                 brightnessReady = true;
                 BrightnessStatus.Text = response.Status == ControlStatus.Applied
-                    ? "Cambio aplicado y verificado"
-                    : "Panel integrado disponible";
+                    ? Localized("StatusVerified")
+                    : Localized("BrightnessAvailable");
                 break;
             case ControlStatus.Unverifiable:
                 if (response.ObservedPercentage.HasValue)
@@ -505,30 +1277,30 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
                     ApplyObservedBrightness(response.ObservedPercentage.Value);
                     BrightnessSlider.IsEnabled = true;
                     brightnessReady = true;
-                    BrightnessStatus.Text = "El cambio no coincide con el valor leído";
+                    BrightnessStatus.Text = Localized("BrightnessMismatch");
                 }
                 else
                 {
-                    DisableBrightnessControl("No se pudo verificar el cambio");
+                    DisableBrightnessControl(Localized("StatusNotVerified"));
                 }
 
                 break;
             case ControlStatus.PermissionRequired:
                 DisableBrightnessControl(
-                    "Windows denegó el permiso para controlar el brillo");
+                    Localized("BrightnessPermission"));
                 break;
             case ControlStatus.Unavailable:
                 DisableBrightnessControl(
-                    "Brillo del panel integrado no disponible");
+                    Localized("BrightnessUnavailable"));
                 break;
             case ControlStatus.Rejected:
-                BrightnessStatus.Text = "Windows rechazó el cambio";
+                BrightnessStatus.Text = Localized("StatusRejected");
                 break;
             default:
                 DisableBrightnessControl(
                     writeAttempted
-                        ? "No se pudo controlar el brillo del panel integrado"
-                        : "No se pudo leer el brillo del panel integrado");
+                        ? Localized("BrightnessControlFailed")
+                        : Localized("BrightnessReadFailed"));
                 break;
         }
     }
@@ -624,9 +1396,11 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         snapshotRefreshInProgress = false;
         volumeRefreshInProgress = false;
         brightnessRefreshInProgress = false;
+        tdpRefreshInProgress = false;
         CancelPendingVolumeWrite();
         CancelPendingMuteWrite();
         CancelPendingBrightnessWrite();
+        CancelPendingTdpWrite();
     }
 
     private void CancelPendingVolumeWrite()
@@ -644,7 +1418,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         muteWritePending = false;
         muteReady = false;
         MuteToggle.IsEnabled = false;
-        MuteStatus.Text = "Comprobando estado de silencio…";
+        MuteStatus.Text = Localized("MuteChecking");
     }
 
     private void CancelPendingBrightnessWrite()
@@ -657,7 +1431,24 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         brightnessDebounce = null;
         BrightnessSlider.IsEnabled = false;
         BrightnessValue.Text = "—";
-        BrightnessStatus.Text = "Comprobando panel integrado…";
+        BrightnessStatus.Text = Localized("BrightnessChecking");
+    }
+
+    private void CancelPendingTdpWrite()
+    {
+        tdpGeneration++;
+        tdpWritePending = false;
+        tdpReady = false;
+        tdpConflict = false;
+        ExperimentalTdpToggle.IsEnabled = false;
+        TdpDecreaseButton.IsEnabled = false;
+        TdpIncreaseButton.IsEnabled = false;
+        foreach (var button in TdpPresetButtons)
+        {
+            button.IsEnabled = false;
+        }
+
+        PowerStatus.Text = Localized("PowerChecking");
     }
 
     private static string Format(
@@ -672,14 +1463,62 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             : StatusText(reading);
     }
 
+    private void ApplyEnergy(HardwareSnapshot snapshot)
+    {
+        var draw = FindReading(snapshot, "power.draw");
+        heroScaleFromDevice = snapshot.DeviceMaxWatts.HasValue;
+        heroScaleWatts = snapshot.DeviceMaxWatts ?? DefaultHeroScaleWatts;
+        if (!heroScaleFromDevice)
+        {
+            heroZone = null;
+        }
+        AnimateHero(draw?.Status == ReadingStatus.Available ? draw.Value : null);
+        PlaceTdpMarker();
+        var remaining = FindReading(snapshot, "battery.time_remaining");
+        PowerDrawDetail.Text = draw?.ErrorCode switch
+        {
+            "power_draw_on_ac" => Localized("PowerDrawOnAc"),
+            "power_draw_pending" => Localized("PowerDrawPending"),
+            _ when remaining?.Status == ReadingStatus.Available && remaining.Value.HasValue =>
+                string.Format(
+                    Localized("PowerDrawRemainingFormat"),
+                    (int)(remaining.Value.Value / 60),
+                    (int)(remaining.Value.Value % 60)),
+            _ when draw?.Status == ReadingStatus.Available => Localized("PowerDrawOnBattery"),
+            _ => StatusText(draw),
+        };
+
+        var mode = FindReading(snapshot, "power.mode");
+        var effective = FindReading(snapshot, "power.mode_effective");
+        PowerModeValue.Text = ModeName(mode) ?? "—";
+        PowerModeDetail.Text = mode?.Value is double selected &&
+            effective?.Value is double active &&
+            (int)selected != (int)active
+                ? string.Format(Localized("PowerModeEffectiveFormat"), ModeName(effective))
+                : string.Empty;
+    }
+
+    private static string? ModeName(TelemetryReading? reading)
+    {
+        return reading?.Status == ReadingStatus.Available && reading.Value.HasValue &&
+            Enum.IsDefined(typeof(PowerMode), (int)reading.Value.Value)
+                ? Localized("PowerMode" + (PowerMode)(int)reading.Value.Value)
+                : null;
+    }
+
+    private static TelemetryReading? FindReading(HardwareSnapshot snapshot, string id)
+    {
+        return snapshot.Readings.FirstOrDefault(candidate => candidate.Id == id);
+    }
+
     private static string FormatPowerSource(HardwareSnapshot snapshot)
     {
         var reading = snapshot.Readings.FirstOrDefault(
             candidate => candidate.Id == "power.ac");
         return reading?.Status == ReadingStatus.Available && reading.Value.HasValue
             ? reading.Value.Value >= 1
-                ? "Conectada a corriente"
-                : "Usando batería"
+                ? Localized("PowerAc")
+                : Localized("PowerBattery")
             : StatusText(reading);
     }
 
@@ -687,14 +1526,31 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     {
         if (reading?.ErrorCode == "device_not_supported")
         {
-            return "Dispositivo no compatible";
+            return Localized("DeviceUnrecognized");
         }
 
-        return reading?.Status switch
+        return reading?.ErrorCode switch
         {
-            ReadingStatus.PermissionRequired => "Necesita permiso",
-            ReadingStatus.Fault => "Error de lectura",
-            _ => "Sin datos",
+            "sensor_driver_missing" => Localized("ReadingDriverMissing"),
+            "sensor_elevation_required" => Localized("ReadingElevation"),
+            "service_not_running" => Localized("ReadingServiceNotRunning"),
+            "service_unavailable" => Localized("ReadingServiceUnavailable"),
+            _ => ReadingStatusText(reading?.Status),
         };
+    }
+
+    private static string ReadingStatusText(ReadingStatus? status)
+    {
+        return status switch
+        {
+            ReadingStatus.PermissionRequired => Localized("ReadingPermission"),
+            ReadingStatus.Fault => Localized("ReadingFault"),
+            _ => Localized("ReadingNoData"),
+        };
+    }
+
+    private static string Localized(string key)
+    {
+        return Strings.GetString(key);
     }
 }

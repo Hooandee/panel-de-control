@@ -7,11 +7,13 @@ on:
       - ".github/workflows/windows-ci.yml"
       - "windows/**"
       - "shared/fixtures/**"
+      - "shared/devices/**"
   pull_request:
     paths:
       - ".github/workflows/windows-ci.yml"
       - "windows/**"
       - "shared/fixtures/**"
+      - "shared/devices/**"
 
 permissions:
   contents: read
@@ -55,6 +57,42 @@ jobs:
           windows/tests/PanelDeControl.Hardware.Tests/PanelDeControl.Hardware.Tests.csproj
           --configuration Release
           --no-restore
+      - run: >-
+          dotnet restore
+          windows/tests/PanelDeControl.Service.Tests/PanelDeControl.Service.Tests.csproj
+          --locked-mode
+      - run: >-
+          dotnet test
+          windows/tests/PanelDeControl.Service.Tests/PanelDeControl.Service.Tests.csproj
+          --configuration Release
+          --no-restore
+
+  service-package:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: "8.0.x"
+      - run: >-
+          dotnet restore
+          windows/src/PanelDeControl.Service/PanelDeControl.Service.csproj
+          --locked-mode
+          --configfile windows/NuGet.ci.config
+      - run: >-
+          dotnet publish
+          windows/src/PanelDeControl.Service/PanelDeControl.Service.csproj
+          --configuration Release
+          --runtime win-x64
+          --self-contained true
+          --output artifacts/service
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: panel-de-control-service-x64
+          path: artifacts/service/**
+          if-no-files-found: error
 
   gamebar-package:
     runs-on: windows-2022

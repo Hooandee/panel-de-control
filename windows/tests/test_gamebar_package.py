@@ -16,6 +16,7 @@ APP_CODE = PROJECT_DIR / "App.xaml.cs"
 TELEMETRY_CLIENT = PROJECT_DIR / "TelemetryClient.cs"
 VOLUME_CLIENT = PROJECT_DIR / "VolumeControlClient.cs"
 BRIGHTNESS_CLIENT = PROJECT_DIR / "BrightnessControlClient.cs"
+TDP_CLIENT = PROJECT_DIR / "TdpControlClient.cs"
 BROKER_LAUNCHER = PROJECT_DIR / "HardwareBrokerLauncher.cs"
 HARDWARE_DIR = ROOT / "windows" / "src" / "PanelDeControl.Hardware"
 PIPE_SERVER = HARDWARE_DIR / "SnapshotPipeServer.cs"
@@ -23,11 +24,31 @@ CONTROL_PIPE_SERVER = HARDWARE_DIR / "VolumeControlPipeServer.cs"
 BRIGHTNESS_PIPE_SERVER = HARDWARE_DIR / "BrightnessControlPipeServer.cs"
 BRIGHTNESS_PROVIDER = HARDWARE_DIR / "WmiDisplayBrightnessProvider.cs"
 BRIGHTNESS_CONTROLLER = HARDWARE_DIR / "IntegratedDisplayBrightnessController.cs"
+TDP_PIPE_SERVER = HARDWARE_DIR / "TdpControlPipeServer.cs"
+SERVICE_TDP_CLIENT = HARDWARE_DIR / "ServiceTdpClient.cs"
+SERVICE_DIR = ROOT / "windows" / "src" / "PanelDeControl.Service"
+TDP_CLIENT_VALIDATOR = SERVICE_DIR / "PackagedTdpClientValidator.cs"
 PIPE_FACTORY = HARDWARE_DIR / "PackageNamedPipeServerFactory.cs"
 BROKER_PROGRAM = HARDWARE_DIR / "Program.cs"
 ROOT_LICENSE = ROOT / "LICENSE"
 ROOT_NOTICES = ROOT / "THIRD_PARTY_NOTICES.md"
 WORKFLOW = ROOT / ".github" / "workflows" / "windows-ci.yml"
+STRINGS_DIR = PROJECT_DIR / "Strings"
+LANGUAGES = ("en-US", "es", "de", "it", "pt-BR")
+XAML_UID = "{http://schemas.microsoft.com/winfx/2006/xaml}Uid"
+AUTOMATION = "[using:Windows.UI.Xaml.Automation]AutomationProperties"
+
+
+def load_strings(language):
+    root = ElementTree.parse(STRINGS_DIR / language / "Resources.resw").getroot()
+    return {
+        node.attrib["name"]: node.findtext("value")
+        for node in root.findall("data")
+    }
+
+
+def spanish_automation_name(uid):
+    return load_strings("es")[f"{uid}.{AUTOMATION}.Name"]
 NUGET_CI_CONFIG = ROOT / "windows" / "NuGet.ci.config"
 
 
@@ -236,8 +257,10 @@ class GameBarProjectTests(unittest.TestCase):
         self.assertIn("volumen", app_description)
         self.assertIn("brillo", app_description)
         self.assertIn("telemetría", app_description)
+        self.assertIn("potencia", app_description)
         self.assertIn("volumen", widget.attrib["Description"].casefold())
         self.assertIn("brillo", widget.attrib["Description"].casefold())
+        self.assertIn("potencia", widget.attrib["Description"].casefold())
 
     def test_broker_payload_metadata_is_bound_to_published_files(self):
         root = ElementTree.parse(PROJECT).getroot()
@@ -306,7 +329,11 @@ class GameBarProjectTests(unittest.TestCase):
                 "BatteryCard",
                 "CpuCard",
                 "GpuCard",
-                "ConnectionCard",
+                "ConnectionStatus",
+                "TabPower",
+                "TabSystem",
+                "TabSensors",
+                "TabSettings",
             }.issubset(names)
         )
         self.assertEqual(
@@ -339,10 +366,8 @@ class GameBarProjectTests(unittest.TestCase):
         self.assertEqual("100", slider.attrib["Maximum"])
         self.assertEqual("5", slider.attrib["StepFrequency"])
         self.assertEqual("True", slider.attrib["IsTabStop"])
-        self.assertEqual(
-            "Volumen del sistema",
-            slider.attrib["AutomationProperties.Name"],
-        )
+        self.assertEqual("VolumeSlider", slider.attrib[XAML_UID])
+        self.assertEqual("Volumen del sistema", spanish_automation_name("VolumeSlider"))
 
     def test_widget_debounces_volume_writes_and_ignores_stale_responses(self):
         code = WIDGET_CODE.read_text(encoding="utf-8")
@@ -390,14 +415,13 @@ class GameBarProjectTests(unittest.TestCase):
         self.assertEqual("100", slider.attrib["Maximum"])
         self.assertEqual("5", slider.attrib["StepFrequency"])
         self.assertEqual("True", slider.attrib["IsTabStop"])
-        self.assertEqual(
-            "Brillo de la pantalla integrada",
-            slider.attrib["AutomationProperties.Name"],
-        )
+        self.assertEqual("BrightnessSlider", slider.attrib[XAML_UID])
+        self.assertEqual("Brillo de la pantalla integrada", spanish_automation_name("BrightnessSlider"))
         self.assertEqual(
             "BrightnessSlider_ValueChanged",
             slider.attrib["ValueChanged"],
         )
+
 
     def test_widget_has_accessible_focusable_system_mute_control(self):
         root = ElementTree.parse(WIDGET).getroot()
@@ -433,11 +457,12 @@ class GameBarProjectTests(unittest.TestCase):
         )
         self.assertEqual("False", mute_toggle.attrib["IsEnabled"])
         self.assertEqual("True", mute_toggle.attrib["IsTabStop"])
+        self.assertEqual("MuteToggle", mute_toggle.attrib[XAML_UID])
         self.assertEqual(
             "Silenciar audio del sistema",
-            mute_toggle.attrib["AutomationProperties.Name"],
+            spanish_automation_name("MuteToggle"),
         )
-        self.assertTrue(mute_toggle.attrib["AutomationProperties.HelpText"])
+        self.assertTrue(load_strings("es")[f"MuteToggle.{AUTOMATION}.HelpText"])
         self.assertEqual("MuteToggle_Toggled", mute_toggle.attrib["Toggled"])
 
     def test_widget_verifies_mute_independently_and_ignores_stale_responses(self):
@@ -469,6 +494,16 @@ class GameBarProjectTests(unittest.TestCase):
             "muteRefreshGeneration == muteGeneration)",
             normalized_refresh,
         )
+
+
+    def test_tdp_client_never_retries_an_indeterminate_write(self):
+        code = TDP_CLIENT.read_text(encoding="utf-8")
+
+        self.assertIn("SendAsync(TdpControlRequest.Set(requestedWatts))", code)
+        self.assertIn("if (!attempt.RequestWriteStarted)", code)
+        self.assertIn("TdpControlResponse.Indeterminate", code)
+        self.assertIn("experimentalStateKnown: false", code)
+        self.assertNotIn("Task.Run", code)
 
     def test_volume_client_never_retries_an_indeterminate_write(self):
         code = VOLUME_CLIENT.read_text(encoding="utf-8")
@@ -562,7 +597,7 @@ class GameBarProjectTests(unittest.TestCase):
         code = WIDGET_CODE.read_text(encoding="utf-8")
 
         self.assertIn('"device_not_supported"', code)
-        self.assertIn('"Dispositivo no compatible"', code)
+        self.assertIn('Localized("DeviceUnrecognized")', code)
         self.assertIn("var unsupported = snapshot.Readings.Any(", code)
         self.assertIn("available && !unsupported", code)
 
@@ -571,15 +606,11 @@ class GameBarProjectTests(unittest.TestCase):
         server = PIPE_SERVER.read_text(encoding="utf-8")
 
         self.assertIn("WellKnownSidType.WorldSid", factory)
-        self.assertIn("DeriveAppContainerSidFromAppContainerName", factory)
         self.assertIn("NamedPipeServerStreamAcl.Create", factory)
         self.assertIn('EntryPoint = "GetCurrentPackageFamilyName"', factory)
-        self.assertIn(
-            'EntryPoint = "DeriveAppContainerSidFromAppContainerName"',
-            factory,
-        )
-        self.assertIn('EntryPoint = "FreeSid"', factory)
-        self.assertEqual(3, factory.count("ExactSpelling = true"))
+        self.assertIn("AppContainerNames.SidFromPackageFamilyName", factory)
+        self.assertIn("AppContainerNames.ServerPipeName", factory)
+        self.assertNotIn("DeriveAppContainerSidFromAppContainerName", factory)
         self.assertNotIn("new NamedPipeServerStream(", server)
         self.assertIn("catch (IOException)", server)
 
@@ -621,6 +652,35 @@ class GameBarProjectTests(unittest.TestCase):
         self.assertIn("ReadbackTolerancePercentagePoints = 1", controller)
         self.assertNotIn("DeviceIdentity", provider)
         self.assertNotIn("DeviceIdentity", controller)
+
+    def test_broker_relays_tdp_without_owning_hardware(self):
+        server = TDP_PIPE_SERVER.read_text(encoding="utf-8")
+        client = SERVICE_TDP_CLIENT.read_text(encoding="utf-8")
+        program = BROKER_PROGRAM.read_text(encoding="utf-8")
+
+        self.assertIn(r'@"LOCAL\PanelDeControl.Tdp"', server)
+        self.assertIn('PipeName = "PanelDeControl.Service.Tdp"', client)
+        self.assertIn("ServicePipeConnector.Connect", client)
+        self.assertIn("new TdpControlPipeServer(", program)
+        self.assertIn("new ServiceTdpClient()", program)
+        self.assertNotIn("ATKACPI", server)
+        self.assertNotIn("ATKACPI", client)
+
+    def test_tdp_service_pins_the_package_family_and_broker_location(self):
+        manifest = ElementTree.parse(MANIFEST).getroot()
+        identity = manifest.find(
+            "{http://schemas.microsoft.com/appx/manifest/foundation/windows10}Identity"
+        )
+        validator = TDP_CLIENT_VALIDATOR.read_text(encoding="utf-8")
+
+        self.assertEqual("PanelDeControl.Windows", identity.attrib["Name"])
+        self.assertEqual("CN=Hooandee", identity.attrib["Publisher"])
+        self.assertIn('PackageName = "PanelDeControl.Windows"', validator)
+        self.assertIn('PackagePublisher = "CN=Hooandee"', validator)
+        self.assertIn("PackageFamilyNameFromFullName", validator)
+        self.assertIn("PackageFamilyNameFromId", validator)
+        self.assertIn("GetPackagePathByFullName", validator)
+        self.assertIn(r'@"HardwareBroker\PanelDeControl.Hardware.exe"', validator)
 
     def test_brightness_timeouts_cover_full_verified_set(self):
         provider = BRIGHTNESS_PROVIDER.read_text(encoding="utf-8")
@@ -681,3 +741,110 @@ class SideloadPackageTests(unittest.TestCase):
         self.assertIn("/property:UapAppxPackageBuildMode=SideloadOnly", workflow)
         self.assertNotIn("UapAppxPackageBuildMode=CI", workflow)
         self.assertIn("<UseDotNetNativeToolchain>true</UseDotNetNativeToolchain>", project)
+
+
+class GameBarLocalizationTests(unittest.TestCase):
+    def test_every_language_ships_the_same_non_empty_keys(self):
+        reference = load_strings("en-US")
+        self.assertTrue(reference)
+        for language in LANGUAGES:
+            strings = load_strings(language)
+            self.assertEqual(set(reference), set(strings), language)
+            for key, value in strings.items():
+                self.assertTrue(value and value.strip(), f"{language}:{key}")
+
+    def test_every_language_is_packaged_and_english_is_the_fallback(self):
+        project = PROJECT.read_text(encoding="utf-8")
+        self.assertIn("<DefaultLanguage>en-US</DefaultLanguage>", project)
+        for language in LANGUAGES:
+            self.assertIn(
+                f'<PRIResource Include="Strings\\{language}\\Resources.resw" />',
+                project,
+            )
+
+    def test_every_xaml_uid_is_localized(self):
+        strings = load_strings("en-US")
+        uids = {
+            node.attrib[XAML_UID]
+            for node in ElementTree.parse(WIDGET).getroot().iter()
+            if XAML_UID in node.attrib
+        }
+        self.assertTrue(uids)
+        for uid in uids:
+            self.assertTrue(
+                any(key.startswith(f"{uid}.") for key in strings),
+                uid,
+            )
+
+    def test_widget_has_no_hard_coded_visible_text(self):
+        allowed = {"—", "↻", "CPU", "GPU", "W"}
+        visible = (
+            "Text",
+            "Content",
+            "OnContent",
+            "OffContent",
+            "AutomationProperties.Name",
+            "AutomationProperties.HelpText",
+        )
+        for node in ElementTree.parse(WIDGET).getroot().iter():
+            for attribute in visible:
+                value = node.attrib.get(attribute)
+                if value is not None and not value.startswith("{"):
+                    self.assertIn(value, allowed, f"{node.tag} {attribute}")
+
+    def test_code_behind_only_uses_known_resource_keys(self):
+        strings = load_strings("en-US")
+        code = WIDGET_CODE.read_text(encoding="utf-8")
+        keys = set(re.findall(r'Localized\("([A-Za-z]+)"\)', code))
+        self.assertTrue(keys)
+        self.assertTrue(keys.issubset(strings), keys - set(strings))
+        self.assertNotRegex(code, r'\.Text = "[^"—]')
+
+
+class DiagnosticsCardTests(unittest.TestCase):
+    def test_every_capability_id_has_a_localized_label(self):
+        ids_source = (HARDWARE_DIR / "Capabilities" / "CapabilityIds.cs").read_text(encoding="utf-8")
+        ids = set(re.findall(r'const string \w+ = "([^"]+)";', ids_source))
+        code = WIDGET_CODE.read_text(encoding="utf-8")
+        mapping = dict(re.findall(r'\["([^"]+)"\] = "([A-Za-z]+)"', code))
+        strings = load_strings("en-US")
+
+        self.assertTrue(ids)
+        self.assertEqual(ids, set(mapping))
+        self.assertTrue(set(mapping.values()).issubset(strings), set(mapping.values()) - set(strings))
+
+
+class DesignSystemTests(unittest.TestCase):
+    def test_widget_and_app_never_hard_code_colours(self):
+        for path in (WIDGET, PROJECT_DIR / "App.xaml"):
+            xaml = path.read_text(encoding="utf-8")
+            self.assertNotRegex(xaml, r'"#[0-9A-Fa-f]{6,8}"', path.name)
+        code = WIDGET_CODE.read_text(encoding="utf-8")
+        self.assertNotIn("Color.FromArgb(255,", code)
+
+    def test_app_merges_the_generated_tokens(self):
+        app = (PROJECT_DIR / "App.xaml").read_text(encoding="utf-8")
+        project = PROJECT.read_text(encoding="utf-8")
+        self.assertIn('Source="ms-appx:///Theme/PdcTokens.xaml"', app)
+        self.assertIn('<Page Include="Theme\\PdcTokens.xaml">', project)
+        self.assertIn('x:Key="PdcAccentBrush"', (PROJECT_DIR / "Theme" / "PdcTokens.xaml").read_text(encoding="utf-8"))
+
+    def test_every_power_zone_has_a_localized_label(self):
+        strings = load_strings("en-US")
+        for zone in ("Save", "Eco", "Balanced", "Hot", "Turbo"):
+            self.assertIn(f"PowerZone{zone}", strings)
+        power_arc = (ROOT / "windows" / "src" / "PanelDeControl.Core" / "Presentation" / "PowerArc.cs").read_text(encoding="utf-8")
+        self.assertEqual(
+            ["Save", "Eco", "Balanced", "Hot", "Turbo"],
+            re.findall(r"^\s{4}(\w+),$", power_arc.split("public enum PowerZone", 1)[1].split("}", 1)[0], re.M),
+        )
+
+
+class EnergyCardTests(unittest.TestCase):
+    def test_every_power_mode_has_a_localized_name(self):
+        strings = load_strings("en-US")
+        modes = (ROOT / "windows" / "src" / "PanelDeControl.Core" / "Telemetry" / "PowerModes.cs").read_text(encoding="utf-8")
+        names = re.findall(r"^\s{4}(\w+) = \d+,$", modes, re.M)
+        self.assertEqual(["BestEfficiency", "Balanced", "BetterPerformance", "BestPerformance"], names)
+        for name in names:
+            self.assertIn(f"PowerMode{name}", strings)

@@ -1,15 +1,29 @@
 # Panel de Control para Xbox Game Bar
 
-La versión de Windows es experimental. Ofrece un widget x64 para Xbox Game Bar
-y un proceso auxiliar empaquetado con telemetría de lectura y ajuste verificado
-del brillo del panel integrado y del volumen del sistema.
+La versión de Windows es experimental. Ofrece un widget x64 para Xbox Game Bar,
+un proceso auxiliar empaquetado y un servicio opcional. Incluye telemetría,
+ajuste verificado del brillo y del volumen, y un primer control experimental de
+potencia limitado a la ROG Xbox Ally X.
 
 ## Alcance inicial
 
-- Identificación estricta de la ROG Xbox Ally X mediante fabricante y producto.
+- Identificación del modelo con el mismo catálogo que la versión de Linux
+  (`shared/devices/catalog.json`), a partir de fabricante, modelo y placa.
+- Interfaz en español, inglés, alemán, italiano y portugués de Brasil, según el
+  idioma de Windows. Si no hay traducción, se muestra en inglés.
 - Batería y estado de alimentación mediante la API de energía de Windows.
 - Carga y temperatura de CPU/GPU cuando LibreHardwareMonitor publica un sensor
-  compatible.
+  compatible con un valor posible. Las temperaturas necesitan el driver PawnIO
+  y permisos de administrador; sin ellos se indica qué falta en vez de mostrar
+  un número.
+- Servicio opcional `PanelDeControlService`, que corre con permisos de sistema,
+  da la temperatura de CPU al widget y es el único proceso autorizado para
+  tocar los registros de potencia ASUS. Si no está en marcha, el widget lo dice
+  y sigue funcionando con lo demás.
+- Tarjeta de diagnóstico que enseña qué vías de hardware encuentra el servicio
+  en cada equipo (WMI del fabricante, ATKACPI, driver de sensores) y si hay
+  software del fabricante en marcha que también controle potencia o
+  ventiladores. Solo mira; no escribe nada.
 - Lectura y ajuste del volumen principal del dispositivo de audio predeterminado
   mediante Windows Core Audio.
 - Lectura y ajuste del silencio principal del mismo dispositivo mediante la
@@ -23,6 +37,9 @@ del brillo del panel integrado y del volumen del sistema.
   que una lectura lenta de hardware no bloquee el volumen.
 - Canal de brillo independiente con timeout acotado, para que WMI no bloquee
   telemetría ni audio.
+- Tarjeta de potencia con arco, pasos de 1 W y presets del catálogo para el
+  perfil exacto `rog_xbox_ally_x`. La escritura está desactivada al iniciar y
+  requiere activar un opt-in experimental en cada ejecución del servicio.
 
 Cada operación abre el endpoint de reproducción predeterminado actual
 (`eRender`/`eConsole`). El volumen y el silencio principal se leen con Core
@@ -39,9 +56,27 @@ ni se controla el audio o el silencio por aplicación. El control corresponde al
 endpoint principal de Windows; una aplicación en modo exclusivo puede impedir
 la verificación y se informa como tal.
 
-No se escriben valores de TDP, ventiladores, GPU, batería ni firmware. Un campo
-sin lectura verificable aparece como `Sin datos`; nunca se sustituye por un
-valor inventado.
+El widget y el companion nunca acceden al hardware de potencia: solo solicitan
+operaciones al servicio. En cada escritura, el servicio relee si el equipo está
+con batería o cargador, limita la consigna al catálogo (25 W en batería y 35 W
+con cargador) y envía el mismo valor a PL1/SPL, SPPT y FPPT. Si detecta alguno
+de los servicios de Armoury Crate vigilados por el inventario R4, rechaza la
+operación antes de tocar el firmware. Un rechazo de `DEVS` detiene los raíles
+restantes y se muestra como rechazado; un fallo de transporte o una lectura
+discordante se muestra como no verificable.
+
+El candidato de readback usa `DSTS` sobre A3, A0 y C1. Solo se muestra
+`Aplicado` cuando las tres lecturas devuelven exactamente la consigna; este
+mecanismo sigue marcado como no validado hasta probarlo físicamente en una
+RC73XA. No hay PawnIO ni RyzenSMU en esta ruta.
+
+El opt-in no se persiste, y no hay reaplicación automática ni rollback. Al
+desactivarlo se detienen las escrituras y el widget explica que, para devolver
+el control al fabricante, se puede reiniciar o volver a abrir Armoury Crate;
+esa recuperación también permanece sin verificar físicamente. No se escriben
+ventiladores, reloj de GPU, batería ni otros controles de firmware. Un campo sin
+lectura verificable aparece como `Sin datos`; nunca se sustituye por un valor
+inventado.
 
 El brillo se habilita por capacidad, sin usar fabricante ni DMI. El companion
 exige exactamente una instancia activa cuyo `InstanceName` coincida entre la
@@ -64,9 +99,10 @@ varias pantallas. Si falta una capacidad, hay más de una candidata o Windows
 deniega acceso, el slider queda deshabilitado con un estado explícito sin afectar
 al resto del widget.
 
-LibreHardwareMonitor solo se inicializa cuando el DMI coincide con la ROG Xbox
-Ally X. En cualquier otro equipo, el companion conserva únicamente la lectura
-estándar de batería/AC y marca el resto como dispositivo no compatible.
+LibreHardwareMonitor solo se inicializa cuando el equipo es un modelo reconocido
+del catálogo. En cualquier otro, el companion conserva únicamente la lectura
+estándar de batería/AC y marca el resto como dispositivo no reconocido.
+Reconocer un modelo no significa que esté probado en Windows.
 El volumen, el silencio y el brillo no dependen de esa identificación: se
 habilitan por capacidades estándar de Windows. El audio requiere un endpoint
 predeterminado y el brillo la coincidencia verificable del panel integrado
@@ -92,6 +128,31 @@ msbuild windows\src\PanelDeControl.GameBar\PanelDeControl.GameBar.csproj /restor
 El paquete generado no está firmado. Para una instalación reproducible fuera de
 Visual Studio hace falta firmarlo con un certificado cuya identidad coincida con
 el `Publisher` del manifiesto.
+
+## Probar en un equipo
+
+Hace falta hacerlo una vez en cada equipo:
+
+1. Activar el **Modo de desarrollador** en Configuración > Sistema > Para
+   programadores.
+2. Instalar y arrancar **OpenSSH Server** (Configuración > Sistema >
+   Características opcionales) y dejar entrar con tu clave SSH.
+
+Después, desde el ordenador de desarrollo, un solo comando instala la última
+compilación correcta de la CI de la rama actual:
+
+```bash
+scripts/deploy-windows-device.sh usuario@equipo
+```
+
+`--dry-run` enseña cada paso sin tocar nada y `--run-id` elige otra compilación.
+Con `--with-service` también instala el servicio `PanelDeControlService` en
+`Program Files`, con arranque automático (hace falta entrar por SSH con una
+cuenta de administrador), y
+`--remove-service` lo quita.
+El paquete de la CI no está firmado, así que se registra desde su contenido
+descomprimido, como hace Visual Studio. Registrar de nuevo borra la
+instalación anterior del widget.
 
 ## Validación física pendiente
 
@@ -122,8 +183,26 @@ declaración de compatibilidad física. En una ROG Xbox Ally X RC73XA:
     confirmar que esos eventos no cambian ni reaplican el brillo.
 13. Confirmar que un sensor ausente aparece como `Sin datos` y que un valor real
     de cero se conserva.
+14. En batería, activar el opt-in y solicitar por debajo, dentro y por encima del
+    rango; confirmar que PL1/SPL, SPPT y FPPT reciben el mismo valor y nunca más
+    de 25 W.
+15. Repetir con cargador y confirmar un techo de 35 W, incluida una transición
+    batería/cargador inmediatamente antes de escribir.
+16. Confirmar con `DSTS` que A3, A0 y C1 coinciden antes de mostrar `Aplicado`;
+    forzar ausencia o discordancia de una lectura y comprobar `No verificable`.
+17. Forzar un rechazo de `DEVS` y comprobar `Rechazado`, sin presentarlo como
+    falta de verificación.
+18. Abrir Armoury Crate y confirmar que el widget explica el conflicto y que no
+    se produce ninguna escritura; cerrarlo y comprobar que el control puede
+    volver a habilitarse manualmente.
+19. Desactivar el opt-in, ocultar/mostrar el widget y reiniciar el companion y el
+    servicio; confirmar que no se escribe ni reaplica nada. Verificar por
+    separado si reiniciar o reabrir Armoury Crate devuelve el control al
+    fabricante.
 
 Hasta completar esta prueba, las lecturas de CPU y GPU son candidatas
 experimentales y el control de volumen/silencio no tiene compatibilidad física
 confirmada. El control de brillo tampoco tiene compatibilidad física confirmada
-y su alcance permanece limitado al panel integrado.
+y su alcance permanece limitado al panel integrado. El control de potencia, su
+readback DSTS y la recuperación del control del fabricante tampoco tienen
+compatibilidad física confirmada.

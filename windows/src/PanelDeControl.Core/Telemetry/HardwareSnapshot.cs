@@ -15,11 +15,13 @@ public sealed class HardwareSnapshot
     public HardwareSnapshot(
         DateTimeOffset capturedAtUtc,
         string deviceModel,
-        IEnumerable<TelemetryReading> readings)
+        IEnumerable<TelemetryReading> readings,
+        int? deviceMaxWatts = null)
     {
         CapturedAtUtc = capturedAtUtc.ToUniversalTime();
         DeviceModel = string.IsNullOrWhiteSpace(deviceModel) ? "Unknown device" : deviceModel;
         this.readings = readings?.ToArray() ?? throw new ArgumentNullException(nameof(readings));
+        DeviceMaxWatts = deviceMaxWatts is > 0 ? deviceMaxWatts : null;
     }
 
     public DateTimeOffset CapturedAtUtc { get; private set; }
@@ -37,6 +39,9 @@ public sealed class HardwareSnapshot
     [DataMember(Name = "device_model", Order = 2)]
     public string DeviceModel { get; private set; } = "Unknown device";
 
+    [DataMember(Name = "device_max_watts", Order = 4, EmitDefaultValue = false)]
+    public int? DeviceMaxWatts { get; private set; }
+
     public IReadOnlyList<TelemetryReading> Readings => readings;
 
     [DataMember(Name = "readings", Order = 3)]
@@ -51,6 +56,7 @@ public sealed class HardwareSnapshot
         return new HardwareSnapshot(
             CapturedAtUtc,
             DeviceModel,
-            Readings.Select(reading => reading.Normalize()));
+            Readings.Select(reading => reading.Normalize()),
+            DeviceMaxWatts);
     }
 }

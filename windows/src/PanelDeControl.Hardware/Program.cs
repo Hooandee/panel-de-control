@@ -8,19 +8,26 @@ public static class Program
         {
             return 1;
         }
-
         try
         {
             // Process teardown owns cleanup because a timed-out hardware poll may still be active.
-            var collector = new SnapshotCollector(
-                new SystemClock(),
-                new DeviceIdentityReader(),
+            var clock = new SystemClock();
+            var localCollector = new SnapshotCollector(
+                clock,
+                new DeviceIdentityReader(DeviceCatalogResource.TryLoad()),
                 new LibreHardwareReader(),
-                new PowerStatusReader());
+                new PowerStatusReader(),
+                new WindowsSensorAccessProbe());
+            var serviceClient = new ServiceSnapshotClient();
+            var collector = new ServiceBackedSnapshotProvider(
+                localCollector,
+                serviceClient,
+                clock);
             var snapshotServer = new SnapshotPipeServer(
                 SnapshotPipeServer.PackagedPipeName,
                 collector,
-                PackageNamedPipeServerFactory.Create);
+                PackageNamedPipeServerFactory.Create,
+                inventoryProvider: new ServiceInventoryProvider(serviceClient, clock));
             var volumeController = new CoreAudioVolumeController(
                 new CoreAudioEndpointVolumeProvider());
             var volumeServer = new VolumeControlPipeServer(
@@ -33,6 +40,10 @@ public static class Program
                 BrightnessControlPipeServer.PackagedPipeName,
                 brightnessController,
                 PackageNamedPipeServerFactory.CreateControl);
+            var tdpServer = new TdpControlPipeServer(
+                TdpControlPipeServer.PackagedPipeName,
+                new ServiceTdpClient(),
+                PackageNamedPipeServerFactory.CreateControl);
 
             using var brokerLifetime = new CancellationTokenSource();
             var snapshotTask = snapshotServer.RunAsync(brokerLifetime.Token);
@@ -40,10 +51,12 @@ public static class Program
                 brokerLifetime.Token);
             var brightnessTask = brightnessServer.RunUntilCancelledAsync(
                 brokerLifetime.Token);
+            var tdpTask = tdpServer.RunUntilCancelledAsync(
+                brokerLifetime.Token);
             try
             {
                 var completedTask = await Task
-                    .WhenAny(snapshotTask, volumeTask, brightnessTask)
+                    .WhenAny(snapshotTask, volumeTask, brightnessTask, tdpTask)
                     .ConfigureAwait(false);
                 await completedTask.ConfigureAwait(false);
             }
@@ -51,14 +64,14 @@ public static class Program
             {
                 brokerLifetime.Cancel();
                 await Task
-                    .WhenAll(snapshotTask, volumeTask, brightnessTask)
+                    .WhenAll(snapshotTask, volumeTask, brightnessTask, tdpTask)
                     .ConfigureAwait(false);
             }
-
             return 0;
         }
-        catch
+        catch (Exception exception)
         {
+            CompanionLog.Write("fatal", exception);
             return 1;
         }
     }

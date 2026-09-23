@@ -1,0 +1,617 @@
+{
+  "generic": {
+    "chip": "Desconocido",
+    "display_name": "Dispositivo genérico",
+    "dmi_matches": [],
+    "experimental": false,
+    "key": "generic",
+    "limits": {
+      "charger_only_extra": false,
+      "cooler_max": null,
+      "experimental_tdp_max_ac": null,
+      "tdp_default": 10,
+      "tdp_max": 30,
+      "tdp_max_charger": 30,
+      "tdp_min": 4,
+      "tdp_presets": []
+    },
+    "match_names": [],
+    "vendor": "amd"
+  },
+  "profiles": [
+    {
+      "chip": "AMD Custom CPU 1772",
+      "display_name": "Steam Machine",
+      "dmi_matches": [
+        {
+          "board_names": [
+            "Fremont"
+          ],
+          "product_name": "Fremont",
+          "sys_vendor": "Valve"
+        }
+      ],
+      "experimental": true,
+      "key": "steam_machine",
+      "limits": {
+        "charger_only_extra": false,
+        "cooler_max": null,
+        "experimental_tdp_max_ac": null,
+        "tdp_default": 23,
+        "tdp_max": 30,
+        "tdp_max_charger": 30,
+        "tdp_min": 4,
+        "tdp_presets": []
+      },
+      "match_names": [],
+      "vendor": "amd"
+    },
+    {
+      "chip": "AMD Van Gogh",
+      "display_name": "Steam Deck",
+      "dmi_matches": [],
+      "experimental": false,
+      "key": "steam_deck_lcd",
+      "limits": {
+        "charger_only_extra": false,
+        "cooler_max": null,
+        "experimental_tdp_max_ac": null,
+        "tdp_default": 12,
+        "tdp_max": 15,
+        "tdp_max_charger": 15,
+        "tdp_min": 3,
+        "tdp_presets": []
+      },
+      "match_names": [
+        "Jupiter"
+      ],
+      "vendor": "amd"
+    },
+    {
+      "chip": "AMD Sephiroth",
+      "display_name": "Steam Deck OLED",
+      "dmi_matches": [],
+      "experimental": false,
+      "key": "steam_deck_oled",
+      "limits": {
+        "charger_only_extra": false,
+        "cooler_max": null,
+        "experimental_tdp_max_ac": null,
+        "tdp_default": 12,
+        "tdp_max": 15,
+        "tdp_max_charger": 15,
+        "tdp_min": 3,
+        "tdp_presets": []
+      },
+      "match_names": [
+        "Galileo"
+      ],
+      "vendor": "amd"
+    },
+    {
+      "chip": "AMD Ryzen AI Z2 Extreme",
+      "display_name": "ROG Xbox Ally X",
+      "dmi_matches": [],
+      "experimental": false,
+      "key": "rog_xbox_ally_x",
+      "limits": {
+        "charger_only_extra": false,
+        "cooler_max": null,
+        "experimental_tdp_max_ac": null,
+        "tdp_default": 17,
+        "tdp_max": 25,
+        "tdp_max_charger": 35,
+        "tdp_min": 7,
+        "tdp_presets": [
+          13,
+          17,
+          25,
+          30
+        ]
+      },
+      "match_names": [
+        "ROG Xbox Ally X"
+      ],
+      "vendor": "amd"
+    },
+    {
+      "chip": "AMD Ryzen Z2 A",
+      "display_name": "ROG Xbox Ally",
+      "dmi_matches": [],
+      "experimental": true,
+      "key": "rog_xbox_ally",
+      "limits": {
+        "charger_only_extra": false,
+        "cooler_max": null,
+        "experimental_tdp_max_ac": null,
+        "tdp_default": 13,
+        "tdp_max": 17,
+        "tdp_max_charger": 20,
+        "tdp_min": 5,
+        "tdp_presets": [
+          10,
+          15,
+          17,
+          20
+        ]
+      },
+      "match_names": [
+        "RC73YA"
+      ],
+      "vendor": "amd"
+    },
+    {
+      "chip": "AMD Z1 Extreme",
+      "display_name": "ROG Ally X",
+      "dmi_matches": [],
+      "experimental": false,
+      "key": "rog_ally_x",
+      "limits": {
+        "charger_only_extra": true,
+        "cooler_max": null,
+        "experimental_tdp_max_ac": null,
+        "tdp_default": 17,
+        "tdp_max": 25,
+        "tdp_max_charger": 30,
+        "tdp_min": 7,
+        "tdp_presets": [
+          13,
+          17,
+          25,
+          30
+        ]
+      },
+      "match_names": [
+        "ROG Ally X"
+      ],
+      "vendor": "amd"
+    },
+    {
+      "chip": "AMD Z1 Extreme",
+      "display_name": "ROG Ally",
+      "dmi_matches": [],
+      "experimental": false,
+      "key": "rog_ally",
+      "limits": {
+        "charger_only_extra": true,
+        "cooler_max": null,
+        "experimental_tdp_max_ac": null,
+        "tdp_default": 15,
+        "tdp_max": 25,
+        "tdp_max_charger": 30,
+        "tdp_min": 7,
+        "tdp_presets": []
+      },
+      "match_names": [
+        "ROG Ally RC71",
+        "ROG Ally"
+      ],
+      "vendor": "amd"
+    },
+    {
+      "chip": "AMD Ryzen AI Z2 Extreme",
+      "display_name": "Legion Go 2",
+      "dmi_matches": [],
+      "experimental": false,
+      "key": "legion_go_2",
+      "limits": {
+        "charger_only_extra": false,
+        "cooler_max": null,
+        "experimental_tdp_max_ac": null,
+        "tdp_default": 15,
+        "tdp_max": 30,
+        "tdp_max_charger": 35,
+        "tdp_min": 5,
+        "tdp_presets": []
+      },
+      "match_names": [
+        "83N0",
+        "83N1",
+        "Legion Go 2"
+      ],
+      "vendor": "amd"
+    },
+    {
+      "chip": "AMD Ryzen Z1 Extreme / Z2 Go",
+      "display_name": "Legion Go S",
+      "dmi_matches": [],
+      "experimental": false,
+      "key": "legion_go_s",
+      "limits": {
+        "charger_only_extra": true,
+        "cooler_max": null,
+        "experimental_tdp_max_ac": null,
+        "tdp_default": 15,
+        "tdp_max": 33,
+        "tdp_max_charger": 40,
+        "tdp_min": 5,
+        "tdp_presets": []
+      },
+      "match_names": [
+        "83L3",
+        "83N6",
+        "Legion Go S"
+      ],
+      "vendor": "amd"
+    },
+    {
+      "chip": "AMD Z1 Extreme",
+      "display_name": "Legion Go",
+      "dmi_matches": [],
+      "experimental": false,
+      "key": "legion_go",
+      "limits": {
+        "charger_only_extra": false,
+        "cooler_max": null,
+        "experimental_tdp_max_ac": null,
+        "tdp_default": 15,
+        "tdp_max": 30,
+        "tdp_max_charger": 30,
+        "tdp_min": 5,
+        "tdp_presets": []
+      },
+      "match_names": [
+        "83E1",
+        "Legion Go"
+      ],
+      "vendor": "amd"
+    },
+    {
+      "chip": "Intel Core Ultra 7 258V",
+      "display_name": "MSI Claw 8 AI+",
+      "dmi_matches": [],
+      "experimental": false,
+      "key": "msi_claw_8_ai_plus",
+      "limits": {
+        "charger_only_extra": false,
+        "cooler_max": null,
+        "experimental_tdp_max_ac": null,
+        "tdp_default": 17,
+        "tdp_max": 30,
+        "tdp_max_charger": 35,
+        "tdp_min": 8,
+        "tdp_presets": []
+      },
+      "match_names": [
+        "Claw 8 AI+",
+        "Claw 8"
+      ],
+      "vendor": "intel"
+    },
+    {
+      "chip": "AMD Ryzen AI Max+ 395",
+      "display_name": "OneXPlayer OneXFly Apex",
+      "dmi_matches": [],
+      "experimental": true,
+      "key": "onexplayer_apex",
+      "limits": {
+        "charger_only_extra": false,
+        "cooler_max": null,
+        "experimental_tdp_max_ac": null,
+        "tdp_default": 20,
+        "tdp_max": 45,
+        "tdp_max_charger": 54,
+        "tdp_min": 5,
+        "tdp_presets": []
+      },
+      "match_names": [
+        "ONEXPLAYER APEX"
+      ],
+      "vendor": "amd"
+    },
+    {
+      "chip": "AMD Ryzen AI Max+ 395",
+      "display_name": "OneXPlayer Super X",
+      "dmi_matches": [
+        {
+          "board_names": [
+            "ONEXPLAYER SUPER X"
+          ],
+          "product_name": "ONEXPLAYER SUPER X",
+          "sys_vendor": "ONE-NETBOOK"
+        }
+      ],
+      "experimental": true,
+      "key": "onexplayer_superx",
+      "limits": {
+        "charger_only_extra": true,
+        "cooler_max": null,
+        "experimental_tdp_max_ac": null,
+        "tdp_default": 30,
+        "tdp_max": 55,
+        "tdp_max_charger": 75,
+        "tdp_min": 10,
+        "tdp_presets": []
+      },
+      "match_names": [],
+      "vendor": "amd"
+    },
+    {
+      "chip": "AMD Ryzen 7 8840U",
+      "display_name": "Zotac Gaming Zone",
+      "dmi_matches": [
+        {
+          "board_names": [
+            "G0A1W",
+            "G1A1W"
+          ],
+          "product_name": null,
+          "sys_vendor": "ZOTAC"
+        }
+      ],
+      "experimental": true,
+      "key": "zotac_gaming_zone",
+      "limits": {
+        "charger_only_extra": false,
+        "cooler_max": null,
+        "experimental_tdp_max_ac": null,
+        "tdp_default": 15,
+        "tdp_max": 28,
+        "tdp_max_charger": 28,
+        "tdp_min": 8,
+        "tdp_presets": []
+      },
+      "match_names": [],
+      "vendor": "amd"
+    },
+    {
+      "chip": "AMD Ryzen AI Max 390",
+      "display_name": "ROG Flow Z13",
+      "dmi_matches": [
+        {
+          "board_names": [
+            "GZ302EA"
+          ],
+          "product_name": null,
+          "sys_vendor": "ASUSTeK COMPUTER INC."
+        }
+      ],
+      "experimental": true,
+      "key": "rog_flow_z13",
+      "limits": {
+        "charger_only_extra": true,
+        "cooler_max": null,
+        "experimental_tdp_max_ac": null,
+        "tdp_default": 20,
+        "tdp_max": 54,
+        "tdp_max_charger": 65,
+        "tdp_min": 5,
+        "tdp_presets": []
+      },
+      "match_names": [],
+      "vendor": "amd"
+    },
+    {
+      "chip": "AMD Ryzen 7 7840U",
+      "display_name": "OneXPlayer F1",
+      "dmi_matches": [
+        {
+          "board_names": [],
+          "product_name": "ONEXPLAYER F1",
+          "sys_vendor": "ONE-NETBOOK"
+        },
+        {
+          "board_names": [],
+          "product_name": "ONEXPLAYER F1 EVA-01",
+          "sys_vendor": "ONE-NETBOOK"
+        },
+        {
+          "board_names": [],
+          "product_name": "ONEXPLAYER F1 EVA-02",
+          "sys_vendor": "ONE-NETBOOK"
+        },
+        {
+          "board_names": [],
+          "product_name": "ONEXPLAYER F1 OLED",
+          "sys_vendor": "ONE-NETBOOK"
+        }
+      ],
+      "experimental": true,
+      "key": "onexplayer_f1",
+      "limits": {
+        "charger_only_extra": false,
+        "cooler_max": null,
+        "experimental_tdp_max_ac": null,
+        "tdp_default": 28,
+        "tdp_max": 30,
+        "tdp_max_charger": 30,
+        "tdp_min": 15,
+        "tdp_presets": []
+      },
+      "match_names": [],
+      "vendor": "amd"
+    },
+    {
+      "chip": "AMD Ryzen AI 9 HX 370 / Ryzen 7 8840U",
+      "display_name": "AYANEO 3",
+      "dmi_matches": [
+        {
+          "board_names": [],
+          "product_name": "AYANEO 3",
+          "sys_vendor": "AYANEO"
+        }
+      ],
+      "experimental": true,
+      "key": "ayaneo_3",
+      "limits": {
+        "charger_only_extra": false,
+        "cooler_max": null,
+        "experimental_tdp_max_ac": null,
+        "tdp_default": 15,
+        "tdp_max": 35,
+        "tdp_max_charger": 35,
+        "tdp_min": 8,
+        "tdp_presets": []
+      },
+      "match_names": [],
+      "vendor": "amd"
+    },
+    {
+      "chip": "AMD Ryzen AI 9 HX 370",
+      "display_name": "AOKZOE A1X",
+      "dmi_matches": [],
+      "experimental": true,
+      "key": "aokzoe_a1x",
+      "limits": {
+        "charger_only_extra": false,
+        "cooler_max": null,
+        "experimental_tdp_max_ac": null,
+        "tdp_default": 18,
+        "tdp_max": 30,
+        "tdp_max_charger": 30,
+        "tdp_min": 4,
+        "tdp_presets": [
+          12,
+          18,
+          30,
+          30
+        ]
+      },
+      "match_names": [
+        "AOKZOE A1X"
+      ],
+      "vendor": "amd"
+    },
+    {
+      "chip": "AMD Ryzen AI 9 HX 370",
+      "display_name": "GPD Win Mini 2025",
+      "dmi_matches": [
+        {
+          "board_names": [],
+          "product_name": "G1617-02",
+          "sys_vendor": "GPD"
+        },
+        {
+          "board_names": [],
+          "product_name": "G1617-02-L",
+          "sys_vendor": "GPD"
+        }
+      ],
+      "experimental": true,
+      "key": "gpd_win_mini_2025",
+      "limits": {
+        "charger_only_extra": false,
+        "cooler_max": null,
+        "experimental_tdp_max_ac": null,
+        "tdp_default": 20,
+        "tdp_max": 35,
+        "tdp_max_charger": 35,
+        "tdp_min": 20,
+        "tdp_presets": [
+          20,
+          25,
+          30,
+          35
+        ]
+      },
+      "match_names": [],
+      "vendor": "amd"
+    },
+    {
+      "chip": "AMD Ryzen Z2 Extreme",
+      "display_name": "MSI Claw A8",
+      "dmi_matches": [],
+      "experimental": true,
+      "key": "msi_claw_a8",
+      "limits": {
+        "charger_only_extra": false,
+        "cooler_max": null,
+        "experimental_tdp_max_ac": null,
+        "tdp_default": 17,
+        "tdp_max": 35,
+        "tdp_max_charger": 35,
+        "tdp_min": 6,
+        "tdp_presets": [
+          10,
+          20,
+          33,
+          33
+        ]
+      },
+      "match_names": [
+        "Claw A8"
+      ],
+      "vendor": "amd"
+    },
+    {
+      "chip": "AMD Ryzen AI 9 HX 370",
+      "display_name": "OneXPlayer F1 Pro",
+      "dmi_matches": [],
+      "experimental": true,
+      "key": "onexplayer_f1pro",
+      "limits": {
+        "charger_only_extra": false,
+        "cooler_max": null,
+        "experimental_tdp_max_ac": null,
+        "tdp_default": 18,
+        "tdp_max": 30,
+        "tdp_max_charger": 30,
+        "tdp_min": 5,
+        "tdp_presets": [
+          12,
+          18,
+          30,
+          30
+        ]
+      },
+      "match_names": [
+        "ONEXPLAYER F1Pro"
+      ],
+      "vendor": "amd"
+    },
+    {
+      "chip": "AMD Ryzen AI Max 385",
+      "display_name": "GPD Win 5",
+      "dmi_matches": [],
+      "experimental": true,
+      "key": "gpd_win5",
+      "limits": {
+        "charger_only_extra": false,
+        "cooler_max": 75,
+        "experimental_tdp_max_ac": null,
+        "tdp_default": 25,
+        "tdp_max": 55,
+        "tdp_max_charger": 55,
+        "tdp_min": 5,
+        "tdp_presets": [
+          15,
+          30,
+          50,
+          50
+        ]
+      },
+      "match_names": [
+        "G1618-05"
+      ],
+      "vendor": "amd"
+    },
+    {
+      "chip": "AMD Ryzen 7 8840U",
+      "display_name": "GPD Win Max 2",
+      "dmi_matches": [],
+      "experimental": true,
+      "key": "gpd_win_max_2",
+      "limits": {
+        "charger_only_extra": false,
+        "cooler_max": null,
+        "experimental_tdp_max_ac": null,
+        "tdp_default": 20,
+        "tdp_max": 35,
+        "tdp_max_charger": 35,
+        "tdp_min": 5,
+        "tdp_presets": [
+          12,
+          22,
+          32,
+          32
+        ]
+      },
+      "match_names": [
+        "G1619-05"
+      ],
+      "vendor": "amd"
+    }
+  ],
+  "schema_version": 1,
+  "source": "py_modules/device_profiles.py"
+}
