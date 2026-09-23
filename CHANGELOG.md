@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.54.4](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.54.3...panel-de-control-v0.54.4) (2026-09-23)
+
+
+### Bug Fixes
+
+* recover Legion Go S custom TDP and isolate unreadable Steam manifests ([#740](https://github.com/Hooandee/panel-de-control/issues/740)) ([fe72361](https://github.com/Hooandee/panel-de-control/commit/fe72361347ba47ebaf4647fca7d1cde100bec1c4))
+
 ## [0.54.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.54.2...panel-de-control-v0.54.3) (2026-09-22)
 
 
