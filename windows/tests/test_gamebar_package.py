@@ -777,7 +777,7 @@ class GameBarLocalizationTests(unittest.TestCase):
             )
 
     def test_widget_has_no_hard_coded_visible_text(self):
-        allowed = {"—", "↻", "CPU", "GPU"}
+        allowed = {"—", "↻", "CPU", "GPU", "W"}
         visible = (
             "Text",
             "Content",
@@ -838,3 +838,13 @@ class DesignSystemTests(unittest.TestCase):
             ["Save", "Eco", "Balanced", "Hot", "Turbo"],
             re.findall(r"^\s{4}(\w+),$", power_arc.split("public enum PowerZone", 1)[1].split("}", 1)[0], re.M),
         )
+
+
+class EnergyCardTests(unittest.TestCase):
+    def test_every_power_mode_has_a_localized_name(self):
+        strings = load_strings("en-US")
+        modes = (ROOT / "windows" / "src" / "PanelDeControl.Core" / "Telemetry" / "PowerModes.cs").read_text(encoding="utf-8")
+        names = re.findall(r"^\s{4}(\w+) = \d+,$", modes, re.M)
+        self.assertEqual(["BestEfficiency", "Balanced", "BetterPerformance", "BestPerformance"], names)
+        for name in names:
+            self.assertIn(f"PowerMode{name}", strings)

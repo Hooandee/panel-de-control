@@ -302,4 +302,37 @@
   <data name="PowerZoneTurbo" xml:space="preserve">
     <value>TURBO</value>
   </data>
+  <data name="EnergyLabel.Text" xml:space="preserve">
+    <value>CONSUMO DI SISTEMA</value>
+  </data>
+  <data name="PowerDrawOnAc" xml:space="preserve">
+    <value>In carica: il consumo si misura solo a batteria</value>
+  </data>
+  <data name="PowerDrawPending" xml:space="preserve">
+    <value>In attesa della lettura della batteria</value>
+  </data>
+  <data name="PowerDrawOnBattery" xml:space="preserve">
+    <value>A batteria</value>
+  </data>
+  <data name="PowerDrawRemainingFormat" xml:space="preserve">
+    <value>A batteria · {0} h {1:00} min rimanenti</value>
+  </data>
+  <data name="PowerModeBestEfficiency" xml:space="preserve">
+    <value>Massima efficienza energetica</value>
+  </data>
+  <data name="PowerModeBalanced" xml:space="preserve">
+    <value>Bilanciato</value>
+  </data>
+  <data name="PowerModeBetterPerformance" xml:space="preserve">
+    <value>Prestazioni migliori</value>
+  </data>
+  <data name="PowerModeBestPerformance" xml:space="preserve">
+    <value>Prestazioni massime</value>
+  </data>
+  <data name="PowerModeEffectiveFormat" xml:space="preserve">
+    <value>Ora in {0}</value>
+  </data>
+  <data name="HeaderSubtitle.Text" xml:space="preserve">
+    <value>Windows · Xbox Game Bar</value>
+  </data>
 </root>

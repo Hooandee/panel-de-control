@@ -40,6 +40,10 @@ public sealed class SnapshotCollector : IHardwareSnapshotProvider
     {
         new("battery.level", "Batería", "%"),
         new("power.ac", "Alimentación", "bool"),
+        new("power.draw", "Consumo", "W"),
+        new("battery.time_remaining", "Autonomía", "min"),
+        new("power.mode", "Modo de energía", "mode"),
+        new("power.mode_effective", "Modo de energía", "mode"),
     };
 
     private readonly IClock clock;
@@ -70,7 +74,7 @@ public sealed class SnapshotCollector : IHardwareSnapshotProvider
         readings.AddRange(ReadPower());
         readings.AddRange(ReadHardware(identity.IsRecognized));
 
-        return new HardwareSnapshot(clock.UtcNow, identity.DisplayName, readings);
+        return new HardwareSnapshot(clock.UtcNow, identity.DisplayName, readings, identity.Profile?.Limits.TdpMaxCharger);
     }
 
     private DeviceIdentity ReadIdentity()
