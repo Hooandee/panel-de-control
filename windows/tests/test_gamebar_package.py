@@ -330,10 +330,8 @@ class GameBarProjectTests(unittest.TestCase):
                 "CpuCard",
                 "GpuCard",
                 "ConnectionStatus",
-                "TabPower",
-                "TabSystem",
-                "TabSensors",
-                "TabSettings",
+                "SectionTabs",
+                "SectionHost",
             }.issubset(names)
         )
         self.assertEqual(

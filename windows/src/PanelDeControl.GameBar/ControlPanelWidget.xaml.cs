@@ -17,6 +17,7 @@ using Windows.UI.Core;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Automation;
 using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml.Controls.Primitives;
 using Windows.UI.Xaml.Media;
 using Windows.UI.Xaml.Media.Animation;
 using Windows.UI.Composition;
@@ -74,6 +75,9 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     private int tdpMinimumWatts;
     private int tdpMaximumWatts;
     private int selectedTdpWatts;
+    private int? confirmedTdpWatts;
+    private CancellationTokenSource? tdpDebounce;
+    private static readonly TimeSpan TdpDebounceDelay = TimeSpan.FromMilliseconds(350);
     private bool? confirmedExperimentalTdpEnabled;
     private bool? lastObservedMuted;
     private bool disposed;
@@ -86,7 +90,8 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         ApplyAccent(ReadSavedAccent());
         BuildAccentSwatches();
         CreateHeroGlow();
-        SelectTab(0);
+        BuildSections();
+        SelectSection(0);
         refreshTimer.Tick += OnRefreshTimerTick;
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
@@ -436,6 +441,9 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         TileGpuValue.Foreground = new SolidColorBrush(gpuColor);
         ApplyEnergy(snapshot);
         PowerSourceValue.Text = FormatPowerSource(snapshot);
+        SystemBatteryValue.Text = Format(snapshot, "battery.level", "0", "%");
+        SystemBatteryValue.Foreground = new SolidColorBrush(batteryColor);
+        SystemBatteryDetail.Text = PowerDrawDetail.Text;
         ApplyTemperature(CpuTemperatureValue, snapshot, "cpu.temperature");
         CpuLoadValue.Text = string.Format(Localized("LoadFormat"), Format(snapshot, "cpu.load", "0", "%"));
         ApplyTemperature(GpuTemperatureValue, snapshot, "gpu.temperature");
@@ -613,19 +621,30 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         }
     }
 
-    private async void TdpDecreaseButton_Click(
-        object sender,
-        RoutedEventArgs args)
+    private async void TdpSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs args)
     {
-        await ApplyTdpSelectionAsync(selectedTdpWatts - 1);
+        if (disposed || applyingTdpReadback || !tdpReady)
+        {
+            return;
+        }
+
+        var watts = (int)Math.Round(args.NewValue);
+        selectedTdpWatts = watts;
+        UpdatePowerArc();
+        tdpDebounce?.Cancel();
+        var debounce = tdpDebounce = new CancellationTokenSource();
+        try
+        {
+            await Task.Delay(TdpDebounceDelay, debounce.Token);
+        }
+        catch (TaskCanceledException)
+        {
+            return;
+        }
+
+        await ApplyTdpSelectionAsync(watts);
     }
 
-    private async void TdpIncreaseButton_Click(
-        object sender,
-        RoutedEventArgs args)
-    {
-        await ApplyTdpSelectionAsync(selectedTdpWatts + 1);
-    }
 
     private async void TdpPresetButton_Click(
         object sender,
@@ -651,6 +670,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         selectedTdpWatts = Math.Min(
             Math.Max(requestedWatts, tdpMinimumWatts),
             tdpMaximumWatts);
+        SetTdpSliderValue(selectedTdpWatts);
         UpdatePowerArc();
         PowerStatus.Text = Localized("StatusApplying");
         var generation = ++tdpGeneration;
@@ -699,6 +719,13 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             applyingTdpReadback = false;
         }
 
+        confirmedTdpWatts = response.Status switch
+        {
+            ControlStatus.Applied => response.AppliedWatts,
+            ControlStatus.Available when tdpReady && !tdpConflict => confirmedTdpWatts,
+            _ => null,
+        };
+
         if (tdpReady)
         {
             tdpMinimumWatts = response.MinimumWatts!.Value;
@@ -711,6 +738,18 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
                     selectedTdpWatts,
                     tdpMinimumWatts),
                 tdpMaximumWatts);
+            applyingTdpReadback = true;
+            try
+            {
+                TdpSlider.Minimum = tdpMinimumWatts;
+                TdpSlider.Maximum = tdpMaximumWatts;
+                TdpSlider.Value = selectedTdpWatts;
+            }
+            finally
+            {
+                applyingTdpReadback = false;
+            }
+
             TdpControls.Visibility = Visibility.Visible;
             PowerReadout.Visibility = Visibility.Visible;
             PowerReadbackHint.Visibility = Visibility.Visible;
@@ -720,7 +759,6 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         else
         {
             PowerValue.Text = "—";
-            TdpMarker.Visibility = Visibility.Collapsed;
             TdpControls.Visibility = Visibility.Collapsed;
             PowerReadout.Visibility = Visibility.Collapsed;
             PowerReadbackHint.Visibility = Visibility.Collapsed;
@@ -753,17 +791,32 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             _ => Localized("PowerServiceUnavailable"),
         };
         UpdateTdpControlAvailability();
+        UpdateHero();
+    }
+
+    private void SetTdpSliderValue(int watts)
+    {
+        applyingTdpReadback = true;
+        try
+        {
+            TdpSlider.Value = watts;
+        }
+        finally
+        {
+            applyingTdpReadback = false;
+        }
     }
 
     private void UpdatePowerArc()
     {
-        PlaceTdpMarker();
-        PowerValue.Text = $"{selectedTdpWatts} W";
+        PowerValue.Text = confirmedTdpWatts is int watts ? $"{watts} W" : "—";
         PowerLimits.Text = string.Format(
             Localized("PowerLimitsFormat"),
             tdpMinimumWatts,
             tdpMaximumWatts);
+        UpdateHero();
     }
+
 
     private void UpdateTdpPresetButtons(IReadOnlyList<int> presets)
     {
@@ -810,10 +863,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             ExperimentalTdpToggle.IsOn &&
             !tdpWritePending &&
             !tdpConflict;
-        TdpDecreaseButton.IsEnabled = canWrite &&
-            selectedTdpWatts > tdpMinimumWatts;
-        TdpIncreaseButton.IsEnabled = canWrite &&
-            selectedTdpWatts < tdpMaximumWatts;
+        TdpSlider.IsEnabled = canWrite;
         foreach (var button in TdpPresetButtons)
         {
             button.IsEnabled = canWrite &&
@@ -831,20 +881,25 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
 
     private static PathGeometry CreatePowerArcGeometry(double fraction)
     {
-        var start = PowerArc.PointAt(0, ArcCenterX, ArcCenterY, ArcRadius);
+        return CreateArcSegmentGeometry(0, fraction);
+    }
+
+    private static PathGeometry CreateArcSegmentGeometry(double from, double to)
+    {
+        var start = PowerArc.PointAt(from, ArcCenterX, ArcCenterY, ArcRadius);
         var figure = new PathFigure
         {
             StartPoint = new Point(start.X, start.Y),
             IsClosed = false,
         };
-        if (fraction > 0)
+        if (to > from)
         {
-            var end = PowerArc.PointAt(fraction, ArcCenterX, ArcCenterY, ArcRadius);
+            var end = PowerArc.PointAt(to, ArcCenterX, ArcCenterY, ArcRadius);
             figure.Segments.Add(new ArcSegment
             {
                 Point = new Point(end.X, end.Y),
                 Size = new Size(ArcRadius, ArcRadius),
-                IsLargeArc = PowerArc.IsLargeArc(fraction),
+                IsLargeArc = PowerArc.IsLargeArc(to - from),
                 SweepDirection = SweepDirection.Clockwise,
             });
         }
@@ -854,13 +909,6 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         return geometry;
     }
 
-    private void TabButton_Click(object sender, RoutedEventArgs args)
-    {
-        if (sender is Button { Tag: string tag } && int.TryParse(tag, out var index))
-        {
-            SelectTab(index);
-        }
-    }
 
     private void Page_KeyDown(object sender, KeyRoutedEventArgs args)
     {
@@ -875,37 +923,178 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             return;
         }
 
-        SelectTab((selectedTab + step + TabPanels.Count) % TabPanels.Count);
+        SelectSection((selectedSection + step + sections.Count) % sections.Count);
         args.Handled = true;
     }
 
-    private int selectedTab;
+    private readonly List<SectionView> sections = new();
+    private int selectedSection;
 
-    private IReadOnlyList<(Button Tab, Panel Panel)> TabPanels => new (Button, Panel)[]
+    private sealed class SectionView
     {
-        (TabPower, PowerPanel),
-        (TabSystem, SystemPanel),
-        (TabSensors, SensorsPanel),
-        (TabSettings, SettingsPanel),
-    };
-
-    private void SelectTab(int index)
-    {
-        selectedTab = index;
-        var section = SectionColor(index);
-        for (var position = 0; position < TabPanels.Count; position++)
+        public SectionView(SectionDefinition definition, Button tab, TextBlock label, StackPanel panel)
         {
-            var (tab, panel) = TabPanels[position];
-            var selected = position == index;
-            panel.Visibility = selected ? Visibility.Visible : Visibility.Collapsed;
-            tab.Foreground = selected ? new SolidColorBrush(section) : ResourceBrush("PdcTextMutedBrush");
+            Definition = definition;
+            Tab = tab;
+            Label = label;
+            Panel = panel;
         }
 
-        Grid.SetColumn(TabThumb, index);
+        public SectionDefinition Definition { get; }
+
+        public Button Tab { get; }
+
+        public TextBlock Label { get; }
+
+        public StackPanel Panel { get; }
+    }
+
+    private void BuildSections()
+    {
+        EnergyTitle.Text = Localized("BlockEnergyTitle");
+        SystemBatteryTitle.Text = Localized("BlockBatteryTitle");
+        SystemBatteryPending.Text = Localized("BatteryHealthPending");
+        var library = BlockLibrary.Children
+            .OfType<FrameworkElement>()
+            .Where(element => element.Tag is string)
+            .ToDictionary(element => (string)element.Tag);
+        foreach (var section in SectionCatalog.All)
+        {
+            var panel = new StackPanel { Visibility = Visibility.Collapsed };
+            panel.ChildrenTransitions = new TransitionCollection
+            {
+                new EntranceThemeTransition { FromVerticalOffset = 12 },
+            };
+            foreach (var block in section.Blocks)
+            {
+                if (library.TryGetValue(section.Id + "." + block.Id, out var element))
+                {
+                    BlockLibrary.Children.Remove(element);
+                    panel.Children.Add(element);
+                }
+                else
+                {
+                    panel.Children.Add(CreatePendingBlock(section, block));
+                }
+            }
+
+            SectionHost.Children.Add(panel);
+            var label = new TextBlock
+            {
+                Text = Localized("Nav" + section.ResourceStem),
+                FontSize = 13,
+                VerticalAlignment = VerticalAlignment.Center,
+                Visibility = Visibility.Collapsed,
+            };
+            var content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 7 };
+            content.Children.Add(new FontIcon
+            {
+                FontFamily = (FontFamily)Application.Current.Resources["PdcIconFontFamily"],
+                FontSize = 16,
+                Glyph = section.Glyph,
+            });
+            content.Children.Add(label);
+            var tab = new Button
+            {
+                Style = (Style)Application.Current.Resources["PdcTabButtonStyle"],
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Padding = new Thickness(11, 8, 11, 8),
+                Content = content,
+                Tag = sections.Count,
+            };
+            AutomationProperties.SetName(tab, Localized("Nav" + section.ResourceStem));
+            tab.Click += SectionTab_Click;
+            SectionTabs.Children.Add(tab);
+            sections.Add(new SectionView(section, tab, label, panel));
+        }
+    }
+
+    private static Border CreatePendingBlock(SectionDefinition section, BlockDefinition block)
+    {
+        var accent = Lighten(ToColor(section.AccentArgb));
+        var layout = new Grid { ColumnSpacing = 14 };
+        layout.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        layout.Children.Add(new Border
+        {
+            Width = 38,
+            Height = 38,
+            CornerRadius = new CornerRadius(12),
+            VerticalAlignment = VerticalAlignment.Top,
+            Background = new SolidColorBrush(WithAlpha(accent, 0x30)),
+            Child = new FontIcon
+            {
+                FontFamily = (FontFamily)Application.Current.Resources["PdcIconFontFamily"],
+                FontSize = 16,
+                Glyph = block.Glyph,
+                Foreground = new SolidColorBrush(accent),
+            },
+        });
+        var text = new StackPanel();
+        text.Children.Add(new TextBlock
+        {
+            Text = Localized(block.ResourceStem + "Title"),
+            Style = (Style)Application.Current.Resources["PdcTitleStyle"],
+        });
+        text.Children.Add(new TextBlock
+        {
+            Text = Localized(block.ResourceStem + "Desc"),
+            Margin = new Thickness(0, 3, 0, 0),
+            Style = (Style)Application.Current.Resources["PdcMutedStyle"],
+        });
+        text.Children.Add(new TextBlock
+        {
+            Text = Localized("BlockPending"),
+            Margin = new Thickness(0, 8, 0, 0),
+            FontSize = 11,
+            Foreground = new SolidColorBrush(accent),
+            Style = (Style)Application.Current.Resources["PdcCaptionStyle"],
+        });
+        Grid.SetColumn(text, 1);
+        layout.Children.Add(text);
+        return new Border
+        {
+            Style = (Style)Application.Current.Resources["PdcCardStyle"],
+            Child = layout,
+        };
+    }
+
+    private static Color Lighten(Color color)
+    {
+        byte Mix(byte channel) => (byte)(channel + ((255 - channel) * 0.35));
+        return Color.FromArgb(color.A, Mix(color.R), Mix(color.G), Mix(color.B));
+    }
+
+    private void SectionTab_Click(object sender, RoutedEventArgs args)
+    {
+        if (sender is Button { Tag: int index })
+        {
+            SelectSection(index);
+        }
+    }
+
+    private void SelectSection(int index)
+    {
+        selectedSection = index;
+        var current = sections[index].Definition;
+        var accent = ToColor(current.AccentArgb);
+        for (var position = 0; position < sections.Count; position++)
+        {
+            var view = sections[position];
+            var selected = position == index;
+            view.Panel.Visibility = selected ? Visibility.Visible : Visibility.Collapsed;
+            view.Label.Visibility = selected ? Visibility.Visible : Visibility.Collapsed;
+            view.Tab.Background = new SolidColorBrush(selected ? WithAlpha(accent, 0x70) : Colors.Transparent);
+            view.Tab.Foreground = ResourceBrush(selected ? "PdcTextPrimaryBrush" : "PdcTextMutedBrush");
+        }
+
+        sections[index].Tab.StartBringIntoView();
+        SectionTitle.Text = Localized("Nav" + current.ResourceStem);
+        SectionDescription.Text = Localized("Nav" + current.ResourceStem + "Desc");
 
         var glow = new ColorAnimation
         {
-            To = WithAlpha(section, 0x3C),
+            To = WithAlpha(Lighten(accent), 0x44),
             Duration = new Duration(TimeSpan.FromMilliseconds(420)),
             EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
         };
@@ -916,16 +1105,6 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         storyboard.Begin();
     }
 
-    private static Color SectionColor(int index)
-    {
-        return index switch
-        {
-            0 => ((SolidColorBrush)Application.Current.Resources["PdcBoostBrush"]).Color,
-            1 => ResourceBrush("PdcAccentBrush").Color,
-            2 => ToColor(AccentPalette.Resolve("mint").Argb),
-            _ => ToColor(AccentPalette.Resolve("purple").Argb),
-        };
-    }
 
     private static Color WithAlpha(Color color, byte alpha)
     {
@@ -942,8 +1121,55 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     private DateTimeOffset heroAnimationStart;
     private PowerZone? heroZone;
     private bool heroScaleFromDevice;
-    private bool heroShowsCharge;
+    private HeroMode heroMode;
     private LinearGradientBrush? heroGradient;
+    private double? lastDrawWatts;
+    private double? lastBatteryLevel;
+    private bool lastDrawOnAc;
+
+    private enum HeroMode
+    {
+        Draw,
+        Charge,
+        Tdp,
+    }
+
+    private void UpdateHero()
+    {
+        HeroMode mode;
+        double? value;
+        if (tdpReady)
+        {
+            mode = HeroMode.Tdp;
+            value = confirmedTdpWatts ?? selectedTdpWatts;
+        }
+        else if (lastDrawOnAc && lastBatteryLevel is double level)
+        {
+            mode = HeroMode.Charge;
+            value = level;
+        }
+        else
+        {
+            mode = HeroMode.Draw;
+            value = lastDrawWatts;
+        }
+
+        if (mode != heroMode)
+        {
+            heroMode = mode;
+            heroZone = null;
+            heroShownWatts = 0;
+        }
+
+        var batteryInVitals = mode == HeroMode.Charge ? Visibility.Collapsed : Visibility.Visible;
+        BatteryTrack.Visibility = batteryInVitals;
+        BatteryRing.Visibility = batteryInVitals;
+        BatteryRow.Visibility = batteryInVitals;
+        HeroWattsUnit.Visibility = mode == HeroMode.Charge ? Visibility.Collapsed : Visibility.Visible;
+        HeroPercentUnit.Visibility = mode == HeroMode.Charge ? Visibility.Visible : Visibility.Collapsed;
+        AnimateHero(value);
+        UpdateTdpDecorations();
+    }
 
     private void AnimateHero(double? watts)
     {
@@ -984,9 +1210,15 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
 
     private void RenderHero(double watts)
     {
-        if (heroShowsCharge)
+        if (heroMode == HeroMode.Charge)
         {
             RenderChargeHero(watts);
+            return;
+        }
+
+        if (heroMode == HeroMode.Tdp)
+        {
+            RenderTdpHero(watts);
             return;
         }
 
@@ -1012,6 +1244,62 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         PowerZoneLabel.Text = Localized("PowerZone" + zone);
         PowerZoneLabel.Foreground = new SolidColorBrush(zoneColor);
         SetHeroGlow(zoneColor);
+    }
+
+    private void RenderTdpHero(double watts)
+    {
+        var scaleMaximum = TdpScaleMaximum();
+        var fraction = PowerArc.Fraction(watts, tdpMinimumWatts, scaleMaximum);
+        var color = ToColor(PowerArc.ColorFor(fraction));
+        PowerDrawValue.Text = watts.ToString("0");
+        PowerArcFill.Data = CreatePowerArcGeometry(confirmedTdpWatts.HasValue ? fraction : 0);
+        PowerArcFill.Stroke = new SolidColorBrush(color);
+        if (confirmedTdpWatts is null)
+        {
+            PowerZoneLabel.Text = Localized("TdpUnconfirmed");
+            PowerZoneLabel.Foreground = ResourceBrush("PdcTextMutedBrush");
+            SetHeroGlow(null);
+            return;
+        }
+
+        PowerZoneLabel.Text = Localized("PowerZone" + PowerArc.ZoneFor(fraction));
+        PowerZoneLabel.Foreground = new SolidColorBrush(color);
+        SetHeroGlow(color);
+    }
+
+    private double TdpScaleMaximum()
+    {
+        return heroScaleFromDevice ? Math.Max(heroScaleWatts, tdpMaximumWatts) : tdpMaximumWatts;
+    }
+
+    private void UpdateTdpDecorations()
+    {
+        if (heroMode != HeroMode.Tdp || tdpMaximumWatts <= tdpMinimumWatts)
+        {
+            ChargerBand.Data = null;
+            BoostArc.Data = null;
+            TdpMarker.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var scaleMaximum = TdpScaleMaximum();
+        double FractionOf(double watts) => PowerArc.Fraction(watts, tdpMinimumWatts, scaleMaximum);
+        ChargerBand.Data = scaleMaximum > tdpMaximumWatts
+            ? CreateArcSegmentGeometry(FractionOf(tdpMaximumWatts), 1)
+            : null;
+        BoostArc.Data = confirmedTdpWatts is int applied && lastDrawWatts is double draw && draw > applied + 0.5
+            ? CreateArcSegmentGeometry(FractionOf(applied), FractionOf(Math.Min(draw, scaleMaximum)))
+            : null;
+        if (confirmedTdpWatts == selectedTdpWatts)
+        {
+            TdpMarker.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var point = PowerArc.PointAt(FractionOf(selectedTdpWatts), ArcCenterX, ArcCenterY, ArcRadius);
+        Canvas.SetLeft(TdpMarker, point.X - (TdpMarker.Width / 2));
+        Canvas.SetTop(TdpMarker, point.Y - (TdpMarker.Height / 2));
+        TdpMarker.Visibility = Visibility.Visible;
     }
 
     private void RenderChargeHero(double level)
@@ -1048,20 +1336,6 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         }
 
         return gradient;
-    }
-
-    private void PlaceTdpMarker()
-    {
-        if (!tdpReady || tdpMaximumWatts <= 0 || heroShowsCharge)
-        {
-            TdpMarker.Visibility = Visibility.Collapsed;
-            return;
-        }
-
-        var point = PowerArc.PointAt(PowerArc.Fraction(selectedTdpWatts, 0, heroScaleWatts), ArcCenterX, ArcCenterY, ArcRadius);
-        Canvas.SetLeft(TdpMarker, point.X - (TdpMarker.Width / 2));
-        Canvas.SetTop(TdpMarker, point.Y - (TdpMarker.Height / 2));
-        TdpMarker.Visibility = Visibility.Visible;
     }
 
     private const double RingOuterSize = 132;
@@ -1203,7 +1477,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         {
             ApplyAccent(AccentPalette.Resolve(id));
             MarkSelectedSwatch(id);
-            SelectTab(selectedTab);
+            SelectSection(selectedSection);
             try
             {
                 ApplicationData.Current.LocalSettings.Values[AccentSettingKey] = id;
@@ -1517,8 +1791,10 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         tdpReady = false;
         tdpConflict = false;
         ExperimentalTdpToggle.IsEnabled = false;
-        TdpDecreaseButton.IsEnabled = false;
-        TdpIncreaseButton.IsEnabled = false;
+        TdpSlider.IsEnabled = false;
+        tdpDebounce?.Cancel();
+        tdpDebounce?.Dispose();
+        tdpDebounce = null;
         foreach (var button in TdpPresetButtons)
         {
             button.IsEnabled = false;
@@ -1549,26 +1825,10 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             heroZone = null;
         }
         var battery = FindReading(snapshot, "battery.level");
-        var showsCharge = draw?.ErrorCode == "power_draw_on_ac" &&
-            battery?.Status == ReadingStatus.Available &&
-            battery.Value.HasValue;
-        if (showsCharge != heroShowsCharge)
-        {
-            heroShowsCharge = showsCharge;
-            heroZone = null;
-            heroShownWatts = 0;
-        }
-
-        var batteryInVitals = showsCharge ? Visibility.Collapsed : Visibility.Visible;
-        BatteryTrack.Visibility = batteryInVitals;
-        BatteryRing.Visibility = batteryInVitals;
-        BatteryRow.Visibility = batteryInVitals;
-        HeroWattsUnit.Visibility = showsCharge ? Visibility.Collapsed : Visibility.Visible;
-        HeroPercentUnit.Visibility = showsCharge ? Visibility.Visible : Visibility.Collapsed;
-        AnimateHero(showsCharge
-            ? battery!.Value
-            : draw?.Status == ReadingStatus.Available ? draw.Value : null);
-        PlaceTdpMarker();
+        lastDrawWatts = draw?.Status == ReadingStatus.Available ? draw.Value : null;
+        lastDrawOnAc = draw?.ErrorCode == "power_draw_on_ac";
+        lastBatteryLevel = battery?.Status == ReadingStatus.Available ? battery.Value : null;
+        UpdateHero();
         var remaining = FindReading(snapshot, "battery.time_remaining");
         PowerDrawDetail.Text = draw?.ErrorCode switch
         {
@@ -1579,6 +1839,8 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
                     Localized("PowerDrawRemainingFormat"),
                     (int)(remaining.Value.Value / 60),
                     (int)(remaining.Value.Value % 60)),
+            _ when draw?.Status == ReadingStatus.Available && tdpReady =>
+                string.Format(Localized("PowerDrawNowFormat"), draw.Value!.Value),
             _ when draw?.Status == ReadingStatus.Available => Localized("PowerDrawOnBattery"),
             _ => StatusText(draw),
         };
