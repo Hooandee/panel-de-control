@@ -73,7 +73,8 @@ public sealed class TdpControlPipeServer
         {
             response = TdpControlResponse.Rejected(
                 false,
-                "tdp_request_too_long");
+                "tdp_request_too_long",
+                experimentalStateKnown: false);
         }
         else
         {
@@ -107,7 +108,10 @@ public sealed class TdpControlPipeServer
         }
         catch
         {
-            return TdpControlResponse.Rejected(false, "invalid_tdp_request");
+            return TdpControlResponse.Rejected(
+                false,
+                "invalid_tdp_request",
+                experimentalStateKnown: false);
         }
 
         if (activeOperation is { IsCompleted: false })
@@ -137,8 +141,12 @@ public sealed class TdpControlPipeServer
             ? TdpControlResponse.Indeterminate(
                 false,
                 request.RequestedWatts!.Value,
-                errorCode)
-            : TdpControlResponse.Fault(false, errorCode);
+                errorCode,
+                experimentalStateKnown: false)
+            : TdpControlResponse.Fault(
+                false,
+                errorCode,
+                experimentalStateKnown: false);
     }
 
     private static async Task<PipeRequest> ReadRequestAsync(

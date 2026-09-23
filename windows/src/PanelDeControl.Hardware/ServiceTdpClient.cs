@@ -99,7 +99,11 @@ public sealed class ServiceTdpClient : ITdpControlProxy
             ? TdpControlResponse.Indeterminate(
                 false,
                 request.RequestedWatts!.Value,
-                errorCode)
-            : TdpControlResponse.Fault(false, errorCode);
+                errorCode,
+                experimentalStateKnown: false)
+            : TdpControlResponse.Fault(
+                false,
+                errorCode,
+                experimentalStateKnown: false);
     }
 }

@@ -52,6 +52,7 @@ public sealed class TdpControlPipeServerTests
 
         Assert.Equal(ControlStatus.Rejected, response.Status);
         Assert.Equal("invalid_tdp_request", response.ErrorCode);
+        Assert.False(response.ExperimentalStateKnown);
         Assert.Equal(0, proxy.SendCount);
     }
 

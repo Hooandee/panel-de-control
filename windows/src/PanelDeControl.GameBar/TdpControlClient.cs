@@ -125,8 +125,12 @@ public sealed class TdpControlClient
             ? TdpControlResponse.Indeterminate(
                 false,
                 request.RequestedWatts!.Value,
-                errorCode)
-            : TdpControlResponse.Fault(false, errorCode);
+                errorCode,
+                experimentalStateKnown: false)
+            : TdpControlResponse.Fault(
+                false,
+                errorCode,
+                experimentalStateKnown: false);
     }
 
     private sealed class TransportAttempt

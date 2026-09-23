@@ -14,6 +14,7 @@ public sealed class TdpControlResponse
     private TdpControlResponse(
         ControlStatus status,
         bool experimentalEnabled,
+        bool experimentalStateKnown,
         int? requestedWatts,
         int? targetWatts,
         int? appliedWatts,
@@ -28,6 +29,7 @@ public sealed class TdpControlResponse
     {
         Status = status;
         ExperimentalEnabled = experimentalEnabled;
+        ExperimentalStateKnown = experimentalStateKnown;
         RequestedWatts = requestedWatts;
         TargetWatts = targetWatts;
         AppliedWatts = appliedWatts;
@@ -47,6 +49,12 @@ public sealed class TdpControlResponse
 
     [DataMember(Name = "experimental_enabled", Order = 2, IsRequired = true)]
     public bool ExperimentalEnabled { get; private set; }
+
+    [DataMember(
+        Name = "experimental_state_known",
+        Order = 14,
+        IsRequired = true)]
+    public bool ExperimentalStateKnown { get; private set; }
 
     [DataMember(Name = "requested_watts", Order = 3, EmitDefaultValue = false)]
     public int? RequestedWatts { get; private set; }
@@ -105,6 +113,7 @@ public sealed class TdpControlResponse
         return new TdpControlResponse(
             ControlStatus.Available,
             experimentalEnabled,
+            true,
             null,
             null,
             null,
@@ -138,6 +147,7 @@ public sealed class TdpControlResponse
         return new TdpControlResponse(
             ControlStatus.Applied,
             experimentalEnabled,
+            true,
             requestedWatts,
             targetWatts,
             appliedWatts,
@@ -175,11 +185,13 @@ public sealed class TdpControlResponse
 
     public static TdpControlResponse Rejected(
         bool experimentalEnabled,
-        string errorCode)
+        string errorCode,
+        bool experimentalStateKnown = true)
     {
         return new TdpControlResponse(
             ControlStatus.Rejected,
             experimentalEnabled,
+            experimentalStateKnown,
             null,
             null,
             null,
@@ -218,11 +230,13 @@ public sealed class TdpControlResponse
     public static TdpControlResponse Indeterminate(
         bool experimentalEnabled,
         int requestedWatts,
-        string errorCode)
+        string errorCode,
+        bool experimentalStateKnown = true)
     {
         return new TdpControlResponse(
             ControlStatus.Unverifiable,
             experimentalEnabled,
+            experimentalStateKnown,
             requestedWatts,
             null,
             null,
@@ -243,16 +257,19 @@ public sealed class TdpControlResponse
         return TerminalFailure(
             ControlStatus.Unavailable,
             experimentalEnabled,
+            true,
             errorCode);
     }
 
     public static TdpControlResponse Fault(
         bool experimentalEnabled,
-        string errorCode)
+        string errorCode,
+        bool experimentalStateKnown = true)
     {
         return TerminalFailure(
             ControlStatus.Fault,
             experimentalEnabled,
+            experimentalStateKnown,
             errorCode);
     }
 
@@ -261,6 +278,13 @@ public sealed class TdpControlResponse
         if (!Enum.IsDefined(typeof(ControlStatus), Status))
         {
             throw new InvalidDataException("TDP control status is invalid.");
+        }
+
+        if (!ExperimentalStateKnown &&
+            Status is ControlStatus.Available or ControlStatus.Applied)
+        {
+            throw new InvalidDataException(
+                "Successful TDP state must confirm the experimental opt-in.");
         }
 
         if (MinimumWatts.HasValue != MaximumWatts.HasValue)
@@ -353,6 +377,7 @@ public sealed class TdpControlResponse
         return new TdpControlResponse(
             status,
             experimentalEnabled,
+            true,
             requestedWatts,
             targetWatts,
             null,
@@ -369,11 +394,13 @@ public sealed class TdpControlResponse
     private static TdpControlResponse TerminalFailure(
         ControlStatus status,
         bool experimentalEnabled,
+        bool experimentalStateKnown,
         string errorCode)
     {
         return new TdpControlResponse(
             status,
             experimentalEnabled,
+            experimentalStateKnown,
             null,
             null,
             null,

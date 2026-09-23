@@ -115,7 +115,26 @@ public sealed class TdpControlServiceTests
         Assert.Equal(ControlStatus.Rejected, response.Status);
         Assert.Equal("firmware_rejected", response.ErrorCode);
         Assert.Null(response.AppliedWatts);
-        Assert.Equal(3, transport.Writes.Count);
+        Assert.Single(transport.Writes);
+        Assert.Empty(transport.Reads);
+    }
+
+    [Fact]
+    public void FirmwareFailureStopsBeforeWritingTheRemainingRails()
+    {
+        var transport = new FakeTransport();
+        transport.WriteResults[AsusTdpRegister.Sppt] =
+            AsusTdpWriteResult.Fault;
+        var control = Create(transport: transport);
+        control.EnableExperimental();
+
+        var response = control.Set(25);
+
+        Assert.Equal(ControlStatus.Unverifiable, response.Status);
+        Assert.Equal("firmware_io_failed", response.ErrorCode);
+        Assert.Equal(
+            ExpectedRegisters.Take(2),
+            transport.Writes.Select(write => write.Register));
         Assert.Empty(transport.Reads);
     }
 
@@ -293,6 +312,9 @@ public sealed class TdpControlServiceTests
         public AsusTdpWriteResult WriteResult { get; set; } =
             AsusTdpWriteResult.Accepted;
 
+        public Dictionary<AsusTdpRegister, AsusTdpWriteResult> WriteResults { get; } =
+            new();
+
         public List<(AsusTdpRegister Register, int Watts)> Writes { get; } = new();
 
         public List<AsusTdpRegister> Reads { get; } = new();
@@ -306,7 +328,9 @@ public sealed class TdpControlServiceTests
         public AsusTdpWriteResult Write(AsusTdpRegister register, int watts)
         {
             Writes.Add((register, watts));
-            return WriteResult;
+            return WriteResults.TryGetValue(register, out var result)
+                ? result
+                : WriteResult;
         }
 
         public AsusTdpReadResult Read(AsusTdpRegister register)

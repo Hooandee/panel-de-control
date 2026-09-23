@@ -166,23 +166,24 @@ public sealed class TdpControlService : ITdpControlEndpoint
                 profile,
                 requestedWatts,
                 power == AcPowerState.External);
-            var writeResults = Registers
-                .Select(register => transport.Write(register, target.TargetWatts))
-                .ToArray();
-            if (writeResults.Contains(AsusTdpWriteResult.Rejected))
+            foreach (var register in Registers)
             {
-                return AttemptRejected(
-                    profile,
-                    target,
-                    "firmware_rejected");
-            }
+                var result = transport.Write(register, target.TargetWatts);
+                if (result == AsusTdpWriteResult.Rejected)
+                {
+                    return AttemptRejected(
+                        profile,
+                        target,
+                        "firmware_rejected");
+                }
 
-            if (writeResults.Contains(AsusTdpWriteResult.Fault))
-            {
-                return AttemptUnverifiable(
-                    profile,
-                    target,
-                    "firmware_io_failed");
+                if (result == AsusTdpWriteResult.Fault)
+                {
+                    return AttemptUnverifiable(
+                        profile,
+                        target,
+                        "firmware_io_failed");
+                }
             }
 
             var readbacks = Registers
