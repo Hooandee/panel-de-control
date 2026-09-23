@@ -19,14 +19,16 @@ public static class Program
                 new LibreHardwareReader(),
                 new PowerStatusReader(),
                 new WindowsSensorAccessProbe());
+            var serviceClient = new ServiceSnapshotClient();
             var collector = new ServiceBackedSnapshotProvider(
                 localCollector,
-                new ServiceSnapshotClient(),
+                serviceClient,
                 clock);
             var snapshotServer = new SnapshotPipeServer(
                 SnapshotPipeServer.PackagedPipeName,
                 collector,
-                PackageNamedPipeServerFactory.Create);
+                PackageNamedPipeServerFactory.Create,
+                inventoryProvider: new ServiceInventoryProvider(serviceClient, clock));
             var volumeController = new CoreAudioVolumeController(
                 new CoreAudioEndpointVolumeProvider());
             var volumeServer = new VolumeControlPipeServer(

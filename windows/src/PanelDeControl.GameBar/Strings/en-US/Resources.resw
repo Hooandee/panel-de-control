@@ -54,6 +54,48 @@
   <data name="BrightnessUnavailable" xml:space="preserve">
     <value>Built-in panel brightness unavailable</value>
   </data>
+  <data name="CapabilityAbsent" xml:space="preserve">
+    <value>Not found</value>
+  </data>
+  <data name="CapabilityAsusAtkacpi" xml:space="preserve">
+    <value>ASUS ATKACPI interface</value>
+  </data>
+  <data name="CapabilityLenovoFan" xml:space="preserve">
+    <value>Lenovo fan WMI</value>
+  </data>
+  <data name="CapabilityLenovoGameZone" xml:space="preserve">
+    <value>Lenovo GameZone WMI</value>
+  </data>
+  <data name="CapabilityLenovoOther" xml:space="preserve">
+    <value>Lenovo power WMI</value>
+  </data>
+  <data name="CapabilityMsiAcpi" xml:space="preserve">
+    <value>MSI_ACPI WMI</value>
+  </data>
+  <data name="CapabilityPresent" xml:space="preserve">
+    <value>Available</value>
+  </data>
+  <data name="CapabilityRivalArmoury" xml:space="preserve">
+    <value>Armoury Crate</value>
+  </data>
+  <data name="CapabilityRivalIntelDtt" xml:space="preserve">
+    <value>Intel thermal management</value>
+  </data>
+  <data name="CapabilityRivalLegionSpace" xml:space="preserve">
+    <value>Legion Space</value>
+  </data>
+  <data name="CapabilityRivalMsiCenter" xml:space="preserve">
+    <value>MSI Center M</value>
+  </data>
+  <data name="CapabilityRowFormat" xml:space="preserve">
+    <value>{0}: {1}</value>
+  </data>
+  <data name="CapabilitySensorDriver" xml:space="preserve">
+    <value>Sensor driver (PawnIO)</value>
+  </data>
+  <data name="CapabilityService" xml:space="preserve">
+    <value>Panel de Control service</value>
+  </data>
   <data name="ConnectionStatus.Text" xml:space="preserve">
     <value>Connecting to the hardware…</value>
   </data>
@@ -65,6 +107,18 @@
   </data>
   <data name="DeviceUnrecognized" xml:space="preserve">
     <value>Unrecognized device</value>
+  </data>
+  <data name="DiagnosticsLoading" xml:space="preserve">
+    <value>Checking the device…</value>
+  </data>
+  <data name="DiagnosticsToggle.Content" xml:space="preserve">
+    <value>DIAGNOSTICS</value>
+  </data>
+  <data name="DiagnosticsToggle.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Show or hide device diagnostics</value>
+  </data>
+  <data name="DiagnosticsUnavailable" xml:space="preserve">
+    <value>Diagnostics could not be read</value>
   </data>
   <data name="FooterScope.Text" xml:space="preserve">
     <value>Built-in panel brightness and volume with verification · Experimental read-only telemetry · No control of external displays, power or fans.</value>
@@ -140,6 +194,12 @@
   </data>
   <data name="RefreshButton.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
     <value>Refresh telemetry, brightness and volume</value>
+  </data>
+  <data name="RivalNotRunning" xml:space="preserve">
+    <value>Not running</value>
+  </data>
+  <data name="RivalRunning" xml:space="preserve">
+    <value>Running</value>
   </data>
   <data name="StatusApplying" xml:space="preserve">
     <value>Applying and verifying…</value>

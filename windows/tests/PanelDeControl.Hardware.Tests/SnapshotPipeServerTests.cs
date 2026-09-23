@@ -1,6 +1,8 @@
 using System.IO.Pipes;
+using PanelDeControl.Core.Capabilities;
 using PanelDeControl.Core.Telemetry;
 using PanelDeControl.Hardware;
+using PanelDeControl.Hardware.Capabilities;
 using Xunit;
 
 namespace PanelDeControl.Hardware.Tests;
@@ -209,6 +211,70 @@ public sealed class SnapshotPipeServerTests
         }
         catch (OperationCanceledException)
         {
+        }
+    }
+
+    [Fact]
+    public async Task InventoryCommandReturnsTheInventoryWithoutCapturingTelemetry()
+    {
+        var pipeName = $"pdc-tests-{Guid.NewGuid():N}";
+        var provider = new CountingSnapshotProvider();
+        var inventory = new CapabilityInventory(
+            new DateTimeOffset(2026, 9, 22, 23, 0, 0, TimeSpan.Zero),
+            "legion_go",
+            new[] { new CapabilityEntry(CapabilityIds.LenovoGameZone, CapabilityStatus.Present) });
+        var server = new SnapshotPipeServer(pipeName, provider, CreateTestPipe, inventoryProvider: new FixedInventory(inventory));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        var payload = await SendAsync(server, pipeName, "inventory", timeout.Token);
+
+        var decoded = CapabilityWireCodec.Deserialize(payload!);
+        Assert.Equal("legion_go", decoded.DeviceKey);
+        Assert.Equal(CapabilityStatus.Present, Assert.Single(decoded.Entries).Status);
+        Assert.Equal(0, provider.CaptureCount);
+    }
+
+    [Fact]
+    public async Task InventoryIsUnsupportedWithoutAProvider()
+    {
+        var pipeName = $"pdc-tests-{Guid.NewGuid():N}";
+        var server = CreateServer(pipeName, new CountingSnapshotProvider());
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        var payload = await SendAsync(server, pipeName, "inventory", timeout.Token);
+
+        Assert.Equal("unsupported_command", Assert.Single(TelemetryWireCodec.Deserialize(payload!).Readings).ErrorCode);
+    }
+
+    private static async Task<string?> SendAsync(
+        SnapshotPipeServer server,
+        string pipeName,
+        string command,
+        CancellationToken cancellationToken)
+    {
+        var serverTask = server.RunOnceAsync(cancellationToken);
+        await using var client = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+        await client.ConnectAsync(cancellationToken);
+        await using var writer = new StreamWriter(client, leaveOpen: true) { AutoFlush = true };
+        using var reader = new StreamReader(client, leaveOpen: true);
+        await writer.WriteLineAsync(command);
+        var payload = await reader.ReadLineAsync(cancellationToken);
+        await serverTask;
+        return payload;
+    }
+
+    private sealed class FixedInventory : ICapabilityInventoryProvider
+    {
+        private readonly CapabilityInventory inventory;
+
+        public FixedInventory(CapabilityInventory inventory)
+        {
+            this.inventory = inventory;
+        }
+
+        public CapabilityInventory Collect()
+        {
+            return inventory;
         }
     }
 

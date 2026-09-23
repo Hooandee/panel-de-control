@@ -753,3 +753,16 @@ class GameBarLocalizationTests(unittest.TestCase):
         self.assertTrue(keys)
         self.assertTrue(keys.issubset(strings), keys - set(strings))
         self.assertNotRegex(code, r'\.Text = "[^"—]')
+
+
+class DiagnosticsCardTests(unittest.TestCase):
+    def test_every_capability_id_has_a_localized_label(self):
+        ids_source = (HARDWARE_DIR / "Capabilities" / "CapabilityIds.cs").read_text(encoding="utf-8")
+        ids = set(re.findall(r'const string \w+ = "([^"]+)";', ids_source))
+        code = WIDGET_CODE.read_text(encoding="utf-8")
+        mapping = dict(re.findall(r'\["([^"]+)"\] = "([A-Za-z]+)"', code))
+        strings = load_strings("en-US")
+
+        self.assertTrue(ids)
+        self.assertEqual(ids, set(mapping))
+        self.assertTrue(set(mapping.values()).issubset(strings), set(mapping.values()) - set(strings))
