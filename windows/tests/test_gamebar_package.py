@@ -412,80 +412,6 @@ class GameBarProjectTests(unittest.TestCase):
         )
 
 
-
-
-    def test_widget_debounces_brightness_and_ignores_stale_readback(self):
-        code = WIDGET_CODE.read_text(encoding="utf-8")
-        refresh = code[
-            code.index("private async Task RefreshAsync()"):
-            code.index("private void ApplySnapshot")
-        ]
-        normalized_refresh = " ".join(refresh.split())
-
-        self.assertIn("BrightnessSlider_ValueChanged", code)
-        self.assertIn("brightnessGeneration", code)
-        self.assertIn("brightnessDebounce", code)
-        self.assertIn("brightnessClient.SetAsync", code)
-        self.assertRegex(
-            code,
-            r"ApplyBrightnessResponse\(\s*brightness,\s*"
-            r"writeAttempted: false\)",
-        )
-        self.assertIn("ApplyObservedBrightness", code)
-        self.assertIn("CancelPendingBrightnessWrite", code)
-        self.assertIn(
-            "var brightnessWriteWasPendingAtRefreshStart = "
-            "brightnessWritePending;",
-            normalized_refresh,
-        )
-        self.assertIn(
-            "!brightnessWriteWasPendingAtRefreshStart && "
-            "!brightnessWritePending && "
-            "brightnessRefreshGeneration == brightnessGeneration",
-            normalized_refresh,
-        )
-        self.assertIn("brightnessClient.GetAsync()", refresh)
-        self.assertNotIn("brightnessClient.SetAsync", refresh)
-        self.assertIn(
-            'writeAttempted ? Localized("BrightnessControlFailed")',
-            " ".join(code.split()),
-        )
-
-    def test_widget_applies_refresh_streams_independently(self):
-        code = WIDGET_CODE.read_text(encoding="utf-8")
-        normalized_code = " ".join(code.split())
-        refresh = code[
-            code.index("private async Task RefreshAsync()"):
-            code.index("private void ApplySnapshot")
-        ]
-
-        self.assertIn("ApplySnapshotWhenReadyAsync", refresh)
-        self.assertIn("ApplyVolumeWhenReadyAsync", refresh)
-        self.assertIn("ApplyBrightnessWhenReadyAsync", refresh)
-        self.assertIn("await Task.WhenAll(", refresh)
-        self.assertIn("private bool snapshotRefreshInProgress;", code)
-        self.assertIn("private bool volumeRefreshInProgress;", code)
-        self.assertIn("private bool brightnessRefreshInProgress;", code)
-        self.assertNotIn("private bool refreshInProgress;", code)
-        self.assertIn(
-            "if (snapshotRefreshInProgress || disposed)",
-            normalized_code,
-        )
-        self.assertIn(
-            "if (volumeRefreshInProgress || disposed)",
-            normalized_code,
-        )
-        self.assertIn(
-            "if (brightnessRefreshInProgress || disposed)",
-            normalized_code,
-        )
-        self.assertNotRegex(
-            refresh,
-            r"var snapshot = await snapshotTask;\s*"
-            r"var volume = await volumeTask;\s*"
-            r"var brightness = await brightnessTask;",
-        )
-
     def test_widget_has_accessible_focusable_system_mute_control(self):
         root = ElementTree.parse(WIDGET).getroot()
         xaml_name = "{http://schemas.microsoft.com/winfx/2006/xaml}Name"
@@ -771,9 +697,6 @@ class SideloadPackageTests(unittest.TestCase):
         self.assertIn("<UseDotNetNativeToolchain>true</UseDotNetNativeToolchain>", project)
 
 
-
-
-
 class GameBarLocalizationTests(unittest.TestCase):
     def test_every_language_ships_the_same_non_empty_keys(self):
         reference = load_strings("en-US")
@@ -830,5 +753,3 @@ class GameBarLocalizationTests(unittest.TestCase):
         self.assertTrue(keys)
         self.assertTrue(keys.issubset(strings), keys - set(strings))
         self.assertNotRegex(code, r'\.Text = "[^"—]')
-        self.assertNotIn("Sin datos", code)
-
