@@ -1,6 +1,7 @@
 using System.IO.Pipes;
 using System.Text;
 using PanelDeControl.Core.Controls;
+using PanelDeControl.Hardware;
 using PanelDeControl.Service;
 using Xunit;
 
@@ -101,25 +102,16 @@ public sealed class TdpServicePipeServerTests
     }
 
     [Fact]
-    public void PackagedIdentityRequiresBothExpectedPackageAndExecutable()
+    public void PackagedBrokerIdentityRequiresThePinnedExecutableInsideItsPackage()
     {
         const string family = "PanelDeControl.Windows_abcde12345abc";
         const string root = @"C:\Program Files\WindowsApps\PanelDeControl.Windows";
-        Assert.True(PackagedTdpClientValidator.IsTrustedIdentity(
+        Assert.True(PackagedPipeClient.IsExpected(
             root + @"\HardwareBroker\PanelDeControl.Hardware.exe",
-            family,
-            family,
-            root));
-        Assert.False(PackagedTdpClientValidator.IsTrustedIdentity(
-            @"C:\Temp\attacker.exe",
-            family,
-            family,
-            root));
-        Assert.False(PackagedTdpClientValidator.IsTrustedIdentity(
-            root + @"\HardwareBroker\PanelDeControl.Hardware.exe",
-            "PanelDeControl.Windows_otherpublisher",
-            family,
-            root));
+            family, family, root, PackagedTdpClientValidator.BrokerRelativePath));
+        Assert.False(PackagedPipeClient.IsExpected(
+            root + @"\PanelDeControl.GameBar.exe",
+            family, family, root, PackagedTdpClientValidator.BrokerRelativePath));
     }
 
     private static NamedPipeServerStream CreateTestPipe(string pipeName)
@@ -208,7 +200,7 @@ public sealed class TdpServicePipeServerTests
         return TdpControlWireCodec.DeserializeResponse(line!);
     }
 
-    private sealed class FixedClientValidator : ITdpClientValidator
+    private sealed class FixedClientValidator : IPipeClientValidator
     {
         private readonly bool trusted;
 

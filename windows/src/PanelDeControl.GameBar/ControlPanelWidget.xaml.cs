@@ -73,7 +73,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     private bool tdpConflict;
     private int tdpMinimumWatts;
     private int tdpMaximumWatts;
-    private int selectedTdpWatts;
+    private readonly TdpPresentationState tdpPresentation = new();
     private bool? confirmedExperimentalTdpEnabled;
     private bool? lastObservedMuted;
     private bool disposed;
@@ -610,14 +610,14 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         object sender,
         RoutedEventArgs args)
     {
-        await ApplyTdpSelectionAsync(selectedTdpWatts - 1);
+        await ApplyTdpSelectionAsync(tdpPresentation.SelectedWatts - 1);
     }
 
     private async void TdpIncreaseButton_Click(
         object sender,
         RoutedEventArgs args)
     {
-        await ApplyTdpSelectionAsync(selectedTdpWatts + 1);
+        await ApplyTdpSelectionAsync(tdpPresentation.SelectedWatts + 1);
     }
 
     private async void TdpPresetButton_Click(
@@ -641,9 +641,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             return;
         }
 
-        selectedTdpWatts = Math.Min(
-            Math.Max(requestedWatts, tdpMinimumWatts),
-            tdpMaximumWatts);
+        tdpPresentation.Select(requestedWatts, tdpMinimumWatts, tdpMaximumWatts);
         UpdatePowerArc();
         PowerStatus.Text = Localized("StatusApplying");
         var generation = ++tdpGeneration;
@@ -651,7 +649,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         UpdateTdpControlAvailability();
         try
         {
-            var response = await tdpClient.SetAsync(selectedTdpWatts);
+            var response = await tdpClient.SetAsync(tdpPresentation.SelectedWatts);
             if (!disposed && generation == tdpGeneration)
             {
                 ApplyTdpResponse(response);
@@ -696,14 +694,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         {
             tdpMinimumWatts = response.MinimumWatts!.Value;
             tdpMaximumWatts = response.MaximumWatts!.Value;
-            selectedTdpWatts = Math.Min(
-                Math.Max(
-                    response.AppliedWatts ??
-                    response.TargetWatts ??
-                    response.DefaultWatts ??
-                    selectedTdpWatts,
-                    tdpMinimumWatts),
-                tdpMaximumWatts);
+            tdpPresentation.Observe(response);
             TdpControls.Visibility = Visibility.Visible;
             UpdatePowerArc();
             UpdateTdpPresetButtons(response.PresetWatts);
@@ -747,7 +738,10 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     private void UpdatePowerArc()
     {
         PlaceTdpMarker();
-        PowerValue.Text = $"{selectedTdpWatts} W";
+        PowerValue.Text = tdpPresentation.AppliedWatts is int appliedWatts
+            ? $"{appliedWatts} W"
+            : "—";
+        TdpSelectionValue.Text = $"{tdpPresentation.SelectedWatts} W";
         PowerLimits.Text = string.Format(
             Localized("PowerLimitsFormat"),
             tdpMinimumWatts,
@@ -800,9 +794,9 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             !tdpWritePending &&
             !tdpConflict;
         TdpDecreaseButton.IsEnabled = canWrite &&
-            selectedTdpWatts > tdpMinimumWatts;
+            tdpPresentation.SelectedWatts > tdpMinimumWatts;
         TdpIncreaseButton.IsEnabled = canWrite &&
-            selectedTdpWatts < tdpMaximumWatts;
+            tdpPresentation.SelectedWatts < tdpMaximumWatts;
         foreach (var button in TdpPresetButtons)
         {
             button.IsEnabled = canWrite &&
@@ -1020,13 +1014,14 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
 
     private void PlaceTdpMarker()
     {
-        if (!tdpReady || tdpMaximumWatts <= 0)
+        if (!tdpReady || tdpMaximumWatts <= 0 ||
+            tdpPresentation.AppliedWatts is not int appliedWatts)
         {
             TdpMarker.Visibility = Visibility.Collapsed;
             return;
         }
 
-        var point = PowerArc.PointAt(PowerArc.Fraction(selectedTdpWatts, 0, heroScaleWatts), ArcCenterX, ArcCenterY, ArcRadius);
+        var point = PowerArc.PointAt(PowerArc.Fraction(appliedWatts, 0, heroScaleWatts), ArcCenterX, ArcCenterY, ArcRadius);
         Canvas.SetLeft(TdpMarker, point.X - (TdpMarker.Width / 2));
         Canvas.SetTop(TdpMarker, point.Y - (TdpMarker.Height / 2));
         TdpMarker.Visibility = Visibility.Visible;

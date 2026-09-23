@@ -140,7 +140,7 @@ public sealed class TdpControlService : ITdpControlEndpoint
 
             if (!experimentalEnabled)
             {
-                return RejectedBeforePower(
+                return RejectedBeforeWrite(
                     profile,
                     requestedWatts,
                     "experimental_tdp_disabled");
@@ -148,7 +148,7 @@ public sealed class TdpControlService : ITdpControlEndpoint
 
             if (armouryCrate.IsRunning())
             {
-                return RejectedBeforePower(
+                return RejectedBeforeWrite(
                     profile,
                     requestedWatts,
                     "armoury_crate_running");
@@ -166,15 +166,17 @@ public sealed class TdpControlService : ITdpControlEndpoint
                 profile,
                 requestedWatts,
                 power == AcPowerState.External);
-            foreach (var register in Registers)
+            for (var index = 0; index < Registers.Length; index++)
             {
-                var result = transport.Write(register, target.TargetWatts);
+                var result = transport.Write(Registers[index], target.TargetWatts);
                 if (result == AsusTdpWriteResult.Rejected)
                 {
-                    return AttemptRejected(
-                        profile,
-                        target,
-                        "firmware_rejected");
+                    return index == 0
+                        ? AttemptRejected(profile, target, "firmware_rejected")
+                        : AttemptUnverifiable(
+                            profile,
+                            target,
+                            "firmware_partially_applied");
                 }
 
                 if (result == AsusTdpWriteResult.Fault)
@@ -264,8 +266,7 @@ public sealed class TdpControlService : ITdpControlEndpoint
                 : profile.Limits.TdpMax,
             profile.Limits.TdpPresets,
             external,
-            manufacturerRecoveryUnverified,
-            profile.Limits.TdpDefault);
+            manufacturerRecoveryUnverified);
     }
 
     private DeviceProfile? ReadSupportedProfile()
@@ -279,19 +280,25 @@ public sealed class TdpControlService : ITdpControlEndpoint
             : null;
     }
 
-    private TdpControlResponse RejectedBeforePower(
+    private TdpControlResponse RejectedBeforeWrite(
         DeviceProfile profile,
         int requestedWatts,
         string errorCode)
     {
+        var power = powerSource.Read();
+        bool? external = power == AcPowerState.Unknown
+            ? null
+            : power == AcPowerState.External;
         return TdpControlResponse.Rejected(
             experimentalEnabled,
             requestedWatts,
             null,
             profile.Limits.TdpMin,
-            profile.Limits.TdpMaxCharger,
+            external == true
+                ? profile.Limits.TdpMaxCharger
+                : profile.Limits.TdpMax,
             profile.Limits.TdpPresets,
-            null,
+            external,
             errorCode);
     }
 
