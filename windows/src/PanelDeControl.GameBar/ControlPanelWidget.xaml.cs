@@ -19,6 +19,9 @@ using Windows.UI.Xaml.Automation;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Media;
 using Windows.UI.Xaml.Media.Animation;
+using Windows.UI.Composition;
+using Windows.UI.Xaml.Hosting;
+using System.Numerics;
 using Windows.UI.Xaml.Input;
 using Windows.UI.Xaml.Navigation;
 using Windows.UI.Xaml.Shapes;
@@ -82,12 +85,8 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         PowerArcFill.Data = CreatePowerArcGeometry(0);
         ApplyAccent(ReadSavedAccent());
         BuildAccentSwatches();
-        BatteryBar.Fill = ResourceBrush("PdcBrightnessBrush");
-        CpuBar.Fill = ResourceBrush("PdcAccentBrush");
-        GpuBar.Fill = new SolidColorBrush(ToColor(AccentPalette.Resolve("mint").Argb));
-        var boost = SectionColor(0);
-        ExperimentalPill.Background = new SolidColorBrush(WithAlpha(boost, 0x29));
-        ExperimentalBadge.Foreground = new SolidColorBrush(boost);
+        ExperimentalDot.Fill = new SolidColorBrush(SectionColor(0));
+        CreateHeroGlow();
         SelectTab(0);
         refreshTimer.Tick += OnRefreshTimerTick;
         Loaded += OnLoaded;
@@ -426,9 +425,10 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         BatteryValue.Text = Format(snapshot, "battery.level", "0", "%");
         TileCpuValue.Text = Format(snapshot, "cpu.load", "0", "%");
         TileGpuValue.Text = Format(snapshot, "gpu.load", "0", "%");
-        SetBar(BatteryBarFill, BatteryBarRest, FindReading(snapshot, "battery.level"));
-        SetBar(CpuBarFill, CpuBarRest, FindReading(snapshot, "cpu.load"));
-        SetBar(GpuBarFill, GpuBarRest, FindReading(snapshot, "gpu.load"));
+        var battery = FindReading(snapshot, "battery.level");
+        SetRing(BatteryRing, battery, BatteryColor(battery));
+        SetRing(CpuRing, FindReading(snapshot, "cpu.load"), ResourceBrush("PdcAccentBrush").Color);
+        SetRing(GpuRing, FindReading(snapshot, "gpu.load"), ToColor(AccentPalette.Resolve("mint").Argb));
         ApplyEnergy(snapshot);
         PowerSourceValue.Text = FormatPowerSource(snapshot);
         CpuTemperatureValue.Text = Format(snapshot, "cpu.temperature", "0", "°C");
@@ -704,6 +704,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
                     selectedTdpWatts,
                     tdpMinimumWatts),
                 tdpMaximumWatts);
+            TdpControls.Visibility = Visibility.Visible;
             UpdatePowerArc();
             UpdateTdpPresetButtons(response.PresetWatts);
         }
@@ -711,6 +712,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         {
             PowerValue.Text = "—";
             TdpMarker.Visibility = Visibility.Collapsed;
+            TdpControls.Visibility = Visibility.Collapsed;
             HideTdpPresetButtons();
         }
 
@@ -895,7 +897,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
 
         var glow = new ColorAnimation
         {
-            To = WithAlpha(section, 0x40),
+            To = WithAlpha(section, 0x66),
             Duration = new Duration(TimeSpan.FromMilliseconds(420)),
             EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
         };
@@ -983,10 +985,10 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         var zoneColor = ToColor(PowerArc.ColorFor(fraction));
         PowerZone.Text = Localized("PowerZone" + zone);
         PowerZone.Foreground = new SolidColorBrush(zoneColor);
-        var glowBrush = new SolidColorBrush(zoneColor);
-        HeroGlowOuter.Fill = glowBrush;
-        HeroGlowMid.Fill = glowBrush;
-        HeroGlowInner.Fill = glowBrush;
+        if (heroGlowStop is not null)
+        {
+            heroGlowStop.Color = WithAlpha(zoneColor, 0x50);
+        }
     }
 
     private static LinearGradientBrush HeroGradient()
@@ -1019,13 +1021,73 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         TdpMarker.Visibility = Visibility.Visible;
     }
 
-    private static void SetBar(ColumnDefinition fill, ColumnDefinition rest, TelemetryReading? reading)
+    private const double RingSize = 84;
+    private const double RingStroke = 7;
+
+    private static void SetRing(Path ring, TelemetryReading? reading, Color color)
     {
-        var percent = reading?.Status == ReadingStatus.Available && reading.Value is double value
-            ? Math.Min(Math.Max(value, 0), 100)
+        var fraction = reading?.Status == ReadingStatus.Available && reading.Value is double value
+            ? Math.Min(Math.Max(value, 0), 100) / 100
             : 0;
-        fill.Width = new GridLength(percent, GridUnitType.Star);
-        rest.Width = new GridLength(100 - percent, GridUnitType.Star);
+        ring.Stroke = new SolidColorBrush(color);
+        ring.Data = CreateRingGeometry(fraction);
+    }
+
+    private static PathGeometry CreateRingGeometry(double fraction)
+    {
+        var radius = (RingSize - RingStroke) / 2;
+        var center = RingSize / 2;
+        var geometry = new PathGeometry();
+        if (fraction <= 0)
+        {
+            return geometry;
+        }
+
+        var sweep = Math.Min(fraction, 0.9999) * 360;
+        Point At(double degrees)
+        {
+            var radians = (degrees - 90) * Math.PI / 180;
+            return new Point(center + (radius * Math.Cos(radians)), center + (radius * Math.Sin(radians)));
+        }
+
+        var figure = new PathFigure { StartPoint = At(0), IsClosed = false };
+        figure.Segments.Add(new ArcSegment
+        {
+            Point = At(sweep),
+            Size = new Size(radius, radius),
+            IsLargeArc = sweep > 180,
+            SweepDirection = SweepDirection.Clockwise,
+        });
+        geometry.Figures.Add(figure);
+        return geometry;
+    }
+
+    private static Color BatteryColor(TelemetryReading? battery)
+    {
+        var level = battery?.Value ?? 100;
+        return ResourceBrush(level < 20 ? "PdcDangerBrush" : level < 50 ? "PdcWarnBrush" : "PdcOkBrush").Color;
+    }
+
+    private CompositionColorGradientStop? heroGlowStop;
+
+    private void CreateHeroGlow()
+    {
+        try
+        {
+            var compositor = ElementCompositionPreview.GetElementVisual(HeroGlowHost).Compositor;
+            var brush = compositor.CreateRadialGradientBrush();
+            heroGlowStop = compositor.CreateColorGradientStop(0, Colors.Transparent);
+            brush.ColorStops.Add(heroGlowStop);
+            brush.ColorStops.Add(compositor.CreateColorGradientStop(1, Colors.Transparent));
+            var visual = compositor.CreateSpriteVisual();
+            visual.Size = new Vector2((float)HeroGlowHost.Width, (float)HeroGlowHost.Height);
+            visual.Brush = brush;
+            ElementCompositionPreview.SetElementChildVisual(HeroGlowHost, visual);
+        }
+        catch (Exception exception)
+        {
+            CrashLog.Write("hero-glow", exception);
+        }
     }
 
     private void BuildAccentSwatches()
