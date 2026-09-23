@@ -1106,6 +1106,8 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         DesktopHeaderSlot.Children.Add(ConnectionStatus);
         DesktopContent.Children.Add(SectionHeaderBlock);
         DesktopContent.Children.Add(SectionHost);
+        HeaderDetail.TextWrapping = TextWrapping.Wrap;
+        HeaderDetail.TextTrimming = TextTrimming.None;
         SectionHeaderBlock.Margin = new Thickness(0, 0, 0, 24);
         SectionTitle.FontSize = 30;
         SectionDescription.FontSize = 14;
@@ -1130,12 +1132,13 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
                 stack.Children.Clear();
             }
 
-            grid.ColumnDefinitions[1].Width = columns == 2
+            var split = columns == 2 && view.Blocks.Count > 1;
+            grid.ColumnDefinitions[1].Width = split
                 ? new GridLength(1, GridUnitType.Star)
                 : new GridLength(0);
             for (var index = 0; index < view.Blocks.Count; index++)
             {
-                stacks[columns == 2 ? index % 2 : 0].Children.Add(view.Blocks[index]);
+                stacks[split ? index % 2 : 0].Children.Add(view.Blocks[index]);
             }
         }
     }

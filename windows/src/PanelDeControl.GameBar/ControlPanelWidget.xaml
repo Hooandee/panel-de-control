@@ -42,7 +42,7 @@
                         FontWeight="SemiBold"
                         Foreground="{StaticResource PdcTextPrimaryBrush}"
                         TextTrimming="CharacterEllipsis" />
-                    <TextBlock Margin="0,3,0,0" Style="{StaticResource PdcMutedStyle}" FontSize="13" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap">
+                    <TextBlock x:Name="HeaderDetail" Margin="0,3,0,0" Style="{StaticResource PdcMutedStyle}" FontSize="13" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap">
                         <Run x:Name="PowerSourceValue" Text="—" />
                         <Run Text=" · " />
                         <Run x:Name="PowerModeValue" Text="—" />
