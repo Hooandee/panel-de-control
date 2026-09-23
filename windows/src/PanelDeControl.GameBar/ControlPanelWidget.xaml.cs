@@ -107,13 +107,20 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         {
             layoutBuilt = true;
             desktopLayout = args.Parameter is not XboxGameBarWidget;
-            if (desktopLayout)
+            try
             {
-                EnterDesktopLayout();
-            }
+                if (desktopLayout)
+                {
+                    EnterDesktopLayout();
+                }
 
-            BuildSections();
-            SelectSection(0);
+                BuildSections();
+                SelectSection(0);
+            }
+            catch (Exception exception)
+            {
+                CrashLog.Write(desktopLayout ? "desktop-layout" : "widget-layout", exception);
+            }
         }
 
         if (args.Parameter is XboxGameBarWidget widget)
