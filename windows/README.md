@@ -15,6 +15,9 @@ del brillo del panel integrado y del volumen del sistema.
   compatible con un valor posible. Las temperaturas necesitan el driver PawnIO
   y permisos de administrador; sin ellos se indica qué falta en vez de mostrar
   un número.
+- Servicio opcional `PanelDeControlService`, de solo lectura, que corre con
+  permisos de sistema y da la temperatura de CPU al widget. Si no está en
+  marcha, el widget lo dice y sigue funcionando con lo demás.
 - Lectura y ajuste del volumen principal del dispositivo de audio predeterminado
   mediante Windows Core Audio.
 - Lectura y ajuste del silencio principal del mismo dispositivo mediante la

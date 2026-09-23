@@ -12,12 +12,17 @@ public static class Program
         try
         {
             // Process teardown owns cleanup because a timed-out hardware poll may still be active.
-            var collector = new SnapshotCollector(
-                new SystemClock(),
+            var clock = new SystemClock();
+            var localCollector = new SnapshotCollector(
+                clock,
                 new DeviceIdentityReader(DeviceCatalogResource.TryLoad()),
                 new LibreHardwareReader(),
                 new PowerStatusReader(),
                 new WindowsSensorAccessProbe());
+            var collector = new ServiceBackedSnapshotProvider(
+                localCollector,
+                new ServiceSnapshotClient(),
+                clock);
             var snapshotServer = new SnapshotPipeServer(
                 SnapshotPipeServer.PackagedPipeName,
                 collector,

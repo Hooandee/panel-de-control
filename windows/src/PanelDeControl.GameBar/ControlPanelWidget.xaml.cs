@@ -696,6 +696,8 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         {
             "sensor_driver_missing" => Localized("ReadingDriverMissing"),
             "sensor_elevation_required" => Localized("ReadingElevation"),
+            "service_not_running" => Localized("ReadingServiceNotRunning"),
+            "service_unavailable" => Localized("ReadingServiceUnavailable"),
             _ => ReadingStatusText(reading?.Status),
         };
     }
