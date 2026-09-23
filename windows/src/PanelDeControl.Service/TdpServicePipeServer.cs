@@ -1,6 +1,7 @@
 using System.IO.Pipes;
 using System.Text;
 using PanelDeControl.Core.Controls;
+using PanelDeControl.Hardware;
 
 namespace PanelDeControl.Service;
 
@@ -63,6 +64,7 @@ public sealed class TdpServicePipeServer : ITdpServiceServer
     public async Task RunOnceAsync(CancellationToken cancellationToken)
     {
         await using var server = pipeFactory(pipeName);
+        using var clientRelease = PipeClientRelease.For(server);
         await server.WaitForConnectionAsync(cancellationToken).ConfigureAwait(false);
         if (!clientValidator.IsTrusted(server))
         {
