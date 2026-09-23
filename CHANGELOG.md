@@ -2,6 +2,39 @@
 
 ## Unreleased
 
+## [0.54.4](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.54.3...panel-de-control-v0.54.4) (2026-09-23)
+
+
+### Español
+
+* **Potencia en Legion Go S:** Si el firmware deja de aplicar el TDP que eliges y se queda en otro valor, Panel de Control intenta recuperarlo reactivando el modo personalizado. Si no lo consigue, el control de potencia sigue disponible y lo vuelve a intentar más tarde, en lugar de repetir lo mismo sin parar.
+* **Limpieza de Steam:** Un archivo de juego de Steam dañado ya no impide comprobar toda la biblioteca. Solo ese juego queda protegido y el resto de datos se puede limpiar con normalidad.
+* **Reportes:** Los reportes explican mejor los problemas de TDP: indican si otro servicio del sistema está cambiando la potencia y el motivo exacto cuando el firmware rechaza un valor.
+
+### English
+
+* **Power on Legion Go S:** If the firmware stops applying the TDP you choose and sticks to another value, Panel de Control now tries to recover it by re-enabling the custom mode. If that does not work, power control stays available and tries again later instead of repeating the same attempt endlessly.
+* **Steam Cleanup:** A damaged Steam game file no longer prevents checking the whole library. Only that game stays protected and the rest of the data can be cleaned as usual.
+* **Reports:** Reports now explain TDP problems better: they show whether another system service is changing the power limits and the exact reason when the firmware rejects a value.
+
+### Italiano
+
+* **Potenza su Legion Go S:** Se il firmware smette di applicare il TDP scelto e resta su un altro valore, Panel de Control prova a recuperarlo riattivando la modalità personalizzata. Se non ci riesce, il controllo della potenza resta disponibile e riprova più tardi, invece di ripetere lo stesso tentativo senza fine.
+* **Pulizia di Steam:** Un file di gioco di Steam danneggiato non impedisce più di controllare l'intera libreria. Solo quel gioco resta protetto e il resto dei dati si può pulire normalmente.
+* **Segnalazioni:** Le segnalazioni spiegano meglio i problemi di TDP: indicano se un altro servizio di sistema sta modificando la potenza e il motivo esatto quando il firmware rifiuta un valore.
+
+### Deutsch
+
+* **Leistung auf Legion Go S:** Wenn die Firmware die gewählte TDP nicht mehr übernimmt und bei einem anderen Wert bleibt, versucht Panel de Control jetzt, sie durch erneutes Aktivieren des benutzerdefinierten Modus wiederherzustellen. Klappt das nicht, bleibt die Leistungssteuerung verfügbar und versucht es später erneut, statt denselben Versuch endlos zu wiederholen.
+* **Steam-Bereinigung:** Eine beschädigte Steam-Spieldatei verhindert nicht mehr die Prüfung der ganzen Bibliothek. Nur dieses Spiel bleibt geschützt, die übrigen Daten lassen sich wie gewohnt bereinigen.
+* **Berichte:** Berichte erklären TDP-Probleme jetzt besser: Sie zeigen, ob ein anderer Systemdienst die Leistungsgrenzen ändert, und den genauen Grund, wenn die Firmware einen Wert ablehnt.
+
+### Português (Brasil)
+
+* **Potência no Legion Go S:** Se o firmware deixar de aplicar o TDP escolhido e ficar preso em outro valor, o Painel de Controle agora tenta recuperá-lo reativando o modo personalizado. Se não conseguir, o controle de potência continua disponível e tenta de novo mais tarde, em vez de repetir a mesma tentativa sem parar.
+* **Limpeza do Steam:** Um arquivo de jogo do Steam danificado não impede mais a verificação de toda a biblioteca. Só esse jogo fica protegido e o restante dos dados pode ser limpo normalmente.
+* **Relatórios:** Os relatórios explicam melhor os problemas de TDP: mostram se outro serviço do sistema está alterando a potência e o motivo exato quando o firmware rejeita um valor.
+
 ## [0.54.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.54.2...panel-de-control-v0.54.3) (2026-09-22)
 
 
