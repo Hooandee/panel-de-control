@@ -232,11 +232,16 @@ mkdir -p "$STAGE/Dependencies"
 if [ "$DRY_RUN" -eq 1 ]; then
   echo "+ stage <package>.msix and Dependencies/x64/* into $STAGE"
 else
-  # CI builds in store-upload mode, which wraps the .msix and its symbols in a .msixupload zip.
-  find "$WORK" -path "$STAGE" -prune -o \( -name '*.msixupload' -o -name '*.appxupload' \) -print |
-    while IFS= read -r upload; do unzip -o -q "$upload" -d "$WORK/unpacked"; done
   MSIX="$(find "$WORK" -path "$STAGE" -prune -o -name '*.msix' -print | head -n 1)"
-  [ -n "$MSIX" ] || { echo "the artifact contains no .msix" >&2; exit 1; }
+  if [ -z "$MSIX" ]; then
+    # A store upload only carries the IL package; it cannot run until the Store compiles it.
+    if find "$WORK" \( -name '*.msixupload' -o -name '*.appxupload' \) | grep -q .; then
+      echo "the artifact is a store upload, not a sideload package; rebuild with SideloadOnly" >&2
+    else
+      echo "the artifact contains no .msix" >&2
+    fi
+    exit 1
+  fi
   cp "$MSIX" "$STAGE/package.msix"
   find "$WORK" -path "$STAGE" -prune -o -path '*/Dependencies/x64/*' -type f \
     \( -name '*.appx' -o -name '*.msix' \) -exec cp {} "$STAGE/Dependencies/" \;
