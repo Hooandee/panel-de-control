@@ -166,9 +166,19 @@
                                         FontWeight="Light"
                                         Style="{StaticResource PdcValueStyle}" />
                                     <TextBlock
+                                        x:Name="HeroWattsUnit"
                                         Margin="4,0,0,12"
                                         VerticalAlignment="Bottom"
                                         Text="W"
+                                        FontFamily="{StaticResource PdcDisplayFontFamily}"
+                                        FontSize="18"
+                                        Foreground="{StaticResource PdcTextMutedBrush}" />
+                                    <TextBlock
+                                        x:Name="HeroPercentUnit"
+                                        Margin="4,0,0,12"
+                                        VerticalAlignment="Bottom"
+                                        Text="%"
+                                        Visibility="Collapsed"
                                         FontFamily="{StaticResource PdcDisplayFontFamily}"
                                         FontSize="18"
                                         Foreground="{StaticResource PdcTextMutedBrush}" />

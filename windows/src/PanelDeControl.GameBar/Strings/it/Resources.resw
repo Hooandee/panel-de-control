@@ -335,4 +335,5 @@
   <data name="HeaderSubtitle.Text" xml:space="preserve">
     <value>Windows · Xbox Game Bar</value>
   </data>
+  <data name="HeroBattery" xml:space="preserve"><value>Batteria</value></data>
 </root>

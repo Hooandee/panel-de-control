@@ -894,15 +894,14 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             var (tab, panel) = TabPanels[position];
             var selected = position == index;
             panel.Visibility = selected ? Visibility.Visible : Visibility.Collapsed;
-            tab.Foreground = ResourceBrush(selected ? "PdcTextPrimaryBrush" : "PdcTextMutedBrush");
+            tab.Foreground = selected ? new SolidColorBrush(section) : ResourceBrush("PdcTextMutedBrush");
         }
 
         Grid.SetColumn(TabThumb, index);
-        TabThumb.Background = new SolidColorBrush(WithAlpha(section, 0x40));
 
         var glow = new ColorAnimation
         {
-            To = WithAlpha(section, 0x30),
+            To = WithAlpha(section, 0x3C),
             Duration = new Duration(TimeSpan.FromMilliseconds(420)),
             EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
         };
@@ -939,6 +938,8 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     private DateTimeOffset heroAnimationStart;
     private PowerZone? heroZone;
     private bool heroScaleFromDevice;
+    private bool heroShowsCharge;
+    private LinearGradientBrush? heroGradient;
 
     private void AnimateHero(double? watts)
     {
@@ -979,10 +980,16 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
 
     private void RenderHero(double watts)
     {
+        if (heroShowsCharge)
+        {
+            RenderChargeHero(watts);
+            return;
+        }
+
         var fraction = PowerArc.Fraction(watts, 0, heroScaleWatts);
         PowerDrawValue.Text = watts.ToString("0.0");
         PowerArcFill.Data = CreatePowerArcGeometry(fraction);
-        PowerArcFill.Stroke ??= HeroGradient();
+        PowerArcFill.Stroke = heroGradient ??= HeroGradient();
         if (!heroScaleFromDevice)
         {
             PowerZoneLabel.Text = string.Empty;
@@ -1001,6 +1008,18 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         PowerZoneLabel.Text = Localized("PowerZone" + zone);
         PowerZoneLabel.Foreground = new SolidColorBrush(zoneColor);
         SetHeroGlow(zoneColor);
+    }
+
+    private void RenderChargeHero(double level)
+    {
+        var fraction = Math.Min(Math.Max(level, 0), 100) / 100;
+        var color = BatteryColorFor(level);
+        PowerDrawValue.Text = level.ToString("0");
+        PowerArcFill.Data = CreatePowerArcGeometry(fraction);
+        PowerArcFill.Stroke = new SolidColorBrush(color);
+        PowerZoneLabel.Text = Localized("HeroBattery");
+        PowerZoneLabel.Foreground = new SolidColorBrush(color);
+        SetHeroGlow(color);
     }
 
     private void SetHeroGlow(Color? color)
@@ -1029,7 +1048,7 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
 
     private void PlaceTdpMarker()
     {
-        if (!tdpReady || tdpMaximumWatts <= 0)
+        if (!tdpReady || tdpMaximumWatts <= 0 || heroShowsCharge)
         {
             TdpMarker.Visibility = Visibility.Collapsed;
             return;
@@ -1091,7 +1110,11 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
 
     private static Color BatteryColor(TelemetryReading? battery)
     {
-        var level = battery?.Value ?? 100;
+        return BatteryColorFor(battery?.Value ?? 100);
+    }
+
+    private static Color BatteryColorFor(double level)
+    {
         return ResourceBrush(level < 20 ? "PdcDangerBrush" : level < 50 ? "PdcWarnBrush" : "PdcOkBrush").Color;
     }
 
@@ -1501,7 +1524,22 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         {
             heroZone = null;
         }
-        AnimateHero(draw?.Status == ReadingStatus.Available ? draw.Value : null);
+        var battery = FindReading(snapshot, "battery.level");
+        var showsCharge = draw?.ErrorCode == "power_draw_on_ac" &&
+            battery?.Status == ReadingStatus.Available &&
+            battery.Value.HasValue;
+        if (showsCharge != heroShowsCharge)
+        {
+            heroShowsCharge = showsCharge;
+            heroZone = null;
+            heroShownWatts = 0;
+        }
+
+        HeroWattsUnit.Visibility = showsCharge ? Visibility.Collapsed : Visibility.Visible;
+        HeroPercentUnit.Visibility = showsCharge ? Visibility.Visible : Visibility.Collapsed;
+        AnimateHero(showsCharge
+            ? battery!.Value
+            : draw?.Status == ReadingStatus.Available ? draw.Value : null);
         PlaceTdpMarker();
         var remaining = FindReading(snapshot, "battery.time_remaining");
         PowerDrawDetail.Text = draw?.ErrorCode switch
