@@ -18,13 +18,14 @@ public sealed class TdpControlContractTests
                      .GetProperty("cases")
                      .EnumerateArray())
         {
+            var input = testCase.GetProperty("input");
             yield return new object[]
             {
                 testCase.GetProperty("id").GetString()!,
-                testCase.GetProperty("profile").GetString()!,
-                testCase.GetProperty("requested_watts").GetInt32(),
-                testCase.GetProperty("external_power").GetBoolean(),
-                testCase.GetProperty("expected_target_watts").GetInt32(),
+                input.GetProperty("profile").GetString()!,
+                input.GetProperty("requested_watts").GetInt32(),
+                input.GetProperty("external_power").GetBoolean(),
+                testCase.GetProperty("expected").GetProperty("target_watts").GetInt32(),
             };
         }
     }
