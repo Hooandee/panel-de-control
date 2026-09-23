@@ -306,6 +306,14 @@ def frontend_crash_diagnostics(
 _KERNEL_CMDS = {
     "dmesg": ["/usr/bin/dmesg", "--ctime", "--level=err,warn"],
     "journal": ["/usr/bin/journalctl", "-b", "-u", "plugin_loader", "-n", "400", "--no-pager"],
+    # Other writers of the same firmware power rails. steamos-manager serves Steam's
+    # native TDP slider and runs as a user unit, so match by syslog identifier.
+    "power_daemons": [
+        "/usr/bin/journalctl", "-b",
+        "-t", "steamos-manager", "-t", "powerstation",
+        "-t", "power-profiles-daemon", "-t", "tuned", "-t", "tuned-ppd",
+        "-n", "200", "--no-pager",
+    ],
 }
 
 
@@ -777,7 +785,7 @@ def steam_cleaner_snapshot(diagnostics) -> dict:
     safe_event_keys = {
         "event", "operation_id", "phase", "at", "reason", "source",
         "system_error", "library_id", "entry_id", "plan_id", "scan_id", "count", "complete",
-        "readback", "kind", "time", "errors", "deleted",
+        "readback", "kind", "time", "errors", "deleted", "vdf_error",
     }
 
     def bounded(value):

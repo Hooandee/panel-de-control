@@ -156,6 +156,10 @@ def test_legion_go_s_83l3_named_profile_recovery_requires_exact_identity(tmp_pat
             "named_profile_owns_rails",
             False,
         ) is expected
+        assert quirks.get(
+            "rearm_custom_on_ignored_writes",
+            False,
+        ) is expected
 
 
 def test_lenovo_legion_live_max_probe_requires_an_exact_supported_dmi(tmp_path):

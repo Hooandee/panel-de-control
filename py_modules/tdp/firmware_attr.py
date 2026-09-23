@@ -1,3 +1,4 @@
+import errno
 import glob
 import os
 import time
@@ -24,6 +25,8 @@ _RAIL_ATTRS = (
 # PL2 (slow) and PL3 (fast) are scaled above PL1, then clamped to each rail's sysfs max.
 _PL2_BOOST_RATIO = 1.2
 _PL3_BOOST_RATIO = 1.4
+_CUSTOM_REARM_COOLDOWN_S = 60.0
+_CUSTOM_RETURN_DELAYS_S = (0.0, 0.25, 0.5, 1.0)
 
 
 def _normalise_rail_floors(values):
@@ -84,6 +87,7 @@ class FirmwareAttrBackend(TDPBackend):
         named_profile_owns_rails=False,
         optional_rails=None,
         probe_live_max_on_ac=False,
+        rearm_custom_on_ignored_writes=False,
     ):
         self.name = f"firmware-attr:{driver_prefix}"
         self._driver_prefix = driver_prefix
@@ -101,6 +105,11 @@ class FirmwareAttrBackend(TDPBackend):
         self._rail_floors = _normalise_rail_floors(rail_floors)
         self._ignored_live_maxes = _normalise_rail_values(ignored_live_maxes)
         self.probe_live_max_on_ac = bool(probe_live_max_on_ac)
+        self._rearm_custom_on_ignored_writes = bool(rearm_custom_on_ignored_writes)
+        self._last_custom_rearm_at = None
+        self._last_custom_rearm = None
+        self._custom_return_pending = False
+        self._last_write_error = None
         self.cap_boost_to_active = bool(cap_boost_to_active)
         self._readback_settle_delays = tuple(
             float(delay) for delay in (readback_settle_delays or ())
@@ -465,12 +474,71 @@ class FirmwareAttrBackend(TDPBackend):
             return None
 
     def _write(self, path, value):
+        self._last_write_error = None
         try:
             with open(path, "w") as f:
                 f.write(f"{value}\n")
             return True
-        except OSError:
+        except OSError as error:
+            self._last_write_error = errno.errorcode.get(error.errno, "OSError")
             return False
+
+    def _failed_write_label(self, surface, rail):
+        label = self._surface_label(surface, rail)
+        return f"{label}!{self._last_write_error}" if self._last_write_error else label
+
+    def _writes_ignored(self, observation, surfaces, snapshot, targets):
+        observed = observation.surfaces
+        return any(
+            snapshot[path] != targets[rail] for _surface, rail, path in surfaces
+        ) and all(
+            (reading := observed.get(surface, {}).get(rail)) is not None
+            and reading.applied_w == snapshot[path]
+            for surface, rail, path in surfaces
+        )
+
+    def _custom_rearm_allowed(self, previous_profile):
+        choices = self.profile_choices()
+        return (
+            self._rearm_custom_on_ignored_writes
+            and previous_profile == "custom"
+            and "custom" in choices
+            and any(choice != "custom" for choice in choices)
+            and (
+                self._last_custom_rearm_at is None
+                or time.monotonic() - self._last_custom_rearm_at
+                >= _CUSTOM_REARM_COOLDOWN_S
+            )
+        )
+
+    def _return_to_custom(self):
+        profile_path = os.path.join(self._pp_dir, "profile")
+        for delay in _CUSTOM_RETURN_DELAYS_S:
+            time.sleep(delay)
+            if self._write(profile_path, "custom") and self.read_profile() == "custom":
+                self._custom_return_pending = False
+                return True
+        self._custom_return_pending = True
+        return False
+
+    def _rearm_custom(self, surfaces, targets):
+        # Some Legion Go S firmware silently drops every custom rail write until the
+        # gamezone profile leaves "custom" and re-enters it.
+        self._last_custom_rearm_at = time.monotonic()
+        choices = self.profile_choices()
+        transient = "balanced" if "balanced" in choices else next(
+            choice for choice in choices if choice != "custom"
+        )
+        profile_path = os.path.join(self._pp_dir, "profile")
+        left_custom = self._write(profile_path, transient)
+        if not left_custom and self.read_profile() == "custom":
+            return False
+        if not self._return_to_custom():
+            return False
+        for surface, rail, path in surfaces:
+            if not self._write(path, targets[rail]):
+                return False
+        return True
 
     def get_limits(self):
         if not self.supported:
@@ -666,6 +734,15 @@ class FirmwareAttrBackend(TDPBackend):
                 False,
                 "firmware ownership recovery pending",
             )
+        if self._custom_return_pending and not self._return_to_custom():
+            return TdpResult(
+                pl1,
+                self.read_applied(),
+                False,
+                "custom return pending: platform-profile="
+                + str(self.read_profile())
+                + "; no rail writes performed",
+            )
         if self._trust_live_bounds and any(
             self._validated_live_bounds(attr) is None
             for rail, attr in _RAIL_ATTRS
@@ -747,7 +824,7 @@ class FirmwareAttrBackend(TDPBackend):
         if not failed:
             for surface, rail, path in surfaces:
                 if not self._write(path, targets[rail]):
-                    failed.append(self._surface_label(surface, rail))
+                    failed.append(self._failed_write_label(surface, rail))
                     break
 
         observation = self.observe()
@@ -762,9 +839,48 @@ class FirmwareAttrBackend(TDPBackend):
                     observation,
                     targets,
                 )
+        rearm_detail = None
+        if (
+            not failed
+            and mismatches
+            and self._custom_rearm_allowed(previous_profile)
+            and self._writes_ignored(observation, surfaces, snapshot, targets)
+        ):
+            rearmed = self._rearm_custom(surfaces, targets)
+            observation = self.observe()
+            mismatches = self._observation_mismatches(observation, targets)
+            for delay in self._readback_settle_delays if rearmed else ():
+                if not mismatches:
+                    break
+                time.sleep(delay)
+                observation = self.observe()
+                mismatches = self._observation_mismatches(observation, targets)
+            recovered = rearmed and not mismatches
+            self._last_custom_rearm = "recovered" if recovered else "not_recovered"
+            if not recovered:
+                rearm_detail = "custom re-arm not confirmed"
+            if self._custom_return_pending:
+                # Rails cannot be restored outside "custom"; keep the transaction lock
+                # for restart recovery and retry the return before the next write.
+                pending_payload = {
+                    **lock_payload,
+                    "state": "custom_return_pending",
+                    "detail": "custom return pending",
+                }
+                if self._safety_lock.persist_payload(pending_payload):
+                    self._runtime_lock_payload = pending_payload
+                return TdpResult(
+                    pl1,
+                    self._read_int(self._attr("ppt_pl1_spl")),
+                    False,
+                    "write not confirmed: "
+                    + ", ".join(mismatches + [rearm_detail])
+                    + "; custom return pending: platform-profile="
+                    + str(self.read_profile()),
+                )
         applied = observation.surfaces.get(self.name, {}).get("pl1")
         applied_w = applied.applied_w if applied else None
-        problems = failed + mismatches
+        problems = failed + mismatches + ([rearm_detail] if rearm_detail else [])
         if problems:
             rollback_ok, rollback_problems = self._rollback_transaction(
                 surfaces,
@@ -891,6 +1007,11 @@ class FirmwareAttrBackend(TDPBackend):
             ),
             "reported_live_bounds": reported,
         }
+        if self._rearm_custom_on_ignored_writes:
+            diagnostics["custom_rearm"] = {
+                "last": self._last_custom_rearm,
+                "return_pending": self._custom_return_pending,
+            }
         if self._restore_on_release:
             diagnostics["owns_state"] = self._owns_state
             diagnostics["ownership_recovery_pending"] = (

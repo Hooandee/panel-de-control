@@ -797,3 +797,52 @@ def test_inventory_limit_is_incomplete_and_never_authorizes_partial_coverage(tmp
     assert len(state["entries"]) == 2
     assert state["coverage_complete"] is False
     assert {entry["blocked_reason"] for entry in state["entries"]} == {"coverage_incomplete"}
+
+
+def test_unreadable_manifest_protects_only_its_own_game(tmp_path):
+    home, steam = make_steam(tmp_path)
+    data(steam, appid="10")
+    orphan = data(steam, appid="20")
+    write(steam / "steamapps/appmanifest_10.acf", b"")
+    cleaner = service(home)
+
+    state = cleaner.inventory()
+    by_appid = {entry["appid"]: entry for entry in state["entries"]}
+
+    assert state["coverage_complete"] is True
+    assert by_appid["10"]["installation"] == "unknown"
+    assert by_appid["10"]["blocked_reason"] == "unknown_identity"
+    assert by_appid["20"]["installation"] == "not_installed"
+    assert by_appid["20"]["blocked_reason"] is None
+    with pytest.raises(SteamCleanerError):
+        cleaner.prepare(state["scan_id"], [by_appid["10"]["id"]])
+    result = cleaner.execute(cleaner.prepare(state["scan_id"], [by_appid["20"]["id"]])["id"])
+    assert result["items"][0]["status"] == "deleted"
+    assert not orphan.exists()
+
+
+def test_manifest_naming_another_game_keeps_library_coverage_incomplete(tmp_path):
+    home, steam = make_steam(tmp_path)
+    data(steam, appid="20")
+    write(steam / "steamapps/appmanifest_10.acf", '"AppState" { "appid" "20" "name" "Other" }')
+
+    state = service(home).inventory()
+
+    assert state["coverage_complete"] is False
+    assert state["entries"][0]["blocked_reason"] == "coverage_incomplete"
+
+
+def test_manifest_diagnostic_names_the_parse_failure_class(tmp_path):
+    home, steam = make_steam(tmp_path)
+    write(steam / "steamapps/appmanifest_10.acf", b"")
+    write(
+        steam / "steamapps/appmanifest_11.acf",
+        '"AppState" { "appid" "11" "name" "A" "name" "B" }',
+    )
+    state_dir = tmp_path / "state"
+    service(home, state_dir=state_dir).inventory()
+
+    reloaded = service(home, state_dir=state_dir)
+    issues = [event for event in reloaded.diagnostics()["events"] if event.get("source") == "manifest"]
+
+    assert {issue.get("vdf_error") for issue in issues} == {"empty", "duplicate_vdf_key"}
