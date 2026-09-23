@@ -60,16 +60,56 @@
                 <Setter Property="FontSize" Value="17" />
                 <Setter Property="FontWeight" Value="Normal" />
             </Style>
-            <Style x:Key="PdcTabButtonStyle" TargetType="Button">
+            <ControlTemplate x:Key="PdcSoftButtonTemplate" TargetType="Button">
+                <Grid x:Name="Root" Background="{TemplateBinding Background}" CornerRadius="{TemplateBinding CornerRadius}">
+                    <VisualStateManager.VisualStateGroups>
+                        <VisualStateGroup x:Name="CommonStates">
+                            <VisualState x:Name="Normal" />
+                            <VisualState x:Name="PointerOver">
+                                <Storyboard>
+                                    <DoubleAnimation Storyboard.TargetName="Wash" Storyboard.TargetProperty="Opacity" To="0.06" Duration="0:0:0.12" />
+                                </Storyboard>
+                            </VisualState>
+                            <VisualState x:Name="Pressed">
+                                <Storyboard>
+                                    <DoubleAnimation Storyboard.TargetName="Wash" Storyboard.TargetProperty="Opacity" To="0.12" Duration="0" />
+                                </Storyboard>
+                            </VisualState>
+                            <VisualState x:Name="Disabled">
+                                <Storyboard>
+                                    <DoubleAnimation Storyboard.TargetName="Content" Storyboard.TargetProperty="Opacity" To="0.35" Duration="0" />
+                                </Storyboard>
+                            </VisualState>
+                        </VisualStateGroup>
+                    </VisualStateManager.VisualStateGroups>
+                    <Rectangle x:Name="Wash" Fill="{StaticResource PdcTextPrimaryBrush}" Opacity="0" />
+                    <ContentPresenter
+                        x:Name="Content"
+                        Padding="{TemplateBinding Padding}"
+                        HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                        VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                        Content="{TemplateBinding Content}"
+                        ContentTemplate="{TemplateBinding ContentTemplate}"
+                        Foreground="{TemplateBinding Foreground}"
+                        FontSize="{TemplateBinding FontSize}"
+                        FontWeight="{TemplateBinding FontWeight}" />
+                </Grid>
+            </ControlTemplate>
+            <Style x:Key="PdcSoftButtonStyle" TargetType="Button">
+                <Setter Property="Template" Value="{StaticResource PdcSoftButtonTemplate}" />
+                <Setter Property="UseSystemFocusVisuals" Value="True" />
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+                <Setter Property="IsTabStop" Value="True" />
+            </Style>
+            <Style x:Key="PdcTabButtonStyle" TargetType="Button" BasedOn="{StaticResource PdcSoftButtonStyle}">
                 <Setter Property="Background" Value="Transparent" />
-                <Setter Property="BorderThickness" Value="0" />
                 <Setter Property="CornerRadius" Value="{StaticResource PdcRadiusInset}" />
                 <Setter Property="Foreground" Value="{StaticResource PdcTextMutedBrush}" />
                 <Setter Property="HorizontalAlignment" Value="Stretch" />
-                <Setter Property="Padding" Value="4,7" />
-                <Setter Property="IsTabStop" Value="True" />
+                <Setter Property="Padding" Value="4,8" />
             </Style>
-            <Style x:Key="PdcChipButtonStyle" TargetType="Button">
+            <Style x:Key="PdcChipButtonStyle" TargetType="Button" BasedOn="{StaticResource PdcSoftButtonStyle}">
                 <Setter Property="Background" Value="{StaticResource PdcLayerBrush}" />
                 <Setter Property="BorderThickness" Value="0" />
                 <Setter Property="CornerRadius" Value="{StaticResource PdcRadiusPill}" />
@@ -84,6 +124,51 @@
                 <Setter Property="Padding" Value="0" />
                 <Setter Property="FontSize" Value="18" />
                 <Setter Property="HorizontalAlignment" Value="Center" />
+            </Style>
+            <Style x:Key="PdcSliderStyle" TargetType="Slider">
+                <Setter Property="UseSystemFocusVisuals" Value="True" />
+                <Setter Property="IsTabStop" Value="True" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Slider">
+                            <Grid x:Name="Root" Background="Transparent">
+                                <VisualStateManager.VisualStateGroups>
+                                    <VisualStateGroup x:Name="CommonStates">
+                                        <VisualState x:Name="Normal" />
+                                        <VisualState x:Name="PointerOver" />
+                                        <VisualState x:Name="Pressed" />
+                                        <VisualState x:Name="Disabled">
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetName="HorizontalTemplate" Storyboard.TargetProperty="Opacity" To="0.4" Duration="0" />
+                                            </Storyboard>
+                                        </VisualState>
+                                    </VisualStateGroup>
+                                </VisualStateManager.VisualStateGroups>
+                                <Grid x:Name="HorizontalTemplate" MinHeight="36">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Rectangle x:Name="HorizontalTrackRect" Grid.ColumnSpan="3" Height="6" RadiusX="3" RadiusY="3" Fill="{StaticResource PdcTrackBrush}" />
+                                    <Rectangle x:Name="HorizontalDecreaseRect" Height="6" RadiusX="3" RadiusY="3" Fill="{TemplateBinding Foreground}" />
+                                    <Thumb x:Name="HorizontalThumb" Grid.Column="1" Width="22" Height="22" DataContext="{TemplateBinding Value}" AutomationProperties.AccessibilityView="Raw">
+                                        <Thumb.Template>
+                                            <ControlTemplate TargetType="Thumb">
+                                                <Ellipse Fill="{StaticResource PdcTextPrimaryBrush}" />
+                                            </ControlTemplate>
+                                        </Thumb.Template>
+                                    </Thumb>
+                                </Grid>
+                                <Grid x:Name="VerticalTemplate" Visibility="Collapsed">
+                                    <Rectangle x:Name="VerticalTrackRect" />
+                                    <Rectangle x:Name="VerticalDecreaseRect" />
+                                    <Thumb x:Name="VerticalThumb" />
+                                </Grid>
+                            </Grid>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
             </Style>
         </ResourceDictionary>
     </Application.Resources>

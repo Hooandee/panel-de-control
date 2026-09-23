@@ -436,12 +436,12 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         TileGpuValue.Foreground = new SolidColorBrush(gpuColor);
         ApplyEnergy(snapshot);
         PowerSourceValue.Text = FormatPowerSource(snapshot);
-        CpuTemperatureValue.Text = Format(snapshot, "cpu.temperature", "0", "°C");
+        ApplyTemperature(CpuTemperatureValue, snapshot, "cpu.temperature");
         CpuLoadValue.Text = string.Format(Localized("LoadFormat"), Format(snapshot, "cpu.load", "0", "%"));
-        GpuTemperatureValue.Text = Format(snapshot, "gpu.temperature", "0", "°C");
+        ApplyTemperature(GpuTemperatureValue, snapshot, "gpu.temperature");
         GpuLoadValue.Text = string.Format(Localized("LoadFormat"), Format(snapshot, "gpu.load", "0", "%"));
-        CpuTemperatureValue.Foreground = TemperatureBrush(FindReading(snapshot, "cpu.temperature"));
-        GpuTemperatureValue.Foreground = TemperatureBrush(FindReading(snapshot, "gpu.temperature"));
+        SetRing(CpuLoadRing, FindReading(snapshot, "cpu.load"), cpuColor, LoadRingSize, LoadRingStroke);
+        SetRing(GpuLoadRing, FindReading(snapshot, "gpu.load"), gpuColor, LoadRingSize, LoadRingStroke);
 
         var available = snapshot.Readings.Any(
             reading => reading.Status == ReadingStatus.Available);
@@ -712,6 +712,8 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
                     tdpMinimumWatts),
                 tdpMaximumWatts);
             TdpControls.Visibility = Visibility.Visible;
+            PowerReadout.Visibility = Visibility.Visible;
+            PowerReadbackHint.Visibility = Visibility.Visible;
             UpdatePowerArc();
             UpdateTdpPresetButtons(response.PresetWatts);
         }
@@ -720,6 +722,8 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             PowerValue.Text = "—";
             TdpMarker.Visibility = Visibility.Collapsed;
             TdpControls.Visibility = Visibility.Collapsed;
+            PowerReadout.Visibility = Visibility.Collapsed;
+            PowerReadbackHint.Visibility = Visibility.Collapsed;
             HideTdpPresetButtons();
         }
 
@@ -1063,19 +1067,21 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
     private const double RingOuterSize = 132;
     private const double RingInset = 15;
     private const double RingStroke = 11;
+    private const double LoadRingSize = 30;
+    private const double LoadRingStroke = 4;
 
-    private static void SetRing(Path ring, TelemetryReading? reading, Color color, double size)
+    private static void SetRing(Path ring, TelemetryReading? reading, Color color, double size, double stroke = RingStroke)
     {
         var fraction = reading?.Status == ReadingStatus.Available && reading.Value is double value
             ? Math.Min(Math.Max(value, 0), 100) / 100
             : 0;
         ring.Stroke = new SolidColorBrush(color);
-        ring.Data = CreateRingGeometry(fraction, size);
+        ring.Data = CreateRingGeometry(fraction, size, stroke);
     }
 
-    private static PathGeometry CreateRingGeometry(double fraction, double size)
+    private static PathGeometry CreateRingGeometry(double fraction, double size, double stroke)
     {
-        var radius = (size - RingStroke) / 2;
+        var radius = (size - stroke) / 2;
         var center = size / 2;
         var geometry = new PathGeometry();
         if (fraction <= 0)
@@ -1102,10 +1108,17 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         return geometry;
     }
 
-    private static SolidColorBrush TemperatureBrush(TelemetryReading? temperature)
+    private static void ApplyTemperature(TextBlock target, HardwareSnapshot snapshot, string id)
     {
-        var celsius = temperature?.Status == ReadingStatus.Available ? temperature.Value : null;
-        return ResourceBrush(celsius >= 85 ? "PdcDangerBrush" : celsius >= 70 ? "PdcWarnBrush" : "PdcTextPrimaryBrush");
+        var reading = FindReading(snapshot, id);
+        var celsius = reading?.Status == ReadingStatus.Available ? reading.Value : null;
+        target.Text = Format(snapshot, id, "0", "°C");
+        target.FontSize = celsius.HasValue ? 40 : 15;
+        target.Foreground = ResourceBrush(
+            celsius >= 85 ? "PdcDangerBrush"
+            : celsius >= 70 ? "PdcWarnBrush"
+            : celsius.HasValue ? "PdcTextPrimaryBrush"
+            : "PdcTextMutedBrush");
     }
 
     private static Color BatteryColor(TelemetryReading? battery)
@@ -1213,11 +1226,22 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
         }
     }
 
+    private static readonly string[] AccentAliases =
+    {
+        "ToggleSwitchFillOn",
+        "ToggleSwitchFillOnPointerOver",
+        "ToggleSwitchFillOnPressed",
+    };
+
     private static void ApplyAccent(AccentColor accent)
     {
         if (Application.Current.Resources["PdcAccentBrush"] is SolidColorBrush brush)
         {
             brush.Color = ToColor(accent.Argb);
+            foreach (var key in AccentAliases)
+            {
+                Application.Current.Resources[key] = brush;
+            }
         }
     }
 
@@ -1535,6 +1559,10 @@ public sealed partial class ControlPanelWidget : Page, IDisposable
             heroShownWatts = 0;
         }
 
+        var batteryInVitals = showsCharge ? Visibility.Collapsed : Visibility.Visible;
+        BatteryTrack.Visibility = batteryInVitals;
+        BatteryRing.Visibility = batteryInVitals;
+        BatteryRow.Visibility = batteryInVitals;
         HeroWattsUnit.Visibility = showsCharge ? Visibility.Collapsed : Visibility.Visible;
         HeroPercentUnit.Visibility = showsCharge ? Visibility.Visible : Visibility.Collapsed;
         AnimateHero(showsCharge
