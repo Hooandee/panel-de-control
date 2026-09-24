@@ -47,6 +47,7 @@ export interface ThemesActivator {
   activate(themeId: string, catalog: readonly PublishedThemeRelease[]): Promise<CssLoaderSnapshot>;
   deactivate(themeId: string, catalog: readonly PublishedThemeRelease[]): Promise<CssLoaderSnapshot>;
   reconcilePendingRecovery?(): Promise<CssLoaderReadySnapshot | null>;
+  takeAbandonedRecovery?(): boolean;
 }
 
 export interface ThemesDependencies {
@@ -77,6 +78,7 @@ export interface ThemesClientSnapshot {
   snapshot: CssLoaderSnapshot;
   operation: ThemesOperation | null;
   recoveryBlocked: boolean;
+  recoveryKeptCurrent: boolean;
   error: string | null;
   publication: ThemePublicationState;
 }
@@ -119,6 +121,7 @@ export class ThemesClient {
     snapshot: { status: "missing", themes: [] },
     operation: null,
     recoveryBlocked: false,
+    recoveryKeptCurrent: false,
     error: null,
     publication: { status: "unchecked" },
   };
@@ -457,6 +460,7 @@ export class ThemesClient {
 
   private async runPendingRecovery(): Promise<CssLoaderReadySnapshot | null> {
     const activationRecovery = await this.dependencies.activator.reconcilePendingRecovery?.() ?? null;
+    if (this.dependencies.activator.takeAbandonedRecovery?.()) this.update({ recoveryKeptCurrent: true });
     if (this.recoveryChecked) return activationRecovery;
     const recoveries = await this.dependencies.installer.pendingRecoveries();
     if (recoveries.length === 0) {
@@ -479,7 +483,7 @@ export class ThemesClient {
     if (this.operationLocked || this.current.recoveryBlocked) return false;
     this.operationLocked = true;
     const request = ++this.requestSequence;
-    this.update({ loading: false, operation, error: null });
+    this.update({ loading: false, operation, error: null, recoveryKeptCurrent: false });
     try {
       await this.reconcilePendingRecovery();
       this.publishSnapshot(request, await run());

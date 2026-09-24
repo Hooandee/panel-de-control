@@ -75,3 +75,47 @@ describe("AdvancedBoost narrow QAM layout", () => {
     expect(rails.style.marginTop).toBe("12px");
   });
 });
+
+describe("AdvancedBoost Steam Deck BIOS notice", () => {
+  afterEach(cleanup);
+
+  const ppt = {
+    supported: true,
+    source: "sysfs" as const,
+    visual_max: 30,
+    requested: { slow: 15, fast: 20 },
+    applied: { slow: 15, fast: 20 },
+    slow: { min: 3, max: 29 },
+    fast: { min: 3, max: 30 },
+  };
+
+  const renderBoost = (levels: { pl1: number; pl2: number; pl3: number }, biosNoticeAbove: number | null) => {
+    render(
+      <AdvancedBoost
+        levels={levels}
+        mode="custom"
+        bounds={{ pl2: { min: 3, max: 29 }, pl3: { min: 3, max: 30 } }}
+        ppt={ppt}
+        biosNoticeAbove={biosNoticeAbove}
+        onSetMode={vi.fn()}
+        onSetLevels={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByText("Impulso de potencia").closest("button")!);
+  };
+
+  it("warns that a stock Deck needs a modded BIOS once a rail passes its ceiling", () => {
+    renderBoost({ pl1: 15, pl2: 15, pl3: 20 }, 15);
+    expect(screen.getByText("tdp.deckPpt.biosRequired")).toBeTruthy();
+  });
+
+  it("stays silent within the ceiling", () => {
+    renderBoost({ pl1: 12, pl2: 15, pl3: 15 }, 15);
+    expect(screen.queryByText("tdp.deckPpt.biosRequired")).toBeNull();
+  });
+
+  it("stays silent on an overclocked Deck", () => {
+    renderBoost({ pl1: 25, pl2: 29, pl3: 30 }, null);
+    expect(screen.queryByText("tdp.deckPpt.biosRequired")).toBeNull();
+  });
+});

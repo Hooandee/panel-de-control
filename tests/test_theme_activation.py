@@ -119,21 +119,46 @@ def test_activation_recovery_rejects_malformed_snapshots(tmp_path, mutate):
     assert invalid.value.code == "invalid_snapshot"
 
 
-def test_activation_recovery_fails_closed_on_corrupt_persistent_state(tmp_path):
+def test_activation_recovery_quarantines_corrupt_persistent_state(tmp_path):
     path = tmp_path / "activation.json"
     path.write_text(json.dumps({"schema_version": 1, "transaction": "forged"}))
 
-    with pytest.raises(theme_activation.ThemeActivationJournalError) as corrupt:
-        theme_activation.get_theme_activation_recovery(path)
+    assert theme_activation.get_theme_activation_recovery(path) is None
 
-    assert corrupt.value.code == "invalid_journal"
+    assert not path.exists()
+    assert json.loads((tmp_path / "activation.json.quarantined").read_text()) == {
+        "schema_version": 1,
+        "transaction": "forged",
+    }
+    assert theme_activation.begin_theme_activation(snapshot(), path)["ok"] is True
 
 
-def test_activation_recovery_rejects_a_forged_persisted_boot_identity(tmp_path):
+def test_activation_recovery_quarantines_a_forged_persisted_boot_identity(tmp_path):
     path = tmp_path / "activation.json"
     theme_activation.begin_theme_activation(snapshot(), path)
     journal = json.loads(path.read_text())
     path.write_text(json.dumps({**journal, "boot_id": "forged"}))
+
+    assert theme_activation.get_theme_activation_recovery(path) is None
+    assert (tmp_path / "activation.json.quarantined").exists()
+
+
+def test_activation_begin_quarantines_corrupt_state_instead_of_blocking(tmp_path):
+    path = tmp_path / "activation.json"
+    path.write_text("{broken")
+
+    assert theme_activation.begin_theme_activation(snapshot(), path)["ok"] is True
+    assert (tmp_path / "activation.json.quarantined").read_text() == "{broken"
+
+
+def test_activation_recovery_still_blocks_when_quarantine_is_impossible(tmp_path, monkeypatch):
+    path = tmp_path / "activation.json"
+    path.write_text("{broken")
+
+    def refuse(source, destination):
+        raise OSError("read-only")
+
+    monkeypatch.setattr(theme_activation.os, "replace", refuse)
 
     with pytest.raises(theme_activation.ThemeActivationJournalError) as corrupt:
         theme_activation.get_theme_activation_recovery(path)

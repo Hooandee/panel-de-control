@@ -18,9 +18,21 @@ public interface IHardwareReader
     IReadOnlyList<SensorCandidate> Read();
 }
 
+public sealed record SensorAccess(bool IsElevated, bool HasSensorDriver);
+
+public interface ISensorAccessProbe
+{
+    SensorAccess Probe();
+}
+
 public interface IPowerStatusReader
 {
     IReadOnlyList<TelemetryReading> Read();
+}
+
+public interface ISnapshotServer
+{
+    Task RunAsync(TimeSpan idleTimeout, CancellationToken cancellationToken);
 }
 
 public interface IHardwareSnapshotProvider
@@ -51,6 +63,33 @@ public interface ISystemVolumeController
     VolumeControlResponse Set(double requestedLevel);
 
     VolumeControlResponse SetMute(bool requestedMuted);
+}
+
+public sealed record DisplayBrightnessCapability(
+    string InstanceName,
+    bool Active,
+    uint VideoOutputTechnology,
+    int CurrentBrightness,
+    IReadOnlyList<int> Levels,
+    bool CanSet);
+
+public interface IDisplayBrightnessProvider
+{
+    IReadOnlyList<DisplayBrightnessCapability> Discover();
+
+    uint SetBrightness(
+        string instanceName,
+        int percentage,
+        uint timeoutSeconds);
+
+    int ReadBrightness(string instanceName);
+}
+
+public interface IDisplayBrightnessController
+{
+    BrightnessControlResponse Get();
+
+    BrightnessControlResponse Set(int requestedPercentage);
 }
 
 public sealed class SystemClock : IClock

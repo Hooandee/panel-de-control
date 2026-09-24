@@ -523,3 +523,31 @@ def test_remote_prepare_sanitizes_service_failures(theme_rpc):
         "code": "publication_changed",
         "theme_id": "example-theme",
     }
+
+
+def test_report_diagnostics_expose_theme_quarantine_without_identifiers(theme_rpc):
+    main, plugin, _ = theme_rpc
+    themes_root = plugin._themes_root()
+    themes_root.mkdir(parents=True)
+    work = themes_root.parent / f".panel-theme-transaction-{'r' * 43}"
+    work.mkdir()
+    (work / "transaction.json").write_text("broken", encoding="utf-8")
+    main.theme_packages.recover_theme_transactions(
+        themes_root,
+        receipts_path=plugin._theme_receipts_path(),
+    )
+    activation = plugin._theme_activation_recovery_path()
+    activation.parent.mkdir(parents=True, exist_ok=True)
+    activation.with_name(f"{activation.name}.quarantined").write_text("{}", encoding="utf-8")
+
+    diagnostics = plugin._theme_report_diagnostics()
+
+    assert diagnostics == {
+        "transactions": {
+            "pending": [],
+            "quarantined": 1,
+            "last_quarantine": {"reason": "unreadable_journal"},
+        },
+        "activation_pending": False,
+        "activation_quarantined": True,
+    }

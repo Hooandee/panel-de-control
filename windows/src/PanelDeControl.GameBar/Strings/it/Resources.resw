@@ -1,0 +1,338 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="AudioConnectFailed" xml:space="preserve">
+    <value>Impossibile collegarsi al controllo audio</value>
+  </data>
+  <data name="AudioNoDefault" xml:space="preserve">
+    <value>Nessun dispositivo audio predefinito</value>
+  </data>
+  <data name="BatteryLabel.Text" xml:space="preserve">
+    <value>BATTERIA</value>
+  </data>
+  <data name="BrightnessAvailable" xml:space="preserve">
+    <value>Pannello integrato disponibile</value>
+  </data>
+  <data name="BrightnessChecking" xml:space="preserve">
+    <value>Verifica del pannello integrato…</value>
+  </data>
+  <data name="BrightnessControlFailed" xml:space="preserve">
+    <value>Impossibile controllare la luminosità del pannello integrato</value>
+  </data>
+  <data name="BrightnessLabel.Text" xml:space="preserve">
+    <value>LUMINOSITÀ DEL PANNELLO INTEGRATO</value>
+  </data>
+  <data name="BrightnessMismatch" xml:space="preserve">
+    <value>La modifica non corrisponde al valore riletto</value>
+  </data>
+  <data name="BrightnessPermission" xml:space="preserve">
+    <value>Windows ha negato l'autorizzazione per controllare la luminosità</value>
+  </data>
+  <data name="BrightnessReadFailed" xml:space="preserve">
+    <value>Impossibile leggere la luminosità del pannello integrato</value>
+  </data>
+  <data name="BrightnessSlider.[using:Windows.UI.Xaml.Automation]AutomationProperties.HelpText" xml:space="preserve">
+    <value>Regola la luminosità reale del pannello integrato e conferma la percentuale letta da Windows</value>
+  </data>
+  <data name="BrightnessSlider.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Luminosità dello schermo integrato</value>
+  </data>
+  <data name="BrightnessStatus.Text" xml:space="preserve">
+    <value>Verifica del pannello integrato…</value>
+  </data>
+  <data name="BrightnessUnavailable" xml:space="preserve">
+    <value>Luminosità del pannello integrato non disponibile</value>
+  </data>
+  <data name="CapabilityAbsent" xml:space="preserve">
+    <value>Non trovato</value>
+  </data>
+  <data name="CapabilityAsusAtkacpi" xml:space="preserve">
+    <value>Interfaccia ASUS ATKACPI</value>
+  </data>
+  <data name="CapabilityLenovoFan" xml:space="preserve">
+    <value>WMI Lenovo della ventola</value>
+  </data>
+  <data name="CapabilityLenovoGameZone" xml:space="preserve">
+    <value>WMI Lenovo GameZone</value>
+  </data>
+  <data name="CapabilityLenovoOther" xml:space="preserve">
+    <value>WMI Lenovo di potenza</value>
+  </data>
+  <data name="CapabilityMsiAcpi" xml:space="preserve">
+    <value>WMI MSI_ACPI</value>
+  </data>
+  <data name="CapabilityPresent" xml:space="preserve">
+    <value>Disponibile</value>
+  </data>
+  <data name="CapabilityRivalArmoury" xml:space="preserve">
+    <value>Armoury Crate</value>
+  </data>
+  <data name="CapabilityRivalIntelDtt" xml:space="preserve">
+    <value>Gestione termica Intel</value>
+  </data>
+  <data name="CapabilityRivalLegionSpace" xml:space="preserve">
+    <value>Legion Space</value>
+  </data>
+  <data name="CapabilityRivalMsiCenter" xml:space="preserve">
+    <value>MSI Center M</value>
+  </data>
+  <data name="CapabilityRowFormat" xml:space="preserve">
+    <value>{0}: {1}</value>
+  </data>
+  <data name="CapabilitySensorDriver" xml:space="preserve">
+    <value>Driver dei sensori (PawnIO)</value>
+  </data>
+  <data name="CapabilityService" xml:space="preserve">
+    <value>Servizio di Panel de Control</value>
+  </data>
+  <data name="ConnectionStatus.Text" xml:space="preserve">
+    <value>Connessione all'hardware…</value>
+  </data>
+  <data name="CpuLoadValue.Text" xml:space="preserve">
+    <value>Carico —</value>
+  </data>
+  <data name="DeviceName.Text" xml:space="preserve">
+    <value>Ricerca del dispositivo…</value>
+  </data>
+  <data name="DeviceUnrecognized" xml:space="preserve">
+    <value>Dispositivo non riconosciuto</value>
+  </data>
+  <data name="DiagnosticsLoading" xml:space="preserve">
+    <value>Verifica del dispositivo…</value>
+  </data>
+  <data name="DiagnosticsToggle.Content" xml:space="preserve">
+    <value>DIAGNOSTICA</value>
+  </data>
+  <data name="DiagnosticsToggle.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Mostra o nascondi la diagnostica del dispositivo</value>
+  </data>
+  <data name="DiagnosticsUnavailable" xml:space="preserve">
+    <value>Impossibile leggere la diagnostica</value>
+  </data>
+  <data name="GpuLoadValue.Text" xml:space="preserve">
+    <value>Carico —</value>
+  </data>
+  <data name="LoadFormat" xml:space="preserve">
+    <value>Carico {0}</value>
+  </data>
+  <data name="MuteAvailable" xml:space="preserve">
+    <value>Stato muto disponibile</value>
+  </data>
+  <data name="MuteChecking" xml:space="preserve">
+    <value>Verifica dello stato muto…</value>
+  </data>
+  <data name="MuteLabel.Text" xml:space="preserve">
+    <value>MUTO</value>
+  </data>
+  <data name="MutePermission" xml:space="preserve">
+    <value>Windows richiede l'autorizzazione per disattivare l'audio</value>
+  </data>
+  <data name="MuteReadFailed" xml:space="preserve">
+    <value>Impossibile leggere lo stato muto</value>
+  </data>
+  <data name="MuteStatus.Text" xml:space="preserve">
+    <value>Verifica dello stato muto…</value>
+  </data>
+  <data name="MuteToggle.OffContent" xml:space="preserve">
+    <value>Audio attivo</value>
+  </data>
+  <data name="MuteToggle.OnContent" xml:space="preserve">
+    <value>Muto</value>
+  </data>
+  <data name="MuteToggle.[using:Windows.UI.Xaml.Automation]AutomationProperties.HelpText" xml:space="preserve">
+    <value>Attiva o disattiva il muto del dispositivo audio predefinito e verifica lo stato riletto</value>
+  </data>
+  <data name="MuteToggle.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Disattiva l'audio di sistema</value>
+  </data>
+  <data name="PowerAc" xml:space="preserve">
+    <value>Collegata alla corrente</value>
+  </data>
+  <data name="PowerBattery" xml:space="preserve">
+    <value>A batteria</value>
+  </data>
+  <data name="ReadingDriverMissing" xml:space="preserve">
+    <value>Driver dei sensori mancante</value>
+  </data>
+  <data name="ReadingElevation" xml:space="preserve">
+    <value>Servono i permessi di amministratore</value>
+  </data>
+  <data name="ReadingFault" xml:space="preserve">
+    <value>Errore di lettura</value>
+  </data>
+  <data name="ReadingNoData" xml:space="preserve">
+    <value>Nessun dato</value>
+  </data>
+  <data name="ReadingPermission" xml:space="preserve">
+    <value>Serve l'autorizzazione</value>
+  </data>
+  <data name="ReadingServiceNotRunning" xml:space="preserve">
+    <value>Il servizio di Panel de Control non è in esecuzione</value>
+  </data>
+  <data name="ReadingServiceUnavailable" xml:space="preserve">
+    <value>Il servizio di Panel de Control non risponde</value>
+  </data>
+  <data name="RefreshButton.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Aggiorna telemetria, potenza, luminosità e volume</value>
+  </data>
+  <data name="RivalNotRunning" xml:space="preserve">
+    <value>Non in esecuzione</value>
+  </data>
+  <data name="RivalRunning" xml:space="preserve">
+    <value>In esecuzione</value>
+  </data>
+  <data name="StatusApplying" xml:space="preserve">
+    <value>Applicazione e verifica…</value>
+  </data>
+  <data name="StatusNotVerified" xml:space="preserve">
+    <value>Impossibile verificare la modifica</value>
+  </data>
+  <data name="StatusRejected" xml:space="preserve">
+    <value>Windows ha rifiutato la modifica</value>
+  </data>
+  <data name="StatusVerified" xml:space="preserve">
+    <value>Modifica applicata e verificata</value>
+  </data>
+  <data name="TelemetryConnected" xml:space="preserve">
+    <value>Telemetria Windows collegata</value>
+  </data>
+  <data name="VolumeAvailable" xml:space="preserve">
+    <value>Dispositivo audio predefinito disponibile</value>
+  </data>
+  <data name="VolumeLabel.Text" xml:space="preserve">
+    <value>VOLUME DI SISTEMA</value>
+  </data>
+  <data name="VolumePermission" xml:space="preserve">
+    <value>Windows richiede l'autorizzazione per controllare l'audio</value>
+  </data>
+  <data name="VolumeSlider.[using:Windows.UI.Xaml.Automation]AutomationProperties.HelpText" xml:space="preserve">
+    <value>Regola il volume del dispositivo audio predefinito</value>
+  </data>
+  <data name="VolumeSlider.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Volume di sistema</value>
+  </data>
+  <data name="VolumeStatus.Text" xml:space="preserve">
+    <value>Verifica del dispositivo audio predefinito…</value>
+  </data>
+  <data name="ExperimentalTdpLabel.Text" xml:space="preserve"><value>TDP SPERIMENTALE</value></data>
+  <data name="ExperimentalTdpToggle.OffContent" xml:space="preserve"><value>Disattivato</value></data>
+  <data name="ExperimentalTdpToggle.OnContent" xml:space="preserve"><value>Attivato</value></data>
+  <data name="ExperimentalTdpToggle.[using:Windows.UI.Xaml.Automation]AutomationProperties.HelpText" xml:space="preserve"><value>Abilita esplicitamente le scritture TDP sperimentali per questa sessione del servizio</value></data>
+  <data name="ExperimentalTdpToggle.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Consenso alla scrittura TDP sperimentale</value></data>
+  <data name="ManufacturerRecoveryHint.Text" xml:space="preserve"><value>Ripristino del produttore non verificato: riavvia Windows o riapri Armoury Crate per restituire il controllo.</value></data>
+  <data name="PowerApplied" xml:space="preserve"><value>Applicato e confermato su PL1, SPPT e FPPT</value></data>
+  <data name="PowerArmouryConflict" xml:space="preserve"><value>Chiudi Armoury Crate prima di modificare il limite di potenza</value></data>
+  <data name="PowerAvailable" xml:space="preserve"><value>Le scritture sperimentali sono pronte</value></data>
+  <data name="PowerChecking" xml:space="preserve"><value>Verifica del controllo sperimentale della potenza…</value></data>
+  <data name="PowerLabel.Text" xml:space="preserve"><value>LIMITE DI POTENZA</value></data>
+  <data name="PowerLimits.Text" xml:space="preserve"><value>—</value></data>
+  <data name="PowerLimitsFormat" xml:space="preserve"><value>{0}–{1} W</value></data>
+  <data name="PowerOptInDisabled" xml:space="preserve"><value>Le scritture sperimentali sono disattivate</value></data>
+  <data name="PowerPresetAutomation" xml:space="preserve"><value>Imposta il TDP sperimentale a {0} watt</value></data>
+  <data name="PowerReadbackHint.Text" xml:space="preserve"><value>Il readback DSTS è un candidato e non è ancora convalidato su RC73XA.</value></data>
+  <data name="PowerRejected" xml:space="preserve"><value>Il firmware ha rifiutato la modifica della potenza</value></data>
+  <data name="PowerServiceUnavailable" xml:space="preserve"><value>Il controllo sperimentale della potenza non è disponibile</value></data>
+  <data name="PowerSourceUnknown" xml:space="preserve"><value>Impossibile leggere lo stato corrente di rete o batteria</value></data>
+  <data name="PowerStatus.Text" xml:space="preserve"><value>Verifica del controllo sperimentale della potenza…</value></data>
+  <data name="PowerStepHint.Text" xml:space="preserve"><value>Passo di 1 W</value></data>
+  <data name="PowerUnsupported" xml:space="preserve"><value>Disponibile solo nel profilo ROG Xbox Ally X</value></data>
+  <data name="PowerUnverifiable" xml:space="preserve"><value>Inviato, ma DSTS non ha confermato tutti e tre i limiti</value></data>
+  <data name="TdpDecreaseButton.Content" xml:space="preserve"><value>−</value></data>
+  <data name="TdpDecreaseButton.[using:Windows.UI.Xaml.Automation]AutomationProperties.HelpText" xml:space="preserve"><value>Scrive un watt in meno su PL1, SPPT e FPPT</value></data>
+  <data name="TdpDecreaseButton.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Riduci TDP sperimentale</value></data>
+  <data name="TdpIncreaseButton.Content" xml:space="preserve"><value>+</value></data>
+  <data name="TdpIncreaseButton.[using:Windows.UI.Xaml.Automation]AutomationProperties.HelpText" xml:space="preserve"><value>Scrive un watt in più su PL1, SPPT e FPPT</value></data>
+  <data name="TdpIncreaseButton.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Aumenta TDP sperimentale</value></data>
+  <data name="ExperimentalBadge.Text" xml:space="preserve">
+    <value>SPERIMENTALE</value>
+  </data>
+  <data name="TabPowerLabel.Text" xml:space="preserve">
+    <value>Potenza</value>
+  </data>
+  <data name="TabPower.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Scheda Potenza</value>
+  </data>
+  <data name="TabSystemLabel.Text" xml:space="preserve">
+    <value>Sistema</value>
+  </data>
+  <data name="TabSystem.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Scheda Sistema</value>
+  </data>
+  <data name="TabSensorsLabel.Text" xml:space="preserve">
+    <value>Sensori</value>
+  </data>
+  <data name="TabSensors.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Scheda Sensori</value>
+  </data>
+  <data name="TabSettingsLabel.Text" xml:space="preserve">
+    <value>Impostazioni</value>
+  </data>
+  <data name="TabSettings.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Scheda Impostazioni</value>
+  </data>
+  <data name="AccentLabel.Text" xml:space="preserve">
+    <value>COLORE DI ACCENTO</value>
+  </data>
+  <data name="AccentSwatchAutomation" xml:space="preserve">
+    <value>Colore di accento {0} di {1}</value>
+  </data>
+  <data name="PowerZoneSave" xml:space="preserve">
+    <value>RISPARMIO</value>
+  </data>
+  <data name="PowerZoneEco" xml:space="preserve">
+    <value>ECO</value>
+  </data>
+  <data name="PowerZoneBalanced" xml:space="preserve">
+    <value>BILANCIATO</value>
+  </data>
+  <data name="PowerZoneHot" xml:space="preserve">
+    <value>ALTO</value>
+  </data>
+  <data name="PowerZoneTurbo" xml:space="preserve">
+    <value>TURBO</value>
+  </data>
+  <data name="EnergyLabel.Text" xml:space="preserve">
+    <value>CONSUMO DI SISTEMA</value>
+  </data>
+  <data name="PowerDrawOnAc" xml:space="preserve">
+    <value>In carica: il consumo si misura solo a batteria</value>
+  </data>
+  <data name="PowerDrawPending" xml:space="preserve">
+    <value>In attesa della lettura della batteria</value>
+  </data>
+  <data name="PowerDrawOnBattery" xml:space="preserve">
+    <value>A batteria</value>
+  </data>
+  <data name="PowerDrawRemainingFormat" xml:space="preserve">
+    <value>A batteria · {0} h {1:00} min rimanenti</value>
+  </data>
+  <data name="PowerModeBestEfficiency" xml:space="preserve">
+    <value>Massima efficienza energetica</value>
+  </data>
+  <data name="PowerModeBalanced" xml:space="preserve">
+    <value>Bilanciato</value>
+  </data>
+  <data name="PowerModeBetterPerformance" xml:space="preserve">
+    <value>Prestazioni migliori</value>
+  </data>
+  <data name="PowerModeBestPerformance" xml:space="preserve">
+    <value>Prestazioni massime</value>
+  </data>
+  <data name="PowerModeEffectiveFormat" xml:space="preserve">
+    <value>Ora in {0}</value>
+  </data>
+  <data name="HeaderSubtitle.Text" xml:space="preserve">
+    <value>Windows · Xbox Game Bar</value>
+  </data>
+</root>

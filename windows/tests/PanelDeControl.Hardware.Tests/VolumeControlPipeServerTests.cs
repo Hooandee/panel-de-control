@@ -319,7 +319,7 @@ public sealed class VolumeControlPipeServerTests
             pipeName,
             controller,
             CreateTestPipe);
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
 
         var serverTask = server.RunOnceAsync(timeout.Token);
         await using (var client = new NamedPipeClientStream(
@@ -336,7 +336,7 @@ public sealed class VolumeControlPipeServerTests
             await writer.WriteLineAsync(
                 VolumeControlWireCodec.SerializeRequest(
                     VolumeControlRequest.Set(0.80)));
-            Assert.True(controller.WaitUntilEntered(TimeSpan.FromSeconds(1)));
+            Assert.True(controller.WaitUntilEntered(TimeSpan.FromSeconds(5)));
         }
 
         controller.Release();

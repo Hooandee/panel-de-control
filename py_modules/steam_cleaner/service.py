@@ -37,6 +37,7 @@ REASONS = {
 EVENTS = {"started", "completed", "prepared", "deleted", "skipped", "error", "interrupted"}
 PHASES = {"idle", "scan", "prepare", "execute"}
 SOURCES = {"library_index", "library", "manifest", "shortcuts", "measure", "history"}
+VDF_ERRORS = {"empty", "malformed_vdf", "duplicate_vdf_key", "oversized_vdf", "unicode", "appid_mismatch"}
 
 
 def opaque(*parts):
@@ -495,12 +496,15 @@ class SteamCleanerService:
         for path in paths:
             self._remember(path)
             try:
-                state = vdf.read_text(path).get("appstate")
+                document = vdf.read_text(path)
+                if not document:
+                    raise ValueError("empty")
+                state = document.get("appstate")
                 if not isinstance(state, dict):
                     raise ValueError("malformed_vdf")
                 appid = state.get("appid")
                 if not isinstance(appid, str) or not appid.isdecimal() or path.name != f"appmanifest_{appid}.acf":
-                    raise ValueError("malformed_vdf")
+                    raise ValueError("appid_mismatch")
                 name = clean_name(state.get("name", ""))
                 directory = state.get("installdir", "")
                 runtime = False
@@ -510,8 +514,16 @@ class SteamCleanerService:
                     runtime = marker.exists()
                 identities[appid] = {"name": name, "installation": "installed", "runtime": runtime or str(state.get("type", "")).lower() == "tool"}
             except (OSError, ValueError, UnicodeError) as error:
-                complete = False
-                self._scan_issue("manifest", "coverage_incomplete", error, opaque(root))
+                vdf_error = "unicode" if isinstance(error, UnicodeError) else str(error) if isinstance(error, ValueError) else None
+                # Steam names each manifest after its own AppID, so an unreadable file
+                # leaves only that game unknown. A readable manifest that names another
+                # game cannot be trusted for any AppID.
+                owner = re.fullmatch(r"appmanifest_([0-9]{1,10})\.acf", path.name)
+                if owner and vdf_error in VDF_ERRORS - {"appid_mismatch"}:
+                    identities[owner.group(1)] = {"name": None, "installation": "unknown", "runtime": False}
+                else:
+                    complete = False
+                self._scan_issue("manifest", "coverage_incomplete", error, opaque(root), vdf_error=vdf_error if vdf_error in VDF_ERRORS else None)
         return complete
 
     def _read_shortcuts(self, root, identities):
@@ -617,13 +629,13 @@ class SteamCleanerService:
             return f"Steam {index + 1}"
         return clean_name(name) or f"Steam {index + 1}"
 
-    def _scan_issue(self, source, reason, error=None, library_id=None, appid=None):
+    def _scan_issue(self, source, reason, error=None, library_id=None, appid=None, vdf_error=None):
         cause = "malformed_data" if isinstance(error, (ValueError, UnicodeError)) else system_error(error) if error else None
-        key = (source, reason, cause)
+        key = (source, reason, cause, vdf_error)
         if key in self._scan_reported or len(self._scan_reported) >= 60:
             return
         self._scan_reported.add(key)
-        self._event("error", self._diagnostic["last_operation_id"], "scan", source=source, reason=reason, system_error=cause, library_id=library_id, appid=appid)
+        self._event("error", self._diagnostic["last_operation_id"], "scan", source=source, reason=reason, system_error=cause, library_id=library_id, appid=appid, vdf_error=vdf_error)
 
     def _event(self, event, operation_id, phase, **fields):
         item = {"time": int(time.time()), "operation_id": operation_id, "phase": phase, "event": event}
@@ -672,6 +684,8 @@ class SteamCleanerService:
                     result["kind"] = item["kind"]
                 if item.get("source") in SOURCES:
                     result["source"] = item["source"]
+                if item.get("vdf_error") in VDF_ERRORS:
+                    result["vdf_error"] = item["vdf_error"]
                 if item.get("readback") in ("absent", "unverified"):
                     result["readback"] = item["readback"]
                 for key in ("count", "duration_ms"):

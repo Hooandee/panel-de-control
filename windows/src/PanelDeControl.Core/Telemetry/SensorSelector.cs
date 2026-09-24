@@ -28,7 +28,7 @@ public static class SensorSelector
                 match.Preference != int.MaxValue &&
                 match.Candidate.HardwareKind == hardwareKind &&
                 match.Candidate.SensorKind == sensorKind &&
-                IsPlausible(match.Candidate.SensorKind, match.Candidate.Value))
+                SensorPlausibility.IsPlausible(match.Candidate.SensorKind, match.Candidate.Value))
             .OrderBy(match => match.Preference)
             .ThenBy(match => match.Candidate.Identifier, StringComparer.Ordinal)
             .Select(match => match.Candidate)
@@ -46,22 +46,5 @@ public static class SensorSelector
         }
 
         return int.MaxValue;
-    }
-
-    private static bool IsPlausible(SensorKind kind, double? value)
-    {
-        if (!value.HasValue || double.IsNaN(value.Value) || double.IsInfinity(value.Value))
-        {
-            return false;
-        }
-
-        return kind switch
-        {
-            SensorKind.Temperature => value.Value is >= -20 and <= 130,
-            SensorKind.Load or SensorKind.Level => value.Value is >= 0 and <= 100,
-            SensorKind.Fan => value.Value is >= 0 and <= 100_000,
-            SensorKind.Power => value.Value is >= -1_000 and <= 1_000,
-            _ => false,
-        };
     }
 }

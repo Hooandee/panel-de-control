@@ -14,6 +14,7 @@ interface AdvancedBoostProps {
   mode: BoostMode;
   bounds: { pl2?: LevelBound; pl3?: LevelBound };
   ppt?: SteamDeckPptState | null;
+  biosNoticeAbove?: number | null;
   onSetMode: (mode: BoostMode) => void;
   onSetLevels: (off2: number, off3: number) => void;
 }
@@ -25,6 +26,7 @@ export const AdvancedBoost: FC<AdvancedBoostProps> = ({
   mode,
   bounds,
   ppt = null,
+  biosNoticeAbove = null,
   onSetMode,
   onSetLevels,
 }) => {
@@ -45,6 +47,10 @@ export const AdvancedBoost: FC<AdvancedBoostProps> = ({
   };
   const Chevron = open ? LuChevronDown : LuChevronRight;
   const isDeckPpt = Boolean(ppt?.supported);
+  const needsBios = isDeckPpt
+    && mode === "custom"
+    && biosNoticeAbove !== null
+    && Math.max(levels.pl2, levels.pl3) > biosNoticeAbove;
 
   const railRow = (
     label: string,
@@ -149,6 +155,12 @@ export const AdvancedBoost: FC<AdvancedBoostProps> = ({
                 slow: ppt.applied.slow ?? "—",
                 fast: ppt.applied.fast ?? "—",
               })}
+            </div>
+          )}
+
+          {needsBios && (
+            <div style={{ fontSize: theme.font.caption, color: theme.color.warn, marginTop: theme.space.xs }}>
+              {t("tdp.deckPpt.biosRequired")}
             </div>
           )}
 

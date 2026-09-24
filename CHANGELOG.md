@@ -2,6 +2,66 @@
 
 ## Unreleased
 
+## [0.55.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.54.4...panel-de-control-v0.55.0) (2026-09-23)
+
+### Español
+
+* **Potencia en Steam Deck:** En el modo Personalizado del impulso, SlowPPT y FastPPT pueden subir hasta 29 y 30 W. Si tu Deck no tiene overclock, verás un aviso al pasar de 15 W, porque para aprovecharlo hace falta una BIOS modificada. El TDP, los presets y el Auto-TDP siguen limitados al máximo de tu Deck.
+* **Temas:** Si la instalación o la activación de un tema se interrumpe, los temas ya no se quedan bloqueados en la comprobación. Panel de Control aparta lo que quedó a medias y puedes volver a instalar o cambiar de tema. Si no puede recuperar el estado anterior de los temas, mantiene el actual y te lo indica.
+
+### English
+
+* **Power on Steam Deck:** In the custom boost mode, SlowPPT and FastPPT can now go up to 29 and 30 W. If your Deck is not overclocked, a notice appears above 15 W, since a modified BIOS is needed to make use of it. TDP, presets and Auto-TDP stay capped at your Deck's maximum.
+* **Themes:** If a theme install or activation is interrupted, themes no longer stay blocked on the check. Panel de Control sets aside what was left half done and you can install or switch themes again. If it cannot restore the previous theme state, it keeps the current one and lets you know.
+
+### Italiano
+
+* **Potenza su Steam Deck:** Nella modalità personalizzata del boost, SlowPPT e FastPPT possono ora arrivare a 29 e 30 W. Se la tua Deck non è in overclock, sopra i 15 W compare un avviso, perché per sfruttarlo serve un BIOS modificato. TDP, preset e Auto-TDP restano limitati al massimo della tua Deck.
+* **Temi:** Se l'installazione o l'attivazione di un tema si interrompe, i temi non restano più bloccati nella verifica. Panel de Control mette da parte ciò che è rimasto a metà e puoi di nuovo installare o cambiare tema. Se non riesce a ripristinare lo stato precedente dei temi, mantiene quello attuale e te lo segnala.
+
+### Deutsch
+
+* **Leistung auf dem Steam Deck:** Im benutzerdefinierten Boost-Modus können SlowPPT und FastPPT jetzt bis 29 und 30 W gehen. Ist dein Deck nicht übertaktet, erscheint über 15 W ein Hinweis, denn dafür ist ein modifiziertes BIOS nötig. TDP, Voreinstellungen und Auto-TDP bleiben auf das Maximum deines Decks begrenzt.
+* **Themes:** Wird die Installation oder Aktivierung eines Themes unterbrochen, bleiben Themes nicht mehr bei der Prüfung blockiert. Panel de Control legt das Halbfertige beiseite, und du kannst wieder Themes installieren oder wechseln. Lässt sich der vorherige Theme-Zustand nicht wiederherstellen, bleibt der aktuelle erhalten und du wirst darauf hingewiesen.
+
+### Português (Brasil)
+
+* **Potência no Steam Deck:** No modo personalizado do boost, SlowPPT e FastPPT agora podem chegar a 29 e 30 W. Se o seu Deck não tiver overclock, aparece um aviso acima de 15 W, porque é preciso uma BIOS modificada para aproveitar. TDP, predefinições e Auto-TDP continuam limitados ao máximo do seu Deck.
+* **Temas:** Se a instalação ou a ativação de um tema for interrompida, os temas não ficam mais travados na verificação. O Painel de Controle deixa de lado o que ficou pela metade e você pode instalar ou trocar de tema de novo. Se não conseguir restaurar o estado anterior dos temas, mantém o atual e avisa você.
+
+## [0.54.4](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.54.3...panel-de-control-v0.54.4) (2026-09-23)
+
+
+### Español
+
+* **Potencia en Legion Go S:** Si el firmware deja de aplicar el TDP que eliges y se queda en otro valor, Panel de Control intenta recuperarlo reactivando el modo personalizado. Si no lo consigue, el control de potencia sigue disponible y lo vuelve a intentar más tarde, en lugar de repetir lo mismo sin parar.
+* **Limpieza de Steam:** Un archivo de juego de Steam dañado ya no impide comprobar toda la biblioteca. Solo ese juego queda protegido y el resto de datos se puede limpiar con normalidad.
+* **Reportes:** Los reportes explican mejor los problemas de TDP: indican si otro servicio del sistema está cambiando la potencia y el motivo exacto cuando el firmware rechaza un valor.
+
+### English
+
+* **Power on Legion Go S:** If the firmware stops applying the TDP you choose and sticks to another value, Panel de Control now tries to recover it by re-enabling the custom mode. If that does not work, power control stays available and tries again later instead of repeating the same attempt endlessly.
+* **Steam Cleanup:** A damaged Steam game file no longer prevents checking the whole library. Only that game stays protected and the rest of the data can be cleaned as usual.
+* **Reports:** Reports now explain TDP problems better: they show whether another system service is changing the power limits and the exact reason when the firmware rejects a value.
+
+### Italiano
+
+* **Potenza su Legion Go S:** Se il firmware smette di applicare il TDP scelto e resta su un altro valore, Panel de Control prova a recuperarlo riattivando la modalità personalizzata. Se non ci riesce, il controllo della potenza resta disponibile e riprova più tardi, invece di ripetere lo stesso tentativo senza fine.
+* **Pulizia di Steam:** Un file di gioco di Steam danneggiato non impedisce più di controllare l'intera libreria. Solo quel gioco resta protetto e il resto dei dati si può pulire normalmente.
+* **Segnalazioni:** Le segnalazioni spiegano meglio i problemi di TDP: indicano se un altro servizio di sistema sta modificando la potenza e il motivo esatto quando il firmware rifiuta un valore.
+
+### Deutsch
+
+* **Leistung auf Legion Go S:** Wenn die Firmware die gewählte TDP nicht mehr übernimmt und bei einem anderen Wert bleibt, versucht Panel de Control jetzt, sie durch erneutes Aktivieren des benutzerdefinierten Modus wiederherzustellen. Klappt das nicht, bleibt die Leistungssteuerung verfügbar und versucht es später erneut, statt denselben Versuch endlos zu wiederholen.
+* **Steam-Bereinigung:** Eine beschädigte Steam-Spieldatei verhindert nicht mehr die Prüfung der ganzen Bibliothek. Nur dieses Spiel bleibt geschützt, die übrigen Daten lassen sich wie gewohnt bereinigen.
+* **Berichte:** Berichte erklären TDP-Probleme jetzt besser: Sie zeigen, ob ein anderer Systemdienst die Leistungsgrenzen ändert, und den genauen Grund, wenn die Firmware einen Wert ablehnt.
+
+### Português (Brasil)
+
+* **Potência no Legion Go S:** Se o firmware deixar de aplicar o TDP escolhido e ficar preso em outro valor, o Painel de Controle agora tenta recuperá-lo reativando o modo personalizado. Se não conseguir, o controle de potência continua disponível e tenta de novo mais tarde, em vez de repetir a mesma tentativa sem parar.
+* **Limpeza do Steam:** Um arquivo de jogo do Steam danificado não impede mais a verificação de toda a biblioteca. Só esse jogo fica protegido e o restante dos dados pode ser limpo normalmente.
+* **Relatórios:** Os relatórios explicam melhor os problemas de TDP: mostram se outro serviço do sistema está alterando a potência e o motivo exato quando o firmware rejeita um valor.
+
 ## [0.54.3](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.54.2...panel-de-control-v0.54.3) (2026-09-22)
 
 
