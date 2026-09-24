@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+## [0.55.1](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.55.0...panel-de-control-v0.55.1) (2026-09-24)
+
+
+### Español
+
+* **Auto-TDP:** Vuelve a estar disponible en las consolas que controlan la potencia con RyzenAdj, como la AOKZOE A1X, las GPD Win 5 y Win Max 2 o la OneXFly F1 Pro, y en las ROG y Legion que no exponen los controles del firmware. Desde la versión 0.54 había desaparecido de estos equipos.
+
+### English
+
+* **Auto-TDP:** It is available again on handhelds that control power through RyzenAdj, such as the AOKZOE A1X, the GPD Win 5 and Win Max 2 or the OneXFly F1 Pro, and on ROG and Legion devices that do not expose the firmware controls. It had disappeared from these devices since version 0.54.
+
+### Italiano
+
+* **Auto-TDP:** È di nuovo disponibile sulle console che gestiscono la potenza con RyzenAdj, come AOKZOE A1X, GPD Win 5 e Win Max 2 o OneXFly F1 Pro, e sui dispositivi ROG e Legion che non espongono i controlli del firmware. Dalla versione 0.54 era sparito da questi dispositivi.
+
+### Deutsch
+
+* **Auto-TDP:** Ist wieder verfügbar auf Handhelds, die die Leistung über RyzenAdj steuern, etwa AOKZOE A1X, GPD Win 5 und Win Max 2 oder OneXFly F1 Pro, sowie auf ROG- und Legion-Geräten, die die Firmware-Steuerung nicht bereitstellen. Seit Version 0.54 fehlte es auf diesen Geräten.
+
+### Português (Brasil)
+
+* **Auto-TDP:** Voltou a estar disponível nos portáteis que controlam a potência com RyzenAdj, como o AOKZOE A1X, os GPD Win 5 e Win Max 2 ou o OneXFly F1 Pro, e nos ROG e Legion que não expõem os controles do firmware. Desde a versão 0.54 ele tinha sumido desses aparelhos.
+
 ## [0.55.0](https://github.com/Hooandee/panel-de-control/compare/panel-de-control-v0.54.4...panel-de-control-v0.55.0) (2026-09-23)
 
 ### Español
