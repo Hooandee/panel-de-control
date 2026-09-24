@@ -528,3 +528,68 @@ def test_guard_does_not_clamp_headphone_route(tmp_path, monkeypatch):
     st = asyncio.run(p.set_audio_bands([12] * 10, "global"))
     assert st["route"] == "headphone"
     assert fake.applied[-1][0] == [12.0] * 10  # guard is speaker-only
+
+
+def _run_failing_watcher(p, monkeypatch, iterations, *, recover_after=None):
+    main = sys.modules["main"]
+    clock = [1000.0]
+    checks = []
+    reapplies = []
+    original_check = p._audio_check
+
+    def counted_check():
+        checks.append(clock[0])
+        return original_check()
+
+    def failing_reapply():
+        reapplies.append(clock[0])
+        if recover_after is not None and len(reapplies) > recover_after:
+            p._audio_apply_failures = 0
+        else:
+            p._audio_apply_failures += 1
+
+    p._audio_check = counted_check
+    p._reapply_audio = failing_reapply
+    monkeypatch.setattr(main, "_monotonic", lambda: clock[0])
+    sleeps = 0
+
+    async def tick(delay):
+        nonlocal sleeps
+        sleeps += 1
+        if sleeps > iterations:
+            raise asyncio.CancelledError
+        clock[0] += delay
+
+    monkeypatch.setattr(asyncio, "sleep", tick)
+    asyncio.run(p._audio_loop())
+    return checks, reapplies
+
+
+def test_audio_watcher_backs_off_while_the_eq_keeps_failing(tmp_path, monkeypatch):
+    p, _fake = _make_plugin(
+        tmp_path, monkeypatch, audio=_FakePipeWireEq(apply_ok=False)
+    )
+    asyncio.run(p.get_audio_state())
+    p._settings["audio_eq_enabled"] = True
+
+    checks, reapplies = _run_failing_watcher(p, monkeypatch, iterations=150)
+
+    gaps = [later - earlier for earlier, later in zip(reapplies, reapplies[1:])]
+    assert len(checks) == len(reapplies) < 20
+    assert gaps == sorted(gaps)
+    assert max(gaps) == 60
+
+
+def test_audio_watcher_returns_to_normal_cadence_after_recovery(tmp_path, monkeypatch):
+    p, _fake = _make_plugin(
+        tmp_path, monkeypatch, audio=_FakePipeWireEq(apply_ok=False)
+    )
+    asyncio.run(p.get_audio_state())
+    p._settings["audio_eq_enabled"] = True
+
+    _checks, reapplies = _run_failing_watcher(
+        p, monkeypatch, iterations=40, recover_after=3
+    )
+
+    gaps = [later - earlier for earlier, later in zip(reapplies, reapplies[1:])]
+    assert gaps[-1] == 4

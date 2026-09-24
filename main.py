@@ -139,6 +139,7 @@ _REPORT_SERVICE_URL = os.environ.get(
 # How often the audio EQ watcher checks the active output route (headphones vs speakers)
 # to re-apply the per-route curve with the QAM closed.
 _AUDIO_POLL_S = 4
+_AUDIO_RETRY_MAX_S = 60
 _NIGHT_TICK_S = 30  # how often the night-mode clock checks for a schedule-edge crossing
 _SHUTDOWN_DRAIN_TIMEOUT_S = 12.0
 _RPC_CONTEXT_UNSET = object()
@@ -760,6 +761,7 @@ class Plugin:
         self._shutting_down = False
         self._offload_futures = set()
         self._audio_apply_failures = 0
+        self._audio_watch_resume_at = 0.0
         self._audio_last_apply = None
         self._test_sample = None
         self._ui_active = False
@@ -11178,10 +11180,17 @@ class Plugin:
                         await self._offload_call(self._restore_audio_safe)
                     continue
                 self._audio_runtime_expected = True
+                now = _monotonic()
+                failures = self._audio_apply_failures
+                if failures and now < self._audio_watch_resume_at:
+                    continue
                 probe = await self._offload_call(self._audio_check)
                 if not probe["active"] or probe["route"] != self._audio_route_last:
                     self._audio_route_last = probe["route"]
                     self._reapply_audio()
+                self._audio_watch_resume_at = now + min(
+                    _AUDIO_RETRY_MAX_S, _AUDIO_POLL_S * 2 ** min(failures, 5)
+                )
             except asyncio.CancelledError:
                 break
             except Exception:  # noqa: BLE001
