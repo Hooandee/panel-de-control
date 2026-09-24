@@ -102,11 +102,23 @@ public sealed class TdpControlPipeServerTests
         {
         }
 
-        var response = await reader.ReadLineAsync(timeout.Token);
+        var response = await ReadUntilDroppedAsync(reader, timeout.Token);
         await serverTask;
 
         Assert.Null(response);
         Assert.Equal(0, proxy.SendCount);
+    }
+
+    private static async Task<string?> ReadUntilDroppedAsync(StreamReader reader, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await reader.ReadLineAsync(cancellationToken);
+        }
+        catch (IOException)
+        {
+            return null;
+        }
     }
 
     private static NamedPipeServerStream CreateTestPipe(string pipeName)
